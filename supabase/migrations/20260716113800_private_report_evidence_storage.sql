@@ -8,7 +8,9 @@
 -- migration, then the 20260716114500 advisory-first post-interaction lock
 -- migration, and only then deploy the application routes that reserve private
 -- evidence. This migration verifies its 112300 dependency before changing
--- buckets, policies, columns, or functions.
+-- buckets, policies, columns, or functions. On managed Supabase, the storage
+-- tables remain owned by supabase_storage_admin: this migration verifies their
+-- RLS/policy boundary but never changes their owners, grants, or policies.
 
 BEGIN;
 
@@ -18,6 +20,84 @@ SET LOCAL statement_timeout = '2min';
 SELECT pg_catalog.pg_advisory_xact_lock(
   pg_catalog.hashtextextended('private-report-evidence-storage:v1', 0)
 );
+
+-- Managed Storage may contain unrelated bucket policies that this migration
+-- neither owns nor rewrites. This temporary verifier accepts only a literal,
+-- top-level bucket_id equality as the first mandatory AND term. It therefore
+-- rejects generic, disjunctive, function-derived, and otherwise ambiguous
+-- expressions instead of trying to infer that they are safe.
+CREATE OR REPLACE FUNCTION pg_temp.private_report_policy_excludes_reports(
+  p_expression text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_index integer := 1;
+  v_length integer := pg_catalog.length(p_expression);
+  v_depth integer := 0;
+  v_in_literal boolean := false;
+  v_first_and integer := 0;
+  v_character text;
+  v_first_term text;
+  v_bucket_id text;
+BEGIN
+  IF p_expression IS NULL OR p_expression = '' THEN
+    RETURN false;
+  END IF;
+
+  WHILE v_index <= v_length LOOP
+    v_character := pg_catalog.substr(p_expression, v_index, 1);
+
+    IF v_character = '''' THEN
+      IF v_in_literal
+         AND pg_catalog.substr(p_expression, v_index + 1, 1) = ''''
+      THEN
+        v_index := v_index + 2;
+        CONTINUE;
+      END IF;
+      v_in_literal := NOT v_in_literal;
+    ELSIF NOT v_in_literal AND v_character = '(' THEN
+      v_depth := v_depth + 1;
+    ELSIF NOT v_in_literal AND v_character = ')' THEN
+      v_depth := v_depth - 1;
+      IF v_depth < 0 THEN
+        RETURN false;
+      END IF;
+    ELSIF NOT v_in_literal AND v_depth = 0 THEN
+      IF pg_catalog.substr(p_expression, v_index, 4) = ' OR ' THEN
+        RETURN false;
+      END IF;
+      IF v_first_and = 0
+         AND pg_catalog.substr(p_expression, v_index, 5) = ' AND '
+      THEN
+        v_first_and := v_index;
+      END IF;
+    END IF;
+
+    v_index := v_index + 1;
+  END LOOP;
+
+  IF v_in_literal OR v_depth <> 0 THEN
+    RETURN false;
+  END IF;
+
+  v_first_term := pg_catalog.btrim(
+    CASE
+      WHEN v_first_and = 0 THEN p_expression
+      ELSE pg_catalog.substr(p_expression, 1, v_first_and - 1)
+    END
+  );
+  v_bucket_id := pg_catalog.substring(
+    v_first_term,
+    '^bucket_id = ''([a-z0-9][a-z0-9_-]*)''::text$'
+  );
+
+  RETURN v_bucket_id IS NOT NULL AND v_bucket_id <> 'reports';
+END
+$function$;
 
 DO $preflight$
 DECLARE
@@ -31,6 +111,14 @@ DECLARE
   v_expected_check text;
   v_registry regclass;
   v_service_role_oid oid;
+  v_anon_role_oid oid;
+  v_authenticated_role_oid oid;
+  v_current_role_oid oid;
+  v_storage_admin_role_oid oid;
+  v_storage_buckets_owner_oid oid;
+  v_storage_objects_owner_oid oid;
+  v_storage_mode text;
+  v_unsafe_storage_policy name;
   v_role name;
   v_privilege text;
   v_column name;
@@ -192,6 +280,211 @@ BEGIN
     SELECT role_row.oid
     FROM pg_catalog.pg_roles AS role_row
     WHERE role_row.rolname = 'service_role'
+  );
+  v_anon_role_oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'anon'
+  );
+  v_authenticated_role_oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'authenticated'
+  );
+  v_current_role_oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = CURRENT_USER
+  );
+  v_storage_admin_role_oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'supabase_storage_admin'
+  );
+  SELECT relation.relowner
+  INTO STRICT v_storage_buckets_owner_oid
+  FROM pg_catalog.pg_class AS relation
+  WHERE relation.oid = 'storage.buckets'::regclass;
+  SELECT relation.relowner
+  INTO STRICT v_storage_objects_owner_oid
+  FROM pg_catalog.pg_class AS relation
+  WHERE relation.oid = 'storage.objects'::regclass;
+
+  IF v_storage_buckets_owner_oid = v_current_role_oid
+     AND v_storage_objects_owner_oid = v_current_role_oid
+  THEN
+    v_storage_mode := 'owner';
+  ELSIF v_storage_admin_role_oid IS NOT NULL
+        AND v_storage_buckets_owner_oid = v_storage_admin_role_oid
+        AND v_storage_objects_owner_oid = v_storage_admin_role_oid
+  THEN
+    v_storage_mode := 'managed';
+
+    -- Managed Supabase owns these relations with a role the deploy principal
+    -- must not inherit or assume. Both the deploy principal and service_role
+    -- need BYPASSRLS for bucket convergence/runtime Storage API access; browser
+    -- roles must remain subject to RLS and outside the owner role.
+    IF (
+      SELECT role_row.rolsuper
+        OR NOT role_row.rolbypassrls
+      FROM pg_catalog.pg_roles AS role_row
+      WHERE role_row.oid = v_current_role_oid
+    ) OR pg_catalog.pg_has_role(
+      v_current_role_oid,
+      v_storage_admin_role_oid,
+      'MEMBER'
+    ) OR pg_catalog.pg_has_role(
+      v_current_role_oid,
+      v_storage_admin_role_oid,
+      'USAGE'
+    ) OR NOT (
+      SELECT role_row.rolbypassrls
+      FROM pg_catalog.pg_roles AS role_row
+      WHERE role_row.oid = v_service_role_oid
+    ) OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_roles AS browser_role
+      WHERE browser_role.oid IN (
+        v_anon_role_oid,
+        v_authenticated_role_oid
+      )
+        AND (
+          browser_role.rolsuper
+          OR browser_role.rolbypassrls
+          OR pg_catalog.pg_has_role(
+            browser_role.oid,
+            v_storage_admin_role_oid,
+            'MEMBER'
+          )
+          OR pg_catalog.pg_has_role(
+            browser_role.oid,
+            v_storage_admin_role_oid,
+            'USAGE'
+          )
+        )
+    ) THEN
+      RAISE EXCEPTION
+        'managed storage role boundary is unsafe or unsupported';
+    END IF;
+
+    IF NOT (
+      SELECT relation.relrowsecurity
+      FROM pg_catalog.pg_class AS relation
+      WHERE relation.oid = 'storage.buckets'::regclass
+    ) OR NOT (
+      SELECT relation.relrowsecurity
+      FROM pg_catalog.pg_class AS relation
+      WHERE relation.oid = 'storage.objects'::regclass
+    ) OR NOT pg_catalog.has_table_privilege(
+      v_current_role_oid,
+      'storage.buckets'::regclass,
+      'SELECT'
+    ) OR NOT pg_catalog.has_table_privilege(
+      v_current_role_oid,
+      'storage.buckets'::regclass,
+      'INSERT'
+    ) OR NOT pg_catalog.has_table_privilege(
+      v_current_role_oid,
+      'storage.buckets'::regclass,
+      'UPDATE'
+    ) OR NOT pg_catalog.has_table_privilege(
+      v_current_role_oid,
+      'storage.objects'::regclass,
+      'SELECT'
+    ) OR NOT pg_catalog.has_table_privilege(
+      v_current_role_oid,
+      'storage.objects'::regclass,
+      'UPDATE'
+    ) THEN
+      RAISE EXCEPTION
+        'managed storage RLS or deploy table privileges are incompatible';
+    END IF;
+
+    SELECT policy.polname
+    INTO v_unsafe_storage_policy
+    FROM pg_catalog.pg_policy AS policy
+    WHERE policy.polrelid = 'storage.objects'::regclass
+      AND policy.polpermissive
+      AND (
+        0::oid = ANY (policy.polroles)
+        OR EXISTS (
+          SELECT 1
+          FROM pg_catalog.unnest(policy.polroles) AS target_role(role_oid)
+          WHERE target_role.role_oid <> 0
+            AND (
+              pg_catalog.pg_has_role(
+                v_anon_role_oid,
+                target_role.role_oid,
+                'MEMBER'
+              )
+              OR pg_catalog.pg_has_role(
+                v_anon_role_oid,
+                target_role.role_oid,
+                'USAGE'
+              )
+              OR pg_catalog.pg_has_role(
+                v_authenticated_role_oid,
+                target_role.role_oid,
+                'MEMBER'
+              )
+              OR pg_catalog.pg_has_role(
+                v_authenticated_role_oid,
+                target_role.role_oid,
+                'USAGE'
+              )
+            )
+        )
+      )
+      AND (
+        policy.polcmd NOT IN ('*', 'r', 'a', 'w', 'd')
+        OR (
+          policy.polcmd IN ('*', 'r', 'w', 'd')
+          AND NOT pg_temp.private_report_policy_excludes_reports(
+            pg_catalog.pg_get_expr(
+              policy.polqual,
+              policy.polrelid,
+              true
+            )
+          )
+        )
+        OR (
+          policy.polcmd IN ('*', 'a', 'w')
+          AND NOT pg_temp.private_report_policy_excludes_reports(
+            COALESCE(
+              pg_catalog.pg_get_expr(
+                policy.polwithcheck,
+                policy.polrelid,
+                true
+              ),
+              pg_catalog.pg_get_expr(
+                policy.polqual,
+                policy.polrelid,
+                true
+              )
+            )
+          )
+        )
+      )
+    ORDER BY policy.polname
+    LIMIT 1;
+
+    IF v_unsafe_storage_policy IS NOT NULL THEN
+      RAISE EXCEPTION
+        'managed storage.objects permissive policy % can authorize or does not provably exclude reports',
+        v_unsafe_storage_policy;
+    END IF;
+  ELSE
+    RAISE EXCEPTION
+      'unsupported storage ownership: buckets %, objects %, current role %',
+      v_storage_buckets_owner_oid::regrole,
+      v_storage_objects_owner_oid::regrole,
+      CURRENT_USER;
+  END IF;
+
+  PERFORM pg_catalog.set_config(
+    'app.private_report_evidence_storage_mode',
+    v_storage_mode,
+    true
   );
 
   IF (
@@ -975,27 +1268,45 @@ ON CONFLICT (id) DO UPDATE SET
   file_size_limit = EXCLUDED.file_size_limit,
   allowed_mime_types = EXCLUDED.allowed_mime_types;
 
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+DO $configure_storage_object_policies$
+DECLARE
+  v_storage_mode text := pg_catalog.current_setting(
+    'app.private_report_evidence_storage_mode'
+  );
+BEGIN
+  IF v_storage_mode = 'managed' THEN
+    -- Managed Supabase owns storage.objects. Its existing policy catalog was
+    -- proven unable to authorize reports during preflight and is protected by
+    -- the storage.objects lock; leave ownership, grants, RLS, and policies
+    -- byte-for-byte untouched.
+    RETURN;
+  ELSIF v_storage_mode <> 'owner' THEN
+    RAISE EXCEPTION 'private report evidence storage mode is invalid';
+  END IF;
 
-DROP POLICY IF EXISTS "Non-service roles cannot access report evidence"
-  ON storage.objects;
-CREATE POLICY "Non-service roles cannot access report evidence"
-  ON storage.objects
-  AS RESTRICTIVE
-  FOR ALL
-  TO PUBLIC
-  USING (bucket_id <> 'reports' OR CURRENT_USER = 'service_role')
-  WITH CHECK (bucket_id <> 'reports' OR CURRENT_USER = 'service_role');
+  ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Service role manages report evidence"
-  ON storage.objects;
-CREATE POLICY "Service role manages report evidence"
-  ON storage.objects
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
-  USING (bucket_id = 'reports')
-  WITH CHECK (bucket_id = 'reports');
+  DROP POLICY IF EXISTS "Non-service roles cannot access report evidence"
+    ON storage.objects;
+  CREATE POLICY "Non-service roles cannot access report evidence"
+    ON storage.objects
+    AS RESTRICTIVE
+    FOR ALL
+    TO PUBLIC
+    USING (bucket_id <> 'reports' OR CURRENT_USER = 'service_role')
+    WITH CHECK (bucket_id <> 'reports' OR CURRENT_USER = 'service_role');
+
+  DROP POLICY IF EXISTS "Service role manages report evidence"
+    ON storage.objects;
+  CREATE POLICY "Service role manages report evidence"
+    ON storage.objects
+    AS PERMISSIVE
+    FOR ALL
+    TO service_role
+    USING (bucket_id = 'reports')
+    WITH CHECK (bucket_id = 'reports');
+END
+$configure_storage_object_policies$;
 
 ALTER TABLE public.content_reports
   DROP CONSTRAINT IF EXISTS content_reports_private_evidence_refs_check;
@@ -2074,6 +2385,26 @@ DECLARE
     SELECT role_row.oid FROM pg_catalog.pg_roles AS role_row
     WHERE role_row.rolname = 'postgres'
   );
+  v_anon_role_oid oid := (
+    SELECT role_row.oid FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'anon'
+  );
+  v_authenticated_role_oid oid := (
+    SELECT role_row.oid FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'authenticated'
+  );
+  v_current_role_oid oid := (
+    SELECT role_row.oid FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = CURRENT_USER
+  );
+  v_storage_admin_role_oid oid := (
+    SELECT role_row.oid FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'supabase_storage_admin'
+  );
+  v_storage_mode text := pg_catalog.current_setting(
+    'app.private_report_evidence_storage_mode'
+  );
+  v_unsafe_storage_policy name;
   v_registry regclass := 'public.report_evidence_uploads'::regclass;
   v_lifecycle_function regprocedure;
   v_expected_check text;
@@ -2295,32 +2626,163 @@ BEGIN
     RAISE EXCEPTION 'RLS is not enabled on storage.objects';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1
+  IF v_storage_mode = 'owner' THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_policy AS policy
+      WHERE policy.polrelid = 'storage.objects'::regclass
+        AND policy.polname = 'Non-service roles cannot access report evidence'
+        AND NOT policy.polpermissive
+        AND policy.polcmd = '*'
+        AND policy.polroles = ARRAY[0::oid]::oid[]
+        AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) =
+          '((bucket_id <> ''reports''::text) OR (CURRENT_USER = ''service_role''::name))'
+        AND pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid) =
+          '((bucket_id <> ''reports''::text) OR (CURRENT_USER = ''service_role''::name))'
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_policy AS policy
+      WHERE policy.polrelid = 'storage.objects'::regclass
+        AND policy.polname = 'Service role manages report evidence'
+        AND policy.polpermissive
+        AND policy.polcmd = '*'
+        AND policy.polroles = ARRAY[v_service_role_oid]::oid[]
+        AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) =
+          '(bucket_id = ''reports''::text)'
+        AND pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid) =
+          '(bucket_id = ''reports''::text)'
+    ) THEN
+      RAISE EXCEPTION 'private report evidence RLS policy contract is invalid';
+    END IF;
+  ELSIF v_storage_mode = 'managed' THEN
+    IF v_storage_admin_role_oid IS NULL OR (
+      SELECT relation.relowner
+      FROM pg_catalog.pg_class AS relation
+      WHERE relation.oid = 'storage.buckets'::regclass
+    ) <> v_storage_admin_role_oid OR (
+      SELECT relation.relowner
+      FROM pg_catalog.pg_class AS relation
+      WHERE relation.oid = 'storage.objects'::regclass
+    ) <> v_storage_admin_role_oid OR NOT (
+      SELECT relation.relrowsecurity
+      FROM pg_catalog.pg_class AS relation
+      WHERE relation.oid = 'storage.buckets'::regclass
+    ) OR (
+      SELECT role_row.rolsuper OR NOT role_row.rolbypassrls
+      FROM pg_catalog.pg_roles AS role_row
+      WHERE role_row.oid = v_current_role_oid
+    ) OR pg_catalog.pg_has_role(
+      v_current_role_oid,
+      v_storage_admin_role_oid,
+      'MEMBER'
+    ) OR pg_catalog.pg_has_role(
+      v_current_role_oid,
+      v_storage_admin_role_oid,
+      'USAGE'
+    ) OR NOT (
+      SELECT role_row.rolbypassrls
+      FROM pg_catalog.pg_roles AS role_row
+      WHERE role_row.oid = v_service_role_oid
+    ) OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_roles AS browser_role
+      WHERE browser_role.oid IN (
+        v_anon_role_oid,
+        v_authenticated_role_oid
+      )
+        AND (
+          browser_role.rolsuper
+          OR browser_role.rolbypassrls
+          OR pg_catalog.pg_has_role(
+            browser_role.oid,
+            v_storage_admin_role_oid,
+            'MEMBER'
+          )
+          OR pg_catalog.pg_has_role(
+            browser_role.oid,
+            v_storage_admin_role_oid,
+            'USAGE'
+          )
+        )
+    ) THEN
+      RAISE EXCEPTION 'managed storage postflight role/owner/RLS drifted';
+    END IF;
+
+    SELECT policy.polname
+    INTO v_unsafe_storage_policy
     FROM pg_catalog.pg_policy AS policy
     WHERE policy.polrelid = 'storage.objects'::regclass
-      AND policy.polname = 'Non-service roles cannot access report evidence'
-      AND NOT policy.polpermissive
-      AND policy.polcmd = '*'
-      AND policy.polroles = ARRAY[0::oid]::oid[]
-      AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) =
-        '((bucket_id <> ''reports''::text) OR (CURRENT_USER = ''service_role''::name))'
-      AND pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid) =
-        '((bucket_id <> ''reports''::text) OR (CURRENT_USER = ''service_role''::name))'
-  ) OR NOT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_policy AS policy
-    WHERE policy.polrelid = 'storage.objects'::regclass
-      AND policy.polname = 'Service role manages report evidence'
       AND policy.polpermissive
-      AND policy.polcmd = '*'
-      AND policy.polroles = ARRAY[v_service_role_oid]::oid[]
-      AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) =
-        '(bucket_id = ''reports''::text)'
-      AND pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid) =
-        '(bucket_id = ''reports''::text)'
-  ) THEN
-    RAISE EXCEPTION 'private report evidence RLS policy contract is invalid';
+      AND (
+        0::oid = ANY (policy.polroles)
+        OR EXISTS (
+          SELECT 1
+          FROM pg_catalog.unnest(policy.polroles) AS target_role(role_oid)
+          WHERE target_role.role_oid <> 0
+            AND (
+              pg_catalog.pg_has_role(
+                v_anon_role_oid,
+                target_role.role_oid,
+                'MEMBER'
+              )
+              OR pg_catalog.pg_has_role(
+                v_anon_role_oid,
+                target_role.role_oid,
+                'USAGE'
+              )
+              OR pg_catalog.pg_has_role(
+                v_authenticated_role_oid,
+                target_role.role_oid,
+                'MEMBER'
+              )
+              OR pg_catalog.pg_has_role(
+                v_authenticated_role_oid,
+                target_role.role_oid,
+                'USAGE'
+              )
+            )
+        )
+      )
+      AND (
+        policy.polcmd NOT IN ('*', 'r', 'a', 'w', 'd')
+        OR (
+          policy.polcmd IN ('*', 'r', 'w', 'd')
+          AND NOT pg_temp.private_report_policy_excludes_reports(
+            pg_catalog.pg_get_expr(
+              policy.polqual,
+              policy.polrelid,
+              true
+            )
+          )
+        )
+        OR (
+          policy.polcmd IN ('*', 'a', 'w')
+          AND NOT pg_temp.private_report_policy_excludes_reports(
+            COALESCE(
+              pg_catalog.pg_get_expr(
+                policy.polwithcheck,
+                policy.polrelid,
+                true
+              ),
+              pg_catalog.pg_get_expr(
+                policy.polqual,
+                policy.polrelid,
+                true
+              )
+            )
+          )
+        )
+      )
+    ORDER BY policy.polname
+    LIMIT 1;
+
+    IF v_unsafe_storage_policy IS NOT NULL THEN
+      RAISE EXCEPTION
+        'managed storage.objects permissive policy % changed or can authorize reports',
+        v_unsafe_storage_policy;
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'private report evidence storage mode postflight is invalid';
   END IF;
 
   IF (
@@ -2850,6 +3312,8 @@ BEGIN
   END IF;
 END
 $postflight$;
+
+DROP FUNCTION pg_temp.private_report_policy_excludes_reports(text);
 
 NOTIFY pgrst, 'reload schema';
 
