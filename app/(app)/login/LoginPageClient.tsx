@@ -1446,8 +1446,8 @@ export default function LoginPageClient() {
         <p
           style={{
             textAlign: 'center',
-            fontSize: 11,
-            color: 'var(--color-text-tertiary)',
+            fontSize: tokens.typography.fontSize.sm,
+            color: 'var(--color-text-secondary)',
             marginTop: 16,
             lineHeight: 1.6,
           }}
@@ -1457,7 +1457,13 @@ export default function LoginPageClient() {
             href="/terms"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'var(--color-brand)', textDecoration: 'none' }}
+            style={{
+              color: 'var(--color-text-primary)',
+              fontWeight: tokens.typography.fontWeight.semibold,
+              textDecoration: 'underline',
+              textDecorationThickness: '1px',
+              textUnderlineOffset: 3,
+            }}
           >
             {t('termsOfService')}
           </a>{' '}
@@ -1466,7 +1472,13 @@ export default function LoginPageClient() {
             href="/privacy"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'var(--color-brand)', textDecoration: 'none' }}
+            style={{
+              color: 'var(--color-text-primary)',
+              fontWeight: tokens.typography.fontWeight.semibold,
+              textDecoration: 'underline',
+              textDecorationThickness: '1px',
+              textUnderlineOffset: 3,
+            }}
           >
             {t('privacyPolicy')}
           </a>

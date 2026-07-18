@@ -151,7 +151,13 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
         >
           <Link
             href="/market"
-            style={{ color: tokens.colors.text.secondary, textDecoration: 'none' }}
+            style={{
+              color: tokens.colors.text.primary,
+              fontWeight: tokens.typography.fontWeight.semibold,
+              textDecoration: 'underline',
+              textDecorationThickness: '1px',
+              textUnderlineOffset: 3,
+            }}
           >
             {t('market')}
           </Link>
