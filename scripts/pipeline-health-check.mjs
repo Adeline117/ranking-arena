@@ -192,37 +192,6 @@ function checkFetcherErrorHandling() {
 // 2. 检查数据新鲜度
 // ============================================
 
-// Platforms intentionally not fetched (in DEAD_BLOCKED_PLATFORMS or
-// otherwise not part of any active fetch group). Skip these in the freshness
-// check so they don't show up as false-positive 🔴 critical alerts.
-//
-// Keep in sync with lib/constants/exchanges.ts → DEAD_BLOCKED_PLATFORMS,
-// plus platforms that exist in DB but compute-leaderboard ignores them.
-const FRESHNESS_SKIP_PLATFORMS = new Set([
-  // Dead/blocked
-  'perpetual_protocol',
-  'whitebit',
-  'bitmart',
-  'btse',
-  'vertex',
-  'apex_pro',
-  'rabbitx',
-  'lbank',
-  'bitget_spot',
-  // Excluded from leaderboard_ranks but still has scattered snapshot rows
-  'web3_bot',
-  // Mac Mini only — pipeline-health-check.mjs has no visibility into
-  // residential-IP scrapers so they always look stale from this script.
-  'phemex',
-  'blofin',
-  'kucoin',
-  // Not in the active fetch groups currently
-  'paradex',
-  'kwenta',
-  'mux',
-  'synthetix',
-])
-
 async function checkDataFreshness() {
   console.log('\n=== 2. 数据新鲜度检查 ===\n')
 
@@ -246,164 +215,72 @@ async function checkDataFreshness() {
       body: '{}',
     })
 
-    if (res.ok) {
-      // RPC success — use the structured response
-      const rpcData = await res.json()
-      const now = Date.now()
-      let freshCount = 0,
-        staleCount = 0,
-        criticalCount = 0,
-        skippedCount = 0
-
-      for (const row of rpcData) {
-        // 2026-07-03: the rebuilt RPC (arena schema) returns {source, latest};
-        // the old shape was {platform, latest_snapshot, trader_count}. Accept
-        // both — reading only the old keys crashed this whole section on
-        // `undefined.padEnd`.
-        const platform = row.platform ?? row.source
-        const latest = row.latest_snapshot ?? row.latest
-        if (!platform || !latest) continue
-        if (FRESHNESS_SKIP_PLATFORMS.has(platform)) {
-          skippedCount++
-          continue
-        }
-        const ageHours = (now - new Date(latest).getTime()) / (1000 * 60 * 60)
-        let status = 'FRESH'
-        let icon = '🟢'
-
-        if (ageHours >= CRITICAL_HOURS) {
-          status = 'CRITICAL'
-          icon = '🔴'
-          criticalCount++
-          results.dataFreshness.push({
-            platform,
-            status,
-            ageHours: Math.round(ageHours),
-          })
-        } else if (ageHours >= STALE_HOURS) {
-          status = 'STALE'
-          icon = '🟡'
-          staleCount++
-          results.dataFreshness.push({
-            platform,
-            status,
-            ageHours: Math.round(ageHours),
-          })
-        } else {
-          freshCount++
-        }
-
-        console.log(
-          `${icon} ${platform.padEnd(20)} ${Math.round(ageHours)}h ago` +
-            (row.trader_count != null ? `  (${row.trader_count} traders)` : '')
-        )
-      }
-
-      console.log(
-        `\n总计: ${freshCount} 新鲜, ${staleCount} 陈旧, ${criticalCount} 严重${skippedCount > 0 ? `, ${skippedCount} 已跳过(dead/mac-mini)` : ''}`
-      )
-      return { freshCount, staleCount, criticalCount }
-    } else {
-      // Fallback: Query each known platform's latest snapshot individually
-      // The old limit=500 approach only captured 2-3 platforms
-      const KNOWN_PLATFORMS = [
-        'binance_futures',
-        'binance_spot',
-        'binance_web3',
-        'bybit',
-        'bybit_spot',
-        'okx_futures',
-        'okx_spot',
-        'okx_web3',
-        'bitget_futures',
-        'hyperliquid',
-        'gmx',
-        'bitunix',
-        'gains',
-        'htx_futures',
-        'bitfinex',
-        'coinex',
-        'mexc',
-        'bingx',
-        'bingx_spot',
-        'gateio',
-        'btcc',
-        'drift',
-        'jupiter_perps',
-        'aevo',
-        'dydx',
-        'web3_bot',
-        'toobit',
-        'xt',
-        'etoro',
-        'kucoin',
-        'weex',
-        'blofin',
-        'phemex',
-      ]
-
-      // Fetch latest timestamp per platform in parallel (one row each).
-      // Skip dead/mac-mini-only platforms — they always look stale from this script.
-      const ACTIVE_PLATFORMS = KNOWN_PLATFORMS.filter((p) => !FRESHNESS_SKIP_PLATFORMS.has(p))
-      const platformResults = await Promise.all(
-        ACTIVE_PLATFORMS.map(async (p) => {
-          try {
-            const r = await fetch(
-              `${SUPABASE_URL}/rest/v1/trader_snapshots_v2?select=platform,as_of_ts&platform=eq.${p}&order=as_of_ts.desc&limit=1`,
-              {
-                headers: {
-                  apikey: SUPABASE_KEY,
-                  Authorization: `Bearer ${SUPABASE_KEY}`,
-                },
-              }
-            )
-            const rows = await r.json()
-            return rows[0] || null
-          } catch {
-            return null
-          }
-        })
-      )
-
-      const latestByPlatform = {}
-      for (const row of platformResults) {
-        if (row) {
-          latestByPlatform[row.platform] = row.as_of_ts
-        }
-      }
-
-      const now = Date.now()
-      let freshCount = 0,
-        staleCount = 0,
-        criticalCount = 0
-
-      for (const [platform, captured_at] of Object.entries(latestByPlatform)) {
-        const ageHours = (now - new Date(captured_at).getTime()) / (1000 * 60 * 60)
-        let status = 'FRESH'
-        let icon = '🟢'
-
-        if (ageHours >= CRITICAL_HOURS) {
-          status = 'CRITICAL'
-          icon = '🔴'
-          criticalCount++
-          results.dataFreshness.push({ platform, status, ageHours: Math.round(ageHours) })
-        } else if (ageHours >= STALE_HOURS) {
-          status = 'STALE'
-          icon = '🟡'
-          staleCount++
-          results.dataFreshness.push({ platform, status, ageHours: Math.round(ageHours) })
-        } else {
-          freshCount++
-        }
-
-        console.log(`${icon} ${platform.padEnd(20)} ${Math.round(ageHours)}h ago`)
-      }
-
-      console.log(`\n总计: ${freshCount} 新鲜, ${staleCount} 陈旧, ${criticalCount} 严重`)
-      return { freshCount, staleCount, criticalCount }
+    if (!res.ok) {
+      throw new Error(`active source freshness RPC returned HTTP ${res.status}`)
     }
+
+    const rpcData = await res.json()
+    if (!Array.isArray(rpcData) || rpcData.length === 0) {
+      throw new Error('active source freshness RPC returned no rows')
+    }
+
+    const now = Date.now()
+    const seenPlatforms = new Set()
+    let freshCount = 0
+    let staleCount = 0
+    let criticalCount = 0
+
+    for (const row of rpcData) {
+      const platform = String(row.source ?? row.platform ?? '').trim()
+      if (!platform || seenPlatforms.has(platform)) {
+        throw new Error(`active source freshness RPC returned an invalid source: ${platform}`)
+      }
+      seenPlatforms.add(platform)
+
+      const latest = row.latest ?? row.latest_snapshot ?? null
+      const timestamp = latest == null ? null : new Date(latest).getTime()
+      if (
+        (timestamp != null && !Number.isFinite(timestamp)) ||
+        (timestamp != null && timestamp > now + 5 * 60 * 1000)
+      ) {
+        throw new Error(`active source freshness RPC returned an invalid timestamp: ${platform}`)
+      }
+
+      const ageHours = timestamp == null ? null : (now - timestamp) / (1000 * 60 * 60)
+      let status = 'FRESH'
+      let icon = '🟢'
+
+      if (ageHours == null || ageHours >= CRITICAL_HOURS) {
+        status = 'CRITICAL'
+        icon = '🔴'
+        criticalCount++
+        results.dataFreshness.push({
+          platform,
+          status,
+          ageHours: ageHours == null ? null : Math.round(ageHours),
+        })
+      } else if (ageHours >= STALE_HOURS) {
+        status = 'STALE'
+        icon = '🟡'
+        staleCount++
+        results.dataFreshness.push({
+          platform,
+          status,
+          ageHours: Math.round(ageHours),
+        })
+      } else {
+        freshCount++
+      }
+
+      const ageLabel = ageHours == null ? 'never fetched' : `${Math.round(ageHours)}h ago`
+      console.log(`${icon} ${platform.padEnd(24)} ${ageLabel}`)
+    }
+
+    console.log(`\n总计: ${freshCount} 新鲜, ${staleCount} 陈旧, ${criticalCount} 严重`)
+    return { freshCount, staleCount, criticalCount }
   } catch (err) {
     console.error('检查失败:', err.message)
+    throw err
   }
 }
 
@@ -499,10 +376,11 @@ function generateSuggestions() {
   // Data freshness suggestions
   for (const item of results.dataFreshness) {
     if (item.status === 'CRITICAL') {
+      const outageDuration = Number.isFinite(item.ageHours) ? `${item.ageHours}h` : '从未成功'
       results.suggestions.push({
         platform: item.platform,
         priority: 'HIGH',
-        action: `修复 ${item.platform} 数据抓取（已停止 ${item.ageHours}h）`,
+        action: `修复 ${item.platform} 数据抓取（${outageDuration}）`,
         command: `/fix-pipeline ${item.platform}`,
       })
     }
