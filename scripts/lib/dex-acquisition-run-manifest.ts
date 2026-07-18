@@ -10,8 +10,8 @@ import {
   parseDexGoldenWalletSnapshot,
 } from './dex-golden-wallets'
 
-export const DEX_ACQUISITION_RUN_MANIFEST_SCHEMA_VERSION = 1 as const
-export const DEX_ACQUISITION_RUN_MANIFEST_CONTRACT = 'arena.dex.acquisition-run-manifest@1' as const
+export const DEX_ACQUISITION_RUN_MANIFEST_SCHEMA_VERSION = 2 as const
+export const DEX_ACQUISITION_RUN_MANIFEST_CONTRACT = 'arena.dex.acquisition-run-manifest@2' as const
 export const DEX_ACQUISITION_QUERY_POLICY_SCHEMA_VERSION = 1 as const
 export const DEX_ACQUISITION_QUERY_POLICY_CONTRACT = 'arena.dex.acquisition-query-policy@1' as const
 export const DEX_ACQUISITION_ENDPOINT_PROFILE_CONTRACT =
@@ -424,7 +424,7 @@ const solanaWindowSchema = z
     duration_seconds: z.literal(DEX_ACQUISITION_RUN_WINDOW_SECONDS),
     declared_resolution_state: z.literal('fully_resolved'),
     boundary_policy: z.literal('solana_first_produced_slot_at_or_after_utc_v1'),
-    finality_anchor_policy: z.literal('solana_verified_anchor_semantics_v1'),
+    finality_anchor_policy: z.literal('solana_verified_anchor_semantics_v2'),
     height_range: bscWindowSchema.shape.height_range,
   })
   .strict()
@@ -1043,7 +1043,7 @@ function assertChainPolicies(manifest: DexAcquisitionRunManifest): void {
     }
   } else if (
     manifest.window.boundary_policy !== 'solana_first_produced_slot_at_or_after_utc_v1' ||
-    manifest.window.finality_anchor_policy !== 'solana_verified_anchor_semantics_v1' ||
+    manifest.window.finality_anchor_policy !== 'solana_verified_anchor_semantics_v2' ||
     manifest.golden_sample.source_slug !== 'okx_web3_solana' ||
     manifest.source.acquisition_mode === 'bsc_provider_address_index'
   ) {

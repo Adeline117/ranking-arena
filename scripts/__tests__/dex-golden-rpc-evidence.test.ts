@@ -6,6 +6,8 @@ import { base58DecodedByteLength } from '../../lib/utils/base58'
 import {
   DEX_BSC_GOLDEN_RPC_LANES,
   DEX_GOLDEN_RPC_EVIDENCE_CONTRACT,
+  DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION,
+  DEX_GOLDEN_RPC_EXCHANGE_BINDING_CONTRACT,
   DEX_GOLDEN_RPC_REQUIRED_BLOCKERS,
   DEX_SOLANA_GOLDEN_RPC_LANES,
   dexGoldenRemoteEndpointIdentity,
@@ -115,7 +117,7 @@ function capture(
             semantic_sha256: null,
           }
         : {
-            policy: 'solana_verified_transaction_finality_semantics_v1',
+            policy: 'solana_verified_transaction_finality_semantics_v2',
             semantic_sha256: hash(`${endpointId}:semantic`),
           },
     stable_transaction_facts_sha256: stableHash,
@@ -130,7 +132,7 @@ function baseEnvelope(chain: 'bsc' | 'solana'): DexGoldenRpcEvidence {
     ? ['alchemy_bnb_mainnet', 'publicnode_bsc_mainnet']
     : ['alchemy_solana_mainnet', 'helius_solana_mainnet']
   return {
-    schema_version: 1,
+    schema_version: DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION,
     data_contract: DEX_GOLDEN_RPC_EVIDENCE_CONTRACT,
     purpose: 'phase0_shadow_finality_membership_evidence_only',
     proof_boundary:
@@ -202,12 +204,26 @@ function rebuildExchangeBinding(
 }
 
 describe('DEX golden double-RPC evidence contract', () => {
+  it('pins the v2 envelope while preserving the unchanged v1 exchange binding', () => {
+    expect(DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION).toBe(2)
+    expect(DEX_GOLDEN_RPC_EVIDENCE_CONTRACT).toBe('arena.dex.golden-rpc-transaction-evidence@2')
+    expect(DEX_GOLDEN_RPC_EXCHANGE_BINDING_CONTRACT).toBe('arena.dex.golden-rpc-exchange-binding@1')
+    expect(DEX_BSC_GOLDEN_RPC_LANES).toHaveLength(8)
+    expect(baseEnvelope('bsc').captures[0].rpc_exchanges[0].exchange_binding_sha256).toBe(
+      'd976d46c7af66aff527a7c11e5e37b27d240198d7c397ab7c65000814042c92f'
+    )
+  })
+
   it.each(['bsc', 'solana'] as const)(
     'accepts a canonical draft-only %s finality envelope',
     (chain) => {
       const evidence = baseEnvelope(chain)
       expect(parseDexGoldenRpcEvidence(evidence)).toEqual(evidence)
-      expect(dexGoldenRpcEvidenceSha256(evidence)).toMatch(/^[0-9a-f]{64}$/)
+      expect(dexGoldenRpcEvidenceSha256(evidence)).toBe(
+        chain === 'bsc'
+          ? '0dd902355dca6a62f685431f7cec687ae42c4b558033021645f0585cd178066f'
+          : 'b8031f747ae37ab94163a401cda6312f026c18015e87e53c9d0f3d545f825844'
+      )
     }
   )
 
@@ -249,6 +265,40 @@ describe('DEX golden double-RPC evidence contract', () => {
     expect(() => parseDexGoldenRpcEvidence(foreign)).toThrow('canonical lane and method order')
   })
 
+  it('pins the produced-slot exchange at the exact Solana anchor position', () => {
+    expect(DEX_SOLANA_GOLDEN_RPC_LANES).toHaveLength(7)
+    expect(DEX_SOLANA_GOLDEN_RPC_LANES[2]).toEqual(['finalized_anchor_produced_slots', 'getBlocks'])
+    const evidence = baseEnvelope('solana')
+    for (const captureValue of evidence.captures) {
+      expect(captureValue.rpc_exchanges[2]).toMatchObject({
+        lane: 'finalized_anchor_produced_slots',
+        method: 'getBlocks',
+      })
+    }
+  })
+
+  it('rejects every legacy v1 Solana envelope boundary independently', () => {
+    const oldSchema = clone(baseEnvelope('solana')) as any
+    oldSchema.schema_version = 1
+    expect(() => parseDexGoldenRpcEvidence(oldSchema)).toThrow()
+
+    const oldContract = clone(baseEnvelope('solana')) as any
+    oldContract.data_contract = 'arena.dex.golden-rpc-transaction-evidence@1'
+    expect(() => parseDexGoldenRpcEvidence(oldContract)).toThrow()
+
+    const oldWitness = clone(baseEnvelope('solana')) as any
+    oldWitness.captures[0].provider_finality_witness.policy =
+      'solana_verified_transaction_finality_semantics_v1'
+    expect(() => parseDexGoldenRpcEvidence(oldWitness)).toThrow()
+
+    const oldSixLaneFixture = clone(baseEnvelope('solana'))
+    for (const captureValue of oldSixLaneFixture.captures) {
+      captureValue.rpc_exchanges.splice(2, 1)
+      expect(captureValue.rpc_exchanges).toHaveLength(6)
+    }
+    expect(() => parseDexGoldenRpcEvidence(oldSixLaneFixture)).toThrow('exact required lane set')
+  })
+
   it('binds every request and response to its exact exchange context', () => {
     const evidence = baseEnvelope('bsc')
     const first = evidence.captures[0].rpc_exchanges[0]
@@ -283,7 +333,7 @@ describe('DEX golden double-RPC evidence contract', () => {
   it('rejects a provider finality witness from the other chain', () => {
     const evidence = baseEnvelope('bsc')
     evidence.captures[0].provider_finality_witness = {
-      policy: 'solana_verified_transaction_finality_semantics_v1',
+      policy: 'solana_verified_transaction_finality_semantics_v2',
       semantic_sha256: hash('foreign-solana-witness'),
     }
     expect(() => parseDexGoldenRpcEvidence(evidence)).toThrow(
@@ -347,8 +397,8 @@ describe('DEX golden double-RPC evidence contract', () => {
 
     const serialized = JSON.stringify(baseEnvelope('bsc'))
     const duplicateKey = serialized.replace(
-      '"schema_version":1',
-      '"schema_version":1,"schema_version":1'
+      '"schema_version":2',
+      '"schema_version":2,"schema_version":2'
     )
     expect(() => parseDexGoldenRpcEvidenceJson(duplicateKey)).toThrow('invalid strict JSON')
   })

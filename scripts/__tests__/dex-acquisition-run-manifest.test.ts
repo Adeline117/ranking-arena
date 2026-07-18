@@ -303,7 +303,7 @@ function validManifest(source: DexGoldenSource = 'binance_web3_bsc'): DexAcquisi
         : 'solana_first_produced_slot_at_or_after_utc_v1',
       finality_anchor_policy: isBsc
         ? 'bsc_verified_anchor_semantics_v1'
-        : 'solana_verified_anchor_semantics_v1',
+        : 'solana_verified_anchor_semantics_v2',
       height_range: {
         start_inclusive: 100,
         end_exclusive: 107,
@@ -503,6 +503,15 @@ describe('DEX acquisition run manifest contract', () => {
       reference: 'mainnet-beta',
       height_unit: 'slot',
     })
+    expect(bsc).toMatchObject({
+      schema_version: 2,
+      data_contract: 'arena.dex.acquisition-run-manifest@2',
+      query_policy: {
+        schema_version: 1,
+        data_contract: 'arena.dex.acquisition-query-policy@1',
+      },
+    })
+    expect(solana.window.finality_anchor_policy).toBe('solana_verified_anchor_semantics_v2')
     expect(bsc.claims).toMatchObject({
       boundary_evidence_verified: false,
       endpoint_registry_verified: false,
@@ -510,6 +519,25 @@ describe('DEX acquisition run manifest contract', () => {
       artifact_persistence_authorized: false,
       transcript_reference_eligible: false,
     })
+  })
+
+  it('rejects legacy run schema version 1', () => {
+    const legacySchema = validManifest()
+    mutableRecord(legacySchema).schema_version = 1
+    expect(() => parseDexAcquisitionRunManifest(legacySchema, fixtureJson)).toThrow()
+  })
+
+  it('rejects the legacy run-manifest @1 contract', () => {
+    const legacyContract = validManifest()
+    mutableRecord(legacyContract).data_contract = 'arena.dex.acquisition-run-manifest@1'
+    expect(() => parseDexAcquisitionRunManifest(legacyContract, fixtureJson)).toThrow()
+  })
+
+  it('rejects Solana v1 anchor semantics', () => {
+    const legacySolanaAnchor = validManifest('okx_web3_solana')
+    mutableRecord(legacySolanaAnchor.window).finality_anchor_policy =
+      'solana_verified_anchor_semantics_v1'
+    expect(() => parseDexAcquisitionRunManifest(legacySolanaAnchor, fixtureJson)).toThrow()
   })
 
   it('accepts the complete chain and acquisition-mode matrix', () => {
@@ -543,7 +571,7 @@ describe('DEX acquisition run manifest contract', () => {
   it('pins domain-bound policy and manifest hashes', () => {
     const manifest = validManifest()
     const expectedPolicy = '01ff3784bcf6bd9046f2549dd07a5def79b756838b56df478d0a1c42f8037005'
-    const expectedManifest = 'fb5073f8cf65131dd49140166a5d4a2b071b0d32b467d2e9e72c7441ffccbdf8'
+    const expectedManifest = 'e11f5709760864bfc2504abf26d3ae328517128377c7f2987986165c9a19cd0b'
 
     expect(dexAcquisitionQueryPolicySha256(manifest.query_policy)).toBe(expectedPolicy)
     expect(dexAcquisitionRunManifestSha256(manifest, fixtureJson)).toBe(expectedManifest)

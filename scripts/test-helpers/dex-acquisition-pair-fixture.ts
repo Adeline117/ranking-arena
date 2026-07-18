@@ -393,7 +393,7 @@ function makeManifest(source: DexGoldenSource, variant: DexPairVariant): DexAcqu
         window: {
           ...sharedWindow,
           boundary_policy: 'solana_first_produced_slot_at_or_after_utc_v1' as const,
-          finality_anchor_policy: 'solana_verified_anchor_semantics_v1' as const,
+          finality_anchor_policy: 'solana_verified_anchor_semantics_v2' as const,
         },
       }
   return {

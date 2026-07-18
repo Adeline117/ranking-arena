@@ -11,9 +11,9 @@ import {
   DEX_SOLANA_STABLE_TRANSACTION_FACTS_CONTRACT,
 } from './dex-golden-transaction-facts'
 
-export const DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION = 1 as const
+export const DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION = 2 as const
 export const DEX_GOLDEN_RPC_EVIDENCE_CONTRACT =
-  'arena.dex.golden-rpc-transaction-evidence@1' as const
+  'arena.dex.golden-rpc-transaction-evidence@2' as const
 export const DEX_GOLDEN_RPC_EXCHANGE_BINDING_CONTRACT =
   'arena.dex.golden-rpc-exchange-binding@1' as const
 
@@ -39,6 +39,7 @@ export const DEX_BSC_GOLDEN_RPC_LANES = [
 export const DEX_SOLANA_GOLDEN_RPC_LANES = [
   ['genesis_hash', 'getGenesisHash'],
   ['finalized_anchor_slot', 'getSlot'],
+  ['finalized_anchor_produced_slots', 'getBlocks'],
   ['finalized_anchor_block', 'getBlock'],
   ['transaction', 'getTransaction'],
   ['signature_status', 'getSignatureStatuses'],
@@ -262,7 +263,7 @@ const bscFinalityWitnessSchema = z
 
 const solanaFinalityWitnessSchema = z
   .object({
-    policy: z.literal('solana_verified_transaction_finality_semantics_v1'),
+    policy: z.literal('solana_verified_transaction_finality_semantics_v2'),
     semantic_sha256: sha256Schema,
   })
   .strict()
@@ -511,7 +512,7 @@ function assertWitnessPolicy(evidence: DexGoldenRpcEvidence): void {
         ? capture.provider_finality_witness.policy !==
           'bsc_verified_finality_document_no_exported_semantic_hash_v1'
         : capture.provider_finality_witness.policy !==
-          'solana_verified_transaction_finality_semantics_v1'
+          'solana_verified_transaction_finality_semantics_v2'
     ) {
       throw new Error('provider finality witness policy conflicts with the evidence chain')
     }

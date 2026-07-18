@@ -28,9 +28,9 @@ import {
   type DexSolanaProtocolArtifact,
 } from './dex-solana-protocol-manifest'
 
-export const DEX_GOLDEN_PROTOCOL_BINDING_SCHEMA_VERSION = 1 as const
+export const DEX_GOLDEN_PROTOCOL_BINDING_SCHEMA_VERSION = 2 as const
 export const DEX_GOLDEN_PROTOCOL_BINDING_CONTRACT =
-  'arena.dex.protocol-decoder-golden-binding@1' as const
+  'arena.dex.protocol-decoder-golden-binding@2' as const
 
 export const DEX_GOLDEN_PROTOCOL_BINDING_REQUIRED_BLOCKERS = [
   'commercial_decoder_clearance_unverified',
