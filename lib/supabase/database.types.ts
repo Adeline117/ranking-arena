@@ -2789,6 +2789,27 @@ export type Database = {
         }
         Relationships: []
       }
+      leaderboard_source_freshness: {
+        Row: {
+          recorded_at: string
+          season_id: string
+          source: string
+          source_as_of: string
+        }
+        Insert: {
+          recorded_at?: string
+          season_id: string
+          source: string
+          source_as_of: string
+        }
+        Update: {
+          recorded_at?: string
+          season_id?: string
+          source?: string
+          source_as_of?: string
+        }
+        Relationships: []
+      }
       ledger_entries: {
         Row: {
           amount: number
@@ -8786,6 +8807,14 @@ export type Database = {
         Returns: boolean
       }
       count_distinct_projects: { Args: never; Returns: number }
+      count_trader_account_followers: {
+        Args: { p_sources: string[]; p_trader_ids: string[] }
+        Returns: {
+          cnt: number
+          source: string
+          trader_id: string
+        }[]
+      }
       count_trader_followers: {
         Args: { trader_ids: string[] }
         Returns: {
