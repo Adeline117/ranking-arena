@@ -11,6 +11,7 @@ import {
   findTraderAcrossSources,
   findTradersAcrossSources,
   getTraderArenaFollowersCountBatch,
+  traderAccountKey,
   clearSourceCache,
 } from '../trader-utils'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -127,24 +128,34 @@ describe('findTradersAcrossSources — 批量 + 注入防护', () => {
 })
 
 describe('getTraderArenaFollowersCountBatch', () => {
-  it('RPC 返回行 → map', async () => {
-    const { client } = mockClient([
+  it('RPC 返回行 → 按交易所账户映射', async () => {
+    const { client, rpc } = mockClient([
       {
         data: [
-          { trader_id: 't1', cnt: 5 },
-          { trader_id: 't2', cnt: 0 },
+          { trader_id: 'shared', source: 'bybit', cnt: 5 },
+          { trader_id: 'shared', source: 'binance', cnt: 1 },
         ],
       },
     ])
-    const r = await getTraderArenaFollowersCountBatch(client, ['t1', 't2'])
-    expect(r.get('t1')).toBe(5)
-    expect(r.get('t2')).toBe(0)
+    const accounts = [
+      { traderId: 'shared', source: 'bybit' },
+      { traderId: 'shared', source: 'binance' },
+    ]
+    const r = await getTraderArenaFollowersCountBatch(client, accounts)
+    expect(rpc).toHaveBeenCalledWith('count_trader_account_followers', {
+      p_trader_ids: ['shared', 'shared'],
+      p_sources: ['bybit', 'binance'],
+    })
+    expect(r.get(traderAccountKey(accounts[0]))).toBe(5)
+    expect(r.get(traderAccountKey(accounts[1]))).toBe(1)
   })
 
-  it('空 ids → 空 map 不调 RPC;RPC error → 空 map', async () => {
+  it('空账户 → 空 map 不调 RPC;RPC error → 空 map', async () => {
     const { client, rpc } = mockClient([{ data: null, error: { message: 'x' } }])
     expect((await getTraderArenaFollowersCountBatch(client, [])).size).toBe(0)
     expect(rpc).not.toHaveBeenCalled()
-    expect((await getTraderArenaFollowersCountBatch(client, ['t1'])).size).toBe(0)
+    expect(
+      (await getTraderArenaFollowersCountBatch(client, [{ traderId: 't1', source: 'bybit' }])).size
+    ).toBe(0)
   })
 })

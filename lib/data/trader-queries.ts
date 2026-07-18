@@ -19,7 +19,11 @@ import type {
   PositionHistoryItem,
   TraderFeedItem,
 } from './trader-types'
-import { findTraderAcrossSources, getTraderArenaFollowersCountBatch } from './trader-utils'
+import {
+  findTraderAcrossSources,
+  getTraderArenaFollowersCountBatch,
+  traderAccountKey,
+} from './trader-utils'
 import { type DataResult, success, failure } from '@/lib/types/result'
 
 // ============================================
@@ -47,7 +51,7 @@ export async function getTraderByHandle(handle: string): Promise<DataResult<Trad
         const [followersCount, profileData] = await Promise.all([
           (async () => {
             const { getTraderArenaFollowersCount } = await import('./trader-followers')
-            return getTraderArenaFollowersCount(supabase, source.source_trader_id)
+            return getTraderArenaFollowersCount(supabase, source.source_trader_id, source.source)
           })(),
           (async () => {
             const profileHandle = source.handle || source.source_trader_id
@@ -684,13 +688,22 @@ export async function getSimilarTraders(
       .sort((a, b) => a.diff - b.diff)
       .slice(0, limit)
 
-    const traderIds = sortedRows.map((s) => s.source_trader_id)
-    const followersMap = await getTraderArenaFollowersCountBatch(supabase, traderIds)
+    const accounts = sortedRows.map((row) => ({
+      traderId: row.source_trader_id,
+      source: source.source,
+    }))
+    const followersMap = await getTraderArenaFollowersCountBatch(supabase, accounts)
 
     return sortedRows.map((s) => ({
       handle: s.handle || s.source_trader_id,
       id: s.source_trader_id,
-      followers: followersMap.get(s.source_trader_id) || 0,
+      followers:
+        followersMap.get(
+          traderAccountKey({
+            traderId: s.source_trader_id,
+            source: source.source,
+          })
+        ) || 0,
       avatar_url: s.avatar_url || undefined,
       source: source.source,
     }))

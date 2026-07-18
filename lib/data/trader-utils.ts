@@ -11,6 +11,15 @@ import { createLogger } from '@/lib/utils/logger'
 const logger = createLogger('trader-utils')
 import { TRADER_SOURCES, TRADER_SOURCES_WITH_WEB3, type TraderSourceRecord } from './trader-types'
 
+export interface TraderAccountIdentity {
+  traderId: string
+  source: string
+}
+
+export function traderAccountKey(account: TraderAccountIdentity): string {
+  return JSON.stringify([account.traderId, account.source])
+}
+
 // Request-scoped cache for findTraderAcrossSources to eliminate N+1 lookups.
 // On a trader detail page, 8+ functions call findTraderAcrossSources(handle) independently.
 // This Map caches results so only the first call hits the DB; subsequent calls return instantly.
@@ -189,23 +198,35 @@ export async function findTradersAcrossSources(
 }
 
 /**
- * 获取交易员的 Arena 粉丝数（批量版本）
- * Uses RPC count_trader_followers for GROUP BY count (1 row per trader, not 1 row per follow)
+ * 获取交易员账户的 Arena 粉丝数（批量版本）
+ * Counts exact (trader_id, source) identities without merging exchanges.
  */
 export async function getTraderArenaFollowersCountBatch(
   client: SupabaseClient,
-  traderIds: string[]
+  accounts: TraderAccountIdentity[]
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>()
-  if (traderIds.length === 0) return result
+  const uniqueAccounts = [
+    ...new Map(
+      accounts
+        .filter((account) => account.traderId.trim() && account.source.trim())
+        .map((account) => [traderAccountKey(account), account])
+    ).values(),
+  ]
+  if (uniqueAccounts.length === 0) return result
 
   try {
-    const { data, error } = await client.rpc('count_trader_followers', { trader_ids: traderIds })
+    const { data, error } = await client.rpc('count_trader_account_followers', {
+      p_trader_ids: uniqueAccounts.map((account) => account.traderId),
+      p_sources: uniqueAccounts.map((account) => account.source),
+    })
 
     if (error || !data) return result
 
-    for (const row of data as { trader_id: string; cnt: number }[]) {
-      result.set(row.trader_id, row.cnt)
+    for (const row of data as { trader_id: string; source: string; cnt: number }[]) {
+      const count = Number(row.cnt)
+      if (!Number.isFinite(count) || count < 0) continue
+      result.set(traderAccountKey({ traderId: row.trader_id, source: row.source }), count)
     }
 
     return result
