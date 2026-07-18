@@ -74,6 +74,7 @@
     "census:dex": "tsx scripts/dex-census-baseline.mts",
     "census:dex:golden-wallets": "tsx scripts/generate-dex-golden-wallets.mts",
     "dex:solana:jupiter-witness": "tsx scripts/dex-solana-jupiter-witness.mts",
+    "dex:solana:program-state-witness": "tsx scripts/dex-solana-program-state-witness.mts",
     "backup:r2": "node scripts/maintenance/backup-to-r2.mjs",
     "backup:r2:full": "node scripts/maintenance/backup-to-r2.mjs --full",
     "qa:serving": "node scripts/qa/serving-acceptance.mjs",
