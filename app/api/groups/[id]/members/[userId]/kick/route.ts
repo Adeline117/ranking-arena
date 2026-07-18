@@ -67,16 +67,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       const admin = getSupabaseAdmin()
-      const { data, error } = await admin.rpc(
-        'moderate_group_member_atomic' as never,
-        {
-          p_actor_id: user.id,
-          p_group_id: groupId,
-          p_target_id: targetUserId,
-          p_action: 'kick',
-          p_reason: null,
-        } as never
-      )
+      const { data, error } = await admin.rpc('moderate_group_member_atomic', {
+        p_actor_id: user.id,
+        p_group_id: groupId,
+        p_target_id: targetUserId,
+        p_action: 'kick',
+        p_reason: null,
+      })
 
       if (error) {
         logger.error('Atomic group kick failed:', error)

@@ -29,16 +29,13 @@ async function moderate(
   action: 'ban' | 'unban',
   reason: string | null
 ): Promise<ModerationResult | null> {
-  const { data, error } = await getSupabaseAdmin().rpc(
-    'moderate_group_member_atomic' as never,
-    {
-      p_actor_id: actorId,
-      p_group_id: groupId,
-      p_target_id: targetUserId,
-      p_action: action,
-      p_reason: reason,
-    } as never
-  )
+  const { data, error } = await getSupabaseAdmin().rpc('moderate_group_member_atomic', {
+    p_actor_id: actorId,
+    p_group_id: groupId,
+    p_target_id: targetUserId,
+    p_action: action,
+    p_reason: reason,
+  })
 
   if (error) {
     logger.error(`Atomic group ${action} failed:`, error)

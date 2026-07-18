@@ -168,15 +168,12 @@ export const GET = withAuth(
       return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 })
     }
 
-    const { data, error } = await getSupabaseAdmin().rpc(
-      'inspect_group_invite_atomic' as never,
-      {
-        p_actor_id: user.id,
-        p_group_id: groupId,
-        p_token_hash: hashInviteToken(token),
-        p_pro_free_promo: PRO_FREE_PROMO,
-      } as never
-    )
+    const { data, error } = await getSupabaseAdmin().rpc('inspect_group_invite_atomic', {
+      p_actor_id: user.id,
+      p_group_id: groupId,
+      p_token_hash: hashInviteToken(token),
+      p_pro_free_promo: PRO_FREE_PROMO,
+    })
 
     if (error) {
       log.error('Atomic invite inspection failed', error)
@@ -217,16 +214,13 @@ export const POST = withAuth(
         return NextResponse.json({ error: 'Failed to generate invite link' }, { status: 500 })
       }
 
-      const { data, error } = await admin.rpc(
-        'create_group_invite_atomic' as never,
-        {
-          p_actor_id: user.id,
-          p_group_id: groupId,
-          p_token_hash: hashInviteToken(inviteToken),
-          p_expires_at: new Date(expiresAt).toISOString(),
-          p_max_uses: INVITE_MAX_USES,
-        } as never
-      )
+      const { data, error } = await admin.rpc('create_group_invite_atomic', {
+        p_actor_id: user.id,
+        p_group_id: groupId,
+        p_token_hash: hashInviteToken(inviteToken),
+        p_expires_at: new Date(expiresAt).toISOString(),
+        p_max_uses: INVITE_MAX_USES,
+      })
 
       if (error) {
         log.error('Atomic invite creation failed', error)
@@ -279,14 +273,11 @@ export const DELETE = withAuth(
       return NextResponse.json({ error: 'A valid invite ID is required' }, { status: 400 })
     }
 
-    const { data, error } = await getSupabaseAdmin().rpc(
-      'revoke_group_invite_atomic' as never,
-      {
-        p_actor_id: user.id,
-        p_group_id: groupId,
-        p_invite_id: parsedBody.data.invite_id,
-      } as never
-    )
+    const { data, error } = await getSupabaseAdmin().rpc('revoke_group_invite_atomic', {
+      p_actor_id: user.id,
+      p_group_id: groupId,
+      p_invite_id: parsedBody.data.invite_id,
+    })
 
     if (error) {
       log.error('Atomic invite revocation failed', error)

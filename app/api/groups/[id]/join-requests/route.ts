@@ -101,16 +101,13 @@ export const DELETE = withAuth(
       return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
     }
 
-    const { data, error } = await getSupabaseAdmin().rpc(
-      'mutate_group_join_request_atomic' as never,
-      {
-        p_actor_id: user.id,
-        p_group_id: groupId,
-        p_action: 'cancel',
-        p_answer_text: null,
-        p_pro_free_promo: PRO_FREE_PROMO,
-      } as never
-    )
+    const { data, error } = await getSupabaseAdmin().rpc('mutate_group_join_request_atomic', {
+      p_actor_id: user.id,
+      p_group_id: groupId,
+      p_action: 'cancel',
+      p_answer_text: null,
+      p_pro_free_promo: PRO_FREE_PROMO,
+    })
 
     if (error) {
       logger.error('Atomic join-request cancellation failed', error)

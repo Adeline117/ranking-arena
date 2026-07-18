@@ -81,14 +81,11 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Join request not found' }, { status: 404 })
     }
 
-    const { data, error } = await getSupabaseAdmin().rpc(
-      'review_group_join_request_atomic' as never,
-      {
-        p_actor_id: user.id,
-        p_request_id: routeIds.requestId,
-        p_decision: parsedBody.data.decision,
-      } as never
-    )
+    const { data, error } = await getSupabaseAdmin().rpc('review_group_join_request_atomic', {
+      p_actor_id: user.id,
+      p_request_id: routeIds.requestId,
+      p_decision: parsedBody.data.decision,
+    })
 
     if (error) {
       logger.error('Atomic join-request review failed', error)
