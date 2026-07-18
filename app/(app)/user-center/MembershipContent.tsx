@@ -7,6 +7,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { usePremium, FEATURE_LIMITS } from '@/lib/premium/hooks'
 import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
+import ErrorState from '@/app/components/ui/ErrorState'
 import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
 import { trackEvent } from '@/lib/analytics/track'
@@ -41,9 +42,11 @@ export default function MembershipContent() {
 
   const [infoState, setInfo] = useState<MembershipInfo | null>(null)
   const [loadingState, setLoading] = useState(true)
+  const [loadErrorState, setLoadError] = useState(false)
   const infoOwnerScopeKeyRef = useRef(scopeKey)
   const info = infoOwnerScopeKeyRef.current === scopeKey ? infoState : null
   const loading = infoOwnerScopeKeyRef.current === scopeKey ? loadingState : true
+  const loadError = infoOwnerScopeKeyRef.current === scopeKey ? loadErrorState : false
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('yearly')
   const [subscribing, setSubscribing] = useState(false)
   const submittingRef = useRef(false)
@@ -57,6 +60,7 @@ export default function MembershipContent() {
     }
     infoOwnerScopeKeyRef.current = scopeKey
     setInfo(null)
+    setLoadError(false)
     setLoading(true)
     const controller = new AbortController()
     fetchMembershipInfo(capturedScope, controller.signal)
@@ -91,11 +95,17 @@ export default function MembershipContent() {
       // If the component unmounted while awaiting, bail out
       if (signal?.aborted || !scopeIsCurrent()) return
 
-      const subData = subRes.ok ? await subRes.json() : null
-      const nftData = nftRes.ok ? await nftRes.json() : null
-      const usageData = usageRes.ok
-        ? await usageRes.json()
-        : { followedTraders: 0, apiCallsToday: 0 }
+      if (!subRes.ok || !nftRes.ok || !usageRes.ok) {
+        throw new Error(
+          `Membership request failed (subscription=${subRes.status}, nft=${nftRes.status}, usage=${usageRes.status})`
+        )
+      }
+
+      const [subData, nftData, usageData] = await Promise.all([
+        subRes.json(),
+        nftRes.json(),
+        usageRes.json(),
+      ])
 
       if (signal?.aborted || !scopeIsCurrent()) return
 
@@ -119,20 +129,32 @@ export default function MembershipContent() {
         nft: nftData || null,
         usage: usageData,
       })
+      setLoadError(false)
     } catch (err) {
-      // Silently ignore navigation-interrupted fetches (component unmounted or route
-      // change): AbortError OR the "TypeError: Failed to fetch" a torn-down fetch
-      // throws. Neither is a real membership-fetch failure.
-      const msg = err instanceof Error ? err.message : ''
-      if (
-        (err instanceof DOMException && err.name === 'AbortError') ||
-        /Failed to fetch/i.test(msg)
-      )
-        return
+      // Only an explicitly aborted request is a navigation/unmount outcome.
+      // A generic "Failed to fetch" can also be a real outage and must not be
+      // rendered as a free plan with zero usage.
+      if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) return
       logger.error('Failed to fetch membership info:', err)
+      if (scopeIsCurrent()) {
+        setInfo(null)
+        setLoadError(true)
+      }
     } finally {
       if (!signal?.aborted && scopeIsCurrent()) setLoading(false)
     }
+  }
+
+  function retryMembershipInfo() {
+    const capturedScope = {
+      viewerKey: auth.viewerKey,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+    }
+    infoOwnerScopeKeyRef.current = scopeKey
+    setLoadError(false)
+    setLoading(true)
+    void fetchMembershipInfo(capturedScope)
   }
 
   const handleSubscribe = async () => {
@@ -222,6 +244,16 @@ export default function MembershipContent() {
       >
         <ButtonSpinner size="md" />
       </div>
+    )
+  }
+
+  if (loadError || !info) {
+    return (
+      <ErrorState
+        description={t('loadFailedRetryShort')}
+        retry={retryMembershipInfo}
+        variant="compact"
+      />
     )
   }
 
