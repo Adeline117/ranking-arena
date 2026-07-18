@@ -46,43 +46,50 @@ interface OpenInterestRow {
   timestamp: string
 }
 
-async function getOpenInterest(): Promise<OpenInterestRow[]> {
+async function getOpenInterest(): Promise<{ rows: OpenInterestRow[]; loadError: boolean }> {
   const supabase = getSupabaseAdmin()
 
   // Use DB-side deduplication via RPC (DISTINCT ON is far more efficient)
   try {
     const { data, error } = await supabase.rpc('get_latest_open_interest')
-    if (!error && data) return data as OpenInterestRow[]
+    if (!error && Array.isArray(data)) {
+      return { rows: data as OpenInterestRow[], loadError: false }
+    }
   } catch {
     // RPC not available, fall back to client-side dedup
   }
 
-  // Fallback: fetch and deduplicate in memory
-  const { data, error } = await supabase
-    .from('open_interest')
-    .select('platform, symbol, open_interest_usd, open_interest_contracts, timestamp')
-    .order('timestamp', { ascending: false })
-    .limit(500)
+  try {
+    // Fallback: fetch and deduplicate in memory
+    const { data, error } = await supabase
+      .from('open_interest')
+      .select('platform, symbol, open_interest_usd, open_interest_contracts, timestamp')
+      .order('timestamp', { ascending: false })
+      .limit(500)
 
-  if (error) {
-    logger.error('[open-interest] fetch error:', error.message)
-    return []
-  }
-
-  const seen = new Set<string>()
-  const deduped: OpenInterestRow[] = []
-  for (const row of data || []) {
-    const key = `${row.platform}:${row.symbol}`
-    if (!seen.has(key)) {
-      seen.add(key)
-      deduped.push(row)
+    if (error) {
+      logger.error('[open-interest] fetch error:', error.message)
+      return { rows: [], loadError: true }
     }
+
+    const seen = new Set<string>()
+    const deduped: OpenInterestRow[] = []
+    for (const row of data || []) {
+      const key = `${row.platform}:${row.symbol}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        deduped.push(row)
+      }
+    }
+    return { rows: deduped, loadError: false }
+  } catch (error) {
+    logger.error('[open-interest] unexpected fetch error:', error)
+    return { rows: [], loadError: true }
   }
-  return deduped
 }
 
 export default async function OpenInterestPage() {
-  const rows = await getOpenInterest()
+  const { rows, loadError } = await getOpenInterest()
 
-  return <OpenInterestClient rows={rows} />
+  return <OpenInterestClient rows={rows} loadError={loadError} />
 }
