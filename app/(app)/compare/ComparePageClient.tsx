@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, Suspense, useCallback } from 'react'
+import { useState, useEffect, Suspense, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import nextDynamic from 'next/dynamic'
@@ -36,6 +36,12 @@ import {
   parseUnifiedSearchTraderId,
   type CompareAccountRef,
 } from '@/lib/compare/identity'
+import {
+  compareAccountsTarget,
+  consumeProfileActionLogin,
+  PROFILE_ACTION_QUERY_PARAM,
+  queueProfileActionLogin,
+} from '@/lib/auth/profile-action-login'
 
 interface TraderCompareData extends CompareAccountRef {
   handle: string | null
@@ -65,8 +71,10 @@ function CompareContent() {
   const searchParams = useSearchParams()
   const { t } = useLanguage()
   const { showToast } = useToast()
-  const { accessToken, authChecked, email } = useAuthSession()
+  const { accessToken, authChecked, userId } = useAuthSession()
   const { tryUnlock } = useAchievements()
+  const redirectingToLoginRef = useRef(false)
+  const rejectedResumeRef = useRef(false)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -99,10 +107,24 @@ function CompareContent() {
 
   // Check auth
   useEffect(() => {
-    if (authChecked && !accessToken) {
-      router.push('/login?redirect=/compare')
+    if (!authChecked || accessToken || redirectingToLoginRef.current) return
+
+    redirectingToLoginRef.current = true
+    const parsed = parseCompareAccounts(searchParams.get('ids'), searchParams.get('platforms'))
+    if (!parsed.ok) {
+      router.push(`/login?returnUrl=${encodeURIComponent('/compare')}`)
+      return
     }
-  }, [authChecked, accessToken, router])
+
+    router.push(
+      queueProfileActionLogin({
+        action: 'compare-traders',
+        target: compareAccountsTarget(parsed.accounts),
+        fallbackPath: buildCompareUrl(parsed.accounts),
+        initiatingUserId: userId,
+      })
+    )
+  }, [authChecked, accessToken, router, searchParams, userId])
 
   // Init — stop loading once auth check completes (even if not logged in)
   useEffect(() => {
@@ -114,6 +136,30 @@ function CompareContent() {
     }
 
     const init = async () => {
+      if (rejectedResumeRef.current) {
+        setLoading(false)
+        return
+      }
+
+      const ids = searchParams.get('ids')
+      const platforms = searchParams.get('platforms')
+      const parsed = parseCompareAccounts(ids, platforms)
+      if (searchParams.get(PROFILE_ACTION_QUERY_PARAM)) {
+        const resumedAction = parsed.ok
+          ? consumeProfileActionLogin({
+              actions: ['compare-traders'],
+              target: compareAccountsTarget(parsed.accounts),
+              currentUserId: userId,
+            })
+          : null
+        if (resumedAction !== 'compare-traders') {
+          rejectedResumeRef.current = true
+          router.replace('/compare', { scroll: false })
+          setLoading(false)
+          return
+        }
+      }
+
       // The subscription fetch only gates Pro UI; it has NO bearing on which
       // traders to load (ids come from the URL). Running it before loadTraders
       // serialized two independent round-trips and blocked the comparison data —
@@ -131,11 +177,8 @@ function CompareContent() {
         })
         .catch((err) => logger.error('Subscription fetch failed:', err))
 
-      const ids = searchParams.get('ids')
-      const platforms = searchParams.get('platforms')
       let tradersPromise: Promise<void> = Promise.resolve()
       if (ids || platforms) {
-        const parsed = parseCompareAccounts(ids, platforms)
         if (parsed.ok) {
           tradersPromise = loadTraders(parsed.accounts).then((result) => {
             if (result && result.missingAccounts.length > 0) {
