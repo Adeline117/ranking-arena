@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import {
   BSC_MAINNET_CHAIN_ID,
   BSC_MAINNET_GENESIS_HASH,
+  captureBscVerifiedChainAnchorEvidence,
   fetchBscChainAnchorEvidence,
   requireBscVerifiedChainAnchor,
 } from '../bsc-evidence'
@@ -69,6 +70,35 @@ function successfulPayload(request: RpcRequest): unknown {
   return request.params[0] === '0x0' ? genesisBlock() : finalizedBlock()
 }
 
+function successfulResponseBody(request: RpcRequest): string {
+  return `${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    result: successfulPayload(request),
+    providerNote: '链上原始字段',
+  })}\n`
+}
+
+function byteStream(body: string): ReadableStream<Uint8Array> {
+  const bytes = new TextEncoder().encode(body)
+  const markerIndex = Buffer.from(bytes).indexOf(Buffer.from('链', 'utf8'))
+  const split = markerIndex >= 0 ? markerIndex + 1 : Math.max(1, bytes.byteLength - 1)
+  const chunks = [bytes.slice(0, split), bytes.slice(split)]
+  return {
+    getReader: () => {
+      let index = 0
+      return {
+        read: jest.fn(async () =>
+          index < chunks.length
+            ? { done: false, value: chunks[index++] }
+            : { done: true, value: undefined }
+        ),
+        cancel: jest.fn(async () => undefined),
+      }
+    },
+  } as never
+}
+
 function mockRpc(handler: (request: RpcRequest) => MockReply): RpcRequest[] {
   const requests: RpcRequest[] = []
   global.fetch = jest.fn(async (_input, init) => {
@@ -92,10 +122,12 @@ function mockRpc(handler: (request: RpcRequest) => MockReply): RpcRequest[] {
 
 describe('fetchBscChainAnchorEvidence', () => {
   const originalFetch = global.fetch
+  const originalAlchemyKey = process.env.ALCHEMY_API_KEY
 
   beforeEach(() => {
     jest.useFakeTimers()
     jest.setSystemTime(new Date(FIXED_NOW))
+    delete process.env.ALCHEMY_API_KEY
   })
 
   afterEach(() => {
@@ -103,6 +135,8 @@ describe('fetchBscChainAnchorEvidence', () => {
     jest.restoreAllMocks()
     if (originalFetch) global.fetch = originalFetch
     else delete (global as typeof global & { fetch?: typeof fetch }).fetch
+    if (originalAlchemyKey === undefined) delete process.env.ALCHEMY_API_KEY
+    else process.env.ALCHEMY_API_KEY = originalAlchemyKey
   })
 
   it('binds one endpoint to chain ID, genesis, and the standard finalized tag', async () => {
@@ -179,6 +213,132 @@ describe('fetchBscChainAnchorEvidence', () => {
     ).toBe(true)
     expect(JSON.stringify(anchor)).not.toContain('private-api-key')
     expect(JSON.stringify(anchor)).not.toContain('127.0.0.1')
+  })
+
+  it('captures four exact anchor exchanges from the same streamed responses', async () => {
+    const requests = mockRpc((request) => ({
+      stream: byteStream(successfulResponseBody(request)),
+    }))
+    const captured = await captureBscVerifiedChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+
+    expect(captured.verified.finalizedBlock.hash).toBe(HASH_A)
+    expect(captured.rawExchanges.map(({ lane }) => lane)).toEqual([
+      'chain_identity',
+      'genesis_block',
+      'finalized_anchor_block',
+      'head_diagnostic_block',
+    ])
+    const fetchCalls = (global.fetch as jest.Mock).mock.calls
+    expect(captured.rawExchanges).toHaveLength(fetchCalls.length)
+    const expectedMethods = [
+      'eth_chainId',
+      'eth_getBlockByNumber',
+      'eth_getBlockByNumber',
+      'eth_getBlockByNumber',
+    ]
+    for (const [index, exchange] of captured.rawExchanges.entries()) {
+      const requestBody = String(fetchCalls[index][1].body)
+      const responseBody = successfulResponseBody(requests[index])
+      const requestBytes = Buffer.from(exchange.request.bytes)
+      const responseBytes = Buffer.from(exchange.response.bytes)
+      expect(requestBytes.toString('utf8')).toBe(requestBody)
+      expect(responseBytes.toString('utf8')).toBe(responseBody)
+      expect(exchange.request.byteLength).toBe(Buffer.byteLength(requestBody))
+      expect(exchange.response.byteLength).toBe(Buffer.byteLength(responseBody))
+      expect(exchange.request.sha256).toBe(createHash('sha256').update(requestBytes).digest('hex'))
+      expect(exchange.response.sha256).toBe(
+        createHash('sha256').update(responseBytes).digest('hex')
+      )
+      expect(exchange.request.hashBasis).toBe('utf8_json_rpc_request_body_bytes')
+      expect(exchange.response.hashBasis).toBe(
+        'fetch_content_decoded_http_entity_body_bytes_before_utf8'
+      )
+      expect(exchange.method).toBe(expectedMethods[index])
+      expect(exchange.completedAt).toBe(FIXED_NOW)
+      expect(exchange.httpStatus).toBe(200)
+      expect(exchange.chain).toBe('bsc')
+      expect(exchange.trustBoundary).toBe(
+        'json_rpc_result_transport_only_semantic_lane_not_yet_verified'
+      )
+      expect(exchange.endpoint).toEqual({
+        providerId: 'local',
+        endpointId: TEST_ENDPOINT_ID,
+        connectionHash: TEST_CONNECTION_HASH,
+      })
+      expect(exchange).not.toHaveProperty('url')
+    }
+    expect(JSON.stringify(captured.evidence)).not.toContain('providerNote')
+    expect(Buffer.from(captured.rawExchanges[2].response.bytes).toString('utf8')).toContain(
+      '链上原始字段'
+    )
+  })
+
+  it('fails exact anchor capture closed for text-only transport while preserving normal fetch', async () => {
+    const requests = mockRpc(() => ({}))
+    await expect(
+      captureBscVerifiedChainAnchorEvidence({
+        rpcUrl: TEST_RPC_URL,
+        endpointId: TEST_ENDPOINT_ID,
+      })
+    ).rejects.toThrow('BSC chain anchor is not fully verified')
+    expect(requests).toHaveLength(4)
+
+    const anchor = await fetchBscChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+    expect(requireBscVerifiedChainAnchor(anchor).finalizedBlock.hash).toBe(HASH_A)
+  })
+
+  it('rejects complete raw anchor lanes whose finalized and head semantics contradict', async () => {
+    const requests = mockRpc((request) => {
+      const result =
+        request.method === 'eth_chainId'
+          ? BSC_MAINNET_CHAIN_ID
+          : request.params[0] === '0x0'
+            ? genesisBlock()
+            : request.params[0] === 'finalized'
+              ? finalizedBlock({ number: '0x124', hash: HASH_C })
+              : finalizedBlock({ number: '0x123', hash: HASH_A })
+      return {
+        stream: byteStream(JSON.stringify({ jsonrpc: '2.0', id: 1, result })),
+      }
+    })
+    await expect(
+      captureBscVerifiedChainAnchorEvidence({
+        rpcUrl: TEST_RPC_URL,
+        endpointId: TEST_ENDPOINT_ID,
+      })
+    ).rejects.toThrow('BSC chain anchor is not fully verified')
+    expect(requests).toHaveLength(4)
+  })
+
+  it.each([
+    ['decoded short key', 'k/', 'k/'],
+    ['encoded short key', 'k/', 'k%2F'],
+  ])('rejects a successful Alchemy response that echoes a %s', async (_label, key, echo) => {
+    process.env.ALCHEMY_API_KEY = key
+    mockRpc((request) => ({
+      stream: byteStream(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: successfulPayload(request),
+          providerEcho: echo,
+        })
+      ),
+    }))
+    let error: unknown
+    try {
+      await captureBscVerifiedChainAnchorEvidence()
+    } catch (caught) {
+      error = caught
+    }
+    expect(String(error)).toBe('TypeError: BSC chain anchor is not fully verified')
+    expect(String(error)).not.toContain(echo)
   })
 
   it('strictly reparses a serialized anchor before granting verified status', async () => {

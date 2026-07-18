@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import {
   BSC_MAINNET_CHAIN_ID,
   BSC_MAINNET_GENESIS_HASH,
+  captureBscVerifiedTransactionFinalityEvidence,
   fetchBscTransactionMembershipEvidence,
   requireBscVerifiedTransactionFinality,
   type BscChainAnchorEvidence,
@@ -20,6 +21,7 @@ interface MockReply {
   body?: string
   status?: number
   error?: Error
+  stream?: ReadableStream<Uint8Array>
 }
 
 const ZERO_HASH = `0x${'0'.repeat(64)}`
@@ -164,6 +166,39 @@ function successfulPayload(request: RpcRequest): unknown {
   return transaction()
 }
 
+function successfulResponseBody(request: RpcRequest): string {
+  const result = successfulPayload(request)
+  return `${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    result:
+      typeof result === 'object' && result !== null
+        ? { ...result, providerOnlyRaw: '链上原始字段' }
+        : result,
+    providerNote: '链上原始信封',
+  })}\n`
+}
+
+function byteStream(body: string): ReadableStream<Uint8Array> {
+  const bytes = new TextEncoder().encode(body)
+  const markerIndex = Buffer.from(bytes).indexOf(Buffer.from('链', 'utf8'))
+  const split = markerIndex >= 0 ? markerIndex + 1 : Math.max(1, bytes.byteLength - 1)
+  const chunks = [bytes.slice(0, split), bytes.slice(split)]
+  return {
+    getReader: () => {
+      let index = 0
+      return {
+        read: jest.fn(async () =>
+          index < chunks.length
+            ? { done: false, value: chunks[index++] }
+            : { done: true, value: undefined }
+        ),
+        cancel: jest.fn(async () => undefined),
+      }
+    },
+  } as never
+}
+
 function mockRpc(handler: (request: RpcRequest) => MockReply = () => ({})): RpcRequest[] {
   const requests: RpcRequest[] = []
   global.fetch = jest.fn(async (_input, init) => {
@@ -178,6 +213,7 @@ function mockRpc(handler: (request: RpcRequest) => MockReply = () => ({})): RpcR
     return {
       status: reply.status ?? 200,
       headers: { get: () => null },
+      body: reply.stream,
       text: async () => reply.body ?? JSON.stringify(payload),
     } as Response
   }) as jest.MockedFunction<typeof fetch>
@@ -273,6 +309,132 @@ describe('fetchBscTransactionMembershipEvidence', () => {
       canonicalBlock: { number: '0x123', hash: BLOCK_HASH },
       indexedTransaction: { hash: TX_HASH },
     })
+  })
+
+  it('captures four exact transaction exchanges without widening normalized facts', async () => {
+    const requests = mockRpc((request) => ({
+      stream: byteStream(successfulResponseBody(request)),
+    }))
+    const captured = await captureBscVerifiedTransactionFinalityEvidence(TX_HASH, anchorFixture(), {
+      rpcUrl: TEST_RPC_URL,
+      endpointId: 'local_bsc_node',
+    })
+
+    expect(captured.verified).toMatchObject({
+      txHash: TX_HASH,
+      receipt: { status: '0x1' },
+      canonicalBlock: { hash: BLOCK_HASH },
+    })
+    expect(captured.rawExchanges.map(({ lane }) => lane)).toEqual([
+      'transaction',
+      'receipt',
+      'membership_block',
+      'indexed_transaction',
+    ])
+    const fetchCalls = (global.fetch as jest.Mock).mock.calls
+    expect(captured.rawExchanges).toHaveLength(fetchCalls.length)
+    const expectedMethods = [
+      'eth_getTransactionByHash',
+      'eth_getTransactionReceipt',
+      'eth_getBlockByNumber',
+      'eth_getTransactionByBlockNumberAndIndex',
+    ]
+    for (const [index, exchange] of captured.rawExchanges.entries()) {
+      const requestBody = String(fetchCalls[index][1].body)
+      const responseBody = successfulResponseBody(requests[index])
+      const requestBytes = Buffer.from(exchange.request.bytes)
+      const responseBytes = Buffer.from(exchange.response.bytes)
+      expect(requestBytes.toString('utf8')).toBe(requestBody)
+      expect(responseBytes.toString('utf8')).toBe(responseBody)
+      expect(exchange.request.byteLength).toBe(Buffer.byteLength(requestBody))
+      expect(exchange.response.byteLength).toBe(Buffer.byteLength(responseBody))
+      expect(exchange.request.sha256).toBe(createHash('sha256').update(requestBytes).digest('hex'))
+      expect(exchange.response.sha256).toBe(
+        createHash('sha256').update(responseBytes).digest('hex')
+      )
+      expect(exchange.request.hashBasis).toBe('utf8_json_rpc_request_body_bytes')
+      expect(exchange.response.hashBasis).toBe(
+        'fetch_content_decoded_http_entity_body_bytes_before_utf8'
+      )
+      expect(exchange.method).toBe(expectedMethods[index])
+      expect(exchange.completedAt).toBe(FIXED_NOW)
+      expect(exchange.httpStatus).toBe(200)
+      expect(exchange.chain).toBe('bsc')
+      expect(exchange.trustBoundary).toBe(
+        'json_rpc_result_transport_only_semantic_lane_not_yet_verified'
+      )
+      expect(exchange.endpoint).toEqual(TEST_ENDPOINT)
+      expect(exchange).not.toHaveProperty('url')
+    }
+    expect(JSON.stringify(captured.evidence)).not.toContain('providerOnlyRaw')
+    expect(JSON.stringify(captured.evidence)).not.toContain('providerNote')
+    const rawTransaction = Buffer.from(captured.rawExchanges[0].response.bytes).toString('utf8')
+    expect(rawTransaction).toContain('providerOnlyRaw')
+    expect(rawTransaction).toContain('链上原始字段')
+  })
+
+  it('fails exact transaction capture closed for text-only transport while preserving normal fetch', async () => {
+    const requests = mockRpc()
+    await expect(
+      captureBscVerifiedTransactionFinalityEvidence(TX_HASH, anchorFixture(), {
+        rpcUrl: TEST_RPC_URL,
+        endpointId: 'local_bsc_node',
+      })
+    ).rejects.toThrow('BSC transaction finality evidence is not fully verified')
+    expect(requests).toHaveLength(2)
+
+    const evidence = await fetchBscTransactionMembershipEvidence(TX_HASH, anchorFixture(), {
+      rpcUrl: TEST_RPC_URL,
+      endpointId: 'local_bsc_node',
+    })
+    expect(requireBscVerifiedTransactionFinality(evidence, anchorFixture()).txHash).toBe(TX_HASH)
+    expect(evidence).not.toHaveProperty('rawExchanges')
+  })
+
+  it('returns no partial raw capture when a dependent membership lane fails', async () => {
+    const secret = 'private-api-key'
+    const requests = mockRpc((request) => ({
+      stream: byteStream(
+        request.method === 'eth_getBlockByNumber'
+          ? JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              error: { code: -32_601, message: `method unavailable at ${secret}` },
+            })
+          : successfulResponseBody(request)
+      ),
+    }))
+    let error: unknown
+    try {
+      await captureBscVerifiedTransactionFinalityEvidence(TX_HASH, anchorFixture(), {
+        rpcUrl: TEST_RPC_URL,
+        endpointId: 'local_bsc_node',
+      })
+    } catch (caught) {
+      error = caught
+    }
+    expect(requests).toHaveLength(4)
+    expect(String(error)).toBe('TypeError: BSC transaction finality evidence is not fully verified')
+    expect(String(error)).not.toContain(secret)
+  })
+
+  it('rejects complete raw transaction lanes whose normalized facts contradict', async () => {
+    const requests = mockRpc((request) => {
+      const result =
+        request.method === 'eth_getTransactionByHash'
+          ? transaction({ value: '0xb' })
+          : successfulPayload(request)
+      return {
+        stream: byteStream(JSON.stringify({ jsonrpc: '2.0', id: 1, result })),
+      }
+    })
+    await expect(
+      captureBscVerifiedTransactionFinalityEvidence(TX_HASH, anchorFixture(), {
+        rpcUrl: TEST_RPC_URL,
+        endpointId: 'local_bsc_node',
+      })
+    ).rejects.toThrow('BSC transaction finality evidence is not fully verified')
+    expect(requests).toHaveLength(4)
   })
 
   it('retains a reverted receipt as non-success evidence and rejects reverted logs', async () => {

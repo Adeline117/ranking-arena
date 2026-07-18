@@ -7,6 +7,15 @@
  */
 
 import { createHash } from 'node:crypto'
+
+import {
+  RAW_RPC_REQUEST_HASH_BASIS,
+  RAW_RPC_RESPONSE_HASH_BASIS,
+  encodeJsonRpcRequestBody,
+  rawRpcBodyEvidence,
+  readBoundedRpcResponse,
+  type RawRpcBodyEvidence,
+} from './raw-rpc-evidence'
 import { parseStrictJson } from './strict-json'
 
 export const BSC_MAINNET_CHAIN_ID = '0x38' as const
@@ -92,6 +101,7 @@ export type BscEvidenceUnavailableReason =
   | 'rpc_error'
   | 'response_too_large'
   | 'malformed_response'
+  | 'evidence_capture_error'
   | 'wrong_chain'
   | 'wrong_genesis'
 
@@ -271,6 +281,8 @@ interface BscRpcSuccess {
   result: unknown
   provider: BscEvidenceProvider
   httpStatus: number | null
+  /** Present only for an explicit in-memory raw capture request. */
+  rawExchange?: BscRawRpcEvidenceExchange
 }
 
 interface BscRpcFailure {
@@ -291,6 +303,50 @@ interface BscRpcFailure {
 }
 
 type BscRpcResult = BscRpcSuccess | BscRpcFailure
+
+export const BSC_RAW_RPC_EVIDENCE_LANES = [
+  'chain_identity',
+  'genesis_block',
+  'finalized_anchor_block',
+  'head_diagnostic_block',
+  'transaction',
+  'receipt',
+  'membership_block',
+  'indexed_transaction',
+] as const
+
+export type BscRawRpcEvidenceLane = (typeof BSC_RAW_RPC_EVIDENCE_LANES)[number]
+
+const BSC_RAW_RPC_LANE_METHODS: Record<BscRawRpcEvidenceLane, string> = {
+  chain_identity: 'eth_chainId',
+  genesis_block: 'eth_getBlockByNumber',
+  finalized_anchor_block: 'eth_getBlockByNumber',
+  head_diagnostic_block: 'eth_getBlockByNumber',
+  transaction: 'eth_getTransactionByHash',
+  receipt: 'eth_getTransactionReceipt',
+  membership_block: 'eth_getBlockByNumber',
+  indexed_transaction: 'eth_getTransactionByBlockNumberAndIndex',
+}
+
+export interface BscRawRpcEvidenceExchange {
+  chain: 'bsc'
+  trustBoundary: 'json_rpc_result_transport_only_semantic_lane_not_yet_verified'
+  lane: BscRawRpcEvidenceLane
+  method: string
+  endpoint: BscEvidenceEndpointIdentity
+  httpStatus: number
+  completedAt: string
+  request: RawRpcBodyEvidence & {
+    hashBasis: typeof RAW_RPC_REQUEST_HASH_BASIS
+  }
+  response: RawRpcBodyEvidence & {
+    hashBasis: typeof RAW_RPC_RESPONSE_HASH_BASIS
+  }
+}
+
+interface BscRawRpcCapture {
+  lane: BscRawRpcEvidenceLane
+}
 
 function endpointCopy(endpoint: BscEvidenceEndpointIdentity): BscEvidenceEndpointIdentity {
   return {
@@ -470,55 +526,6 @@ async function discardResponseBody(response: Response): Promise<void> {
   }
 }
 
-async function readBoundedResponseText(
-  response: Response
-): Promise<
-  { ok: true; text: string } | { ok: false; reason: 'response_too_large' | 'malformed_response' }
-> {
-  const contentLength = response.headers?.get?.('content-length')
-  if (contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > MAX_RESPONSE_BYTES) {
-    await discardResponseBody(response)
-    return { ok: false, reason: 'response_too_large' }
-  }
-
-  if (response.body && typeof response.body.getReader === 'function') {
-    const reader = response.body.getReader()
-    const chunks: Uint8Array[] = []
-    let totalBytes = 0
-    while (true) {
-      const chunk = await reader.read()
-      if (chunk.done) break
-      totalBytes += chunk.value.byteLength
-      if (totalBytes > MAX_RESPONSE_BYTES) {
-        try {
-          await reader.cancel()
-        } catch {
-          // The fixed reason is sufficient; never retain raw stream failures.
-        }
-        return { ok: false, reason: 'response_too_large' }
-      }
-      chunks.push(chunk.value)
-    }
-    const bytes = new Uint8Array(totalBytes)
-    let offset = 0
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset)
-      offset += chunk.byteLength
-    }
-    try {
-      return { ok: true, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) }
-    } catch {
-      return { ok: false, reason: 'malformed_response' }
-    }
-  }
-
-  const text = await response.text()
-  if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) {
-    return { ok: false, reason: 'response_too_large' }
-  }
-  return { ok: true, text }
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -545,6 +552,50 @@ function timeoutError(error: unknown): boolean {
   )
 }
 
+function endpointSecretFragments(endpoint: BscEvidenceEndpoint): string[] | null {
+  if (endpoint.identity.endpointId !== 'alchemy_bnb_mainnet') return []
+  try {
+    const parsed = new URL(endpoint.url)
+    const encoded = parsed.pathname.split('/').filter(Boolean).at(-1) ?? ''
+    let decoded = ''
+    try {
+      decoded = decodeURIComponent(encoded)
+    } catch {
+      // The encoded credential is still a secret and remains scannable.
+    }
+    return [
+      ...new Set(
+        [encoded, decoded, decoded ? encodeURIComponent(decoded) : ''].filter(
+          (candidate) => candidate.length > 0
+        )
+      ),
+    ]
+  } catch {
+    return null
+  }
+}
+
+function parseRawCapture(value: unknown): BscRawRpcCapture | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) throw new TypeError('invalid BSC raw RPC evidence capture')
+  const prototype = Object.getPrototypeOf(value)
+  const keys = Reflect.ownKeys(value)
+  const laneDescriptor = Object.getOwnPropertyDescriptor(value, 'lane')
+  if (
+    (prototype !== Object.prototype && prototype !== null) ||
+    keys.length !== 1 ||
+    keys[0] !== 'lane' ||
+    !laneDescriptor ||
+    !laneDescriptor.enumerable ||
+    !('value' in laneDescriptor) ||
+    typeof laneDescriptor.value !== 'string' ||
+    !BSC_RAW_RPC_EVIDENCE_LANES.includes(laneDescriptor.value as BscRawRpcEvidenceLane)
+  ) {
+    throw new TypeError('invalid BSC raw RPC evidence capture')
+  }
+  return { lane: laneDescriptor.value as BscRawRpcEvidenceLane }
+}
+
 function rpcFailure(
   endpoint: BscEvidenceEndpointIdentity,
   reason: BscRpcFailure['reason'],
@@ -564,16 +615,27 @@ async function bscEvidenceRpc(
   endpoint: BscEvidenceEndpoint,
   method: string,
   params: unknown[],
-  timeoutMs: number
+  timeoutMs: number,
+  rawCapture?: BscRawRpcCapture
 ): Promise<BscRpcResult> {
+  let parsedRawCapture: BscRawRpcCapture | undefined
+  try {
+    parsedRawCapture = parseRawCapture(rawCapture)
+  } catch {
+    throw new TypeError('invalid BSC raw RPC evidence capture')
+  }
+  if (parsedRawCapture && BSC_RAW_RPC_LANE_METHODS[parsedRawCapture.lane] !== method) {
+    throw new TypeError('invalid BSC raw RPC evidence capture')
+  }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
+    const requestBody = encodeJsonRpcRequestBody(RPC_REQUEST_ID, method, params)
     const response = await fetch(endpoint.url, {
       method: 'POST',
       redirect: 'error',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: RPC_REQUEST_ID, method, params }),
+      body: requestBody.text,
       signal: controller.signal,
     })
     const httpStatus = normalizedHttpStatus(response)
@@ -590,9 +652,20 @@ async function bscEvidenceRpc(
       return rpcFailure(endpoint.identity, 'rpc_error', null, httpStatus)
     }
 
-    const responseText = await readBoundedResponseText(response)
+    const responseText = await readBoundedRpcResponse(
+      response,
+      MAX_RESPONSE_BYTES,
+      parsedRawCapture !== undefined
+    )
     if (!responseText.ok) {
-      return rpcFailure(endpoint.identity, responseText.reason, null, httpStatus)
+      return rpcFailure(
+        endpoint.identity,
+        responseText.reason === 'raw_capture_unavailable'
+          ? 'evidence_capture_error'
+          : responseText.reason,
+        null,
+        httpStatus
+      )
     }
     let payload: unknown
     try {
@@ -628,11 +701,45 @@ async function bscEvidenceRpc(
       return rpcFailure(endpoint.identity, 'rpc_error', rpcCode, httpStatus)
     }
 
+    let rawExchange: BscRawRpcEvidenceExchange | undefined
+    if (parsedRawCapture) {
+      if (httpStatus === null || responseText.bytes === null) {
+        return rpcFailure(endpoint.identity, 'evidence_capture_error', null, httpStatus)
+      }
+      const secretFragments = endpointSecretFragments(endpoint)
+      if (
+        secretFragments === null ||
+        secretFragments.some(
+          (secret) => requestBody.text.includes(secret) || responseText.text.includes(secret)
+        )
+      ) {
+        return rpcFailure(endpoint.identity, 'evidence_capture_error', null, httpStatus)
+      }
+      rawExchange = {
+        chain: 'bsc',
+        trustBoundary: 'json_rpc_result_transport_only_semantic_lane_not_yet_verified',
+        lane: parsedRawCapture.lane,
+        method,
+        endpoint: endpointCopy(endpoint.identity),
+        httpStatus,
+        completedAt: new Date().toISOString(),
+        request: {
+          ...requestBody.evidence,
+          hashBasis: RAW_RPC_REQUEST_HASH_BASIS,
+        },
+        response: {
+          ...rawRpcBodyEvidence(responseText.bytes),
+          hashBasis: RAW_RPC_RESPONSE_HASH_BASIS,
+        },
+      }
+    }
+
     return {
       ok: true,
       result: payload.result,
       provider: providerEvidence(endpoint.identity, [endpoint.identity]),
       httpStatus,
+      ...(rawExchange ? { rawExchange } : {}),
     }
   } catch (error) {
     return rpcFailure(endpoint.identity, timeoutError(error) ? 'timeout' : 'transport_error')
@@ -1485,9 +1592,13 @@ export function requireBscVerifiedChainAnchor(evidence: unknown): BscVerifiedCha
  * `latest` is retained only as a diagnostic head and never replaces the
  * finalized tag, confirmation depth, or another endpoint.
  */
-export async function fetchBscChainAnchorEvidence(
-  opts: BscEvidenceRpcOpts = {}
-): Promise<BscChainAnchorEvidence> {
+async function fetchBscChainAnchorEvidenceInternal(
+  opts: BscEvidenceRpcOpts,
+  captureRaw: boolean
+): Promise<{
+  evidence: BscChainAnchorEvidence
+  rawExchanges: BscRawRpcEvidenceExchange[]
+}> {
   const parsedOpts = parseOptsOrThrow(opts)
   const endpoint = resolveEndpoint(parsedOpts)
   const base = {
@@ -1504,20 +1615,41 @@ export async function fetchBscChainAnchorEvidence(
   }
   if (!endpoint) {
     return {
-      ...base,
-      observedAt: new Date().toISOString(),
-      chainId: unconfiguredLane(),
-      genesisBlock: unconfiguredLane(),
-      finalizedBlock: unconfiguredLane(),
-      headBlock: unconfiguredLane(),
+      evidence: {
+        ...base,
+        observedAt: new Date().toISOString(),
+        chainId: unconfiguredLane(),
+        genesisBlock: unconfiguredLane(),
+        finalizedBlock: unconfiguredLane(),
+        headBlock: unconfiguredLane(),
+      },
+      rawExchanges: [],
     }
   }
 
   const timeoutMs = parsedOpts.timeoutMs ?? 20_000
   const [chainId, genesisBlock, finalizedBlock] = await Promise.all([
-    bscEvidenceRpc(endpoint, 'eth_chainId', [], timeoutMs),
-    bscEvidenceRpc(endpoint, 'eth_getBlockByNumber', ['0x0', false], timeoutMs),
-    bscEvidenceRpc(endpoint, 'eth_getBlockByNumber', ['finalized', false], timeoutMs),
+    bscEvidenceRpc(
+      endpoint,
+      'eth_chainId',
+      [],
+      timeoutMs,
+      captureRaw ? { lane: 'chain_identity' } : undefined
+    ),
+    bscEvidenceRpc(
+      endpoint,
+      'eth_getBlockByNumber',
+      ['0x0', false],
+      timeoutMs,
+      captureRaw ? { lane: 'genesis_block' } : undefined
+    ),
+    bscEvidenceRpc(
+      endpoint,
+      'eth_getBlockByNumber',
+      ['finalized', false],
+      timeoutMs,
+      captureRaw ? { lane: 'finalized_anchor_block' } : undefined
+    ),
   ])
   // Fetch head after the cutoff so a moving chain cannot create a false
   // head-below-finalized result merely because parallel requests raced.
@@ -1525,17 +1657,62 @@ export async function fetchBscChainAnchorEvidence(
     endpoint,
     'eth_getBlockByNumber',
     ['latest', false],
-    timeoutMs
+    timeoutMs,
+    captureRaw ? { lane: 'head_diagnostic_block' } : undefined
   )
 
   return {
-    ...base,
-    observedAt: new Date().toISOString(),
-    chainId: chainIdLane(chainId),
-    genesisBlock: blockLane(genesisBlock, 'genesis'),
-    finalizedBlock: blockLane(finalizedBlock, 'produced'),
-    headBlock: blockLane(headBlock, 'produced'),
+    evidence: {
+      ...base,
+      observedAt: new Date().toISOString(),
+      chainId: chainIdLane(chainId),
+      genesisBlock: blockLane(genesisBlock, 'genesis'),
+      finalizedBlock: blockLane(finalizedBlock, 'produced'),
+      headBlock: blockLane(headBlock, 'produced'),
+    },
+    rawExchanges: captureRaw
+      ? [chainId, genesisBlock, finalizedBlock, headBlock]
+          .map((result) => (result.ok ? result.rawExchange : undefined))
+          .filter((exchange): exchange is BscRawRpcEvidenceExchange => exchange !== undefined)
+      : [],
   }
+}
+
+export async function fetchBscChainAnchorEvidence(
+  opts: BscEvidenceRpcOpts = {}
+): Promise<BscChainAnchorEvidence> {
+  return (await fetchBscChainAnchorEvidenceInternal(opts, false)).evidence
+}
+
+export interface BscVerifiedChainAnchorRawCapture {
+  evidence: BscChainAnchorEvidence
+  verified: BscVerifiedChainAnchor
+  rawExchanges: BscRawRpcEvidenceExchange[]
+}
+
+/**
+ * Capture the exact same response bytes consumed by the strict BSC anchor
+ * verifier. Nothing is persisted here; callers must separately scan and
+ * authorize any raw artifact storage.
+ */
+export async function captureBscVerifiedChainAnchorEvidence(
+  opts: BscEvidenceRpcOpts = {}
+): Promise<BscVerifiedChainAnchorRawCapture> {
+  const captured = await fetchBscChainAnchorEvidenceInternal(opts, true)
+  const verified = requireBscVerifiedChainAnchor(captured.evidence)
+  const expectedLanes = [
+    'chain_identity',
+    'genesis_block',
+    'finalized_anchor_block',
+    'head_diagnostic_block',
+  ] as const
+  if (
+    captured.rawExchanges.length !== expectedLanes.length ||
+    captured.rawExchanges.some((exchange, index) => exchange.lane !== expectedLanes[index])
+  ) {
+    throw new TypeError('BSC anchor raw evidence capture is incomplete')
+  }
+  return { evidence: captured.evidence, verified, rawExchanges: captured.rawExchanges }
 }
 
 /**
@@ -1543,11 +1720,15 @@ export async function fetchBscChainAnchorEvidence(
  * membership. This is still an RPC-provider assertion, not an MPT inclusion
  * proof; callers must run the strict aggregate verifier before using it.
  */
-export async function fetchBscTransactionMembershipEvidence(
+async function fetchBscTransactionMembershipEvidenceInternal(
   txHashInput: string,
   anchorEvidence: unknown,
-  opts: BscEvidenceRpcOpts = {}
-): Promise<BscTransactionMembershipEvidence> {
+  opts: BscEvidenceRpcOpts,
+  captureRaw: boolean
+): Promise<{
+  evidence: BscTransactionMembershipEvidence
+  rawExchanges: BscRawRpcEvidenceExchange[]
+}> {
   if (typeof txHashInput !== 'string' || !HASH_RE.test(txHashInput)) {
     throw new TypeError('txHash must be a 0x-prefixed 32-byte hex string')
   }
@@ -1562,27 +1743,43 @@ export async function fetchBscTransactionMembershipEvidence(
 
   const timeoutMs = parsedOpts.timeoutMs ?? 20_000
   const [transactionResult, receiptResult] = await Promise.all([
-    bscEvidenceRpc(endpoint, 'eth_getTransactionByHash', [txHash], timeoutMs),
-    bscEvidenceRpc(endpoint, 'eth_getTransactionReceipt', [txHash], timeoutMs),
+    bscEvidenceRpc(
+      endpoint,
+      'eth_getTransactionByHash',
+      [txHash],
+      timeoutMs,
+      captureRaw ? { lane: 'transaction' } : undefined
+    ),
+    bscEvidenceRpc(
+      endpoint,
+      'eth_getTransactionReceipt',
+      [txHash],
+      timeoutMs,
+      captureRaw ? { lane: 'receipt' } : undefined
+    ),
   ])
   const transaction = transactionLane(transactionResult, txHash)
   const receipt = receiptLane(receiptResult, txHash)
 
   let canonicalBlock: BscEvidenceLane<BscBlockMembershipEvidence> = dependencyUnavailableLane()
   let indexedTransaction: BscEvidenceLane<BscMinedTransactionEvidence> = dependencyUnavailableLane()
+  let blockResult: BscRpcResult | null = null
+  let indexedTransactionResult: BscRpcResult | null = null
   if (receipt.status === 'available') {
-    const [blockResult, indexedTransactionResult] = await Promise.all([
+    ;[blockResult, indexedTransactionResult] = await Promise.all([
       bscEvidenceRpc(
         endpoint,
         'eth_getBlockByNumber',
         [receipt.value.blockNumber, false],
-        timeoutMs
+        timeoutMs,
+        captureRaw ? { lane: 'membership_block' } : undefined
       ),
       bscEvidenceRpc(
         endpoint,
         'eth_getTransactionByBlockNumberAndIndex',
         [receipt.value.blockNumber, receipt.value.transactionIndex],
-        timeoutMs
+        timeoutMs,
+        captureRaw ? { lane: 'indexed_transaction' } : undefined
       ),
     ])
     canonicalBlock = blockMembershipLane(blockResult)
@@ -1590,38 +1787,93 @@ export async function fetchBscTransactionMembershipEvidence(
   }
 
   return {
-    chain: { namespace: 'eip155', reference: '56' },
-    txHash,
-    capturedAt: new Date().toISOString(),
-    membershipPolicy: {
-      version: 'bsc_transaction_membership_v1',
-      transactionMethod: 'eth_getTransactionByHash',
-      receiptMethod: 'eth_getTransactionReceipt',
-      blockMethod: 'eth_getBlockByNumber',
-      indexedTransactionMethod: 'eth_getTransactionByBlockNumberAndIndex',
-      fullTransactions: false,
-    },
-    anchor: {
-      endpoint: endpointCopy(anchor.endpoint),
-      verifiedAnchorHash: verifiedChainAnchorHash(anchor),
-      verifiedAnchorHashPolicy: 'bsc_verified_anchor_semantics_v1',
-      observedAt: anchor.observedAt,
-      finalityPolicy: {
-        version: 'bsc_standard_finalized_current_v1',
-        method: 'eth_getBlockByNumber',
-        blockTag: 'finalized',
-        headBlockTag: 'latest',
+    evidence: {
+      chain: { namespace: 'eip155', reference: '56' },
+      txHash,
+      capturedAt: new Date().toISOString(),
+      membershipPolicy: {
+        version: 'bsc_transaction_membership_v1',
+        transactionMethod: 'eth_getTransactionByHash',
+        receiptMethod: 'eth_getTransactionReceipt',
+        blockMethod: 'eth_getBlockByNumber',
+        indexedTransactionMethod: 'eth_getTransactionByBlockNumberAndIndex',
         fullTransactions: false,
-        maxFutureBlockSkewMs: MAX_FUTURE_BLOCK_SKEW_MS,
-        maxCurrentAnchorLagMs: MAX_CURRENT_ANCHOR_LAG_MS,
       },
-      finalizedBlock: copyBlockHeader(anchor.finalizedBlock),
+      anchor: {
+        endpoint: endpointCopy(anchor.endpoint),
+        verifiedAnchorHash: verifiedChainAnchorHash(anchor),
+        verifiedAnchorHashPolicy: 'bsc_verified_anchor_semantics_v1',
+        observedAt: anchor.observedAt,
+        finalityPolicy: {
+          version: 'bsc_standard_finalized_current_v1',
+          method: 'eth_getBlockByNumber',
+          blockTag: 'finalized',
+          headBlockTag: 'latest',
+          fullTransactions: false,
+          maxFutureBlockSkewMs: MAX_FUTURE_BLOCK_SKEW_MS,
+          maxCurrentAnchorLagMs: MAX_CURRENT_ANCHOR_LAG_MS,
+        },
+        finalizedBlock: copyBlockHeader(anchor.finalizedBlock),
+      },
+      transaction,
+      receipt,
+      canonicalBlock,
+      indexedTransaction,
     },
-    transaction,
-    receipt,
-    canonicalBlock,
-    indexedTransaction,
+    rawExchanges: captureRaw
+      ? [transactionResult, receiptResult, blockResult, indexedTransactionResult]
+          .map((result) => (result?.ok ? result.rawExchange : undefined))
+          .filter((exchange): exchange is BscRawRpcEvidenceExchange => exchange !== undefined)
+      : [],
   }
+}
+
+export async function fetchBscTransactionMembershipEvidence(
+  txHashInput: string,
+  anchorEvidence: unknown,
+  opts: BscEvidenceRpcOpts = {}
+): Promise<BscTransactionMembershipEvidence> {
+  return (
+    await fetchBscTransactionMembershipEvidenceInternal(txHashInput, anchorEvidence, opts, false)
+  ).evidence
+}
+
+export interface BscVerifiedTransactionFinalityRawCapture {
+  evidence: BscTransactionMembershipEvidence
+  verified: BscVerifiedTransactionFinality
+  rawExchanges: BscRawRpcEvidenceExchange[]
+}
+
+/**
+ * Capture the exact same response bytes consumed by the strict transaction
+ * finality verifier. This does not capture trace/internal native cashflow and
+ * cannot by itself verify a DEX protocol invocation or authorize persistence.
+ */
+export async function captureBscVerifiedTransactionFinalityEvidence(
+  txHashInput: string,
+  anchorEvidence: unknown,
+  opts: BscEvidenceRpcOpts = {}
+): Promise<BscVerifiedTransactionFinalityRawCapture> {
+  const captured = await fetchBscTransactionMembershipEvidenceInternal(
+    txHashInput,
+    anchorEvidence,
+    opts,
+    true
+  )
+  const verified = requireBscVerifiedTransactionFinality(captured.evidence, anchorEvidence)
+  const expectedLanes = [
+    'transaction',
+    'receipt',
+    'membership_block',
+    'indexed_transaction',
+  ] as const
+  if (
+    captured.rawExchanges.length !== expectedLanes.length ||
+    captured.rawExchanges.some((exchange, index) => exchange.lane !== expectedLanes[index])
+  ) {
+    throw new TypeError('BSC transaction raw evidence capture is incomplete')
+  }
+  return { evidence: captured.evidence, verified, rawExchanges: captured.rawExchanges }
 }
 
 function invalidVerifiedTransactionFinality(): never {
