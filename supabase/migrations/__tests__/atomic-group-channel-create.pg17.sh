@@ -230,6 +230,18 @@ CREATE TABLE public.user_follows (
   PRIMARY KEY (follower_id, following_id)
 );
 
+CREATE TABLE public.notifications (
+  user_id uuid NOT NULL,
+  type text NOT NULL,
+  actor_id uuid NOT NULL
+);
+
+CREATE TABLE public.user_activities (
+  user_id uuid NOT NULL,
+  activity_type text NOT NULL,
+  target_id uuid NOT NULL
+);
+
 ALTER TABLE public.conversations OWNER TO postgres;
 ALTER TABLE public.chat_channels OWNER TO postgres;
 ALTER TABLE public.channel_members OWNER TO postgres;
@@ -367,6 +379,54 @@ BEFORE INSERT OR DELETE OR UPDATE OF follower_id, following_id
 ON public.user_follows
 FOR EACH ROW
 EXECUTE FUNCTION public.serialize_direct_message_pair_edge();
+
+-- These independent production AFTER INSERT side effects coexist with the
+-- serializer. The migration must preserve their exact trigger contracts.
+CREATE FUNCTION public.create_user_follow_notification()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+PARALLEL UNSAFE
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  following_notify_follow boolean := true;
+BEGIN
+  IF following_notify_follow THEN
+    INSERT INTO notifications(user_id, type, actor_id)
+    VALUES (NEW.following_id, 'follow', NEW.follower_id);
+  END IF;
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION public.create_user_follow_notification() OWNER TO postgres;
+
+CREATE FUNCTION public.log_user_follow_activity()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+PARALLEL UNSAFE
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+BEGIN
+  INSERT INTO user_activities(user_id, activity_type, target_id)
+  VALUES (NEW.follower_id, 'follow_user', NEW.following_id);
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION public.log_user_follow_activity() OWNER TO postgres;
+
+CREATE TRIGGER on_user_follow
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.create_user_follow_notification();
+
+CREATE TRIGGER trg_log_user_follow_activity
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.log_user_follow_activity();
 
 CREATE FUNCTION public.add_channel_members_atomic(
   p_channel_id uuid,
@@ -605,6 +665,69 @@ FOR EACH ROW EXECUTE FUNCTION public.rogue_channel_trigger();
 SQL
 expect_migration_failure
 psql_cmd -c "DROP TRIGGER rogue_channel_trigger ON public.chat_channels; DROP FUNCTION public.rogue_channel_trigger()" >/dev/null
+
+# The production follow notification/activity triggers are accepted only with
+# their exact enabled event/function shapes, and no fourth trigger is allowed.
+psql_cmd -c \
+  "ALTER TABLE public.user_follows DISABLE TRIGGER on_user_follow" >/dev/null
+expect_migration_failure
+psql_cmd -c \
+  "ALTER TABLE public.user_follows ENABLE TRIGGER on_user_follow" >/dev/null
+
+psql_cmd <<'SQL'
+DROP TRIGGER trg_log_user_follow_activity ON public.user_follows;
+CREATE TRIGGER trg_log_user_follow_activity
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.create_user_follow_notification();
+SQL
+expect_migration_failure
+psql_cmd <<'SQL'
+DROP TRIGGER trg_log_user_follow_activity ON public.user_follows;
+CREATE TRIGGER trg_log_user_follow_activity
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.log_user_follow_activity();
+SQL
+
+psql_cmd <<'SQL'
+CREATE FUNCTION public.rogue_follow_side_effect()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER zz_rogue_follow_side_effect
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.rogue_follow_side_effect();
+SQL
+expect_migration_failure
+psql_cmd <<'SQL'
+DROP TRIGGER zz_rogue_follow_side_effect ON public.user_follows;
+DROP FUNCTION public.rogue_follow_side_effect();
+SQL
+
+psql_cmd -Atqc "SELECT pg_catalog.pg_get_functiondef('public.create_user_follow_notification()'::regprocedure)" >"$TMP_ROOT/follow-notification-function.sql"
+psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION public.create_user_follow_notification()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+PARALLEL UNSAFE
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+BEGIN
+  RETURN NEW;
+END
+$function$;
+SQL
+expect_migration_failure
+psql_cmd -f "$TMP_ROOT/follow-notification-function.sql" >/dev/null
+
 psql_cmd -f "$MIGRATION" >/dev/null
 
 # The parent constraint rejects a directly inserted empty group at commit, but
