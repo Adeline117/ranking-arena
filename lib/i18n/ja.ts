@@ -4378,7 +4378,7 @@ const ja = {
   // Activity Feed
   activityFeedTitle: 'アクティビティフィード',
   activityFeedDesc:
-    'ライブトレーダーデータからのマイルストーン — ランク上昇、ROIブレイクアウト、連勝、大幅利益。',
+    '最新の公開トレーダーデータから自動生成したマイルストーン — ランク上昇、ROIブレイクアウト、連勝、大幅利益。',
   activityFilterAll: 'すべて',
   activityFeedEmpty:
     'まだアクティビティイベントはありません。次のデータ同期後にもう一度ご確認ください。',
