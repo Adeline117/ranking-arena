@@ -133,6 +133,32 @@ test('waits for Vercel READY within the job budget before allowing promotion', (
   )
 })
 
+test('verifies an exact healthy public SHA after deploy-gate rollback', () => {
+  const workflow = deployGate
+  assert.match(workflow, /echo "serving=\$SERVING" >> "\$GITHUB_OUTPUT"/)
+  assert.match(workflow, /PREVIOUS_DEPLOYMENT_ID: \$\{\{ steps\.fresh\.outputs\.previous_id \}\}/)
+  assert.match(workflow, /EXPECTED_ROLLBACK_SHA: \$\{\{ steps\.fresh\.outputs\.serving \}\}/)
+  assert.match(workflow, /--connect-timeout 5 --max-time 30/)
+  assert.match(workflow, /gate_rollback_verify=/)
+  assert.match(workflow, /\[ "\$HEALTH_HTTP" = "200" \]/)
+  assert.match(workflow, /\[ "\$HEALTH_STATUS" = "healthy" \]/)
+  assert.match(workflow, /\[ "\$SERVING_SHA" = "\$EXPECTED_ROLLBACK_SHA" \]/)
+  assert.match(workflow, /\[ "\$SERVING_SHA" != "\$HEAD_SHA" \]/)
+  assert.match(workflow, /STABLE_CONFIRMATIONS.*2/)
+  assert.match(workflow, /RECOVERY_SHA.*EXPECTED_ROLLBACK_SHA/)
+  assert.doesNotMatch(workflow, /2\?\?\) ROLLED="已自动回滚/)
+  assert.doesNotMatch(workflow, /promote\/\$PREV_ID/)
+})
+
+test('does not duplicate the detailed smoke rollback alert', () => {
+  assert.match(deployGate, /id: smoke_release/)
+  assert.match(deployGate, /echo "alerted=true" >> "\$GITHUB_OUTPUT"/)
+  assert.match(
+    deployGate,
+    /if: failure\(\) && steps\.gate\.outputs\.pass == 'true' && steps\.smoke_release\.outputs\.alerted != 'true'/
+  )
+})
+
 test('skips duplicate Next type validation only for a CI-attested candidate', () => {
   assert.match(nextConfig, /ignoreBuildErrors: process\.env\.ARENA_CI_TYPES_ATTESTED === '1'/)
   assert.equal(deployGate.match(/--build-env ARENA_CI_TYPES_ATTESTED=1/g)?.length, 1)
