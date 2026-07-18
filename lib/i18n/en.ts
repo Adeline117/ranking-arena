@@ -909,7 +909,7 @@ const en = {
   profileSection: 'Profile',
   securitySection: 'Account Security',
   walletSection: 'Wallet',
-  walletDescription: 'Connect and manage your Web3 wallet. View NFT membership status.',
+  walletDescription: 'Connect and manage your Web3 wallet. View your on-chain NFT badge.',
   exchangesSection: 'Exchange Binding',
   apiKeysSection: 'API Keys',
   alertsSection: 'Trader Alerts',
@@ -2926,8 +2926,8 @@ const en = {
   voteSignatureRejected: 'Signature rejected',
 
   // Web3 - NFTBadge
-  nftBadgeTitle: 'Pro membership via Arena NFT',
-  nftBadgePro: 'Pro',
+  nftBadgeTitle: 'Arena NFT badge',
+  nftBadgePro: 'NFT',
 
   // Web3 - OnChainBadge
   onChainVerified: 'On-chain Verified',
@@ -2940,7 +2940,7 @@ const en = {
   walletLinkedSuccess: 'Wallet linked successfully',
   walletUnlinkTitle: 'Unlink Wallet',
   walletUnlinkConfirm:
-    'Are you sure you want to unlink your wallet? You will lose NFT membership benefits if applicable.',
+    'Are you sure you want to unlink your wallet? Its on-chain NFT badge will no longer appear, but your plan will not change.',
   walletUnlinked: 'Wallet unlinked',
   walletUnlinkFailed: 'Failed to unlink wallet',
   walletLinkedHeading: 'Linked Wallet',
@@ -2951,10 +2951,12 @@ const en = {
   walletSigning: 'Signing...',
   walletLinkButton: 'Link Wallet',
   walletConnectButton: 'Connect Wallet',
-  walletProNft: 'Pro Membership (NFT)',
-  walletNoNft: 'No NFT Membership',
-  walletProStatus: 'Your account has Pro status via NFT. Tier: {tier}',
-  walletHoldNft: 'Hold an Arena Pro NFT to unlock Pro features.',
+  walletProNft: 'Arena NFT Badge',
+  walletNoNft: 'No Arena NFT Badge',
+  walletProStatus:
+    'Your Arena NFT badge is verified on-chain. Pro access is based on your current plan.',
+  walletHoldNft:
+    'Hold and link an Arena NFT to display its on-chain badge. It does not unlock Pro features.',
 
   // Web3 - useSiweAuth
   siweRejected:
@@ -3050,13 +3052,12 @@ const en = {
   billingMonthly: 'Monthly',
   expirationDate: 'Expiration Date',
   nextRenewal: 'Next Renewal',
-  nftMembershipCard: 'NFT Membership Card',
+  nftMembershipCard: 'NFT Badge',
   nftValidUntil: 'Valid until:',
-  nftNotMintedPro: 'You are a Pro member, but have not minted your NFT membership card yet.',
-  nftLinkWalletHint:
-    'Your NFT membership card will be automatically minted after linking a wallet.',
+  nftNotMintedPro: 'You are a Pro member, but have not minted your NFT badge yet.',
+  nftLinkWalletHint: 'Your NFT badge will be automatically minted after linking a wallet.',
   nftLinkWallet: 'Link Wallet',
-  nftUpgradeHint: 'Upgrade to Pro to get an NFT membership card.',
+  nftUpgradeHint: 'Upgrade to Pro to get an NFT badge.',
   benefitsComparison: 'Benefits Comparison',
   benefitFeature: 'Feature',
   benefitFollowTraders: 'Follow Traders',
@@ -3067,7 +3068,7 @@ const en = {
   benefitApiAccess: 'API Access',
   benefitProGroups: 'Pro Groups',
   benefitAdvancedFilter: 'Advanced Filters',
-  benefitNft: 'NFT Membership',
+  benefitNft: 'NFT Badge',
   benefitLimited: 'Limited',
   benefitUnlimited: 'Unlimited',
   benefitUnit: '',
@@ -3868,7 +3869,7 @@ const en = {
   statusPastDue: 'Past Due',
   expiresLabel: 'Expires',
   validUntil: 'Valid until',
-  proMintNft: 'Pro members can mint an exclusive NFT membership card',
+  proMintNft: 'Pro members can mint an exclusive NFT badge',
   linkWallet: 'Link Wallet',
   featureLabel: 'Feature',
   followTradersLabel: 'Follow Traders',
@@ -3885,7 +3886,7 @@ const en = {
   directMessagesLabel: 'Direct Messages',
   basicLabel: 'Basic',
   unlimitedLabel: 'Unlimited',
-  nftMembershipLabel: 'NFT Membership',
+  nftMembershipLabel: 'NFT Badge',
   usageStatsTitle: 'Usage Stats',
   followedTradersUsage: 'Followed Traders',
   apiCallsTodayLabel: 'API Calls Today',

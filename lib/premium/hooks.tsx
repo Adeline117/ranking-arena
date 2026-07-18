@@ -90,8 +90,8 @@ interface PremiumContextValue {
   /** 当前等级 */
   tier: SubscriptionTier
   /** 订阅来源 */
-  source: 'stripe' | 'nft' | 'admin' | 'free'
-  /** 是否持有 NFT 会员 */
+  source: 'stripe' | 'admin' | 'free'
+  /** 是否持有可展示的链上 NFT 徽章（不代表 Pro 权限） */
   hasNFT: boolean
   /** 检查功能访问 */
   checkFeature: (featureId: PremiumFeatureId) => FeatureCheckResult
@@ -146,7 +146,6 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
   )
   const [isLoadingState, setIsLoading] = useState(!initialSubscription)
   const [hasNFTState, setHasNFT] = useState(false)
-  const [_sourceState, setSource] = useState<'stripe' | 'nft' | 'admin' | 'free'>('free')
   const stateScopeOwned = stateOwnerScopeKeyRef.current === scopeKey
   const subscription = stateScopeOwned ? subscriptionState : null
   const isLoading = stateScopeOwned ? isLoadingState : true
@@ -171,19 +170,11 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
         setSubscription(null)
         setIsLoading(true)
         setHasNFT(false)
-        setSource('free')
       }
       return true
     },
     [scopeIsCurrent]
   )
-  // Track subscription in a ref so checkNFTMembership can read it without being
-  // recreated on every subscription state change (which was causing useEffect churn)
-  const subscriptionRef = useRef(subscription)
-  useEffect(() => {
-    subscriptionRef.current = subscription
-  }, [subscription])
-
   // 加载订阅状态
   const loadSubscription = useCallback(async () => {
     const capturedScope = {
@@ -318,9 +309,8 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     scopeIsCurrent,
   ])
 
-  // Check NFT membership in parallel (non-blocking enhancement)
-  // Uses subscriptionRef (not subscription state) so this callback is stable and
-  // is not recreated on every subscription change, preventing useEffect re-trigger churn.
+  // Check the on-chain badge in parallel. Badge ownership is display-only and
+  // must not create or replace a paid Pro subscription.
   const checkNFTMembership = useCallback(async () => {
     const capturedScope = {
       viewerKey: auth.viewerKey,
@@ -336,33 +326,9 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
         headers: { Authorization: `Bearer ${session.accessToken}` },
       })
       if (res.ok && scopeIsCurrent(capturedScope)) {
-        const { hasNFT: nft } = await res.json()
+        const { hasNft } = await res.json()
         if (!scopeIsCurrent(capturedScope)) return
-        setHasNFT(nft)
-        if (nft) {
-          setSource('nft')
-          // If NFT holder but no Stripe sub, treat as pro — read from ref to avoid dep
-          if (!subscriptionRef.current || subscriptionRef.current.tier === 'free') {
-            const nftSub: UserSubscription = {
-              userId: session.userId,
-              tier: 'pro',
-              status: 'active',
-              startDate: new Date().toISOString(),
-              endDate: null,
-              trialEndDate: null,
-              autoRenew: false,
-              paymentMethod: undefined,
-              usage: {
-                apiCallsToday: 0,
-                comparisonReportsThisMonth: 0,
-                exportsThisMonth: 0,
-                currentFollows: 0,
-                currentCustomRankings: 0,
-              },
-            }
-            setSubscription(nftSub)
-          }
-        }
+        setHasNFT(hasNft === true)
       }
     } catch (_err) {
       // Intentionally swallowed: NFT-based premium check is optional, Stripe subscription is primary
@@ -407,7 +373,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
   }, [loadSubscription])
 
   const value = useMemo<PremiumContextValue>(() => {
-    const actualIsPremium = (subscription ? scopedService.isPremiumUser() : false) || hasNFT
+    const actualIsPremium = subscription ? scopedService.isPremiumUser() : false
     // During open beta, all users get premium features unlocked
     const effectiveIsPremium = BETA_PRO_FEATURES_FREE || actualIsPremium
     return {
@@ -415,9 +381,8 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       isLoading,
       isPremium: effectiveIsPremium,
       isFeaturesUnlocked: effectiveIsPremium,
-      tier:
-        (subscription?.tier || 'free') === 'free' && hasNFT ? 'pro' : subscription?.tier || 'free',
-      source: hasNFT ? 'nft' : subscription?.paymentMethod === 'stripe' ? 'stripe' : 'free',
+      tier: subscription?.tier || 'free',
+      source: subscription?.paymentMethod === 'stripe' ? 'stripe' : 'free',
       hasNFT,
       checkFeature,
       refresh,

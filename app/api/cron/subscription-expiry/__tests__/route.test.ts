@@ -1,6 +1,6 @@
 /**
  * Cron: subscription-expiry route tests
- * Tests auth, expiry checks, downgrade logic, NFT validation, and error handling.
+ * Tests auth, expiry checks, downgrade logic, and error handling.
  *
  * @jest-environment node
  */
@@ -356,57 +356,34 @@ describe('GET /api/cron/subscription-expiry', () => {
     expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
   })
 
-  it('preserves an expired NFT user when Stripe fallback verification fails', async () => {
+  it('does not treat an NFT badge as fallback authority for an ended Stripe subscription', async () => {
+    const ended = stripeSubscription('canceled')
     queueDatabaseResults(
-      { data: [], error: null },
       { data: [], error: null },
       {
         data: [
           {
-            id: 'user1',
-            wallet_address: '0x123',
-            subscription_tier: 'pro',
+            user_id: 'user1',
+            stripe_subscription_id: 'sub_1',
             stripe_customer_id: 'cus_1',
-            pro_plan: 'monthly',
+            plan: 'monthly',
           },
         ],
         error: null,
       },
-      { data: [], error: null }
-    )
-    mockStripeList.mockRejectedValue(new Error('Stripe unavailable'))
-
-    const res = await GET(createCronRequest(CRON_SECRET))
-    const body = await res.json()
-
-    expect(body.downgraded).toBe(0)
-    expect(body.errors).toHaveLength(1)
-  })
-
-  it('downgrades an expired NFT only when no Stripe fallback exists', async () => {
-    queueDatabaseResults(
-      { data: [], error: null },
-      { data: [], error: null },
       {
-        data: [
-          {
-            id: 'user1',
-            wallet_address: '0x123',
-            subscription_tier: 'pro',
-            stripe_customer_id: null,
-            pro_plan: null,
-          },
-        ],
+        data: [{ id: 'user1', pro_plan: 'monthly', wallet_address: '0x123' }],
         error: null,
-      },
-      { data: [], error: null },
-      { data: null, error: null }
+      }
     )
+    mockStripeList.mockResolvedValue({ data: [ended] })
+    mockCheckNFTMembership.mockResolvedValue(true)
 
     const res = await GET(createCronRequest(CRON_SECRET))
     const body = await res.json()
 
     expect(body.downgraded).toBe(1)
-    expect(mockStripeList).not.toHaveBeenCalled()
+    expect(mockUpdateUserSubscription).toHaveBeenCalledWith('user1', ended, 'monthly')
+    expect(mockCheckNFTMembership).not.toHaveBeenCalled()
   })
 })

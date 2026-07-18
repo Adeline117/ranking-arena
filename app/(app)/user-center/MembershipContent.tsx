@@ -240,9 +240,9 @@ export default function MembershipContent() {
   // never-paid user has `info.subscription === null`, so claiming "Current Plan: Pro"
   // + rendering the Stripe subscription-management panel (Change Plan / Billing
   // History / Cancel → /api/stripe/portal → dead-ends to /pricing) is a false claim.
-  // A real entitlement = a live Stripe subscription OR an NFT membership.
+  // NFT ownership is a display badge, not payment authority.
   const hasRealSubscription = !!info?.subscription
-  const hasGenuinePro = hasRealSubscription || !!info?.nft?.hasNft
+  const hasGenuinePro = hasRealSubscription
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>

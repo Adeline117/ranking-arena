@@ -10,6 +10,7 @@
 
 import { NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import { withCron } from '@/lib/api/with-cron'
 import { createLogger } from '@/lib/utils/logger'
 import { getStripe, STRIPE_API_PRICE_IDS, STRIPE_PRICE_IDS } from '@/lib/stripe'
@@ -26,7 +27,7 @@ const logger = createLogger('reconcile-subscriptions')
 export const GET = withCron(
   'reconcile-subscriptions',
   async (_request: NextRequest, { supabase }) => {
-    const sb = supabase as SupabaseClient
+    const sb: SupabaseClient<Database> = supabase
     let upgradedCount = 0
     let downgradedCount = 0
     let repairedCount = 0
@@ -144,41 +145,9 @@ export const GET = withCron(
         const usersWithActiveSub = new Set(activeSubs?.map((s) => s.user_id) || [])
         const idsToDowngrade = proUserIds.filter((id) => !usersWithActiveSub.has(id))
 
-        // S-6 FIX: Check actual NFT validity instead of just wallet_address presence.
-        // Before: any user with wallet_address was skipped, even if their NFT expired.
-        // After: only users with a verified valid NFT are skipped.
         if (idsToDowngrade.length > 0) {
-          const { data: walletUsers } = await sb
-            .from('user_profiles')
-            .select('id, wallet_address')
-            .in('id', idsToDowngrade)
-            .not('wallet_address', 'is', null)
-
-          let nftUserIds = new Set<string>()
-          if (walletUsers && walletUsers.length > 0) {
-            const { checkNFTMembership } = await import('@/lib/web3/nft')
-            const results = await Promise.allSettled(
-              walletUsers.map(async (u) => {
-                try {
-                  const valid = await checkNFTMembership(u.wallet_address!)
-                  return { id: u.id, valid }
-                } catch {
-                  // On NFT check failure, err on the side of not downgrading
-                  return { id: u.id, valid: true }
-                }
-              })
-            )
-            nftUserIds = new Set(
-              results
-                .filter(
-                  (r): r is PromiseFulfilledResult<{ id: string; valid: boolean }> =>
-                    r.status === 'fulfilled' && r.value.valid
-                )
-                .map((r) => r.value.id)
-            )
-          }
-          const candidates = nonLifetimeProfiles.filter(
-            (profile) => idsToDowngrade.includes(profile.id) && !nftUserIds.has(profile.id)
+          const candidates = nonLifetimeProfiles.filter((profile) =>
+            idsToDowngrade.includes(profile.id)
           )
           const finalDowngradeIds: string[] = []
 
