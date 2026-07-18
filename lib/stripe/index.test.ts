@@ -466,6 +466,8 @@ describe('createCheckoutSession', () => {
         success_url: 'https://example.com/success',
         cancel_url: 'https://example.com/cancel',
         allow_promotion_codes: true,
+        automatic_tax: { enabled: false },
+        adaptive_pricing: { enabled: false },
       }),
       expect.objectContaining({ idempotencyKey: expect.any(String) })
     )
