@@ -17,12 +17,14 @@ const mockShowToast = jest.fn()
 const mockTrackEvent = jest.fn()
 const mockTrackInteraction = jest.fn()
 const mockSearchParamsGet = jest.fn()
+const mockPush = jest.fn()
 const mockPostSetter = jest.fn()
 let mockPosts: Array<Record<string, unknown>> = []
 let mockIsPro = true
 
 jest.mock('next/navigation', () => ({
   redirect: jest.fn(),
+  useRouter: () => ({ push: mockPush }),
   useSearchParams: () => ({ get: (...args: unknown[]) => mockSearchParamsGet(...args) }),
 }))
 jest.mock('next/link', () => ({
@@ -250,6 +252,20 @@ function pendingAuth(sessionGeneration: number) {
     user: null,
     userId: null,
     viewerKey: 'pending' as const,
+  }
+}
+
+function anonymousAuth(sessionGeneration: number) {
+  return {
+    accessToken: null,
+    authChecked: true,
+    email: null,
+    isLoggedIn: false,
+    loading: false,
+    sessionGeneration,
+    user: null,
+    userId: null,
+    viewerKey: 'anon' as const,
   }
 }
 
@@ -758,5 +774,26 @@ describe('group detail viewer and resource ownership', () => {
       source: 'premium_group_join',
     })
     expect(screen.getByTestId('pro-upsell')).toHaveTextContent('open')
+  })
+
+  it('returns anonymous joiners to the exact group and preserves an invite', async () => {
+    const scope = synchronizeViewerScope(true, null)
+    currentAuth = anonymousAuth(scope.sessionGeneration)
+    mockSearchParamsGet.mockImplementation((key: string) =>
+      key === 'invite' ? 'invite/with?reserved' : null
+    )
+
+    render(<GroupDetailPage params={Promise.resolve({ id: GROUP_1 })} />)
+    await waitForGroup(`Group ${GROUP_1}`)
+
+    fireEvent.click(screen.getByRole('button', { name: 'join' }))
+
+    expect(mockShowToast).toHaveBeenCalledWith('pleaseLogin', 'warning')
+    expect(mockPush).toHaveBeenCalledWith(
+      `/login?returnUrl=${encodeURIComponent(
+        `/groups/${GROUP_1}?invite=${encodeURIComponent('invite/with?reserved')}`
+      )}`
+    )
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })
