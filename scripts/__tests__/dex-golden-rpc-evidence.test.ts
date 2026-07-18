@@ -237,6 +237,49 @@ describe('DEX golden double-RPC evidence contract', () => {
     expect(() => parseDexGoldenRpcEvidence(evidence)).toThrow('two distinct remote providers')
   })
 
+  it('accepts PublicNode as a distinct pinned Solana provider and rejects chain or identity drift', () => {
+    const expectedConnectionHash = createHash('sha256')
+      .update(
+        JSON.stringify([
+          'solana_evidence_connection_v1',
+          'publicnode',
+          'publicnode_solana_mainnet',
+          'https://solana-rpc.publicnode.com',
+        ])
+      )
+      .digest('hex')
+    const identity = dexGoldenRemoteEndpointIdentity('publicnode_solana_mainnet')
+    expect(identity).toEqual({
+      provider_id: 'publicnode',
+      endpoint_id: 'publicnode_solana_mainnet',
+      connection_hash: expectedConnectionHash,
+    })
+    expect(JSON.stringify(identity)).not.toContain('solana-rpc.publicnode.com')
+
+    const evidence = baseEnvelope('solana')
+    const stableHash = evidence.stable_transaction_facts_sha256
+    evidence.captures = [
+      capture('solana', SOLANA_TX, 'alchemy_solana_mainnet', stableHash),
+      capture('solana', SOLANA_TX, 'publicnode_solana_mainnet', stableHash),
+    ]
+    expect(() => parseDexGoldenRpcEvidence(evidence)).not.toThrow()
+
+    const forged = clone(evidence)
+    forged.captures[1].endpoint.connection_hash = hash('forged-publicnode')
+    expect(() => parseDexGoldenRpcEvidence(forged)).toThrow('pinned secret-free RPC origin')
+
+    const wrongChain = baseEnvelope('bsc')
+    wrongChain.captures[1] = capture(
+      'eip155',
+      BSC_TX,
+      'publicnode_solana_mainnet',
+      wrongChain.stable_transaction_facts_sha256
+    )
+    expect(() => parseDexGoldenRpcEvidence(wrongChain)).toThrow(
+      'endpoint belongs to a different chain'
+    )
+  })
+
   it('allows provider-specific witness drift but rejects stable fact disagreement', () => {
     const evidence = baseEnvelope('solana')
     expect(evidence.captures[0].provider_finality_witness.semantic_sha256).not.toBe(

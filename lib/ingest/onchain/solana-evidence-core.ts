@@ -20,8 +20,10 @@ const RPC_REQUEST_ID = 1
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 const MAX_TIMEOUT_MS = 120_000
 export const DEFAULT_SOLANA_EVIDENCE_TIMEOUT_MS = 20_000
+const PUBLICNODE_SOLANA_HISTORY_SETTLE_MS = 20_000
 const CONNECTION_HASH_RE = /^[0-9a-f]{64}$/
 const SOLANA_OFFICIAL_ORIGIN = 'https://api.mainnet-beta.solana.com'
+const PUBLICNODE_SOLANA_ORIGIN = 'https://solana-rpc.publicnode.com'
 const HELIUS_ORIGIN = 'https://mainnet.helius-rpc.com'
 const ALCHEMY_SOLANA_ORIGIN = 'https://solana-mainnet.g.alchemy.com'
 
@@ -29,6 +31,11 @@ const CALLER_ENDPOINTS = {
   solana_official_mainnet: {
     providerId: 'solana_foundation',
     origin: SOLANA_OFFICIAL_ORIGIN,
+    route: 'root',
+  },
+  publicnode_solana_mainnet: {
+    providerId: 'publicnode',
+    origin: PUBLICNODE_SOLANA_ORIGIN,
     route: 'root',
   },
   helius_solana_mainnet: {
@@ -472,6 +479,14 @@ export async function solanaEvidenceRpc(
   }
   if (parsedRawCapture && SOLANA_RAW_RPC_LANE_METHODS[parsedRawCapture.lane] !== method) {
     throw new TypeError('invalid Solana raw RPC evidence capture')
+  }
+  if (endpoint.identity.endpointId === 'publicnode_solana_mainnet' && method === 'getBlocks') {
+    // PublicNode can expose a finalized getSlot context before its getBlocks
+    // history surface catches up. This fixed one-shot transport accommodation
+    // neither refreshes the pinned root nor proves any chain slot semantics.
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, PUBLICNODE_SOLANA_HISTORY_SETTLE_MS)
+    })
   }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
