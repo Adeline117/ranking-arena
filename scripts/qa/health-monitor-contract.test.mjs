@@ -48,6 +48,28 @@ function createFakeCurl(directory) {
   fs.chmodSync(fakeCurl, 0o755)
 }
 
+function createFakeGit(directory) {
+  const fakeGit = path.join(directory, 'git')
+  fs.writeFileSync(
+    fakeGit,
+    [
+      '#!/usr/bin/env bash',
+      'printf "%s\\n" "$*" >> "${FAKE_GIT_LOG}"',
+      'case "$1" in',
+      '  fetch)',
+      '    if [ "${3:-}" = "main" ]; then exit 0; fi',
+      '    exit "${FAKE_GIT_FETCH_SHA_EXIT:-0}"',
+      '    ;;',
+      '  cat-file) exit "${FAKE_GIT_HAS_COMMIT_EXIT:-0}" ;;',
+      '  merge-base) exit "${FAKE_GIT_ANCESTOR_EXIT:-0}" ;;',
+      '  *) exit 2 ;;',
+      'esac',
+      '',
+    ].join('\n')
+  )
+  fs.chmodSync(fakeGit, 0o755)
+}
+
 function runHealthCheck({ body, http = '200', curlExit = '0' }) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-health-check-'))
   try {
@@ -77,6 +99,80 @@ function runHealthCheck({ body, http = '200', curlExit = '0' }) {
       ...result,
       output: fs.readFileSync(output, 'utf8'),
       message: fs.existsSync(message) ? fs.readFileSync(message, 'utf8') : '',
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+function runReleaseCheck({
+  body,
+  http = '200',
+  curlExit = '0',
+  hasCommitExit = '0',
+  fetchShaExit = '0',
+  ancestorExit = '0',
+}) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-release-check-'))
+  try {
+    createFakeCurl(directory)
+    createFakeGit(directory)
+    const output = path.join(directory, 'github-output')
+    const message = path.join(directory, 'health-message.txt')
+    const curlLog = path.join(directory, 'curl.log')
+    const gitLog = path.join(directory, 'git.log')
+    fs.writeFileSync(output, '')
+    fs.writeFileSync(message, 'All systems healthy\n')
+    fs.writeFileSync(curlLog, '')
+    fs.writeFileSync(gitLog, '')
+    const result = spawnSync('bash', ['-c', runBlock('Verify production main ancestry')], {
+      cwd: directory,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH}`,
+        RELEASE_URL: 'https://release.example.test/health',
+        HEALTH_MESSAGE_FILE: message,
+        GITHUB_OUTPUT: output,
+        FAKE_CURL_BODY: body,
+        FAKE_CURL_HTTP: http,
+        FAKE_CURL_EXIT: curlExit,
+        FAKE_CURL_LOG: curlLog,
+        FAKE_GIT_LOG: gitLog,
+        FAKE_GIT_HAS_COMMIT_EXIT: hasCommitExit,
+        FAKE_GIT_FETCH_SHA_EXIT: fetchShaExit,
+        FAKE_GIT_ANCESTOR_EXIT: ancestorExit,
+      },
+    })
+    return {
+      ...result,
+      output: fs.readFileSync(output, 'utf8'),
+      message: fs.readFileSync(message, 'utf8'),
+      gitCalls: fs.readFileSync(gitLog, 'utf8'),
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+function runAggregateCheck({ pipelineStatus, releaseStatus }) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-health-aggregate-'))
+  try {
+    const output = path.join(directory, 'github-output')
+    fs.writeFileSync(output, '')
+    const result = spawnSync('bash', ['-c', runBlock('Aggregate health result')], {
+      cwd: directory,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GITHUB_OUTPUT: output,
+        PIPELINE_STATUS: pipelineStatus,
+        RELEASE_STATUS: releaseStatus,
+      },
+    })
+    return {
+      ...result,
+      output: fs.readFileSync(output, 'utf8'),
     }
   } finally {
     fs.rmSync(directory, { recursive: true, force: true })
@@ -174,6 +270,60 @@ test('turns transport, HTTP, and JSON failures into an explicit down result', ()
   }
 })
 
+test('fails health when production is outside main ancestry', () => {
+  const servingSha = 'b489a40612e7dedba5bae7ee3b448f89f204ba4a'
+
+  const healthy = runReleaseCheck({
+    body: JSON.stringify({ commit: servingSha }),
+  })
+  assert.equal(healthy.status, 0)
+  assert.equal(healthy.output, 'status=healthy\n')
+  assert.equal(healthy.message, 'All systems healthy\n')
+  assert.match(healthy.gitCalls, /fetch origin main --quiet/)
+  assert.match(healthy.gitCalls, new RegExp(`merge-base --is-ancestor ${servingSha} origin/main`))
+
+  const divergent = runReleaseCheck({
+    body: JSON.stringify({ commit: servingSha }),
+    ancestorExit: '1',
+  })
+  assert.equal(divergent.status, 0)
+  assert.equal(divergent.output, 'status=divergent\n')
+  assert.match(divergent.message, /outside main ancestry/)
+  assert.doesNotMatch(divergent.output, new RegExp(servingSha))
+})
+
+test('fails closed when production release identity cannot be verified', () => {
+  const servingSha = 'b489a40612e7dedba5bae7ee3b448f89f204ba4a'
+  for (const scenario of [
+    { body: '', http: '000', curlExit: '28' },
+    { body: '{"commit":"short"}' },
+    {
+      body: JSON.stringify({ commit: servingSha }),
+      hasCommitExit: '1',
+      fetchShaExit: '1',
+    },
+  ]) {
+    const result = runReleaseCheck(scenario)
+    assert.equal(result.status, 0)
+    assert.equal(result.output, 'status=down\n')
+    assert.notEqual(result.message, 'All systems healthy\n')
+  }
+})
+
+test('aggregates pipeline and release checks without masking missing outputs', () => {
+  for (const scenario of [
+    { pipelineStatus: 'healthy', releaseStatus: 'healthy', expected: 'healthy' },
+    { pipelineStatus: 'critical', releaseStatus: 'healthy', expected: 'critical' },
+    { pipelineStatus: 'healthy', releaseStatus: 'divergent', expected: 'divergent' },
+    { pipelineStatus: '', releaseStatus: 'healthy', expected: 'down' },
+    { pipelineStatus: 'healthy', releaseStatus: '', expected: 'down' },
+  ]) {
+    const result = runAggregateCheck(scenario)
+    assert.equal(result.status, 0)
+    assert.equal(result.output, `status=${scenario.expected}\n`)
+  }
+})
+
 test('writes a dedup marker only after Telegram returns 2xx', () => {
   const delivered = runTelegram({ http: '200' })
   assert.equal(delivered.status, 0)
@@ -221,7 +371,7 @@ test('restores and saves cache explicitly before failing unhealthy runs', () => 
   assert.match(workflow, /if: steps\.telegram\.outputs\.delivered == 'true'/)
   assert.match(
     workflow,
-    /- name: Fail unhealthy health-monitor run\n        if: always\(\) && steps\.health\.outputs\.status != 'healthy'/
+    /- name: Fail unhealthy health-monitor run\n        if: always\(\) && steps\.aggregate\.outputs\.status != 'healthy'/
   )
   assert.match(runBlock('Fail unhealthy health-monitor run'), /exit 1/)
   assert.doesNotMatch(workflow, /uses: actions\/cache@v4/)
@@ -230,6 +380,8 @@ test('restores and saves cache explicitly before failing unhealthy runs', () => 
 test('keeps secrets and dynamic health data out of shell expression interpolation', () => {
   for (const name of [
     'Check pipeline health',
+    'Verify production main ancestry',
+    'Aggregate health result',
     'Send Telegram alert on failure (2h dedup)',
     'Fail unhealthy health-monitor run',
   ]) {
@@ -246,13 +398,21 @@ test('uses a de-duplicated GitHub issue when the primary alert channel fails', (
   assert.match(workflow, /permissions:\n  contents: read\n  issues: write/)
   assert.match(
     workflow,
-    /- name: Open independent issue when Telegram delivery fails\n        if: always\(\).*outcome != 'delivered'.*outcome != 'deduplicated'/
+    /- name: Open independent issue when Telegram delivery fails\n        if: always\(\) && steps\.aggregate\.outputs\.status != 'healthy'.*outcome != 'delivered'.*outcome != 'deduplicated'/
   )
-  assert.match(workflow, /ISSUE_TITLE: '🛑 Arena pipeline health is unhealthy'/)
+  assert.match(workflow, /ISSUE_TITLE: '🛑 Arena production health is unhealthy'/)
   assert.match(workflow, /gh issue create --repo "\$GH_REPO"/)
   assert.match(
     workflow,
-    /- name: Close independent issue after health recovery\n        if: always\(\) && steps\.health\.outputs\.status == 'healthy'/
+    /- name: Close independent issue after health recovery\n        if: always\(\) && steps\.aggregate\.outputs\.status == 'healthy'/
   )
   assert.match(workflow, /gh issue close "\$NUMBER" --repo "\$GH_REPO"/)
+})
+
+test('checks out full history before verifying the serving release', () => {
+  assert.match(workflow, /uses: actions\/checkout@v4\n        with:\n          fetch-depth: 0/)
+  const release = runBlock('Verify production main ancestry')
+  assert.match(release, /git fetch origin main --quiet/)
+  assert.match(release, /git merge-base --is-ancestor "\$SERVING" origin\/main/)
+  assert.match(release, /STATUS="divergent"/)
 })
