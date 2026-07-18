@@ -25,6 +25,7 @@ function makeScored(overrides: Partial<ScoredTrader> = {}): ScoredTrader {
   return {
     source: 'fixture_source',
     source_trader_id: 'trader-1',
+    source_as_of: '2026-07-18T10:00:00.000Z',
     arena_score: 80,
     arena_score_v3: 76,
     arena_score_v4: 80,

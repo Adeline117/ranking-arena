@@ -23,6 +23,8 @@ const logger = createLogger('compute-leaderboard')
 export interface ScoredTrader {
   source: string
   source_trader_id: string
+  /** Exchange/protocol snapshot time. Never substitute score computed_at. */
+  source_as_of: string
   arena_score: number | null // NOW the v4 score (served + ranked); filled by the batch pass
   arena_score_v3: number | null // rollback: pre-v4 (ROI+PnL) score; also the serving-population gate
   arena_score_v4: number | null // = arena_score (labeled shadow, kept for continuity)
@@ -120,6 +122,7 @@ export async function scoreTraders(
     return {
       source: t.source,
       source_trader_id: t.source_trader_id,
+      source_as_of: t.captured_at,
       arena_score: null as number | null, // v4 — filled by the batch pass below (SERVED + RANKED)
       arena_score_v3: finalScore, // rollback + serving-population gate (real ROI/PnL present)
       arena_score_v4: null as number | null, // = arena_score, filled below
