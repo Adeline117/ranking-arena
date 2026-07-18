@@ -450,7 +450,13 @@ function WatchlistPlaceholder() {
   )
 }
 
-function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[] }) {
+function MarketPageContent({
+  initialSpotData,
+  initialSpotDataUpdatedAt,
+}: {
+  initialSpotData?: SpotCoinSSR[]
+  initialSpotDataUpdatedAt?: number
+}) {
   const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [selectedToken, setSelectedToken] = useState<{
@@ -472,7 +478,10 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
   // Single shared fetch for /api/market/spot — data passed as props to all children.
   // Seed with the SSR-delivered spot data so the hook doesn't refetch the same
   // ~33KB/100-coin payload on mount (it was already in the document).
-  const { data: spotData, isLoading: spotLoading } = useMarketSpotData(initialSpotData)
+  const { data: spotData, isLoading: spotLoading } = useMarketSpotData(
+    initialSpotData,
+    initialSpotDataUpdatedAt
+  )
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
@@ -743,9 +752,11 @@ export interface SpotCoinSSR {
 
 export default function MarketPage({
   initialSpotData,
+  initialSpotDataUpdatedAt,
   initialError,
 }: {
   initialSpotData?: SpotCoinSSR[]
+  initialSpotDataUpdatedAt?: number
   initialError?: boolean
 }) {
   return (
@@ -764,7 +775,10 @@ export default function MarketPage({
           />
         </div>
       ) : (
-        <MarketPageContent initialSpotData={initialSpotData} />
+        <MarketPageContent
+          initialSpotData={initialSpotData}
+          initialSpotDataUpdatedAt={initialSpotDataUpdatedAt}
+        />
       )}
     </ErrorBoundary>
   )

@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query'
+import { environmentManager, QueryClient } from '@tanstack/react-query'
 import { logger } from '@/lib/logger'
 
 /**
@@ -41,6 +41,31 @@ export function createQueryClient() {
       },
     },
   })
+}
+
+let browserQueryClient: QueryClient | undefined
+
+/**
+ * Return an SSR-safe QueryClient.
+ *
+ * Client Components also execute during the server render. A module-level
+ * QueryClient therefore shares cached query state across requests and can make
+ * the server render data that a fresh browser cache does not have. TanStack's
+ * App Router pattern is a new client per server render and a singleton only in
+ * the browser (where it must survive Suspense retries).
+ */
+export function getQueryClient(): QueryClient {
+  if (environmentManager.isServer()) {
+    const client = createQueryClient()
+    setupQueryErrorLogging(client)
+    return client
+  }
+
+  if (!browserQueryClient) {
+    browserQueryClient = createQueryClient()
+    setupQueryErrorLogging(browserQueryClient)
+  }
+  return browserQueryClient
 }
 
 /**

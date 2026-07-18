@@ -7,7 +7,7 @@
  * re-exported here for backward compatibility.
  *
  * Cache utility functions (refreshCache, clearCache, etc.) now use
- * the React Query queryClient from Providers.
+ * the SSR-safe React Query client resolver.
  */
 
 import { useQuery, useInfiniteQuery, type UseQueryResult } from '@tanstack/react-query'
@@ -17,7 +17,7 @@ import {
   REFETCH_RELAXED,
   REFETCH_STATIC,
 } from './cache-presets'
-import { queryClient } from '@/app/components/Providers'
+import { getQueryClient } from './queryClient'
 
 // Re-export pure fetchers from the shared module
 export { fetcher, fetcherWithAuth, fetchWithTimeout } from './fetchers'
@@ -366,14 +366,14 @@ export function useNotifications(userId: string | undefined, token?: string) {
  * 手动刷新指定 key 的缓存
  */
 export function refreshCache(key: string) {
-  return queryClient.invalidateQueries({ queryKey: [key] })
+  return getQueryClient().invalidateQueries({ queryKey: [key] })
 }
 
 /**
  * 刷新所有匹配模式的缓存
  */
 export function refreshCacheByPattern(pattern: RegExp) {
-  return queryClient.invalidateQueries({
+  return getQueryClient().invalidateQueries({
     predicate: (query) => {
       const key = JSON.stringify(query.queryKey)
       return pattern.test(key)
@@ -385,14 +385,14 @@ export function refreshCacheByPattern(pattern: RegExp) {
  * 清除指定 key 的缓存
  */
 export function clearCache(key: string) {
-  return queryClient.removeQueries({ queryKey: [key] })
+  return getQueryClient().removeQueries({ queryKey: [key] })
 }
 
 /**
  * 预填充缓存数据
  */
 export function prefillCache<T>(key: string, data: T) {
-  return queryClient.setQueryData([key], data)
+  return getQueryClient().setQueryData([key], data)
 }
 
 // ============================================

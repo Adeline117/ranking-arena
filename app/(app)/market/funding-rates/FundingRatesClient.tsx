@@ -5,8 +5,8 @@ import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens, alpha } from '@/lib/design-tokens'
+import { formatMarketTimeUtc } from '@/lib/market/time'
 
 interface FundingRateRow {
   platform: string
@@ -48,20 +48,8 @@ function formatApr(apr: number): string {
   return (apr * 100).toFixed(2) + '%'
 }
 
-function formatTime(iso: string, locale: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString(locale, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-}
-
 export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] }) {
-  const { t, language } = useLanguage()
-  const locale = getLocaleFromLanguage(language)
+  const { t } = useLanguage()
   const [sortField, setSortField] = useState<SortField>('funding_rate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [filterPlatform, setFilterPlatform] = useState<string>('all')
@@ -391,7 +379,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                           fontSize: tokens.typography.fontSize.sm,
                         }}
                       >
-                        {formatTime(row.funding_time, locale)}
+                        {formatMarketTimeUtc(row.funding_time)}
                       </td>
                     </tr>
                   )
