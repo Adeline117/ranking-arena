@@ -1,3 +1,5 @@
+import { runInNewContext } from 'node:vm'
+
 import fixtureJson from '../fixtures/dex-golden-wallets.v1.json'
 import {
   buildDexGoldenWalletChainSubset,
@@ -11,6 +13,20 @@ const EXPECTED_FIXTURE_SHA256 = '736144afddfb61c3140c4286caf480578345aae1c30f9e6
 
 function mutableFixture(): Record<string, unknown> {
   return JSON.parse(JSON.stringify(fixtureJson)) as Record<string, unknown>
+}
+
+function hostileProxy<T extends object>(target: T, onTrap: () => void): T {
+  const trapped = (): never => {
+    onTrap()
+    throw new Error('hostile Proxy trap must not run')
+  }
+  return new Proxy(target, {
+    get: trapped,
+    getOwnPropertyDescriptor: trapped,
+    getPrototypeOf: trapped,
+    has: trapped,
+    ownKeys: trapped,
+  })
 }
 
 describe('DEX golden-wallet production fixture', () => {
@@ -81,6 +97,15 @@ describe('DEX golden-wallet production fixture', () => {
     expect(dexGoldenWalletSnapshotSha256(fixtureJson)).toBe(EXPECTED_FIXTURE_SHA256)
   })
 
+  it('accepts ordinary JSON records from another VM realm without changing the hash', () => {
+    const crossRealmFixture = runInNewContext('JSON.parse(serialized)', {
+      serialized: JSON.stringify(fixtureJson),
+    }) as unknown
+
+    expect(parseDexGoldenWalletSnapshot(crossRealmFixture)).toEqual(fixture)
+    expect(dexGoldenWalletSnapshotSha256(crossRealmFixture)).toBe(EXPECTED_FIXTURE_SHA256)
+  })
+
   it('derives exact chain subsets that remain bound to the parent artifact', () => {
     const expectedSubsetHashes = {
       binance_web3_bsc: 'dcce3efd3ffd1afa47b832acd623e1455ad2150560f19d11941659aa152cc04d',
@@ -117,6 +142,14 @@ describe('DEX golden-wallet production fixture', () => {
     const reordered = JSON.parse(JSON.stringify(subset)) as typeof subset
     ;[reordered.wallets[0], reordered.wallets[1]] = [reordered.wallets[1], reordered.wallets[0]]
     expect(() => parseDexGoldenWalletChainSubset(reordered)).toThrow(/canonical cohort\/wallet/)
+
+    const invalidTopBoundary = JSON.parse(JSON.stringify(subset)) as typeof subset
+    const top = invalidTopBoundary.wallets.find((wallet) => wallet.cohort === 'top')!
+    const nonTop = invalidTopBoundary.wallets.find((wallet) => wallet.cohort !== 'top')!
+    ;[top.source_rank, nonTop.source_rank] = [nonTop.source_rank, top.source_rank]
+    expect(() => parseDexGoldenWalletChainSubset(invalidTopBoundary)).toThrow(
+      /top cohort is not ahead/
+    )
   })
 
   it('rejects a Solana subset wallet that only looks like Base58', () => {
@@ -162,5 +195,320 @@ describe('DEX golden-wallet production fixture', () => {
 
     expect(() => parseDexGoldenWalletSnapshot(negativeZero)).toThrow(/negative zero/)
     expect(() => dexGoldenWalletSnapshotSha256(negativeZero)).toThrow(/negative zero/)
+  })
+
+  it('rejects accessors before invocation and refuses hidden or symbol hash aliases', () => {
+    const accessor = mutableFixture()
+    const accessorWallets = accessor.wallets as Array<Record<string, unknown>>
+    const walletValue = accessorWallets[0].wallet
+    let getterCalls = 0
+    Object.defineProperty(accessorWallets[0], 'wallet', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        getterCalls += 1
+        return walletValue
+      },
+    })
+
+    expect(() => parseDexGoldenWalletSnapshot(accessor)).toThrow(/object accessors/)
+    expect(() => dexGoldenWalletSnapshotSha256(accessor)).toThrow(/object accessors/)
+    expect(getterCalls).toBe(0)
+
+    const hidden = mutableFixture()
+    Object.defineProperty(hidden, 'hidden_provenance', {
+      enumerable: false,
+      value: 'must-not-alias',
+    })
+    expect(() => parseDexGoldenWalletSnapshot(hidden)).toThrow(/non-enumerable object properties/)
+    expect(() => dexGoldenWalletSnapshotSha256(hidden)).toThrow(/non-enumerable object properties/)
+
+    const symbol = mutableFixture()
+    Object.defineProperty(symbol, Symbol('hidden-provenance'), {
+      enumerable: true,
+      value: 'must-not-alias',
+    })
+    expect(() => parseDexGoldenWalletSnapshot(symbol)).toThrow(/symbol keys/)
+    expect(() => dexGoldenWalletSnapshotSha256(symbol)).toThrow(/symbol keys/)
+
+    const hiddenArrayElement = mutableFixture()
+    const hiddenWallets = hiddenArrayElement.wallets as Array<Record<string, unknown>>
+    Object.defineProperty(hiddenWallets, '0', {
+      enumerable: false,
+      value: hiddenWallets[0],
+    })
+    expect(() => parseDexGoldenWalletSnapshot(hiddenArrayElement)).toThrow(
+      /non-enumerable array elements/
+    )
+    expect(() => dexGoldenWalletSnapshotSha256(hiddenArrayElement)).toThrow(
+      /non-enumerable array elements/
+    )
+  })
+
+  it('applies the same descriptor-safe preflight to derived chain subsets', () => {
+    const { subset } = buildDexGoldenWalletChainSubset(fixtureJson, 'okx_web3_solana')
+    const accessor = JSON.parse(JSON.stringify(subset)) as typeof subset
+    const walletValue = accessor.wallets[0].wallet
+    let getterCalls = 0
+    Object.defineProperty(accessor.wallets[0], 'wallet', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        getterCalls += 1
+        return walletValue
+      },
+    })
+
+    expect(() => parseDexGoldenWalletChainSubset(accessor)).toThrow(/object accessors/)
+    expect(() => dexGoldenWalletChainSubsetSha256(accessor)).toThrow(/object accessors/)
+    expect(getterCalls).toBe(0)
+
+    const hidden = JSON.parse(JSON.stringify(subset)) as typeof subset
+    Object.defineProperty(hidden.wallets[0], 'hidden', {
+      enumerable: false,
+      value: true,
+    })
+    expect(() => parseDexGoldenWalletChainSubset(hidden)).toThrow(
+      /non-enumerable object properties/
+    )
+    expect(() => dexGoldenWalletChainSubsetSha256(hidden)).toThrow(
+      /non-enumerable object properties/
+    )
+
+    const hiddenArrayElement = JSON.parse(JSON.stringify(subset)) as typeof subset
+    Object.defineProperty(hiddenArrayElement.wallets, '0', {
+      enumerable: false,
+      value: hiddenArrayElement.wallets[0],
+    })
+    expect(() => parseDexGoldenWalletChainSubset(hiddenArrayElement)).toThrow(
+      /non-enumerable array elements/
+    )
+    expect(() => dexGoldenWalletChainSubsetSha256(hiddenArrayElement)).toThrow(
+      /non-enumerable array elements/
+    )
+  })
+
+  it('rejects inherited getters without invoking them', () => {
+    const inherited = mutableFixture()
+    delete inherited.sample_seed
+    const originalDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, 'sample_seed')
+    let getterCalls = 0
+    Object.defineProperty(Object.prototype, 'sample_seed', {
+      configurable: true,
+      get() {
+        getterCalls += 1
+        return fixture.sample_seed
+      },
+    })
+
+    try {
+      expect(() => parseDexGoldenWalletSnapshot(inherited)).toThrow()
+      expect(() => dexGoldenWalletSnapshotSha256(inherited)).toThrow()
+      expect(getterCalls).toBe(0)
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(Object.prototype, 'sample_seed', originalDescriptor)
+      } else {
+        delete (Object.prototype as Record<string, unknown>).sample_seed
+      }
+    }
+  })
+
+  it('rejects top-level and nested Proxies without running any trap', () => {
+    let trapCalls = 0
+    const topLevelProxy = hostileProxy(mutableFixture(), () => {
+      trapCalls += 1
+    })
+    expect(() => parseDexGoldenWalletSnapshot(topLevelProxy)).toThrow(/Proxy objects/)
+    expect(() => dexGoldenWalletSnapshotSha256(topLevelProxy)).toThrow(/Proxy objects/)
+
+    const nestedProxy = mutableFixture()
+    const nestedWallets = nestedProxy.wallets as Array<Record<string, unknown>>
+    nestedWallets[0] = hostileProxy(nestedWallets[0], () => {
+      trapCalls += 1
+    })
+    expect(() => parseDexGoldenWalletSnapshot(nestedProxy)).toThrow(/Proxy objects/)
+
+    const { subset } = buildDexGoldenWalletChainSubset(fixtureJson, 'binance_web3_bsc')
+    const subsetProxy = hostileProxy(subset, () => {
+      trapCalls += 1
+    })
+    expect(() => parseDexGoldenWalletChainSubset(subsetProxy)).toThrow(/Proxy objects/)
+    expect(() => dexGoldenWalletChainSubsetSha256(subsetProxy)).toThrow(/Proxy objects/)
+    expect(trapCalls).toBe(0)
+  })
+
+  it('rejects Proxy prototypes and revoked Proxies before reflection', () => {
+    let trapCalls = 0
+    const inheritedProxy = mutableFixture()
+    Object.setPrototypeOf(
+      inheritedProxy,
+      hostileProxy(Object.create(null) as Record<string, unknown>, () => {
+        trapCalls += 1
+      })
+    )
+    expect(() => parseDexGoldenWalletSnapshot(inheritedProxy)).toThrow(/non-plain objects/)
+
+    const revoked = Proxy.revocable(mutableFixture(), {})
+    revoked.revoke()
+    expect(() => parseDexGoldenWalletSnapshot(revoked.proxy)).toThrow(/Proxy objects/)
+    expect(() => dexGoldenWalletSnapshotSha256(revoked.proxy)).toThrow(/Proxy objects/)
+    expect(trapCalls).toBe(0)
+  })
+
+  it('rejects array accessors, symbols, and sparse slots without invoking code', () => {
+    const accessor = mutableFixture()
+    const accessorWallets = accessor.wallets as Array<Record<string, unknown>>
+    const wallet = accessorWallets[0]
+    let getterCalls = 0
+    Object.defineProperty(accessorWallets, '0', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        getterCalls += 1
+        return wallet
+      },
+    })
+    expect(() => parseDexGoldenWalletSnapshot(accessor)).toThrow(/array accessors/)
+    expect(() => dexGoldenWalletSnapshotSha256(accessor)).toThrow(/array accessors/)
+    expect(getterCalls).toBe(0)
+
+    const symbol = mutableFixture()
+    Object.defineProperty(symbol.wallets as unknown[], Symbol('hidden-array-field'), {
+      enumerable: true,
+      value: 'must-not-alias',
+    })
+    expect(() => parseDexGoldenWalletSnapshot(symbol)).toThrow(/symbol keys/)
+
+    const sparse = mutableFixture()
+    delete (sparse.wallets as unknown[])[0]
+    expect(() => parseDexGoldenWalletSnapshot(sparse)).toThrow(/sparse arrays/)
+  })
+
+  it('sanitizes shared records and terminal prototype behavior before schema parsing', () => {
+    const shared = mutableFixture()
+    const sharedWallets = shared.wallets as Array<Record<string, unknown>>
+    sharedWallets[1].chain = sharedWallets[0].chain
+    expect(dexGoldenWalletSnapshotSha256(shared)).toBe(EXPECTED_FIXTURE_SHA256)
+
+    const forgedPrototype = Object.create(null) as Record<string, unknown>
+    Object.defineProperties(forgedPrototype, Object.getOwnPropertyDescriptors(Object.prototype))
+    let inheritedGetterCalls = 0
+    Object.defineProperty(forgedPrototype, 'toString', {
+      configurable: true,
+      enumerable: false,
+      get() {
+        inheritedGetterCalls += 1
+        return Object.prototype.toString
+      },
+    })
+    const forged = mutableFixture()
+    Object.setPrototypeOf(forged, forgedPrototype)
+    expect(dexGoldenWalletSnapshotSha256(forged)).toBe(EXPECTED_FIXTURE_SHA256)
+    expect(inheritedGetterCalls).toBe(0)
+
+    const protoKey = mutableFixture()
+    Object.defineProperty(protoKey, '__proto__', {
+      configurable: true,
+      enumerable: true,
+      value: { polluted: true },
+    })
+    expect(() => parseDexGoldenWalletSnapshot(protoKey)).toThrow(/__proto__ object keys/)
+    expect(() => dexGoldenWalletSnapshotSha256(protoKey)).toThrow(/__proto__ object keys/)
+    expect(({} as { polluted?: boolean }).polluted).toBeUndefined()
+  })
+
+  it('applies depth limits to every expanded shared-reference path', () => {
+    const input = mutableFixture()
+    const nodes = Array.from({ length: 2_000 }, () => ({}) as Record<string, unknown>)
+    for (let index = 0; index < nodes.length - 1; index += 1) {
+      nodes[index].next = nodes[index + 1]
+    }
+    const attack: Record<string, unknown> = {}
+    for (let index = nodes.length - 1; index >= 0; index -= 1) {
+      attack[`cache${index}`] = nodes[index]
+    }
+    attack.deep = nodes[0]
+    input.attack = attack
+
+    expect(() => parseDexGoldenWalletSnapshot(input)).toThrow(
+      new TypeError('strict canonical JSON rejects input depth limit')
+    )
+
+    const wide = mutableFixture()
+    wide.attack = new Array<null>(50_000).fill(null)
+    expect(() => parseDexGoldenWalletSnapshot(wide)).toThrow(
+      new TypeError('strict canonical JSON rejects input node limit')
+    )
+  })
+
+  it('rejects cycles and excessive depth with fixed TypeErrors instead of stack overflow', () => {
+    const cyclicSnapshot = mutableFixture()
+    cyclicSnapshot.cycle = cyclicSnapshot
+    expect(() => parseDexGoldenWalletSnapshot(cyclicSnapshot)).toThrow(
+      new TypeError('strict canonical JSON rejects cycles')
+    )
+
+    const deepSnapshot = mutableFixture()
+    const deepValue: Record<string, unknown> = {}
+    let snapshotCursor = deepValue
+    deepSnapshot.deep = deepValue
+    for (let index = 0; index < 30_000; index += 1) {
+      const next: Record<string, unknown> = {}
+      snapshotCursor.next = next
+      snapshotCursor = next
+    }
+    expect(() => parseDexGoldenWalletSnapshot(deepSnapshot)).toThrow(
+      new TypeError('strict canonical JSON rejects input depth limit')
+    )
+
+    const { subset } = buildDexGoldenWalletChainSubset(fixtureJson, 'okx_web3_solana')
+    const cyclicSubset = subset as typeof subset & { cycle?: unknown }
+    cyclicSubset.cycle = cyclicSubset
+    expect(() => parseDexGoldenWalletChainSubset(cyclicSubset)).toThrow(
+      new TypeError('strict canonical JSON rejects cycles')
+    )
+
+    const { subset: deepSubsetBase } = buildDexGoldenWalletChainSubset(
+      fixtureJson,
+      'okx_web3_solana'
+    )
+    const deepSubset = deepSubsetBase as typeof deepSubsetBase & { deep?: unknown }
+    deepSubset.deep = deepValue
+    expect(() => parseDexGoldenWalletChainSubset(deepSubset)).toThrow(
+      new TypeError('strict canonical JSON rejects input depth limit')
+    )
+  })
+
+  it('rejects population claims smaller than selected evidence or a false top cohort', () => {
+    const tooFewEligible = mutableFixture()
+    const eligiblePopulations = tooFewEligible.populations as Array<Record<string, unknown>>
+    eligiblePopulations[0].eligible_candidates_with_non_null_pnl = 49
+    eligiblePopulations[0].candidates_with_positive_activity_proxy = 49
+    expect(() => parseDexGoldenWalletSnapshot(tooFewEligible)).toThrow(
+      /population is smaller than its selected wallet evidence/
+    )
+
+    const tooFewActive = mutableFixture()
+    const activePopulations = tooFewActive.populations as Array<Record<string, unknown>>
+    activePopulations[0].candidates_with_positive_activity_proxy = 49
+    expect(() => parseDexGoldenWalletSnapshot(tooFewActive)).toThrow(
+      /population is smaller than its selected wallet evidence/
+    )
+
+    const invalidTopBoundary = mutableFixture()
+    const boundaryPopulations = invalidTopBoundary.populations as Array<Record<string, unknown>>
+    const boundaryWallets = invalidTopBoundary.wallets as Array<Record<string, unknown>>
+    const boundaryPopulation = boundaryPopulations.find(
+      (population) => population.source_slug === 'binance_web3_bsc'
+    )!
+    const bscWallets = boundaryWallets.filter((wallet) => wallet.source_slug === 'binance_web3_bsc')
+    const usedRanks = new Set(bscWallets.map((wallet) => Number(wallet.source_rank)))
+    let replacementRank = Number(boundaryPopulation.snapshot_actual_count)
+    while (usedRanks.has(replacementRank)) replacementRank -= 1
+    bscWallets.find((wallet) => wallet.cohort === 'top')!.source_rank = replacementRank
+    expect(() => parseDexGoldenWalletSnapshot(invalidTopBoundary)).toThrow(
+      /top cohort is not ahead/
+    )
   })
 })

@@ -1,4 +1,9 @@
-import type { DexGoldenSource, DexGoldenWalletCandidate } from './dex-golden-wallets'
+import {
+  compareDexGoldenText,
+  compareDexGoldenWalletIdentity,
+  type DexGoldenSource,
+  type DexGoldenWalletCandidate,
+} from './dex-golden-wallets'
 
 export const DEX_GOLDEN_SOURCES: readonly DexGoldenSource[] = [
   'binance_web3_bsc',
@@ -9,6 +14,7 @@ export interface DexGoldenWalletQueryRow {
   source_slug: string
   snapshot_id: string
   snapshot_scraped_at: Date | string
+  /** Published rows after source-page deduplication. */
   snapshot_actual_count: number
   source_currency: string
   entry_currency: string
@@ -16,6 +22,7 @@ export interface DexGoldenWalletQueryRow {
   is_derived: boolean
   wallet_address: string | null
   exchange_trader_id: string
+  /** Upstream positional rank before source-page deduplication. */
   source_rank: number
   pnl_90d_raw: string | null
   activity_json_type: string | null
@@ -191,8 +198,8 @@ export function buildDexGoldenWalletCandidates(
 
   return candidates.sort(
     (a, b) =>
-      a.sourceSlug.localeCompare(b.sourceSlug) ||
+      compareDexGoldenText(a.sourceSlug, b.sourceSlug) ||
       a.sourceRank - b.sourceRank ||
-      a.wallet.localeCompare(b.wallet)
+      compareDexGoldenWalletIdentity(a.wallet, b.wallet)
   )
 }

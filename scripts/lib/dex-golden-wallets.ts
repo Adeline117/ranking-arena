@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto'
+import { isProxy } from 'node:util/types'
 
 import { z } from 'zod'
 
 import { hasBase58DecodedByteLength } from '../../lib/utils/base58'
 
-import { strictCanonicalSha256 } from './dex-contract-hash'
+import { strictCanonicalJson, strictCanonicalSha256 } from './dex-contract-hash'
 
 export const DEX_GOLDEN_WALLET_SCHEMA_VERSION = 1 as const
 export const DEX_GOLDEN_WALLET_CONTRACT = 'arena.dex.golden-wallets@1' as const
@@ -21,6 +22,7 @@ export interface DexGoldenWalletCandidate {
   snapshotId: string
   snapshotScrapedAt: string
   snapshotActualCount: number
+  /** Upstream positional rank; it can exceed the post-dedup snapshot row count. */
   sourceRank: number
   arenaScore: null
   pnl90d: string
@@ -35,6 +37,7 @@ export interface DexGoldenWallet {
   cohort: DexGoldenCohort
   source_snapshot_id: string
   source_snapshot_scraped_at: string
+  /** Upstream positional rank; it can exceed the post-dedup snapshot row count. */
   source_rank: number
   arena_score: null
   pnl_90d: string
@@ -70,6 +73,7 @@ export interface DexGoldenWalletSnapshot {
     source_slug: DexGoldenSource
     snapshot_id: string
     snapshot_scraped_at: string
+    /** Published rows after source-page deduplication. */
     snapshot_actual_count: number
     pnl_currency: DexGoldenPnlCurrency
     eligible_candidates_with_non_null_pnl: number
@@ -109,6 +113,178 @@ const COHORT_ORDER: Record<DexGoldenCohort, number> = {
   top: 0,
   deterministic_random: 1,
   high_frequency: 2,
+}
+
+const GOLDEN_JSON_MAX_DEPTH = 64
+const GOLDEN_JSON_MAX_NODES = 50_000
+const OBJECT_PROTOTYPE_KEYS = Reflect.ownKeys(Object.prototype)
+
+export function compareDexGoldenText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function asciiCaseFold(value: string): string {
+  return value.replace(/[A-Z]/g, (character) =>
+    String.fromCharCode(character.charCodeAt(0) + ('a'.charCodeAt(0) - 'A'.charCodeAt(0)))
+  )
+}
+
+/**
+ * Preserve the original case-insensitive ASCII wallet order without relying
+ * on host locale or ICU data. Case-only Solana identities remain distinct and
+ * use their raw code units as the deterministic tie-breaker.
+ */
+export function compareDexGoldenWalletIdentity(left: string, right: string): number {
+  return (
+    compareDexGoldenText(asciiCaseFold(left), asciiCaseFold(right)) ||
+    compareDexGoldenText(left, right)
+  )
+}
+
+function rejectGoldenJson(reason: string): never {
+  throw new TypeError(`strict canonical JSON rejects ${reason}`)
+}
+
+function hasOrdinaryRecordPrototype(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype === null || prototype === Object.prototype) return true
+  if (isProxy(prototype) || Object.getPrototypeOf(prototype) !== null) return false
+
+  const prototypeKeys = Reflect.ownKeys(prototype)
+  return (
+    prototypeKeys.length === OBJECT_PROTOTYPE_KEYS.length &&
+    prototypeKeys.every((key) => OBJECT_PROTOTYPE_KEYS.includes(key))
+  )
+}
+
+type GoldenJsonCloneContainer = Record<string, unknown> | unknown[]
+
+type GoldenJsonCloneFrame =
+  | {
+      kind: 'visit'
+      value: unknown
+      parent: GoldenJsonCloneContainer
+      key: string
+      depth: number
+    }
+  | { kind: 'exit'; value: object }
+
+function defineGoldenJsonCloneValue(
+  parent: GoldenJsonCloneContainer,
+  key: string,
+  value: unknown
+): void {
+  Object.defineProperty(parent, key, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  })
+}
+
+/**
+ * Build a descriptor-only JSON clone before Zod sees untrusted input.
+ *
+ * This accepts ordinary records from another VM realm, but never invokes
+ * accessors, inherited properties, or Proxy traps. Bounds and an iterative
+ * worklist keep hostile depth/width from reaching recursive schema parsing.
+ */
+function cloneStrictGoldenJsonInput(input: unknown): unknown {
+  const root = Object.create(null) as Record<string, unknown>
+  const ancestors = new Set<object>()
+  const stack: GoldenJsonCloneFrame[] = [
+    { kind: 'visit', value: input, parent: root, key: 'value', depth: 0 },
+  ]
+  let scheduledNodes = 1
+
+  while (stack.length > 0) {
+    const frame = stack.pop()!
+    if (frame.kind === 'exit') {
+      ancestors.delete(frame.value)
+      continue
+    }
+
+    if (frame.depth > GOLDEN_JSON_MAX_DEPTH) rejectGoldenJson('input depth limit')
+
+    const value = frame.value
+    if (value === null || typeof value !== 'object') {
+      strictCanonicalJson(value)
+      defineGoldenJsonCloneValue(frame.parent, frame.key, value)
+      continue
+    }
+    if (isProxy(value)) rejectGoldenJson('Proxy objects')
+    if (ancestors.has(value)) rejectGoldenJson('cycles')
+
+    let clone: GoldenJsonCloneContainer
+    const children: Array<{ key: string; value: unknown }> = []
+    if (Array.isArray(value)) {
+      const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length')
+      if (
+        !lengthDescriptor ||
+        !('value' in lengthDescriptor) ||
+        !Number.isSafeInteger(lengthDescriptor.value) ||
+        lengthDescriptor.value < 0
+      ) {
+        rejectGoldenJson('invalid array length')
+      }
+      const length = lengthDescriptor.value
+      if (length > GOLDEN_JSON_MAX_NODES) rejectGoldenJson('input node limit')
+      const ownKeys = Reflect.ownKeys(value)
+      if (ownKeys.some((key) => typeof key === 'symbol')) rejectGoldenJson('symbol keys')
+      const allowedKeys = new Set<string>(['length'])
+      for (let index = 0; index < length; index += 1) allowedKeys.add(String(index))
+      if (ownKeys.some((key) => !allowedKeys.has(key as string))) {
+        rejectGoldenJson('extra array properties')
+      }
+
+      clone = new Array<unknown>(length)
+      for (let index = 0; index < length; index += 1) {
+        const key = String(index)
+        const descriptor = Object.getOwnPropertyDescriptor(value, key)
+        if (!descriptor) rejectGoldenJson('sparse arrays')
+        if (!descriptor.enumerable) rejectGoldenJson('non-enumerable array elements')
+        if (!('value' in descriptor)) rejectGoldenJson('array accessors')
+        children.push({ key, value: descriptor.value })
+      }
+    } else {
+      if (!hasOrdinaryRecordPrototype(value)) rejectGoldenJson('non-plain objects')
+      const ownKeys = Reflect.ownKeys(value)
+      if (ownKeys.length > GOLDEN_JSON_MAX_NODES) rejectGoldenJson('input node limit')
+      if (ownKeys.some((key) => typeof key === 'symbol')) rejectGoldenJson('symbol keys')
+
+      clone = Object.create(null) as Record<string, unknown>
+      for (const key of ownKeys as string[]) {
+        strictCanonicalJson(key)
+        if (key === '__proto__') rejectGoldenJson('__proto__ object keys')
+        const descriptor = Object.getOwnPropertyDescriptor(value, key)
+        if (!descriptor || !descriptor.enumerable) {
+          rejectGoldenJson('non-enumerable object properties')
+        }
+        if (!('value' in descriptor)) rejectGoldenJson('object accessors')
+        children.push({ key, value: descriptor.value })
+      }
+    }
+
+    defineGoldenJsonCloneValue(frame.parent, frame.key, clone)
+    ancestors.add(value)
+    stack.push({ kind: 'exit', value })
+    if (children.length > GOLDEN_JSON_MAX_NODES - scheduledNodes) {
+      rejectGoldenJson('input node limit')
+    }
+    scheduledNodes += children.length
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const child = children[index]
+      stack.push({
+        kind: 'visit',
+        value: child.value,
+        parent: clone,
+        key: child.key,
+        depth: frame.depth + 1,
+      })
+    }
+  }
+
+  return root.value
 }
 
 const FULL_GIT_SHA = /^[0-9a-f]{40}$/
@@ -268,7 +444,7 @@ function byRank(a: DexGoldenWalletCandidate, b: DexGoldenWalletCandidate): numbe
   const aPnl = Number(a.pnl90d)
   const bPnl = Number(b.pnl90d)
   if (aPnl !== bPnl) return bPnl - aPnl
-  return a.wallet.localeCompare(b.wallet)
+  return compareDexGoldenWalletIdentity(a.wallet, b.wallet)
 }
 
 function byActivity(a: DexGoldenWalletCandidate, b: DexGoldenWalletCandidate): number {
@@ -383,6 +559,12 @@ export function buildDexGoldenWalletSnapshot(input: {
     if (sourceCandidates.length > snapshotActualCount) {
       throw new Error(`${source} eligible candidates exceed source snapshot actual count`)
     }
+    if (
+      new Set(sourceCandidates.map((candidate) => candidate.sourceRank)).size !==
+      sourceCandidates.length
+    ) {
+      throw new Error(`${source} has duplicate source rank`)
+    }
     const selected = new Set<string>()
 
     const top = [...sourceCandidates].sort(byRank).slice(0, 20)
@@ -406,7 +588,8 @@ export function buildDexGoldenWalletSnapshot(input: {
     const deterministicRandom = sourceCandidates
       .filter((candidate) => !selected.has(candidate.wallet))
       .sort((a, b) =>
-        randomKey(input.sampleSeed, source, a.wallet).localeCompare(
+        compareDexGoldenText(
+          randomKey(input.sampleSeed, source, a.wallet),
           randomKey(input.sampleSeed, source, b.wallet)
         )
       )
@@ -434,9 +617,9 @@ export function buildDexGoldenWalletSnapshot(input: {
 
   wallets.sort(
     (a, b) =>
-      a.source_slug.localeCompare(b.source_slug) ||
+      compareDexGoldenText(a.source_slug, b.source_slug) ||
       COHORT_ORDER[a.cohort] - COHORT_ORDER[b.cohort] ||
-      a.wallet.localeCompare(b.wallet)
+      compareDexGoldenWalletIdentity(a.wallet, b.wallet)
   )
   if (wallets.length !== 100 || new Set(wallets.map((wallet) => wallet.wallet)).size !== 100) {
     throw new Error('golden-wallet snapshot must contain 100 globally unique wallets')
@@ -494,9 +677,9 @@ function assertParsedSnapshotInvariants(snapshot: DexGoldenWalletSnapshot): void
   )
   const expectedWalletOrder = [...snapshot.wallets].sort(
     (a, b) =>
-      a.source_slug.localeCompare(b.source_slug) ||
+      compareDexGoldenText(a.source_slug, b.source_slug) ||
       COHORT_ORDER[a.cohort] - COHORT_ORDER[b.cohort] ||
-      a.wallet.localeCompare(b.wallet)
+      compareDexGoldenWalletIdentity(a.wallet, b.wallet)
   )
   if (expectedWalletOrder.some((wallet, index) => wallet !== snapshot.wallets[index])) {
     throw new Error('golden-wallet rows must use canonical source/cohort/wallet order')
@@ -522,6 +705,15 @@ function assertParsedSnapshotInvariants(snapshot: DexGoldenWalletSnapshot): void
 
     const sourceWallets = snapshot.wallets.filter((wallet) => wallet.source_slug === source)
     if (sourceWallets.length !== 50) throw new Error(`${source} must contain exactly 50 wallets`)
+    const selectedPositiveActivity = sourceWallets.filter(
+      (wallet) => wallet.activity_proxy_count > 0
+    ).length
+    if (
+      population.eligible_candidates_with_non_null_pnl < sourceWallets.length ||
+      population.candidates_with_positive_activity_proxy < selectedPositiveActivity
+    ) {
+      throw new Error(`${source} population is smaller than its selected wallet evidence`)
+    }
     assertUnique(
       sourceWallets.map((wallet) => String(wallet.source_rank)),
       `${source} source rank`
@@ -537,6 +729,15 @@ function assertParsedSnapshotInvariants(snapshot: DexGoldenWalletSnapshot): void
       if (sourceWallets.filter((wallet) => wallet.cohort === cohort).length !== expectedCount) {
         throw new Error(`${source} has an invalid ${cohort} cohort size`)
       }
+    }
+    const topRanks = sourceWallets
+      .filter((wallet) => wallet.cohort === 'top')
+      .map((wallet) => wallet.source_rank)
+    const nonTopRanks = sourceWallets
+      .filter((wallet) => wallet.cohort !== 'top')
+      .map((wallet) => wallet.source_rank)
+    if (Math.max(...topRanks) >= Math.min(...nonTopRanks)) {
+      throw new Error(`${source} top cohort is not ahead of every selected non-top wallet`)
     }
 
     for (const wallet of sourceWallets) {
@@ -599,6 +800,15 @@ function assertParsedChainSubsetInvariants(subset: DexGoldenWalletChainSubset): 
       throw new Error(`${source} chain subset has an invalid ${cohort} cohort size`)
     }
   }
+  const topRanks = subset.wallets
+    .filter((wallet) => wallet.cohort === 'top')
+    .map((wallet) => wallet.source_rank)
+  const nonTopRanks = subset.wallets
+    .filter((wallet) => wallet.cohort !== 'top')
+    .map((wallet) => wallet.source_rank)
+  if (Math.max(...topRanks) >= Math.min(...nonTopRanks)) {
+    throw new Error(`${source} chain subset top cohort is not ahead of every non-top wallet`)
+  }
 
   for (const wallet of subset.wallets) {
     if (wallet.source_slug !== source) {
@@ -622,7 +832,9 @@ function assertParsedChainSubsetInvariants(subset: DexGoldenWalletChainSubset): 
   }
 
   const expectedOrder = [...subset.wallets].sort(
-    (a, b) => COHORT_ORDER[a.cohort] - COHORT_ORDER[b.cohort] || a.wallet.localeCompare(b.wallet)
+    (a, b) =>
+      COHORT_ORDER[a.cohort] - COHORT_ORDER[b.cohort] ||
+      compareDexGoldenWalletIdentity(a.wallet, b.wallet)
   )
   if (expectedOrder.some((wallet, index) => wallet !== subset.wallets[index])) {
     throw new Error(`${source} chain subset wallets must use canonical cohort/wallet order`)
@@ -630,7 +842,8 @@ function assertParsedChainSubsetInvariants(subset: DexGoldenWalletChainSubset): 
 }
 
 export function parseDexGoldenWalletSnapshot(input: unknown): DexGoldenWalletSnapshot {
-  const snapshot = goldenSnapshotSchema.parse(input) as DexGoldenWalletSnapshot
+  const safeInput = cloneStrictGoldenJsonInput(input)
+  const snapshot = goldenSnapshotSchema.parse(safeInput) as DexGoldenWalletSnapshot
   assertParsedSnapshotInvariants(snapshot)
   return snapshot
 }
@@ -640,7 +853,8 @@ export function dexGoldenWalletSnapshotSha256(input: unknown): string {
 }
 
 export function parseDexGoldenWalletChainSubset(input: unknown): DexGoldenWalletChainSubset {
-  const subset = dexGoldenWalletChainSubsetSchema.parse(input) as DexGoldenWalletChainSubset
+  const safeInput = cloneStrictGoldenJsonInput(input)
+  const subset = dexGoldenWalletChainSubsetSchema.parse(safeInput) as DexGoldenWalletChainSubset
   assertParsedChainSubsetInvariants(subset)
   return subset
 }
