@@ -1,5 +1,7 @@
 import {
   buildDexGoldenWalletSnapshot,
+  compareDexGoldenText,
+  compareDexGoldenWalletIdentity,
   dexGoldenWalletSnapshotSha256,
   type DexGoldenSource,
   type DexGoldenWalletCandidate,
@@ -43,6 +45,12 @@ const METADATA = {
 }
 
 describe('DEX golden-wallet selection contract', () => {
+  it('uses a fixed raw-code-unit order instead of host locale collation', () => {
+    expect(compareDexGoldenText('B', 'a')).toBeLessThan(0)
+    expect(compareDexGoldenWalletIdentity('a', 'B')).toBeLessThan(0)
+    expect(compareDexGoldenWalletIdentity('A', 'a')).toBeLessThan(0)
+  })
+
   it('selects 20 top, 20 deterministic-random, and 10 high-frequency wallets per chain', () => {
     const { snapshot } = buildDexGoldenWalletSnapshot({ candidates: candidates(), ...METADATA })
 
@@ -104,6 +112,25 @@ describe('DEX golden-wallet selection contract', () => {
     }
   })
 
+  it('preserves an upstream positional rank beyond the post-dedup snapshot row count', () => {
+    const input = candidates()
+    const candidate = input.find(
+      (item) => item.sourceSlug === 'okx_web3_solana' && item.sourceRank === 70
+    )!
+    candidate.sourceRank = 71
+
+    const built = buildDexGoldenWalletSnapshot({ candidates: input, ...METADATA })
+    expect(
+      built.snapshot.wallets.find(
+        (wallet) =>
+          wallet.source_slug === 'okx_web3_solana' &&
+          wallet.wallet === candidate.wallet &&
+          wallet.source_rank === 71
+      )
+    ).toBeDefined()
+    expect(dexGoldenWalletSnapshotSha256(built.snapshot)).toBe(built.sha256)
+  })
+
   it('canonicalizes BSC addresses without changing Solana case', () => {
     const input = candidates()
     input[0].wallet = input[0].wallet.toUpperCase().replace('0X', '0x')
@@ -139,6 +166,12 @@ describe('DEX golden-wallet selection contract', () => {
     duplicate[1].wallet = duplicate[0].wallet
     expect(() => buildDexGoldenWalletSnapshot({ candidates: duplicate, ...METADATA })).toThrow(
       /duplicate golden-wallet candidate/
+    )
+
+    const duplicateRank = candidates()
+    duplicateRank[1].sourceRank = duplicateRank[0].sourceRank
+    expect(() => buildDexGoldenWalletSnapshot({ candidates: duplicateRank, ...METADATA })).toThrow(
+      /duplicate source rank/
     )
 
     expect(() =>

@@ -119,6 +119,13 @@ describe('DEX golden-wallet production row contract', () => {
     )
   })
 
+  it('does not confuse post-dedup row count with the upstream positional rank', () => {
+    const rows = queryRows()
+    rows[1].source_rank = 3
+
+    expect(() => buildDexGoldenWalletCandidates(rows)).not.toThrow()
+  })
+
   it('rejects mixed snapshots, duplicate ranks, and mismatched identities', () => {
     const mixed = queryRows()
     mixed[1].snapshot_id = '999'
