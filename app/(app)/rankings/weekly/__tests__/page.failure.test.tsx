@@ -2,6 +2,10 @@ import type { ReactElement } from 'react'
 
 const mockGetWeeklyLeaders = jest.fn()
 
+jest.mock('next/cache', () => ({
+  unstable_cache: (loader: () => unknown) => loader,
+}))
+
 jest.mock('@/lib/supabase/read-replica', () => ({
   getReadReplica: () => ({ rpc: jest.fn() }),
 }))
@@ -15,7 +19,7 @@ jest.mock('../WeeklyArenaClient', () => ({
   default: () => null,
 }))
 
-import WeeklyArenaPage from '../page'
+import WeeklyArenaPage, { dynamic } from '../page'
 
 type WeeklyPageProps = {
   data: {
@@ -34,6 +38,10 @@ describe('weekly rankings SSR failure state', () => {
     mockGetWeeklyLeaders.mockRejectedValue(new Error('database unavailable'))
 
     await expect(WeeklyArenaPage()).rejects.toThrow('database unavailable')
+  })
+
+  it('is request-rendered so a transient RPC failure cannot fail the production build', () => {
+    expect(dynamic).toBe('force-dynamic')
   })
 
   it('renders a genuine successful empty board as empty data', async () => {

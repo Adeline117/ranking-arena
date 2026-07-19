@@ -8,15 +8,26 @@
  */
 
 import type { Metadata } from 'next'
+import { unstable_cache } from 'next/cache'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { BASE_URL } from '@/lib/constants/urls'
 import { getWeeklyLeaders } from '@/lib/data/serving/weekly-leaders'
 import WeeklyArenaClient from './WeeklyArenaClient'
 
-export const revalidate = 1800 // ISR: 30 minutes
+// The weekly RPC reads an external serving dataset and can transiently exceed
+// the database statement timeout. Pre-rendering this route made that upstream
+// blip fail the entire production build. Keep the route request-rendered so a
+// deploy never depends on live database availability, while preserving the
+// same 30-minute data cache and the runtime error boundary/retry semantics.
+export const dynamic = 'force-dynamic'
 
 const MIN_SERVING_SOURCES = 3
 const LEADER_LIMIT = 50
+const getCachedWeeklyLeaders = unstable_cache(
+  () => getWeeklyLeaders(getReadReplica(), LEADER_LIMIT),
+  ['rankings-weekly-leaders-v1'],
+  { revalidate: 1800, tags: ['rankings', 'weekly-leaders'] }
+)
 
 export const metadata: Metadata = {
   title: 'Weekly Cross-Exchange ROI Arena — This Week’s Top Traders',
@@ -56,7 +67,7 @@ export const metadata: Metadata = {
 }
 
 export default async function WeeklyArenaPage() {
-  const data = await getWeeklyLeaders(getReadReplica(), LEADER_LIMIT)
+  const data = await getCachedWeeklyLeaders()
 
   // Same gate as /rankings/exchanges: below 3 serving sources a
   // cross-exchange weekly competition is noise, not signal. A transient
