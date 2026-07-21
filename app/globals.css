@@ -109,6 +109,12 @@ html.theme-transition #main-content {
   opacity: 1 !important;
 }
 
+/* The tertiary token already meets the text contrast baseline. Avoid applying
+   a second alpha multiplier to the data disclaimer. */
+.trader-page-container .trader-data-disclaimer {
+  opacity: 1 !important;
+}
+
 .stagger-children > * {
   opacity: 0;
   animation: fadeIn 0.4s ease-out forwards;

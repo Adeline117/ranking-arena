@@ -1251,9 +1251,10 @@ export default function TraderProfileClient({
 
         {/* Data disclaimer */}
         <Text
+          className="trader-data-disclaimer"
           size="xs"
           color="tertiary"
-          style={{ textAlign: 'center', marginTop: tokens.spacing[6], opacity: 0.7 }}
+          style={{ textAlign: 'center', marginTop: tokens.spacing[6] }}
         >
           {t('dataDisclaimer')}
         </Text>
