@@ -5,8 +5,24 @@ BEGIN
   IF pg_catalog.to_regrole('shadow_payment_auditor') IS NULL THEN
     CREATE ROLE shadow_payment_auditor NOLOGIN;
   END IF;
+  IF pg_catalog.to_regrole('trusted_cluster_backup') IS NULL THEN
+    CREATE ROLE trusted_cluster_backup NOLOGIN BYPASSRLS;
+  END IF;
+  IF pg_catalog.to_regrole('trusted_cluster_reader') IS NULL THEN
+    CREATE ROLE trusted_cluster_reader NOLOGIN NOBYPASSRLS;
+  END IF;
 END
 $create_shadow_payment_auditor$;
+
+-- Supabase production has non-superuser backup/ETL roles whose cluster-level
+-- pg_read_all_data capability legitimately reaches every column. Object ACL
+-- convergence cannot and must not revoke that trusted cluster authority.
+GRANT pg_read_all_data TO trusted_cluster_reader;
+
+-- Exercise the separate BYPASSRLS exclusion with effective access inherited
+-- from the service control-plane role rather than pg_read_all_data.
+GRANT SELECT ON TABLE public.tips TO service_role;
+GRANT service_role TO trusted_cluster_backup WITH INHERIT TRUE, SET TRUE;
 
 GRANT SELECT ON TABLE public.tips TO shadow_payment_auditor;
 GRANT EXECUTE ON FUNCTION public.record_charge_refund_tombstone_atomic(

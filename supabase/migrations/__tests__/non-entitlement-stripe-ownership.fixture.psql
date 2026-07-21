@@ -1849,6 +1849,34 @@ BEGIN
     RAISE EXCEPTION 'bootstrap superuser ACL control is missing';
   END IF;
 
+  IF NOT pg_catalog.has_column_privilege(
+    'trusted_cluster_backup',
+    'public.tips',
+    'stripe_charge_id',
+    'SELECT'
+  ) OR NOT pg_catalog.has_column_privilege(
+    'trusted_cluster_backup',
+    'public.tips',
+    'stripe_customer_id',
+    'SELECT'
+  ) THEN
+    RAISE EXCEPTION 'trusted cluster backup ACL control is missing';
+  END IF;
+
+  IF NOT pg_catalog.has_column_privilege(
+    'trusted_cluster_reader',
+    'public.tips',
+    'stripe_charge_id',
+    'SELECT'
+  ) OR NOT pg_catalog.has_column_privilege(
+    'trusted_cluster_reader',
+    'public.tips',
+    'stripe_customer_id',
+    'SELECT'
+  ) THEN
+    RAISE EXCEPTION 'trusted cluster reader ACL control is missing';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_class AS relation
