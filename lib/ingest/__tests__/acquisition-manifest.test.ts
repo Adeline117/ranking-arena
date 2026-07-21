@@ -19,6 +19,17 @@ const reported = (value: number): LeaderboardAcquisitionReportEvidence => ({
   value,
 })
 const notReported = (): LeaderboardAcquisitionReportEvidence => ({ state: 'not_reported' })
+const reports = (
+  population: LeaderboardAcquisitionReportEvidence,
+  pageCount: LeaderboardAcquisitionReportEvidence,
+  currentPage: LeaderboardAcquisitionReportEvidence = notReported(),
+  pageSize: LeaderboardAcquisitionReportEvidence = notReported()
+) => ({
+  population,
+  page_count: pageCount,
+  current_page: currentPage,
+  page_size: pageSize,
+})
 
 function input(
   overrides: Partial<BuildLeaderboardAcquisitionManifestInput> = {}
@@ -34,11 +45,8 @@ function input(
       source_row_count: 2,
       request_sha256: REQUEST_SHA_1,
       http_status: 200,
-      pagination_position: { kind: 'page_index', page_index: 1 },
-      source_reports: {
-        population: reported(3),
-        page_count: notReported(),
-      },
+      pagination_position: { kind: 'page_index', request_page_index: 1 },
+      source_reports: reports(reported(3), notReported()),
     },
     {
       raw_page: {
@@ -50,11 +58,8 @@ function input(
       source_row_count: 1,
       request_sha256: REQUEST_SHA_2,
       http_status: 200,
-      pagination_position: { kind: 'page_index', page_index: 2 },
-      source_reports: {
-        population: reported(3),
-        page_count: notReported(),
-      },
+      pagination_position: { kind: 'page_index', request_page_index: 2 },
+      source_reports: reports(reported(3), notReported()),
     },
   ]
 
@@ -74,8 +79,13 @@ function input(
     observation_cycle_id: 'tier-a:binance_futures:job-1:1784628000000',
     capture_evidence_state: 'verified',
     termination_reason: 'reported_population_reached',
+    capture_config: { caller_page_cap: null, safety_page_cap: 5_000 },
     source_pages,
     parse_pages: source_pages.map((page) => page.raw_page),
+    parser_transformation: {
+      kind: 'identity_projection',
+      source_page_ordinals: [1, 2],
+    },
     accepted_population: 3,
     rejected_row_count: 0,
     ...overrides,
@@ -103,9 +113,9 @@ describe('leaderboard acquisition manifest', () => {
   it('builds a total-only Binance manifest without inventing a page-count report', () => {
     const built = buildLeaderboardAcquisitionManifest(input())
 
-    expect(built.manifest.data_contract).toBe('arena.ingest.leaderboard-acquisition-manifest@1')
+    expect(built.manifest.data_contract).toBe('arena.ingest.leaderboard-acquisition-manifest@2')
     expect(LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT).toBe(
-      'arena.ingest.leaderboard-acquisition-manifest@1'
+      'arena.ingest.leaderboard-acquisition-manifest@2'
     )
     expect(built.manifest).not.toHaveProperty('sourceRunId')
     expect(built.manifest).not.toHaveProperty('source_run_id')
@@ -130,6 +140,13 @@ describe('leaderboard acquisition manifest', () => {
           fetchedAt: '2026-07-21T10:00:02.000Z',
         },
       ],
+      parser_transformation: {
+        kind: 'dedupe_rechunk',
+        source_page_ordinals: [1, 2],
+        algorithm_contract: 'arena.test.normalize-board@1',
+        output_row_count: 3,
+        output_page_size: 3,
+      },
     })
     const changed = buildLeaderboardAcquisitionManifest(normalized)
 
@@ -138,6 +155,21 @@ describe('leaderboard acquisition manifest', () => {
     )
     expect(changed.manifest.parser_input).not.toEqual(original.manifest.parser_input)
     expect(changed.sourceRunId).not.toBe(original.sourceRunId)
+
+    const parserReject = input({
+      accepted_population: 2,
+      rejected_row_count: 1,
+      parser_transformation: {
+        kind: 'dedupe_rechunk',
+        source_page_ordinals: [1, 2],
+        algorithm_contract: 'arena.test.normalize-board@1',
+        output_row_count: 3,
+        output_page_size: 2,
+      },
+    })
+    const rejected = buildLeaderboardAcquisitionManifest(parserReject)
+    expect(rejected.manifest.parser_input.page_count).toBe(2)
+    expect(rejected.manifest.assessment.population_state).toBe('partial')
   })
 
   it('keeps page-count-only moving-board population unknown', () => {
@@ -150,10 +182,7 @@ describe('leaderboard acquisition manifest', () => {
     web3.termination_reason = 'reported_page_count_reached'
     web3.source_pages = web3.source_pages.map((page) => ({
       ...page,
-      source_reports: {
-        population: notReported(),
-        page_count: reported(2),
-      },
+      source_reports: reports(notReported(), reported(2)),
     }))
     const built = buildLeaderboardAcquisitionManifest(web3)
 
@@ -174,10 +203,7 @@ describe('leaderboard acquisition manifest', () => {
     movingShort.source_pages = movingShort.source_pages.map((page, index) => ({
       ...page,
       source_row_count: index === 0 ? 25 : 23,
-      source_reports: {
-        population: notReported(),
-        page_count: reported(9),
-      },
+      source_reports: reports(notReported(), reported(9)),
     }))
     movingShort.accepted_population = 48
     expect(buildLeaderboardAcquisitionManifest(movingShort).manifest.assessment).toEqual({
@@ -188,10 +214,7 @@ describe('leaderboard acquisition manifest', () => {
     const totalButMorePages = input()
     totalButMorePages.source_pages = totalButMorePages.source_pages.map((page) => ({
       ...page,
-      source_reports: {
-        population: reported(3),
-        page_count: reported(3),
-      },
+      source_reports: reports(reported(3), reported(3)),
     }))
     expect(buildLeaderboardAcquisitionManifest(totalButMorePages).manifest.assessment).toEqual({
       acquisition_state: 'unknown',
@@ -201,10 +224,7 @@ describe('leaderboard acquisition manifest', () => {
     const conflictingPageCounts = input({ termination_reason: 'short_page' })
     conflictingPageCounts.source_pages = conflictingPageCounts.source_pages.map((page, index) => ({
       ...page,
-      source_reports: {
-        population: reported(3),
-        page_count: reported(index === 0 ? 2 : 3),
-      },
+      source_reports: reports(reported(3), reported(index === 0 ? 2 : 3)),
     }))
     expect(buildLeaderboardAcquisitionManifest(conflictingPageCounts).manifest.assessment).toEqual({
       acquisition_state: 'unknown',
@@ -214,10 +234,7 @@ describe('leaderboard acquisition manifest', () => {
     const pastReportedEnd = input({ termination_reason: 'short_page' })
     pastReportedEnd.source_pages = pastReportedEnd.source_pages.map((page) => ({
       ...page,
-      source_reports: {
-        population: reported(3),
-        page_count: reported(1),
-      },
+      source_reports: reports(reported(3), reported(1)),
     }))
     expect(buildLeaderboardAcquisitionManifest(pastReportedEnd).manifest.assessment).toEqual({
       acquisition_state: 'unknown',
@@ -252,6 +269,63 @@ describe('leaderboard acquisition manifest', () => {
     )
   })
 
+  it('keeps mismatched upstream current/page-size reports unknown', () => {
+    const mismatch = input()
+    mismatch.source_pages = mismatch.source_pages.map((page) => ({
+      ...page,
+      source_reports: reports(reported(3), notReported(), reported(1), reported(2)),
+    }))
+    expect(buildLeaderboardAcquisitionManifest(mismatch).manifest.assessment).toEqual({
+      acquisition_state: 'unknown',
+      population_state: 'unknown',
+    })
+
+    const matching = input()
+    matching.source_pages = matching.source_pages.map((page, index) => ({
+      ...page,
+      source_reports: reports(reported(3), notReported(), reported(index + 1), reported(2)),
+    }))
+    expect(buildLeaderboardAcquisitionManifest(matching).manifest.assessment).toEqual({
+      acquisition_state: 'complete',
+      population_state: 'verified',
+    })
+  })
+
+  it('binds page limits and parser projection into the durable contract', () => {
+    const base = buildLeaderboardAcquisitionManifest(input())
+    const capped = buildLeaderboardAcquisitionManifest(
+      input({ capture_config: { caller_page_cap: 4, safety_page_cap: 100 } })
+    )
+    expect(capped.sourceRunId).not.toBe(base.sourceRunId)
+    expect(capped.manifest.capture_config).toEqual({
+      caller_page_cap: 4,
+      safety_page_cap: 100,
+    })
+
+    expect(() =>
+      buildLeaderboardAcquisitionManifest(
+        input({
+          termination_reason: 'caller_limit',
+          capture_config: { caller_page_cap: null, safety_page_cap: 100 },
+        })
+      )
+    ).toThrow('caller_limit must bind the reached effective caller page cap')
+    expect(() =>
+      buildLeaderboardAcquisitionManifest(
+        input({ capture_config: { caller_page_cap: 1, safety_page_cap: 100 } })
+      )
+    ).toThrow('source pages exceed the caller cap')
+
+    const wrongProjection = input()
+    wrongProjection.parse_pages[0] = {
+      ...wrongProjection.parse_pages[0],
+      payload: { changed: true },
+    }
+    expect(() => buildLeaderboardAcquisitionManifest(wrongProjection)).toThrow(
+      'identity projection parser pages must exactly equal their cited source pages'
+    )
+  })
+
   it('supports an honestly reported empty board with pages=0', () => {
     const empty = input()
     empty.termination_reason = 'empty_page'
@@ -263,13 +337,14 @@ describe('leaderboard acquisition manifest', () => {
           payload: { data: [], pages: 0, total: 0 },
         },
         source_row_count: 0,
-        source_reports: {
-          population: reported(0),
-          page_count: reported(0),
-        },
+        source_reports: reports(reported(0), reported(0)),
       },
     ]
     empty.parse_pages = [empty.source_pages[0].raw_page]
+    empty.parser_transformation = {
+      kind: 'identity_projection',
+      source_page_ordinals: [1],
+    }
     empty.accepted_population = 0
     const built = buildLeaderboardAcquisitionManifest(empty)
 
@@ -396,13 +471,14 @@ describe('leaderboard acquisition manifest', () => {
       {
         ...single.source_pages[0],
         pagination_position: { kind: 'single_snapshot' },
-        source_reports: {
-          population: reported(2),
-          page_count: reported(2),
-        },
+        source_reports: reports(reported(2), reported(2)),
       },
     ]
     single.parse_pages = [single.source_pages[0].raw_page]
+    single.parser_transformation = {
+      kind: 'identity_projection',
+      source_page_ordinals: [1],
+    }
     single.accepted_population = 2
     expect(buildLeaderboardAcquisitionManifest(single).manifest.assessment).toEqual({
       acquisition_state: 'unknown',
@@ -411,9 +487,29 @@ describe('leaderboard acquisition manifest', () => {
   })
 
   it('fails closed before assigning partial states to capped runs', () => {
-    const callerLimited = buildLeaderboardAcquisitionManifest(
-      input({ termination_reason: 'caller_limit' })
-    ).manifest
+    const truncatedInput = (): BuildLeaderboardAcquisitionManifestInput => {
+      const truncated = input({
+        termination_reason: 'caller_limit',
+        capture_config: { caller_page_cap: 2, safety_page_cap: 5_000 },
+      })
+      truncated.source_pages = truncated.source_pages.map((page) => ({
+        ...page,
+        source_reports: reports(reported(5), notReported()),
+      }))
+      truncated.source_pages[1] = {
+        ...truncated.source_pages[1],
+        source_row_count: 2,
+        raw_page: {
+          ...truncated.source_pages[1].raw_page,
+          payload: { data: [{ id: 'three' }, { id: 'four' }], total: 5 },
+        },
+      }
+      truncated.parse_pages[1] = truncated.source_pages[1].raw_page
+      truncated.accepted_population = 4
+      return truncated
+    }
+
+    const callerLimited = buildLeaderboardAcquisitionManifest(truncatedInput()).manifest
     expect(callerLimited.caller_limited).toBe(true)
     expect(callerLimited.safety_limited).toBe(false)
     expect(callerLimited.assessment).toEqual({
@@ -421,21 +517,35 @@ describe('leaderboard acquisition manifest', () => {
       population_state: 'partial',
     })
 
-    const noRunner = input({ termination_reason: 'caller_limit', runner_git_sha: null })
+    const noRunner = truncatedInput()
+    noRunner.runner_git_sha = null
     expect(buildLeaderboardAcquisitionManifest(noRunner).manifest.assessment).toEqual({
       acquisition_state: 'unknown',
       population_state: 'unknown',
     })
 
-    const failedHttp = input({ termination_reason: 'safety_limit' })
-    failedHttp.source_pages[1] = { ...failedHttp.source_pages[1], http_status: 500 }
-    const failed = buildLeaderboardAcquisitionManifest(failedHttp).manifest
-    expect(failed.caller_limited).toBe(false)
-    expect(failed.safety_limited).toBe(true)
-    expect(failed.assessment).toEqual({
-      acquisition_state: 'unknown',
-      population_state: 'unknown',
+    const safetyInput = truncatedInput()
+    safetyInput.termination_reason = 'safety_limit'
+    safetyInput.capture_config = { caller_page_cap: null, safety_page_cap: 2 }
+    expect(buildLeaderboardAcquisitionManifest(safetyInput).manifest.assessment).toEqual({
+      acquisition_state: 'partial',
+      population_state: 'partial',
     })
+
+    const failedHttp = safetyInput
+    failedHttp.source_pages[1] = { ...failedHttp.source_pages[1], http_status: 500 }
+    expect(() => buildLeaderboardAcquisitionManifest(failedHttp)).toThrow(
+      'limit termination cannot override an upstream error'
+    )
+
+    expect(() =>
+      buildLeaderboardAcquisitionManifest(
+        input({
+          termination_reason: 'caller_limit',
+          capture_config: { caller_page_cap: 2, safety_page_cap: 5_000 },
+        })
+      )
+    ).toThrow('limit termination cannot override natural termination')
   })
 
   it('does not treat parser loss as a natural short or empty source page', () => {
@@ -443,17 +553,11 @@ describe('leaderboard acquisition manifest', () => {
     parserLoss.source_pages[1] = {
       ...parserLoss.source_pages[1],
       source_row_count: 2,
-      source_reports: {
-        population: reported(4),
-        page_count: notReported(),
-      },
+      source_reports: reports(reported(4), notReported()),
     }
     parserLoss.source_pages[0] = {
       ...parserLoss.source_pages[0],
-      source_reports: {
-        population: reported(4),
-        page_count: notReported(),
-      },
+      source_reports: reports(reported(4), notReported()),
     }
     parserLoss.accepted_population = 3
     parserLoss.rejected_row_count = 1
@@ -482,10 +586,7 @@ describe('leaderboard acquisition manifest', () => {
     const conflicting = input()
     conflicting.source_pages[1] = {
       ...conflicting.source_pages[1],
-      source_reports: {
-        population: reported(4),
-        page_count: notReported(),
-      },
+      source_reports: reports(reported(4), notReported()),
     }
     const built = buildLeaderboardAcquisitionManifest(conflicting)
 
@@ -550,6 +651,7 @@ describe('leaderboard acquisition manifest', () => {
       ...pageGap.source_pages[1],
       raw_page: { ...pageGap.source_pages[1].raw_page, pageIndex: 3 },
     }
+    pageGap.parse_pages[1] = pageGap.source_pages[1].raw_page
     expect(() => buildLeaderboardAcquisitionManifest(pageGap)).toThrow(
       'stored page indexes must be contiguous from one'
     )
@@ -562,6 +664,7 @@ describe('leaderboard acquisition manifest', () => {
         fetchedAt: '2026-07-21T09:59:59.000Z',
       },
     }
+    backwards.parse_pages[1] = backwards.source_pages[1].raw_page
     expect(() => buildLeaderboardAcquisitionManifest(backwards)).toThrow(
       'page timestamp must fall inside the run'
     )
@@ -630,16 +733,16 @@ describe('leaderboard acquisition manifest', () => {
         changed.source_pages[0] = { ...changed.source_pages[0], http_status: 201 }
         return changed
       })(),
-      input({ termination_reason: 'caller_limit' }),
+      input({ termination_reason: 'degenerate_page' }),
     ]
     for (const mutation of mutations) {
       expect(buildLeaderboardAcquisitionManifest(mutation).sourceRunId).not.toBe(built.sourceRunId)
     }
   })
 
-  it('pins the complete v1 manifest contract to a golden sourceRunId', () => {
+  it('pins the complete v2 manifest contract to a golden sourceRunId', () => {
     expect(buildLeaderboardAcquisitionManifest(input()).sourceRunId).toBe(
-      'bf7864ef31c7e535854130e87f64da0dd15b19e2b8d67b171e7d2491399eb5c3'
+      '4cfa2a9bed73e846f36242344f11bb1e322215d98c91f978dd35a6787360340f'
     )
   })
 })
