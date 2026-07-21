@@ -274,7 +274,7 @@ test('fails health when production is outside main ancestry', () => {
   const servingSha = 'b489a40612e7dedba5bae7ee3b448f89f204ba4a'
 
   const healthy = runReleaseCheck({
-    body: JSON.stringify({ commit: servingSha }),
+    body: JSON.stringify({ status: 'healthy', commit: servingSha }),
   })
   assert.equal(healthy.status, 0)
   assert.equal(healthy.output, 'status=healthy\n')
@@ -283,7 +283,7 @@ test('fails health when production is outside main ancestry', () => {
   assert.match(healthy.gitCalls, new RegExp(`merge-base --is-ancestor ${servingSha} origin/main`))
 
   const divergent = runReleaseCheck({
-    body: JSON.stringify({ commit: servingSha }),
+    body: JSON.stringify({ status: 'healthy', commit: servingSha }),
     ancestorExit: '1',
   })
   assert.equal(divergent.status, 0)
@@ -298,7 +298,7 @@ test('fails closed when production release identity cannot be verified', () => {
     { body: '', http: '000', curlExit: '28' },
     { body: '{"commit":"short"}' },
     {
-      body: JSON.stringify({ commit: servingSha }),
+      body: JSON.stringify({ status: 'healthy', commit: servingSha }),
       hasCommitExit: '1',
       fetchShaExit: '1',
     },
@@ -310,10 +310,23 @@ test('fails closed when production release identity cannot be verified', () => {
   }
 })
 
+test('keeps degraded release identity verifiable while surfacing degraded health', () => {
+  const servingSha = 'b489a40612e7dedba5bae7ee3b448f89f204ba4a'
+  const degraded = runReleaseCheck({
+    body: JSON.stringify({ status: 'degraded', commit: servingSha }),
+    http: '202',
+  })
+  assert.equal(degraded.status, 0)
+  assert.equal(degraded.output, 'status=degraded\n')
+  assert.match(degraded.message, /in main ancestry but health is degraded/)
+  assert.match(degraded.gitCalls, new RegExp(`merge-base --is-ancestor ${servingSha} origin/main`))
+})
+
 test('aggregates pipeline and release checks without masking missing outputs', () => {
   for (const scenario of [
     { pipelineStatus: 'healthy', releaseStatus: 'healthy', expected: 'healthy' },
     { pipelineStatus: 'critical', releaseStatus: 'healthy', expected: 'critical' },
+    { pipelineStatus: 'healthy', releaseStatus: 'degraded', expected: 'degraded' },
     { pipelineStatus: 'healthy', releaseStatus: 'divergent', expected: 'divergent' },
     { pipelineStatus: '', releaseStatus: 'healthy', expected: 'down' },
     { pipelineStatus: 'healthy', releaseStatus: '', expected: 'down' },

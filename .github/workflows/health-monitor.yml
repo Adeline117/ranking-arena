@@ -93,8 +93,11 @@ jobs:
 
           STATUS="down"
           MESSAGE=""
-          if [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP" != "200" ]; then
+          if [ "$CURL_EXIT" -ne 0 ] || [[ "$HTTP" != "200" && "$HTTP" != "202" ]]; then
             MESSAGE="Release identity transport failure (curl=$CURL_EXIT HTTP=${HTTP:-000})"
+          elif ! RELEASE_HEALTH=$(jq -er '.status | select(. == "healthy" or . == "degraded")' \
+            /tmp/release-health.json 2>/dev/null); then
+            MESSAGE="Release health status is missing or unsupported"
           elif ! SERVING=$(jq -er '.commit | select(type == "string" and test("^[0-9a-f]{40}$"))' \
             /tmp/release-health.json 2>/dev/null); then
             MESSAGE="Release identity is missing or malformed"
@@ -104,7 +107,10 @@ jobs:
             && ! git fetch origin "$SERVING" --quiet 2>/dev/null; then
             MESSAGE="Serving release ${SERVING:0:12} is not fetchable from the repository"
           elif git merge-base --is-ancestor "$SERVING" origin/main; then
-            STATUS="healthy"
+            STATUS="$RELEASE_HEALTH"
+            if [ "$STATUS" = "degraded" ]; then
+              MESSAGE="Production release ${SERVING:0:12} is in main ancestry but health is degraded"
+            fi
           else
             STATUS="divergent"
             MESSAGE="Production release ${SERVING:0:12} is outside main ancestry"
@@ -128,7 +134,7 @@ jobs:
             *) PIPELINE_STATUS="down" ;;
           esac
           case "$RELEASE_STATUS" in
-            healthy|divergent|down) ;;
+            healthy|degraded|divergent|down) ;;
             *) RELEASE_STATUS="down" ;;
           esac
 
