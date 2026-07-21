@@ -36,6 +36,11 @@ export const RAW_EVIDENCE_ROLES = [
   'price_history',
   'opening_inventory',
 ] as const
+export const SOURCE_PAYLOAD_SCOPES = [
+  'population_snapshot',
+  'metric_payload',
+  'not_required',
+] as const
 
 export type RankingMetric = (typeof RANKING_METRICS)[number]
 export type MetricProvenance = (typeof METRIC_PROVENANCE)[number]
@@ -45,9 +50,19 @@ export type RankingWindowKey = (typeof RANKING_WINDOW_KEYS)[number]
 export type MetricValueUnit = (typeof METRIC_VALUE_UNITS)[number]
 export type RankingCurrency = (typeof RANKING_CURRENCIES)[number]
 export type RawEvidenceRole = (typeof RAW_EVIDENCE_ROLES)[number]
+export type SourcePayloadScope = (typeof SOURCE_PAYLOAD_SCOPES)[number]
 
 const nonEmptyString = z.string().trim().min(1)
 const isoTimestamp = z.string().datetime()
+const sha256Digest = z.string().regex(/^[a-f0-9]{64}$/)
+const rawEvidenceRefSchema = z
+  .object({
+    role: z.enum(RAW_EVIDENCE_ROLES),
+    ref: nonEmptyString,
+    sha256: sha256Digest,
+    sourceRunId: sha256Digest,
+  })
+  .strict()
 
 export const metricTrustEvidenceSchema = z
   .object({
@@ -79,20 +94,13 @@ export const metricTrustBindingSchema = z
     subjectKey: nonEmptyString,
     sourceId: nonEmptyString,
     sourceContractVersion: nonEmptyString,
-    sourceRunId: nonEmptyString,
+    sourceRunId: sha256Digest,
     fieldPath: nonEmptyString,
-    rawRefs: z
-      .array(
-        z
-          .object({
-            role: z.enum(RAW_EVIDENCE_ROLES),
-            ref: nonEmptyString,
-            sha256: z.string().regex(/^[a-f0-9]{64}$/i),
-            sourceRunId: nonEmptyString,
-          })
-          .strict()
-      )
-      .min(1),
+    populationSnapshotRef: rawEvidenceRefSchema.refine(
+      (rawRef) => rawRef.role === 'source_payload',
+      'population snapshot must identify a source payload'
+    ),
+    rawRefs: z.array(rawEvidenceRefSchema).min(1),
     window: z
       .object({
         key: z.enum(RANKING_WINDOW_KEYS),
@@ -126,10 +134,12 @@ export const sourceMetricFieldContractSchema = z
     fieldPath: nonEmptyString,
     provenance: z.enum(METRIC_PROVENANCE),
     methodologyVersion: nonEmptyString,
+    metricSetId: nonEmptyString,
     windowKeys: z.array(z.enum(RANKING_WINDOW_KEYS)).min(1),
     valueUnit: z.enum(METRIC_VALUE_UNITS),
     currencies: z.array(z.enum(RANKING_CURRENCIES)).min(1),
     requiredRawRoles: z.array(z.enum(RAW_EVIDENCE_ROLES)).min(1),
+    sourcePayloadScope: z.enum(SOURCE_PAYLOAD_SCOPES),
     maxFreshnessMs: z.number().int().positive(),
     maxWindowEndLagMs: z.number().int().min(0),
   })
@@ -137,6 +147,15 @@ export const sourceMetricFieldContractSchema = z
   .superRefine((field, ctx) => {
     if (new Set(field.requiredRawRoles).size !== field.requiredRawRoles.length) {
       ctx.addIssue({ code: 'custom', message: 'duplicate required raw evidence role' })
+    }
+    if (
+      (field.sourcePayloadScope === 'not_required') ===
+      field.requiredRawRoles.includes('source_payload')
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'source payload scope does not match required raw roles',
+      })
     }
   })
 
@@ -215,10 +234,12 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
         fieldPath: 'data.list[].roi',
         provenance: 'source_reported',
         methodologyVersion: 'binance-board-roi@1',
+        metricSetId: 'binance-board-roi-pnl@1',
         windowKeys: ['7D', '30D', '90D'],
         valueUnit: 'percent',
         currencies: ['USDT'],
         requiredRawRoles: DIRECT_RAW_ROLES,
+        sourcePayloadScope: 'population_snapshot',
         maxFreshnessMs: 6 * 60 * 60 * 1000,
         maxWindowEndLagMs: 5 * 60 * 1000,
       },
@@ -227,10 +248,12 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
         fieldPath: 'data.list[].pnl',
         provenance: 'source_reported',
         methodologyVersion: 'binance-board-pnl@1',
+        metricSetId: 'binance-board-roi-pnl@1',
         windowKeys: ['7D', '30D', '90D'],
         valueUnit: 'currency',
         currencies: ['USDT'],
         requiredRawRoles: DIRECT_RAW_ROLES,
+        sourcePayloadScope: 'population_snapshot',
         maxFreshnessMs: 6 * 60 * 60 * 1000,
         maxWindowEndLagMs: 5 * 60 * 1000,
       },
@@ -239,10 +262,12 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
         fieldPath: 'performance.roi',
         provenance: 'source_reported',
         methodologyVersion: 'binance-performance-roi@1',
+        metricSetId: 'binance-profile-roi-pnl@1',
         windowKeys: ['7D', '30D', '90D'],
         valueUnit: 'percent',
         currencies: ['USDT'],
         requiredRawRoles: DIRECT_RAW_ROLES,
+        sourcePayloadScope: 'metric_payload',
         maxFreshnessMs: 6 * 60 * 60 * 1000,
         maxWindowEndLagMs: 5 * 60 * 1000,
       },
@@ -251,10 +276,12 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
         fieldPath: 'performance.pnl',
         provenance: 'source_reported',
         methodologyVersion: 'binance-performance-pnl@1',
+        metricSetId: 'binance-profile-roi-pnl@1',
         windowKeys: ['7D', '30D', '90D'],
         valueUnit: 'currency',
         currencies: ['USDT'],
         requiredRawRoles: DIRECT_RAW_ROLES,
+        sourcePayloadScope: 'metric_payload',
         maxFreshnessMs: 6 * 60 * 60 * 1000,
         maxWindowEndLagMs: 5 * 60 * 1000,
       },
@@ -269,10 +296,12 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
         fieldPath: 'board.data.data[].realizedPnlPercent',
         provenance: 'source_reported',
         methodologyVersion: 'binance-web3-board-realized-pnl-percent@1',
+        metricSetId: 'binance-web3-board-realized-pnl@1',
         windowKeys: ['7D', '30D', '90D'],
         valueUnit: 'percent',
         currencies: ['USD'],
         requiredRawRoles: DIRECT_RAW_ROLES,
+        sourcePayloadScope: 'population_snapshot',
         maxFreshnessMs: 2 * 60 * 60 * 1000,
         maxWindowEndLagMs: 5 * 60 * 1000,
       },
@@ -281,10 +310,12 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
         fieldPath: 'board.data.data[].realizedPnl',
         provenance: 'source_reported',
         methodologyVersion: 'binance-web3-board-realized-pnl@1',
+        metricSetId: 'binance-web3-board-realized-pnl@1',
         windowKeys: ['7D', '30D', '90D'],
         valueUnit: 'currency',
         currencies: ['USD'],
         requiredRawRoles: DIRECT_RAW_ROLES,
+        sourcePayloadScope: 'population_snapshot',
         maxFreshnessMs: 2 * 60 * 60 * 1000,
         maxWindowEndLagMs: 5 * 60 * 1000,
       },
@@ -293,10 +324,12 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
         fieldPath: 'rebuild.roi',
         provenance: 'arena_rebuilt',
         methodologyVersion: 'wallet-event-ledger-average-cost@1',
+        metricSetId: 'wallet-event-ledger-average-cost@1',
         windowKeys: ['7D', '30D', '90D'],
         valueUnit: 'percent',
         currencies: ['USD'],
         requiredRawRoles: REBUILD_RAW_ROLES,
+        sourcePayloadScope: 'not_required',
         maxFreshnessMs: 2 * 60 * 60 * 1000,
         maxWindowEndLagMs: 5 * 60 * 1000,
       },
@@ -477,6 +510,29 @@ export function evaluateMetricRankEligibility(
   if (binding.rawRefs.some((rawRef) => rawRef.sourceRunId !== binding.sourceRunId)) {
     addUnknown('source_lineage_run_mismatch')
   }
+  if (binding.populationSnapshotRef.sourceRunId !== binding.sourceRunId) {
+    addUnknown('source_population_run_mismatch')
+  }
+  const manifests = binding.rawRefs.filter((rawRef) => rawRef.role === 'population_manifest')
+  if (manifests.length !== 1) {
+    addUnknown('source_manifest_cardinality_invalid')
+  } else if (manifests[0].sha256 !== binding.sourceRunId) {
+    addUnknown('source_manifest_digest_mismatch')
+  }
+  if (fieldContract?.sourcePayloadScope === 'population_snapshot') {
+    const sourcePayloads = binding.rawRefs.filter((rawRef) => rawRef.role === 'source_payload')
+    if (
+      sourcePayloads.length !== 1 ||
+      sourcePayloads.some(
+        (rawRef) =>
+          rawRef.ref !== binding.populationSnapshotRef.ref ||
+          rawRef.sha256 !== binding.populationSnapshotRef.sha256 ||
+          rawRef.sourceRunId !== binding.populationSnapshotRef.sourceRunId
+      )
+    ) {
+      addUnknown('source_population_payload_mismatch')
+    }
+  }
 
   if (evidence.quality === 'unknown') addUnknown('quality_unknown')
   if (evidence.quality === 'unsupported') addUnknown('metric_unsupported')
@@ -567,6 +623,10 @@ export function evaluateRankingEligibility(
   const reference = parsedInputs[0]
   if (reference) {
     const referenceAsOf = Date.parse(reference.binding.asOf)
+    const referenceSourceContract = SOURCE_CONTRACT_REGISTRY[reference.binding.sourceId]
+    const referenceFieldContract = referenceSourceContract
+      ? findRegisteredField(reference, referenceSourceContract)
+      : null
     for (const input of parsedInputs) {
       const { binding } = input
       if (binding.subjectKey !== reference.binding.subjectKey) {
@@ -579,6 +639,20 @@ export function evaluateRankingEligibility(
       }
       if (binding.sourceRunId !== reference.binding.sourceRunId) {
         reasons.push(`${input.evidence.metric}:source_run_mismatch`)
+        state = 'unknown'
+      }
+      if (binding.sourceContractVersion !== reference.binding.sourceContractVersion) {
+        reasons.push(`${input.evidence.metric}:source_contract_version_mismatch`)
+        state = 'unknown'
+      }
+      const sourceContract = SOURCE_CONTRACT_REGISTRY[binding.sourceId]
+      const fieldContract = sourceContract ? findRegisteredField(input, sourceContract) : null
+      if (
+        referenceFieldContract &&
+        fieldContract &&
+        fieldContract.metricSetId !== referenceFieldContract.metricSetId
+      ) {
+        reasons.push(`${input.evidence.metric}:metric_set_mismatch`)
         state = 'unknown'
       }
       if (
