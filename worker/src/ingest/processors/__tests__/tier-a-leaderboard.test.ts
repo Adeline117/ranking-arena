@@ -12,6 +12,8 @@ const mockRecordFieldInventory = jest.fn()
 const mockValidateLeaderboardRows = jest.fn()
 const mockPublishLeaderboardSnapshot = jest.fn()
 const mockPublishBoardSeries = jest.fn()
+const mockPublishBots = jest.fn()
+const mockJobUpdateData = jest.fn()
 
 jest.mock('@/lib/ingest/sources', () => ({
   getSourceBySlug: (...args: unknown[]) => mockGetSourceBySlug(...args),
@@ -35,6 +37,9 @@ jest.mock('@/lib/ingest/staging/validate', () => ({
 jest.mock('@/lib/ingest/serving/publish', () => ({
   publishLeaderboardSnapshot: (...args: unknown[]) => mockPublishLeaderboardSnapshot(...args),
   publishBoardSeries: (...args: unknown[]) => mockPublishBoardSeries(...args),
+}))
+jest.mock('@/lib/ingest/serving/publish-bots', () => ({
+  publishBots: (...args: unknown[]) => mockPublishBots(...args),
 }))
 
 import { processTierA } from '../tier-a-leaderboard'
@@ -72,17 +77,34 @@ const row = {
   raw: {},
 } as ParsedLeaderboardRow
 
-const job = {
-  id: 'repeat:tiera:xt_futures:1784361600000',
-  timestamp: 1_784_361_600_000,
-  attemptsMade: 2,
-  data: { sourceSlug: src.slug },
-} as Job<TierJobData>
-const expectedCycleId = `tier-a:${src.slug}:${job.id}:${job.timestamp}`
+function makeJob(data: TierJobData = { sourceSlug: src.slug }): Job<TierJobData> {
+  const testJob = {
+    id: 'repeat:tiera:xt_futures:1784361600000',
+    timestamp: 1_784_361_600_000,
+    attemptsMade: 2,
+    data: {
+      ...data,
+      ...(data.completedTimeframes ? { completedTimeframes: [...data.completedTimeframes] } : {}),
+    },
+    updateData(nextData: TierJobData): Promise<void> {
+      // BullMQ mutates the in-memory Job before awaiting its Redis command.
+      // Keep the mock faithful so fail-closed restoration is regression-tested.
+      testJob.data = nextData
+      return mockJobUpdateData(nextData)
+    },
+  }
+  return testJob as unknown as Job<TierJobData>
+}
 
 describe('Tier-A board-series publication guard', () => {
+  let job: Job<TierJobData>
+  let expectedCycleId: string
+
   beforeEach(() => {
     jest.clearAllMocks()
+    mockJobUpdateData.mockResolvedValue(undefined)
+    job = makeJob()
+    expectedCycleId = `tier-a:${src.slug}:${job.id}:${job.timestamp}`
     mockGetSourceBySlug.mockResolvedValue(src)
     mockNativeRankingTimeframes.mockReturnValue([30])
     mockOpenSession.mockResolvedValue({ close: mockSessionClose })
@@ -125,6 +147,7 @@ describe('Tier-A board-series publication guard', () => {
       traderIds: new Map([[row.exchangeTraderId, 42]]),
     })
     mockPublishBoardSeries.mockResolvedValue({ traders: 1, points: 1 })
+    mockPublishBots.mockResolvedValue({ written: 1 })
   })
 
   it('passes the exact live snapshot identity before publishing replacement series', async () => {
@@ -164,7 +187,204 @@ describe('Tier-A board-series publication guard', () => {
         observationCycleId: expectedCycleId,
       })
     )
+    expect(mockJobUpdateData).toHaveBeenCalledWith({
+      sourceSlug: src.slug,
+      completedTimeframes: [30],
+    })
+    expect(mockPublishBoardSeries.mock.invocationCallOrder[0]).toBeLessThan(
+      mockJobUpdateData.mock.invocationCallOrder[0]
+    )
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('resumes a retried job at the first unfinished native window', async () => {
+    const attempted: number[] = []
+    job = makeJob({ sourceSlug: src.slug, completedTimeframes: [7, 30] })
+    mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
+    mockGetAdapter.mockReturnValue({
+      listLeaderboard: async function* (_session: unknown, _src: SourceRow, timeframe: number) {
+        attempted.push(timeframe)
+        yield page
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+
+    await expect(processTierA(job)).resolves.toEqual([
+      expect.objectContaining({ timeframe: 90, snapshotId: 777, passed: true }),
+    ])
+
+    expect(attempted).toEqual([90])
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockWriteRawObject).toHaveBeenCalledWith(expect.objectContaining({ timeframe: 90 }))
+    expect(mockJobUpdateData).toHaveBeenCalledWith({
+      sourceSlug: src.slug,
+      completedTimeframes: [7, 30, 90],
+    })
+    expect(job.data.completedTimeframes).toEqual([7, 30, 90])
+  })
+
+  it('normalizes duplicate and invalid checkpoints before deciding what to skip', async () => {
+    const attempted: number[] = []
+    job = makeJob({
+      sourceSlug: src.slug,
+      completedTimeframes: [30, 30, 365, '90', null],
+    } as unknown as TierJobData)
+    mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
+    mockGetAdapter.mockReturnValue({
+      listLeaderboard: async function* (_session: unknown, _src: SourceRow, timeframe: number) {
+        attempted.push(timeframe)
+        yield page
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+
+    await expect(processTierA(job)).resolves.toHaveLength(2)
+
+    // Only the numeric native 30d value is trusted; duplicates, unknown
+    // numbers, strings, and null cannot suppress a crawl.
+    expect(attempted).toEqual([7, 90])
+    expect(mockJobUpdateData.mock.calls.map(([data]) => data.completedTimeframes)).toEqual([
+      [7, 30],
+      [7, 30, 90],
+    ])
+    expect(job.data.completedTimeframes).toEqual([7, 30, 90])
+  })
+
+  it('returns before opening a browser when every native window is checkpointed', async () => {
+    job = makeJob({ sourceSlug: src.slug, completedTimeframes: [7, 30, 90] })
+    mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
+
+    await expect(processTierA(job)).resolves.toEqual([])
+
+    expect(mockGetAdapter).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+  })
+
+  it('does not checkpoint a window until board-series publication succeeds', async () => {
+    mockPublishBoardSeries.mockRejectedValueOnce(new Error('series write failed'))
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toThrow('1/1 native windows failed (30d)')
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockPublishBoardSeries).toHaveBeenCalledTimes(1)
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(job.data).toEqual({ sourceSlug: src.slug })
+  })
+
+  it('checkpoints a bot window only after bot publication succeeds', async () => {
+    mockGetSourceBySlug.mockResolvedValue({ ...src, trader_kind_scope: 'bot' })
+
+    await expect(processTierA(job)).resolves.toHaveLength(1)
+
+    expect(mockPublishBots).toHaveBeenCalledTimes(1)
+    expect(mockPublishBots.mock.invocationCallOrder[0]).toBeLessThan(
+      mockJobUpdateData.mock.invocationCallOrder[0]
+    )
+    expect(mockJobUpdateData).toHaveBeenCalledWith({
+      sourceSlug: src.slug,
+      completedTimeframes: [30],
+    })
+  })
+
+  it('does not checkpoint a bot window whose bot publication fails', async () => {
+    mockGetSourceBySlug.mockResolvedValue({ ...src, trader_kind_scope: 'bot' })
+    mockPublishBots.mockRejectedValueOnce(new Error('bot write failed'))
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toThrow('1/1 native windows failed (30d)')
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(mockPublishBots).toHaveBeenCalledTimes(1)
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(job.data).toEqual({ sourceSlug: src.slug })
+  })
+
+  it('fails closed, restores acknowledged data, and stops after an updateData failure', async () => {
+    const attempted: number[] = []
+    job = makeJob({ sourceSlug: src.slug, completedTimeframes: [7] })
+    mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
+    mockGetAdapter.mockReturnValue({
+      listLeaderboard: async function* (_session: unknown, _src: SourceRow, timeframe: number) {
+        attempted.push(timeframe)
+        yield page
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+    mockJobUpdateData.mockRejectedValueOnce(new Error('redis unavailable'))
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toThrow(
+        'checkpoint persistence failed for xt_futures 30d: redis unavailable'
+      )
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(attempted).toEqual([30])
+    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockJobUpdateData).toHaveBeenCalledWith({
+      sourceSlug: src.slug,
+      completedTimeframes: [7, 30],
+    })
+    expect(job.data).toEqual({ sourceSlug: src.slug, completedTimeframes: [7] })
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('checkpoints successes around a normal failure and retries only the missing window', async () => {
+    const attempted: number[] = []
+    let run = 1
+    mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
+    mockGetAdapter.mockReturnValue({
+      listLeaderboard: async function* (_session: unknown, _src: SourceRow, timeframe: number) {
+        attempted.push(timeframe)
+        if (run === 1 && timeframe === 30) throw new Error('transient upstream failure')
+        yield page
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toThrow('1/3 native windows failed (30d)')
+
+      expect(attempted).toEqual([7, 30, 90])
+      expect(mockJobUpdateData.mock.calls.map(([data]) => data.completedTimeframes)).toEqual([
+        [7],
+        [7, 90],
+      ])
+      expect(job.data.completedTimeframes).toEqual([7, 90])
+
+      run = 2
+      attempted.length = 0
+      mockJobUpdateData.mockClear()
+
+      await expect(processTierA(job)).resolves.toEqual([
+        expect.objectContaining({ timeframe: 30, snapshotId: 777, passed: true }),
+      ])
+
+      expect(attempted).toEqual([30])
+      expect(mockJobUpdateData).toHaveBeenCalledWith({
+        sourceSlug: src.slug,
+        completedTimeframes: [7, 30, 90],
+      })
+      expect(job.data.completedTimeframes).toEqual([7, 30, 90])
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   it('attempts every native window, then exits with one aggregate error', async () => {
@@ -222,6 +442,11 @@ describe('Tier-A board-series publication guard', () => {
     expect((failure as AggregateError).errors).toHaveLength(2)
     expect((failure as Error).message).toContain('2/3 native windows failed (7d, 30d)')
     expect((failure as Error).message).toContain('1 succeeded')
+    expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
+    expect(mockJobUpdateData).toHaveBeenCalledWith({
+      sourceSlug: src.slug,
+      completedTimeframes: [90],
+    })
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
 
     for (const [input] of mockWriteRawObject.mock.calls) {

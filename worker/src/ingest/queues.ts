@@ -201,6 +201,14 @@ export const INGEST_JOB = {
 export interface TierJobData {
   sourceSlug: string
   /**
+   * Tier-A only: native windows whose entire publication pipeline completed
+   * during this BullMQ job. Persisted with Job.updateData after RAW, snapshot,
+   * board-series and bot publication all succeed so a retry/stall recovery can
+   * resume at the first unfinished window instead of crawling from page 1.
+   * Repeat-scheduler templates omit it, so every new observation starts clean.
+   */
+  completedTimeframes?: Array<7 | 30 | 90>
+  /**
    * Tier-B deadline continuations only: how many continuation hops this
    * chain has taken. Scheduler-fired iterations omit it (chain restarts at
    * 0); processTierB stops re-enqueuing past a bound so a slow-failing
