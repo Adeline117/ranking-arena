@@ -12,11 +12,13 @@
 import type { Job } from 'bullmq'
 import { getSourceBySlug, nativeRankingTimeframes } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
-import type {
-  BoardSeriesBlock,
-  ParseCtx,
-  ParsedLeaderboardRow,
-  RawPage,
+import {
+  RANKING_TIMEFRAMES,
+  type BoardSeriesBlock,
+  type ParseCtx,
+  type ParsedLeaderboardRow,
+  type RankingTimeframe,
+  type RawPage,
 } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
@@ -35,6 +37,46 @@ export interface TierAResult {
   snapshotId: number
 }
 
+function completedTimeframesFrom(value: unknown): RankingTimeframe[] {
+  if (!Array.isArray(value)) return []
+  const completed = new Set(value.filter((timeframe) => RANKING_TIMEFRAMES.includes(timeframe)))
+  return RANKING_TIMEFRAMES.filter((timeframe) => completed.has(timeframe))
+}
+
+class TierACheckpointPersistenceError extends Error {
+  constructor(sourceSlug: string, timeframe: RankingTimeframe, options: { cause: unknown }) {
+    const detail = options.cause instanceof Error ? options.cause.message : String(options.cause)
+    super(`checkpoint persistence failed for ${sourceSlug} ${timeframe}d: ${detail}`, options)
+    this.name = 'TierACheckpointPersistenceError'
+  }
+}
+
+async function persistCompletedTimeframe(
+  job: Job<TierJobData>,
+  persistedJobData: TierJobData,
+  completedTimeframes: ReadonlySet<RankingTimeframe>,
+  timeframe: RankingTimeframe,
+  sourceSlug: string
+): Promise<TierJobData> {
+  const nextCompleted = completedTimeframesFrom([...completedTimeframes, timeframe])
+  const nextData: TierJobData = {
+    ...persistedJobData,
+    completedTimeframes: nextCompleted,
+  }
+
+  try {
+    await job.updateData(nextData)
+    return nextData
+  } catch (cause) {
+    // BullMQ mutates job.data before its Redis command resolves. Restore the
+    // last acknowledged value so a later checkpoint can never accidentally
+    // persist this unconfirmed window. The caller treats this as fatal rather
+    // than continuing to another timeframe.
+    job.data = persistedJobData
+    throw new TierACheckpointPersistenceError(sourceSlug, timeframe, { cause })
+  }
+}
+
 export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]> {
   const src = await getSourceBySlug(job.data.sourceSlug)
   if (src.status !== 'active') {
@@ -42,18 +84,33 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
     return []
   }
 
-  const adapter = getAdapter(src.adapter_slug)
   const timeframes = nativeRankingTimeframes(src)
+  const completedTimeframes = new Set(
+    completedTimeframesFrom(job.data.completedTimeframes).filter((timeframe) =>
+      timeframes.includes(timeframe)
+    )
+  )
+  const pendingTimeframes = timeframes.filter((timeframe) => !completedTimeframes.has(timeframe))
+  if (completedTimeframes.size > 0) {
+    console.log(
+      `[tier-a] ${src.slug}: resuming job; skipping completed windows ` +
+        [...completedTimeframes].map((timeframe) => `${timeframe}d`).join(', ')
+    )
+  }
+  if (pendingTimeframes.length === 0) return []
+
+  const adapter = getAdapter(src.adapter_slug)
   const cycleId = observationCycleId(job, 'tier-a', src.slug)
   const results: TierAResult[] = []
   const failures: Array<{ timeframe: number; error: Error }> = []
+  let persistedJobData: TierJobData = { ...job.data }
   // Compute every potentially-throwing input before acquiring the source's
   // persistent-profile lease. Once acquired, the try/finally begins
   // immediately so future edits cannot strand the unsuffixed Tier-A lane.
   const session = await openSession(src)
 
   try {
-    for (const timeframe of timeframes) {
+    for (const timeframe of pendingTimeframes) {
       try {
         const scrapedAt = new Date().toISOString()
         const pages: RawPage[] = []
@@ -180,6 +237,19 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         // trader_latest), so the compat bridge is orphaned and trader_latest is
         // being dropped. publish() above already wrote arena.* — the canonical source.
 
+        // This is deliberately the LAST awaited side effect in one window.
+        // A retry may skip the window only after RAW + snapshot + optional
+        // board-series + optional bot publication have all completed. Persist
+        // after every window so a worker restart loses at most the in-flight TF.
+        persistedJobData = await persistCompletedTimeframe(
+          job,
+          persistedJobData,
+          completedTimeframes,
+          timeframe,
+          src.slug
+        )
+        completedTimeframes.add(timeframe)
+
         results.push({
           timeframe,
           actualCount: valid.length,
@@ -191,8 +261,12 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
       } catch (cause) {
         const detail = cause instanceof Error ? cause.message : String(cause)
         const error = new Error(`[tier-a] ${src.slug} ${timeframe}d failed: ${detail}`, { cause })
-        failures.push({ timeframe, error })
         console.error(error.message)
+        // A checkpoint failure is infrastructure-level and must fail closed.
+        // Continuing could let a later updateData call persist a checkpoint
+        // whose Redis acknowledgement was lost for this window.
+        if (cause instanceof TierACheckpointPersistenceError) throw error
+        failures.push({ timeframe, error })
       }
     }
   } finally {

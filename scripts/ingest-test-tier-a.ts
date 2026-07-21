@@ -14,6 +14,7 @@
  */
 import { resolve } from 'path'
 import { config } from 'dotenv'
+import type { TierJobData } from '@/worker/src/ingest/queues'
 config({ path: resolve(process.cwd(), 'worker', '.env') })
 config({ path: resolve(process.cwd(), '.env.local') })
 
@@ -29,7 +30,13 @@ async function main() {
   const startedAt = new Date().toISOString()
   let results: unknown
   try {
-    const fakeJob = { name: 'tiera:leaderboard', data: { sourceSlug: slug } }
+    const fakeJob = {
+      name: 'tiera:leaderboard',
+      data: { sourceSlug: slug } as TierJobData,
+      async updateData(nextData: TierJobData) {
+        this.data = nextData
+      },
+    }
     results = await processTierA(fakeJob as never)
     console.log(JSON.stringify(results, null, 2))
   } finally {
