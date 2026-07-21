@@ -51,24 +51,23 @@ done
 # means the domain points at a different deployment than the one CI approved.
 HEALTH_JSON=$(curl -fsS --max-time 20 --retry 2 --retry-all-errors --retry-delay 1 \
   "${BASE}/api/health?_release_check=$(date +%s)" || true)
-HEALTH_STATE=$(printf '%s' "$HEALTH_JSON" | python3 -c '
-import json,sys
-try: print(json.load(sys.stdin).get("status", ""))
-except Exception: print("")
-' 2>/dev/null)
 DEPLOYED_SHA=$(printf '%s' "$HEALTH_JSON" | python3 -c '
 import json,sys
 try: print(json.load(sys.stdin).get("commit", ""))
 except Exception: print("")
 ' 2>/dev/null)
 
-if [ "$HEALTH_STATE" = "healthy" ]; then
-  echo "✅ PASS health.status=healthy"
+HEALTH_VALIDATION_ERROR=$(mktemp)
+if HEALTH_DECISION=$(printf '%s' "$HEALTH_JSON" \
+  | node scripts/ci/validate-release-health.mjs 2>"$HEALTH_VALIDATION_ERROR"); then
+  echo "✅ PASS release health ${HEALTH_DECISION}"
   PASS=$((PASS+1))
 else
-  echo "❌ FAIL health.status=${HEALTH_STATE:-unreadable}"
+  HEALTH_FAILURE=$(cat "$HEALTH_VALIDATION_ERROR" 2>/dev/null || true)
+  echo "❌ FAIL release health ${HEALTH_FAILURE:-unreadable}"
   FAIL=$((FAIL+1))
 fi
+rm -f "$HEALTH_VALIDATION_ERROR"
 
 if [ -n "$EXPECTED_SHA" ]; then
   if [ "$DEPLOYED_SHA" = "$EXPECTED_SHA" ]; then

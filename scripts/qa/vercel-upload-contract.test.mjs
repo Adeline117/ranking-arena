@@ -166,14 +166,14 @@ test('waits for Vercel READY within the job budget before allowing promotion', (
 test('reasserts the single production writer without ever skipping promoted smoke', () => {
   assert.match(
     deployGate,
-    /- name: Pin release-control helper for this Gate run\n        run: install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"/
+    /- name: Pin release-control helpers for this Gate run\n        run: \|[\s\S]*install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"[\s\S]*install -m 700 scripts\/ci\/validate-release-health\.mjs "\$RUNNER_TEMP\/validate-release-health\.mjs"/
   )
   assert.equal(
     deployGate.match(/node "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"/g)?.length,
     4
   )
   assert.ok(
-    deployGate.indexOf('Pin release-control helper for this Gate run') <
+    deployGate.indexOf('Pin release-control helpers for this Gate run') <
       deployGate.indexOf('git checkout --quiet "$HEAD_SHA"')
   )
   assert.match(
@@ -197,15 +197,17 @@ test('reasserts the single production writer without ever skipping promoted smok
   )
 })
 
-test('verifies an exact healthy public SHA after deploy-gate rollback', () => {
+test('verifies an exact release-safe public SHA after deploy-gate rollback', () => {
   const workflow = deployGate
   assert.match(workflow, /echo "serving=\$SERVING" >> "\$GITHUB_OUTPUT"/)
   assert.match(workflow, /PREVIOUS_DEPLOYMENT_ID: \$\{\{ steps\.fresh\.outputs\.previous_id \}\}/)
   assert.match(workflow, /EXPECTED_ROLLBACK_SHA: \$\{\{ steps\.fresh\.outputs\.serving \}\}/)
   assert.match(workflow, /--connect-timeout 5 --max-time 30/)
   assert.match(workflow, /gate_rollback_verify=/)
-  assert.match(workflow, /\[ "\$HEALTH_HTTP" = "200" \]/)
-  assert.match(workflow, /\[ "\$HEALTH_STATUS" = "healthy" \]/)
+  assert.match(workflow, /install -m 700 scripts\/ci\/validate-release-health\.mjs/)
+  assert.match(workflow, /node "\$RUNNER_TEMP\/validate-release-health\.mjs"/)
+  assert.match(workflow, /"\$HEALTH_HTTP" = "200" \|\| "\$HEALTH_HTTP" = "202"/)
+  assert.match(workflow, /\[ "\$HEALTH_SAFE" = "true" \]/)
   assert.match(workflow, /\[ "\$SERVING_SHA" = "\$EXPECTED_ROLLBACK_SHA" \]/)
   assert.match(workflow, /\[ "\$SERVING_SHA" != "\$HEAD_SHA" \]/)
   assert.match(workflow, /STABLE_CONFIRMATIONS.*2/)
