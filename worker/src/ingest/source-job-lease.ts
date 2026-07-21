@@ -57,12 +57,12 @@ function leaseKey(lane: string, sourceSlug: string): string {
  * Coalesce duplicate recovered scheduler iterations for one source and lane.
  *
  * BullMQ correctly recovers every stalled iteration after a worker restart.
- * When several old Tier-A iterations exist for the same source, however, they
+ * When several old source iterations exist for the same tier, however, they
  * can all become active together: the in-process persistent-profile lane then
  * serializes the browser sessions, but the duplicates still occupy worker
- * slots and eventually repeat the same full crawl. This Redis lease is shared
- * by the native region worker and its failover worker, so exactly one current
- * crawl survives that recovery wave.
+ * slots and eventually repeat the same crawl. This Redis lease is shared by
+ * the native region worker and its failover worker, so exactly one current
+ * owner per source+tier survives that recovery wave.
  */
 export async function withSourceJobLease<T>({
   redis,

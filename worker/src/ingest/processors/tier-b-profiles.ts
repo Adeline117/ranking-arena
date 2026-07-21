@@ -436,14 +436,18 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
     if (contDepth < MAX_CONT_DEPTH) {
       // Same priority as the scheduler registration (6) — a continuation must
       // never jump the tier order (that inversion was the 2026-07-03 wedge).
-      // Stable jobId dedups: at most one pending continuation per source.
+      // Depth-scoped jobId preserves dedup within one hop while letting the
+      // currently-active continuation enqueue its successor. Reusing one
+      // source-only id made BullMQ return the active job as a duplicate, so
+      // continuation chains silently stopped after their first hop.
       try {
+        const nextDepth = contDepth + 1
         await getRegionQueue(src.fetch_region).add(
           INGEST_JOB.TIER_B,
-          { sourceSlug: src.slug, contDepth: contDepth + 1 } satisfies TierJobData,
+          { sourceSlug: src.slug, contDepth: nextDepth } satisfies TierJobData,
           {
             priority: 6,
-            jobId: `tierb-cont-${src.slug}`,
+            jobId: `tierb-cont-${src.slug}-${nextDepth}`,
             delay: 5_000,
             removeOnComplete: true,
             removeOnFail: { age: 3600 },

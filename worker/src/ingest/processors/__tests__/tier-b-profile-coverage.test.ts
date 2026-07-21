@@ -18,6 +18,7 @@ const mockRoiCrossCheckOk = jest.fn()
 const mockGetHistoryCursor = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockDbQuery = jest.fn()
+const mockQueueAdd = jest.fn()
 
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: (...args: unknown[]) => mockDbQuery(...args) })),
@@ -52,7 +53,7 @@ jest.mock('@/lib/ingest/field-inventory', () => ({
   recordFieldInventory: jest.fn(async () => undefined),
 }))
 jest.mock('../../queues', () => ({
-  getRegionQueue: jest.fn(() => ({ add: jest.fn() })),
+  getRegionQueue: jest.fn(() => ({ add: (...args: unknown[]) => mockQueueAdd(...args) })),
   INGEST_JOB: { TIER_B: 'tier-b' },
 }))
 
@@ -146,6 +147,7 @@ describe('Tier-B profile coverage accounting', () => {
     mockValidateStats.mockImplementation((stats: unknown[]) => ({ valid: stats, rejects: [] }))
     mockRoiCrossCheckOk.mockReturnValue(null)
     mockPublishProfile.mockResolvedValue(undefined)
+    mockQueueAdd.mockResolvedValue(undefined)
     mockDbQuery.mockImplementation(async (sql: string) => {
       if (sql.includes('WITH latest AS')) {
         return {
@@ -455,5 +457,64 @@ describe('Tier-B profile coverage accounting', () => {
         String(sql).includes('INSERT INTO arena.ingest_cursors')
       )
     ).toBe(false)
+  })
+
+  it('enqueues a distinct next-hop continuation while the current hop is active', async () => {
+    mockGetSourceBySlug.mockResolvedValue({
+      ...src,
+      meta: { tier_b_deadline_ms: 60_000 },
+    })
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockDbQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('WITH latest AS')) {
+        return {
+          rows: [
+            {
+              id: 42,
+              exchange_trader_id: '0x0000000000000000000000000000000000000001',
+              meta: null,
+              headline_rois: null,
+            },
+            {
+              id: 43,
+              exchange_trader_id: '0x0000000000000000000000000000000000000002',
+              meta: null,
+              headline_rois: null,
+            },
+          ],
+          rowCount: 2,
+        }
+      }
+      return { rows: [], rowCount: 1 }
+    })
+    const now = jest
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(1_784_700_000_000)
+      .mockReturnValueOnce(1_784_700_000_000)
+      .mockReturnValueOnce(1_784_700_061_000)
+    const continuation = {
+      id: 'tierb-cont-gtrade-1',
+      data: { sourceSlug: 'gtrade', contDepth: 1 },
+    } as Job<TierJobData>
+
+    let result
+    try {
+      result = await processTierB(continuation)
+    } finally {
+      now.mockRestore()
+    }
+    expect(result).toMatchObject({
+      tradersCrawled: 1,
+      remaining: 1,
+    })
+    expect(mockQueueAdd).toHaveBeenCalledWith(
+      'tier-b',
+      { sourceSlug: 'gtrade', contDepth: 2 },
+      expect.objectContaining({
+        priority: 6,
+        jobId: 'tierb-cont-gtrade-2',
+      })
+    )
   })
 })

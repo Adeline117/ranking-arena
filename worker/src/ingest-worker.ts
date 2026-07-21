@@ -33,7 +33,7 @@ import {
 import { reconcileSchedulers } from './ingest/scheduler'
 import { startHeartbeat } from './ingest/heartbeat'
 import { startFailoverManager } from './ingest/failover'
-import { withSourceJobLease } from './ingest/source-job-lease'
+import { routeJobWithSourceLease } from './ingest/source-job-routing'
 import { routeTierCJobRegion } from './ingest/tier-c-region-router'
 
 // Per-region worker concurrency. Bumped 3→5 (2026-06-12): at 3 the drain
@@ -60,27 +60,11 @@ const INGEST_CONCURRENCY = Number(process.env.INGEST_CONCURRENCY) || 5
 // peak extra concurrent browsers stay low because each session is short-lived.
 const FAST_CONCURRENCY = 3
 
-async function route(job: Job): Promise<unknown> {
+async function runJob(job: Job): Promise<unknown> {
   switch (job.name) {
     case INGEST_JOB.TIER_A: {
       const { processTierA } = await import('./ingest/processors/tier-a-leaderboard')
-      const sourceSlug = job.data?.sourceSlug
-      if (typeof sourceSlug !== 'string' || sourceSlug.length === 0) {
-        throw new Error('[ingest-worker] Tier-A job is missing sourceSlug')
-      }
-      const result = await withSourceJobLease({
-        redis: getConnection(),
-        lane: 'tier-a',
-        sourceSlug,
-        run: () => processTierA(job),
-      })
-      if (result.coalesced) {
-        console.log(
-          `[ingest-worker] ↪ coalesced duplicate Tier-A iteration ${job.id} (${sourceSlug})`
-        )
-        return { coalesced: true, sourceSlug }
-      }
-      return result.value
+      return processTierA(job)
     }
     case INGEST_JOB.TIER_B: {
       const { processTierB } = await import('./ingest/processors/tier-b-profiles')
@@ -128,6 +112,14 @@ async function route(job: Job): Promise<unknown> {
     default:
       throw new Error(`[ingest-worker] unknown job: ${job.name}`)
   }
+}
+
+async function route(job: Job): Promise<unknown> {
+  return routeJobWithSourceLease({
+    redis: getConnection(),
+    job,
+    run: () => runJob(job),
+  })
 }
 
 async function routeTierC(job: Job<TierCJobData>, region: IngestRegion): Promise<unknown> {
