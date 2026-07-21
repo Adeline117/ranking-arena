@@ -85,6 +85,7 @@ PREDEPLOY_MIGRATIONS=(
   20260718184550_durable_tip_completion_notification.sql
   20260721120000_metric_trust_shadow_gate.sql
   20260721130000_raw_object_gc_outbox.sql
+  20260721140000_idempotent_equivalent_refund_events.sql
 )
 
 # These contracts revoke compatibility writes or change identity uniqueness

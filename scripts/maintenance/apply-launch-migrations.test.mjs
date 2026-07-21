@@ -29,7 +29,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
   const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
 
-  assert.equal(predeploy.length, 59)
+  assert.equal(predeploy.length, 60)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -58,6 +58,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260718184550_durable_tip_completion_notification.sql',
           '20260721120000_metric_trust_shadow_gate.sql',
           '20260721130000_raw_object_gc_outbox.sql',
+          '20260721140000_idempotent_equivalent_refund_events.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -75,9 +76,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716083256_repair_legacy_exchange_logo_paths.sql',
   ])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 70)
+  assert.equal(new Set(all).size, 71)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-18), [
+  assert.deepEqual(predeploy.slice(-19), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -96,6 +97,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260718184550_durable_tip_completion_notification.sql',
     '20260721120000_metric_trust_shadow_gate.sql',
     '20260721130000_raw_object_gc_outbox.sql',
+    '20260721140000_idempotent_equivalent_refund_events.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -105,6 +107,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260718184550_durable_tip_completion_notification.sql'))
   assert.ok(predeploy.includes('20260721120000_metric_trust_shadow_gate.sql'))
   assert.ok(predeploy.includes('20260721130000_raw_object_gc_outbox.sql'))
+  assert.ok(predeploy.includes('20260721140000_idempotent_equivalent_refund_events.sql'))
   assert.ok(!postdeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260717120000_trader_follows_composite_identity.sql'))
   assert.ok(
@@ -127,6 +130,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   )
   assert.ok(!recoveryPrerequisites.includes('20260721120000_metric_trust_shadow_gate.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260721130000_raw_object_gc_outbox.sql'))
+  assert.ok(
+    !recoveryPrerequisites.includes('20260721140000_idempotent_equivalent_refund_events.sql')
+  )
 })
 
 test('runner records exact file bodies and hashes in the same transaction', () => {

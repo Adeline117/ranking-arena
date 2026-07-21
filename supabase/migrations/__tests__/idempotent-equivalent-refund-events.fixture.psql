@@ -1,0 +1,670 @@
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+
+INSERT INTO auth.users(id)
+VALUES
+  ('10000000-0000-0000-0000-000000000031'),
+  ('10000000-0000-0000-0000-000000000032');
+INSERT INTO public.user_profiles(
+  id, subscription_tier, pro_plan, pro_expires_at, is_pro
+) VALUES
+  (
+    '10000000-0000-0000-0000-000000000031',
+    'free',
+    NULL,
+    NULL,
+    false
+  ),
+  (
+    '10000000-0000-0000-0000-000000000032',
+    'free',
+    NULL,
+    NULL,
+    false
+  );
+INSERT INTO public.test_official_members(user_id)
+VALUES
+  ('10000000-0000-0000-0000-000000000031'),
+  ('10000000-0000-0000-0000-000000000032');
+
+DO $composed_handler_order_still_revokes$
+DECLARE
+  v_user uuid := '10000000-0000-0000-0000-000000000031';
+  v_record jsonb;
+  v_status text;
+BEGIN
+  PERFORM public.test_activate_lifetime(
+    v_user,
+    'composed_handler_order',
+    '2035-06-01Z'
+  );
+
+  -- Production records the central Charge tombstone route before it invokes
+  -- the exact Pro reconciler. Pro payments are discovered by the financial
+  -- writer before any tombstone merge, so this first RPC must not consume the
+  -- entitlement side effects.
+  v_record := public.record_charge_refund_tombstone_atomic(
+    NULL,
+    'cus_10000000000000000000000000000031',
+    'pi_composed_handler_order',
+    'ch_composed_handler_order',
+    true,
+    50000,
+    'usd',
+    50000,
+    'succeeded',
+    'evt_composed_handler_order',
+    '2035-06-02Z'
+  );
+  IF v_record ->> 'status' IS DISTINCT FROM
+      'payment_reconciliation_required'
+    OR v_record ->> 'product_kind' IS DISTINCT FROM 'pro_entitlement'
+    OR v_record ->> 'projection_status' IS DISTINCT FROM 'no_tombstone'
+    OR EXISTS (
+      SELECT 1
+      FROM public.stripe_charge_refund_tombstones AS tombstone
+      WHERE tombstone.stripe_charge_id = 'ch_composed_handler_order'
+    )
+  THEN
+    RAISE EXCEPTION
+      'first composed refund RPC consumed or misrouted Pro authority: %',
+      v_record;
+  END IF;
+
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'composed_handler_order',
+    50000,
+    'succeeded',
+    'evt_composed_handler_order',
+    '2035-06-02Z',
+    '2035-06-01Z'
+  ) ->> 'status';
+  IF v_status <> 'revoked'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.subscriptions AS subscription
+      WHERE subscription.user_id = v_user
+        AND subscription.status = 'canceled'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.stripe_charge_id = 'ch_composed_handler_order'
+        AND payment.refund_succeeded_amount = 50000
+        AND payment.refund_state = 'succeeded'
+    )
+  THEN
+    RAISE EXCEPTION
+      'composed record-then-reconcile flow did not revoke: %',
+      v_status;
+  END IF;
+END
+$composed_handler_order_still_revokes$;
+
+DO $subscription_status_is_part_of_equivalence$
+DECLARE
+  v_user uuid := '10000000-0000-0000-0000-000000000032';
+  v_status text;
+  v_payment_id uuid;
+BEGIN
+  PERFORM public.test_activate_recurring(
+    v_user,
+    'sub_equivalent_projection',
+    'equivalent_projection',
+    '2035-07-01Z',
+    '2035-08-01Z'
+  );
+  v_status := public.test_refund_recurring(
+    v_user,
+    'sub_equivalent_projection',
+    'equivalent_projection',
+    100,
+    'succeeded',
+    'active',
+    'evt_equivalent_projection_first',
+    '2035-07-02Z',
+    '2035-07-01Z',
+    '2035-08-01Z'
+  ) ->> 'status';
+  IF v_status <> 'partial_refund' THEN
+    RAISE EXCEPTION
+      'recurring equivalence setup failed: %',
+      v_status;
+  END IF;
+
+  SELECT payment.id
+  INTO v_payment_id
+  FROM public.stripe_entitlement_payments AS payment
+  WHERE payment.stripe_charge_id = 'ch_equivalent_projection';
+
+  v_status := public.test_refund_recurring(
+    v_user,
+    'sub_equivalent_projection',
+    'equivalent_projection',
+    100,
+    'succeeded',
+    'active',
+    'evt_equivalent_projection_same',
+    '2035-07-03Z',
+    '2035-07-01Z',
+    '2035-08-01Z'
+  ) ->> 'status';
+  IF v_status <> 'already_reconciled' THEN
+    RAISE EXCEPTION
+      'equal recurring projection was not idempotent: %',
+      v_status;
+  END IF;
+
+  v_status := public.test_refund_recurring(
+    v_user,
+    'sub_equivalent_projection',
+    'equivalent_projection',
+    100,
+    'succeeded',
+    'past_due',
+    'evt_equivalent_projection_status',
+    '2035-07-04Z',
+    '2035-07-01Z',
+    '2035-08-01Z'
+  ) ->> 'status';
+  IF v_status <> 'partial_refund'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.id = v_payment_id
+        AND payment.refund_snapshot_event_id =
+          'evt_equivalent_projection_status'
+        AND payment.latest_refund_event_id =
+          'evt_equivalent_projection_status'
+    )
+  THEN
+    RAISE EXCEPTION
+      'changed subscription projection was swallowed: %',
+      v_status;
+  END IF;
+
+  v_status := public.test_refund_recurring(
+    v_user,
+    'sub_equivalent_projection',
+    'equivalent_projection',
+    100,
+    'succeeded',
+    'past_due',
+    'evt_equivalent_projection_status_replay',
+    '2035-07-05Z',
+    '2035-07-01Z',
+    '2035-08-01Z'
+  ) ->> 'status';
+  IF v_status <> 'already_reconciled'
+    OR EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_id IN (
+        'evt_equivalent_projection_same',
+        'evt_equivalent_projection_status',
+        'evt_equivalent_projection_status_replay'
+      )
+    )
+  THEN
+    RAISE EXCEPTION
+      'recurring projection replay opened review: %',
+      v_status;
+  END IF;
+END
+$subscription_status_is_part_of_equivalence$;
+
+DO $equivalent_wakeups_keep_applied_snapshot$
+DECLARE
+  v_user uuid := '10000000-0000-0000-0000-000000000026';
+  v_status text;
+  v_payment_id uuid;
+BEGIN
+  v_status := public.test_activate_lifetime(
+    v_user,
+    'equivalent_wakeups',
+    '2035-01-01Z'
+  ) ->> 'status';
+  IF v_status <> 'activated' THEN
+    RAISE EXCEPTION 'equivalence fixture activation failed: %', v_status;
+  END IF;
+
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'equivalent_wakeups',
+    10000,
+    'succeeded',
+    'evt_equivalent_wakeups_first',
+    '2035-01-05Z',
+    '2035-01-01Z'
+  ) ->> 'status';
+  IF v_status <> 'partial_refund' THEN
+    RAISE EXCEPTION 'first partial refund did not apply: %', v_status;
+  END IF;
+
+  SELECT payment.id
+  INTO v_payment_id
+  FROM public.stripe_entitlement_payments AS payment
+  WHERE payment.stripe_charge_id = 'ch_equivalent_wakeups';
+
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'equivalent_wakeups',
+    10000,
+    'succeeded',
+    'evt_equivalent_wakeups_older',
+    '2035-01-04Z',
+    '2035-01-01Z'
+  ) ->> 'status';
+  IF v_status <> 'already_reconciled' THEN
+    RAISE EXCEPTION 'older equivalent event was not idempotent: %', v_status;
+  END IF;
+
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'equivalent_wakeups',
+    10000,
+    'succeeded',
+    'evt_equivalent_wakeups_same_second',
+    '2035-01-05Z',
+    '2035-01-01Z'
+  ) ->> 'status';
+  IF v_status <> 'already_reconciled' THEN
+    RAISE EXCEPTION 'same-second equivalent event was not idempotent: %', v_status;
+  END IF;
+
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'equivalent_wakeups',
+    10000,
+    'succeeded',
+    'evt_equivalent_wakeups_newer',
+    '2035-01-06Z',
+    '2035-01-01Z'
+  ) ->> 'status';
+  IF v_status <> 'already_reconciled'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.id = v_payment_id
+        AND payment.refund_succeeded_amount = 10000
+        AND payment.refund_state = 'succeeded'
+        AND payment.refund_snapshot_event_id =
+          'evt_equivalent_wakeups_first'
+        AND payment.refund_snapshot_event_created_at = '2035-01-05Z'
+        AND payment.latest_refund_event_id =
+          'evt_equivalent_wakeups_newer'
+        AND payment.latest_refund_event_created_at = '2035-01-06Z'
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_entitlement_refund_events AS refund_event
+      WHERE refund_event.entitlement_payment_id = v_payment_id
+        AND refund_event.event_id IN (
+          'evt_equivalent_wakeups_first',
+          'evt_equivalent_wakeups_older',
+          'evt_equivalent_wakeups_same_second',
+          'evt_equivalent_wakeups_newer'
+        )
+    ) <> 4
+    OR EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_id IN (
+        'evt_equivalent_wakeups_older',
+        'evt_equivalent_wakeups_same_second',
+        'evt_equivalent_wakeups_newer'
+      )
+    )
+  THEN
+    RAISE EXCEPTION
+      'equivalent wakeups changed the applied snapshot or opened review';
+  END IF;
+
+  -- A fresh larger aggregate remains authoritative even when its triggering
+  -- envelope was created before the max-seen equivalent event.
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'equivalent_wakeups',
+    15000,
+    'succeeded',
+    'evt_equivalent_wakeups_growth',
+    '2035-01-03Z',
+    '2035-01-01Z'
+  ) ->> 'status';
+  IF v_status <> 'partial_refund'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.id = v_payment_id
+        AND payment.refund_succeeded_amount = 15000
+        AND payment.refund_snapshot_event_id =
+          'evt_equivalent_wakeups_growth'
+        AND payment.latest_refund_event_id =
+          'evt_equivalent_wakeups_newer'
+    )
+  THEN
+    RAISE EXCEPTION 'older monotonic aggregate did not apply: %', v_status;
+  END IF;
+
+  -- Equal financial amount with a changed fresh lifecycle state is not an
+  -- equivalent projection and must become the applied snapshot.
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'equivalent_wakeups',
+    15000,
+    'failed',
+    'evt_equivalent_wakeups_state_change',
+    '2035-01-02Z',
+    '2035-01-01Z'
+  ) ->> 'status';
+  IF v_status <> 'refund_recorded'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.id = v_payment_id
+        AND payment.refund_succeeded_amount = 15000
+        AND payment.refund_state = 'failed'
+        AND payment.refund_snapshot_event_id =
+          'evt_equivalent_wakeups_state_change'
+        AND payment.latest_refund_event_id =
+          'evt_equivalent_wakeups_newer'
+    )
+  THEN
+    RAISE EXCEPTION 'equal-amount lifecycle change was swallowed: %', v_status;
+  END IF;
+END
+$equivalent_wakeups_keep_applied_snapshot$;
+
+DO $same_second_growth_reaches_full_terminal$
+DECLARE
+  v_user uuid := '10000000-0000-0000-0000-000000000027';
+  v_status text;
+BEGIN
+  PERFORM public.test_activate_lifetime(
+    v_user,
+    'same_second_full',
+    '2035-02-01Z'
+  );
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'same_second_full',
+    10000,
+    'succeeded',
+    'evt_same_second_partial',
+    '2035-02-02Z',
+    '2035-02-01Z'
+  ) ->> 'status';
+  IF v_status <> 'partial_refund' THEN
+    RAISE EXCEPTION 'same-second partial setup failed: %', v_status;
+  END IF;
+
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'same_second_full',
+    50000,
+    'succeeded',
+    'evt_same_second_full',
+    '2035-02-02Z',
+    '2035-02-01Z'
+  ) ->> 'status';
+  IF v_status <> 'revoked'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.stripe_charge_id = 'ch_same_second_full'
+        AND payment.refund_succeeded_amount = 50000
+        AND payment.refund_state = 'succeeded'
+        AND payment.refund_snapshot_event_id = 'evt_same_second_full'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.subscriptions AS subscription
+      WHERE subscription.user_id = v_user
+        AND subscription.status = 'canceled'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_id = 'evt_same_second_full'
+    )
+  THEN
+    RAISE EXCEPTION
+      'same-second partial-to-full refund did not converge: %',
+      v_status;
+  END IF;
+END
+$same_second_growth_reaches_full_terminal$;
+
+DO $partial_aggregate_decrease_is_quarantined$
+DECLARE
+  v_user uuid := '10000000-0000-0000-0000-000000000028';
+  v_status text;
+  v_payment_id uuid;
+BEGIN
+  PERFORM public.test_activate_lifetime(
+    v_user,
+    'partial_decrease',
+    '2035-03-01Z'
+  );
+  PERFORM public.test_refund_lifetime(
+    v_user,
+    'partial_decrease',
+    20000,
+    'succeeded',
+    'evt_partial_decrease_applied',
+    '2035-03-02Z',
+    '2035-03-01Z'
+  );
+  SELECT payment.id
+  INTO v_payment_id
+  FROM public.stripe_entitlement_payments AS payment
+  WHERE payment.stripe_charge_id = 'ch_partial_decrease';
+
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'partial_decrease',
+    10000,
+    'succeeded',
+    'evt_partial_decrease_conflict',
+    '2035-03-03Z',
+    '2035-03-01Z'
+  ) ->> 'status';
+  IF v_status <> 'manual_review' THEN
+    RAISE EXCEPTION 'partial aggregate decrease was accepted: %', v_status;
+  END IF;
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'partial_decrease',
+    10000,
+    'succeeded',
+    'evt_partial_decrease_conflict',
+    '2035-03-03Z',
+    '2035-03-01Z'
+  ) ->> 'status';
+
+  IF v_status <> 'manual_review'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.id = v_payment_id
+        AND payment.refund_succeeded_amount = 20000
+        AND payment.refund_state = 'succeeded'
+        AND payment.refund_snapshot_event_id =
+          'evt_partial_decrease_applied'
+        AND payment.latest_refund_event_id =
+          'evt_partial_decrease_conflict'
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'refund'
+        AND review.object_id = 'evt_partial_decrease_conflict'
+        AND review.reason_key = 'charge_refund_aggregate_decreased'
+    ) <> 1
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.entitlement_payment_id = v_payment_id
+        AND effect.operation_key =
+          'review:charge_refund_aggregate_decreased:evt_partial_decrease_conflict'
+        AND effect.effect_type = 'payment_manual_review'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION
+      'partial decrease changed state or duplicated quarantine effects';
+  END IF;
+END
+$partial_aggregate_decrease_is_quarantined$;
+
+DO $full_refund_remains_terminal$
+DECLARE
+  v_user uuid := '10000000-0000-0000-0000-000000000029';
+  v_status text;
+BEGIN
+  PERFORM public.test_activate_lifetime(
+    v_user,
+    'full_terminal',
+    '2035-04-01Z'
+  );
+  PERFORM public.test_refund_lifetime(
+    v_user,
+    'full_terminal',
+    50000,
+    'succeeded',
+    'evt_full_terminal_applied',
+    '2035-04-02Z',
+    '2035-04-01Z'
+  );
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'full_terminal',
+    30000,
+    'succeeded',
+    'evt_full_terminal_conflict',
+    '2035-04-03Z',
+    '2035-04-01Z'
+  ) ->> 'status';
+
+  IF v_status <> 'manual_review'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.stripe_charge_id = 'ch_full_terminal'
+        AND payment.refund_succeeded_amount = 50000
+        AND payment.refund_state = 'succeeded'
+        AND payment.refund_snapshot_event_id =
+          'evt_full_terminal_applied'
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_id = 'evt_full_terminal_conflict'
+        AND review.reason_key = 'full_refund_terminal_conflict'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION 'full refund terminal state regressed: %', v_status;
+  END IF;
+END
+$full_refund_remains_terminal$;
+
+DO $same_event_growth_and_identity_are_distinct$
+DECLARE
+  v_user uuid := '10000000-0000-0000-0000-000000000030';
+  v_status text;
+  v_payment_id uuid;
+BEGIN
+  PERFORM public.test_activate_lifetime(
+    v_user,
+    'same_event_growth',
+    '2035-05-01Z'
+  );
+  PERFORM public.test_refund_lifetime(
+    v_user,
+    'same_event_growth',
+    10000,
+    'succeeded',
+    'evt_same_event_growth',
+    '2035-05-02Z',
+    '2035-05-01Z'
+  );
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'same_event_growth',
+    15000,
+    'succeeded',
+    'evt_same_event_growth',
+    '2035-05-02Z',
+    '2035-05-01Z'
+  ) ->> 'status';
+  SELECT payment.id
+  INTO v_payment_id
+  FROM public.stripe_entitlement_payments AS payment
+  WHERE payment.stripe_charge_id = 'ch_same_event_growth';
+
+  IF v_status <> 'partial_refund'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.id = v_payment_id
+        AND payment.refund_succeeded_amount = 15000
+        AND payment.refund_snapshot_event_id = 'evt_same_event_growth'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_refund_events AS refund_event
+      WHERE refund_event.event_id = 'evt_same_event_growth'
+        AND refund_event.refund_succeeded_amount = 10000
+        AND refund_event.event_created_at = '2035-05-02Z'
+        AND pg_catalog.jsonb_array_length(refund_event.observations) = 2
+    )
+  THEN
+    RAISE EXCEPTION 'same-event fresh aggregate growth did not apply';
+  END IF;
+
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'same_event_growth',
+    15000,
+    'succeeded',
+    'evt_same_event_growth',
+    '2035-05-02Z',
+    '2035-05-01Z'
+  ) ->> 'status';
+  IF v_status <> 'already_reconciled'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_refund_events AS refund_event
+      WHERE refund_event.event_id = 'evt_same_event_growth'
+        AND pg_catalog.jsonb_array_length(refund_event.observations) = 2
+    )
+  THEN
+    RAISE EXCEPTION
+      'exact same-event replay changed observation history: %',
+      v_status;
+  END IF;
+
+  v_status := public.test_refund_lifetime(
+    v_user,
+    'same_event_growth',
+    15000,
+    'succeeded',
+    'evt_same_event_growth',
+    '2035-05-03Z',
+    '2035-05-01Z'
+  ) ->> 'status';
+  IF v_status <> 'identity_conflict'
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_id = 'evt_same_event_growth'
+        AND review.reason_key = 'refund_event_identity_conflict'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION 'same event id accepted a changed immutable timestamp';
+  END IF;
+END
+$same_event_growth_and_identity_are_distinct$;
