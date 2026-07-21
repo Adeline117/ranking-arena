@@ -9,7 +9,7 @@ import {
 } from '@/lib/metric-trust'
 
 const NOW = new Date('2026-07-21T12:00:00.000Z')
-const RUN_ID = 'run-2026-07-21-01'
+const RUN_ID = 'b'.repeat(64)
 
 function directRawRefs(sourceId = 'binance_futures', runId = RUN_ID) {
   return [
@@ -22,10 +22,14 @@ function directRawRefs(sourceId = 'binance_futures', runId = RUN_ID) {
     {
       role: 'population_manifest' as const,
       ref: `manifest://${sourceId}/${runId}/30D`,
-      sha256: 'b'.repeat(64),
+      sha256: runId,
       sourceRunId: runId,
     },
   ]
+}
+
+function populationSnapshotRef(sourceId = 'binance_futures', runId = RUN_ID) {
+  return directRawRefs(sourceId, runId)[0]
 }
 
 function rebuildRawRefs(runId = RUN_ID) {
@@ -51,7 +55,7 @@ function rebuildRawRefs(runId = RUN_ID) {
     {
       role: 'population_manifest' as const,
       ref: 'manifest://binance-web3/30D',
-      sha256: 'f'.repeat(64),
+      sha256: runId,
       sourceRunId: runId,
     },
   ]
@@ -95,6 +99,7 @@ function input(
       sourceContractVersion: '1',
       sourceRunId: RUN_ID,
       fieldPath: isPnl ? 'performance.pnl' : isMdd ? 'performance.mdd' : 'performance.roi',
+      populationSnapshotRef: populationSnapshotRef(),
       rawRefs: directRawRefs(),
       window: {
         key: '30D',
@@ -122,6 +127,7 @@ function rebuiltRoi(evidence: Partial<MetricTrustEvidence> = {}): RankingMetricI
       sourceId: 'binance_web3_bsc',
       sourceContractVersion: '1',
       fieldPath: 'rebuild.roi',
+      populationSnapshotRef: populationSnapshotRef('binance_web3_bsc'),
       rawRefs: rebuildRawRefs(),
       currency: 'USD',
     },
@@ -153,6 +159,7 @@ function binanceWalletMetric(metric: 'roi' | 'pnl'): RankingMetricInput {
       sourceContractVersion: '1',
       fieldPath:
         metric === 'roi' ? 'board.data.data[].realizedPnlPercent' : 'board.data.data[].realizedPnl',
+      populationSnapshotRef: populationSnapshotRef('binance_web3_bsc'),
       rawRefs: directRawRefs('binance_web3_bsc'),
       currency: 'USD',
     },
@@ -275,6 +282,47 @@ describe('metric trust ranking gate', () => {
     )
   })
 
+  it('binds the source run to exactly one canonical manifest digest', () => {
+    const mismatched = input('roi')
+    mismatched.binding.rawRefs = mismatched.binding.rawRefs.map((rawRef) =>
+      rawRef.role === 'population_manifest' ? { ...rawRef, sha256: 'f'.repeat(64) } : rawRef
+    )
+
+    expect(evaluateMetricRankEligibility(mismatched, NOW).reasons).toContain(
+      'source_manifest_digest_mismatch'
+    )
+    expect(
+      evaluateMetricRankEligibility(
+        input('roi', { binding: { sourceRunId: 'retry-cycle-1' } }),
+        NOW
+      )
+    ).toEqual({ eligible: false, state: 'unknown', reasons: ['trust_input_invalid'] })
+  })
+
+  it('requires population-scoped metrics to reference the exact population payload', () => {
+    const boardRoi = binanceBoardMetric('roi')
+    boardRoi.binding.rawRefs = boardRoi.binding.rawRefs.map((rawRef) =>
+      rawRef.role === 'source_payload'
+        ? { ...rawRef, ref: 'raw://binance_futures/other-page' }
+        : rawRef
+    )
+
+    expect(evaluateMetricRankEligibility(boardRoi, NOW).reasons).toContain(
+      'source_population_payload_mismatch'
+    )
+
+    const withExtraPayload = binanceBoardMetric('roi')
+    withExtraPayload.binding.rawRefs.push({
+      role: 'source_payload',
+      ref: 'raw://binance_futures/unbound-extra-page',
+      sha256: 'd'.repeat(64),
+      sourceRunId: RUN_ID,
+    })
+    expect(evaluateMetricRankEligibility(withExtraPayload, NOW).reasons).toContain(
+      'source_population_payload_mismatch'
+    )
+  })
+
   it('preserves an explicit unknown blocking reason', () => {
     const verdict = evaluateMetricRankEligibility(
       input('roi', {
@@ -393,12 +441,16 @@ describe('metric trust ranking gate', () => {
   })
 
   it('rejects fields from different acquisition runs', () => {
-    const otherRun = 'run-2026-07-21-02'
+    const otherRun = 'c'.repeat(64)
     const verdict = evaluateRankingEligibility(
       {
         roi: input('roi'),
         pnl: input('pnl', {
-          binding: { sourceRunId: otherRun, rawRefs: directRawRefs('binance_futures', otherRun) },
+          binding: {
+            sourceRunId: otherRun,
+            populationSnapshotRef: populationSnapshotRef('binance_futures', otherRun),
+            rawRefs: directRawRefs('binance_futures', otherRun),
+          },
         }),
       },
       ARENA_CORE_30D_USDT_METHOD_ID,
@@ -406,5 +458,19 @@ describe('metric trust ranking gate', () => {
     )
     expect(verdict.reasons).toContain('pnl:source_run_mismatch')
     expect(verdict.state).toBe('unknown')
+  })
+
+  it('rejects cross-family board ROI and profile PnL even inside one run', () => {
+    const verdict = evaluateRankingEligibility(
+      {
+        roi: binanceBoardMetric('roi'),
+        pnl: input('pnl'),
+      },
+      ARENA_CORE_30D_USDT_METHOD_ID,
+      NOW
+    )
+
+    expect(verdict).toMatchObject({ eligible: false, state: 'unknown' })
+    expect(verdict.reasons).toContain('pnl:metric_set_mismatch')
   })
 })
