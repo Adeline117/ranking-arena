@@ -93,6 +93,12 @@ export interface WriteRawInput {
   meta?: Record<string, unknown>
 }
 
+export interface RawObjectReceipt {
+  id: number
+  storagePath: string
+  contentHash: string
+}
+
 interface RawObjectPointer {
   storage_path: string
   bytes: number
@@ -142,8 +148,8 @@ function verifyRawIntegrityMetadata(
   }
 }
 
-/** Write one raw payload; returns the arena.raw_objects id. */
-export async function writeRawObject(input: WriteRawInput): Promise<number> {
+/** Write one raw payload; returns its durable pointer and computed content identity. */
+export async function writeRawObject(input: WriteRawInput): Promise<RawObjectReceipt> {
   const json = JSON.stringify(input.payload)
   const jsonBytes = Buffer.from(json, 'utf8')
   const gz = gzipSync(jsonBytes)
@@ -190,7 +196,11 @@ export async function writeRawObject(input: WriteRawInput): Promise<number> {
       JSON.stringify(meta),
     ]
   )
-  return rows[0].id
+  return {
+    id: rows[0].id,
+    storagePath,
+    contentHash,
+  }
 }
 
 /** Re-read a stored raw payload (re-parse path, spec §5.5). */

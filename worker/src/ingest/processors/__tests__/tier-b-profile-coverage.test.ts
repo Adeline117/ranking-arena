@@ -136,7 +136,11 @@ describe('Tier-B profile coverage accounting', () => {
     }))
     mockOpenSession.mockResolvedValue({ close: mockSessionClose })
     mockSessionClose.mockResolvedValue(undefined)
-    mockWriteRawObject.mockResolvedValue(2_081_896)
+    mockWriteRawObject.mockResolvedValue({
+      id: 2_081_896,
+      storagePath: 'test/tier_b/raw.json.gz',
+      contentHash: 'a'.repeat(64),
+    })
     mockRecordStagingRejects.mockResolvedValue(undefined)
     mockValidateProfile.mockReturnValue([])
     mockValidateStats.mockImplementation((stats: unknown[]) => ({ valid: stats, rejects: [] }))

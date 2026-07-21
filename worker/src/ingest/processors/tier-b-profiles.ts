@@ -260,14 +260,16 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
             { intent: 'scheduled_full' }
           )
 
-          const rawObjectId = await writeRawObject({
-            sourceId: src.id,
-            sourceSlug: src.slug,
-            jobType: 'tier_b',
-            traderId: trader.id,
-            timeframe,
-            payload: bundle.pages,
-          })
+          const rawObjectId = (
+            await writeRawObject({
+              sourceId: src.id,
+              sourceSlug: src.slug,
+              jobType: 'tier_b',
+              traderId: trader.id,
+              timeframe,
+              payload: bundle.pages,
+            })
+          ).id
 
           // Upstream field radar (P1): 1-in-50 traders sample the profile
           // payload shape. Fire-and-forget — never breaks the crawl.

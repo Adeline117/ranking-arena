@@ -71,14 +71,16 @@ async function main() {
           trader.meta,
           { intent: 'scheduled_full' }
         )
-        const rawObjectId = await writeRawObject({
-          sourceId: src.id,
-          sourceSlug: src.slug,
-          jobType: 'tier_b',
-          traderId: trader.id,
-          timeframe: tf,
-          payload: bundle.pages,
-        })
+        const rawObjectId = (
+          await writeRawObject({
+            sourceId: src.id,
+            sourceSlug: src.slug,
+            jobType: 'tier_b',
+            traderId: trader.id,
+            timeframe: tf,
+            payload: bundle.pages,
+          })
+        ).id
         const ctx = ctxOf()
         const parsedPages = bundle.pages.map((page) => ({
           page,

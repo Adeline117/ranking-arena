@@ -103,14 +103,16 @@ export async function processTierC(
 
     // Evidence is durable before a parser or quality gate can fail. Reuse this
     // pointer for every outcome; a Tier-C profile fetch writes RAW exactly once.
-    const rawObjectId = await writeRawObject({
-      sourceId: src.id,
-      sourceSlug: src.slug,
-      jobType: 'tier_c',
-      traderId: existingTraderId,
-      timeframe,
-      payload: bundle.pages,
-    })
+    const rawObjectId = (
+      await writeRawObject({
+        sourceId: src.id,
+        sourceSlug: src.slug,
+        jobType: 'tier_c',
+        traderId: existingTraderId,
+        timeframe,
+        payload: bundle.pages,
+      })
+    ).id
 
     const ctx: ParseCtx = {
       sourceSlug: src.slug,

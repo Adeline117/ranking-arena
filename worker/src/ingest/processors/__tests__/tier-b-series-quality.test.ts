@@ -130,7 +130,11 @@ describe('Tier-B series quality scheduling', () => {
     })
     mockOpenSession.mockResolvedValue({ close: mockSessionClose })
     mockSessionClose.mockResolvedValue(undefined)
-    mockWriteRawObject.mockResolvedValue(2_081_896)
+    mockWriteRawObject.mockResolvedValue({
+      id: 2_081_896,
+      storagePath: 'test/tier_b_series/raw.json.gz',
+      contentHash: 'a'.repeat(64),
+    })
     mockRecordStagingRejects.mockResolvedValue(undefined)
     mockParseProfile.mockReturnValue(profile())
     mockValidateProfile.mockReturnValue([])
