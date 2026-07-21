@@ -51,6 +51,21 @@ const CONTEXT_OPTIONS = {
     '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
 } as const
 
+const DEFAULT_PAGE_FETCH_TIMEOUT_MS = 60_000
+const MIN_PAGE_FETCH_TIMEOUT_MS = 5_000
+const MAX_PAGE_FETCH_TIMEOUT_MS = 300_000
+
+function pageFetchTimeoutMs(src: SourceRow): number {
+  const configured = src.meta?.page_fetch_timeout_ms
+  if (typeof configured !== 'number' || !Number.isFinite(configured)) {
+    return DEFAULT_PAGE_FETCH_TIMEOUT_MS
+  }
+  return Math.min(
+    MAX_PAGE_FETCH_TIMEOUT_MS,
+    Math.max(MIN_PAGE_FETCH_TIMEOUT_MS, Math.floor(configured))
+  )
+}
+
 /**
  * Remove stale Chromium singleton locks when no live process is using the
  * profile dir. Chrome's lock is a symlink (SingletonLock → "host-pid");
@@ -447,25 +462,44 @@ class PlaywrightFetchSession implements FetchSession {
   ): Promise<{ status: number; json: unknown }> {
     const page = await this.page()
     return page.evaluate(
-      async (t) => {
-        const resp = await fetch(t.url, {
-          method: t.method,
-          headers: t.headers,
-          body: t.body === undefined ? undefined : JSON.stringify(t.body),
-        })
-        let json: unknown = null
+      async ({ request, timeoutMs, sourceSlug }) => {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), timeoutMs)
         try {
-          json = await resp.json()
-        } catch {
-          // non-JSON body — caller decides
+          const resp = await fetch(request.url, {
+            method: request.method,
+            headers: request.headers,
+            body: request.body === undefined ? undefined : JSON.stringify(request.body),
+            signal: controller.signal,
+          })
+          let json: unknown = null
+          try {
+            json = await resp.json()
+          } catch {
+            if (controller.signal.aborted) {
+              throw new Error(`[ingest] page fetch timeout (${sourceSlug}, ${timeoutMs}ms)`)
+            }
+            // non-JSON body — caller decides
+          }
+          return { status: resp.status, json }
+        } catch (error) {
+          if (controller.signal.aborted) {
+            throw new Error(`[ingest] page fetch timeout (${sourceSlug}, ${timeoutMs}ms)`)
+          }
+          throw error
+        } finally {
+          clearTimeout(timer)
         }
-        return { status: resp.status, json }
       },
       {
-        url: template.url,
-        method: template.method,
-        headers: template.headers,
-        body: template.body,
+        request: {
+          url: template.url,
+          method: template.method,
+          headers: template.headers,
+          body: template.body,
+        },
+        timeoutMs: pageFetchTimeoutMs(this.src),
+        sourceSlug: this.sourceSlug,
       }
     )
   }

@@ -515,6 +515,68 @@ describe('persistent Chromium profile lanes', () => {
     expect(callback).not.toHaveBeenCalled()
   })
 
+  it('aborts a stalled in-page fetch at the bounded source timeout', async () => {
+    jest.useFakeTimers()
+    const launched = contextMock()
+    ;(launched.page.evaluate as jest.Mock).mockImplementation(
+      async (callback: (input: unknown) => unknown, input: unknown) => callback(input)
+    )
+    mockLaunchPersistentContext.mockResolvedValueOnce(launched.context)
+    const src = source('binance_stalled_page_fetch')
+    src.meta = { page_fetch_timeout_ms: 5_000 }
+
+    const originalFetch = globalThis.fetch
+    const fetchMock = jest.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+            once: true,
+          })
+        })
+    )
+    Object.defineProperty(globalThis, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    })
+    const session = await openSession(src)
+    try {
+      const request = session.pageFetch({
+        url: 'https://example.test/stalled',
+        method: 'GET',
+        headers: {},
+      })
+      const rejection = expect(request).rejects.toThrow(
+        '[ingest] page fetch timeout (binance_stalled_page_fetch, 5000ms)'
+      )
+
+      await jest.advanceTimersByTimeAsync(5_000)
+      await rejection
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://example.test/stalled',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+
+      fetchMock.mockResolvedValueOnce({
+        status: 200,
+        json: async () => ({ recovered: true }),
+      } as Response)
+      await expect(
+        session.pageFetch({
+          url: 'https://example.test/recovered',
+          method: 'GET',
+          headers: {},
+        })
+      ).resolves.toEqual({ status: 200, json: { recovered: true } })
+      expect(launched.close).not.toHaveBeenCalled()
+      expect(mockLaunchPersistentContext).toHaveBeenCalledTimes(1)
+    } finally {
+      await session.close()
+      if (originalFetch) globalThis.fetch = originalFetch
+      else delete (globalThis as { fetch?: typeof fetch }).fetch
+    }
+  })
+
   it('rejects every browser entry point after close without relaunching', async () => {
     const session = await openSession(source('bybit_use_after_close'))
     await session.close()
