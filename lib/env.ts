@@ -147,6 +147,9 @@ const INVITE_SECRET = isServer ? getEnv('INVITE_SECRET', false) : undefined
 // Stripe
 const STRIPE_SECRET_KEY = isServer ? getEnv('STRIPE_SECRET_KEY', false) : undefined
 const STRIPE_WEBHOOK_SECRET = isServer ? getEnv('STRIPE_WEBHOOK_SECRET', false) : undefined
+const STRIPE_WEBHOOK_SECRET_PREVIOUS = isServer
+  ? getEnv('STRIPE_WEBHOOK_SECRET_PREVIOUS', false)
+  : undefined
 
 // Cron / Workers — required in production (protects 50+ endpoints)
 const CRON_SECRET = isServer
@@ -206,6 +209,7 @@ export const env = {
   // ── Stripe ──
   STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET,
+  STRIPE_WEBHOOK_SECRET_PREVIOUS,
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: getEnv('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', false),
   STRIPE_PRO_MONTHLY_PRICE_ID: getEnv('STRIPE_PRO_MONTHLY_PRICE_ID', false),
   STRIPE_PRO_YEARLY_PRICE_ID: getEnv('STRIPE_PRO_YEARLY_PRICE_ID', false),

@@ -2,6 +2,7 @@ import 'server-only'
 import Stripe from 'stripe'
 import { API_PRICING, PRICING } from '@/app/(app)/user-center/membership-config'
 import { stripeMetadataUserId } from '@/lib/stripe/identity'
+import { STRIPE_API_VERSION } from '@/lib/stripe/version'
 
 /**
  * Validates that a required Stripe environment variable is set.
@@ -29,7 +30,7 @@ export function getStripe(): Stripe {
   if (!_stripe) {
     const secretKey = requireEnv('STRIPE_SECRET_KEY')
     _stripe = new Stripe(secretKey, {
-      apiVersion: '2026-04-22.dahlia',
+      apiVersion: STRIPE_API_VERSION,
       typescript: true,
     })
   }
@@ -43,9 +44,16 @@ export function getStripe(): Stripe {
 export function assertStripePaymentRuntimeReady(): void {
   const secretKey = requireEnv('STRIPE_SECRET_KEY')
   const webhookSecret = requireEnv('STRIPE_WEBHOOK_SECRET')
+  const previousWebhookSecret = optionalEnv('STRIPE_WEBHOOK_SECRET_PREVIOUS')
 
   if (!webhookSecret.startsWith('whsec_')) {
     throw new Error('STRIPE_WEBHOOK_SECRET is invalid')
+  }
+  if (previousWebhookSecret && !previousWebhookSecret.startsWith('whsec_')) {
+    throw new Error('STRIPE_WEBHOOK_SECRET_PREVIOUS is invalid')
+  }
+  if (previousWebhookSecret && previousWebhookSecret === webhookSecret) {
+    throw new Error('STRIPE_WEBHOOK_SECRET_PREVIOUS must differ from STRIPE_WEBHOOK_SECRET')
   }
 
   if (process.env.VERCEL_ENV === 'production') {
@@ -466,5 +474,17 @@ export async function getCustomerSubscriptions(customerId: string): Promise<Stri
 // Webhook 签名验证
 export function constructWebhookEvent(payload: string | Buffer, signature: string): Stripe.Event {
   const webhookSecret = requireEnv('STRIPE_WEBHOOK_SECRET')
-  return stripe.webhooks.constructEvent(payload, signature, webhookSecret)
+  try {
+    return stripe.webhooks.constructEvent(payload, signature, webhookSecret)
+  } catch (primaryError) {
+    const previousWebhookSecret = optionalEnv('STRIPE_WEBHOOK_SECRET_PREVIOUS')
+    if (
+      !previousWebhookSecret ||
+      !previousWebhookSecret.startsWith('whsec_') ||
+      previousWebhookSecret === webhookSecret
+    ) {
+      throw primaryError
+    }
+    return stripe.webhooks.constructEvent(payload, signature, previousWebhookSecret)
+  }
 }

@@ -67,7 +67,9 @@ jest.mock('@/lib/env', () => ({
   },
 }))
 
+import Stripe from 'stripe'
 import { NextRequest } from 'next/server'
+import { STRIPE_API_VERSION } from '@/lib/stripe/version'
 import { POST } from '../route'
 
 function request() {
@@ -116,6 +118,16 @@ describe('POST /api/stripe/verify-session', () => {
     })
     mockActivateLifetimeCheckoutEntitlement.mockResolvedValue({ status: 'activated' })
     mockRpc.mockResolvedValue({ error: null })
+  })
+
+  it('constructs its verifier with the shared pinned Stripe API version', async () => {
+    const response = await POST(request())
+
+    expect(response.status).toBe(200)
+    expect(STRIPE_API_VERSION).toBe('2026-04-22.dahlia')
+    expect(Stripe).toHaveBeenCalledWith('sk_test_123', {
+      apiVersion: '2026-04-22.dahlia',
+    })
   })
 
   it('fails closed when a lifetime refund safety lookup is unavailable', async () => {

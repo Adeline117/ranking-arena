@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import type Stripe from 'stripe'
 import { withCron } from '@/lib/api/with-cron'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import {
@@ -8,6 +9,7 @@ import {
   STRIPE_API_PRICE_IDS,
   STRIPE_PRICE_IDS,
 } from '@/lib/stripe'
+import { STRIPE_API_VERSION } from '@/lib/stripe/version'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -25,9 +27,9 @@ export const REQUIRED_WEBHOOK_EVENTS = [
   'invoice.payment_failed',
   'invoice.payment_action_required',
   'invoice.finalization_failed',
-  'charge.refunded',
-  'charge.refund.updated',
+  'refund.created',
   'refund.updated',
+  'refund.failed',
   'charge.dispute.created',
 ] as const
 
@@ -51,6 +53,36 @@ type StripePaidReadiness = {
 } & Record<EntitlementReadinessMetric, number>
 
 const WEBHOOK_URL = 'https://www.arenafi.org/api/stripe/webhook'
+const MAX_WEBHOOK_ENDPOINT_PAGES = 100
+
+async function listEnabledCanonicalWebhookEndpoints(): Promise<Stripe.WebhookEndpoint[]> {
+  const stripe = getStripe()
+  const enabled: Stripe.WebhookEndpoint[] = []
+  const seenCursors = new Set<string>()
+  let startingAfter: string | undefined
+
+  for (let pageIndex = 0; pageIndex < MAX_WEBHOOK_ENDPOINT_PAGES; pageIndex += 1) {
+    const page = await stripe.webhookEndpoints.list({
+      limit: 100,
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    })
+    enabled.push(
+      ...page.data.filter(
+        (endpoint) => endpoint.url === WEBHOOK_URL && endpoint.status === 'enabled'
+      )
+    )
+    if (!page.has_more) return enabled
+
+    const nextCursor = page.data.at(-1)?.id
+    if (!nextCursor || seenCursors.has(nextCursor)) {
+      throw new Error('Stripe webhook endpoint pagination did not advance')
+    }
+    seenCursors.add(nextCursor)
+    startingAfter = nextCursor
+  }
+
+  throw new Error('Stripe webhook endpoint pagination exceeded the safety limit')
+}
 
 function keyMode(value: string | undefined, livePrefix: string, testPrefix: string) {
   if (value?.startsWith(livePrefix)) return 'live'
@@ -100,7 +132,12 @@ export const GET = withCron(
       'pk_test_'
     )
     const promoEnabled = process.env.NEXT_PUBLIC_PRO_FREE_PROMO !== 'false'
-    const webhookSecretConfigured = process.env.STRIPE_WEBHOOK_SECRET?.startsWith('whsec_') === true
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim() || ''
+    const webhookSecretConfigured = webhookSecret.startsWith('whsec_')
+    const previousWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS?.trim() || ''
+    const previousWebhookSecretConfigured = previousWebhookSecret.length > 0
+    const previousWebhookSecretValid = previousWebhookSecret.startsWith('whsec_')
+    const webhookSecretsDistinct = previousWebhookSecret !== webhookSecret
 
     if (secretMode === 'invalid') failures.push('Stripe secret key is missing or invalid')
     if (publishableMode === 'invalid') failures.push('Stripe publishable key is missing or invalid')
@@ -113,11 +150,20 @@ export const GET = withCron(
     }
     if (!webhookSecretConfigured)
       failures.push('Stripe webhook signing secret is missing or invalid')
+    if (previousWebhookSecretConfigured && !previousWebhookSecretValid) {
+      failures.push('Previous Stripe webhook signing secret is invalid')
+    }
+    if (previousWebhookSecretValid && !webhookSecretsDistinct) {
+      failures.push('Previous Stripe webhook signing secret must differ from primary')
+    }
     if (!promoEnabled && secretMode !== 'live') {
       failures.push('Production paywall is enabled without live Stripe keys')
     }
     if (promoEnabled) warnings.push('Owner gate remains: free promo is enabled')
     if (secretMode === 'test') warnings.push('Owner gate remains: Stripe is in test mode')
+    if (previousWebhookSecretValid && webhookSecretsDistinct) {
+      warnings.push('Cutover gate remains: previous Stripe webhook signing secret is configured')
+    }
 
     const proPriceChecks = await Promise.allSettled([
       assertProPriceReady('monthly', STRIPE_PRICE_IDS.monthly),
@@ -143,14 +189,13 @@ export const GET = withCron(
     }
 
     try {
-      const endpoints = await getStripe().webhookEndpoints.list({ limit: 100 })
-      const enabled = endpoints.data.filter(
-        (endpoint) => endpoint.url === WEBHOOK_URL && endpoint.status === 'enabled'
-      )
+      const enabled = await listEnabledCanonicalWebhookEndpoints()
       const expectedEvents = new Set<string>(REQUIRED_WEBHOOK_EVENTS)
       const exactContract =
         enabled.length === 1 &&
+        enabled[0].api_version === STRIPE_API_VERSION &&
         enabled[0].enabled_events.length === expectedEvents.size &&
+        new Set(enabled[0].enabled_events).size === expectedEvents.size &&
         enabled[0].enabled_events.every((event) => expectedEvents.has(event))
       if (!exactContract) {
         failures.push('Enabled Stripe webhook endpoint or event contract has drifted')
@@ -204,7 +249,11 @@ export const GET = withCron(
     }
 
     const paidLaunchReady =
-      failures.length === 0 && !promoEnabled && secretMode === 'live' && publishableMode === 'live'
+      failures.length === 0 &&
+      !promoEnabled &&
+      secretMode === 'live' &&
+      publishableMode === 'live' &&
+      !previousWebhookSecretConfigured
 
     if (failures.length > 0) {
       await sendRateLimitedAlert(

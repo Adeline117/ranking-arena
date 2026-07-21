@@ -4,6 +4,7 @@
  * 测试 Stripe 支付集成
  */
 
+import Stripe from 'stripe'
 import {
   stripe,
   STRIPE_PRICE_IDS,
@@ -21,7 +22,9 @@ import {
   assertProPriceReady,
   assertApiPriceReady,
   assertStripePaymentRuntimeReady,
+  getStripe,
 } from './index'
+import { STRIPE_API_VERSION } from './version'
 
 // Mock server-only (no-op in test environment)
 jest.mock('server-only', () => ({}))
@@ -73,6 +76,7 @@ beforeEach(() => {
     STRIPE_PRO_MONTHLY_PRICE_ID: 'price_monthly_123',
     STRIPE_PRO_YEARLY_PRICE_ID: 'price_yearly_123',
   }
+  delete process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS
 })
 
 afterAll(() => {
@@ -132,6 +136,16 @@ describe('Constants', () => {
 })
 
 describe('getStripe', () => {
+  test('constructs the shared client with the pinned API version', () => {
+    getStripe()
+
+    expect(STRIPE_API_VERSION).toBe('2026-04-22.dahlia')
+    expect(Stripe).toHaveBeenCalledWith('sk_test_123', {
+      apiVersion: '2026-04-22.dahlia',
+      typescript: true,
+    })
+  })
+
   test('should throw error when STRIPE_SECRET_KEY is not defined', () => {
     delete process.env.STRIPE_SECRET_KEY
     // Clear the cached instance
@@ -239,6 +253,22 @@ describe('Stripe payment runtime readiness', () => {
     process.env.STRIPE_WEBHOOK_SECRET = 'invalid'
 
     expect(() => assertStripePaymentRuntimeReady()).toThrow('STRIPE_WEBHOOK_SECRET is invalid')
+  })
+
+  test('rejects an invalid previous webhook signing secret when configured', () => {
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'invalid'
+
+    expect(() => assertStripePaymentRuntimeReady()).toThrow(
+      'STRIPE_WEBHOOK_SECRET_PREVIOUS is invalid'
+    )
+  })
+
+  test('rejects a previous webhook signing secret that equals the primary secret', () => {
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'whsec_test_123'
+
+    expect(() => assertStripePaymentRuntimeReady()).toThrow(
+      'STRIPE_WEBHOOK_SECRET_PREVIOUS must differ from STRIPE_WEBHOOK_SECRET'
+    )
   })
 
   test('rejects test keys for Production payment actions even during a free promo', () => {
@@ -752,8 +782,24 @@ describe('getCustomerSubscriptions', () => {
 })
 
 describe('constructWebhookEvent', () => {
-  test('should construct webhook event', () => {
+  test('constructs with the primary secret when no previous secret is configured', () => {
+    const mockEvent = { id: 'evt_primary', type: 'refund.created' }
+    stripe.webhooks.constructEvent = jest.fn().mockReturnValue(mockEvent)
+
+    const result = constructWebhookEvent('payload', 'signature')
+
+    expect(result).toBe(mockEvent)
+    expect(stripe.webhooks.constructEvent).toHaveBeenCalledTimes(1)
+    expect(stripe.webhooks.constructEvent).toHaveBeenCalledWith(
+      'payload',
+      'signature',
+      'whsec_test_123'
+    )
+  })
+
+  test('returns the primary-secret result without trying the previous secret', () => {
     const mockEvent = { id: 'evt_123', type: 'customer.subscription.created' }
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'whsec_previous_123'
     stripe.webhooks.constructEvent = jest.fn().mockReturnValue(mockEvent)
 
     const result = constructWebhookEvent('payload', 'signature')
@@ -764,5 +810,73 @@ describe('constructWebhookEvent', () => {
       'signature',
       'whsec_test_123'
     )
+    expect(stripe.webhooks.constructEvent).toHaveBeenCalledTimes(1)
+  })
+
+  test('falls back to a distinct valid previous secret after primary verification fails', () => {
+    const mockEvent = { id: 'evt_previous', type: 'refund.created' }
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'whsec_previous_123'
+    stripe.webhooks.constructEvent = jest
+      .fn()
+      .mockImplementation((_payload, _signature, secret) => {
+        if (secret === 'whsec_test_123') throw new Error('primary signature mismatch')
+        return mockEvent
+      })
+
+    const result = constructWebhookEvent('payload', 'signature')
+
+    expect(result).toBe(mockEvent)
+    expect(stripe.webhooks.constructEvent).toHaveBeenNthCalledWith(
+      1,
+      'payload',
+      'signature',
+      'whsec_test_123'
+    )
+    expect(stripe.webhooks.constructEvent).toHaveBeenNthCalledWith(
+      2,
+      'payload',
+      'signature',
+      'whsec_previous_123'
+    )
+  })
+
+  test('throws when both primary and previous signature verification fail', () => {
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'whsec_previous_123'
+    stripe.webhooks.constructEvent = jest
+      .fn()
+      .mockImplementation((_payload, _signature, secret) => {
+        throw new Error(
+          secret === 'whsec_test_123' ? 'primary signature mismatch' : 'previous signature mismatch'
+        )
+      })
+
+    expect(() => constructWebhookEvent('payload', 'signature')).toThrow(
+      'previous signature mismatch'
+    )
+    expect(stripe.webhooks.constructEvent).toHaveBeenCalledTimes(2)
+  })
+
+  test('does not try an invalid previous secret after primary verification fails', () => {
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'invalid'
+    stripe.webhooks.constructEvent = jest.fn().mockImplementation(() => {
+      throw new Error('primary signature mismatch')
+    })
+
+    expect(() => constructWebhookEvent('payload', 'signature')).toThrow(
+      'primary signature mismatch'
+    )
+    expect(stripe.webhooks.constructEvent).toHaveBeenCalledTimes(1)
+  })
+
+  test('does not retry the same secret when previous equals primary', () => {
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'whsec_test_123'
+    stripe.webhooks.constructEvent = jest.fn().mockImplementation(() => {
+      throw new Error('primary signature mismatch')
+    })
+
+    expect(() => constructWebhookEvent('payload', 'signature')).toThrow(
+      'primary signature mismatch'
+    )
+    expect(stripe.webhooks.constructEvent).toHaveBeenCalledTimes(1)
   })
 })
