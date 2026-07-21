@@ -129,7 +129,8 @@ jobs:
             --connect-timeout 5 --max-time 25 \
             --output /tmp/deploy-freshness-health.json --write-out '%{http_code}' \
             "$HEALTH_URL") || HEALTH_CURL_EXIT=$?
-          if [ "$HEALTH_CURL_EXIT" -ne 0 ] || [ "$HEALTH_HTTP" != "200" ]; then
+          if [ "$HEALTH_CURL_EXIT" -ne 0 ] \
+            || [[ "$HEALTH_HTTP" != "200" && "$HEALTH_HTTP" != "202" ]]; then
             fail_freshness "🛑 部署新鲜度哨兵失明：生产 health 不可读（curl=$HEALTH_CURL_EXIT HTTP=${HEALTH_HTTP:-000}）。"
           fi
           if ! jq -e 'type == "object"' /tmp/deploy-freshness-health.json >/dev/null 2>&1; then
@@ -139,8 +140,9 @@ jobs:
           HEALTH_STATUS=$(jq -r '.status // empty' /tmp/deploy-freshness-health.json 2>/dev/null || true)
           DEPLOYED=$(jq -r '.commit // empty' /tmp/deploy-freshness-health.json 2>/dev/null || true)
           echo "HEAD=$HEAD_SHA deployed=${DEPLOYED:-missing} health=${HEALTH_STATUS:-missing}"
-          if [ "$HEALTH_STATUS" != "healthy" ] || [[ ! "$DEPLOYED" =~ ^[0-9a-f]{40}$ ]]; then
-            fail_freshness "🛑 部署新鲜度哨兵失明：生产 health 未提供 healthy + 完整 commit（status=${HEALTH_STATUS:-missing}）。"
+          if [[ "$HEALTH_STATUS" != "healthy" && "$HEALTH_STATUS" != "degraded" ]] \
+            || [[ ! "$DEPLOYED" =~ ^[0-9a-f]{40}$ ]]; then
+            fail_freshness "🛑 部署新鲜度哨兵失明：生产 health 未提供可验证状态 + 完整 commit（status=${HEALTH_STATUS:-missing}）。"
           fi
 
           if [ "$DEPLOYED" = "$HEAD_SHA" ]; then

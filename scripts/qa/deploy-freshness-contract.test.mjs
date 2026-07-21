@@ -180,10 +180,23 @@ test('fails loudly and opens the independent issue when health is unreadable', (
   assert.match(result.summary, /Telegram alert failed/)
 })
 
-test('requires a healthy full deployed SHA before doing ancestry math', () => {
-  const result = runScenario({ healthStatus: 'degraded' })
+test('uses a degraded release identity for deploy ancestry without masking staleness', () => {
+  const result = runScenario({
+    oldestAgeMinutes: 10,
+    newestAgeMinutes: 2,
+    healthStatus: 'degraded',
+    healthHttp: '202',
+  })
+  assert.equal(result.status, 0)
+  assert.match(result.stdout, /health=degraded/)
+  assert.match(result.stdout, /within normal deploy window/)
+  assert.doesNotMatch(result.ghLog, /issue create/)
+})
+
+test('rejects unsupported release states before doing ancestry math', () => {
+  const result = runScenario({ healthStatus: 'unhealthy' })
   assert.equal(result.status, 1)
-  assert.match(result.stdout, /未提供 healthy/)
+  assert.match(result.stdout, /未提供可验证状态/)
   assert.match(result.ghLog, /issue create/)
 })
 
