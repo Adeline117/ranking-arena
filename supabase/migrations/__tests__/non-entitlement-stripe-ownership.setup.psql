@@ -1,0 +1,244 @@
+CREATE TABLE public.tips (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  post_id uuid,
+  from_user_id uuid NOT NULL
+    REFERENCES auth.users(id) ON DELETE CASCADE,
+  to_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  amount_cents integer NOT NULL CHECK (amount_cents > 0),
+  message text,
+  status text NOT NULL DEFAULT 'pending'
+    CONSTRAINT tips_status_check
+    CHECK (
+      status IN ('pending', 'completed', 'failed', 'refunded')
+    ),
+  stripe_checkout_session_id text,
+  stripe_payment_intent_id text,
+  completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
+);
+ALTER TABLE public.tips OWNER TO postgres;
+ALTER TABLE public.tips ENABLE ROW LEVEL SECURITY;
+
+-- Minimal production-shaped paid-group authority projections. The ownership
+-- wrapper proof must show subscription/member rows are absent for refund-first
+-- payments and are rolled back when post-grant central claiming fails.
+CREATE TYPE public.member_role AS ENUM ('owner', 'admin', 'member');
+
+CREATE TABLE public.group_subscriptions (
+  id uuid PRIMARY KEY,
+  group_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  tier text NOT NULL CHECK (tier IN ('monthly', 'yearly', 'trial')),
+  status text NOT NULL
+    CHECK (status IN ('active', 'trialing', 'cancelled', 'expired')),
+  price_paid numeric,
+  starts_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  expires_at timestamptz NOT NULL,
+  cancelled_at timestamptz,
+  cancel_at_period_end boolean NOT NULL DEFAULT false,
+  payment_provider text,
+  payment_reference text,
+  updated_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
+);
+ALTER TABLE public.group_subscriptions OWNER TO postgres;
+
+CREATE TABLE public.group_members (
+  group_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  role public.member_role NOT NULL DEFAULT 'member',
+  joined_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  notifications_muted boolean DEFAULT false,
+  pinned boolean NOT NULL DEFAULT false,
+  mute_reason text,
+  muted_by uuid,
+  muted_until timestamptz,
+  self_notify_muted boolean NOT NULL DEFAULT false,
+  PRIMARY KEY (group_id, user_id)
+);
+ALTER TABLE public.group_members OWNER TO postgres;
+
+CREATE TABLE public.group_payment_consumptions (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  provider text NOT NULL CHECK (provider = 'stripe'),
+  payment_intent_id text NOT NULL,
+  checkout_session_id text,
+  subscription_id uuid NOT NULL,
+  group_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  tier text NOT NULL CHECK (tier IN ('monthly', 'yearly')),
+  amount_cents bigint NOT NULL CHECK (amount_cents > 0),
+  currency text NOT NULL CHECK (currency = 'usd'),
+  outcome text NOT NULL
+    CONSTRAINT group_payment_consumptions_outcome_valid
+    CHECK (outcome IN ('activated', 'renewed')),
+  result jsonb NOT NULL,
+  consumed_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  CONSTRAINT group_payment_consumptions_intent_unique
+    UNIQUE (provider, payment_intent_id),
+  CONSTRAINT group_payment_consumptions_result_valid
+    CHECK (
+      pg_catalog.jsonb_typeof(result) = 'object'
+      AND result ? 'status'
+      AND result ? 'subscription_id'
+      AND result ->> 'status' IN ('subscribed', 'renewed')
+      AND result ->> 'subscription_id' = subscription_id::text
+    )
+);
+ALTER TABLE public.group_payment_consumptions OWNER TO postgres;
+CREATE UNIQUE INDEX group_payment_consumptions_checkout_session_unique
+  ON public.group_payment_consumptions(provider, checkout_session_id)
+  WHERE checkout_session_id IS NOT NULL;
+
+CREATE TABLE public.group_trial_consumptions (
+  group_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  subscription_id uuid NOT NULL,
+  consumed_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  PRIMARY KEY (group_id, user_id)
+);
+ALTER TABLE public.group_trial_consumptions OWNER TO postgres;
+
+CREATE FUNCTION public.prevent_group_pass_ledger_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  RAISE EXCEPTION 'group pass consumption ledgers are immutable'
+    USING ERRCODE = '23514';
+END
+$function$;
+ALTER FUNCTION public.prevent_group_pass_ledger_mutation()
+  OWNER TO postgres;
+CREATE TRIGGER trg_group_payment_consumptions_immutable
+  BEFORE UPDATE OR DELETE ON public.group_payment_consumptions
+  FOR EACH ROW
+  EXECUTE FUNCTION public.prevent_group_pass_ledger_mutation();
+
+CREATE FUNCTION public.activate_group_subscription_atomic(
+  p_actor_id uuid,
+  p_group_id uuid,
+  p_tier text,
+  p_payment_provider text,
+  p_payment_intent_id text,
+  p_checkout_session_id text,
+  p_amount_cents bigint,
+  p_currency text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_subscription_id uuid;
+  v_result jsonb;
+  v_membership_status text;
+BEGIN
+  IF COALESCE((SELECT auth.role()), '') IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'service role required' USING ERRCODE = '42501';
+  END IF;
+  IF p_actor_id IS NULL
+    OR p_group_id IS NULL
+    OR p_tier NOT IN ('monthly', 'yearly')
+    OR p_payment_provider IS DISTINCT FROM 'stripe'
+    OR pg_catalog.left(COALESCE(p_payment_intent_id, ''), 3) <> 'pi_'
+    OR p_amount_cents IS NULL
+    OR p_amount_cents <= 0
+    OR pg_catalog.lower(COALESCE(p_currency, '')) <> 'usd'
+  THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'invalid_payment');
+  END IF;
+
+  SELECT consumption.result
+  INTO v_result
+  FROM public.group_payment_consumptions AS consumption
+  WHERE consumption.provider = 'stripe'
+    AND consumption.payment_intent_id = p_payment_intent_id;
+  IF FOUND THEN
+    RETURN v_result
+      || pg_catalog.jsonb_build_object('idempotent_replay', true);
+  END IF;
+
+  v_subscription_id := pg_catalog.gen_random_uuid();
+  INSERT INTO public.group_subscriptions (
+    id,
+    group_id,
+    user_id,
+    tier,
+    status,
+    price_paid,
+    expires_at,
+    payment_provider,
+    payment_reference
+  ) VALUES (
+    v_subscription_id,
+    p_group_id,
+    p_actor_id,
+    p_tier,
+    'active',
+    p_amount_cents::numeric / 100,
+    pg_catalog.clock_timestamp() + interval '30 days',
+    'stripe',
+    'stripe:' || p_payment_intent_id
+  );
+  INSERT INTO public.group_members (
+    group_id,
+    user_id
+  ) VALUES (
+    p_group_id,
+    p_actor_id
+  ) ON CONFLICT (group_id, user_id) DO NOTHING;
+  IF FOUND THEN
+    v_membership_status := 'joined';
+  ELSE
+    v_membership_status := 'already_member';
+  END IF;
+  v_result := pg_catalog.jsonb_build_object(
+    'status', 'subscribed',
+    'subscription_id', v_subscription_id,
+    'tier', p_tier,
+    'subscription_status', 'active',
+    'membership_status', v_membership_status,
+    'idempotent_replay', false
+  );
+  INSERT INTO public.group_payment_consumptions (
+    provider,
+    payment_intent_id,
+    checkout_session_id,
+    subscription_id,
+    group_id,
+    user_id,
+    tier,
+    amount_cents,
+    currency,
+    outcome,
+    result
+  ) VALUES (
+    'stripe',
+    p_payment_intent_id,
+    p_checkout_session_id,
+    v_subscription_id,
+    p_group_id,
+    p_actor_id,
+    p_tier,
+    p_amount_cents,
+    'usd',
+    'activated',
+    v_result
+  );
+  RETURN v_result;
+END
+$function$;
+ALTER FUNCTION public.activate_group_subscription_atomic(
+  uuid, uuid, text, text, text, text, bigint, text
+) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.activate_group_subscription_atomic(
+  uuid, uuid, text, text, text, text, bigint, text
+) FROM PUBLIC, anon, authenticated, service_role, authenticator;
+GRANT EXECUTE ON FUNCTION public.activate_group_subscription_atomic(
+  uuid, uuid, text, text, text, text, bigint, text
+) TO service_role;

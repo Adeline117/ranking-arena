@@ -1,0 +1,1964 @@
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+
+INSERT INTO auth.users(id) VALUES
+  ('c1000000-0000-0000-0000-000000000001'),
+  ('c1000000-0000-0000-0000-000000000002'),
+  ('c1000000-0000-0000-0000-000000000003');
+INSERT INTO public.user_profiles(id, stripe_customer_id) VALUES
+  (
+    'c1000000-0000-0000-0000-000000000001',
+    'cus_nonentitlement_tip'
+  ),
+  (
+    'c1000000-0000-0000-0000-000000000002',
+    'cus_nonentitlement_group'
+  ),
+  (
+    'c1000000-0000-0000-0000-000000000003',
+    'cus_nonentitlement_concurrent'
+  );
+
+DO $refund_first_tip_writer_later$
+DECLARE
+  v_tip_id uuid := 'c2000000-0000-0000-0000-000000000001';
+  v_record jsonb;
+  v_complete jsonb;
+  v_replay jsonb;
+BEGIN
+  v_record := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000001',
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_tip',
+    'ch_nonentitlement_tip',
+    true,
+    1000,
+    'usd',
+    1000,
+    'succeeded',
+    'evt_nonentitlement_tip',
+    '2035-01-01 00:00:00+00'
+  );
+  IF v_record ->> 'status' <> 'recorded' THEN
+    RAISE EXCEPTION 'refund-first tip tombstone was not recorded: %', v_record;
+  END IF;
+
+  INSERT INTO public.tips (
+    id,
+    from_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    v_tip_id,
+    'c1000000-0000-0000-0000-000000000001',
+    1000,
+    'pending',
+    'cs_nonentitlement_tip'
+  );
+
+  v_complete := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_tip',
+    'ch_nonentitlement_tip',
+    'cs_nonentitlement_tip',
+    1000,
+    'usd',
+    '2035-01-01 00:00:01+00'
+  );
+  IF v_complete ->> 'status' <> 'refunded'
+    OR v_complete ->> 'tombstone_status' <> 'resolved'
+  THEN
+    RAISE EXCEPTION 'tip ownership did not resolve tombstone: %', v_complete;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_payment_ownerships AS ownership
+    WHERE ownership.product_kind = 'tip'
+      AND ownership.ledger_id = v_tip_id
+      AND public.stripe_payment_ownership_is_exact_v2(ownership.id)
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = v_tip_id
+      AND tip.status = 'refunded'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_charge_refund_tombstones AS tombstone
+    JOIN public.stripe_payment_ownerships AS ownership
+      ON ownership.id = tombstone.resolution_ownership_id
+    WHERE tombstone.stripe_charge_id = 'ch_nonentitlement_tip'
+      AND tombstone.resolution_kind = 'non_entitlement_payment'
+      AND tombstone.merged_payment_id IS NULL
+      AND ownership.product_kind = 'tip'
+      AND public.stripe_refund_tombstone_is_resolved_v2(
+        tombstone.stripe_charge_id
+      )
+  ) THEN
+    RAISE EXCEPTION 'tip non-entitlement resolution is not exact';
+  END IF;
+
+  v_replay := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000001',
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_tip',
+    'ch_nonentitlement_tip',
+    true,
+    1000,
+    'usd',
+    1000,
+    'succeeded',
+    'evt_nonentitlement_tip',
+    '2035-01-01 00:00:00+00'
+  );
+  IF v_replay ->> 'status' <> 'already_recorded'
+    OR NOT public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_tip'
+    )
+  THEN
+    RAISE EXCEPTION
+      'tip refund redelivery was not idempotent: %',
+      v_replay;
+  END IF;
+
+  v_replay := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_tip',
+    'ch_nonentitlement_tip',
+    'cs_nonentitlement_tip',
+    1000,
+    'usd',
+    '2035-01-01 00:00:01+00'
+  );
+  IF v_replay ->> 'status' <> 'refunded'
+    OR v_replay ->> 'tombstone_status' <> 'already_resolved'
+  THEN
+    RAISE EXCEPTION 'tip writer replay was not idempotent: %', v_replay;
+  END IF;
+END
+$refund_first_tip_writer_later$;
+
+DO $legacy_tip_completion_bind$
+DECLARE
+  v_tip_id uuid := 'c2000000-0000-0000-0000-000000000011';
+  v_result jsonb;
+BEGIN
+  INSERT INTO public.tips (
+    id,
+    from_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id,
+    stripe_payment_intent_id,
+    completed_at
+  ) VALUES (
+    v_tip_id,
+    'c1000000-0000-0000-0000-000000000001',
+    700,
+    'completed',
+    'cs_nonentitlement_legacy_tip',
+    'pi_nonentitlement_legacy_tip',
+    '2035-01-01 01:00:00+00'
+  );
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_legacy_tip',
+    'ch_nonentitlement_legacy_tip',
+    'cs_nonentitlement_legacy_tip',
+    700,
+    'usd',
+    '2035-01-01 01:00:00+00'
+  );
+  IF v_result ->> 'status' <> 'already_completed'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_payment_ownerships AS ownership
+      WHERE ownership.product_kind = 'tip'
+        AND ownership.ledger_id = v_tip_id
+        AND public.stripe_payment_ownership_is_exact_v2(ownership.id)
+    )
+  THEN
+    RAISE EXCEPTION
+      'legacy completed tip was not exactly bound: %',
+      v_result;
+  END IF;
+END
+$legacy_tip_completion_bind$;
+
+DO $legacy_tip_webhook_redelivery$
+DECLARE
+  v_tip_id uuid := 'c2000000-0000-0000-0000-000000000012';
+  v_conflict_tip_id uuid := 'c2000000-0000-0000-0000-000000000013';
+  v_completed_at timestamptz;
+BEGIN
+  INSERT INTO public.tips (
+    id,
+    from_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    v_tip_id,
+    'c1000000-0000-0000-0000-000000000001',
+    710,
+    'pending',
+    'cs_nonentitlement_legacy_redelivery'
+  );
+  UPDATE public.tips
+  SET status = 'completed',
+      stripe_payment_intent_id =
+        'pi_nonentitlement_legacy_redelivery',
+      completed_at = '2035-01-01 01:10:00+00'
+  WHERE id = v_tip_id;
+  UPDATE public.tips
+  SET status = 'completed',
+      stripe_payment_intent_id =
+        'pi_nonentitlement_legacy_redelivery',
+      completed_at = '2035-01-01 01:11:00+00'
+  WHERE id = v_tip_id;
+  SELECT tip.completed_at
+  INTO v_completed_at
+  FROM public.tips AS tip
+  WHERE tip.id = v_tip_id;
+  IF v_completed_at IS DISTINCT FROM
+      '2035-01-01 01:10:00+00'::timestamptz
+  THEN
+    RAISE EXCEPTION
+      'identity-poor legacy tip redelivery changed terminal time';
+  END IF;
+
+  PERFORM public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_legacy_redelivery',
+    'ch_nonentitlement_legacy_redelivery',
+    'cs_nonentitlement_legacy_redelivery',
+    710,
+    'usd',
+    '2035-01-01 01:10:00+00'
+  );
+  UPDATE public.tips
+  SET status = 'completed',
+      stripe_payment_intent_id =
+        'pi_nonentitlement_legacy_redelivery',
+      completed_at = '2035-01-01 01:12:00+00'
+  WHERE id = v_tip_id;
+  IF (
+    SELECT tip.completed_at
+    FROM public.tips AS tip
+    WHERE tip.id = v_tip_id
+  ) IS DISTINCT FROM '2035-01-01 01:10:00+00'::timestamptz THEN
+    RAISE EXCEPTION
+      'exact-bound legacy tip redelivery changed terminal time';
+  END IF;
+
+  UPDATE public.tips
+  SET status = 'completed',
+      stripe_payment_intent_id = 'pi_nonentitlement_tip',
+      completed_at = '2035-01-01 01:13:00+00'
+  WHERE id = 'c2000000-0000-0000-0000-000000000001';
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = 'c2000000-0000-0000-0000-000000000001'
+      AND tip.status = 'refunded'
+      AND tip.completed_at = '2035-01-01 00:00:01+00'
+  ) THEN
+    RAISE EXCEPTION 'legacy replay regressed refunded tip terminal state';
+  END IF;
+
+  INSERT INTO public.tips (
+    id,
+    from_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id,
+    stripe_payment_intent_id,
+    completed_at
+  ) VALUES (
+    v_conflict_tip_id,
+    'c1000000-0000-0000-0000-000000000001',
+    720,
+    'completed',
+    'cs_nonentitlement_terminal_conflict',
+    'pi_nonentitlement_terminal_conflict',
+    '2035-01-01 01:20:00+00'
+  );
+  UPDATE public.tips
+  SET status = 'identity_conflict'
+  WHERE id = v_conflict_tip_id;
+  UPDATE public.tips
+  SET status = 'completed',
+      stripe_payment_intent_id =
+        'pi_nonentitlement_terminal_conflict',
+      completed_at = '2035-01-01 01:21:00+00'
+  WHERE id = v_conflict_tip_id;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = v_conflict_tip_id
+      AND tip.status = 'identity_conflict'
+      AND tip.completed_at = '2035-01-01 01:20:00+00'
+  ) THEN
+    RAISE EXCEPTION
+      'legacy replay regressed identity-conflict tip terminal state';
+  END IF;
+END
+$legacy_tip_webhook_redelivery$;
+
+DO $refund_first_group_writer_later$
+DECLARE
+  v_result jsonb;
+BEGIN
+  PERFORM public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000002',
+    'cus_nonentitlement_group',
+    'pi_nonentitlement_group',
+    'ch_nonentitlement_group',
+    true,
+    2500,
+    'usd',
+    500,
+    'pending',
+    'evt_nonentitlement_group',
+    '2035-01-02 00:00:00+00'
+  );
+
+  v_result :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'c1000000-0000-0000-0000-000000000002',
+      'c3000000-0000-0000-0000-000000000002',
+      'monthly',
+      'pi_nonentitlement_group',
+      'cs_nonentitlement_group',
+      2500,
+      'usd',
+      'ch_nonentitlement_group',
+      'cus_nonentitlement_group'
+    );
+  IF v_result ->> 'status' <> 'refund_observed'
+    OR v_result ->> 'tombstone_status' <> 'resolved'
+  THEN
+    RAISE EXCEPTION 'group ownership did not resolve tombstone: %', v_result;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_payment_ownerships AS ownership
+    JOIN public.group_payment_consumptions AS consumption
+      ON consumption.id = ownership.ledger_id
+    WHERE ownership.product_kind = 'group_pass'
+      AND ownership.stripe_charge_id = 'ch_nonentitlement_group'
+      AND consumption.provider = 'stripe'
+      AND consumption.outcome = 'refund_blocked'
+      AND consumption.result ->> 'status' = 'refund_observed'
+      AND public.stripe_payment_ownership_is_exact_v2(ownership.id)
+  ) OR NOT public.stripe_refund_tombstone_is_resolved_v2(
+    'ch_nonentitlement_group'
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.group_subscriptions AS subscription
+    WHERE subscription.group_id =
+      'c3000000-0000-0000-0000-000000000002'
+      AND subscription.user_id =
+        'c1000000-0000-0000-0000-000000000002'
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.group_members AS member
+    WHERE member.group_id =
+      'c3000000-0000-0000-0000-000000000002'
+      AND member.user_id =
+        'c1000000-0000-0000-0000-000000000002'
+  ) THEN
+    RAISE EXCEPTION 'group non-entitlement resolution is not exact';
+  END IF;
+END
+$refund_first_group_writer_later$;
+
+DO $payment_first_tip_partial_then_full$
+DECLARE
+  v_tip_id uuid := 'c2000000-0000-0000-0000-000000000021';
+  v_complete jsonb;
+  v_partial jsonb;
+  v_full jsonb;
+  v_replay jsonb;
+BEGIN
+  INSERT INTO public.tips (
+    id,
+    from_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    v_tip_id,
+    'c1000000-0000-0000-0000-000000000001',
+    1200,
+    'pending',
+    'cs_nonentitlement_payment_first_tip'
+  );
+
+  v_complete := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_payment_first_tip',
+    'ch_nonentitlement_payment_first_tip',
+    'cs_nonentitlement_payment_first_tip',
+    1200,
+    'usd',
+    '2035-01-04 00:00:00+00'
+  );
+  IF v_complete ->> 'status' <> 'completed'
+    OR v_complete ->> 'tombstone_status' <> 'no_tombstone'
+  THEN
+    RAISE EXCEPTION 'payment-first tip did not complete: %', v_complete;
+  END IF;
+
+  v_partial := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000001',
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_payment_first_tip',
+    'ch_nonentitlement_payment_first_tip',
+    true,
+    1200,
+    'usd',
+    300,
+    'pending',
+    'evt_nonentitlement_payment_first_tip_partial',
+    '2035-01-04 00:01:00+00'
+  );
+  IF v_partial ->> 'status' <> 'recorded'
+    OR v_partial ->> 'projection_status' <> 'resolved'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_tip_id
+        AND tip.status = 'completed'
+    )
+  THEN
+    RAISE EXCEPTION
+      'payment-first partial tip refund did not classify: %',
+      v_partial;
+  END IF;
+
+  v_full := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000001',
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_payment_first_tip',
+    'ch_nonentitlement_payment_first_tip',
+    true,
+    1200,
+    'usd',
+    1200,
+    'succeeded',
+    'evt_nonentitlement_payment_first_tip_full',
+    '2035-01-04 00:02:00+00'
+  );
+  IF v_full ->> 'status' <> 'recorded'
+    OR v_full ->> 'projection_status' <> 'already_resolved'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_tip_id
+        AND tip.status = 'refunded'
+    )
+    OR NOT public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_payment_first_tip'
+    )
+  THEN
+    RAISE EXCEPTION
+      'payment-first full tip refund was hidden by classification: %',
+      v_full;
+  END IF;
+
+  v_replay := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000001',
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_payment_first_tip',
+    'ch_nonentitlement_payment_first_tip',
+    true,
+    1200,
+    'usd',
+    1200,
+    'succeeded',
+    'evt_nonentitlement_payment_first_tip_full',
+    '2035-01-04 00:02:00+00'
+  );
+  IF v_replay ->> 'status' <> 'already_recorded'
+    OR v_replay ->> 'projection_status' <> 'already_resolved'
+  THEN
+    RAISE EXCEPTION
+      'payment-first full tip refund replay drifted: %',
+      v_replay;
+  END IF;
+END
+$payment_first_tip_partial_then_full$;
+
+DO $payment_first_group_partial_then_full$
+DECLARE
+  v_group_id uuid := 'c3000000-0000-0000-0000-000000000022';
+  v_activate jsonb;
+  v_partial jsonb;
+  v_full jsonb;
+  v_ack jsonb;
+  v_ack_replay jsonb;
+  v_projection_replay jsonb;
+  v_new_snapshot jsonb;
+  v_new_snapshot_ack jsonb;
+  v_readiness jsonb;
+  v_ownership_id uuid;
+  v_subscription_id uuid;
+BEGIN
+  v_activate :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'c1000000-0000-0000-0000-000000000002',
+      v_group_id,
+      'monthly',
+      'pi_nonentitlement_payment_first_group',
+      'cs_nonentitlement_payment_first_group',
+      2600,
+      'usd',
+      'ch_nonentitlement_payment_first_group',
+      'cus_nonentitlement_group'
+    );
+  IF v_activate ->> 'status' <> 'subscribed'
+    OR v_activate ->> 'tombstone_status' <> 'no_tombstone'
+  THEN
+    RAISE EXCEPTION 'payment-first group did not grant: %', v_activate;
+  END IF;
+
+  v_partial := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000002',
+    'cus_nonentitlement_group',
+    'pi_nonentitlement_payment_first_group',
+    'ch_nonentitlement_payment_first_group',
+    true,
+    2600,
+    'usd',
+    400,
+    'pending',
+    'evt_nonentitlement_payment_first_group_partial',
+    '2035-01-05 00:01:00+00'
+  );
+  IF v_partial ->> 'status' <> 'recorded'
+    OR v_partial ->> 'projection_status' <> 'resolved'
+    OR NOT public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_payment_first_group'
+    )
+  THEN
+    RAISE EXCEPTION
+      'payment-first partial group refund did not classify: %',
+      v_partial;
+  END IF;
+
+  v_full := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000002',
+    'cus_nonentitlement_group',
+    'pi_nonentitlement_payment_first_group',
+    'ch_nonentitlement_payment_first_group',
+    true,
+    2600,
+    'usd',
+    2600,
+    'succeeded',
+    'evt_nonentitlement_payment_first_group_full',
+    '2035-01-05 00:02:00+00'
+  );
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  IF v_full ->> 'status' <> 'manual_review'
+    OR v_full ->> 'record_status' <> 'recorded'
+    OR public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_payment_first_group'
+    )
+    OR v_readiness ->> 'status' <> 'blocked'
+    OR (v_readiness ->> 'unresolved_refund_tombstones')::integer < 1
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'group_payment'
+        AND review.reason_key =
+          'group_pass_full_refund_revocation_required'
+        AND review.state = 'open'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.group_subscriptions AS subscription
+      WHERE subscription.group_id = v_group_id
+        AND subscription.user_id =
+          'c1000000-0000-0000-0000-000000000002'
+        AND subscription.status = 'active'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.group_members AS member
+      WHERE member.group_id = v_group_id
+        AND member.user_id =
+          'c1000000-0000-0000-0000-000000000002'
+    )
+  THEN
+    RAISE EXCEPTION
+      'fully refunded active group grant was falsely resolved: %, %',
+      v_full,
+      v_readiness;
+  END IF;
+
+  SELECT ownership.id, consumption.subscription_id
+  INTO v_ownership_id, v_subscription_id
+  FROM public.stripe_payment_ownerships AS ownership
+  JOIN public.group_payment_consumptions AS consumption
+    ON consumption.id = ownership.ledger_id
+  WHERE ownership.stripe_charge_id =
+    'ch_nonentitlement_payment_first_group';
+
+  v_ack :=
+    public.acknowledge_group_pass_full_refund_revocation_atomic(
+      v_ownership_id,
+      v_subscription_id,
+      'evt_nonentitlement_payment_first_group_full',
+      2600,
+      'ops:refund:evt_nonentitlement_payment_first_group_full'
+    );
+  IF v_ack ->> 'status' <> 'acknowledged'
+    OR v_ack ->> 'subscription_action' <> 'expired_exact_payment'
+    OR v_ack ->> 'membership_action' <> 'payment_member_deleted'
+    OR NOT public.group_pass_full_refund_revocation_is_effective_v2(
+      v_ownership_id
+    )
+    OR NOT public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_payment_first_group'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_subscriptions AS subscription
+      WHERE subscription.id = v_subscription_id
+        AND subscription.status IN ('active', 'trialing')
+        AND subscription.expires_at > pg_catalog.statement_timestamp()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_members AS member
+      WHERE member.group_id = v_group_id
+        AND member.user_id =
+          'c1000000-0000-0000-0000-000000000002'
+        AND member.role = 'member'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'group_payment'
+        AND review.object_id = (
+          SELECT consumption.id::text
+          FROM public.group_payment_consumptions AS consumption
+          WHERE consumption.subscription_id = v_subscription_id
+        )
+        AND review.reason_key =
+          'group_pass_full_refund_revocation_required'
+        AND review.state = 'resolved'
+    )
+  THEN
+    RAISE EXCEPTION
+      'exact group refund revocation was not acknowledged: %',
+      v_ack;
+  END IF;
+
+  v_projection_replay :=
+    public.record_charge_refund_tombstone_atomic(
+      'c1000000-0000-0000-0000-000000000002',
+      'cus_nonentitlement_group',
+      'pi_nonentitlement_payment_first_group',
+      'ch_nonentitlement_payment_first_group',
+      true,
+      2600,
+      'usd',
+      2600,
+      'succeeded',
+      'evt_nonentitlement_payment_first_group_full',
+      '2035-01-05 00:02:00+00'
+    );
+  IF v_projection_replay ->> 'projection_status' <>
+      'revocation_acknowledged'
+  THEN
+    RAISE EXCEPTION
+      'acknowledged group revocation did not replay idempotently: %',
+      v_projection_replay;
+  END IF;
+
+  -- Stripe may later emit a distinct event carrying the same final aggregate.
+  -- Preserve the old immutable ack, reopen against the new current snapshot,
+  -- and append a second exact ack instead of mutating history or blocking
+  -- forever on the ownership id.
+  v_new_snapshot := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000002',
+    'cus_nonentitlement_group',
+    'pi_nonentitlement_payment_first_group',
+    'ch_nonentitlement_payment_first_group',
+    true,
+    2600,
+    'usd',
+    2600,
+    'succeeded',
+    'evt_nonentitlement_payment_first_group_full_later',
+    '2035-01-05 00:03:00+00'
+  );
+  IF v_new_snapshot ->> 'status' <> 'manual_review'
+    OR public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_payment_first_group'
+    )
+  THEN
+    RAISE EXCEPTION
+      'new full-refund snapshot trusted a stale acknowledgment: %',
+      v_new_snapshot;
+  END IF;
+
+  v_new_snapshot_ack :=
+    public.acknowledge_group_pass_full_refund_revocation_atomic(
+      v_ownership_id,
+      v_subscription_id,
+      'evt_nonentitlement_payment_first_group_full_later',
+      2600,
+      'ops:refund:evt_nonentitlement_payment_first_group_full_later'
+    );
+  IF v_new_snapshot_ack ->> 'status' <> 'acknowledged'
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.group_pass_refund_revocation_acks AS acknowledgment
+      WHERE acknowledgment.ownership_id = v_ownership_id
+    ) <> 2
+    OR NOT public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_payment_first_group'
+    )
+  THEN
+    RAISE EXCEPTION
+      'new full-refund snapshot did not append an exact acknowledgment: %',
+      v_new_snapshot_ack;
+  END IF;
+
+  -- Historical ack alone is never authority. Re-expanding the exact refunded
+  -- subscription and its payment-created plain member must immediately block
+  -- the tombstone and reopen only the exact revocation review.
+  UPDATE public.group_subscriptions
+  SET status = 'active',
+      expires_at = pg_catalog.clock_timestamp() + interval '30 days',
+      updated_at = pg_catalog.clock_timestamp()
+  WHERE id = v_subscription_id;
+  INSERT INTO public.group_members(group_id, user_id, role)
+  VALUES (
+    v_group_id,
+    'c1000000-0000-0000-0000-000000000002',
+    'member'
+  );
+  IF public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_payment_first_group'
+    )
+  THEN
+    RAISE EXCEPTION
+      'historical group ack trusted resurrected paid authority';
+  END IF;
+  PERFORM public.stripe_resolve_non_entitlement_refund_tombstone_atomic(
+    v_ownership_id
+  );
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_manual_reviews AS review
+    WHERE review.object_type = 'group_payment'
+      AND review.reason_key =
+        'group_pass_full_refund_revocation_required'
+      AND review.state = 'open'
+  ) THEN
+    RAISE EXCEPTION 'resurrected paid-group effect did not reopen review';
+  END IF;
+
+  UPDATE public.group_subscriptions
+  SET status = 'expired',
+      expires_at = LEAST(expires_at, pg_catalog.clock_timestamp()),
+      updated_at = pg_catalog.clock_timestamp()
+  WHERE id = v_subscription_id;
+  DELETE FROM public.group_members
+  WHERE group_id = v_group_id
+    AND user_id =
+      'c1000000-0000-0000-0000-000000000002'
+    AND role = 'member';
+  v_ack_replay :=
+    public.acknowledge_group_pass_full_refund_revocation_atomic(
+      v_ownership_id,
+      v_subscription_id,
+      'evt_nonentitlement_payment_first_group_full_later',
+      2600,
+      'ops:refund:evt_nonentitlement_payment_first_group_full_later'
+    );
+  IF v_ack_replay ->> 'status' <> 'already_acknowledged'
+    OR NOT public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_payment_first_group'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'group_payment'
+        AND review.reason_key =
+          'group_pass_full_refund_revocation_required'
+        AND review.state = 'open'
+    )
+  THEN
+    RAISE EXCEPTION
+      'group refund revocation revalidation did not converge: %',
+      v_ack_replay;
+  END IF;
+END
+$payment_first_group_partial_then_full$;
+
+BEGIN;
+DO $recreated_plain_member_is_not_payment_provenance$
+DECLARE
+  v_group_id uuid := 'c3000000-0000-0000-0000-000000000040';
+  v_activate jsonb;
+  v_full jsonb;
+  v_ack jsonb;
+  v_ownership_id uuid;
+  v_subscription_id uuid;
+  v_payment_member_joined_at timestamptz;
+BEGIN
+  v_activate :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'c1000000-0000-0000-0000-000000000003',
+      v_group_id,
+      'monthly',
+      'pi_nonentitlement_recreated_member',
+      'cs_nonentitlement_recreated_member',
+      2700,
+      'usd',
+      'ch_nonentitlement_recreated_member',
+      'cus_nonentitlement_concurrent'
+    );
+  IF v_activate ->> 'status' <> 'subscribed' THEN
+    RAISE EXCEPTION
+      'recreated-member fixture did not create exact grant: %',
+      v_activate;
+  END IF;
+
+  SELECT
+    ownership.id,
+    consumption.subscription_id,
+    consumption.payment_member_joined_at
+  INTO
+    v_ownership_id,
+    v_subscription_id,
+    v_payment_member_joined_at
+  FROM public.stripe_payment_ownerships AS ownership
+  JOIN public.group_payment_consumptions AS consumption
+    ON consumption.id = ownership.ledger_id
+  WHERE ownership.stripe_charge_id =
+    'ch_nonentitlement_recreated_member';
+  IF v_payment_member_joined_at IS NULL THEN
+    RAISE EXCEPTION 'new atomic group grant omitted member provenance';
+  END IF;
+
+  v_full := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000003',
+    'cus_nonentitlement_concurrent',
+    'pi_nonentitlement_recreated_member',
+    'ch_nonentitlement_recreated_member',
+    true,
+    2700,
+    'usd',
+    2700,
+    'succeeded',
+    'evt_nonentitlement_recreated_member_full',
+    '2035-01-05 00:04:00+00'
+  );
+  IF v_full ->> 'status' <> 'manual_review' THEN
+    RAISE EXCEPTION
+      'recreated-member full refund did not require revocation: %',
+      v_full;
+  END IF;
+
+  DELETE FROM public.group_members
+  WHERE group_id = v_group_id
+    AND user_id = 'c1000000-0000-0000-0000-000000000003';
+  INSERT INTO public.group_members(group_id, user_id, role, joined_at)
+  VALUES (
+    v_group_id,
+    'c1000000-0000-0000-0000-000000000003',
+    'member',
+    v_payment_member_joined_at + interval '1 day'
+  );
+
+  v_ack := public.acknowledge_group_pass_full_refund_revocation_atomic(
+    v_ownership_id,
+    v_subscription_id,
+    'evt_nonentitlement_recreated_member_full',
+    2700,
+    'ops:refund:evt_nonentitlement_recreated_member_full'
+  );
+  IF v_ack ->> 'status' <> 'manual_review'
+    OR v_ack ->> 'reason_key' <>
+      'group_pass_refund_revocation_effect_failed'
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_pass_refund_revocation_acks AS acknowledgment
+      WHERE acknowledgment.ownership_id = v_ownership_id
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.group_subscriptions AS subscription
+      WHERE subscription.id = v_subscription_id
+        AND subscription.status = 'active'
+        AND subscription.expires_at > pg_catalog.statement_timestamp()
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.group_members AS member
+      WHERE member.group_id = v_group_id
+        AND member.user_id =
+          'c1000000-0000-0000-0000-000000000003'
+        AND member.role = 'member'
+        AND member.joined_at =
+          v_payment_member_joined_at + interval '1 day'
+    )
+    OR public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_recreated_member'
+    )
+  THEN
+    RAISE EXCEPTION
+      'recreated plain member was treated as payment provenance: %',
+      v_ack;
+  END IF;
+END
+$recreated_plain_member_is_not_payment_provenance$;
+ROLLBACK;
+
+BEGIN;
+DO $legacy_joined_replay_cannot_infer_member_provenance$
+DECLARE
+  v_group_id uuid := 'c3000000-0000-0000-0000-000000000043';
+  v_legacy jsonb;
+  v_replay jsonb;
+  v_readiness jsonb;
+  v_original_joined_at timestamptz;
+BEGIN
+  v_legacy := public.activate_group_subscription_atomic(
+    'c1000000-0000-0000-0000-000000000003',
+    v_group_id,
+    'monthly',
+    'stripe',
+    'pi_nonentitlement_legacy_recreated_member',
+    'cs_nonentitlement_legacy_recreated_member',
+    2750,
+    'usd'
+  );
+  IF v_legacy ->> 'status' <> 'subscribed'
+    OR v_legacy ->> 'membership_status' <> 'joined'
+  THEN
+    RAISE EXCEPTION
+      'legacy recreated-member fixture did not grant: %',
+      v_legacy;
+  END IF;
+  SELECT member.joined_at
+  INTO v_original_joined_at
+  FROM public.group_members AS member
+  WHERE member.group_id = v_group_id
+    AND member.user_id = 'c1000000-0000-0000-0000-000000000003';
+  DELETE FROM public.group_members
+  WHERE group_id = v_group_id
+    AND user_id = 'c1000000-0000-0000-0000-000000000003';
+  INSERT INTO public.group_members(group_id, user_id, role, joined_at)
+  VALUES (
+    v_group_id,
+    'c1000000-0000-0000-0000-000000000003',
+    'member',
+    v_original_joined_at + interval '1 day'
+  );
+
+  v_replay :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'c1000000-0000-0000-0000-000000000003',
+      v_group_id,
+      'monthly',
+      'pi_nonentitlement_legacy_recreated_member',
+      'cs_nonentitlement_legacy_recreated_member',
+      2750,
+      'usd',
+      'ch_nonentitlement_legacy_recreated_member',
+      'cus_nonentitlement_concurrent'
+    );
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  IF v_replay ->> 'status' <> 'manual_review'
+    OR v_replay ->> 'reason_key' <>
+      'group_pass_membership_provenance_required'
+    OR v_readiness ->> 'status' <> 'blocked'
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_payment_consumptions AS consumption
+      WHERE consumption.payment_intent_id =
+          'pi_nonentitlement_legacy_recreated_member'
+        AND (
+          consumption.stripe_charge_id IS NOT NULL
+          OR consumption.stripe_customer_id IS NOT NULL
+          OR consumption.payment_member_joined_at IS NOT NULL
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.stripe_payment_ownerships AS ownership
+      WHERE ownership.stripe_charge_id =
+        'ch_nonentitlement_legacy_recreated_member'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.group_members AS member
+      WHERE member.group_id = v_group_id
+        AND member.user_id =
+          'c1000000-0000-0000-0000-000000000003'
+        AND member.joined_at = v_original_joined_at + interval '1 day'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.group_subscriptions AS subscription
+      WHERE subscription.group_id = v_group_id
+        AND subscription.user_id =
+          'c1000000-0000-0000-0000-000000000003'
+        AND subscription.status = 'active'
+    )
+  THEN
+    RAISE EXCEPTION
+      'legacy joined replay inferred replacement member provenance: %, %',
+      v_replay,
+      v_readiness;
+  END IF;
+END
+$legacy_joined_replay_cannot_infer_member_provenance$;
+ROLLBACK;
+
+BEGIN;
+DO $preexisting_member_is_never_payment_revocation_state$
+DECLARE
+  v_group_id uuid := 'c3000000-0000-0000-0000-000000000041';
+  v_activate jsonb;
+  v_full jsonb;
+  v_ack jsonb;
+  v_ownership_id uuid;
+  v_subscription_id uuid;
+BEGIN
+  INSERT INTO public.group_members(group_id, user_id, role, joined_at)
+  VALUES (
+    v_group_id,
+    'c1000000-0000-0000-0000-000000000001',
+    'member',
+    '2034-12-01 00:00:00+00'
+  );
+  v_activate :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'c1000000-0000-0000-0000-000000000001',
+      v_group_id,
+      'monthly',
+      'pi_nonentitlement_preexisting_member',
+      'cs_nonentitlement_preexisting_member',
+      2800,
+      'usd',
+      'ch_nonentitlement_preexisting_member',
+      'cus_nonentitlement_tip'
+    );
+  IF v_activate ->> 'status' <> 'subscribed'
+    OR v_activate ->> 'membership_status' <> 'already_member'
+  THEN
+    RAISE EXCEPTION
+      'pre-existing group member was not preserved at grant: %',
+      v_activate;
+  END IF;
+
+  SELECT ownership.id, consumption.subscription_id
+  INTO v_ownership_id, v_subscription_id
+  FROM public.stripe_payment_ownerships AS ownership
+  JOIN public.group_payment_consumptions AS consumption
+    ON consumption.id = ownership.ledger_id
+  WHERE ownership.stripe_charge_id =
+    'ch_nonentitlement_preexisting_member'
+    AND consumption.payment_member_joined_at IS NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'pre-existing group membership acquired false payment provenance';
+  END IF;
+
+  v_full := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000001',
+    'cus_nonentitlement_tip',
+    'pi_nonentitlement_preexisting_member',
+    'ch_nonentitlement_preexisting_member',
+    true,
+    2800,
+    'usd',
+    2800,
+    'succeeded',
+    'evt_nonentitlement_preexisting_member_full',
+    '2035-01-05 00:05:00+00'
+  );
+  IF v_full ->> 'status' <> 'manual_review' THEN
+    RAISE EXCEPTION
+      'pre-existing-member refund did not require revocation: %',
+      v_full;
+  END IF;
+
+  v_ack := public.acknowledge_group_pass_full_refund_revocation_atomic(
+    v_ownership_id,
+    v_subscription_id,
+    'evt_nonentitlement_preexisting_member_full',
+    2800,
+    'ops:refund:evt_nonentitlement_preexisting_member_full'
+  );
+  IF v_ack ->> 'status' <> 'acknowledged'
+    OR v_ack ->> 'membership_action' <> 'membership_preexisting'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.group_members AS member
+      WHERE member.group_id = v_group_id
+        AND member.user_id =
+          'c1000000-0000-0000-0000-000000000001'
+        AND member.joined_at = '2034-12-01 00:00:00+00'
+    )
+    OR NOT public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_preexisting_member'
+    )
+  THEN
+    RAISE EXCEPTION
+      'pre-existing membership was treated as refunded payment state: %',
+      v_ack;
+  END IF;
+END
+$preexisting_member_is_never_payment_revocation_state$;
+ROLLBACK;
+
+BEGIN;
+DO $multi_payment_subscription_stays_manual_review$
+DECLARE
+  v_group_id uuid := 'c3000000-0000-0000-0000-000000000042';
+  v_activate jsonb;
+  v_full jsonb;
+  v_ack jsonb;
+  v_readiness jsonb;
+  v_ownership_id uuid;
+  v_subscription_id uuid;
+BEGIN
+  v_activate :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'c1000000-0000-0000-0000-000000000002',
+      v_group_id,
+      'monthly',
+      'pi_nonentitlement_multi_period_one',
+      'cs_nonentitlement_multi_period_one',
+      2900,
+      'usd',
+      'ch_nonentitlement_multi_period_one',
+      'cus_nonentitlement_group'
+    );
+  IF v_activate ->> 'status' <> 'subscribed' THEN
+    RAISE EXCEPTION
+      'multi-period fixture did not create first exact grant: %',
+      v_activate;
+  END IF;
+  SELECT ownership.id, consumption.subscription_id
+  INTO v_ownership_id, v_subscription_id
+  FROM public.stripe_payment_ownerships AS ownership
+  JOIN public.group_payment_consumptions AS consumption
+    ON consumption.id = ownership.ledger_id
+  WHERE ownership.stripe_charge_id =
+    'ch_nonentitlement_multi_period_one';
+
+  INSERT INTO public.group_payment_consumptions (
+    provider,
+    payment_intent_id,
+    checkout_session_id,
+    subscription_id,
+    group_id,
+    user_id,
+    tier,
+    amount_cents,
+    currency,
+    outcome,
+    result
+  ) VALUES (
+    'stripe',
+    'pi_nonentitlement_multi_period_two',
+    'cs_nonentitlement_multi_period_two',
+    v_subscription_id,
+    v_group_id,
+    'c1000000-0000-0000-0000-000000000002',
+    'monthly',
+    2900,
+    'usd',
+    'renewed',
+    pg_catalog.jsonb_build_object(
+      'status', 'renewed',
+      'subscription_id', v_subscription_id,
+      'membership_status', 'already_member'
+    )
+  );
+
+  v_full := public.record_charge_refund_tombstone_atomic(
+    'c1000000-0000-0000-0000-000000000002',
+    'cus_nonentitlement_group',
+    'pi_nonentitlement_multi_period_one',
+    'ch_nonentitlement_multi_period_one',
+    true,
+    2900,
+    'usd',
+    2900,
+    'succeeded',
+    'evt_nonentitlement_multi_period_one_full',
+    '2035-01-05 00:06:00+00'
+  );
+  IF v_full ->> 'status' <> 'manual_review' THEN
+    RAISE EXCEPTION
+      'multi-period full refund did not require revocation: %',
+      v_full;
+  END IF;
+
+  v_ack := public.acknowledge_group_pass_full_refund_revocation_atomic(
+    v_ownership_id,
+    v_subscription_id,
+    'evt_nonentitlement_multi_period_one_full',
+    2900,
+    'ops:refund:evt_nonentitlement_multi_period_one_full'
+  );
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  IF v_ack ->> 'status' <> 'manual_review'
+    OR v_ack ->> 'reason_key' <>
+      'group_pass_refund_revocation_multi_payment_subscription'
+    OR v_readiness ->> 'status' <> 'blocked'
+    OR public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_nonentitlement_multi_period_one'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_pass_refund_revocation_acks AS acknowledgment
+      WHERE acknowledgment.ownership_id = v_ownership_id
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.group_subscriptions AS subscription
+      WHERE subscription.id = v_subscription_id
+        AND subscription.status = 'active'
+    )
+  THEN
+    RAISE EXCEPTION
+      'multi-period refund was guessed instead of left blocked: %, %',
+      v_ack,
+      v_readiness;
+  END IF;
+END
+$multi_payment_subscription_stays_manual_review$;
+ROLLBACK;
+
+-- A product writer can also classify an already-created exact ledger. The two
+-- concurrent claim sessions prove that the Charge -> PI advisory order plus
+-- global unique keys produce one claim and one idempotent replay.
+INSERT INTO public.tips (
+  id,
+  from_user_id,
+  amount_cents,
+  status,
+  stripe_checkout_session_id,
+  stripe_payment_intent_id,
+  stripe_charge_id,
+  stripe_customer_id,
+  currency,
+  completed_at
+) VALUES (
+  'c2000000-0000-0000-0000-000000000003',
+  'c1000000-0000-0000-0000-000000000003',
+  1500,
+  'completed',
+  'cs_nonentitlement_concurrent',
+  'pi_nonentitlement_concurrent',
+  'ch_nonentitlement_concurrent',
+  'cus_nonentitlement_concurrent',
+  'usd',
+  '2035-01-03 00:00:00+00'
+);
+
+CREATE EXTENSION dblink;
+CREATE FUNCTION public.test_claim_non_entitlement_concurrently()
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_result jsonb;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+  v_result := public.claim_stripe_payment_ownership_atomic(
+    'ch_nonentitlement_concurrent',
+    'pi_nonentitlement_concurrent'
+  );
+  RETURN v_result ->> 'status';
+END
+$function$;
+ALTER FUNCTION public.test_claim_non_entitlement_concurrently()
+  OWNER TO postgres;
+
+DO $concurrent_claim$
+DECLARE
+  v_connection text :=
+    'dbname=' || pg_catalog.current_database()
+      || ' host=' || pg_catalog.current_setting('unix_socket_directories')
+      || ' port=' || pg_catalog.current_setting('port');
+  v_one text;
+  v_two text;
+BEGIN
+  PERFORM public.dblink_connect('ownership_one', v_connection);
+  PERFORM public.dblink_connect('ownership_two', v_connection);
+  PERFORM public.dblink_send_query(
+    'ownership_one',
+    'SELECT public.test_claim_non_entitlement_concurrently()'
+  );
+  PERFORM public.dblink_send_query(
+    'ownership_two',
+    'SELECT public.test_claim_non_entitlement_concurrently()'
+  );
+  SELECT result.status INTO v_one
+  FROM public.dblink_get_result('ownership_one') AS result(status text);
+  SELECT result.status INTO v_two
+  FROM public.dblink_get_result('ownership_two') AS result(status text);
+  PERFORM public.dblink_disconnect('ownership_one');
+  PERFORM public.dblink_disconnect('ownership_two');
+
+  IF NOT (
+      (v_one = 'claimed' AND v_two = 'already_claimed')
+      OR (v_two = 'claimed' AND v_one = 'already_claimed')
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_payment_ownerships AS ownership
+      WHERE ownership.stripe_charge_id =
+        'ch_nonentitlement_concurrent'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION
+      'concurrent product ownership claim was not exact: %, %',
+      v_one,
+      v_two;
+  END IF;
+END
+$concurrent_claim$;
+
+CREATE FUNCTION public.test_group_session_concurrently(p_variant text)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_result jsonb;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+  v_result :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'c1000000-0000-0000-0000-000000000003',
+      CASE p_variant
+        WHEN 'one' THEN
+          'c3000000-0000-0000-0000-000000000031'::uuid
+        ELSE
+          'c3000000-0000-0000-0000-000000000032'::uuid
+      END,
+      'monthly',
+      'pi_nonentitlement_group_concurrent_' || p_variant,
+      'cs_nonentitlement_group_concurrent',
+      1800,
+      'usd',
+      'ch_nonentitlement_group_concurrent_' || p_variant,
+      'cus_nonentitlement_concurrent'
+    );
+  RETURN v_result ->> 'status';
+END
+$function$;
+ALTER FUNCTION public.test_group_session_concurrently(text)
+  OWNER TO postgres;
+
+DO $concurrent_group_session_claim$
+DECLARE
+  v_connection text :=
+    'dbname=' || pg_catalog.current_database()
+      || ' host=' || pg_catalog.current_setting('unix_socket_directories')
+      || ' port=' || pg_catalog.current_setting('port');
+  v_one text;
+  v_two text;
+BEGIN
+  PERFORM public.dblink_connect('group_ownership_one', v_connection);
+  PERFORM public.dblink_connect('group_ownership_two', v_connection);
+  PERFORM public.dblink_send_query(
+    'group_ownership_one',
+    'SELECT public.test_group_session_concurrently(''one'')'
+  );
+  PERFORM public.dblink_send_query(
+    'group_ownership_two',
+    'SELECT public.test_group_session_concurrently(''two'')'
+  );
+  SELECT result.status INTO v_one
+  FROM public.dblink_get_result('group_ownership_one')
+    AS result(status text);
+  SELECT result.status INTO v_two
+  FROM public.dblink_get_result('group_ownership_two')
+    AS result(status text);
+  PERFORM public.dblink_disconnect('group_ownership_one');
+  PERFORM public.dblink_disconnect('group_ownership_two');
+
+  IF NOT (
+      (v_one = 'subscribed' AND v_two = 'identity_conflict')
+      OR (v_two = 'subscribed' AND v_one = 'identity_conflict')
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.group_payment_consumptions AS consumption
+      WHERE consumption.checkout_session_id =
+        'cs_nonentitlement_group_concurrent'
+    ) <> 1
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_payment_ownerships AS ownership
+      WHERE ownership.checkout_session_id =
+        'cs_nonentitlement_group_concurrent'
+    ) <> 1
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.group_subscriptions AS subscription
+      JOIN public.group_payment_consumptions AS consumption
+        ON consumption.subscription_id = subscription.id
+      WHERE consumption.checkout_session_id =
+        'cs_nonentitlement_group_concurrent'
+        AND subscription.status = 'active'
+    ) <> 1
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_id IN (
+          'ch_nonentitlement_group_concurrent_one',
+          'ch_nonentitlement_group_concurrent_two'
+        )
+        AND review.reason_key =
+          'group_pass_cross_product_identity_conflict'
+        AND review.state = 'open'
+    )
+  THEN
+    RAISE EXCEPTION
+      'Checkout Session fence did not serialize concurrent group grants: %, %',
+      v_one,
+      v_two;
+  END IF;
+END
+$concurrent_group_session_claim$;
+
+DROP FUNCTION public.test_claim_non_entitlement_concurrently();
+DROP FUNCTION public.test_group_session_concurrently(text);
+DROP EXTENSION dblink;
+
+DO $cross_product_conflicts_fail_closed$
+DECLARE
+  v_group_conflict jsonb;
+  v_group_session_conflict jsonb;
+  v_pro_conflict jsonb;
+BEGIN
+  v_group_conflict :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'c1000000-0000-0000-0000-000000000002',
+      'c3000000-0000-0000-0000-000000000099',
+      'monthly',
+      'pi_nonentitlement_tip',
+      'cs_nonentitlement_tip',
+      1000,
+      'usd',
+      'ch_nonentitlement_tip',
+      'cus_nonentitlement_tip'
+    );
+  IF v_group_conflict ->> 'status' <> 'identity_conflict'
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_payment_consumptions AS consumption
+      WHERE consumption.payment_intent_id = 'pi_nonentitlement_tip'
+    )
+  THEN
+    RAISE EXCEPTION
+      'cross-product group claim did not fail before grant: %',
+      v_group_conflict;
+  END IF;
+
+  INSERT INTO public.tips (
+    id,
+    from_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    'c2000000-0000-0000-0000-000000000099',
+    'c1000000-0000-0000-0000-000000000001',
+    1100,
+    'pending',
+    'cs_nonentitlement_unclaimed_tip'
+  );
+
+  v_group_session_conflict :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'c1000000-0000-0000-0000-000000000002',
+      'c3000000-0000-0000-0000-000000000098',
+      'monthly',
+      'pi_nonentitlement_group_session_conflict',
+      'cs_nonentitlement_unclaimed_tip',
+      1100,
+      'usd',
+      'ch_nonentitlement_group_session_conflict',
+      'cus_nonentitlement_group'
+    );
+  IF v_group_session_conflict ->> 'status' <> 'identity_conflict'
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_payment_consumptions AS consumption
+      WHERE consumption.payment_intent_id =
+        'pi_nonentitlement_group_session_conflict'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_id =
+          'ch_nonentitlement_group_session_conflict'
+        AND review.state = 'open'
+        AND review.reason_key =
+          'group_pass_cross_product_identity_conflict'
+    )
+  THEN
+    RAISE EXCEPTION
+      'unclaimed cross-product Checkout Session granted a group pass: %',
+      v_group_session_conflict;
+  END IF;
+
+  v_pro_conflict :=
+    public.activate_recurring_entitlement_payment_atomic(
+      'c1000000-0000-0000-0000-000000000001',
+      'cus_nonentitlement_tip',
+      'sub_nonentitlement_conflict',
+      'in_nonentitlement_conflict',
+      'pi_nonentitlement_tip',
+      'ch_nonentitlement_tip',
+      'monthly',
+      1000,
+      'usd',
+      '2035-01-01 00:00:00+00',
+      '2035-02-01 00:00:00+00',
+      'paid',
+      'active'
+    );
+  IF v_pro_conflict ->> 'status' <> 'identity_conflict' THEN
+    RAISE EXCEPTION
+      'unclaimed cross-product Pro payment was allowed to grant: %',
+      v_pro_conflict;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.stripe_entitlement_payments AS payment
+    WHERE payment.stripe_charge_id = 'ch_nonentitlement_tip'
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.subscriptions AS subscription
+    WHERE subscription.stripe_subscription_id =
+      'sub_nonentitlement_conflict'
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.pro_entitlement_grants AS entitlement_grant
+    WHERE entitlement_grant.user_id =
+      'c1000000-0000-0000-0000-000000000001'
+      AND entitlement_grant.source = 'stripe_lifetime_payment'
+  ) THEN
+    RAISE EXCEPTION 'unclaimed Pro payment wrote entitlement authority';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_charge_refund_tombstones AS tombstone
+    JOIN public.stripe_payment_ownerships AS ownership
+      ON ownership.id = tombstone.resolution_ownership_id
+    WHERE tombstone.stripe_charge_id = 'ch_nonentitlement_tip'
+      AND tombstone.resolution_kind = 'non_entitlement_payment'
+      AND ownership.product_kind = 'tip'
+  )
+  THEN
+    RAISE EXCEPTION
+      'Pro activation overwrote non-entitlement ownership';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_manual_reviews AS review
+    WHERE review.object_id = 'ch_nonentitlement_tip'
+      AND review.state = 'open'
+      AND review.reason_key IN (
+        'group_pass_cross_product_identity_conflict',
+        'cross_product_payment_identity_conflict',
+        'payment_identity_conflict'
+      )
+  ) THEN
+    RAISE EXCEPTION 'cross-product identity conflict was not durable';
+  END IF;
+END
+$cross_product_conflicts_fail_closed$;
+
+CREATE FUNCTION public.test_reject_group_central_ownership()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF NEW.stripe_charge_id =
+    'ch_nonentitlement_post_grant_conflict'
+  THEN
+    RAISE EXCEPTION 'injected post-grant ownership failure'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION public.test_reject_group_central_ownership()
+  OWNER TO postgres;
+CREATE TRIGGER trg_test_reject_group_central_ownership
+  BEFORE INSERT ON public.stripe_payment_ownerships
+  FOR EACH ROW
+  EXECUTE FUNCTION public.test_reject_group_central_ownership();
+
+DO $post_grant_claim_failure_is_durable$
+DECLARE
+  v_group_id uuid := 'c3000000-0000-0000-0000-000000000096';
+  v_result jsonb;
+BEGIN
+  v_result :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'c1000000-0000-0000-0000-000000000002',
+      v_group_id,
+      'monthly',
+      'pi_nonentitlement_post_grant_conflict',
+      'cs_nonentitlement_post_grant_conflict',
+      1900,
+      'usd',
+      'ch_nonentitlement_post_grant_conflict',
+      'cus_nonentitlement_group'
+    );
+  IF v_result ->> 'status' <> 'identity_conflict'
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_payment_consumptions AS consumption
+      WHERE consumption.payment_intent_id =
+        'pi_nonentitlement_post_grant_conflict'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_subscriptions AS subscription
+      WHERE subscription.group_id = v_group_id
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_members AS member
+      WHERE member.group_id = v_group_id
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.stripe_payment_ownerships AS ownership
+      WHERE ownership.stripe_charge_id =
+        'ch_nonentitlement_post_grant_conflict'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_id =
+          'ch_nonentitlement_post_grant_conflict'
+        AND review.reason_key =
+          'group_pass_post_grant_ownership_conflict'
+        AND review.state = 'open'
+    )
+  THEN
+    RAISE EXCEPTION
+      'post-grant ownership failure was not rolled back with durable review: %',
+      v_result;
+  END IF;
+END
+$post_grant_claim_failure_is_durable$;
+
+DROP TRIGGER trg_test_reject_group_central_ownership
+  ON public.stripe_payment_ownerships;
+DROP FUNCTION public.test_reject_group_central_ownership();
+
+-- The reused 181830 fixture intentionally leaves unrelated unresolved
+-- tombstones behind. In a rolled-back readiness-only transaction, remove that
+-- pre-existing debt plus the deliberately blocked active-group full refund,
+-- then prove every safely projected non-entitlement chain contributes exactly
+-- zero unresolved tombstones.
+BEGIN;
+DELETE FROM public.stripe_charge_refund_tombstone_events AS event_row
+USING public.stripe_charge_refund_tombstones AS tombstone
+WHERE event_row.stripe_charge_id = tombstone.stripe_charge_id
+  AND NOT public.stripe_refund_tombstone_is_resolved_v2(
+    tombstone.stripe_charge_id
+  );
+DELETE FROM public.stripe_charge_refund_tombstones AS tombstone
+WHERE NOT public.stripe_refund_tombstone_is_resolved_v2(
+  tombstone.stripe_charge_id
+);
+
+DO $readiness_zero$
+DECLARE
+  v_readiness jsonb := public.stripe_paid_launch_readiness_v2();
+  v_authority_drift_before integer;
+  v_authority_drift_legacy integer;
+  v_authority_drift_after integer;
+  v_legacy_group jsonb;
+  v_subscription_id uuid :=
+    'c4000000-0000-0000-0000-000000000099';
+BEGIN
+  IF (v_readiness ->> 'unresolved_refund_tombstones')::integer <> 0 THEN
+    RAISE EXCEPTION
+      'resolved non-entitlement tombstones still block readiness: %',
+      v_readiness;
+  END IF;
+
+  v_authority_drift_before :=
+    (v_readiness ->> 'authority_drift')::integer;
+
+  -- Simulate the additive window in which an old application writer commits
+  -- a completed tip and activated group pass without fresh Charge/Customer
+  -- identity. Neither row may disappear from launch readiness.
+  INSERT INTO public.tips (
+    id,
+    from_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id,
+    stripe_payment_intent_id,
+    completed_at
+  ) VALUES (
+    'c2000000-0000-0000-0000-000000000095',
+    'c1000000-0000-0000-0000-000000000001',
+    800,
+    'completed',
+    'cs_nonentitlement_legacy_window_tip',
+    'pi_nonentitlement_legacy_window_tip',
+    '2035-01-06 00:00:00+00'
+  );
+  v_legacy_group := public.activate_group_subscription_atomic(
+    'c1000000-0000-0000-0000-000000000002',
+    'c3000000-0000-0000-0000-000000000095',
+    'monthly',
+    'stripe',
+    'pi_nonentitlement_legacy_window_group',
+    'cs_nonentitlement_legacy_window_group',
+    1300,
+    'usd'
+  );
+  IF v_legacy_group ->> 'status' <> 'subscribed' THEN
+    RAISE EXCEPTION
+      'legacy group writer fixture did not grant: %',
+      v_legacy_group;
+  END IF;
+
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  v_authority_drift_legacy :=
+    (v_readiness ->> 'authority_drift')::integer;
+  IF v_authority_drift_legacy
+      IS DISTINCT FROM v_authority_drift_before + 2
+  THEN
+    RAISE EXCEPTION
+      'legacy-window non-entitlement writers escaped readiness: %',
+      v_readiness;
+  END IF;
+
+  INSERT INTO public.group_payment_consumptions (
+    provider,
+    payment_intent_id,
+    checkout_session_id,
+    subscription_id,
+    group_id,
+    user_id,
+    tier,
+    amount_cents,
+    currency,
+    outcome,
+    result,
+    stripe_charge_id,
+    stripe_customer_id
+  ) VALUES (
+    'stripe',
+    'pi_nonentitlement_unclaimed_readiness',
+    'cs_nonentitlement_unclaimed_readiness',
+    v_subscription_id,
+    'c3000000-0000-0000-0000-000000000097',
+    'c1000000-0000-0000-0000-000000000002',
+    'monthly',
+    900,
+    'usd',
+    'activated',
+    pg_catalog.jsonb_build_object(
+      'status', 'subscribed',
+      'subscription_id', v_subscription_id,
+      'membership_status', 'already_member'
+    ),
+    'ch_nonentitlement_unclaimed_readiness',
+    'cus_nonentitlement_group'
+  );
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  v_authority_drift_after :=
+    (v_readiness ->> 'authority_drift')::integer;
+  IF v_authority_drift_after
+      IS DISTINCT FROM v_authority_drift_before + 3
+  THEN
+    RAISE EXCEPTION
+      'an exact non-entitlement ledger without central ownership did not block readiness: %',
+      v_readiness;
+  END IF;
+END
+$readiness_zero$;
+ROLLBACK;
+
+DO $authority$
+DECLARE
+  v_function pg_catalog.regprocedure;
+BEGIN
+  -- The cluster bootstrap role is a second superuser in this harness. Its
+  -- implicit access is not an object ACL and must not make PREDEPLOY fail.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolsuper
+      AND role_row.oid <> pg_catalog.to_regrole('postgres')
+      AND pg_catalog.has_column_privilege(
+        role_row.rolname,
+        'public.tips',
+        'stripe_charge_id',
+        'SELECT'
+      )
+  ) THEN
+    RAISE EXCEPTION 'bootstrap superuser ACL control is missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class AS relation
+    WHERE relation.oid =
+        'public.stripe_payment_ownerships'::pg_catalog.regclass
+      AND relation.relowner = pg_catalog.to_regrole('postgres')
+      AND relation.relrowsecurity
+      AND relation.relforcerowsecurity
+  ) OR NOT pg_catalog.has_table_privilege(
+    'service_role',
+    'public.stripe_payment_ownerships',
+    'SELECT'
+  ) OR pg_catalog.has_table_privilege(
+    'service_role',
+    'public.stripe_payment_ownerships',
+    'INSERT,UPDATE,DELETE'
+  ) OR pg_catalog.has_table_privilege(
+    'authenticated',
+    'public.stripe_payment_ownerships',
+    'SELECT'
+  ) THEN
+    RAISE EXCEPTION 'central ownership table authority is open';
+  END IF;
+
+  FOREACH v_function IN ARRAY ARRAY[
+    'public.record_charge_refund_tombstone_atomic(uuid,text,text,text,boolean,bigint,text,bigint,text,text,timestamp with time zone)'::pg_catalog.regprocedure,
+    'public.claim_stripe_payment_ownership_atomic(text,text)'::pg_catalog.regprocedure,
+    'public.stripe_resolve_non_entitlement_refund_tombstone_atomic(uuid)'::pg_catalog.regprocedure,
+    'public.complete_tip_with_stripe_ownership_atomic(uuid,text,text,text,text,bigint,text,timestamp with time zone)'::pg_catalog.regprocedure,
+    'public.activate_group_subscription_with_stripe_ownership_atomic(uuid,uuid,text,text,text,bigint,text,text,text)'::pg_catalog.regprocedure,
+    'public.acknowledge_group_pass_full_refund_revocation_atomic(uuid,uuid,text,bigint,text)'::pg_catalog.regprocedure
+  ]
+  LOOP
+    IF NOT pg_catalog.has_function_privilege(
+      'service_role',
+      v_function,
+      'EXECUTE'
+    ) OR pg_catalog.has_function_privilege(
+      'authenticated',
+      v_function,
+      'EXECUTE'
+    ) OR pg_catalog.has_function_privilege(
+      'shadow_payment_auditor',
+      v_function,
+      'EXECUTE'
+    ) OR (
+      SELECT function_row.proowner
+      FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid = v_function
+    ) IS DISTINCT FROM pg_catalog.to_regrole('postgres')
+    OR (
+      SELECT function_row.proconfig
+      FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid = v_function
+    ) @> ARRAY['search_path=pg_catalog, pg_temp']::text[]
+      IS DISTINCT FROM true
+    THEN
+      RAISE EXCEPTION 'ownership RPC authority drifted: %', v_function;
+    END IF;
+  END LOOP;
+
+  IF pg_catalog.has_function_privilege(
+    'service_role',
+    'public.record_charge_refund_tombstone_financial_legacy_v2(uuid,text,text,text,boolean,bigint,text,bigint,text,text,timestamp with time zone)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'service_role',
+    'public.bind_group_pass_stripe_ownership_atomic(text,text,text,timestamp with time zone)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'authenticated',
+    'public.record_charge_refund_tombstone_financial_legacy_v2(uuid,text,text,text,boolean,bigint,text,bigint,text,text,timestamp with time zone)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'shadow_payment_auditor',
+    'public.record_charge_refund_tombstone_financial_legacy_v2(uuid,text,text,text,boolean,bigint,text,bigint,text,text,timestamp with time zone)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'shadow_payment_auditor',
+    'public.stripe_merge_charge_refund_tombstone_v2(uuid)',
+    'EXECUTE'
+  ) OR pg_catalog.has_column_privilege(
+    'shadow_payment_auditor',
+    'public.tips',
+    'stripe_charge_id',
+    'SELECT'
+  ) OR pg_catalog.has_column_privilege(
+    'shadow_payment_auditor',
+    'public.tips',
+    'stripe_customer_id',
+    'SELECT'
+  ) THEN
+    RAISE EXCEPTION
+      'private Stripe helper or tip financial identity remained exposed';
+  END IF;
+END
+$authority$;
+
+DO $ack_immutable$
+BEGIN
+  BEGIN
+    UPDATE public.group_pass_refund_revocation_acks
+    SET membership_action = membership_action
+    WHERE true;
+    RAISE EXCEPTION 'revocation ack update unexpectedly succeeded';
+  EXCEPTION
+    WHEN check_violation THEN
+      NULL;
+  END;
+END
+$ack_immutable$;
+
+\echo 'Non-entitlement Stripe payment ownership fixture passed'

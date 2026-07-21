@@ -1,0 +1,123 @@
+-- Production-shaped prerequisites for applying the real atomic paid-group
+-- migration inside the Stripe entitlement PG17 harness. Unlike the primary
+-- fixture, this file does not define a test replacement group writer.
+
+GRANT service_role TO authenticator WITH INHERIT FALSE, SET TRUE;
+
+ALTER TABLE public.user_profiles
+  ADD COLUMN reputation_score integer NOT NULL DEFAULT 0,
+  ADD COLUMN is_verified_trader boolean NOT NULL DEFAULT false;
+ALTER TABLE public.user_profiles OWNER TO postgres;
+
+CREATE TABLE public.tips (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  post_id uuid,
+  from_user_id uuid NOT NULL
+    REFERENCES auth.users(id) ON DELETE CASCADE,
+  to_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  amount_cents integer NOT NULL CHECK (amount_cents > 0),
+  message text,
+  status text NOT NULL DEFAULT 'pending'
+    CONSTRAINT tips_status_check
+    CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
+  stripe_checkout_session_id text,
+  stripe_payment_intent_id text,
+  completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
+);
+ALTER TABLE public.tips OWNER TO postgres;
+ALTER TABLE public.tips ENABLE ROW LEVEL SECURITY;
+
+CREATE TYPE public.member_role AS ENUM ('owner', 'admin', 'member');
+
+CREATE TABLE public.groups (
+  id uuid PRIMARY KEY,
+  name text NOT NULL,
+  created_by uuid NOT NULL,
+  dissolved_at timestamptz,
+  is_premium_only boolean NOT NULL DEFAULT false,
+  subscription_price_monthly numeric,
+  subscription_price_yearly numeric,
+  original_price_monthly numeric,
+  original_price_yearly numeric,
+  allow_trial boolean NOT NULL DEFAULT false,
+  trial_days integer,
+  min_arena_score integer,
+  is_verified_only boolean,
+  member_count integer NOT NULL DEFAULT 0
+);
+ALTER TABLE public.groups OWNER TO postgres;
+
+CREATE TABLE public.group_members (
+  group_id uuid NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
+  role public.member_role NOT NULL DEFAULT 'member',
+  joined_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  notifications_muted boolean DEFAULT false,
+  pinned boolean NOT NULL DEFAULT false,
+  mute_reason text,
+  muted_by uuid,
+  muted_until timestamptz,
+  self_notify_muted boolean NOT NULL DEFAULT false,
+  PRIMARY KEY (group_id, user_id)
+);
+ALTER TABLE public.group_members OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.test_sync_group_member_count()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE public.groups
+    SET member_count = member_count + 1
+    WHERE id = NEW.group_id;
+    RETURN NEW;
+  END IF;
+  UPDATE public.groups
+  SET member_count = member_count - 1
+  WHERE id = OLD.group_id;
+  RETURN OLD;
+END
+$function$;
+ALTER FUNCTION public.test_sync_group_member_count() OWNER TO postgres;
+CREATE TRIGGER trg_test_sync_group_member_count
+  AFTER INSERT OR DELETE ON public.group_members
+  FOR EACH ROW
+  EXECUTE FUNCTION public.test_sync_group_member_count();
+
+CREATE TABLE public.group_bans (
+  group_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  PRIMARY KEY (group_id, user_id)
+);
+ALTER TABLE public.group_bans OWNER TO postgres;
+
+CREATE TABLE public.pro_official_groups (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  group_id uuid NOT NULL UNIQUE,
+  is_active boolean NOT NULL DEFAULT true
+);
+ALTER TABLE public.pro_official_groups OWNER TO postgres;
+
+CREATE TABLE public.group_subscriptions (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  group_id uuid NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
+  tier text NOT NULL,
+  status text NOT NULL DEFAULT 'active',
+  price_paid numeric,
+  starts_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  expires_at timestamptz NOT NULL,
+  cancelled_at timestamptz,
+  payment_provider text,
+  payment_reference text,
+  created_at timestamptz DEFAULT pg_catalog.clock_timestamp(),
+  updated_at timestamptz
+);
+ALTER TABLE public.group_subscriptions OWNER TO postgres;
+ALTER TABLE public.group_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.group_subscriptions NO FORCE ROW LEVEL SECURITY;
