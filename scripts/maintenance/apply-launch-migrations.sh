@@ -5,6 +5,11 @@
 # Usage:
 #   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh status
 #   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh dry-run-all
+#   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh \
+#     dry-run-predeploy-one 20260721140000_idempotent_equivalent_refund_events.sql
+#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY_ONE_20260721140000 \
+#     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh \
+#     apply-predeploy-one 20260721140000_idempotent_equivalent_refund_events.sql
 #   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh dry-run-recovery
 #   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_CONCURRENT_RECOVERY \
 #     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-concurrent-recovery
@@ -85,6 +90,14 @@ PREDEPLOY_MIGRATIONS=(
   20260718184550_durable_tip_completion_notification.sql
   20260721120000_metric_trust_shadow_gate.sql
   20260721130000_raw_object_gc_outbox.sql
+  20260721140000_idempotent_equivalent_refund_events.sql
+)
+
+# A selective apply bypasses manifest ordering, so it is more restrictive than
+# the normal predeploy phase. Add a migration here only after proving it has no
+# dependency on earlier missing rows and its own preflight validates the live
+# predecessor contract.
+INDEPENDENT_PREDEPLOY_MIGRATIONS=(
   20260721140000_idempotent_equivalent_refund_events.sql
 )
 
@@ -415,6 +428,30 @@ require_exact_migrations() {
   done
 }
 
+require_predeploy_target() {
+  local target="$1"
+  local migration
+  local in_manifest=false
+
+  for migration in "${PREDEPLOY_MIGRATIONS[@]}"; do
+    if [[ "$migration" == "$target" ]]; then
+      in_manifest=true
+      break
+    fi
+  done
+  if [[ "$in_manifest" != "true" ]]; then
+    echo "predeploy target is not in the audited manifest: $target" >&2
+    exit 2
+  fi
+  for migration in "${INDEPENDENT_PREDEPLOY_MIGRATIONS[@]}"; do
+    if [[ "$migration" == "$target" ]]; then
+      return
+    fi
+  done
+  echo "predeploy target is not approved for an independent apply: $target" >&2
+  exit 2
+}
+
 emit_concurrent_migration() {
   local migration="$1"
   local version
@@ -604,6 +641,15 @@ main() {
     dry-run-all)
       emit_all_dry_run | run_sql_stream
       ;;
+    dry-run-predeploy-one)
+      if [[ "$#" != "2" ]]; then
+        echo "usage: $0 dry-run-predeploy-one <manifest-migration.sql>" >&2
+        exit 2
+      fi
+      local migration="$2"
+      require_predeploy_target "$migration"
+      emit_transaction 'ROLLBACK' "$migration" | run_sql_stream
+      ;;
     dry-run-recovery)
       local migration
       local state
@@ -671,6 +717,20 @@ main() {
       fi
       emit_transaction 'COMMIT' "${PREDEPLOY_MIGRATIONS[@]}" | run_sql_stream
       ;;
+    apply-predeploy-one)
+      if [[ "$#" != "2" ]]; then
+        echo "usage: $0 apply-predeploy-one <manifest-migration.sql>" >&2
+        exit 2
+      fi
+      local migration="$2"
+      local confirmation="APPLY_PREDEPLOY_ONE_$(migration_version "$migration")"
+      require_predeploy_target "$migration"
+      if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "$confirmation" ]]; then
+        echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=$confirmation" >&2
+        exit 1
+      fi
+      emit_transaction 'COMMIT' "$migration" | run_sql_stream
+      ;;
     apply-postdeploy)
       if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_POSTDEPLOY" ]]; then
         echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_POSTDEPLOY" >&2
@@ -725,7 +785,7 @@ main() {
       done
       ;;
     *)
-      echo "usage: $0 {status|dry-run-all|dry-run-recovery|apply-concurrent-recovery|apply-predeploy|apply-postdeploy|apply-recovery}" >&2
+      echo "usage: $0 {status|dry-run-all|dry-run-predeploy-one|dry-run-recovery|apply-concurrent-recovery|apply-predeploy|apply-predeploy-one|apply-postdeploy|apply-recovery}" >&2
       exit 2
       ;;
   esac
