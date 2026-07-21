@@ -501,6 +501,54 @@ describe('captureNumericLeaderboard', () => {
     expect(pacedCause).toBeInstanceOf(BlockedUpstreamError)
   })
 
+  it('carries frozen RAW when a 2xx response fails metadata validation', async () => {
+    const validationError = new TypeError('application envelope is invalid')
+    let thrown: unknown
+    try {
+      await captureNumericLeaderboard(
+        captureOptions(makeCaptureFetcher([{ rows: ['untrusted'], total: 1 }]), {
+          extractMeta: () => {
+            throw validationError
+          },
+        })
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    expect(thrown).toMatchObject({
+      status: 200,
+      cause: validationError,
+      capture: {
+        terminationReason: 'upstream_error',
+        parsePages: [],
+        sourcePages: [
+          {
+            httpStatus: 200,
+            sourceRowCount: 0,
+            sourceReports: {
+              population: { state: 'not_reported' },
+              page_count: { state: 'not_reported' },
+              current_page: { state: 'not_reported' },
+              page_size: { state: 'not_reported' },
+            },
+            rawPage: {
+              payload: {
+                rows: ['untrusted'],
+                total: 1,
+                pages: null,
+                current: null,
+                size: null,
+              },
+            },
+          },
+        ],
+      },
+    })
+    expect(Object.isFrozen((thrown as LeaderboardCaptureUpstreamError).capture)).toBe(true)
+  })
+
   it('deep-freezes the canonical response before metadata and parser consumers see it', async () => {
     let callbackPayload: unknown
     const capture = await captureNumericLeaderboard(
