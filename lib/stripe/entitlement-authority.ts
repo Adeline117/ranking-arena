@@ -42,6 +42,7 @@ export type StripeAuthorityErrorCode =
   | 'invalid_trial'
   | 'object_mismatch'
   | 'pagination_invariant'
+  | 'resource_missing'
   | 'unsupported_invoice_payment'
   | 'unsupported_product'
 

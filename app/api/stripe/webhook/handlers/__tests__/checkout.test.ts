@@ -25,6 +25,11 @@ jest.mock('@/lib/stripe/lifetime-entitlement', () => ({
   LIFETIME_RESERVATION_NONCE_METADATA_KEY: 'lifetime_reservation_nonce',
 }))
 
+const mockCompleteTipCheckout = jest.fn()
+jest.mock('@/lib/stripe/tip-completion', () => ({
+  completeTipCheckout: (...args: unknown[]) => mockCompleteTipCheckout(...args),
+}))
+
 const mockUpdateUserSubscription = jest.fn()
 const mockGetProPlanFromPriceId = jest.fn()
 jest.mock('../subscription', () => ({
@@ -56,7 +61,6 @@ jest.mock('@/lib/alerts/send-alert', () => ({
   sendAlert: (...args: unknown[]) => mockSendAlert(...args),
 }))
 jest.mock('@/lib/utils/logger', () => ({ fireAndForget: jest.fn() }))
-jest.mock('@/lib/data/notifications', () => ({ sendNotification: jest.fn() }))
 
 import type Stripe from 'stripe'
 import {
@@ -83,6 +87,7 @@ const lifetimeUserId = '21e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const lifetimeReservationId = '9a8df3e8-e908-4f27-9cb4-8b892d748cc7'
 const lifetimeRequestNonce = `lifetime:${lifetimeUserId}:123`
 const expiredEvent = { id: 'evt_expired_123', created: 1_800_000_000 }
+const tipEvent = { id: 'evt_tip_123', created: 1_800_000_000 }
 
 function expiredLifetimeSession(
   metadataOverrides: Record<string, string> = {}
@@ -126,21 +131,6 @@ function noExistingSubscriptionQuery() {
       eq: () => ({
         in: () => ({
           maybeSingle: async () => ({ data: null, error: null }),
-        }),
-      }),
-    }),
-  }
-}
-
-function tipUpdateQuery(
-  error: { message: string } | null,
-  data: { id: string } | null = { id: 'tip-123' }
-) {
-  return {
-    update: () => ({
-      eq: () => ({
-        select: () => ({
-          maybeSingle: async () => ({ data, error }),
         }),
       }),
     }),
@@ -686,64 +676,51 @@ describe('handleTipPaymentCompleted persistence', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockFrom.mockReset()
+    mockCompleteTipCheckout.mockResolvedValue({ status: 'completed' })
   })
 
-  it('rejects a paid tip event without its persisted tip identity', async () => {
-    await expect(
-      handleTipPaymentCompleted(
-        checkoutSession({
-          mode: 'payment',
-          subscription: null,
-          payment_intent: 'pi_tip_123',
-          metadata: { type: 'tip' },
-        })
-      )
-    ).rejects.toThrow('Paid tip checkout cs_test_123 is missing tip_id')
+  it('passes only the signed snapshot session id into fresh tip completion', async () => {
+    const untrustedSnapshot = checkoutSession({
+      mode: 'payment',
+      subscription: null,
+      customer: 'cus_untrusted',
+      payment_intent: 'pi_untrusted',
+      metadata: {
+        type: 'tip',
+        tip_id: 'untrusted-tip-id',
+        from_user_id: 'untrusted-user-id',
+        amount_cents: '999999',
+      },
+    })
+
+    await expect(handleTipPaymentCompleted(untrustedSnapshot, tipEvent)).resolves.toEqual({
+      status: 'completed',
+    })
+
+    expect(mockCompleteTipCheckout).toHaveBeenCalledWith({
+      stripe: mockGetStripeClient,
+      supabase: { rpc: mockRpc },
+      sessionId: 'cs_test_123',
+      eventId: 'evt_tip_123',
+    })
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('throws when the paid tip cannot be marked completed', async () => {
-    mockFrom.mockReturnValue(tipUpdateQuery({ message: 'tips update unavailable' }))
+  it('keeps technical completion failures retryable', async () => {
+    mockCompleteTipCheckout.mockRejectedValue(new Error('tip authority unavailable'))
 
-    await expect(
-      handleTipPaymentCompleted(
-        checkoutSession({
-          mode: 'payment',
-          subscription: null,
-          payment_intent: 'pi_tip_123',
-          metadata: { type: 'tip', tip_id: 'tip-123' },
-        })
-      )
-    ).rejects.toThrow('Failed to mark tip completed: tips update unavailable')
+    await expect(handleTipPaymentCompleted(checkoutSession(), tipEvent)).rejects.toThrow(
+      'tip authority unavailable'
+    )
   })
 
-  it('throws when the paid tip update matched no persisted row', async () => {
-    mockFrom.mockReturnValue(tipUpdateQuery(null, null))
+  it('contains no direct tip-table or notification side effect', () => {
+    const source = require('node:fs').readFileSync(require.resolve('../checkout'), 'utf8')
+    const start = source.indexOf('export async function handleTipPaymentCompleted')
+    const end = source.indexOf('export async function handleCheckoutExpired', start)
+    const handler = source.slice(start, end)
 
-    await expect(
-      handleTipPaymentCompleted(
-        checkoutSession({
-          mode: 'payment',
-          subscription: null,
-          payment_intent: 'pi_tip_123',
-          metadata: { type: 'tip', tip_id: 'tip-missing' },
-        })
-      )
-    ).rejects.toThrow('Failed to mark tip completed: tip tip-missing was not found')
-  })
-
-  it('completes normally after the paid tip is persisted', async () => {
-    mockFrom.mockReturnValue(tipUpdateQuery(null))
-
-    await expect(
-      handleTipPaymentCompleted(
-        checkoutSession({
-          mode: 'payment',
-          subscription: null,
-          payment_intent: 'pi_tip_123',
-          metadata: { type: 'tip', tip_id: 'tip-123' },
-        })
-      )
-    ).resolves.toBeUndefined()
+    expect(handler).not.toMatch(/\.from\(['"]tips['"]\)/)
+    expect(handler).not.toContain('sendNotification')
   })
 })

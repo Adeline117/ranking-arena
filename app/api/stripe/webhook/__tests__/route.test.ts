@@ -214,6 +214,10 @@ describe('POST /api/stripe/webhook', () => {
 
     expect(response.status).toBe(500)
     expect(mockHandleTipPaymentCompleted).toHaveBeenCalledTimes(1)
+    expect(mockHandleTipPaymentCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'cs_tip' }),
+      { id: 'evt_test_retryable', created: 1_800_000_000 }
+    )
     expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
     expect(mockRpc).toHaveBeenCalledWith('finish_stripe_event', {
       p_event_id: 'evt_test_retryable',

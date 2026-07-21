@@ -103,7 +103,10 @@ export async function POST(request: NextRequest) {
           case 'checkout.session.completed': {
             const session = event.data.object as Stripe.Checkout.Session
             if (session.metadata?.type === 'tip') {
-              await handleTipPaymentCompleted(session)
+              await handleTipPaymentCompleted(session, {
+                id: event.id,
+                created: event.created,
+              })
             } else {
               await handleCheckoutComplete(session)
             }
