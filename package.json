@@ -73,6 +73,7 @@
     "backfill:risk:7d30d": "npx tsx scripts/backfill-risk-metrics-7d30d.ts",
     "census:dex": "tsx scripts/dex-census-baseline.mts",
     "census:dex:golden-wallets": "tsx scripts/generate-dex-golden-wallets.mts",
+    "census:dex:golden-wallets:verify": "tsx scripts/generate-dex-golden-wallets.mts --verify-pinned",
     "dex:solana:jupiter-witness": "tsx scripts/dex-solana-jupiter-witness.mts",
     "dex:solana:program-state-witness": "tsx scripts/dex-solana-program-state-witness.mts",
     "backup:r2": "node scripts/maintenance/backup-to-r2.mjs",
