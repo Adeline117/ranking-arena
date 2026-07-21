@@ -180,6 +180,19 @@ describe('DEX same-read strict JSON documents', () => {
     expect(compactDocument.raw_sha256).not.toBe(formattedDocument.raw_sha256)
   })
 
+  it('normalizes wide JSON arrays without a variadic argument limit', async () => {
+    const itemCount = 150_000
+    await write('wide.json', JSON.stringify({ items: Array(itemCount).fill(null) }))
+
+    const inspection = inspectDexStrictJsonDocument(
+      await readDexStrictJsonDocument(input('wide.json'))
+    )
+    const value = inspection.value as { items: readonly null[] }
+
+    expect(Object.getPrototypeOf(inspection.value)).toBeNull()
+    expect(value.items).toHaveLength(itemCount)
+  })
+
   it('loops over deterministic short reads and always closes the descriptor', async () => {
     const bytes = Buffer.from('{"nested":{"value":"short-read-proof"}}', 'utf8')
     await write('short-read.json', bytes)
