@@ -1,13 +1,16 @@
 # Stripe 2C 收费上线 Runbook
 
-最后核验：2026-07-18。
+最后核验：2026-07-21。
 
 ## 当前结论
 
 ArenaFi 的 B2C Pro **尚未开始真实收费，当前支付入口必须保持关闭**：
 
 - Vercel Production 仍使用 Stripe test key，免费 promo 仍开启。
-- Production 缺少 `STRIPE_WEBHOOK_SECRET`；支付运行时门禁会拒绝创建 B2C、API 和付费群 Checkout，不能把这个 fail-closed 状态称为 sandbox ready。
+- Production 已有 test-mode `STRIPE_WEBHOOK_SECRET` 和月付/年付/终身三档 test Price ID；
+  不得把这些 test 对象复用到 live mode。当前阻断点不是“缺一个环境变量”，而是
+  readiness 仍有 `2` 个 manual review、`2` 个 projection drift、`2` 个 authority
+  drift，且最终 Stripe POSTDEPLOY writer 撤权尚未实现；`paidLaunchReady=false`。
 - `NEXT_PUBLIC_PRO_FREE_PROMO` 未显式配置，代码当前按免费 promo 开启处理。
 - `STRIPE_LIFETIME_CHECKOUT_ENABLED` 未配置；终身 Checkout 默认关闭，只有完成名额 reservation、退款和 readiness 验收后才能显式开启。
 - 测试价格已与产品唯一口径一致：月付 `$4.99`、年付 `$29.99`、终身 `$49.99`。
