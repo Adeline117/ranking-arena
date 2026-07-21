@@ -3,21 +3,28 @@ import { gzipSync, gunzipSync } from 'node:zlib'
 
 const mockUpload = jest.fn()
 const mockDownload = jest.fn()
+const mockRemove = jest.fn()
 const mockQuery = jest.fn()
+const mockClientQuery = jest.fn()
+const mockClientRelease = jest.fn()
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     storage: {
-      from: jest.fn(() => ({ upload: mockUpload, download: mockDownload })),
+      from: jest.fn(() => ({ upload: mockUpload, download: mockDownload, remove: mockRemove })),
     },
   })),
 }))
 
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: mockQuery })),
+  ingestClientConnect: jest.fn(async () => ({
+    query: mockClientQuery,
+    release: mockClientRelease,
+  })),
 }))
 
-import { readRawObject, writeRawObject } from '@/lib/ingest/raw'
+import { cleanupRawObjects, readRawObject, writeRawObject } from '@/lib/ingest/raw'
 
 const input = {
   sourceId: 7,
@@ -294,5 +301,183 @@ describe('readRawObject integrity verification', () => {
     })
 
     await expect(readRawObject(42)).rejects.toThrow('payload is not valid UTF-8')
+  })
+})
+
+describe('cleanupRawObjects fail-closed garbage collection', () => {
+  function useRawGcQueryPlan({
+    acquired = true,
+    pending = [],
+    afterRetire = [],
+    retireError,
+    acknowledgementError,
+    unlockError,
+  }: {
+    acquired?: boolean
+    pending?: string[]
+    afterRetire?: string[]
+    retireError?: Error
+    acknowledgementError?: Error
+    unlockError?: Error
+  } = {}) {
+    let queueReads = 0
+    mockClientQuery.mockImplementation(async (sqlInput: unknown) => {
+      const sql = String(sqlInput)
+      if (sql.includes('pg_try_advisory_lock')) return { rows: [{ acquired }] }
+      if (sql.includes('pg_advisory_unlock')) {
+        if (unlockError) throw unlockError
+        return { rows: [{ unlocked: true }] }
+      }
+      if (sql.includes('SELECT storage_path')) {
+        const paths = queueReads++ === 0 ? pending : afterRetire
+        return { rows: paths.map((storage_path) => ({ storage_path })) }
+      }
+      if (sql.includes('WITH candidates AS MATERIALIZED')) {
+        if (retireError) throw retireError
+        return { rows: [], rowCount: afterRetire.length }
+      }
+      if (sql.includes('UPDATE arena.raw_object_gc_queue')) {
+        return { rows: [], rowCount: pending.length }
+      }
+      if (sql.includes('DELETE FROM arena.raw_object_gc_queue')) {
+        if (acknowledgementError) throw acknowledgementError
+        return { rows: [], rowCount: pending.length || afterRetire.length }
+      }
+      throw new Error(`Unexpected RAW GC SQL: ${sql}`)
+    })
+  }
+
+  function rawGcQueryIndex(fragment: string): number {
+    return mockClientQuery.mock.calls.findIndex(([sql]) => String(sql).includes(fragment))
+  }
+
+  beforeAll(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockClientQuery.mockReset()
+    mockClientRelease.mockReset()
+    mockRemove.mockReset()
+    useRawGcQueryPlan()
+  })
+
+  it('atomically queues and deletes DB evidence before removing its Storage object', async () => {
+    useRawGcQueryPlan({ afterRetire: ['raw/older.json.gz', 'raw/newer.json.gz'] })
+    mockRemove.mockResolvedValueOnce({ error: null })
+
+    await expect(cleanupRawObjects(30)).resolves.toBe(2)
+
+    const retireIndex = rawGcQueryIndex('WITH candidates AS MATERIALIZED')
+    const retireSql = String(mockClientQuery.mock.calls[retireIndex][0])
+    expect(retireSql).toContain('INSERT INTO arena.raw_object_gc_queue')
+    expect(retireSql).toContain('DELETE FROM arena.raw_objects AS raw')
+    expect(retireSql).toContain('FOR UPDATE SKIP LOCKED')
+    expect(retireSql).toContain('ORDER BY fetched_at, id')
+    expect(retireSql).toContain('LIMIT 500')
+    expect(mockClientQuery.mock.calls[retireIndex][1]).toEqual([30])
+    expect(mockClientQuery.mock.invocationCallOrder[retireIndex]).toBeLessThan(
+      mockRemove.mock.invocationCallOrder[0]
+    )
+    expect(mockRemove).toHaveBeenCalledWith(['raw/older.json.gz', 'raw/newer.json.gz'])
+    expect(rawGcQueryIndex('DELETE FROM arena.raw_object_gc_queue')).toBeGreaterThan(retireIndex)
+    expect(rawGcQueryIndex('pg_advisory_unlock')).toBeGreaterThan(retireIndex)
+    expect(mockClientRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('drains a prior durable queue before retiring more DB evidence', async () => {
+    useRawGcQueryPlan({ pending: ['raw/retry.json.gz'] })
+    mockRemove.mockResolvedValueOnce({ error: null })
+
+    await expect(cleanupRawObjects()).resolves.toBe(1)
+
+    expect(mockClientQuery).toHaveBeenCalledTimes(4)
+    expect(rawGcQueryIndex('SELECT storage_path')).toBeGreaterThanOrEqual(0)
+    expect(rawGcQueryIndex('DELETE FROM arena.raw_object_gc_queue')).toBeGreaterThanOrEqual(0)
+    expect(
+      mockClientQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('DELETE FROM arena.raw_objects')
+      )
+    ).toBe(false)
+    expect(mockClientRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not touch Storage when durable queueing or DB deletion fails', async () => {
+    useRawGcQueryPlan({ retireError: new Error('database transaction failed') })
+
+    await expect(cleanupRawObjects()).rejects.toThrow('database transaction failed')
+    expect(mockRemove).not.toHaveBeenCalled()
+    expect(rawGcQueryIndex('pg_advisory_unlock')).toBeGreaterThanOrEqual(0)
+    expect(mockClientRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('retains and annotates the durable queue when Storage deletion fails', async () => {
+    useRawGcQueryPlan({ pending: ['raw/retry.json.gz'] })
+    mockRemove.mockResolvedValueOnce({ error: { message: 'Storage unavailable' } })
+
+    await expect(cleanupRawObjects()).rejects.toThrow(
+      'RAW cleanup remove failed; durable queue retained: Storage unavailable'
+    )
+
+    const updateIndex = rawGcQueryIndex('attempts = attempts + 1')
+    expect(updateIndex).toBeGreaterThanOrEqual(0)
+    expect(mockClientQuery.mock.calls[updateIndex][1]).toEqual([
+      ['raw/retry.json.gz'],
+      'Storage unavailable',
+    ])
+    expect(
+      mockClientQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('DELETE FROM arena.raw_object_gc_queue')
+      )
+    ).toBe(false)
+    expect(mockClientRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the durable queue when Storage succeeds but acknowledgement fails', async () => {
+    useRawGcQueryPlan({
+      pending: ['raw/retry.json.gz'],
+      acknowledgementError: new Error('acknowledgement failed'),
+    })
+    mockRemove.mockResolvedValueOnce({ error: null })
+
+    await expect(cleanupRawObjects()).rejects.toThrow('acknowledgement failed')
+    expect(mockRemove).toHaveBeenCalledTimes(1)
+    expect(mockClientRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns zero without calling Storage when there is no pending or expired RAW', async () => {
+    await expect(cleanupRawObjects()).resolves.toBe(0)
+    expect(mockRemove).not.toHaveBeenCalled()
+    expect(mockClientRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not claim or remove outbox work while another node holds the GC lock', async () => {
+    useRawGcQueryPlan({ acquired: false })
+
+    await expect(cleanupRawObjects()).resolves.toBe(0)
+
+    expect(mockClientQuery).toHaveBeenCalledTimes(1)
+    expect(String(mockClientQuery.mock.calls[0][0])).toContain('pg_try_advisory_lock')
+    expect(mockRemove).not.toHaveBeenCalled()
+    expect(mockClientRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('destroys a pooled session when explicit advisory unlock fails', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    useRawGcQueryPlan({
+      pending: ['raw/retry.json.gz'],
+      unlockError: new Error('unlock query cancelled'),
+    })
+    mockRemove.mockResolvedValueOnce({ error: null })
+
+    try {
+      await expect(cleanupRawObjects()).resolves.toBe(1)
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(mockClientRelease).toHaveBeenCalledWith(true)
   })
 })

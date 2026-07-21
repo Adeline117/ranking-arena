@@ -82,6 +82,8 @@ PREDEPLOY_MIGRATIONS=(
   20260718183600_fix_stripe_lifetime_duplicate_and_early_expiry.sql
   20260718184000_arena_score_inputs_board_as_of.sql
   20260718184500_classify_non_entitlement_stripe_payments.sql
+  20260721120000_metric_trust_shadow_gate.sql
+  20260721130000_raw_object_gc_outbox.sql
 )
 
 # These contracts revoke compatibility writes or change identity uniqueness
