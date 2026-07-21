@@ -115,6 +115,13 @@ html.theme-transition #main-content {
   opacity: 1 !important;
 }
 
+/* Secondary performance metrics carry decision-critical labels and values.
+   Keep the entrance movement, but never fade the whole grid and reduce every
+   descendant's effective contrast while the delayed transition is running. */
+.trader-page-container .metric-badges-grid {
+  opacity: 1 !important;
+}
+
 .stagger-children > * {
   opacity: 0;
   animation: fadeIn 0.4s ease-out forwards;

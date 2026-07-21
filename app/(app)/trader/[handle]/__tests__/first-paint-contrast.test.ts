@@ -10,6 +10,7 @@ describe('trader first-paint contrast contract', () => {
       '.trader-page-container .glass-card',
       '.trader-page-container .tab-pane-enter',
       '.trader-page-container .trader-data-disclaimer',
+      '.trader-page-container .metric-badges-grid',
     ]) {
       const rule = stylesheet.nodes.find(
         (node): node is Rule => node.type === 'rule' && node.selector === selector
