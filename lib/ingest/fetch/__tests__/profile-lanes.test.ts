@@ -577,6 +577,29 @@ describe('persistent Chromium profile lanes', () => {
     }
   })
 
+  it('caps a source page-fetch override below the worker lock budget', async () => {
+    const launched = contextMock()
+    let evaluatedInput: unknown
+    ;(launched.page.evaluate as jest.Mock).mockImplementation(
+      async (_callback: (input: unknown) => unknown, input: unknown) => {
+        evaluatedInput = input
+        return { status: 200, json: { ok: true } }
+      }
+    )
+    mockLaunchPersistentContext.mockResolvedValueOnce(launched.context)
+    const src = source('bounded_page_fetch_override')
+    src.meta = { page_fetch_timeout_ms: 300_000 }
+
+    const session = await openSession(src)
+    await expect(
+      session.pageFetch({ url: 'https://example.test/fast', method: 'GET', headers: {} })
+    ).resolves.toEqual({ status: 200, json: { ok: true } })
+    expect(evaluatedInput).toEqual(
+      expect.objectContaining({ timeoutMs: 90_000, sourceSlug: 'bounded_page_fetch_override' })
+    )
+    await session.close()
+  })
+
   it('rejects every browser entry point after close without relaunching', async () => {
     const session = await openSession(source('bybit_use_after_close'))
     await session.close()
