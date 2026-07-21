@@ -94,6 +94,14 @@ html.theme-transition #main-content {
   }
 }
 
+/* Trader cards contain readable metrics and controls, not decorative artwork.
+   Their old mount animations faded the whole card from opacity:0 to 1, which
+   made otherwise-compliant text fall below WCAG 4.5:1 for the first ~900ms.
+   Keep any transform motion, but never fade readable card content. */
+.trader-page-container .glass-card {
+  opacity: 1 !important;
+}
+
 .stagger-children > * {
   opacity: 0;
   animation: fadeIn 0.4s ease-out forwards;
