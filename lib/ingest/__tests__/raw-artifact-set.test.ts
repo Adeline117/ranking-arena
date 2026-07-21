@@ -1,0 +1,594 @@
+import { gzipSync } from 'node:zlib'
+import type { PoolClient } from 'pg'
+
+const mockUpload = jest.fn()
+const mockDownload = jest.fn()
+const mockConnect = jest.fn()
+
+jest.mock('@supabase/supabase-js', () => ({
+  createClient: jest.fn(() => ({
+    storage: {
+      from: jest.fn(() => ({ upload: mockUpload, download: mockDownload })),
+    },
+  })),
+}))
+
+jest.mock('@/lib/ingest/db', () => ({
+  getIngestPool: jest.fn(),
+  ingestClientConnect: (...args: unknown[]) => mockConnect(...args),
+}))
+
+import { buildLeaderboardAcquisitionManifest } from '@/lib/ingest/acquisition-manifest'
+import { writeLeaderboardRawArtifactSet } from '@/lib/ingest/raw'
+import type { RawPage } from '@/lib/ingest/core/types'
+import { strictCanonicalJson, strictCanonicalSha256 } from '@/lib/ingest/strict-canonical-json'
+
+interface PointerRow {
+  id: number
+  source_id: number
+  job_type: string
+  trader_id: number | null
+  timeframe: number
+  fetched_at: string
+  storage_path: string
+  bytes: number
+  content_hash: string
+  quarantined: boolean
+  meta: unknown
+  source_run_id: string | null
+  trust_artifact_role: string | null
+}
+
+const sourcePages: RawPage[] = [
+  {
+    pageIndex: 1,
+    payload: { data: [{ id: 'one' }, { id: 'two' }], total: 3 },
+    url: 'https://example.test/board?page=1',
+    fetchedAt: '2026-07-21T10:00:01.000Z',
+  },
+  {
+    pageIndex: 2,
+    payload: { data: [{ id: 'three' }], total: 3 },
+    url: 'https://example.test/board?page=2',
+    fetchedAt: '2026-07-21T10:00:02.000Z',
+  },
+]
+
+function artifactInput() {
+  const built = buildLeaderboardAcquisitionManifest({
+    source: {
+      id: 1,
+      slug: 'binance_futures',
+      adapter_slug: 'binance',
+      configured_page_size: 2,
+      configured_pagination_kind: 'numeric',
+    },
+    surface: 'tier_a_leaderboard',
+    timeframe: 30,
+    started_at: '2026-07-21T10:00:00.000Z',
+    completed_at: '2026-07-21T10:00:03.000Z',
+    runner_git_sha: 'a'.repeat(40),
+    observation_cycle_id: 'tier-a:binance_futures:job-1:1784628000000',
+    capture_evidence_state: 'verified',
+    termination_reason: 'reported_population_reached',
+    capture_config: { caller_page_cap: null, safety_page_cap: 5_000 },
+    source_pages: [
+      {
+        raw_page: sourcePages[0],
+        source_row_count: 2,
+        request_sha256: 'b'.repeat(64),
+        http_status: 200,
+        pagination_position: { kind: 'page_index', request_page_index: 1 },
+        source_reports: {
+          population: { state: 'reported', value: 3 },
+          page_count: { state: 'not_reported' },
+          current_page: { state: 'not_reported' },
+          page_size: { state: 'not_reported' },
+        },
+      },
+      {
+        raw_page: sourcePages[1],
+        source_row_count: 1,
+        request_sha256: 'c'.repeat(64),
+        http_status: 200,
+        pagination_position: { kind: 'page_index', request_page_index: 2 },
+        source_reports: {
+          population: { state: 'reported', value: 3 },
+          page_count: { state: 'not_reported' },
+          current_page: { state: 'not_reported' },
+          page_size: { state: 'not_reported' },
+        },
+      },
+    ],
+    parse_pages: sourcePages,
+    parser_transformation: {
+      kind: 'identity_projection',
+      source_page_ordinals: [1, 2],
+    },
+    accepted_population: 3,
+    rejected_row_count: 0,
+  })
+  return {
+    sourceId: 1,
+    sourceSlug: 'binance_futures',
+    timeframe: 30 as const,
+    sourceRunId: built.sourceRunId,
+    sourcePages,
+    manifest: built.manifest,
+    observationCycleId: 'tier-a:binance_futures:job-1:1784628000000',
+  }
+}
+
+function downloadBody(payload: Buffer) {
+  return {
+    arrayBuffer: async () =>
+      payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength),
+  }
+}
+
+function makeDatabaseHarness(
+  options: {
+    commitError?: Error
+    insertErrorRole?: 'source_payload' | 'population_manifest'
+    rollbackError?: Error
+    initialRows?: PointerRow[]
+    reconcileRows?: PointerRow[]
+  } = {}
+) {
+  const pointers: PointerRow[] = options.initialRows ? [...options.initialRows] : []
+  let transactionSnapshot: PointerRow[] | null = null
+  let nextId = 101
+  const query = jest.fn(async (sqlInput: unknown, params: unknown[] = []) => {
+    const sql = String(sqlInput)
+    if (sql === 'BEGIN') {
+      transactionSnapshot = pointers.map((pointer) => ({ ...pointer }))
+      return { rows: [] }
+    }
+    if (sql.startsWith('SET LOCAL') || sql.includes('pg_advisory_xact_lock')) {
+      return { rows: [] }
+    }
+    if (sql === 'ROLLBACK') {
+      if (options.rollbackError) throw options.rollbackError
+      pointers.splice(0, pointers.length, ...(transactionSnapshot ?? []))
+      transactionSnapshot = null
+      return { rows: [] }
+    }
+    if (sql === 'COMMIT') {
+      if (options.commitError) throw options.commitError
+      transactionSnapshot = null
+      return { rows: [] }
+    }
+    if (sql.startsWith('SELECT id, source_id')) {
+      const paths = params[0] as string[]
+      const sourceRunId = params[1] as string
+      return {
+        rows: pointers.filter(
+          (pointer) =>
+            paths.includes(pointer.storage_path) ||
+            (pointer.source_run_id === sourceRunId &&
+              (pointer.trust_artifact_role === 'population_manifest' ||
+                (pointer.trust_artifact_role === 'source_payload' &&
+                  pointer.job_type === 'tier_a' &&
+                  pointer.trader_id === null)))
+        ),
+      }
+    }
+    if (sql.startsWith('INSERT INTO arena.raw_objects')) {
+      const role = params[9] as PointerRow['trust_artifact_role']
+      if (role === options.insertErrorRole) throw new Error(`insert ${role} failed`)
+      if (
+        !pointers.some(
+          (pointer) => pointer.source_run_id === params[8] && pointer.trust_artifact_role === role
+        )
+      ) {
+        pointers.push({
+          id: nextId++,
+          source_id: params[0] as number,
+          job_type: params[1] as string,
+          trader_id: null,
+          timeframe: params[2] as number,
+          fetched_at: params[3] as string,
+          storage_path: params[4] as string,
+          bytes: params[5] as number,
+          content_hash: params[6] as string,
+          quarantined: false,
+          meta: JSON.parse(params[7] as string),
+          source_run_id: params[8] as string,
+          trust_artifact_role: role,
+        })
+      }
+      return { rows: [] }
+    }
+    if (sql.startsWith('UPDATE arena.raw_objects')) {
+      const [sourceRunId, sourcePath, manifestPath, rawIds] = params as [
+        string,
+        string,
+        string,
+        number[],
+      ]
+      const updated: Array<{ id: number }> = []
+      for (const pointer of pointers) {
+        if (
+          rawIds.includes(pointer.id) &&
+          pointer.source_run_id === null &&
+          pointer.trust_artifact_role === null
+        ) {
+          pointer.source_run_id = sourceRunId
+          pointer.trust_artifact_role =
+            pointer.storage_path === sourcePath
+              ? 'source_payload'
+              : pointer.storage_path === manifestPath
+                ? 'population_manifest'
+                : null
+          updated.push({ id: pointer.id })
+        }
+      }
+      return { rows: updated }
+    }
+    throw new Error(`Unexpected SQL: ${sql}`)
+  })
+  const release = jest.fn()
+  const client = { query, release } as unknown as PoolClient
+
+  const reconcileQuery = jest.fn(async (sqlInput: unknown, params: unknown[] = []) => {
+    const sql = String(sqlInput)
+    if (sql.startsWith('SELECT id, source_id')) {
+      if (options.reconcileRows) return { rows: options.reconcileRows }
+      const paths = params[0] as string[]
+      const sourceRunId = params[1] as string
+      return {
+        rows: pointers.filter(
+          (pointer) =>
+            paths.includes(pointer.storage_path) ||
+            (pointer.source_run_id === sourceRunId &&
+              (pointer.trust_artifact_role === 'population_manifest' ||
+                (pointer.trust_artifact_role === 'source_payload' &&
+                  pointer.job_type === 'tier_a' &&
+                  pointer.trader_id === null)))
+        ),
+      }
+    }
+    throw new Error(`Unexpected reconcile SQL: ${sql}`)
+  })
+  const reconcileRelease = jest.fn()
+  const reconcileClient = {
+    query: reconcileQuery,
+    release: reconcileRelease,
+  } as unknown as PoolClient
+
+  return { pointers, query, release, client, reconcileQuery, reconcileRelease, reconcileClient }
+}
+
+describe('writeLeaderboardRawArtifactSet', () => {
+  const storage = new Map<string, Buffer>()
+
+  beforeAll(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    storage.clear()
+    mockUpload.mockImplementation(async (path: string, payload: Buffer) => {
+      if (storage.has(path)) return { error: { message: 'already exists', statusCode: 409 } }
+      storage.set(path, Buffer.from(payload))
+      return { error: null }
+    })
+    mockDownload.mockImplementation(async (path: string) => {
+      const payload = storage.get(path)
+      return payload
+        ? { data: downloadBody(payload), error: null }
+        : { data: null, error: { message: 'not found' } }
+    })
+  })
+
+  it('writes one deterministic pair and returns the same pointers on an exact retry', async () => {
+    const database = makeDatabaseHarness()
+    mockConnect.mockResolvedValue(database.client)
+    const input = artifactInput()
+
+    const first = await writeLeaderboardRawArtifactSet(input)
+    const second = await writeLeaderboardRawArtifactSet(input)
+
+    expect(second).toEqual(first)
+    expect(database.pointers).toHaveLength(2)
+    expect(first.sourcePayload.id).not.toBe(first.populationManifest.id)
+    expect(first.populationManifest.contentHash).toBe(input.sourceRunId)
+    expect(first.sourcePayload.storagePath).toContain(`${input.sourceRunId}/source_payload_`)
+    expect(first.populationManifest.storagePath).toContain(
+      `${input.sourceRunId}/population_manifest_${input.sourceRunId}.json.gz`
+    )
+    expect(database.pointers.map((pointer) => pointer.fetched_at)).toEqual([
+      input.manifest.completed_at,
+      input.manifest.completed_at,
+    ])
+    expect(mockUpload).toHaveBeenCalledTimes(4)
+    expect(mockDownload).toHaveBeenCalledTimes(2)
+    const insertSql = database.query.mock.calls
+      .filter(([sql]) => String(sql).startsWith('INSERT INTO arena.raw_objects'))
+      .map(([sql]) => String(sql))
+    expect(insertSql).toHaveLength(2)
+    expect(insertSql[0]).toContain("trust_artifact_role = 'source_payload'")
+    expect(insertSql[0]).toContain("job_type = 'tier_a'")
+    expect(insertSql[0]).toContain('trader_id IS NULL')
+    expect(insertSql[1]).toContain("trust_artifact_role = 'population_manifest'")
+  })
+
+  it('uses the verified existing gzip length after a first-attempt 409', async () => {
+    const database = makeDatabaseHarness()
+    mockConnect.mockResolvedValue(database.client)
+    mockUpload.mockResolvedValue({ error: { message: 'duplicate', statusCode: 409 } })
+    const input = artifactInput()
+    const sourceJson = Buffer.from(strictCanonicalJson(input.sourcePages), 'utf8')
+    const manifestJson = Buffer.from(strictCanonicalJson(input.manifest), 'utf8')
+    const sourceGzip = gzipSync(sourceJson, { level: 1 })
+    const manifestGzip = gzipSync(manifestJson, { level: 1 })
+    mockDownload
+      .mockResolvedValueOnce({ data: downloadBody(sourceGzip), error: null })
+      .mockResolvedValueOnce({ data: downloadBody(manifestGzip), error: null })
+
+    await writeLeaderboardRawArtifactSet(input)
+
+    expect(database.pointers.map((pointer) => pointer.bytes)).toEqual([
+      sourceGzip.byteLength,
+      manifestGzip.byteLength,
+    ])
+    expect(
+      database.pointers.map(
+        (pointer) =>
+          (pointer.meta as { raw_integrity: { compressed_bytes: number } }).raw_integrity
+            .compressed_bytes
+      )
+    ).toEqual([sourceGzip.byteLength, manifestGzip.byteLength])
+  })
+
+  it('rejects a 409 collision whose stored JSON bytes differ', async () => {
+    mockUpload.mockResolvedValueOnce({ error: { message: 'duplicate', statusCode: 409 } })
+    mockDownload.mockResolvedValueOnce({
+      data: downloadBody(gzipSync(Buffer.from('{"different":true}', 'utf8'))),
+      error: null,
+    })
+
+    await expect(writeLeaderboardRawArtifactSet(artifactInput())).rejects.toThrow(
+      'has different content'
+    )
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('does not open a database transaction when the second upload fails', async () => {
+    mockUpload
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: { message: 'bucket unavailable', statusCode: 400 } })
+
+    await expect(writeLeaderboardRawArtifactSet(artifactInput())).rejects.toThrow(
+      'bucket unavailable'
+    )
+    expect(mockConnect).not.toHaveBeenCalled()
+    expect(mockDownload).not.toHaveBeenCalled()
+  })
+
+  it('rolls back instead of repairing a partial database pointer pair', async () => {
+    const database = makeDatabaseHarness({
+      initialRows: [
+        {
+          id: 99,
+          source_id: 1,
+          job_type: 'tier_a',
+          trader_id: null,
+          timeframe: 30,
+          fetched_at: artifactInput().manifest.completed_at,
+          storage_path: 'foreign',
+          bytes: 1,
+          content_hash: 'f'.repeat(64),
+          quarantined: false,
+          meta: {},
+          source_run_id: artifactInput().sourceRunId,
+          trust_artifact_role: 'source_payload',
+        },
+      ],
+    })
+    mockConnect.mockResolvedValue(database.client)
+
+    await expect(writeLeaderboardRawArtifactSet(artifactInput())).rejects.toThrow(
+      'only part of the expected RAW pointer pair'
+    )
+    expect(database.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(database.query.mock.calls.some(([sql]) => String(sql).startsWith('INSERT'))).toBe(false)
+  })
+
+  it('rolls back the first pointer when the second database insert fails', async () => {
+    const database = makeDatabaseHarness({ insertErrorRole: 'population_manifest' })
+    mockConnect.mockResolvedValue(database.client)
+
+    await expect(writeLeaderboardRawArtifactSet(artifactInput())).rejects.toThrow(
+      'insert population_manifest failed'
+    )
+
+    expect(database.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(database.pointers).toHaveLength(0)
+    expect(storage).toHaveProperty('size', 2)
+  })
+
+  it('atomically binds an exact pair of pre-existing unbound pointers', async () => {
+    const database = makeDatabaseHarness()
+    mockConnect.mockResolvedValue(database.client)
+    const input = artifactInput()
+    const first = await writeLeaderboardRawArtifactSet(input)
+    for (const pointer of database.pointers) {
+      pointer.source_run_id = null
+      pointer.trust_artifact_role = null
+    }
+
+    const second = await writeLeaderboardRawArtifactSet(input)
+
+    expect(second).toEqual(first)
+    expect(database.pointers.every((pointer) => pointer.source_run_id === input.sourceRunId)).toBe(
+      true
+    )
+    expect(
+      database.query.mock.calls.some(([sql]) => String(sql).startsWith('UPDATE arena.raw_objects'))
+    ).toBe(true)
+  })
+
+  it('rejects a mixed bound and unbound pointer pair without repairing either row', async () => {
+    const database = makeDatabaseHarness()
+    mockConnect.mockResolvedValue(database.client)
+    const input = artifactInput()
+    await writeLeaderboardRawArtifactSet(input)
+    database.pointers[0].source_run_id = null
+    database.pointers[0].trust_artifact_role = null
+    const updateCountBeforeRetry = database.query.mock.calls.filter(([sql]) =>
+      String(sql).startsWith('UPDATE arena.raw_objects')
+    ).length
+
+    await expect(writeLeaderboardRawArtifactSet(input)).rejects.toThrow(
+      'database pointers are only partially bound'
+    )
+
+    expect(
+      database.query.mock.calls.filter(([sql]) =>
+        String(sql).startsWith('UPDATE arena.raw_objects')
+      )
+    ).toHaveLength(updateCountBeforeRetry)
+    expect(database.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(database.pointers[0].source_run_id).toBeNull()
+    expect(database.pointers[1].source_run_id).toBe(input.sourceRunId)
+  })
+
+  it('preserves both the transaction and ROLLBACK failures and destroys the connection', async () => {
+    const rollbackError = new Error('connection lost during ROLLBACK')
+    const database = makeDatabaseHarness({
+      insertErrorRole: 'population_manifest',
+      rollbackError,
+    })
+    mockConnect.mockResolvedValue(database.client)
+
+    let failure: unknown
+    try {
+      await writeLeaderboardRawArtifactSet(artifactInput())
+    } catch (error) {
+      failure = error
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors[0].message).toBe('insert population_manifest failed')
+    expect((failure as AggregateError).errors[1]).toBe(rollbackError)
+    expect(database.release).toHaveBeenCalledWith(true)
+  })
+
+  it('reconciles an exact pair after an uncertain COMMIT without deleting Storage', async () => {
+    const commitError = new Error('connection lost during COMMIT')
+    const database = makeDatabaseHarness({ commitError })
+    mockConnect
+      .mockResolvedValueOnce(database.client)
+      .mockResolvedValueOnce(database.reconcileClient)
+
+    await expect(writeLeaderboardRawArtifactSet(artifactInput())).resolves.toEqual({
+      sourcePayload: expect.objectContaining({ id: 101 }),
+      populationManifest: expect.objectContaining({ id: 102 }),
+    })
+
+    expect(database.release).toHaveBeenCalledWith(true)
+    expect(database.reconcileQuery).toHaveBeenCalledTimes(1)
+    expect(database.reconcileRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps both COMMIT and reconciliation failures in the final error', async () => {
+    const commitError = new Error('connection lost during COMMIT')
+    const database = makeDatabaseHarness({ commitError, reconcileRows: [] })
+    mockConnect
+      .mockResolvedValueOnce(database.client)
+      .mockResolvedValueOnce(database.reconcileClient)
+
+    let failure: unknown
+    try {
+      await writeLeaderboardRawArtifactSet(artifactInput())
+    } catch (error) {
+      failure = error
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors[0]).toBe(commitError)
+    expect((failure as AggregateError).errors[1].message).toContain('expected 2 database pointers')
+    expect(database.release).toHaveBeenCalledWith(true)
+    expect(database.reconcileRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a source payload that does not match its canonical manifest before I/O', async () => {
+    const input = artifactInput()
+
+    await expect(
+      writeLeaderboardRawArtifactSet({
+        ...input,
+        sourcePages: [{ ...input.sourcePages[0], payload: { forged: true } }, input.sourcePages[1]],
+      })
+    ).rejects.toThrow('source payload page 1 does not match the manifest')
+
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('rejects extra source-page fields and a forged parser digest before I/O', async () => {
+    const input = artifactInput()
+    const pageWithExtraField = {
+      ...input.sourcePages[0],
+      unboundEvidence: true,
+    } as RawPage
+
+    await expect(
+      writeLeaderboardRawArtifactSet({
+        ...input,
+        sourcePages: [pageWithExtraField, input.sourcePages[1]],
+      })
+    ).rejects.toThrow('source payload page 1 does not match the manifest')
+
+    const forgedManifest: typeof input.manifest = {
+      ...input.manifest,
+      parser_input: {
+        ...input.manifest.parser_input,
+        sha256: 'f'.repeat(64),
+      },
+    }
+    await expect(
+      writeLeaderboardRawArtifactSet({
+        ...input,
+        manifest: forgedManifest,
+        sourceRunId: strictCanonicalSha256(forgedManifest),
+      })
+    ).rejects.toThrow('parser input digest does not match the persisted source pages')
+
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('fails closed on dedupe/rechunk evidence until its parser payload is persisted', async () => {
+    const input = artifactInput()
+    const dedupeManifest: typeof input.manifest = {
+      ...input.manifest,
+      parser_input: {
+        ...input.manifest.parser_input,
+        transformation: {
+          kind: 'dedupe_rechunk',
+          source_page_ordinals: [1, 2],
+          algorithm_contract: 'arena.test.dedupe-rechunk@1',
+          output_row_count: 3,
+          output_page_size: 2,
+        },
+      },
+    }
+
+    await expect(
+      writeLeaderboardRawArtifactSet({
+        ...input,
+        manifest: dedupeManifest,
+        sourceRunId: strictCanonicalSha256(dedupeManifest),
+      })
+    ).rejects.toThrow(
+      'dedupe/rechunk parser evidence requires a separately persisted parser payload'
+    )
+
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+})
