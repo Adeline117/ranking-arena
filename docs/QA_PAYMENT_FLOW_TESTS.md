@@ -21,6 +21,7 @@
 ## A. 端到端核心用例
 
 ### 【用例001】未登录用户完整购买流程
+
 - **前置条件**：用户未登录，无账号
 - **操作步骤**：
   1. 访问首页 → 点击Pro功能（如排行榜高级筛选）
@@ -46,6 +47,7 @@
 ---
 
 ### 【用例002】已登录Free用户升级Pro（月付）
+
 - **前置条件**：用户已登录，tier='free'
 - **操作步骤**：
   1. 点击设置页 → 订阅管理 → "升级到Pro"
@@ -68,6 +70,7 @@
 ---
 
 ### 【用例003】已登录Free用户升级Pro（年付）
+
 - **前置条件**：用户已登录，tier='free'
 - **操作步骤**：
   1. 点击"升级 Pro"
@@ -82,6 +85,7 @@
 ---
 
 ### 【用例004】Pro用户续费成功
+
 - **前置条件**：用户tier='pro'，订阅即将到期（7天内）
 - **操作步骤**：
   1. Stripe 自动扣款成功
@@ -98,6 +102,7 @@
 ---
 
 ### 【用例005】Pro用户主动取消订阅
+
 - **前置条件**：用户tier='pro', status='active'
 - **操作步骤**：
   1. 设置页 → 订阅管理 → "取消订阅"
@@ -116,6 +121,7 @@
 ---
 
 ### 【用例006】取消后到期降级
+
 - **前置条件**：用户已取消，`current_period_end` 已过
 - **操作步骤**：
   1. Stripe 发送 `customer.subscription.deleted` webhook
@@ -136,6 +142,7 @@
 ---
 
 ### 【用例007】续费失败（卡过期/余额不足）
+
 - **前置条件**：用户tier='pro'，卡信息失效
 - **操作步骤**：
   1. Stripe 扣款失败
@@ -155,6 +162,7 @@
 ---
 
 ### 【用例008】已取消用户重新订阅
+
 - **前置条件**：`subscriptions.status = 'canceled'`
 - **操作步骤**：
   1. 点击"重新订阅"
@@ -168,6 +176,7 @@
 ---
 
 ### 【用例009】Pro用户访问受限功能 - Trader Comparison
+
 - **前置条件**：`user_profiles.subscription_tier = 'pro'`
 - **操作步骤**：
   1. 访问交易员对比页面
@@ -183,6 +192,7 @@
 ---
 
 ### 【用例010】Free用户访问Pro功能 - Advanced Filter
+
 - **前置条件**：`user_profiles.subscription_tier = 'free'`
 - **操作步骤**：
   1. 访问排行榜页面
@@ -200,29 +210,30 @@
 
 ## B. 权限矩阵
 
-| 功能 | Free 可见 | Free 可用 | Pro 可见 | Pro 可用 | 验证点 |
-|------|-----------|-----------|----------|----------|--------|
-| 排行榜浏览 | ✅ | ✅ | ✅ | ✅ | 首页可访问 |
-| 基础筛选（交易所） | ✅ | ✅ | ✅ | ✅ | 下拉菜单可用 |
-| **高级筛选（多条件）** | ✅ | ❌ Paywall | ✅ | ✅ | `advanced_filter` feature check |
-| 交易员详情页 | ✅ | ✅ | ✅ | ✅ | `/trader/[handle]` 可访问 |
-| **Arena Score 详情** | ✅ | ❌ 模糊 | ✅ | ✅ | `score_breakdown` feature check |
-| **交易员对比** | ✅ | ❌ Paywall | ✅ | ✅ (10次/月) | `trader_comparison` feature check |
-| 历史数据 | ✅ | ✅ (7天) | ✅ | ✅ (90天) | `historical_data` feature check |
-| 关注交易员 | ✅ | ✅ (10人) | ✅ | ✅ (50人) | `useFollowLimit()` hook |
-| 发帖 | ✅ | ✅ (3条/天) | ✅ | ✅ (无限) | API 层检查 |
-| **交易员预警** | ❌ | - | ✅ | ✅ | `trader_alerts` feature check |
-| **Pro官方群** | ❌ | - | ✅ | ✅ | `premium_groups` feature check |
-| **数据导出** | ✅ | ❌ | ✅ | ✅ (10次/月) | `export_data` feature check |
-| **API访问** | ❌ | - | ✅ | ✅ (1000次/天) | `api_access` feature check |
-| Pro徽章 | ❌ | - | ✅ | ✅ | `pro_badge` feature check |
-| 分类排行 | ✅ | ❌ | ✅ | ✅ | `category_ranking` feature check |
-| 邮件通知 | ❌ | - | ✅ | ✅ | `email_notifications` feature check |
-| 推送通知 | ❌ | - | ✅ | ✅ | `push_notifications` feature check |
-| 自定义排行 | ❌ | - | ✅ | ✅ | `custom_rankings` feature check |
-| 投资组合建议 | ❌ | - | ✅ | ✅ | `portfolio_suggestions` feature check |
+| 功能                   | Free 可见 | Free 可用   | Pro 可见 | Pro 可用       | 验证点                                |
+| ---------------------- | --------- | ----------- | -------- | -------------- | ------------------------------------- |
+| 排行榜浏览             | ✅        | ✅          | ✅       | ✅             | 首页可访问                            |
+| 基础筛选（交易所）     | ✅        | ✅          | ✅       | ✅             | 下拉菜单可用                          |
+| **高级筛选（多条件）** | ✅        | ❌ Paywall  | ✅       | ✅             | `advanced_filter` feature check       |
+| 交易员详情页           | ✅        | ✅          | ✅       | ✅             | `/trader/[handle]` 可访问             |
+| **Arena Score 详情**   | ✅        | ❌ 模糊     | ✅       | ✅             | `score_breakdown` feature check       |
+| **交易员对比**         | ✅        | ❌ Paywall  | ✅       | ✅ (10次/月)   | `trader_comparison` feature check     |
+| 历史数据               | ✅        | ✅ (7天)    | ✅       | ✅ (90天)      | `historical_data` feature check       |
+| 关注交易员             | ✅        | ✅ (10人)   | ✅       | ✅ (50人)      | `useFollowLimit()` hook               |
+| 发帖                   | ✅        | ✅ (3条/天) | ✅       | ✅ (无限)      | API 层检查                            |
+| **交易员预警**         | ❌        | -           | ✅       | ✅             | `trader_alerts` feature check         |
+| **Pro官方群**          | ❌        | -           | ✅       | ✅             | `premium_groups` feature check        |
+| **数据导出**           | ✅        | ❌          | ✅       | ✅ (10次/月)   | `export_data` feature check           |
+| **API访问**            | ❌        | -           | ✅       | ✅ (1000次/天) | `api_access` feature check            |
+| Pro徽章                | ❌        | -           | ✅       | ✅             | `pro_badge` feature check             |
+| 分类排行               | ✅        | ❌          | ✅       | ✅             | `category_ranking` feature check      |
+| 邮件通知               | ❌        | -           | ✅       | ✅             | `email_notifications` feature check   |
+| 推送通知               | ❌        | -           | ✅       | ✅             | `push_notifications` feature check    |
+| 自定义排行             | ❌        | -           | ✅       | ✅             | `custom_rankings` feature check       |
+| 投资组合建议           | ❌        | -           | ✅       | ✅             | `portfolio_suggestions` feature check |
 
 **验证方法**：
+
 ```typescript
 // 前端验证
 const { hasAccess, remaining } = useFeatureAccess('trader_alerts')
@@ -238,6 +249,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ## C. 反作弊/边界用例
 
 ### 【用例E-001】重复点击支付按钮
+
 - **前置条件**：用户在 Checkout 页面
 - **操作步骤**：快速连续点击"支付"按钮5次
 - **期望结果**：
@@ -250,6 +262,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ---
 
 ### 【用例E-002】支付过程中网络中断
+
 - **前置条件**：用户在 Stripe 输入卡号后
 - **操作步骤**：点击支付后立即断开网络
 - **期望 UI 结果**：恢复网络后显示明确状态（成功/失败）
@@ -259,6 +272,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ---
 
 ### 【用例E-003】Webhook 延迟（支付成功但webhook未到）
+
 - **前置条件**：用户完成支付，但 webhook 延迟 5 分钟
 - **操作步骤**：
   1. 支付成功 → 跳转 success 页面
@@ -274,6 +288,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ---
 
 ### 【用例E-004】Webhook 重复投递
+
 - **前置条件**：同一 event 被 Stripe 投递 2 次
 - **操作步骤**：接收重复的 `checkout.session.completed`
 - **期望后端结果**：
@@ -285,6 +300,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ---
 
 ### 【用例E-005】同一账号多设备登录
+
 - **前置条件**：用户在设备A已登录Pro
 - **操作步骤**：
   1. 在设备B登录同一账号
@@ -300,6 +316,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ---
 
 ### 【用例E-006】伪造 tier 前端绕过
+
 - **前置条件**：Free用户修改前端状态
 - **操作步骤**：
   1. 修改 localStorage 中的 tier 为 'pro'
@@ -313,6 +330,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ---
 
 ### 【用例E-007】Stripe Webhook 签名验证失败
+
 - **前置条件**：伪造 webhook 请求
 - **操作步骤**：发送无效签名的 webhook
 - **期望结果**：
@@ -324,21 +342,26 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 
 ---
 
-### 【用例E-008】退款后权限回收
-- **前置条件**：用户Pro订阅，Stripe发起退款
+### 【用例E-008】现代 Refund 生命周期与产品权限隔离
+
+- **前置条件**：分别准备一笔具有 exact Stripe identity/ownership 的 Pro、Tip、group-pass 付款，并保留各自的 PaymentIntent、Charge、Checkout/Invoice 和本地 immutable ledger 对应关系
 - **操作步骤**：
-  1. Stripe Dashboard 发起全额退款
-  2. Webhook 接收 `charge.refunded`
+  1. 分别对三类付款发起 partial、failed 和 full succeeded refund
+  2. Webhook 只接收 canonical `refund.created`、`refund.updated`、`refund.failed`，并重放重复、乱序投递
+  3. 对每个 Charge 分页核对 Stripe 的全部 Refund，只把 `status='succeeded'` 的累计金额作为退款财务权威
 - **期望结果**：
-  - `subscriptions.status` = 'cancelled'
-  - `tier` 降为 'free'
-  - 立即移除 Pro 权限
-  - `payment_history` 记录 `status='refunded'`
+  - pending/failed 或未达到 captured amount 的 partial refund 不得按全额成功退款撤权；重复、乱序事件不得重复执行副作用
+  - Pro 全额成功退款只回收该 exact `pro_entitlement` 对应的权益；更新的订阅或其他独立有效 Pro 权威不得受影响
+  - Tip 全额成功退款只把 exact Tip 投影为 `refunded`，不得修改 `subscriptions`、Pro profile 投影或 group membership
+  - group-pass 全额成功退款只走 exact group-pass、authority-aware 的撤销闭环；不得猜删成员，存在独立当前 group authority 时必须保留成员资格，未完成 exact revocation acknowledgement 时必须保持 durable review，且不得修改 Pro 或 Tip
+  - ownership 缺失、冲突或一笔 Charge 匹配多个产品时必须 fail closed 并进入 durable review，禁止猜测为 Pro 后撤权
+  - 本地退款 tombstone/ledger 记录成功退款累计金额、状态和 exact product ownership，最终 projection 与对应产品权威一致
 - **严重程度**：高
 
 ---
 
 ### 【用例E-009】价格变更后老用户续费
+
 - **前置条件**：用户以 $9.99/月 订阅，新价格 $14.99
 - **操作步骤**：老用户续费周期到达
 - **期望结果**：
@@ -349,6 +372,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ---
 
 ### 【用例E-010】并发创建多个 Checkout Session
+
 - **前置条件**：恶意用户脚本并发调用
 - **操作步骤**：同时发送10个 `/api/checkout` 请求
 - **期望结果**：
@@ -360,6 +384,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ---
 
 ### 【用例E-011】卡片验证失败（3DS 挑战失败）
+
 - **前置条件**：用户使用需要 3DS 验证的卡
 - **操作步骤**：在 3DS 弹窗中点击"取消"或验证失败
 - **期望 UI 结果**：显示"支付验证失败，请重试"
@@ -369,6 +394,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ---
 
 ### 【用例E-012】货币转换场景
+
 - **前置条件**：用户使用非 USD 货币卡
 - **操作步骤**：完成支付
 - **期望后端结果**：`payment_history.currency = 'usd'`，金额正确（以美分计）
@@ -380,36 +406,37 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 
 ### 必须记录的日志事件
 
-| 事件 | 级别 | 必含字段 | 目的 |
-|------|------|----------|------|
-| `checkout.session.created` | INFO | user_id, session_id, plan, amount | 追踪转化漏斗 |
-| `webhook.received` | INFO | event_id, event_type, timestamp | Webhook 到达 |
-| `webhook.processed` | INFO | event_id, processing_time_ms | 处理完成 |
-| `subscription.created` | INFO | user_id, tier, plan, stripe_subscription_id | 订阅创建 |
-| `subscription.updated` | INFO | user_id, old_status, new_status | 状态变更 |
-| `subscription.canceled` | WARN | user_id, reason, cancel_at | 取消订阅 |
-| `payment.succeeded` | INFO | user_id, amount, currency, invoice_id | 支付成功 |
-| `payment.failed` | ERROR | user_id, error_code, error_message | 支付失败/排障 |
-| `permission.denied` | WARN | user_id, feature_id, current_tier | 权限拒绝/识别滥用 |
-| `quota.exceeded` | WARN | user_id, feature_id, current_usage, limit | 配额超限 |
-| Pro群组加入/退出 | INFO | user_id, group_id, action | 追踪自动化 |
+| 事件                       | 级别  | 必含字段                                    | 目的              |
+| -------------------------- | ----- | ------------------------------------------- | ----------------- |
+| `checkout.session.created` | INFO  | user_id, session_id, plan, amount           | 追踪转化漏斗      |
+| `webhook.received`         | INFO  | event_id, event_type, timestamp             | Webhook 到达      |
+| `webhook.processed`        | INFO  | event_id, processing_time_ms                | 处理完成          |
+| `subscription.created`     | INFO  | user_id, tier, plan, stripe_subscription_id | 订阅创建          |
+| `subscription.updated`     | INFO  | user_id, old_status, new_status             | 状态变更          |
+| `subscription.canceled`    | WARN  | user_id, reason, cancel_at                  | 取消订阅          |
+| `payment.succeeded`        | INFO  | user_id, amount, currency, invoice_id       | 支付成功          |
+| `payment.failed`           | ERROR | user_id, error_code, error_message          | 支付失败/排障     |
+| `permission.denied`        | WARN  | user_id, feature_id, current_tier           | 权限拒绝/识别滥用 |
+| `quota.exceeded`           | WARN  | user_id, feature_id, current_usage, limit   | 配额超限          |
+| Pro群组加入/退出           | INFO  | user_id, group_id, action                   | 追踪自动化        |
 
 ### 必须监控的指标
 
-| 指标 | 阈值 | 告警 |
-|------|------|------|
-| Webhook 处理延迟 | P95 < 5s | > 10s 告警 |
-| Webhook 失败率 | < 0.1% | > 1% 告警 |
-| 订阅创建成功率 | > 99% | < 95% 告警 |
-| 权限校验延迟 | P95 < 100ms | > 500ms 告警 |
-| 数据库同步延迟 | < 1s | > 5s 告警 |
-| 新订阅数/天 | - | 监控趋势 |
-| 取消率/月 | - | 监控趋势 |
-| 续费成功率 | > 95% | < 90% 告警 |
+| 指标             | 阈值        | 告警         |
+| ---------------- | ----------- | ------------ |
+| Webhook 处理延迟 | P95 < 5s    | > 10s 告警   |
+| Webhook 失败率   | < 0.1%      | > 1% 告警    |
+| 订阅创建成功率   | > 99%       | < 95% 告警   |
+| 权限校验延迟     | P95 < 100ms | > 500ms 告警 |
+| 数据库同步延迟   | < 1s        | > 5s 告警    |
+| 新订阅数/天      | -           | 监控趋势     |
+| 取消率/月        | -           | 监控趋势     |
+| 续费成功率       | > 95%       | < 90% 告警   |
 
 ### Sentry 错误监控
 
 必须捕获的错误:
+
 - Stripe webhook 验证失败
 - 订阅状态更新失败
 - 权限检查异常
@@ -418,6 +445,7 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 ### 审计要求
 
 每笔交易必须可追溯:
+
 1. Stripe Dashboard → `payment_intent_id`
 2. `payment_history` 表 → `stripe_payment_intent_id`
 3. `subscriptions` 表 → `stripe_subscription_id`
@@ -427,8 +455,8 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 
 ## 附录: Stripe 测试卡号
 
-| 场景 | 卡号 | CVC | 日期 |
-|------|------|-----|------|
+| 场景     | 卡号             | CVC  | 日期     |
+| -------- | ---------------- | ---- | -------- |
 | 成功支付 | 4242424242424242 | 任意 | 任意未来 |
 | 卡片被拒 | 4000000000000002 | 任意 | 任意未来 |
 | 余额不足 | 4000000000009995 | 任意 | 任意未来 |
