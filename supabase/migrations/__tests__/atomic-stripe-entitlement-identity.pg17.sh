@@ -8,6 +8,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260718183000_atomic_stripe_entitlement_identity.sql"
+EXTRA_SETUP_SQLS="${STRIPE_ENTITLEMENT_EXTRA_SETUP_SQLS:-${STRIPE_ENTITLEMENT_EXTRA_SETUP_SQL:-}}"
 EXTRA_MIGRATIONS="${STRIPE_ENTITLEMENT_EXTRA_MIGRATIONS:-${STRIPE_ENTITLEMENT_EXTRA_MIGRATION:-}}"
 EXTRA_PROOF_SQLS="${STRIPE_ENTITLEMENT_EXTRA_PROOF_SQLS:-${STRIPE_ENTITLEMENT_EXTRA_PROOF_SQL:-}}"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
@@ -515,6 +516,17 @@ INSERT INTO public.subscriptions(
   NULL
 );
 SQL
+
+if [[ -n "$EXTRA_SETUP_SQLS" ]]; then
+  IFS=':' read -r -a extra_setup_paths <<< "$EXTRA_SETUP_SQLS"
+  for extra_setup in "${extra_setup_paths[@]}"; do
+    if [[ ! -r "$extra_setup" ]]; then
+      echo "Extra Stripe entitlement setup is unreadable: $extra_setup" >&2
+      exit 1
+    fi
+    psql_cmd -f "$extra_setup" >/dev/null
+  done
+fi
 
 psql_cmd -f "$MIGRATION" >/dev/null
 if [[ -n "$EXTRA_MIGRATIONS" ]]; then

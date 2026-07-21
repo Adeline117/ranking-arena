@@ -1,0 +1,249 @@
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+
+INSERT INTO auth.users(id)
+VALUES ('e1000000-0000-0000-0000-000000000001');
+INSERT INTO public.user_profiles(
+  id,
+  stripe_customer_id,
+  reputation_score,
+  is_verified_trader
+) VALUES (
+  'e1000000-0000-0000-0000-000000000001',
+  'cus_production_group_fixture',
+  100,
+  true
+);
+INSERT INTO public.groups (
+  id,
+  name,
+  created_by,
+  is_premium_only,
+  subscription_price_monthly,
+  subscription_price_yearly,
+  original_price_monthly,
+  original_price_yearly,
+  allow_trial,
+  trial_days
+) VALUES
+  (
+    'e3000000-0000-0000-0000-000000000001',
+    'Production-shaped exact group',
+    'e9000000-0000-0000-0000-000000000009',
+    true,
+    12.34,
+    123.40,
+    15.00,
+    150.00,
+    true,
+    7
+  ),
+  (
+    'e3000000-0000-0000-0000-000000000002',
+    'Production-shaped legacy group',
+    'e9000000-0000-0000-0000-000000000009',
+    true,
+    23.45,
+    234.50,
+    25.00,
+    250.00,
+    true,
+    7
+  );
+
+DO $production_group_exact_writer_and_refund$
+DECLARE
+  v_activate jsonb;
+  v_refund jsonb;
+  v_ack jsonb;
+  v_ownership_id uuid;
+  v_subscription_id uuid;
+  v_joined_at timestamptz;
+BEGIN
+  v_activate :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'e1000000-0000-0000-0000-000000000001',
+      'e3000000-0000-0000-0000-000000000001',
+      'monthly',
+      'pi_production_group_exact',
+      'cs_production_group_exact',
+      1234,
+      'usd',
+      'ch_production_group_exact',
+      'cus_production_group_fixture'
+    );
+  IF v_activate ->> 'status' <> 'subscribed'
+    OR v_activate ->> 'membership_status' <> 'joined'
+    OR v_activate ->> 'idempotent_replay' <> 'false'
+  THEN
+    RAISE EXCEPTION
+      'real atomic group writer did not create an exact grant: %',
+      v_activate;
+  END IF;
+
+  SELECT
+    ownership.id,
+    consumption.subscription_id,
+    consumption.payment_member_joined_at
+  INTO v_ownership_id, v_subscription_id, v_joined_at
+  FROM public.stripe_payment_ownerships AS ownership
+  JOIN public.group_payment_consumptions AS consumption
+    ON consumption.id = ownership.ledger_id
+  JOIN public.group_members AS member
+    ON member.group_id = consumption.group_id
+    AND member.user_id = consumption.user_id
+    AND member.joined_at = consumption.payment_member_joined_at
+  WHERE ownership.stripe_charge_id = 'ch_production_group_exact'
+    AND public.stripe_payment_ownership_is_exact_v2(ownership.id);
+  IF NOT FOUND OR v_joined_at IS NULL THEN
+    RAISE EXCEPTION
+      'real atomic group writer did not persist exact membership provenance';
+  END IF;
+
+  v_refund := public.record_charge_refund_tombstone_atomic(
+    'e1000000-0000-0000-0000-000000000001',
+    'cus_production_group_fixture',
+    'pi_production_group_exact',
+    'ch_production_group_exact',
+    true,
+    1234,
+    'usd',
+    1234,
+    'succeeded',
+    'evt_production_group_exact_full',
+    '2036-01-01 00:00:00+00'
+  );
+  IF v_refund ->> 'status' <> 'manual_review' THEN
+    RAISE EXCEPTION
+      'real group full refund did not require exact revocation: %',
+      v_refund;
+  END IF;
+
+  v_ack := public.acknowledge_group_pass_full_refund_revocation_atomic(
+    v_ownership_id,
+    v_subscription_id,
+    'evt_production_group_exact_full',
+    1234,
+    'ops:refund:evt_production_group_exact_full'
+  );
+  IF v_ack ->> 'status' <> 'acknowledged'
+    OR v_ack ->> 'membership_action' <> 'payment_member_deleted'
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_members AS member
+      WHERE member.group_id =
+          'e3000000-0000-0000-0000-000000000001'
+        AND member.user_id =
+          'e1000000-0000-0000-0000-000000000001'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_subscriptions AS subscription
+      WHERE subscription.id = v_subscription_id
+        AND subscription.status IN ('active', 'trialing')
+        AND subscription.expires_at > pg_catalog.statement_timestamp()
+    )
+    OR NOT public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_production_group_exact'
+    )
+  THEN
+    RAISE EXCEPTION
+      'real group refund revocation did not remove exact payment authority: %',
+      v_ack;
+  END IF;
+END
+$production_group_exact_writer_and_refund$;
+
+DO $production_group_legacy_replay_cannot_guess_provenance$
+DECLARE
+  v_legacy jsonb;
+  v_replay jsonb;
+  v_original_joined_at timestamptz;
+BEGIN
+  v_legacy := public.activate_group_subscription_atomic(
+    'e1000000-0000-0000-0000-000000000001',
+    'e3000000-0000-0000-0000-000000000002',
+    'monthly',
+    'stripe',
+    'pi_production_group_legacy',
+    'cs_production_group_legacy',
+    2345,
+    'usd'
+  );
+  IF v_legacy ->> 'status' <> 'subscribed'
+    OR v_legacy ->> 'membership_status' <> 'joined'
+  THEN
+    RAISE EXCEPTION 'real legacy group writer did not grant: %', v_legacy;
+  END IF;
+  SELECT member.joined_at
+  INTO v_original_joined_at
+  FROM public.group_members AS member
+  WHERE member.group_id =
+      'e3000000-0000-0000-0000-000000000002'
+    AND member.user_id =
+      'e1000000-0000-0000-0000-000000000001';
+  DELETE FROM public.group_members
+  WHERE group_id = 'e3000000-0000-0000-0000-000000000002'
+    AND user_id = 'e1000000-0000-0000-0000-000000000001';
+  INSERT INTO public.group_members(group_id, user_id, role, joined_at)
+  VALUES (
+    'e3000000-0000-0000-0000-000000000002',
+    'e1000000-0000-0000-0000-000000000001',
+    'member',
+    v_original_joined_at + interval '1 day'
+  );
+
+  v_replay :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'e1000000-0000-0000-0000-000000000001',
+      'e3000000-0000-0000-0000-000000000002',
+      'monthly',
+      'pi_production_group_legacy',
+      'cs_production_group_legacy',
+      2345,
+      'usd',
+      'ch_production_group_legacy',
+      'cus_production_group_fixture'
+    );
+  IF v_replay ->> 'status' <> 'manual_review'
+    OR v_replay ->> 'reason_key' <>
+      'group_pass_membership_provenance_required'
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_payment_consumptions AS consumption
+      WHERE consumption.payment_intent_id = 'pi_production_group_legacy'
+        AND (
+          consumption.stripe_charge_id IS NOT NULL
+          OR consumption.stripe_customer_id IS NOT NULL
+          OR consumption.payment_member_joined_at IS NOT NULL
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.stripe_payment_ownerships AS ownership
+      WHERE ownership.stripe_charge_id = 'ch_production_group_legacy'
+    )
+  THEN
+    RAISE EXCEPTION
+      'real legacy group replay guessed replacement member provenance: %',
+      v_replay;
+  END IF;
+END
+$production_group_legacy_replay_cannot_guess_provenance$;
+
+DO $production_group_private_binder_acl$
+BEGIN
+  IF pg_catalog.has_function_privilege(
+    'service_role',
+    'public.bind_group_pass_stripe_ownership_atomic(text,text,text,timestamp with time zone)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'private group provenance binder is service executable';
+  END IF;
+END
+$production_group_private_binder_acl$;
+
+\echo 'Production-shaped non-entitlement group ownership fixture passed'

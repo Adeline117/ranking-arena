@@ -1,0 +1,17 @@
+-- Applied after the entitlement migrations but immediately before 181845.
+-- Simulate out-of-band grants that a secure rename/cutover must converge.
+DO $create_shadow_payment_auditor$
+BEGIN
+  IF pg_catalog.to_regrole('shadow_payment_auditor') IS NULL THEN
+    CREATE ROLE shadow_payment_auditor NOLOGIN;
+  END IF;
+END
+$create_shadow_payment_auditor$;
+
+GRANT SELECT ON TABLE public.tips TO shadow_payment_auditor;
+GRANT EXECUTE ON FUNCTION public.record_charge_refund_tombstone_atomic(
+  uuid, text, text, text, boolean, bigint, text, bigint, text, text,
+  timestamptz
+) TO shadow_payment_auditor;
+GRANT EXECUTE ON FUNCTION public.stripe_merge_charge_refund_tombstone_v2(uuid)
+  TO shadow_payment_auditor;

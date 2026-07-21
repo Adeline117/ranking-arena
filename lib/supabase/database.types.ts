@@ -2075,6 +2075,74 @@ export type Database = {
         }
         Relationships: []
       }
+      group_pass_refund_revocation_acks: {
+        Row: {
+          acknowledged_at: string
+          amount_paid: number
+          id: string
+          membership_action: string
+          ownership_id: string
+          payment_member_joined_at: string | null
+          refund_snapshot_event_created_at: string
+          refund_snapshot_event_id: string
+          refund_succeeded_amount: number
+          revocation_action_reference: string
+          stripe_charge_id: string
+          subscription_action: string
+          subscription_expires_at_after: string | null
+          subscription_expires_at_before: string | null
+          subscription_id: string
+          subscription_status_after: string | null
+          subscription_status_before: string | null
+        }
+        Insert: {
+          acknowledged_at?: string
+          amount_paid: number
+          id?: string
+          membership_action: string
+          ownership_id: string
+          payment_member_joined_at?: string | null
+          refund_snapshot_event_created_at: string
+          refund_snapshot_event_id: string
+          refund_succeeded_amount: number
+          revocation_action_reference: string
+          stripe_charge_id: string
+          subscription_action: string
+          subscription_expires_at_after?: string | null
+          subscription_expires_at_before?: string | null
+          subscription_id: string
+          subscription_status_after?: string | null
+          subscription_status_before?: string | null
+        }
+        Update: {
+          acknowledged_at?: string
+          amount_paid?: number
+          id?: string
+          membership_action?: string
+          ownership_id?: string
+          payment_member_joined_at?: string | null
+          refund_snapshot_event_created_at?: string
+          refund_snapshot_event_id?: string
+          refund_succeeded_amount?: number
+          revocation_action_reference?: string
+          stripe_charge_id?: string
+          subscription_action?: string
+          subscription_expires_at_after?: string | null
+          subscription_expires_at_before?: string | null
+          subscription_id?: string
+          subscription_status_after?: string | null
+          subscription_status_before?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'group_pass_refund_revocation_acks_ownership_id_fkey'
+            columns: ['ownership_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_payment_ownerships'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       group_payment_consumptions: {
         Row: {
           amount_cents: number
@@ -2084,9 +2152,12 @@ export type Database = {
           group_id: string
           id: string
           outcome: string
+          payment_member_joined_at: string | null
           payment_intent_id: string
           provider: string
           result: Json
+          stripe_charge_id: string | null
+          stripe_customer_id: string | null
           subscription_id: string
           tier: string
           user_id: string
@@ -2099,9 +2170,12 @@ export type Database = {
           group_id: string
           id?: string
           outcome: string
+          payment_member_joined_at?: string | null
           payment_intent_id: string
           provider: string
           result: Json
+          stripe_charge_id?: string | null
+          stripe_customer_id?: string | null
           subscription_id: string
           tier: string
           user_id: string
@@ -2114,9 +2188,12 @@ export type Database = {
           group_id?: string
           id?: string
           outcome?: string
+          payment_member_joined_at?: string | null
           payment_intent_id?: string
           provider?: string
           result?: Json
+          stripe_charge_id?: string | null
+          stripe_customer_id?: string | null
           subscription_id?: string
           tier?: string
           user_id?: string
@@ -5662,6 +5739,7 @@ export type Database = {
           refund_state: string
           refund_succeeded_amount: number
           resolution_kind: string
+          resolution_ownership_id: string | null
           resolution_reference: string | null
           stripe_charge_id: string
           stripe_customer_id: string
@@ -5681,6 +5759,7 @@ export type Database = {
           refund_state: string
           refund_succeeded_amount: number
           resolution_kind?: string
+          resolution_ownership_id?: string | null
           resolution_reference?: string | null
           stripe_charge_id: string
           stripe_customer_id: string
@@ -5700,6 +5779,7 @@ export type Database = {
           refund_state?: string
           refund_succeeded_amount?: number
           resolution_kind?: string
+          resolution_ownership_id?: string | null
           resolution_reference?: string | null
           stripe_charge_id?: string
           stripe_customer_id?: string
@@ -5712,6 +5792,13 @@ export type Database = {
             columns: ['merged_payment_id']
             isOneToOne: false
             referencedRelation: 'stripe_entitlement_payments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_charge_refund_tombstones_resolution_ownership_id_fkey'
+            columns: ['resolution_ownership_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_payment_ownerships'
             referencedColumns: ['id']
           },
         ]
@@ -6177,6 +6264,48 @@ export type Database = {
           },
         ]
       }
+      stripe_payment_ownerships: {
+        Row: {
+          amount_paid: number
+          checkout_session_id: string | null
+          claimed_at: string
+          currency: string
+          id: string
+          ledger_id: string
+          owner_user_id: string | null
+          product_kind: string
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_payment_intent_id: string | null
+        }
+        Insert: {
+          amount_paid: number
+          checkout_session_id?: string | null
+          claimed_at?: string
+          currency: string
+          id?: string
+          ledger_id: string
+          owner_user_id?: string | null
+          product_kind: string
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_payment_intent_id?: string | null
+        }
+        Update: {
+          amount_paid?: number
+          checkout_session_id?: string | null
+          claimed_at?: string
+          currency?: string
+          id?: string
+          ledger_id?: string
+          owner_user_id?: string | null
+          product_kind?: string
+          stripe_charge_id?: string
+          stripe_customer_id?: string
+          stripe_payment_intent_id?: string | null
+        }
+        Relationships: []
+      }
       stripe_subscription_state_events: {
         Row: {
           cancel_at_period_end: boolean
@@ -6412,12 +6541,15 @@ export type Database = {
           amount_cents: number
           completed_at: string | null
           created_at: string
+          currency: string | null
           from_user_id: string
           id: string
           message: string | null
           post_id: string | null
           status: string
+          stripe_charge_id: string | null
           stripe_checkout_session_id: string | null
+          stripe_customer_id: string | null
           stripe_payment_intent_id: string | null
           to_user_id: string | null
           updated_at: string
@@ -6426,12 +6558,15 @@ export type Database = {
           amount_cents: number
           completed_at?: string | null
           created_at?: string
+          currency?: string | null
           from_user_id: string
           id?: string
           message?: string | null
           post_id?: string | null
           status?: string
+          stripe_charge_id?: string | null
           stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
           stripe_payment_intent_id?: string | null
           to_user_id?: string | null
           updated_at?: string
@@ -6440,12 +6575,15 @@ export type Database = {
           amount_cents?: number
           completed_at?: string | null
           created_at?: string
+          currency?: string | null
           from_user_id?: string
           id?: string
           message?: string | null
           post_id?: string | null
           status?: string
+          stripe_charge_id?: string | null
           stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
           stripe_payment_intent_id?: string | null
           to_user_id?: string | null
           updated_at?: string
@@ -9169,6 +9307,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      acknowledge_group_pass_full_refund_revocation_atomic: {
+        Args: {
+          p_ownership_id: string
+          p_refund_snapshot_event_id: string
+          p_refund_succeeded_amount: number
+          p_revocation_action_reference: string
+          p_subscription_id: string
+        }
+        Returns: Json
+      }
       acquire_leaderboard_lock: { Args: { season: string }; Returns: boolean }
       acquire_post_audience_block_edges: {
         Args: { p_actor_id: string; p_author_ids: string[] }
@@ -9183,6 +9331,20 @@ export type Database = {
           p_group_id: string
           p_payment_intent_id: string | null
           p_payment_provider: string | null
+          p_tier: string
+        }
+        Returns: Json
+      }
+      activate_group_subscription_with_stripe_ownership_atomic: {
+        Args: {
+          p_actor_id: string
+          p_amount_cents: number
+          p_checkout_session_id: string | null
+          p_currency: string
+          p_group_id: string
+          p_payment_intent_id: string
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
           p_tier: string
         }
         Returns: Json
@@ -9418,6 +9580,15 @@ export type Database = {
         }
         Returns: Json
       }
+      bind_group_pass_stripe_ownership_atomic: {
+        Args: {
+          p_payment_member_joined_at: string | null
+          p_payment_intent_id: string
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+        }
+        Returns: Json
+      }
       bind_stripe_customer_owner_atomic: {
         Args: {
           p_expected_previous_stripe_customer_id: string | null
@@ -9603,6 +9774,13 @@ export type Database = {
         }
         Returns: string
       }
+      claim_stripe_payment_ownership_atomic: {
+        Args: {
+          p_stripe_charge_id: string
+          p_stripe_payment_intent_id: string | null
+        }
+        Returns: Json
+      }
       claimant_counts: {
         Args: never
         Returns: {
@@ -9634,6 +9812,19 @@ export type Database = {
           p_source: string
         }
         Returns: number
+      }
+      complete_tip_with_stripe_ownership_atomic: {
+        Args: {
+          p_amount_paid: number
+          p_checkout_session_id: string
+          p_completed_at: string
+          p_currency: string
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_payment_intent_id: string
+          p_tip_id: string
+        }
+        Returns: Json
       }
       clip: {
         Args: { max_val: number; min_val: number; val: number }
@@ -10276,6 +10467,19 @@ export type Database = {
       }
       has_current_group_entitlement: {
         Args: { p_actor_id: string; p_group_id: string }
+        Returns: boolean
+      }
+      group_pass_full_refund_revocation_is_effective_v2: {
+        Args: { p_ownership_id: string }
+        Returns: boolean
+      }
+      group_pass_has_independent_current_authority_v2: {
+        Args: {
+          p_excluded_ownership_id: string
+          p_excluded_subscription_id: string
+          p_group_id: string
+          p_user_id: string
+        }
         Returns: boolean
       }
       has_valid_group_subscription: {
@@ -11068,6 +11272,18 @@ export type Database = {
         Returns: Json
       }
       stripe_paid_launch_readiness_v2: { Args: never; Returns: Json }
+      stripe_payment_ownership_is_exact_v2: {
+        Args: { p_ownership_id: string }
+        Returns: boolean
+      }
+      stripe_refund_tombstone_is_resolved_v2: {
+        Args: { p_stripe_charge_id: string }
+        Returns: boolean
+      }
+      stripe_resolve_non_entitlement_refund_tombstone_atomic: {
+        Args: { p_ownership_id: string }
+        Returns: Json
+      }
       stripe_subscription_has_exact_payment_binding_v2: {
         Args: { p_user_id: string }
         Returns: boolean
