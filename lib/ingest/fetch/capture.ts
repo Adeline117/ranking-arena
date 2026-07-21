@@ -288,9 +288,9 @@ export interface LeaderboardCapture {
 }
 
 /**
- * A non-2xx response is both durable evidence and a failed job attempt. The
- * caller persists `capture` in its failed-run transaction, then rethrows so
- * the queue retry policy remains active.
+ * An upstream HTTP or response-validation failure is both durable evidence
+ * and a failed job attempt. The caller persists `capture` in its failed-run
+ * transaction, then rethrows so the queue retry policy remains active.
  */
 export class LeaderboardCaptureUpstreamError extends Error {
   constructor(
@@ -299,7 +299,7 @@ export class LeaderboardCaptureUpstreamError extends Error {
     public readonly capture: LeaderboardCapture,
     public readonly cause: Error
   ) {
-    super(`[ingest] leaderboard capture upstream ${status} for ${publicUrl}`)
+    super(`[ingest] leaderboard capture upstream ${status} for ${publicUrl}: ${cause.message}`)
     this.name = 'LeaderboardCaptureUpstreamError'
   }
 }
@@ -671,19 +671,46 @@ export async function captureNumericLeaderboard(
       fetchedAt: canonicalTimestamp(now),
     })
 
-    const extractedMeta = extractMeta(payload)
-    const meta: NumericLeaderboardPageMeta = {
-      rowCount: extractedMeta.rowCount,
-      reportedPopulation: extractedMeta.reportedPopulation,
-      reportedPageCount: extractedMeta.reportedPageCount,
-      reportedCurrentPage: extractedMeta.reportedCurrentPage,
-      reportedPageSize: extractedMeta.reportedPageSize,
+    let meta: NumericLeaderboardPageMeta
+    try {
+      const extractedMeta = extractMeta(payload)
+      meta = {
+        rowCount: extractedMeta.rowCount,
+        reportedPopulation: extractedMeta.reportedPopulation,
+        reportedPageCount: extractedMeta.reportedPageCount,
+        reportedCurrentPage: extractedMeta.reportedCurrentPage,
+        reportedPageSize: extractedMeta.reportedPageSize,
+      }
+      assertSafeInteger(meta.rowCount, 'source row count', 0)
+      assertOptionalReport(meta.reportedPopulation, 'reported population')
+      assertOptionalReport(meta.reportedPageCount, 'reported page count')
+      assertOptionalReport(meta.reportedCurrentPage, 'reported current page')
+      assertOptionalReport(meta.reportedPageSize, 'reported page size')
+    } catch (cause) {
+      const validationError =
+        cause instanceof Error
+          ? cause
+          : new Error(`[ingest] leaderboard response validation failed: ${String(cause)}`)
+      sourcePages.push({
+        rawPage,
+        sourceRowCount: 0,
+        requestSha256,
+        httpStatus: status,
+        paginationPosition,
+        sourceReports: {
+          population: { state: 'not_reported' },
+          page_count: { state: 'not_reported' },
+          current_page: { state: 'not_reported' },
+          page_size: { state: 'not_reported' },
+        },
+      })
+      throw new LeaderboardCaptureUpstreamError(
+        status,
+        publicRequest.url,
+        finish('upstream_error'),
+        validationError
+      )
     }
-    assertSafeInteger(meta.rowCount, 'source row count', 0)
-    assertOptionalReport(meta.reportedPopulation, 'reported population')
-    assertOptionalReport(meta.reportedPageCount, 'reported page count')
-    assertOptionalReport(meta.reportedCurrentPage, 'reported current page')
-    assertOptionalReport(meta.reportedPageSize, 'reported page size')
     addReport(populationReport, meta.reportedPopulation)
     addReport(pageCountReport, meta.reportedPageCount)
 
