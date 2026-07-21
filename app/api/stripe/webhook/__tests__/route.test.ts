@@ -26,7 +26,7 @@ const mockHandlePaymentFailed = jest.fn()
 const mockHandlePaymentActionRequired = jest.fn()
 const mockHandleInvoiceFinalizationFailed = jest.fn()
 const mockHandleChargeRefunded = jest.fn()
-const mockHandleRefundUpdated = jest.fn()
+const mockHandleRefundLifecycle = jest.fn()
 const mockHandleChargeDisputeCreated = jest.fn()
 
 jest.mock('@/app/api/stripe/webhook/handlers/checkout', () => ({
@@ -48,7 +48,7 @@ jest.mock('@/app/api/stripe/webhook/handlers/invoice', () => ({
 }))
 jest.mock('@/app/api/stripe/webhook/handlers/refund', () => ({
   handleChargeRefunded: (...args: unknown[]) => mockHandleChargeRefunded(...args),
-  handleRefundUpdated: (...args: unknown[]) => mockHandleRefundUpdated(...args),
+  handleRefundLifecycle: (...args: unknown[]) => mockHandleRefundLifecycle(...args),
   handleChargeDisputeCreated: (...args: unknown[]) => mockHandleChargeDisputeCreated(...args),
 }))
 
@@ -230,9 +230,6 @@ describe('POST /api/stripe/webhook', () => {
     ['invoice.payment_failed', mockHandlePaymentFailed],
     ['invoice.payment_action_required', mockHandlePaymentActionRequired],
     ['invoice.finalization_failed', mockHandleInvoiceFinalizationFailed],
-    ['charge.refunded', mockHandleChargeRefunded],
-    ['charge.refund.updated', mockHandleRefundUpdated],
-    ['refund.updated', mockHandleRefundUpdated],
     ['charge.dispute.created', mockHandleChargeDisputeCreated],
     ['checkout.session.expired', mockHandleCheckoutExpired],
     ['customer.subscription.trial_will_end', mockHandleTrialWillEnd],
@@ -250,4 +247,43 @@ describe('POST /api/stripe/webhook', () => {
       })
     }
   })
+
+  it.each(['refund.created', 'refund.updated', 'refund.failed'])(
+    'dispatches canonical %s through the unified refund lifecycle handler',
+    async (type) => {
+      const stripeEvent = event(type)
+      constructEventMock.mockReturnValue(stripeEvent)
+
+      const response = await POST(createRequest())
+
+      expect(response.status).toBe(200)
+      expect(mockHandleRefundLifecycle).toHaveBeenCalledTimes(1)
+      expect(mockHandleRefundLifecycle).toHaveBeenCalledWith(stripeEvent.data.object, {
+        eventId: 'evt_test_retryable',
+        eventCreatedAt: 1_800_000_000,
+      })
+      expect(mockHandleChargeRefunded).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    ['charge.refunded', mockHandleChargeRefunded, mockHandleRefundLifecycle],
+    ['charge.refund.updated', mockHandleRefundLifecycle, mockHandleChargeRefunded],
+  ])(
+    'dispatches legacy %s through its refund authority adapter',
+    async (type, handler, otherRefundHandler) => {
+      const stripeEvent = event(type)
+      constructEventMock.mockReturnValue(stripeEvent)
+
+      const response = await POST(createRequest())
+
+      expect(response.status).toBe(200)
+      expect(handler).toHaveBeenCalledTimes(1)
+      expect(handler).toHaveBeenCalledWith(stripeEvent.data.object, {
+        eventId: 'evt_test_retryable',
+        eventCreatedAt: 1_800_000_000,
+      })
+      expect(otherRefundHandler).not.toHaveBeenCalled()
+    }
+  )
 })

@@ -20,7 +20,7 @@ import {
 } from './handlers/invoice'
 import {
   handleChargeRefunded,
-  handleRefundUpdated,
+  handleRefundLifecycle,
   handleChargeDisputeCreated,
 } from './handlers/refund'
 import { getOrCreateCorrelationId, runWithCorrelationId } from '@/lib/api/correlation'
@@ -143,13 +143,28 @@ export async function POST(request: NextRequest) {
             await handleInvoiceFinalizationFailed(event.data.object as Stripe.Invoice)
             break
 
+          case 'refund.created':
+          case 'refund.updated':
+          case 'refund.failed':
+            await handleRefundLifecycle(event.data.object as Stripe.Refund, {
+              eventId: event.id,
+              eventCreatedAt: event.created,
+            })
+            break
+
+          // Legacy event adapters remain retryable through the same authority chain.
           case 'charge.refunded':
-            await handleChargeRefunded(event.data.object as Stripe.Charge)
+            await handleChargeRefunded(event.data.object as Stripe.Charge, {
+              eventId: event.id,
+              eventCreatedAt: event.created,
+            })
             break
 
           case 'charge.refund.updated':
-          case 'refund.updated':
-            await handleRefundUpdated(event.data.object as Stripe.Refund)
+            await handleRefundLifecycle(event.data.object as Stripe.Refund, {
+              eventId: event.id,
+              eventCreatedAt: event.created,
+            })
             break
 
           case 'customer.subscription.trial_will_end':
