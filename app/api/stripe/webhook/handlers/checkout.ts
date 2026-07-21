@@ -6,7 +6,6 @@ import { getProPlanFromPriceId, updateUserSubscription } from './subscription'
 import { mintNFTForUser } from './nft'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { fireAndForget } from '@/lib/utils/logger'
-import { sendNotification } from '@/lib/data/notifications'
 import {
   activateLifetimeCheckoutEntitlement,
   lifetimeActivationGranted,
@@ -14,6 +13,7 @@ import {
   LIFETIME_RESERVATION_NONCE_METADATA_KEY,
   recordStripeCheckoutManualReview,
 } from '@/lib/stripe/lifetime-entitlement'
+import { completeTipCheckout } from '@/lib/stripe/tip-completion'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { Json } from '@/lib/supabase/database.types'
 
@@ -280,70 +280,23 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   }
 }
 
-export async function handleTipPaymentCompleted(session: Stripe.Checkout.Session) {
-  const tipId = session.metadata?.tip_id
-  const postId = session.metadata?.post_id
-  const fromUserId = session.metadata?.from_user_id
-  const toUserId = session.metadata?.to_user_id
-  const amountCents = session.metadata?.amount_cents
-  const paymentIntentId = session.payment_intent as string
-
-  if (!tipId) {
-    logger.warn('Tip payment completed without tip_id', { sessionId: session.id })
-    throw new Error(`Paid tip checkout ${session.id} is missing tip_id`)
-  }
-
-  logger.info('Tip payment completed', {
-    tipId,
-    postId,
-    fromUserId,
-    toUserId,
-    amountCents,
+export async function handleTipPaymentCompleted(
+  session: Stripe.Checkout.Session,
+  event: StripeWebhookEventContext
+) {
+  const outcome = await completeTipCheckout({
+    stripe: getStripe(),
+    supabase: getSupabaseAdmin(),
     sessionId: session.id,
+    eventId: event.id,
   })
-
-  const { data: updatedTip, error: updateError } = await getSupabase()
-    .from('tips')
-    .update({
-      status: 'completed',
-      stripe_payment_intent_id: paymentIntentId,
-      completed_at: new Date().toISOString(),
-    })
-    .eq('id', tipId)
-    .select('id')
-    .maybeSingle()
-
-  if (updateError) {
-    logger.error('Failed to update tip status', { tipId, error: updateError.message })
-    throw new Error(`Failed to mark tip completed: ${updateError.message}`)
-  }
-  if (!updatedTip) {
-    throw new Error(`Failed to mark tip completed: tip ${tipId} was not found`)
-  }
-
-  if (toUserId && fromUserId && postId) {
-    const { data: fromProfile } = await getSupabase()
-      .from('user_profiles')
-      .select('handle')
-      .eq('id', fromUserId)
-      .single()
-
-    sendNotification(
-      getSupabase(),
-      {
-        user_id: toUserId,
-        type: 'tip_received',
-        title: '收到打赏',
-        message: `${fromProfile?.handle || '用户'} 给你的帖子打赏了 $${(Number(amountCents) / 100).toFixed(2)}`,
-        actor_id: fromUserId,
-        link: `/post/${postId}`,
-        reference_id: tipId,
-      },
-      'stripe-tip'
-    )
-  }
-
-  logger.info('Tip recorded successfully', { tipId, amountCents })
+  logger.info('Tip checkout reached a durable terminal state', {
+    sessionId: session.id,
+    eventId: event.id,
+    status: outcome.status,
+    reviewCode: outcome.reviewCode,
+  })
+  return outcome
 }
 
 export async function handleCheckoutExpired(
