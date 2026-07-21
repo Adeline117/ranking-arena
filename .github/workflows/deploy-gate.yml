@@ -106,8 +106,10 @@ jobs:
       # Later the job checks out the candidate SHA, which may predate this
       # helper. Freeze the control-plane code from the current Gate revision so
       # queued older candidates cannot make post-promote enforcement disappear.
-      - name: Pin release-control helper for this Gate run
-        run: install -m 700 scripts/ci/enforce-vercel-release-control.mjs "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
+      - name: Pin release-control helpers for this Gate run
+        run: |
+          install -m 700 scripts/ci/enforce-vercel-release-control.mjs "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
+          install -m 700 scripts/ci/validate-release-health.mjs "$RUNNER_TEMP/validate-release-health.mjs"
 
       - name: Enforce single production writer before deploy
         run: node "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
@@ -367,10 +369,19 @@ jobs:
                   HEALTH_BODY=$(cat /tmp/gate-rollback-health.json 2>/dev/null || true)
                   HEALTH_STATUS=$(jq -r '.status // empty' <<< "$HEALTH_BODY" 2>/dev/null || true)
                   SERVING_SHA=$(jq -r '.commit // empty' <<< "$HEALTH_BODY" 2>/dev/null || true)
-                  echo "rollback verification $attempt/10: curl=$HEALTH_CURL_EXIT HTTP=${HEALTH_HTTP:-000} status=${HEALTH_STATUS:-missing} serving=${SERVING_SHA:-missing} expected=$EXPECTED_ROLLBACK_SHA"
+                  HEALTH_SAFE=false
+                  if node "$RUNNER_TEMP/validate-release-health.mjs" \
+                    < /tmp/gate-rollback-health.json \
+                    > /tmp/gate-rollback-health-decision.txt \
+                    2> /tmp/gate-rollback-health-error.txt; then
+                    HEALTH_SAFE=true
+                  fi
+                  HEALTH_DECISION=$(cat /tmp/gate-rollback-health-decision.txt \
+                    /tmp/gate-rollback-health-error.txt 2>/dev/null | tr '\n' ' ')
+                  echo "rollback verification $attempt/10: curl=$HEALTH_CURL_EXIT HTTP=${HEALTH_HTTP:-000} status=${HEALTH_STATUS:-missing} safe=$HEALTH_SAFE serving=${SERVING_SHA:-missing} expected=$EXPECTED_ROLLBACK_SHA decision=${HEALTH_DECISION:-missing}"
                   if [ "$HEALTH_CURL_EXIT" -eq 0 ] \
-                    && [ "$HEALTH_HTTP" = "200" ] \
-                    && [ "$HEALTH_STATUS" = "healthy" ] \
+                    && [[ "$HEALTH_HTTP" = "200" || "$HEALTH_HTTP" = "202" ]] \
+                    && [ "$HEALTH_SAFE" = "true" ] \
                     && [ "$SERVING_SHA" = "$EXPECTED_ROLLBACK_SHA" ] \
                     && [ "$SERVING_SHA" != "$HEAD_SHA" ]; then
                     if [ "$SERVING_SHA" = "$LAST_CONFIRMED_SHA" ]; then
@@ -379,7 +390,7 @@ jobs:
                       LAST_CONFIRMED_SHA="$SERVING_SHA"
                       STABLE_CONFIRMATIONS=1
                     fi
-                    echo "healthy rollback target ${SERVING_SHA:0:8} confirmation $STABLE_CONFIRMATIONS/2"
+                    echo "release-safe rollback target ${SERVING_SHA:0:8} confirmation $STABLE_CONFIRMATIONS/2"
                     if [ "$STABLE_CONFIRMATIONS" -ge 2 ]; then
                       RECOVERY_SHA="$SERVING_SHA"
                       break
