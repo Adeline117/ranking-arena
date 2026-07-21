@@ -102,6 +102,13 @@ html.theme-transition #main-content {
   opacity: 1 !important;
 }
 
+/* The trader tab wrapper also contains readable controls. Its deferred
+   tabFadeIn animation may keep the transform motion, but must not fade the
+   whole panel and temporarily reduce the contrast of every descendant. */
+.trader-page-container .tab-pane-enter {
+  opacity: 1 !important;
+}
+
 .stagger-children > * {
   opacity: 0;
   animation: fadeIn 0.4s ease-out forwards;
