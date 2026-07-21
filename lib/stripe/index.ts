@@ -391,6 +391,10 @@ export async function createOneTimePaymentSession(params: {
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     customer: params.customerId,
     customer_email: params.customerId ? undefined : params.customerEmail,
+    // Since Stripe API 2022-08-01, payment-mode Checkout defaults to a guest
+    // customer. Every durable product/refund ledger requires an immutable
+    // cus_ identity, so create one whenever the Arena profile has none yet.
+    customer_creation: params.customerId ? undefined : 'always',
     payment_method_types: ['card', 'link'],
     line_items: params.lineItems,
     mode: 'payment',
