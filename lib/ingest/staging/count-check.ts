@@ -94,6 +94,12 @@ export interface CountObservation {
    * null disables the sustained-shift escape hatch for this observation.
    */
   cycleId: string | null
+  /**
+   * Versioned producer contract for this count. A new generation starts from
+   * expectedCount instead of inheriting incompatible historical observations.
+   * null/omitted is the legacy generation.
+   */
+  baselineGeneration?: string | null
 }
 
 interface StoredCountObservation {
@@ -118,6 +124,7 @@ async function getRecentDistinctObservations(
   options: {
     passedOnly: boolean
     excludeCycleId?: string
+    baselineGeneration: string | null
   }
 ): Promise<StoredCountObservation[]> {
   const { rows } = await getIngestPool().query<StoredCountObservation>(
@@ -132,6 +139,10 @@ async function getRecentDistinctObservations(
         WHERE source_id = $1
           AND timeframe = $2
           AND ($4::boolean = false OR count_check_passed)
+          AND (
+            ($6::text IS NULL AND NULLIF(meta->>'count_baseline_generation', '') IS NULL)
+            OR NULLIF(meta->>'count_baseline_generation', '') = $6
+          )
      ),
      latest_per_cycle AS (
        SELECT DISTINCT ON (cycle_id)
@@ -145,7 +156,14 @@ async function getRecentDistinctObservations(
        FROM latest_per_cycle
       ORDER BY scraped_at DESC, id DESC
       LIMIT $3`,
-    [sourceId, timeframe, limit, options.passedOnly, options.excludeCycleId ?? null]
+    [
+      sourceId,
+      timeframe,
+      limit,
+      options.passedOnly,
+      options.excludeCycleId ?? null,
+      options.baselineGeneration,
+    ]
   )
   return rows
 }
@@ -161,12 +179,14 @@ export async function getCountBaseline(
   expectedCount: number | null,
   currentObservation: CountObservation
 ): Promise<CountBaseline> {
+  const baselineGeneration = currentObservation.baselineGeneration?.trim() || null
   const rows = await getRecentDistinctObservations(sourceId, timeframe, 7, {
     passedOnly: true,
     // A retry may revisit a window that already passed earlier in this same
     // multi-window job. That earlier attempt is not independent history and
     // must not help the current retry cross the 3-cycle rolling threshold.
     excludeCycleId: currentObservation.cycleId ?? undefined,
+    baselineGeneration,
   })
 
   // Current baseline: rolling median of real passing crawls once we have ≥3,
@@ -206,6 +226,7 @@ export async function getCountBaseline(
       {
         passedOnly: false,
         excludeCycleId: currentObservation.cycleId,
+        baselineGeneration,
       }
     )
     // Pre-deploy/manual snapshots carry no trustworthy job-instance identity.

@@ -58,11 +58,17 @@ export interface PublishSnapshotInput {
   rejects: RejectedRow[]
   rawObjectId: number | null
   isDerived?: boolean
-  /** Override sources.expected_count as the day-one baseline. Derived
-   *  boards (spec §1.1-C) have no upstream count — pass null so bootstrap
-   *  cycles pass on actual; once 3 independent snapshots exist the rolling
-   *  median takes over as usual. undefined = use sources.expected_count. */
+  /** Override sources.expected_count as the day-one baseline. Producers with
+   *  no trustworthy population may pass null; bounded derived boards pass the
+   *  size of their native-board eligibility cohort. Once 3 independent
+   *  snapshots exist the rolling median takes over. undefined = use the source. */
   expectedCountOverride?: number | null
+  /**
+   * Versioned count contract. Historical snapshots from other generations are
+   * excluded from rolling-baseline and level-shift evidence. Bump deliberately
+   * when a producer's eligibility semantics change.
+   */
+  countBaselineGeneration?: string
   /**
    * Stable identity of the scheduler crawl cycle. Every retry of the same
    * BullMQ job reuses this id so count-baseline and level-shift evidence can
@@ -162,6 +168,13 @@ export async function publishLeaderboardSnapshot(
   input: PublishSnapshotInput
 ): Promise<PublishSnapshotResult> {
   const { src, timeframe, rows, rejects, rawObjectId } = input
+  const countBaselineGeneration = input.countBaselineGeneration?.trim() || null
+  if (
+    countBaselineGeneration !== null &&
+    !/^[a-z0-9][a-z0-9:_-]{0,63}$/i.test(countBaselineGeneration)
+  ) {
+    throw new Error(`[publish] invalid count baseline generation: ${countBaselineGeneration}`)
+  }
   const expectedCount =
     input.expectedCountOverride !== undefined ? input.expectedCountOverride : src.expected_count
   const { baseline, isBootstrap, shifted } = await getCountBaseline(
@@ -171,6 +184,7 @@ export async function publishLeaderboardSnapshot(
     {
       actualCount: rows.length,
       cycleId: input.observationCycleId?.trim() || null,
+      baselineGeneration: countBaselineGeneration,
     }
   )
   if (shifted) {
@@ -211,11 +225,14 @@ export async function publishLeaderboardSnapshot(
         verdict.passed,
         input.isDerived ?? false,
         rawObjectId,
-        JSON.stringify(
-          input.observationCycleId?.trim()
+        JSON.stringify({
+          ...(input.observationCycleId?.trim()
             ? { observation_cycle_id: input.observationCycleId.trim() }
-            : {}
-        ),
+            : {}),
+          ...(countBaselineGeneration
+            ? { count_baseline_generation: countBaselineGeneration }
+            : {}),
+        }),
       ]
     )
     const snapshotId = snap[0].id
