@@ -2152,8 +2152,8 @@ export type Database = {
           group_id: string
           id: string
           outcome: string
-          payment_member_joined_at: string | null
           payment_intent_id: string
+          payment_member_joined_at: string | null
           provider: string
           result: Json
           stripe_charge_id: string | null
@@ -2170,8 +2170,8 @@ export type Database = {
           group_id: string
           id?: string
           outcome: string
-          payment_member_joined_at?: string | null
           payment_intent_id: string
+          payment_member_joined_at?: string | null
           provider: string
           result: Json
           stripe_charge_id?: string | null
@@ -2188,8 +2188,8 @@ export type Database = {
           group_id?: string
           id?: string
           outcome?: string
-          payment_member_joined_at?: string | null
           payment_intent_id?: string
+          payment_member_joined_at?: string | null
           provider?: string
           result?: Json
           stripe_charge_id?: string | null
@@ -9339,7 +9339,7 @@ export type Database = {
         Args: {
           p_actor_id: string
           p_amount_cents: number
-          p_checkout_session_id: string | null
+          p_checkout_session_id: string
           p_currency: string
           p_group_id: string
           p_payment_intent_id: string
@@ -9570,6 +9570,15 @@ export type Database = {
       }
       arena_weekly_leaders: { Args: { p_limit?: number }; Returns: Json }
       b2c_product_metrics: { Args: { p_window_days?: number }; Returns: Json }
+      bind_group_pass_stripe_ownership_atomic: {
+        Args: {
+          p_payment_intent_id: string
+          p_payment_member_joined_at: string
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+        }
+        Returns: Json
+      }
       bind_lifetime_membership_reservation_session_atomic: {
         Args: {
           p_checkout_session_id: string
@@ -9577,15 +9586,6 @@ export type Database = {
           p_reservation_id: string
           p_session_expires_at: string
           p_user_id: string
-        }
-        Returns: Json
-      }
-      bind_group_pass_stripe_ownership_atomic: {
-        Args: {
-          p_payment_member_joined_at: string | null
-          p_payment_intent_id: string
-          p_stripe_charge_id: string
-          p_stripe_customer_id: string
         }
         Returns: Json
       }
@@ -9775,10 +9775,7 @@ export type Database = {
         Returns: string
       }
       claim_stripe_payment_ownership_atomic: {
-        Args: {
-          p_stripe_charge_id: string
-          p_stripe_payment_intent_id: string | null
-        }
+        Args: { p_stripe_charge_id: string; p_stripe_payment_intent_id: string }
         Returns: Json
       }
       claimant_counts: {
@@ -9813,6 +9810,10 @@ export type Database = {
         }
         Returns: number
       }
+      clip: {
+        Args: { max_val: number; min_val: number; val: number }
+        Returns: number
+      }
       complete_tip_with_stripe_ownership_atomic: {
         Args: {
           p_amount_paid: number
@@ -9825,10 +9826,6 @@ export type Database = {
           p_tip_id: string
         }
         Returns: Json
-      }
-      clip: {
-        Args: { max_val: number; min_val: number; val: number }
-        Returns: number
       }
       content_report_evidence_refs_valid: {
         Args: { p_images: string[]; p_reporter_id: string }
@@ -10457,18 +10454,6 @@ export type Database = {
         }
         Returns: Json
       }
-      has_block_with_current_user: {
-        Args: { p_other_user_id: string }
-        Returns: boolean
-      }
-      has_current_global_pro_entitlement: {
-        Args: { p_actor_id: string }
-        Returns: boolean
-      }
-      has_current_group_entitlement: {
-        Args: { p_actor_id: string; p_group_id: string }
-        Returns: boolean
-      }
       group_pass_full_refund_revocation_is_effective_v2: {
         Args: { p_ownership_id: string }
         Returns: boolean
@@ -10480,6 +10465,18 @@ export type Database = {
           p_group_id: string
           p_user_id: string
         }
+        Returns: boolean
+      }
+      has_block_with_current_user: {
+        Args: { p_other_user_id: string }
+        Returns: boolean
+      }
+      has_current_global_pro_entitlement: {
+        Args: { p_actor_id: string }
+        Returns: boolean
+      }
+      has_current_group_entitlement: {
+        Args: { p_actor_id: string; p_group_id: string }
         Returns: boolean
       }
       has_valid_group_subscription: {
@@ -10976,6 +10973,22 @@ export type Database = {
         }
         Returns: Json
       }
+      record_charge_refund_tombstone_financial_legacy_v2: {
+        Args: {
+          p_amount_paid: number
+          p_captured: boolean
+          p_currency: string
+          p_refund_event_created_at: string
+          p_refund_event_id: string
+          p_refund_state: string
+          p_refund_succeeded_amount: number
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_payment_intent_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       record_post_impression: {
         Args: { p_metadata?: Json | null; p_post_id: string; p_user_id: string }
         Returns: boolean
@@ -11269,6 +11282,10 @@ export type Database = {
       stripe_lifetime_claimed_seat_count_v2: { Args: never; Returns: number }
       stripe_merge_charge_refund_tombstone_v2: {
         Args: { p_payment_id: string }
+        Returns: Json
+      }
+      stripe_paid_launch_readiness_entitlement_only_legacy_v2: {
+        Args: never
         Returns: Json
       }
       stripe_paid_launch_readiness_v2: { Args: never; Returns: Json }
