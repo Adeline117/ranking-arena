@@ -63,6 +63,9 @@ export const NULLABLE_RPC_ARGS = {
   activate_recurring_entitlement_payment_atomic: {
     p_stripe_payment_intent_id: { type: 'string', optional: false },
   },
+  bind_group_pass_stripe_ownership_atomic: {
+    p_payment_member_joined_at: { type: 'string', optional: false },
+  },
   bind_stripe_customer_owner_atomic: {
     p_expected_previous_stripe_customer_id: { type: 'string', optional: false },
   },
@@ -71,6 +74,9 @@ export const NULLABLE_RPC_ARGS = {
   },
   can_service_actor_read_activity: {
     p_actor_id: { type: 'string', optional: true },
+  },
+  claim_stripe_payment_ownership_atomic: {
+    p_stripe_payment_intent_id: { type: 'string', optional: false },
   },
   create_group_channel_atomic: {
     p_description: { type: 'string', optional: false },

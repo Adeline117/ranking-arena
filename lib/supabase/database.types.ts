@@ -9573,7 +9573,7 @@ export type Database = {
       bind_group_pass_stripe_ownership_atomic: {
         Args: {
           p_payment_intent_id: string
-          p_payment_member_joined_at: string
+          p_payment_member_joined_at: string | null
           p_stripe_charge_id: string
           p_stripe_customer_id: string
         }
@@ -9775,7 +9775,7 @@ export type Database = {
         Returns: string
       }
       claim_stripe_payment_ownership_atomic: {
-        Args: { p_stripe_charge_id: string; p_stripe_payment_intent_id: string }
+        Args: { p_stripe_charge_id: string; p_stripe_payment_intent_id: string | null }
         Returns: Json
       }
       claimant_counts: {
