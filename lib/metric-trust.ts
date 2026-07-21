@@ -212,6 +212,30 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
     fields: [
       {
         metric: 'roi',
+        fieldPath: 'data.list[].roi',
+        provenance: 'source_reported',
+        methodologyVersion: 'binance-board-roi@1',
+        windowKeys: ['7D', '30D', '90D'],
+        valueUnit: 'percent',
+        currencies: ['USDT'],
+        requiredRawRoles: DIRECT_RAW_ROLES,
+        maxFreshnessMs: 6 * 60 * 60 * 1000,
+        maxWindowEndLagMs: 5 * 60 * 1000,
+      },
+      {
+        metric: 'pnl',
+        fieldPath: 'data.list[].pnl',
+        provenance: 'source_reported',
+        methodologyVersion: 'binance-board-pnl@1',
+        windowKeys: ['7D', '30D', '90D'],
+        valueUnit: 'currency',
+        currencies: ['USDT'],
+        requiredRawRoles: DIRECT_RAW_ROLES,
+        maxFreshnessMs: 6 * 60 * 60 * 1000,
+        maxWindowEndLagMs: 5 * 60 * 1000,
+      },
+      {
+        metric: 'roi',
         fieldPath: 'performance.roi',
         provenance: 'source_reported',
         methodologyVersion: 'binance-performance-roi@1',
@@ -242,7 +266,7 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
     fields: [
       {
         metric: 'roi',
-        fieldPath: 'board.realizedPnlPercent',
+        fieldPath: 'board.data.data[].realizedPnlPercent',
         provenance: 'source_reported',
         methodologyVersion: 'binance-web3-board-realized-pnl-percent@1',
         windowKeys: ['7D', '30D', '90D'],
@@ -254,7 +278,7 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       },
       {
         metric: 'pnl',
-        fieldPath: 'board.realizedPnl',
+        fieldPath: 'board.data.data[].realizedPnl',
         provenance: 'source_reported',
         methodologyVersion: 'binance-web3-board-realized-pnl@1',
         windowKeys: ['7D', '30D', '90D'],
