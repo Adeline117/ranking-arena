@@ -22,6 +22,7 @@ function migrationArray(name) {
 
 test('predeploy, postdeploy and recovery phases are exact, unique and ordered', () => {
   const predeploy = migrationArray('PREDEPLOY_MIGRATIONS')
+  const independentPredeploy = migrationArray('INDEPENDENT_PREDEPLOY_MIGRATIONS')
   const postdeploy = migrationArray('POSTDEPLOY_MIGRATIONS')
   const recoveryPrerequisites = migrationArray('RECOVERY_PREREQUISITE_MIGRATIONS')
   const concurrentRecovery = migrationArray('CONCURRENT_RECOVERY_MIGRATIONS')
@@ -30,6 +31,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
 
   assert.equal(predeploy.length, 60)
+  assert.deepEqual(independentPredeploy, ['20260721140000_idempotent_equivalent_refund_events.sql'])
+  assert.ok(independentPredeploy.every((migration) => predeploy.includes(migration)))
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -230,6 +233,7 @@ test('production writes require phase-specific confirmations', () => {
   )
   assert.match(source, /if \[\[ "\$command" != "status" \]\]/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_PREDEPLOY"/)
+  assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "\$confirmation"/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_POSTDEPLOY"/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_CONCURRENT_RECOVERY"/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_RECOVERY"/)
@@ -238,6 +242,100 @@ test('production writes require phase-specific confirmations', () => {
   assert.match(source, /printf '%s\\n' 'ROLLBACK;'/)
   assert.match(source, /emit_ledger_exact_preflight "\$migration" 'postdeploy'/)
   assert.match(source, /emit_ledger_exact_preflight "\$migration" 'recovery'/)
+})
+
+test('single predeploy runs only an exact audited manifest target', () => {
+  assert.match(
+    source,
+    /require_predeploy_target\(\)[\s\S]*PREDEPLOY_MIGRATIONS\[@\][\s\S]*audited manifest[\s\S]*INDEPENDENT_PREDEPLOY_MIGRATIONS\[@\][\s\S]*approved for an independent apply/
+  )
+  assert.match(
+    source,
+    /dry-run-predeploy-one\)[\s\S]*require_predeploy_target "\$migration"[\s\S]*emit_transaction 'ROLLBACK' "\$migration"/
+  )
+  assert.match(
+    source,
+    /apply-predeploy-one\)[\s\S]*APPLY_PREDEPLOY_ONE_\$\(migration_version "\$migration"\)[\s\S]*require_predeploy_target "\$migration"[\s\S]*emit_transaction 'COMMIT' "\$migration"/
+  )
+  const applyCase = /apply-predeploy-one\)([\s\S]*?)\n\s*;;/.exec(source)?.[1]
+  assert.ok(applyCase)
+  assert.doesNotMatch(applyCase, /psql_with_database/)
+})
+
+test('single predeploy dry-run and apply emit only the selected migration', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'arena-single-predeploy-'))
+  const fakePsql = resolve(directory, 'psql')
+  const sqlPath = resolve(directory, 'sql')
+  const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
+  const target = '20260721140000_idempotent_equivalent_refund_events.sql'
+  try {
+    writeFileSync(
+      fakePsql,
+      [
+        '#!/usr/bin/env bash',
+        'if [[ " $* " == *" -Atc "* ]]; then',
+        "  printf '%s\\n' missing",
+        '  exit 0',
+        'fi',
+        'cat > "$FAKE_PSQL_STREAM"',
+        '',
+      ].join('\n')
+    )
+    chmodSync(fakePsql, 0o755)
+    const baseOptions = {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH}`,
+        DATABASE_URL: 'postgresql://runner:secret@db.example.test:5432/arena',
+        FAKE_PSQL_STREAM: sqlPath,
+      },
+    }
+
+    const dryRun = spawnSync('bash', [script, 'dry-run-predeploy-one', target], baseOptions)
+    assert.equal(dryRun.status, 0, dryRun.stderr)
+    const dryRunSql = readFileSync(sqlPath, 'utf8')
+    assert.match(dryRunSql, /\\echo APPLY 20260721140000_idempotent_equivalent_refund_events\.sql/)
+    assert.doesNotMatch(dryRunSql, /\\echo APPLY 202607211[23]0000_/)
+    assert.match(dryRunSql, /^BEGIN ISOLATION LEVEL REPEATABLE READ;$/m)
+    assert.ok(dryRunSql.trimEnd().endsWith('ROLLBACK;'))
+
+    const apply = spawnSync('bash', [script, 'apply-predeploy-one', target], {
+      ...baseOptions,
+      env: {
+        ...baseOptions.env,
+        ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY_ONE_20260721140000',
+      },
+    })
+    assert.equal(apply.status, 0, apply.stderr)
+    const applySql = readFileSync(sqlPath, 'utf8')
+    assert.match(applySql, /\\echo APPLY 20260721140000_idempotent_equivalent_refund_events\.sql/)
+    assert.doesNotMatch(applySql, /\\echo APPLY 202607211[23]0000_/)
+    assert.ok(applySql.trimEnd().endsWith('COMMIT;'))
+
+    const noConfirmation = spawnSync('bash', [script, 'apply-predeploy-one', target], baseOptions)
+    assert.equal(noConfirmation.status, 1)
+    assert.match(noConfirmation.stderr, /APPLY_PREDEPLOY_ONE_20260721140000/)
+
+    const outsideManifest = spawnSync(
+      'bash',
+      [script, 'dry-run-predeploy-one', '20260721000000_not_a_manifest_migration.sql'],
+      baseOptions
+    )
+    assert.equal(outsideManifest.status, 2)
+    assert.match(outsideManifest.stderr, /not in the audited manifest/)
+
+    const orderedOnly = spawnSync(
+      'bash',
+      [script, 'dry-run-predeploy-one', '20260721120000_metric_trust_shadow_gate.sql'],
+      baseOptions
+    )
+    assert.equal(orderedOnly.status, 2)
+    assert.match(orderedOnly.stderr, /not approved for an independent apply/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
 
 test('keeps the database credential out of psql process arguments', () => {
