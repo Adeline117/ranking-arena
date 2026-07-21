@@ -4,6 +4,7 @@ import type { TierJobData } from '../../queues'
 
 const mockGetSourceBySlug = jest.fn()
 const mockProfileTimeframes = jest.fn()
+const mockGetLatestPassedNativeCohort = jest.fn()
 const mockGetAdapter = jest.fn()
 const mockGetProfile = jest.fn()
 const mockGetHistory = jest.fn()
@@ -26,6 +27,9 @@ jest.mock('@/lib/ingest/db', () => ({
 jest.mock('@/lib/ingest/sources', () => ({
   getSourceBySlug: (...args: unknown[]) => mockGetSourceBySlug(...args),
   profileTimeframes: (...args: unknown[]) => mockProfileTimeframes(...args),
+}))
+jest.mock('@/lib/ingest/native-cohort', () => ({
+  getLatestPassedNativeCohort: (...args: unknown[]) => mockGetLatestPassedNativeCohort(...args),
 }))
 jest.mock('@/lib/ingest/core/adapter', () => ({
   getAdapter: (...args: unknown[]) => mockGetAdapter(...args),
@@ -67,6 +71,8 @@ const src = {
   currency: 'USDC',
   tf_label_map: {},
   meta: {},
+  timeframes_native: [7, 30],
+  timeframes_derived: [],
   deep_profile_topn: 300,
   cadence_tier_b_seconds: 21_600,
   fetch_region: 'local',
@@ -148,22 +154,20 @@ describe('Tier-B profile coverage accounting', () => {
     mockRoiCrossCheckOk.mockReturnValue(null)
     mockPublishProfile.mockResolvedValue(undefined)
     mockQueueAdd.mockResolvedValue(undefined)
-    mockDbQuery.mockImplementation(async (sql: string) => {
-      if (sql.includes('WITH latest AS')) {
-        return {
-          rows: [
-            {
-              id: 42,
-              exchange_trader_id: '0x0000000000000000000000000000000000000001',
-              meta: null,
-              headline_rois: null,
-            },
-          ],
-          rowCount: 1,
-        }
-      }
-      return { rows: [], rowCount: 1 }
+    mockGetLatestPassedNativeCohort.mockResolvedValue({
+      traders: [
+        {
+          id: 42,
+          exchange_trader_id: '0x0000000000000000000000000000000000000001',
+          meta: null,
+          headline_rois: {},
+        },
+      ],
+      nativeTimeframes: [7, 30],
+      foundTimeframes: [7, 30],
+      missingTimeframes: [],
     })
+    mockDbQuery.mockResolvedValue({ rows: [], rowCount: 1 })
   })
 
   it('does not mark a trader fresh when one timeframe is unproven', async () => {
@@ -180,6 +184,14 @@ describe('Tier-B profile coverage accounting', () => {
 
     expect(mockWriteRawObject).toHaveBeenCalledTimes(2)
     expect(mockPublishProfile).toHaveBeenCalledTimes(2)
+    expect(mockGetLatestPassedNativeCohort).toHaveBeenCalledWith(src, {
+      excludeClaimed: true,
+      profileCursor: {
+        kind: 'tierb_profiled',
+        stalerThan: expect.any(Date),
+      },
+    })
+    expect(mockProfileTimeframes).toHaveBeenCalledWith(src)
     expect(
       mockDbQuery.mock.calls.some(([sql]) =>
         String(sql).includes('INSERT INTO arena.ingest_cursors')
@@ -466,27 +478,24 @@ describe('Tier-B profile coverage accounting', () => {
     })
     mockProfileTimeframes.mockReturnValue([30])
     mockParseProfile.mockReturnValue(profile(30, true))
-    mockDbQuery.mockImplementation(async (sql: string) => {
-      if (sql.includes('WITH latest AS')) {
-        return {
-          rows: [
-            {
-              id: 42,
-              exchange_trader_id: '0x0000000000000000000000000000000000000001',
-              meta: null,
-              headline_rois: null,
-            },
-            {
-              id: 43,
-              exchange_trader_id: '0x0000000000000000000000000000000000000002',
-              meta: null,
-              headline_rois: null,
-            },
-          ],
-          rowCount: 2,
-        }
-      }
-      return { rows: [], rowCount: 1 }
+    mockGetLatestPassedNativeCohort.mockResolvedValue({
+      traders: [
+        {
+          id: 42,
+          exchange_trader_id: '0x0000000000000000000000000000000000000001',
+          meta: null,
+          headline_rois: {},
+        },
+        {
+          id: 43,
+          exchange_trader_id: '0x0000000000000000000000000000000000000002',
+          meta: null,
+          headline_rois: {},
+        },
+      ],
+      nativeTimeframes: [7, 30],
+      foundTimeframes: [7, 30],
+      missingTimeframes: [],
     })
     const now = jest
       .spyOn(Date, 'now')
