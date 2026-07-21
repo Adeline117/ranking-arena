@@ -60,6 +60,7 @@ const readyEntitlementAuthority = {
   unresolved_refund_tombstones: 0,
   reservation_anomalies: 0,
   projection_drift: 0,
+  notification_delivery_anomalies: 0,
   authority_drift: 0,
 }
 
@@ -222,6 +223,52 @@ describe('GET /api/cron/stripe-readiness', () => {
     const { unresolved_refund_tombstones: _omitted, ...incompleteReadiness } =
       readyEntitlementAuthority
     mockRpc.mockResolvedValue({ data: incompleteReadiness, error: null })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Stripe entitlement authority readiness contract is invalid')
+  })
+
+  it('fails closed when durable notification delivery authority is anomalous', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        ...readyEntitlementAuthority,
+        status: 'blocked',
+        notification_delivery_anomalies: 1,
+      },
+      error: null,
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.paidLaunchReady).toBe(false)
+    expect(body.failures).toContain(
+      'Stripe entitlement authority is blocked: notification_delivery_anomalies=1'
+    )
+    expect(mockSendAlert).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a readiness payload that omits notification delivery authority', async () => {
+    const { notification_delivery_anomalies: _omitted, ...incompleteReadiness } =
+      readyEntitlementAuthority
+    mockRpc.mockResolvedValue({ data: incompleteReadiness, error: null })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Stripe entitlement authority readiness contract is invalid')
+  })
+
+  it('rejects negative notification delivery authority counts', async () => {
+    mockRpc.mockResolvedValue({
+      data: { ...readyEntitlementAuthority, notification_delivery_anomalies: -1 },
+      error: null,
+    })
 
     const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
     const body = await response.json()

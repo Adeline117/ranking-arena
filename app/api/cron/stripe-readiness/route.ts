@@ -41,6 +41,7 @@ const ENTITLEMENT_READINESS_METRIC_KEYS = [
   'unresolved_refund_tombstones',
   'reservation_anomalies',
   'projection_drift',
+  'notification_delivery_anomalies',
   'authority_drift',
 ] as const
 
@@ -116,6 +117,7 @@ function parseStripePaidReadiness(value: unknown): StripePaidReadiness | null {
     unresolved_refund_tombstones: record.unresolved_refund_tombstones as number,
     reservation_anomalies: record.reservation_anomalies as number,
     projection_drift: record.projection_drift as number,
+    notification_delivery_anomalies: record.notification_delivery_anomalies as number,
     authority_drift: record.authority_drift as number,
   }
 }
