@@ -11,7 +11,8 @@ import { createHash } from 'node:crypto'
 import { TextDecoder } from 'node:util'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { getIngestPool } from './db'
+import type { PoolClient } from 'pg'
+import { getIngestPool, ingestClientConnect } from './db'
 
 export const RAW_BUCKET = 'raw-snapshots'
 
@@ -19,6 +20,7 @@ let storageClient: SupabaseClient | null = null
 
 const RAW_UPLOAD_ATTEMPTS = 3
 const RAW_UPLOAD_RETRY_BASE_MS = 750
+const RAW_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_object_gc_queue', 0)"
 
 interface StorageUploadError {
   message?: string
@@ -104,6 +106,10 @@ interface RawObjectPointer {
   bytes: number
   content_hash: string
   meta: unknown
+}
+
+interface RawObjectGcPointer {
+  storage_path: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -288,25 +294,122 @@ export async function readRawObject(rawObjectId: number): Promise<unknown> {
   }
 }
 
-/** Delete raw objects older than the retention window (skips quarantined).
- *  Returns the number of objects removed. Called by maintenance.ts. */
-export async function cleanupRawObjects(retentionDays = 30): Promise<number> {
-  const pool = getIngestPool()
-  const { rows } = await pool.query<{ id: number; storage_path: string }>(
-    `SELECT id, storage_path FROM arena.raw_objects
-     WHERE NOT quarantined AND fetched_at < now() - ($1 || ' days')::interval
-     LIMIT 500`,
-    [retentionDays]
+async function readRawObjectGcBatch(client: PoolClient): Promise<RawObjectGcPointer[]> {
+  const { rows } = await client.query<RawObjectGcPointer>(
+    `SELECT storage_path
+       FROM arena.raw_object_gc_queue
+      ORDER BY coalesce(last_attempt_at, enqueued_at), enqueued_at, storage_path
+      LIMIT 500`
   )
+  return rows
+}
+
+async function drainRawObjectGcBatch(
+  client: PoolClient,
+  rows: RawObjectGcPointer[]
+): Promise<number> {
   if (rows.length === 0) return 0
 
+  const storagePaths = rows.map((row) => row.storage_path)
   const storage = getStorageClient().storage.from(RAW_BUCKET)
-  const { error } = await storage.remove(rows.map((r) => r.storage_path))
+  const { error } = await storage.remove(storagePaths)
   if (error) {
-    throw new Error(`[ingest] RAW cleanup remove failed: ${error.message}`)
+    const message = error.message ?? 'unknown Storage error'
+    try {
+      await client.query(
+        `UPDATE arena.raw_object_gc_queue
+            SET attempts = attempts + 1,
+                last_attempt_at = now(),
+                last_error = $2
+          WHERE storage_path = ANY($1::text[])`,
+        [storagePaths, message.slice(0, 2_000)]
+      )
+    } catch (recordError) {
+      throw new Error(
+        `[ingest] RAW cleanup remove failed; durable queue bookkeeping also failed: ${message}; ${recordError instanceof Error ? recordError.message : String(recordError)}`
+      )
+    }
+    throw new Error(`[ingest] RAW cleanup remove failed; durable queue retained: ${message}`)
   }
-  await pool.query(`DELETE FROM arena.raw_objects WHERE id = ANY($1::bigint[])`, [
-    rows.map((r) => r.id),
-  ])
-  return rows.length
+
+  await client.query(
+    `DELETE FROM arena.raw_object_gc_queue
+      WHERE storage_path = ANY($1::text[])`,
+    [storagePaths]
+  )
+  return storagePaths.length
+}
+
+/**
+ * Delete raw objects older than the retention window (skips quarantined).
+ * The database pointer is deleted only in the same statement that durably
+ * enqueues its Storage path. This makes ranking fail closed before external
+ * deletion and leaves a retryable outbox across worker or Storage failures.
+ * Returns the number of Storage objects removed. Called by maintenance.ts.
+ */
+export async function cleanupRawObjects(retentionDays = 30): Promise<number> {
+  const client = await ingestClientConnect()
+  let lockAcquired = false
+  let destroyClient = false
+  try {
+    const { rows: lockRows } = await client.query<{ acquired: boolean }>(
+      `SELECT pg_catalog.pg_try_advisory_lock(${RAW_GC_ADVISORY_LOCK}) AS acquired`
+    )
+    lockAcquired = lockRows[0]?.acquired === true
+    if (!lockAcquired) return 0
+
+    // Drain prior failures before retiring more evidence so a Storage outage
+    // cannot grow the durable queue without bound on every maintenance run.
+    const pending = await readRawObjectGcBatch(client)
+    if (pending.length > 0) return drainRawObjectGcBatch(client, pending)
+
+    await client.query(
+      `WITH candidates AS MATERIALIZED (
+         SELECT id, storage_path, content_hash
+           FROM arena.raw_objects
+          WHERE NOT quarantined
+            AND fetched_at < now() - ($1 || ' days')::interval
+          ORDER BY fetched_at, id
+          FOR UPDATE SKIP LOCKED
+          LIMIT 500
+       ), queued AS (
+         INSERT INTO arena.raw_object_gc_queue
+           (raw_object_id, storage_path, content_hash)
+         SELECT id, storage_path, content_hash
+           FROM candidates
+         ON CONFLICT (storage_path) DO NOTHING
+         RETURNING raw_object_id
+       )
+       DELETE FROM arena.raw_objects AS raw
+        USING queued
+        WHERE raw.id = queued.raw_object_id`,
+      [retentionDays]
+    )
+
+    return drainRawObjectGcBatch(client, await readRawObjectGcBatch(client))
+  } finally {
+    if (lockAcquired) {
+      try {
+        const { rows } = await client.query<{ unlocked: boolean }>(
+          `SELECT pg_catalog.pg_advisory_unlock(${RAW_GC_ADVISORY_LOCK}) AS unlocked`
+        )
+        if (rows[0]?.unlocked !== true) {
+          destroyClient = true
+          console.error(
+            '[ingest] RAW cleanup advisory unlock returned false; destroying pooled session'
+          )
+        }
+      } catch (error) {
+        // Never return a possibly lock-owning session to the pool. A dropped
+        // PostgreSQL session already released the lock; destroying a healthy
+        // but query-failed session releases it deterministically.
+        destroyClient = true
+        console.error(
+          '[ingest] RAW cleanup advisory unlock failed; destroying pooled session:',
+          error instanceof Error ? error.message : String(error)
+        )
+      }
+    }
+    client.release(destroyClient)
+  }
 }
