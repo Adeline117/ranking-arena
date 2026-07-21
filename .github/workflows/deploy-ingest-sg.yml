@@ -44,7 +44,7 @@ jobs:
     if: ${{ github.event.inputs.mode != 'code-only' }}
     runs-on: ubuntu-latest                # Linux x64 — matches the SG VPS
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           # MUST match the SG box's Node MAJOR (v22.22.0) — native N-API addons
@@ -103,7 +103,7 @@ jobs:
     if: ${{ always() && !cancelled() }}   # also runs for code-only (build-deps skipped)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Guard — require SG secrets (skip cleanly if absent)
         id: guard
         run: |

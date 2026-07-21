@@ -35,7 +35,7 @@ jobs:
       contents: read
       packages: write          # push to ghcr.io
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # OCI image repository names must be lowercase. GitHub preserves the
       # account's display casing in GITHUB_REPOSITORY (Adeline117/...), which
       # otherwise makes buildx reject the tag before the Docker build starts.
