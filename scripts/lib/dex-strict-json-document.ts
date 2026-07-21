@@ -341,7 +341,23 @@ function deepFreeze<T>(value: T): DeepReadonly<T> {
 }
 
 function cloneStrictData<T>(value: T): T {
-  return deserialize(serialize(value)) as T
+  const clone = deserialize(serialize(value)) as T
+  const pending: unknown[] = [clone]
+
+  while (pending.length > 0) {
+    const current = pending.pop()
+    if (current === null || typeof current !== 'object') continue
+
+    if (Array.isArray(current)) {
+      pending.push(...current)
+      continue
+    }
+
+    Object.setPrototypeOf(current, null)
+    pending.push(...Object.values(current))
+  }
+
+  return clone
 }
 
 function mintStrictJsonDocument(

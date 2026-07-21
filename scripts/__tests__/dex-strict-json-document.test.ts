@@ -147,6 +147,8 @@ describe('DEX same-read strict JSON documents', () => {
     expect(Object.isFrozen(first)).toBe(true)
     expect(Object.isFrozen(first.value)).toBe(true)
     const value = first.value as { list: readonly unknown[]; nested: { count: number } }
+    expect(Object.getPrototypeOf(first.value)).toBeNull()
+    expect(Object.getPrototypeOf(value.nested)).toBeNull()
     expect(Object.isFrozen(value.list)).toBe(true)
     expect(Object.isFrozen(value.nested)).toBe(true)
 
