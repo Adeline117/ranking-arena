@@ -68,6 +68,10 @@ describe('non-entitlement Stripe payment ownership', () => {
     expect(migration).toContain(
       'GRANT SELECT ON TABLE public.stripe_payment_ownerships TO service_role'
     )
+    expect(migration).toContain('AND NOT role_row.rolbypassrls')
+    expect(migration).toContain("'pg_read_all_data'::pg_catalog.regrole")
+    expect(fixture).toContain('trusted cluster backup ACL control is missing')
+    expect(fixture).toContain('trusted cluster reader ACL control is missing')
   })
 
   it('re-queries product ledgers and serializes Charge before PaymentIntent', () => {

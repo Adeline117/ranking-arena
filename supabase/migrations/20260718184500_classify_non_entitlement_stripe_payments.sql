@@ -4499,18 +4499,25 @@ BEGIN
       'id',
       'SELECT'
     )
-    -- Every user-defined non-superuser role must also fail the effective
+    -- Every application-level user-defined role must also fail the effective
     -- privilege check. This catches role-membership inheritance that a direct
-    -- ACL scan alone cannot see. PostgreSQL's fixed pg_read_all_data role is
-    -- below FirstNormalObjectId and, like superusers, is not an object ACL that
-    -- this migration can revoke; any user-defined member inheriting from it is
-    -- still caught here.
+    -- ACL scan alone cannot see. Cluster-trusted principals (the owner,
+    -- superusers, BYPASSRLS roles, and members of pg_read_all_data) already sit
+    -- outside object-level ACL isolation and are intentionally not treated as
+    -- browser exposure. Direct table/column ACLs are still converged and
+    -- checked independently below.
     OR EXISTS (
       SELECT 1
       FROM pg_catalog.pg_roles AS role_row
       WHERE role_row.oid >= 16384
         AND NOT role_row.rolsuper
-        AND role_row.oid <> v_service_role
+        AND NOT role_row.rolbypassrls
+        AND role_row.oid NOT IN (v_postgres, v_service_role)
+        AND NOT pg_catalog.pg_has_role(
+          role_row.oid,
+          'pg_read_all_data'::pg_catalog.regrole,
+          'USAGE'
+        )
         AND (
           pg_catalog.has_column_privilege(
             role_row.rolname,
