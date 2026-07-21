@@ -6542,8 +6542,8 @@ export type Database = {
           amount_cents: number
           currency: string
           delivered_at: string | null
-          disposition: string
           disposed_at: string | null
+          disposition: string
           link: string | null
           message: string
           notification_id: string | null
@@ -6559,8 +6559,8 @@ export type Database = {
           amount_cents: number
           currency: string
           delivered_at?: string | null
-          disposition: string
           disposed_at?: string | null
+          disposition: string
           link?: string | null
           message: string
           notification_id?: string | null
@@ -6576,8 +6576,8 @@ export type Database = {
           amount_cents?: number
           currency?: string
           delivered_at?: string | null
-          disposition?: string
           disposed_at?: string | null
+          disposition?: string
           link?: string | null
           message?: string
           notification_id?: string | null
@@ -9881,6 +9881,19 @@ export type Database = {
         }
         Returns: Json
       }
+      complete_tip_with_stripe_ownership_financial_legacy_v2: {
+        Args: {
+          p_amount_paid: number
+          p_checkout_session_id: string
+          p_completed_at: string
+          p_currency: string
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_payment_intent_id: string
+          p_tip_id: string
+        }
+        Returns: Json
+      }
       content_report_evidence_refs_valid: {
         Args: { p_images: string[]; p_reporter_id: string }
         Returns: boolean
@@ -10789,6 +10802,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      lock_tip_notification_authority_atomic: {
+        Args: { p_tip_id: string }
+        Returns: Json
+      }
       moderate_comment: {
         Args: {
           p_action: string
@@ -11342,6 +11359,10 @@ export type Database = {
         Args: never
         Returns: Json
       }
+      stripe_paid_launch_readiness_non_notification_legacy_v2: {
+        Args: never
+        Returns: Json
+      }
       stripe_paid_launch_readiness_v2: { Args: never; Returns: Json }
       stripe_payment_ownership_is_exact_v2: {
         Args: { p_ownership_id: string }
@@ -11350,6 +11371,10 @@ export type Database = {
       stripe_refund_tombstone_is_resolved_v2: {
         Args: { p_stripe_charge_id: string }
         Returns: boolean
+      }
+      stripe_resolve_non_entitlement_refund_notification_legacy_v2: {
+        Args: { p_ownership_id: string }
+        Returns: Json
       }
       stripe_resolve_non_entitlement_refund_tombstone_atomic: {
         Args: { p_ownership_id: string }
