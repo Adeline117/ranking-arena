@@ -14,8 +14,11 @@ jest.mock('@/lib/auth/verify-service-auth', () => ({
   verifyAdminAuth: (...args: unknown[]) => mockVerifyAdminAuth(...args),
 }))
 
-jest.mock('@/app/api/cron/check-data-freshness/route', () => ({
+jest.mock('@/lib/rankings/build-freshness-report', () => ({
   buildFreshnessReport: (...args: unknown[]) => mockBuildFreshnessReport(...args),
+}))
+
+jest.mock('@/app/api/cron/check-data-freshness/route', () => ({
   GET: (...args: unknown[]) => mockCronGet(...args),
 }))
 
