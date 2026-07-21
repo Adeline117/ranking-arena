@@ -23,7 +23,11 @@ import { sendAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 90
+// Each stale season is deliberately kicked in sequence with a 60s request
+// budget. Three stale seasons therefore need up to 180s before alert/finalize;
+// the old 90s function budget killed the watchdog midway and left its own
+// pipeline log stuck even though the detached computes kept running.
+export const maxDuration = 240
 
 // Compute runs every 2h normally; health tolerates 4h. Intervene at 3h — one
 // full cycle definitively missed, but before the health SLO trips.
