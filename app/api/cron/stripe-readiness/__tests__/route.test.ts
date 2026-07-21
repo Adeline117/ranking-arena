@@ -33,6 +33,24 @@ jest.mock('@/lib/api/with-cron', () => ({
 import { NextRequest } from 'next/server'
 import { GET, REQUIRED_WEBHOOK_EVENTS, STRIPE_PAID_READINESS_KEYS } from '../route'
 
+const HEALTHY_CANONICAL_EVENTS = [
+  'checkout.session.completed',
+  'checkout.session.expired',
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'customer.subscription.trial_will_end',
+  'invoice.paid',
+  'invoice.payment_succeeded',
+  'invoice.payment_failed',
+  'invoice.payment_action_required',
+  'invoice.finalization_failed',
+  'refund.created',
+  'refund.updated',
+  'refund.failed',
+  'charge.dispute.created',
+] as const
+
 const readyEntitlementAuthority = {
   status: 'ready',
   open_manual_reviews: 0,
@@ -67,27 +85,41 @@ function queueEventHealth(failed = 0, stale = 0) {
   mockFrom.mockImplementation(() => chainable(results.shift()!))
 }
 
+function healthyWebhookEndpoint(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'we_canonical',
+    url: 'https://www.arenafi.org/api/stripe/webhook',
+    status: 'enabled',
+    api_version: '2026-04-22.dahlia',
+    enabled_events: [...HEALTHY_CANONICAL_EVENTS],
+    ...overrides,
+  }
+}
+
 describe('GET /api/cron/stripe-readiness', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     process.env.STRIPE_SECRET_KEY = 'sk_test_example'
     process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_example'
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_example'
+    delete process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS
     delete process.env.NEXT_PUBLIC_PRO_FREE_PROMO
     mockAssertProPriceReady.mockResolvedValue(undefined)
     mockAssertApiPriceReady.mockResolvedValue(undefined)
     mockSendAlert.mockResolvedValue({ sent: false, rateLimited: false, channels: [] })
     mockRpc.mockResolvedValue({ data: readyEntitlementAuthority, error: null })
     mockWebhookList.mockResolvedValue({
-      data: [
-        {
-          url: 'https://www.arenafi.org/api/stripe/webhook',
-          status: 'enabled',
-          enabled_events: [...REQUIRED_WEBHOOK_EVENTS],
-        },
-      ],
+      data: [healthyWebhookEndpoint()],
     })
     queueEventHealth()
+  })
+
+  it('pins the independently specified canonical webhook event contract', () => {
+    expect(REQUIRED_WEBHOOK_EVENTS).toEqual(HEALTHY_CANONICAL_EVENTS)
+    expect(REQUIRED_WEBHOOK_EVENTS).toHaveLength(15)
+    expect(REQUIRED_WEBHOOK_EVENTS).not.toEqual(
+      expect.arrayContaining(['charge.refunded', 'charge.refund.updated'])
+    )
   })
 
   it('reports a healthy sandbox while keeping the paid-launch owner gate closed', async () => {
@@ -107,6 +139,62 @@ describe('GET /api/cron/stripe-readiness', () => {
     expect(mockRpc).toHaveBeenCalledWith('stripe_paid_launch_readiness_v2')
     expect(body.warnings).toHaveLength(2)
     expect(mockSendAlert).not.toHaveBeenCalled()
+  })
+
+  it('allows a valid secret rotation window without declaring cutover complete', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_example'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_live_example'
+    process.env.NEXT_PUBLIC_PRO_FREE_PROMO = 'false'
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'whsec_previous'
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(true)
+    expect(body.paidLaunchReady).toBe(false)
+    expect(body.failures).toEqual([])
+    expect(body.warnings).toContain(
+      'Cutover gate remains: previous Stripe webhook signing secret is configured'
+    )
+    expect(mockSendAlert).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when a configured previous webhook secret is invalid', async () => {
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'invalid'
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.paidLaunchReady).toBe(false)
+    expect(body.failures).toContain('Previous Stripe webhook signing secret is invalid')
+  })
+
+  it('fails closed when previous and primary webhook secrets are identical', async () => {
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'whsec_example'
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.paidLaunchReady).toBe(false)
+    expect(body.failures).toContain(
+      'Previous Stripe webhook signing secret must differ from primary'
+    )
+    expect(body.warnings).not.toContain(
+      'Cutover gate remains: previous Stripe webhook signing secret is configured'
+    )
+  })
+
+  it('never accepts the previous webhook secret as a substitute for primary', async () => {
+    delete process.env.STRIPE_WEBHOOK_SECRET
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = 'whsec_previous'
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Stripe webhook signing secret is missing or invalid')
   })
 
   it('fails closed when an unresolved Charge refund tombstone blocks authority', async () => {
@@ -173,6 +261,101 @@ describe('GET /api/cron/stripe-readiness', () => {
     expect(body.healthy).toBe(false)
     expect(body.failures).toContain('Enabled Stripe webhook endpoint or event contract has drifted')
     expect(mockSendAlert).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['2024-10-28.acacia', null])(
+    'fails closed when the webhook endpoint API version is %p',
+    async (apiVersion) => {
+      mockWebhookList.mockResolvedValue({
+        data: [healthyWebhookEndpoint({ api_version: apiVersion })],
+      })
+
+      const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+      const body = await response.json()
+
+      expect(body.healthy).toBe(false)
+      expect(body.failures).toContain(
+        'Enabled Stripe webhook endpoint or event contract has drifted'
+      )
+      expect(mockSendAlert).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('fails closed when a legacy refund event is additionally enabled', async () => {
+    mockWebhookList.mockResolvedValue({
+      data: [
+        healthyWebhookEndpoint({
+          enabled_events: [...HEALTHY_CANONICAL_EVENTS, 'charge.refunded'],
+        }),
+      ],
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Enabled Stripe webhook endpoint or event contract has drifted')
+  })
+
+  it('fails closed when a duplicate masks a missing canonical event', async () => {
+    mockWebhookList.mockResolvedValue({
+      data: [
+        healthyWebhookEndpoint({
+          enabled_events: [...HEALTHY_CANONICAL_EVENTS.slice(0, -1), HEALTHY_CANONICAL_EVENTS[0]],
+        }),
+      ],
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Enabled Stripe webhook endpoint or event contract has drifted')
+  })
+
+  it('fails closed when two enabled endpoints use the canonical webhook URL', async () => {
+    mockWebhookList.mockResolvedValue({
+      data: [healthyWebhookEndpoint(), healthyWebhookEndpoint({ id: 'we_duplicate' })],
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Enabled Stripe webhook endpoint or event contract has drifted')
+  })
+
+  it('paginates the full endpoint collection before enforcing uniqueness', async () => {
+    mockWebhookList
+      .mockResolvedValueOnce({
+        data: [healthyWebhookEndpoint()],
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        data: [healthyWebhookEndpoint({ id: 'we_duplicate' })],
+        has_more: false,
+      })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(mockWebhookList).toHaveBeenNthCalledWith(1, { limit: 100 })
+    expect(mockWebhookList).toHaveBeenNthCalledWith(2, {
+      limit: 100,
+      starting_after: 'we_canonical',
+    })
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Enabled Stripe webhook endpoint or event contract has drifted')
+  })
+
+  it('fails closed when endpoint pagination cannot advance', async () => {
+    mockWebhookList.mockResolvedValue({ data: [], has_more: true })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Stripe webhook endpoint verification failed')
   })
 
   it('alerts when retryable webhook events remain failed', async () => {

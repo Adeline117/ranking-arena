@@ -13,6 +13,7 @@ import {
   activateLifetimeCheckoutEntitlement,
   lifetimeActivationGranted,
 } from '@/lib/stripe/lifetime-entitlement'
+import { STRIPE_API_VERSION } from '@/lib/stripe/version'
 
 // 懒加载 Stripe 客户端
 function getStripe() {
@@ -21,7 +22,7 @@ function getStripe() {
     throw new Error('STRIPE_SECRET_KEY is not configured')
   }
   return new Stripe(secretKey, {
-    apiVersion: '2026-04-22.dahlia',
+    apiVersion: STRIPE_API_VERSION,
   })
 }
 

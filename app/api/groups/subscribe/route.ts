@@ -10,6 +10,7 @@ import { success, error, badRequest, handleError } from '@/lib/api/response'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { assertStripePaymentRuntimeReady } from '@/lib/stripe'
+import { STRIPE_API_VERSION } from '@/lib/stripe/version'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -388,7 +389,7 @@ export const POST = withAuth(
           return error('Paid subscriptions are not available at this time', 503)
         }
 
-        const stripe = new Stripe(stripeSecret, { apiVersion: '2026-04-22.dahlia' })
+        const stripe = new Stripe(stripeSecret, { apiVersion: STRIPE_API_VERSION })
         try {
           verifiedPayment = await verifyStripePayment({
             stripe,

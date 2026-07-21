@@ -77,7 +77,9 @@ jest.mock('stripe', () => ({
   })),
 }))
 
+import Stripe from 'stripe'
 import { NextRequest } from 'next/server'
+import { STRIPE_API_VERSION } from '@/lib/stripe/version'
 import { DELETE, GET, POST } from '../route'
 
 const ACTOR_ID = '11111111-1111-4111-8111-111111111111'
@@ -352,6 +354,32 @@ describe('/api/groups/subscribe atomic boundary', () => {
       p_currency: 'usd',
     })
     expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('constructs paid verification with the shared pinned Stripe API version', async () => {
+    mockPaymentIntentRetrieve.mockResolvedValue(paymentIntent())
+    mockRpc.mockResolvedValue({
+      data: activationResult({
+        tier: 'monthly',
+        subscription_status: 'active',
+        price_paid: 9.9,
+      }),
+      error: null,
+    })
+
+    const response = await POST(
+      postRequest({
+        group_id: GROUP_ID,
+        tier: 'monthly',
+        payment_intent_id: PAYMENT_INTENT_ID,
+      })
+    )
+
+    expect(response.status).toBe(201)
+    expect(STRIPE_API_VERSION).toBe('2026-04-22.dahlia')
+    expect(Stripe).toHaveBeenCalledWith('sk_test_unit', {
+      apiVersion: '2026-04-22.dahlia',
+    })
   })
 
   it.each([
