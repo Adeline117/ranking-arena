@@ -11,7 +11,6 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { isAuthorized } from '@/lib/cron/utils'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
@@ -19,35 +18,16 @@ import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { evaluateAndAlert } from '@/lib/services/pipeline-self-heal'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
-import {
-  parseVisibleLeaderboardSources,
-  type LeaderboardTimeRange,
-} from '@/lib/data/visible-leaderboard-sources'
-import {
-  buildRegistrySourceFreshnessStatuses,
-  parseExpectedSourceWindows,
-  type VisibleSourceWindow,
-} from '@/lib/rankings/source-freshness'
-import type { FreshnessReport, PlatformFreshnessStatus } from '@/lib/rankings/freshness-report'
+import { buildFreshnessReport } from '@/lib/rankings/build-freshness-report'
+import type { FreshnessReport } from '@/lib/rankings/freshness-report'
 
 export type { FreshnessReport, PlatformFreshnessStatus } from '@/lib/rankings/freshness-report'
+export { buildFreshnessReport } from '@/lib/rankings/build-freshness-report'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
-
-// 数据过期阈值（毫秒）
-const STALE_THRESHOLD_MS = 8 * 60 * 60 * 1000 // 8 小时
-const CRITICAL_THRESHOLD_MS = 24 * 60 * 60 * 1000 // 24 小时
-const RANKING_SEASONS: readonly LeaderboardTimeRange[] = ['7D', '30D', '90D']
-
-// 平台级阈值覆盖（毫秒）— 某些平台 API 不稳定或更新频率低
-const PLATFORM_THRESHOLD_OVERRIDES: Record<string, { stale: number; critical: number }> = {
-  blofin: { stale: 48 * 60 * 60 * 1000, critical: 72 * 60 * 60 * 1000 }, // BloFin API 频繁限流
-  gmx: { stale: 48 * 60 * 60 * 1000, critical: 72 * 60 * 60 * 1000 }, // On-chain, less frequent
-  gains: { stale: 48 * 60 * 60 * 1000, critical: 72 * 60 * 60 * 1000 }, // On-chain
-}
 
 type PipelineLogHandle = Awaited<ReturnType<typeof PipelineLogger.start>>
 
@@ -99,124 +79,6 @@ async function freshnessPipelineLogUnavailable(): Promise<void> {
       60 * 60 * 1000
     )
   )
-}
-
-/**
- * 构建新鲜度报告（共享逻辑，cron 和 admin endpoint 都用）
- */
-export async function buildFreshnessReport(): Promise<FreshnessReport> {
-  const supabase = getSupabaseAdmin()
-  const now = Date.now()
-
-  // Registry promises, current positive-count visibility, and upstream
-  // watermarks are independent authorities. Keeping all three prevents a
-  // source from making itself disappear from monitoring when its count falls
-  // to zero or its current-generation cache row goes missing.
-  const [expectedResult, visibleBySeason, watermarkResult] = await Promise.all([
-    supabase.rpc('arena_freshness_expected_sources'),
-    Promise.all(
-      RANKING_SEASONS.map(async (season) => ({
-        season,
-        result: await supabase.rpc('arena_visible_sources', {
-          p_season_id: season,
-        }),
-      }))
-    ),
-    supabase
-      .from('leaderboard_source_freshness')
-      .select('season_id,source,source_as_of')
-      .in('season_id', [...RANKING_SEASONS]),
-  ])
-
-  if (expectedResult.error) {
-    throw new Error('freshness expected source authority is unavailable')
-  }
-  const expectedWindows = parseExpectedSourceWindows(expectedResult.data)
-
-  const visibleWindows: VisibleSourceWindow[] = visibleBySeason.flatMap(({ season, result }) => {
-    if (result.error) {
-      throw new Error('visible source freshness authority is unavailable')
-    }
-    return parseVisibleLeaderboardSources(result.data).map((source) => ({
-      season_id: season,
-      registry_slug: source.registrySlug,
-      source: source.filterSource,
-      display_name: source.exchangeName,
-      record_count: source.traderCount,
-    }))
-  })
-  if (watermarkResult.error || !Array.isArray(watermarkResult.data)) {
-    throw new Error('source watermark freshness authority is unavailable')
-  }
-
-  const sourceStatuses = buildRegistrySourceFreshnessStatuses(
-    expectedWindows,
-    visibleWindows,
-    watermarkResult.data,
-    now
-  )
-  const results: PlatformFreshnessStatus[] = []
-  const stalePlatforms: string[] = []
-  const criticalPlatforms: string[] = []
-  const unknownPlatforms: string[] = []
-
-  for (const source of sourceStatuses) {
-    let ageMs: number | null = null
-    let ageHours: number | null = null
-    let status: PlatformFreshnessStatus['status'] = 'unknown'
-
-    if (source.issues.length > 0 || source.updated_at === null) {
-      unknownPlatforms.push(source.source)
-    } else {
-      ageMs = Math.max(0, now - Date.parse(source.updated_at))
-      ageHours = Math.round((ageMs / (1000 * 60 * 60)) * 10) / 10
-      const overrides = PLATFORM_THRESHOLD_OVERRIDES[source.source]
-      const critThreshold = overrides?.critical ?? CRITICAL_THRESHOLD_MS
-      const staleThreshold = overrides?.stale ?? STALE_THRESHOLD_MS
-
-      if (ageMs >= critThreshold) {
-        status = 'critical'
-        criticalPlatforms.push(source.source)
-      } else if (ageMs >= staleThreshold) {
-        status = 'stale'
-        stalePlatforms.push(source.source)
-      } else {
-        status = 'fresh'
-      }
-    }
-
-    results.push({
-      platform: source.source,
-      displayName: source.display_name,
-      lastUpdate: source.updated_at,
-      ageMs,
-      ageHours,
-      status,
-      recordCount: source.record_count,
-    })
-  }
-
-  const freshCount = results.filter((r) => r.status === 'fresh').length
-
-  return {
-    ok:
-      criticalPlatforms.length === 0 &&
-      stalePlatforms.length === 0 &&
-      unknownPlatforms.length === 0,
-    checked_at: new Date(now).toISOString(),
-    summary: {
-      total: results.length,
-      fresh: freshCount,
-      stale: stalePlatforms.length,
-      critical: criticalPlatforms.length,
-      unknown: unknownPlatforms.length,
-    },
-    thresholds: {
-      stale_hours: STALE_THRESHOLD_MS / (1000 * 60 * 60),
-      critical_hours: CRITICAL_THRESHOLD_MS / (1000 * 60 * 60),
-    },
-    platforms: results,
-  }
 }
 
 /**

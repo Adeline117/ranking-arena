@@ -12,6 +12,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { logger } from '@/lib/logger'
+import { buildFreshnessReport } from '@/lib/rankings/build-freshness-report'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'edge'
@@ -45,15 +46,31 @@ function withTimeout<T>(
   label: string,
   ms: number = 15000
 ): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) =>
-      setTimeout(() => {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true
         logger.warn(`[health] ${label} timed out after ${ms}ms`)
         resolve(fallback)
-      }, ms)
-    ),
-  ])
+      }
+    }, ms)
+
+    Promise.resolve(promise).then(
+      (value) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        resolve(value)
+      },
+      (error: unknown) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        reject(error)
+      }
+    )
+  })
 }
 
 async function checkDatabase(): Promise<{
@@ -107,79 +124,47 @@ async function checkRedis(): Promise<{
   }
 }
 
+async function checkFreshness(): Promise<{
+  status: 'pass' | 'fail'
+  latency?: number
+  message?: string
+}> {
+  const t0 = Date.now()
+  try {
+    const report = await withTimeout(buildFreshnessReport(), null, 'checkFreshness', 8000)
+    const latency = Date.now() - t0
+    if (!report) {
+      return { status: 'fail', latency, message: 'Freshness authority timed out' }
+    }
+
+    const { total, fresh, stale, critical, unknown } = report.summary
+    const message = `${fresh}/${total} sources fresh; ${stale} stale; ${critical} critical; ${unknown} unknown`
+    return { status: report.ok ? 'pass' : 'fail', latency, message }
+  } catch {
+    return {
+      status: 'fail',
+      latency: Date.now() - t0,
+      message: 'Freshness authority unavailable',
+    }
+  }
+}
+
 export async function GET() {
   const t0 = Date.now()
 
-  // DB + Redis + API connectivity - run in parallel
-  const [database, redis] = await Promise.all([checkDatabase(), checkRedis()])
+  // Independent launch authorities run in parallel so complete source closure
+  // does not add its latency after the DB/Redis checks.
+  const [database, redis, freshness] = await Promise.all([
+    checkDatabase(),
+    checkRedis(),
+    checkFreshness(),
+  ])
 
   // API check (self-check: if we got here, the API layer is working)
   const api: { status: 'pass' | 'fail'; latency?: number; message?: string } = {
     status: 'pass',
     latency: Date.now() - t0,
     message: 'Responding',
-  }
-
-  // Data freshness check: verify that pipeline data is recent (< 4 hours).
-  //
-  // ROOT CAUSE FIX (2026-04-09): Previous version queried pipeline_logs for
-  // compute-leaderboard success, which drifted to 8h+ whenever compute-leaderboard
-  // was slow or got marked as timeout by cleanup-stuck-logs. That created
-  // constant false "System degraded" alerts on the monitor even while actual
-  // data was fresh.
-  //
-  // Fix: check ANY successful batch-fetch-traders job in the last 4h as the
-  // "data is flowing" signal. These run every 15-30 min so the threshold can
-  // stay tight without depending on the slow compute-leaderboard job finishing.
-  // 4h threshold tolerates occasional cron hiccups without drifting into
-  // genuine staleness territory.
-  let freshness: { status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }
-  try {
-    const t1 = Date.now()
-    // Data-flowing signal: latest arena.leaderboard_snapshots time (canonical;
-    // migrated off retiring trader_latest 2026-06-15). The unified ingest worker
-    // writes arena; arena_latest_snapshot_at is the single source of truth. RPC
-    // is service_role-only. Raced against an 8s timeout for cold-start tolerance.
-    const result = await Promise.race([
-      getSupabaseAdmin()
-        .rpc('arena_latest_snapshot_at')
-        .then((r) => r as { data: string | null; error: { message: string } | null }),
-      new Promise<{ data: null; error: { message: string } }>((resolve) =>
-        setTimeout(
-          () => resolve({ data: null, error: { message: 'Freshness query timed out (8s)' } }),
-          8000
-        )
-      ),
-    ])
-    const latency = Date.now() - t1
-    let newestMs: number | null = null
-    if (!result.error && result.data) {
-      newestMs = new Date(result.data as string).getTime()
-    }
-    if (newestMs === null) {
-      freshness = {
-        status: 'fail',
-        message: result.error?.message ?? 'No pipeline data found (arena)',
-        latency,
-      }
-    } else {
-      const ageHours = (Date.now() - newestMs) / (1000 * 60 * 60)
-      // 4h threshold: worker tiers run every 2-8h per source.
-      freshness =
-        ageHours <= 4
-          ? {
-              status: 'pass',
-              latency,
-              message: `${ageHours.toFixed(1)}h old (pipeline)`,
-            }
-          : {
-              status: 'fail',
-              latency,
-              message: `Data is ${ageHours.toFixed(1)}h old (threshold: 4h)`,
-            }
-    }
-  } catch (e: unknown) {
-    freshness = { status: 'skip', message: e instanceof Error ? e.message : 'Unknown' }
   }
 
   // VPS connectivity check (SG) — WAF-protected platforms depend on this

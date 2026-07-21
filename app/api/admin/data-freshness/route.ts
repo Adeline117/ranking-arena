@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { buildFreshnessReport } from '@/app/api/cron/check-data-freshness/route'
+import { buildFreshnessReport } from '@/lib/rankings/build-freshness-report'
 import { createLogger } from '@/lib/utils/logger'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 

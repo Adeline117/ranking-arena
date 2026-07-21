@@ -591,14 +591,19 @@ describe('GET /api/cron/check-data-freshness', () => {
       join(process.cwd(), 'app/api/cron/check-data-freshness/route.ts'),
       'utf8'
     )
+    const builder = readFileSync(
+      join(process.cwd(), 'lib/rankings/build-freshness-report.ts'),
+      'utf8'
+    )
 
     expect(route).not.toContain('SOURCES_WITH_DATA')
     expect(route).not.toContain("from('leaderboard_ranks')")
     expect(route).not.toContain('computed_at')
-    expect(route).toContain("rpc('arena_freshness_expected_sources')")
-    expect(route).toContain("rpc('arena_visible_sources'")
-    expect(route).toContain("from('leaderboard_source_freshness')")
-    expect(route).toContain("select('season_id,source,source_as_of')")
+    expect(route).toContain("from '@/lib/rankings/build-freshness-report'")
+    expect(builder).toContain("rpc('arena_freshness_expected_sources')")
+    expect(builder).toContain("rpc('arena_visible_sources'")
+    expect(builder).toContain("from('leaderboard_source_freshness')")
+    expect(builder).toContain("select('season_id,source,source_as_of')")
     expect(route).toContain("acquireCronLock('check-data-freshness'")
     expect(route).not.toContain('sendScraperAlert')
   })
