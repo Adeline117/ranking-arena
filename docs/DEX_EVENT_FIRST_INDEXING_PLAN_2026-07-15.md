@@ -796,11 +796,16 @@ Arena 规范事实/账本 → 官方 API/托管 indexer 对账。任何第三方
       钱包 subset 的 canonical SHA，严格拒绝缺行、重排、跨链或 cohort 漂移。
       `census:dex:golden-wallets:verify` 仅从 configured production URL 的 normalized leaderboard
       snapshot rows 重建这 100 个已选钱包；它不是 provider refetch、event acquisition replay 或
-      population denominator 验收。完整 query-row/candidate-set SHA 在 companion baseline 落库前只能
-      标记为 `observed_unpinned`。当前 URL authority 只做 literal project-ref 绑定，Postgres TLS 已加密但
+      population denominator 验收。当前 verifier `@1` 尚未消费 companion，故其独立报告仍只能标记
+      `observed_unpinned`。当前 URL authority 只做 literal project-ref 绑定，Postgres TLS 已加密但
       尚未配置项目 CA，因此 `tls_server_identity_verified=false`、
       `production_database_identity_verified=false`；provider-body persistence、serving、rank、Score 仍全部
       未授权。
+      metadata-only `golden-wallet-source-provenance@1` 已固定 verifier query、7,508 条 normalized
+      query rows 与 7,508 个 eligible candidates 的 observation baseline；canonical SHA 为
+      `34d7a1b696b6ef686cbfa0dd342bd76ded0275f6052f9fc062cedebc9c4eee5a`。它只允许后续检测相对这次
+      observation 的漂移；在项目 CA/`verify-full` 与 provider refetch 关闭前，不得提升为 production
+      origin、population coverage 或 RAW replay 证明。
 - [x] 固定首个真实 Solana 双源 metadata-only finality/membership witness：
       `j79F…KDpef` 的 `golden-rpc-transaction-evidence@3` canonical SHA 为
       `223babd47d32242e49e594286cc20a7cd5471aa9ab8e85bdeee5c3d96390b2a9`，两源 stable facts SHA

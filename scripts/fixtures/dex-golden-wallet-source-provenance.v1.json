@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "data_contract": "arena.dex.golden-wallet-source-provenance@1",
+  "purpose": "phase0_selected_fixture_generator_baseline_only",
+  "baseline_recorded_at": "2026-07-21T18:05:21.000Z",
+  "parent_snapshot_sha256": "736144afddfb61c3140c4286caf480578345aae1c30f9e65c50341092cf2e5ba",
+  "observation": {
+    "recorded_verifier_git_sha": "87fe67cfb1461f1213012cfcb1f270ad843dff2d",
+    "recorded_verifier_worktree_clean": true,
+    "database_url_binding": "literal_authority_bound_to_ranking_arena_project_ref",
+    "tls_transport_encrypted": true,
+    "tls_server_identity_verified": false,
+    "production_database_identity_verified": false
+  },
+  "source_snapshot_pins": [
+    {
+      "source_slug": "binance_web3_bsc",
+      "snapshot_id": "18904",
+      "snapshot_scraped_at": "2026-07-16T16:20:27.846Z",
+      "snapshot_actual_count": 775
+    },
+    {
+      "source_slug": "okx_web3_solana",
+      "snapshot_id": "18891",
+      "snapshot_scraped_at": "2026-07-16T15:26:16.352Z",
+      "snapshot_actual_count": 6733
+    }
+  ],
+  "candidate_query": {
+    "commitment_state": "pinned_in_source_provenance",
+    "sha256": "aa164efcd956c6b4fcecd05b208638a438b14c8681dab852b8c545a2bae33dd4"
+  },
+  "query_row_set": {
+    "commitment_state": "pinned_observation_baseline",
+    "sha256": "0974bea50f5b945a7b6800e7669fcda22f04153bcf970e17b54eb22cc5634458",
+    "row_count": 7508
+  },
+  "eligible_candidate_set": {
+    "commitment_state": "pinned_observation_baseline",
+    "sha256": "cec54b8a53abef1d52cb40e7ad98ae4cc5bb5b4fda6bb51075896c17a14b4d2c",
+    "candidate_count": 7508,
+    "candidate_counts": {
+      "binance_web3_bsc": 775,
+      "okx_web3_solana": 6733
+    }
+  },
+  "raw_boundary": {
+    "provider_refetch_performed": false,
+    "provider_body_included": false,
+    "raw_object_locator_included": false,
+    "raw_content_commitment_included": false
+  },
+  "claims": {
+    "population_denominator_authorized": false,
+    "serving_authorized": false,
+    "rank_eligible": false,
+    "score_eligible": false
+  }
+}
