@@ -1,0 +1,25 @@
+-- Production-shaped authority tables needed by the focused 18184550 proof.
+-- The parent Stripe harness already owns auth.users, user_profiles, and tips.
+
+ALTER TABLE public.user_profiles ADD COLUMN handle text;
+UPDATE public.user_profiles
+SET handle = 'fixture_'
+  || pg_catalog.left(
+    pg_catalog.replace(id::text, '-', ''),
+    20
+  );
+ALTER TABLE public.user_profiles OWNER TO postgres;
+
+CREATE TABLE public.posts (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  author_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  title text NOT NULL DEFAULT '',
+  content text NOT NULL DEFAULT ''
+);
+ALTER TABLE public.posts OWNER TO postgres;
+
+ALTER TABLE public.tips
+  ADD CONSTRAINT tips_post_id_fkey
+    FOREIGN KEY (post_id)
+    REFERENCES public.posts(id)
+    ON DELETE SET NULL;
