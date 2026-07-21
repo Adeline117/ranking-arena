@@ -53,7 +53,10 @@ const CONTEXT_OPTIONS = {
 
 const DEFAULT_PAGE_FETCH_TIMEOUT_MS = 60_000
 const MIN_PAGE_FETCH_TIMEOUT_MS = 5_000
-const MAX_PAGE_FETCH_TIMEOUT_MS = 300_000
+// Stay below the ingest workers' 180s lock/job budget. A per-source override
+// may relax the 60s default, but can never turn one request back into a
+// multi-minute slot holder.
+const MAX_PAGE_FETCH_TIMEOUT_MS = 90_000
 
 function pageFetchTimeoutMs(src: SourceRow): number {
   const configured = src.meta?.page_fetch_timeout_ms
