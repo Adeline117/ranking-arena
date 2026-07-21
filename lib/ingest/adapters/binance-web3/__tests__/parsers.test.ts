@@ -50,6 +50,12 @@ describe('parseBinanceWeb3LeaderboardPage', () => {
     expect(page.rows[0].headlineRoi).toBeCloseTo(51.79739614962856, 6)
     expect(page.rows[0].headlinePnl).toBeCloseTo(59312.259257, 4)
     expect(page.rows[0].headlineWinRate).toBeCloseTo(47.37, 6)
+    expect(page.rows[0].headlineMetricSources).toEqual({
+      roi: { fieldPath: 'board.data.data[].realizedPnlPercent' },
+      pnl: { fieldPath: 'board.data.data[].realizedPnl' },
+      win_rate: { fieldPath: 'board.data.data[].winRate' },
+    })
+    expect(page.rows[0].headlineMetricSources?.roi).not.toHaveProperty('provenance')
     // No headlineAum: `balance` is BNB (not USD) — must not be written as AUM.
     expect(page.rows[0].headlineAum).toBeUndefined()
     // Board-backfill: volume + on-chain extras → trader_stats

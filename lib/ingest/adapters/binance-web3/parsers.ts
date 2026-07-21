@@ -163,6 +163,9 @@ export function parseBinanceWeb3LeaderboardPage(
 
     const isKol = kol.has(address)
     const twitter = str(item.addressTwitterUrl)
+    const headlineRoi = pct(item.realizedPnlPercent)
+    const headlinePnl = num(item.realizedPnl)
+    const headlineWinRate = pct(item.winRate)
     rows.push({
       exchangeTraderId: address,
       rank: rows.length + 1, // page-local; tier-a re-anchors by page_size
@@ -171,9 +174,18 @@ export function parseBinanceWeb3LeaderboardPage(
       walletAddress: address, // spec §1.4 on-chain identity (copyable on site)
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: pct(item.realizedPnlPercent),
-      headlinePnl: num(item.realizedPnl),
-      headlineWinRate: pct(item.winRate),
+      headlineRoi,
+      headlinePnl,
+      headlineWinRate,
+      headlineMetricSources: {
+        ...(headlineRoi === null
+          ? {}
+          : { roi: { fieldPath: 'board.data.data[].realizedPnlPercent' } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'board.data.data[].realizedPnl' } }),
+        ...(headlineWinRate === null
+          ? {}
+          : { win_rate: { fieldPath: 'board.data.data[].winRate' } }),
+      },
       // Board IS the stats substrate (profile page is 202-gated and unneeded —
       // the board row carries the full §2.5d on-chain superset). NO headlineAum:
       // `balance` is the BNB amount (NOT USD, per header doc) — using it as AUM

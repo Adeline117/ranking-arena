@@ -39,6 +39,12 @@ describe('parseBinanceLeaderboardPage', () => {
     expect(first.traderKind).toBe('human')
     expect(typeof first.headlineRoi).toBe('number') // already percent
     expect(typeof first.headlinePnl).toBe('number')
+    expect(first.headlineMetricSources).toEqual({
+      roi: { fieldPath: 'data.list[].roi' },
+      pnl: { fieldPath: 'data.list[].pnl' },
+      win_rate: { fieldPath: 'data.list[].winRate' },
+    })
+    expect(first.headlineMetricSources?.roi).not.toHaveProperty('provenance')
     expect(first.headlineAum).toBeCloseTo(85079.66905633, 2) // board aum (absolute USD)
     expect(first.raw).toHaveProperty('sharpRatio') // board card extras kept
     expect(first.raw).toHaveProperty('chartItems')
@@ -49,6 +55,10 @@ describe('parseBinanceLeaderboardPage', () => {
     expect(page.reportedTotal).toBe(2509)
     expect(page.rows).toHaveLength(20)
     expect(page.rows[0].headlineWinRate).toBeNull()
+    expect(page.rows[0].headlineMetricSources).toEqual({
+      roi: { fieldPath: 'data.list[].roi' },
+      pnl: { fieldPath: 'data.list[].pnl' },
+    })
     expect(page.rows[0].exchangeTraderId).toMatch(/^\d{16,}$/)
     expect(page.rows[5].rank).toBe(6)
   })
