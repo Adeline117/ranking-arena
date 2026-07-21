@@ -44,16 +44,24 @@ export type TraderSource =
   | 'bitmart'
   | 'bitmart_futures'
   | 'bitget_cfd'
+  | 'bitget_bots_futures'
+  | 'bybit_mt5'
+  | 'gate_cfd'
+  | 'toobit_futures'
   // CEX spot
   | 'binance_spot'
   | 'bitget_spot'
+  | 'bitget_bots_spot'
+  | 'blofin_spot'
   | 'bybit_spot'
   | 'htx_spot'
   | 'okx_spot'
+  | 'xt_spot'
   | 'bingx_spot'
   // CEX web3 / wallets
   | 'binance_web3'
   | 'okx_web3'
+  | 'okx_web3_solana'
   | 'okx_wallet'
   // DEX / on-chain perpetuals
   | 'gmx'
@@ -116,12 +124,24 @@ export const ALL_SOURCES: TraderSource[] = [
   'xt',
   'lbank',
   'blofin',
+  'bitget_cfd',
+  'bitget_bots_futures',
+  'bitmart_futures',
+  'bybit_mt5',
+  'gate_cfd',
+  'toobit_futures',
   // CEX spot
   'binance_spot',
+  'bitget_bots_spot',
+  'bitget_spot',
+  'blofin_spot',
+  'htx_spot',
+  'xt_spot',
   'okx_spot',
   'bingx_spot',
   // CEX web3
   'binance_web3',
+  'okx_web3_solana',
   // DEX / on-chain perpetuals
   'gmx',
   'hyperliquid',
@@ -239,7 +259,10 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'bybit',
   'bitget_futures',
   'bitget_cfd',
+  'bitget_bots_futures',
   'bitmart_futures',
+  'bybit_mt5',
+  'gate_cfd',
   'okx_futures',
   'mexc',
   'htx_futures',
@@ -254,15 +277,20 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'bitunix',
   'kucoin',
   'phemex',
+  'toobit_futures',
   // CEX spot
   'binance_spot',
+  'bitget_bots_spot',
   'bitget_spot',
+  'blofin_spot',
   'htx_spot',
   'okx_spot',
+  'xt_spot',
   // Web3 / DEX
   'gmx',
   'hyperliquid',
   'binance_web3',
+  'okx_web3_solana',
   'drift',
 ]
 
@@ -416,6 +444,34 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
     trustWeight: 0.85,
     roiType: 'mixed',
   },
+  bitget_bots_futures: {
+    name: 'Bitget Futures Bots',
+    sourceType: 'futures',
+    reliability: 68,
+    trustWeight: 0.85,
+    roiType: 'mixed',
+  },
+  bybit_mt5: {
+    name: 'Bybit MT5',
+    sourceType: 'futures',
+    reliability: 85,
+    trustWeight: 0.85,
+    roiType: 'mixed',
+  },
+  gate_cfd: {
+    name: 'Gate CFD',
+    sourceType: 'futures',
+    reliability: 68,
+    trustWeight: 0.8,
+    roiType: 'mixed',
+  },
+  toobit_futures: {
+    name: 'Toobit',
+    sourceType: 'futures',
+    reliability: 50,
+    trustWeight: 0.65,
+    roiType: 'mixed',
+  },
   // CEX spot
   binance_spot: {
     name: 'Binance Spot',
@@ -429,6 +485,20 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
     sourceType: 'spot',
     reliability: 65,
     trustWeight: 0.8,
+    roiType: 'mixed',
+  },
+  bitget_bots_spot: {
+    name: 'Bitget Spot Bots',
+    sourceType: 'spot',
+    reliability: 65,
+    trustWeight: 0.8,
+    roiType: 'mixed',
+  },
+  blofin_spot: {
+    name: 'BloFin Spot',
+    sourceType: 'spot',
+    reliability: 40,
+    trustWeight: 0.65,
     roiType: 'mixed',
   },
   htx_spot: {
@@ -453,6 +523,13 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
     roiType: 'mixed',
     requiresPassphrase: true,
   },
+  xt_spot: {
+    name: 'XT.COM Spot',
+    sourceType: 'spot',
+    reliability: 55,
+    trustWeight: 0.65,
+    roiType: 'mixed',
+  },
   bingx_spot: {
     name: 'BingX Spot',
     sourceType: 'spot',
@@ -470,6 +547,13 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   },
   okx_web3: {
     name: 'OKX Web3',
+    sourceType: 'web3',
+    reliability: 90,
+    trustWeight: 1.0,
+    roiType: 'mixed',
+  },
+  okx_web3_solana: {
+    name: 'OKX Wallet',
     sourceType: 'web3',
     reliability: 90,
     trustWeight: 1.0,
