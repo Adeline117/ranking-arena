@@ -794,6 +794,13 @@ Arena 规范事实/账本 → 官方 API/托管 indexer 对账。任何第三方
       不得把既有 `raw-snapshots` 行为扩展到 DEX event/golden/acquisition artifact。
 - [x] 固定 100 个 golden wallets：每链 top 20、随机 20、异常/高频 10；保存全局快照与每链 50
       钱包 subset 的 canonical SHA，严格拒绝缺行、重排、跨链或 cohort 漂移。
+      `census:dex:golden-wallets:verify` 仅从 configured production URL 的 normalized leaderboard
+      snapshot rows 重建这 100 个已选钱包；它不是 provider refetch、event acquisition replay 或
+      population denominator 验收。完整 query-row/candidate-set SHA 在 companion baseline 落库前只能
+      标记为 `observed_unpinned`。当前 URL authority 只做 literal project-ref 绑定，Postgres TLS 已加密但
+      尚未配置项目 CA，因此 `tls_server_identity_verified=false`、
+      `production_database_identity_verified=false`；provider-body persistence、serving、rank、Score 仍全部
+      未授权。
 - [x] 固定首个真实 Solana 双源 metadata-only finality/membership witness：
       `j79F…KDpef` 的 `golden-rpc-transaction-evidence@3` canonical SHA 为
       `223babd47d32242e49e594286cc20a7cd5471aa9ab8e85bdeee5c3d96390b2a9`，两源 stable facts SHA
@@ -1067,7 +1074,8 @@ ClickHouse engine 变更后追加演练。
 
 ## 13. 第一批实际任务（严格按顺序）
 
-1. 建 `dex_protocol_manifest` 与 golden wallets/tx 文档，只提交 fixtures/manifest。
+1. 建 `dex_protocol_manifest` 与 golden wallets/tx 文档，只提交 fixtures/manifest 及离线生成/验签
+   工具，不接生产 serving。
 2. 建 SQD 7 天只读 spike，输出 BSC/Solana 字段与成本报告，不接生产。
 3. 建 ClickHouse 最小 DDL + checkpoint/replay harness。
 4. 建 BSC 第一个协议 decoder + golden tests。

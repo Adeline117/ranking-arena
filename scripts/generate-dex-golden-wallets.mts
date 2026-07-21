@@ -6,13 +6,27 @@
  * observation; arena.trader_stats is intentionally excluded because it is a
  * mutable mixed-width latest row, not immutable snapshot evidence.
  *
- * Usage:  npm run census:dex:golden-wallets
- * Writes: scripts/fixtures/dex-golden-wallets.v1.json
+ * Usage:
+ *   npm run census:dex:golden-wallets
+ *   npm run census:dex:golden-wallets -- --verify-pinned
+ *
+ * The default mode writes scripts/fixtures/dex-golden-wallets.v1.json. Pinned
+ * verification is read-only and emits only hashes/counts to stdout.
  */
 
 import { execFileSync } from 'node:child_process'
-import { closeSync, fsyncSync, openSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import {
+  closeSync,
+  fsyncSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { config } from 'dotenv'
 import { Client } from 'pg'
@@ -23,12 +37,21 @@ import {
   DEX_GOLDEN_SOURCES,
   type DexGoldenWalletQueryRow,
 } from './lib/dex-golden-wallet-query'
+import {
+  assertDexGoldenProductionDatabaseUrlLiteral,
+  buildDexGoldenPinnedQueryParameters,
+  DEX_GOLDEN_PINNED_CANDIDATE_QUERY,
+  parseDexGoldenGeneratorArgs,
+  verifyDexGoldenPinnedSnapshotRebuild,
+} from './lib/dex-golden-wallet-replay'
 import { buildDexGoldenWalletSnapshot } from './lib/dex-golden-wallets'
 
-config({ path: resolve(process.cwd(), '.env.local'), quiet: true, override: false })
+const REPOSITORY_ROOT = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '..'))
+
+config({ path: join(REPOSITORY_ROOT, '.env.local'), quiet: true, override: false })
 
 const SAMPLE_SEED = 'arena-dex-golden-wallets-v1-2026-07-16'
-const OUTPUT_PATH = join(process.cwd(), 'scripts', 'fixtures', 'dex-golden-wallets.v1.json')
+const OUTPUT_PATH = join(REPOSITORY_ROOT, 'scripts', 'fixtures', 'dex-golden-wallets.v1.json')
 
 const CANDIDATE_QUERY = `
 WITH latest AS MATERIALIZED (
@@ -89,30 +112,38 @@ SELECT l.slug AS source_slug,
    AND t.source_id = l.source_id
  ORDER BY l.slug, le.rank, t.exchange_trader_id`
 
-function cleanGitSha(): string {
-  const cwd = process.cwd()
+function gitRevision(): { sha: string; clean: boolean } {
+  const cwd = REPOSITORY_ROOT
   const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], {
     cwd,
     encoding: 'utf8',
   }).trim()
-  if (status) throw new Error('Refusing to generate golden wallets from a dirty Git worktree')
 
   const sha = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], {
     cwd,
     encoding: 'utf8',
   }).trim()
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Git HEAD is not a full lowercase SHA')
-  return sha
+  return { sha, clean: status.length === 0 }
 }
 
-async function collectSnapshotRows(): Promise<DexGoldenWalletQueryRow[]> {
+function configuredProductionDatabaseUrl(): string {
   const databaseUrl = process.env.INGEST_DATABASE_URL ?? process.env.DATABASE_URL
   if (!databaseUrl) throw new Error('Production database URL is not configured')
-  const isLocal = databaseUrl.includes('127.0.0.1') || databaseUrl.includes('localhost')
+  assertDexGoldenProductionDatabaseUrlLiteral(databaseUrl)
+  return databaseUrl
+}
+
+async function collectSnapshotRows(
+  databaseUrl: string,
+  query: string,
+  parameters: readonly unknown[]
+): Promise<DexGoldenWalletQueryRow[]> {
+  assertDexGoldenProductionDatabaseUrlLiteral(databaseUrl)
   const client = new Client({
     connectionString: databaseUrl,
     application_name: 'ranking-arena-golden-wallet-readonly',
-    ssl: isLocal ? undefined : { rejectUnauthorized: false },
+    ssl: { rejectUnauthorized: false },
   })
   const suppressUnstructuredClientError = () => {
     // The query rejection is sanitized by the CLI boundary below.
@@ -127,9 +158,7 @@ async function collectSnapshotRows(): Promise<DexGoldenWalletQueryRow[]> {
     transactionOpen = true
     await client.query("SET LOCAL statement_timeout = '45s'")
     await client.query("SET LOCAL lock_timeout = '5s'")
-    const { rows } = await client.query<DexGoldenWalletQueryRow>(CANDIDATE_QUERY, [
-      [...DEX_GOLDEN_SOURCES],
-    ])
+    const { rows } = await client.query<DexGoldenWalletQueryRow>(query, [...parameters])
     await client.query('COMMIT')
     transactionOpen = false
     return rows
@@ -186,13 +215,45 @@ function safeErrorMessage(error: unknown): string {
 }
 
 async function main(): Promise<void> {
-  const gitSha = cleanGitSha()
-  const rows = await collectSnapshotRows()
+  const mode = parseDexGoldenGeneratorArgs(process.argv.slice(2))
+  const revision = gitRevision()
+
+  if (mode === 'verify-pinned') {
+    if (!revision.clean) {
+      throw new Error('Pinned snapshot rebuild requires a clean Git worktree')
+    }
+    const databaseUrl = configuredProductionDatabaseUrl()
+    const fixtureInput = JSON.parse(readFileSync(OUTPUT_PATH, 'utf8')) as unknown
+    const parameters = buildDexGoldenPinnedQueryParameters(fixtureInput)
+    const rows = await collectSnapshotRows(databaseUrl, DEX_GOLDEN_PINNED_CANDIDATE_QUERY, [
+      parameters.sourceSlugs,
+      parameters.snapshotIds,
+    ])
+    const finalRevision = gitRevision()
+    if (!finalRevision.clean || finalRevision.sha !== revision.sha) {
+      throw new Error('Git worktree changed during pinned snapshot rebuild')
+    }
+    const report = verifyDexGoldenPinnedSnapshotRebuild({
+      fixture: fixtureInput,
+      rows,
+      verifierGitSha: finalRevision.sha,
+      verifierWorktreeClean: finalRevision.clean,
+      databaseUrl,
+    })
+    process.stdout.write(`${JSON.stringify(report)}\n`)
+    return
+  }
+
+  if (!revision.clean) {
+    throw new Error('Refusing to generate golden wallets from a dirty Git worktree')
+  }
+  const databaseUrl = configuredProductionDatabaseUrl()
+  const rows = await collectSnapshotRows(databaseUrl, CANDIDATE_QUERY, [[...DEX_GOLDEN_SOURCES]])
   const candidates = buildDexGoldenWalletCandidates(rows)
   const { snapshot, sha256 } = buildDexGoldenWalletSnapshot({
     candidates,
     generatedAt: new Date().toISOString(),
-    generatorGitSha: gitSha,
+    generatorGitSha: revision.sha,
     sampleSeed: SAMPLE_SEED,
   })
   const output = await format(JSON.stringify(snapshot), { parser: 'json' })
