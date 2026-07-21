@@ -132,7 +132,11 @@ describe('Tier-C incomplete profile window gate', () => {
       return { rows: [], rowCount: 0 }
     })
     mockResolveTraderId.mockResolvedValue(42)
-    mockWriteRawObject.mockResolvedValue(2_081_896)
+    mockWriteRawObject.mockResolvedValue({
+      id: 2_081_896,
+      storagePath: 'test/tier_c/raw.json.gz',
+      contentHash: 'a'.repeat(64),
+    })
     mockRecordStagingRejects.mockResolvedValue(undefined)
     mockValidateProfile.mockReturnValue([])
     mockRedisSet.mockResolvedValue('OK')

@@ -87,7 +87,11 @@ describe('Tier-A board-series publication guard', () => {
     mockNativeRankingTimeframes.mockReturnValue([30])
     mockOpenSession.mockResolvedValue({ close: mockSessionClose })
     mockSessionClose.mockResolvedValue(undefined)
-    mockWriteRawObject.mockResolvedValue(9001)
+    mockWriteRawObject.mockResolvedValue({
+      id: 9001,
+      storagePath: 'xt_futures/tier_a/raw.json.gz',
+      contentHash: 'a'.repeat(64),
+    })
     mockRecordFieldInventory.mockResolvedValue(undefined)
     mockValidateLeaderboardRows.mockImplementation((rows: ParsedLeaderboardRow[]) => ({
       valid: rows,
@@ -175,7 +179,17 @@ describe('Tier-A board-series publication guard', () => {
       parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
       parseLeaderboardSeries: () => new Map(),
     })
-    mockWriteRawObject.mockResolvedValueOnce(9030).mockResolvedValueOnce(9090)
+    mockWriteRawObject
+      .mockResolvedValueOnce({
+        id: 9030,
+        storagePath: 'xt_futures/tier_a/30.json.gz',
+        contentHash: 'b'.repeat(64),
+      })
+      .mockResolvedValueOnce({
+        id: 9090,
+        storagePath: 'xt_futures/tier_a/90.json.gz',
+        contentHash: 'c'.repeat(64),
+      })
     mockPublishLeaderboardSnapshot.mockImplementation(
       async (input: { timeframe: number; rawObjectId: number }) => ({
         snapshotId: input.timeframe === 30 ? 730 : 790,

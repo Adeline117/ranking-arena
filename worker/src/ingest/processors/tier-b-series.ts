@@ -306,14 +306,16 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
             { intent: 'series_only' }
           )
 
-          const rawObjectId = await writeRawObject({
-            sourceId: src.id,
-            sourceSlug: src.slug,
-            jobType: 'tier_b_series',
-            traderId: trader.id,
-            timeframe,
-            payload: bundle.pages,
-          })
+          const rawObjectId = (
+            await writeRawObject({
+              sourceId: src.id,
+              sourceSlug: src.slug,
+              jobType: 'tier_b_series',
+              traderId: trader.id,
+              timeframe,
+              payload: bundle.pages,
+            })
+          ).id
 
           const ctx: ParseCtx = {
             sourceSlug: src.slug,

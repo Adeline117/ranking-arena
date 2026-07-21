@@ -62,7 +62,7 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         }
 
         // RAW first — any downstream bug becomes a re-parse (spec §5.5).
-        const rawObjectId = await writeRawObject({
+        const rawReceipt = await writeRawObject({
           sourceId: src.id,
           sourceSlug: src.slug,
           jobType: 'tier_a',
@@ -73,6 +73,7 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
             ...(cycleId ? { observation_cycle_id: cycleId } : {}),
           },
         })
+        const rawObjectId = rawReceipt.id
 
         // Upstream field radar (P1): sample the first page's shape while it's
         // still in memory (RAW blobs aren't SQL-queryable). Fire-and-forget —

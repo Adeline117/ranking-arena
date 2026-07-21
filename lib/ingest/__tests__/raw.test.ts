@@ -54,7 +54,11 @@ describe('writeRawObject storage retries', () => {
     const result = writeRawObject(input)
     await jest.advanceTimersByTimeAsync(750)
 
-    await expect(result).resolves.toBe(42)
+    await expect(result).resolves.toEqual({
+      id: 42,
+      storagePath: expect.stringMatching(/\.json\.gz$/),
+      contentHash: 'f2d0bb204039f952e467902406c9f5d82f6a1567c329df3be83af227a4fb76f0',
+    })
     expect(mockUpload).toHaveBeenCalledTimes(2)
     expect(mockQuery).toHaveBeenCalledTimes(1)
   })
@@ -67,7 +71,11 @@ describe('writeRawObject storage retries', () => {
     const result = writeRawObject(input)
     await jest.advanceTimersByTimeAsync(750)
 
-    await expect(result).resolves.toBe(42)
+    await expect(result).resolves.toEqual({
+      id: 42,
+      storagePath: expect.stringMatching(/\.json\.gz$/),
+      contentHash: 'f2d0bb204039f952e467902406c9f5d82f6a1567c329df3be83af227a4fb76f0',
+    })
     expect(mockUpload).toHaveBeenCalledTimes(2)
     expect(mockQuery).toHaveBeenCalledTimes(1)
   })
@@ -96,7 +104,11 @@ describe('writeRawObject storage retries', () => {
           raw_integrity: { version: 999, compressed_bytes: -1 },
         },
       })
-    ).resolves.toBe(42)
+    ).resolves.toEqual({
+      id: 42,
+      storagePath: expect.stringMatching(new RegExp(`_${expectedHash}\\.json\\.gz$`)),
+      contentHash: expectedHash,
+    })
 
     const [storagePath, compressedPayload, uploadOptions] = mockUpload.mock.calls[0]
     expect(storagePath).toMatch(new RegExp(`_${expectedHash}\\.json\\.gz$`))
