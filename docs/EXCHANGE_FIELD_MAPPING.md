@@ -9,6 +9,32 @@
 > [`DEX_EVENT_FIRST_INDEXING_PLAN_2026-07-15.md`](./DEX_EVENT_FIRST_INDEXING_PLAN_2026-07-15.md)
 > 为准；旧截图/表格不能覆盖当前 RAW 与方法口径。
 
+## 零、字段来源、补齐与排名硬门（2026-07-21）
+
+不能把 CEX、钱包榜单和链上重建混成一种 provenance，也不能把一个可选字段的缺失扩大成
+“整个交易员没有数据”。逐字段采用以下三条路径：
+
+| 路径                | 范围                                                                  | 使用规则                                                                       | 排名规则                                                                        |
+| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `source_reported`   | 所有 CEX 文档/截图字段；Binance Wallet 与 OKX Web3 直接返回的钱包指标 | 原值优先，保留上游窗口、币种、`as_of`、endpoint/fixture 证据；链上结果不得覆盖 | 当前 PASSED board、字段语义/单位/窗口已验证且 fresh 时可以进入对应排名指标      |
+| `source_normalized` | 协议官方 API/GraphQL 给出完整组件，Arena 只做确定性单位或公式归一化   | 固定方法版本并保留组件；不得和不同方法的同名字段无标签混排                     | 所需组件、窗口和方法兼容性全部通过才可排名                                      |
+| `arena_rebuilt`     | 其他 DEX 缺失字段的事件账本重建                                       | 与原生值并列保存；不能 `COALESCE` 冒充原生                                     | 历史完整、价格可信、成本基础/期初库存明确、窗口/币种/freshness 全部通过才可排名 |
+
+有限回扫、分页截断、现价估值、开窗库存未知、执行价或成本基础未知，一律是
+`partial/unknown + reason`：可以在详情或发现层显示，但 `Arena Score` 和 `rank` 必须为 NULL。
+评分不再允许用 `-8%/-20%` 一类置信度罚分把不合格输入留在榜内。排名方法只检查自己真正
+消费的字段；例如 MDD 暂缺不应抹掉一个来源可信的 PnL，但一个消费 ROI+PnL 的统一分数要求
+两者分别通过硬门。
+
+机器可执行判定见 `lib/metric-trust.ts`。它不接受一个孤立的 `verified` 布尔值，而是把指标值
+绑定到 subject、来源、采集 run、RAW 引用、真实窗口边界、单位/币种、`as_of/valid_until`，再与
+代码内静态登记的来源字段合同和排名方法合同核对；调用方不能随指标一起提交一份临时合同
+“自证”。注册表先从已核对的 Binance Futures 与 Binance Wallet 字段开始，未登记来源一律
+fail closed，按来源逐个扩展。后续数据库/RPC 必须持久化逐指标
+`provenance / methodology_version / quality / history / price / cost_basis / population / window /
+unit / freshness / raw_refs+sha256 / blocking_reasons / rank_eligible`；RAW 引用还必须由数据库外键和
+读取时 digest 校验确认真实存在，完成这层接线前不得把新合同当成公共排名已经通过。
+
 ---
 
 ## 一、Binance 交易员主页字段清单（UI 顺序：Top → Bottom）
@@ -524,8 +550,10 @@ interface ExtendedDisplayFields {
 ### Arena Score 计算兼容性
 
 本文档不再复制容易漂移的 Arena Score 权重。当前实现必须从 typed score input 读取，并对每个
-指标执行 methodology/provenance/quality 门。GMX 的 MDD/Sharpe 为 NULL 时保留 partial confidence；
-不得在映射层凭空写 `default_penalty(-15)`，也不得把旧 mixed-basis 风险值填回来。
+指标执行 methodology/provenance/quality 门。`partial/unknown` 可以展示，但不得产生 Arena Score
+或 rank；不得用 confidence multiplier/default penalty 把它留在榜内。GMX 的 MDD/Sharpe 为 NULL
+时只是不参与消费这些字段的方法；不得在映射层凭空写 `default_penalty(-15)`，也不得把旧
+mixed-basis 风险值填回来。
 
 ---
 
@@ -587,7 +615,9 @@ function normalizeWinRate(value, source) {
 
 ### 3. UI 展示建议
 
-- 缺失字段显示 "N/A" 或 "-"
+- `unsupported` 显示 "N/A"；证据不足显示 `partial` 或 `unknown`，不能显示假 0
 - 悬浮提示说明数据来源和时间段
 - 不同交易所用不同颜色/图标区分
 - 跨交易所比较时明确标注数据差异
+- `partial/unknown` 指标和交易员仍可被发现、查看、关注和比较；任何消费该字段的方法不显示
+  Arena rank/Score，但可选 MDD 缺失不阻塞只消费可信 ROI+PnL 的独立方法
