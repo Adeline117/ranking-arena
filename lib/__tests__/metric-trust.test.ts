@@ -128,6 +128,37 @@ function rebuiltRoi(evidence: Partial<MetricTrustEvidence> = {}): RankingMetricI
   })
 }
 
+function binanceBoardMetric(metric: 'roi' | 'pnl'): RankingMetricInput {
+  return input(metric, {
+    evidence: {
+      methodologyVersion: metric === 'roi' ? 'binance-board-roi@1' : 'binance-board-pnl@1',
+    },
+    binding: {
+      fieldPath: metric === 'roi' ? 'data.list[].roi' : 'data.list[].pnl',
+    },
+  })
+}
+
+function binanceWalletMetric(metric: 'roi' | 'pnl'): RankingMetricInput {
+  return input(metric, {
+    evidence: {
+      methodologyVersion:
+        metric === 'roi'
+          ? 'binance-web3-board-realized-pnl-percent@1'
+          : 'binance-web3-board-realized-pnl@1',
+    },
+    binding: {
+      subjectKey: 'binance_web3_bsc:0xabc',
+      sourceId: 'binance_web3_bsc',
+      sourceContractVersion: '1',
+      fieldPath:
+        metric === 'roi' ? 'board.data.data[].realizedPnlPercent' : 'board.data.data[].realizedPnl',
+      rawRefs: directRawRefs('binance_web3_bsc'),
+      currency: 'USD',
+    },
+  })
+}
+
 describe('metric trust ranking gate', () => {
   it('admits a registered and verified provider-reported metric', () => {
     expect(evaluateMetricRankEligibility(input(), NOW)).toEqual({
@@ -135,6 +166,17 @@ describe('metric trust ranking gate', () => {
       state: 'eligible',
       reasons: [],
     })
+  })
+
+  it('registers the real Binance Tier-A board paths separately from profile paths', () => {
+    expect(evaluateMetricRankEligibility(binanceBoardMetric('roi'), NOW).eligible).toBe(true)
+    expect(evaluateMetricRankEligibility(binanceBoardMetric('pnl'), NOW).eligible).toBe(true)
+  })
+
+  it('keeps Binance Wallet board metrics source-reported and USD-bound', () => {
+    expect(binanceWalletMetric('roi').evidence.provenance).toBe('source_reported')
+    expect(evaluateMetricRankEligibility(binanceWalletMetric('roi'), NOW).eligible).toBe(true)
+    expect(evaluateMetricRankEligibility(binanceWalletMetric('pnl'), NOW).eligible).toBe(true)
   })
 
   it.each([
