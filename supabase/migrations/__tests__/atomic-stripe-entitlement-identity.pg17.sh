@@ -11,6 +11,7 @@ MIGRATION="$ROOT_DIR/supabase/migrations/20260718183000_atomic_stripe_entitlemen
 EXTRA_SETUP_SQLS="${STRIPE_ENTITLEMENT_EXTRA_SETUP_SQLS:-${STRIPE_ENTITLEMENT_EXTRA_SETUP_SQL:-}}"
 EXTRA_MIGRATIONS="${STRIPE_ENTITLEMENT_EXTRA_MIGRATIONS:-${STRIPE_ENTITLEMENT_EXTRA_MIGRATION:-}}"
 EXTRA_PROOF_SQLS="${STRIPE_ENTITLEMENT_EXTRA_PROOF_SQLS:-${STRIPE_ENTITLEMENT_EXTRA_PROOF_SQL:-}}"
+EXTRA_PROOF_SHELLS="${STRIPE_ENTITLEMENT_EXTRA_PROOF_SHELLS:-}"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -2091,17 +2092,35 @@ BEGIN
     FROM pg_catalog.jsonb_object_keys(
       public.stripe_paid_launch_readiness_v2()
     ) AS readiness(key)
-  ) IS DISTINCT FROM ARRAY[
-    'authority_drift',
-    'completed_effects_without_external_ref',
-    'open_manual_reviews',
-    'paid_unbound_payments',
-    'projection_drift',
-    'reservation_anomalies',
-    'status',
-    'unfinished_effects',
-    'unresolved_refund_tombstones'
-  ]::text[]
+  ) IS DISTINCT FROM (
+    CASE
+      WHEN pg_catalog.to_regclass(
+        'public.tip_completion_notification_deliveries'
+      ) IS NULL THEN ARRAY[
+        'authority_drift',
+        'completed_effects_without_external_ref',
+        'open_manual_reviews',
+        'paid_unbound_payments',
+        'projection_drift',
+        'reservation_anomalies',
+        'status',
+        'unfinished_effects',
+        'unresolved_refund_tombstones'
+      ]::text[]
+      ELSE ARRAY[
+        'authority_drift',
+        'completed_effects_without_external_ref',
+        'notification_delivery_anomalies',
+        'open_manual_reviews',
+        'paid_unbound_payments',
+        'projection_drift',
+        'reservation_anomalies',
+        'status',
+        'unfinished_effects',
+        'unresolved_refund_tombstones'
+      ]::text[]
+    END
+  )
   THEN
     RAISE EXCEPTION 'readiness JSON keys drifted';
   END IF;
@@ -2511,6 +2530,17 @@ if [[ -n "$EXTRA_PROOF_SQLS" ]]; then
       exit 1
     fi
     psql_cmd -f "$extra_proof"
+  done
+fi
+
+if [[ -n "$EXTRA_PROOF_SHELLS" ]]; then
+  IFS=':' read -r -a extra_proof_shell_paths <<< "$EXTRA_PROOF_SHELLS"
+  for extra_proof_shell in "${extra_proof_shell_paths[@]}"; do
+    if [[ ! -x "$extra_proof_shell" ]]; then
+      echo "Extra Stripe entitlement shell proof is not executable: $extra_proof_shell" >&2
+      exit 1
+    fi
+    "$extra_proof_shell" "$SOCKET_DIR" "$PORT" "$PG_BIN"
   done
 fi
 

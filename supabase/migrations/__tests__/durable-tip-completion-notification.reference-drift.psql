@@ -1,0 +1,5 @@
+-- Expected-failure setup: production reference_id is uuid. A text-shaped
+-- shadow must be rejected before any migration object is created.
+ALTER TABLE public.notifications
+  ALTER COLUMN reference_id TYPE text
+  USING reference_id::text;

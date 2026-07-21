@@ -1,0 +1,1534 @@
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+
+INSERT INTO auth.users(id) VALUES
+  ('d1000000-0000-4000-8000-000000000001'),
+  ('d1000000-0000-4000-8000-000000000002'),
+  ('d1000000-0000-4000-8000-000000000008'),
+  ('d1000000-0000-4000-8000-000000000009'),
+  ('d1000000-0000-4000-8000-000000000010'),
+  ('d1000000-0000-4000-8000-000000000011'),
+  ('d1000000-0000-4000-8000-000000000012'),
+  ('d1000000-0000-4000-8000-000000000013'),
+  ('d1000000-0000-4000-8000-000000000016'),
+  ('d1000000-0000-4000-8000-000000000017'),
+  ('d1000000-0000-4000-8000-000000000018');
+INSERT INTO public.user_profiles(id, handle, stripe_customer_id) VALUES
+  (
+    'd1000000-0000-4000-8000-000000000001',
+    'durable_actor',
+    'cus_durable_tip_actor'
+  ),
+  (
+    'd1000000-0000-4000-8000-000000000002',
+    'durable_recipient',
+    NULL
+  ),
+  (
+    'd1000000-0000-4000-8000-000000000016',
+    'durable_deleted_actor',
+    'cus_durable_tip_deleted_actor'
+  ),
+  (
+    'd1000000-0000-4000-8000-000000000017',
+    'durable_post_delete_recipient',
+    NULL
+  ),
+  (
+    'd1000000-0000-4000-8000-000000000018',
+    'durable_refund_delete_recipient',
+    NULL
+  );
+
+DO $production_fk_trigger_order_matches$
+DECLARE
+  v_notification_parent_trigger_max oid;
+  v_tip_parent_trigger_min oid;
+BEGIN
+  SELECT pg_catalog.max(trigger.oid)
+  INTO v_notification_parent_trigger_max
+  FROM pg_catalog.pg_trigger AS trigger
+  JOIN pg_catalog.pg_constraint AS constraint_row
+    ON constraint_row.oid = trigger.tgconstraint
+  WHERE trigger.tgrelid = 'auth.users'::pg_catalog.regclass
+    AND constraint_row.conname IN (
+      'notifications_user_id_fkey',
+      'notifications_actor_id_fkey'
+    );
+
+  SELECT pg_catalog.min(trigger.oid)
+  INTO v_tip_parent_trigger_min
+  FROM pg_catalog.pg_trigger AS trigger
+  JOIN pg_catalog.pg_constraint AS constraint_row
+    ON constraint_row.oid = trigger.tgconstraint
+  WHERE trigger.tgrelid = 'auth.users'::pg_catalog.regclass
+    AND constraint_row.conname IN (
+      'tips_from_user_id_fkey',
+      'tips_to_user_id_fkey'
+    );
+
+  IF v_notification_parent_trigger_max IS NULL
+    OR v_tip_parent_trigger_min IS NULL
+    OR v_notification_parent_trigger_max >= v_tip_parent_trigger_min
+  THEN
+    RAISE EXCEPTION
+      'fixture does not match production notification-before-tip FK order: notification %, tip %',
+      v_notification_parent_trigger_max,
+      v_tip_parent_trigger_min;
+  END IF;
+END
+$production_fk_trigger_order_matches$;
+
+INSERT INTO public.posts(id, author_id, title, content) VALUES
+  (
+    'd2000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000002',
+    'first completion',
+    'first completion'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000002',
+    'd1000000-0000-4000-8000-000000000002',
+    'refund first',
+    'refund first'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000003',
+    'd1000000-0000-4000-8000-000000000002',
+    'refund after',
+    'refund after'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000004',
+    'd1000000-0000-4000-8000-000000000002',
+    'conflicting notification',
+    'conflicting notification'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000005',
+    'd1000000-0000-4000-8000-000000000002',
+    'crash rollback',
+    'crash rollback'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000006',
+    'd1000000-0000-4000-8000-000000000002',
+    'identity conflict',
+    'identity conflict'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000007',
+    'd1000000-0000-4000-8000-000000000002',
+    'concurrent refund',
+    'concurrent refund'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000008',
+    'd1000000-0000-4000-8000-000000000008',
+    'recipient lifecycle',
+    'recipient lifecycle'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000009',
+    'd1000000-0000-4000-8000-000000000009',
+    'post lifecycle',
+    'post lifecycle'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000010',
+    'd1000000-0000-4000-8000-000000000010',
+    'recipient deleted before completion',
+    'recipient deleted before completion'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000011',
+    'd1000000-0000-4000-8000-000000000011',
+    'post deleted before completion',
+    'post deleted before completion'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000012',
+    'd1000000-0000-4000-8000-000000000002',
+    'actor profile missing',
+    'actor profile missing'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000013',
+    'd1000000-0000-4000-8000-000000000013',
+    'recipient mismatch',
+    'recipient mismatch'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000016',
+    'd1000000-0000-4000-8000-000000000017',
+    'post delete completion race',
+    'post delete completion race'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000017',
+    'd1000000-0000-4000-8000-000000000002',
+    'actor delete completion race',
+    'actor delete completion race'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000018',
+    'd1000000-0000-4000-8000-000000000018',
+    'recipient delete refund race',
+    'recipient delete refund race'
+  );
+
+DO $first_completion_and_replay$
+DECLARE
+  v_tip_id uuid := 'd3000000-0000-4000-8000-000000000001';
+  v_first jsonb;
+  v_replay jsonb;
+BEGIN
+  INSERT INTO public.tips (
+    id,
+    post_id,
+    from_user_id,
+    to_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    v_tip_id,
+    'd2000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000002',
+    1234,
+    'pending',
+    'cs_durable_tip_first'
+  );
+
+  v_first := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_first',
+    'ch_durable_tip_first',
+    'cs_durable_tip_first',
+    1234,
+    'usd',
+    '2036-01-01 00:00:00+00'
+  );
+  IF v_first ->> 'status' <> 'completed'
+    OR v_first ->> 'tombstone_status' <> 'no_tombstone'
+  THEN
+    RAISE EXCEPTION 'first tip completion failed: %', v_first;
+  END IF;
+
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM public.notifications AS notification
+    WHERE notification.type = 'tip_received'
+      AND notification.reference_id = v_tip_id
+      AND notification.user_id =
+        'd1000000-0000-4000-8000-000000000002'
+      AND notification.actor_id =
+        'd1000000-0000-4000-8000-000000000001'
+      AND notification.title = '收到打赏'
+      AND notification.message = '你的帖子收到了一笔 $12.34 打赏'
+      AND notification.link =
+        '/post/d2000000-0000-4000-8000-000000000001'
+  ) <> 1 OR NOT EXISTS (
+    SELECT 1
+    FROM public.tip_completion_notification_deliveries AS delivery
+    WHERE delivery.tip_id = v_tip_id
+      AND delivery.payload_spec = 'tip_completion_v1'
+      AND delivery.disposition = 'delivered'
+      AND delivery.notification_id IS NOT NULL
+      AND delivery.delivered_at IS NOT NULL
+      AND delivery.disposed_at IS NULL
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_payment_ownerships AS ownership
+    WHERE ownership.product_kind = 'tip'
+      AND ownership.ledger_id = v_tip_id
+      AND public.stripe_payment_ownership_is_exact_v2(ownership.id)
+  ) THEN
+    RAISE EXCEPTION 'first tip delivery was not exact';
+  END IF;
+
+  v_replay := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_first',
+    'ch_durable_tip_first',
+    'cs_durable_tip_first',
+    1234,
+    'usd',
+    '2036-01-01 00:00:00+00'
+  );
+  IF v_replay ->> 'status' <> 'already_completed'
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.notifications AS notification
+      WHERE notification.type = 'tip_received'
+        AND notification.reference_id = v_tip_id
+    ) <> 1
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_tip_id
+    ) <> 1
+  THEN
+    RAISE EXCEPTION 'tip completion replay was not idempotent: %', v_replay;
+  END IF;
+END
+$first_completion_and_replay$;
+
+-- Identity fields cannot be edited, but normal read state remains mutable.
+UPDATE public.notifications
+SET read = true,
+    read_at = '2036-01-01 00:01:00+00'
+WHERE type = 'tip_received'
+  AND reference_id = 'd3000000-0000-4000-8000-000000000001';
+
+DO $notification_identity_is_immutable$
+BEGIN
+  BEGIN
+    UPDATE public.notifications
+    SET title = 'forged'
+    WHERE type = 'tip_received'
+      AND reference_id = 'd3000000-0000-4000-8000-000000000001';
+    RAISE EXCEPTION 'tip notification title mutation unexpectedly succeeded';
+  EXCEPTION
+    WHEN check_violation THEN
+      IF SQLERRM <> 'tip_received notification identity is immutable' THEN
+        RAISE;
+      END IF;
+  END;
+END
+$notification_identity_is_immutable$;
+
+-- Exercise the real recipient DELETE policy/role. The after-delete trigger
+-- persists a tombstone even though the inbox row is intentionally gone.
+RESET ROLE;
+SET ROLE authenticated;
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  'd1000000-0000-4000-8000-000000000002',
+  false
+);
+DELETE FROM public.notifications
+WHERE type = 'tip_received'
+  AND reference_id = 'd3000000-0000-4000-8000-000000000001';
+RESET ROLE;
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+
+DO $deleted_notification_replay_does_not_resurrect$
+DECLARE
+  v_result jsonb;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tip_completion_notification_deliveries AS delivery
+    WHERE delivery.tip_id =
+        'd3000000-0000-4000-8000-000000000001'
+      AND delivery.disposition = 'recipient_deleted'
+      AND delivery.disposed_at IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'recipient deletion did not persist a tombstone';
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    'd3000000-0000-4000-8000-000000000001',
+    'cus_durable_tip_actor',
+    'pi_durable_tip_first',
+    'ch_durable_tip_first',
+    'cs_durable_tip_first',
+    1234,
+    'usd',
+    '2036-01-01 00:00:00+00'
+  );
+  IF v_result ->> 'status' <> 'already_completed'
+    OR EXISTS (
+      SELECT 1
+      FROM public.notifications AS notification
+      WHERE notification.type = 'tip_received'
+        AND notification.reference_id =
+          'd3000000-0000-4000-8000-000000000001'
+    )
+  THEN
+    RAISE EXCEPTION 'deleted notification was resurrected: %', v_result;
+  END IF;
+END
+$deleted_notification_replay_does_not_resurrect$;
+
+DO $refund_first_never_notifies$
+DECLARE
+  v_tip_id uuid := 'd3000000-0000-4000-8000-000000000002';
+  v_result jsonb;
+BEGIN
+  PERFORM public.record_charge_refund_tombstone_atomic(
+    'd1000000-0000-4000-8000-000000000001',
+    'cus_durable_tip_actor',
+    'pi_durable_tip_refund_first',
+    'ch_durable_tip_refund_first',
+    true,
+    1500,
+    'usd',
+    1500,
+    'succeeded',
+    'evt_durable_tip_refund_first',
+    '2036-01-02 00:00:00+00'
+  );
+  INSERT INTO public.tips (
+    id,
+    post_id,
+    from_user_id,
+    to_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    v_tip_id,
+    'd2000000-0000-4000-8000-000000000002',
+    'd1000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000002',
+    1500,
+    'pending',
+    'cs_durable_tip_refund_first'
+  );
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_refund_first',
+    'ch_durable_tip_refund_first',
+    'cs_durable_tip_refund_first',
+    1500,
+    'usd',
+    '2036-01-02 00:00:01+00'
+  );
+  IF v_result ->> 'status' <> 'refunded'
+    OR EXISTS (
+      SELECT 1
+      FROM public.notifications AS notification
+      WHERE notification.type = 'tip_received'
+        AND notification.reference_id = v_tip_id
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_tip_id
+        AND delivery.disposition = 'refund_suppressed'
+        AND delivery.notification_id IS NULL
+        AND delivery.delivered_at IS NULL
+        AND delivery.disposed_at IS NOT NULL
+    ) THEN
+    RAISE EXCEPTION 'refund-first tip notification was not suppressed: %', v_result;
+  END IF;
+END
+$refund_first_never_notifies$;
+
+DO $refund_after_removes_active_notification$
+DECLARE
+  v_tip_id uuid := 'd3000000-0000-4000-8000-000000000003';
+  v_result jsonb;
+  v_refund jsonb;
+BEGIN
+  INSERT INTO public.tips (
+    id,
+    post_id,
+    from_user_id,
+    to_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    v_tip_id,
+    'd2000000-0000-4000-8000-000000000003',
+    'd1000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000002',
+    2000,
+    'pending',
+    'cs_durable_tip_refund_after'
+  );
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_refund_after',
+    'ch_durable_tip_refund_after',
+    'cs_durable_tip_refund_after',
+    2000,
+    'usd',
+    '2036-01-03 00:00:00+00'
+  );
+  IF v_result ->> 'status' <> 'completed' THEN
+    RAISE EXCEPTION 'refund-after setup completion failed: %', v_result;
+  END IF;
+
+  v_refund := public.record_charge_refund_tombstone_atomic(
+    'd1000000-0000-4000-8000-000000000001',
+    'cus_durable_tip_actor',
+    'pi_durable_tip_refund_after',
+    'ch_durable_tip_refund_after',
+    true,
+    2000,
+    'usd',
+    2000,
+    'succeeded',
+    'evt_durable_tip_refund_after',
+    '2036-01-03 00:01:00+00'
+  );
+  IF v_refund ->> 'status' <> 'recorded'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_tip_id
+        AND tip.status = 'refunded'
+    ) OR EXISTS (
+      SELECT 1
+      FROM public.notifications AS notification
+      WHERE notification.type = 'tip_received'
+        AND notification.reference_id = v_tip_id
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_tip_id
+        AND delivery.disposition = 'refund_suppressed'
+        AND delivery.notification_id IS NOT NULL
+        AND delivery.delivered_at IS NOT NULL
+        AND delivery.disposed_at IS NOT NULL
+    ) THEN
+    RAISE EXCEPTION 'refund-after did not suppress delivery: %', v_refund;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_refund_after',
+    'ch_durable_tip_refund_after',
+    'cs_durable_tip_refund_after',
+    2000,
+    'usd',
+    '2036-01-03 00:00:00+00'
+  );
+  IF v_result ->> 'status' <> 'refunded'
+    OR EXISTS (
+      SELECT 1
+      FROM public.notifications AS notification
+      WHERE notification.type = 'tip_received'
+        AND notification.reference_id = v_tip_id
+    ) THEN
+    RAISE EXCEPTION 'refund replay recreated a notification: %', v_result;
+  END IF;
+END
+$refund_after_removes_active_notification$;
+
+DO $conflicting_notification_is_durably_quarantined$
+DECLARE
+  v_tip_id uuid := 'd3000000-0000-4000-8000-000000000004';
+  v_result jsonb;
+BEGIN
+  INSERT INTO public.tips (
+    id,
+    post_id,
+    from_user_id,
+    to_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    v_tip_id,
+    'd2000000-0000-4000-8000-000000000004',
+    'd1000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000002',
+    2500,
+    'pending',
+    'cs_durable_tip_notification_conflict'
+  );
+  INSERT INTO public.notifications (
+    id,
+    user_id,
+    type,
+    title,
+    message,
+    link,
+    actor_id,
+    reference_id
+  ) VALUES (
+    'd4000000-0000-4000-8000-000000000004',
+    'd1000000-0000-4000-8000-000000000002',
+    'tip_received',
+    'forged title',
+    'forged message',
+    '/post/forged',
+    'd1000000-0000-4000-8000-000000000001',
+    v_tip_id
+  );
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_notification_conflict',
+    'ch_durable_tip_notification_conflict',
+    'cs_durable_tip_notification_conflict',
+    2500,
+    'usd',
+    '2036-01-04 00:00:00+00'
+  );
+
+  IF v_result ->> 'status' <> 'completed'
+    OR NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = v_tip_id
+      AND tip.status = 'completed'
+      AND tip.stripe_charge_id =
+        'ch_durable_tip_notification_conflict'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_payment_ownerships AS ownership
+    WHERE ownership.product_kind = 'tip'
+      AND ownership.ledger_id = v_tip_id
+      AND public.stripe_payment_ownership_is_exact_v2(ownership.id)
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.tip_completion_notification_deliveries AS delivery
+    WHERE delivery.tip_id = v_tip_id
+      AND delivery.disposition = 'identity_conflict_suppressed'
+      AND delivery.disposed_at IS NOT NULL
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.notifications AS notification
+    WHERE notification.type = 'tip_received'
+      AND notification.reference_id = v_tip_id
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_manual_reviews AS review
+    WHERE review.object_type = 'tip_notification'
+      AND review.object_id = v_tip_id::text
+      AND review.reason_key =
+        'tip_completion_notification_identity_conflict'
+      AND review.state = 'open'
+  ) THEN
+    RAISE EXCEPTION 'notification conflict was not durably quarantined: %', v_result;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_notification_conflict',
+    'ch_durable_tip_notification_conflict',
+    'cs_durable_tip_notification_conflict',
+    2500,
+    'usd',
+    '2036-01-04 00:00:00+00'
+  );
+  IF v_result ->> 'status' <> 'already_completed'
+    OR EXISTS (
+      SELECT 1
+      FROM public.notifications AS notification
+      WHERE notification.type = 'tip_received'
+        AND notification.reference_id = v_tip_id
+    ) OR (
+      SELECT pg_catalog.count(*)
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_tip_id
+        AND delivery.disposition = 'identity_conflict_suppressed'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION 'notification conflict replay did not converge: %', v_result;
+  END IF;
+END
+$conflicting_notification_is_durably_quarantined$;
+
+CREATE FUNCTION public.raise_durable_tip_delivery_test_crash()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $function$
+BEGIN
+  IF NEW.tip_id = 'd3000000-0000-4000-8000-000000000005'::uuid THEN
+    RAISE EXCEPTION 'durable tip delivery test crash'
+      USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER trg_tip_delivery_test_crash
+  BEFORE INSERT ON public.tip_completion_notification_deliveries
+  FOR EACH ROW
+  EXECUTE FUNCTION public.raise_durable_tip_delivery_test_crash();
+
+DO $delivery_exception_rolls_back_everything$
+DECLARE
+  v_tip_id uuid := 'd3000000-0000-4000-8000-000000000005';
+BEGIN
+  INSERT INTO public.tips (
+    id,
+    post_id,
+    from_user_id,
+    to_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    v_tip_id,
+    'd2000000-0000-4000-8000-000000000005',
+    'd1000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000002',
+    3000,
+    'pending',
+    'cs_durable_tip_crash'
+  );
+
+  BEGIN
+    PERFORM public.complete_tip_with_stripe_ownership_atomic(
+      v_tip_id,
+      'cus_durable_tip_actor',
+      'pi_durable_tip_crash',
+      'ch_durable_tip_crash',
+      'cs_durable_tip_crash',
+      3000,
+      'usd',
+      '2036-01-05 00:00:00+00'
+    );
+    RAISE EXCEPTION 'delivery crash unexpectedly completed';
+  EXCEPTION
+    WHEN raise_exception THEN
+      IF SQLERRM <> 'durable tip delivery test crash' THEN
+        RAISE;
+      END IF;
+  END;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = v_tip_id
+      AND tip.status = 'pending'
+      AND tip.stripe_charge_id IS NULL
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.stripe_payment_ownerships AS ownership
+    WHERE ownership.product_kind = 'tip'
+      AND ownership.ledger_id = v_tip_id
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.notifications AS notification
+    WHERE notification.type = 'tip_received'
+      AND notification.reference_id = v_tip_id
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.tip_completion_notification_deliveries AS delivery
+    WHERE delivery.tip_id = v_tip_id
+  ) THEN
+    RAISE EXCEPTION 'delivery exception did not roll back the atomic unit';
+  END IF;
+END
+$delivery_exception_rolls_back_everything$;
+
+DROP TRIGGER trg_tip_delivery_test_crash
+  ON public.tip_completion_notification_deliveries;
+DROP FUNCTION public.raise_durable_tip_delivery_test_crash();
+
+DO $identity_conflict_is_suppressed_and_reviewed$
+DECLARE
+  v_tip_id uuid := 'd3000000-0000-4000-8000-000000000006';
+  v_result jsonb;
+BEGIN
+  -- A pre-existing central Session owner makes the second-pass exact claim
+  -- fail after the tip was provisionally completed. The 181845 function writes
+  -- manual review and moves the tip to identity_conflict; 18184550 must leave
+  -- zero active notification and one durable suppression tombstone.
+  INSERT INTO public.stripe_payment_ownerships (
+    id,
+    product_kind,
+    ledger_id,
+    owner_user_id,
+    stripe_customer_id,
+    stripe_payment_intent_id,
+    stripe_charge_id,
+    checkout_session_id,
+    amount_paid,
+    currency
+  ) VALUES (
+    'd5000000-0000-4000-8000-000000000006',
+    'group_pass',
+    'd6000000-0000-4000-8000-000000000006',
+    'd1000000-0000-4000-8000-000000000001',
+    'cus_durable_conflict_shadow',
+    'pi_durable_conflict_shadow',
+    'ch_durable_conflict_shadow',
+    'cs_durable_tip_identity_conflict',
+    3100,
+    'usd'
+  );
+  INSERT INTO public.tips (
+    id,
+    post_id,
+    from_user_id,
+    to_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    v_tip_id,
+    'd2000000-0000-4000-8000-000000000006',
+    'd1000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000002',
+    3100,
+    'pending',
+    'cs_durable_tip_identity_conflict'
+  );
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_identity_conflict',
+    'ch_durable_tip_identity_conflict',
+    'cs_durable_tip_identity_conflict',
+    3100,
+    'usd',
+    '2036-01-06 00:00:00+00'
+  );
+  IF v_result ->> 'status' <> 'identity_conflict'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_tip_id
+        AND tip.status = 'identity_conflict'
+    ) OR EXISTS (
+      SELECT 1
+      FROM public.notifications AS notification
+      WHERE notification.type = 'tip_received'
+        AND notification.reference_id = v_tip_id
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_tip_id
+        AND delivery.disposition = 'identity_conflict_suppressed'
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'payment_identity'
+        AND review.object_id =
+          'ch_durable_tip_identity_conflict'
+        AND review.state = 'open'
+    ) THEN
+    RAISE EXCEPTION 'identity conflict was not suppressed/reviewed: %', v_result;
+  END IF;
+END
+$identity_conflict_is_suppressed_and_reviewed$;
+
+DO $deleted_recipient_and_post_use_cached_delivery_authority$
+DECLARE
+  v_recipient_tip_id uuid :=
+    'd3000000-0000-4000-8000-000000000008';
+  v_post_tip_id uuid := 'd3000000-0000-4000-8000-000000000009';
+  v_result jsonb;
+BEGIN
+  INSERT INTO public.tips (
+    id,
+    post_id,
+    from_user_id,
+    to_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES
+    (
+      v_recipient_tip_id,
+      'd2000000-0000-4000-8000-000000000008',
+      'd1000000-0000-4000-8000-000000000001',
+      'd1000000-0000-4000-8000-000000000008',
+      3200,
+      'pending',
+      'cs_durable_tip_recipient_lifecycle'
+    ),
+    (
+      v_post_tip_id,
+      'd2000000-0000-4000-8000-000000000009',
+      'd1000000-0000-4000-8000-000000000001',
+      'd1000000-0000-4000-8000-000000000009',
+      3300,
+      'pending',
+      'cs_durable_tip_post_lifecycle'
+    );
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_recipient_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_recipient_lifecycle',
+    'ch_durable_tip_recipient_lifecycle',
+    'cs_durable_tip_recipient_lifecycle',
+    3200,
+    'usd',
+    '2036-01-06 01:00:00+00'
+  );
+  IF v_result ->> 'status' <> 'completed' THEN
+    RAISE EXCEPTION 'recipient lifecycle tip did not complete: %', v_result;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_post_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_post_lifecycle',
+    'ch_durable_tip_post_lifecycle',
+    'cs_durable_tip_post_lifecycle',
+    3300,
+    'usd',
+    '2036-01-06 01:01:00+00'
+  );
+  IF v_result ->> 'status' <> 'completed' THEN
+    RAISE EXCEPTION 'post lifecycle tip did not complete: %', v_result;
+  END IF;
+
+  DELETE FROM auth.users
+  WHERE id = 'd1000000-0000-4000-8000-000000000008';
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = v_recipient_tip_id
+      AND tip.status = 'completed'
+      AND tip.to_user_id IS NULL
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.notifications AS notification
+    WHERE notification.type = 'tip_received'
+      AND notification.reference_id = v_recipient_tip_id
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.tip_completion_notification_deliveries AS delivery
+    WHERE delivery.tip_id = v_recipient_tip_id
+      AND delivery.disposition = 'authority_deleted'
+  ) THEN
+    RAISE EXCEPTION 'recipient account deletion did not converge';
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_recipient_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_recipient_lifecycle',
+    'ch_durable_tip_recipient_lifecycle',
+    'cs_durable_tip_recipient_lifecycle',
+    3200,
+    'usd',
+    '2036-01-06 01:00:00+00'
+  );
+  IF v_result ->> 'status' <> 'already_completed' THEN
+    RAISE EXCEPTION 'deleted recipient replay did not converge: %', v_result;
+  END IF;
+
+  PERFORM public.record_charge_refund_tombstone_atomic(
+    'd1000000-0000-4000-8000-000000000001',
+    'cus_durable_tip_actor',
+    'pi_durable_tip_recipient_lifecycle',
+    'ch_durable_tip_recipient_lifecycle',
+    true,
+    3200,
+    'usd',
+    3200,
+    'succeeded',
+    'evt_durable_tip_recipient_lifecycle_refund',
+    '2036-01-06 01:02:00+00'
+  );
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = v_recipient_tip_id
+      AND tip.status = 'refunded'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.tip_completion_notification_deliveries AS delivery
+    WHERE delivery.tip_id = v_recipient_tip_id
+      AND delivery.disposition = 'refund_suppressed'
+  ) THEN
+    RAISE EXCEPTION 'deleted recipient refund did not converge';
+  END IF;
+
+  DELETE FROM public.posts
+  WHERE id = 'd2000000-0000-4000-8000-000000000009';
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = v_post_tip_id
+      AND tip.status = 'completed'
+      AND tip.post_id IS NULL
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.notifications AS notification
+    WHERE notification.type = 'tip_received'
+      AND notification.reference_id = v_post_tip_id
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.tip_completion_notification_deliveries AS delivery
+    WHERE delivery.tip_id = v_post_tip_id
+      AND delivery.disposition = 'authority_deleted'
+  ) THEN
+    RAISE EXCEPTION 'post deletion did not converge';
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_post_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_post_lifecycle',
+    'ch_durable_tip_post_lifecycle',
+    'cs_durable_tip_post_lifecycle',
+    3300,
+    'usd',
+    '2036-01-06 01:01:00+00'
+  );
+  IF v_result ->> 'status' <> 'already_completed' THEN
+    RAISE EXCEPTION 'deleted post replay did not converge: %', v_result;
+  END IF;
+END
+$deleted_recipient_and_post_use_cached_delivery_authority$;
+
+DO $pre_delivery_authority_lifecycle_is_terminal$
+DECLARE
+  v_recipient_tip_id uuid :=
+    'd3000000-0000-4000-8000-000000000010';
+  v_post_tip_id uuid := 'd3000000-0000-4000-8000-000000000011';
+  v_actor_tip_id uuid := 'd3000000-0000-4000-8000-000000000012';
+  v_mismatch_tip_id uuid :=
+    'd3000000-0000-4000-8000-000000000013';
+  v_result jsonb;
+BEGIN
+  INSERT INTO public.tips (
+    id,
+    post_id,
+    from_user_id,
+    to_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES
+    (
+      v_recipient_tip_id,
+      'd2000000-0000-4000-8000-000000000010',
+      'd1000000-0000-4000-8000-000000000001',
+      'd1000000-0000-4000-8000-000000000010',
+      3600,
+      'pending',
+      'cs_durable_tip_recipient_predeleted'
+    ),
+    (
+      v_post_tip_id,
+      'd2000000-0000-4000-8000-000000000011',
+      'd1000000-0000-4000-8000-000000000001',
+      'd1000000-0000-4000-8000-000000000011',
+      3700,
+      'pending',
+      'cs_durable_tip_post_predeleted'
+    ),
+    (
+      v_actor_tip_id,
+      'd2000000-0000-4000-8000-000000000012',
+      'd1000000-0000-4000-8000-000000000012',
+      'd1000000-0000-4000-8000-000000000002',
+      3800,
+      'pending',
+      'cs_durable_tip_actor_profile_missing'
+    ),
+    (
+      v_mismatch_tip_id,
+      'd2000000-0000-4000-8000-000000000013',
+      'd1000000-0000-4000-8000-000000000001',
+      'd1000000-0000-4000-8000-000000000002',
+      3900,
+      'pending',
+      'cs_durable_tip_recipient_mismatch'
+    );
+
+  DELETE FROM auth.users
+  WHERE id = 'd1000000-0000-4000-8000-000000000010';
+  DELETE FROM public.posts
+  WHERE id = 'd2000000-0000-4000-8000-000000000011';
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_recipient_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_recipient_predeleted',
+    'ch_durable_tip_recipient_predeleted',
+    'cs_durable_tip_recipient_predeleted',
+    3600,
+    'usd',
+    '2036-01-08 00:00:00+00'
+  );
+  IF v_result ->> 'status' <> 'notification_suppressed'
+    OR v_result ->> 'completion_status' <> 'completed'
+    OR v_result ->> 'reason_key' <>
+      'tip_notification_recipient_deleted'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_recipient_tip_id
+        AND tip.status = 'completed'
+        AND tip.to_user_id IS NULL
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_recipient_tip_id
+        AND delivery.payload_spec = 'tip_completion_unavailable_v1'
+        AND delivery.disposition = 'authority_unavailable'
+        AND delivery.recipient_user_id IS NULL
+        AND delivery.notification_id IS NULL
+        AND delivery.delivered_at IS NULL
+        AND delivery.disposed_at IS NOT NULL
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'tip_notification'
+        AND review.object_id = v_recipient_tip_id::text
+        AND review.reason_key = 'tip_notification_recipient_deleted'
+        AND review.state = 'open'
+    ) OR EXISTS (
+      SELECT 1
+      FROM public.notifications AS notification
+      WHERE notification.type = 'tip_received'
+        AND notification.reference_id = v_recipient_tip_id
+    ) THEN
+    RAISE EXCEPTION
+      'pre-deleted recipient did not terminally suppress: %',
+      v_result;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_recipient_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_recipient_predeleted',
+    'ch_durable_tip_recipient_predeleted',
+    'cs_durable_tip_recipient_predeleted',
+    3600,
+    'usd',
+    '2036-01-08 00:00:00+00'
+  );
+  IF v_result ->> 'status' <> 'notification_suppressed'
+    OR v_result ->> 'completion_status' <> 'already_completed'
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_recipient_tip_id
+    ) <> 1
+  THEN
+    RAISE EXCEPTION
+      'pre-deleted recipient replay was not terminal: %', v_result;
+  END IF;
+
+  v_result := public.record_charge_refund_tombstone_atomic(
+    'd1000000-0000-4000-8000-000000000001',
+    'cus_durable_tip_actor',
+    'pi_durable_tip_recipient_predeleted',
+    'ch_durable_tip_recipient_predeleted',
+    true,
+    3600,
+    'usd',
+    3600,
+    'succeeded',
+    'evt_durable_tip_recipient_predeleted_refund',
+    '2036-01-08 00:01:00+00'
+  );
+  IF v_result ->> 'product_kind' <> 'tip'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_recipient_tip_id
+        AND tip.status = 'refunded'
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_recipient_tip_id
+        AND delivery.disposition = 'refund_suppressed'
+        AND delivery.payload_spec = 'tip_completion_unavailable_v1'
+    ) THEN
+    RAISE EXCEPTION
+      'pre-deleted recipient refund did not converge: %', v_result;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_post_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_post_predeleted',
+    'ch_durable_tip_post_predeleted',
+    'cs_durable_tip_post_predeleted',
+    3700,
+    'usd',
+    '2036-01-08 00:02:00+00'
+  );
+  IF v_result ->> 'status' <> 'notification_suppressed'
+    OR v_result ->> 'reason_key' <> 'tip_notification_post_deleted'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_post_tip_id
+        AND delivery.disposition = 'authority_unavailable'
+        AND delivery.post_id IS NULL
+    ) THEN
+    RAISE EXCEPTION 'pre-deleted post did not terminally suppress: %', v_result;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_actor_tip_id,
+    'cus_durable_tip_actor_missing',
+    'pi_durable_tip_actor_profile_missing',
+    'ch_durable_tip_actor_profile_missing',
+    'cs_durable_tip_actor_profile_missing',
+    3800,
+    'usd',
+    '2036-01-08 00:03:00+00'
+  );
+  IF v_result ->> 'status' <> 'notification_suppressed'
+    OR v_result ->> 'reason_key' <>
+      'tip_notification_actor_profile_missing'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_actor_tip_id
+        AND delivery.disposition = 'authority_unavailable'
+        AND delivery.actor_user_id =
+          'd1000000-0000-4000-8000-000000000012'
+    ) THEN
+    RAISE EXCEPTION 'missing actor profile did not terminally suppress: %',
+      v_result;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_mismatch_tip_id,
+    'cus_durable_tip_actor',
+    'pi_durable_tip_recipient_mismatch',
+    'ch_durable_tip_recipient_mismatch',
+    'cs_durable_tip_recipient_mismatch',
+    3900,
+    'usd',
+    '2036-01-08 00:04:00+00'
+  );
+  IF v_result ->> 'status' <> 'notification_suppressed'
+    OR v_result ->> 'reason_key' <>
+      'tip_notification_post_recipient_mismatch'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id = v_mismatch_tip_id
+        AND delivery.disposition = 'authority_unavailable'
+    ) THEN
+    RAISE EXCEPTION 'recipient mismatch did not terminally suppress: %',
+      v_result;
+  END IF;
+END
+$pre_delivery_authority_lifecycle_is_terminal$;
+
+DO $missing_tip_is_durable_manual_review$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    'd3000000-0000-4000-8000-000000000014',
+    'cus_durable_tip_missing',
+    'pi_durable_tip_missing',
+    'ch_durable_tip_missing',
+    'cs_durable_tip_missing',
+    4000,
+    'usd',
+    '2036-01-08 00:05:00+00'
+  );
+  IF v_result ->> 'status' <> 'manual_review'
+    OR v_result ->> 'completion_status' <> 'not_found'
+    OR v_result ->> 'reason_key' <> 'tip_completion_subject_missing'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'tip_notification'
+        AND review.object_id =
+          'd3000000-0000-4000-8000-000000000014'
+        AND review.reason_key = 'tip_completion_subject_missing'
+        AND review.state = 'open'
+    ) OR EXISTS (
+      SELECT 1
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id =
+        'd3000000-0000-4000-8000-000000000014'
+    ) THEN
+    RAISE EXCEPTION 'missing tip did not produce durable review: %', v_result;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    'd3000000-0000-4000-8000-000000000014',
+    'cus_durable_tip_missing',
+    'pi_durable_tip_missing',
+    'ch_durable_tip_missing',
+    'cs_durable_tip_missing',
+    4000,
+    'usd',
+    '2036-01-08 00:05:00+00'
+  );
+  IF v_result ->> 'status' <> 'manual_review'
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'tip_notification'
+        AND review.object_id =
+          'd3000000-0000-4000-8000-000000000014'
+        AND review.reason_key = 'tip_completion_subject_missing'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION 'missing tip review replay was not idempotent: %',
+      v_result;
+  END IF;
+END
+$missing_tip_is_durable_manual_review$;
+
+DO $readiness_includes_notification_delivery_authority$
+DECLARE
+  v_readiness jsonb;
+  v_result jsonb;
+BEGIN
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  IF (v_readiness ->> 'notification_delivery_anomalies')::integer <> 0
+  THEN
+    RAISE EXCEPTION
+      'valid notification suppressions blocked readiness authority: %',
+      v_readiness;
+  END IF;
+
+  BEGIN
+    INSERT INTO public.tips (
+      id,
+      post_id,
+      from_user_id,
+      to_user_id,
+      amount_cents,
+      status,
+      stripe_checkout_session_id
+    ) VALUES (
+      'd3000000-0000-4000-8000-000000000015',
+      'd2000000-0000-4000-8000-000000000001',
+      'd1000000-0000-4000-8000-000000000001',
+      'd1000000-0000-4000-8000-000000000002',
+      4100,
+      'pending',
+      'cs_durable_tip_bypass_readiness'
+    );
+
+    -- Simulate an obsolete webhook bypassing the public wrapper. The private
+    -- financial function remains exact, but readiness must fail closed on the
+    -- missing delivery outcome.
+    v_result :=
+      public.complete_tip_with_stripe_ownership_financial_legacy_v2(
+        'd3000000-0000-4000-8000-000000000015',
+        'cus_durable_tip_actor',
+        'pi_durable_tip_bypass_readiness',
+        'ch_durable_tip_bypass_readiness',
+        'cs_durable_tip_bypass_readiness',
+        4100,
+        'usd',
+        '2036-01-08 00:06:00+00'
+      );
+    IF v_result ->> 'status' <> 'completed' THEN
+      RAISE EXCEPTION 'readiness bypass setup failed: %', v_result;
+    END IF;
+
+    v_readiness := public.stripe_paid_launch_readiness_v2();
+    IF (v_readiness ->> 'notification_delivery_anomalies')::integer <> 1
+      OR v_readiness ->> 'status' <> 'blocked'
+    THEN
+      RAISE EXCEPTION
+        'missing notification delivery did not block readiness: %',
+        v_readiness;
+    END IF;
+
+    RAISE EXCEPTION 'rollback readiness bypass proof'
+      USING ERRCODE = 'P7100';
+  EXCEPTION
+    WHEN SQLSTATE 'P7100' THEN NULL;
+  END;
+END
+$readiness_includes_notification_delivery_authority$;
+
+DO $delivery_acl_is_read_only$
+BEGIN
+  IF NOT pg_catalog.has_table_privilege(
+    'service_role',
+    'public.tip_completion_notification_deliveries',
+    'SELECT'
+  ) OR pg_catalog.has_table_privilege(
+    'service_role',
+    'public.tip_completion_notification_deliveries',
+    'INSERT'
+  ) OR pg_catalog.has_table_privilege(
+    'service_role',
+    'public.tip_completion_notification_deliveries',
+    'UPDATE'
+  ) OR pg_catalog.has_table_privilege(
+    'service_role',
+    'public.tip_completion_notification_deliveries',
+    'DELETE'
+  ) OR pg_catalog.has_function_privilege(
+    'service_role',
+    'public.complete_tip_with_stripe_ownership_financial_legacy_v2(uuid,text,text,text,text,bigint,text,timestamp with time zone)',
+    'EXECUTE'
+  ) OR NOT pg_catalog.has_function_privilege(
+    'service_role',
+    'public.complete_tip_with_stripe_ownership_atomic(uuid,text,text,text,text,bigint,text,timestamp with time zone)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'service_role',
+    'public.lock_tip_notification_authority_atomic(uuid)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'service_role',
+    'public.stripe_resolve_non_entitlement_refund_notification_legacy_v2(uuid)',
+    'EXECUTE'
+  ) OR NOT pg_catalog.has_function_privilege(
+    'service_role',
+    'public.stripe_resolve_non_entitlement_refund_tombstone_atomic(uuid)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'service_role',
+    'public.stripe_paid_launch_readiness_non_notification_legacy_v2()',
+    'EXECUTE'
+  ) OR NOT pg_catalog.has_function_privilege(
+    'service_role',
+    'public.stripe_paid_launch_readiness_v2()',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'tip notification delivery ACL is not fail closed';
+  END IF;
+END
+$delivery_acl_is_read_only$;
+
+-- Leave a refund-first tip and deterministic sleep trigger for the external
+-- two-session concurrency proof run by the wrapper shell.
+SELECT public.record_charge_refund_tombstone_atomic(
+  'd1000000-0000-4000-8000-000000000001',
+  'cus_durable_tip_actor',
+  'pi_durable_tip_concurrent_refund',
+  'ch_durable_tip_concurrent_refund',
+  true,
+  3500,
+  'usd',
+  3500,
+  'succeeded',
+  'evt_durable_tip_concurrent_refund',
+  '2036-01-07 00:00:00+00'
+);
+INSERT INTO public.tips (
+  id,
+  post_id,
+  from_user_id,
+  to_user_id,
+  amount_cents,
+  status,
+  stripe_checkout_session_id
+) VALUES (
+  'd3000000-0000-4000-8000-000000000007',
+  'd2000000-0000-4000-8000-000000000007',
+  'd1000000-0000-4000-8000-000000000001',
+  'd1000000-0000-4000-8000-000000000002',
+  3500,
+  'pending',
+  'cs_durable_tip_concurrent_refund'
+);
+
+-- These rows exercise the parent-before-tip lifecycle fence against the exact
+-- production FK trigger order in separate sessions. Tip 18 is deliberately
+-- completed before the refund/delete race so both the mutable notification and
+-- immutable delivery row exist when the competing transactions begin.
+INSERT INTO public.tips (
+  id,
+  post_id,
+  from_user_id,
+  to_user_id,
+  amount_cents,
+  status,
+  stripe_checkout_session_id
+) VALUES
+  (
+    'd3000000-0000-4000-8000-000000000016',
+    'd2000000-0000-4000-8000-000000000016',
+    'd1000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000017',
+    1600,
+    'pending',
+    'cs_durable_tip_post_delete_race'
+  ),
+  (
+    'd3000000-0000-4000-8000-000000000017',
+    'd2000000-0000-4000-8000-000000000017',
+    'd1000000-0000-4000-8000-000000000016',
+    'd1000000-0000-4000-8000-000000000002',
+    1700,
+    'pending',
+    'cs_durable_tip_actor_delete_race'
+  ),
+  (
+    'd3000000-0000-4000-8000-000000000018',
+    'd2000000-0000-4000-8000-000000000018',
+    'd1000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000018',
+    1800,
+    'pending',
+    'cs_durable_tip_recipient_refund_race'
+  );
+
+DO $prime_recipient_refund_race$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    'd3000000-0000-4000-8000-000000000018',
+    'cus_durable_tip_actor',
+    'pi_durable_tip_recipient_refund_race',
+    'ch_durable_tip_recipient_refund_race',
+    'cs_durable_tip_recipient_refund_race',
+    1800,
+    'usd',
+    '2036-01-18 00:00:00+00'
+  );
+
+  IF v_result ->> 'status' <> 'completed'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_completion_notification_deliveries AS delivery
+      WHERE delivery.tip_id =
+        'd3000000-0000-4000-8000-000000000018'
+        AND delivery.disposition = 'delivered'
+    )
+  THEN
+    RAISE EXCEPTION
+      'recipient/refund concurrency seed was not delivered: %',
+      v_result;
+  END IF;
+END
+$prime_recipient_refund_race$;
+
+CREATE FUNCTION public.sleep_durable_tip_concurrency_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $function$
+BEGIN
+  IF (
+    NEW.id IN (
+      'd3000000-0000-4000-8000-000000000007'::uuid,
+      'd3000000-0000-4000-8000-000000000016'::uuid,
+      'd3000000-0000-4000-8000-000000000017'::uuid
+    )
+    AND OLD.status = 'pending'
+    AND NEW.status = 'completed'
+  ) OR (
+    NEW.id = 'd3000000-0000-4000-8000-000000000018'::uuid
+    AND OLD.status = 'completed'
+    AND NEW.status = 'refunded'
+  )
+  THEN
+    PERFORM pg_catalog.pg_sleep(1.5);
+  END IF;
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER trg_tips_zz_durable_concurrency_sleep
+  BEFORE UPDATE OF status ON public.tips
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sleep_durable_tip_concurrency_update();
+
+SELECT 'Durable tip completion notification fixture passed' AS result;

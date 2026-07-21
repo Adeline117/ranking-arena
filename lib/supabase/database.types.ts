@@ -6536,6 +6536,60 @@ export type Database = {
           },
         ]
       }
+      tip_completion_notification_deliveries: {
+        Row: {
+          actor_user_id: string
+          amount_cents: number
+          currency: string
+          delivered_at: string | null
+          disposition: string
+          disposed_at: string | null
+          link: string | null
+          message: string
+          notification_id: string | null
+          payload_spec: string
+          post_id: string | null
+          recipient_user_id: string | null
+          recorded_at: string
+          tip_id: string
+          title: string
+        }
+        Insert: {
+          actor_user_id: string
+          amount_cents: number
+          currency: string
+          delivered_at?: string | null
+          disposition: string
+          disposed_at?: string | null
+          link?: string | null
+          message: string
+          notification_id?: string | null
+          payload_spec: string
+          post_id?: string | null
+          recipient_user_id?: string | null
+          recorded_at?: string
+          tip_id: string
+          title: string
+        }
+        Update: {
+          actor_user_id?: string
+          amount_cents?: number
+          currency?: string
+          delivered_at?: string | null
+          disposition?: string
+          disposed_at?: string | null
+          link?: string | null
+          message?: string
+          notification_id?: string | null
+          payload_spec?: string
+          post_id?: string | null
+          recipient_user_id?: string | null
+          recorded_at?: string
+          tip_id?: string
+          title?: string
+        }
+        Relationships: []
+      }
       tips: {
         Row: {
           amount_cents: number

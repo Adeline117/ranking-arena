@@ -1,0 +1,56 @@
+-- Match production FK trigger creation order: notifications existed before
+-- the restored tips table. Lifecycle concurrency proofs depend on this exact
+-- order instead of a friendlier shadow-schema accident.
+CREATE TABLE public.notifications (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  user_id uuid NOT NULL
+    REFERENCES auth.users(id) ON DELETE CASCADE,
+  type text NOT NULL,
+  title text NOT NULL,
+  message text NOT NULL,
+  link text,
+  read boolean DEFAULT false,
+  read_at timestamptz,
+  actor_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  reference_id uuid,
+  created_at timestamptz DEFAULT pg_catalog.clock_timestamp()
+);
+ALTER TABLE public.notifications OWNER TO postgres;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE FUNCTION auth.uid()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SET search_path = pg_catalog
+AS $function$
+  SELECT NULLIF(
+    pg_catalog.current_setting('request.jwt.claim.sub', true),
+    ''
+  )::uuid
+$function$;
+GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, service_role;
+
+CREATE POLICY notifications_service_all
+  ON public.notifications
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.notifications
+  TO service_role;
+
+CREATE POLICY notifications_recipient_select
+  ON public.notifications
+  FOR SELECT TO authenticated
+  USING ((SELECT auth.uid()) = user_id);
+CREATE POLICY notifications_recipient_update
+  ON public.notifications
+  FOR UPDATE TO authenticated
+  USING ((SELECT auth.uid()) = user_id)
+  WITH CHECK ((SELECT auth.uid()) = user_id);
+CREATE POLICY notifications_recipient_delete
+  ON public.notifications
+  FOR DELETE TO authenticated
+  USING ((SELECT auth.uid()) = user_id);
+GRANT SELECT, UPDATE, DELETE ON TABLE public.notifications
+  TO authenticated;
