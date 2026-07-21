@@ -13,6 +13,7 @@ import { gzipSync, gunzipSync } from 'node:zlib'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { PoolClient } from 'pg'
 import { getIngestPool, ingestClientConnect } from './db'
+import { STRICT_CANONICAL_JSON_CONTRACT, strictCanonicalJson } from './strict-canonical-json'
 
 export const RAW_BUCKET = 'raw-snapshots'
 
@@ -21,6 +22,11 @@ let storageClient: SupabaseClient | null = null
 const RAW_UPLOAD_ATTEMPTS = 3
 const RAW_UPLOAD_RETRY_BASE_MS = 750
 const RAW_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_object_gc_queue', 0)"
+
+export const RAW_JSON_STRINGIFY_CONTRACT = 'arena.raw-json-stringify@1' as const
+export type RawSerializationContract =
+  | typeof RAW_JSON_STRINGIFY_CONTRACT
+  | typeof STRICT_CANONICAL_JSON_CONTRACT
 
 interface StorageUploadError {
   message?: string
@@ -93,6 +99,7 @@ export interface WriteRawInput {
   timeframe?: number | null
   payload: unknown
   meta?: Record<string, unknown>
+  serialization?: RawSerializationContract
 }
 
 export interface RawObjectReceipt {
@@ -128,8 +135,8 @@ function verifyRawIntegrityMetadata(
   meta: unknown,
   compressedBytes: number,
   uncompressedBytes: number
-): void {
-  if (!isRecord(meta) || !Object.hasOwn(meta, 'raw_integrity')) return
+): RawSerializationContract | null {
+  if (!isRecord(meta) || !Object.hasOwn(meta, 'raw_integrity')) return null
 
   const integrity = meta.raw_integrity
   if (!isRecord(integrity)) {
@@ -152,11 +159,44 @@ function verifyRawIntegrityMetadata(
       throw rawIntegrityError(rawObjectId, storagePath, `raw_integrity.${field} mismatch`)
     }
   }
+
+  const serializationContract = integrity.serialization_contract
+  if (serializationContract === undefined) return null
+  if (
+    serializationContract !== RAW_JSON_STRINGIFY_CONTRACT &&
+    serializationContract !== STRICT_CANONICAL_JSON_CONTRACT
+  ) {
+    throw rawIntegrityError(
+      rawObjectId,
+      storagePath,
+      'raw_integrity.serialization_contract mismatch'
+    )
+  }
+  return serializationContract
+}
+
+function serializeRawPayload(
+  payload: unknown,
+  serialization: RawSerializationContract | undefined
+): { json: string; serializationContract: RawSerializationContract } {
+  const serializationContract =
+    serialization === undefined ? RAW_JSON_STRINGIFY_CONTRACT : serialization
+  if (serializationContract === RAW_JSON_STRINGIFY_CONTRACT) {
+    const json = JSON.stringify(payload)
+    if (json === undefined) {
+      throw new TypeError('[ingest] RAW JSON payload is not serializable')
+    }
+    return { json, serializationContract }
+  }
+  if (serializationContract === STRICT_CANONICAL_JSON_CONTRACT) {
+    return { json: strictCanonicalJson(payload), serializationContract }
+  }
+  throw new TypeError(`[ingest] unsupported RAW serialization contract: ${serializationContract}`)
 }
 
 /** Write one raw payload; returns its durable pointer and computed content identity. */
 export async function writeRawObject(input: WriteRawInput): Promise<RawObjectReceipt> {
-  const json = JSON.stringify(input.payload)
+  const { json, serializationContract } = serializeRawPayload(input.payload, input.serialization)
   const jsonBytes = Buffer.from(json, 'utf8')
   const gz = gzipSync(jsonBytes)
   const contentHash = createHash('sha256').update(jsonBytes).digest('hex')
@@ -171,6 +211,7 @@ export async function writeRawObject(input: WriteRawInput): Promise<RawObjectRec
       compression: 'gzip',
       hash_algorithm: 'sha256',
       hash_scope: 'json_utf8',
+      serialization_contract: serializationContract,
       compressed_bytes: gz.byteLength,
       uncompressed_bytes: jsonBytes.byteLength,
     },
@@ -263,7 +304,7 @@ export async function readRawObject(rawObjectId: number): Promise<unknown> {
     throw rawIntegrityError(rawObjectId, pointer.storage_path, 'gzip payload or trailer is corrupt')
   }
 
-  verifyRawIntegrityMetadata(
+  const serializationContract = verifyRawIntegrityMetadata(
     rawObjectId,
     pointer.storage_path,
     pointer.meta,
@@ -287,11 +328,33 @@ export async function readRawObject(rawObjectId: number): Promise<unknown> {
     throw rawIntegrityError(rawObjectId, pointer.storage_path, 'payload is not valid UTF-8')
   }
 
+  let payload: unknown
   try {
-    return JSON.parse(json)
+    payload = JSON.parse(json)
   } catch {
     throw rawIntegrityError(rawObjectId, pointer.storage_path, 'payload is not valid JSON')
   }
+
+  if (serializationContract === STRICT_CANONICAL_JSON_CONTRACT) {
+    let canonicalJson: string
+    try {
+      canonicalJson = strictCanonicalJson(payload)
+    } catch {
+      throw rawIntegrityError(
+        rawObjectId,
+        pointer.storage_path,
+        'strict canonical serialization mismatch'
+      )
+    }
+    if (canonicalJson !== json) {
+      throw rawIntegrityError(
+        rawObjectId,
+        pointer.storage_path,
+        'strict canonical serialization mismatch'
+      )
+    }
+  }
+  return payload
 }
 
 async function readRawObjectGcBatch(client: PoolClient): Promise<RawObjectGcPointer[]> {
