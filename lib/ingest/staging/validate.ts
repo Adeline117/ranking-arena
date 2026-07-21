@@ -4,7 +4,7 @@
  * silently NULLed. Pure module — no I/O.
  */
 
-import type { ParsedLeaderboardRow, ParsedStats } from '../core/types'
+import type { ParsedHeadlineMetricSources, ParsedLeaderboardRow, ParsedStats } from '../core/types'
 import { parsedLeaderboardRowSchema, parsedStatsSchema } from '../core/schemas'
 
 export interface RejectedRow {
@@ -34,6 +34,20 @@ function clampRoi(v: number | null | undefined): number | null {
 }
 function boundPct(v: number | null | undefined): number | null {
   return v == null || v < 0 || v > 100 ? null : v
+}
+
+function exactHeadlineMetricSources(
+  row: ParsedLeaderboardRow,
+  roi: number | null,
+  winRate: number | null,
+  mdd: number | null
+): ParsedHeadlineMetricSources | undefined {
+  if (!row.headlineMetricSources) return undefined
+  const sources = { ...row.headlineMetricSources }
+  if (roi !== row.headlineRoi) delete sources.roi
+  if (winRate !== row.headlineWinRate) delete sources.win_rate
+  if (mdd !== (row.headlineMdd ?? null)) delete sources.mdd
+  return Object.keys(sources).length > 0 ? sources : undefined
 }
 
 /**
@@ -68,11 +82,20 @@ export function validateLeaderboardRows(
   }
 
   for (const row of seen.values()) {
+    const headlineRoi = clampRoi(row.headlineRoi)
+    const headlineWinRate = boundPct(row.headlineWinRate)
+    const headlineMdd = boundPct(row.headlineMdd)
     valid.push({
       ...row,
-      headlineRoi: clampRoi(row.headlineRoi),
-      headlineWinRate: boundPct(row.headlineWinRate),
-      headlineMdd: boundPct(row.headlineMdd),
+      headlineRoi,
+      headlineWinRate,
+      headlineMdd,
+      headlineMetricSources: exactHeadlineMetricSources(
+        row,
+        headlineRoi,
+        headlineWinRate,
+        headlineMdd
+      ),
     })
   }
   valid.sort((a, b) => a.rank - b.rank)

@@ -85,6 +85,9 @@ export function parseBinanceLeaderboardPage(
     const item = items[i]
     const id = item.leadPortfolioId
     if (!id) continue
+    const headlineRoi = num(item.roi)
+    const headlinePnl = num(item.pnl)
+    const headlineWinRate = num(item.winRate)
     rows.push({
       exchangeTraderId: String(id),
       // Sort order is the rank; re-anchored across pages by the caller.
@@ -94,9 +97,14 @@ export function parseBinanceLeaderboardPage(
       walletAddress: null,
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: num(item.roi),
-      headlinePnl: num(item.pnl),
-      headlineWinRate: num(item.winRate), // spot rows don't expose it → null
+      headlineRoi,
+      headlinePnl,
+      headlineWinRate, // spot rows don't expose it → null
+      headlineMetricSources: {
+        ...(headlineRoi === null ? {} : { roi: { fieldPath: 'data.list[].roi' } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.list[].pnl' } }),
+        ...(headlineWinRate === null ? {} : { win_rate: { fieldPath: 'data.list[].winRate' } }),
+      },
       // The board carries aum as an absolute USD amount on every row — extract it
       // (was raw-only, so AUM came only from the deep-profile tier). MDD/sharpe on
       // the board are 0/null sentinels (real values are profile-only), so not lifted.

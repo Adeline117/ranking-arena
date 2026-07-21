@@ -98,6 +98,59 @@ describe('validateLeaderboardRows — zod + 必填 + 去重', () => {
     expect(rejects[0].reason).toMatch(/^zod:/)
   })
 
+  it('rejects self-asserted trust, unknown metrics, and empty field paths', () => {
+    const invalidSources = [
+      {
+        roi: {
+          fieldPath: 'data.list[].roi',
+          provenance: 'source_reported',
+          verified: true,
+        },
+      },
+      { volatility: { fieldPath: 'data.list[].volatility' } },
+      { roi: { fieldPath: ' ' } },
+    ]
+    for (const headlineMetricSources of invalidSources) {
+      const { valid, rejects } = validateLeaderboardRows([
+        row({
+          headlineMetricSources: headlineMetricSources as never,
+        }),
+      ])
+      expect(valid).toHaveLength(0)
+      expect(rejects[0].reason).toMatch(/^zod:/)
+    }
+  })
+
+  it('rejects a field source attached to a missing metric', () => {
+    const { valid, rejects } = validateLeaderboardRows([
+      row({
+        headlineRoi: null,
+        headlineMetricSources: { roi: { fieldPath: 'data.list[].roi' } },
+      }),
+    ])
+    expect(valid).toHaveLength(0)
+    expect(rejects[0].reason).toMatch(/^zod:/)
+  })
+
+  it('drops field lineage when staging changes the upstream metric value', () => {
+    const { valid } = validateLeaderboardRows([
+      row({
+        headlineRoi: 2.19e9,
+        headlineWinRate: 140,
+        headlineMdd: 140665,
+        headlineMetricSources: {
+          roi: { fieldPath: 'data.list[].roi' },
+          pnl: { fieldPath: 'data.list[].pnl' },
+          win_rate: { fieldPath: 'data.list[].winRate' },
+          mdd: { fieldPath: 'data.list[].mdd' },
+        },
+      }),
+    ])
+    expect(valid[0].headlineMetricSources).toEqual({
+      pnl: { fieldPath: 'data.list[].pnl' },
+    })
+  })
+
   it('必填字段缺失 → missing_required_field reject', () => {
     const { valid, rejects } = validateLeaderboardRows(
       [row({ headlinePnl: null })],

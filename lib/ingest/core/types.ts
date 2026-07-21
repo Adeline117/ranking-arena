@@ -103,6 +103,22 @@ export interface ParseCtx {
 
 // ── Parsed (canonical) rows ──
 
+export type ParsedRankingMetric = 'roi' | 'pnl' | 'win_rate' | 'mdd' | 'sharpe'
+
+/**
+ * Parser-owned claim about where one value was read. Deliberately contains
+ * only the upstream field path: provenance, units, methodology, completeness,
+ * and rank eligibility come from Arena's reviewed registry and acquisition
+ * evidence, never from an adapter or payload.
+ */
+export interface ParsedMetricFieldSource {
+  fieldPath: string
+}
+
+export type ParsedHeadlineMetricSources = Partial<
+  Record<ParsedRankingMetric, ParsedMetricFieldSource>
+>
+
 export interface ParsedLeaderboardRow {
   exchangeTraderId: string
   rank: number
@@ -114,6 +130,11 @@ export interface ParsedLeaderboardRow {
   headlineRoi: number | null
   headlinePnl: number | null
   headlineWinRate: number | null
+  /** Present only when the canonical value is directly attributable to one
+   *  exact upstream field (including a registry-owned unit conversion such as
+   *  fraction→percent). Staging mutations remove the claim. Missing means the
+   *  publisher has no field lineage and must keep that metric unrankable. */
+  headlineMetricSources?: ParsedHeadlineMetricSources
   /** Board-level stat columns for PROFILE-LESS sources whose board IS the
    *  stats substrate (e.g. blofin: no per-uid profile endpoint, but the board
    *  carries mdd/sharpe/aum/followers). Populate ONLY when the board is the

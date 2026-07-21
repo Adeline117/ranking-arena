@@ -9,20 +9,58 @@ import { z } from 'zod'
 const finite = z.number().finite()
 const nullableFinite = finite.nullable()
 const isoTs = z.string().min(10) // ISO timestamp; DB casts to timestamptz
+const parsedMetricFieldSourceSchema = z
+  .object({
+    fieldPath: z.string().trim().min(1),
+  })
+  .strict()
 
-export const parsedLeaderboardRowSchema = z.object({
-  exchangeTraderId: z.string().min(1),
-  rank: z.number().int().positive(),
-  nickname: z.string().nullable(),
-  avatarUrlOrigin: z.string().nullable(),
-  walletAddress: z.string().nullable(),
-  traderKind: z.enum(['human', 'bot']),
-  botStrategy: z.enum(['martingale', 'grid', 'ai']).nullable(),
-  headlineRoi: nullableFinite,
-  headlinePnl: nullableFinite,
-  headlineWinRate: nullableFinite,
-  raw: z.record(z.string(), z.unknown()),
-})
+export const parsedLeaderboardRowSchema = z
+  .object({
+    exchangeTraderId: z.string().min(1),
+    rank: z.number().int().positive(),
+    nickname: z.string().nullable(),
+    avatarUrlOrigin: z.string().nullable(),
+    walletAddress: z.string().nullable(),
+    traderKind: z.enum(['human', 'bot']),
+    botStrategy: z.enum(['martingale', 'grid', 'ai']).nullable(),
+    headlineRoi: nullableFinite,
+    headlinePnl: nullableFinite,
+    headlineWinRate: nullableFinite,
+    headlineMdd: nullableFinite.optional(),
+    headlineSharpe: nullableFinite.optional(),
+    headlineMetricSources: z
+      .object({
+        roi: parsedMetricFieldSourceSchema.optional(),
+        pnl: parsedMetricFieldSourceSchema.optional(),
+        win_rate: parsedMetricFieldSourceSchema.optional(),
+        mdd: parsedMetricFieldSourceSchema.optional(),
+        sharpe: parsedMetricFieldSourceSchema.optional(),
+      })
+      .strict()
+      .optional(),
+    raw: z.record(z.string(), z.unknown()),
+  })
+  .superRefine((row, ctx) => {
+    const values = {
+      roi: row.headlineRoi,
+      pnl: row.headlinePnl,
+      win_rate: row.headlineWinRate,
+      mdd: row.headlineMdd,
+      sharpe: row.headlineSharpe,
+    }
+    for (const metric of Object.keys(row.headlineMetricSources ?? {}) as Array<
+      keyof typeof values
+    >) {
+      if (values[metric] === null || values[metric] === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['headlineMetricSources', metric],
+          message: 'field source cannot be attached to a missing metric',
+        })
+      }
+    }
+  })
 
 export const parsedStatsSchema = z.object({
   timeframe: z.union([z.literal(0), z.literal(7), z.literal(30), z.literal(90)]),
