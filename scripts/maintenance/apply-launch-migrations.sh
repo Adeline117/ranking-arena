@@ -91,6 +91,7 @@ PREDEPLOY_MIGRATIONS=(
   20260721120000_metric_trust_shadow_gate.sql
   20260721130000_raw_object_gc_outbox.sql
   20260721140000_idempotent_equivalent_refund_events.sql
+  20260721150000_metric_trust_raw_artifact_identity.sql
 )
 
 # A selective apply bypasses manifest ordering, so it is more restrictive than
