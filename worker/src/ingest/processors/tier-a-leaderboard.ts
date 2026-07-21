@@ -11,7 +11,7 @@
 
 import type { Job } from 'bullmq'
 import { getSourceBySlug, nativeRankingTimeframes } from '@/lib/ingest/sources'
-import { getAdapter } from '@/lib/ingest/core/adapter'
+import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
 import {
   RANKING_TIMEFRAMES,
   type BoardSeriesBlock,
@@ -21,12 +21,15 @@ import {
   type RawPage,
 } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
+import type { LeaderboardCapture } from '@/lib/ingest/fetch/capture'
+import { buildLeaderboardAcquisitionManifest } from '@/lib/ingest/acquisition-manifest'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
 import { publishBoardSeries, publishLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
 import type { TierJobData } from '../queues'
 import { observationCycleId } from '../observation-cycle'
+import { resolveDeployedSha } from '@/worker/src/ingest/heartbeat'
 
 export interface TierAResult {
   timeframe: number
@@ -35,6 +38,33 @@ export interface TierAResult {
   passed: boolean
   baselineUsed: number | null
   snapshotId: number
+}
+
+type TierAAcquisition =
+  | { kind: 'capture'; capture: LeaderboardCapture }
+  | { kind: 'legacy'; pages: RawPage[] }
+
+async function acquireLeaderboard(
+  adapter: SourceAdapter,
+  session: Parameters<SourceAdapter['listLeaderboard']>[0],
+  src: Parameters<SourceAdapter['listLeaderboard']>[1],
+  timeframe: RankingTimeframe
+): Promise<TierAAcquisition> {
+  if (adapter.captureLeaderboard) {
+    return {
+      kind: 'capture',
+      capture: await adapter.captureLeaderboard(session, src, timeframe),
+    }
+  }
+
+  const pages: RawPage[] = []
+  for await (const page of adapter.listLeaderboard(session, src, timeframe)) pages.push(page)
+  return { kind: 'legacy', pages }
+}
+
+function verifiedRunnerGitSha(): string | null {
+  const value = resolveDeployedSha()
+  return /^[0-9a-f]{40}$/.test(value) ? value : null
 }
 
 function completedTimeframesFrom(value: unknown): RankingTimeframe[] {
@@ -101,8 +131,13 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
 
   const adapter = getAdapter(src.adapter_slug)
   const cycleId = observationCycleId(job, 'tier-a', src.slug)
+  // Freeze provenance before the first upstream request. A long-running crawl
+  // must not bind later timeframes to a different checkout/deployment SHA.
+  const runnerGitSha = adapter.captureLeaderboard ? verifiedRunnerGitSha() : null
   const results: TierAResult[] = []
   const failures: Array<{ timeframe: number; error: Error }> = []
+  let terminalFailure: { error: unknown } | null = null
+  let sessionCloseFailure: Error | null = null
   let persistedJobData: TierJobData = { ...job.data }
   // Compute every potentially-throwing input before acquiring the source's
   // persistent-profile lease. Once acquired, the try/finally begins
@@ -113,10 +148,13 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
     for (const timeframe of pendingTimeframes) {
       try {
         const scrapedAt = new Date().toISOString()
-        const pages: RawPage[] = []
-        for await (const page of adapter.listLeaderboard(session, src, timeframe)) {
-          pages.push(page)
-        }
+        const acquisition = await acquireLeaderboard(adapter, session, src, timeframe)
+        const pages =
+          acquisition.kind === 'capture' ? [...acquisition.capture.parsePages] : acquisition.pages
+        const rawPages =
+          acquisition.kind === 'capture'
+            ? acquisition.capture.sourcePages.map((sourcePage) => sourcePage.rawPage)
+            : acquisition.pages
 
         // RAW first — any downstream bug becomes a re-parse (spec §5.5).
         const rawReceipt = await writeRawObject({
@@ -124,9 +162,9 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
           sourceSlug: src.slug,
           jobType: 'tier_a',
           timeframe,
-          payload: pages,
+          payload: rawPages,
           meta: {
-            pageCount: pages.length,
+            pageCount: rawPages.length,
             ...(cycleId ? { observation_cycle_id: cycleId } : {}),
           },
         })
@@ -174,6 +212,50 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
           keyof ParsedLeaderboardRow
         >
         const { valid, rejects } = validateLeaderboardRows(rows, requiredFields)
+
+        if (acquisition.kind === 'capture') {
+          const capture = acquisition.capture
+          const built = buildLeaderboardAcquisitionManifest({
+            source: {
+              id: src.id,
+              slug: src.slug,
+              adapter_slug: src.adapter_slug,
+              configured_page_size: src.page_size,
+              configured_pagination_kind: src.pagination_kind,
+            },
+            surface: 'tier_a_leaderboard',
+            timeframe,
+            started_at: scrapedAt,
+            completed_at: new Date().toISOString(),
+            runner_git_sha: runnerGitSha,
+            observation_cycle_id: cycleId,
+            capture_evidence_state: 'verified',
+            termination_reason: capture.terminationReason,
+            capture_config: capture.captureConfig,
+            source_pages: capture.sourcePages.map((sourcePage) => ({
+              raw_page: sourcePage.rawPage,
+              source_row_count: sourcePage.sourceRowCount,
+              request_sha256: sourcePage.requestSha256,
+              http_status: sourcePage.httpStatus,
+              pagination_position: sourcePage.paginationPosition,
+              source_reports: sourcePage.sourceReports,
+            })),
+            parse_pages: capture.parsePages,
+            parser_transformation: capture.parserTransformation,
+            accepted_population: valid.length,
+            rejected_row_count: rejects.length,
+          })
+          if (
+            built.manifest.assessment.acquisition_state !== 'complete' ||
+            built.manifest.assessment.population_state !== 'verified'
+          ) {
+            throw new Error(
+              `acquisition trust gate FAILED: acquisition=` +
+                `${built.manifest.assessment.acquisition_state}, population=` +
+                `${built.manifest.assessment.population_state}, source_run=${built.sourceRunId}`
+            )
+          }
+        }
 
         const result = await publishLeaderboardSnapshot({
           src,
@@ -269,18 +351,45 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         failures.push({ timeframe, error })
       }
     }
+  } catch (error) {
+    terminalFailure = { error }
   } finally {
-    await session.close()
+    try {
+      await session.close()
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause)
+      sessionCloseFailure = new Error(`[tier-a] ${src.slug} session close failed: ${detail}`, {
+        cause,
+      })
+    }
+  }
+
+  if (terminalFailure !== null) {
+    if (sessionCloseFailure !== null) {
+      const processingError =
+        terminalFailure.error instanceof Error
+          ? terminalFailure.error
+          : new Error(String(terminalFailure.error))
+      throw new AggregateError(
+        [processingError, sessionCloseFailure],
+        `[tier-a] ${src.slug}: processing and session close both failed`
+      )
+    }
+    throw terminalFailure.error
   }
 
   if (failures.length > 0) {
+    const errors = failures.map((failure) => failure.error)
+    if (sessionCloseFailure !== null) errors.push(sessionCloseFailure)
     throw new AggregateError(
-      failures.map((failure) => failure.error),
+      errors,
       `[tier-a] ${src.slug}: ${failures.length}/${timeframes.length} native windows failed ` +
         `(${failures.map((failure) => `${failure.timeframe}d`).join(', ')}); ` +
-        `${results.length} succeeded`
+        `${results.length} succeeded${sessionCloseFailure ? '; session close failed' : ''}`
     )
   }
+
+  if (sessionCloseFailure !== null) throw sessionCloseFailure
 
   return results
 }
