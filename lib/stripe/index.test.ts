@@ -517,6 +517,7 @@ describe('createCheckoutSession', () => {
 
 describe('createOneTimePaymentSession', () => {
   test('freezes dashboard-controlled price mutation for exact one-time payments', async () => {
+    process.env.VERCEL_ENV = 'preview'
     const mockSession = {
       id: 'cs_tip123',
       url: 'https://checkout.stripe.com/...',
@@ -560,6 +561,57 @@ describe('createOneTimePaymentSession', () => {
         idempotencyKey: expect.stringMatching(/^payment_user-123_tip_post-123_500_/),
       })
     )
+  })
+
+  test('refuses a Production test-mode tip before creating Checkout', async () => {
+    process.env.VERCEL_ENV = 'production'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_123'
+    stripe.checkout.sessions.create = jest.fn()
+
+    await expect(
+      createOneTimePaymentSession({
+        customerId: 'cus_123',
+        userId: 'user-123',
+        discriminator: 'tip_post-123_500',
+        lineItems: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: { name: 'Tip' },
+              unit_amount: 500,
+            },
+            quantity: 1,
+          },
+        ],
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel',
+        metadata: { type: 'tip', tip_id: 'tip-123' },
+      })
+    ).rejects.toThrow('Stripe live mode is required for Production payment actions')
+
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
+  })
+
+  test('refuses a Production tip when signed webhook fulfillment is unavailable', async () => {
+    process.env.VERCEL_ENV = 'production'
+    process.env.STRIPE_SECRET_KEY = 'sk_live_123'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_live_123'
+    delete process.env.STRIPE_WEBHOOK_SECRET
+    stripe.checkout.sessions.create = jest.fn()
+
+    await expect(
+      createOneTimePaymentSession({
+        customerId: 'cus_123',
+        userId: 'user-123',
+        discriminator: 'tip_post-123_500',
+        lineItems: [],
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel',
+        metadata: { type: 'tip', tip_id: 'tip-123' },
+      })
+    ).rejects.toThrow('STRIPE_WEBHOOK_SECRET is not configured')
+
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
   })
 })
 

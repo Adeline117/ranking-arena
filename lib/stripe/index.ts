@@ -381,6 +381,11 @@ export async function createOneTimePaymentSession(params: {
   cancelUrl: string
   metadata: Record<string, string>
 }): Promise<Stripe.Checkout.Session> {
+  // Tips are reachable independently of the Pro promo gate. Keep every
+  // one-time Production payment closed until live keys and signed webhook
+  // fulfillment are configured, just like the paid group runtime.
+  assertStripePaymentRuntimeReady()
+
   const idempotencyKey = `payment_${params.userId}_${params.discriminator}_${Math.floor(Date.now() / 60_000)}`
 
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
