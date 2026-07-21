@@ -33,6 +33,18 @@ function functionBody(source: string): string {
   return source.slice(start, end)
 }
 
+function migrationNames(arrayName: string): string[] {
+  const marker = new RegExp(`^${arrayName}=\\(\\n`, 'm')
+  const match = marker.exec(runner)
+  expect(match).not.toBeNull()
+  const bodyStart = (match?.index ?? 0) + (match?.[0].length ?? 0)
+  const bodyEnd = runner.indexOf('\n)', bodyStart)
+  expect(bodyEnd).toBeGreaterThan(bodyStart)
+  return [...runner.slice(bodyStart, bodyEnd).matchAll(/^\s+(202\d{11}_[a-z0-9_]+\.sql)$/gm)].map(
+    (entry) => entry[1]
+  )
+}
+
 describe('idempotent equivalent Stripe refund events', () => {
   it('replaces only the refund reconciler without changing its public contract', () => {
     const previousBody = functionBody(predecessor)
@@ -138,9 +150,10 @@ describe('idempotent equivalent Stripe refund events', () => {
 
   it('places the migration after every current predeploy dependency', () => {
     const migrationName = '20260721140000_idempotent_equivalent_refund_events.sql'
-    expect(runner.indexOf(migrationName)).toBeGreaterThan(
-      runner.indexOf('20260721130000_raw_object_gc_outbox.sql')
+    const predeploy = migrationNames('PREDEPLOY_MIGRATIONS')
+    expect(predeploy.indexOf(migrationName)).toBeGreaterThan(
+      predeploy.indexOf('20260721130000_raw_object_gc_outbox.sql')
     )
-    expect(runner.slice(runner.indexOf('POSTDEPLOY_MIGRATIONS=('))).not.toContain(migrationName)
+    expect(migrationNames('POSTDEPLOY_MIGRATIONS')).not.toContain(migrationName)
   })
 })
