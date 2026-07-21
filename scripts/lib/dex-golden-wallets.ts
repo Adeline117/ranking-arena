@@ -189,7 +189,7 @@ function defineGoldenJsonCloneValue(
  * accessors, inherited properties, or Proxy traps. Bounds and an iterative
  * worklist keep hostile depth/width from reaching recursive schema parsing.
  */
-function cloneStrictGoldenJsonInput(input: unknown): unknown {
+export function cloneStrictDexJsonInput(input: unknown): unknown {
   const root = Object.create(null) as Record<string, unknown>
   const ancestors = new Set<object>()
   const stack: GoldenJsonCloneFrame[] = [
@@ -842,7 +842,7 @@ function assertParsedChainSubsetInvariants(subset: DexGoldenWalletChainSubset): 
 }
 
 export function parseDexGoldenWalletSnapshot(input: unknown): DexGoldenWalletSnapshot {
-  const safeInput = cloneStrictGoldenJsonInput(input)
+  const safeInput = cloneStrictDexJsonInput(input)
   const snapshot = goldenSnapshotSchema.parse(safeInput) as DexGoldenWalletSnapshot
   assertParsedSnapshotInvariants(snapshot)
   return snapshot
@@ -853,7 +853,7 @@ export function dexGoldenWalletSnapshotSha256(input: unknown): string {
 }
 
 export function parseDexGoldenWalletChainSubset(input: unknown): DexGoldenWalletChainSubset {
-  const safeInput = cloneStrictGoldenJsonInput(input)
+  const safeInput = cloneStrictDexJsonInput(input)
   const subset = dexGoldenWalletChainSubsetSchema.parse(safeInput) as DexGoldenWalletChainSubset
   assertParsedChainSubsetInvariants(subset)
   return subset
