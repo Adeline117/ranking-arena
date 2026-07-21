@@ -24,7 +24,13 @@ jest.mock('@/lib/ingest/db', () => ({
   })),
 }))
 
-import { cleanupRawObjects, readRawObject, writeRawObject } from '@/lib/ingest/raw'
+import {
+  RAW_JSON_STRINGIFY_CONTRACT,
+  cleanupRawObjects,
+  readRawObject,
+  writeRawObject,
+} from '@/lib/ingest/raw'
+import { STRICT_CANONICAL_JSON_CONTRACT } from '@/lib/ingest/strict-canonical-json'
 
 const input = {
   sourceId: 7,
@@ -136,10 +142,65 @@ describe('writeRawObject storage retries', () => {
         compression: 'gzip',
         hash_algorithm: 'sha256',
         hash_scope: 'json_utf8',
+        serialization_contract: RAW_JSON_STRINGIFY_CONTRACT,
         compressed_bytes: compressedPayload.byteLength,
         uncompressed_bytes: Buffer.byteLength(expectedJson, 'utf8'),
       },
     })
+  })
+
+  it('hashes and uploads the exact strict canonical UTF-8 bytes', async () => {
+    mockUpload.mockResolvedValueOnce({ error: null })
+    const payload = { a: 1, Z: 2 }
+    const expectedJson = '{"Z":2,"a":1}'
+    const expectedHash = fullHash(Buffer.from(expectedJson, 'utf8'))
+
+    await expect(
+      writeRawObject({
+        ...input,
+        payload,
+        serialization: STRICT_CANONICAL_JSON_CONTRACT,
+      })
+    ).resolves.toEqual({
+      id: 42,
+      storagePath: expect.stringMatching(new RegExp(`_${expectedHash}\\.json\\.gz$`)),
+      contentHash: expectedHash,
+    })
+
+    const [, compressedPayload] = mockUpload.mock.calls[0]
+    expect(gunzipSync(compressedPayload).toString('utf8')).toBe(expectedJson)
+    const queryMeta = JSON.parse(mockQuery.mock.calls[0][1][7])
+    expect(queryMeta.raw_integrity.serialization_contract).toBe(STRICT_CANONICAL_JSON_CONTRACT)
+  })
+
+  it.each([
+    ['undefined', { value: undefined }],
+    ['negative zero', { value: -0 }],
+    ['date', { value: new Date(0) }],
+  ])('rejects strict canonical %s before Storage or DB writes', async (_label, payload) => {
+    await expect(
+      writeRawObject({
+        ...input,
+        payload,
+        serialization: STRICT_CANONICAL_JSON_CONTRACT,
+      })
+    ).rejects.toThrow('strict canonical JSON rejects')
+
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockQuery).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['unknown', 'arena.unknown-json@1'],
+    ['null', null],
+  ])('rejects %s runtime serialization contract before Storage', async (_label, contract) => {
+    await expect(
+      writeRawObject({
+        ...input,
+        serialization: contract as never,
+      })
+    ).rejects.toThrow('unsupported RAW serialization contract')
+    expect(mockUpload).not.toHaveBeenCalled()
   })
 })
 
@@ -221,6 +282,53 @@ describe('readRawObject integrity verification', () => {
     })
 
     await expect(readRawObject(42)).resolves.toEqual({ roi: 12.5 })
+  })
+
+  it('accepts exact strict canonical bytes and rejects reordered equivalents', async () => {
+    const canonicalJson = '{"Z":2,"a":1}'
+    const canonicalBytes = Buffer.from(canonicalJson, 'utf8')
+    const canonicalGz = gzipSync(canonicalBytes)
+    mockRawPointer({
+      json: canonicalJson,
+      compressed: canonicalGz,
+      meta: {
+        raw_integrity: integrityMetadata(canonicalBytes, canonicalGz, {
+          serialization_contract: STRICT_CANONICAL_JSON_CONTRACT,
+        }),
+      },
+    })
+    await expect(readRawObject(42)).resolves.toEqual({ Z: 2, a: 1 })
+
+    const reorderedJson = '{"a":1,"Z":2}'
+    const reorderedBytes = Buffer.from(reorderedJson, 'utf8')
+    const reorderedGz = gzipSync(reorderedBytes)
+    mockRawPointer({
+      json: reorderedJson,
+      compressed: reorderedGz,
+      meta: {
+        raw_integrity: integrityMetadata(reorderedBytes, reorderedGz, {
+          serialization_contract: STRICT_CANONICAL_JSON_CONTRACT,
+        }),
+      },
+    })
+    await expect(readRawObject(42)).rejects.toThrow('strict canonical serialization mismatch')
+  })
+
+  it('rejects an unknown stored serialization contract', async () => {
+    const json = '{"roi":12.5}'
+    const jsonBytes = Buffer.from(json, 'utf8')
+    const gz = gzipSync(jsonBytes)
+    mockRawPointer({
+      json,
+      compressed: gz,
+      meta: {
+        raw_integrity: integrityMetadata(jsonBytes, gz, {
+          serialization_contract: 'arena.unknown-json@1',
+        }),
+      },
+    })
+
+    await expect(readRawObject(42)).rejects.toThrow('raw_integrity.serialization_contract mismatch')
   })
 
   it('accepts the historical 32-character SHA-256 prefix', async () => {
