@@ -6,11 +6,13 @@ jest.mock('../queues', () => ({
     TIER_D: 'tierd:positions',
     DERIVE_BOARDS: 'derive:boards',
     FRESHNESS: 'maint:freshness',
+    ONCHAIN_ENRICH: 'maint:onchain-enrich',
   },
 }))
 
 import { INGEST_JOB } from '../queues'
 import {
+  GLOBAL_JOB_LEASE_LANES,
   routeJobWithSourceLease,
   sourceJobLeaseLane,
   SOURCE_JOB_LEASE_LANES,
@@ -41,6 +43,10 @@ describe('source job routing leases', () => {
       [INGEST_JOB.TIER_D]: 'tier-d',
       [INGEST_JOB.DERIVE_BOARDS]: 'derive',
     })
+    expect(GLOBAL_JOB_LEASE_LANES).toEqual({
+      [INGEST_JOB.ONCHAIN_ENRICH]: 'onchain-enrich',
+    })
+    expect(sourceJobLeaseLane(INGEST_JOB.ONCHAIN_ENRICH)).toBe('onchain-enrich')
     expect(sourceJobLeaseLane(INGEST_JOB.FRESHNESS)).toBeNull()
   })
 
@@ -93,5 +99,45 @@ describe('source job routing leases', () => {
 
     expect(run).toHaveBeenCalledTimes(1)
     expect(redis.set).not.toHaveBeenCalled()
+  })
+
+  it('coalesces overlapping global on-chain enrichment iterations', async () => {
+    const redis = redisMock(['OK', null])
+    const ownerFinish = deferred<string>()
+    const ownerRun = jest.fn(() => ownerFinish.promise)
+    const duplicateRun = jest.fn(async () => 'duplicate-ran')
+    const job = {
+      id: 'repeat:maint:onchain-enrich:first',
+      name: INGEST_JOB.ONCHAIN_ENRICH,
+      data: {},
+    }
+
+    const owner = routeJobWithSourceLease({ redis, job, run: ownerRun })
+    await Promise.resolve()
+    await expect(
+      routeJobWithSourceLease({
+        redis,
+        job: { ...job, id: 'repeat:maint:onchain-enrich:duplicate' },
+        run: duplicateRun,
+      })
+    ).resolves.toEqual({
+      coalesced: true,
+      sourceSlug: 'global',
+      lane: 'onchain-enrich',
+    })
+
+    expect(redis.set).toHaveBeenNthCalledWith(
+      1,
+      'arena:ingest:source-job-lease:onchain-enrich:global',
+      expect.any(String),
+      'PX',
+      expect.any(Number),
+      'NX'
+    )
+    expect(ownerRun).toHaveBeenCalledTimes(1)
+    expect(duplicateRun).not.toHaveBeenCalled()
+
+    ownerFinish.resolve('owner-finished')
+    await expect(owner).resolves.toBe('owner-finished')
   })
 })
