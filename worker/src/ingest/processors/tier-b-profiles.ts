@@ -8,6 +8,7 @@
 import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
+import { getLatestPassedNativeCohort } from '@/lib/ingest/native-cohort'
 import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
 import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
 import { supportsSourceSurface } from '@/lib/ingest/core/surface-capabilities'
@@ -26,21 +27,7 @@ import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { fireAndForget, logger } from '@/lib/utils/logger'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
 
-interface TopTrader {
-  id: number
-  exchange_trader_id: string
-  meta: Record<string, unknown> | null
-  /** timeframe → board headline ROI (for the spec §5.3 cross-check). */
-  headline_rois: Record<string, number | null> | null
-}
-
 /**
- * Top-ranked traders from the latest PASSED snapshot of each timeframe.
- * NOTE: join entries on snapshot_id ONLY (indexed) — never on scraped_at
- * equality: pg timestamptz carries microseconds while values round-tripped
- * through JS Date are millisecond-truncated, so a ts-equality join silently
- * matches zero rows (the 2026-06-11 "no passed snapshots yet" bug).
- *
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
  * deep-profiled since `stalerThan` are returned. The marker is a dedicated
  * arena.ingest_cursors row (kind 'tierb_profiled') written after each trader
@@ -48,36 +35,10 @@ interface TopTrader {
  * trader_stats.as_of is NOT usable here because the
  * tier-A board upsert refreshes it every 2-5h, which would make everyone
  * look "fresh" and starve the deep crawl entirely.
+ * The native-cohort helper applies this filter after selecting only declared
+ * native PASSED top-N membership; derived boards must never feed Tier-B back
+ * into themselves.
  */
-async function getTopTraders(
-  sourceId: number,
-  topN: number,
-  stalerThan: Date
-): Promise<TopTrader[]> {
-  const { rows } = await getIngestPool().query<TopTrader>(
-    `WITH latest AS (
-       SELECT DISTINCT ON (timeframe) id AS snapshot_id
-         FROM arena.leaderboard_snapshots
-        WHERE source_id = $1 AND count_check_passed
-        ORDER BY timeframe, scraped_at DESC
-     )
-     SELECT t.id, t.exchange_trader_id, t.meta,
-            jsonb_object_agg(e.timeframe::text, e.headline_roi) AS headline_rois
-       FROM latest l
-       JOIN arena.leaderboard_entries e ON e.snapshot_id = l.snapshot_id
-       JOIN arena.traders t ON t.id = e.trader_id
-       LEFT JOIN arena.ingest_cursors pc
-              ON pc.trader_id = t.id AND pc.kind = '${PROFILED_CURSOR_KIND}'
-      WHERE e.rank <= $2
-        -- 认领交易员停抓(P3-P2): 第一方 sync 是他们的权威数据源
-        AND (t.meta->>'claimed') IS DISTINCT FROM 'true'
-        AND (pc.updated_at IS NULL OR pc.updated_at < $3)
-      GROUP BY t.id, t.exchange_trader_id, t.meta`,
-    [sourceId, topN, stalerThan.toISOString()]
-  )
-  return rows
-}
-
 /** Compatibility marker recording a terminal deep-profile attempt. */
 const PROFILED_CURSOR_KIND = 'tierb_profiled'
 
@@ -219,9 +180,23 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
   const stalerThan = new Date(Date.now() - refreshMs)
   const contDepth = Number(job.data.contDepth ?? 0)
 
-  const topTraders = shuffle(await getTopTraders(src.id, src.deep_profile_topn, stalerThan))
+  const nativeCohort = await getLatestPassedNativeCohort(src, {
+    excludeClaimed: true,
+    profileCursor: { kind: PROFILED_CURSOR_KIND, stalerThan },
+  })
+  if (nativeCohort.missingTimeframes.length > 0) {
+    logger.warn(
+      `[tier-b] ${src.slug}: native cohort incomplete, missing PASSED board(s) ` +
+        `[${nativeCohort.missingTimeframes.map((tf) => `${tf}d`).join(',')}]; ` +
+        `crawling available native top-N only`
+    )
+  }
+
+  const topTraders = shuffle(nativeCohort.traders)
   if (topTraders.length === 0) {
-    logger.info(`[tier-b] ${src.slug}: all top-${src.deep_profile_topn} fresh — nothing to crawl`)
+    if (nativeCohort.missingTimeframes.length === 0) {
+      logger.info(`[tier-b] ${src.slug}: all top-${src.deep_profile_topn} fresh — nothing to crawl`)
+    }
     return empty
   }
 

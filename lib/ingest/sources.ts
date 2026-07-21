@@ -68,7 +68,9 @@ export async function getServingSourceNames(): Promise<string[]> {
 }
 
 /** Ranking TFs this source natively exposes (boards only ever use 7/30/90). */
-export function nativeRankingTimeframes(src: SourceRow): Array<7 | 30 | 90> {
+export function nativeRankingTimeframes(
+  src: Pick<SourceRow, 'timeframes_native'>
+): Array<7 | 30 | 90> {
   return src.timeframes_native.filter((tf): tf is 7 | 30 | 90 => tf === 7 || tf === 30 || tf === 90)
 }
 
