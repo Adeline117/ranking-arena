@@ -29,6 +29,7 @@ import type {
   Timeframe,
 } from './types'
 import type { FetchSession } from '../fetch/types'
+import type { LeaderboardCapture } from '../fetch/capture'
 import type { ProfileQualityReject } from './profile-quality'
 
 /** Lets expensive adapters defer deep enrichment off interactive/series paths. */
@@ -62,6 +63,18 @@ export interface SourceAdapter {
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage>
+
+  /**
+   * Evidence-preserving Tier-A capture used during the trust-gate rollout.
+   * Processors must prefer this over `listLeaderboard` when present; absence
+   * means acquisition/population trust is unavailable, never implicitly
+   * verified. The legacy stream remains until every source is migrated.
+   */
+  captureLeaderboard?(
+    session: FetchSession,
+    src: SourceRow,
+    timeframe: RankingTimeframe
+  ): Promise<LeaderboardCapture>
 
   /** Tier B/C: the main profile surface (stats blocks + charts) for one TF.
    *  Must be a small number of replayed JSON requests (spec §2.4: 1-3s).

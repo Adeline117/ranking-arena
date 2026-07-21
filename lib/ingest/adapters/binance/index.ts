@@ -33,8 +33,15 @@ import type {
   Timeframe,
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
-import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import type { FetchSession, ReplayRequestTemplate } from '../../fetch/types'
+import {
+  captureNumericLeaderboard,
+  pageFetcher,
+  replayJson,
+  replayPaged,
+  type LeaderboardPublicRequestProjectionInput,
+  type NumericLeaderboardPageMeta,
+} from '../../fetch/capture'
 import {
   parseBinanceHistory,
   parseBinanceLeaderboardPage,
@@ -163,6 +170,96 @@ function listBody(pageIndex: number, pageSize: number, timeframe: RankingTimefra
   }
 }
 
+const PUBLIC_LIST_BODY_FIELDS = [
+  'pageNumber',
+  'pageSize',
+  'timeRange',
+  'dataType',
+  'favoriteOnly',
+  'hideFull',
+  'nickname',
+  'order',
+  'userAsset',
+  'portfolioType',
+  'useAiRecommended',
+] as const
+
+function recordOf(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function configuredCallerPageCap(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  const numeric = typeof value === 'string' && /^[1-9][0-9]*$/.test(value) ? Number(value) : value
+  if (
+    typeof numeric !== 'number' ||
+    !Number.isSafeInteger(numeric) ||
+    Object.is(numeric, -0) ||
+    numeric < 1
+  ) {
+    throw new TypeError('[binance] meta.max_pages must be a positive safe integer')
+  }
+  return numeric
+}
+
+function binanceLeaderboardMeta(payload: unknown): NumericLeaderboardPageMeta {
+  const envelope = recordOf(payload)
+  if (envelope?.code !== '000000' || envelope.success !== true) {
+    throw new TypeError('[binance] leaderboard response must declare code 000000 and success=true')
+  }
+  const data = recordOf(envelope.data)
+  if (!data || !Array.isArray(data.list)) {
+    throw new TypeError('[binance] leaderboard response must contain data.list')
+  }
+  const total = data.total
+  if (total !== null && total !== undefined && typeof total !== 'number') {
+    throw new TypeError('[binance] leaderboard data.total must be numeric when reported')
+  }
+  return {
+    // Deliberately count the source collection before parser ID validation.
+    rowCount: data.list.length,
+    reportedPopulation: total ?? null,
+    reportedPageCount: null,
+    reportedCurrentPage: null,
+    reportedPageSize: null,
+  }
+}
+
+/** Explicit allowlist: credentials and adapter-only fields never enter RAW provenance. */
+export function projectBinanceLeaderboardRequest(
+  request: ReplayRequestTemplate
+): LeaderboardPublicRequestProjectionInput {
+  if (request.method !== 'POST') {
+    throw new TypeError('[binance] leaderboard request must be POST')
+  }
+  const publicUrl = new URL(request.url)
+  if ([...publicUrl.searchParams].length > 0) {
+    throw new TypeError('[binance] leaderboard list endpoint must not contain query parameters')
+  }
+  const body = recordOf(request.body)
+  if (!body) throw new TypeError('[binance] leaderboard request body must be an object')
+  const unknownFields = Object.keys(body).filter(
+    (field) => !PUBLIC_LIST_BODY_FIELDS.includes(field as (typeof PUBLIC_LIST_BODY_FIELDS)[number])
+  )
+  if (unknownFields.length > 0) {
+    throw new TypeError(
+      `[binance] leaderboard request contains non-public fields: ${unknownFields.join(', ')}`
+    )
+  }
+
+  const publicBody: Record<string, unknown> = {}
+  for (const field of PUBLIC_LIST_BODY_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(body, field)) {
+      throw new TypeError(`[binance] leaderboard request is missing public field ${field}`)
+    }
+    publicBody[field] = body[field]
+  }
+  publicUrl.hash = ''
+  return { method: 'POST', url: publicUrl.href, body: publicBody }
+}
+
 const binanceAdapter: SourceAdapter = {
   slug: 'binance',
   capabilities: {
@@ -172,6 +269,29 @@ const binanceAdapter: SourceAdapter = {
     orders: true, // futures Latest Records; spot trade history (fills)
     transfers: true, // futures only
     copiers: true, // both boards (PII rules apply downstream)
+  },
+
+  async captureLeaderboard(session: FetchSession, src: SourceRow, timeframe: RankingTimeframe) {
+    const listUrl = endpoint(src, 'list')
+    const pageSize = src.page_size ?? 20
+    const callerPageCap = configuredCallerPageCap(src.meta.max_pages)
+    await warmSession(session, src)
+
+    return captureNumericLeaderboard({
+      session,
+      fetcher: pageFetcher(session),
+      buildRequest: (pageIndex) => ({
+        url: listUrl,
+        method: 'POST',
+        headers: HEADERS,
+        body: listBody(pageIndex, pageSize, timeframe),
+      }),
+      projectPublicRequest: projectBinanceLeaderboardRequest,
+      pageBinding: { location: 'body', path: ['pageNumber'] },
+      extractMeta: binanceLeaderboardMeta,
+      pageSize,
+      callerPageCap,
+    })
   },
 
   async *listLeaderboard(

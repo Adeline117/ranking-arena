@@ -78,7 +78,11 @@ export interface RawPage {
   pageIndex: number
   /** The raw JSON payload exactly as the endpoint returned it. */
   payload: unknown
-  /** Endpoint URL the payload came from (provenance / debugging). */
+  /**
+   * Endpoint provenance URL. Evidence-preserving captures store a public,
+   * credential-free projection; legacy adapters may still store the actual
+   * URL and must not be treated as sanitized until migrated.
+   */
   url: string
   fetchedAt: string
 }
