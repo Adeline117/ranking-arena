@@ -139,7 +139,7 @@ describe('getCountBaseline — 独立观测周期', () => {
       getCountBaseline(19, 30, 100, { actualCount: 130, cycleId: 'shift-c' })
     ).resolves.toEqual({ baseline: 130, isBootstrap: false, shifted: true })
 
-    expect(mockQuery.mock.calls[1][1]).toEqual([19, 30, 2, false, 'shift-c'])
+    expect(mockQuery.mock.calls[1][1]).toEqual([19, 30, 2, false, 'shift-c', null])
   })
 
   it('同一 BullMQ cycle 的 retry 被排除，不能凑 level-shift quorum', async () => {
@@ -158,7 +158,7 @@ describe('getCountBaseline — 独立观测周期', () => {
     const sql = String(mockQuery.mock.calls[1][0])
     expect(sql).toContain('DISTINCT ON (cycle_id)')
     expect(sql).toContain('cycle_id <> $5')
-    expect(mockQuery.mock.calls[1][1]).toEqual([19, 30, 2, false, 'same-job'])
+    expect(mockQuery.mock.calls[1][1]).toEqual([19, 30, 2, false, 'same-job', null])
   })
 
   it('没有稳定 cycle id 时 fail closed，不启用 level-shift', async () => {
@@ -200,6 +200,37 @@ describe('getCountBaseline — 独立观测周期', () => {
     const sql = String(mockQuery.mock.calls[0][0])
     expect(sql).toContain('DISTINCT ON (cycle_id)')
     expect(sql).toContain('cycle_id <> $5')
-    expect(mockQuery.mock.calls[0][1]).toEqual([19, 30, 7, true, 'current'])
+    expect(mockQuery.mock.calls[0][1]).toEqual([19, 30, 7, true, 'current', null])
+  })
+
+  it('new baseline generation excludes incompatible historical observations', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
+
+    await expect(
+      getCountBaseline(19, 30, 300, {
+        actualCount: 270,
+        cycleId: 'derived-cycle',
+        baselineGeneration: 'derived-native-eligibility-v1',
+      })
+    ).resolves.toEqual({ baseline: 300, isBootstrap: true })
+
+    const sql = String(mockQuery.mock.calls[0][0])
+    expect(sql).toContain("meta->>'count_baseline_generation'")
+    expect(mockQuery.mock.calls[0][1]).toEqual([
+      19,
+      30,
+      7,
+      true,
+      'derived-cycle',
+      'derived-native-eligibility-v1',
+    ])
+    expect(mockQuery.mock.calls[1][1]).toEqual([
+      19,
+      30,
+      2,
+      false,
+      'derived-cycle',
+      'derived-native-eligibility-v1',
+    ])
   })
 })
