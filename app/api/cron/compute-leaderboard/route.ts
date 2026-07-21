@@ -14,7 +14,7 @@ import { getSupabaseAdmin } from '@/lib/api'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { type Period } from '@/lib/utils/arena-score'
-import { SOURCES_WITH_DATA, SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
+import { SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import {
   warmupSsrHomepageCache,
@@ -472,11 +472,8 @@ async function computeSeason(
   // Data freshness check: classify each source as fresh / stale / query-failed.
   // If ALL platforms are stale (>48h) we skip computation to avoid publishing
   // a stale leaderboard. Logic lives in freshness-check.ts.
-  const { freshPlatforms, stalePlatforms, queryFailedPlatforms } = await checkPlatformFreshness(
-    supabase,
-    traderMap,
-    season
-  )
+  const { expectedPlatforms, freshPlatforms, stalePlatforms, queryFailedPlatforms } =
+    await checkPlatformFreshness(supabase, traderMap, season)
 
   if (queryFailedPlatforms.length > 0) {
     logger.warn(
@@ -484,7 +481,7 @@ async function computeSeason(
     )
   }
 
-  if (freshPlatforms.length === 0 && SOURCES_WITH_DATA.length > 0) {
+  if (freshPlatforms.length === 0 && expectedPlatforms.length > 0) {
     if (queryFailedPlatforms.length > 0) {
       logger.error(
         `[${season}] No fresh platforms loaded but ${queryFailedPlatforms.length} had DB fresh-data (query failures). Transient Supabase issue — skipping this run.`,
