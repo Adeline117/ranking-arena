@@ -8,7 +8,7 @@ import {
 } from './strict-canonical-json'
 
 export const LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT =
-  'arena.ingest.leaderboard-acquisition-manifest@1' as const
+  'arena.ingest.leaderboard-acquisition-manifest@2' as const
 
 const SHA256 = /^[0-9a-f]{64}$/
 const FULL_GIT_SHA = /^[0-9a-f]{40}$/
@@ -131,6 +131,8 @@ const sourceReportsSchema = z
   .object({
     population: reportEvidenceSchema,
     page_count: reportEvidenceSchema,
+    current_page: reportEvidenceSchema,
+    page_size: reportEvidenceSchema,
   })
   .strict()
 
@@ -138,7 +140,7 @@ const paginationPositionSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('page_index'),
-      page_index: safePositiveIntegerSchema,
+      request_page_index: safePositiveIntegerSchema,
     })
     .strict(),
   z
@@ -149,6 +151,31 @@ const paginationPositionSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
   z.object({ kind: z.literal('single_snapshot') }).strict(),
+])
+
+const captureConfigSchema = z
+  .object({
+    caller_page_cap: safePositiveIntegerSchema.nullable(),
+    safety_page_cap: safePositiveIntegerSchema,
+  })
+  .strict()
+
+const parserTransformationSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('identity_projection'),
+      source_page_ordinals: z.array(safePositiveIntegerSchema),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('dedupe_rechunk'),
+      source_page_ordinals: z.array(safePositiveIntegerSchema),
+      algorithm_contract: nonEmptyCanonicalStringSchema,
+      output_row_count: safeNonNegativeIntegerSchema,
+      output_page_size: safePositiveIntegerSchema,
+    })
+    .strict(),
 ])
 
 const sourcePageInputSchema = z
@@ -185,8 +212,10 @@ const buildInputSchema = z
     observation_cycle_id: nonEmptyCanonicalStringSchema.nullable(),
     capture_evidence_state: z.enum(captureEvidenceStates),
     termination_reason: z.enum(terminationReasons),
+    capture_config: captureConfigSchema,
     source_pages: z.array(sourcePageInputSchema),
     parse_pages: z.array(rawPageSchema),
+    parser_transformation: parserTransformationSchema,
     accepted_population: safeNonNegativeIntegerSchema,
     rejected_row_count: safeNonNegativeIntegerSchema,
   })
@@ -233,12 +262,14 @@ const durableManifestStructuralSchema = z
     observation_cycle_id: nonEmptyCanonicalStringSchema.nullable(),
     capture_evidence_state: z.enum(captureEvidenceStates),
     termination_reason: z.enum(terminationReasons),
+    capture_config: captureConfigSchema,
     source_pages: z.array(durableSourcePageSchema),
     parser_input: z
       .object({
         serialization_contract: z.literal(STRICT_CANONICAL_JSON_CONTRACT),
         sha256: sha256Schema,
         page_count: safeNonNegativeIntegerSchema,
+        transformation: parserTransformationSchema,
       })
       .strict(),
     population: z
@@ -268,6 +299,7 @@ const durableManifestStructuralSchema = z
 
 export type LeaderboardAcquisitionPaginationPosition = z.infer<typeof paginationPositionSchema>
 export type LeaderboardAcquisitionReportEvidence = z.infer<typeof reportEvidenceSchema>
+export type LeaderboardAcquisitionParserTransformation = z.infer<typeof parserTransformationSchema>
 export type LeaderboardAcquisitionSourcePageInput = z.input<typeof sourcePageInputSchema>
 
 export interface BuildLeaderboardAcquisitionManifestInput {
@@ -286,6 +318,10 @@ export interface BuildLeaderboardAcquisitionManifestInput {
   observation_cycle_id: string | null
   capture_evidence_state: CaptureEvidenceState
   termination_reason: TerminationReason
+  capture_config: {
+    caller_page_cap: number | null
+    safety_page_cap: number
+  }
   /** Exact parsed JSON values returned by the upstream, before normalization. */
   source_pages: Array<{
     raw_page: RawPage
@@ -297,10 +333,13 @@ export interface BuildLeaderboardAcquisitionManifestInput {
     source_reports: {
       population: LeaderboardAcquisitionReportEvidence
       page_count: LeaderboardAcquisitionReportEvidence
+      current_page: LeaderboardAcquisitionReportEvidence
+      page_size: LeaderboardAcquisitionReportEvidence
     } | null
   }>
   /** Deterministic parser inputs. These may be normalized projections of source_pages. */
   parse_pages: RawPage[]
+  parser_transformation: LeaderboardAcquisitionParserTransformation
   accepted_population: number
   rejected_row_count: number
 }
@@ -349,6 +388,34 @@ function deriveAggregateReport(
   return { state: 'consistent', value: reports[0] }
 }
 
+function pageResponseMetadataMatches(
+  manifest: LeaderboardAcquisitionManifest,
+  page: LeaderboardAcquisitionManifest['source_pages'][number]
+): boolean {
+  const reports = page.source_reports
+  const position = page.pagination_position
+  if (!reports || !position) return false
+
+  if (reports.current_page.state === 'reported') {
+    if (
+      position.kind !== 'page_index' ||
+      reports.current_page.value !== position.request_page_index
+    ) {
+      return false
+    }
+  }
+  if (reports.page_size.state === 'reported') {
+    if (
+      reports.page_size.value === 0 ||
+      (manifest.source.configured_page_size !== null &&
+        reports.page_size.value !== manifest.source.configured_page_size)
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
 function hasVerifiedCaptureFoundation(manifest: LeaderboardAcquisitionManifest): boolean {
   return (
     manifest.capture_evidence_state === 'verified' &&
@@ -361,7 +428,8 @@ function hasVerifiedCaptureFoundation(manifest: LeaderboardAcquisitionManifest):
         page.http_status >= 200 &&
         page.http_status <= 299 &&
         page.pagination_position !== null &&
-        page.source_reports !== null
+        page.source_reports !== null &&
+        pageResponseMetadataMatches(manifest, page)
     )
   )
 }
@@ -369,7 +437,8 @@ function hasVerifiedCaptureFoundation(manifest: LeaderboardAcquisitionManifest):
 function isNaturalTermination(
   manifest: LeaderboardAcquisitionManifest,
   populationReport: AggregateReport,
-  pageCountReport: AggregateReport
+  pageCountReport: AggregateReport,
+  terminationReason: TerminationReason = manifest.termination_reason
 ): boolean {
   const pages = manifest.source_pages
   const lastPage = pages.at(-1)
@@ -385,9 +454,9 @@ function isNaturalTermination(
     pageCountReport.state === 'unknown' ||
     (pageCountReport.state === 'consistent' &&
       (position.kind === 'page_index'
-        ? position.page_index === pageCountReport.value ||
-          (manifest.termination_reason === 'empty_page' &&
-            position.page_index === pageCountReport.value! + 1)
+        ? position.request_page_index === pageCountReport.value ||
+          (terminationReason === 'empty_page' &&
+            position.request_page_index === pageCountReport.value! + 1)
         : position.kind === 'cursor'
           ? pages.length === pageCountReport.value
           : pageCountReport.value === 1))
@@ -396,7 +465,7 @@ function isNaturalTermination(
   const hasContradictoryContinuation =
     !populationMatchesTerminal || !pageCountMatchesTerminal || continuationClaimsMore
 
-  switch (manifest.termination_reason) {
+  switch (terminationReason) {
     case 'reported_population_reached':
       return (
         position.kind !== 'single_snapshot' &&
@@ -409,7 +478,7 @@ function isNaturalTermination(
       return (
         pageCountReport.state === 'consistent' &&
         position.kind === 'page_index' &&
-        position.page_index === pageCountReport.value &&
+        position.request_page_index === pageCountReport.value &&
         populationMatchesTerminal
       )
     case 'short_page':
@@ -529,7 +598,7 @@ function validatePaginationPositions(
 
   if (kind === 'page_index') {
     for (const [index, position] of positions.entries()) {
-      if (position!.kind !== 'page_index' || position!.page_index !== index + 1) {
+      if (position!.kind !== 'page_index' || position!.request_page_index !== index + 1) {
         addIssue(
           ctx,
           ['source_pages', index, 'pagination_position'],
@@ -583,6 +652,137 @@ function validatePaginationPositions(
       }
       emittedCursors.add(nextCursor)
     }
+  }
+}
+
+function validateCaptureLimits(
+  manifest: LeaderboardAcquisitionManifest,
+  ctx: z.RefinementCtx
+): void {
+  const pageCount = manifest.source_pages.length
+  const { caller_page_cap: callerCap, safety_page_cap: safetyCap } = manifest.capture_config
+  if (pageCount > safetyCap) {
+    addIssue(ctx, ['capture_config', 'safety_page_cap'], 'source pages exceed the safety cap')
+  }
+  if (callerCap !== null && callerCap <= safetyCap && pageCount > callerCap) {
+    addIssue(ctx, ['capture_config', 'caller_page_cap'], 'source pages exceed the caller cap')
+  }
+  if (
+    manifest.termination_reason === 'caller_limit' &&
+    (callerCap === null || callerCap > safetyCap || pageCount !== callerCap)
+  ) {
+    addIssue(
+      ctx,
+      ['termination_reason'],
+      'caller_limit must bind the reached effective caller page cap'
+    )
+  }
+  if (
+    manifest.termination_reason === 'safety_limit' &&
+    (pageCount !== safetyCap || (callerCap !== null && callerCap <= safetyCap))
+  ) {
+    addIssue(
+      ctx,
+      ['termination_reason'],
+      'safety_limit must bind the reached safety cap before any caller cap'
+    )
+  }
+}
+
+function validateLimitTerminationPriority(
+  manifest: LeaderboardAcquisitionManifest,
+  populationReport: AggregateReport,
+  pageCountReport: AggregateReport,
+  ctx: z.RefinementCtx
+): void {
+  if (
+    manifest.termination_reason !== 'caller_limit' &&
+    manifest.termination_reason !== 'safety_limit'
+  ) {
+    return
+  }
+  if (
+    manifest.source_pages.some(
+      (page) => page.http_status !== null && (page.http_status < 200 || page.http_status > 299)
+    )
+  ) {
+    addIssue(ctx, ['termination_reason'], 'limit termination cannot override an upstream error')
+    return
+  }
+
+  const naturalReasons: readonly TerminationReason[] = [
+    'empty_page',
+    'reported_population_reached',
+    'reported_page_count_reached',
+    'short_page',
+    'cursor_exhausted',
+    'single_snapshot',
+  ]
+  const naturalReason = naturalReasons.find((reason) =>
+    isNaturalTermination(manifest, populationReport, pageCountReport, reason)
+  )
+  if (naturalReason) {
+    addIssue(
+      ctx,
+      ['termination_reason'],
+      `limit termination cannot override natural termination ${naturalReason}`
+    )
+  }
+}
+
+function validateParserTransformation(
+  manifest: LeaderboardAcquisitionManifest,
+  ctx: z.RefinementCtx
+): void {
+  const transformation = manifest.parser_input.transformation
+  const ordinals = transformation.source_page_ordinals
+  let previous = 0
+  for (const [index, ordinal] of ordinals.entries()) {
+    if (ordinal <= previous || ordinal > manifest.source_pages.length) {
+      addIssue(
+        ctx,
+        ['parser_input', 'transformation', 'source_page_ordinals', index],
+        'source page ordinals must be unique, increasing, and in range'
+      )
+    }
+    previous = ordinal
+  }
+
+  if (transformation.kind === 'identity_projection') {
+    if (ordinals.length !== manifest.parser_input.page_count) {
+      addIssue(
+        ctx,
+        ['parser_input', 'transformation', 'source_page_ordinals'],
+        'identity projection must bind every parser page to one source page'
+      )
+    }
+    return
+  }
+
+  if (manifest.parser_input.page_count > 0 && ordinals.length === 0) {
+    addIssue(
+      ctx,
+      ['parser_input', 'transformation', 'source_page_ordinals'],
+      'dedupe/rechunk parser input must cite its source pages'
+    )
+  }
+  if (
+    transformation.output_row_count > manifest.population.observed_row_count ||
+    manifest.population.accepted_population > transformation.output_row_count
+  ) {
+    addIssue(
+      ctx,
+      ['parser_input', 'transformation', 'output_row_count'],
+      'dedupe/rechunk output rows must fall between accepted and observed population'
+    )
+  }
+  const expectedPages = Math.ceil(transformation.output_row_count / transformation.output_page_size)
+  if (manifest.parser_input.page_count !== expectedPages) {
+    addIssue(
+      ctx,
+      ['parser_input', 'page_count'],
+      'dedupe/rechunk page count must match accepted population and output page size'
+    )
   }
 }
 
@@ -702,9 +902,12 @@ function validateManifestInvariants(
   }
 
   validatePaginationPositions(manifest, ctx)
+  validateCaptureLimits(manifest, ctx)
+  validateParserTransformation(manifest, ctx)
 
   const populationReport = deriveAggregateReport(manifest.source_pages, 'population')
   const pageCountReport = deriveAggregateReport(manifest.source_pages, 'page_count')
+  validateLimitTerminationPriority(manifest, populationReport, pageCountReport, ctx)
   if (
     manifest.population.reports.population.state !== populationReport.state ||
     manifest.population.reports.population.value !== populationReport.value
@@ -756,6 +959,22 @@ export function buildLeaderboardAcquisitionManifest(
   rawInput: BuildLeaderboardAcquisitionManifestInput
 ): BuiltLeaderboardAcquisitionManifest {
   const input = buildInputSchema.parse(rawInput)
+  if (input.parser_transformation.kind === 'identity_projection') {
+    if (input.parser_transformation.source_page_ordinals.length !== input.parse_pages.length) {
+      throw new TypeError('identity projection must bind every parser page to one source page')
+    }
+    for (const [index, ordinal] of input.parser_transformation.source_page_ordinals.entries()) {
+      const sourcePage = input.source_pages[ordinal - 1]?.raw_page
+      if (
+        sourcePage === undefined ||
+        strictCanonicalJson(sourcePage) !== strictCanonicalJson(input.parse_pages[index])
+      ) {
+        throw new TypeError(
+          'identity projection parser pages must exactly equal their cited source pages'
+        )
+      }
+    }
+  }
   const observedRowCount = safeIntegerSum(
     input.source_pages.map((page) => page.source_row_count),
     'observed row count'
@@ -796,11 +1015,13 @@ export function buildLeaderboardAcquisitionManifest(
     observation_cycle_id: input.observation_cycle_id,
     capture_evidence_state: input.capture_evidence_state,
     termination_reason: input.termination_reason,
+    capture_config: input.capture_config,
     source_pages: sourcePages,
     parser_input: {
       serialization_contract: STRICT_CANONICAL_JSON_CONTRACT,
       sha256: strictCanonicalSha256(input.parse_pages),
       page_count: input.parse_pages.length,
+      transformation: input.parser_transformation,
     },
     population: {
       observed_row_count: observedRowCount,
