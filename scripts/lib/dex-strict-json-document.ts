@@ -349,12 +349,12 @@ function cloneStrictData<T>(value: T): T {
     if (current === null || typeof current !== 'object') continue
 
     if (Array.isArray(current)) {
-      pending.push(...current)
+      for (const child of current) pending.push(child)
       continue
     }
 
     Object.setPrototypeOf(current, null)
-    pending.push(...Object.values(current))
+    for (const child of Object.values(current)) pending.push(child)
   }
 
   return clone
