@@ -23,6 +23,17 @@ types.setTypeParser(types.builtins.INT8, (v) => (v === null ? null : Number(v)))
 
 let pool: Pool | null = null
 
+/**
+ * A worker query must never outlive its BullMQ job indefinitely.  The server
+ * deadline cancels genuinely slow SQL; the slightly wider client deadline is
+ * the final shield when a pooler/TCP connection stays open but loses the
+ * backend response.  Keep these deterministic across Mac and VPS workers.
+ */
+export const INGEST_DB_STATEMENT_TIMEOUT_MS = 4 * 60_000
+export const INGEST_DB_QUERY_TIMEOUT_MS = 5 * 60_000
+export const INGEST_DB_LOCK_TIMEOUT_MS = 60_000
+export const INGEST_DB_KEEPALIVE_INITIAL_DELAY_MS = 10_000
+
 export function getIngestPool(): Pool {
   if (pool) return pool
 
@@ -69,8 +80,15 @@ export function getIngestPool(): Pool {
     // slot to the other node faster.
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
+    // Server-side deadline for normal slow/blocked SQL.  query_timeout is
+    // intentionally wider: it also rejects the local Promise when Supavisor
+    // has lost the backend response and PostgreSQL can no longer cancel it.
+    statement_timeout: INGEST_DB_STATEMENT_TIMEOUT_MS,
+    query_timeout: INGEST_DB_QUERY_TIMEOUT_MS,
+    lock_timeout: INGEST_DB_LOCK_TIMEOUT_MS,
     // Surface a half-open socket before a query rides it into EDBHANDLEREXITED.
     keepAlive: true,
+    keepAliveInitialDelayMillis: INGEST_DB_KEEPALIVE_INITIAL_DELAY_MS,
     // Supabase pooler requires TLS; local dev (127.0.0.1) does not.
     ssl:
       url.includes('127.0.0.1') || url.includes('localhost')
