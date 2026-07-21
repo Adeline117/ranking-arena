@@ -4,6 +4,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260721120000_metric_trust_shadow_gate.sql"
+IDENTITY_MIGRATION="$ROOT_DIR/supabase/migrations/20260721150000_metric_trust_raw_artifact_identity.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -121,6 +122,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA arena TO service_role;
 SQL
 
 psql_cmd -q -f "$MIGRATION"
+psql_cmd -q -f "$IDENTITY_MIGRATION"
 
 psql_cmd -q <<'SQL'
 INSERT INTO arena.traders (id, source_id) VALUES (10, 1), (11, 1), (12, 1), (13, 1);
@@ -528,6 +530,26 @@ expect_failure \
      AND observation.metric = 'roi'
      AND raw.job_type = 'tier_a_alt'
    LIMIT 1;"
+
+expect_failure \
+  "duplicate population manifest identity" \
+  "INSERT INTO arena.raw_objects (
+     source_id, job_type, timeframe, storage_path, bytes, content_hash,
+     quarantined, meta, source_run_id, trust_artifact_role
+   ) VALUES (
+     1, 'tier_a_manifest', 30, 'binance/run-1/duplicate-manifest.json.gz', 10,
+     repeat('b', 64), false, '{}', repeat('b', 64), 'population_manifest'
+   );"
+
+expect_failure \
+  "duplicate Tier-A population identity" \
+  "INSERT INTO arena.raw_objects (
+     source_id, job_type, timeframe, storage_path, bytes, content_hash,
+     quarantined, meta, source_run_id, trust_artifact_role
+   ) VALUES (
+     1, 'tier_a', 30, 'binance/run-1/duplicate-population.json.gz', 10,
+     repeat('a', 64), false, '{}', repeat('b', 64), 'source_payload'
+   );"
 
 expect_failure \
   "mutating referenced RAW digest" \
