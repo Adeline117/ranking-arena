@@ -1706,45 +1706,43 @@ describe('Tier-A board-series publication guard', () => {
   })
 
   it('preserves the upstream failure when its unknown-manifest finalization also fails', async () => {
-    const failedRawPage: RawPage = {
-      ...page,
-      payload: { error: 'service unavailable' },
-      fetchedAt: new Date().toISOString(),
-    }
-    const failedCapture = capturedLeaderboard({
-      sourcePages: [
-        {
-          rawPage: failedRawPage,
-          sourceRowCount: 0,
-          requestSha256: 'd'.repeat(64),
-          httpStatus: 503,
-          paginationPosition: { kind: 'page_index', request_page_index: 1 },
-          sourceReports: {
-            population: { state: 'not_reported' },
-            page_count: { state: 'not_reported' },
-            current_page: { state: 'not_reported' },
-            page_size: { state: 'not_reported' },
+    let upstream: LeaderboardCaptureUpstreamError | null = null
+    const captureLeaderboard = jest.fn(async () => {
+      const failedRawPage: RawPage = {
+        ...page,
+        payload: { error: 'service unavailable' },
+        fetchedAt: new Date().toISOString(),
+      }
+      const failedCapture = capturedLeaderboard({
+        sourcePages: [
+          {
+            rawPage: failedRawPage,
+            sourceRowCount: 0,
+            requestSha256: 'd'.repeat(64),
+            httpStatus: 503,
+            paginationPosition: { kind: 'page_index', request_page_index: 1 },
+            sourceReports: {
+              population: { state: 'not_reported' },
+              page_count: { state: 'not_reported' },
+              current_page: { state: 'not_reported' },
+              page_size: { state: 'not_reported' },
+            },
           },
-        },
-      ],
-      parsePages: [],
-      terminationReason: 'upstream_error',
-      parserTransformation: { kind: 'identity_projection', source_page_ordinals: [] },
+        ],
+        parsePages: [],
+        terminationReason: 'upstream_error',
+        parserTransformation: { kind: 'identity_projection', source_page_ordinals: [] },
+      })
+      upstream = new LeaderboardCaptureUpstreamError(
+        503,
+        failedRawPage.url,
+        failedCapture,
+        new Error('service unavailable')
+      )
+      throw upstream
     })
-    const upstream = new LeaderboardCaptureUpstreamError(
-      503,
-      failedRawPage.url,
-      failedCapture,
-      new Error('service unavailable')
-    )
     const finishFailure = new Error('terminal ledger unavailable')
-    configureAttemptBoundSource(
-      [30, 90],
-      jest.fn(async () => {
-        throw upstream
-      }),
-      []
-    )
+    configureAttemptBoundSource([30, 90], captureLeaderboard, [])
     mockFinishLeaderboardAcquisitionAttempt.mockRejectedValue(finishFailure)
 
     let failure: unknown
@@ -1755,7 +1753,8 @@ describe('Tier-A board-series publication guard', () => {
     }
 
     expect(failure).toBeInstanceOf(AggregateError)
-    expect((failure as AggregateError).errors).toStrictEqual([upstream, finishFailure])
+    expect(upstream).not.toBeNull()
+    expect((failure as AggregateError).errors).toStrictEqual([upstream!, finishFailure])
     expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledTimes(1)
     expect(mockStartLeaderboardAcquisitionAttempt).toHaveBeenCalledTimes(1)
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
@@ -2026,44 +2025,42 @@ describe('Tier-A board-series publication guard', () => {
   })
 
   it('records a structured upstream HTTP failure as an unknown manifest terminal', async () => {
-    const failedRawPage: RawPage = {
-      ...page,
-      payload: { error: 'service unavailable' },
-      fetchedAt: new Date().toISOString(),
-    }
-    const failedCapture = capturedLeaderboard({
-      sourcePages: [
-        {
-          rawPage: failedRawPage,
-          sourceRowCount: 0,
-          requestSha256: 'd'.repeat(64),
-          httpStatus: 503,
-          paginationPosition: { kind: 'page_index', request_page_index: 1 },
-          sourceReports: {
-            population: { state: 'not_reported' },
-            page_count: { state: 'not_reported' },
-            current_page: { state: 'not_reported' },
-            page_size: { state: 'not_reported' },
+    let upstream: LeaderboardCaptureUpstreamError | null = null
+    const captureLeaderboard = jest.fn(async () => {
+      const failedRawPage: RawPage = {
+        ...page,
+        payload: { error: 'service unavailable' },
+        fetchedAt: new Date().toISOString(),
+      }
+      const failedCapture = capturedLeaderboard({
+        sourcePages: [
+          {
+            rawPage: failedRawPage,
+            sourceRowCount: 0,
+            requestSha256: 'd'.repeat(64),
+            httpStatus: 503,
+            paginationPosition: { kind: 'page_index', request_page_index: 1 },
+            sourceReports: {
+              population: { state: 'not_reported' },
+              page_count: { state: 'not_reported' },
+              current_page: { state: 'not_reported' },
+              page_size: { state: 'not_reported' },
+            },
           },
-        },
-      ],
-      parsePages: [],
-      terminationReason: 'upstream_error',
-      parserTransformation: { kind: 'identity_projection', source_page_ordinals: [] },
+        ],
+        parsePages: [],
+        terminationReason: 'upstream_error',
+        parserTransformation: { kind: 'identity_projection', source_page_ordinals: [] },
+      })
+      upstream = new LeaderboardCaptureUpstreamError(
+        503,
+        failedRawPage.url,
+        failedCapture,
+        new Error('service unavailable')
+      )
+      throw upstream
     })
-    const upstream = new LeaderboardCaptureUpstreamError(
-      503,
-      failedRawPage.url,
-      failedCapture,
-      new Error('service unavailable')
-    )
-    configureAttemptBoundSource(
-      [30],
-      jest.fn(async () => {
-        throw upstream
-      }),
-      []
-    )
+    configureAttemptBoundSource([30], captureLeaderboard, [])
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
     let failure: unknown
@@ -2076,8 +2073,9 @@ describe('Tier-A board-series publication guard', () => {
     }
 
     expect(failure).toBeInstanceOf(AggregateError)
+    expect(upstream).not.toBeNull()
     expect(((failure as AggregateError).errors[0] as Error & { cause?: unknown }).cause).toBe(
-      upstream
+      upstream!
     )
     expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).toHaveBeenCalledTimes(1)
     expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledTimes(1)
