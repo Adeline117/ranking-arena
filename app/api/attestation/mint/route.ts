@@ -57,13 +57,17 @@ export async function GET(request: NextRequest) {
       return success({ attestation: null })
     }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('trader_attestations')
       .select(
         'id, trader_handle, attestation_uid, tx_hash, arena_score, chain_id, score_period, minted_by, published_at, updated_at'
       )
       .eq('trader_handle', handle)
       .maybeSingle()
+
+    if (error) {
+      return handleError(error, 'attestation GET')
+    }
 
     return success({ attestation: data })
   } catch (error: unknown) {
