@@ -13,6 +13,7 @@ import {
   classifyProxyStrictRateLimit,
   type ProxyStrictRateLimitTier,
 } from '@/lib/security/proxy-rate-limit'
+import { shouldFreezeTipCheckout } from '@/lib/security/tip-checkout-cutover'
 
 // Page routes requiring Supabase auth redirect
 const _AUTH_PROTECTED_PAGES = ['/settings', '/favorites', '/user-center', '/inbox', '/my-posts']
@@ -452,6 +453,25 @@ export async function proxy(request: NextRequest) {
   // 跳过不需要处理的路由
   if (shouldSkip(pathname)) {
     return NextResponse.next()
+  }
+
+  // The Next.js proxy runs before route handlers. Freeze Tip checkout here so
+  // CSRF/auth/rate-limit responses cannot mask the cutover gate and make an
+  // operator believe payments are stopped when the route never ran.
+  if (shouldFreezeTipCheckout(pathname, method)) {
+    return NextResponse.json(
+      {
+        error: 'Tip checkout is temporarily unavailable.',
+        code: 'TIP_CHECKOUT_UNAVAILABLE',
+      },
+      {
+        status: 503,
+        headers: {
+          'Cache-Control': 'no-store',
+          'Retry-After': '300',
+        },
+      }
+    )
   }
 
   // 全局 per-IP 限流兜底(见上;fail-open)

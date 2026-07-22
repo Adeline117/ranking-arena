@@ -11,6 +11,7 @@ import { env } from '@/lib/env'
 import { createOneTimePaymentSession } from '@/lib/stripe'
 import { canServiceActorReadPost } from '@/lib/data/service-post-audience'
 import { sanitizeInput } from '@/lib/utils/sanitize'
+import { isTipCheckoutEnabled } from '@/lib/security/tip-checkout-cutover'
 
 const logger = createLogger('tip-checkout')
 
@@ -189,7 +190,7 @@ export async function POST(request: NextRequest) {
   // the atomic Tip checkout cutover. Do not depend on Vercel system variables:
   // every runtime must opt in explicitly so missing deployment metadata cannot
   // silently reopen payments. Preview and local canaries set the flag to true.
-  if (process.env.STRIPE_TIP_CHECKOUT_ENABLED !== 'true') {
+  if (!isTipCheckoutEnabled()) {
     return NextResponse.json(
       {
         error: 'Tip checkout is temporarily unavailable.',
