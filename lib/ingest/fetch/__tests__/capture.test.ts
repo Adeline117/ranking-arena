@@ -11,6 +11,7 @@ import type { JsonFetcher } from '../capture'
 import type { FetchSession, ReplayRequestTemplate } from '../types'
 import { buildLeaderboardAcquisitionManifest } from '../../acquisition-manifest'
 import { BlockedUpstreamError } from '../rate-limiter'
+import { CircuitOpenError } from '../circuit'
 
 /** Minimal paced-only session stub — replay never touches Playwright. */
 const session = {
@@ -472,6 +473,132 @@ describe('captureNumericLeaderboard', () => {
     })
     expect(capture.parsePages).toEqual([])
     expect(extractMeta).not.toHaveBeenCalled()
+  })
+
+  it('turns a first-request transport failure into page-less unavailable evidence', async () => {
+    const transportError = new Error('socket timed out before headers')
+    let thrown: unknown
+    try {
+      await captureNumericLeaderboard(
+        captureOptions(async () => {
+          throw transportError
+        })
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    expect(thrown).toMatchObject({
+      status: null,
+      publicUrl: 'https://x.test/board?page=1',
+      cause: transportError,
+      capture: {
+        terminationReason: 'upstream_error',
+        sourcePages: [],
+        parsePages: [],
+        parserTransformation: { kind: 'identity_projection', source_page_ordinals: [] },
+      },
+    })
+    expect((thrown as LeaderboardCaptureUpstreamError).cause).toBe(transportError)
+    expect(Object.isFrozen((thrown as LeaderboardCaptureUpstreamError).capture)).toBe(true)
+  })
+
+  it('retains successful pages when a later request fails before a response', async () => {
+    const transportError = new Error('connection reset on page two')
+    let requestCount = 0
+    const fetcher: JsonFetcher = async () => {
+      requestCount += 1
+      if (requestCount === 2) throw transportError
+      return {
+        status: 200,
+        json: {
+          rows: ['one', 'two'],
+          total: 4,
+          pages: 2,
+          current: 1,
+          size: 2,
+        },
+      }
+    }
+
+    let thrown: unknown
+    try {
+      await captureNumericLeaderboard(captureOptions(fetcher))
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    expect(thrown).toMatchObject({
+      status: null,
+      publicUrl: 'https://x.test/board?page=2',
+      cause: transportError,
+      capture: {
+        terminationReason: 'upstream_error',
+        parserTransformation: { kind: 'identity_projection', source_page_ordinals: [1] },
+      },
+    })
+    const capture = (thrown as LeaderboardCaptureUpstreamError).capture
+    expect(capture.sourcePages).toHaveLength(1)
+    expect(capture.sourcePages[0]).toMatchObject({
+      httpStatus: 200,
+      sourceRowCount: 2,
+      paginationPosition: { kind: 'page_index', request_page_index: 1 },
+    })
+    expect(capture.parsePages).toEqual([capture.sourcePages[0].rawPage])
+    expect((thrown as LeaderboardCaptureUpstreamError).cause).toBe(transportError)
+  })
+
+  it('wraps an open circuit as a page-less no-response capture', async () => {
+    const circuitError = new CircuitOpenError('test', Date.now() + 60_000)
+    const circuitSession = {
+      sourceSlug: 'test',
+      paced: async () => {
+        throw circuitError
+      },
+    } as unknown as FetchSession
+
+    let thrown: unknown
+    try {
+      await captureNumericLeaderboard(
+        captureOptions(makeCaptureFetcher([]), { session: circuitSession })
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    expect(thrown).toMatchObject({
+      status: null,
+      capture: { sourcePages: [], parsePages: [], terminationReason: 'upstream_error' },
+    })
+    expect((thrown as LeaderboardCaptureUpstreamError).cause).toBe(circuitError)
+  })
+
+  it('does not relabel session lifecycle or response-contract errors as upstream transport', async () => {
+    const lifecycleError = new Error('[ingest] test fetch session is closed')
+    const closedSession = {
+      sourceSlug: 'test',
+      paced: async () => {
+        throw lifecycleError
+      },
+    } as unknown as FetchSession
+
+    await expect(
+      captureNumericLeaderboard(captureOptions(makeCaptureFetcher([]), { session: closedSession }))
+    ).rejects.toBe(lifecycleError)
+
+    let contractFailure: unknown
+    try {
+      await captureNumericLeaderboard(
+        captureOptions(async () => ({ status: 99, json: { rows: [] } }))
+      )
+    } catch (error) {
+      contractFailure = error
+    }
+    expect(contractFailure).toBeInstanceOf(TypeError)
+    expect(contractFailure).not.toBeInstanceOf(LeaderboardCaptureUpstreamError)
   })
 
   it('throws blocked statuses inside paced so backoff and circuit accounting see them', async () => {
