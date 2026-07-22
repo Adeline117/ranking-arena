@@ -7,6 +7,7 @@ import {
 import type { RankingTimeframe } from '@/lib/ingest/core/types'
 import {
   BINANCE_LEADERBOARD_LIST_URLS,
+  BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
   BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS,
   assessLeaderboardNativeWindowRequest,
   binanceLeaderboardListRequestSha256,
@@ -184,7 +185,9 @@ describe('reviewed leaderboard native-window request evidence', () => {
     'does not equate the exact %s %dD request label with a window boundary',
     (sourceSlug, timeframe) => {
       expect(assessLeaderboardNativeWindowRequest(manifest({ sourceSlug, timeframe }))).toEqual({
-        state: 'unknown',
+        state: 'request_verified',
+        contractId: BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
+        semantics: 'provider_native_period_aggregate',
         reason: 'native_window_boundary_unverified',
         diagnostic: 'provider_window_boundary_unavailable',
       })

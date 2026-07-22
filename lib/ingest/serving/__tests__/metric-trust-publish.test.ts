@@ -164,8 +164,14 @@ function attemptBoundTrustFixture(source: SourceRow = src) {
   )
 }
 
-function exactRequestAttemptBoundTrustFixture(source: SourceRow = src) {
+function exactRequestAttemptBoundTrustFixture(
+  source: SourceRow = src,
+  parserTransformation?: Parameters<
+    typeof buildLeaderboardAcquisitionManifest
+  >[0]['parser_transformation']
+) {
   const input = manifestInput(source)
+  if (parserTransformation) input.parser_transformation = parserTransformation
   const requestSha256 = binanceLeaderboardListRequestSha256({
     sourceSlug: source.slug,
     pageIndex: 1,
@@ -780,9 +786,51 @@ describe('Tier-A metric trust transaction writer', () => {
         }),
       ])
     )
+
+    const dedupedPrepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: exactRequestAttemptBoundTrustFixture(src, {
+        kind: 'dedupe_rechunk',
+        source_page_ordinals: [1],
+        algorithm_contract: 'arena.test.dedupe-rechunk@1',
+        output_row_count: 2,
+        output_page_size: 100,
+      }),
+    })
+    await writeLeaderboardMetricTrust(queryClient(query), dedupedPrepared, {
+      snapshotId: 78,
+      snapshotScrapedAt: '2026-07-21T10:00:03.000Z',
+      traderIds: new Map([
+        ['one', 1_001],
+        ['two', 1_002],
+      ]),
+    })
+    const observationCalls = query.mock.calls.filter(([sql]) =>
+      String(sql).includes('INSERT INTO arena.metric_trust_observations')
+    )
+    const dedupedObservations = JSON.parse(String(observationCalls[1][1][0])) as Array<{
+      exchange_trader_id: string
+      contract_id: string
+      blocking_reasons: unknown[]
+    }>
+    expect(dedupedObservations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          exchange_trader_id: 'one',
+          contract_id: '12',
+          blocking_reasons: [
+            { code: 'source_page_lineage_unknown', state: 'unknown' },
+            { code: 'native_window_boundary_unverified', state: 'unknown' },
+          ],
+        }),
+      ])
+    )
   })
 
-  it('keeps exact request labels out of ranking without provider window boundaries', async () => {
+  it('keeps request proof shadow-only and requires exact source-page lineage', async () => {
     const query = jest.fn(async (sqlInput: unknown, params: unknown[] = []) => {
       const sql = String(sqlInput)
       if (sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')) {
@@ -812,18 +860,39 @@ describe('Tier-A metric trust transaction writer', () => {
       }
       throw new Error(`unexpected SQL: ${sql}`)
     })
+    const lineageRows: ParsedLeaderboardRow[] = [
+      {
+        ...rows[0],
+        headlineMetricSources: {
+          roi: { fieldPath: 'data.list[].roi', sourcePageOrdinal: 1 },
+          pnl: { fieldPath: 'data.list[].pnl' },
+        },
+      },
+      {
+        ...rows[1],
+        headlineMetricSources: {
+          roi: { fieldPath: 'data.list[].roi', sourcePageOrdinal: 2 },
+        },
+      },
+    ]
     const prepared = prepareLeaderboardMetricTrust({
       src,
       timeframe: 30,
-      rows,
+      rows: lineageRows,
       rejectedRowCount: 0,
       bundle: exactRequestAttemptBoundTrustFixture(),
     })
 
     expect(prepared.nativeWindowEvidence).toMatchObject({
-      state: 'unknown',
+      state: 'request_verified',
       diagnostic: 'provider_window_boundary_unavailable',
     })
+    // Legacy/future request-only states must never become boundary authority.
+    prepared.nativeWindowEvidence = {
+      state: 'verified',
+      contractId: 'legacy-request-only',
+      semantics: 'provider_native_period_aggregate',
+    } as unknown as typeof prepared.nativeWindowEvidence
     await writeLeaderboardMetricTrust(queryClient(query), prepared, {
       snapshotId: 77,
       snapshotScrapedAt: '2026-07-21T10:00:03.000Z',
@@ -850,7 +919,10 @@ describe('Tier-A metric trust transaction writer', () => {
           contract_id: '11',
           quality: 'unknown',
           window_state: 'unknown',
-          blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+          blocking_reasons: [
+            { code: 'source_page_lineage_unknown', state: 'unknown' },
+            { code: 'native_window_boundary_unverified', state: 'unknown' },
+          ],
         }),
         expect.objectContaining({
           exchange_trader_id: 'one',
@@ -874,7 +946,10 @@ describe('Tier-A metric trust transaction writer', () => {
           contract_id: '12',
           quality: 'unknown',
           window_state: 'unknown',
-          blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+          blocking_reasons: [
+            { code: 'source_page_lineage_mismatch', state: 'unknown' },
+            { code: 'native_window_boundary_unverified', state: 'unknown' },
+          ],
         }),
       ])
     )
@@ -1013,8 +1088,8 @@ describe('Tier-A metric trust transaction writer', () => {
       window_state: 'unknown',
       freshness_state: 'unknown',
       blocking_reasons: [
-        { code: 'native_window_boundary_unverified', state: 'unknown' },
         { code: 'source_page_lineage_unknown', state: 'unknown' },
+        { code: 'native_window_boundary_unverified', state: 'unknown' },
       ],
     })
 
@@ -1057,8 +1132,8 @@ describe('Tier-A metric trust transaction writer', () => {
       window_state: 'unknown',
       freshness_state: 'unknown',
       blocking_reasons: [
+        { code: 'source_page_lineage_mismatch', state: 'unknown' },
         { code: 'native_window_boundary_unverified', state: 'unknown' },
-        { code: 'source_page_lineage_invalid', state: 'unknown' },
       ],
       source_as_of: '2026-07-21T10:00:01.000Z',
     })
@@ -1097,8 +1172,8 @@ describe('Tier-A metric trust transaction writer', () => {
         window_state: 'unknown',
         freshness_state: 'unknown',
         blocking_reasons: [
-          { code: 'native_window_boundary_unverified', state: 'unknown' },
           { code: 'source_page_lineage_conflict', state: 'unknown' },
+          { code: 'native_window_boundary_unverified', state: 'unknown' },
         ],
       }),
       expect.objectContaining({
@@ -1106,8 +1181,8 @@ describe('Tier-A metric trust transaction writer', () => {
         window_state: 'unknown',
         freshness_state: 'unknown',
         blocking_reasons: [
-          { code: 'native_window_boundary_unverified', state: 'unknown' },
           { code: 'source_page_lineage_conflict', state: 'unknown' },
+          { code: 'native_window_boundary_unverified', state: 'unknown' },
         ],
       }),
     ])
@@ -1443,7 +1518,7 @@ function reconciliationQuery(
     population_state: 'verified',
     window_state: 'unknown',
     unit_state: 'verified',
-    freshness_state: 'verified',
+    freshness_state: observation.id === '203' ? 'unknown' : 'verified',
     source_as_of: '2026-07-21 10:00:01+00',
     valid_until: '2026-07-21 16:00:01+00',
     window_start: '2026-06-21 10:00:01+00',
