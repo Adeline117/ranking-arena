@@ -112,6 +112,7 @@ jobs:
           install -m 700 scripts/ci/enforce-vercel-release-control.mjs "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
           install -m 700 scripts/ci/validate-release-health.mjs "$RUNNER_TEMP/validate-release-health.mjs"
           install -m 700 scripts/ci/verify-metric-trust-release-readiness.mjs "$RUNNER_TEMP/verify-metric-trust-release-readiness.mjs"
+          install -m 700 scripts/ci/verify-worker-release-readiness.mjs "$RUNNER_TEMP/verify-worker-release-readiness.mjs"
 
       - name: Enforce single production writer before deploy
         run: node "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
@@ -272,9 +273,38 @@ jobs:
           fi
           echo "Candidate READY without aliasing: $DEPLOY_URL"
 
+      - name: Require exact ingest worker fleet before promotion
+        id: worker_fleet
+        if: steps.fresh.outputs.deploy == 'true' && steps.wait_candidate.outcome == 'success'
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          WORKER_READINESS_BASE_URL: ${{ steps.deploy_candidate.outputs.url }}
+        run: |
+          PAYLOAD_FILE="$RUNNER_TEMP/worker-release-readiness.json"
+          STATUS_FILE="$RUNNER_TEMP/worker-release-readiness.status"
+          rm -f "$PAYLOAD_FILE" "$STATUS_FILE"
+          set +e
+          npx vercel@56.2.1 curl \
+            "/api/health/worker-release-readiness?expected_sha=$HEAD_SHA" \
+            --deployment "$WORKER_READINESS_BASE_URL" \
+            -- \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            --silent --show-error --fail-with-body \
+            --max-time 15 --max-redirs 0 --max-filesize 65536 \
+            --output "$PAYLOAD_FILE" --write-out '%{http_code}' > "$STATUS_FILE"
+          REQUEST_EXIT=$?
+          set -e
+          HTTP_CODE=$(grep -Eo '[0-9]{3}' "$STATUS_FILE" 2>/dev/null | tail -1 || true)
+          if [ "$REQUEST_EXIT" -ne 0 ] || [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::protected worker-readiness request failed (exit=$REQUEST_EXIT HTTP=${HTTP_CODE:-unknown})"
+            exit 1
+          fi
+          WORKER_READINESS_PAYLOAD_FILE="$PAYLOAD_FILE" \
+            node "$RUNNER_TEMP/verify-worker-release-readiness.mjs"
+
       - name: Promote only if candidate is not stale after build
         id: promote_candidate
-        if: steps.fresh.outputs.deploy == 'true' && steps.wait_candidate.outcome == 'success'
+        if: steps.fresh.outputs.deploy == 'true' && steps.wait_candidate.outcome == 'success' && steps.worker_fleet.outcome == 'success'
         run: |
           git fetch origin main --quiet
           MAIN_SHA=$(git rev-parse FETCH_HEAD)
