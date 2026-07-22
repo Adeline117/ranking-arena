@@ -9619,6 +9619,14 @@ export type Database = {
         }
         Returns: Json
       }
+      arena_score_inputs_publish_bundle_json: {
+        Args: {
+          p_max_age_hours?: number
+          p_per_platform_limit?: number
+          p_window: string
+        }
+        Returns: Json
+      }
       arena_serving_sources: { Args: never; Returns: string[] }
       arena_set_trader_claimed: {
         Args: {
