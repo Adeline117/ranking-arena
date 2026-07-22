@@ -1,0 +1,96 @@
+{
+  "period": "90D",
+  "sourceBundleDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+  "scoreRowsDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+  "physicalBoardsDigest": "3333333333333333333333333333333333333333333333333333333333333333",
+  "sourceEvidence": {
+    "freshAliases": ["binance_futures", "bybit"],
+    "retainedAliases": ["okx_futures"],
+    "physicalBoards": [
+      {
+        "registry_slug": "binance_futures",
+        "filter_source": "binance_futures",
+        "window": "90D",
+        "snapshot_id": 7001,
+        "scraped_at": "2026-07-22T04:30:00Z",
+        "actual_count": 2,
+        "entry_count": 2,
+        "evidence_status": "passed",
+        "latest_attempt_id": 7001,
+        "latest_attempt_scraped_at": "2026-07-22T04:30:00Z",
+        "latest_attempt_passed": true
+      },
+      {
+        "registry_slug": "bybit",
+        "filter_source": "bybit",
+        "window": "90D",
+        "snapshot_id": 7002,
+        "scraped_at": "2026-07-22T04:31:00Z",
+        "actual_count": 1,
+        "entry_count": 1,
+        "evidence_status": "passed",
+        "latest_attempt_id": 7002,
+        "latest_attempt_scraped_at": "2026-07-22T04:31:00Z",
+        "latest_attempt_passed": true
+      }
+    ]
+  },
+  "enrichmentContract": "leaderboard-enrichment-evidence@1",
+  "enrichmentEvidence": {
+    "asOf": "2026-07-22T04:32:00Z",
+    "records": [
+      {
+        "source": "binance_futures",
+        "source_trader_id": "alice",
+        "statsDetailVersion": 17,
+        "equitySnapshot": "eq-101",
+        "dailyCutoff": "2026-07-21",
+        "profitFactorSource": "equity"
+      },
+      {
+        "source": "bybit",
+        "source_trader_id": "bob",
+        "statsDetailVersion": 23,
+        "equitySnapshot": "eq-202",
+        "dailyCutoff": "2026-07-21",
+        "profitFactorSource": "stats_detail"
+      }
+    ]
+  },
+  "eligibilityContract": "leaderboard-eligibility-evidence@1",
+  "eligibilityEvidence": {
+    "included": ["binance_futures:alice", "bybit:bob"],
+    "excluded": [
+      {
+        "source": "okx_futures",
+        "source_trader_id": "carol",
+        "reason": "retained_source"
+      }
+    ],
+    "canonicalIdentityCollisionCount": 0
+  },
+  "inputs": [
+    {
+      "source": "bybit",
+      "source_trader_id": "bob",
+      "roi": 42.5,
+      "pnl": 15000,
+      "max_drawdown": 8.5,
+      "win_rate": 61,
+      "sharpe_ratio": 1.8,
+      "profit_factor": 1.9,
+      "trades_count": 75
+    },
+    {
+      "source": "binance_futures",
+      "source_trader_id": "alice",
+      "roi": 18.25,
+      "pnl": 9000,
+      "max_drawdown": 12,
+      "win_rate": 54,
+      "sharpe_ratio": 1.2,
+      "profit_factor": 1.4,
+      "trades_count": 120
+    }
+  ]
+}
