@@ -22,18 +22,21 @@ jest.mock('next/server', () => {
 
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
+const mockAuthenticatedPost = jest.fn()
 const mockUser = {
   id: '10000000-0000-4000-8000-000000000001',
   email: 'tipper@example.com',
 }
 
 jest.mock('@/lib/api/middleware', () => ({
-  withAuth: (handler: (context: unknown) => unknown) => (request: unknown) =>
-    handler({
+  withAuth: (handler: (context: unknown) => unknown) => (request: unknown) => {
+    mockAuthenticatedPost(request)
+    return handler({
       user: mockUser,
       supabase: { rpc: mockRpc, from: mockFrom },
       request,
-    }),
+    })
+  },
 }))
 
 jest.mock('@/lib/api/response', () => {
@@ -94,6 +97,48 @@ describe('POST /api/tip/checkout', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockRpc.mockResolvedValue({ data: true, error: null })
+    delete process.env.STRIPE_TIP_CHECKOUT_ENABLED
+    delete process.env.VERCEL_ENV
+  })
+
+  afterAll(() => {
+    delete process.env.STRIPE_TIP_CHECKOUT_ENABLED
+    delete process.env.VERCEL_ENV
+  })
+
+  it.each([
+    ['unset', undefined],
+    ['false', 'false'],
+    ['non-exact uppercase value', 'TRUE'],
+  ])(
+    'fails closed before auth and payment work in Production when the gate is %s',
+    async (_, value) => {
+      process.env.VERCEL_ENV = 'production'
+      if (value !== undefined) process.env.STRIPE_TIP_CHECKOUT_ENABLED = value
+
+      const response = await POST({} as never)
+
+      expect(response.status).toBe(503)
+      expect(await response.json()).toEqual({
+        error: 'Tip checkout is temporarily unavailable.',
+        code: 'TIP_CHECKOUT_UNAVAILABLE',
+      })
+      expect(mockAuthenticatedPost).not.toHaveBeenCalled()
+      expect(mockRpc).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+      expect(mockCreateOneTimePaymentSession).not.toHaveBeenCalled()
+    }
+  )
+
+  it('delegates in Production only when the server gate is exactly true', async () => {
+    process.env.VERCEL_ENV = 'production'
+    process.env.STRIPE_TIP_CHECKOUT_ENABLED = 'true'
+    const request = requestWith({ post_id: 'invalid' })
+
+    const response = await POST(request as never)
+
+    expect(response.status).toBe(400)
+    expect(mockAuthenticatedPost).toHaveBeenCalledWith(request)
   })
 
   it('fails closed before reading or charging for an unreadable post', async () => {

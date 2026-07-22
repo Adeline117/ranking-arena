@@ -3,7 +3,7 @@
  * POST /api/tip/checkout - 创建打赏支付会话
  */
 
-import { NextResponse } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, notFound, serverError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export const POST = withAuth(
+const authenticatedPost = withAuth(
   async ({ user, supabase, request }) => {
     let body: Record<string, unknown>
     try {
@@ -183,3 +183,29 @@ export const POST = withAuth(
     rateLimit: 'sensitive',
   }
 )
+
+export async function POST(request: NextRequest) {
+  // Fail closed before authentication, database access, or Stripe work during
+  // the atomic Tip checkout cutover. Preview and local environments stay
+  // available for canaries; Production must be enabled explicitly.
+  if (
+    process.env.VERCEL_ENV === 'production' &&
+    process.env.STRIPE_TIP_CHECKOUT_ENABLED !== 'true'
+  ) {
+    return NextResponse.json(
+      {
+        error: 'Tip checkout is temporarily unavailable.',
+        code: 'TIP_CHECKOUT_UNAVAILABLE',
+      },
+      {
+        status: 503,
+        headers: {
+          'Cache-Control': 'no-store',
+          'Retry-After': '300',
+        },
+      }
+    )
+  }
+
+  return authenticatedPost(request)
+}
