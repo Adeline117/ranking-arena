@@ -9,6 +9,7 @@ import {
 } from '../../acquisition-manifest'
 import type { ParsedLeaderboardRow, RawPage, SourceRow } from '../../core/types'
 import {
+  fenceAttemptBoundLeaderboardPublicationCommit,
   prepareLeaderboardMetricTrust,
   reconcileLeaderboardMetricTrust,
   writeLeaderboardMetricTrust,
@@ -250,6 +251,82 @@ describe('Tier-A metric trust transaction writer', () => {
         data_contract: 'arena.ingest.leaderboard-acquisition-manifest@4',
       } as unknown as typeof v3.manifest)
     ).toThrow('unsupported acquisition manifest contract')
+  })
+
+  it('takes the acquisition source/window lock before the final exact v3 terminal check', async () => {
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: attemptBoundTrustFixture(),
+    })
+    const query = jest.fn(async (sqlInput: unknown) => {
+      const sql = String(sqlInput)
+      if (sql === `SET LOCAL lock_timeout = '5s'`) return { rows: [], rowCount: 0 }
+      if (sql.includes('pg_catalog.pg_advisory_xact_lock')) {
+        return { rows: [], rowCount: 1 }
+      }
+      if (sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')) {
+        return { rows: [{ attempt_seq: '41' }], rowCount: 1 }
+      }
+      throw new Error(`unexpected SQL: ${sql}`)
+    })
+
+    await expect(
+      fenceAttemptBoundLeaderboardPublicationCommit(queryClient(query), prepared)
+    ).resolves.toBeUndefined()
+
+    expect(query).toHaveBeenCalledTimes(3)
+    expect(query.mock.calls[0]).toEqual([`SET LOCAL lock_timeout = '5s'`])
+    expect(query.mock.calls[1][1]).toEqual(['arena.leaderboard-acquisition-source:1:30'])
+    expect(String(query.mock.calls[1][0])).toContain('pg_catalog.pg_advisory_xact_lock')
+    expect(String(query.mock.calls[2][0])).toContain(
+      'arena.latest_terminal_leaderboard_acquisitions AS terminal'
+    )
+    expect(String(query.mock.calls[2][0])).not.toContain('FOR UPDATE')
+  })
+
+  it('rejects the final v3 commit fence when the locked latest terminal changed', async () => {
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: attemptBoundTrustFixture(),
+    })
+    const query = jest.fn(async (sqlInput: unknown) => {
+      const sql = String(sqlInput)
+      if (sql === `SET LOCAL lock_timeout = '5s'`) return { rows: [], rowCount: 0 }
+      if (sql.includes('pg_catalog.pg_advisory_xact_lock')) {
+        return { rows: [], rowCount: 1 }
+      }
+      if (sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')) {
+        return { rows: [], rowCount: 0 }
+      }
+      throw new Error(`unexpected SQL: ${sql}`)
+    })
+
+    await expect(
+      fenceAttemptBoundLeaderboardPublicationCommit(queryClient(query), prepared)
+    ).rejects.toThrow('requires one exact complete acquisition outcome')
+    expect(query).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps the v2 final commit fence query-free', async () => {
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: trustFixture(),
+    })
+    const query = jest.fn()
+
+    await expect(
+      fenceAttemptBoundLeaderboardPublicationCommit(queryClient(query), prepared)
+    ).resolves.toBeUndefined()
+    expect(query).not.toHaveBeenCalled()
   })
 
   it('writes run, fail-closed window observations, and exact RAW refs on one client', async () => {
@@ -557,6 +634,40 @@ describe('Tier-A metric trust transaction writer', () => {
     await expect(reconcileLeaderboardMetricTrust(queryClient(query), prepared)).rejects.toThrow(
       'requires one exact complete acquisition outcome'
     )
+  })
+
+  it('keeps v3 read-only replay reconciliation lock-free', async () => {
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: attemptBoundTrustFixture(),
+    })
+    const baseQuery = reconciliationQuery(prepared)
+    const query = jest.fn(async (sqlInput: unknown, params?: unknown[]) => {
+      if (String(sqlInput).includes('arena.latest_terminal_leaderboard_acquisitions')) {
+        return { rows: [{ attempt_seq: '41' }], rowCount: 1 }
+      }
+      return baseQuery(sqlInput, params)
+    })
+
+    await expect(reconcileLeaderboardMetricTrust(queryClient(query), prepared)).resolves.toEqual(
+      expect.objectContaining({
+        snapshotId: 77,
+        trust: expect.objectContaining({ replayed: true }),
+      })
+    )
+
+    const statements = query.mock.calls.map(([sql]) => String(sql))
+    expect(statements.some((sql) => /pg_advisory_xact_lock|SET LOCAL|FOR UPDATE/i.test(sql))).toBe(
+      false
+    )
+    expect(
+      statements.filter((sql) =>
+        sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')
+      )
+    ).toHaveLength(1)
   })
 
   it('rejects an idempotent retry when one persisted artifact hash differs', async () => {

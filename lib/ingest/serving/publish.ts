@@ -23,6 +23,7 @@ import type {
 import type { RejectedRow } from '../staging/validate'
 import { deriveMissingRatios, deriveRiskFromBlocks } from '../core/series-risk'
 import { ensureHistoryPartitions } from './history-partitions'
+import { LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT } from '../acquisition-manifest'
 
 /** PURE-DEX sources the spec authorizes to self-compute risk from chain data
  *  (§31/32/34: "所有数据要靠我们链上算"). CEX gives real Sharpe on its page —
@@ -45,6 +46,7 @@ import {
   type CountVerdict,
 } from '../staging/count-check'
 import {
+  fenceAttemptBoundLeaderboardPublicationCommit,
   prepareLeaderboardMetricTrust,
   reconcileLeaderboardMetricTrust,
   snapshotLeaderboardTrustValue,
@@ -375,6 +377,9 @@ async function publishLeaderboardSnapshotInternal(
         if (existing.expectedCount !== expectedCount) {
           throw new Error('[publish] existing trusted snapshot expected_count conflicts with retry')
         }
+        if (preparedTrust.manifest.data_contract === LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT) {
+          await fenceAttemptBoundLeaderboardPublicationCommit(client, preparedTrust)
+        }
         commitAttempted = true
         await client.query('COMMIT')
         transactionOpen = false
@@ -608,6 +613,9 @@ async function publishLeaderboardSnapshotInternal(
         traderIds,
       })
       trustReceipt = { ...written, replayed: false }
+      if (preparedTrust.manifest.data_contract === LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT) {
+        await fenceAttemptBoundLeaderboardPublicationCommit(client, preparedTrust)
+      }
     }
 
     commitAttempted = true

@@ -5,6 +5,7 @@ const mockConnect = jest.fn()
 const mockPrepareTrust = jest.fn()
 const mockReconcileTrust = jest.fn()
 const mockWriteTrust = jest.fn()
+const mockFenceCommit = jest.fn()
 
 jest.mock('../../db', () => ({
   getIngestPool: jest.fn(() => {
@@ -15,6 +16,7 @@ jest.mock('../../db', () => ({
 
 jest.mock('../metric-trust-publish', () => ({
   snapshotLeaderboardTrustValue: (value: unknown) => JSON.parse(JSON.stringify(value)),
+  fenceAttemptBoundLeaderboardPublicationCommit: (...args: unknown[]) => mockFenceCommit(...args),
   prepareLeaderboardMetricTrust: (...args: unknown[]) => mockPrepareTrust(...args),
   reconcileLeaderboardMetricTrust: (...args: unknown[]) => mockReconcileTrust(...args),
   writeLeaderboardMetricTrust: (...args: unknown[]) => mockWriteTrust(...args),
@@ -77,6 +79,37 @@ const prepared = {
   expectedFields: [{ maxFreshnessMs: 6 * 60 * 60 * 1000 }],
 } as never
 
+const preparedV3 = {
+  ...prepared,
+  manifest: {
+    completed_at: '2026-07-21T10:00:03.000Z',
+    data_contract: 'arena.ingest.leaderboard-acquisition-manifest@3',
+    observation_cycle_id: 'tier-a:binance_futures:job-1:1784628000000',
+    acquisition_attempt: {
+      binding_contract: 'arena.ingest.leaderboard-acquisition-attempt-binding@1',
+      attempt_id: '00000000-0000-4000-8000-000000000001',
+      attempt_seq: 41,
+    },
+  },
+} as never
+
+async function emulateAttemptBoundCommitFence(
+  client: PoolClient,
+  attemptBoundPrepared: { src: SourceRow; timeframe: number }
+): Promise<void> {
+  await client.query(`SET LOCAL lock_timeout = '5s'`)
+  await client.query(
+    `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
+    [
+      `arena.leaderboard-acquisition-source:${attemptBoundPrepared.src.id}:${attemptBoundPrepared.timeframe}`,
+    ]
+  )
+  await client.query(
+    `SELECT terminal.attempt_seq::text
+       FROM arena.latest_terminal_leaderboard_acquisitions AS terminal`
+  )
+}
+
 interface HarnessOptions {
   commitError?: Error
   rollbackError?: Error
@@ -87,9 +120,14 @@ interface HarnessOptions {
 
 function clientHarness(options: HarnessOptions = {}) {
   const release = jest.fn()
-  const query = jest.fn(async (sqlInput: unknown) => {
+  const query = jest.fn(async (sqlInput: unknown, _params?: unknown[]) => {
     const sql = String(sqlInput)
-    if (sql.startsWith('BEGIN') || sql.includes('pg_advisory_xact_lock')) {
+    if (
+      sql.startsWith('BEGIN') ||
+      sql.startsWith('SET LOCAL') ||
+      sql.includes('pg_advisory_xact_lock') ||
+      sql.includes('arena.latest_terminal_leaderboard_acquisitions')
+    ) {
       return { rows: [], rowCount: 0 }
     }
     if (sql.includes('statement_timestamp()::text AS database_now')) {
@@ -141,11 +179,29 @@ function trustedInput() {
   }
 }
 
+function existingTrustedPublication() {
+  return {
+    snapshotId: 77,
+    scrapedAt: '2026-07-21T10:00:03.000Z',
+    expectedCount: 1,
+    actualCount: 1,
+    baselineUsed: 1,
+    traderIds: new Map([[row.exchangeTraderId, 1_001]]),
+    trust: {
+      sourceRunId: 'a'.repeat(64),
+      observationsWritten: 2,
+      artifactRefsWritten: 4,
+      replayed: true,
+    },
+  }
+}
+
 describe('atomic trusted leaderboard publication', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockPrepareTrust.mockReturnValue(prepared)
     mockReconcileTrust.mockResolvedValue(null)
+    mockFenceCommit.mockImplementation(emulateAttemptBoundCommitFence)
     mockWriteTrust.mockResolvedValue({
       sourceRunId: 'a'.repeat(64),
       observationsWritten: 2,
@@ -179,6 +235,102 @@ describe('atomic trusted leaderboard publication', () => {
     expect(mockWriteTrust.mock.invocationCallOrder[0]).toBeLessThan(
       harness.query.mock.invocationCallOrder[commitIndex]
     )
+    expect(mockFenceCommit).not.toHaveBeenCalled()
+    expect(harness.release).toHaveBeenCalledWith(false)
+  })
+
+  it('runs the v3 final fence after all new writes and immediately before COMMIT', async () => {
+    const harness = clientHarness()
+    mockConnect.mockResolvedValue(harness.client)
+    mockPrepareTrust.mockReturnValue(preparedV3)
+
+    await expect(publishTrustedLeaderboardSnapshot(trustedInput())).resolves.toEqual(
+      expect.objectContaining({
+        published: true,
+        trust: expect.objectContaining({ replayed: false }),
+      })
+    )
+
+    const statements = harness.query.mock.calls.map(([sql]) => String(sql))
+    const setTimeoutIndex = statements.indexOf(`SET LOCAL lock_timeout = '5s'`)
+    const acquisitionLockIndex = harness.query.mock.calls.findIndex(
+      ([, params]) =>
+        (params as string[] | undefined)?.[0] === 'arena.leaderboard-acquisition-source:1:30'
+    )
+    const terminalCheckIndex = statements.findIndex((sql) =>
+      sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')
+    )
+    const commitIndex = statements.indexOf('COMMIT')
+    const commitOrder = harness.query.mock.invocationCallOrder[commitIndex]
+    const fenceOrder = mockFenceCommit.mock.invocationCallOrder[0]
+    expect(mockFenceCommit).toHaveBeenCalledWith(harness.client, preparedV3)
+    expect(mockWriteTrust.mock.invocationCallOrder[0]).toBeLessThan(fenceOrder)
+    expect(fenceOrder).toBeLessThan(harness.query.mock.invocationCallOrder[setTimeoutIndex])
+    expect(setTimeoutIndex).toBeLessThan(acquisitionLockIndex)
+    expect(acquisitionLockIndex).toBeLessThan(terminalCheckIndex)
+    expect(commitIndex).toBe(terminalCheckIndex + 1)
+    expect(harness.query.mock.invocationCallOrder[terminalCheckIndex]).toBeLessThan(commitOrder)
+  })
+
+  it('runs the v3 final fence after exact existing replay reconciliation and before COMMIT', async () => {
+    const harness = clientHarness()
+    mockConnect.mockResolvedValue(harness.client)
+    mockPrepareTrust.mockReturnValue(preparedV3)
+    mockReconcileTrust.mockResolvedValue(existingTrustedPublication())
+
+    await expect(publishTrustedLeaderboardSnapshot(trustedInput())).resolves.toEqual(
+      expect.objectContaining({
+        published: true,
+        trust: expect.objectContaining({ replayed: true }),
+      })
+    )
+
+    const statements = harness.query.mock.calls.map(([sql]) => String(sql))
+    const setTimeoutIndex = statements.indexOf(`SET LOCAL lock_timeout = '5s'`)
+    const acquisitionLockIndex = harness.query.mock.calls.findIndex(
+      ([, params]) =>
+        (params as string[] | undefined)?.[0] === 'arena.leaderboard-acquisition-source:1:30'
+    )
+    const terminalCheckIndex = statements.findIndex((sql) =>
+      sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')
+    )
+    const commitOrder = harness.query.mock.invocationCallOrder[statements.indexOf('COMMIT')]
+    const fenceOrder = mockFenceCommit.mock.invocationCallOrder[0]
+    expect(mockWriteTrust).not.toHaveBeenCalled()
+    expect(mockReconcileTrust.mock.invocationCallOrder[0]).toBeLessThan(fenceOrder)
+    expect(fenceOrder).toBeLessThan(harness.query.mock.invocationCallOrder[setTimeoutIndex])
+    expect(setTimeoutIndex).toBeLessThan(acquisitionLockIndex)
+    expect(acquisitionLockIndex).toBeLessThan(terminalCheckIndex)
+    expect(statements.indexOf('COMMIT')).toBe(terminalCheckIndex + 1)
+    expect(harness.query.mock.invocationCallOrder[terminalCheckIndex]).toBeLessThan(commitOrder)
+  })
+
+  it.each([
+    ['new write', null],
+    ['existing replay', existingTrustedPublication()],
+  ])('rolls back a v3 %s when the final fence rejects', async (_path, existing) => {
+    const harness = clientHarness()
+    const fenceError = new Error('latest terminal changed under final fence')
+    mockConnect.mockResolvedValue(harness.client)
+    mockPrepareTrust.mockReturnValue(preparedV3)
+    mockReconcileTrust.mockResolvedValue(existing)
+    mockFenceCommit.mockImplementation(
+      async (client: PoolClient, attemptBoundPrepared: { src: SourceRow; timeframe: number }) => {
+        await emulateAttemptBoundCommitFence(client, attemptBoundPrepared)
+        throw fenceError
+      }
+    )
+
+    await expect(publishTrustedLeaderboardSnapshot(trustedInput())).rejects.toBe(fenceError)
+
+    const statements = harness.query.mock.calls.map(([sql]) => String(sql))
+    const terminalCheckIndex = statements.findIndex((sql) =>
+      sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')
+    )
+    expect(mockFenceCommit).toHaveBeenCalledTimes(1)
+    expect(statements).toContain('ROLLBACK')
+    expect(statements).not.toContain('COMMIT')
+    expect(statements.indexOf('ROLLBACK')).toBe(terminalCheckIndex + 1)
     expect(harness.release).toHaveBeenCalledWith(false)
   })
 
@@ -329,20 +481,10 @@ describe('atomic trusted leaderboard publication', () => {
     const primary = clientHarness({ commitError })
     const reconciliation = clientHarness()
     mockConnect.mockResolvedValueOnce(primary.client).mockResolvedValueOnce(reconciliation.client)
-    mockReconcileTrust.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      snapshotId: 77,
-      scrapedAt: '2026-07-21T10:00:03.000Z',
-      expectedCount: 1,
-      actualCount: 1,
-      baselineUsed: 1,
-      traderIds: new Map([[row.exchangeTraderId, 1_001]]),
-      trust: {
-        sourceRunId: 'a'.repeat(64),
-        observationsWritten: 2,
-        artifactRefsWritten: 4,
-        replayed: true,
-      },
-    })
+    mockPrepareTrust.mockReturnValue(preparedV3)
+    mockReconcileTrust
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(existingTrustedPublication())
 
     await expect(publishTrustedLeaderboardSnapshot(trustedInput())).resolves.toEqual(
       expect.objectContaining({
@@ -357,6 +499,14 @@ describe('atomic trusted leaderboard publication', () => {
       'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY',
       'COMMIT',
     ])
+    expect(mockFenceCommit).toHaveBeenCalledTimes(1)
+    expect(mockFenceCommit).toHaveBeenCalledWith(primary.client, preparedV3)
+    expect(mockFenceCommit).not.toHaveBeenCalledWith(reconciliation.client, preparedV3)
+    expect(
+      reconciliation.query.mock.calls.some(([sql]) =>
+        /pg_advisory_xact_lock|FOR UPDATE/i.test(String(sql))
+      )
+    ).toBe(false)
     expect(primary.query.mock.calls.map(([sql]) => String(sql))).not.toContain('ROLLBACK')
   })
 
