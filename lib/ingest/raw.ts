@@ -16,8 +16,16 @@ import { getIngestPool, ingestClientConnect } from './db'
 import type { RankingTimeframe, RawPage } from './core/types'
 import {
   parseLeaderboardAcquisitionManifest,
+  parseLeaderboardAcquisitionManifestV3,
+  type BuiltLeaderboardAcquisitionManifestV3,
   type LeaderboardAcquisitionManifest,
+  type LeaderboardAcquisitionManifestV3,
 } from './acquisition-manifest'
+import {
+  projectLeaderboardManifestV3Outcome,
+  type LeaderboardAcquisitionAttempt,
+  type LeaderboardManifestOutcomeProjection,
+} from './acquisition-attempts'
 import {
   STRICT_CANONICAL_JSON_CONTRACT,
   strictCanonicalJson,
@@ -130,6 +138,30 @@ export interface WriteLeaderboardRawArtifactSetInput {
 export interface LeaderboardRawArtifactSetReceipt {
   sourcePayload: RawObjectReceipt
   populationManifest: RawObjectReceipt
+}
+
+export interface WriteAttemptBoundLeaderboardRawArtifactSetInput {
+  attempt: LeaderboardAcquisitionAttempt
+  built: BuiltLeaderboardAcquisitionManifestV3
+  sourcePages: RawPage[]
+}
+
+export interface AttemptBoundLeaderboardRawArtifactSetReceipt extends LeaderboardRawArtifactSetReceipt {
+  projection: LeaderboardManifestOutcomeProjection
+}
+
+type LeaderboardAcquisitionManifestLike =
+  | LeaderboardAcquisitionManifest
+  | LeaderboardAcquisitionManifestV3
+
+interface NormalizedLeaderboardRawArtifactSetInput {
+  sourceId: number
+  sourceSlug: string
+  timeframe: RankingTimeframe
+  sourceRunId: string
+  sourcePages: RawPage[]
+  manifest: LeaderboardAcquisitionManifestLike
+  observationCycleId: string | null
 }
 
 interface RawObjectPointer {
@@ -283,9 +315,12 @@ function assertSafePositiveInteger(value: number, label: string): void {
   }
 }
 
-function validateLeaderboardRawArtifactSetInput(
-  input: WriteLeaderboardRawArtifactSetInput
-): LeaderboardAcquisitionManifest {
+function validateLeaderboardRawArtifactSetCoordinates(
+  input: Pick<
+    NormalizedLeaderboardRawArtifactSetInput,
+    'sourceId' | 'sourceSlug' | 'timeframe' | 'sourceRunId' | 'observationCycleId'
+  >
+): void {
   assertSafePositiveInteger(input.sourceId, 'source id')
   if (![7, 30, 90].includes(input.timeframe)) {
     throw artifactSetError('timeframe must be 7, 30, or 90')
@@ -303,19 +338,12 @@ function validateLeaderboardRawArtifactSetInput(
   ) {
     throw artifactSetError('observation cycle id must be canonical or null')
   }
+}
 
-  const manifest = parseLeaderboardAcquisitionManifest(input.manifest)
-  if (strictCanonicalSha256(manifest) !== input.sourceRunId) {
-    throw artifactSetError('canonical manifest hash does not match source run id')
-  }
-  if (
-    manifest.source.id !== input.sourceId ||
-    manifest.source.slug !== input.sourceSlug ||
-    manifest.timeframe !== input.timeframe ||
-    manifest.observation_cycle_id !== input.observationCycleId
-  ) {
-    throw artifactSetError('manifest source, timeframe, or cycle binding does not match the input')
-  }
+function validateLeaderboardManifestPages(
+  input: Pick<NormalizedLeaderboardRawArtifactSetInput, 'sourcePages'>,
+  manifest: LeaderboardAcquisitionManifestLike
+): void {
   if (manifest.source_pages.length !== input.sourcePages.length) {
     throw artifactSetError('source payload page count does not match the manifest')
   }
@@ -353,11 +381,31 @@ function validateLeaderboardRawArtifactSetInput(
   ) {
     throw artifactSetError('parser input digest does not match the persisted source pages')
   }
+}
+
+function validateLeaderboardRawArtifactSetInput(
+  input: WriteLeaderboardRawArtifactSetInput
+): LeaderboardAcquisitionManifest {
+  validateLeaderboardRawArtifactSetCoordinates(input)
+
+  const manifest = parseLeaderboardAcquisitionManifest(input.manifest)
+  if (strictCanonicalSha256(manifest) !== input.sourceRunId) {
+    throw artifactSetError('canonical manifest hash does not match source run id')
+  }
+  if (
+    manifest.source.id !== input.sourceId ||
+    manifest.source.slug !== input.sourceSlug ||
+    manifest.timeframe !== input.timeframe ||
+    manifest.observation_cycle_id !== input.observationCycleId
+  ) {
+    throw artifactSetError('manifest source, timeframe, or cycle binding does not match the input')
+  }
+  validateLeaderboardManifestPages(input, manifest)
   return manifest
 }
 
 function prepareLeaderboardTrustArtifact(
-  input: WriteLeaderboardRawArtifactSetInput,
+  input: NormalizedLeaderboardRawArtifactSetInput,
   role: LeaderboardTrustArtifactRole,
   payload: unknown,
   metaBase: Record<string, unknown>
@@ -500,7 +548,7 @@ async function loadLeaderboardTrustPointers(
 function validateLeaderboardTrustPointers(
   rows: readonly LeaderboardTrustPointerRow[],
   artifacts: readonly PreparedLeaderboardTrustArtifact[],
-  input: WriteLeaderboardRawArtifactSetInput,
+  input: NormalizedLeaderboardRawArtifactSetInput,
   allowUnbound: boolean
 ): { state: 'bound' | 'unbound'; receipts: LeaderboardRawArtifactSetReceipt } {
   if (rows.length !== artifacts.length) {
@@ -584,7 +632,7 @@ function validateLeaderboardTrustPointers(
 
 async function insertLeaderboardTrustPointer(
   client: PoolClient,
-  input: WriteLeaderboardRawArtifactSetInput,
+  input: NormalizedLeaderboardRawArtifactSetInput,
   artifact: PreparedLeaderboardTrustArtifact
 ): Promise<void> {
   const conflictClause =
@@ -622,7 +670,7 @@ async function insertLeaderboardTrustPointer(
 
 async function bindUnboundLeaderboardTrustPointers(
   client: PoolClient,
-  input: WriteLeaderboardRawArtifactSetInput,
+  input: NormalizedLeaderboardRawArtifactSetInput,
   artifacts: readonly PreparedLeaderboardTrustArtifact[],
   receipts: LeaderboardRawArtifactSetReceipt
 ): Promise<void> {
@@ -650,7 +698,7 @@ async function bindUnboundLeaderboardTrustPointers(
 }
 
 async function reconcileLeaderboardTrustCommit(
-  input: WriteLeaderboardRawArtifactSetInput,
+  input: NormalizedLeaderboardRawArtifactSetInput,
   artifacts: readonly PreparedLeaderboardTrustArtifact[],
   commitError: unknown
 ): Promise<LeaderboardRawArtifactSetReceipt> {
@@ -677,7 +725,7 @@ async function reconcileLeaderboardTrustCommit(
 }
 
 async function persistLeaderboardTrustPointers(
-  input: WriteLeaderboardRawArtifactSetInput,
+  input: NormalizedLeaderboardRawArtifactSetInput,
   artifacts: readonly PreparedLeaderboardTrustArtifact[]
 ): Promise<LeaderboardRawArtifactSetReceipt> {
   const client = await ingestClientConnect()
@@ -769,7 +817,7 @@ export async function writeLeaderboardRawArtifactSet(
   const manifest = validateLeaderboardRawArtifactSetInput(input)
   // Snapshot every later-read binding before the first Storage await. Callers
   // cannot race a mutable input object against the database transaction.
-  const normalizedInput: WriteLeaderboardRawArtifactSetInput = {
+  const normalizedInput: NormalizedLeaderboardRawArtifactSetInput = {
     sourceId: input.sourceId,
     sourceSlug: input.sourceSlug,
     timeframe: input.timeframe,
@@ -811,6 +859,96 @@ export async function writeLeaderboardRawArtifactSet(
     artifact.durableCompressedBytes = await uploadDeterministicRaw(artifact)
   }
   return persistLeaderboardTrustPointers(normalizedInput, artifacts)
+}
+
+/**
+ * Persist an attempt-bound v3 capture. The returned projection is the exact
+ * validated terminal projection that the worker must pass to the acquisition
+ * ledger after both RAW pointers are durable.
+ */
+export async function writeAttemptBoundLeaderboardRawArtifactSet(
+  input: WriteAttemptBoundLeaderboardRawArtifactSetInput
+): Promise<AttemptBoundLeaderboardRawArtifactSetReceipt> {
+  // Snapshot all caller-owned identity and evidence before the first await.
+  const attempt: LeaderboardAcquisitionAttempt = Object.freeze({ ...input.attempt })
+  const manifest = parseLeaderboardAcquisitionManifestV3(input.built.manifest)
+  const built: BuiltLeaderboardAcquisitionManifestV3 = Object.freeze({
+    manifest,
+    canonicalJson: input.built.canonicalJson,
+    sourceRunId: input.built.sourceRunId,
+  })
+  const sourcePages = input.sourcePages.map((page) => ({ ...page }))
+  const projection = projectLeaderboardManifestV3Outcome(attempt, built)
+  const normalizedInput: NormalizedLeaderboardRawArtifactSetInput = {
+    sourceId: attempt.sourceId,
+    sourceSlug: attempt.sourceSlug,
+    timeframe: attempt.timeframe,
+    sourceRunId: projection.sourceRunId,
+    sourcePages,
+    manifest,
+    observationCycleId: attempt.observationCycleId,
+  }
+  validateLeaderboardRawArtifactSetCoordinates(normalizedInput)
+  validateLeaderboardManifestPages(normalizedInput, manifest)
+
+  const acquisitionAttemptMeta = Object.freeze({
+    binding_contract: projection.binding.bindingContract,
+    attempt_id: projection.binding.attemptId,
+    attempt_seq: projection.binding.attemptSeq,
+    runner_git_sha: projection.binding.runnerGitSha,
+    capture_started_at: projection.binding.captureStartedAt,
+    capture_completed_at: projection.binding.captureCompletedAt,
+    capture_evidence_state: projection.captureEvidenceState,
+    termination_reason: projection.terminationReason,
+    source_page_count: projection.sourcePageCount,
+    population_report_state: projection.populationReportState,
+    reported_population: projection.reportedPopulation,
+    page_count_report_state: projection.pageCountReportState,
+    reported_page_count: projection.reportedPageCount,
+    observed_population: projection.observedPopulation,
+    accepted_population: projection.acceptedPopulation,
+    rejected_row_count: projection.rejectedRowCount,
+    deduplicated_row_count: projection.deduplicatedRowCount,
+    caller_limited: projection.callerLimited,
+    safety_limited: projection.safetyLimited,
+    acquisition_state: projection.acquisitionState,
+    population_state: projection.populationState,
+  })
+  const commonMeta = {
+    surface: 'tier_a_leaderboard',
+    source_run_id: normalizedInput.sourceRunId,
+    ...(normalizedInput.observationCycleId
+      ? { observation_cycle_id: normalizedInput.observationCycleId }
+      : {}),
+    acquisition_attempt: acquisitionAttemptMeta,
+  }
+  const artifacts = [
+    prepareLeaderboardTrustArtifact(
+      normalizedInput,
+      'source_payload',
+      normalizedInput.sourcePages,
+      {
+        ...commonMeta,
+        pageCount: normalizedInput.sourcePages.length,
+      }
+    ),
+    prepareLeaderboardTrustArtifact(normalizedInput, 'population_manifest', manifest, {
+      ...commonMeta,
+      data_contract: manifest.data_contract,
+    }),
+  ] as const
+  if (artifacts[1].contentHash !== normalizedInput.sourceRunId) {
+    throw artifactSetError('serialized manifest digest does not match source run id')
+  }
+  if (artifacts[0].storagePath === artifacts[1].storagePath) {
+    throw artifactSetError('source payload and manifest Storage paths must differ')
+  }
+
+  for (const artifact of artifacts) {
+    artifact.durableCompressedBytes = await uploadDeterministicRaw(artifact)
+  }
+  const receipts = await persistLeaderboardTrustPointers(normalizedInput, artifacts)
+  return { ...receipts, projection }
 }
 
 /** Write one raw payload; returns its durable pointer and computed content identity. */

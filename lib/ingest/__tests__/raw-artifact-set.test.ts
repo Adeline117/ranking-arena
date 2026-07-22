@@ -1,4 +1,4 @@
-import { gzipSync } from 'node:zlib'
+import { gzipSync, gunzipSync } from 'node:zlib'
 import type { PoolClient } from 'pg'
 
 const mockUpload = jest.fn()
@@ -18,8 +18,19 @@ jest.mock('@/lib/ingest/db', () => ({
   ingestClientConnect: (...args: unknown[]) => mockConnect(...args),
 }))
 
-import { buildLeaderboardAcquisitionManifest } from '@/lib/ingest/acquisition-manifest'
-import { writeLeaderboardRawArtifactSet } from '@/lib/ingest/raw'
+import {
+  buildLeaderboardAcquisitionManifest,
+  buildLeaderboardAcquisitionManifestV3,
+  LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+} from '@/lib/ingest/acquisition-manifest'
+import {
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+  type LeaderboardAcquisitionAttempt,
+} from '@/lib/ingest/acquisition-attempts'
+import {
+  writeAttemptBoundLeaderboardRawArtifactSet,
+  writeLeaderboardRawArtifactSet,
+} from '@/lib/ingest/raw'
 import type { RawPage } from '@/lib/ingest/core/types'
 import { strictCanonicalJson, strictCanonicalSha256 } from '@/lib/ingest/strict-canonical-json'
 
@@ -54,8 +65,13 @@ const sourcePages: RawPage[] = [
   },
 ]
 
-function artifactInput() {
-  const built = buildLeaderboardAcquisitionManifest({
+const attemptId = '00000000-0000-4000-8000-000000000001'
+const observationCycleId = 'tier-a:binance_futures:job-1:1784628000000'
+const captureStartedAt = '2026-07-21T10:00:00.000Z'
+const captureCompletedAt = '2026-07-21T10:00:03.000Z'
+
+function manifestBuildInput(): Parameters<typeof buildLeaderboardAcquisitionManifest>[0] {
+  return {
     source: {
       id: 1,
       slug: 'binance_futures',
@@ -65,10 +81,10 @@ function artifactInput() {
     },
     surface: 'tier_a_leaderboard',
     timeframe: 30,
-    started_at: '2026-07-21T10:00:00.000Z',
-    completed_at: '2026-07-21T10:00:03.000Z',
+    started_at: captureStartedAt,
+    completed_at: captureCompletedAt,
     runner_git_sha: 'a'.repeat(40),
-    observation_cycle_id: 'tier-a:binance_futures:job-1:1784628000000',
+    observation_cycle_id: observationCycleId,
     capture_evidence_state: 'verified',
     termination_reason: 'reported_population_reached',
     capture_config: { caller_page_cap: null, safety_page_cap: 5_000 },
@@ -107,16 +123,72 @@ function artifactInput() {
     },
     accepted_population: 3,
     rejected_row_count: 0,
-  })
+  }
+}
+
+function artifactInput() {
+  const built = buildLeaderboardAcquisitionManifest(manifestBuildInput())
   return {
     sourceId: 1,
     sourceSlug: 'binance_futures',
     timeframe: 30 as const,
     sourceRunId: built.sourceRunId,
-    sourcePages,
+    sourcePages: sourcePages.map((page) => ({ ...page })),
     manifest: built.manifest,
-    observationCycleId: 'tier-a:binance_futures:job-1:1784628000000',
+    observationCycleId,
   }
+}
+
+function acquisitionAttempt(
+  overrides: Partial<LeaderboardAcquisitionAttempt> = {}
+): LeaderboardAcquisitionAttempt {
+  return {
+    attemptSeq: 41,
+    attemptId,
+    sourceId: 1,
+    sourceSlug: 'binance_futures',
+    adapterSlug: 'binance',
+    timeframe: 30,
+    observationCycleId,
+    queueJobId: 'job-1',
+    queueAttempt: 1,
+    captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+    attemptBindingContract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+    runnerGitSha: 'a'.repeat(40),
+    workerRegion: 'vps_sg',
+    sourceStatus: 'active',
+    sourceServingMode: 'serving',
+    sourceCurrency: 'USDT',
+    sourceFetchRegion: 'vps_sg',
+    recordedStartedAt: captureStartedAt,
+    replayed: false,
+    ...overrides,
+  }
+}
+
+function attemptBoundArtifactInput(
+  options: {
+    attempt?: Partial<LeaderboardAcquisitionAttempt>
+    binding?: Partial<{
+      binding_contract: typeof LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT
+      attempt_id: string
+      attempt_seq: number
+    }>
+    manifest?: Partial<ReturnType<typeof manifestBuildInput>>
+  } = {}
+) {
+  const attempt = acquisitionAttempt(options.attempt)
+  const built = buildLeaderboardAcquisitionManifestV3({
+    ...manifestBuildInput(),
+    ...options.manifest,
+    acquisition_attempt: {
+      binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+      attempt_id: attempt.attemptId,
+      attempt_seq: attempt.attemptSeq,
+      ...options.binding,
+    },
+  })
+  return { attempt, built, sourcePages: sourcePages.map((page) => ({ ...page })) }
 }
 
 function downloadBody(payload: Buffer) {
@@ -299,6 +371,12 @@ describe('writeLeaderboardRawArtifactSet', () => {
     expect(first.populationManifest.storagePath).toContain(
       `${input.sourceRunId}/population_manifest_${input.sourceRunId}.json.gz`
     )
+    expect(first).not.toHaveProperty('projection')
+    expect(
+      database.pointers.every(
+        (pointer) => !Object.hasOwn(pointer.meta as Record<string, unknown>, 'acquisition_attempt')
+      )
+    ).toBe(true)
     expect(database.pointers.map((pointer) => pointer.fetched_at)).toEqual([
       input.manifest.completed_at,
       input.manifest.completed_at,
@@ -313,6 +391,220 @@ describe('writeLeaderboardRawArtifactSet', () => {
     expect(insertSql[0]).toContain("job_type = 'tier_a'")
     expect(insertSql[0]).toContain('trader_id IS NULL')
     expect(insertSql[1]).toContain("trust_artifact_role = 'population_manifest'")
+  })
+
+  it('writes one attempt-bound pair with the same complete identity summary on both RAW objects', async () => {
+    const database = makeDatabaseHarness()
+    mockConnect.mockResolvedValue(database.client)
+    const input = attemptBoundArtifactInput()
+
+    const first = await writeAttemptBoundLeaderboardRawArtifactSet(input)
+    const second = await writeAttemptBoundLeaderboardRawArtifactSet(input)
+
+    expect(second).toEqual(first)
+    expect(database.pointers).toHaveLength(2)
+    expect(Object.isFrozen(first.projection)).toBe(true)
+    expect(Object.isFrozen(first.projection.binding)).toBe(true)
+    expect(first.populationManifest.contentHash).toBe(input.built.sourceRunId)
+    expect(first.sourcePayload.storagePath).toContain(`${input.built.sourceRunId}/source_payload_`)
+    expect(first.populationManifest.storagePath).toContain(
+      `${input.built.sourceRunId}/population_manifest_${input.built.sourceRunId}.json.gz`
+    )
+
+    const expectedAttemptMeta = {
+      binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+      attempt_id: attemptId,
+      attempt_seq: 41,
+      runner_git_sha: 'a'.repeat(40),
+      capture_started_at: captureStartedAt,
+      capture_completed_at: captureCompletedAt,
+      capture_evidence_state: 'verified',
+      termination_reason: 'reported_population_reached',
+      source_page_count: 2,
+      population_report_state: 'consistent',
+      reported_population: 3,
+      page_count_report_state: 'unknown',
+      reported_page_count: null,
+      observed_population: 3,
+      accepted_population: 3,
+      rejected_row_count: 0,
+      deduplicated_row_count: 0,
+      caller_limited: false,
+      safety_limited: false,
+      acquisition_state: 'complete',
+      population_state: 'verified',
+    }
+    const attemptMetas = database.pointers.map(
+      (pointer) => (pointer.meta as Record<string, unknown>).acquisition_attempt
+    )
+    expect(attemptMetas).toStrictEqual([expectedAttemptMeta, expectedAttemptMeta])
+    expect(strictCanonicalJson(attemptMetas[0])).toBe(strictCanonicalJson(attemptMetas[1]))
+    expect(database.pointers.map((pointer) => pointer.fetched_at)).toStrictEqual([
+      captureCompletedAt,
+      captureCompletedAt,
+    ])
+
+    const sourcePointer = database.pointers.find(
+      (pointer) => pointer.trust_artifact_role === 'source_payload'
+    )!
+    const manifestPointer = database.pointers.find(
+      (pointer) => pointer.trust_artifact_role === 'population_manifest'
+    )!
+    expect(sourcePointer.meta).toMatchObject({ pageCount: 2 })
+    expect(manifestPointer.meta).toMatchObject({
+      data_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+    })
+    expect(mockUpload).toHaveBeenCalledTimes(4)
+    expect(mockDownload).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['attempt id', { attemptId: '00000000-0000-4000-8000-000000000002' }],
+    ['attempt sequence', { attemptSeq: 42 }],
+  ] as const)(
+    'uses different physical RAW paths when only the %s changes',
+    async (_label, attemptOverride) => {
+      const database = makeDatabaseHarness()
+      mockConnect.mockResolvedValue(database.client)
+      const firstInput = attemptBoundArtifactInput()
+      const secondInput = attemptBoundArtifactInput({ attempt: attemptOverride })
+
+      const first = await writeAttemptBoundLeaderboardRawArtifactSet(firstInput)
+      const second = await writeAttemptBoundLeaderboardRawArtifactSet(secondInput)
+
+      expect(secondInput.built.sourceRunId).not.toBe(firstInput.built.sourceRunId)
+      expect(second.sourcePayload.contentHash).toBe(first.sourcePayload.contentHash)
+      expect(second.sourcePayload.storagePath).not.toBe(first.sourcePayload.storagePath)
+      expect(second.populationManifest.storagePath).not.toBe(first.populationManifest.storagePath)
+      expect(database.pointers).toHaveLength(4)
+    }
+  )
+
+  it.each([
+    [
+      'manifest attempt id',
+      () =>
+        attemptBoundArtifactInput({
+          binding: { attempt_id: '00000000-0000-4000-8000-000000000002' },
+        }),
+    ],
+    [
+      'manifest attempt sequence',
+      () => attemptBoundArtifactInput({ binding: { attempt_seq: 42 } }),
+    ],
+    [
+      'capture contract',
+      () =>
+        attemptBoundArtifactInput({
+          attempt: { captureContract: 'arena.ingest.leaderboard-acquisition-manifest@2' },
+        }),
+    ],
+    ['runner SHA', () => attemptBoundArtifactInput({ attempt: { runnerGitSha: 'b'.repeat(40) } })],
+    [
+      'database start',
+      () =>
+        attemptBoundArtifactInput({
+          attempt: { recordedStartedAt: '2026-07-21T10:00:00.001Z' },
+        }),
+    ],
+    [
+      'canonical manifest JSON',
+      () => {
+        const input = attemptBoundArtifactInput()
+        return { ...input, built: { ...input.built, canonicalJson: 'forged' } }
+      },
+    ],
+    [
+      'source run id',
+      () => {
+        const input = attemptBoundArtifactInput()
+        return { ...input, built: { ...input.built, sourceRunId: 'd'.repeat(64) } }
+      },
+    ],
+  ] as const)('rejects %s drift before Storage or database I/O', async (_label, buildInput) => {
+    await expect(writeAttemptBoundLeaderboardRawArtifactSet(buildInput())).rejects.toThrow(
+      /attempt|bind|digest/
+    )
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('rejects a forged attempt-bound source page before Storage or database I/O', async () => {
+    const input = attemptBoundArtifactInput()
+
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet({
+        ...input,
+        sourcePages: [{ ...input.sourcePages[0], payload: { forged: true } }, input.sourcePages[1]],
+      })
+    ).rejects.toThrow('source payload page 1 does not match the manifest')
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it.each(['source_payload', 'population_manifest'] as const)(
+    'rejects an exact retry when the %s pointer carries foreign attempt metadata',
+    async (role) => {
+      const database = makeDatabaseHarness()
+      mockConnect.mockResolvedValue(database.client)
+      const input = attemptBoundArtifactInput()
+      await writeAttemptBoundLeaderboardRawArtifactSet(input)
+      const pointer = database.pointers.find((candidate) => candidate.trust_artifact_role === role)!
+      const meta = pointer.meta as Record<string, unknown>
+      pointer.meta = {
+        ...meta,
+        acquisition_attempt: {
+          ...(meta.acquisition_attempt as Record<string, unknown>),
+          attempt_id: '00000000-0000-4000-8000-000000000002',
+        },
+      }
+
+      await expect(writeAttemptBoundLeaderboardRawArtifactSet(input)).rejects.toThrow(
+        new RegExp(`database pointer \\d+ does not match ${role}`)
+      )
+      expect(database.query).toHaveBeenCalledWith('ROLLBACK')
+    }
+  )
+
+  it('snapshots attempt, manifest, and source pages before the first Storage await', async () => {
+    const database = makeDatabaseHarness()
+    mockConnect.mockResolvedValue(database.client)
+    let releaseFirstUpload: (() => void) | undefined
+    mockUpload.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseFirstUpload = () => resolve({ error: null })
+        })
+    )
+    const input = attemptBoundArtifactInput()
+
+    const pending = writeAttemptBoundLeaderboardRawArtifactSet(input)
+    expect(releaseFirstUpload).toBeDefined()
+    input.attempt.attemptId = '00000000-0000-4000-8000-000000000002'
+    input.built.manifest.acquisition_attempt.attempt_id = '00000000-0000-4000-8000-000000000002'
+    input.sourcePages[0].payload = { forged: true }
+    releaseFirstUpload!()
+
+    const receipt = await pending
+    expect(receipt.projection.binding.attemptId).toBe(attemptId)
+    const persistedSourcePages = JSON.parse(
+      gunzipSync(mockUpload.mock.calls[0][1] as Buffer).toString('utf8')
+    ) as RawPage[]
+    const persistedManifest = JSON.parse(
+      gunzipSync(mockUpload.mock.calls[1][1] as Buffer).toString('utf8')
+    ) as { acquisition_attempt: { attempt_id: string } }
+    expect(persistedSourcePages[0].payload).toStrictEqual({
+      data: [{ id: 'one' }, { id: 'two' }],
+      total: 3,
+    })
+    expect(persistedManifest.acquisition_attempt.attempt_id).toBe(attemptId)
+    expect(
+      database.pointers.map(
+        (pointer) =>
+          ((pointer.meta as Record<string, unknown>).acquisition_attempt as Record<string, unknown>)
+            .attempt_id
+      )
+    ).toStrictEqual([attemptId, attemptId])
   })
 
   it('uses the verified existing gzip length after a first-attempt 409', async () => {
