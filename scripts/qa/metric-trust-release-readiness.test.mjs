@@ -26,10 +26,37 @@ test('metric-trust readiness requires the exact complete contract', () => {
     readyPayload({ missing: ['arena.metric_trust_observations'] }),
     readyPayload({ missing: 'none' }),
     readyPayload({ legacy_complete_verified_count: 1 }),
+    readyPayload({ legacy_complete_verified_count: -1 }),
     readyPayload({ source_page_lineage_column: false }),
+    readyPayload({ extra: true }),
   ]) {
     assert.equal(validateMetricTrustReadiness(payload).ready, false)
   }
+})
+
+test('metric-trust readiness distinguishes missing objects, quarantine, and inconsistent flags', () => {
+  assert.deepEqual(
+    validateMetricTrustReadiness(
+      readyPayload({
+        ready: false,
+        legacy_complete_verified_count: 1,
+      })
+    ),
+    { ready: false, reason: 'legacy complete observations require quarantine' }
+  )
+  assert.deepEqual(
+    validateMetricTrustReadiness(
+      readyPayload({
+        ready: false,
+        missing: ['arena.metric_trust_observations'],
+      })
+    ),
+    { ready: false, reason: 'required metric-trust database objects are missing' }
+  )
+  assert.deepEqual(validateMetricTrustReadiness(readyPayload({ ready: false })), {
+    ready: false,
+    reason: 'readiness ready flag is inconsistent',
+  })
 })
 
 test('release verification is project-bound and sends credentials only as headers', async () => {
@@ -116,6 +143,6 @@ test('release verification retries transient responses without accepting malform
       fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ready: true }) }),
       sleep: async () => {},
     }),
-    /contract is missing or unsupported/
+    /payload keys are malformed/
   )
 })
