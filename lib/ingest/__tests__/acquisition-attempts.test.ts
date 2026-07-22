@@ -4,12 +4,17 @@ jest.mock('../db', () => ({
   ingestClientConnect: (...args: unknown[]) => mockConnect(...args),
 }))
 
-import { buildLeaderboardAcquisitionManifest } from '../acquisition-manifest'
 import {
+  buildLeaderboardAcquisitionManifest,
+  buildLeaderboardAcquisitionManifestV3,
+} from '../acquisition-manifest'
+import {
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
   finishLeaderboardAcquisitionAttempt,
   LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
   LEGACY_LEADERBOARD_ACQUISITION_CONTRACT,
   projectLeaderboardManifestOutcome,
+  projectLeaderboardManifestV3Outcome,
   startLeaderboardAcquisitionAttempt,
   VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT,
   type LeaderboardAcquisitionAttempt,
@@ -110,7 +115,9 @@ function sourceReports(population: number | null, pageCount: number | null, page
   }
 }
 
-function builtManifest(kind: 'complete' | 'partial' | 'unknown') {
+function manifestInput(
+  kind: 'complete' | 'partial' | 'unknown'
+): Parameters<typeof buildLeaderboardAcquisitionManifest>[0] {
   const partial = kind === 'partial'
   const unknown = kind === 'unknown'
   const reports = sourceReports(
@@ -126,7 +133,7 @@ function builtManifest(kind: 'complete' | 'partial' | 'unknown') {
     url: 'https://example.test/leaderboard?page=1',
     fetchedAt: '2026-07-22T03:00:01.000Z',
   }
-  return buildLeaderboardAcquisitionManifest({
+  return {
     source: {
       id: 1,
       slug: 'binance_futures',
@@ -161,6 +168,28 @@ function builtManifest(kind: 'complete' | 'partial' | 'unknown') {
     parser_transformation: { kind: 'identity_projection', source_page_ordinals: [1] },
     accepted_population: 1,
     rejected_row_count: 0,
+  }
+}
+
+function builtManifest(kind: 'complete' | 'partial' | 'unknown') {
+  return buildLeaderboardAcquisitionManifest(manifestInput(kind))
+}
+
+function builtManifestV3(
+  kind: 'complete' | 'partial' | 'unknown',
+  acquisitionAttempt: {
+    binding_contract: typeof LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT
+    attempt_id: string
+    attempt_seq: number
+  } = {
+    binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+    attempt_id: attemptId,
+    attempt_seq: 41,
+  }
+) {
+  return buildLeaderboardAcquisitionManifestV3({
+    ...manifestInput(kind),
+    acquisition_attempt: acquisitionAttempt,
   })
 }
 
@@ -191,6 +220,19 @@ describe('leaderboard acquisition attempt client', () => {
     ])
   })
 
+  it('starts an attempt-bound v3 acquisition without weakening the v2 contract', async () => {
+    enqueueQuery({
+      rows: [attemptRow({ capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT })],
+    })
+
+    await expect(
+      startLeaderboardAcquisitionAttempt({
+        ...startInput(),
+        captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+      })
+    ).resolves.toEqual(attempt({ captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT }))
+  })
+
   it.each([
     ['non-canonical UUID', { attemptId: 'ABCDEFAB-0000-4000-8000-000000000001' }],
     ['invalid timeframe', { timeframe: 14 }],
@@ -198,6 +240,13 @@ describe('leaderboard acquisition attempt client', () => {
     ['padded cycle', { observationCycleId: ' cycle ' }],
     ['zero runner SHA', { runnerGitSha: '0'.repeat(40) }],
     ['missing verified runner SHA', { runnerGitSha: null }],
+    [
+      'missing attempt-bound runner SHA',
+      {
+        captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+        runnerGitSha: null,
+      },
+    ],
     ['invalid worker region', { workerRegion: 'bad region' }],
   ])('rejects %s before database I/O', async (_label, override) => {
     await expect(
@@ -307,6 +356,148 @@ describe('leaderboard acquisition attempt client', () => {
         built
       )
     ).toThrow('does not bind the durable attempt')
+  })
+
+  it('projects a frozen v3 outcome only when the canonical body binds the exact attempt', () => {
+    const boundAttempt = attempt({
+      captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+    })
+    const projection = projectLeaderboardManifestV3Outcome(
+      boundAttempt,
+      builtManifestV3('complete')
+    )
+
+    expect(Object.isFrozen(projection)).toBe(true)
+    expect(Object.isFrozen(projection.binding)).toBe(true)
+    expect(projection).toMatchObject({
+      terminalState: 'complete',
+      populationState: 'verified',
+      reasonCode: null,
+      binding: {
+        bindingContract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+        attemptId,
+        attemptSeq: 41,
+        captureStartedAt: startedAt,
+        captureCompletedAt: completedAt,
+        runnerGitSha: 'a'.repeat(40),
+      },
+    })
+  })
+
+  it.each([
+    [
+      'attempt id',
+      {
+        binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+        attempt_id: '00000000-0000-4000-8000-000000000002',
+        attempt_seq: 41,
+      },
+    ],
+    [
+      'attempt sequence',
+      {
+        binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+        attempt_id: attemptId,
+        attempt_seq: 42,
+      },
+    ],
+  ] as const)('rejects v3 evidence bound to a foreign %s', (_label, binding) => {
+    expect(() =>
+      projectLeaderboardManifestV3Outcome(
+        attempt({ captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT }),
+        builtManifestV3('complete', binding)
+      )
+    ).toThrow('does not bind the durable attempt identity')
+  })
+
+  it('keeps v2 and v3 projection contracts isolated', () => {
+    expect(() =>
+      projectLeaderboardManifestV3Outcome(attempt(), builtManifestV3('complete'))
+    ).toThrow('only an attempt-bound v3 attempt')
+    expect(() =>
+      projectLeaderboardManifestOutcome(
+        attempt({ captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT }),
+        builtManifest('complete')
+      )
+    ).toThrow('only a v2 attempt')
+  })
+
+  it('rejects v3 evidence whose DB start belongs to another attempt', () => {
+    expect(() =>
+      projectLeaderboardManifestV3Outcome(
+        attempt({
+          captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+          recordedStartedAt: '2026-07-22T03:00:00.124Z',
+        }),
+        builtManifestV3('complete')
+      )
+    ).toThrow('does not bind the durable attempt')
+  })
+
+  it.each([
+    ['source slug', { sourceSlug: 'binance_spot' }],
+    ['adapter slug', { adapterSlug: 'other_adapter' }],
+    ['timeframe', { timeframe: 7 }],
+    ['observation cycle', { observationCycleId: 'tier-a:binance_futures:job-2:1000' }],
+    ['runner SHA', { runnerGitSha: 'b'.repeat(40) }],
+  ] as const)('rejects v3 evidence with durable %s drift', (_label, override) => {
+    expect(() =>
+      projectLeaderboardManifestV3Outcome(
+        attempt({
+          captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+          ...(override as Partial<LeaderboardAcquisitionAttempt>),
+        }),
+        builtManifestV3('complete')
+      )
+    ).toThrow('does not bind the durable attempt')
+  })
+
+  it.each([
+    ['canonical JSON', { canonicalJson: 'forged' }],
+    ['source run id', { sourceRunId: 'd'.repeat(64) }],
+  ])('rejects v3 evidence with a forged %s', (_label, override) => {
+    expect(() =>
+      projectLeaderboardManifestV3Outcome(
+        attempt({ captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT }),
+        { ...builtManifestV3('complete'), ...override }
+      )
+    ).toThrow('digest does not match its canonical body')
+  })
+
+  it('finishes an attempt-bound v3 projection through the same exact terminal contract', async () => {
+    const boundAttempt = attempt({
+      captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+    })
+    const projection = projectLeaderboardManifestV3Outcome(
+      boundAttempt,
+      builtManifestV3('complete')
+    )
+    const client = enqueueQuery({
+      rows: [
+        {
+          attempt_seq: '41',
+          terminal_state: 'complete',
+          recorded_completed_at: '2026-07-22 03:00:03.789+00',
+        },
+      ],
+    })
+
+    await expect(
+      finishLeaderboardAcquisitionAttempt({
+        kind: 'manifest',
+        attempt: boundAttempt,
+        projection,
+        sourcePayloadRawObjectId: 301,
+        manifestRawObjectId: 302,
+      })
+    ).resolves.toMatchObject({ attemptSeq: 41, terminalState: 'complete' })
+    expect(client.query.mock.calls[0][1]).toHaveLength(25)
+    expect(client.query.mock.calls[0][1].slice(8, 12)).toEqual([
+      projection.sourceRunId,
+      301,
+      302,
+      null,
+    ])
   })
 
   it('finishes a manifest through the exact named 25-argument projection', async () => {

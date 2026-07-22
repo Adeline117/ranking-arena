@@ -11,9 +11,13 @@ import { randomUUID } from 'node:crypto'
 import {
   LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
   LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT,
+  LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
   parseLeaderboardAcquisitionManifest,
+  parseLeaderboardAcquisitionManifestV3,
   type BuiltLeaderboardAcquisitionManifest,
+  type BuiltLeaderboardAcquisitionManifestV3,
   type LeaderboardAcquisitionManifest,
+  type LeaderboardAcquisitionManifestV3,
 } from './acquisition-manifest'
 import type { RankingTimeframe } from './core/types'
 import { ingestClientConnect } from './db'
@@ -21,6 +25,8 @@ import { strictCanonicalJson, strictCanonicalSha256 } from './strict-canonical-j
 
 export { LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT } from './acquisition-manifest'
 export const VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT = LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT
+export const ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT =
+  LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT
 export const LEGACY_LEADERBOARD_ACQUISITION_CONTRACT = 'legacy_unverified' as const
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
@@ -31,6 +37,7 @@ const MANIFEST_PROJECTION_BRAND: unique symbol = Symbol('leaderboard-manifest-ou
 
 export type LeaderboardAcquisitionContract =
   | typeof VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT
+  | typeof ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT
   | typeof LEGACY_LEADERBOARD_ACQUISITION_CONTRACT
 export type LeaderboardAcquisitionTerminalState =
   | 'complete'
@@ -47,6 +54,9 @@ export type LeaderboardCaptureEvidenceState =
 export type LeaderboardTerminationReason = LeaderboardAcquisitionManifest['termination_reason']
 export type LeaderboardAggregateReportState =
   LeaderboardAcquisitionManifest['population']['reports']['population']['state']
+type LeaderboardAcquisitionManifestLike =
+  | LeaderboardAcquisitionManifest
+  | LeaderboardAcquisitionManifestV3
 export type LeaderboardAcquisitionFailureStage =
   | 'session_open'
   | 'request_build'
@@ -440,6 +450,7 @@ function assertStartInput(
   assertSafeInteger(input.queueAttempt, 'queue attempt', 0)
   if (
     input.captureContract !== VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT &&
+    input.captureContract !== ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT &&
     input.captureContract !== LEGACY_LEADERBOARD_ACQUISITION_CONTRACT
   ) {
     throw new TypeError('[ingest] leaderboard acquisition capture contract is invalid')
@@ -448,7 +459,7 @@ function assertStartInput(
     assertDigest(input.runnerGitSha, FULL_GIT_SHA, 40, 'runner git SHA')
   }
   if (
-    input.captureContract === VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT &&
+    input.captureContract !== LEGACY_LEADERBOARD_ACQUISITION_CONTRACT &&
     input.runnerGitSha === null
   ) {
     throw new TypeError(
@@ -562,7 +573,7 @@ function assertAttemptShape(attempt: LeaderboardAcquisitionAttempt): void {
 }
 
 function reasonCodeForManifest(
-  manifest: LeaderboardAcquisitionManifest,
+  manifest: LeaderboardAcquisitionManifestLike,
   terminalState: LeaderboardManifestOutcomeProjection['terminalState']
 ): LeaderboardAcquisitionReasonCode | null {
   if (terminalState === 'complete') return null
@@ -588,7 +599,7 @@ function reasonCodeForManifest(
 }
 
 function terminalStateForManifest(
-  manifest: LeaderboardAcquisitionManifest
+  manifest: LeaderboardAcquisitionManifestLike
 ): LeaderboardManifestOutcomeProjection['terminalState'] {
   if (
     manifest.assessment.acquisition_state === 'complete' &&
@@ -605,15 +616,11 @@ function terminalStateForManifest(
   return 'unknown'
 }
 
-export function projectLeaderboardManifestOutcome(
+function projectParsedLeaderboardManifestOutcome(
   attempt: LeaderboardAcquisitionAttempt,
-  built: BuiltLeaderboardAcquisitionManifest
+  built: BuiltLeaderboardAcquisitionManifest | BuiltLeaderboardAcquisitionManifestV3,
+  manifest: LeaderboardAcquisitionManifestLike
 ): LeaderboardManifestOutcomeProjection {
-  assertAttemptShape(attempt)
-  if (attempt.captureContract !== VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT) {
-    throw new TypeError('[ingest] a legacy attempt cannot project verified manifest evidence')
-  }
-  const manifest = parseLeaderboardAcquisitionManifest(built.manifest)
   const canonicalJson = strictCanonicalJson(manifest)
   if (
     built.canonicalJson !== canonicalJson ||
@@ -668,6 +675,42 @@ export function projectLeaderboardManifestOutcome(
     failureStage: null,
     reasonCode: reasonCodeForManifest(manifest, terminalState),
   })
+}
+
+export function projectLeaderboardManifestOutcome(
+  attempt: LeaderboardAcquisitionAttempt,
+  built: BuiltLeaderboardAcquisitionManifest
+): LeaderboardManifestOutcomeProjection {
+  assertAttemptShape(attempt)
+  if (attempt.captureContract !== VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT) {
+    throw new TypeError('[ingest] only a v2 attempt can project v2 manifest evidence')
+  }
+  return projectParsedLeaderboardManifestOutcome(
+    attempt,
+    built,
+    parseLeaderboardAcquisitionManifest(built.manifest)
+  )
+}
+
+export function projectLeaderboardManifestV3Outcome(
+  attempt: LeaderboardAcquisitionAttempt,
+  built: BuiltLeaderboardAcquisitionManifestV3
+): LeaderboardManifestOutcomeProjection {
+  assertAttemptShape(attempt)
+  if (attempt.captureContract !== ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT) {
+    throw new TypeError(
+      '[ingest] only an attempt-bound v3 attempt can project v3 manifest evidence'
+    )
+  }
+  const manifest = parseLeaderboardAcquisitionManifestV3(built.manifest)
+  if (
+    manifest.acquisition_attempt.binding_contract !== attempt.attemptBindingContract ||
+    manifest.acquisition_attempt.attempt_id !== attempt.attemptId ||
+    manifest.acquisition_attempt.attempt_seq !== attempt.attemptSeq
+  ) {
+    throw new TypeError('[ingest] acquisition manifest does not bind the durable attempt identity')
+  }
+  return projectParsedLeaderboardManifestOutcome(attempt, built, manifest)
 }
 
 function validatedCaptureClock(
