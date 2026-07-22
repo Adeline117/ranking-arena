@@ -29,13 +29,13 @@ config({ path: resolve(__dirname, '..', '.env') })
 import { Worker } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
 import { QUEUE_NAME, JOB, getQueue } from './queues'
+import { PIPELINE_WORKER_CONCURRENCY } from './pipeline-runtime'
 import { registerSchedules } from './scheduler'
 import { startDashboard } from './dashboard'
 
 // ENDGAME (ARENA_DATA_SPEC v1.2): legacy fetch/enrich removed — leaderboard
 // data is produced by arena-ingest-worker. This worker only keeps the
 // downstream chain: Arena Score recompute + Meilisearch sync.
-const CONCURRENCY = 3
 
 async function main() {
   console.log('[worker] Arena Pipeline Worker starting...')
@@ -93,7 +93,7 @@ async function main() {
     },
     {
       connection: getConnection(),
-      concurrency: CONCURRENCY,
+      concurrency: PIPELINE_WORKER_CONCURRENCY,
       removeOnComplete: { age: 24 * 3600, count: 1000 }, // Keep last 1000 completed jobs for 24h
       removeOnFail: { age: 7 * 24 * 3600, count: 5000 }, // Keep failed jobs for 7 days
     }
@@ -171,7 +171,10 @@ async function main() {
     console.error('[worker] UNHANDLED REJECTION:', reason)
   })
 
-  console.log(`[worker] Ready — processing queue "${QUEUE_NAME}" with concurrency=${CONCURRENCY}`)
+  console.log(
+    `[worker] Ready — processing queue "${QUEUE_NAME}" with ` +
+      `concurrency=${PIPELINE_WORKER_CONCURRENCY}`
+  )
   console.log('[worker] Press Ctrl+C to stop')
 
   // 5. Start Bull Board dashboard
