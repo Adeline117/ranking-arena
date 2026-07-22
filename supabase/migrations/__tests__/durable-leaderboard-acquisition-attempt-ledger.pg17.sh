@@ -4,6 +4,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260722030000_durable_leaderboard_acquisition_attempt_ledger.sql"
+COMPAT_MIGRATION="$ROOT_DIR/supabase/migrations/20260722040000_leaderboard_acquisition_manifest_v3_compat.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -111,6 +112,7 @@ INSERT INTO arena.sources (
 SQL
 
 psql_cmd -q -f "$MIGRATION"
+psql_cmd -q -f "$COMPAT_MIGRATION"
 
 psql_cmd -q <<'SQL'
 CREATE TABLE public.ledger_test_pairs (
@@ -1458,6 +1460,64 @@ BEGIN
      WHERE attempt_id = '00000000-0000-0000-0000-000000000060'
   ) <> 1 THEN
     RAISE EXCEPTION 'concurrent exact begin created duplicate attempts';
+  END IF;
+END
+$test$;
+SQL
+
+# The additive compatibility migration must admit a new attempt-bound v3 run
+# without weakening the still-valid v2 proofs above.
+psql_cmd -q <<'SQL'
+SELECT attempt_seq FROM arena.start_leaderboard_acquisition_attempt(
+  '00000000-0000-0000-0000-000000000091', 1, 30,
+  'tier-a:binance_futures:job-91:91000', 'job-91', 0,
+  'arena.ingest.leaderboard-acquisition-manifest@3', repeat('1', 40), 'vps_sg'
+);
+SELECT public.make_ledger_test_pair(
+  '00000000-0000-0000-0000-000000000091', 1, 'manifest-v3-complete',
+  'manifest-v3-complete'
+);
+SELECT outcome.attempt_seq
+FROM public.ledger_test_pairs AS pair
+CROSS JOIN LATERAL arena.finish_leaderboard_acquisition_attempt(
+  pair.attempt_id,
+  'complete', 'complete', 'verified', 'verified',
+  'reported_population_reached',
+  pair.capture_started_at, pair.capture_completed_at,
+  pair.source_run_id, pair.payload_id, pair.manifest_id, NULL,
+  1, 'consistent', 1, 1, 'consistent',
+  1, 1, 0, 0, false, false, NULL, NULL
+) AS outcome
+WHERE pair.attempt_id = '00000000-0000-0000-0000-000000000091';
+
+DO $test$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM arena.leaderboard_acquisition_attempts AS attempt
+      JOIN arena.leaderboard_acquisition_outcomes AS outcome
+        ON outcome.attempt_seq = attempt.attempt_seq
+      JOIN public.ledger_test_pairs AS pair
+        ON pair.attempt_id = attempt.attempt_id
+      JOIN arena.raw_objects AS manifest
+        ON manifest.id = outcome.manifest_raw_object_id
+     WHERE attempt.attempt_id =
+           '00000000-0000-0000-0000-000000000091'::uuid
+       AND attempt.capture_contract =
+           'arena.ingest.leaderboard-acquisition-manifest@3'
+       AND outcome.terminal_state = 'complete'
+       AND outcome.acquisition_state = 'complete'
+       AND outcome.population_state = 'verified'
+       AND outcome.source_run_id = pair.source_run_id
+       AND manifest.content_hash = pair.source_run_id
+       AND manifest.meta->>'data_contract' =
+           'arena.ingest.leaderboard-acquisition-manifest@3'
+       AND manifest.meta->'acquisition_attempt'->>'attempt_id' =
+           attempt.attempt_id::text
+       AND (manifest.meta->'acquisition_attempt'->>'attempt_seq')::bigint =
+           attempt.attempt_seq
+  ) THEN
+    RAISE EXCEPTION 'manifest v3 complete RAW/finish proof failed';
   END IF;
 END
 $test$;
