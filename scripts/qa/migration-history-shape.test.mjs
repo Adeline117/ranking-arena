@@ -24,8 +24,8 @@ test('checked-in migration history matches the offline legacy fingerprint', () =
 
   assert.deepEqual(result.errors, [])
   assert.deepEqual(result.summary, {
-    migrationCount: 525,
-    modernCount: 334,
+    migrationCount: 526,
+    modernCount: 335,
     legacyCount: 191,
     legacyLetterVersionCount: 93,
     shortCollisionCount: 3,
