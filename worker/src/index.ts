@@ -30,6 +30,7 @@ import { Worker } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
 import { QUEUE_NAME, JOB, getQueue } from './queues'
 import { PIPELINE_WORKER_CONCURRENCY } from './pipeline-runtime'
+import { assertSuccessfulMeilisearchSyncResponse } from './pipeline-response'
 import { registerSchedules } from './scheduler'
 import { startDashboard } from './dashboard'
 
@@ -82,7 +83,7 @@ async function main() {
           })
           const msBody = await msResp.json().catch(() => ({}))
           job.log(`sync-meilisearch: ${msResp.status}`)
-          if (!msResp.ok) throw new Error(`sync-meilisearch returned ${msResp.status}`)
+          assertSuccessfulMeilisearchSyncResponse(msResp.ok, msResp.status, msBody)
           return { status: msResp.status, ...msBody }
         }
 
