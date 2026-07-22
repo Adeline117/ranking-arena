@@ -26,6 +26,7 @@ import type { FetchSession, ReplayRequestTemplate } from './types'
 import type { RawPage } from '../core/types'
 import { strictCanonicalJson, strictCanonicalSha256 } from '../strict-canonical-json'
 import { BlockedUpstreamError, isBlockedStatus } from './rate-limiter'
+import { CircuitOpenError } from './circuit'
 
 export interface JsonResponse {
   status: number
@@ -288,18 +289,23 @@ export interface LeaderboardCapture {
 }
 
 /**
- * An upstream HTTP or response-validation failure is both durable evidence
- * and a failed job attempt. The caller persists `capture` in its failed-run
+ * An upstream transport, HTTP, or response-validation failure is both durable
+ * evidence and a failed job attempt. A null status means no canonical HTTP
+ * response was available. The caller persists `capture` in its failed-run
  * transaction, then rethrows so the queue retry policy remains active.
  */
 export class LeaderboardCaptureUpstreamError extends Error {
   constructor(
-    public readonly status: number,
+    public readonly status: number | null,
     public readonly publicUrl: string,
     public readonly capture: LeaderboardCapture,
     public readonly cause: Error
   ) {
-    super(`[ingest] leaderboard capture upstream ${status} for ${publicUrl}: ${cause.message}`)
+    super(
+      status === null
+        ? `[ingest] leaderboard capture failed before a canonical response for ${publicUrl}: ${cause.message}`
+        : `[ingest] leaderboard capture upstream ${status} for ${publicUrl}: ${cause.message}`
+    )
     this.name = 'LeaderboardCaptureUpstreamError'
   }
 }
@@ -611,9 +617,23 @@ export async function captureNumericLeaderboard(
 
     let status: number
     let payload: unknown
+    const fetcherFailure: { caught: boolean; cause: unknown } = {
+      caught: false,
+      cause: undefined,
+    }
     try {
       const response = await session.paced(async () => {
-        const fetched = await fetcher(template)
+        let fetched: JsonResponse
+        try {
+          fetched = await fetcher(template)
+        } catch (cause) {
+          // Remember the exact rejected value without wrapping it inside the
+          // paced callback. Rate/circuit accounting must observe the original
+          // transport failure; the durable capture wrapper is added outside.
+          fetcherFailure.caught = true
+          fetcherFailure.cause = cause
+          throw cause
+        }
         assertSafeInteger(fetched.status, 'HTTP status', 1)
         if (fetched.status < 100 || fetched.status > 599) {
           throw new TypeError('[ingest] HTTP status must be between 100 and 599')
@@ -635,7 +655,20 @@ export async function captureNumericLeaderboard(
       payload = response.payload
     } catch (error) {
       const failure = capturedHttpFailure(error)
-      if (!failure) throw error
+      if (!failure) {
+        const fetcherRejected = fetcherFailure.caught && error === fetcherFailure.cause
+        if (!fetcherRejected && !(error instanceof CircuitOpenError)) throw error
+        const transportError =
+          error instanceof Error
+            ? error
+            : new Error(`[ingest] leaderboard transport failed: ${String(error)}`)
+        throw new LeaderboardCaptureUpstreamError(
+          null,
+          publicRequest.url,
+          finish('upstream_error'),
+          transportError
+        )
+      }
 
       const rawPage: RawPage = Object.freeze({
         pageIndex,
