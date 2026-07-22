@@ -82,6 +82,11 @@ function migrationBodySha(migration) {
     .digest('hex')
 }
 
+test('runner uses baseline grep instead of optional ripgrep', () => {
+  assert.doesNotMatch(source, /\brg\s/)
+  assert.match(source, /grep -c '\^BEGIN;\$'/)
+})
+
 test('predeploy, postdeploy and recovery phases are exact, unique and ordered', () => {
   const predeploy = migrationArray('PREDEPLOY_MIGRATIONS')
   const postdeploy = migrationArray('POSTDEPLOY_MIGRATIONS')
