@@ -12,17 +12,11 @@ name: Build Ingest Worker Image
 
 on:
   workflow_dispatch: {}
-  # Build the image whenever the ingest worker, its deps, or this build def change,
-  # so a tested :latest is always waiting in GHCR for the SG box to pull (cutover
-  # needs the image to EXIST first). Editing this file is itself in the path set, so
-  # this commit triggers the first real build.
+  # The production Gate requires every live worker to report the exact release
+  # HEAD. Build every main SHA, including app-only and migration-only commits,
+  # so that invariant never names a container tag that cannot exist.
   push:
     branches: [main]
-    paths:
-      - 'package-lock.json'
-      - 'lib/ingest/**'
-      - 'worker/**'
-      - '.github/workflows/build-ingest-image.yml'
 
 concurrency:
   group: build-ingest-image
@@ -33,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write          # push to ghcr.io
+      packages: write # push to ghcr.io
     steps:
       - uses: actions/checkout@v4
       # OCI image repository names must be lowercase. GitHub preserves the
