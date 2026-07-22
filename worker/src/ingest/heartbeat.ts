@@ -17,7 +17,7 @@
 
 import type IORedis from 'ioredis'
 import { hostname } from 'node:os'
-import { execSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -60,23 +60,43 @@ interface HeartbeatPayload {
   pid: number
   node: string
   sha: string
-  /** Root-fs used %, so the Vercel heartbeat-check cron can page before a node
-   *  (esp. the disk-starved SG VPS, ~95%) fills up and crashloops. Optional —
-   *  older workers omit it; the cron treats absent as "unknown, don't page". */
+  /** Used % for the filesystem containing the worker checkout, so the Vercel
+   *  heartbeat-check cron can page before a node fills up and crashloops.
+   *  Optional — older workers omit it; the cron treats absent as unknown. */
   disk?: number
 }
 
-/** Root filesystem used %, via `df`. Never throws; undefined on any failure. */
-function diskUsedPct(): number | undefined {
+type DiskUsageReader = (target: string) => string
+
+function readDiskUsage(target: string): string {
+  return execFileSync('df', ['-P', target], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: 3000,
+  })
+}
+
+/** Parse the Capacity column from POSIX `df -P` output. */
+export function parseDiskUsedPct(output: string): number | undefined {
+  const last = output.trim().split('\n').pop() || ''
+  const match = last.match(/(?:^|\s)(\d{1,3})%(?:\s|$)/)
+  if (!match) return undefined
+
+  const used = Number(match[1])
+  return Number.isInteger(used) && used >= 0 && used <= 100 ? used : undefined
+}
+
+/**
+ * Used % for the filesystem containing the worker checkout. `process.cwd()`
+ * resolves to the writable Data volume on macOS and `/` on the SG Linux host.
+ * Never throws; returns undefined on any failure.
+ */
+export function diskUsedPct(
+  target = process.cwd(),
+  readUsage: DiskUsageReader = readDiskUsage
+): number | undefined {
   try {
-    const out = execSync('df -P /', {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 3000,
-    })
-    const last = out.trim().split('\n').pop() || ''
-    const m = last.match(/(\d+)%/)
-    return m ? Number(m[1]) : undefined
+    return parseDiskUsedPct(readUsage(target))
   } catch {
     return undefined
   }
