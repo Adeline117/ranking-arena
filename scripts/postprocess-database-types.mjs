@@ -122,6 +122,9 @@ export const NULLABLE_RPC_ARGS = {
   resolve_content_report_atomic: {
     p_reason: { type: 'string', optional: false },
   },
+  reserve_tip_checkout_atomic: {
+    p_message: { type: 'string', optional: false },
+  },
   release_lifetime_membership_reservation_atomic: {
     p_checkout_session_id: { type: 'string', optional: false },
     p_event_created_at: { type: 'string', optional: false },

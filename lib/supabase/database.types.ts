@@ -11180,6 +11180,14 @@ export type Database = {
         }
         Returns: Json
       }
+      reserve_report_evidence_upload: {
+        Args: {
+          p_extension: string
+          p_mime_type: string
+          p_reporter_id: string
+        }
+        Returns: Json
+      }
       reserve_tip_checkout_atomic: {
         Args: {
           p_amount_cents: number
@@ -11187,14 +11195,6 @@ export type Database = {
           p_from_user_id: string
           p_message: string | null
           p_post_id: string
-        }
-        Returns: Json
-      }
-      reserve_report_evidence_upload: {
-        Args: {
-          p_extension: string
-          p_mime_type: string
-          p_reporter_id: string
         }
         Returns: Json
       }
