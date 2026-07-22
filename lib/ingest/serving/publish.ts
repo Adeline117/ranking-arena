@@ -44,6 +44,15 @@ import {
   getCountBaseline,
   type CountVerdict,
 } from '../staging/count-check'
+import {
+  prepareLeaderboardMetricTrust,
+  reconcileLeaderboardMetricTrust,
+  snapshotLeaderboardTrustValue,
+  writeLeaderboardMetricTrust,
+  type LeaderboardMetricTrustBundle,
+  type MetricTrustWriteReceipt,
+  type PreparedLeaderboardMetricTrust,
+} from './metric-trust-publish'
 
 async function lockSourcePublication(client: PoolClient, sourceId: number): Promise<void> {
   await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
@@ -78,12 +87,20 @@ export interface PublishSnapshotInput {
   observationCycleId?: string
 }
 
+export interface PublishTrustedSnapshotInput extends Omit<
+  PublishSnapshotInput,
+  'rawObjectId' | 'isDerived'
+> {
+  trust: LeaderboardMetricTrustBundle
+}
+
 export interface PublishSnapshotResult {
   snapshotId: number
   scrapedAt: string
   verdict: CountVerdict
   published: boolean
   traderIds: Map<string, number> // exchange_trader_id → arena.traders.id
+  trust?: MetricTrustWriteReceipt & { replayed: boolean }
 }
 
 export class StaleProfilePublicationError extends Error {
@@ -95,6 +112,74 @@ export class StaleProfilePublicationError extends Error {
   }
 }
 
+export class StaleLeaderboardPublicationError extends Error {
+  constructor(sourceSlug: string, timeframe: number, incomingAt: string, latestAt: string) {
+    super(
+      `stale leaderboard publication rejected: source=${sourceSlug}, timeframe=${timeframe}, ` +
+        `incoming=${incomingAt}, latest=${latestAt}`
+    )
+    this.name = 'StaleLeaderboardPublicationError'
+  }
+}
+
+async function assertTrustedPublicationIsNewest(
+  client: PoolClient,
+  prepared: PreparedLeaderboardMetricTrust
+): Promise<void> {
+  const { rows } = await client.query<{
+    database_now: string
+    latest_scraped_at: string | null
+  }>(
+    `SELECT statement_timestamp()::text AS database_now,
+            (
+              SELECT scraped_at::text
+                FROM arena.leaderboard_snapshots
+               WHERE source_id = $1
+                 AND timeframe = $2
+                 AND count_check_passed
+               ORDER BY scraped_at DESC, id DESC
+               LIMIT 1
+            ) AS latest_scraped_at`,
+    [prepared.src.id, prepared.timeframe]
+  )
+  if (rows.length !== 1) throw new Error('[publish] database clock query returned no row')
+  const databaseNow = new Date(rows[0].database_now)
+  const incomingAt = new Date(prepared.manifest.completed_at)
+  const sourceAsOf = new Date(prepared.sourceAsOf)
+  if (
+    !Number.isFinite(databaseNow.getTime()) ||
+    !Number.isFinite(incomingAt.getTime()) ||
+    !Number.isFinite(sourceAsOf.getTime())
+  ) {
+    throw new Error('[publish] invalid freshness timestamp while ordering trusted snapshots')
+  }
+  const futureBoundary = databaseNow.getTime() + 5 * 60 * 1000
+  if (incomingAt.getTime() > futureBoundary || sourceAsOf.getTime() > futureBoundary) {
+    throw new Error('[publish] trusted capture timestamp is more than five minutes in the future')
+  }
+  if (
+    prepared.expectedFields.some(
+      (field) => sourceAsOf.getTime() + field.maxFreshnessMs <= databaseNow.getTime()
+    )
+  ) {
+    throw new Error('[publish] trusted capture evidence expired before publication')
+  }
+
+  if (rows[0].latest_scraped_at === null) return
+  const latestAt = new Date(rows[0].latest_scraped_at)
+  if (!Number.isFinite(latestAt.getTime())) {
+    throw new Error('[publish] latest snapshot has an invalid freshness timestamp')
+  }
+  if (latestAt.getTime() >= incomingAt.getTime()) {
+    throw new StaleLeaderboardPublicationError(
+      prepared.src.slug,
+      prepared.timeframe,
+      incomingAt.toISOString(),
+      latestAt.toISOString()
+    )
+  }
+}
+
 async function insertRejects(
   client: PoolClient,
   sourceId: number,
@@ -102,7 +187,7 @@ async function insertRejects(
   rejects: RejectedRow[]
 ): Promise<void> {
   if (rejects.length === 0) return
-  await client.query(
+  const result = await client.query(
     `INSERT INTO arena.staging_rejects (source_id, raw_object_id, reason, row_payload)
      SELECT $1, $2, r.reason, r.payload
        FROM jsonb_to_recordset($3::jsonb) AS r(reason text, payload jsonb)`,
@@ -112,6 +197,11 @@ async function insertRejects(
       JSON.stringify(rejects.map((r) => ({ reason: r.reason, payload: r.payload ?? {} }))),
     ]
   )
+  if (result.rowCount !== rejects.length) {
+    throw new Error(
+      `[publish] staging reject insert count mismatch: expected=${rejects.length}, actual=${result.rowCount ?? 'unknown'}`
+    )
+  }
 }
 
 /** Batch-upsert traders rows; returns exchange_trader_id → id. */
@@ -158,16 +248,105 @@ async function upsertTraders(
   return map
 }
 
+function verdictFromStored(
+  actualCount: number,
+  baselineUsed: number | null,
+  passed: boolean
+): CountVerdict {
+  return {
+    passed,
+    baselineUsed,
+    deviationPct:
+      baselineUsed === null || baselineUsed <= 0
+        ? null
+        : (Math.abs(actualCount - baselineUsed) / baselineUsed) * 100,
+  }
+}
+
+async function reconcileCommittedTrustedPublication(
+  prepared: PreparedLeaderboardMetricTrust,
+  expectedCount: number | null,
+  commitError: unknown
+): Promise<PublishSnapshotResult> {
+  const commitCause = commitError instanceof Error ? commitError : new Error(String(commitError))
+  let client: PoolClient
+  try {
+    client = await ingestClientConnect()
+  } catch (cause) {
+    throw new AggregateError(
+      [commitCause, cause instanceof Error ? cause : new Error(String(cause))],
+      '[publish] COMMIT outcome and trusted publication reconciliation both failed'
+    )
+  }
+  let transactionOpen = false
+  let commitAttempted = false
+  let destroyClient = false
+  try {
+    await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+    transactionOpen = true
+    const existing = await reconcileLeaderboardMetricTrust(client, prepared)
+    if (!existing) {
+      throw new Error('[publish] fresh reconciliation found no committed trusted publication')
+    }
+    if (existing.expectedCount !== expectedCount) {
+      throw new Error('[publish] reconciled snapshot expected_count does not match retry input')
+    }
+    const result: PublishSnapshotResult = {
+      snapshotId: existing.snapshotId,
+      scrapedAt: existing.scrapedAt,
+      verdict: verdictFromStored(existing.actualCount, existing.baselineUsed, true),
+      published: true,
+      traderIds: existing.traderIds,
+      trust: existing.trust,
+    }
+    commitAttempted = true
+    await client.query('COMMIT')
+    transactionOpen = false
+    return result
+  } catch (cause) {
+    let reconciliationCause = cause instanceof Error ? cause : new Error(String(cause))
+    if (transactionOpen && !commitAttempted) {
+      try {
+        await client.query('ROLLBACK')
+        transactionOpen = false
+      } catch (rollbackCause) {
+        destroyClient = true
+        reconciliationCause = new AggregateError(
+          [
+            reconciliationCause,
+            rollbackCause instanceof Error ? rollbackCause : new Error(String(rollbackCause)),
+          ],
+          '[publish] trusted reconciliation and rollback both failed'
+        )
+      }
+    } else if (commitAttempted) {
+      // The reconciliation transaction is read-only, but its connection is no
+      // longer safe to pool when the COMMIT response is uncertain.
+      destroyClient = true
+    }
+    throw new AggregateError(
+      [commitCause, reconciliationCause],
+      '[publish] COMMIT outcome is not an exact trusted publication'
+    )
+  } finally {
+    client.release(destroyClient)
+  }
+}
+
+interface InternalPublishSnapshotInput extends PublishSnapshotInput {
+  preparedTrust: PreparedLeaderboardMetricTrust | null
+}
+
 /**
  * Publish one Tier-A leaderboard crawl through the gate.
  * Headline stats upsert uses COALESCE so a sparse board never erases
  * richer profile-crawl data; roi/pnl/win_rate from the board are
  * authoritative for ranking (cross-checked against profiles per §5.3).
  */
-export async function publishLeaderboardSnapshot(
-  input: PublishSnapshotInput
+async function publishLeaderboardSnapshotInternal(
+  input: InternalPublishSnapshotInput
 ): Promise<PublishSnapshotResult> {
-  const { src, timeframe, rows, rejects, rawObjectId } = input
+  const { src, timeframe, rows, rejects, rawObjectId, preparedTrust } = input
   const countBaselineGeneration = input.countBaselineGeneration?.trim() || null
   if (
     countBaselineGeneration !== null &&
@@ -177,41 +356,72 @@ export async function publishLeaderboardSnapshot(
   }
   const expectedCount =
     input.expectedCountOverride !== undefined ? input.expectedCountOverride : src.expected_count
-  const { baseline, isBootstrap, shifted } = await getCountBaseline(
-    src.id,
-    timeframe,
-    expectedCount,
-    {
-      actualCount: rows.length,
-      cycleId: input.observationCycleId?.trim() || null,
-      baselineGeneration: countBaselineGeneration,
-    }
-  )
-  if (shifted) {
-    console.warn(
-      `[publish] ${src.slug} tf${timeframe}: sustained level-shift detected — ` +
-        `adopting new baseline ${baseline} (was frozen, board un-stuck), actual=${rows.length}`
-    )
-  }
-  const verdict = evaluateCount(
-    rows.length,
-    baseline,
-    isBootstrap ? BOOTSTRAP_DEVIATION_PCT : ROLLING_DEVIATION_PCT
-  )
 
   const client = await ingestClientConnect()
+  let transactionOpen = false
+  let commitAttempted = false
+  let destroyClient = false
   try {
     await client.query('BEGIN')
+    transactionOpen = true
     // A snapshot and its board series are separate transactions in Tier A.
     // Sharing this source lock with replay prevents an older RAW re-parse
     // from crossing a newer snapshot commit and winning the final write.
     await lockSourcePublication(client, src.id)
 
+    if (preparedTrust) {
+      const existing = await reconcileLeaderboardMetricTrust(client, preparedTrust)
+      if (existing) {
+        if (existing.expectedCount !== expectedCount) {
+          throw new Error('[publish] existing trusted snapshot expected_count conflicts with retry')
+        }
+        commitAttempted = true
+        await client.query('COMMIT')
+        transactionOpen = false
+        return {
+          snapshotId: existing.snapshotId,
+          scrapedAt: existing.scrapedAt,
+          verdict: verdictFromStored(existing.actualCount, existing.baselineUsed, true),
+          published: true,
+          traderIds: existing.traderIds,
+          trust: existing.trust,
+        }
+      }
+      await assertTrustedPublicationIsNewest(client, preparedTrust)
+    }
+
+    // Count evidence must be read only after the source publication lock and
+    // on this same transaction client. Concurrent publishers can no longer
+    // evaluate against a baseline that changed before their own commit.
+    const { baseline, isBootstrap, shifted } = await getCountBaseline(
+      src.id,
+      timeframe,
+      expectedCount,
+      {
+        actualCount: rows.length,
+        cycleId: input.observationCycleId?.trim() || null,
+        baselineGeneration: countBaselineGeneration,
+      },
+      client
+    )
+    if (shifted) {
+      console.warn(
+        `[publish] ${src.slug} tf${timeframe}: sustained level-shift detected — ` +
+          `adopting new baseline ${baseline} (was frozen, board un-stuck), actual=${rows.length}`
+      )
+    }
+    const verdict = evaluateCount(
+      rows.length,
+      baseline,
+      isBootstrap ? BOOTSTRAP_DEVIATION_PCT : ROLLING_DEVIATION_PCT
+    )
+
     const { rows: snap } = await client.query<{ id: number; scraped_at: string }>(
       `INSERT INTO arena.leaderboard_snapshots
-         (source_id, timeframe, expected_count, actual_count, baseline_used,
+         (source_id, timeframe, scraped_at, expected_count, actual_count, baseline_used,
           count_check_passed, is_derived, raw_object_id, meta)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       VALUES ($1, $2, COALESCE($3::timestamptz, statement_timestamp()),
+               $4, $5, $6, $7, $8, $9, $10)
        RETURNING id, scraped_at::text AS scraped_at`,
       // ::text — node-pg would otherwise hydrate a JS Date (ms precision),
       // truncating pg's microseconds; entries.scraped_at must round-trip
@@ -219,6 +429,7 @@ export async function publishLeaderboardSnapshot(
       [
         src.id,
         timeframe,
+        preparedTrust?.manifest.completed_at ?? null,
         expectedCount,
         rows.length,
         verdict.baselineUsed,
@@ -232,9 +443,17 @@ export async function publishLeaderboardSnapshot(
           ...(countBaselineGeneration
             ? { count_baseline_generation: countBaselineGeneration }
             : {}),
+          ...(preparedTrust
+            ? {
+                source_run_id: preparedTrust.sourceRunId,
+                manifest_raw_object_id: preparedTrust.artifacts.populationManifest.id,
+                acquisition_contract: preparedTrust.manifest.data_contract,
+              }
+            : {}),
         }),
       ]
     )
+    if (snap.length !== 1) throw new Error('[publish] snapshot insert count mismatch')
     const snapshotId = snap[0].id
     const scrapedAt = snap[0].scraped_at
 
@@ -243,8 +462,13 @@ export async function publishLeaderboardSnapshot(
     let traderIds = new Map<string, number>()
     if (verdict.passed && rows.length > 0) {
       traderIds = await upsertTraders(client, src.id, rows)
+      if (traderIds.size !== rows.length) {
+        throw new Error(
+          `[publish] trader upsert count mismatch: expected=${rows.length}, actual=${traderIds.size}`
+        )
+      }
 
-      await client.query(
+      const entries = await client.query(
         `INSERT INTO arena.leaderboard_entries
            (scraped_at, snapshot_id, trader_id, timeframe, rank,
             headline_roi, headline_pnl, headline_win_rate, currency, raw)
@@ -272,6 +496,11 @@ export async function publishLeaderboardSnapshot(
           src.id,
         ]
       )
+      if (entries.rowCount !== rows.length) {
+        throw new Error(
+          `[publish] leaderboard entry insert count mismatch: expected=${rows.length}, actual=${entries.rowCount ?? 'unknown'}`
+        )
+      }
 
       // Native upstream boards may seed headline stats (Tier A guarantee:
       // profile first screen renders with zero on-demand fetching, spec
@@ -284,7 +513,7 @@ export async function publishLeaderboardSnapshot(
       // COALESCE(EXCLUDED, existing) keeps any richer profile-crawl value — so
       // this never clobbers profile sources, but backfills profile-less ones.
       if (!input.isDerived) {
-        await client.query(
+        const stats = await client.query(
           `INSERT INTO arena.trader_stats
            (trader_id, timeframe, as_of, currency, roi, pnl, win_rate, mdd, sharpe, aum, copier_count, copier_pnl, volume,
             win_positions, total_positions, holding_duration_avg, extras)
@@ -363,17 +592,102 @@ export async function publishLeaderboardSnapshot(
             src.id,
           ]
         )
+        if (stats.rowCount !== rows.length) {
+          throw new Error(
+            `[publish] headline stats upsert count mismatch: expected=${rows.length}, actual=${stats.rowCount ?? 'unknown'}`
+          )
+        }
       }
     }
 
+    let trustReceipt: (MetricTrustWriteReceipt & { replayed: boolean }) | undefined
+    if (preparedTrust && verdict.passed) {
+      const written = await writeLeaderboardMetricTrust(client, preparedTrust, {
+        snapshotId,
+        snapshotScrapedAt: scrapedAt,
+        traderIds,
+      })
+      trustReceipt = { ...written, replayed: false }
+    }
+
+    commitAttempted = true
     await client.query('COMMIT')
-    return { snapshotId, scrapedAt, verdict, published: verdict.passed, traderIds }
-  } catch (err) {
-    await client.query('ROLLBACK')
-    throw err
+    transactionOpen = false
+    return {
+      snapshotId,
+      scrapedAt,
+      verdict,
+      published: verdict.passed,
+      traderIds,
+      ...(trustReceipt ? { trust: trustReceipt } : {}),
+    }
+  } catch (cause) {
+    if (commitAttempted) {
+      // The server may have committed even when the connection lost the COMMIT
+      // response. Never issue ROLLBACK on an ambiguous connection; destroy it
+      // and verify the immutable run through a fresh connection instead.
+      destroyClient = true
+      if (preparedTrust) {
+        return reconcileCommittedTrustedPublication(preparedTrust, expectedCount, cause)
+      }
+      throw cause
+    }
+
+    let failure: unknown = cause
+    if (transactionOpen) {
+      try {
+        await client.query('ROLLBACK')
+        transactionOpen = false
+      } catch (rollbackCause) {
+        destroyClient = true
+        failure = new AggregateError(
+          [
+            cause instanceof Error ? cause : new Error(String(cause)),
+            rollbackCause instanceof Error ? rollbackCause : new Error(String(rollbackCause)),
+          ],
+          '[publish] transaction and rollback both failed'
+        )
+      }
+    }
+    throw failure
   } finally {
-    client.release()
+    client.release(destroyClient)
   }
+}
+
+export async function publishLeaderboardSnapshot(
+  input: PublishSnapshotInput
+): Promise<PublishSnapshotResult> {
+  return publishLeaderboardSnapshotInternal({ ...input, preparedTrust: null })
+}
+
+export async function publishTrustedLeaderboardSnapshot(
+  input: PublishTrustedSnapshotInput
+): Promise<PublishSnapshotResult> {
+  const rejects = snapshotLeaderboardTrustValue(input.rejects)
+  const preparedTrust = prepareLeaderboardMetricTrust({
+    src: input.src,
+    timeframe: input.timeframe,
+    rows: input.rows,
+    rejectedRowCount: rejects.length,
+    bundle: input.trust,
+  })
+  const cycleId = input.observationCycleId?.trim() || null
+  if (cycleId !== preparedTrust.manifest.observation_cycle_id) {
+    throw new Error('[publish] observation cycle does not match the canonical capture manifest')
+  }
+  return publishLeaderboardSnapshotInternal({
+    src: preparedTrust.src,
+    timeframe: preparedTrust.timeframe,
+    rows: preparedTrust.rows,
+    rejects,
+    expectedCountOverride: input.expectedCountOverride,
+    countBaselineGeneration: input.countBaselineGeneration,
+    observationCycleId: cycleId ?? undefined,
+    rawObjectId: preparedTrust.artifacts.sourcePayload.id,
+    isDerived: false,
+    preparedTrust,
+  })
 }
 
 /** Resolve (or create) a single trader id — Tier-C path for long-tail views. */

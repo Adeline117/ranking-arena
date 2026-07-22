@@ -22,6 +22,8 @@ const mockWriteLeaderboardRawArtifactSet = jest.fn()
 const mockRecordFieldInventory = jest.fn()
 const mockValidateLeaderboardRows = jest.fn()
 const mockPublishLeaderboardSnapshot = jest.fn()
+const mockPublishTrustedLeaderboardSnapshot = jest.fn()
+const mockHasRegisteredLeaderboardMetricTrust = jest.fn()
 const mockPublishBoardSeries = jest.fn()
 const mockPublishBots = jest.fn()
 const mockJobUpdateData = jest.fn()
@@ -50,7 +52,13 @@ jest.mock('@/lib/ingest/staging/validate', () => ({
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
   publishLeaderboardSnapshot: (...args: unknown[]) => mockPublishLeaderboardSnapshot(...args),
+  publishTrustedLeaderboardSnapshot: (...args: unknown[]) =>
+    mockPublishTrustedLeaderboardSnapshot(...args),
   publishBoardSeries: (...args: unknown[]) => mockPublishBoardSeries(...args),
+}))
+jest.mock('@/lib/ingest/serving/metric-trust-publish', () => ({
+  hasRegisteredLeaderboardMetricTrust: (...args: unknown[]) =>
+    mockHasRegisteredLeaderboardMetricTrust(...args),
 }))
 jest.mock('@/lib/ingest/serving/publish-bots', () => ({
   publishBots: (...args: unknown[]) => mockPublishBots(...args),
@@ -198,6 +206,7 @@ describe('Tier-A board-series publication guard', () => {
       valid: rows,
       rejects: [],
     }))
+    mockHasRegisteredLeaderboardMetricTrust.mockReturnValue(true)
     mockGetAdapter.mockReturnValue({
       listLeaderboard: async function* () {
         yield page
@@ -224,6 +233,19 @@ describe('Tier-A board-series publication guard', () => {
       verdict: { passed: true, baselineUsed: 1, deviationPct: 0 },
       published: true,
       traderIds: new Map([[row.exchangeTraderId, 42]]),
+    })
+    mockPublishTrustedLeaderboardSnapshot.mockResolvedValue({
+      snapshotId: 777,
+      scrapedAt: '2026-07-16 00:01:02.123456+00',
+      verdict: { passed: true, baselineUsed: 1, deviationPct: 0 },
+      published: true,
+      traderIds: new Map([[row.exchangeTraderId, 42]]),
+      trust: {
+        sourceRunId: 'c'.repeat(64),
+        observationsWritten: 0,
+        artifactRefsWritten: 0,
+        replayed: false,
+      },
     })
     mockPublishBoardSeries.mockResolvedValue({ traders: 1, points: 1 })
     mockPublishBots.mockResolvedValue({ written: 1 })
@@ -319,11 +341,62 @@ describe('Tier-A board-series publication guard', () => {
     const artifactInput = mockWriteLeaderboardRawArtifactSet.mock.calls[0][0]
     expect(artifactInput.sourceRunId).toBe(strictCanonicalSha256(artifactInput.manifest))
     expect(mockWriteLeaderboardRawArtifactSet.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPublishTrustedLeaderboardSnapshot.mock.invocationCallOrder[0]
+    )
+    expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trust: expect.objectContaining({
+          sourceRunId: artifactInput.sourceRunId,
+          manifest: artifactInput.manifest,
+          artifacts: expect.objectContaining({
+            sourcePayload: expect.objectContaining({ id: 9101 }),
+            populationManifest: expect.objectContaining({ id: 9102 }),
+          }),
+        }),
+      })
+    )
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('keeps captured artifacts but uses legacy publication when no metric trust contract is registered', async () => {
+    const captureLeaderboard = jest.fn(async () => capturedLeaderboard())
+    mockHasRegisteredLeaderboardMetricTrust.mockReturnValue(false)
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard,
+      listLeaderboard: async function* () {
+        throw new Error('legacy stream must not run')
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+
+    await expect(processTierA(job)).resolves.toHaveLength(1)
+
+    expect(captureLeaderboard).toHaveBeenCalledTimes(1)
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledTimes(1)
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        observationCycleId: expectedCycleId,
+        manifest: expect.objectContaining({
+          assessment: { acquisition_state: 'complete', population_state: 'verified' },
+        }),
+      })
+    )
+    expect(mockHasRegisteredLeaderboardMetricTrust).toHaveBeenCalledWith(src, 30)
+    expect(mockWriteLeaderboardRawArtifactSet.mock.invocationCallOrder[0]).toBeLessThan(
       mockPublishLeaderboardSnapshot.mock.invocationCallOrder[0]
     )
     expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({ rawObjectId: 9101 })
+      expect.objectContaining({
+        src,
+        timeframe: 30,
+        rows: [row],
+        rejects: [],
+        rawObjectId: 9101,
+        observationCycleId: expectedCycleId,
+      })
     )
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('freezes one runner SHA before a multi-window capture cycle', async () => {

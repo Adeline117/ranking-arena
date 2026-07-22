@@ -50,17 +50,22 @@ describe('publishLeaderboardSnapshot count baseline generation', () => {
     expect(result.published).toBe(false)
     expect(result.verdict.baselineUsed).toBe(300)
 
-    const [baselineSql, baselineParams] = baselineQuery.mock.calls[0]
+    const baselineCall = clientQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('WITH observations AS')
+    )
+    expect(baselineCall).toBeDefined()
+    const [baselineSql, baselineParams] = baselineCall!
     expect(String(baselineSql)).toContain("meta->>'count_baseline_generation'")
     expect(baselineParams).toEqual([19, 30, 7, true, null, generation])
+    expect(baselineQuery).not.toHaveBeenCalled()
 
     const snapshotCall = clientQuery.mock.calls.find(([sql]) =>
       String(sql).includes('INSERT INTO arena.leaderboard_snapshots')
     )
     expect(snapshotCall).toBeDefined()
     const snapshotParams = snapshotCall?.[1] as unknown[]
-    expect(snapshotParams.slice(0, 8)).toEqual([19, 30, 300, 0, 300, false, true, null])
-    expect(JSON.parse(String(snapshotParams[8]))).toEqual({
+    expect(snapshotParams.slice(0, 9)).toEqual([19, 30, null, 300, 0, 300, false, true, null])
+    expect(JSON.parse(String(snapshotParams[9]))).toEqual({
       count_baseline_generation: generation,
     })
     expect(release).toHaveBeenCalledTimes(1)
