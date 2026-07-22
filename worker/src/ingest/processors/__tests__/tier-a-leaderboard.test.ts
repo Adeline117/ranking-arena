@@ -2,8 +2,14 @@ import type { Job } from 'bullmq'
 import type { ParsedLeaderboardRow, RawPage, SourceRow } from '@/lib/ingest/core/types'
 import {
   LeaderboardCaptureUpstreamError,
+  captureNumericLeaderboard,
   type LeaderboardCapture,
 } from '@/lib/ingest/fetch/capture'
+import type { FetchSession } from '@/lib/ingest/fetch/types'
+import {
+  STRICT_CANONICAL_JSON_CONTRACT,
+  strictCanonicalSha256,
+} from '@/lib/ingest/strict-canonical-json'
 import type { TierJobData } from '../../queues'
 
 const mockGetSourceBySlug = jest.fn()
@@ -12,6 +18,7 @@ const mockGetAdapter = jest.fn()
 const mockOpenSession = jest.fn()
 const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
+const mockWriteLeaderboardRawArtifactSet = jest.fn()
 const mockRecordFieldInventory = jest.fn()
 const mockValidateLeaderboardRows = jest.fn()
 const mockPublishLeaderboardSnapshot = jest.fn()
@@ -32,6 +39,8 @@ jest.mock('@/lib/ingest/fetch/fetcher', () => ({
 }))
 jest.mock('@/lib/ingest/raw', () => ({
   writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
+  writeLeaderboardRawArtifactSet: (...args: unknown[]) =>
+    mockWriteLeaderboardRawArtifactSet(...args),
 }))
 jest.mock('@/lib/ingest/field-inventory', () => ({
   recordFieldInventory: (...args: unknown[]) => mockRecordFieldInventory(...args),
@@ -172,6 +181,18 @@ describe('Tier-A board-series publication guard', () => {
       storagePath: 'xt_futures/tier_a/raw.json.gz',
       contentHash: 'a'.repeat(64),
     })
+    mockWriteLeaderboardRawArtifactSet.mockResolvedValue({
+      sourcePayload: {
+        id: 9101,
+        storagePath: 'xt_futures/tier_a_trust/source.json.gz',
+        contentHash: 'b'.repeat(64),
+      },
+      populationManifest: {
+        id: 9102,
+        storagePath: 'xt_futures/tier_a_trust/manifest.json.gz',
+        contentHash: 'c'.repeat(64),
+      },
+    })
     mockRecordFieldInventory.mockResolvedValue(undefined)
     mockValidateLeaderboardRows.mockImplementation((rows: ParsedLeaderboardRow[]) => ({
       valid: rows,
@@ -285,13 +306,24 @@ describe('Tier-A board-series publication guard', () => {
     expect(parseLeaderboard).toHaveBeenCalledTimes(1)
     expect(parseLeaderboard).toHaveBeenCalledWith(parsePage.payload, expect.any(Object))
     expect(parseLeaderboard).not.toHaveBeenCalledWith(terminalPage.payload, expect.any(Object))
-    expect(mockWriteRawObject).toHaveBeenCalledWith(
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
       expect.objectContaining({
-        payload: sourcePages,
-        meta: { pageCount: 2, observation_cycle_id: expectedCycleId },
+        sourcePages,
+        observationCycleId: expectedCycleId,
+        manifest: expect.objectContaining({
+          assessment: { acquisition_state: 'complete', population_state: 'verified' },
+        }),
       })
     )
-    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    const artifactInput = mockWriteLeaderboardRawArtifactSet.mock.calls[0][0]
+    expect(artifactInput.sourceRunId).toBe(strictCanonicalSha256(artifactInput.manifest))
+    expect(mockWriteLeaderboardRawArtifactSet.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPublishLeaderboardSnapshot.mock.invocationCallOrder[0]
+    )
+    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ rawObjectId: 9101 })
+    )
   })
 
   it('freezes one runner SHA before a multi-window capture cycle', async () => {
@@ -360,7 +392,14 @@ describe('Tier-A board-series publication guard', () => {
     expect((failure as AggregateError).errors[0].message).toContain(
       'acquisition trust gate FAILED: acquisition=partial, population=partial'
     )
-    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifest: expect.objectContaining({
+          assessment: { acquisition_state: 'partial', population_state: 'partial' },
+        }),
+      })
+    )
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
   })
@@ -413,40 +452,92 @@ describe('Tier-A board-series publication guard', () => {
     expect((failure as AggregateError).errors[0].message).toContain(
       'acquisition trust gate FAILED: acquisition=unknown, population=unknown'
     )
-    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifest: expect.objectContaining({
+          assessment: { acquisition_state: 'unknown', population_state: 'unknown' },
+        }),
+      })
+    )
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+  })
+
+  it('persists a missing-runner manifest as unknown before refusing publication', async () => {
+    mockResolveDeployedSha.mockReturnValue('unknown-deployment')
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard: async () => capturedLeaderboard(),
+      listLeaderboard: async function* () {
+        throw new Error('legacy stream must not run')
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    let failure: unknown
+    try {
+      await processTierA(job)
+    } catch (error) {
+      failure = error
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors[0].message).toContain(
+      'acquisition trust gate FAILED: acquisition=unknown, population=unknown'
+    )
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifest: expect.objectContaining({
+          runner_git_sha: null,
+          assessment: { acquisition_state: 'unknown', population_state: 'unknown' },
+        }),
+      })
+    )
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
   })
 
   it('preserves capture error identity through the per-window AggregateError', async () => {
-    const failedCapture = capturedLeaderboard({
-      sourcePages: [
-        {
-          rawPage: page,
-          sourceRowCount: 0,
-          requestSha256: 'd'.repeat(64),
-          httpStatus: 503,
-          paginationPosition: { kind: 'page_index', request_page_index: 1 },
-          sourceReports: {
-            population: { state: 'not_reported' },
-            page_count: { state: 'not_reported' },
-            current_page: { state: 'not_reported' },
-            page_size: { state: 'not_reported' },
-          },
-        },
-      ],
-      parsePages: [],
-      terminationReason: 'upstream_error',
-      parserTransformation: { kind: 'identity_projection', source_page_ordinals: [] },
-    })
-    const upstream = new LeaderboardCaptureUpstreamError(
-      503,
-      page.url,
-      failedCapture,
-      new Error('service unavailable')
-    )
+    let failedRawPage: RawPage | null = null
+    let failedCapture: LeaderboardCapture | null = null
+    let upstream: LeaderboardCaptureUpstreamError | null = null
     mockGetAdapter.mockReturnValue({
       captureLeaderboard: async () => {
+        const captureBase = capturedLeaderboard()
+        failedRawPage = {
+          ...captureBase.sourcePages[0].rawPage,
+          payload: { error: 'service unavailable' },
+        }
+        failedCapture = capturedLeaderboard({
+          sourcePages: [
+            {
+              rawPage: failedRawPage,
+              sourceRowCount: 0,
+              requestSha256: 'd'.repeat(64),
+              httpStatus: 503,
+              paginationPosition: { kind: 'page_index', request_page_index: 1 },
+              sourceReports: {
+                population: { state: 'not_reported' },
+                page_count: { state: 'not_reported' },
+                current_page: { state: 'not_reported' },
+                page_size: { state: 'not_reported' },
+              },
+            },
+          ],
+          parsePages: [],
+          terminationReason: 'upstream_error',
+          parserTransformation: { kind: 'identity_projection', source_page_ordinals: [] },
+        })
+        upstream = new LeaderboardCaptureUpstreamError(
+          503,
+          failedRawPage.url,
+          failedCapture,
+          new Error('service unavailable')
+        )
         throw upstream
       },
       listLeaderboard: async function* () {
@@ -474,6 +565,358 @@ describe('Tier-A board-series publication guard', () => {
       'session close failed: browser close failed'
     )
     expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePages: [failedRawPage],
+        manifest: expect.objectContaining({
+          termination_reason: 'upstream_error',
+          population: expect.objectContaining({
+            accepted_population: 0,
+            rejected_row_count: 0,
+          }),
+          assessment: { acquisition_state: 'unknown', population_state: 'unknown' },
+        }),
+      })
+    )
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+  })
+
+  it('uses real accepted counts from pages captured before an upstream error', async () => {
+    let upstream: LeaderboardCaptureUpstreamError | null = null
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard: async () => {
+        const base = capturedLeaderboard()
+        const errorRawPage: RawPage = {
+          ...base.sourcePages[1].rawPage,
+          payload: { error: 'second page unavailable' },
+        }
+        const failedCapture = capturedLeaderboard({
+          sourcePages: [
+            base.sourcePages[0],
+            {
+              ...base.sourcePages[1],
+              rawPage: errorRawPage,
+              sourceRowCount: 0,
+              httpStatus: 503,
+              sourceReports: {
+                population: { state: 'not_reported' },
+                page_count: { state: 'not_reported' },
+                current_page: { state: 'not_reported' },
+                page_size: { state: 'not_reported' },
+              },
+            },
+          ],
+          parsePages: [base.sourcePages[0].rawPage],
+          terminationReason: 'upstream_error',
+          parserTransformation: { kind: 'identity_projection', source_page_ordinals: [1] },
+        })
+        upstream = new LeaderboardCaptureUpstreamError(
+          503,
+          errorRawPage.url,
+          failedCapture,
+          new Error('service unavailable')
+        )
+        throw upstream
+      },
+      listLeaderboard: async function* () {
+        throw new Error('legacy stream must not run')
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    let failure: unknown
+    try {
+      await processTierA(job)
+    } catch (error) {
+      failure = error
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect(((failure as AggregateError).errors[0] as Error & { cause?: unknown }).cause).toBe(
+      upstream
+    )
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifest: expect.objectContaining({
+          termination_reason: 'upstream_error',
+          parser_input: expect.objectContaining({ page_count: 1 }),
+          population: expect.objectContaining({
+            observed_row_count: 1,
+            accepted_population: 1,
+            rejected_row_count: 0,
+          }),
+          assessment: { acquisition_state: 'unknown', population_state: 'unknown' },
+        }),
+      })
+    )
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('persists a real first-request transport failure as unavailable and unknown', async () => {
+    const transportError = new Error('connection failed before a response')
+    const captureSession = {
+      sourceSlug: src.slug,
+      paced: <T>(fn: () => Promise<T>) => fn(),
+      close: mockSessionClose,
+    } as unknown as FetchSession
+    mockOpenSession.mockResolvedValue(captureSession)
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard: (session: FetchSession) =>
+        captureNumericLeaderboard({
+          session,
+          fetcher: async () => {
+            throw transportError
+          },
+          buildRequest: (pageIndex) => ({
+            url: `https://xt.test/leader-list?page=${pageIndex}`,
+            method: 'GET',
+            headers: {},
+          }),
+          projectPublicRequest: (template) => ({
+            url: template.url,
+            method: template.method,
+          }),
+          pageBinding: { location: 'query', key: 'page' },
+          extractMeta: () => ({
+            rowCount: 0,
+            reportedPopulation: null,
+            reportedPageCount: null,
+            reportedCurrentPage: null,
+            reportedPageSize: null,
+          }),
+          pageSize: src.page_size,
+          safetyPageCap: 5_000,
+        }),
+      listLeaderboard: async function* () {
+        throw new Error('legacy stream must not run')
+      },
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    let failure: unknown
+    try {
+      await processTierA(job)
+    } catch (error) {
+      failure = error
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    const wrapped = (failure as AggregateError).errors[0] as Error & { cause?: unknown }
+    expect(wrapped.cause).toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    expect(wrapped.cause).toMatchObject({ status: null, cause: transportError })
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePages: [],
+        manifest: expect.objectContaining({
+          capture_evidence_state: 'unavailable',
+          termination_reason: 'unknown',
+          population: expect.objectContaining({
+            observed_row_count: 0,
+            accepted_population: 0,
+            rejected_row_count: 0,
+          }),
+          assessment: { acquisition_state: 'unknown', population_state: 'unknown' },
+        }),
+      })
+    )
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('keeps a series-parser bug from erasing valid population evidence', async () => {
+    const seriesError = new Error('series envelope changed')
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard: async () => capturedLeaderboard(),
+      listLeaderboard: async function* () {
+        throw new Error('legacy stream must not run')
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => {
+        throw seriesError
+      },
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    let failure: unknown
+    try {
+      await processTierA(job)
+    } catch (error) {
+      failure = error
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect(((failure as AggregateError).errors[0] as Error & { cause?: unknown }).cause).toBe(
+      seriesError
+    )
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifest: expect.objectContaining({
+          assessment: { acquisition_state: 'complete', population_state: 'verified' },
+        }),
+      })
+    )
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+  })
+
+  it('stops later windows and preserves upstream plus artifact persistence failures', async () => {
+    mockNativeRankingTimeframes.mockReturnValue([30, 90])
+    const attempted: number[] = []
+    let upstream: LeaderboardCaptureUpstreamError | null = null
+    const persistenceError = new Error('artifact database unavailable')
+    mockWriteLeaderboardRawArtifactSet.mockRejectedValueOnce(persistenceError)
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard: async (_session: unknown, _source: SourceRow, timeframe: number) => {
+        attempted.push(timeframe)
+        const base = capturedLeaderboard()
+        const failedRawPage: RawPage = {
+          ...base.sourcePages[0].rawPage,
+          payload: { error: 'upstream unavailable' },
+        }
+        const failedCapture = capturedLeaderboard({
+          sourcePages: [
+            {
+              ...base.sourcePages[0],
+              rawPage: failedRawPage,
+              sourceRowCount: 0,
+              httpStatus: 503,
+              sourceReports: {
+                population: { state: 'not_reported' },
+                page_count: { state: 'not_reported' },
+                current_page: { state: 'not_reported' },
+                page_size: { state: 'not_reported' },
+              },
+            },
+          ],
+          parsePages: [],
+          terminationReason: 'upstream_error',
+          parserTransformation: { kind: 'identity_projection', source_page_ordinals: [] },
+        })
+        upstream = new LeaderboardCaptureUpstreamError(
+          503,
+          failedRawPage.url,
+          failedCapture,
+          new Error('service unavailable')
+        )
+        throw upstream
+      },
+      listLeaderboard: async function* () {
+        throw new Error('legacy stream must not run')
+      },
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    let failure: unknown
+    try {
+      await processTierA(job)
+    } catch (error) {
+      failure = error
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors).toEqual([upstream, persistenceError])
+    expect(attempted).toEqual([30])
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('persists an explicit unknown RAW fallback and stops when capture parsing fails', async () => {
+    mockNativeRankingTimeframes.mockReturnValue([30, 90])
+    const attempted: number[] = []
+    const parserError = new Error('parser contract mismatch')
+    let capture: LeaderboardCapture | null = null
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard: async (_session: unknown, _source: SourceRow, timeframe: number) => {
+        attempted.push(timeframe)
+        capture = capturedLeaderboard()
+        return capture
+      },
+      listLeaderboard: async function* () {
+        throw new Error('legacy stream must not run')
+      },
+      parseLeaderboard: () => {
+        throw parserError
+      },
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    let failure: unknown
+    try {
+      await processTierA(job)
+    } catch (error) {
+      failure = error
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors).toEqual([parserError])
+    expect(attempted).toEqual([30])
+    expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockWriteRawObject).toHaveBeenCalledWith({
+      sourceId: src.id,
+      sourceSlug: src.slug,
+      jobType: 'tier_a_failure',
+      timeframe: 30,
+      payload: (capture as LeaderboardCapture).sourcePages.map((sourcePage) => sourcePage.rawPage),
+      serialization: STRICT_CANONICAL_JSON_CONTRACT,
+      meta: {
+        pageCount: 2,
+        observation_cycle_id: expectedCycleId,
+        trust_evidence: {
+          state: 'unknown',
+          rank_eligible: false,
+          failure_stage: 'parse_validate_or_manifest',
+          termination_reason: 'empty_page',
+          capture_started_at: expect.any(String),
+          capture_completed_at: expect.any(String),
+        },
+      },
+    })
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+  })
+
+  it('preserves parser and RAW fallback persistence failures together', async () => {
+    const parserError = new Error('parser contract mismatch')
+    const persistenceError = new Error('RAW bucket unavailable')
+    mockWriteRawObject.mockRejectedValueOnce(persistenceError)
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard: async () => capturedLeaderboard(),
+      listLeaderboard: async function* () {
+        throw new Error('legacy stream must not run')
+      },
+      parseLeaderboard: () => {
+        throw parserError
+      },
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    let failure: unknown
+    try {
+      await processTierA(job)
+    } catch (error) {
+      failure = error
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors).toEqual([parserError, persistenceError])
+    expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
   })
@@ -494,6 +937,7 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockWriteRawObject).toHaveBeenCalledWith(
       expect.objectContaining({ payload: [page], meta: expect.objectContaining({ pageCount: 1 }) })
     )
+    expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
     expect(mockResolveDeployedSha).not.toHaveBeenCalled()
   })
 
