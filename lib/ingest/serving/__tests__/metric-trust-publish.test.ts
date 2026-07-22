@@ -57,8 +57,8 @@ const rows: ParsedLeaderboardRow[] = [
     headlinePnl: 100,
     headlineWinRate: null,
     headlineMetricSources: {
-      roi: { fieldPath: 'data.list[].roi' },
-      pnl: { fieldPath: 'data.list[].pnl' },
+      roi: { fieldPath: 'data.list[].roi', sourcePageOrdinal: 1 },
+      pnl: { fieldPath: 'data.list[].pnl', sourcePageOrdinal: 1 },
     },
     raw: {},
   },
@@ -75,7 +75,9 @@ const rows: ParsedLeaderboardRow[] = [
     headlineWinRate: null,
     // Staging removed PnL lineage: keep the visible value but make its trust
     // observation unknown so the ROI/PnL pair cannot enter ranking.
-    headlineMetricSources: { roi: { fieldPath: 'data.list[].roi' } },
+    headlineMetricSources: {
+      roi: { fieldPath: 'data.list[].roi', sourcePageOrdinal: 1 },
+    },
     raw: {},
   },
 ]
@@ -184,6 +186,99 @@ function exactRequestAttemptBoundTrustFixture(source: SourceRow = src) {
   )
 }
 
+function longWindowAttemptBoundFixture() {
+  const source = { ...src, page_size: 1 }
+  const fetchedAt = [
+    '2026-07-21T10:00:01.000Z',
+    '2026-07-21T10:10:01.000Z',
+    '2026-07-21T10:20:01.000Z',
+  ] as const
+  const pageRows = [
+    { leadPortfolioId: 'one', roi: 10, pnl: 100 },
+    { leadPortfolioId: 'two', roi: 5, pnl: 50 },
+  ]
+  const rawPages: RawPage[] = fetchedAt.map((pageFetchedAt, index) => ({
+    pageIndex: index + 1,
+    payload: {
+      code: '000000',
+      success: true,
+      data: { total: 2, list: index < pageRows.length ? [pageRows[index]] : [] },
+    },
+    url: sourcePage.url,
+    fetchedAt: pageFetchedAt,
+  }))
+  const sourcePages = rawPages.map((rawPage, index) => {
+    const requestSha256 = binanceLeaderboardListRequestSha256({
+      sourceSlug: source.slug,
+      pageIndex: index + 1,
+      pageSize: 1,
+      timeframe: 30,
+    })
+    if (requestSha256 === null) throw new Error('test source has no reviewed request contract')
+    return {
+      raw_page: rawPage,
+      source_row_count: index < pageRows.length ? 1 : 0,
+      request_sha256: requestSha256,
+      http_status: 200,
+      pagination_position: { kind: 'page_index' as const, request_page_index: index + 1 },
+      source_reports: {
+        population: { state: 'reported' as const, value: 2 },
+        page_count: { state: 'not_reported' as const },
+        current_page: { state: 'not_reported' as const },
+        page_size: { state: 'not_reported' as const },
+      },
+    }
+  })
+  const built = buildLeaderboardAcquisitionManifestV3({
+    source: {
+      id: source.id,
+      slug: source.slug,
+      adapter_slug: source.adapter_slug,
+      configured_page_size: source.page_size,
+      configured_pagination_kind: source.pagination_kind,
+    },
+    surface: 'tier_a_leaderboard',
+    timeframe: 30,
+    started_at: '2026-07-21T10:00:00.000Z',
+    completed_at: '2026-07-21T10:20:02.000Z',
+    runner_git_sha: 'a'.repeat(40),
+    observation_cycle_id: 'tier-a:binance_futures:long-window-test',
+    capture_evidence_state: 'verified',
+    termination_reason: 'empty_page',
+    capture_config: { caller_page_cap: null, safety_page_cap: 5_000 },
+    source_pages: sourcePages,
+    parse_pages: rawPages.slice(0, 2),
+    parser_transformation: {
+      kind: 'identity_projection',
+      source_page_ordinals: [1, 2],
+    },
+    accepted_population: 2,
+    rejected_row_count: 0,
+    acquisition_attempt: {
+      binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+      attempt_id: '00000000-0000-4000-8000-000000000001',
+      attempt_seq: 41,
+    },
+  })
+  const pageBoundRows: ParsedLeaderboardRow[] = [
+    {
+      ...rows[0],
+      headlineMetricSources: {
+        roi: { fieldPath: 'data.list[].roi', sourcePageOrdinal: 1 },
+        pnl: { fieldPath: 'data.list[].pnl', sourcePageOrdinal: 1 },
+      },
+    },
+    {
+      ...rows[1],
+      headlineMetricSources: {
+        roi: { fieldPath: 'data.list[].roi', sourcePageOrdinal: 2 },
+        pnl: { fieldPath: 'data.list[].pnl', sourcePageOrdinal: 2 },
+      },
+    },
+  ]
+  return { source, bundle: trustBundle(built), rows: pageBoundRows }
+}
+
 const contracts = [
   {
     id: '11',
@@ -220,6 +315,188 @@ const contracts = [
     allow_derived_population: false,
   },
 ]
+
+function successfulTrustWriteQuery() {
+  return jest.fn(async (sqlInput: unknown, params: unknown[] = []) => {
+    const sql = String(sqlInput)
+    if (sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')) {
+      return { rows: [{ attempt_seq: '41' }], rowCount: 1 }
+    }
+    if (sql.includes('INSERT INTO arena.metric_trust_runs')) return { rows: [], rowCount: 1 }
+    if (sql.includes('FROM arena.metric_source_contracts')) {
+      return { rows: contracts, rowCount: contracts.length }
+    }
+    if (sql.includes('INSERT INTO arena.metric_trust_observations')) {
+      const input = JSON.parse(String(params[0])) as Array<{
+        contract_id: string
+        trader_id: number
+      }>
+      return {
+        rows: input.map((observation, index) => ({
+          id: String(401 + index),
+          contract_id: observation.contract_id,
+          trader_id: String(observation.trader_id),
+        })),
+        rowCount: input.length,
+      }
+    }
+    if (sql.includes('INSERT INTO arena.metric_trust_artifacts')) {
+      const input = JSON.parse(String(params[0])) as Array<Record<string, unknown>>
+      return { rows: input, rowCount: input.length }
+    }
+    throw new Error(`unexpected SQL: ${sql}`)
+  })
+}
+
+interface WrittenObservationInput {
+  contract_id: string
+  trader_id: number
+  exchange_trader_id: string
+  value: number | null
+  quality: string
+  history_state: string
+  price_state: string
+  cost_basis_state: string
+  population_state: string
+  window_state: string
+  unit_state: string
+  freshness_state: string
+  blocking_reasons: unknown[]
+  source_as_of: string
+  window_start: string
+  window_end: string
+}
+
+function longCaptureReconciliationQuery(
+  prepared: ReturnType<typeof prepareLeaderboardMetricTrust>,
+  inputs: WrittenObservationInput[],
+  swapTraderTimes = false
+) {
+  const observationRows = inputs.map((input, index) => {
+    const timeSource = swapTraderTimes
+      ? inputs.find(
+          (candidate) =>
+            candidate.contract_id === input.contract_id &&
+            candidate.exchange_trader_id !== input.exchange_trader_id
+        )!
+      : input
+    const contract = contracts.find((candidate) => candidate.id === input.contract_id)!
+    return {
+      id: String(501 + index),
+      contract_id: input.contract_id,
+      trader_id: String(input.trader_id),
+      exchange_trader_id: input.exchange_trader_id,
+      value: input.value === null ? null : String(input.value),
+      quality: input.quality,
+      history_state: input.history_state,
+      price_state: input.price_state,
+      cost_basis_state: input.cost_basis_state,
+      population_state: input.population_state,
+      window_state: input.window_state,
+      unit_state: input.unit_state,
+      freshness_state: input.freshness_state,
+      blocking_reasons: input.blocking_reasons,
+      source_as_of: timeSource.source_as_of,
+      valid_until: new Date(
+        Date.parse(timeSource.source_as_of) + Number(contract.max_freshness_ms)
+      ).toISOString(),
+      window_start: timeSource.window_start,
+      window_end: timeSource.window_end,
+    }
+  })
+  const artifacts = observationRows.flatMap((observation) => [
+    {
+      observation_id: observation.id,
+      role: 'source_payload',
+      raw_object_id: String(prepared.artifacts.sourcePayload.id),
+      content_hash: prepared.artifacts.sourcePayload.contentHash,
+    },
+    {
+      observation_id: observation.id,
+      role: 'population_manifest',
+      raw_object_id: String(prepared.artifacts.populationManifest.id),
+      content_hash: prepared.sourceRunId,
+    },
+  ])
+  return jest.fn(async (sqlInput: unknown) => {
+    const sql = String(sqlInput)
+    if (sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')) {
+      return { rows: [{ attempt_seq: '41' }], rowCount: 1 }
+    }
+    if (sql.includes('FROM arena.metric_trust_runs AS run')) {
+      return {
+        rows: [
+          {
+            source_id: prepared.src.id,
+            timeframe: prepared.timeframe,
+            snapshot_id: '77',
+            snapshot_scraped_at: '2026-07-21 10:20:02+00',
+            population_raw_object_id: String(prepared.artifacts.sourcePayload.id),
+            manifest_raw_object_id: String(prepared.artifacts.populationManifest.id),
+            started_at: '2026-07-21 10:00:00+00',
+            completed_at: '2026-07-21 10:20:02+00',
+            reported_population: 2,
+            fetched_population: 2,
+            caller_limited: false,
+            acquisition_state: 'complete',
+            population_state: 'verified',
+            expected_count: 2,
+            actual_count: 2,
+            baseline_used: 2,
+            count_check_passed: true,
+            is_derived: false,
+            snapshot_raw_object_id: String(prepared.artifacts.sourcePayload.id),
+            current_snapshot_source_id: prepared.src.id,
+            current_snapshot_timeframe: prepared.timeframe,
+            current_snapshot_scraped_at: '2026-07-21 10:20:02+00',
+            population_content_hash: prepared.artifacts.sourcePayload.contentHash,
+            population_quarantined: false,
+            population_source_run_id: prepared.sourceRunId,
+            population_role: 'source_payload',
+            population_meta: {
+              raw_integrity: { hash_algorithm: 'sha256', hash_scope: 'json_utf8' },
+            },
+            manifest_content_hash: prepared.sourceRunId,
+            manifest_quarantined: false,
+            manifest_source_run_id: prepared.sourceRunId,
+            manifest_role: 'population_manifest',
+            manifest_meta: {
+              raw_integrity: { hash_algorithm: 'sha256', hash_scope: 'json_utf8' },
+            },
+          },
+        ],
+        rowCount: 1,
+      }
+    }
+    if (sql.includes('FROM arena.leaderboard_entries AS entry')) {
+      return {
+        rows: prepared.rows.map((row, index) => ({
+          trader_id: String(1_001 + index),
+          trader_source_id: prepared.src.id,
+          exchange_trader_id: row.exchangeTraderId,
+          timeframe: prepared.timeframe,
+          scraped_at: '2026-07-21 10:20:02+00',
+          rank: row.rank,
+          headline_roi: row.headlineRoi === null ? null : String(row.headlineRoi),
+          headline_pnl: row.headlinePnl === null ? null : String(row.headlinePnl),
+          headline_win_rate: row.headlineWinRate === null ? null : String(row.headlineWinRate),
+          currency: prepared.src.currency,
+        })),
+        rowCount: prepared.rows.length,
+      }
+    }
+    if (sql.includes('FROM arena.metric_source_contracts')) {
+      return { rows: contracts, rowCount: contracts.length }
+    }
+    if (sql.includes('FROM arena.metric_trust_observations AS observation')) {
+      return { rows: observationRows, rowCount: observationRows.length }
+    }
+    if (sql.includes('FROM arena.metric_trust_artifacts')) {
+      return { rows: artifacts, rowCount: artifacts.length }
+    }
+    throw new Error(`unexpected SQL: ${sql}`)
+  })
+}
 
 describe('Tier-A metric trust transaction writer', () => {
   it('prepares an attempt-bound v3 manifest through its version-specific parser', () => {
@@ -484,8 +761,6 @@ describe('Tier-A metric trust transaction writer', () => {
       prepared.sourceRunId,
       30,
       'USDT',
-      '2026-07-21T10:00:01.000Z',
-      '2026-06-21T10:00:01.000Z',
     ])
     expect(observations).toEqual(
       expect.arrayContaining([
@@ -603,6 +878,239 @@ describe('Tier-A metric trust transaction writer', () => {
         }),
       ])
     )
+  })
+
+  it('preserves long-capture page times without promoting an unprovable Binance window', async () => {
+    const fixture = longWindowAttemptBoundFixture()
+    const query = successfulTrustWriteQuery()
+    const prepared = prepareLeaderboardMetricTrust({
+      src: fixture.source,
+      timeframe: 30,
+      rows: fixture.rows,
+      rejectedRowCount: 0,
+      bundle: fixture.bundle,
+    })
+    expect(prepared.nativeWindowEvidence).toMatchObject({
+      state: 'unknown',
+      diagnostic: 'page_time_span_exceeds_tolerance',
+    })
+
+    await writeLeaderboardMetricTrust(queryClient(query), prepared, {
+      snapshotId: 77,
+      snapshotScrapedAt: '2026-07-21T10:20:02.000Z',
+      traderIds: new Map([
+        ['one', 1_001],
+        ['two', 1_002],
+      ]),
+    })
+    const observationCall = query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO arena.metric_trust_observations')
+    )!
+    const observations = JSON.parse(String(observationCall[1][0])) as WrittenObservationInput[]
+    expect(observations.filter((observation) => observation.exchange_trader_id === 'one')).toEqual([
+      expect.objectContaining({
+        quality: 'unknown',
+        window_state: 'unknown',
+        freshness_state: 'verified',
+        blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+        source_as_of: '2026-07-21T10:00:01.000Z',
+        window_start: '2026-06-21T10:00:01.000Z',
+        window_end: '2026-07-21T10:00:01.000Z',
+      }),
+      expect.objectContaining({
+        quality: 'unknown',
+        window_state: 'unknown',
+        freshness_state: 'verified',
+        blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+        source_as_of: '2026-07-21T10:00:01.000Z',
+        window_start: '2026-06-21T10:00:01.000Z',
+        window_end: '2026-07-21T10:00:01.000Z',
+      }),
+    ])
+    expect(observations.filter((observation) => observation.exchange_trader_id === 'two')).toEqual([
+      expect.objectContaining({
+        quality: 'unknown',
+        window_state: 'unknown',
+        freshness_state: 'verified',
+        blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+        source_as_of: '2026-07-21T10:10:01.000Z',
+        window_start: '2026-06-21T10:10:01.000Z',
+        window_end: '2026-07-21T10:10:01.000Z',
+      }),
+      expect.objectContaining({
+        quality: 'unknown',
+        window_state: 'unknown',
+        freshness_state: 'verified',
+        blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+        source_as_of: '2026-07-21T10:10:01.000Z',
+        window_start: '2026-06-21T10:10:01.000Z',
+        window_end: '2026-07-21T10:10:01.000Z',
+      }),
+    ])
+    expect(observations.some((observation) => observation.source_as_of.includes('10:20:01'))).toBe(
+      false
+    )
+    await expect(
+      reconcileLeaderboardMetricTrust(
+        queryClient(longCaptureReconciliationQuery(prepared, observations)),
+        prepared
+      )
+    ).resolves.toEqual({
+      snapshotId: 77,
+      scrapedAt: '2026-07-21T10:20:02.000Z',
+      expectedCount: 2,
+      actualCount: 2,
+      baselineUsed: 2,
+      traderIds: new Map([
+        ['one', 1_001],
+        ['two', 1_002],
+      ]),
+      trust: {
+        sourceRunId: prepared.sourceRunId,
+        observationsWritten: 4,
+        artifactRefsWritten: 8,
+        replayed: true,
+      },
+    })
+    await expect(
+      reconcileLeaderboardMetricTrust(
+        queryClient(longCaptureReconciliationQuery(prepared, observations, true)),
+        prepared
+      )
+    ).rejects.toThrow('existing metric observation mismatch')
+
+    const missingRows = JSON.parse(JSON.stringify(fixture.rows)) as ParsedLeaderboardRow[]
+    delete missingRows[1].headlineMetricSources?.pnl?.sourcePageOrdinal
+    const missingQuery = successfulTrustWriteQuery()
+    await writeLeaderboardMetricTrust(
+      queryClient(missingQuery),
+      prepareLeaderboardMetricTrust({
+        src: fixture.source,
+        timeframe: 30,
+        rows: missingRows,
+        rejectedRowCount: 0,
+        bundle: fixture.bundle,
+      }),
+      {
+        snapshotId: 78,
+        snapshotScrapedAt: '2026-07-21T10:20:02.000Z',
+        traderIds: new Map([
+          ['one', 1_001],
+          ['two', 1_002],
+        ]),
+      }
+    )
+    const missingObservationCall = missingQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO arena.metric_trust_observations')
+    )!
+    expect(
+      (JSON.parse(String(missingObservationCall[1][0])) as Array<Record<string, unknown>>).find(
+        (observation) =>
+          observation.exchange_trader_id === 'two' && observation.contract_id === '11'
+      )
+    ).toMatchObject({
+      quality: 'unknown',
+      window_state: 'unknown',
+      freshness_state: 'unknown',
+      blocking_reasons: [
+        { code: 'native_window_boundary_unverified', state: 'unknown' },
+        { code: 'source_page_lineage_unknown', state: 'unknown' },
+      ],
+    })
+
+    const invalidRows = JSON.parse(JSON.stringify(fixture.rows)) as ParsedLeaderboardRow[]
+    // Page 3 exists only as the empty terminal response and is deliberately
+    // absent from parser_input.source_page_ordinals. Claim both metrics came
+    // from it so this case exercises invalid lineage rather than cross-metric
+    // page conflict, which is asserted separately below.
+    invalidRows[1].headlineMetricSources!.roi!.sourcePageOrdinal = 3
+    invalidRows[1].headlineMetricSources!.pnl!.sourcePageOrdinal = 3
+    const invalidQuery = successfulTrustWriteQuery()
+    await writeLeaderboardMetricTrust(
+      queryClient(invalidQuery),
+      prepareLeaderboardMetricTrust({
+        src: fixture.source,
+        timeframe: 30,
+        rows: invalidRows,
+        rejectedRowCount: 0,
+        bundle: fixture.bundle,
+      }),
+      {
+        snapshotId: 79,
+        snapshotScrapedAt: '2026-07-21T10:20:02.000Z',
+        traderIds: new Map([
+          ['one', 1_001],
+          ['two', 1_002],
+        ]),
+      }
+    )
+    const invalidObservationCall = invalidQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO arena.metric_trust_observations')
+    )!
+    expect(
+      (JSON.parse(String(invalidObservationCall[1][0])) as Array<Record<string, unknown>>).find(
+        (observation) =>
+          observation.exchange_trader_id === 'two' && observation.contract_id === '11'
+      )
+    ).toMatchObject({
+      quality: 'unknown',
+      window_state: 'unknown',
+      freshness_state: 'unknown',
+      blocking_reasons: [
+        { code: 'native_window_boundary_unverified', state: 'unknown' },
+        { code: 'source_page_lineage_invalid', state: 'unknown' },
+      ],
+      source_as_of: '2026-07-21T10:00:01.000Z',
+    })
+
+    const conflictingRows = JSON.parse(JSON.stringify(fixture.rows)) as ParsedLeaderboardRow[]
+    conflictingRows[0].headlineMetricSources!.pnl!.sourcePageOrdinal = 2
+    const conflictQuery = successfulTrustWriteQuery()
+    await writeLeaderboardMetricTrust(
+      queryClient(conflictQuery),
+      prepareLeaderboardMetricTrust({
+        src: fixture.source,
+        timeframe: 30,
+        rows: conflictingRows,
+        rejectedRowCount: 0,
+        bundle: fixture.bundle,
+      }),
+      {
+        snapshotId: 80,
+        snapshotScrapedAt: '2026-07-21T10:20:02.000Z',
+        traderIds: new Map([
+          ['one', 1_001],
+          ['two', 1_002],
+        ]),
+      }
+    )
+    const conflictObservationCall = conflictQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO arena.metric_trust_observations')
+    )!
+    expect(
+      (JSON.parse(String(conflictObservationCall[1][0])) as Array<Record<string, unknown>>).filter(
+        (observation) => observation.exchange_trader_id === 'one'
+      )
+    ).toEqual([
+      expect.objectContaining({
+        quality: 'unknown',
+        window_state: 'unknown',
+        freshness_state: 'unknown',
+        blocking_reasons: [
+          { code: 'native_window_boundary_unverified', state: 'unknown' },
+          { code: 'source_page_lineage_conflict', state: 'unknown' },
+        ],
+      }),
+      expect.objectContaining({
+        quality: 'unknown',
+        window_state: 'unknown',
+        freshness_state: 'unknown',
+        blocking_reasons: [
+          { code: 'native_window_boundary_unverified', state: 'unknown' },
+          { code: 'source_page_lineage_conflict', state: 'unknown' },
+        ],
+      }),
+    ])
   })
 
   it('rejects an attempt-bound write before inserts without the exact latest outcome', async () => {
