@@ -245,8 +245,8 @@ describe('Binance evidence-preserving leaderboard capture', () => {
     })
 
     expect(assessLeaderboardNativeWindowRequest(built.manifest)).toMatchObject({
-      state: 'verified',
-      semantics: 'provider_native_period_aggregate',
+      state: 'unknown',
+      diagnostic: 'provider_window_boundary_unavailable',
     })
   })
 

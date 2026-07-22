@@ -162,7 +162,7 @@ function attemptBoundTrustFixture(source: SourceRow = src) {
   )
 }
 
-function exactWindowAttemptBoundTrustFixture(source: SourceRow = src) {
+function exactRequestAttemptBoundTrustFixture(source: SourceRow = src) {
   const input = manifestInput(source)
   const requestSha256 = binanceLeaderboardListRequestSha256({
     sourceSlug: source.slug,
@@ -507,7 +507,7 @@ describe('Tier-A metric trust transaction writer', () => {
     )
   })
 
-  it('writes complete observations only when the reviewed native-window request also matches', async () => {
+  it('keeps exact request labels out of ranking without provider window boundaries', async () => {
     const query = jest.fn(async (sqlInput: unknown, params: unknown[] = []) => {
       const sql = String(sqlInput)
       if (sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')) {
@@ -542,12 +542,12 @@ describe('Tier-A metric trust transaction writer', () => {
       timeframe: 30,
       rows,
       rejectedRowCount: 0,
-      bundle: exactWindowAttemptBoundTrustFixture(),
+      bundle: exactRequestAttemptBoundTrustFixture(),
     })
 
     expect(prepared.nativeWindowEvidence).toMatchObject({
-      state: 'verified',
-      semantics: 'provider_native_period_aggregate',
+      state: 'unknown',
+      diagnostic: 'provider_window_boundary_unavailable',
     })
     await writeLeaderboardMetricTrust(queryClient(query), prepared, {
       snapshotId: 77,
@@ -573,30 +573,33 @@ describe('Tier-A metric trust transaction writer', () => {
         expect.objectContaining({
           exchange_trader_id: 'one',
           contract_id: '11',
-          quality: 'complete',
-          window_state: 'verified',
-          blocking_reasons: [],
+          quality: 'unknown',
+          window_state: 'unknown',
+          blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
         }),
         expect.objectContaining({
           exchange_trader_id: 'one',
           contract_id: '12',
-          quality: 'complete',
-          window_state: 'verified',
-          blocking_reasons: [],
+          quality: 'unknown',
+          window_state: 'unknown',
+          blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
         }),
         expect.objectContaining({
           exchange_trader_id: 'two',
           contract_id: '11',
           quality: 'unknown',
-          window_state: 'verified',
-          blocking_reasons: [{ code: 'field_lineage_unknown', state: 'unknown' }],
+          window_state: 'unknown',
+          blocking_reasons: [
+            { code: 'field_lineage_unknown', state: 'unknown' },
+            { code: 'native_window_boundary_unverified', state: 'unknown' },
+          ],
         }),
         expect.objectContaining({
           exchange_trader_id: 'two',
           contract_id: '12',
-          quality: 'complete',
-          window_state: 'verified',
-          blocking_reasons: [],
+          quality: 'unknown',
+          window_state: 'unknown',
+          blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
         }),
       ])
     )
