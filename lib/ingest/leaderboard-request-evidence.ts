@@ -109,7 +109,10 @@ export type NativeWindowRequestEvidence =
         | 'source_contract_unavailable'
         | 'source_contract_mismatch'
         | 'page_binding_mismatch'
+        | 'page_timestamp_invalid'
         | 'page_time_span_exceeds_tolerance'
+        | 'pagination_snapshot_unavailable'
+        | 'provider_window_boundary_unavailable'
         | 'request_digest_mismatch'
     }
 
@@ -252,6 +255,9 @@ export function assessLeaderboardNativeWindowRequest(
   const pageSize = manifest.source.configured_page_size ?? BINANCE_DEFAULT_PAGE_SIZE
   const expectedUrl = BINANCE_LEADERBOARD_LIST_URLS[contract.board]
   const pageTimes = manifest.source_pages.map((page) => Date.parse(page.fetched_at))
+  if (pageTimes.some((pageTime) => !Number.isFinite(pageTime))) {
+    return unknownEvidence('page_timestamp_invalid')
+  }
   if (Math.max(...pageTimes) - Math.min(...pageTimes) > BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS) {
     // Rows do not yet retain their source-page ordinal. Beyond the contract's
     // five-minute end-lag tolerance, one run-wide timestamp would overstate
@@ -282,10 +288,19 @@ export function assessLeaderboardNativeWindowRequest(
       return unknownEvidence('request_digest_mismatch')
     }
   }
-
-  return {
-    state: 'verified',
-    contractId: BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
-    semantics: contract.windowSemantics,
+  if (manifest.source_pages.length > 1) {
+    // Binance's numeric pageNumber is a live offset, not a snapshot cursor.
+    // A trader entering, leaving, or reordering between otherwise valid page
+    // requests can omit one row and include another while total, page hashes,
+    // and duplicate counts all remain stable. Until the capture binds every
+    // page to one provider snapshot/cursor, a stitched population cannot prove
+    // an exact native-window boundary and must remain outside ranking.
+    return unknownEvidence('pagination_snapshot_unavailable')
   }
+  // timeRange proves which provider-native label was requested, but Binance
+  // does not return the aggregate's actual computed_at, start, or end boundary.
+  // Treating fetch time as that boundary would falsely satisfy Arena's strict
+  // max_window_end_lag contract even though the board may refresh later. Keep
+  // the request evidence, but do not promote it to exact-window authority.
+  return unknownEvidence('provider_window_boundary_unavailable')
 }

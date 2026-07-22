@@ -7,7 +7,6 @@ import {
 import type { RankingTimeframe } from '@/lib/ingest/core/types'
 import {
   BINANCE_LEADERBOARD_LIST_URLS,
-  BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
   BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS,
   assessLeaderboardNativeWindowRequest,
   binanceLeaderboardListRequestSha256,
@@ -181,13 +180,16 @@ describe('reviewed leaderboard native-window request evidence', () => {
     ['binance_spot', 7],
     ['binance_spot', 30],
     ['binance_spot', 90],
-  ] as const)('verifies the exact %s %dD public request contract', (sourceSlug, timeframe) => {
-    expect(assessLeaderboardNativeWindowRequest(manifest({ sourceSlug, timeframe }))).toEqual({
-      state: 'verified',
-      contractId: BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
-      semantics: 'provider_native_period_aggregate',
-    })
-  })
+  ] as const)(
+    'does not equate the exact %s %dD request label with a window boundary',
+    (sourceSlug, timeframe) => {
+      expect(assessLeaderboardNativeWindowRequest(manifest({ sourceSlug, timeframe }))).toEqual({
+        state: 'unknown',
+        reason: 'native_window_boundary_unverified',
+        diagnostic: 'provider_window_boundary_unavailable',
+      })
+    }
+  )
 
   it('builds one frozen body for the adapter and independent verifier', () => {
     const body = buildBinanceLeaderboardListBody(3, 100, 30)
@@ -260,6 +262,36 @@ describe('reviewed leaderboard native-window request evidence', () => {
     ).toMatchObject({
       state: 'unknown',
       diagnostic: 'page_time_span_exceeds_tolerance',
+    })
+  })
+
+  it('fails closed when the exported verifier receives an invalid page timestamp', () => {
+    const valid = manifest()
+    const invalid = {
+      ...valid,
+      source_pages: valid.source_pages.map((page, index) => ({
+        ...page,
+        fetched_at: index === 0 ? 'not-a-time' : page.fetched_at,
+      })),
+    }
+    expect(assessLeaderboardNativeWindowRequest(invalid)).toMatchObject({
+      state: 'unknown',
+      diagnostic: 'page_timestamp_invalid',
+    })
+  })
+
+  it('fails closed when live offset pages are stitched without a provider snapshot cursor', () => {
+    // Even with stable totals and no duplicate IDs, a reorder between page 1
+    // and page 2 can turn [A,B,C,D] into captured [A,B,D,E], omitting C while
+    // retaining an exited A. Exact request hashes cannot detect that churn.
+    expect(
+      assessLeaderboardNativeWindowRequest(
+        manifest({ secondPageFetchedAt: '2026-07-21T10:00:02.000Z' })
+      )
+    ).toMatchObject({
+      state: 'unknown',
+      reason: 'native_window_boundary_unverified',
+      diagnostic: 'pagination_snapshot_unavailable',
     })
   })
 
