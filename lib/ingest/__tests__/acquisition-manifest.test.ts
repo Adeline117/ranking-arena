@@ -1,10 +1,15 @@
 import { createHash } from 'node:crypto'
 
 import {
+  LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
   LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT,
+  LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
   buildLeaderboardAcquisitionManifest,
+  buildLeaderboardAcquisitionManifestV3,
   parseLeaderboardAcquisitionManifest,
+  parseLeaderboardAcquisitionManifestV3,
   type BuildLeaderboardAcquisitionManifestInput,
+  type BuildLeaderboardAcquisitionManifestV3Input,
   type LeaderboardAcquisitionReportEvidence,
 } from '@/lib/ingest/acquisition-manifest'
 
@@ -106,6 +111,20 @@ function unavailableInput(): BuildLeaderboardAcquisitionManifestInput {
       pagination_position: null,
       source_reports: null,
     })),
+  }
+}
+
+function v3Input(
+  overrides: Partial<BuildLeaderboardAcquisitionManifestV3Input> = {}
+): BuildLeaderboardAcquisitionManifestV3Input {
+  return {
+    ...input(),
+    acquisition_attempt: {
+      binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+      attempt_id: '00000000-0000-4000-8000-000000000001',
+      attempt_seq: 41,
+    },
+    ...overrides,
   }
 }
 
@@ -743,6 +762,129 @@ describe('leaderboard acquisition manifest', () => {
   it('pins the complete v2 manifest contract to a golden sourceRunId', () => {
     expect(buildLeaderboardAcquisitionManifest(input()).sourceRunId).toBe(
       '4cfa2a9bed73e846f36242344f11bb1e322215d98c91f978dd35a6787360340f'
+    )
+  })
+
+  it('builds an additive v3 manifest with physical attempt identity in the canonical body', () => {
+    const built = buildLeaderboardAcquisitionManifestV3(v3Input())
+
+    expect(built.manifest).toMatchObject({
+      data_contract: LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
+      acquisition_attempt: {
+        binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+        attempt_id: '00000000-0000-4000-8000-000000000001',
+        attempt_seq: 41,
+      },
+    })
+    expect(JSON.parse(built.canonicalJson)).toEqual(built.manifest)
+    expect(createHash('sha256').update(built.canonicalJson, 'utf8').digest('hex')).toBe(
+      built.sourceRunId
+    )
+    expect(buildLeaderboardAcquisitionManifest(input()).manifest).not.toHaveProperty(
+      'acquisition_attempt'
+    )
+  })
+
+  it('makes attempt id and sequence part of source-run identity while staying deterministic', () => {
+    const first = buildLeaderboardAcquisitionManifestV3(v3Input())
+    const same = buildLeaderboardAcquisitionManifestV3(v3Input())
+    const differentId = buildLeaderboardAcquisitionManifestV3(
+      v3Input({
+        acquisition_attempt: {
+          ...v3Input().acquisition_attempt,
+          attempt_id: '00000000-0000-4000-8000-000000000002',
+        },
+      })
+    )
+    const differentSeq = buildLeaderboardAcquisitionManifestV3(
+      v3Input({
+        acquisition_attempt: { ...v3Input().acquisition_attempt, attempt_seq: 42 },
+      })
+    )
+
+    expect(same.sourceRunId).toBe(first.sourceRunId)
+    expect(differentId.sourceRunId).not.toBe(first.sourceRunId)
+    expect(differentSeq.sourceRunId).not.toBe(first.sourceRunId)
+  })
+
+  it.each([
+    [
+      'missing binding',
+      (() => {
+        const { acquisition_attempt: _binding, ...missing } = v3Input()
+        return missing
+      })(),
+    ],
+    [
+      'wrong binding contract',
+      v3Input({
+        acquisition_attempt: {
+          ...v3Input().acquisition_attempt,
+          binding_contract: 'arena.ingest.leaderboard-acquisition-attempt-binding@2',
+        } as BuildLeaderboardAcquisitionManifestV3Input['acquisition_attempt'],
+      }),
+    ],
+    [
+      'non-canonical UUID',
+      v3Input({
+        acquisition_attempt: {
+          ...v3Input().acquisition_attempt,
+          attempt_id: 'ABCDEFAB-0000-4000-8000-000000000001',
+        },
+      }),
+    ],
+    [
+      'UUID without a version or RFC variant',
+      v3Input({
+        acquisition_attempt: {
+          ...v3Input().acquisition_attempt,
+          attempt_id: '00000000-0000-0000-0000-000000000001',
+        },
+      }),
+    ],
+    [
+      'zero sequence',
+      v3Input({
+        acquisition_attempt: { ...v3Input().acquisition_attempt, attempt_seq: 0 },
+      }),
+    ],
+    [
+      'unsafe sequence',
+      v3Input({
+        acquisition_attempt: {
+          ...v3Input().acquisition_attempt,
+          attempt_seq: Number.MAX_SAFE_INTEGER + 1,
+        },
+      }),
+    ],
+    [
+      'extra binding field',
+      v3Input({
+        acquisition_attempt: {
+          ...v3Input().acquisition_attempt,
+          unexpected: true,
+        } as BuildLeaderboardAcquisitionManifestV3Input['acquisition_attempt'],
+      }),
+    ],
+  ])('rejects v3 %s', (_label, candidate) => {
+    expect(() =>
+      buildLeaderboardAcquisitionManifestV3(candidate as BuildLeaderboardAcquisitionManifestV3Input)
+    ).toThrow()
+  })
+
+  it('keeps v2 and v3 parsing explicit at trust boundaries', () => {
+    const v2 = buildLeaderboardAcquisitionManifest(input()).manifest
+    const v3 = buildLeaderboardAcquisitionManifestV3(v3Input()).manifest
+
+    expect(parseLeaderboardAcquisitionManifest(v2)).toEqual(v2)
+    expect(parseLeaderboardAcquisitionManifestV3(v3)).toEqual(v3)
+    expect(() => parseLeaderboardAcquisitionManifest(v3)).toThrow()
+    expect(() => parseLeaderboardAcquisitionManifestV3(v2)).toThrow()
+  })
+
+  it('pins the complete v3 attempt-bound contract to a golden sourceRunId', () => {
+    expect(buildLeaderboardAcquisitionManifestV3(v3Input()).sourceRunId).toBe(
+      '099dab8260a927905dc7e3b0cf24878ee4a21a2f262105fb2809c6f0c6ef1702'
     )
   })
 })

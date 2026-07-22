@@ -7,11 +7,20 @@ import {
   strictCanonicalSha256,
 } from './strict-canonical-json'
 
-export const LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT =
+export const LEADERBOARD_ACQUISITION_MANIFEST_V2_CONTRACT =
   'arena.ingest.leaderboard-acquisition-manifest@2' as const
+export const LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT =
+  'arena.ingest.leaderboard-acquisition-manifest@3' as const
+export const LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT =
+  'arena.ingest.leaderboard-acquisition-attempt-binding@1' as const
+
+/** Legacy builder/parser alias retained until the Tier-A @3 cutover. */
+export const LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT =
+  LEADERBOARD_ACQUISITION_MANIFEST_V2_CONTRACT
 
 const SHA256 = /^[0-9a-f]{64}$/
 const FULL_GIT_SHA = /^[0-9a-f]{40}$/
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 const captureEvidenceStates = ['verified', 'unavailable'] as const
 const terminationReasons = [
@@ -250,6 +259,14 @@ const aggregateReportSchema = z
   })
   .strict()
 
+const acquisitionAttemptBindingSchema = z
+  .object({
+    binding_contract: z.literal(LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT),
+    attempt_id: z.string().regex(CANONICAL_UUID, 'must be a canonical lowercase UUID'),
+    attempt_seq: safePositiveIntegerSchema,
+  })
+  .strict()
+
 const durableManifestStructuralSchema = z
   .object({
     data_contract: z.literal(LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT),
@@ -295,6 +312,18 @@ const durableManifestStructuralSchema = z
       })
       .strict(),
   })
+  .strict()
+
+const durableManifestV3StructuralSchema = durableManifestStructuralSchema
+  .omit({ data_contract: true })
+  .extend({
+    data_contract: z.literal(LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT),
+    acquisition_attempt: acquisitionAttemptBindingSchema,
+  })
+  .strict()
+
+const buildV3InputSchema = buildInputSchema
+  .extend({ acquisition_attempt: acquisitionAttemptBindingSchema })
   .strict()
 
 export type LeaderboardAcquisitionPaginationPosition = z.infer<typeof paginationPositionSchema>
@@ -344,10 +373,28 @@ export interface BuildLeaderboardAcquisitionManifestInput {
   rejected_row_count: number
 }
 
+export interface BuildLeaderboardAcquisitionManifestV3Input extends BuildLeaderboardAcquisitionManifestInput {
+  acquisition_attempt: {
+    binding_contract: typeof LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT
+    attempt_id: string
+    attempt_seq: number
+  }
+}
+
 export type LeaderboardAcquisitionManifest = z.infer<typeof durableManifestStructuralSchema>
+export type LeaderboardAcquisitionManifestV3 = z.infer<typeof durableManifestV3StructuralSchema>
+type LeaderboardAcquisitionManifestLike =
+  | LeaderboardAcquisitionManifest
+  | LeaderboardAcquisitionManifestV3
 
 export interface BuiltLeaderboardAcquisitionManifest {
   manifest: LeaderboardAcquisitionManifest
+  canonicalJson: string
+  sourceRunId: string
+}
+
+export interface BuiltLeaderboardAcquisitionManifestV3 {
+  manifest: LeaderboardAcquisitionManifestV3
   canonicalJson: string
   sourceRunId: string
 }
@@ -389,7 +436,7 @@ function deriveAggregateReport(
 }
 
 function pageResponseMetadataMatches(
-  manifest: LeaderboardAcquisitionManifest,
+  manifest: LeaderboardAcquisitionManifestLike,
   page: LeaderboardAcquisitionManifest['source_pages'][number]
 ): boolean {
   const reports = page.source_reports
@@ -416,7 +463,7 @@ function pageResponseMetadataMatches(
   return true
 }
 
-function hasVerifiedCaptureFoundation(manifest: LeaderboardAcquisitionManifest): boolean {
+function hasVerifiedCaptureFoundation(manifest: LeaderboardAcquisitionManifestLike): boolean {
   return (
     manifest.capture_evidence_state === 'verified' &&
     manifest.runner_git_sha !== null &&
@@ -435,7 +482,7 @@ function hasVerifiedCaptureFoundation(manifest: LeaderboardAcquisitionManifest):
 }
 
 function isNaturalTermination(
-  manifest: LeaderboardAcquisitionManifest,
+  manifest: LeaderboardAcquisitionManifestLike,
   populationReport: AggregateReport,
   pageCountReport: AggregateReport,
   terminationReason: TerminationReason = manifest.termination_reason
@@ -519,7 +566,7 @@ function isNaturalTermination(
 }
 
 function deriveAssessment(
-  manifest: LeaderboardAcquisitionManifest,
+  manifest: LeaderboardAcquisitionManifestLike,
   populationReport: AggregateReport,
   pageCountReport: AggregateReport
 ): DerivedAssessment {
@@ -564,7 +611,7 @@ function addIssue(ctx: z.RefinementCtx, path: PropertyKey[], message: string): v
 }
 
 function validatePaginationPositions(
-  manifest: LeaderboardAcquisitionManifest,
+  manifest: LeaderboardAcquisitionManifestLike,
   ctx: z.RefinementCtx
 ): void {
   if (manifest.capture_evidence_state !== 'verified' || manifest.source_pages.length === 0) {
@@ -656,7 +703,7 @@ function validatePaginationPositions(
 }
 
 function validateCaptureLimits(
-  manifest: LeaderboardAcquisitionManifest,
+  manifest: LeaderboardAcquisitionManifestLike,
   ctx: z.RefinementCtx
 ): void {
   const pageCount = manifest.source_pages.length
@@ -690,7 +737,7 @@ function validateCaptureLimits(
 }
 
 function validateLimitTerminationPriority(
-  manifest: LeaderboardAcquisitionManifest,
+  manifest: LeaderboardAcquisitionManifestLike,
   populationReport: AggregateReport,
   pageCountReport: AggregateReport,
   ctx: z.RefinementCtx
@@ -731,7 +778,7 @@ function validateLimitTerminationPriority(
 }
 
 function validateParserTransformation(
-  manifest: LeaderboardAcquisitionManifest,
+  manifest: LeaderboardAcquisitionManifestLike,
   ctx: z.RefinementCtx
 ): void {
   const transformation = manifest.parser_input.transformation
@@ -787,7 +834,7 @@ function validateParserTransformation(
 }
 
 function validateManifestInvariants(
-  manifest: LeaderboardAcquisitionManifest,
+  manifest: LeaderboardAcquisitionManifestLike,
   ctx: z.RefinementCtx
 ): void {
   const startedAt = Date.parse(manifest.started_at)
@@ -950,9 +997,18 @@ function validateManifestInvariants(
 export const leaderboardAcquisitionManifestSchema = durableManifestStructuralSchema.superRefine(
   validateManifestInvariants
 )
+export const leaderboardAcquisitionManifestV3Schema = durableManifestV3StructuralSchema.superRefine(
+  validateManifestInvariants
+)
 
 export function parseLeaderboardAcquisitionManifest(raw: unknown): LeaderboardAcquisitionManifest {
   return leaderboardAcquisitionManifestSchema.parse(raw)
+}
+
+export function parseLeaderboardAcquisitionManifestV3(
+  raw: unknown
+): LeaderboardAcquisitionManifestV3 {
+  return leaderboardAcquisitionManifestV3Schema.parse(raw)
 }
 
 export function buildLeaderboardAcquisitionManifest(
@@ -1047,6 +1103,32 @@ export function buildLeaderboardAcquisitionManifest(
   )
 
   const manifest = parseLeaderboardAcquisitionManifest(structuralManifest)
+  const canonicalJson = strictCanonicalJson(manifest)
+  return {
+    manifest,
+    canonicalJson,
+    sourceRunId: strictCanonicalSha256(manifest),
+  }
+}
+
+/**
+ * Build attempt-bound evidence without changing the still-live v2 path.
+ * The physical attempt identity is part of the canonical body, so two
+ * captures cannot share a source_run_id merely because their clocks and
+ * upstream bytes happen to match.
+ */
+export function buildLeaderboardAcquisitionManifestV3(
+  rawInput: BuildLeaderboardAcquisitionManifestV3Input
+): BuiltLeaderboardAcquisitionManifestV3 {
+  const input = buildV3InputSchema.parse(rawInput)
+  const { acquisition_attempt: acquisitionAttempt, ...legacyInput } = input
+  const legacy = buildLeaderboardAcquisitionManifest(legacyInput)
+  const { data_contract: _legacyContract, ...body } = legacy.manifest
+  const manifest = parseLeaderboardAcquisitionManifestV3({
+    ...body,
+    data_contract: LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
+    acquisition_attempt: acquisitionAttempt,
+  })
   const canonicalJson = strictCanonicalJson(manifest)
   return {
     manifest,

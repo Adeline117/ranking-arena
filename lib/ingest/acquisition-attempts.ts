@@ -9,6 +9,7 @@
 import { randomUUID } from 'node:crypto'
 
 import {
+  LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
   LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT,
   parseLeaderboardAcquisitionManifest,
   type BuiltLeaderboardAcquisitionManifest,
@@ -18,8 +19,7 @@ import type { RankingTimeframe } from './core/types'
 import { ingestClientConnect } from './db'
 import { strictCanonicalJson, strictCanonicalSha256 } from './strict-canonical-json'
 
-export const LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT =
-  'arena.ingest.leaderboard-acquisition-attempt-binding@1' as const
+export { LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT } from './acquisition-manifest'
 export const VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT = LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT
 export const LEGACY_LEADERBOARD_ACQUISITION_CONTRACT = 'legacy_unverified' as const
 
