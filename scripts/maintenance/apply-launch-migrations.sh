@@ -253,11 +253,11 @@ validate_transactional_migration_file() {
     echo "migration file is missing: $migration" >&2
     exit 1
   }
-  begin_count="$(rg -c '^BEGIN;$' "$file" || true)"
-  commit_count="$(rg -c '^COMMIT;$' "$file" || true)"
-  transaction_mode_count="$(rg -c '^SET TRANSACTION ' "$file" || true)"
+  begin_count="$(grep -c '^BEGIN;$' "$file" || true)"
+  commit_count="$(grep -c '^COMMIT;$' "$file" || true)"
+  transaction_mode_count="$(grep -c '^SET TRANSACTION ' "$file" || true)"
   repeatable_read_count="$(
-    rg -c '^SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;$' "$file" || true
+    grep -c '^SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;$' "$file" || true
   )"
   transaction_mode_count="${transaction_mode_count:-0}"
   repeatable_read_count="${repeatable_read_count:-0}"
@@ -277,7 +277,7 @@ transaction_begin_for_migrations() {
 
   for migration in "$@"; do
     validate_transactional_migration_file "$migration"
-    if rg -q '^SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;$' \
+    if grep -q '^SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;$' \
       "$MIGRATIONS_DIR/$migration"; then
       begin_statement='BEGIN ISOLATION LEVEL REPEATABLE READ;'
     fi
@@ -297,9 +297,9 @@ validate_concurrent_migration_file() {
     echo "migration file is missing: $migration" >&2
     exit 1
   }
-  begin_count="$(rg -c '^BEGIN;$' "$file" || true)"
-  commit_count="$(rg -c '^COMMIT;$' "$file" || true)"
-  concurrent_count="$(rg -c '^CREATE INDEX CONCURRENTLY ' "$file" || true)"
+  begin_count="$(grep -c '^BEGIN;$' "$file" || true)"
+  commit_count="$(grep -c '^COMMIT;$' "$file" || true)"
+  concurrent_count="$(grep -c '^CREATE INDEX CONCURRENTLY ' "$file" || true)"
   if [[ -n "$begin_count" || -n "$commit_count" || -z "$concurrent_count" ]]; then
     echo "concurrent migration must have CREATE INDEX CONCURRENTLY and no outer transaction: $migration" >&2
     exit 1
@@ -374,7 +374,7 @@ emit_ledger_insert() {
   hash="$(migration_body_sha256 "$migration")"
   tag="arena_ledger_body_${version}"
 
-  if rg -F -q "\$$tag\$" "$file"; then
+  if grep -F -q "\$$tag\$" "$file"; then
     echo "ledger dollar-quote tag collides with migration: $migration" >&2
     exit 1
   fi
