@@ -31,7 +31,15 @@ import { writeLeaderboardRawArtifactSet, writeRawObject } from '@/lib/ingest/raw
 import { STRICT_CANONICAL_JSON_CONTRACT } from '@/lib/ingest/strict-canonical-json'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
-import { publishBoardSeries, publishLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
+import {
+  publishBoardSeries,
+  publishLeaderboardSnapshot,
+  publishTrustedLeaderboardSnapshot,
+} from '@/lib/ingest/serving/publish'
+import {
+  hasRegisteredLeaderboardMetricTrust,
+  type LeaderboardMetricTrustBundle,
+} from '@/lib/ingest/serving/metric-trust-publish'
 import type { TierJobData } from '../queues'
 import { observationCycleId } from '../observation-cycle'
 import { resolveDeployedSha } from '@/worker/src/ingest/heartbeat'
@@ -346,6 +354,7 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
             ? acquisition.pages
             : acquisition.capture.sourcePages.map((sourcePage) => sourcePage.rawPage)
         let rawObjectId: number | null = null
+        let metricTrust: LeaderboardMetricTrustBundle | null = null
 
         // Legacy adapters retain the existing RAW-first path. Capture-aware
         // adapters atomically persist source payload + manifest after the
@@ -446,6 +455,11 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
             )
           }
           rawObjectId = artifactSet.sourcePayload.id
+          metricTrust = {
+            sourceRunId: built.sourceRunId,
+            manifest: built.manifest,
+            artifacts: artifactSet,
+          }
 
           // The failed response is now durable. Preserve the exact upstream
           // error object so BullMQ retry classification and operator evidence
@@ -473,14 +487,27 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         // series-specific bug cannot erase an otherwise truthful manifest.
         const boardSeries = parseLeaderboardSeriesWindow({ adapter, pages, ctx, timeframe })
 
-        const result = await publishLeaderboardSnapshot({
-          src,
-          timeframe,
-          rows: valid,
-          rejects,
-          rawObjectId,
-          observationCycleId: cycleId ?? undefined,
-        })
+        const trustedBundle =
+          metricTrust !== null && hasRegisteredLeaderboardMetricTrust(src, timeframe)
+            ? metricTrust
+            : null
+        const result = trustedBundle
+          ? await publishTrustedLeaderboardSnapshot({
+              src,
+              timeframe,
+              rows: valid,
+              rejects,
+              observationCycleId: cycleId ?? undefined,
+              trust: trustedBundle,
+            })
+          : await publishLeaderboardSnapshot({
+              src,
+              timeframe,
+              rows: valid,
+              rejects,
+              rawObjectId,
+              observationCycleId: cycleId ?? undefined,
+            })
 
         const status = result.published ? 'PUBLISHED' : 'GATED'
         console.log(

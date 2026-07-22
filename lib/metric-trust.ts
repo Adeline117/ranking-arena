@@ -337,6 +337,17 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
   }),
 })
 
+/**
+ * Return a validated copy of one reviewed source contract. Publishers use the
+ * copy to resolve parser field claims without allowing an adapter, payload, or
+ * caller to mutate the process-wide registry or self-declare methodology.
+ * Unknown sources deliberately return null and remain outside metric ranking.
+ */
+export function getRegisteredMetricSourceContract(sourceId: string): MetricSourceContract | null {
+  const contract = SOURCE_CONTRACT_REGISTRY[sourceId]
+  return contract ? metricSourceContractSchema.parse(contract) : null
+}
+
 const METHOD_CONTRACT_REGISTRY: Readonly<Record<string, RankingMethodContract>> = Object.freeze({
   [ARENA_CORE_7D_USDT_METHOD_ID]: registeredMethodContract({
     id: 'arena-core-roi-pnl-7d-usdt',
