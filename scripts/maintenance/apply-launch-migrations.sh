@@ -92,6 +92,7 @@ PREDEPLOY_MIGRATIONS=(
   20260721130000_raw_object_gc_outbox.sql
   20260721140000_idempotent_equivalent_refund_events.sql
   20260721150000_metric_trust_raw_artifact_identity.sql
+  20260721175746_arena_score_inputs_publish_bundle.sql
 )
 
 # A selective apply bypasses manifest ordering, so it is more restrictive than
@@ -100,6 +101,7 @@ PREDEPLOY_MIGRATIONS=(
 # predecessor contract.
 INDEPENDENT_PREDEPLOY_MIGRATIONS=(
   20260721140000_idempotent_equivalent_refund_events.sql
+  20260721175746_arena_score_inputs_publish_bundle.sql
 )
 
 # These contracts revoke compatibility writes or change identity uniqueness

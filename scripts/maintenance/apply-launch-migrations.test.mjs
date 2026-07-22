@@ -30,8 +30,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
   const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
 
-  assert.equal(predeploy.length, 61)
-  assert.deepEqual(independentPredeploy, ['20260721140000_idempotent_equivalent_refund_events.sql'])
+  assert.equal(predeploy.length, 62)
+  assert.deepEqual(independentPredeploy, [
+    '20260721140000_idempotent_equivalent_refund_events.sql',
+    '20260721175746_arena_score_inputs_publish_bundle.sql',
+  ])
   assert.ok(independentPredeploy.every((migration) => predeploy.includes(migration)))
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
@@ -63,6 +66,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260721130000_raw_object_gc_outbox.sql',
           '20260721140000_idempotent_equivalent_refund_events.sql',
           '20260721150000_metric_trust_raw_artifact_identity.sql',
+          '20260721175746_arena_score_inputs_publish_bundle.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -80,9 +84,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716083256_repair_legacy_exchange_logo_paths.sql',
   ])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 72)
+  assert.equal(new Set(all).size, 73)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-20), [
+  assert.deepEqual(predeploy.slice(-21), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -103,6 +107,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260721130000_raw_object_gc_outbox.sql',
     '20260721140000_idempotent_equivalent_refund_events.sql',
     '20260721150000_metric_trust_raw_artifact_identity.sql',
+    '20260721175746_arena_score_inputs_publish_bundle.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -114,6 +119,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260721130000_raw_object_gc_outbox.sql'))
   assert.ok(predeploy.includes('20260721140000_idempotent_equivalent_refund_events.sql'))
   assert.ok(predeploy.includes('20260721150000_metric_trust_raw_artifact_identity.sql'))
+  assert.ok(predeploy.includes('20260721175746_arena_score_inputs_publish_bundle.sql'))
   assert.ok(!postdeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260717120000_trader_follows_composite_identity.sql'))
   assert.ok(
@@ -142,6 +148,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(
     !recoveryPrerequisites.includes('20260721150000_metric_trust_raw_artifact_identity.sql')
   )
+  assert.ok(!recoveryPrerequisites.includes('20260721175746_arena_score_inputs_publish_bundle.sql'))
 })
 
 test('runner records exact file bodies and hashes in the same transaction', () => {
@@ -273,7 +280,7 @@ test('single predeploy dry-run and apply emit only the selected migration', () =
   const fakePsql = resolve(directory, 'psql')
   const sqlPath = resolve(directory, 'sql')
   const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
-  const target = '20260721140000_idempotent_equivalent_refund_events.sql'
+  const target = '20260721175746_arena_score_inputs_publish_bundle.sql'
   try {
     writeFileSync(
       fakePsql,
@@ -302,27 +309,27 @@ test('single predeploy dry-run and apply emit only the selected migration', () =
     const dryRun = spawnSync('bash', [script, 'dry-run-predeploy-one', target], baseOptions)
     assert.equal(dryRun.status, 0, dryRun.stderr)
     const dryRunSql = readFileSync(sqlPath, 'utf8')
-    assert.match(dryRunSql, /\\echo APPLY 20260721140000_idempotent_equivalent_refund_events\.sql/)
-    assert.doesNotMatch(dryRunSql, /\\echo APPLY 202607211[23]0000_/)
-    assert.match(dryRunSql, /^BEGIN ISOLATION LEVEL REPEATABLE READ;$/m)
+    assert.match(dryRunSql, /\\echo APPLY 20260721175746_arena_score_inputs_publish_bundle\.sql/)
+    assert.equal(dryRunSql.match(/^\\echo APPLY /gm)?.length, 1)
+    assert.match(dryRunSql, /^BEGIN;$/m)
     assert.ok(dryRunSql.trimEnd().endsWith('ROLLBACK;'))
 
     const apply = spawnSync('bash', [script, 'apply-predeploy-one', target], {
       ...baseOptions,
       env: {
         ...baseOptions.env,
-        ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY_ONE_20260721140000',
+        ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY_ONE_20260721175746',
       },
     })
     assert.equal(apply.status, 0, apply.stderr)
     const applySql = readFileSync(sqlPath, 'utf8')
-    assert.match(applySql, /\\echo APPLY 20260721140000_idempotent_equivalent_refund_events\.sql/)
-    assert.doesNotMatch(applySql, /\\echo APPLY 202607211[23]0000_/)
+    assert.match(applySql, /\\echo APPLY 20260721175746_arena_score_inputs_publish_bundle\.sql/)
+    assert.equal(applySql.match(/^\\echo APPLY /gm)?.length, 1)
     assert.ok(applySql.trimEnd().endsWith('COMMIT;'))
 
     const noConfirmation = spawnSync('bash', [script, 'apply-predeploy-one', target], baseOptions)
     assert.equal(noConfirmation.status, 1)
-    assert.match(noConfirmation.stderr, /APPLY_PREDEPLOY_ONE_20260721140000/)
+    assert.match(noConfirmation.stderr, /APPLY_PREDEPLOY_ONE_20260721175746/)
 
     const outsideManifest = spawnSync(
       'bash',
