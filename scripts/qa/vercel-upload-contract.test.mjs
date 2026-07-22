@@ -180,7 +180,7 @@ test('revokes production write authority when a candidate is no longer exact mai
 test('reasserts the single production writer without ever skipping promoted smoke', () => {
   assert.match(
     deployGate,
-    /- name: Pin release-control helpers for this Gate run\n        run: \|[\s\S]*install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"[\s\S]*install -m 700 scripts\/ci\/validate-release-health\.mjs "\$RUNNER_TEMP\/validate-release-health\.mjs"/
+    /- name: Pin release-control helpers for this Gate run\n        run: \|[\s\S]*install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"[\s\S]*install -m 700 scripts\/ci\/validate-release-health\.mjs "\$RUNNER_TEMP\/validate-release-health\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-metric-trust-release-readiness\.mjs "\$RUNNER_TEMP\/verify-metric-trust-release-readiness\.mjs"/
   )
   assert.equal(
     deployGate.match(/node "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"/g)?.length,
@@ -189,6 +189,14 @@ test('reasserts the single production writer without ever skipping promoted smok
   assert.ok(
     deployGate.indexOf('Pin release-control helpers for this Gate run') <
       deployGate.indexOf('git checkout --quiet "$HEAD_SHA"')
+  )
+  assert.match(
+    deployGate,
+    /- name: Require production metric-trust schema before deploy\n        if: steps\.fresh\.outputs\.deploy == 'true'[\s\S]*NEXT_PUBLIC_SUPABASE_URL: \$\{\{ secrets\.NEXT_PUBLIC_SUPABASE_URL \}\}[\s\S]*SUPABASE_SERVICE_ROLE_KEY: \$\{\{ secrets\.SUPABASE_SERVICE_ROLE_KEY \}\}[\s\S]*node "\$RUNNER_TEMP\/verify-metric-trust-release-readiness\.mjs"/
+  )
+  assert.ok(
+    deployGate.indexOf('Require production metric-trust schema before deploy') <
+      deployGate.indexOf('Deploy to Vercel (build on Vercel infra)')
   )
   assert.match(
     deployGate,

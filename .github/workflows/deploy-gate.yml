@@ -111,6 +111,7 @@ jobs:
         run: |
           install -m 700 scripts/ci/enforce-vercel-release-control.mjs "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
           install -m 700 scripts/ci/validate-release-health.mjs "$RUNNER_TEMP/validate-release-health.mjs"
+          install -m 700 scripts/ci/verify-metric-trust-release-readiness.mjs "$RUNNER_TEMP/verify-metric-trust-release-readiness.mjs"
 
       - name: Enforce single production writer before deploy
         run: node "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
@@ -154,6 +155,13 @@ jobs:
             echo "run ${HEAD_SHA:0:8} is NOT newer than serving ${SERVING:0:8} — skip (would regress)"
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Require production metric-trust schema before deploy
+        if: steps.fresh.outputs.deploy == 'true'
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node "$RUNNER_TEMP/verify-metric-trust-release-readiness.mjs"
 
       - name: Deploy to Vercel (build on Vercel infra)
         id: deploy_candidate
