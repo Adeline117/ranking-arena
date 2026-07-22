@@ -300,7 +300,7 @@ validate_concurrent_migration_file() {
   begin_count="$(grep -c '^BEGIN;$' "$file" || true)"
   commit_count="$(grep -c '^COMMIT;$' "$file" || true)"
   concurrent_count="$(grep -c '^CREATE INDEX CONCURRENTLY ' "$file" || true)"
-  if [[ -n "$begin_count" || -n "$commit_count" || -z "$concurrent_count" ]]; then
+  if ((begin_count != 0 || commit_count != 0 || concurrent_count < 1)); then
     echo "concurrent migration must have CREATE INDEX CONCURRENTLY and no outer transaction: $migration" >&2
     exit 1
   fi

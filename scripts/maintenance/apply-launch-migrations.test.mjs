@@ -87,6 +87,46 @@ test('runner uses baseline grep instead of optional ripgrep', () => {
   assert.match(source, /grep -c '\^BEGIN;\$'/)
 })
 
+test('concurrent migration validation treats grep counts numerically', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'arena-concurrent-migration-'))
+  const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
+  const validate = (migration) =>
+    spawnSync(
+      'bash',
+      [
+        '-c',
+        'source "$1"; MIGRATIONS_DIR="$2"; validate_concurrent_migration_file "$3"',
+        'bash',
+        script,
+        directory,
+        migration,
+      ],
+      { cwd: ROOT, encoding: 'utf8' }
+    )
+
+  try {
+    writeFileSync(
+      resolve(directory, 'valid.sql'),
+      'CREATE INDEX CONCURRENTLY idx_valid ON arena.valid_table (id);\n'
+    )
+    writeFileSync(
+      resolve(directory, 'transactional.sql'),
+      'BEGIN;\nCREATE INDEX CONCURRENTLY idx_bad ON arena.valid_table (id);\nCOMMIT;\n'
+    )
+    writeFileSync(resolve(directory, 'missing.sql'), 'SELECT 1;\n')
+
+    const valid = validate('valid.sql')
+    assert.equal(valid.status, 0, valid.stderr)
+    for (const migration of ['transactional.sql', 'missing.sql']) {
+      const rejected = validate(migration)
+      assert.equal(rejected.status, 1)
+      assert.match(rejected.stderr, /concurrent migration must have CREATE INDEX CONCURRENTLY/)
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test('predeploy, postdeploy and recovery phases are exact, unique and ordered', () => {
   const predeploy = migrationArray('PREDEPLOY_MIGRATIONS')
   const postdeploy = migrationArray('POSTDEPLOY_MIGRATIONS')
