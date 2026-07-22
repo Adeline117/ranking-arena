@@ -1,39 +1,47 @@
 #!/usr/bin/env bash
 
-# Audited production cutover runner for the July B2C launch hardening chain.
+# Launch migration diagnostics and dormant ordered-channel candidate.
 #
 # Usage:
 #   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh status
 #   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh dry-run-all
 #   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh \
-#     dry-run-predeploy-one 20260721140000_idempotent_equivalent_refund_events.sql
-#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY_ONE_20260721140000 \
+#     dry-run-predeploy-one 20260721120000_metric_trust_shadow_gate.sql
+#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY_ONE_20260721120000 \
+#     ARENA_PRODUCTION_MIGRATION_BODY_SHA256=<exact-file-sha256> \
+#     ARENA_PRODUCTION_RELEASE_SHA=<full-origin-main-sha> \
+#     ARENA_PRODUCTION_PROJECT_REF=iknktzifjdyujdccyhsv \
+#     ARENA_ORDERED_PSQL_CHANNEL_APPROVAL=ADR_023_FUTURE_ADDENDUM_ORDERED_PSQL_V1_APPROVED \
 #     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh \
-#     apply-predeploy-one 20260721140000_idempotent_equivalent_refund_events.sql
+#     apply-predeploy-one 20260721120000_metric_trust_shadow_gate.sql
 #   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh dry-run-recovery
-#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_CONCURRENT_RECOVERY \
-#     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-concurrent-recovery
-#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY \
-#     ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM=TIP_CHECKOUT_FROZEN_PENDING_ZERO \
-#     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-predeploy
 #   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY_ONE_20260721210000 \
+#     ARENA_PRODUCTION_MIGRATION_BODY_SHA256=<exact-file-sha256> \
+#     ARENA_PRODUCTION_RELEASE_SHA=<full-origin-main-sha> \
+#     ARENA_PRODUCTION_PROJECT_REF=iknktzifjdyujdccyhsv \
+#     ARENA_ORDERED_PSQL_CHANNEL_APPROVAL=ADR_023_FUTURE_ADDENDUM_ORDERED_PSQL_V1_APPROVED \
 #     ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM=TIP_CHECKOUT_FROZEN_PENDING_ZERO \
 #     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh \
 #     apply-predeploy-one 20260721210000_tip_checkout_lifecycle_atomic.sql
-#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_POSTDEPLOY \
-#     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-postdeploy
-#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_RECOVERY \
-#     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-recovery
+#   Legacy predeploy/postdeploy/recovery write commands are disabled pending
+#   production-channel governance.
 #
-# Each transactional cutover phase owns its outer BEGIN/isolation/COMMIT;
-# recovery stays resumable one migration at a time. Migration files keep their
-# original transaction statements in the ledger. Exact rows are skipped as new
-# launch migrations are appended, while drift always fails closed.
+# The psql-backed single-predeploy command is a dormant candidate break-glass
+# channel, not an approved production path. ADR-023 keeps Supabase MCP
+# apply_migration as the only approved channel until a future addendum adopts
+# this candidate and authorizes its separate governance literal. Candidate
+# predeploy is intentionally ordered and single-file. Its session lock is
+# acquired before BEGIN so a repeatable-read target cannot take an old snapshot
+# while waiting. Migration files keep their original transaction statements in
+# the ledger. Exact rows are skipped as new launch migrations are appended,
+# while drift always fails closed.
 
 set -Eeuo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 MIGRATIONS_DIR="$ROOT/supabase/migrations"
+PRODUCTION_PROJECT_REF='iknktzifjdyujdccyhsv'
+ORDERED_PSQL_CHANNEL_APPROVAL='ADR_023_FUTURE_ADDENDUM_ORDERED_PSQL_V1_APPROVED'
 
 PREDEPLOY_MIGRATIONS=(
   20260716111600_atomic_group_application_review.sql
@@ -105,19 +113,6 @@ PREDEPLOY_MIGRATIONS=(
   20260722041000_pure_arena_score_v4_scorer.sql
   20260722042000_leaderboard_terminal_publication_fence.sql
   20260722050000_metric_trust_attempt_outcome_authority.sql
-  20260722051000_leaderboard_score_input_manifest_contract.sql
-)
-
-# A selective apply bypasses manifest ordering, so it is more restrictive than
-# the normal predeploy phase. Add a migration here only after proving it has no
-# dependency on earlier missing rows and its own preflight validates the live
-# predecessor contract.
-INDEPENDENT_PREDEPLOY_MIGRATIONS=(
-  20260721140000_idempotent_equivalent_refund_events.sql
-  20260721175746_arena_score_inputs_publish_bundle.sql
-  20260721210000_tip_checkout_lifecycle_atomic.sql
-  20260721211000_tip_checkout_completion_identity.sql
-  20260722041000_pure_arena_score_v4_scorer.sql
   20260722051000_leaderboard_score_input_manifest_contract.sql
 )
 
@@ -457,25 +452,175 @@ require_exact_migrations() {
 require_predeploy_target() {
   local target="$1"
   local migration
-  local in_manifest=false
 
   for migration in "${PREDEPLOY_MIGRATIONS[@]}"; do
-    if [[ "$migration" == "$target" ]]; then
-      in_manifest=true
-      break
-    fi
-  done
-  if [[ "$in_manifest" != "true" ]]; then
-    echo "predeploy target is not in the audited manifest: $target" >&2
-    exit 2
-  fi
-  for migration in "${INDEPENDENT_PREDEPLOY_MIGRATIONS[@]}"; do
     if [[ "$migration" == "$target" ]]; then
       return
     fi
   done
-  echo "predeploy target is not approved for an independent apply: $target" >&2
+  echo "predeploy target is not in the ordered candidate manifest: $target" >&2
   exit 2
+}
+
+require_tracked_migration() {
+  local migration="$1"
+  local relative_path="supabase/migrations/$migration"
+
+  if ! git -C "$ROOT" ls-files --error-unmatch -- "$relative_path" >/dev/null 2>&1; then
+    echo "predeploy target must be tracked by git: $relative_path" >&2
+    exit 1
+  fi
+}
+
+require_production_project_ref() {
+  EXPECTED_PROJECT_REF="$PRODUCTION_PROJECT_REF" node <<'NODE'
+const expected = process.env.EXPECTED_PROJECT_REF
+let parsed
+try {
+  parsed = new URL(process.env.DATABASE_URL)
+} catch {
+  process.stderr.write('single predeploy requires a valid production DATABASE_URL\n')
+  process.exit(1)
+}
+const host = parsed.hostname.toLowerCase()
+let username
+let database
+try {
+  username = decodeURIComponent(parsed.username)
+  database = decodeURIComponent(parsed.pathname)
+} catch {
+  process.stderr.write('single predeploy requires a valid production DATABASE_URL\n')
+  process.exit(1)
+}
+const isPostgresProtocol = parsed.protocol === 'postgres:' || parsed.protocol === 'postgresql:'
+const isSessionPort = parsed.port === '5432'
+const isPostgresDatabase = database === '/postgres'
+const sslModes = parsed.searchParams.getAll('sslmode')
+const hasVerifiedTls = sslModes.length === 1 && sslModes[0] === 'verify-full'
+const isDirect = host === `db.${expected}.supabase.co` && username === 'postgres'
+const isPooler =
+  host === 'aws-0-us-west-2.pooler.supabase.com' && username === `postgres.${expected}`
+if (
+  !isPostgresProtocol ||
+  !isSessionPort ||
+  !isPostgresDatabase ||
+  !hasVerifiedTls ||
+  (!isDirect && !isPooler)
+) {
+  process.stderr.write('single predeploy requires the exact production session endpoint\n')
+  process.exit(1)
+}
+NODE
+}
+
+require_ordered_psql_channel_approval() {
+  if [[ "${ARENA_ORDERED_PSQL_CHANNEL_APPROVAL:-}" != \
+    "$ORDERED_PSQL_CHANNEL_APPROVAL" ]]; then
+    echo \
+      "ordered psql candidate is dormant pending an ADR-023 addendum; channel approval is absent" \
+      >&2
+    exit 1
+  fi
+}
+
+require_release_provenance() {
+  local migration="$1"
+  local head_sha
+  local origin_main_sha
+  local remote_main_line
+  local remote_main_sha
+  local dirty
+
+  require_tracked_migration "$migration"
+  dirty="$(git -C "$ROOT" status --porcelain=v1 --untracked-files=all)"
+  if [[ -n "$dirty" ]]; then
+    echo "single predeploy requires a clean worktree" >&2
+    exit 1
+  fi
+  head_sha="$(git -C "$ROOT" rev-parse --verify HEAD)"
+  origin_main_sha="$(git -C "$ROOT" rev-parse --verify refs/remotes/origin/main)"
+  if [[ "$head_sha" != "$origin_main_sha" ]]; then
+    echo "single predeploy requires HEAD to equal the pushed origin/main SHA" >&2
+    exit 1
+  fi
+  if ! remote_main_line="$(
+    GIT_TERMINAL_PROMPT=0 git -C "$ROOT" ls-remote --exit-code origin refs/heads/main 2>/dev/null
+  )"; then
+    echo "single predeploy could not verify the live origin/main SHA" >&2
+    exit 1
+  fi
+  remote_main_sha="$(printf '%s\n' "$remote_main_line" | awk 'NR == 1 {print $1}')"
+  if [[ ! "$remote_main_sha" =~ ^[0-9a-f]{40,64}$ || "$head_sha" != "$remote_main_sha" ]]; then
+    echo "single predeploy requires HEAD to equal the live pushed origin/main SHA" >&2
+    exit 1
+  fi
+  require_production_project_ref
+}
+
+require_single_predeploy_confirmation() {
+  local migration="$1"
+  local version
+  local body_sha
+  local head_sha
+  local confirmation
+
+  version="$(migration_version "$migration")"
+  body_sha="$(shasum -a 256 "$MIGRATIONS_DIR/$migration" | awk '{print $1}')"
+  head_sha="$(git -C "$ROOT" rev-parse --verify HEAD)"
+  confirmation="APPLY_PREDEPLOY_ONE_$version"
+  if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "$confirmation" ]]; then
+    echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=$confirmation" >&2
+    exit 1
+  fi
+  if [[ "${ARENA_PRODUCTION_MIGRATION_BODY_SHA256:-}" != "$body_sha" ]]; then
+    echo "set ARENA_PRODUCTION_MIGRATION_BODY_SHA256=$body_sha" >&2
+    exit 1
+  fi
+  if [[ "${ARENA_PRODUCTION_RELEASE_SHA:-}" != "$head_sha" ]]; then
+    echo "set ARENA_PRODUCTION_RELEASE_SHA=$head_sha" >&2
+    exit 1
+  fi
+  if [[ "${ARENA_PRODUCTION_PROJECT_REF:-}" != "$PRODUCTION_PROJECT_REF" ]]; then
+    echo "set ARENA_PRODUCTION_PROJECT_REF=$PRODUCTION_PROJECT_REF" >&2
+    exit 1
+  fi
+}
+
+ORDERED_PREDEPLOY_PREREQUISITES=()
+
+prepare_ordered_predeploy_target() {
+  local target="$1"
+  local migration
+  local state
+
+  require_predeploy_target "$target"
+  require_release_provenance "$target"
+  ORDERED_PREDEPLOY_PREREQUISITES=()
+  for migration in "${PREDEPLOY_MIGRATIONS[@]}"; do
+    validate_transactional_migration_file "$migration"
+    state="$(ledger_state "$migration")"
+    case "$state" in
+      exact)
+        ORDERED_PREDEPLOY_PREREQUISITES+=("$migration")
+        ;;
+      missing)
+        if [[ "$migration" != "$target" ]]; then
+          echo \
+            "predeploy target must be the first missing migration: requested $target, first missing $migration" \
+            >&2
+          exit 1
+        fi
+        return
+        ;;
+      *)
+        echo "refusing drifted predeploy ledger before target: $migration ($state)" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  echo "predeploy manifest has no missing migration; requested target is not pending: $target" >&2
+  exit 1
 }
 
 require_tip_checkout_cutover_attestation() {
@@ -582,6 +727,46 @@ emit_transaction() {
     emit_pending_migration "$migration"
   done
   printf '%s\n' "$terminal;"
+}
+
+emit_ordered_predeploy_transaction() {
+  local terminal="$1"
+  local target="$2"
+  local migration
+  local begin_statement
+  local lock_key='arena:production-schema-migration'
+
+  begin_statement="$(transaction_begin_for_migrations "$target")"
+  # Take the session lock before BEGIN. A repeatable-read target must not
+  # establish its snapshot and then wait behind another ordered apply.
+  printf '%s\n' \
+    "SET lock_timeout = '10s';" \
+    "SET statement_timeout = '15min';" \
+    "SELECT pg_catalog.pg_advisory_lock(" \
+    "  pg_catalog.hashtextextended('$lock_key', 0)" \
+    ');' \
+    "$begin_statement" \
+    "SET LOCAL lock_timeout = '10s';" \
+    "SET LOCAL statement_timeout = '15min';" \
+    "SET LOCAL idle_in_transaction_session_timeout = '60s';" \
+    'LOCK TABLE supabase_migrations.schema_migrations' \
+    '  IN SHARE ROW EXCLUSIVE MODE;' \
+    "SET LOCAL client_min_messages = 'warning';"
+  for migration in "${ORDERED_PREDEPLOY_PREREQUISITES[@]}"; do
+    emit_ledger_exact_preflight "$migration" 'ordered predeploy'
+  done
+  emit_migration "$target"
+  printf '%s\n' \
+    "$terminal;" \
+    'DO $arena_ordered_predeploy_unlock$' \
+    'BEGIN' \
+    '  IF NOT pg_catalog.pg_advisory_unlock(' \
+    "    pg_catalog.hashtextextended('$lock_key', 0)" \
+    '  ) THEN' \
+    "    RAISE EXCEPTION 'ordered predeploy advisory unlock failed';" \
+    '  END IF;' \
+    'END' \
+    '$arena_ordered_predeploy_unlock$;'
 }
 
 emit_all_dry_run() {
@@ -696,8 +881,8 @@ main() {
         exit 2
       fi
       local migration="$2"
-      require_predeploy_target "$migration"
-      emit_transaction 'ROLLBACK' "$migration" | run_sql_stream
+      prepare_ordered_predeploy_target "$migration"
+      emit_ordered_predeploy_transaction 'ROLLBACK' "$migration" | run_sql_stream
       ;;
     dry-run-recovery)
       local migration
@@ -729,43 +914,14 @@ main() {
       done
       ;;
     apply-concurrent-recovery)
-      if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_CONCURRENT_RECOVERY" ]]; then
-        echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_CONCURRENT_RECOVERY" >&2
-        exit 1
-      fi
-      require_exact_migrations \
-        'concurrent recovery' \
-        "${RECOVERY_PREREQUISITE_MIGRATIONS[@]}"
-      {
-        printf '%s\n' \
-          'BEGIN READ ONLY;' \
-          "SET LOCAL client_min_messages = 'warning';"
-        emit_cutover_ledger_requirement
-        printf '%s\n' 'COMMIT;'
-      } | run_sql_stream
-      local migration
-      local state
-      for migration in "${CONCURRENT_RECOVERY_MIGRATIONS[@]}"; do
-        validate_concurrent_migration_file "$migration"
-        state="$(ledger_state "$migration")"
-        if [[ "$state" == "exact" ]]; then
-          echo "SKIP exact ledger: $migration"
-          continue
-        fi
-        if [[ "$state" != "missing" ]]; then
-          echo "refusing drifted ledger: $migration" >&2
-          exit 1
-        fi
-        emit_concurrent_migration "$migration" | run_sql_stream
-      done
+      echo "apply-concurrent-recovery is disabled by ADR-023 pending channel governance" >&2
+      exit 2
       ;;
     apply-predeploy)
-      if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_PREDEPLOY" ]]; then
-        echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY" >&2
-        exit 1
-      fi
-      require_tip_checkout_cutover_attestation
-      emit_transaction 'COMMIT' "${PREDEPLOY_MIGRATIONS[@]}" | run_sql_stream
+      echo \
+        "apply-predeploy is disabled by ADR-023; use apply-predeploy-one for the first missing migration" \
+        >&2
+      exit 2
       ;;
     apply-predeploy-one)
       if [[ "$#" != "2" ]]; then
@@ -773,67 +929,22 @@ main() {
         exit 2
       fi
       local migration="$2"
-      local confirmation="APPLY_PREDEPLOY_ONE_$(migration_version "$migration")"
       require_predeploy_target "$migration"
-      if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "$confirmation" ]]; then
-        echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=$confirmation" >&2
-        exit 1
-      fi
+      require_tracked_migration "$migration"
+      require_ordered_psql_channel_approval
+      require_single_predeploy_confirmation "$migration"
       require_tip_checkout_cutover_for_target "$migration"
-      emit_transaction 'COMMIT' "$migration" | run_sql_stream
+      prepare_ordered_predeploy_target "$migration"
+      echo "CANDIDATE BREAK-GLASS: applying one ordered predeploy migration" >&2
+      emit_ordered_predeploy_transaction 'COMMIT' "$migration" | run_sql_stream
       ;;
     apply-postdeploy)
-      if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_POSTDEPLOY" ]]; then
-        echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_POSTDEPLOY" >&2
-        exit 1
-      fi
-      require_exact_migrations 'postdeploy' "${PREDEPLOY_MIGRATIONS[@]}"
-      local begin_statement
-      begin_statement="$(transaction_begin_for_migrations "${POSTDEPLOY_MIGRATIONS[@]}")"
-      {
-        printf '%s\n' \
-          "$begin_statement" \
-          "SET LOCAL client_min_messages = 'warning';"
-        emit_predeploy_ledger_requirement
-        local migration
-        for migration in "${POSTDEPLOY_MIGRATIONS[@]}"; do
-          emit_pending_migration "$migration"
-        done
-        printf '%s\n' 'COMMIT;'
-      } | run_sql_stream
+      echo "apply-postdeploy is disabled by ADR-023 pending channel governance" >&2
+      exit 2
       ;;
     apply-recovery)
-      if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_RECOVERY" ]]; then
-        echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_RECOVERY" >&2
-        exit 1
-      fi
-      local migration
-      local state
-      local begin_statement
-      require_exact_migrations \
-        'recovery' \
-        "${RECOVERY_PREREQUISITE_MIGRATIONS[@]}"
-      for migration in "${RECOVERY_MIGRATIONS[@]}"; do
-        validate_transactional_migration_file "$migration"
-        state="$(ledger_state "$migration")"
-        if [[ "$state" == "exact" ]]; then
-          echo "SKIP exact ledger: $migration"
-          continue
-        fi
-        if [[ "$state" != "missing" ]]; then
-          echo "refusing drifted ledger: $migration" >&2
-          exit 1
-        fi
-        begin_statement="$(transaction_begin_for_migrations "$migration")"
-        {
-          printf '%s\n' \
-            "$begin_statement" \
-            "SET LOCAL client_min_messages = 'warning';"
-          emit_cutover_ledger_requirement
-          emit_migration "$migration"
-          printf '%s\n' 'COMMIT;'
-        } | run_sql_stream
-      done
+      echo "apply-recovery is disabled by ADR-023 pending channel governance" >&2
+      exit 2
       ;;
     *)
       echo "usage: $0 {status|dry-run-all|dry-run-predeploy-one|dry-run-recovery|apply-concurrent-recovery|apply-predeploy|apply-predeploy-one|apply-postdeploy|apply-recovery}" >&2
@@ -842,4 +953,6 @@ main() {
   esac
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

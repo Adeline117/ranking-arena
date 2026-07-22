@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
@@ -20,9 +21,61 @@ function migrationArray(name) {
   return [...body.matchAll(/^\s+(202\d{11}_[a-z0-9_]+\.sql)$/gm)].map((match) => match[1])
 }
 
+function writeFakeCleanReleaseGit(directory) {
+  const fakeGit = resolve(directory, 'git')
+  writeFileSync(
+    fakeGit,
+    [
+      '#!/usr/bin/env bash',
+      'set -eu',
+      'args=" $* "',
+      'if [[ "$*" == "rev-parse --show-toplevel" ]]; then',
+      '  printf "%s\\n" "$FAKE_GIT_ROOT"',
+      'elif [[ "$args" == *" ls-files --error-unmatch -- "* ]]; then',
+      '  [[ "${FAKE_GIT_TRACKED:-true}" == "true" ]] || exit 1',
+      '  printf "%s\\n" "${*: -1}"',
+      'elif [[ "$args" == *" status --porcelain=v1 --untracked-files=normal "* ]]; then',
+      '  printf "%s" "${FAKE_GIT_DIRTY:-}"',
+      'elif [[ "$args" == *" status --porcelain=v1 --untracked-files=all "* ]]; then',
+      '  printf "%s" "${FAKE_GIT_DIRTY:-}"',
+      'elif [[ "$args" == *" ls-remote --exit-code origin refs/heads/main "* ]]; then',
+      '  [[ "${FAKE_GIT_REMOTE_AVAILABLE:-true}" == "true" ]] || exit 2',
+      '  printf "%s\\trefs/heads/main\\n" "$FAKE_GIT_LIVE_MAIN"',
+      'elif [[ "$args" == *" rev-parse --verify refs/remotes/origin/main "* ]]; then',
+      '  printf "%s\\n" "$FAKE_GIT_ORIGIN_MAIN"',
+      'elif [[ "$args" == *" rev-parse --verify HEAD "* ]]; then',
+      '  printf "%s\\n" "$FAKE_GIT_HEAD"',
+      'else',
+      '  printf "unexpected fake git invocation: %s\\n" "$*" >&2',
+      '  exit 99',
+      'fi',
+      '',
+    ].join('\n')
+  )
+  chmodSync(fakeGit, 0o755)
+}
+
+function cleanReleaseEnvironment(directory, overrides = {}) {
+  const releaseSha = '1111111111111111111111111111111111111111'
+  return {
+    PATH: `${directory}:${process.env.PATH}`,
+    FAKE_GIT_ROOT: ROOT,
+    FAKE_GIT_HEAD: releaseSha,
+    FAKE_GIT_ORIGIN_MAIN: releaseSha,
+    FAKE_GIT_LIVE_MAIN: releaseSha,
+    FAKE_GIT_TRACKED: 'true',
+    ...overrides,
+  }
+}
+
+function migrationBodySha(migration) {
+  return createHash('sha256')
+    .update(readFileSync(resolve(ROOT, 'supabase/migrations', migration)))
+    .digest('hex')
+}
+
 test('predeploy, postdeploy and recovery phases are exact, unique and ordered', () => {
   const predeploy = migrationArray('PREDEPLOY_MIGRATIONS')
-  const independentPredeploy = migrationArray('INDEPENDENT_PREDEPLOY_MIGRATIONS')
   const postdeploy = migrationArray('POSTDEPLOY_MIGRATIONS')
   const recoveryPrerequisites = migrationArray('RECOVERY_PREREQUISITE_MIGRATIONS')
   const concurrentRecovery = migrationArray('CONCURRENT_RECOVERY_MIGRATIONS')
@@ -31,15 +84,6 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
 
   assert.equal(predeploy.length, 70)
-  assert.deepEqual(independentPredeploy, [
-    '20260721140000_idempotent_equivalent_refund_events.sql',
-    '20260721175746_arena_score_inputs_publish_bundle.sql',
-    '20260721210000_tip_checkout_lifecycle_atomic.sql',
-    '20260721211000_tip_checkout_completion_identity.sql',
-    '20260722041000_pure_arena_score_v4_scorer.sql',
-    '20260722051000_leaderboard_score_input_manifest_contract.sql',
-  ])
-  assert.ok(independentPredeploy.every((migration) => predeploy.includes(migration)))
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -244,7 +288,7 @@ test('repeatable-read migrations promote isolation to the outer transaction', ()
   )
 })
 
-test('predeploy and postdeploy are exact-ledger resumable and fail closed on drift', () => {
+test('diagnostic transactions remain exact-ledger resumable while legacy writes stay disabled', () => {
   assert.match(source, /emit_pending_migration/)
   assert.match(source, /SKIP exact ledger/)
   assert.match(source, /refusing drifted ledger/)
@@ -252,14 +296,8 @@ test('predeploy and postdeploy are exact-ledger resumable and fail closed on dri
     source,
     /emit_pending_migration\(\)[\s\S]*SKIP exact ledger[\s\S]*emit_ledger_exact_preflight "\$migration"/
   )
-  assert.match(
-    source,
-    /apply-predeploy\)[\s\S]*emit_transaction 'COMMIT' "\$\{PREDEPLOY_MIGRATIONS\[@\]\}"/
-  )
-  assert.match(
-    source,
-    /apply-postdeploy\)[\s\S]*require_exact_migrations 'postdeploy'[\s\S]*emit_pending_migration/
-  )
+  assert.match(source, /apply-predeploy\)[\s\S]*disabled by ADR-023[\s\S]*exit 2/)
+  assert.match(source, /apply-postdeploy\)[\s\S]*disabled by ADR-023[\s\S]*exit 2/)
   assert.match(source, /echo "\$phase requires exact ledger: \$migration \(\$state\)"/)
 })
 
@@ -287,17 +325,19 @@ test('transactional exact-ledger checks re-attest and lock every skipped prerequ
   )
 })
 
-test('production writes require phase-specific confirmations', () => {
+test('candidate production write requires governance plus artifact-bound confirmations', () => {
   assert.match(
     source,
     /require_session_connection\(\)[\s\S]*psql-from-database-url\.mjs"[\s\S]*--check-session-connection/
   )
   assert.match(source, /if \[\[ "\$command" != "status" \]\]/)
-  assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_PREDEPLOY"/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "\$confirmation"/)
-  assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_POSTDEPLOY"/)
-  assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_CONCURRENT_RECOVERY"/)
-  assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_RECOVERY"/)
+  assert.match(source, /ARENA_PRODUCTION_MIGRATION_BODY_SHA256:-}" != "\$body_sha"/)
+  assert.match(source, /ARENA_PRODUCTION_RELEASE_SHA:-}" != "\$head_sha"/)
+  assert.match(source, /ARENA_PRODUCTION_PROJECT_REF:-}" != "\$PRODUCTION_PROJECT_REF"/)
+  assert.match(source, /ORDERED_PSQL_CHANNEL_APPROVAL='ADR_023_FUTURE_ADDENDUM_/)
+  assert.match(source, /ARENA_ORDERED_PSQL_CHANNEL_APPROVAL:-}" !=/)
+  assert.match(source, /candidate is dormant pending an ADR-023 addendum/)
   assert.match(
     source,
     /ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM:-}" !=[\s\\]*"\$TIP_CHECKOUT_CUTOVER_ATTESTATION"/
@@ -305,12 +345,19 @@ test('production writes require phase-specific confirmations', () => {
   assert.match(source, /TIP_CHECKOUT_FROZEN_PENDING_ZERO/)
   assert.match(
     source,
-    /apply-predeploy\)[\s\S]*require_tip_checkout_cutover_attestation[\s\S]*emit_transaction 'COMMIT'/
+    /apply-predeploy-one\)[\s\S]*require_ordered_psql_channel_approval[\s\S]*require_tip_checkout_cutover_for_target "\$migration"[\s\S]*emit_ordered_predeploy_transaction 'COMMIT'/
   )
-  assert.match(
-    source,
-    /apply-predeploy-one\)[\s\S]*require_tip_checkout_cutover_for_target "\$migration"[\s\S]*emit_transaction 'COMMIT'/
-  )
+  for (const command of [
+    'apply-predeploy',
+    'apply-postdeploy',
+    'apply-recovery',
+    'apply-concurrent-recovery',
+  ]) {
+    assert.match(
+      source,
+      new RegExp(`${command.replaceAll('-', '\\-')}\\)[\\s\\S]*disabled by ADR-023`)
+    )
+  }
   assert.match(source, /dry-run-all[\s\S]*emit_all_dry_run/)
   assert.match(source, /dry-run-recovery[\s\S]*emit_cutover_ledger_requirement/)
   assert.match(source, /printf '%s\\n' 'ROLLBACK;'/)
@@ -318,120 +365,107 @@ test('production writes require phase-specific confirmations', () => {
   assert.match(source, /emit_ledger_exact_preflight "\$migration" 'recovery'/)
 })
 
-test('single predeploy runs only an exact audited manifest target', () => {
+test('single predeploy is ordered, provenance-bound and serialized before BEGIN', () => {
   assert.match(
     source,
-    /require_predeploy_target\(\)[\s\S]*PREDEPLOY_MIGRATIONS\[@\][\s\S]*audited manifest[\s\S]*INDEPENDENT_PREDEPLOY_MIGRATIONS\[@\][\s\S]*approved for an independent apply/
+    /require_predeploy_target\(\)[\s\S]*PREDEPLOY_MIGRATIONS\[@\][\s\S]*not in the ordered candidate manifest/
+  )
+  assert.doesNotMatch(source, /INDEPENDENT_PREDEPLOY_MIGRATIONS/)
+  assert.match(source, /git -C "\$ROOT" ls-files --error-unmatch/)
+  assert.match(source, /status --porcelain=v1 --untracked-files=all/)
+  assert.match(source, /ls-remote --exit-code origin refs\/heads\/main/)
+  assert.match(source, /rev-parse --verify HEAD/)
+  assert.match(source, /rev-parse --verify refs\/remotes\/origin\/main/)
+  assert.match(source, /PRODUCTION_PROJECT_REF='iknktzifjdyujdccyhsv'/)
+  assert.match(source, /aws-0-us-west-2\.pooler\.supabase\.com/)
+  assert.match(source, /sslModes\.length === 1 && sslModes\[0\] === 'verify-full'/)
+  assert.match(
+    source,
+    /prepare_ordered_predeploy_target\(\)[\s\S]*ledger_state[\s\S]*first missing migration/
   )
   assert.match(
     source,
-    /dry-run-predeploy-one\)[\s\S]*require_predeploy_target "\$migration"[\s\S]*emit_transaction 'ROLLBACK' "\$migration"/
+    /emit_ordered_predeploy_transaction\(\)[\s\S]*pg_advisory_lock[\s\S]*"\$begin_statement"[\s\S]*LOCK TABLE supabase_migrations\.schema_migrations[\s\S]*IN SHARE ROW EXCLUSIVE MODE[\s\S]*emit_ledger_exact_preflight[\s\S]*emit_migration "\$target"/
   )
   assert.match(
     source,
-    /apply-predeploy-one\)[\s\S]*APPLY_PREDEPLOY_ONE_\$\(migration_version "\$migration"\)[\s\S]*require_predeploy_target "\$migration"[\s\S]*emit_transaction 'COMMIT' "\$migration"/
+    /dry-run-predeploy-one\)[\s\S]*prepare_ordered_predeploy_target "\$migration"[\s\S]*emit_ordered_predeploy_transaction 'ROLLBACK' "\$migration"/
   )
+  assert.match(
+    source,
+    /apply-predeploy-one\)[\s\S]*require_ordered_psql_channel_approval[\s\S]*require_single_predeploy_confirmation "\$migration"[\s\S]*prepare_ordered_predeploy_target "\$migration"[\s\S]*emit_ordered_predeploy_transaction 'COMMIT' "\$migration"/
+  )
+  assert.match(source, /IF NOT pg_catalog\.pg_advisory_unlock/)
+  assert.match(source, /ordered predeploy advisory unlock failed/)
+  assert.match(source, /BASH_SOURCE\[0\].*==.*\$0/)
   const applyCase = /apply-predeploy-one\)([\s\S]*?)\n\s*;;/.exec(source)?.[1]
   assert.ok(applyCase)
   assert.doesNotMatch(applyCase, /psql_with_database/)
 })
 
-test('single predeploy dry-run and apply emit only the selected migration', () => {
-  const directory = mkdtempSync(resolve(tmpdir(), 'arena-single-predeploy-'))
-  const fakePsql = resolve(directory, 'psql')
-  const sqlPath = resolve(directory, 'sql')
+test('production endpoint allowlist requires the exact project session URL and verified TLS', () => {
   const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
-  const target = '20260721175746_arena_score_inputs_publish_bundle.sql'
-  try {
-    writeFileSync(
-      fakePsql,
-      [
-        '#!/usr/bin/env bash',
-        'if [[ " $* " == *" -Atc "* ]]; then',
-        "  printf '%s\\n' missing",
-        '  exit 0',
-        'fi',
-        'cat > "$FAKE_PSQL_STREAM"',
-        '',
-      ].join('\n')
-    )
-    chmodSync(fakePsql, 0o755)
-    const cleanEnvironment = { ...process.env }
-    delete cleanEnvironment.ARENA_PRODUCTION_MIGRATION_CONFIRM
-    delete cleanEnvironment.ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM
-    const baseOptions = {
+  const invoke = (databaseUrl) =>
+    spawnSync('bash', ['-c', 'source "$1"; require_production_project_ref', 'bash', script], {
       cwd: ROOT,
       encoding: 'utf8',
-      env: {
-        ...cleanEnvironment,
-        PATH: `${directory}:${process.env.PATH}`,
-        DATABASE_URL: 'postgresql://runner:secret@db.example.test:5432/arena',
-        FAKE_PSQL_STREAM: sqlPath,
-      },
-    }
-
-    const dryRun = spawnSync('bash', [script, 'dry-run-predeploy-one', target], baseOptions)
-    assert.equal(dryRun.status, 0, dryRun.stderr)
-    const dryRunSql = readFileSync(sqlPath, 'utf8')
-    assert.match(dryRunSql, /\\echo APPLY 20260721175746_arena_score_inputs_publish_bundle\.sql/)
-    assert.equal(dryRunSql.match(/^\\echo APPLY /gm)?.length, 1)
-    assert.match(dryRunSql, /^BEGIN;$/m)
-    assert.ok(dryRunSql.trimEnd().endsWith('ROLLBACK;'))
-
-    const apply = spawnSync('bash', [script, 'apply-predeploy-one', target], {
-      ...baseOptions,
-      env: {
-        ...baseOptions.env,
-        ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY_ONE_20260721175746',
-      },
+      env: { ...process.env, DATABASE_URL: databaseUrl },
     })
-    assert.equal(apply.status, 0, apply.stderr)
-    const applySql = readFileSync(sqlPath, 'utf8')
-    assert.match(applySql, /\\echo APPLY 20260721175746_arena_score_inputs_publish_bundle\.sql/)
-    assert.equal(applySql.match(/^\\echo APPLY /gm)?.length, 1)
-    assert.ok(applySql.trimEnd().endsWith('COMMIT;'))
+  const project = 'iknktzifjdyujdccyhsv'
+  const direct =
+    `postgresql://postgres:allowlist-secret@db.${project}.supabase.co:5432/postgres` +
+    '?sslmode=verify-full'
+  const pooler =
+    `postgresql://postgres.${project}:allowlist-secret@` +
+    'aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=verify-full'
 
-    const noConfirmation = spawnSync('bash', [script, 'apply-predeploy-one', target], baseOptions)
-    assert.equal(noConfirmation.status, 1)
-    assert.match(noConfirmation.stderr, /APPLY_PREDEPLOY_ONE_20260721175746/)
+  for (const accepted of [direct, pooler]) {
+    const result = invoke(accepted)
+    assert.equal(result.status, 0, result.stderr)
+  }
 
-    const outsideManifest = spawnSync(
-      'bash',
-      [script, 'dry-run-predeploy-one', '20260721000000_not_a_manifest_migration.sql'],
-      baseOptions
-    )
-    assert.equal(outsideManifest.status, 2)
-    assert.match(outsideManifest.stderr, /not in the audited manifest/)
-
-    const orderedOnly = spawnSync(
-      'bash',
-      [script, 'dry-run-predeploy-one', '20260721120000_metric_trust_shadow_gate.sql'],
-      baseOptions
-    )
-    assert.equal(orderedOnly.status, 2)
-    assert.match(orderedOnly.stderr, /not approved for an independent apply/)
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
+  for (const rejected of [
+    direct.replace('?sslmode=verify-full', ''),
+    direct.replace('verify-full', 'require'),
+    direct.replace('verify-full', 'verify-ca'),
+    `${direct}&sslmode=verify-full`,
+    direct.replace(':5432/', '/'),
+    direct.replace(`db.${project}`, 'db.wrongprojectref.supabase.co'),
+    direct.replace('postgres:allowlist-secret', `postgres.${project}:allowlist-secret`),
+    direct.replace('/postgres?', '/arena?'),
+    direct.replace(':5432/', ':6543/'),
+    pooler.replace('aws-0-us-west-2', 'aws-0-us-west-1'),
+    pooler.replace(`postgres.${project}:`, 'postgres:'),
+    pooler.replace(`postgres.${project}:`, `postgres.${project}.extra:`),
+    pooler.replace('aws-0-us-west-2.pooler.supabase.com', 'evil.pooler.supabase.com'),
+  ]) {
+    const result = invoke(rejected)
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /requires the exact production session endpoint/)
+    assert.doesNotMatch(result.stderr, /allowlist-secret|postgresql:|supabase\.com/)
   }
 })
 
-test('Tip checkout production apply requires a dedicated freeze attestation before psql', () => {
-  const directory = mkdtempSync(resolve(tmpdir(), 'arena-tip-checkout-cutover-'))
+test('single predeploy dry-run and apply execute the first missing target only', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'arena-single-predeploy-'))
   const fakePsql = resolve(directory, 'psql')
-  const callsPath = resolve(directory, 'psql-calls')
   const sqlPath = resolve(directory, 'sql')
+  const callsPath = resolve(directory, 'psql-calls')
   const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
-  const lifecycle = '20260721210000_tip_checkout_lifecycle_atomic.sql'
-  const completionIdentity = '20260721211000_tip_checkout_completion_identity.sql'
-  const independent = '20260721140000_idempotent_equivalent_refund_events.sql'
+  const target = '20260718123000_shadow_sources_without_roi_basis.sql'
+  const version = '20260718123000'
+  const bodySha = migrationBodySha(target)
   try {
+    writeFakeCleanReleaseGit(directory)
     writeFileSync(
       fakePsql,
       [
         '#!/usr/bin/env bash',
         'printf "%s\\n" "$*" >> "$FAKE_PSQL_CALLS"',
         'if [[ " $* " == *" -Atc "* ]]; then',
-        '  if [[ "$*" == *"20260721210000"* || "$*" == *"20260721211000"* || "$*" == *"20260721140000"* ]]; then',
+        '  if [[ -n "${FAKE_LEDGER_DRIFT_VERSION:-}" && "$*" == *"ledger.version = \'$FAKE_LEDGER_DRIFT_VERSION\'"* ]]; then',
+        "    printf '%s\\n' drift",
+        '  elif [[ -n "${FAKE_LEDGER_MISSING_VERSION:-}" && "$*" == *"ledger.version = \'$FAKE_LEDGER_MISSING_VERSION\'"* ]]; then',
         "    printf '%s\\n' missing",
         '  else',
         "    printf '%s\\n' exact",
@@ -444,14 +478,25 @@ test('Tip checkout production apply requires a dedicated freeze attestation befo
     )
     chmodSync(fakePsql, 0o755)
     const cleanEnvironment = { ...process.env }
-    delete cleanEnvironment.ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM
+    for (const name of [
+      'ARENA_PRODUCTION_MIGRATION_CONFIRM',
+      'ARENA_PRODUCTION_MIGRATION_BODY_SHA256',
+      'ARENA_PRODUCTION_RELEASE_SHA',
+      'ARENA_PRODUCTION_PROJECT_REF',
+      'ARENA_ORDERED_PSQL_CHANNEL_APPROVAL',
+      'ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM',
+    ]) {
+      delete cleanEnvironment[name]
+    }
     const baseOptions = {
       cwd: ROOT,
       encoding: 'utf8',
       env: {
         ...cleanEnvironment,
-        PATH: `${directory}:${process.env.PATH}`,
-        DATABASE_URL: 'postgresql://runner:secret@db.example.test:5432/arena',
+        ...cleanReleaseEnvironment(directory),
+        DATABASE_URL:
+          'postgresql://postgres.iknktzifjdyujdccyhsv:secret@aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=verify-full',
+        FAKE_LEDGER_MISSING_VERSION: version,
         FAKE_PSQL_CALLS: callsPath,
         FAKE_PSQL_STREAM: sqlPath,
       },
@@ -460,143 +505,382 @@ test('Tip checkout production apply requires a dedicated freeze attestation befo
       rmSync(callsPath, { force: true })
       rmSync(sqlPath, { force: true })
     }
-    const assertRejectedBeforePsql = (result) => {
-      assert.equal(result.status, 1)
-      assert.match(result.stderr, /freeze the old Tip checkout route/)
-      assert.match(
-        result.stderr,
-        /ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM=TIP_CHECKOUT_FROZEN_PENDING_ZERO/
-      )
+
+    const dryRun = spawnSync('bash', [script, 'dry-run-predeploy-one', target], baseOptions)
+    assert.equal(dryRun.status, 0, dryRun.stderr)
+    const dryRunSql = readFileSync(sqlPath, 'utf8')
+    assert.match(dryRunSql, /\\echo APPLY 20260718123000_shadow_sources_without_roi_basis\.sql/)
+    assert.equal(dryRunSql.match(/^\\echo APPLY /gm)?.length, 1)
+    assert.match(dryRunSql, /^BEGIN ISOLATION LEVEL REPEATABLE READ;$/m)
+    assert.match(dryRunSql, /ordered predeploy requires exact ledger/)
+    assert.match(dryRunSql, /migration ledger version already exists: 20260718123000/)
+    assert.match(dryRunSql, new RegExp(`codex:${version}:${bodySha}`))
+    const advisory = dryRunSql.indexOf('pg_advisory_lock')
+    const sessionLockTimeout = dryRunSql.indexOf("SET lock_timeout = '10s';")
+    const sessionStatementTimeout = dryRunSql.indexOf("SET statement_timeout = '15min';")
+    const begin = dryRunSql.indexOf('BEGIN ISOLATION LEVEL REPEATABLE READ;')
+    const localLockTimeout = dryRunSql.indexOf("SET LOCAL lock_timeout = '10s';")
+    const localStatementTimeout = dryRunSql.indexOf("SET LOCAL statement_timeout = '15min';")
+    const localIdleTimeout = dryRunSql.indexOf(
+      "SET LOCAL idle_in_transaction_session_timeout = '60s';"
+    )
+    const tableLock = dryRunSql.indexOf('LOCK TABLE supabase_migrations.schema_migrations')
+    const prefixCheck = dryRunSql.indexOf('ordered predeploy requires exact ledger')
+    const applyBody = dryRunSql.indexOf(`\\echo APPLY ${target}`)
+    const rollback = dryRunSql.lastIndexOf('ROLLBACK;')
+    const unlock = dryRunSql.lastIndexOf('pg_advisory_unlock')
+    assert.match(dryRunSql, /IF NOT pg_catalog\.pg_advisory_unlock/)
+    assert.match(dryRunSql, /ordered predeploy advisory unlock failed/)
+    assert.ok(sessionLockTimeout < sessionStatementTimeout)
+    assert.ok(sessionStatementTimeout < advisory)
+    assert.ok(advisory < begin)
+    assert.ok(begin < localLockTimeout)
+    assert.ok(localLockTimeout < localStatementTimeout)
+    assert.ok(localStatementTimeout < localIdleTimeout)
+    assert.ok(localIdleTimeout < tableLock)
+    assert.ok(begin < tableLock)
+    assert.ok(tableLock < prefixCheck)
+    assert.ok(prefixCheck < applyBody)
+    assert.ok(applyBody < rollback)
+    assert.ok(rollback < unlock)
+
+    resetEvidence()
+    const apply = spawnSync('bash', [script, 'apply-predeploy-one', target], {
+      ...baseOptions,
+      env: {
+        ...baseOptions.env,
+        ARENA_PRODUCTION_MIGRATION_CONFIRM: `APPLY_PREDEPLOY_ONE_${version}`,
+        ARENA_PRODUCTION_MIGRATION_BODY_SHA256: bodySha,
+        ARENA_PRODUCTION_RELEASE_SHA: baseOptions.env.FAKE_GIT_HEAD,
+        ARENA_PRODUCTION_PROJECT_REF: 'iknktzifjdyujdccyhsv',
+        ARENA_ORDERED_PSQL_CHANNEL_APPROVAL: 'ADR_023_FUTURE_ADDENDUM_ORDERED_PSQL_V1_APPROVED',
+      },
+    })
+    assert.equal(apply.status, 0, apply.stderr)
+    const applySql = readFileSync(sqlPath, 'utf8')
+    assert.equal(applySql.match(/^\\echo APPLY /gm)?.length, 1)
+    assert.ok(applySql.indexOf('COMMIT;') < applySql.lastIndexOf('pg_advisory_unlock'))
+
+    resetEvidence()
+    const dormant = spawnSync('bash', [script, 'apply-predeploy-one', target], {
+      ...baseOptions,
+      env: {
+        ...baseOptions.env,
+        ARENA_PRODUCTION_MIGRATION_CONFIRM: `APPLY_PREDEPLOY_ONE_${version}`,
+        ARENA_PRODUCTION_MIGRATION_BODY_SHA256: bodySha,
+        ARENA_PRODUCTION_RELEASE_SHA: baseOptions.env.FAKE_GIT_HEAD,
+        ARENA_PRODUCTION_PROJECT_REF: 'iknktzifjdyujdccyhsv',
+      },
+    })
+    assert.equal(dormant.status, 1)
+    assert.match(dormant.stderr, /candidate is dormant pending an ADR-023 addendum/)
+    assert.equal(existsSync(callsPath), false)
+    assert.equal(existsSync(sqlPath), false)
+
+    resetEvidence()
+    const unapprovedLiteral = spawnSync('bash', [script, 'apply-predeploy-one', target], {
+      ...baseOptions,
+      env: {
+        ...baseOptions.env,
+        ARENA_ORDERED_PSQL_CHANNEL_APPROVAL: 'ADR_023_NOT_APPROVED',
+      },
+    })
+    assert.equal(unapprovedLiteral.status, 1)
+    assert.match(unapprovedLiteral.stderr, /candidate is dormant pending an ADR-023 addendum/)
+    assert.equal(existsSync(callsPath), false)
+    assert.equal(existsSync(sqlPath), false)
+
+    for (const [environment, message] of [
+      [{}, /APPLY_PREDEPLOY_ONE_20260718123000/],
+      [
+        { ARENA_PRODUCTION_MIGRATION_CONFIRM: `APPLY_PREDEPLOY_ONE_${version}` },
+        new RegExp(`ARENA_PRODUCTION_MIGRATION_BODY_SHA256=${bodySha}`),
+      ],
+      [
+        {
+          ARENA_PRODUCTION_MIGRATION_CONFIRM: `APPLY_PREDEPLOY_ONE_${version}`,
+          ARENA_PRODUCTION_MIGRATION_BODY_SHA256: bodySha,
+        },
+        new RegExp(`ARENA_PRODUCTION_RELEASE_SHA=${baseOptions.env.FAKE_GIT_HEAD}`),
+      ],
+      [
+        {
+          ARENA_PRODUCTION_MIGRATION_CONFIRM: `APPLY_PREDEPLOY_ONE_${version}`,
+          ARENA_PRODUCTION_MIGRATION_BODY_SHA256: '0'.repeat(64),
+          ARENA_PRODUCTION_RELEASE_SHA: baseOptions.env.FAKE_GIT_HEAD,
+        },
+        new RegExp(`ARENA_PRODUCTION_MIGRATION_BODY_SHA256=${bodySha}`),
+      ],
+      [
+        {
+          ARENA_PRODUCTION_MIGRATION_CONFIRM: `APPLY_PREDEPLOY_ONE_${version}`,
+          ARENA_PRODUCTION_MIGRATION_BODY_SHA256: bodySha,
+          ARENA_PRODUCTION_RELEASE_SHA: baseOptions.env.FAKE_GIT_HEAD,
+        },
+        /ARENA_PRODUCTION_PROJECT_REF=iknktzifjdyujdccyhsv/,
+      ],
+      [
+        {
+          ARENA_PRODUCTION_MIGRATION_CONFIRM: `APPLY_PREDEPLOY_ONE_${version}`,
+          ARENA_PRODUCTION_MIGRATION_BODY_SHA256: bodySha,
+          ARENA_PRODUCTION_RELEASE_SHA: baseOptions.env.FAKE_GIT_HEAD,
+          ARENA_PRODUCTION_PROJECT_REF: 'wrong-project',
+        },
+        /ARENA_PRODUCTION_PROJECT_REF=iknktzifjdyujdccyhsv/,
+      ],
+      [
+        {
+          ARENA_PRODUCTION_MIGRATION_CONFIRM: `APPLY_PREDEPLOY_ONE_${version}`,
+          ARENA_PRODUCTION_MIGRATION_BODY_SHA256: bodySha,
+          ARENA_PRODUCTION_RELEASE_SHA: '2'.repeat(40),
+          ARENA_PRODUCTION_PROJECT_REF: 'iknktzifjdyujdccyhsv',
+        },
+        new RegExp(`ARENA_PRODUCTION_RELEASE_SHA=${baseOptions.env.FAKE_GIT_HEAD}`),
+      ],
+    ]) {
+      resetEvidence()
+      const rejected = spawnSync('bash', [script, 'apply-predeploy-one', target], {
+        ...baseOptions,
+        env: {
+          ...baseOptions.env,
+          ARENA_ORDERED_PSQL_CHANNEL_APPROVAL: 'ADR_023_FUTURE_ADDENDUM_ORDERED_PSQL_V1_APPROVED',
+          ...environment,
+        },
+      })
+      assert.equal(rejected.status, 1)
+      assert.match(rejected.stderr, message)
       assert.equal(existsSync(callsPath), false)
       assert.equal(existsSync(sqlPath), false)
     }
 
-    const lifecycleEnv = {
-      ...baseOptions.env,
-      ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY_ONE_20260721210000',
-    }
     resetEvidence()
-    assertRejectedBeforePsql(
-      spawnSync('bash', [script, 'apply-predeploy-one', lifecycle], {
-        ...baseOptions,
-        env: lifecycleEnv,
-      })
-    )
+    const earlierMissing = spawnSync('bash', [script, 'dry-run-predeploy-one', target], {
+      ...baseOptions,
+      env: { ...baseOptions.env, FAKE_LEDGER_MISSING_VERSION: '20260718120000' },
+    })
+    assert.equal(earlierMissing.status, 1)
+    assert.match(earlierMissing.stderr, /requested .*18123000.*first missing .*18120000/)
+    assert.equal(existsSync(sqlPath), false)
 
     resetEvidence()
-    assertRejectedBeforePsql(
-      spawnSync('bash', [script, 'apply-predeploy-one', lifecycle], {
-        ...baseOptions,
-        env: {
-          ...lifecycleEnv,
-          ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM: 'TIP_CHECKOUT_NOT_FROZEN',
-        },
-      })
+    const earlierDrift = spawnSync('bash', [script, 'dry-run-predeploy-one', target], {
+      ...baseOptions,
+      env: {
+        ...baseOptions.env,
+        FAKE_LEDGER_MISSING_VERSION: version,
+        FAKE_LEDGER_DRIFT_VERSION: '20260718120000',
+      },
+    })
+    assert.equal(earlierDrift.status, 1)
+    assert.match(earlierDrift.stderr, /refusing drifted predeploy ledger before target/)
+    assert.equal(existsSync(sqlPath), false)
+
+    resetEvidence()
+    const targetAlreadyExact = spawnSync('bash', [script, 'dry-run-predeploy-one', target], {
+      ...baseOptions,
+      env: { ...baseOptions.env, FAKE_LEDGER_MISSING_VERSION: '20260718130000' },
+    })
+    assert.equal(targetAlreadyExact.status, 1)
+    assert.match(targetAlreadyExact.stderr, /requested .*18123000.*first missing .*18130000/)
+    assert.equal(existsSync(sqlPath), false)
+
+    resetEvidence()
+    const nothingPending = spawnSync('bash', [script, 'dry-run-predeploy-one', target], {
+      ...baseOptions,
+      env: { ...baseOptions.env, FAKE_LEDGER_MISSING_VERSION: '99999999999999' },
+    })
+    assert.equal(nothingPending.status, 1)
+    assert.match(nothingPending.stderr, /manifest has no missing migration/)
+    assert.equal(existsSync(sqlPath), false)
+
+    const outsideManifest = spawnSync(
+      'bash',
+      [script, 'dry-run-predeploy-one', '20260721000000_not_a_manifest_migration.sql'],
+      baseOptions
     )
+    assert.equal(outsideManifest.status, 2)
+    assert.match(outsideManifest.stderr, /not in the ordered candidate manifest/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('single predeploy rejects untrusted release provenance before ledger reads', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'arena-single-provenance-'))
+  const fakePsql = resolve(directory, 'psql')
+  const callsPath = resolve(directory, 'psql-calls')
+  const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
+  const target = '20260716111600_atomic_group_application_review.sql'
+  try {
+    writeFakeCleanReleaseGit(directory)
+    writeFileSync(fakePsql, '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$FAKE_PSQL_CALLS"\n')
+    chmodSync(fakePsql, 0o755)
+    const baseOptions = {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        ...cleanReleaseEnvironment(directory),
+        DATABASE_URL:
+          'postgresql://postgres.iknktzifjdyujdccyhsv:secret@aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=verify-full',
+        FAKE_PSQL_CALLS: callsPath,
+      },
+    }
+    const cases = [
+      [{ FAKE_GIT_TRACKED: 'false' }, /must be tracked by git/, 1],
+      [{ FAKE_GIT_DIRTY: ' M changed.sql' }, /requires a clean worktree/, 1],
+      [{ FAKE_GIT_DIRTY: '?? untracked.sql' }, /requires a clean worktree/, 1],
+      [{ FAKE_GIT_ORIGIN_MAIN: 'different-sha' }, /HEAD to equal the pushed origin\/main SHA/, 1],
+      [
+        { FAKE_GIT_LIVE_MAIN: '2222222222222222222222222222222222222222' },
+        /HEAD to equal the live pushed origin\/main SHA/,
+        1,
+      ],
+      [{ FAKE_GIT_REMOTE_AVAILABLE: 'false' }, /could not verify the live origin\/main SHA/, 1],
+      [
+        { DATABASE_URL: 'postgresql://runner:secret@db.example.test:5432/arena' },
+        /requires the exact production session endpoint/,
+        1,
+      ],
+      [
+        {
+          DATABASE_URL:
+            'https://postgres.iknktzifjdyujdccyhsv:secret@aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=verify-full',
+        },
+        /psql connection configuration error/,
+        2,
+      ],
+      [
+        {
+          DATABASE_URL:
+            'postgresql://postgres.iknktzifjdyujdccyhsv:secret@aws-0-us-west-2.pooler.supabase.com:5432/arena?sslmode=verify-full',
+        },
+        /requires the exact production session endpoint/,
+        1,
+      ],
+      [
+        {
+          DATABASE_URL:
+            'postgresql://postgres.iknktzifjdyujdccyhsv:secret@aws-0-us-west-2.pooler.supabase.com:6543/postgres?sslmode=verify-full',
+        },
+        /refuses transaction-pooler port 6543/,
+        2,
+      ],
+    ]
+    for (const [environment, message, status] of cases) {
+      rmSync(callsPath, { force: true })
+      const result = spawnSync('bash', [script, 'dry-run-predeploy-one', target], {
+        ...baseOptions,
+        env: { ...baseOptions.env, ...environment },
+      })
+      assert.equal(result.status, status, result.stderr)
+      assert.match(result.stderr, message)
+      assert.equal(existsSync(callsPath), false)
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('Tip freeze is required only when the selected ordered target is protected', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'arena-tip-checkout-cutover-'))
+  const fakePsql = resolve(directory, 'psql')
+  const callsPath = resolve(directory, 'psql-calls')
+  const sqlPath = resolve(directory, 'sql')
+  const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
+  const lifecycle = '20260721210000_tip_checkout_lifecycle_atomic.sql'
+  const afterTip = '20260722030000_durable_leaderboard_acquisition_attempt_ledger.sql'
+  try {
+    writeFakeCleanReleaseGit(directory)
+    writeFileSync(
+      fakePsql,
+      [
+        '#!/usr/bin/env bash',
+        'printf "%s\\n" "$*" >> "$FAKE_PSQL_CALLS"',
+        'if [[ " $* " == *" -Atc "* ]]; then',
+        '  if [[ "$*" == *"ledger.version = \'$FAKE_LEDGER_MISSING_VERSION\'"* ]]; then',
+        "    printf '%s\\n' missing",
+        '  else',
+        "    printf '%s\\n' exact",
+        '  fi',
+        '  exit 0',
+        'fi',
+        'cat > "$FAKE_PSQL_STREAM"',
+        '',
+      ].join('\n')
+    )
+    chmodSync(fakePsql, 0o755)
+    const inheritedEnvironment = { ...process.env }
+    delete inheritedEnvironment.ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM
+    const baseEnvironment = {
+      ...inheritedEnvironment,
+      ...cleanReleaseEnvironment(directory),
+      DATABASE_URL:
+        'postgresql://postgres.iknktzifjdyujdccyhsv:secret@aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=verify-full',
+      FAKE_PSQL_CALLS: callsPath,
+      FAKE_PSQL_STREAM: sqlPath,
+    }
+    const confirmedEnvironment = (migration) => ({
+      ...baseEnvironment,
+      ARENA_PRODUCTION_MIGRATION_CONFIRM: `APPLY_PREDEPLOY_ONE_${migration.split('_')[0]}`,
+      ARENA_PRODUCTION_MIGRATION_BODY_SHA256: migrationBodySha(migration),
+      ARENA_PRODUCTION_RELEASE_SHA: baseEnvironment.FAKE_GIT_HEAD,
+      ARENA_PRODUCTION_PROJECT_REF: 'iknktzifjdyujdccyhsv',
+      ARENA_ORDERED_PSQL_CHANNEL_APPROVAL: 'ADR_023_FUTURE_ADDENDUM_ORDERED_PSQL_V1_APPROVED',
+      FAKE_LEDGER_MISSING_VERSION: migration.split('_')[0],
+    })
+    const resetEvidence = () => {
+      rmSync(callsPath, { force: true })
+      rmSync(sqlPath, { force: true })
+    }
+
+    resetEvidence()
+    const blocked = spawnSync('bash', [script, 'apply-predeploy-one', lifecycle], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: confirmedEnvironment(lifecycle),
+    })
+    assert.equal(blocked.status, 1)
+    assert.match(blocked.stderr, /freeze the old Tip checkout route/)
+    assert.equal(existsSync(callsPath), false)
 
     resetEvidence()
     const lifecycleApply = spawnSync('bash', [script, 'apply-predeploy-one', lifecycle], {
-      ...baseOptions,
+      cwd: ROOT,
+      encoding: 'utf8',
       env: {
-        ...lifecycleEnv,
+        ...confirmedEnvironment(lifecycle),
         ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM: 'TIP_CHECKOUT_FROZEN_PENDING_ZERO',
       },
     })
     assert.equal(lifecycleApply.status, 0, lifecycleApply.stderr)
-    assert.equal(existsSync(callsPath), true)
-    const lifecycleSql = readFileSync(sqlPath, 'utf8')
-    assert.match(lifecycleSql, /\\echo APPLY 20260721210000_tip_checkout_lifecycle_atomic\.sql/)
-    assert.ok(lifecycleSql.trimEnd().endsWith('COMMIT;'))
-
-    const completionIdentityEnv = {
-      ...baseOptions.env,
-      ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY_ONE_20260721211000',
-    }
-    resetEvidence()
-    assertRejectedBeforePsql(
-      spawnSync('bash', [script, 'apply-predeploy-one', completionIdentity], {
-        ...baseOptions,
-        env: completionIdentityEnv,
-      })
-    )
+    assert.match(readFileSync(sqlPath, 'utf8'), /\\echo APPLY 20260721210000_/)
 
     resetEvidence()
-    const completionIdentityApply = spawnSync(
-      'bash',
-      [script, 'apply-predeploy-one', completionIdentity],
-      {
-        ...baseOptions,
-        env: {
-          ...completionIdentityEnv,
-          ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM: 'TIP_CHECKOUT_FROZEN_PENDING_ZERO',
-        },
-      }
-    )
-    assert.equal(completionIdentityApply.status, 0, completionIdentityApply.stderr)
-    const completionIdentitySql = readFileSync(sqlPath, 'utf8')
-    assert.match(
-      completionIdentitySql,
-      /\\echo APPLY 20260721211000_tip_checkout_completion_identity\.sql/
-    )
-    assert.equal(completionIdentitySql.match(/^\\echo APPLY /gm)?.length, 1)
-    assert.doesNotMatch(
-      completionIdentitySql,
-      /\\echo APPLY 20260721210000_tip_checkout_lifecycle_atomic\.sql/
-    )
-    assert.ok(completionIdentitySql.trimEnd().endsWith('COMMIT;'))
-
-    resetEvidence()
-    const independentApply = spawnSync('bash', [script, 'apply-predeploy-one', independent], {
-      ...baseOptions,
-      env: {
-        ...baseOptions.env,
-        ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY_ONE_20260721140000',
-      },
+    const afterTipApply = spawnSync('bash', [script, 'apply-predeploy-one', afterTip], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: confirmedEnvironment(afterTip),
     })
-    assert.equal(independentApply.status, 0, independentApply.stderr)
-    const independentSql = readFileSync(sqlPath, 'utf8')
-    assert.match(
-      independentSql,
-      /\\echo APPLY 20260721140000_idempotent_equivalent_refund_events\.sql/
-    )
-    assert.doesNotMatch(independentSql, /20260721210000_tip_checkout_lifecycle_atomic/)
+    assert.equal(afterTipApply.status, 0, afterTipApply.stderr)
+    assert.match(readFileSync(sqlPath, 'utf8'), /\\echo APPLY 20260722030000_/)
 
-    const fullEnv = {
-      ...baseOptions.env,
-      ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY',
+    for (const command of [
+      'apply-predeploy',
+      'apply-postdeploy',
+      'apply-recovery',
+      'apply-concurrent-recovery',
+    ]) {
+      resetEvidence()
+      const disabled = spawnSync('bash', [script, command], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: baseEnvironment,
+      })
+      assert.equal(disabled.status, 2)
+      assert.match(disabled.stderr, /disabled by ADR-023/)
+      assert.equal(existsSync(callsPath), false)
     }
-    resetEvidence()
-    assertRejectedBeforePsql(
-      spawnSync('bash', [script, 'apply-predeploy'], {
-        ...baseOptions,
-        env: fullEnv,
-      })
-    )
-
-    resetEvidence()
-    assertRejectedBeforePsql(
-      spawnSync('bash', [script, 'apply-predeploy'], {
-        ...baseOptions,
-        env: {
-          ...fullEnv,
-          ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM: 'TIP_CHECKOUT_PENDING_UNKNOWN',
-        },
-      })
-    )
-
-    resetEvidence()
-    const fullApply = spawnSync('bash', [script, 'apply-predeploy'], {
-      ...baseOptions,
-      env: {
-        ...fullEnv,
-        ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM: 'TIP_CHECKOUT_FROZEN_PENDING_ZERO',
-      },
-    })
-    assert.equal(fullApply.status, 0, fullApply.stderr)
-    assert.equal(existsSync(callsPath), true)
-    const fullSql = readFileSync(sqlPath, 'utf8')
-    assert.match(fullSql, /\\echo APPLY 20260721210000_tip_checkout_lifecycle_atomic\.sql/)
-    assert.ok(fullSql.trimEnd().endsWith('COMMIT;'))
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -714,23 +998,13 @@ test('session-pooler guard is bound to the parsed URL and ignores ambient libpq 
   assert.equal(accepted.status, 0, accepted.stderr)
 })
 
-test('concurrent recovery is resumable and never enters a transaction', () => {
+test('legacy schema write commands stay disabled pending channel governance', () => {
   assert.match(source, /validate_concurrent_migration_file/)
   assert.match(source, /CREATE INDEX CONCURRENTLY/)
-  assert.match(source, /pg_advisory_lock/)
-  assert.match(source, /ledger_state/)
-  assert.match(source, /SKIP exact ledger/)
-  assert.match(source, /refusing drifted ledger/)
-  assert.doesNotMatch(source, /emit_transaction 'COMMIT' "\$\{CONCURRENT_RECOVERY_MIGRATIONS/)
-})
-
-test('transactional recovery is resumable and keeps unrelated locks separate', () => {
   assert.match(source, /dry-run-recovery[\s\S]*ledger_state[\s\S]*ROLLBACK/)
-  assert.match(
-    source,
-    /apply-recovery[\s\S]*ledger_state[\s\S]*emit_migration "\$migration"[\s\S]*COMMIT/
-  )
-  assert.doesNotMatch(source, /emit_transaction 'COMMIT' "\$\{RECOVERY_MIGRATIONS/)
+  assert.match(source, /apply-concurrent-recovery\)[\s\S]*disabled by ADR-023[\s\S]*exit 2/)
+  assert.match(source, /apply-postdeploy\)[\s\S]*disabled by ADR-023[\s\S]*exit 2/)
+  assert.match(source, /apply-recovery\)[\s\S]*disabled by ADR-023[\s\S]*exit 2/)
 })
 
 test('status makes the intentionally superseded migration explicit', () => {
