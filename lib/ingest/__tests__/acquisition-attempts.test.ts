@@ -11,6 +11,7 @@ import {
 import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
   finishLeaderboardAcquisitionAttempt,
+  hasRegisteredAttemptBoundLeaderboardAcquisitionContract,
   LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
   LEGACY_LEADERBOARD_ACQUISITION_CONTRACT,
   projectLeaderboardManifestOutcome,
@@ -195,6 +196,118 @@ function builtManifestV3(
 
 describe('leaderboard acquisition attempt client', () => {
   beforeEach(() => jest.clearAllMocks())
+
+  it('enables @3 only from one exact database capability registration', async () => {
+    const client = enqueueQuery({
+      rows: [
+        {
+          capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+          adapter_slug: 'binance',
+          attempt_binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+          requires_runner_git_sha: true,
+        },
+      ],
+    })
+
+    await expect(
+      hasRegisteredAttemptBoundLeaderboardAcquisitionContract({
+        sourceId: 1,
+        adapterSlug: 'binance',
+      })
+    ).resolves.toBe(true)
+
+    const [sql, params] = client.query.mock.calls[0]
+    expect(String(sql)).toContain('FROM arena.leaderboard_capture_contracts')
+    expect(String(sql)).toContain('source_id = $1::smallint')
+    expect(params).toEqual([1, ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT])
+  })
+
+  it('keeps an unregistered source off the @3 path', async () => {
+    enqueueQuery({ rows: [] })
+
+    await expect(
+      hasRegisteredAttemptBoundLeaderboardAcquisitionContract({
+        sourceId: 2,
+        adapterSlug: 'binance',
+      })
+    ).resolves.toBe(false)
+  })
+
+  it.each([
+    [
+      'adapter drift',
+      [
+        {
+          capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+          adapter_slug: 'other',
+          attempt_binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+          requires_runner_git_sha: true,
+        },
+      ],
+      /inconsistent/,
+    ],
+    [
+      'binding drift',
+      [
+        {
+          capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+          adapter_slug: 'binance',
+          attempt_binding_contract: 'foreign-binding',
+          requires_runner_git_sha: true,
+        },
+      ],
+      /inconsistent/,
+    ],
+    [
+      'runner provenance disabled',
+      [
+        {
+          capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+          adapter_slug: 'binance',
+          attempt_binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+          requires_runner_git_sha: false,
+        },
+      ],
+      /inconsistent/,
+    ],
+    [
+      'duplicate registrations',
+      [
+        {
+          capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+          adapter_slug: 'binance',
+          attempt_binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+          requires_runner_git_sha: true,
+        },
+        {
+          capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+          adapter_slug: 'binance',
+          attempt_binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+          requires_runner_git_sha: true,
+        },
+      ],
+      /ambiguous/,
+    ],
+  ])('rejects %s in the @3 capability registry', async (_label, rows, error) => {
+    enqueueQuery({ rows })
+    await expect(
+      hasRegisteredAttemptBoundLeaderboardAcquisitionContract({
+        sourceId: 1,
+        adapterSlug: 'binance',
+      })
+    ).rejects.toThrow(error as RegExp)
+  })
+
+  it.each([
+    ['zero source', { sourceId: 0, adapterSlug: 'binance' }],
+    ['oversized source', { sourceId: 32_768, adapterSlug: 'binance' }],
+    ['padded adapter', { sourceId: 1, adapterSlug: ' binance ' }],
+  ])('rejects %s before capability registry I/O', async (_label, input) => {
+    await expect(hasRegisteredAttemptBoundLeaderboardAcquisitionContract(input)).rejects.toThrow(
+      /leaderboard acquisition/
+    )
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
 
   it('starts with named, explicitly cast arguments and preserves the DB millisecond clock', async () => {
     const client = enqueueQuery({ rows: [attemptRow()] })

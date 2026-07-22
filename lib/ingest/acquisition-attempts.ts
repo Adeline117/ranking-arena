@@ -234,6 +234,13 @@ interface OutcomeRow {
   recorded_completed_at: string
 }
 
+interface CaptureContractRow {
+  capture_contract: string
+  adapter_slug: string
+  attempt_binding_contract: string
+  requires_runner_git_sha: boolean
+}
+
 interface TerminalProjection {
   terminalState: LeaderboardAcquisitionTerminalState
   acquisitionState: LeaderboardAcquisitionState
@@ -326,6 +333,15 @@ const FINISH_SQL = `SELECT
     p_failure_stage => $24::text,
     p_reason_code => $25::text
   )`
+
+const ATTEMPT_BOUND_CAPTURE_CONTRACT_SQL = `SELECT
+    capture_contract,
+    adapter_slug,
+    attempt_binding_contract,
+    requires_runner_git_sha
+  FROM arena.leaderboard_capture_contracts
+  WHERE source_id = $1::smallint
+    AND capture_contract = $2::text`
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value))
@@ -570,6 +586,47 @@ function assertAttemptShape(attempt: LeaderboardAcquisitionAttempt): void {
     throw new TypeError('[ingest] leaderboard acquisition attempt binding contract is invalid')
   }
   assertCanonicalTimestamp(attempt.recordedStartedAt, 'recorded start')
+}
+
+/**
+ * Read the immutable database capability registry before choosing the @3
+ * worker path. Adapter methods are shared by some source rows and therefore
+ * are not sufficient evidence that a source contract was reviewed.
+ */
+export async function hasRegisteredAttemptBoundLeaderboardAcquisitionContract(input: {
+  sourceId: number
+  adapterSlug: string
+}): Promise<boolean> {
+  assertSafeInteger(input.sourceId, 'source id', 1)
+  if (input.sourceId > 32_767) {
+    throw new TypeError('[ingest] leaderboard acquisition source id is invalid')
+  }
+  if (
+    typeof input.adapterSlug !== 'string' ||
+    input.adapterSlug.length < 1 ||
+    input.adapterSlug.length > 128 ||
+    input.adapterSlug.trim() !== input.adapterSlug
+  ) {
+    throw new TypeError('[ingest] leaderboard acquisition adapter slug is invalid')
+  }
+  const rows = await queryOnce<CaptureContractRow>(ATTEMPT_BOUND_CAPTURE_CONTRACT_SQL, [
+    input.sourceId,
+    ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+  ])
+  if (rows.length === 0) return false
+  if (rows.length !== 1) {
+    throw new Error('[ingest] attempt-bound leaderboard capture registry is ambiguous')
+  }
+  const [row] = rows
+  if (
+    row.capture_contract !== ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT ||
+    row.adapter_slug !== input.adapterSlug ||
+    row.attempt_binding_contract !== LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT ||
+    row.requires_runner_git_sha !== true
+  ) {
+    throw new Error('[ingest] attempt-bound leaderboard capture registry is inconsistent')
+  }
+  return true
 }
 
 function reasonCodeForManifest(
