@@ -130,17 +130,6 @@ CREATE TABLE arena.leaderboard_score_input_manifests (
         AND manifest->>'period' = period
         AND (manifest->>'validUntil')::timestamp with time zone = valid_until
       ) IS TRUE
-    ),
-  CONSTRAINT leaderboard_score_input_manifest_rank_eligible_pnl
-    CHECK (
-      pg_catalog.jsonb_typeof(manifest->'inputs') = 'array'
-      AND pg_catalog.jsonb_array_length(manifest->'inputs') =
-          pg_catalog.jsonb_array_length(
-            pg_catalog.jsonb_path_query_array(
-              manifest->'inputs',
-              '$[*] ? (@.pnl.type() == "number")'::pg_catalog.jsonpath
-            )
-          )
     )
 );
 
@@ -241,20 +230,6 @@ BEGIN
      OR v_scorer_result->>'outputDigest' !~ '^[0-9a-f]{64}$' THEN
     RAISE EXCEPTION 'private PG17 scorer returned an invalid envelope'
       USING ERRCODE = '55000';
-  END IF;
-
-  -- Ranking requires an observed finite PnL. The private scorer intentionally
-  -- accepts null for lower-level experiments, so the leaderboard manifest must
-  -- narrow that domain explicitly. JSON number zero and losses remain valid;
-  -- missing, null, string, object, array, and boolean PnL fail closed.
-  IF EXISTS (
-    SELECT 1
-    FROM pg_catalog.jsonb_array_elements(p_inputs) AS input_row(value)
-    WHERE pg_catalog.jsonb_typeof(input_row.value->'pnl')
-          IS DISTINCT FROM 'number'
-  ) THEN
-    RAISE EXCEPTION 'leaderboard score-input PnL must be a finite JSON number'
-      USING ERRCODE = '22023';
   END IF;
 
   -- Rebuild canonical inputs from the same parsed float8/integer domain as the
@@ -706,26 +681,6 @@ BEGIN
     WHERE relation_row.oid = v_table_oid
   ) THEN
     RAISE EXCEPTION 'score-input manifest table RLS is not enabled';
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_constraint AS constraint_row
-    WHERE constraint_row.conrelid = v_table_oid
-      AND constraint_row.conname =
-          'leaderboard_score_input_manifest_rank_eligible_pnl'
-      AND constraint_row.contype = 'c'
-      AND constraint_row.convalidated
-      AND pg_catalog.strpos(
-            pg_catalog.pg_get_expr(
-              constraint_row.conbin,
-              constraint_row.conrelid,
-              true
-            ),
-            'jsonb_path_query_array'
-          ) > 0
-  ) THEN
-    RAISE EXCEPTION 'score-input manifest PnL table constraint drifted';
   END IF;
 
   FOR v_signature, v_expected_volatility IN
