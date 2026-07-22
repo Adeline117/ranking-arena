@@ -26,15 +26,14 @@ export const maxDuration = 120 // Increased from 60s — paginated Supabase quer
 
 const logger = createLogger('sync-meilisearch')
 
-const MEILI_URL = process.env.MEILISEARCH_URL
-const MEILI_KEY = process.env.MEILISEARCH_ADMIN_KEY
-
 const SEASONS = ['7D', '30D', '90D'] as const
 
 /** Time budget: stop syncing new seasons after this many ms to stay within maxDuration */
 const TIME_BUDGET_MS = 90_000 // 90s — leaves 30s buffer for response + cleanup
 
 async function meiliRequest(path: string, method: string, body?: unknown) {
+  const MEILI_URL = process.env.MEILISEARCH_URL
+  const MEILI_KEY = process.env.MEILISEARCH_ADMIN_KEY
   if (!MEILI_URL || !MEILI_KEY)
     throw new Error('MEILISEARCH_URL or MEILISEARCH_ADMIN_KEY not configured')
   const res = await fetch(`${MEILI_URL}${path}`, {
@@ -52,7 +51,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  if (!MEILI_URL || !MEILI_KEY) {
+  if (!process.env.MEILISEARCH_URL || !process.env.MEILISEARCH_ADMIN_KEY) {
     return NextResponse.json({ error: 'Meilisearch not configured' }, { status: 503 })
   }
 
@@ -114,21 +113,19 @@ export async function GET(request: NextRequest) {
         const allData: Record<string, unknown>[] = []
         let offset = 0
         const pageSize = 500 // Reduced from 1000 to avoid statement_timeout on large windows
-        const MAX_PAGES = 10 // 5K traders per season is plenty for search (reduced from 20)
+        const MAX_PAGES = 10 // At most 5K traders per season; fail closed if more remain.
         let pageCount = 0
-        while (true) {
+        let paginationComplete = false
+        while (pageCount <= MAX_PAGES) {
           // Check time budget before each page fetch
           if (Date.now() - startTime > TIME_BUDGET_MS) {
-            logger.warn(
-              `Time budget hit during ${season} pagination at page ${pageCount}, using ${allData.length} traders fetched so far`
+            throw new Error(
+              `partial: time budget exhausted during ${season} pagination after ${allData.length} traders`
             )
-            break
           }
 
-          if (++pageCount > MAX_PAGES) {
-            logger.warn(`Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
-            break
-          }
+          pageCount += 1
+          const isCompletenessProbe = pageCount > MAX_PAGES
           // Uses idx_leaderboard_ranks_sync: (season_id, computed_at DESC)
           // WHERE arena_score > 0 AND (is_outlier IS NULL OR is_outlier = false)
           // The is_outlier filter is baked into the partial index, no need for .or() in query.
@@ -148,25 +145,44 @@ export async function GET(request: NextRequest) {
 
           const { data, error } = await query
             .order('computed_at', { ascending: false })
-            .range(offset, offset + pageSize - 1)
+            .range(offset, offset + (isCompletenessProbe ? 0 : pageSize - 1))
 
           if (error) {
-            // If statement timeout, log and break out of this season (don't crash the whole sync)
             if (
               error.message.includes('statement timeout') ||
               error.message.includes('canceling statement')
             ) {
-              logger.warn(
-                `Statement timeout on season ${season} page ${pageCount}, using ${allData.length} traders fetched so far`
+              throw new Error(
+                `partial: statement timeout on season ${season} page ${pageCount} after ${allData.length} traders`
               )
-              break
             }
             throw new Error(`Supabase query failed (${season}): ${error.message}`)
           }
-          if (!data || data.length === 0) break
+          if (isCompletenessProbe) {
+            if (data && data.length > 0) {
+              throw new Error(
+                `partial: reached page limit (${MAX_PAGES}) for season ${season} after ${allData.length} traders`
+              )
+            }
+            paginationComplete = true
+            break
+          }
+          if (!data || data.length === 0) {
+            paginationComplete = true
+            break
+          }
           allData.push(...data)
-          if (data.length < pageSize) break
+          if (data.length < pageSize) {
+            paginationComplete = true
+            break
+          }
           offset += pageSize
+        }
+
+        if (!paginationComplete) {
+          throw new Error(
+            `partial: reached page limit (${MAX_PAGES}) for season ${season} after ${allData.length} traders`
+          )
         }
 
         // Map to Meilisearch documents with compound ID including season
@@ -206,58 +222,67 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // If no changes found (incremental sync), return early
+    const elapsed = Date.now() - startTime
+    const hasErrors = Object.keys(seasonErrors).length > 0
+
+    if (hasErrors) {
+      const error = new Error(`Meilisearch sync incomplete: ${JSON.stringify(seasonErrors)}`)
+      logger.error(error.message)
+      await plog.error(error, {
+        elapsed_ms: elapsed,
+        seasons: seasonCounts,
+        errors: seasonErrors,
+        mode: isFull ? 'full' : 'incremental',
+      })
+      return NextResponse.json(
+        {
+          ok: false,
+          traders: totalSynced,
+          seasons: seasonCounts,
+          errors: seasonErrors,
+          elapsed_ms: elapsed,
+          mode: isFull ? 'full' : 'incremental',
+        },
+        { status: 502 }
+      )
+    }
+
+    // Every season completed successfully. Advance the incremental boundary even
+    // when there were genuinely zero changes, otherwise every no-op run rescans
+    // the same interval forever.
+    await PipelineState.set(LAST_SYNC_KEY, syncStartTime)
+
     if (totalSynced === 0 && !isFull) {
-      const elapsed = Date.now() - startTime
       logger.info(`Meilisearch incremental sync: no changes since ${lastSync} (${elapsed}ms)`)
-      await plog.success(0, { elapsed_ms: elapsed, message: 'no changes', errors: seasonErrors })
+      await plog.success(0, {
+        elapsed_ms: elapsed,
+        message: 'no changes',
+        seasons: seasonCounts,
+        mode: 'incremental',
+      })
       return NextResponse.json({
         ok: true,
         traders: 0,
         message: 'no changes',
+        seasons: seasonCounts,
         elapsed_ms: elapsed,
-        errors: seasonErrors,
+        mode: 'incremental',
       })
     }
 
-    // Update last sync timestamp in DB (persistent, no TTL expiry risk)
-    // Only update if at least one season succeeded
-    if (totalSynced > 0) {
-      await PipelineState.set(LAST_SYNC_KEY, syncStartTime)
-    }
-
-    const elapsed = Date.now() - startTime
-    const hasErrors = Object.keys(seasonErrors).length > 0
     logger.info(
-      `Meilisearch synced: ${totalSynced} traders (${JSON.stringify(seasonCounts)}) in ${elapsed}ms${isFull ? ' [full]' : ' [incremental]'}${hasErrors ? ` errors: ${JSON.stringify(seasonErrors)}` : ''}`
+      `Meilisearch synced: ${totalSynced} traders (${JSON.stringify(seasonCounts)}) in ${elapsed}ms${isFull ? ' [full]' : ' [incremental]'}`
     )
-
-    if (hasErrors && totalSynced > 0) {
-      // Partial success — log as success with warnings
-      await plog.success(totalSynced, {
-        elapsed_ms: elapsed,
-        seasons: seasonCounts,
-        errors: seasonErrors,
-        mode: isFull ? 'full' : 'incremental',
-      })
-    } else if (hasErrors) {
-      await plog.error(new Error(`All seasons failed: ${JSON.stringify(seasonErrors)}`), {
-        elapsed_ms: elapsed,
-        seasons: seasonCounts,
-      })
-    } else {
-      await plog.success(totalSynced, {
-        elapsed_ms: elapsed,
-        seasons: seasonCounts,
-        mode: isFull ? 'full' : 'incremental',
-      })
-    }
+    await plog.success(totalSynced, {
+      elapsed_ms: elapsed,
+      seasons: seasonCounts,
+      mode: isFull ? 'full' : 'incremental',
+    })
 
     return NextResponse.json({
-      ok: !hasErrors || totalSynced > 0,
+      ok: true,
       traders: totalSynced,
       seasons: seasonCounts,
-      errors: hasErrors ? seasonErrors : undefined,
       elapsed_ms: elapsed,
       mode: isFull ? 'full' : 'incremental',
     })
