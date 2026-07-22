@@ -100,6 +100,8 @@ PREDEPLOY_MIGRATIONS=(
   20260721175746_arena_score_inputs_publish_bundle.sql
   20260721210000_tip_checkout_lifecycle_atomic.sql
   20260721211000_tip_checkout_completion_identity.sql
+  20260722030000_durable_leaderboard_acquisition_attempt_ledger.sql
+  20260722040000_leaderboard_acquisition_manifest_v3_compat.sql
   20260722041000_pure_arena_score_v4_scorer.sql
 )
 
