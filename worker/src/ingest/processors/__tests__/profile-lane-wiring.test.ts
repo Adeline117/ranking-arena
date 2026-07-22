@@ -8,8 +8,9 @@ function processorSource(file: string): string {
 describe('ingest processor persistent-profile contract', () => {
   it('preserves Tier A on the existing unsuffixed warm-cookie profile', () => {
     const source = processorSource('tier-a-leaderboard.ts')
-    expect(source).toContain('const session = await openSession(src)')
-    expect(source).not.toMatch(/openSession\(src,\s*\{\s*profileSuffix:/)
+    const openSessionCalls = source.match(/openSession\([^)]*\)/g) ?? []
+    expect(openSessionCalls.length).toBeGreaterThan(0)
+    expect(new Set(openSessionCalls)).toEqual(new Set(['openSession(src)']))
   })
 
   it('assigns fixed, mutually distinct lanes to every other browser tier', () => {
