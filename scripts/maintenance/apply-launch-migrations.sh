@@ -104,6 +104,7 @@ PREDEPLOY_MIGRATIONS=(
   20260722040000_leaderboard_acquisition_manifest_v3_compat.sql
   20260722041000_pure_arena_score_v4_scorer.sql
   20260722042000_leaderboard_terminal_publication_fence.sql
+  20260722050000_metric_trust_attempt_outcome_authority.sql
 )
 
 # A selective apply bypasses manifest ordering, so it is more restrictive than
