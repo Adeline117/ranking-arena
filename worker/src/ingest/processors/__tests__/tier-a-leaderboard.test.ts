@@ -184,6 +184,39 @@ function capturedLeaderboard(overrides: Partial<LeaderboardCapture> = {}): Leade
   }
 }
 
+function capturedLeaderboardWithPageRows(pageRows: string[][]): LeaderboardCapture {
+  const fetchedAt = new Date().toISOString()
+  const reportedPopulation = pageRows.reduce((total, rows) => total + rows.length, 0)
+  const rawPages = pageRows.map((accounts, index) => ({
+    ...page,
+    pageIndex: index + 1,
+    payload: { result: { items: accounts.map((accountId) => ({ accountId })) } },
+    url: `https://xt.test/leader-list?page=${index + 1}`,
+    fetchedAt,
+  }))
+  return capturedLeaderboard({
+    sourcePages: rawPages.map((rawPage, index) => ({
+      rawPage,
+      sourceRowCount: pageRows[index].length,
+      requestSha256: String(index + 1).repeat(64),
+      httpStatus: 200,
+      paginationPosition: { kind: 'page_index', request_page_index: index + 1 },
+      sourceReports: {
+        population: { state: 'reported', value: reportedPopulation },
+        page_count: { state: 'not_reported' },
+        current_page: { state: 'not_reported' },
+        page_size: { state: 'not_reported' },
+      },
+    })),
+    parsePages: rawPages,
+    terminationReason: 'reported_population_reached',
+    parserTransformation: {
+      kind: 'identity_projection',
+      source_page_ordinals: rawPages.map((_, index) => index + 1),
+    },
+  })
+}
+
 function makeJob(data: TierJobData = { sourceSlug: src.slug }): Job<TierJobData> {
   const testJob = {
     id: 'repeat:tiera:xt_futures:1784361600000',
@@ -571,6 +604,213 @@ describe('Tier-A board-series publication guard', () => {
     )
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
+
+  it('anchors capture ranks to observed source rows when configured page size is unknown', async () => {
+    const defaultedSource = { ...src, page_size: null }
+    const firstAccounts = Array.from({ length: 20 }, (_, index) => `first-${index + 1}`)
+    const secondAccounts = ['second-1']
+    mockGetSourceBySlug.mockResolvedValue(defaultedSource)
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard: jest.fn(async () =>
+        capturedLeaderboardWithPageRows([firstAccounts, secondAccounts])
+      ),
+      listLeaderboard: async function* () {
+        throw new Error('capture-aware adapter must not run legacy streaming')
+      },
+      parseLeaderboard: (payload: unknown) => {
+        const items = (payload as { result: { items: Array<{ accountId: string }> } }).result.items
+        return {
+          rows: items.map(({ accountId }, index) => ({
+            ...row,
+            exchangeTraderId: accountId,
+            nickname: accountId,
+            rank: index + 1,
+          })),
+          reportedTotal: 21,
+        }
+      },
+      parseLeaderboardSeries: () => new Map(),
+    })
+
+    await expect(processTierA(job)).resolves.toEqual([
+      expect.objectContaining({ actualCount: 21, rejects: 0, passed: true }),
+    ])
+
+    expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        src: defaultedSource,
+        rows: expect.arrayContaining([
+          expect.objectContaining({ exchangeTraderId: 'first-1', rank: 1 }),
+          expect.objectContaining({ exchangeTraderId: 'first-20', rank: 20 }),
+          expect.objectContaining({ exchangeTraderId: 'second-1', rank: 21 }),
+        ]),
+      })
+    )
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifest: expect.objectContaining({
+          source: expect.objectContaining({ configured_page_size: null }),
+        }),
+      })
+    )
+  })
+
+  it('keeps source-row rank gaps but quarantines a capture when parsing loses an identity', async () => {
+    const defaultedSource = { ...src, page_size: null }
+    const firstAccounts = Array.from({ length: 20 }, (_, index) => `first-${index + 1}`)
+    mockGetSourceBySlug.mockResolvedValue(defaultedSource)
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard: jest.fn(async () =>
+        capturedLeaderboardWithPageRows([firstAccounts, ['second-1']])
+      ),
+      listLeaderboard: async function* () {
+        throw new Error('capture-aware adapter must not run legacy streaming')
+      },
+      parseLeaderboard: (payload: unknown) => {
+        const items = (payload as { result: { items: Array<{ accountId: string }> } }).result.items
+        return {
+          rows: items.flatMap(({ accountId }, index) =>
+            accountId === 'first-10'
+              ? []
+              : [
+                  {
+                    ...row,
+                    exchangeTraderId: accountId,
+                    nickname: accountId,
+                    rank: index + 1,
+                  },
+                ]
+          ),
+          reportedTotal: 21,
+        }
+      },
+      parseLeaderboardSeries: () => new Map(),
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toBeInstanceOf(AggregateError)
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    const rowsAtValidation = mockValidateLeaderboardRows.mock.calls[0][0] as ParsedLeaderboardRow[]
+    expect(rowsAtValidation).toHaveLength(20)
+    expect(rowsAtValidation).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ exchangeTraderId: 'first-11', rank: 11 }),
+        expect.objectContaining({ exchangeTraderId: 'second-1', rank: 21 }),
+      ])
+    )
+    expect(rowsAtValidation.some((candidate) => candidate.rank === 10)).toBe(false)
+    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifest: expect.objectContaining({
+          assessment: { acquisition_state: 'complete', population_state: 'partial' },
+        }),
+      })
+    )
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'terminal-page ordinal',
+      () =>
+        capturedLeaderboard({
+          parserTransformation: {
+            kind: 'identity_projection',
+            source_page_ordinals: [2],
+          },
+        }),
+      [{ ...row, rank: 1 }],
+    ],
+    [
+      'page-local rank beyond the source row count',
+      () => capturedLeaderboard(),
+      [{ ...row, rank: 2 }],
+    ],
+    [
+      'negative source row count',
+      () => {
+        const capture = capturedLeaderboard()
+        return {
+          ...capture,
+          sourcePages: [{ ...capture.sourcePages[0], sourceRowCount: -1 }, capture.sourcePages[1]],
+        }
+      },
+      [{ ...row, rank: 1 }],
+    ],
+    [
+      'zero-row terminal page included as parser input',
+      () => {
+        const zeroPage = {
+          ...terminalPage,
+          pageIndex: 1,
+          url: 'https://xt.test/leader-list?page=1',
+          fetchedAt: new Date().toISOString(),
+        }
+        return capturedLeaderboard({
+          sourcePages: [
+            {
+              rawPage: zeroPage,
+              sourceRowCount: 0,
+              requestSha256: 'a'.repeat(64),
+              httpStatus: 200,
+              paginationPosition: { kind: 'page_index', request_page_index: 1 },
+              sourceReports: {
+                population: { state: 'reported', value: 0 },
+                page_count: { state: 'not_reported' },
+                current_page: { state: 'not_reported' },
+                page_size: { state: 'not_reported' },
+              },
+            },
+          ],
+          parsePages: [zeroPage],
+          terminationReason: 'empty_page',
+          parserTransformation: {
+            kind: 'identity_projection',
+            source_page_ordinals: [1],
+          },
+        })
+      },
+      [{ ...row, rank: 1 }],
+    ],
+    [
+      'duplicate page-local rank',
+      () => capturedLeaderboard(),
+      [
+        { ...row, exchangeTraderId: 'one', rank: 1 },
+        { ...row, exchangeTraderId: 'two', rank: 1 },
+      ],
+    ],
+  ] as const)(
+    'keeps invalid capture rank evidence out of serving: %s',
+    async (_label, makeCapture, parsedRows) => {
+      mockGetAdapter.mockReturnValue({
+        captureLeaderboard: jest.fn(async () => makeCapture()),
+        listLeaderboard: async function* () {
+          throw new Error('capture-aware adapter must not run legacy streaming')
+        },
+        parseLeaderboard: () => ({ rows: parsedRows, reportedTotal: 1 }),
+        parseLeaderboardSeries: () => new Map(),
+      })
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        await expect(processTierA(job)).rejects.toBeInstanceOf(AggregateError)
+      } finally {
+        errorSpy.mockRestore()
+      }
+
+      expect(mockWriteRawObject).toHaveBeenCalledWith(
+        expect.objectContaining({ jobType: 'tier_a_failure' })
+      )
+      expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+      expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    }
+  )
 
   it('freezes one runner SHA before a multi-window capture cycle', async () => {
     mockNativeRankingTimeframes.mockReturnValue([7, 30])

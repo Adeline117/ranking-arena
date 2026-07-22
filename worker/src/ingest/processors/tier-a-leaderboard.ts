@@ -262,28 +262,97 @@ function buildAttemptBoundCaptureManifest(
   })
 }
 
+interface CapturedPageRankAnchor {
+  sourcePageOrdinal: number
+  rankBase: number
+  sourceRowCount: number
+}
+
+function capturedPageRankAnchors(capture: LeaderboardCapture): CapturedPageRankAnchor[] {
+  const ordinals = capture.parserTransformation.source_page_ordinals
+  if (ordinals.length !== capture.parsePages.length) {
+    throw new TypeError('[tier-a] parser pages require one source-page ordinal each')
+  }
+
+  let rankBase = 0
+  return capture.parsePages.map((parsePage, pageOffset) => {
+    const sourcePageOrdinal = ordinals[pageOffset]
+    // Numeric capture stops at its first terminal/error page, so parser pages
+    // must be the exact non-empty source prefix. Skips or reordering make rank
+    // bases ambiguous and must never reach serving.
+    if (sourcePageOrdinal !== pageOffset + 1) {
+      throw new TypeError('[tier-a] captured parser pages must be a continuous source prefix')
+    }
+    const sourcePage = capture.sourcePages[sourcePageOrdinal - 1]
+    // captureNumericLeaderboard hands the processor one in-memory graph, so
+    // parser pages must be the exact RawPage objects retained in sourcePages.
+    // A future deserialize/replay path needs canonical byte equality instead;
+    // until then, cloned pages deliberately fail closed here.
+    if (
+      !sourcePage ||
+      sourcePage.rawPage !== parsePage ||
+      sourcePage.rawPage.pageIndex !== sourcePageOrdinal ||
+      sourcePage.paginationPosition.kind !== 'page_index' ||
+      sourcePage.paginationPosition.request_page_index !== sourcePageOrdinal
+    ) {
+      throw new TypeError('[tier-a] captured parser page is not bound to its source page')
+    }
+    if (
+      !Number.isSafeInteger(sourcePage.sourceRowCount) ||
+      Object.is(sourcePage.sourceRowCount, -0) ||
+      sourcePage.sourceRowCount < 1
+    ) {
+      throw new TypeError('[tier-a] captured parser page must have a positive source row count')
+    }
+
+    const anchor = {
+      sourcePageOrdinal,
+      rankBase,
+      sourceRowCount: sourcePage.sourceRowCount,
+    }
+    rankBase += sourcePage.sourceRowCount
+    if (!Number.isSafeInteger(rankBase)) {
+      throw new TypeError('[tier-a] captured rank base exceeds the safe integer range')
+    }
+    return anchor
+  })
+}
+
 function parseLeaderboardRows(input: {
   adapter: SourceAdapter
   pages: readonly RawPage[]
   ctx: ParseCtx
   pageSize: number
-  sourcePageOrdinals?: readonly number[]
+  captureRankAnchors?: readonly CapturedPageRankAnchor[]
 }): ParsedLeaderboardRow[] {
-  if (
-    input.sourcePageOrdinals &&
-    (input.sourcePageOrdinals.length !== input.pages.length ||
-      new Set(input.sourcePageOrdinals).size !== input.sourcePageOrdinals.length ||
-      input.sourcePageOrdinals.some(
-        (ordinal) => !Number.isSafeInteger(ordinal) || Object.is(ordinal, -0) || ordinal < 1
-      ))
-  ) {
-    throw new TypeError('[tier-a] parser pages require distinct positive source-page ordinals')
+  if (input.captureRankAnchors && input.captureRankAnchors.length !== input.pages.length) {
+    throw new TypeError('[tier-a] parser pages require one captured rank anchor each')
   }
   const rows: ParsedLeaderboardRow[] = []
   for (const [pageOffset, page] of input.pages.entries()) {
     const parsed = input.adapter.parseLeaderboard(page.payload, input.ctx)
+    const anchor = input.captureRankAnchors?.[pageOffset]
+    const pageLocalRanks = new Set<number>()
     for (const row of parsed.rows) {
-      const sourcePageOrdinal = input.sourcePageOrdinals?.[pageOffset]
+      if (
+        !Number.isSafeInteger(row.rank) ||
+        Object.is(row.rank, -0) ||
+        row.rank < 1 ||
+        (anchor && row.rank > anchor.sourceRowCount)
+      ) {
+        throw new TypeError('[tier-a] page-local rank exceeds captured source rows')
+      }
+      if (anchor && pageLocalRanks.has(row.rank)) {
+        throw new TypeError('[tier-a] page-local ranks must be unique within a captured page')
+      }
+      pageLocalRanks.add(row.rank)
+      const anchoredRank = anchor
+        ? anchor.rankBase + row.rank
+        : (page.pageIndex - 1) * input.pageSize + row.rank
+      if (!Number.isSafeInteger(anchoredRank) || anchoredRank < 1) {
+        throw new TypeError('[tier-a] global leaderboard rank exceeds the safe integer range')
+      }
+      const sourcePageOrdinal = anchor?.sourcePageOrdinal
       const headlineMetricSources = row.headlineMetricSources
         ? Object.fromEntries(
             Object.entries(row.headlineMetricSources).map(([metric, source]) => {
@@ -303,7 +372,7 @@ function parseLeaderboardRows(input: {
         : undefined
       rows.push({
         ...row,
-        rank: (page.pageIndex - 1) * input.pageSize + row.rank,
+        rank: anchoredRank,
         ...(headlineMetricSources ? { headlineMetricSources } : {}),
       })
     }
@@ -567,16 +636,13 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         failureStage = 'parse_validate_manifest'
         failureReason = 'parse_failed'
         try {
+          const captureRankAnchors = capture ? capturedPageRankAnchors(capture) : undefined
           rows = parseLeaderboardRows({
             adapter,
             pages,
             ctx,
             pageSize,
-            ...(capture
-              ? {
-                  sourcePageOrdinals: capture.parserTransformation.source_page_ordinals,
-                }
-              : {}),
+            ...(captureRankAnchors ? { captureRankAnchors } : {}),
           })
           failureReason = 'validation_failed'
           validated = validateLeaderboardRows(rows, requiredFields)
