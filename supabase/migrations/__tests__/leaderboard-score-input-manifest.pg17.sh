@@ -398,6 +398,12 @@ $content_addressed_proof$;
 DO $invalid_input_proof$
 DECLARE
   v_fixture jsonb := (SELECT payload FROM manifest_fixture);
+  v_bad_kind text;
+  v_bad_inputs jsonb;
+  v_rank_eligible_inputs jsonb;
+  v_sealed jsonb;
+  v_verified jsonb;
+  v_manifest jsonb;
 BEGIN
   BEGIN
     INSERT INTO arena.leaderboard_score_input_manifests (
@@ -412,6 +418,114 @@ BEGIN
       pg_catalog.statement_timestamp() + interval '1 hour'
     );
     RAISE EXCEPTION 'null-valued scalar binding unexpectedly passed CHECK';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+
+  -- The lower-level scorer accepts null PnL, but leaderboard manifests must
+  -- not turn ROI-only rows into rankable evidence. Missing/null/string PnL
+  -- fail; JSON number zero and losses remain eligible.
+  FOR v_bad_kind, v_bad_inputs IN
+    SELECT bad.kind, bad.inputs
+    FROM (VALUES
+      (
+        'missing',
+        pg_catalog.jsonb_set(
+          v_fixture->'inputs',
+          '{0}',
+          (v_fixture->'inputs'->0) - 'pnl'
+        )
+      ),
+      (
+        'null',
+        pg_catalog.jsonb_set(v_fixture->'inputs', '{0,pnl}', 'null'::jsonb)
+      ),
+      (
+        'string',
+        pg_catalog.jsonb_set(v_fixture->'inputs', '{0,pnl}', '"100"'::jsonb)
+      )
+    ) AS bad(kind, inputs)
+  LOOP
+    BEGIN
+      PERFORM arena.seal_leaderboard_score_input_manifest_v1(
+        v_fixture->>'period',
+        v_fixture->>'sourceBundleDigest',
+        v_fixture->>'scoreRowsDigest',
+        v_fixture->>'physicalBoardsDigest',
+        v_fixture->'sourceEvidence',
+        v_fixture->>'enrichmentContract',
+        v_fixture->'enrichmentEvidence',
+        v_fixture->>'eligibilityContract',
+        v_fixture->'eligibilityEvidence',
+        v_bad_inputs,
+        pg_catalog.statement_timestamp() + interval '1 hour'
+      );
+      RAISE EXCEPTION '% PnL unexpectedly sealed', v_bad_kind;
+    EXCEPTION
+      WHEN SQLSTATE '22023' THEN NULL;
+    END;
+  END LOOP;
+
+  v_rank_eligible_inputs := pg_catalog.jsonb_set(
+    pg_catalog.jsonb_set(v_fixture->'inputs', '{0,pnl}', '0'::jsonb),
+    '{1,pnl}',
+    '-250.5'::jsonb
+  );
+  v_sealed := arena.seal_leaderboard_score_input_manifest_v1(
+    v_fixture->>'period',
+    v_fixture->>'sourceBundleDigest',
+    v_fixture->>'scoreRowsDigest',
+    v_fixture->>'physicalBoardsDigest',
+    v_fixture->'sourceEvidence',
+    v_fixture->>'enrichmentContract',
+    v_fixture->'enrichmentEvidence',
+    v_fixture->>'eligibilityContract',
+    v_fixture->'eligibilityEvidence',
+    v_rank_eligible_inputs,
+    pg_catalog.statement_timestamp() + interval '1 hour'
+  );
+  v_verified := arena.verify_leaderboard_score_input_manifest_v1(
+    (v_sealed->>'manifestId')::uuid
+  );
+  SELECT stored.manifest
+  INTO STRICT v_manifest
+  FROM arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest_id = (v_sealed->>'manifestId')::uuid;
+  IF (v_verified->>'contentValid')::boolean IS DISTINCT FROM true
+     OR (v_verified->>'valid')::boolean IS DISTINCT FROM true
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_catalog.jsonb_array_elements(v_manifest->'inputs') AS input_row(value)
+       WHERE (input_row.value->>'pnl')::numeric = 0
+     )
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_catalog.jsonb_array_elements(v_manifest->'inputs') AS input_row(value)
+       WHERE (input_row.value->>'pnl')::numeric < 0
+     ) THEN
+    RAISE EXCEPTION 'zero/loss PnL manifest failed verification: %', v_verified;
+  END IF;
+
+  -- Defense in depth: even the table owner cannot bypass the manifest codec
+  -- and persist a non-numeric PnL row directly.
+  v_manifest := pg_catalog.jsonb_set(
+    pg_catalog.jsonb_set(v_manifest, '{inputs,0,pnl}', 'null'::jsonb),
+    '{manifestDigest}',
+    pg_catalog.to_jsonb(pg_catalog.repeat('b', 64))
+  );
+  BEGIN
+    INSERT INTO arena.leaderboard_score_input_manifests (
+      manifest_digest,
+      period,
+      manifest,
+      valid_until
+    ) VALUES (
+      pg_catalog.repeat('b', 64),
+      v_manifest->>'period',
+      v_manifest,
+      (v_manifest->>'validUntil')::timestamp with time zone
+    );
+    RAISE EXCEPTION 'table CHECK accepted a non-numeric PnL';
   EXCEPTION
     WHEN check_violation THEN NULL;
   END;
