@@ -118,8 +118,11 @@ interface ObservationInput {
   population_state: 'verified'
   window_state: 'verified' | 'unknown'
   unit_state: 'verified'
-  freshness_state: 'verified'
+  freshness_state: 'verified' | 'unknown'
   blocking_reasons: Array<{ code: string; state: 'unknown' }>
+  source_as_of: string
+  window_start: string
+  window_end: string
 }
 
 interface InsertedObservationRow {
@@ -557,16 +560,23 @@ function buildObservationInputs(
   contracts: MetricContractRow[]
 ): ObservationInput[] {
   const observations: ObservationInput[] = []
-  const nativeWindowVerified = prepared.nativeWindowEvidence.state === 'verified'
   for (const row of prepared.rows) {
     const traderId = context.traderIds.get(row.exchangeTraderId)
     if (!traderId) {
       throw publicationError(`missing trader id for ${row.exchangeTraderId}`)
     }
+    const claimedSourcePageOrdinals = Object.values(row.headlineMetricSources ?? {}).flatMap(
+      (claim) => (claim?.sourcePageOrdinal === undefined ? [] : [claim.sourcePageOrdinal])
+    )
+    const sourcePageLineageConflict = new Set(claimedSourcePageOrdinals).size > 1
     for (const contract of contracts) {
       const value = metricValue(row, contract.metric)
       const claim = row.headlineMetricSources?.[contract.metric]
       const exactLineage = claim?.fieldPath === contract.field_path
+      let sourceAsOf = prepared.sourceAsOf
+      let windowStart = prepared.windowStart
+      let nativeWindowVerified = prepared.nativeWindowEvidence.state === 'verified'
+      let freshnessVerified = true
       const blockingReasons: ObservationInput['blocking_reasons'] = []
       if (value === null) blockingReasons.push({ code: 'value_unknown', state: 'unknown' })
       if (!exactLineage) {
@@ -581,6 +591,45 @@ function buildObservationInputs(
           state: 'unknown',
         })
       }
+      if (exactLineage && sourcePageLineageConflict) {
+        nativeWindowVerified = false
+        freshnessVerified = false
+        blockingReasons.push({
+          code: 'source_page_lineage_conflict',
+          state: 'unknown',
+        })
+      } else if (exactLineage) {
+        const transformation = prepared.manifest.parser_input.transformation
+        const sourcePageOrdinal = claim?.sourcePageOrdinal
+        const sourcePage =
+          transformation.kind === 'identity_projection' &&
+          sourcePageOrdinal !== undefined &&
+          Number.isSafeInteger(sourcePageOrdinal) &&
+          !Object.is(sourcePageOrdinal, -0) &&
+          sourcePageOrdinal > 0 &&
+          transformation.source_page_ordinals.includes(sourcePageOrdinal)
+            ? prepared.manifest.source_pages[sourcePageOrdinal - 1]
+            : undefined
+        if (sourcePage && sourcePage.ordinal === sourcePageOrdinal) {
+          sourceAsOf = canonicalTimestamp(sourcePage.fetched_at, 'source page fetched_at')
+          // The database requires nominal bounds even while window_state is
+          // unknown. Page fetch time proves capture timing only; it does not
+          // promote Binance's unavailable provider window boundary.
+          windowStart = new Date(
+            Date.parse(sourceAsOf) - prepared.timeframe * 24 * 60 * 60 * 1000
+          ).toISOString()
+        } else {
+          nativeWindowVerified = false
+          freshnessVerified = false
+          blockingReasons.push({
+            code:
+              sourcePageOrdinal === undefined
+                ? 'source_page_lineage_unknown'
+                : 'source_page_lineage_invalid',
+            state: 'unknown',
+          })
+        }
+      }
       const complete = value !== null && exactLineage && nativeWindowVerified
       observations.push({
         contract_id: contract.id,
@@ -594,8 +643,11 @@ function buildObservationInputs(
         population_state: 'verified',
         window_state: nativeWindowVerified ? 'verified' : 'unknown',
         unit_state: 'verified',
-        freshness_state: 'verified',
+        freshness_state: freshnessVerified ? 'verified' : 'unknown',
         blocking_reasons: blockingReasons,
+        source_as_of: sourceAsOf,
+        window_start: windowStart,
+        window_end: sourceAsOf,
       })
     }
   }
@@ -864,10 +916,10 @@ export async function writeLeaderboardMetricTrust(
             input.value,
             contract.value_unit,
             $7,
-            $8,
-            $8::timestamptz + contract.max_freshness,
-            $9,
-            $8,
+            input.source_as_of,
+            input.source_as_of + contract.max_freshness,
+            input.window_start,
+            input.window_end,
             input.quality,
             input.history_state,
             input.price_state,
@@ -889,7 +941,10 @@ export async function writeLeaderboardMetricTrust(
          window_state text,
          unit_state text,
          freshness_state text,
-         blocking_reasons jsonb
+         blocking_reasons jsonb,
+         source_as_of timestamptz,
+         window_start timestamptz,
+         window_end timestamptz
        )
        JOIN arena.metric_source_contracts AS contract
          ON contract.id = input.contract_id
@@ -902,8 +957,6 @@ export async function writeLeaderboardMetricTrust(
       prepared.sourceRunId,
       prepared.timeframe,
       prepared.src.currency,
-      prepared.sourceAsOf,
-      prepared.windowStart,
     ]
   )
   if (
@@ -1169,7 +1222,7 @@ export async function reconcileLeaderboardMetricTrust(
       throw publicationError('existing metric observation identity mismatch')
     }
     const validUntil = new Date(
-      Date.parse(prepared.sourceAsOf) + Number(contract.max_freshness_ms)
+      Date.parse(expected.source_as_of) + Number(contract.max_freshness_ms)
     ).toISOString()
     if (
       !sameNumeric(observation.value, expected.value) ||
@@ -1182,10 +1235,10 @@ export async function reconcileLeaderboardMetricTrust(
       observation.unit_state !== expected.unit_state ||
       observation.freshness_state !== expected.freshness_state ||
       !sameJson(observation.blocking_reasons, expected.blocking_reasons) ||
-      !sameTimestamp(observation.source_as_of, prepared.sourceAsOf) ||
+      !sameTimestamp(observation.source_as_of, expected.source_as_of) ||
       !sameTimestamp(observation.valid_until, validUntil) ||
-      !sameTimestamp(observation.window_start, prepared.windowStart) ||
-      !sameTimestamp(observation.window_end, prepared.sourceAsOf)
+      !sameTimestamp(observation.window_start, expected.window_start) ||
+      !sameTimestamp(observation.window_end, expected.window_end)
     ) {
       throw publicationError(
         `existing metric observation mismatch for ${observation.exchange_trader_id}`
