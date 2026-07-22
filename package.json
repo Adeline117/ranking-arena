@@ -146,7 +146,7 @@
     "wagmi": "^3.6.0",
     "web-push": "^3.6.7",
     "zod": "^4.4.3",
-    "zustand": "^5.0.12"
+    "zustand": "^5.0.14"
   },
   "overrides": {
     "zod": "$zod",
