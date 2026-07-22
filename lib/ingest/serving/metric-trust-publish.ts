@@ -17,8 +17,12 @@ import {
   type SourceMetricFieldContract,
 } from '../../metric-trust'
 import {
+  LEADERBOARD_ACQUISITION_MANIFEST_V2_CONTRACT,
+  LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
   parseLeaderboardAcquisitionManifest,
+  parseLeaderboardAcquisitionManifestV3,
   type LeaderboardAcquisitionManifest,
+  type LeaderboardAcquisitionManifestV3,
 } from '../acquisition-manifest'
 import type { ParsedLeaderboardRow, RankingTimeframe, SourceRow } from '../core/types'
 import type { LeaderboardRawArtifactSetReceipt } from '../raw'
@@ -29,9 +33,13 @@ const PROVIDER_PROVENANCE = new Set<MetricProvenance>(['source_reported', 'sourc
 
 export interface LeaderboardMetricTrustBundle {
   sourceRunId: string
-  manifest: LeaderboardAcquisitionManifest
+  manifest: LeaderboardMetricTrustManifest
   artifacts: LeaderboardRawArtifactSetReceipt
 }
+
+export type LeaderboardMetricTrustManifest =
+  | LeaderboardAcquisitionManifest
+  | LeaderboardAcquisitionManifestV3
 
 export interface PrepareLeaderboardMetricTrustInput {
   src: SourceRow
@@ -45,7 +53,7 @@ export interface PreparedLeaderboardMetricTrust {
   src: SourceRow
   timeframe: RankingTimeframe
   rows: ParsedLeaderboardRow[]
-  manifest: LeaderboardAcquisitionManifest
+  manifest: LeaderboardMetricTrustManifest
   sourceRunId: string
   artifacts: LeaderboardRawArtifactSetReceipt
   sourceAsOf: string
@@ -195,6 +203,20 @@ function publicationError(detail: string): Error {
   return new Error(`[metric-trust-publish] ${detail}`)
 }
 
+function parseLeaderboardMetricTrustManifest(raw: unknown): LeaderboardMetricTrustManifest {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw publicationError('acquisition manifest is not an object')
+  }
+  const dataContract = (raw as Record<string, unknown>).data_contract
+  if (dataContract === LEADERBOARD_ACQUISITION_MANIFEST_V2_CONTRACT) {
+    return parseLeaderboardAcquisitionManifest(raw)
+  }
+  if (dataContract === LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT) {
+    return parseLeaderboardAcquisitionManifestV3(raw)
+  }
+  throw publicationError('unsupported acquisition manifest contract')
+}
+
 /** Runtime-compatible deep snapshot for JSON-shaped ingestion values. */
 export function snapshotLeaderboardTrustValue<T>(value: T): T {
   const seen = new WeakSet<object>()
@@ -279,7 +301,7 @@ function fieldKey(field: {
   ].join('\u0000')
 }
 
-function reportedPopulation(manifest: LeaderboardAcquisitionManifest): number | null {
+function reportedPopulation(manifest: LeaderboardMetricTrustManifest): number | null {
   const report = manifest.population.reports.population
   return report.state === 'consistent' ? report.value : null
 }
@@ -360,7 +382,7 @@ export function prepareLeaderboardMetricTrust(
   if (!SHA256.test(bundle.sourceRunId)) {
     throw publicationError('source run id must be a lowercase SHA-256 digest')
   }
-  const manifest = parseLeaderboardAcquisitionManifest(bundle.manifest)
+  const manifest = parseLeaderboardMetricTrustManifest(bundle.manifest)
   if (strictCanonicalSha256(manifest) !== bundle.sourceRunId) {
     throw publicationError('source run id does not match the canonical manifest')
   }
