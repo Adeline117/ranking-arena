@@ -14,7 +14,12 @@
 #   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_CONCURRENT_RECOVERY \
 #     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-concurrent-recovery
 #   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY \
+#     ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM=TIP_CHECKOUT_FROZEN_PENDING_ZERO \
 #     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-predeploy
+#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY_ONE_20260721210000 \
+#     ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM=TIP_CHECKOUT_FROZEN_PENDING_ZERO \
+#     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh \
+#     apply-predeploy-one 20260721210000_tip_checkout_lifecycle_atomic.sql
 #   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_POSTDEPLOY \
 #     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-postdeploy
 #   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_RECOVERY \
@@ -93,6 +98,7 @@ PREDEPLOY_MIGRATIONS=(
   20260721140000_idempotent_equivalent_refund_events.sql
   20260721150000_metric_trust_raw_artifact_identity.sql
   20260721175746_arena_score_inputs_publish_bundle.sql
+  20260721210000_tip_checkout_lifecycle_atomic.sql
 )
 
 # A selective apply bypasses manifest ordering, so it is more restrictive than
@@ -102,7 +108,11 @@ PREDEPLOY_MIGRATIONS=(
 INDEPENDENT_PREDEPLOY_MIGRATIONS=(
   20260721140000_idempotent_equivalent_refund_events.sql
   20260721175746_arena_score_inputs_publish_bundle.sql
+  20260721210000_tip_checkout_lifecycle_atomic.sql
 )
+
+TIP_CHECKOUT_LIFECYCLE_VERSION='20260721210000'
+TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 
 # These contracts revoke compatibility writes or change identity uniqueness
 # used by old routes. They must run only after the target application is serving
@@ -455,6 +465,24 @@ require_predeploy_target() {
   exit 2
 }
 
+require_tip_checkout_cutover_attestation() {
+  if [[ "${ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM:-}" != \
+    "$TIP_CHECKOUT_CUTOVER_ATTESTATION" ]]; then
+    echo \
+      "Tip checkout lifecycle apply is blocked: freeze the old Tip checkout route, verify pending Tips are zero, then set ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM=$TIP_CHECKOUT_CUTOVER_ATTESTATION" \
+      >&2
+    exit 1
+  fi
+}
+
+require_tip_checkout_cutover_for_target() {
+  local migration="$1"
+  if [[ "$(migration_version "$migration")" == \
+    "$TIP_CHECKOUT_LIFECYCLE_VERSION" ]]; then
+    require_tip_checkout_cutover_attestation
+  fi
+}
+
 emit_concurrent_migration() {
   local migration="$1"
   local version
@@ -718,6 +746,7 @@ main() {
         echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY" >&2
         exit 1
       fi
+      require_tip_checkout_cutover_attestation
       emit_transaction 'COMMIT' "${PREDEPLOY_MIGRATIONS[@]}" | run_sql_stream
       ;;
     apply-predeploy-one)
@@ -732,6 +761,7 @@ main() {
         echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=$confirmation" >&2
         exit 1
       fi
+      require_tip_checkout_cutover_for_target "$migration"
       emit_transaction 'COMMIT' "$migration" | run_sql_stream
       ;;
     apply-postdeploy)

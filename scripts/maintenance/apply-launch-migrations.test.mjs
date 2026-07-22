@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import test from 'node:test'
@@ -30,10 +30,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
   const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
 
-  assert.equal(predeploy.length, 62)
+  assert.equal(predeploy.length, 63)
   assert.deepEqual(independentPredeploy, [
     '20260721140000_idempotent_equivalent_refund_events.sql',
     '20260721175746_arena_score_inputs_publish_bundle.sql',
+    '20260721210000_tip_checkout_lifecycle_atomic.sql',
   ])
   assert.ok(independentPredeploy.every((migration) => predeploy.includes(migration)))
   assert.deepEqual(postdeploy, [
@@ -67,6 +68,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260721140000_idempotent_equivalent_refund_events.sql',
           '20260721150000_metric_trust_raw_artifact_identity.sql',
           '20260721175746_arena_score_inputs_publish_bundle.sql',
+          '20260721210000_tip_checkout_lifecycle_atomic.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -84,9 +86,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716083256_repair_legacy_exchange_logo_paths.sql',
   ])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 73)
+  assert.equal(new Set(all).size, 74)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-21), [
+  assert.deepEqual(predeploy.slice(-22), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -108,6 +110,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260721140000_idempotent_equivalent_refund_events.sql',
     '20260721150000_metric_trust_raw_artifact_identity.sql',
     '20260721175746_arena_score_inputs_publish_bundle.sql',
+    '20260721210000_tip_checkout_lifecycle_atomic.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -120,6 +123,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260721140000_idempotent_equivalent_refund_events.sql'))
   assert.ok(predeploy.includes('20260721150000_metric_trust_raw_artifact_identity.sql'))
   assert.ok(predeploy.includes('20260721175746_arena_score_inputs_publish_bundle.sql'))
+  assert.ok(predeploy.includes('20260721210000_tip_checkout_lifecycle_atomic.sql'))
   assert.ok(!postdeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260717120000_trader_follows_composite_identity.sql'))
   assert.ok(
@@ -149,6 +153,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     !recoveryPrerequisites.includes('20260721150000_metric_trust_raw_artifact_identity.sql')
   )
   assert.ok(!recoveryPrerequisites.includes('20260721175746_arena_score_inputs_publish_bundle.sql'))
+  assert.ok(!recoveryPrerequisites.includes('20260721210000_tip_checkout_lifecycle_atomic.sql'))
 })
 
 test('runner records exact file bodies and hashes in the same transaction', () => {
@@ -250,6 +255,19 @@ test('production writes require phase-specific confirmations', () => {
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_POSTDEPLOY"/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_CONCURRENT_RECOVERY"/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_RECOVERY"/)
+  assert.match(
+    source,
+    /ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM:-}" !=[\s\\]*"\$TIP_CHECKOUT_CUTOVER_ATTESTATION"/
+  )
+  assert.match(source, /TIP_CHECKOUT_FROZEN_PENDING_ZERO/)
+  assert.match(
+    source,
+    /apply-predeploy\)[\s\S]*require_tip_checkout_cutover_attestation[\s\S]*emit_transaction 'COMMIT'/
+  )
+  assert.match(
+    source,
+    /apply-predeploy-one\)[\s\S]*require_tip_checkout_cutover_for_target "\$migration"[\s\S]*emit_transaction 'COMMIT'/
+  )
   assert.match(source, /dry-run-all[\s\S]*emit_all_dry_run/)
   assert.match(source, /dry-run-recovery[\s\S]*emit_cutover_ledger_requirement/)
   assert.match(source, /printf '%s\\n' 'ROLLBACK;'/)
@@ -295,11 +313,14 @@ test('single predeploy dry-run and apply emit only the selected migration', () =
       ].join('\n')
     )
     chmodSync(fakePsql, 0o755)
+    const cleanEnvironment = { ...process.env }
+    delete cleanEnvironment.ARENA_PRODUCTION_MIGRATION_CONFIRM
+    delete cleanEnvironment.ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM
     const baseOptions = {
       cwd: ROOT,
       encoding: 'utf8',
       env: {
-        ...process.env,
+        ...cleanEnvironment,
         PATH: `${directory}:${process.env.PATH}`,
         DATABASE_URL: 'postgresql://runner:secret@db.example.test:5432/arena',
         FAKE_PSQL_STREAM: sqlPath,
@@ -346,6 +367,155 @@ test('single predeploy dry-run and apply emit only the selected migration', () =
     )
     assert.equal(orderedOnly.status, 2)
     assert.match(orderedOnly.stderr, /not approved for an independent apply/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('Tip checkout production apply requires a dedicated freeze attestation before psql', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'arena-tip-checkout-cutover-'))
+  const fakePsql = resolve(directory, 'psql')
+  const callsPath = resolve(directory, 'psql-calls')
+  const sqlPath = resolve(directory, 'sql')
+  const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
+  const lifecycle = '20260721210000_tip_checkout_lifecycle_atomic.sql'
+  const independent = '20260721140000_idempotent_equivalent_refund_events.sql'
+  try {
+    writeFileSync(
+      fakePsql,
+      [
+        '#!/usr/bin/env bash',
+        'printf "%s\\n" "$*" >> "$FAKE_PSQL_CALLS"',
+        'if [[ " $* " == *" -Atc "* ]]; then',
+        '  if [[ "$*" == *"20260721210000"* || "$*" == *"20260721140000"* ]]; then',
+        "    printf '%s\\n' missing",
+        '  else',
+        "    printf '%s\\n' exact",
+        '  fi',
+        '  exit 0',
+        'fi',
+        'cat > "$FAKE_PSQL_STREAM"',
+        '',
+      ].join('\n')
+    )
+    chmodSync(fakePsql, 0o755)
+    const cleanEnvironment = { ...process.env }
+    delete cleanEnvironment.ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM
+    const baseOptions = {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: {
+        ...cleanEnvironment,
+        PATH: `${directory}:${process.env.PATH}`,
+        DATABASE_URL: 'postgresql://runner:secret@db.example.test:5432/arena',
+        FAKE_PSQL_CALLS: callsPath,
+        FAKE_PSQL_STREAM: sqlPath,
+      },
+    }
+    const resetEvidence = () => {
+      rmSync(callsPath, { force: true })
+      rmSync(sqlPath, { force: true })
+    }
+    const assertRejectedBeforePsql = (result) => {
+      assert.equal(result.status, 1)
+      assert.match(result.stderr, /freeze the old Tip checkout route/)
+      assert.match(
+        result.stderr,
+        /ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM=TIP_CHECKOUT_FROZEN_PENDING_ZERO/
+      )
+      assert.equal(existsSync(callsPath), false)
+      assert.equal(existsSync(sqlPath), false)
+    }
+
+    const lifecycleEnv = {
+      ...baseOptions.env,
+      ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY_ONE_20260721210000',
+    }
+    resetEvidence()
+    assertRejectedBeforePsql(
+      spawnSync('bash', [script, 'apply-predeploy-one', lifecycle], {
+        ...baseOptions,
+        env: lifecycleEnv,
+      })
+    )
+
+    resetEvidence()
+    assertRejectedBeforePsql(
+      spawnSync('bash', [script, 'apply-predeploy-one', lifecycle], {
+        ...baseOptions,
+        env: {
+          ...lifecycleEnv,
+          ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM: 'TIP_CHECKOUT_NOT_FROZEN',
+        },
+      })
+    )
+
+    resetEvidence()
+    const lifecycleApply = spawnSync('bash', [script, 'apply-predeploy-one', lifecycle], {
+      ...baseOptions,
+      env: {
+        ...lifecycleEnv,
+        ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM: 'TIP_CHECKOUT_FROZEN_PENDING_ZERO',
+      },
+    })
+    assert.equal(lifecycleApply.status, 0, lifecycleApply.stderr)
+    assert.equal(existsSync(callsPath), true)
+    const lifecycleSql = readFileSync(sqlPath, 'utf8')
+    assert.match(lifecycleSql, /\\echo APPLY 20260721210000_tip_checkout_lifecycle_atomic\.sql/)
+    assert.ok(lifecycleSql.trimEnd().endsWith('COMMIT;'))
+
+    resetEvidence()
+    const independentApply = spawnSync('bash', [script, 'apply-predeploy-one', independent], {
+      ...baseOptions,
+      env: {
+        ...baseOptions.env,
+        ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY_ONE_20260721140000',
+      },
+    })
+    assert.equal(independentApply.status, 0, independentApply.stderr)
+    const independentSql = readFileSync(sqlPath, 'utf8')
+    assert.match(
+      independentSql,
+      /\\echo APPLY 20260721140000_idempotent_equivalent_refund_events\.sql/
+    )
+    assert.doesNotMatch(independentSql, /20260721210000_tip_checkout_lifecycle_atomic/)
+
+    const fullEnv = {
+      ...baseOptions.env,
+      ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY',
+    }
+    resetEvidence()
+    assertRejectedBeforePsql(
+      spawnSync('bash', [script, 'apply-predeploy'], {
+        ...baseOptions,
+        env: fullEnv,
+      })
+    )
+
+    resetEvidence()
+    assertRejectedBeforePsql(
+      spawnSync('bash', [script, 'apply-predeploy'], {
+        ...baseOptions,
+        env: {
+          ...fullEnv,
+          ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM: 'TIP_CHECKOUT_PENDING_UNKNOWN',
+        },
+      })
+    )
+
+    resetEvidence()
+    const fullApply = spawnSync('bash', [script, 'apply-predeploy'], {
+      ...baseOptions,
+      env: {
+        ...fullEnv,
+        ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM: 'TIP_CHECKOUT_FROZEN_PENDING_ZERO',
+      },
+    })
+    assert.equal(fullApply.status, 0, fullApply.stderr)
+    assert.equal(existsSync(callsPath), true)
+    const fullSql = readFileSync(sqlPath, 'utf8')
+    assert.match(fullSql, /\\echo APPLY 20260721210000_tip_checkout_lifecycle_atomic\.sql/)
+    assert.ok(fullSql.trimEnd().endsWith('COMMIT;'))
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

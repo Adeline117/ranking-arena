@@ -1,0 +1,39 @@
+INSERT INTO auth.users (id) VALUES
+  ('d4100000-0000-4000-8000-000000000001'),
+  ('d4100000-0000-4000-8000-000000000002');
+
+INSERT INTO public.user_profiles (id, handle) VALUES
+  ('d4100000-0000-4000-8000-000000000001', 'duplicate_payer'),
+  ('d4100000-0000-4000-8000-000000000002', 'duplicate_recipient');
+
+INSERT INTO public.posts (id, author_id, title, content) VALUES (
+  'd4200000-0000-4000-8000-000000000001',
+  'd4100000-0000-4000-8000-000000000002',
+  'duplicate reservation preflight',
+  'duplicate reservation preflight'
+);
+
+INSERT INTO public.tips (
+  id,
+  post_id,
+  from_user_id,
+  to_user_id,
+  amount_cents,
+  status
+) VALUES
+  (
+    'd4300000-0000-4000-8000-000000000001',
+    'd4200000-0000-4000-8000-000000000001',
+    'd4100000-0000-4000-8000-000000000001',
+    'd4100000-0000-4000-8000-000000000002',
+    2500,
+    'pending'
+  ),
+  (
+    'd4300000-0000-4000-8000-000000000002',
+    'd4200000-0000-4000-8000-000000000001',
+    'd4100000-0000-4000-8000-000000000001',
+    'd4100000-0000-4000-8000-000000000002',
+    2500,
+    'pending'
+  );

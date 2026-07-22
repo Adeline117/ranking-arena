@@ -1,0 +1,152 @@
+-- Focused production-shape helpers for the Tip checkout lifecycle proof. The
+-- full application migrations own richer post/group/block tables; this shadow
+-- keeps the same owner, volatility, SECURITY DEFINER, active-account, and row
+-- lock contract needed by 20260721210000.
+
+DO $managed_auth_role$
+BEGIN
+  IF pg_catalog.to_regrole('supabase_auth_admin') IS NULL THEN
+    CREATE ROLE supabase_auth_admin NOLOGIN;
+  END IF;
+END
+$managed_auth_role$;
+
+ALTER TABLE auth.users OWNER TO supabase_auth_admin;
+ALTER SCHEMA auth OWNER TO supabase_auth_admin;
+ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
+GRANT USAGE ON SCHEMA auth TO postgres;
+GRANT SELECT, UPDATE ON TABLE auth.users TO postgres;
+-- The shared harness bootstraps its legacy public tables as the cluster
+-- bootstrap role. Give the production function owner equivalent table
+-- authority before downgrading it to the hosted non-superuser topology.
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
+
+CREATE OR REPLACE FUNCTION public.can_actor_read_post_id(
+  p_post_id uuid,
+  p_viewer_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT p_viewer_id IS NOT NULL AND EXISTS (
+    SELECT 1
+    FROM public.posts AS post
+    WHERE post.id = p_post_id
+      AND post.author_id IS NOT NULL
+  )
+$function$;
+
+ALTER FUNCTION public.can_actor_read_post_id(uuid, uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.can_actor_read_post_id(uuid, uuid)
+  FROM PUBLIC, anon, authenticated, service_role, authenticator;
+
+CREATE OR REPLACE FUNCTION public.lock_post_interaction_block_edges(
+  p_post_id uuid,
+  p_actor_id uuid,
+  p_comment_id uuid
+)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'post-interaction:' || p_post_id::text || ':' || p_actor_id::text,
+      0
+    )
+  );
+  RETURN p_comment_id IS NULL;
+END
+$function$;
+
+ALTER FUNCTION public.lock_post_interaction_block_edges(uuid, uuid, uuid)
+  OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.lock_actor_can_interact_with_post_locked_impl(
+  p_post_id uuid,
+  p_actor_id uuid
+)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+SET lock_timeout = '5s'
+AS $function$
+BEGIN
+  IF p_actor_id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  PERFORM profile.id
+  FROM public.user_profiles AS profile
+  WHERE profile.id = p_actor_id
+    AND profile.deleted_at IS NULL
+    AND profile.banned_at IS NULL
+    AND NOT (
+      profile.is_banned
+      AND (
+        profile.ban_expires_at IS NULL
+        OR profile.ban_expires_at > pg_catalog.statement_timestamp()
+      )
+    )
+  FOR SHARE;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+
+  PERFORM post.id
+  FROM public.posts AS post
+  WHERE post.id = p_post_id
+  FOR SHARE;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+
+  RETURN public.can_actor_read_post_id(p_post_id, p_actor_id);
+END
+$function$;
+
+ALTER FUNCTION public.lock_actor_can_interact_with_post_locked_impl(uuid, uuid)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION
+  public.lock_actor_can_interact_with_post_locked_impl(uuid, uuid)
+  FROM PUBLIC, anon, authenticated, service_role, authenticator;
+
+CREATE OR REPLACE FUNCTION public.lock_actor_can_interact_with_post(
+  p_post_id uuid,
+  p_actor_id uuid
+)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+SET lock_timeout = '5s'
+AS $function$
+BEGIN
+  IF NOT public.lock_post_interaction_block_edges(
+    p_post_id,
+    p_actor_id,
+    NULL::uuid
+  ) THEN
+    RETURN false;
+  END IF;
+  RETURN public.lock_actor_can_interact_with_post_locked_impl(
+    p_post_id,
+    p_actor_id
+  );
+END
+$function$;
+
+ALTER FUNCTION public.lock_actor_can_interact_with_post(uuid, uuid)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.lock_actor_can_interact_with_post(uuid, uuid)
+  FROM PUBLIC, anon, authenticated, service_role, authenticator;

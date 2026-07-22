@@ -1,0 +1,3 @@
+-- Hosted auth normally owns this table. SELECT alone is insufficient for the
+-- FOR KEY SHARE locks used by every Tip lifecycle RPC.
+REVOKE UPDATE ON TABLE auth.users FROM postgres;

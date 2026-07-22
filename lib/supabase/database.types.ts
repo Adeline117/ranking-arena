@@ -6593,6 +6593,13 @@ export type Database = {
       tips: {
         Row: {
           amount_cents: number
+          checkout_expires_at: string | null
+          checkout_failed_at: string | null
+          checkout_failure_event_created_at: string | null
+          checkout_failure_event_id: string | null
+          checkout_failure_reason: string | null
+          checkout_post_id: string | null
+          checkout_to_user_id: string | null
           completed_at: string | null
           created_at: string
           currency: string | null
@@ -6610,6 +6617,13 @@ export type Database = {
         }
         Insert: {
           amount_cents: number
+          checkout_expires_at?: string | null
+          checkout_failed_at?: string | null
+          checkout_failure_event_created_at?: string | null
+          checkout_failure_event_id?: string | null
+          checkout_failure_reason?: string | null
+          checkout_post_id?: string | null
+          checkout_to_user_id?: string | null
           completed_at?: string | null
           created_at?: string
           currency?: string | null
@@ -6627,6 +6641,13 @@ export type Database = {
         }
         Update: {
           amount_cents?: number
+          checkout_expires_at?: string | null
+          checkout_failed_at?: string | null
+          checkout_failure_event_created_at?: string | null
+          checkout_failure_event_id?: string | null
+          checkout_failure_reason?: string | null
+          checkout_post_id?: string | null
+          checkout_to_user_id?: string | null
           completed_at?: string | null
           created_at?: string
           currency?: string | null
@@ -9651,6 +9672,15 @@ export type Database = {
         }
         Returns: Json
       }
+      bind_tip_checkout_session_atomic: {
+        Args: {
+          p_checkout_expires_at: string
+          p_checkout_session_id: string
+          p_from_user_id: string
+          p_tip_id: string
+        }
+        Returns: Json
+      }
       bulk_enrich_sync_v2: { Args: { updates: Json }; Returns: number }
       bulk_update_snapshot_metrics: { Args: { updates: Json }; Returns: number }
       bytea_to_text: { Args: { data: string }; Returns: string }
@@ -10028,6 +10058,20 @@ export type Database = {
       }
       exec_sql: { Args: { sql: string }; Returns: undefined }
       expire_group_subscriptions: { Args: never; Returns: number }
+      expire_pending_tip_checkout_atomic: {
+        Args: {
+          p_amount_cents: number
+          p_checkout_expires_at: string
+          p_checkout_session_id: string
+          p_event_created_at: string
+          p_event_id: string
+          p_from_user_id: string
+          p_post_id: string
+          p_tip_id: string
+          p_to_user_id: string
+        }
+        Returns: Json
+      }
       fill_null_pnl_from_siblings: { Args: never; Returns: number }
       finalize_report_evidence_upload: {
         Args: { p_evidence_ref: string; p_reporter_id: string }
@@ -11133,6 +11177,16 @@ export type Database = {
           p_request_nonce: string
           p_ttl_seconds: number
           p_user_id: string
+        }
+        Returns: Json
+      }
+      reserve_tip_checkout_atomic: {
+        Args: {
+          p_amount_cents: number
+          p_checkout_ttl_seconds?: number
+          p_from_user_id: string
+          p_message: string | null
+          p_post_id: string
         }
         Returns: Json
       }
