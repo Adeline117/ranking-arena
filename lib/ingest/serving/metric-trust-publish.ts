@@ -31,6 +31,7 @@ import type {
   SourceRow,
 } from '../core/types'
 import {
+  assessLeaderboardMetricAuthorities,
   assessLeaderboardNativeWindowRequest,
   type NativeWindowRequestEvidence,
 } from '../leaderboard-request-evidence'
@@ -120,7 +121,7 @@ interface ObservationInput {
   history_state: 'source_owned'
   price_state: 'source_owned'
   cost_basis_state: 'source_owned'
-  population_state: 'verified'
+  population_state: 'verified' | 'unknown'
   window_state: 'verified' | 'unknown'
   unit_state: 'verified'
   freshness_state: 'verified' | 'unknown'
@@ -216,6 +217,12 @@ interface ExistingArtifactRow {
 
 function publicationError(detail: string): Error {
   return new Error(`[metric-trust-publish] ${detail}`)
+}
+
+function assertPreparedManifestIntegrity(prepared: PreparedLeaderboardMetricTrust): void {
+  if (strictCanonicalSha256(prepared.manifest) !== prepared.sourceRunId) {
+    throw publicationError('prepared manifest changed after source-run verification')
+  }
 }
 
 function parseLeaderboardMetricTrustManifest(raw: unknown): LeaderboardMetricTrustManifest {
@@ -568,7 +575,17 @@ function buildObservationInputs(
   context: MetricTrustSnapshotContext,
   contracts: MetricContractRow[]
 ): ObservationInput[] {
+  assertPreparedManifestIntegrity(prepared)
   const observations: ObservationInput[] = []
+  const authorities = assessLeaderboardMetricAuthorities(prepared.manifest)
+  const pushBlockingReason = (
+    reasons: ObservationInput['blocking_reasons'],
+    code: string
+  ): void => {
+    if (!reasons.some((reason) => reason.code === code)) {
+      reasons.push({ code, state: 'unknown' })
+    }
+  }
   for (const row of prepared.rows) {
     const traderId = context.traderIds.get(row.exchangeTraderId)
     if (!traderId) {
@@ -587,14 +604,11 @@ function buildObservationInputs(
       let sourcePageOrdinal: number | null = null
       let freshnessVerified = false
       const blockingReasons: ObservationInput['blocking_reasons'] = []
-      if (value === null) blockingReasons.push({ code: 'value_unknown', state: 'unknown' })
+      if (value === null) pushBlockingReason(blockingReasons, 'value_unknown')
       if (lineage.state === 'unknown') {
-        blockingReasons.push({ code: lineage.code, state: 'unknown' })
+        pushBlockingReason(blockingReasons, lineage.code)
       } else if (sourcePageLineageConflict) {
-        blockingReasons.push({
-          code: 'source_page_lineage_conflict',
-          state: 'unknown',
-        })
+        pushBlockingReason(blockingReasons, 'source_page_lineage_conflict')
       } else {
         sourceAsOf = lineage.sourceAsOf
         // The schema requires nominal bounds even while window_state is
@@ -606,10 +620,13 @@ function buildObservationInputs(
         sourcePageOrdinal = lineage.sourcePageOrdinal
         freshnessVerified = true
       }
+      for (const diagnostic of authorities.diagnostics) {
+        pushBlockingReason(blockingReasons, diagnostic)
+      }
       // Request-body evidence can prove the requested 7D/30D/90D label, but
       // it cannot prove the provider's computed_at/start/end boundary. Keep
       // this publisher shadow-only until a distinct boundary authority exists.
-      blockingReasons.push({ code: 'native_window_boundary_unverified', state: 'unknown' })
+      pushBlockingReason(blockingReasons, 'native_window_boundary_unverified')
       observations.push({
         contract_id: contract.id,
         trader_id: traderId,
@@ -619,7 +636,7 @@ function buildObservationInputs(
         history_state: 'source_owned',
         price_state: 'source_owned',
         cost_basis_state: 'source_owned',
-        population_state: 'verified',
+        population_state: authorities.population.state,
         window_state: 'unknown',
         unit_state: 'verified',
         freshness_state: freshnessVerified ? 'verified' : 'unknown',
@@ -712,6 +729,7 @@ async function assertAttemptBoundAcquisitionOutcome(
   client: PoolClient,
   prepared: PreparedLeaderboardMetricTrust
 ): Promise<void> {
+  assertPreparedManifestIntegrity(prepared)
   const manifest = prepared.manifest
   if (manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT) return
 
@@ -861,6 +879,7 @@ export async function fenceAttemptBoundLeaderboardPublicationCommit(
   client: PoolClient,
   prepared: PreparedLeaderboardMetricTrust
 ): Promise<void> {
+  assertPreparedManifestIntegrity(prepared)
   if (prepared.manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT) return
 
   await client.query(`SET LOCAL lock_timeout = '5s'`)
@@ -1074,6 +1093,7 @@ export async function reconcileLeaderboardMetricTrust(
   client: PoolClient,
   prepared: PreparedLeaderboardMetricTrust
 ): Promise<ExistingTrustedPublication | null> {
+  assertPreparedManifestIntegrity(prepared)
   const runResult = await client.query<ExistingRunRow>(
     `SELECT run.source_id,
             run.timeframe,

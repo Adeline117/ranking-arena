@@ -21,6 +21,8 @@ import type { ReplayRequestTemplate } from './fetch/types'
 
 export const BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT =
   'arena.metric-trust.binance-native-period-request@1' as const
+export const BINANCE_SINGLE_RESPONSE_POPULATION_CONTRACT =
+  'arena.metric-trust.binance-single-response-population@1' as const
 export const BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS = 5 * 60 * 1000
 
 export const BINANCE_LEADERBOARD_LIST_URLS = Object.freeze({
@@ -94,6 +96,18 @@ const BINANCE_NATIVE_PERIOD_SOURCES: Readonly<Record<string, BinanceNativePeriod
     }),
   })
 
+export type BinanceLeaderboardCaptureDiagnostic =
+  | 'capture_not_rankable'
+  | 'attempt_binding_unavailable'
+  | 'source_contract_unavailable'
+  | 'source_contract_mismatch'
+  | 'page_binding_mismatch'
+  | 'page_timestamp_invalid'
+  | 'page_time_span_exceeds_tolerance'
+  | 'pagination_snapshot_unavailable'
+  | 'provider_window_boundary_unavailable'
+  | 'request_digest_mismatch'
+
 export type NativeWindowRequestEvidence =
   | {
       /** The request body matched; this is not provider window-boundary authority. */
@@ -106,18 +120,60 @@ export type NativeWindowRequestEvidence =
   | {
       state: 'unknown'
       reason: 'native_window_boundary_unverified'
-      diagnostic:
-        | 'capture_not_rankable'
-        | 'attempt_binding_unavailable'
-        | 'source_contract_unavailable'
-        | 'source_contract_mismatch'
-        | 'page_binding_mismatch'
-        | 'page_timestamp_invalid'
-        | 'page_time_span_exceeds_tolerance'
-        | 'pagination_snapshot_unavailable'
-        | 'provider_window_boundary_unavailable'
-        | 'request_digest_mismatch'
+      diagnostic: BinanceLeaderboardCaptureDiagnostic
     }
+
+export type CaptureAuthorityDiagnostic = Exclude<
+  BinanceLeaderboardCaptureDiagnostic,
+  'provider_window_boundary_unavailable'
+>
+
+export type PopulationAuthorityDiagnostic = Exclude<
+  CaptureAuthorityDiagnostic,
+  'page_timestamp_invalid' | 'page_time_span_exceeds_tolerance'
+>
+
+export type PopulationAuthorityEvidence =
+  | {
+      state: 'verified'
+      contractId: typeof BINANCE_SINGLE_RESPONSE_POPULATION_CONTRACT
+      semantics: 'reviewed_board_single_response_population'
+    }
+  | {
+      state: 'unknown'
+      diagnostics: readonly PopulationAuthorityDiagnostic[]
+    }
+
+export type RequestAuthorityDiagnostic = Extract<
+  BinanceLeaderboardCaptureDiagnostic,
+  | 'capture_not_rankable'
+  | 'source_contract_unavailable'
+  | 'source_contract_mismatch'
+  | 'page_binding_mismatch'
+  | 'request_digest_mismatch'
+>
+
+export type RequestAuthorityEvidence =
+  | {
+      state: 'verified'
+      contractId: typeof BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT
+      semantics: 'provider_native_period_aggregate'
+    }
+  | {
+      state: 'unknown'
+      diagnostics: readonly RequestAuthorityDiagnostic[]
+    }
+
+export interface LeaderboardMetricAuthorities {
+  /** Exact reviewed endpoint/body/page request binding. */
+  request: RequestAuthorityEvidence
+  /** Whether the rows are one complete instance of the reviewed board population. */
+  population: PopulationAuthorityEvidence
+  /** Provider-native period request plus exact boundary authority. */
+  window: NativeWindowRequestEvidence
+  /** Stable, de-duplicated diagnostics for observation blockers. */
+  diagnostics: readonly CaptureAuthorityDiagnostic[]
+}
 
 function positiveSafeInteger(value: number): boolean {
   return Number.isSafeInteger(value) && !Object.is(value, -0) && value > 0
@@ -221,52 +277,107 @@ const unknownEvidence = (
   diagnostic,
 })
 
+interface BinanceLeaderboardCaptureInspection {
+  contract: BinanceNativePeriodSourceContract | null
+  diagnostics: CaptureAuthorityDiagnostic[]
+  requestDiagnostics: RequestAuthorityDiagnostic[]
+  populationDiagnostics: PopulationAuthorityDiagnostic[]
+}
+
+function addDiagnostic<T extends string>(diagnostics: T[], diagnostic: T): void {
+  if (!diagnostics.includes(diagnostic)) diagnostics.push(diagnostic)
+}
+
+function addCaptureDiagnostic(
+  inspection: BinanceLeaderboardCaptureInspection,
+  diagnostic: CaptureAuthorityDiagnostic
+): void {
+  addDiagnostic(inspection.diagnostics, diagnostic)
+}
+
+type RequestPopulationDiagnostic = RequestAuthorityDiagnostic & PopulationAuthorityDiagnostic
+
+function addRequestPopulationDiagnostic(
+  inspection: BinanceLeaderboardCaptureInspection,
+  diagnostic: RequestPopulationDiagnostic
+): void {
+  addCaptureDiagnostic(inspection, diagnostic)
+  addDiagnostic(inspection.requestDiagnostics, diagnostic)
+  addDiagnostic(inspection.populationDiagnostics, diagnostic)
+}
+
+function addPopulationDiagnostic(
+  inspection: BinanceLeaderboardCaptureInspection,
+  diagnostic: PopulationAuthorityDiagnostic
+): void {
+  addCaptureDiagnostic(inspection, diagnostic)
+  addDiagnostic(inspection.populationDiagnostics, diagnostic)
+}
+
 /**
- * Verify one complete capture against the reviewed provider-native request.
- * This proves which native period was requested; history, price, and cost-basis
- * methodology remain explicitly source-owned for source-reported metrics.
+ * Independently assess request binding and population snapshot authority.
+ * Multiple diagnostics are retained because a v2 multi-page run can lack both
+ * an attempt fence and a provider snapshot cursor at the same time.
  */
-export function assessLeaderboardNativeWindowRequest(
+function inspectBinanceLeaderboardCapture(
   manifest: LeaderboardMetricTrustManifest
-): NativeWindowRequestEvidence {
-  if (
+): BinanceLeaderboardCaptureInspection {
+  const inspection: BinanceLeaderboardCaptureInspection = {
+    contract: null,
+    diagnostics: [],
+    requestDiagnostics: [],
+    populationDiagnostics: [],
+  }
+  const captureEvidenceUnavailable =
     manifest.capture_evidence_state !== 'verified' ||
+    manifest.runner_git_sha === null ||
+    manifest.source_pages.length === 0
+  if (
+    captureEvidenceUnavailable ||
     manifest.assessment.acquisition_state !== 'complete' ||
     manifest.assessment.population_state !== 'verified' ||
     manifest.caller_limited ||
-    manifest.safety_limited ||
-    manifest.runner_git_sha === null ||
-    manifest.source_pages.length === 0
+    manifest.safety_limited
   ) {
-    return unknownEvidence('capture_not_rankable')
+    if (captureEvidenceUnavailable) {
+      addRequestPopulationDiagnostic(inspection, 'capture_not_rankable')
+    } else {
+      addPopulationDiagnostic(inspection, 'capture_not_rankable')
+    }
   }
-  // V2 publications have no latest-terminal attempt fence. A matching request
-  // digest cannot compensate for that missing authority binding.
+
   if (manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT) {
-    return unknownEvidence('attempt_binding_unavailable')
+    addPopulationDiagnostic(inspection, 'attempt_binding_unavailable')
   }
 
   const contract = BINANCE_NATIVE_PERIOD_SOURCES[manifest.source.slug]
-  if (!contract) return unknownEvidence('source_contract_unavailable')
+  if (!contract) {
+    addRequestPopulationDiagnostic(inspection, 'source_contract_unavailable')
+    return inspection
+  }
+  inspection.contract = contract
   if (
     manifest.source.adapter_slug !== contract.adapterSlug ||
     manifest.source.configured_pagination_kind !== 'numeric'
   ) {
-    return unknownEvidence('source_contract_mismatch')
+    addRequestPopulationDiagnostic(inspection, 'source_contract_mismatch')
+    return inspection
   }
 
   const pageSize = manifest.source.configured_page_size ?? BINANCE_DEFAULT_PAGE_SIZE
   const expectedUrl = BINANCE_LEADERBOARD_LIST_URLS[contract.board]
   const pageTimes = manifest.source_pages.map((page) => Date.parse(page.fetched_at))
   if (pageTimes.some((pageTime) => !Number.isFinite(pageTime))) {
-    return unknownEvidence('page_timestamp_invalid')
+    addCaptureDiagnostic(inspection, 'page_timestamp_invalid')
+  } else if (
+    Math.max(...pageTimes) - Math.min(...pageTimes) >
+    BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS
+  ) {
+    // One run-wide timestamp would overstate both temporal coherence and the
+    // exact native window of late pages.
+    addCaptureDiagnostic(inspection, 'page_time_span_exceeds_tolerance')
   }
-  if (Math.max(...pageTimes) - Math.min(...pageTimes) > BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS) {
-    // Even though the framework retains source-page ordinals, the provider
-    // does not expose an aggregate boundary for any page. One run-wide fetch
-    // timestamp would still overstate the exact window of late pages.
-    return unknownEvidence('page_time_span_exceeds_tolerance')
-  }
+
   for (const [index, page] of manifest.source_pages.entries()) {
     const position = page.pagination_position
     const pageIndex = index + 1
@@ -278,7 +389,7 @@ export function assessLeaderboardNativeWindowRequest(
       position.request_page_index !== pageIndex ||
       (reportedPageSize?.state === 'reported' && reportedPageSize.value !== pageSize)
     ) {
-      return unknownEvidence('page_binding_mismatch')
+      addRequestPopulationDiagnostic(inspection, 'page_binding_mismatch')
     }
 
     const expectedRequestSha256 = binanceLeaderboardListRequestSha256({
@@ -288,28 +399,106 @@ export function assessLeaderboardNativeWindowRequest(
       timeframe: manifest.timeframe,
     })
     if (expectedRequestSha256 === null || page.request_sha256 !== expectedRequestSha256) {
-      return unknownEvidence('request_digest_mismatch')
+      addRequestPopulationDiagnostic(inspection, 'request_digest_mismatch')
     }
   }
+
   if (manifest.source_pages.length > 1) {
-    // Binance's numeric pageNumber is a live offset, not a snapshot cursor.
-    // A trader entering, leaving, or reordering between otherwise valid page
-    // requests can omit one row and include another while total, page hashes,
-    // and duplicate counts all remain stable. Until the capture binds every
-    // page to one provider snapshot/cursor, a stitched population cannot prove
-    // an exact native-window boundary and must remain outside ranking.
-    return unknownEvidence('pagination_snapshot_unavailable')
+    // Binance pageNumber is a live offset, not a snapshot cursor. Stable totals,
+    // request hashes, and duplicate counts cannot prove one stitched population.
+    addPopulationDiagnostic(inspection, 'pagination_snapshot_unavailable')
   }
-  // timeRange proves which provider-native label was requested, but Binance
-  // does not return the aggregate's actual computed_at, start, or end boundary.
-  // Treating fetch time as that boundary would falsely satisfy Arena's strict
-  // max_window_end_lag contract even though the board may refresh later. Keep
-  // the request evidence, but do not promote it to exact-window authority.
-  return {
-    state: 'request_verified',
-    contractId: BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
-    semantics: contract.windowSemantics,
-    reason: 'native_window_boundary_unverified',
-    diagnostic: 'provider_window_boundary_unavailable',
-  }
+  return inspection
+}
+
+function frozenUnknownRequest(
+  diagnostics: readonly RequestAuthorityDiagnostic[]
+): RequestAuthorityEvidence {
+  return Object.freeze({
+    state: 'unknown' as const,
+    diagnostics: Object.freeze([...diagnostics]),
+  })
+}
+
+function frozenUnknownPopulation(
+  diagnostics: readonly PopulationAuthorityDiagnostic[]
+): PopulationAuthorityEvidence {
+  return Object.freeze({
+    state: 'unknown' as const,
+    diagnostics: Object.freeze([...diagnostics]),
+  })
+}
+
+/**
+ * Assess request, population, and window independently while retaining one
+ * deterministic diagnostic order for persistence. A complete manifest count
+ * is not, by itself, provider population authority.
+ */
+export function assessLeaderboardMetricAuthorities(
+  manifest: LeaderboardMetricTrustManifest
+): LeaderboardMetricAuthorities {
+  const inspection = inspectBinanceLeaderboardCapture(manifest)
+  const contract = inspection.contract
+  const request: RequestAuthorityEvidence =
+    contract && inspection.requestDiagnostics.length === 0
+      ? Object.freeze({
+          state: 'verified' as const,
+          contractId: BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
+          semantics: contract.windowSemantics,
+        })
+      : frozenUnknownRequest(
+          inspection.requestDiagnostics.length > 0
+            ? inspection.requestDiagnostics
+            : ['source_contract_unavailable']
+        )
+  const population: PopulationAuthorityEvidence =
+    inspection.populationDiagnostics.length === 0
+      ? Object.freeze({
+          state: 'verified' as const,
+          contractId: BINANCE_SINGLE_RESPONSE_POPULATION_CONTRACT,
+          semantics: 'reviewed_board_single_response_population' as const,
+        })
+      : frozenUnknownPopulation(inspection.populationDiagnostics)
+  const window: NativeWindowRequestEvidence =
+    inspection.diagnostics.length > 0
+      ? Object.freeze(unknownEvidence(inspection.diagnostics[0]))
+      : request.state === 'verified'
+        ? Object.freeze({
+            state: 'request_verified' as const,
+            contractId: BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
+            semantics: request.semantics,
+            reason: 'native_window_boundary_unverified' as const,
+            diagnostic: 'provider_window_boundary_unavailable' as const,
+          })
+        : Object.freeze(unknownEvidence(request.diagnostics[0] ?? 'source_contract_unavailable'))
+
+  return Object.freeze({
+    request,
+    population,
+    window,
+    diagnostics: Object.freeze([...inspection.diagnostics]),
+  })
+}
+
+/**
+ * Population authority is distinct from the manifest's count check. One exact
+ * v3 response to the reviewed unfiltered request can bind one population;
+ * request/filter drift and stitched numeric pages cannot. The latter remains
+ * unknown until the provider exposes a snapshot/cursor contract.
+ */
+export function assessLeaderboardPopulationAuthority(
+  manifest: LeaderboardMetricTrustManifest
+): PopulationAuthorityEvidence {
+  return assessLeaderboardMetricAuthorities(manifest).population
+}
+
+/**
+ * Verify one complete capture against the reviewed provider-native request.
+ * This proves which native period was requested; history, price, and cost-basis
+ * methodology remain explicitly source-owned for source-reported metrics.
+ */
+export function assessLeaderboardNativeWindowRequest(
+  manifest: LeaderboardMetricTrustManifest
+): NativeWindowRequestEvidence {
+  return assessLeaderboardMetricAuthorities(manifest).window
 }

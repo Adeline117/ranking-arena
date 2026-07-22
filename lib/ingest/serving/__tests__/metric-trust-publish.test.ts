@@ -151,6 +151,19 @@ function trustFixture(source: SourceRow = src) {
   return trustBundle(buildLeaderboardAcquisitionManifest(manifestInput(source)))
 }
 
+function exactRequestTrustFixture(source: SourceRow = src) {
+  const input = manifestInput(source)
+  const requestSha256 = binanceLeaderboardListRequestSha256({
+    sourceSlug: source.slug,
+    pageIndex: 1,
+    pageSize: source.page_size ?? 20,
+    timeframe: 30,
+  })
+  if (requestSha256 === null) throw new Error('test source has no reviewed request contract')
+  input.source_pages[0].request_sha256 = requestSha256
+  return trustBundle(buildLeaderboardAcquisitionManifest(input))
+}
+
 function attemptBoundTrustFixture(source: SourceRow = src) {
   return trustBundle(
     buildLeaderboardAcquisitionManifestV3({
@@ -192,13 +205,15 @@ function exactRequestAttemptBoundTrustFixture(
   )
 }
 
-function longWindowAttemptBoundFixture() {
-  const source = { ...src, page_size: 1 }
-  const fetchedAt = [
+function longWindowAttemptBoundFixture(
+  fetchedAt: readonly string[] = [
     '2026-07-21T10:00:01.000Z',
     '2026-07-21T10:10:01.000Z',
     '2026-07-21T10:20:01.000Z',
-  ] as const
+  ]
+) {
+  const source = { ...src, page_size: 1 }
+  const completedAt = new Date(Date.parse(fetchedAt.at(-1)!) + 1_000).toISOString()
   const pageRows = [
     { leadPortfolioId: 'one', roi: 10, pnl: 100 },
     { leadPortfolioId: 'two', roi: 5, pnl: 50 },
@@ -246,7 +261,7 @@ function longWindowAttemptBoundFixture() {
     surface: 'tier_a_leaderboard',
     timeframe: 30,
     started_at: '2026-07-21T10:00:00.000Z',
-    completed_at: '2026-07-21T10:20:02.000Z',
+    completed_at: completedAt,
     runner_git_sha: 'a'.repeat(40),
     observation_cycle_id: 'tier-a:binance_futures:long-window-test',
     capture_evidence_state: 'verified',
@@ -372,6 +387,38 @@ interface WrittenObservationInput {
   window_start: string
   window_end: string
   source_page_ordinal: number | null
+}
+
+async function writeFixtureObservations(input: {
+  source?: SourceRow
+  fixtureRows?: ParsedLeaderboardRow[]
+  bundle: ReturnType<typeof trustBundle>
+  snapshotScrapedAt?: string
+}) {
+  const query = successfulTrustWriteQuery()
+  const prepared = prepareLeaderboardMetricTrust({
+    src: input.source ?? src,
+    timeframe: 30,
+    rows: input.fixtureRows ?? rows,
+    rejectedRowCount: 0,
+    bundle: input.bundle,
+  })
+  await writeLeaderboardMetricTrust(queryClient(query), prepared, {
+    snapshotId: 77,
+    snapshotScrapedAt: input.snapshotScrapedAt ?? '2026-07-21T10:00:03.000Z',
+    traderIds: new Map([
+      ['one', 1_001],
+      ['two', 1_002],
+    ]),
+  })
+  const observationCall = query.mock.calls.find(([sql]) =>
+    String(sql).includes('INSERT INTO arena.metric_trust_observations')
+  )!
+  return {
+    observations: JSON.parse(String(observationCall[1][0])) as WrittenObservationInput[],
+    prepared,
+    query,
+  }
 }
 
 function longCaptureReconciliationQuery(
@@ -637,7 +684,99 @@ describe('Tier-A metric trust transaction writer', () => {
     expect(query).not.toHaveBeenCalled()
   })
 
-  it('writes run, fail-closed window observations, and exact RAW refs on one client', async () => {
+  it('rejects prepared-manifest mutation before any database write', async () => {
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: trustFixture(),
+    })
+    ;(prepared.manifest.source_pages[0] as { request_sha256: string | null }).request_sha256 =
+      'd'.repeat(64)
+    const query = jest.fn()
+
+    await expect(
+      writeLeaderboardMetricTrust(queryClient(query), prepared, {
+        snapshotId: 77,
+        snapshotScrapedAt: '2026-07-21T10:00:03.000Z',
+        traderIds: new Map([
+          ['one', 1_001],
+          ['two', 1_002],
+        ]),
+      })
+    ).rejects.toThrow('prepared manifest changed after source-run verification')
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it('keeps exact v3 single-response population verified while its native window stays unknown', async () => {
+    const { observations } = await writeFixtureObservations({
+      bundle: exactRequestAttemptBoundTrustFixture(),
+    })
+
+    expect(observations.every((observation) => observation.population_state === 'verified')).toBe(
+      true
+    )
+    expect(observations.filter((observation) => observation.exchange_trader_id === 'one')).toEqual([
+      expect.objectContaining({
+        population_state: 'verified',
+        window_state: 'unknown',
+        blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+      }),
+      expect.objectContaining({
+        population_state: 'verified',
+        window_state: 'unknown',
+        blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+      }),
+    ])
+  })
+
+  it('keeps v2 population unknown and preserves attempt plus independent request diagnostics', async () => {
+    const exact = await writeFixtureObservations({ bundle: exactRequestTrustFixture() })
+    expect(exact.observations.every(({ population_state }) => population_state === 'unknown')).toBe(
+      true
+    )
+    expect(
+      exact.observations.filter((observation) => observation.exchange_trader_id === 'one')
+    ).toEqual([
+      expect.objectContaining({
+        blocking_reasons: [
+          { code: 'attempt_binding_unavailable', state: 'unknown' },
+          { code: 'native_window_boundary_unverified', state: 'unknown' },
+        ],
+      }),
+      expect.objectContaining({
+        blocking_reasons: [
+          { code: 'attempt_binding_unavailable', state: 'unknown' },
+          { code: 'native_window_boundary_unverified', state: 'unknown' },
+        ],
+      }),
+    ])
+
+    const drifted = await writeFixtureObservations({ bundle: trustFixture() })
+    expect(
+      drifted.observations.filter((observation) => observation.exchange_trader_id === 'one')
+    ).toEqual([
+      expect.objectContaining({
+        population_state: 'unknown',
+        blocking_reasons: [
+          { code: 'attempt_binding_unavailable', state: 'unknown' },
+          { code: 'request_digest_mismatch', state: 'unknown' },
+          { code: 'native_window_boundary_unverified', state: 'unknown' },
+        ],
+      }),
+      expect.objectContaining({
+        population_state: 'unknown',
+        blocking_reasons: [
+          { code: 'attempt_binding_unavailable', state: 'unknown' },
+          { code: 'request_digest_mismatch', state: 'unknown' },
+          { code: 'native_window_boundary_unverified', state: 'unknown' },
+        ],
+      }),
+    ])
+  })
+
+  it('keeps a bad v3 request digest out of observation population without downgrading the run', async () => {
     const query = jest.fn(async (sqlInput: unknown, params: unknown[] = []) => {
       const sql = String(sqlInput)
       if (sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')) {
@@ -770,6 +909,7 @@ describe('Tier-A metric trust transaction writer', () => {
       exchange_trader_id: string
       contract_id: string
       quality: string
+      population_state: string
       blocking_reasons: unknown[]
     }>
     expect(observationCall[1].slice(1)).toEqual([
@@ -785,14 +925,20 @@ describe('Tier-A metric trust transaction writer', () => {
         expect.objectContaining({
           exchange_trader_id: 'one',
           quality: 'unknown',
-          blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+          population_state: 'unknown',
+          blocking_reasons: [
+            { code: 'request_digest_mismatch', state: 'unknown' },
+            { code: 'native_window_boundary_unverified', state: 'unknown' },
+          ],
         }),
         expect.objectContaining({
           exchange_trader_id: 'two',
           contract_id: '11',
           quality: 'unknown',
+          population_state: 'unknown',
           blocking_reasons: [
             { code: 'field_lineage_unknown', state: 'unknown' },
+            { code: 'request_digest_mismatch', state: 'unknown' },
             { code: 'native_window_boundary_unverified', state: 'unknown' },
           ],
         }),
@@ -922,6 +1068,7 @@ describe('Tier-A metric trust transaction writer', () => {
       exchange_trader_id: string
       contract_id: string
       quality: string
+      population_state: string
       window_state: string
       blocking_reasons: unknown[]
     }>
@@ -931,6 +1078,7 @@ describe('Tier-A metric trust transaction writer', () => {
           exchange_trader_id: 'one',
           contract_id: '11',
           quality: 'unknown',
+          population_state: 'verified',
           window_state: 'unknown',
           blocking_reasons: [
             { code: 'source_page_lineage_unknown', state: 'unknown' },
@@ -941,6 +1089,7 @@ describe('Tier-A metric trust transaction writer', () => {
           exchange_trader_id: 'one',
           contract_id: '12',
           quality: 'unknown',
+          population_state: 'verified',
           window_state: 'unknown',
           blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
           source_page_ordinal: 1,
@@ -949,6 +1098,7 @@ describe('Tier-A metric trust transaction writer', () => {
           exchange_trader_id: 'two',
           contract_id: '11',
           quality: 'unknown',
+          population_state: 'verified',
           window_state: 'unknown',
           blocking_reasons: [
             { code: 'field_lineage_unknown', state: 'unknown' },
@@ -960,6 +1110,7 @@ describe('Tier-A metric trust transaction writer', () => {
           exchange_trader_id: 'two',
           contract_id: '12',
           quality: 'unknown',
+          population_state: 'verified',
           window_state: 'unknown',
           blocking_reasons: [
             { code: 'source_page_lineage_mismatch', state: 'unknown' },
@@ -969,6 +1120,36 @@ describe('Tier-A metric trust transaction writer', () => {
         }),
       ])
     )
+  })
+
+  it('keeps an exact fast multi-page capture population unknown without a snapshot cursor', async () => {
+    const fixture = longWindowAttemptBoundFixture([
+      '2026-07-21T10:00:01.000Z',
+      '2026-07-21T10:01:01.000Z',
+      '2026-07-21T10:02:01.000Z',
+    ])
+    const { observations } = await writeFixtureObservations({
+      source: fixture.source,
+      fixtureRows: fixture.rows,
+      bundle: fixture.bundle,
+      snapshotScrapedAt: '2026-07-21T10:02:02.000Z',
+    })
+
+    expect(observations.every(({ population_state }) => population_state === 'unknown')).toBe(true)
+    expect(observations.filter((observation) => observation.exchange_trader_id === 'one')).toEqual([
+      expect.objectContaining({
+        blocking_reasons: [
+          { code: 'pagination_snapshot_unavailable', state: 'unknown' },
+          { code: 'native_window_boundary_unverified', state: 'unknown' },
+        ],
+      }),
+      expect.objectContaining({
+        blocking_reasons: [
+          { code: 'pagination_snapshot_unavailable', state: 'unknown' },
+          { code: 'native_window_boundary_unverified', state: 'unknown' },
+        ],
+      }),
+    ])
   })
 
   it('preserves long-capture page times without promoting an unprovable Binance window', async () => {
@@ -985,6 +1166,11 @@ describe('Tier-A metric trust transaction writer', () => {
       state: 'unknown',
       diagnostic: 'page_time_span_exceeds_tolerance',
     })
+    const captureAuthorityReasons = [
+      { code: 'page_time_span_exceeds_tolerance', state: 'unknown' },
+      { code: 'pagination_snapshot_unavailable', state: 'unknown' },
+      { code: 'native_window_boundary_unverified', state: 'unknown' },
+    ]
 
     await writeLeaderboardMetricTrust(queryClient(query), prepared, {
       snapshotId: 77,
@@ -1001,9 +1187,10 @@ describe('Tier-A metric trust transaction writer', () => {
     expect(observations.filter((observation) => observation.exchange_trader_id === 'one')).toEqual([
       expect.objectContaining({
         quality: 'unknown',
+        population_state: 'unknown',
         window_state: 'unknown',
         freshness_state: 'verified',
-        blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+        blocking_reasons: captureAuthorityReasons,
         source_as_of: '2026-07-21T10:00:01.000Z',
         window_start: '2026-06-21T10:00:01.000Z',
         window_end: '2026-07-21T10:00:01.000Z',
@@ -1011,9 +1198,10 @@ describe('Tier-A metric trust transaction writer', () => {
       }),
       expect.objectContaining({
         quality: 'unknown',
+        population_state: 'unknown',
         window_state: 'unknown',
         freshness_state: 'verified',
-        blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+        blocking_reasons: captureAuthorityReasons,
         source_as_of: '2026-07-21T10:00:01.000Z',
         window_start: '2026-06-21T10:00:01.000Z',
         window_end: '2026-07-21T10:00:01.000Z',
@@ -1023,9 +1211,10 @@ describe('Tier-A metric trust transaction writer', () => {
     expect(observations.filter((observation) => observation.exchange_trader_id === 'two')).toEqual([
       expect.objectContaining({
         quality: 'unknown',
+        population_state: 'unknown',
         window_state: 'unknown',
         freshness_state: 'verified',
-        blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+        blocking_reasons: captureAuthorityReasons,
         source_as_of: '2026-07-21T10:10:01.000Z',
         window_start: '2026-06-21T10:10:01.000Z',
         window_end: '2026-07-21T10:10:01.000Z',
@@ -1033,9 +1222,10 @@ describe('Tier-A metric trust transaction writer', () => {
       }),
       expect.objectContaining({
         quality: 'unknown',
+        population_state: 'unknown',
         window_state: 'unknown',
         freshness_state: 'verified',
-        blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+        blocking_reasons: captureAuthorityReasons,
         source_as_of: '2026-07-21T10:10:01.000Z',
         window_start: '2026-06-21T10:10:01.000Z',
         window_end: '2026-07-21T10:10:01.000Z',
@@ -1073,6 +1263,15 @@ describe('Tier-A metric trust transaction writer', () => {
         prepared
       )
     ).rejects.toThrow('existing metric observation mismatch')
+    const forgedPopulation = observations.map((observation, index) =>
+      index === 0 ? { ...observation, population_state: 'verified' } : observation
+    )
+    await expect(
+      reconcileLeaderboardMetricTrust(
+        queryClient(longCaptureReconciliationQuery(prepared, forgedPopulation)),
+        prepared
+      )
+    ).rejects.toThrow('existing metric observation mismatch')
 
     const missingRows = JSON.parse(JSON.stringify(fixture.rows)) as ParsedLeaderboardRow[]
     delete missingRows[1].headlineMetricSources?.pnl?.sourcePageOrdinal
@@ -1105,11 +1304,12 @@ describe('Tier-A metric trust transaction writer', () => {
       )
     ).toMatchObject({
       quality: 'unknown',
+      population_state: 'unknown',
       window_state: 'unknown',
       freshness_state: 'unknown',
       blocking_reasons: [
         { code: 'source_page_lineage_unknown', state: 'unknown' },
-        { code: 'native_window_boundary_unverified', state: 'unknown' },
+        ...captureAuthorityReasons,
       ],
       source_page_ordinal: null,
     })
@@ -1150,11 +1350,12 @@ describe('Tier-A metric trust transaction writer', () => {
       )
     ).toMatchObject({
       quality: 'unknown',
+      population_state: 'unknown',
       window_state: 'unknown',
       freshness_state: 'unknown',
       blocking_reasons: [
         { code: 'source_page_lineage_mismatch', state: 'unknown' },
-        { code: 'native_window_boundary_unverified', state: 'unknown' },
+        ...captureAuthorityReasons,
       ],
       source_as_of: '2026-07-21T10:00:01.000Z',
       source_page_ordinal: null,
@@ -1191,21 +1392,23 @@ describe('Tier-A metric trust transaction writer', () => {
     ).toEqual([
       expect.objectContaining({
         quality: 'unknown',
+        population_state: 'unknown',
         window_state: 'unknown',
         freshness_state: 'unknown',
         blocking_reasons: [
           { code: 'source_page_lineage_conflict', state: 'unknown' },
-          { code: 'native_window_boundary_unverified', state: 'unknown' },
+          ...captureAuthorityReasons,
         ],
         source_page_ordinal: null,
       }),
       expect.objectContaining({
         quality: 'unknown',
+        population_state: 'unknown',
         window_state: 'unknown',
         freshness_state: 'unknown',
         blocking_reasons: [
           { code: 'source_page_lineage_conflict', state: 'unknown' },
-          { code: 'native_window_boundary_unverified', state: 'unknown' },
+          ...captureAuthorityReasons,
         ],
         source_page_ordinal: null,
       }),
@@ -1383,6 +1586,29 @@ describe('Tier-A metric trust transaction writer', () => {
     )
   })
 
+  it('rejects replay that promotes observation population or drops its required blocker', async () => {
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: trustFixture(),
+    })
+
+    await expect(
+      reconcileLeaderboardMetricTrust(
+        queryClient(reconciliationQuery(prepared, false, false, 'verified_population')),
+        prepared
+      )
+    ).rejects.toThrow('existing metric observation mismatch')
+    await expect(
+      reconcileLeaderboardMetricTrust(
+        queryClient(reconciliationQuery(prepared, false, false, 'missing_population_blocker')),
+        prepared
+      )
+    ).rejects.toThrow('existing metric observation mismatch')
+  })
+
   it('rejects an attempt-bound replay when the latest terminal outcome no longer authorizes it', async () => {
     const prepared = prepareLeaderboardMetricTrust({
       src,
@@ -1532,8 +1758,15 @@ function queryClient(query: jest.Mock): PoolClient {
 function reconciliationQuery(
   prepared: ReturnType<typeof prepareLeaderboardMetricTrust>,
   corruptArtifact = false,
-  quarantinePopulation = false
+  quarantinePopulation = false,
+  authorityCorruption?: 'verified_population' | 'missing_population_blocker'
 ) {
+  const populationBlockingReasons = [
+    ...(prepared.manifest.data_contract === LEADERBOARD_ACQUISITION_MANIFEST_V2_CONTRACT
+      ? [{ code: 'attempt_binding_unavailable', state: 'unknown' }]
+      : []),
+    { code: 'request_digest_mismatch', state: 'unknown' },
+  ]
   const observationRows = [
     {
       id: '201',
@@ -1542,7 +1775,10 @@ function reconciliationQuery(
       exchange_trader_id: 'one',
       value: '100',
       quality: 'unknown',
-      blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+      blocking_reasons: [
+        ...populationBlockingReasons,
+        { code: 'native_window_boundary_unverified', state: 'unknown' },
+      ],
     },
     {
       id: '202',
@@ -1551,7 +1787,10 @@ function reconciliationQuery(
       exchange_trader_id: 'one',
       value: '10',
       quality: 'unknown',
-      blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+      blocking_reasons: [
+        ...populationBlockingReasons,
+        { code: 'native_window_boundary_unverified', state: 'unknown' },
+      ],
     },
     {
       id: '203',
@@ -1562,6 +1801,7 @@ function reconciliationQuery(
       quality: 'unknown',
       blocking_reasons: [
         { code: 'field_lineage_unknown', state: 'unknown' },
+        ...populationBlockingReasons,
         { code: 'native_window_boundary_unverified', state: 'unknown' },
       ],
     },
@@ -1572,14 +1812,17 @@ function reconciliationQuery(
       exchange_trader_id: 'two',
       value: '5',
       quality: 'unknown',
-      blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+      blocking_reasons: [
+        ...populationBlockingReasons,
+        { code: 'native_window_boundary_unverified', state: 'unknown' },
+      ],
     },
   ].map((observation) => ({
     ...observation,
     history_state: 'source_owned',
     price_state: 'source_owned',
     cost_basis_state: 'source_owned',
-    population_state: 'verified',
+    population_state: 'unknown',
     window_state: 'unknown',
     unit_state: 'verified',
     freshness_state: observation.id === '203' ? 'unknown' : 'verified',
@@ -1589,6 +1832,13 @@ function reconciliationQuery(
     window_end: '2026-07-21 10:00:01+00',
     source_page_ordinal: observation.id === '203' ? null : '1',
   }))
+  if (authorityCorruption === 'verified_population') {
+    observationRows[0].population_state = 'verified'
+  } else if (authorityCorruption === 'missing_population_blocker') {
+    observationRows[0].blocking_reasons = observationRows[0].blocking_reasons.filter(
+      (reason) => reason.code !== 'request_digest_mismatch'
+    )
+  }
   const artifacts = observationRows.flatMap((observation) => [
     {
       observation_id: observation.id,
