@@ -1,0 +1,3 @@
+-- A hosted auth owner with RLS requires the postgres SECURITY DEFINER owner to
+-- bypass RLS; table privileges alone cannot make parent locks visible.
+ALTER ROLE postgres NOBYPASSRLS;

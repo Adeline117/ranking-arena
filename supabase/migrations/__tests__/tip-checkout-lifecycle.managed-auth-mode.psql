@@ -1,0 +1,4 @@
+-- Match hosted Supabase while the lifecycle migration validates its owner and
+-- row-lock authority. The harness bootstrap session remains a separate
+-- superuser and can restore the role after the migration.
+ALTER ROLE postgres NOSUPERUSER BYPASSRLS;

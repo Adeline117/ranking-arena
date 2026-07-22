@@ -1,0 +1,5 @@
+-- The shared entitlement harness predates managed-auth testing and exercises
+-- many legacy SECURITY DEFINER functions after migrations. Restore its local
+-- bootstrap shape; the lifecycle fixture downgrades postgres again before
+-- executing the new RPCs.
+ALTER ROLE postgres SUPERUSER BYPASSRLS;

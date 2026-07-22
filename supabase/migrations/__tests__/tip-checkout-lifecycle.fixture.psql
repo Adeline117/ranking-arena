@@ -1,0 +1,1059 @@
+-- Execute every lifecycle RPC under the hosted Supabase function-owner shape.
+ALTER ROLE postgres NOSUPERUSER BYPASSRLS;
+
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', false);
+
+INSERT INTO auth.users (id) VALUES
+  ('d5100000-0000-4000-8000-000000000001'),
+  ('d5100000-0000-4000-8000-000000000002'),
+  ('d5100000-0000-4000-8000-000000000003'),
+  ('d5100000-0000-4000-8000-000000000004'),
+  ('d5100000-0000-4000-8000-000000000005');
+
+INSERT INTO public.user_profiles (id, handle) VALUES
+  ('d5100000-0000-4000-8000-000000000001', 'tip_lifecycle_payer'),
+  ('d5100000-0000-4000-8000-000000000002', 'tip_lifecycle_recipient'),
+  ('d5100000-0000-4000-8000-000000000003', 'tip_lifecycle_self'),
+  ('d5100000-0000-4000-8000-000000000005', 'tip_delete_recipient');
+
+INSERT INTO public.posts (id, author_id, title, content) VALUES
+  (
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    'Tip lifecycle authority',
+    'Tip lifecycle authority'
+  ),
+  (
+    'd5200000-0000-4000-8000-000000000002',
+    'd5100000-0000-4000-8000-000000000003',
+    'Self tip authority',
+    'Self tip authority'
+  ),
+  (
+    'd5200000-0000-4000-8000-000000000003',
+    'd5100000-0000-4000-8000-000000000004',
+    'Unavailable recipient',
+    'Unavailable recipient'
+  ),
+  (
+    'd5200000-0000-4000-8000-000000000004',
+    'd5100000-0000-4000-8000-000000000005',
+    'Recipient deletion',
+    'Recipient deletion'
+  );
+
+DO $reservation_bind_and_expire$
+DECLARE
+  v_result jsonb;
+  v_tip_id uuid;
+  v_expires_at timestamptz;
+  v_event_created_at timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+BEGIN
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    2500,
+    'thanks',
+    3600
+  );
+  IF v_result ->> 'status' <> 'reserved'
+    OR v_result ->> 'tip_id' IS NULL
+    OR v_result ->> 'checkout_expires_at' IS NULL
+  THEN
+    RAISE EXCEPTION 'Tip reservation did not return exact authority: %', v_result;
+  END IF;
+  v_tip_id := (v_result ->> 'tip_id')::uuid;
+  v_expires_at := (v_result ->> 'checkout_expires_at')::timestamptz;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = v_tip_id
+      AND tip.checkout_post_id =
+        'd5200000-0000-4000-8000-000000000001'
+      AND tip.checkout_to_user_id =
+        'd5100000-0000-4000-8000-000000000002'
+      AND tip.post_id = tip.checkout_post_id
+      AND tip.to_user_id = tip.checkout_to_user_id
+  ) THEN
+    RAISE EXCEPTION 'Tip reservation immutable parent snapshots drifted';
+  END IF;
+
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    2500,
+    'changed message is not a new payment identity',
+    3600
+  );
+  IF v_result ->> 'status' <> 'reservation_exists'
+    OR (v_result ->> 'tip_id')::uuid <> v_tip_id
+    OR (v_result ->> 'checkout_expires_at')::timestamptz <>
+      v_expires_at
+  THEN
+    RAISE EXCEPTION 'Tip reservation replay drifted: %', v_result;
+  END IF;
+
+  BEGIN
+    PERFORM public.bind_tip_checkout_session_atomic(
+      v_tip_id,
+      'd5100000-0000-4000-8000-000000000001',
+      'cs_tip_fractional_expiry',
+      v_expires_at + interval '1 millisecond'
+    );
+    RAISE EXCEPTION 'fractional Checkout expiry unexpectedly bound';
+  EXCEPTION
+    WHEN SQLSTATE '22023' THEN NULL;
+  END;
+
+  v_result := public.bind_tip_checkout_session_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'cs_tip_lifecycle_exact',
+    v_expires_at
+  );
+  IF v_result ->> 'status' <> 'bound'
+    OR v_result ->> 'checkout_session_id' <> 'cs_tip_lifecycle_exact'
+  THEN
+    RAISE EXCEPTION 'Tip Session bind failed: %', v_result;
+  END IF;
+
+  v_result := public.bind_tip_checkout_session_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'cs_tip_lifecycle_exact',
+    v_expires_at
+  );
+  IF v_result ->> 'status' <> 'already_bound' THEN
+    RAISE EXCEPTION 'Tip Session replay did not converge: %', v_result;
+  END IF;
+
+  v_result := public.bind_tip_checkout_session_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'cs_tip_lifecycle_conflict',
+    v_expires_at
+  );
+  IF v_result ->> 'status' <> 'identity_conflict' THEN
+    RAISE EXCEPTION 'different Tip Session was not rejected: %', v_result;
+  END IF;
+
+  v_result := public.expire_pending_tip_checkout_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    2500,
+    'cs_tip_lifecycle_exact',
+    v_expires_at,
+    'evt_tip_lifecycle_exact',
+    v_event_created_at
+  );
+  IF v_result ->> 'status' <> 'expired'
+    OR v_result ->> 'event_id' <> 'evt_tip_lifecycle_exact'
+  THEN
+    RAISE EXCEPTION 'signed Tip expiry did not terminate: %', v_result;
+  END IF;
+
+  v_result := public.expire_pending_tip_checkout_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    2500,
+    'cs_tip_lifecycle_exact',
+    v_expires_at,
+    'evt_tip_lifecycle_exact',
+    v_event_created_at
+  );
+  IF v_result ->> 'status' <> 'already_expired'
+    OR v_result ->> 'event_id' <> 'evt_tip_lifecycle_exact'
+  THEN
+    RAISE EXCEPTION 'signed Tip expiry replay drifted: %', v_result;
+  END IF;
+
+  v_result := public.expire_pending_tip_checkout_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    2500,
+    'cs_tip_lifecycle_exact',
+    v_expires_at,
+    'evt_tip_lifecycle_other',
+    v_event_created_at
+  );
+  IF v_result ->> 'status' <> 'identity_conflict'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'tip_checkout_expiry'
+        AND review.object_id = 'evt_tip_lifecycle_other'
+        AND review.reason_key = 'tip_checkout_expiry_replay_conflict'
+    )
+  THEN
+    RAISE EXCEPTION 'conflicting expiry replay was not durable: %', v_result;
+  END IF;
+
+  BEGIN
+    UPDATE public.tips
+    SET amount_cents = 2600
+    WHERE id = v_tip_id;
+    RAISE EXCEPTION 'failed Tip identity unexpectedly mutated';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = v_tip_id
+      AND tip.status = 'failed'
+      AND tip.amount_cents = 2500
+      AND tip.stripe_checkout_session_id = 'cs_tip_lifecycle_exact'
+      AND tip.checkout_failure_event_id = 'evt_tip_lifecycle_exact'
+  ) THEN
+    RAISE EXCEPTION 'expired Tip terminal projection drifted';
+  END IF;
+END
+$reservation_bind_and_expire$;
+
+DO $authority_and_input_rejections$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000003',
+    'd5200000-0000-4000-8000-000000000002',
+    1000,
+    NULL,
+    3600
+  );
+  IF v_result ->> 'status' <> 'self_tip' THEN
+    RAISE EXCEPTION 'self tip was not rejected: %', v_result;
+  END IF;
+
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000003',
+    1000,
+    NULL,
+    3600
+  );
+  IF v_result ->> 'status' <> 'recipient_unavailable' THEN
+    RAISE EXCEPTION 'missing recipient profile was not rejected: %', v_result;
+  END IF;
+
+  UPDATE public.user_profiles
+  SET is_banned = true,
+      ban_expires_at = NULL
+  WHERE id = 'd5100000-0000-4000-8000-000000000001';
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    3100,
+    NULL,
+    3600
+  );
+  IF v_result ->> 'status' <> 'not_found' THEN
+    RAISE EXCEPTION 'inactive payer was not rejected: %', v_result;
+  END IF;
+  UPDATE public.user_profiles
+  SET is_banned = false
+  WHERE id = 'd5100000-0000-4000-8000-000000000001';
+
+  BEGIN
+    PERFORM public.reserve_tip_checkout_atomic(
+      'd5100000-0000-4000-8000-000000000001',
+      'd5200000-0000-4000-8000-000000000001',
+      3200,
+      NULL,
+      1800
+    );
+    RAISE EXCEPTION 'unsafe minimum TTL unexpectedly passed';
+  EXCEPTION
+    WHEN SQLSTATE '22023' THEN NULL;
+  END;
+END
+$authority_and_input_rejections$;
+
+DO $bind_revalidates_external_gap$
+DECLARE
+  v_result jsonb;
+  v_tip_id uuid;
+  v_expires_at timestamptz;
+  v_event_created_at timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+BEGIN
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    3300,
+    NULL,
+    3600
+  );
+  v_tip_id := (v_result ->> 'tip_id')::uuid;
+  v_expires_at := (v_result ->> 'checkout_expires_at')::timestamptz;
+
+  UPDATE public.user_profiles
+  SET is_banned = true,
+      ban_expires_at = NULL
+  WHERE id = 'd5100000-0000-4000-8000-000000000002';
+  v_result := public.bind_tip_checkout_session_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'cs_tip_authority_gap',
+    v_expires_at
+  );
+  IF v_result ->> 'status' <> 'not_found'
+    OR EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_tip_id
+        AND tip.stripe_checkout_session_id IS NOT NULL
+    )
+  THEN
+    RAISE EXCEPTION 'authority gap exposed a bound Session: %', v_result;
+  END IF;
+  UPDATE public.user_profiles
+  SET is_banned = false
+  WHERE id = 'd5100000-0000-4000-8000-000000000002';
+
+  -- The exact signed event may terminally bind an otherwise unbound Session.
+  v_result := public.expire_pending_tip_checkout_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    3300,
+    'cs_tip_authority_gap',
+    v_expires_at,
+    'evt_tip_authority_gap_expired',
+    v_event_created_at
+  );
+  IF v_result ->> 'status' <> 'expired' THEN
+    RAISE EXCEPTION 'unbound signed expiry did not converge: %', v_result;
+  END IF;
+END
+$bind_revalidates_external_gap$;
+
+DO $constraint_and_transition_guards$
+DECLARE
+  v_result jsonb;
+  v_tip_id uuid;
+  v_expires_at timestamptz;
+  v_now timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+BEGIN
+  BEGIN
+    INSERT INTO public.tips (
+      id, post_id, from_user_id, to_user_id, amount_cents, status,
+      stripe_checkout_session_id, checkout_expires_at,
+      checkout_failed_at, checkout_failure_reason,
+      checkout_failure_event_id, checkout_failure_event_created_at,
+      created_at, updated_at
+    ) VALUES (
+      'd5300000-0000-4000-8000-000000000001',
+      'd5200000-0000-4000-8000-000000000001',
+      'd5100000-0000-4000-8000-000000000001',
+      'd5100000-0000-4000-8000-000000000002',
+      3400,
+      'failed',
+      'cs_tip_null_failure_reason',
+      v_now + interval '1 hour',
+      v_now,
+      NULL,
+      'evt_tip_null_failure_reason',
+      v_now,
+      v_now - interval '1 minute',
+      v_now
+    );
+    RAISE EXCEPTION 'NULL failed provenance unexpectedly passed';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    3500,
+    NULL,
+    3600
+  );
+  v_tip_id := (v_result ->> 'tip_id')::uuid;
+  v_expires_at := (v_result ->> 'checkout_expires_at')::timestamptz;
+  BEGIN
+    UPDATE public.tips
+    SET status = 'failed',
+        amount_cents = 3501,
+        stripe_checkout_session_id = 'cs_tip_rewrite_attempt',
+        checkout_failed_at = v_now,
+        checkout_failure_reason = 'checkout_session_expired',
+        checkout_failure_event_id = 'evt_tip_rewrite_attempt',
+        checkout_failure_event_created_at = v_now
+    WHERE id = v_tip_id;
+    RAISE EXCEPTION 'pending-to-failed core rewrite unexpectedly passed';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.tips AS tip
+    WHERE tip.id = v_tip_id
+      AND tip.status = 'pending'
+      AND tip.amount_cents = 3500
+      AND tip.stripe_checkout_session_id IS NULL
+      AND tip.checkout_expires_at = v_expires_at
+  ) THEN
+    RAISE EXCEPTION 'rejected pending rewrite left partial state';
+  END IF;
+END
+$constraint_and_transition_guards$;
+
+DO $reservation_recovery_safety_margin$
+DECLARE
+  v_result jsonb;
+  v_now timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+BEGIN
+  INSERT INTO public.tips (
+    id, post_id, from_user_id, to_user_id, amount_cents, status,
+    checkout_expires_at, created_at, updated_at
+  ) VALUES (
+    'd5300000-0000-4000-8000-000000000010',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    3900,
+    'pending',
+    v_now + interval '35 minutes',
+    v_now,
+    v_now
+  );
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    3900,
+    NULL,
+    3600
+  );
+  IF v_result ->> 'status' <> 'reservation_expiring' THEN
+    RAISE EXCEPTION '35-minute recovery margin was unsafe: %', v_result;
+  END IF;
+
+  INSERT INTO public.tips (
+    id, post_id, from_user_id, to_user_id, amount_cents, status,
+    stripe_checkout_session_id, checkout_expires_at,
+    created_at, updated_at
+  ) VALUES (
+    'd5300000-0000-4000-8000-000000000011',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4000,
+    'pending',
+    'cs_tip_bound_near_expiry',
+    v_now + interval '1 minute',
+    v_now,
+    v_now
+  );
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    4000,
+    NULL,
+    3600
+  );
+  IF v_result ->> 'status' <> 'already_bound'
+    OR v_result ->> 'checkout_session_id' <> 'cs_tip_bound_near_expiry'
+  THEN
+    RAISE EXCEPTION 'bound recovery was hidden by DB time: %', v_result;
+  END IF;
+END
+$reservation_recovery_safety_margin$;
+
+DO $mixed_deploy_legacy_pending_is_durable_review$
+DECLARE
+  v_result jsonb;
+BEGIN
+  INSERT INTO public.tips (
+    id, post_id, from_user_id, to_user_id, amount_cents, status
+  ) VALUES (
+    'd5300000-0000-4000-8000-000000000012',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4100,
+    'pending'
+  );
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    4100,
+    NULL,
+    3600
+  );
+  IF v_result ->> 'status' <> 'not_found'
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.tips AS tip
+      WHERE tip.from_user_id =
+          'd5100000-0000-4000-8000-000000000001'
+        AND tip.checkout_post_id =
+          'd5200000-0000-4000-8000-000000000001'
+        AND tip.amount_cents = 4100
+        AND tip.status = 'pending'
+    ) <> 1
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'tip_checkout_reservation'
+        AND review.object_id =
+          'd5300000-0000-4000-8000-000000000012'
+        AND review.reason_key = 'tip_checkout_legacy_pending'
+    )
+  THEN
+    RAISE EXCEPTION 'mixed-deploy legacy pending was not durable: %', v_result;
+  END IF;
+END
+$mixed_deploy_legacy_pending_is_durable_review$;
+
+DO $paid_terminal_expiry_review$
+DECLARE
+  v_result jsonb;
+  v_now timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+  v_expires_at timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp())
+      + interval '1 hour';
+BEGIN
+  INSERT INTO public.tips (
+    id, post_id, from_user_id, to_user_id, amount_cents, status,
+    stripe_checkout_session_id, stripe_payment_intent_id,
+    stripe_charge_id, stripe_customer_id, currency, completed_at,
+    checkout_expires_at, created_at, updated_at
+  ) VALUES (
+    'd5300000-0000-4000-8000-000000000002',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    3600,
+    'completed',
+    'cs_tip_paid_terminal',
+    'pi_tip_paid_terminal',
+    'ch_tip_paid_terminal',
+    'cus_tip_paid_terminal',
+    'usd',
+    v_now,
+    v_expires_at,
+    v_now - interval '1 minute',
+    v_now
+  );
+
+  v_result := public.expire_pending_tip_checkout_atomic(
+    'd5300000-0000-4000-8000-000000000002',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    3600,
+    'cs_tip_paid_terminal',
+    v_expires_at,
+    'evt_tip_paid_terminal_expired',
+    v_now
+  );
+  IF v_result ->> 'status' <> 'already_terminal'
+    OR v_result ->> 'tip_status' <> 'completed'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'tip_checkout'
+        AND review.object_id = 'evt_tip_paid_terminal_expired'
+        AND review.reason_key =
+          'tip_checkout_expired_after_payment_terminal'
+    )
+  THEN
+    RAISE EXCEPTION 'paid-terminal expiry conflict was not durable: %', v_result;
+  END IF;
+END
+$paid_terminal_expiry_review$;
+
+DO $lifecycle_completion_and_full_refund_preserve_snapshots$
+DECLARE
+  v_result jsonb;
+  v_refund jsonb;
+  v_tip_id uuid;
+  v_expires_at timestamptz;
+  v_now timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+BEGIN
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    4300,
+    'completion and refund',
+    3600
+  );
+  v_tip_id := (v_result ->> 'tip_id')::uuid;
+  v_expires_at := (v_result ->> 'checkout_expires_at')::timestamptz;
+  v_result := public.bind_tip_checkout_session_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'cs_tip_lifecycle_refund',
+    v_expires_at
+  );
+  IF v_result ->> 'status' <> 'bound' THEN
+    RAISE EXCEPTION 'lifecycle refund Session did not bind: %', v_result;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_tip_lifecycle_refund',
+    'pi_tip_lifecycle_refund',
+    'ch_tip_lifecycle_refund',
+    'cs_tip_lifecycle_refund',
+    4300,
+    'usd',
+    v_now
+  );
+  IF v_result ->> 'status' <> 'completed'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_tip_id
+        AND tip.status = 'completed'
+        AND tip.checkout_post_id =
+          'd5200000-0000-4000-8000-000000000001'
+        AND tip.checkout_to_user_id =
+          'd5100000-0000-4000-8000-000000000002'
+        AND tip.checkout_expires_at = v_expires_at
+        AND tip.stripe_checkout_session_id = 'cs_tip_lifecycle_refund'
+        AND tip.checkout_failed_at IS NULL
+        AND tip.checkout_failure_reason IS NULL
+        AND tip.checkout_failure_event_id IS NULL
+        AND tip.checkout_failure_event_created_at IS NULL
+    )
+  THEN
+    RAISE EXCEPTION 'completion mutated lifecycle snapshots: %', v_result;
+  END IF;
+
+  v_refund := public.record_charge_refund_tombstone_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'cus_tip_lifecycle_refund',
+    'pi_tip_lifecycle_refund',
+    'ch_tip_lifecycle_refund',
+    true,
+    4300,
+    'usd',
+    4300,
+    'succeeded',
+    'evt_tip_lifecycle_full_refund',
+    v_now + interval '1 second'
+  );
+  IF v_refund ->> 'status' <> 'recorded'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_tip_id
+        AND tip.status = 'refunded'
+        AND tip.checkout_post_id =
+          'd5200000-0000-4000-8000-000000000001'
+        AND tip.checkout_to_user_id =
+          'd5100000-0000-4000-8000-000000000002'
+        AND tip.checkout_expires_at = v_expires_at
+        AND tip.stripe_checkout_session_id = 'cs_tip_lifecycle_refund'
+        AND tip.checkout_failed_at IS NULL
+        AND tip.checkout_failure_reason IS NULL
+        AND tip.checkout_failure_event_id IS NULL
+        AND tip.checkout_failure_event_created_at IS NULL
+    )
+  THEN
+    RAISE EXCEPTION 'full refund mutated lifecycle snapshots: %', v_refund;
+  END IF;
+END
+$lifecycle_completion_and_full_refund_preserve_snapshots$;
+
+DO $mixed_deploy_legacy_payment_completion_and_refund$
+DECLARE
+  v_result jsonb;
+  v_refund jsonb;
+  v_now timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+BEGIN
+  -- Model an old App instance during DB-first rollout: direct pending insert,
+  -- followed by its direct Session update. The new trigger snapshots parents
+  -- but deliberately leaves checkout expiry NULL for compatibility.
+  INSERT INTO public.tips (
+    id, post_id, from_user_id, to_user_id, amount_cents, status
+  ) VALUES (
+    'd5300000-0000-4000-8000-000000000020',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4500,
+    'pending'
+  );
+  UPDATE public.tips
+  SET stripe_checkout_session_id = 'cs_tip_legacy_cutover'
+  WHERE id = 'd5300000-0000-4000-8000-000000000020';
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tips AS tip
+    WHERE tip.id = 'd5300000-0000-4000-8000-000000000020'
+      AND tip.status = 'pending'
+      AND tip.checkout_expires_at IS NULL
+      AND tip.checkout_post_id =
+        'd5200000-0000-4000-8000-000000000001'
+      AND tip.checkout_to_user_id =
+        'd5100000-0000-4000-8000-000000000002'
+      AND tip.stripe_checkout_session_id = 'cs_tip_legacy_cutover'
+  ) THEN
+    RAISE EXCEPTION 'mixed-deploy old App binding shape drifted';
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    'd5300000-0000-4000-8000-000000000020',
+    'cus_tip_legacy_cutover',
+    'pi_tip_legacy_cutover',
+    'ch_tip_legacy_cutover',
+    'cs_tip_legacy_cutover',
+    4500,
+    'usd',
+    v_now
+  );
+  IF v_result ->> 'status' <> 'completed'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = 'd5300000-0000-4000-8000-000000000020'
+        AND tip.status = 'completed'
+        AND tip.checkout_expires_at IS NULL
+        AND tip.checkout_post_id =
+          'd5200000-0000-4000-8000-000000000001'
+        AND tip.checkout_to_user_id =
+          'd5100000-0000-4000-8000-000000000002'
+        AND tip.stripe_checkout_session_id = 'cs_tip_legacy_cutover'
+    )
+  THEN
+    RAISE EXCEPTION 'mixed-deploy old App completion failed: %', v_result;
+  END IF;
+
+  v_refund := public.record_charge_refund_tombstone_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'cus_tip_legacy_cutover',
+    'pi_tip_legacy_cutover',
+    'ch_tip_legacy_cutover',
+    true,
+    4500,
+    'usd',
+    4500,
+    'succeeded',
+    'evt_tip_legacy_cutover_refund',
+    v_now + interval '1 second'
+  );
+  IF v_refund ->> 'status' <> 'recorded'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = 'd5300000-0000-4000-8000-000000000020'
+        AND tip.status = 'refunded'
+        AND tip.checkout_expires_at IS NULL
+        AND tip.checkout_post_id =
+          'd5200000-0000-4000-8000-000000000001'
+        AND tip.checkout_to_user_id =
+          'd5100000-0000-4000-8000-000000000002'
+        AND tip.stripe_checkout_session_id = 'cs_tip_legacy_cutover'
+    )
+  THEN
+    RAISE EXCEPTION 'mixed-deploy old App refund failed: %', v_refund;
+  END IF;
+END
+$mixed_deploy_legacy_payment_completion_and_refund$;
+
+DO $parent_tombstone_replay$
+DECLARE
+  v_result jsonb;
+  v_tip_id uuid;
+  v_expires_at timestamptz;
+  v_event_created_at timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+BEGIN
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000004',
+    3700,
+    NULL,
+    3600
+  );
+  v_tip_id := (v_result ->> 'tip_id')::uuid;
+  v_expires_at := (v_result ->> 'checkout_expires_at')::timestamptz;
+  v_result := public.expire_pending_tip_checkout_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000004',
+    'd5100000-0000-4000-8000-000000000005',
+    3700,
+    'cs_tip_deleted_recipient',
+    v_expires_at,
+    'evt_tip_deleted_recipient',
+    v_event_created_at
+  );
+  IF v_result ->> 'status' <> 'expired' THEN
+    RAISE EXCEPTION 'recipient tombstone fixture did not expire: %', v_result;
+  END IF;
+
+  DELETE FROM auth.users
+  WHERE id = 'd5100000-0000-4000-8000-000000000005';
+  IF NOT EXISTS (
+    SELECT 1 FROM public.tips AS tip
+    WHERE tip.id = v_tip_id
+      AND tip.to_user_id IS NULL
+      AND tip.checkout_to_user_id =
+        'd5100000-0000-4000-8000-000000000005'
+  ) THEN
+    RAISE EXCEPTION 'recipient FK tombstone was blocked';
+  END IF;
+
+  INSERT INTO auth.users (id) VALUES
+    ('d5100000-0000-4000-8000-000000000005');
+  INSERT INTO public.user_profiles (id, handle) VALUES (
+    'd5100000-0000-4000-8000-000000000005',
+    'tip_delete_recipient_recreated'
+  );
+
+  v_result := public.expire_pending_tip_checkout_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000004',
+    'd5100000-0000-4000-8000-000000000005',
+    3700,
+    'cs_tip_deleted_recipient',
+    v_expires_at,
+    'evt_tip_deleted_recipient',
+    v_event_created_at
+  );
+  IF v_result ->> 'status' <> 'already_expired' THEN
+    RAISE EXCEPTION 'recreated-recipient expiry replay drifted: %', v_result;
+  END IF;
+
+  DELETE FROM public.posts
+  WHERE id = 'd5200000-0000-4000-8000-000000000004';
+  IF NOT EXISTS (
+    SELECT 1 FROM public.tips AS tip
+    WHERE tip.id = v_tip_id
+      AND tip.post_id IS NULL
+      AND tip.checkout_post_id =
+        'd5200000-0000-4000-8000-000000000004'
+  ) THEN
+    RAISE EXCEPTION 'post FK tombstone erased immutable snapshot';
+  END IF;
+  INSERT INTO public.posts (id, author_id, title, content) VALUES (
+    'd5200000-0000-4000-8000-000000000004',
+    'd5100000-0000-4000-8000-000000000005',
+    'Recipient deletion recreated',
+    'Recipient deletion recreated'
+  );
+  v_result := public.expire_pending_tip_checkout_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000004',
+    'd5100000-0000-4000-8000-000000000005',
+    3700,
+    'cs_tip_deleted_recipient',
+    v_expires_at,
+    'evt_tip_deleted_recipient',
+    v_event_created_at
+  );
+  IF v_result ->> 'status' <> 'already_expired' THEN
+    RAISE EXCEPTION 'recreated-post expiry replay drifted: %', v_result;
+  END IF;
+
+  v_result := public.expire_pending_tip_checkout_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000099',
+    'd5100000-0000-4000-8000-000000000099',
+    3700,
+    'cs_tip_deleted_recipient',
+    v_expires_at,
+    'evt_tip_different_nonexistent_parent',
+    v_event_created_at
+  );
+  IF v_result ->> 'status' <> 'identity_conflict'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'tip_checkout_expiry'
+        AND review.object_id = 'evt_tip_different_nonexistent_parent'
+        AND review.reason_key = 'tip_checkout_expiry_identity_conflict'
+    )
+  THEN
+    RAISE EXCEPTION 'different nonexistent parent was accepted: %', v_result;
+  END IF;
+END
+$parent_tombstone_replay$;
+
+DO $pending_post_tombstone_keeps_tuple_reserved$
+DECLARE
+  v_result jsonb;
+  v_tip_id uuid;
+BEGIN
+  INSERT INTO public.posts (id, author_id, title, content) VALUES (
+    'd5200000-0000-4000-8000-000000000005',
+    'd5100000-0000-4000-8000-000000000002',
+    'Pending tombstone tuple',
+    'Pending tombstone tuple'
+  );
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000005',
+    4200,
+    NULL,
+    3600
+  );
+  v_tip_id := (v_result ->> 'tip_id')::uuid;
+  DELETE FROM public.posts
+  WHERE id = 'd5200000-0000-4000-8000-000000000005';
+  INSERT INTO public.posts (id, author_id, title, content) VALUES (
+    'd5200000-0000-4000-8000-000000000005',
+    'd5100000-0000-4000-8000-000000000002',
+    'Pending tombstone tuple recreated',
+    'Pending tombstone tuple recreated'
+  );
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000005',
+    4200,
+    NULL,
+    3600
+  );
+  IF v_result ->> 'status' <> 'reservation_exists'
+    OR (v_result ->> 'tip_id')::uuid <> v_tip_id
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.tips AS tip
+      WHERE tip.from_user_id =
+          'd5100000-0000-4000-8000-000000000001'
+        AND tip.checkout_post_id =
+          'd5200000-0000-4000-8000-000000000005'
+        AND tip.amount_cents = 4200
+        AND tip.status = 'pending'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION 'post tombstone released pending tuple: %', v_result;
+  END IF;
+END
+$pending_post_tombstone_keeps_tuple_reserved$;
+
+DO $missing_and_predating_expiry_are_durable$
+DECLARE
+  v_result jsonb;
+  v_tip_id uuid;
+  v_expires_at timestamptz;
+  v_now timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+BEGIN
+  v_result := public.expire_pending_tip_checkout_atomic(
+    'd5300000-0000-4000-8000-000000000099',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4400,
+    'cs_tip_missing_subject',
+    v_now + interval '1 hour',
+    'evt_tip_missing_subject',
+    v_now
+  );
+  IF v_result ->> 'status' <> 'not_found'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'tip_checkout_expiry'
+        AND review.object_id = 'evt_tip_missing_subject'
+        AND review.reason_key = 'tip_checkout_expiry_subject_missing'
+    )
+  THEN
+    RAISE EXCEPTION 'missing signed expiry was not durable: %', v_result;
+  END IF;
+
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    4400,
+    NULL,
+    3600
+  );
+  v_tip_id := (v_result ->> 'tip_id')::uuid;
+  v_expires_at := (v_result ->> 'checkout_expires_at')::timestamptz;
+  v_result := public.expire_pending_tip_checkout_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4400,
+    'cs_tip_predating_event',
+    v_expires_at,
+    'evt_tip_predating_event',
+    v_now - interval '10 minutes'
+  );
+  IF v_result ->> 'status' <> 'identity_conflict'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'tip_checkout_expiry'
+        AND review.object_id = 'evt_tip_predating_event'
+        AND review.reason_key =
+          'tip_checkout_expiry_event_predates_reservation'
+    )
+    OR NOT EXISTS (
+      SELECT 1 FROM public.tips AS tip
+      WHERE tip.id = v_tip_id
+        AND tip.status = 'pending'
+        AND tip.stripe_checkout_session_id IS NULL
+    )
+  THEN
+    RAISE EXCEPTION 'predating signed expiry was not durable: %', v_result;
+  END IF;
+END
+$missing_and_predating_expiry_are_durable$;
+
+DO $function_acl_and_role_guard$
+BEGIN
+  IF pg_catalog.has_function_privilege(
+      'anon',
+      'public.reserve_tip_checkout_atomic(uuid,uuid,bigint,text,integer)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.bind_tip_checkout_session_atomic(uuid,uuid,text,timestamp with time zone)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.expire_pending_tip_checkout_atomic(uuid,uuid,uuid,uuid,bigint,text,timestamp with time zone,text,timestamp with time zone)',
+      'EXECUTE'
+    )
+    OR NOT pg_catalog.has_function_privilege(
+      'service_role',
+      'public.reserve_tip_checkout_atomic(uuid,uuid,bigint,text,integer)',
+      'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION 'Tip checkout lifecycle ACL drifted';
+  END IF;
+
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'authenticated', false);
+  BEGIN
+    PERFORM public.reserve_tip_checkout_atomic(
+      'd5100000-0000-4000-8000-000000000001',
+      'd5200000-0000-4000-8000-000000000001',
+      3800,
+      NULL,
+      3600
+    );
+    RAISE EXCEPTION 'authenticated role claim bypassed service guard';
+  EXCEPTION
+    WHEN insufficient_privilege THEN NULL;
+  END;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', false);
+END
+$function_acl_and_role_guard$;
