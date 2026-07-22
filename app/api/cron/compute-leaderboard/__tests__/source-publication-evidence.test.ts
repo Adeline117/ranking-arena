@@ -433,6 +433,27 @@ describe('source publication evidence', () => {
     )
   })
 
+  it('rejects count expansion from raw rows through final publication', () => {
+    captureError(
+      () =>
+        parse(
+          [physicalBoard()],
+          [scoreRow(), scoreRow({ trader_key: 'duplicate-or-forged-trader' })]
+        ),
+      'unsafe_count_expansion'
+    )
+
+    const parsed = parse([physicalBoard()], [scoreRow()])
+    captureError(
+      () =>
+        buildSourcePublicationRows(parsed, {
+          publishId: PUBLISH_ID,
+          finalRankCounts: new Map([['alpha', 2]]),
+        }),
+      'unsafe_count_expansion'
+    )
+  })
+
   it('rejects nonzero ranks for an explicitly empty board and unknown count aliases', () => {
     const empty = parse([physicalBoard({ actual_count: 0, entry_count: 0 })])
     captureError(

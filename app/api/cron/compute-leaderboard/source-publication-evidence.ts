@@ -92,6 +92,7 @@ export type SourcePublicationEvidenceErrorCode =
   | 'invalid_publish_id'
   | 'missing_rank_count'
   | 'retained_rank_count'
+  | 'unsafe_count_expansion'
   | 'unsafe_empty_publication'
 
 export class SourcePublicationEvidenceError extends Error {
@@ -535,6 +536,12 @@ export function parseSourcePublicationEvidence(
     if (alias.raw_actual_count > 0 && alias.score_row_count === 0) {
       fail('query_omission', `${alias.source} raw board is non-empty but score rows were omitted`)
     }
+    if (alias.score_row_count > alias.raw_actual_count) {
+      fail(
+        'unsafe_count_expansion',
+        `${alias.source} score rows exceed the physical raw board count`
+      )
+    }
   }
 
   const freshSources = new Set(freshAliases.map((alias) => alias.source))
@@ -589,6 +596,12 @@ export function buildSourcePublicationRows(
         fail(
           'unsafe_empty_publication',
           `${alias.source} non-empty raw board cannot authorize a zero-rank publication`
+        )
+      }
+      if (publishedRankCount > alias.score_row_count) {
+        fail(
+          'unsafe_count_expansion',
+          `${alias.source} published rank count exceeds its fresh score-row count`
         )
       }
 
