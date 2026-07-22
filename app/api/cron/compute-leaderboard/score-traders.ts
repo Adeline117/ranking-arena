@@ -55,9 +55,13 @@ export interface ScoredTrader {
   is_outlier?: boolean
 }
 
+function hasRankEligiblePnl(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
 /**
  * Calculate arena scores for all traders and apply post-processing.
- * Returns scored + filtered array (null scores excluded).
+ * Returns scored + ranking-eligible arrays.
  */
 export async function scoreTraders(
   uniqueTraders: TraderRow[],
@@ -66,7 +70,19 @@ export async function scoreTraders(
   season: Period,
   supabase: SupabaseClient<Database>
 ): Promise<{ scored: ScoredTrader[]; scoredFiltered: ScoredTrader[] }> {
-  const scored = uniqueTraders.map((t) => {
+  // Defense in depth: callers other than the arena reader can still construct
+  // TraderRows directly. PnL is mandatory for ranking, so reject missing,
+  // malformed-at-runtime, and non-finite values before either score formula or
+  // the percentile cohort sees them. Finite zero and losses remain eligible.
+  const rankEligibleTraders = uniqueTraders.filter((trader) => hasRankEligiblePnl(trader.pnl))
+  const excludedForPnl = uniqueTraders.length - rankEligibleTraders.length
+  if (excludedForPnl > 0) {
+    logger.warn(
+      `[${season}] Excluded ${excludedForPnl} trader(s) from scoring: PnL missing, malformed, or non-finite`
+    )
+  }
+
+  const scored = rankEligibleTraders.map((t) => {
     // Win rate normalization: clamp to 0-100, convert decimal if needed
     let normalizedWinRate: number | null = null
     if (t.win_rate != null && !isNaN(t.win_rate)) {
@@ -86,7 +102,7 @@ export async function scoreTraders(
 
     // Confidence: V3 scores ROI + PnL only
     const hasRoi = t.roi != null
-    const hasPnl = t.pnl != null && Number(t.pnl) > 0
+    const hasPnl = hasRankEligiblePnl(t.pnl)
     const confidenceMultiplier = hasRoi && hasPnl ? 1.0 : hasRoi ? 0.85 : 0.5
     const estimationPenalty = t.metrics_estimated ? 0.92 : 1.0
 
@@ -109,7 +125,9 @@ export async function scoreTraders(
           Math.min(100, rawSubScores * confidenceMultiplier * estimationPenalty * tradeCountPenalty)
         ) * 100
       ) / 100
-    const finalScore = rawFinalScore > 0 ? rawFinalScore : null
+    // A legitimate zero score is still a computed score. Converting it to
+    // null used to remove zero/losing traders from the v4 percentile cohort.
+    const finalScore = rawFinalScore
 
     // Handle/avatar resolution
     const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || {
@@ -181,9 +199,9 @@ export async function scoreTraders(
     `[${season}] Arena followers: ${applied} traders have followers (${uniqueAccounts} unique exchange accounts queried)`
   )
 
-  // Served population = traders with a real (v3) score — the SAME quality gate as
-  // pre-cutover (real ROI/PnL present). Only the score/rank VALUE changes to v4.
-  const scoredFiltered = scored.filter((t) => t.arena_score_v3 != null)
+  // Cohort membership is a data-eligibility decision, not a positive-score
+  // decision: finite zero/loss PnL remains rankable even when v3 computes 0.
+  const scoredFiltered = scored.filter((trader) => hasRankEligiblePnl(trader.pnl))
 
   // ── Arena Score v4 — NOW THE FLAGSHIP ──
   // Batch percentile over the SERVED cohort (percentiles are relative to what

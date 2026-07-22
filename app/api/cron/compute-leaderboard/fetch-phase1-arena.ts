@@ -63,9 +63,14 @@ interface RpcRow {
   board_as_of: string
 }
 
-const num = (v: number | string | null): number | null => {
-  if (v == null) return null
-  const n = Number(v)
+const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
+
+const num = (v: unknown): number | null => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v !== 'string') return null
+  const value = v.trim()
+  if (!value || !DECIMAL_NUMBER.test(value)) return null
+  const n = Number(value)
   return Number.isFinite(n) ? n : null
 }
 
@@ -120,13 +125,22 @@ export async function fetchPhase1FromArena(
     )
   }
 
+  let rankEligibleRowCount = 0
   for (const d of rows) {
+    // PnL is a hard ranking input. Keep incomplete rows in the arena data
+    // model for discovery/display, but never copy them into the compute map:
+    // ROI-only rows previously received a discounted score and were ranked.
+    // Zero and negative PnL are valid observations; only absence/malformed or
+    // non-finite values fail this boundary.
+    const pnl = num(d.pnl_usd)
+    if (pnl === null) continue
+
     addToTraderMap(
       mapArenaScoreRowToTraderRow({
         platform: d.platform,
         trader_key: d.trader_key,
         roi_pct: num(d.roi_pct),
-        pnl_usd: num(d.pnl_usd),
+        pnl_usd: pnl,
         win_rate: num(d.win_rate),
         max_drawdown: num(d.max_drawdown),
         copiers: num(d.copiers),
@@ -139,6 +153,7 @@ export async function fetchPhase1FromArena(
         board_as_of: d.board_as_of,
       })
     )
+    rankEligibleRowCount += 1
     countBySource.set(d.platform, (countBySource.get(d.platform) ?? 0) + 1)
   }
 
@@ -146,15 +161,15 @@ export async function fetchPhase1FromArena(
   // cleanup. Throwing aborts the whole compute, leaving the prior leaderboard
   // intact rather than letting cleanup wipe it down to whatever partial set
   // survived. This is the guard that would have prevented the 06-13 collapse.
-  if (countBySource.size < MIN_PLAUSIBLE_SOURCES || rows.length < MIN_PLAUSIBLE_ROWS) {
+  if (countBySource.size < MIN_PLAUSIBLE_SOURCES || rankEligibleRowCount < MIN_PLAUSIBLE_ROWS) {
     throw new Error(
-      `[${season}] arena read implausibly small (${rows.length} rows / ${countBySource.size} platforms; ` +
+      `[${season}] arena read implausibly small (${rankEligibleRowCount} rank-eligible rows / ${countBySource.size} platforms; ` +
         `floor ${MIN_PLAUSIBLE_ROWS} rows / ${MIN_PLAUSIBLE_SOURCES} platforms) — aborting to protect leaderboard`
     )
   }
 
   logger.info(
-    `[${season}] arena_score_inputs_json: ${rows.length} rows across ${countBySource.size} platforms`
+    `[${season}] arena_score_inputs_json: ${rankEligibleRowCount}/${rows.length} rank-eligible rows across ${countBySource.size} platforms`
   )
   return countBySource
 }
