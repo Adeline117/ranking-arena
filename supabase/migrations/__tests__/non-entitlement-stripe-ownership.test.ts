@@ -186,7 +186,7 @@ describe('non-entitlement Stripe payment ownership', () => {
     expect(databaseTypes).toContain('stripe_payment_ownerships: {')
     expect(databaseTypes).toContain('resolution_ownership_id: string | null')
     expect(databaseTypes).toContain('claim_stripe_payment_ownership_atomic: {')
-    expect(databaseTypes).toContain('complete_tip_with_stripe_ownership_atomic: {')
+    expect(databaseTypes).toMatch(/complete_tip_with_stripe_ownership_atomic:\s*(?:\|\s*)?\{/)
     expect(databaseTypes).toContain('activate_group_subscription_with_stripe_ownership_atomic: {')
     expect(databaseTypes).toContain('payment_member_joined_at: string | null')
     expect(databaseTypes).toContain('p_payment_member_joined_at: string | null')

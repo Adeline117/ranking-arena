@@ -90,7 +90,7 @@ describe('durable tip completion notification migration', () => {
     expect(migration).toMatch(
       /REVOKE ALL ON FUNCTION[\s\S]*?complete_tip_with_stripe_ownership_financial_legacy_v2[\s\S]*?FROM PUBLIC, anon, authenticated, service_role, authenticator/
     )
-    expect(databaseTypes).toContain('complete_tip_with_stripe_ownership_atomic: {')
+    expect(databaseTypes).toMatch(/complete_tip_with_stripe_ownership_atomic:\s*(?:\|\s*)?\{/)
   })
 
   it('takes Stripe advisories, lifecycle parents, and tip rows in one global order', () => {
