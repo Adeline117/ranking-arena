@@ -8,6 +8,7 @@ const mockGetIngestPool = jest.mocked(getIngestPool)
 
 beforeEach(() => {
   mockQuery.mockReset()
+  mockGetIngestPool.mockClear()
   mockGetIngestPool.mockReturnValue({ query: mockQuery } as never)
 })
 
@@ -140,6 +141,30 @@ describe('getCountBaseline — 独立观测周期', () => {
     ).resolves.toEqual({ baseline: 130, isBootstrap: false, shifted: true })
 
     expect(mockQuery.mock.calls[1][1]).toEqual([19, 30, 2, false, 'shift-c', null])
+  })
+
+  it('传入事务 executor 时 baseline 与 shift 查询都只走该 executor', async () => {
+    const transactionQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: passingBaseline })
+      .mockResolvedValueOnce({
+        rows: [
+          { actual_count: 130, cycle_id: 'shift-b', explicit_cycle: true },
+          { actual_count: 130, cycle_id: 'shift-a', explicit_cycle: true },
+        ],
+      })
+
+    await expect(
+      getCountBaseline(19, 30, 100, { actualCount: 130, cycleId: 'shift-c' }, {
+        query: transactionQuery,
+      } as never)
+    ).resolves.toEqual({ baseline: 130, isBootstrap: false, shifted: true })
+
+    expect(mockGetIngestPool).not.toHaveBeenCalled()
+    expect(mockQuery).not.toHaveBeenCalled()
+    expect(transactionQuery).toHaveBeenCalledTimes(2)
+    expect(transactionQuery.mock.calls[0][1]).toEqual([19, 30, 7, true, 'shift-c', null])
+    expect(transactionQuery.mock.calls[1][1]).toEqual([19, 30, 2, false, 'shift-c', null])
   })
 
   it('同一 BullMQ cycle 的 retry 被排除，不能凑 level-shift quorum', async () => {

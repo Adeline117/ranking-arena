@@ -11,6 +11,9 @@
  */
 
 import { getIngestPool } from '../db'
+import type { PoolClient } from 'pg'
+
+export type CountBaselineQueryExecutor = Pick<PoolClient, 'query'>
 
 export interface CountVerdict {
   passed: boolean
@@ -125,9 +128,10 @@ async function getRecentDistinctObservations(
     passedOnly: boolean
     excludeCycleId?: string
     baselineGeneration: string | null
-  }
+  },
+  queryExecutor: CountBaselineQueryExecutor
 ): Promise<StoredCountObservation[]> {
-  const { rows } = await getIngestPool().query<StoredCountObservation>(
+  const { rows } = await queryExecutor.query<StoredCountObservation>(
     `WITH observations AS (
        SELECT id, actual_count, scraped_at,
               NULLIF(meta->>'observation_cycle_id', '') AS explicit_cycle_id,
@@ -177,17 +181,29 @@ export async function getCountBaseline(
   sourceId: number,
   timeframe: number,
   expectedCount: number | null,
-  currentObservation: CountObservation
+  currentObservation: CountObservation,
+  queryExecutor?: CountBaselineQueryExecutor
 ): Promise<CountBaseline> {
+  // A publisher may provide its transaction client after taking the source
+  // publication lock. Keeping every baseline/shift read on that executor
+  // prevents a concurrent commit from changing the evidence mid-verdict.
+  // Legacy callers retain the pool-backed behavior.
+  const executor = queryExecutor ?? getIngestPool()
   const baselineGeneration = currentObservation.baselineGeneration?.trim() || null
-  const rows = await getRecentDistinctObservations(sourceId, timeframe, 7, {
-    passedOnly: true,
-    // A retry may revisit a window that already passed earlier in this same
-    // multi-window job. That earlier attempt is not independent history and
-    // must not help the current retry cross the 3-cycle rolling threshold.
-    excludeCycleId: currentObservation.cycleId ?? undefined,
-    baselineGeneration,
-  })
+  const rows = await getRecentDistinctObservations(
+    sourceId,
+    timeframe,
+    7,
+    {
+      passedOnly: true,
+      // A retry may revisit a window that already passed earlier in this same
+      // multi-window job. That earlier attempt is not independent history and
+      // must not help the current retry cross the 3-cycle rolling threshold.
+      excludeCycleId: currentObservation.cycleId ?? undefined,
+      baselineGeneration,
+    },
+    executor
+  )
 
   // Current baseline: rolling median of real passing crawls once we have ≥3,
   // else the (loose) day-one survey number.
@@ -227,7 +243,8 @@ export async function getCountBaseline(
         passedOnly: false,
         excludeCycleId: currentObservation.cycleId,
         baselineGeneration,
-      }
+      },
+      executor
     )
     // Pre-deploy/manual snapshots carry no trustworthy job-instance identity.
     // They stay visible in the newest-N sequence and break the quorum instead
