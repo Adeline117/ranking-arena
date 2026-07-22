@@ -76,17 +76,36 @@ describe('fetchPhase1FromArena board watermark boundary', () => {
     )
   })
 
-  it('preserves the legacy reader numeric coercion around the shared pure mapper', async () => {
-    const rows = Array.from({ length: 3_000 }, (_, index) => rpcRow(index))
-    rows[0].roi_pct = '12.5'
-    rows[0].pnl_usd = 'not-finite'
+  it('keeps finite zero/loss PnL but never sends ROI-only or malformed PnL to scoring', async () => {
+    const rows = Array.from({ length: 3_006 }, (_, index) => rpcRow(index))
+    rows[0].pnl_usd = null
+    rows[1].pnl_usd = ''
+    rows[2].pnl_usd = 'not-a-number'
+    rows[3].pnl_usd = Number.NaN
+    rows[4].pnl_usd = Number.POSITIVE_INFINITY
+    rows[5].pnl_usd = {} as never
+    rows[6].roi_pct = '12.5'
+    rows[6].pnl_usd = '0'
+    rows[7].pnl_usd = '-250.5'
     const supabase = supabaseReturning(rows)
     const addToTraderMap = jest.fn()
 
-    await fetchPhase1FromArena(supabase as never, '30D', addToTraderMap)
-
-    expect(addToTraderMap.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ roi: 12.5, pnl: null })
+    await expect(fetchPhase1FromArena(supabase as never, '30D', addToTraderMap)).resolves.toEqual(
+      new Map(Array.from({ length: 10 }, (_, index) => [`source_${index}`, 300]))
     )
+
+    expect(addToTraderMap).toHaveBeenCalledTimes(3_000)
+    expect(addToTraderMap.mock.calls.map(([row]) => row.source_trader_id)).not.toEqual(
+      expect.arrayContaining([
+        'trader_0',
+        'trader_1',
+        'trader_2',
+        'trader_3',
+        'trader_4',
+        'trader_5',
+      ])
+    )
+    expect(addToTraderMap.mock.calls[0][0]).toEqual(expect.objectContaining({ roi: 12.5, pnl: 0 }))
+    expect(addToTraderMap.mock.calls[1][0]).toEqual(expect.objectContaining({ pnl: -250.5 }))
   })
 })
