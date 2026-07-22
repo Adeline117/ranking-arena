@@ -135,10 +135,13 @@ export const CACHE_KEY_PATTERNS = {
 
   // 交易员历史 - 冷数据
   traderHistory: {
-    pattern: 'trader:history:*',
+    // This root namespace is deliberately impossible for the retired builder
+    // (`trader:history:${platform}:${trader}:${period}`) to express. Keeping a
+    // version only inside an old argument slot allowed cross-rollout poisoning.
+    pattern: 'trader:history-evidence:v1:*',
     tier: 'cold' as CacheTier,
     keyBuilder: (platform: string, traderId: string, period: string) =>
-      `trader:history:${platform}:${traderId}:${period}`,
+      `trader:history-evidence:v1:${encodeURIComponent(platform)}:${encodeURIComponent(traderId)}:${encodeURIComponent(period)}`,
   },
 
   // 平台统计 - 温数据

@@ -97,6 +97,25 @@ async function getHistory() {
   return response.json()
 }
 
+function emptyEvidenceHistoryResponse(): {
+  contract: string
+  history: Record<'7D' | '30D' | '90D', Array<Record<string, unknown>>>
+  coverage: Record<
+    '7D' | '30D' | '90D',
+    { state: string; reason: string; count: number; expectedCount: number }
+  >
+} {
+  return {
+    contract: 'arena.trader-history-evidence@1',
+    history: { '7D': [], '30D': [], '90D': [] },
+    coverage: {
+      '7D': { state: 'unknown', reason: 'no_observations', count: 0, expectedCount: 7 },
+      '30D': { state: 'unknown', reason: 'no_observations', count: 0, expectedCount: 30 },
+      '90D': { state: 'unknown', reason: 'no_observations', count: 0, expectedCount: 90 },
+    },
+  }
+}
+
 describe('trader history evidence boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -123,6 +142,75 @@ describe('trader history evidence boundary', () => {
     })
     expect(random).not.toHaveBeenCalled()
     random.mockRestore()
+  })
+
+  it('accepts only a fully validated evidence-contract cache hit', async () => {
+    const cached = emptyEvidenceHistoryResponse()
+    mockGetCachedTraderHistory.mockResolvedValue(cached)
+
+    const response = await requestHistory('30D')
+
+    expect(response.status).toBe(200)
+    expect(response.headers['X-Cache']).toBe('HIT')
+    await expect(response.json()).resolves.toEqual(cached)
+    expect(mockGetCachedTraderHistory).toHaveBeenCalledWith('binance', 'trader-1', '30D')
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockCacheTraderHistory).not.toHaveBeenCalled()
+  })
+
+  it('treats a legacy v2 collision payload without coverage as a cache miss', async () => {
+    mockGetCachedTraderHistory.mockResolvedValue({
+      history: {
+        '7D': [{ date: '2026-07-20', roi: 999 }],
+        '30D': [],
+        '90D': [],
+      },
+    })
+    mockFrom.mockReturnValue(queryReturning([]))
+
+    const response = await requestHistory('30D')
+    const result = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(response.headers['X-Cache']).toBe('MISS')
+    expect(mockGetCachedTraderHistory).toHaveBeenCalledWith('binance', 'trader-1', '30D')
+    expect(mockFrom).toHaveBeenCalledWith('trader_daily_snapshots')
+    expect(result).toEqual(emptyEvidenceHistoryResponse())
+    expect(mockCacheTraderHistory).toHaveBeenCalledWith(
+      'binance',
+      'trader-1',
+      '30D',
+      emptyEvidenceHistoryResponse()
+    )
+  })
+
+  it('rejects a contract-labeled cache entry with fabricated score fields', async () => {
+    const poisoned = emptyEvidenceHistoryResponse()
+    poisoned.history['7D'] = [
+      {
+        date: '2026-07-20',
+        roi: 10,
+        pnl: 100,
+        rank: null,
+        arenaScore: 99,
+        winRate: 60,
+        maxDrawdown: 5,
+      },
+    ]
+    poisoned.coverage['7D'] = {
+      state: 'partial',
+      reason: 'sparse_daily_coverage',
+      count: 1,
+      expectedCount: 7,
+    }
+    mockGetCachedTraderHistory.mockResolvedValue(poisoned)
+    mockFrom.mockReturnValue(queryReturning([]))
+
+    const response = await requestHistory('7D')
+
+    expect(response.headers['X-Cache']).toBe('MISS')
+    expect(mockFrom).toHaveBeenCalledWith('trader_daily_snapshots')
+    await expect(response.json()).resolves.toEqual(emptyEvidenceHistoryResponse())
   })
 
   it('keeps sparse source observations sparse and marks each affected period partial', async () => {

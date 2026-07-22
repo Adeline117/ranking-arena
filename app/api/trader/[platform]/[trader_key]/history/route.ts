@@ -40,7 +40,10 @@ interface HistoryPeriodCoverage {
   expectedCount: number
 }
 
+const HISTORY_RESPONSE_CONTRACT = 'arena.trader-history-evidence@1' as const
+
 interface TraderHistoryResponse {
+  contract: typeof HISTORY_RESPONSE_CONTRACT
   history: Record<TimePeriod, HistoryDataPoint[]>
   coverage: Record<TimePeriod, HistoryPeriodCoverage>
 }
@@ -53,6 +56,117 @@ const PERIOD_DAYS: Record<TimePeriod, number> = {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+const HISTORY_PERIODS = Object.keys(PERIOD_DAYS) as TimePeriod[]
+const FULL_COVERAGE_REASONS = new Set<HistoryCoverageReason>([
+  'required_roi_missing',
+  'confidence_not_high',
+  'legacy_metric_trust_unknown',
+])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value)
+  return actual.length === keys.length && keys.every((key) => key in value)
+}
+
+function isNullableFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isFinite(value))
+}
+
+function isCanonicalDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !DATE_ONLY.test(value)) return false
+  const parsed = Date.parse(`${value}T00:00:00.000Z`)
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value
+}
+
+function isHistoryDataPoint(value: unknown): value is HistoryDataPoint {
+  if (!isRecord(value)) return false
+  if (
+    !hasExactKeys(value, ['date', 'roi', 'pnl', 'rank', 'arenaScore', 'winRate', 'maxDrawdown'])
+  ) {
+    return false
+  }
+  return (
+    isCanonicalDate(value.date) &&
+    isNullableFiniteNumber(value.roi) &&
+    isNullableFiniteNumber(value.pnl) &&
+    value.rank === null &&
+    value.arenaScore === null &&
+    isNullableFiniteNumber(value.winRate) &&
+    isNullableFiniteNumber(value.maxDrawdown)
+  )
+}
+
+function isSortedUniqueHistory(value: unknown): value is HistoryDataPoint[] {
+  return (
+    Array.isArray(value) &&
+    value.every(isHistoryDataPoint) &&
+    value.every((point, index) => index === 0 || value[index - 1].date < point.date)
+  )
+}
+
+function isPeriodCoverage(
+  value: unknown,
+  period: TimePeriod,
+  pointCount: number
+): value is HistoryPeriodCoverage {
+  if (!isRecord(value) || !hasExactKeys(value, ['state', 'reason', 'count', 'expectedCount'])) {
+    return false
+  }
+  if (
+    value.count !== pointCount ||
+    value.expectedCount !== PERIOD_DAYS[period] ||
+    !Number.isInteger(value.count) ||
+    pointCount < 0 ||
+    pointCount > PERIOD_DAYS[period]
+  ) {
+    return false
+  }
+  if (pointCount === 0) return value.state === 'unknown' && value.reason === 'no_observations'
+  if (pointCount < PERIOD_DAYS[period]) {
+    return value.state === 'partial' && value.reason === 'sparse_daily_coverage'
+  }
+  return (
+    value.state === 'partial' &&
+    typeof value.reason === 'string' &&
+    FULL_COVERAGE_REASONS.has(value.reason as HistoryCoverageReason)
+  )
+}
+
+function isTraderHistoryResponse(value: unknown): value is TraderHistoryResponse {
+  if (!isRecord(value) || !hasExactKeys(value, ['contract', 'history', 'coverage'])) return false
+  if (
+    value.contract !== HISTORY_RESPONSE_CONTRACT ||
+    !isRecord(value.history) ||
+    !isRecord(value.coverage) ||
+    !hasExactKeys(value.history, HISTORY_PERIODS) ||
+    !hasExactKeys(value.coverage, HISTORY_PERIODS)
+  ) {
+    return false
+  }
+
+  for (const period of HISTORY_PERIODS) {
+    const points = value.history[period]
+    if (
+      !isSortedUniqueHistory(points) ||
+      !isPeriodCoverage(value.coverage[period], period, points.length)
+    ) {
+      return false
+    }
+  }
+
+  const history = value.history as Record<TimePeriod, HistoryDataPoint[]>
+  const dates7 = new Set(history['7D'].map((point) => point.date))
+  const dates30 = new Set(history['30D'].map((point) => point.date))
+  return (
+    [...dates7].every((date) => dates30.has(date)) &&
+    [...dates30].every((date) => history['90D'].some((point) => point.date === date))
+  )
+}
 
 function finiteNumberOrNull(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null
@@ -143,12 +257,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestedPeriod = periodParam
 
   // 尝试从缓存获取
-  // Version the response cache because v1 contained fabricated points and no
-  // coverage metadata. Never let an old cached payload cross this trust boundary.
-  const cacheKey = `v2:${requestedPeriod || 'all'}`
-  const cached = await getCachedTraderHistory<TraderHistoryResponse>(platform, traderId, cacheKey)
+  // The redis layer uses a root namespace the retired builder cannot express.
+  // Runtime validation is still mandatory: cache contents are untrusted and a
+  // pre-version fabricated/no-coverage payload must degrade to a database miss.
+  const cacheKey = requestedPeriod || 'all'
+  const cached = await getCachedTraderHistory<unknown>(platform, traderId, cacheKey)
 
-  if (cached) {
+  if (isTraderHistoryResponse(cached)) {
     return NextResponse.json(cached, {
       headers: {
         'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
@@ -257,7 +372,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ])
     ) as Record<TimePeriod, HistoryPeriodCoverage>
 
-    const result: TraderHistoryResponse = { history: historyByPeriod, coverage }
+    const result: TraderHistoryResponse = {
+      contract: HISTORY_RESPONSE_CONTRACT,
+      history: historyByPeriod,
+      coverage,
+    }
 
     // 缓存结果
     await cacheTraderHistory(platform, traderId, cacheKey, result)

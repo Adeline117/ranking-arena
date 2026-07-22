@@ -87,8 +87,18 @@ describe('redis-layer', () => {
 
     it('should build trader history key', () => {
       expect(CACHE_KEY_PATTERNS.traderHistory.keyBuilder('binance', '123', '30D')).toBe(
-        'trader:history:binance:123:30D'
+        'trader:history-evidence:v1:binance:123:30D'
       )
+      expect(CACHE_KEY_PATTERNS.traderHistory.pattern).toBe('trader:history-evidence:v1:*')
+      expect(CACHE_KEY_PATTERNS.traderHistory.keyBuilder('binance:evil', '123:456', '30D')).toBe(
+        'trader:history-evidence:v1:binance%3Aevil:123%3A456:30D'
+      )
+      // The retired builder always starts `trader:history:`. Even its former
+      // arbitrary period slot cannot manufacture the new root namespace.
+      const retiredCollision = 'trader:history:binance:123:v2:30D'
+      const evidenceKey = CACHE_KEY_PATTERNS.traderHistory.keyBuilder('binance', '123', '30D')
+      expect(evidenceKey).not.toBe(retiredCollision)
+      expect(evidenceKey).not.toMatch(/^trader:history:/)
     })
   })
 
