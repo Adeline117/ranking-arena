@@ -756,6 +756,16 @@ describe('Tier-A metric trust transaction writer', () => {
     const observationCall = query.mock.calls.find(([sql]) =>
       String(sql).includes('INSERT INTO arena.metric_trust_observations')
     )!
+    const observationSql = String(observationCall[0])
+    expect(observationSql).toMatch(
+      /window_state,\s+unit_state,\s+freshness_state,\s+blocking_reasons,\s+source_page_ordinal\)/
+    )
+    expect(observationSql).toMatch(
+      /input\.window_state,\s+input\.unit_state,\s+input\.freshness_state,\s+input\.blocking_reasons,\s+input\.source_page_ordinal\s+FROM/
+    )
+    expect(observationSql).toMatch(
+      /FROM jsonb_to_recordset\(\$1::jsonb\) AS input\([\s\S]*window_end timestamptz,\s+source_page_ordinal integer\s+\)/
+    )
     const observations = JSON.parse(String(observationCall[1][0])) as Array<{
       exchange_trader_id: string
       contract_id: string
@@ -1331,6 +1341,46 @@ describe('Tier-A metric trust transaction writer', () => {
         replayed: true,
       },
     })
+  })
+
+  it.each([
+    {
+      caseName: 'a verified source-page ordinal changes from 1 to 2',
+      observationId: '201',
+      sourcePageOrdinal: '2',
+    },
+    {
+      caseName: 'an unknown source-page ordinal changes from null to 1',
+      observationId: '203',
+      sourcePageOrdinal: '1',
+    },
+  ])('rejects an idempotent retry when $caseName', async ({ observationId, sourcePageOrdinal }) => {
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: trustFixture(),
+    })
+    const baseQuery = reconciliationQuery(prepared)
+    const query = jest.fn(async (sqlInput: unknown, params?: unknown[]) => {
+      const result = await baseQuery(sqlInput, params)
+      if (String(sqlInput).includes('FROM arena.metric_trust_observations AS observation')) {
+        return {
+          ...result,
+          rows: (result.rows as Array<Record<string, unknown>>).map((observation) =>
+            observation.id === observationId
+              ? { ...observation, source_page_ordinal: sourcePageOrdinal }
+              : observation
+          ),
+        }
+      }
+      return result
+    })
+
+    await expect(reconcileLeaderboardMetricTrust(queryClient(query), prepared)).rejects.toThrow(
+      'existing metric observation mismatch'
+    )
   })
 
   it('rejects an attempt-bound replay when the latest terminal outcome no longer authorizes it', async () => {

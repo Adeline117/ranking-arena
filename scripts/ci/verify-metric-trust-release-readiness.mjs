@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+
 /**
  * Fail closed before a Vercel candidate is built when the production database
  * has not completed the metric-trust dependency chain. The service-role RPC is
@@ -9,13 +13,19 @@
 
 export const METRIC_TRUST_READINESS_CONTRACT = 'arena.metric-trust-release-readiness@1'
 export const PRODUCTION_SUPABASE_ORIGIN = 'https://iknktzifjdyujdccyhsv.supabase.co'
+export const METRIC_TRUST_RELEASE_MIGRATION_PATH =
+  'supabase/migrations/20260722054000_metric_trust_source_page_lineage.sql'
 
-const TRANSIENT_STATUS = new Set([429, 502, 503, 504])
+// PostgREST can briefly answer 404 while its schema cache reloads after the
+// migration's NOTIFY. Retry it, but still fail closed after the bounded loop.
+const TRANSIENT_STATUS = new Set([404, 429, 502, 503, 504])
+const SHA256 = /^[0-9a-f]{64}$/
 const READINESS_KEYS = [
   'contract',
   'legacy_complete_verified_count',
   'missing',
   'ready',
+  'release_migration_sha256',
   'source_page_lineage_column',
 ]
 
@@ -23,7 +33,11 @@ function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-export function validateMetricTrustReadiness(payload) {
+export function metricTrustReleaseMigrationSha256(contents) {
+  return createHash('sha256').update(contents).digest('hex')
+}
+
+export function validateMetricTrustReadiness(payload, expectedReleaseMigrationSha256) {
   if (!isRecord(payload)) return { ready: false, reason: 'readiness payload is not an object' }
   if (JSON.stringify(Object.keys(payload).sort()) !== JSON.stringify(READINESS_KEYS)) {
     return { ready: false, reason: 'readiness payload keys are malformed' }
@@ -49,6 +63,19 @@ export function validateMetricTrustReadiness(payload) {
   if (typeof payload.ready !== 'boolean') {
     return { ready: false, reason: 'readiness ready flag is malformed' }
   }
+  if (
+    typeof expectedReleaseMigrationSha256 !== 'string' ||
+    !SHA256.test(expectedReleaseMigrationSha256)
+  ) {
+    return { ready: false, reason: 'release migration source digest is malformed' }
+  }
+  if (
+    typeof payload.release_migration_sha256 !== 'string' ||
+    !SHA256.test(payload.release_migration_sha256) ||
+    payload.release_migration_sha256 !== expectedReleaseMigrationSha256
+  ) {
+    return { ready: false, reason: 'release migration ledger digest is not exact main' }
+  }
   if (payload.source_page_lineage_column !== true) {
     return { ready: false, reason: 'source-page lineage is not durably available' }
   }
@@ -67,6 +94,7 @@ export function validateMetricTrustReadiness(payload) {
 export async function verifyMetricTrustReleaseReadiness({
   env = process.env,
   fetchImpl = globalThis.fetch,
+  readFileImpl = readFile,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 } = {}) {
   const rawOrigin = env.NEXT_PUBLIC_SUPABASE_URL?.trim()
@@ -86,6 +114,15 @@ export async function verifyMetricTrustReleaseReadiness({
   }
   if (typeof fetchImpl !== 'function') throw new Error('fetch is unavailable')
 
+  let expectedReleaseMigrationSha256
+  try {
+    const workspace = env.GITHUB_WORKSPACE?.trim() || process.cwd()
+    const migration = await readFileImpl(resolve(workspace, METRIC_TRUST_RELEASE_MIGRATION_PATH))
+    expectedReleaseMigrationSha256 = metricTrustReleaseMigrationSha256(migration)
+  } catch {
+    throw new Error('release migration source is unavailable')
+  }
+
   const endpoint = `${origin}/rest/v1/rpc/arena_metric_trust_release_readiness`
   let lastFailure = 'readiness endpoint did not respond'
   for (let attempt = 1; attempt <= 4; attempt += 1) {
@@ -101,7 +138,10 @@ export async function verifyMetricTrustReleaseReadiness({
         signal: AbortSignal.timeout(10_000),
       })
       if (response.ok) {
-        const result = validateMetricTrustReadiness(await response.json())
+        const result = validateMetricTrustReadiness(
+          await response.json(),
+          expectedReleaseMigrationSha256
+        )
         if (!result.ready) throw new Error(result.reason)
         return result
       }
@@ -110,7 +150,7 @@ export async function verifyMetricTrustReleaseReadiness({
     } catch (error) {
       lastFailure = error instanceof Error ? error.message : 'readiness request failed'
       if (
-        /contract|malformed|missing|lineage|quarantine|inconsistent|credentials|origin|project/.test(
+        /contract|malformed|missing|lineage|quarantine|inconsistent|migration|credentials|origin|project/.test(
           lastFailure
         )
       ) {

@@ -4,21 +4,27 @@ import test from 'node:test'
 import {
   METRIC_TRUST_READINESS_CONTRACT,
   PRODUCTION_SUPABASE_ORIGIN,
+  metricTrustReleaseMigrationSha256,
   validateMetricTrustReadiness,
   verifyMetricTrustReleaseReadiness,
 } from '../ci/verify-metric-trust-release-readiness.mjs'
+
+const RELEASE_MIGRATION = Buffer.from('reviewed metric-trust release migration\n')
+const RELEASE_MIGRATION_SHA256 = metricTrustReleaseMigrationSha256(RELEASE_MIGRATION)
+const readReleaseMigration = async () => RELEASE_MIGRATION
 
 const readyPayload = (overrides = {}) => ({
   contract: METRIC_TRUST_READINESS_CONTRACT,
   ready: true,
   missing: [],
   legacy_complete_verified_count: 0,
+  release_migration_sha256: RELEASE_MIGRATION_SHA256,
   source_page_lineage_column: true,
   ...overrides,
 })
 
 test('metric-trust readiness requires the exact complete contract', () => {
-  assert.equal(validateMetricTrustReadiness(readyPayload()).ready, true)
+  assert.equal(validateMetricTrustReadiness(readyPayload(), RELEASE_MIGRATION_SHA256).ready, true)
   for (const payload of [
     null,
     readyPayload({ contract: 'wrong' }),
@@ -27,11 +33,13 @@ test('metric-trust readiness requires the exact complete contract', () => {
     readyPayload({ missing: 'none' }),
     readyPayload({ legacy_complete_verified_count: 1 }),
     readyPayload({ legacy_complete_verified_count: -1 }),
+    readyPayload({ release_migration_sha256: '0'.repeat(64) }),
     readyPayload({ source_page_lineage_column: false }),
     readyPayload({ extra: true }),
   ]) {
-    assert.equal(validateMetricTrustReadiness(payload).ready, false)
+    assert.equal(validateMetricTrustReadiness(payload, RELEASE_MIGRATION_SHA256).ready, false)
   }
+  assert.equal(validateMetricTrustReadiness(readyPayload()).ready, false)
 })
 
 test('metric-trust readiness distinguishes missing objects, quarantine, and inconsistent flags', () => {
@@ -40,7 +48,8 @@ test('metric-trust readiness distinguishes missing objects, quarantine, and inco
       readyPayload({
         ready: false,
         legacy_complete_verified_count: 1,
-      })
+      }),
+      RELEASE_MIGRATION_SHA256
     ),
     { ready: false, reason: 'legacy complete observations require quarantine' }
   )
@@ -49,14 +58,18 @@ test('metric-trust readiness distinguishes missing objects, quarantine, and inco
       readyPayload({
         ready: false,
         missing: ['arena.metric_trust_observations'],
-      })
+      }),
+      RELEASE_MIGRATION_SHA256
     ),
     { ready: false, reason: 'required metric-trust database objects are missing' }
   )
-  assert.deepEqual(validateMetricTrustReadiness(readyPayload({ ready: false })), {
-    ready: false,
-    reason: 'readiness ready flag is inconsistent',
-  })
+  assert.deepEqual(
+    validateMetricTrustReadiness(readyPayload({ ready: false }), RELEASE_MIGRATION_SHA256),
+    {
+      ready: false,
+      reason: 'readiness ready flag is inconsistent',
+    }
+  )
 })
 
 test('release verification is project-bound and sends credentials only as headers', async () => {
@@ -66,6 +79,7 @@ test('release verification is project-bound and sends credentials only as header
       NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_ORIGIN,
       SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
     },
+    readFileImpl: readReleaseMigration,
     fetchImpl: async (...args) => {
       calls.push(args)
       return { ok: true, status: 200, json: async () => readyPayload() }
@@ -84,7 +98,7 @@ test('release verification is project-bound and sends credentials only as header
   assert.doesNotMatch(calls[0][0], /test-service-role-key/)
 })
 
-test('release verification fails closed on missing credentials, wrong project, or missing RPC', async () => {
+test('release verification fails closed on credentials, project, or a persistently missing RPC', async () => {
   let fetchCalls = 0
   const fetchImpl = async () => {
     fetchCalls += 1
@@ -112,14 +126,15 @@ test('release verification fails closed on missing credentials, wrong project, o
         SUPABASE_SERVICE_ROLE_KEY: 'secret',
       },
       fetchImpl,
+      readFileImpl: readReleaseMigration,
       sleep: async () => {},
     }),
     /HTTP 404/
   )
-  assert.equal(fetchCalls, 1)
+  assert.equal(fetchCalls, 4)
 })
 
-test('release verification retries transient responses without accepting malformed success', async () => {
+test('release verification retries schema-cache and transient responses without accepting malformed success', async () => {
   let attempts = 0
   const env = {
     NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_ORIGIN,
@@ -127,9 +142,11 @@ test('release verification retries transient responses without accepting malform
   }
   const result = await verifyMetricTrustReleaseReadiness({
     env,
+    readFileImpl: readReleaseMigration,
     fetchImpl: async () => {
       attempts += 1
-      if (attempts < 3) return { ok: false, status: 503 }
+      if (attempts === 1) return { ok: false, status: 404 }
+      if (attempts === 2) return { ok: false, status: 503 }
       return { ok: true, status: 200, json: async () => readyPayload() }
     },
     sleep: async () => {},
@@ -140,9 +157,26 @@ test('release verification retries transient responses without accepting malform
   await assert.rejects(
     verifyMetricTrustReleaseReadiness({
       env,
+      readFileImpl: readReleaseMigration,
       fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ready: true }) }),
       sleep: async () => {},
     }),
     /payload keys are malformed/
+  )
+})
+
+test('release verification fails closed when the committed migration cannot be read', async () => {
+  await assert.rejects(
+    verifyMetricTrustReleaseReadiness({
+      env: {
+        NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_ORIGIN,
+        SUPABASE_SERVICE_ROLE_KEY: 'secret',
+      },
+      readFileImpl: async () => {
+        throw new Error('missing')
+      },
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => readyPayload() }),
+    }),
+    /release migration source is unavailable/
   )
 })
