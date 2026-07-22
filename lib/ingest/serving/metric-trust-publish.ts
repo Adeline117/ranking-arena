@@ -24,7 +24,12 @@ import {
   type LeaderboardAcquisitionManifest,
   type LeaderboardAcquisitionManifestV3,
 } from '../acquisition-manifest'
-import type { ParsedLeaderboardRow, RankingTimeframe, SourceRow } from '../core/types'
+import type {
+  ParsedLeaderboardRow,
+  ParsedMetricFieldSource,
+  RankingTimeframe,
+  SourceRow,
+} from '../core/types'
 import {
   assessLeaderboardNativeWindowRequest,
   type NativeWindowRequestEvidence,
@@ -441,6 +446,8 @@ export function prepareLeaderboardMetricTrust(
   const sourceAsOf = manifest.source_pages
     .map((sourcePage) => canonicalTimestamp(sourcePage.fetched_at, 'source page fetched_at'))
     .sort()[0]
+  // Diagnostic estimate only. Fetch time cannot attest when the provider
+  // computed its native-period aggregate, so observations remain window-unknown.
   const windowStart = new Date(
     Date.parse(sourceAsOf) - timeframe * 24 * 60 * 60 * 1000
   ).toISOString()
@@ -572,76 +579,44 @@ function buildObservationInputs(
     for (const contract of contracts) {
       const value = metricValue(row, contract.metric)
       const claim = row.headlineMetricSources?.[contract.metric]
-      const exactLineage = claim?.fieldPath === contract.field_path
+      const lineage = assessMetricLineage(prepared, claim, contract.field_path)
       let sourceAsOf = prepared.sourceAsOf
       let windowStart = prepared.windowStart
-      let nativeWindowVerified = prepared.nativeWindowEvidence.state === 'verified'
-      let freshnessVerified = true
+      let freshnessVerified = false
       const blockingReasons: ObservationInput['blocking_reasons'] = []
       if (value === null) blockingReasons.push({ code: 'value_unknown', state: 'unknown' })
-      if (!exactLineage) {
-        blockingReasons.push({
-          code: claim ? 'field_lineage_mismatch' : 'field_lineage_unknown',
-          state: 'unknown',
-        })
-      }
-      if (prepared.nativeWindowEvidence.state !== 'verified') {
-        blockingReasons.push({
-          code: prepared.nativeWindowEvidence.reason,
-          state: 'unknown',
-        })
-      }
-      if (exactLineage && sourcePageLineageConflict) {
-        nativeWindowVerified = false
-        freshnessVerified = false
+      if (lineage.state === 'unknown') {
+        blockingReasons.push({ code: lineage.code, state: 'unknown' })
+      } else if (sourcePageLineageConflict) {
         blockingReasons.push({
           code: 'source_page_lineage_conflict',
           state: 'unknown',
         })
-      } else if (exactLineage) {
-        const transformation = prepared.manifest.parser_input.transformation
-        const sourcePageOrdinal = claim?.sourcePageOrdinal
-        const sourcePage =
-          transformation.kind === 'identity_projection' &&
-          sourcePageOrdinal !== undefined &&
-          Number.isSafeInteger(sourcePageOrdinal) &&
-          !Object.is(sourcePageOrdinal, -0) &&
-          sourcePageOrdinal > 0 &&
-          transformation.source_page_ordinals.includes(sourcePageOrdinal)
-            ? prepared.manifest.source_pages[sourcePageOrdinal - 1]
-            : undefined
-        if (sourcePage && sourcePage.ordinal === sourcePageOrdinal) {
-          sourceAsOf = canonicalTimestamp(sourcePage.fetched_at, 'source page fetched_at')
-          // The database requires nominal bounds even while window_state is
-          // unknown. Page fetch time proves capture timing only; it does not
-          // promote Binance's unavailable provider window boundary.
-          windowStart = new Date(
-            Date.parse(sourceAsOf) - prepared.timeframe * 24 * 60 * 60 * 1000
-          ).toISOString()
-        } else {
-          nativeWindowVerified = false
-          freshnessVerified = false
-          blockingReasons.push({
-            code:
-              sourcePageOrdinal === undefined
-                ? 'source_page_lineage_unknown'
-                : 'source_page_lineage_invalid',
-            state: 'unknown',
-          })
-        }
+      } else {
+        sourceAsOf = lineage.sourceAsOf
+        // The schema requires nominal bounds even while window_state is
+        // unknown. Page fetch time proves capture timing only; it does not
+        // attest the provider's native-period aggregate boundary.
+        windowStart = new Date(
+          Date.parse(sourceAsOf) - prepared.timeframe * 24 * 60 * 60 * 1000
+        ).toISOString()
+        freshnessVerified = true
       }
-      const complete = value !== null && exactLineage && nativeWindowVerified
+      // Request-body evidence can prove the requested 7D/30D/90D label, but
+      // it cannot prove the provider's computed_at/start/end boundary. Keep
+      // this publisher shadow-only until a distinct boundary authority exists.
+      blockingReasons.push({ code: 'native_window_boundary_unverified', state: 'unknown' })
       observations.push({
         contract_id: contract.id,
         trader_id: traderId,
         exchange_trader_id: row.exchangeTraderId,
         value,
-        quality: complete ? 'complete' : 'unknown',
+        quality: 'unknown',
         history_state: 'source_owned',
         price_state: 'source_owned',
         cost_basis_state: 'source_owned',
         population_state: 'verified',
-        window_state: nativeWindowVerified ? 'verified' : 'unknown',
+        window_state: 'unknown',
         unit_state: 'verified',
         freshness_state: freshnessVerified ? 'verified' : 'unknown',
         blocking_reasons: blockingReasons,
@@ -652,6 +627,53 @@ function buildObservationInputs(
     }
   }
   return observations
+}
+
+type MetricLineageAssessment =
+  | { state: 'verified'; sourceAsOf: string }
+  | {
+      state: 'unknown'
+      code:
+        | 'field_lineage_unknown'
+        | 'field_lineage_mismatch'
+        | 'source_page_lineage_unknown'
+        | 'source_page_lineage_mismatch'
+    }
+
+function assessMetricLineage(
+  prepared: PreparedLeaderboardMetricTrust,
+  claim: ParsedMetricFieldSource | undefined,
+  expectedFieldPath: string
+): MetricLineageAssessment {
+  if (!claim) return { state: 'unknown', code: 'field_lineage_unknown' }
+  if (claim.fieldPath !== expectedFieldPath) {
+    return { state: 'unknown', code: 'field_lineage_mismatch' }
+  }
+  if (claim.sourcePageOrdinal === undefined) {
+    return { state: 'unknown', code: 'source_page_lineage_unknown' }
+  }
+
+  const transformation = prepared.manifest.parser_input.transformation
+  if (transformation.kind !== 'identity_projection') {
+    return { state: 'unknown', code: 'source_page_lineage_unknown' }
+  }
+
+  const ordinal = claim.sourcePageOrdinal
+  if (!Number.isSafeInteger(ordinal) || Object.is(ordinal, -0) || ordinal < 1) {
+    return { state: 'unknown', code: 'source_page_lineage_mismatch' }
+  }
+  const sourcePage = prepared.manifest.source_pages[ordinal - 1]
+  if (
+    !transformation.source_page_ordinals.includes(ordinal) ||
+    sourcePage?.ordinal !== ordinal ||
+    sourcePage.stored_page_index !== ordinal
+  ) {
+    return { state: 'unknown', code: 'source_page_lineage_mismatch' }
+  }
+  return {
+    state: 'verified',
+    sourceAsOf: canonicalTimestamp(sourcePage.fetched_at, 'source page fetched_at'),
+  }
 }
 
 function rawRefForRole(

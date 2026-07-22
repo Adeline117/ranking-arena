@@ -96,9 +96,12 @@ const BINANCE_NATIVE_PERIOD_SOURCES: Readonly<Record<string, BinanceNativePeriod
 
 export type NativeWindowRequestEvidence =
   | {
-      state: 'verified'
+      /** The request body matched; this is not provider window-boundary authority. */
+      state: 'request_verified'
       contractId: typeof BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT
       semantics: 'provider_native_period_aggregate'
+      reason: 'native_window_boundary_unverified'
+      diagnostic: 'provider_window_boundary_unavailable'
     }
   | {
       state: 'unknown'
@@ -259,9 +262,9 @@ export function assessLeaderboardNativeWindowRequest(
     return unknownEvidence('page_timestamp_invalid')
   }
   if (Math.max(...pageTimes) - Math.min(...pageTimes) > BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS) {
-    // Rows do not yet retain their source-page ordinal. Beyond the contract's
-    // five-minute end-lag tolerance, one run-wide timestamp would overstate
-    // the exact window of late pages, so the whole capture stays unknown.
+    // Even though the framework retains source-page ordinals, the provider
+    // does not expose an aggregate boundary for any page. One run-wide fetch
+    // timestamp would still overstate the exact window of late pages.
     return unknownEvidence('page_time_span_exceeds_tolerance')
   }
   for (const [index, page] of manifest.source_pages.entries()) {
@@ -302,5 +305,11 @@ export function assessLeaderboardNativeWindowRequest(
   // Treating fetch time as that boundary would falsely satisfy Arena's strict
   // max_window_end_lag contract even though the board may refresh later. Keep
   // the request evidence, but do not promote it to exact-window authority.
-  return unknownEvidence('provider_window_boundary_unavailable')
+  return {
+    state: 'request_verified',
+    contractId: BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
+    semantics: contract.windowSemantics,
+    reason: 'native_window_boundary_unverified',
+    diagnostic: 'provider_window_boundary_unavailable',
+  }
 }
