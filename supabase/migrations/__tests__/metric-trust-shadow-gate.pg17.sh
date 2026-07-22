@@ -6,6 +6,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260721120000_metric_trust_shadow_gate.sql"
 IDENTITY_MIGRATION="$ROOT_DIR/supabase/migrations/20260721150000_metric_trust_raw_artifact_identity.sql"
 SCORE_INPUT_MIGRATION="$ROOT_DIR/supabase/migrations/20260721180903_metric_rankable_score_inputs_shadow.sql"
+LEDGER_MIGRATION="$ROOT_DIR/supabase/migrations/20260722030000_durable_leaderboard_acquisition_attempt_ledger.sql"
+COMPAT_MIGRATION="$ROOT_DIR/supabase/migrations/20260722040000_leaderboard_acquisition_manifest_v3_compat.sql"
+TERMINAL_FENCE_MIGRATION="$ROOT_DIR/supabase/migrations/20260722042000_leaderboard_terminal_publication_fence.sql"
+AUTHORITY_MIGRATION="$ROOT_DIR/supabase/migrations/20260722050000_metric_trust_attempt_outcome_authority.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -44,8 +48,20 @@ psql_cmd() {
 expect_failure() {
   local label="$1"
   local sql="$2"
-  if psql_cmd -q -c "$sql" >"$ERROR_FILE" 2>&1; then
+  local expected="${3:-}"
+  local sqlstate="${4:-}"
+  if psql_cmd -q -v VERBOSITY=verbose -c "$sql" >"$ERROR_FILE" 2>&1; then
     echo "$label unexpectedly succeeded" >&2
+    exit 1
+  fi
+  if [[ -n "$expected" ]] && [[ "$(<"$ERROR_FILE")" != *"$expected"* ]]; then
+    echo "$label failed for the wrong reason; expected: $expected" >&2
+    cat "$ERROR_FILE" >&2
+    exit 1
+  fi
+  if [[ -n "$sqlstate" ]] && [[ "$(<"$ERROR_FILE")" != *"$sqlstate"* ]]; then
+    echo "$label returned the wrong SQLSTATE; expected: $sqlstate" >&2
+    cat "$ERROR_FILE" >&2
     exit 1
   fi
 }
@@ -66,15 +82,19 @@ psql_cmd -q <<'SQL'
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN BYPASSRLS;
+CREATE ROLE leaked_default_role NOLOGIN;
+CREATE ROLE postgres NOLOGIN SUPERUSER;
 CREATE SCHEMA arena;
 
 CREATE TABLE arena.sources (
   id smallint PRIMARY KEY,
   slug text UNIQUE NOT NULL,
+  adapter_slug text NOT NULL,
   status text NOT NULL,
   serving_mode text NOT NULL,
   currency text NOT NULL,
   product_type text NOT NULL,
+  fetch_region text NOT NULL,
   meta jsonb NOT NULL DEFAULT '{}',
   timeframes_native integer[] NOT NULL DEFAULT '{}',
   timeframes_derived integer[] NOT NULL DEFAULT '{}'
@@ -126,11 +146,18 @@ CREATE TABLE arena.raw_objects (
 );
 
 INSERT INTO arena.sources (
-  id, slug, status, serving_mode, currency, product_type, meta,
+  id, slug, adapter_slug, status, serving_mode, currency, product_type,
+  fetch_region, meta,
   timeframes_native, timeframes_derived
 ) VALUES
-  (1, 'binance_futures', 'active', 'serving', 'USDT', 'futures', '{}', '{30}', '{}'),
-  (2, 'binance_web3_bsc', 'active', 'serving', 'USDT', 'onchain', '{}', '{30}', '{}');
+  (
+    1, 'binance_futures', 'binance', 'active', 'serving', 'USDT', 'futures',
+    'vps_sg', '{}', '{30}', '{}'
+  ),
+  (
+    2, 'binance_web3_bsc', 'binance_web3', 'active', 'serving', 'USDT', 'onchain',
+    'vps_sg', '{}', '{30}', '{}'
+  );
 
 GRANT USAGE ON SCHEMA arena TO service_role;
 GRANT SELECT ON ALL TABLES IN SCHEMA arena TO service_role;
@@ -139,6 +166,48 @@ SQL
 psql_cmd -q -f "$MIGRATION"
 psql_cmd -q -f "$IDENTITY_MIGRATION"
 psql_cmd -q -f "$SCORE_INPUT_MIGRATION"
+psql_cmd -q -f "$LEDGER_MIGRATION"
+psql_cmd -q -f "$COMPAT_MIGRATION"
+psql_cmd -q -f "$TERMINAL_FENCE_MIGRATION"
+psql_cmd -q -c \
+  'ALTER DEFAULT PRIVILEGES GRANT EXECUTE ON FUNCTIONS TO leaked_default_role;'
+psql_cmd -q -f "$AUTHORITY_MIGRATION"
+
+AUTHORITY_ACL="$(
+  psql_cmd -Atqc "
+    SELECT
+      pg_catalog.has_function_privilege(
+        'leaked_default_role',
+        'arena.lock_leaderboard_acquisition_source_window(integer,integer)',
+        'EXECUTE'
+      ),
+      pg_catalog.has_function_privilege(
+        'leaked_default_role',
+        'arena.validate_metric_trust_attempt_outcome_authority()',
+        'EXECUTE'
+      ),
+      (
+        SELECT pg_catalog.count(*)
+          FROM pg_catalog.pg_proc AS function_row
+          CROSS JOIN LATERAL pg_catalog.aclexplode(
+            COALESCE(
+              function_row.proacl,
+              pg_catalog.acldefault('f', function_row.proowner)
+            )
+          ) AS privilege_row
+         WHERE function_row.oid IN (
+                 'arena.lock_leaderboard_acquisition_source_window(integer,integer)'::pg_catalog.regprocedure,
+                 'arena.validate_metric_trust_attempt_outcome_authority()'::pg_catalog.regprocedure
+               )
+           AND privilege_row.privilege_type = 'EXECUTE'
+           AND privilege_row.grantee <> function_row.proowner
+      );
+  "
+)"
+if [[ "$AUTHORITY_ACL" != "f|f|0" ]]; then
+  echo "metric-trust authority function ACL leaked: $AUTHORITY_ACL" >&2
+  exit 1
+fi
 
 psql_cmd -q <<'SQL'
 INSERT INTO arena.traders (
@@ -166,7 +235,10 @@ INSERT INTO arena.raw_objects (
   (
     1, 'tier_a_manifest', 30, 'binance/run-1/manifest.json.gz', 10, repeat('b', 64),
     false,
-    '{"raw_integrity":{"hash_algorithm":"sha256","hash_scope":"json_utf8"}}',
+    '{
+      "data_contract":"arena.ingest.leaderboard-acquisition-manifest@2",
+      "raw_integrity":{"hash_algorithm":"sha256","hash_scope":"json_utf8"}
+    }',
     repeat('b', 64),
     'population_manifest',
     statement_timestamp() - interval '1 minute'
@@ -963,6 +1035,699 @@ expect_failure \
   "anonymous score-input canary execution" \
   "SET ROLE anon;
    SELECT public.arena_metric_rankable_score_inputs_shadow_json('30D', 1000, 48);"
+
+# Exercise the real 030000 attempt ledger, 040000 v2/v3 compatibility layer,
+# 042000 terminal serializer, and 050000 database authority in the same
+# PostgreSQL 17 process as the metric trust views above. The helpers only
+# construct deterministic test evidence;
+# every attempt, terminal outcome, trust INSERT, and rankability decision still
+# passes through the production tables, RPCs, triggers, and views.
+psql_cmd -q <<'SQL'
+CREATE TABLE public.metric_trust_v3_pairs (
+  attempt_id uuid PRIMARY KEY,
+  snapshot_id bigint NOT NULL UNIQUE,
+  capture_started_at timestamptz NOT NULL,
+  capture_completed_at timestamptz NOT NULL,
+  source_run_id text NOT NULL UNIQUE,
+  payload_id bigint NOT NULL UNIQUE,
+  manifest_id bigint NOT NULL UNIQUE
+);
+
+CREATE FUNCTION public.prepare_metric_trust_v3_pair(
+  p_attempt_id uuid,
+  p_snapshot_id bigint,
+  p_run_seed text,
+  p_path_prefix text
+)
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_attempt arena.leaderboard_acquisition_attempts%ROWTYPE;
+  v_completed_at timestamptz := pg_catalog.clock_timestamp();
+  v_source_run_id text := pg_catalog.md5(p_run_seed)
+    || pg_catalog.md5(p_run_seed || ':metric-trust-v3');
+  v_payload_id bigint;
+  v_manifest_id bigint;
+  v_attempt_summary jsonb;
+BEGIN
+  SELECT *
+    INTO STRICT v_attempt
+    FROM arena.leaderboard_acquisition_attempts
+   WHERE attempt_id = p_attempt_id;
+
+  IF v_attempt.capture_contract IS DISTINCT FROM
+     'arena.ingest.leaderboard-acquisition-manifest@3' THEN
+    RAISE EXCEPTION 'test v3 pair requires a manifest@3 attempt';
+  END IF;
+
+  v_attempt_summary := pg_catalog.jsonb_build_object(
+    'binding_contract', v_attempt.attempt_binding_contract,
+    'attempt_id', v_attempt.attempt_id,
+    'attempt_seq', v_attempt.attempt_seq,
+    'runner_git_sha', v_attempt.runner_git_sha,
+    'capture_started_at', v_attempt.recorded_started_at,
+    'capture_completed_at', v_completed_at,
+    'capture_evidence_state', 'verified',
+    'termination_reason', 'reported_population_reached',
+    'source_page_count', 1,
+    'population_report_state', 'consistent',
+    'reported_population', 1,
+    'page_count_report_state', 'consistent',
+    'reported_page_count', 1,
+    'observed_population', 1,
+    'accepted_population', 1,
+    'rejected_row_count', 0,
+    'deduplicated_row_count', 0,
+    'caller_limited', false,
+    'safety_limited', false,
+    'acquisition_state', 'complete',
+    'population_state', 'verified'
+  );
+
+  INSERT INTO arena.raw_objects (
+    source_id, job_type, trader_id, timeframe, fetched_at, storage_path,
+    bytes, content_hash, quarantined, meta, source_run_id, trust_artifact_role
+  ) VALUES (
+    v_attempt.source_id,
+    'tier_a',
+    NULL,
+    v_attempt.timeframe,
+    v_completed_at,
+    p_path_prefix || '/payload.json.gz',
+    100,
+    pg_catalog.repeat('a', 64),
+    false,
+    pg_catalog.jsonb_build_object(
+      'surface', 'tier_a_leaderboard',
+      'source_run_id', v_source_run_id,
+      'observation_cycle_id', v_attempt.observation_cycle_id,
+      'acquisition_attempt', v_attempt_summary,
+      'raw_integrity', pg_catalog.jsonb_build_object(
+        'hash_algorithm', 'sha256',
+        'hash_scope', 'json_utf8',
+        'serialization_contract', 'arena.strict-canonical-json@1'
+      )
+    ),
+    v_source_run_id,
+    'source_payload'
+  ) RETURNING id INTO STRICT v_payload_id;
+
+  INSERT INTO arena.raw_objects (
+    source_id, job_type, trader_id, timeframe, fetched_at, storage_path,
+    bytes, content_hash, quarantined, meta, source_run_id, trust_artifact_role
+  ) VALUES (
+    v_attempt.source_id,
+    'tier_a_manifest',
+    NULL,
+    v_attempt.timeframe,
+    v_completed_at,
+    p_path_prefix || '/manifest.json.gz',
+    100,
+    v_source_run_id,
+    false,
+    pg_catalog.jsonb_build_object(
+      'surface', 'tier_a_leaderboard',
+      'source_run_id', v_source_run_id,
+      'observation_cycle_id', v_attempt.observation_cycle_id,
+      'data_contract', v_attempt.capture_contract,
+      'acquisition_attempt', v_attempt_summary,
+      'raw_integrity', pg_catalog.jsonb_build_object(
+        'hash_algorithm', 'sha256',
+        'hash_scope', 'json_utf8',
+        'serialization_contract', 'arena.strict-canonical-json@1'
+      )
+    ),
+    v_source_run_id,
+    'population_manifest'
+  ) RETURNING id INTO STRICT v_manifest_id;
+
+  INSERT INTO arena.leaderboard_snapshots (
+    id, source_id, timeframe, scraped_at, actual_count,
+    count_check_passed, is_derived, raw_object_id
+  ) VALUES (
+    p_snapshot_id,
+    v_attempt.source_id,
+    v_attempt.timeframe,
+    v_completed_at,
+    1,
+    true,
+    false,
+    v_payload_id
+  );
+
+  INSERT INTO arena.leaderboard_entries (
+    scraped_at, snapshot_id, trader_id, timeframe, rank, currency
+  ) VALUES (
+    v_completed_at, p_snapshot_id, 10, v_attempt.timeframe, 1, 'USDT'
+  );
+
+  INSERT INTO public.metric_trust_v3_pairs (
+    attempt_id, snapshot_id, capture_started_at, capture_completed_at,
+    source_run_id, payload_id, manifest_id
+  ) VALUES (
+    p_attempt_id, p_snapshot_id, v_attempt.recorded_started_at, v_completed_at,
+    v_source_run_id, v_payload_id, v_manifest_id
+  );
+END
+$function$;
+
+CREATE FUNCTION public.finish_metric_trust_v3_success(p_attempt_id uuid)
+RETURNS bigint
+LANGUAGE sql
+VOLATILE
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT outcome.attempt_seq
+    FROM public.metric_trust_v3_pairs AS pair
+    CROSS JOIN LATERAL arena.finish_leaderboard_acquisition_attempt(
+      pair.attempt_id,
+      'complete', 'complete', 'verified', 'verified',
+      'reported_population_reached',
+      pair.capture_started_at, pair.capture_completed_at,
+      pair.source_run_id, pair.payload_id, pair.manifest_id, NULL,
+      1, 'consistent', 1, 1, 'consistent',
+      1, 1, 0, 0, false, false, NULL, NULL
+    ) AS outcome
+   WHERE pair.attempt_id = p_attempt_id
+$function$;
+
+CREATE FUNCTION public.finish_metric_trust_v3_failure(p_attempt_id uuid)
+RETURNS bigint
+LANGUAGE sql
+VOLATILE
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT outcome.attempt_seq
+    FROM arena.finish_leaderboard_acquisition_attempt(
+      p_attempt_id,
+      'processing_failed', 'unknown', 'unknown', 'unassessed',
+      NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+      false, false, 'upstream_fetch', 'upstream_unavailable'
+    ) AS outcome
+$function$;
+
+CREATE FUNCTION public.insert_metric_trust_v3_run(p_attempt_id uuid)
+RETURNS text
+LANGUAGE plpgsql
+VOLATILE
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_source_run_id text;
+BEGIN
+  INSERT INTO arena.metric_trust_runs (
+    source_run_id, source_id, timeframe, snapshot_id, snapshot_scraped_at,
+    population_raw_object_id, manifest_raw_object_id,
+    started_at, completed_at, reported_population, fetched_population,
+    caller_limited, acquisition_state, population_state
+  )
+  SELECT
+    pair.source_run_id,
+    snapshot.source_id,
+    snapshot.timeframe,
+    snapshot.id,
+    snapshot.scraped_at,
+    pair.payload_id,
+    pair.manifest_id,
+    pair.capture_started_at,
+    pair.capture_completed_at,
+    1,
+    1,
+    false,
+    'complete',
+    'verified'
+  FROM public.metric_trust_v3_pairs AS pair
+  JOIN arena.leaderboard_snapshots AS snapshot
+    ON snapshot.id = pair.snapshot_id
+  WHERE pair.attempt_id = p_attempt_id
+  RETURNING source_run_id INTO STRICT v_source_run_id;
+
+  RETURN v_source_run_id;
+END
+$function$;
+
+CREATE FUNCTION public.add_metric_trust_v3_observations(p_attempt_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+VOLATILE
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  WITH pair AS (
+    SELECT *
+      FROM public.metric_trust_v3_pairs
+     WHERE attempt_id = p_attempt_id
+  ), contracts AS (
+    SELECT id, metric, field_path, provenance, methodology_version
+      FROM arena.metric_source_contracts
+     WHERE source_id = 1
+       AND field_path IN ('data.list[].roi', 'data.list[].pnl')
+  )
+  INSERT INTO arena.metric_trust_observations (
+    contract_id, trader_id, source_id, snapshot_id, snapshot_scraped_at,
+    source_run_id, source_contract_version, timeframe, metric, field_path,
+    provenance, methodology_version, value, value_unit, currency,
+    source_as_of, valid_until, window_start, window_end, quality,
+    history_state, price_state, cost_basis_state, population_state,
+    window_state, unit_state, freshness_state, blocking_reasons
+  )
+  SELECT
+    contracts.id,
+    10,
+    1,
+    pair.snapshot_id,
+    pair.capture_completed_at,
+    pair.source_run_id,
+    '1',
+    30,
+    contracts.metric,
+    contracts.field_path,
+    contracts.provenance,
+    contracts.methodology_version,
+    CASE contracts.metric WHEN 'roi' THEN 15.5 ELSE 1500 END,
+    CASE contracts.metric WHEN 'roi' THEN 'percent' ELSE 'currency' END,
+    'USDT',
+    pair.capture_completed_at,
+    pair.capture_completed_at + interval '5 hours',
+    pair.capture_completed_at - interval '30 days',
+    pair.capture_completed_at,
+    'complete',
+    'source_owned',
+    'source_owned',
+    'source_owned',
+    'verified',
+    'verified',
+    'verified',
+    'verified',
+    '[]'::jsonb
+  FROM pair
+  CROSS JOIN contracts;
+
+  INSERT INTO arena.metric_trust_artifacts (
+    observation_id, role, raw_object_id, content_hash
+  )
+  SELECT
+    observation.id,
+    evidence.role,
+    raw.id,
+    raw.content_hash
+  FROM public.metric_trust_v3_pairs AS pair
+  JOIN arena.metric_trust_observations AS observation
+    ON observation.source_run_id = pair.source_run_id
+  CROSS JOIN (VALUES
+    ('source_payload'::text, 'tier_a'::text),
+    ('population_manifest'::text, 'tier_a_manifest'::text)
+  ) AS evidence(role, job_type)
+  JOIN arena.raw_objects AS raw
+    ON raw.source_run_id = pair.source_run_id
+   AND raw.job_type = evidence.job_type
+  WHERE pair.attempt_id = p_attempt_id;
+END
+$function$;
+SQL
+
+# 050000 must preserve the explicit manifest@2 branch. This is the original
+# direct metric-trust run and its original eight rankable observations; no
+# acquisition-ledger terminal is required merely because v3 is registered.
+V2_COMPAT="$(
+  psql_cmd -Atqc "
+    SELECT
+      (SELECT count(*)
+         FROM arena.metric_trust_runs AS run
+         JOIN arena.raw_objects AS manifest
+           ON manifest.id = run.manifest_raw_object_id
+        WHERE manifest.meta->>'data_contract' =
+              'arena.ingest.leaderboard-acquisition-manifest@2') || '|' ||
+      (SELECT count(*)
+         FROM arena.metric_rankable_observations
+        WHERE source_run_id = repeat('b', 64));
+  "
+)"
+if [[ "$V2_COMPAT" != "1|8" ]]; then
+  echo "manifest v2 compatibility drifted: $V2_COMPAT" >&2
+  exit 1
+fi
+
+# A syntactically and cryptographically coherent v3 RAW/snapshot bundle is not
+# trusted merely because an owner can INSERT it. Without the exact terminal
+# outcome, direct SQL publication must fail closed.
+psql_cmd -q <<'SQL'
+SELECT attempt_seq FROM arena.start_leaderboard_acquisition_attempt(
+  '00000000-0000-0000-0000-000000000100', 1, 30,
+  'metric-trust:fake:100', 'metric-trust-fake-100', 0,
+  'arena.ingest.leaderboard-acquisition-manifest@3', repeat('1', 40), 'vps_sg'
+);
+SELECT public.prepare_metric_trust_v3_pair(
+  '00000000-0000-0000-0000-000000000100', 200,
+  'metric-trust-direct-fake', 'metric-trust-direct-fake'
+);
+SQL
+
+expect_failure \
+  "direct v3 metric-trust forgery" \
+  "SELECT public.insert_metric_trust_v3_run(
+     '00000000-0000-0000-0000-000000000100'
+   );" \
+  "v3 metric-trust run is not authorized by the exact latest terminal outcome" \
+  "23514"
+
+# Finish-first ordering: an older complete terminal exists, but a newer failure
+# takes the shared source/timeframe fence before the old trust INSERT. The trust
+# statement must visibly wait on that exact advisory lock and, after COMMIT,
+# take a fresh READ COMMITTED snapshot that rejects the now-stale old success.
+psql_cmd -q <<'SQL'
+SELECT attempt_seq FROM arena.start_leaderboard_acquisition_attempt(
+  '00000000-0000-0000-0000-000000000110', 1, 30,
+  'metric-trust:old:110', 'metric-trust-old-110', 0,
+  'arena.ingest.leaderboard-acquisition-manifest@3', repeat('1', 40), 'vps_sg'
+);
+SELECT public.prepare_metric_trust_v3_pair(
+  '00000000-0000-0000-0000-000000000110', 201,
+  'metric-trust-old-success', 'metric-trust-old-success'
+);
+SELECT public.finish_metric_trust_v3_success(
+  '00000000-0000-0000-0000-000000000110'
+);
+SELECT attempt_seq FROM arena.start_leaderboard_acquisition_attempt(
+  '00000000-0000-0000-0000-000000000111', 1, 30,
+  'metric-trust:failure:111', 'metric-trust-failure-111', 0,
+  'arena.ingest.leaderboard-acquisition-manifest@3', repeat('1', 40), 'vps_sg'
+);
+SQL
+
+FINISH_FIRST_LOG="$TMP_ROOT/finish-first.log"
+FINISH_FIRST_TRUST_LOG="$TMP_ROOT/finish-first-trust.log"
+PGAPPNAME=metric-trust-finish-first psql_cmd -q -c \
+  "BEGIN ISOLATION LEVEL READ COMMITTED;
+   SELECT public.finish_metric_trust_v3_failure(
+     '00000000-0000-0000-0000-000000000111'
+   );
+   SELECT pg_catalog.pg_sleep(5);
+   COMMIT;" \
+  >"$FINISH_FIRST_LOG" 2>&1 &
+finish_first_pid=$!
+
+finish_sleep_seen=false
+for _ in {1..80}; do
+  if [[ "$(psql_cmd -Atqc "
+    SELECT count(*)
+      FROM pg_catalog.pg_stat_activity
+     WHERE application_name = 'metric-trust-finish-first'
+       AND wait_event = 'PgSleep';
+  ")" -eq 1 ]]; then
+    finish_sleep_seen=true
+    break
+  fi
+  sleep 0.05
+done
+if [[ "$finish_sleep_seen" != true ]]; then
+  echo "finish-first terminal never reached its held-lock sleep" >&2
+  wait "$finish_first_pid" || cat "$FINISH_FIRST_LOG" >&2
+  exit 1
+fi
+
+PGAPPNAME=metric-trust-finish-first-waiter psql_cmd -q -v VERBOSITY=verbose -c \
+  "BEGIN ISOLATION LEVEL READ COMMITTED;
+   SELECT public.insert_metric_trust_v3_run(
+     '00000000-0000-0000-0000-000000000110'
+   );
+   COMMIT;" \
+  >"$FINISH_FIRST_TRUST_LOG" 2>&1 &
+finish_first_trust_pid=$!
+
+shared_lock_seen=false
+for _ in {1..80}; do
+  if [[ "$(psql_cmd -Atqc "
+    SELECT count(*)
+      FROM pg_catalog.pg_locks AS waiter
+      JOIN pg_catalog.pg_stat_activity AS waiter_activity
+        ON waiter_activity.pid = waiter.pid
+      JOIN pg_catalog.pg_locks AS holder
+        ON holder.locktype = waiter.locktype
+       AND holder.database IS NOT DISTINCT FROM waiter.database
+       AND holder.classid IS NOT DISTINCT FROM waiter.classid
+       AND holder.objid IS NOT DISTINCT FROM waiter.objid
+       AND holder.objsubid IS NOT DISTINCT FROM waiter.objsubid
+       AND holder.pid <> waiter.pid
+      JOIN pg_catalog.pg_stat_activity AS holder_activity
+        ON holder_activity.pid = holder.pid
+     WHERE waiter.locktype = 'advisory'
+       AND NOT waiter.granted
+       AND holder.granted
+       AND waiter_activity.application_name =
+           'metric-trust-finish-first-waiter'
+       AND holder_activity.application_name = 'metric-trust-finish-first';
+  ")" -gt 0 ]]; then
+    shared_lock_seen=true
+    break
+  fi
+  sleep 0.05
+done
+if [[ "$shared_lock_seen" != true ]]; then
+  echo "finish and trust did not contend on the same source/timeframe advisory lock" >&2
+  wait "$finish_first_pid" || cat "$FINISH_FIRST_LOG" >&2
+  wait "$finish_first_trust_pid" || true
+  cat "$FINISH_FIRST_TRUST_LOG" >&2
+  exit 1
+fi
+
+if ! wait "$finish_first_pid"; then
+  echo "finish-first terminal transaction failed" >&2
+  cat "$FINISH_FIRST_LOG" >&2
+  wait "$finish_first_trust_pid" || true
+  exit 1
+fi
+set +e
+wait "$finish_first_trust_pid"
+finish_first_trust_status=$?
+set -e
+if [[ "$finish_first_trust_status" -eq 0 ]]; then
+  echo "stale v3 trust unexpectedly survived the newer terminal" >&2
+  exit 1
+fi
+if [[ "$(<"$FINISH_FIRST_TRUST_LOG")" != *"23514"* ]] \
+   || [[ "$(<"$FINISH_FIRST_TRUST_LOG")" != *"v3 metric-trust run is not authorized by the exact latest terminal outcome"* ]]; then
+  echo "finish-first trust rejection drifted" >&2
+  cat "$FINISH_FIRST_TRUST_LOG" >&2
+  exit 1
+fi
+
+FINISH_FIRST_RESULT="$(
+  psql_cmd -Atqc "
+    SELECT
+      (SELECT attempt_id
+         FROM arena.latest_terminal_leaderboard_acquisitions
+        WHERE source_id = 1 AND timeframe = 30) || '|' ||
+      (SELECT count(*)
+         FROM arena.metric_trust_runs AS run
+         JOIN public.metric_trust_v3_pairs AS pair
+           ON pair.source_run_id = run.source_run_id
+        WHERE pair.attempt_id =
+              '00000000-0000-0000-0000-000000000110'::uuid);
+  "
+)"
+if [[ "$FINISH_FIRST_RESULT" != "00000000-0000-0000-0000-000000000111|0" ]]; then
+  echo "finish-first latest terminal was not visible: $FINISH_FIRST_RESULT" >&2
+  exit 1
+fi
+
+# Trust-first ordering: publish one exact v3 success, attach complete metric
+# evidence, and prove it is rankable. A current-source region drift hides it;
+# restoring the frozen worker/source region restores it. Merely starting a newer
+# attempt does not withdraw it, but the newer failure terminal does immediately.
+psql_cmd -q <<'SQL'
+SELECT attempt_seq FROM arena.start_leaderboard_acquisition_attempt(
+  '00000000-0000-0000-0000-000000000120', 1, 30,
+  'metric-trust:success:120', 'metric-trust-success-120', 0,
+  'arena.ingest.leaderboard-acquisition-manifest@3', repeat('1', 40), 'vps_sg'
+);
+SELECT public.prepare_metric_trust_v3_pair(
+  '00000000-0000-0000-0000-000000000120', 202,
+  'metric-trust-live-success', 'metric-trust-live-success'
+);
+SELECT public.finish_metric_trust_v3_success(
+  '00000000-0000-0000-0000-000000000120'
+);
+SQL
+
+psql_cmd -q -c "UPDATE arena.sources SET fetch_region = 'vps_jp' WHERE id = 1;"
+expect_failure \
+  "v3 trust with stale source-region snapshot" \
+  "SELECT public.insert_metric_trust_v3_run(
+     '00000000-0000-0000-0000-000000000120'
+   );" \
+  "v3 metric-trust run is not authorized by the exact latest terminal outcome" \
+  "23514"
+psql_cmd -q -c "UPDATE arena.sources SET fetch_region = 'vps_sg' WHERE id = 1;"
+
+psql_cmd -q <<'SQL'
+SELECT public.insert_metric_trust_v3_run(
+  '00000000-0000-0000-0000-000000000120'
+);
+SELECT public.add_metric_trust_v3_observations(
+  '00000000-0000-0000-0000-000000000120'
+);
+SQL
+
+TRUST_FIRST_LIVE="$(
+  psql_cmd -Atqc "
+    SELECT
+      (SELECT count(*)
+         FROM arena.metric_rankable_observations AS observation
+         JOIN public.metric_trust_v3_pairs AS pair
+           ON pair.source_run_id = observation.source_run_id
+        WHERE pair.attempt_id =
+              '00000000-0000-0000-0000-000000000120'::uuid) || '|' ||
+      terminal.worker_region || '|' ||
+      terminal.source_fetch_region || '|' ||
+      source.fetch_region || '|' ||
+      terminal.source_status || '|' ||
+      source.status || '|' ||
+      terminal.source_serving_mode || '|' ||
+      source.serving_mode || '|' ||
+      terminal.source_currency || '|' ||
+      source.currency
+    FROM arena.latest_terminal_leaderboard_acquisitions AS terminal
+    JOIN arena.sources AS source ON source.id = terminal.source_id
+    WHERE terminal.attempt_id =
+          '00000000-0000-0000-0000-000000000120'::uuid;
+  "
+)"
+if [[ "$TRUST_FIRST_LIVE" != "2|vps_sg|vps_sg|vps_sg|active|active|serving|serving|USDT|USDT" ]]; then
+  echo "trust-first v3 success or worker/source snapshot drifted: $TRUST_FIRST_LIVE" >&2
+  exit 1
+fi
+
+psql_cmd -q -c "UPDATE arena.sources SET fetch_region = 'vps_jp' WHERE id = 1;"
+REGION_DRIFT="$(
+  psql_cmd -Atqc "
+    SELECT
+      (SELECT count(*)
+         FROM arena.metric_rankable_observations AS observation
+         JOIN public.metric_trust_v3_pairs AS pair
+           ON pair.source_run_id = observation.source_run_id
+        WHERE pair.attempt_id =
+              '00000000-0000-0000-0000-000000000120'::uuid) || '|' ||
+      (SELECT count(*)
+         FROM arena.metric_rankable_observations
+        WHERE source_run_id = repeat('b', 64));
+  "
+)"
+if [[ "$REGION_DRIFT" != "0|8" ]]; then
+  echo "source-region drift did not hide only v3: $REGION_DRIFT" >&2
+  exit 1
+fi
+psql_cmd -q -c "UPDATE arena.sources SET fetch_region = 'vps_sg' WHERE id = 1;"
+
+psql_cmd -q <<'SQL'
+DO $test$
+BEGIN
+  IF (
+    SELECT count(*)
+      FROM arena.metric_rankable_observations AS observation
+      JOIN public.metric_trust_v3_pairs AS pair
+        ON pair.source_run_id = observation.source_run_id
+     WHERE pair.attempt_id =
+           '00000000-0000-0000-0000-000000000120'::uuid
+  ) <> 2 THEN
+    RAISE EXCEPTION 'restoring current source region did not restore exact v3 evidence';
+  END IF;
+END
+$test$;
+
+SELECT attempt_seq FROM arena.start_leaderboard_acquisition_attempt(
+  '00000000-0000-0000-0000-000000000121', 1, 30,
+  'metric-trust:failure:121', 'metric-trust-failure-121', 0,
+  'arena.ingest.leaderboard-acquisition-manifest@3', repeat('1', 40), 'vps_sg'
+);
+
+DO $test$
+BEGIN
+  IF (
+    SELECT count(*)
+      FROM arena.metric_rankable_observations AS observation
+      JOIN public.metric_trust_v3_pairs AS pair
+        ON pair.source_run_id = observation.source_run_id
+     WHERE pair.attempt_id =
+           '00000000-0000-0000-0000-000000000120'::uuid
+  ) <> 2 THEN
+    RAISE EXCEPTION 'a newer in-progress attempt withdrew the prior terminal success';
+  END IF;
+END
+$test$;
+
+SELECT public.finish_metric_trust_v3_failure(
+  '00000000-0000-0000-0000-000000000121'
+);
+SQL
+
+TRUST_FIRST_HIDDEN="$(
+  psql_cmd -Atqc "
+    SELECT
+      (SELECT count(*)
+         FROM arena.metric_rankable_observations AS observation
+         JOIN public.metric_trust_v3_pairs AS pair
+           ON pair.source_run_id = observation.source_run_id
+        WHERE pair.attempt_id =
+              '00000000-0000-0000-0000-000000000120'::uuid) || '|' ||
+      (SELECT count(*)
+         FROM arena.metric_rankable_observations
+        WHERE source_run_id = repeat('b', 64)) || '|' ||
+      (SELECT attempt_id
+         FROM arena.latest_terminal_leaderboard_acquisitions
+        WHERE source_id = 1 AND timeframe = 30);
+  "
+)"
+if [[ "$TRUST_FIRST_HIDDEN" != "0|8|00000000-0000-0000-0000-000000000121" ]]; then
+  echo "new failure terminal did not dynamically hide only v3: $TRUST_FIRST_HIDDEN" >&2
+  exit 1
+fi
+
+# Even a fully valid, latest v3 terminal cannot be published from a transaction-
+# wide snapshot. The explicit 25001 rejection is the fail-closed contract that
+# keeps the post-lock latest-terminal read meaningful.
+psql_cmd -q <<'SQL'
+SELECT attempt_seq FROM arena.start_leaderboard_acquisition_attempt(
+  '00000000-0000-0000-0000-000000000130', 1, 30,
+  'metric-trust:repeatable:130', 'metric-trust-repeatable-130', 0,
+  'arena.ingest.leaderboard-acquisition-manifest@3', repeat('1', 40), 'vps_sg'
+);
+SELECT public.prepare_metric_trust_v3_pair(
+  '00000000-0000-0000-0000-000000000130', 203,
+  'metric-trust-repeatable-read', 'metric-trust-repeatable-read'
+);
+SELECT public.finish_metric_trust_v3_success(
+  '00000000-0000-0000-0000-000000000130'
+);
+SQL
+
+expect_failure \
+  "repeatable-read v3 metric-trust publication" \
+  "BEGIN ISOLATION LEVEL REPEATABLE READ;
+   SELECT public.insert_metric_trust_v3_run(
+     '00000000-0000-0000-0000-000000000130'
+   );
+   COMMIT;" \
+  "attempt-bound metric-trust publication requires READ COMMITTED isolation" \
+  "25001"
+
+RR_RUNS="$(
+  psql_cmd -Atqc "
+    SELECT count(*)
+      FROM arena.metric_trust_runs AS run
+      JOIN public.metric_trust_v3_pairs AS pair
+        ON pair.source_run_id = run.source_run_id
+     WHERE pair.attempt_id =
+           '00000000-0000-0000-0000-000000000130'::uuid;
+  "
+)"
+if [[ "$RR_RUNS" != "0" ]]; then
+  echo "repeatable-read rejection left a v3 trust row: $RR_RUNS" >&2
+  exit 1
+fi
 
 # RAW cleanup remains possible. ON DELETE CASCADE removes the evidence link,
 # and the shadow input fails closed immediately instead of blocking cleanup.
