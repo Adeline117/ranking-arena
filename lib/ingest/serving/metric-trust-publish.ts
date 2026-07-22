@@ -762,6 +762,29 @@ async function assertAttemptBoundAcquisitionOutcome(
   }
 }
 
+/**
+ * Final commit fence for an attempt-bound trusted publication.
+ *
+ * The acquisition start path uses this exact source/window advisory-lock key
+ * when allocating attempt_seq. Taking it only after the serving and trust
+ * writes are ready keeps the critical section short. The exact terminal check
+ * must run after the lock and the caller must issue no further mutable work
+ * before COMMIT. Legacy v2 publications deliberately remain query-free here.
+ */
+export async function fenceAttemptBoundLeaderboardPublicationCommit(
+  client: PoolClient,
+  prepared: PreparedLeaderboardMetricTrust
+): Promise<void> {
+  if (prepared.manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT) return
+
+  await client.query(`SET LOCAL lock_timeout = '5s'`)
+  await client.query(
+    `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
+    [`arena.leaderboard-acquisition-source:${prepared.src.id}:${prepared.timeframe}`]
+  )
+  await assertAttemptBoundAcquisitionOutcome(client, prepared)
+}
+
 export async function writeLeaderboardMetricTrust(
   client: PoolClient,
   prepared: PreparedLeaderboardMetricTrust,
