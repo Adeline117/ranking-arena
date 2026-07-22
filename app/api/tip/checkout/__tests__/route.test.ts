@@ -97,7 +97,7 @@ describe('POST /api/tip/checkout', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockRpc.mockResolvedValue({ data: true, error: null })
-    delete process.env.STRIPE_TIP_CHECKOUT_ENABLED
+    process.env.STRIPE_TIP_CHECKOUT_ENABLED = 'true'
     delete process.env.VERCEL_ENV
   })
 
@@ -107,31 +107,29 @@ describe('POST /api/tip/checkout', () => {
   })
 
   it.each([
-    ['unset', undefined],
-    ['false', 'false'],
-    ['non-exact uppercase value', 'TRUE'],
-  ])(
-    'fails closed before auth and payment work in Production when the gate is %s',
-    async (_, value) => {
-      process.env.VERCEL_ENV = 'production'
-      if (value !== undefined) process.env.STRIPE_TIP_CHECKOUT_ENABLED = value
+    ['unset without deployment metadata', undefined, undefined],
+    ['false in Preview', 'false', 'preview'],
+    ['non-exact uppercase value in Production', 'TRUE', 'production'],
+  ])('fails closed before auth and payment work when the gate is %s', async (_, value, env) => {
+    if (env !== undefined) process.env.VERCEL_ENV = env
+    else delete process.env.VERCEL_ENV
+    if (value !== undefined) process.env.STRIPE_TIP_CHECKOUT_ENABLED = value
+    else delete process.env.STRIPE_TIP_CHECKOUT_ENABLED
 
-      const response = await POST({} as never)
+    const response = await POST({} as never)
 
-      expect(response.status).toBe(503)
-      expect(await response.json()).toEqual({
-        error: 'Tip checkout is temporarily unavailable.',
-        code: 'TIP_CHECKOUT_UNAVAILABLE',
-      })
-      expect(mockAuthenticatedPost).not.toHaveBeenCalled()
-      expect(mockRpc).not.toHaveBeenCalled()
-      expect(mockFrom).not.toHaveBeenCalled()
-      expect(mockCreateOneTimePaymentSession).not.toHaveBeenCalled()
-    }
-  )
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({
+      error: 'Tip checkout is temporarily unavailable.',
+      code: 'TIP_CHECKOUT_UNAVAILABLE',
+    })
+    expect(mockAuthenticatedPost).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockCreateOneTimePaymentSession).not.toHaveBeenCalled()
+  })
 
-  it('delegates in Production only when the server gate is exactly true', async () => {
-    process.env.VERCEL_ENV = 'production'
+  it('delegates only when the server gate is exactly true', async () => {
     process.env.STRIPE_TIP_CHECKOUT_ENABLED = 'true'
     const request = requestWith({ post_id: 'invalid' })
 

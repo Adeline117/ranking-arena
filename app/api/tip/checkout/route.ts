@@ -186,12 +186,10 @@ const authenticatedPost = withAuth(
 
 export async function POST(request: NextRequest) {
   // Fail closed before authentication, database access, or Stripe work during
-  // the atomic Tip checkout cutover. Preview and local environments stay
-  // available for canaries; Production must be enabled explicitly.
-  if (
-    process.env.VERCEL_ENV === 'production' &&
-    process.env.STRIPE_TIP_CHECKOUT_ENABLED !== 'true'
-  ) {
+  // the atomic Tip checkout cutover. Do not depend on Vercel system variables:
+  // every runtime must opt in explicitly so missing deployment metadata cannot
+  // silently reopen payments. Preview and local canaries set the flag to true.
+  if (process.env.STRIPE_TIP_CHECKOUT_ENABLED !== 'true') {
     return NextResponse.json(
       {
         error: 'Tip checkout is temporarily unavailable.',
