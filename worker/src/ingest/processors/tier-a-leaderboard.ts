@@ -267,12 +267,45 @@ function parseLeaderboardRows(input: {
   pages: readonly RawPage[]
   ctx: ParseCtx
   pageSize: number
+  sourcePageOrdinals?: readonly number[]
 }): ParsedLeaderboardRow[] {
+  if (
+    input.sourcePageOrdinals &&
+    (input.sourcePageOrdinals.length !== input.pages.length ||
+      new Set(input.sourcePageOrdinals).size !== input.sourcePageOrdinals.length ||
+      input.sourcePageOrdinals.some(
+        (ordinal) => !Number.isSafeInteger(ordinal) || Object.is(ordinal, -0) || ordinal < 1
+      ))
+  ) {
+    throw new TypeError('[tier-a] parser pages require distinct positive source-page ordinals')
+  }
   const rows: ParsedLeaderboardRow[] = []
-  for (const page of input.pages) {
+  for (const [pageOffset, page] of input.pages.entries()) {
     const parsed = input.adapter.parseLeaderboard(page.payload, input.ctx)
     for (const row of parsed.rows) {
-      rows.push({ ...row, rank: (page.pageIndex - 1) * input.pageSize + row.rank })
+      const sourcePageOrdinal = input.sourcePageOrdinals?.[pageOffset]
+      const headlineMetricSources = row.headlineMetricSources
+        ? Object.fromEntries(
+            Object.entries(row.headlineMetricSources).map(([metric, source]) => {
+              // Preserve every unknown adapter field so staging can reject it;
+              // only the adapter-claimed page ordinal is stripped/replaced.
+              const sourceWithoutAdapterOrdinal = { ...source }
+              delete sourceWithoutAdapterOrdinal.sourcePageOrdinal
+              return [
+                metric,
+                {
+                  ...sourceWithoutAdapterOrdinal,
+                  ...(sourcePageOrdinal === undefined ? {} : { sourcePageOrdinal }),
+                },
+              ]
+            })
+          )
+        : undefined
+      rows.push({
+        ...row,
+        rank: (page.pageIndex - 1) * input.pageSize + row.rank,
+        ...(headlineMetricSources ? { headlineMetricSources } : {}),
+      })
     }
   }
   return rows
@@ -534,7 +567,17 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         failureStage = 'parse_validate_manifest'
         failureReason = 'parse_failed'
         try {
-          rows = parseLeaderboardRows({ adapter, pages, ctx, pageSize })
+          rows = parseLeaderboardRows({
+            adapter,
+            pages,
+            ctx,
+            pageSize,
+            ...(capture
+              ? {
+                  sourcePageOrdinals: capture.parserTransformation.source_page_ordinals,
+                }
+              : {}),
+          })
           failureReason = 'validation_failed'
           validated = validateLeaderboardRows(rows, requiredFields)
           failureReason = 'manifest_failed'

@@ -117,6 +117,13 @@ export type ParsedRankingMetric = 'roi' | 'pnl' | 'win_rate' | 'mdd' | 'sharpe'
  */
 export interface ParsedMetricFieldSource {
   fieldPath: string
+  /**
+   * Framework-owned 1-based ordinal of the captured source page containing
+   * this exact metric value. Adapters must not self-assert it; the Tier-A
+   * processor strips adapter input and binds the ordinal from capture
+   * evidence after parsing.
+   */
+  sourcePageOrdinal?: number
 }
 
 export type ParsedHeadlineMetricSources = Partial<

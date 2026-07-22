@@ -12,6 +12,7 @@ const isoTs = z.string().min(10) // ISO timestamp; DB casts to timestamptz
 const parsedMetricFieldSourceSchema = z
   .object({
     fieldPath: z.string().trim().min(1),
+    sourcePageOrdinal: z.number().int().positive().optional(),
   })
   .strict()
 
