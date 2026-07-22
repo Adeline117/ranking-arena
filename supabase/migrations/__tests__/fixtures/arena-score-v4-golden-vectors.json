@@ -1,0 +1,472 @@
+{
+  "contract": "arena-score-v4-golden-vectors@1",
+  "cases": [
+    {
+      "name": "empty_cohort",
+      "period": "7D",
+      "inputs": [],
+      "expected": []
+    },
+    {
+      "name": "ties_nulls_and_unknown_trade_count",
+      "period": "30D",
+      "inputs": [
+        {
+          "source": "beta",
+          "source_trader_id": "tie-b",
+          "roi": 10,
+          "pnl": 1000,
+          "max_drawdown": 10,
+          "win_rate": 60,
+          "sharpe_ratio": 1.2,
+          "profit_factor": 1.5,
+          "trades_count": 100
+        },
+        {
+          "source": "gamma",
+          "source_trader_id": "null-risk",
+          "roi": -5,
+          "pnl": -500,
+          "max_drawdown": null,
+          "win_rate": null,
+          "sharpe_ratio": null,
+          "profit_factor": null,
+          "trades_count": 0
+        },
+        {
+          "source": "alpha",
+          "source_trader_id": "tie-a",
+          "roi": 10,
+          "pnl": 1000,
+          "max_drawdown": 10,
+          "win_rate": 60,
+          "sharpe_ratio": 1.2,
+          "profit_factor": 1.5,
+          "trades_count": 100
+        },
+        {
+          "source": "epsilon",
+          "source_trader_id": "partial",
+          "roi": 10,
+          "pnl": null,
+          "max_drawdown": 20,
+          "win_rate": 55,
+          "sharpe_ratio": 1.2,
+          "profit_factor": 1,
+          "trades_count": 10
+        },
+        {
+          "source": "delta",
+          "source_trader_id": "zero-risk-fields",
+          "roi": 100,
+          "pnl": 10000000,
+          "max_drawdown": 0,
+          "win_rate": 0,
+          "sharpe_ratio": 2,
+          "profit_factor": null,
+          "trades_count": null
+        }
+      ],
+      "expected": [
+        {
+          "source": "alpha",
+          "sourceTraderId": "tie-a",
+          "totalScore": 43.82,
+          "quality": 0.2,
+          "confidence": 0.92,
+          "factors": {
+            "roi": 0.25,
+            "pnl": 0,
+            "drawdown": 0.5,
+            "sharpe": 0,
+            "consistency": 0.5
+          }
+        },
+        {
+          "source": "beta",
+          "sourceTraderId": "tie-b",
+          "totalScore": 43.82,
+          "quality": 0.2,
+          "confidence": 0.92,
+          "factors": {
+            "roi": 0.25,
+            "pnl": 0,
+            "drawdown": 0.5,
+            "sharpe": 0,
+            "consistency": 0.5
+          }
+        },
+        {
+          "source": "delta",
+          "sourceTraderId": "zero-risk-fields",
+          "totalScore": 100,
+          "quality": 1,
+          "confidence": 0.62,
+          "factors": {
+            "roi": 1,
+            "pnl": 1,
+            "drawdown": null,
+            "sharpe": 1,
+            "consistency": null
+          }
+        },
+        {
+          "source": "epsilon",
+          "sourceTraderId": "partial",
+          "totalScore": 19.2,
+          "quality": 0.05,
+          "confidence": 0.71,
+          "factors": {
+            "roi": 0.25,
+            "pnl": 0,
+            "drawdown": 0,
+            "sharpe": 0,
+            "consistency": 0
+          }
+        },
+        {
+          "source": "gamma",
+          "sourceTraderId": "null-risk",
+          "totalScore": 0,
+          "quality": 0,
+          "confidence": 0.62,
+          "factors": {
+            "roi": 0,
+            "pnl": 0,
+            "drawdown": null,
+            "sharpe": null,
+            "consistency": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "utf8_c_order",
+      "period": "30D",
+      "inputs": [
+        {
+          "source": "unicode",
+          "source_trader_id": "𐀀",
+          "roi": 25,
+          "pnl": 2500,
+          "max_drawdown": 12,
+          "win_rate": 58,
+          "sharpe_ratio": 1.1,
+          "profit_factor": 1.3,
+          "trades_count": 50
+        },
+        {
+          "source": "unicode",
+          "source_trader_id": "",
+          "roi": 25,
+          "pnl": 2500,
+          "max_drawdown": 12,
+          "win_rate": 58,
+          "sharpe_ratio": 1.1,
+          "profit_factor": 1.3,
+          "trades_count": 50
+        }
+      ],
+      "expected": [
+        {
+          "source": "unicode",
+          "sourceTraderId": "",
+          "totalScore": 30,
+          "quality": 0.03,
+          "confidence": 0.87,
+          "factors": {
+            "roi": 0,
+            "pnl": 0.1,
+            "drawdown": 0,
+            "sharpe": 0,
+            "consistency": 0
+          }
+        },
+        {
+          "source": "unicode",
+          "sourceTraderId": "𐀀",
+          "totalScore": 30,
+          "quality": 0.03,
+          "confidence": 0.87,
+          "factors": {
+            "roi": 0,
+            "pnl": 0.1,
+            "drawdown": 0,
+            "sharpe": 0,
+            "consistency": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "single_row_7d",
+      "period": "7D",
+      "inputs": [
+        {
+          "source": "solo",
+          "source_trader_id": "one",
+          "roi": 25,
+          "pnl": 2500,
+          "max_drawdown": 12,
+          "win_rate": 58,
+          "sharpe_ratio": 1.1,
+          "profit_factor": 1.3,
+          "trades_count": 50
+        }
+      ],
+      "expected": [
+        {
+          "source": "solo",
+          "sourceTraderId": "one",
+          "totalScore": 100,
+          "quality": 0.73,
+          "confidence": 0.87,
+          "factors": {
+            "roi": 1,
+            "pnl": 0.1,
+            "drawdown": 1,
+            "sharpe": 1,
+            "consistency": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "single_row_30d",
+      "period": "30D",
+      "inputs": [
+        {
+          "source": "solo",
+          "source_trader_id": "one",
+          "roi": 25,
+          "pnl": 2500,
+          "max_drawdown": 12,
+          "win_rate": 58,
+          "sharpe_ratio": 1.1,
+          "profit_factor": 1.3,
+          "trades_count": 50
+        }
+      ],
+      "expected": [
+        {
+          "source": "solo",
+          "sourceTraderId": "one",
+          "totalScore": 100,
+          "quality": 0.73,
+          "confidence": 0.87,
+          "factors": {
+            "roi": 1,
+            "pnl": 0.1,
+            "drawdown": 1,
+            "sharpe": 1,
+            "consistency": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "single_row_90d",
+      "period": "90D",
+      "inputs": [
+        {
+          "source": "solo",
+          "source_trader_id": "one",
+          "roi": 25,
+          "pnl": 2500,
+          "max_drawdown": 12,
+          "win_rate": 58,
+          "sharpe_ratio": 1.1,
+          "profit_factor": 1.3,
+          "trades_count": 50
+        }
+      ],
+      "expected": [
+        {
+          "source": "solo",
+          "sourceTraderId": "one",
+          "totalScore": 100,
+          "quality": 0.73,
+          "confidence": 0.87,
+          "factors": {
+            "roi": 1,
+            "pnl": 0.1,
+            "drawdown": 1,
+            "sharpe": 1,
+            "consistency": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "extreme_positive_and_negative_pnl",
+      "period": "90D",
+      "inputs": [
+        {
+          "source": "extreme",
+          "source_trader_id": "huge-positive",
+          "roi": 10000,
+          "pnl": 1e100,
+          "max_drawdown": 1,
+          "win_rate": 99,
+          "sharpe_ratio": 20,
+          "profit_factor": 100,
+          "trades_count": 2147483647
+        },
+        {
+          "source": "extreme",
+          "source_trader_id": "huge-negative",
+          "roi": -10000,
+          "pnl": -1e100,
+          "max_drawdown": 100,
+          "win_rate": 1,
+          "sharpe_ratio": -20,
+          "profit_factor": -100,
+          "trades_count": 1
+        },
+        {
+          "source": "extreme",
+          "source_trader_id": "zero",
+          "roi": 0,
+          "pnl": 0,
+          "max_drawdown": null,
+          "win_rate": null,
+          "sharpe_ratio": null,
+          "profit_factor": null,
+          "trades_count": 0
+        },
+        {
+          "source": "extreme",
+          "source_trader_id": "pnl-floor",
+          "roi": 1,
+          "pnl": 1000,
+          "max_drawdown": 50,
+          "win_rate": 50,
+          "sharpe_ratio": 0,
+          "profit_factor": 0,
+          "trades_count": 50
+        },
+        {
+          "source": "extreme",
+          "source_trader_id": "pnl-cap",
+          "roi": 2,
+          "pnl": 10000000,
+          "max_drawdown": 25,
+          "win_rate": 75,
+          "sharpe_ratio": 2,
+          "profit_factor": 2,
+          "trades_count": null
+        }
+      ],
+      "expected": [
+        {
+          "source": "extreme",
+          "sourceTraderId": "huge-negative",
+          "totalScore": 0,
+          "quality": 0,
+          "confidence": 0.53,
+          "factors": {
+            "roi": 0,
+            "pnl": 0,
+            "drawdown": 0,
+            "sharpe": 0,
+            "consistency": 0
+          }
+        },
+        {
+          "source": "extreme",
+          "sourceTraderId": "huge-positive",
+          "totalScore": 100,
+          "quality": 1,
+          "confidence": 1,
+          "factors": {
+            "roi": 1,
+            "pnl": 1,
+            "drawdown": 1,
+            "sharpe": 1,
+            "consistency": 1
+          }
+        },
+        {
+          "source": "extreme",
+          "sourceTraderId": "pnl-cap",
+          "totalScore": 70.95,
+          "quality": 0.78,
+          "confidence": 0.79,
+          "factors": {
+            "roi": 0.75,
+            "pnl": 1,
+            "drawdown": 0.67,
+            "sharpe": 0.67,
+            "consistency": 0.67
+          }
+        },
+        {
+          "source": "extreme",
+          "sourceTraderId": "pnl-floor",
+          "totalScore": 41.93,
+          "quality": 0.27,
+          "confidence": 0.87,
+          "factors": {
+            "roi": 0.5,
+            "pnl": 0,
+            "drawdown": 0.33,
+            "sharpe": 0.33,
+            "consistency": 0.33
+          }
+        },
+        {
+          "source": "extreme",
+          "sourceTraderId": "zero",
+          "totalScore": 19.37,
+          "quality": 0.1,
+          "confidence": 0.62,
+          "factors": {
+            "roi": 0.25,
+            "pnl": 0,
+            "drawdown": null,
+            "sharpe": null,
+            "consistency": null
+          }
+        }
+      ]
+    }
+  ],
+  "pg17MathBoundary": {
+    "contract": "arena-score-v4-pg17-math-boundary@1",
+    "period": "30D",
+    "input": {
+      "source": "math-boundary",
+      "source_trader_id": "pg17-ln-v8-log",
+      "roi": 0,
+      "pnl": 2630.2558790915355,
+      "max_drawdown": null,
+      "win_rate": null,
+      "sharpe_ratio": null,
+      "profit_factor": null,
+      "trades_count": null
+    },
+    "expectedPg17FactorPnl": 0.1,
+    "expectedLegacyV8FactorPnl": 0.11
+  },
+  "denseCase": {
+    "contract": "arena-score-v4-dense-seed@1",
+    "period": "30D",
+    "count": 257,
+    "expectedCentDigest": "db2a7a1f5805c76afa12519bde9cc4faf49deeb8bf222b9e57a9b3495bac6f58"
+  },
+  "roundingBoundary": [
+    { "input": 1.005, "expected": 1.01 },
+    { "input": 2.675, "expected": 2.68 },
+    { "input": 0.1049994, "expected": 0.1 },
+    { "input": 0.1049995, "expected": 0.11 },
+    { "input": 0.1049996, "expected": 0.11 },
+    { "input": 19.995, "expected": 20 },
+    { "input": 19.994999, "expected": 19.99 },
+    { "input": 99.995, "expected": 100 },
+    { "input": 0.005, "expected": 0.01 },
+    { "input": 0.004999, "expected": 0 },
+    { "input": 0.995, "expected": 1 },
+    { "input": 0.2549995, "expected": 0.25 },
+    { "input": 0.014999499999999999, "expected": 0.01 }
+  ]
+}
