@@ -80,9 +80,8 @@ describe('leaderboard terminal publication fence migration', () => {
     )
   })
 
-  it('is ordered after the attempt, v3 compatibility, and scorer migrations only in predeploy', () => {
+  it('is ordered after the attempt, v3 compatibility, and scorer in ordered predeploy', () => {
     const predeploy = migrationNames('PREDEPLOY_MIGRATIONS')
-    const independent = migrationNames('INDEPENDENT_PREDEPLOY_MIGRATIONS')
     const recoveryPrerequisites = migrationNames('RECOVERY_PREREQUISITE_MIGRATIONS')
     const postdeploy = migrationNames('POSTDEPLOY_MIGRATIONS')
     const index = predeploy.indexOf(migrationName)
@@ -96,10 +95,10 @@ describe('leaderboard terminal publication fence migration', () => {
     expect(index).toBeGreaterThan(
       predeploy.indexOf('20260722041000_pure_arena_score_v4_scorer.sql')
     )
-    expect(independent).not.toContain(migrationName)
     expect(recoveryPrerequisites).not.toContain(migrationName)
     expect(postdeploy).not.toContain(migrationName)
     expect(runner.match(new RegExp(migrationName.replace('.', '\\.'), 'g'))).toHaveLength(1)
+    expect(runner).toContain('prepare_ordered_predeploy_target')
   })
 
   it('contains PostgreSQL 17 proofs for the three real concurrency orders', () => {

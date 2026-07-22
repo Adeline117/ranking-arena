@@ -76,7 +76,7 @@ describe('pure Arena Score v4 PostgreSQL scorer migration', () => {
     expect(migration).not.toContain("'arena-score-v4-pure@1'")
   })
 
-  it('revokes every API role and is wired into both predeploy paths', () => {
+  it('revokes every API role and is wired into the ordered predeploy path', () => {
     expect(migration).toMatch(
       /REVOKE ALL\s+ON FUNCTION arena\.compute_arena_scores_v4_json\(text, jsonb\)\s+FROM PUBLIC, anon, authenticated, service_role;/
     )
@@ -85,7 +85,13 @@ describe('pure Arena Score v4 PostgreSQL scorer migration', () => {
     )
     expect(migration).toContain('privilege_row.grantee NOT IN (0, function_row.proowner)')
     expect(migration).toContain('privilege_row.grantee <> function_row.proowner')
-    expect(runner.match(new RegExp(migrationName.replace('.', '\\.'), 'g'))).toHaveLength(2)
+    const predeploy = runner.slice(
+      runner.indexOf('PREDEPLOY_MIGRATIONS=('),
+      runner.indexOf('TIP_CHECKOUT_CUTOVER_VERSIONS=(')
+    )
+    expect(predeploy).toContain(migrationName)
+    expect(runner.match(new RegExp(migrationName.replace('.', '\\.'), 'g'))).toHaveLength(1)
+    expect(runner).toContain('prepare_ordered_predeploy_target')
     expect(pg17).toContain("provolatile <> 'i'")
     expect(pg17).toContain('prosecdef')
     expect(pg17).toContain("'service_role'")
