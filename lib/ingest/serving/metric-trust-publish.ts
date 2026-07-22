@@ -25,6 +25,10 @@ import {
   type LeaderboardAcquisitionManifestV3,
 } from '../acquisition-manifest'
 import type { ParsedLeaderboardRow, RankingTimeframe, SourceRow } from '../core/types'
+import {
+  assessLeaderboardNativeWindowRequest,
+  type NativeWindowRequestEvidence,
+} from '../leaderboard-request-evidence'
 import type { LeaderboardRawArtifactSetReceipt } from '../raw'
 import { strictCanonicalSha256 } from '../strict-canonical-json'
 
@@ -58,6 +62,7 @@ export interface PreparedLeaderboardMetricTrust {
   artifacts: LeaderboardRawArtifactSetReceipt
   sourceAsOf: string
   windowStart: string
+  nativeWindowEvidence: NativeWindowRequestEvidence
   expectedFields: SourceMetricFieldContract[]
 }
 
@@ -466,6 +471,7 @@ export function prepareLeaderboardMetricTrust(
       )
     }
   }
+  const nativeWindowEvidence = assessLeaderboardNativeWindowRequest(manifest)
 
   return {
     src,
@@ -476,6 +482,7 @@ export function prepareLeaderboardMetricTrust(
     artifacts: bundle.artifacts,
     sourceAsOf,
     windowStart,
+    nativeWindowEvidence,
     expectedFields,
   }
 }
@@ -550,6 +557,7 @@ function buildObservationInputs(
   contracts: MetricContractRow[]
 ): ObservationInput[] {
   const observations: ObservationInput[] = []
+  const nativeWindowVerified = prepared.nativeWindowEvidence.state === 'verified'
   for (const row of prepared.rows) {
     const traderId = context.traderIds.get(row.exchangeTraderId)
     if (!traderId) {
@@ -567,26 +575,24 @@ function buildObservationInputs(
           state: 'unknown',
         })
       }
-      // The capture currently proves the native timeframe label and keeps a
-      // conservative freshness watermark, but it does not bind each row to a
-      // page timestamp or persist provider-defined exact rolling boundaries.
-      // Keep the value visible in shadow evidence while failing ranking closed
-      // until that request/window contract is durably proven.
-      blockingReasons.push({
-        code: 'native_window_boundary_unverified',
-        state: 'unknown',
-      })
+      if (prepared.nativeWindowEvidence.state !== 'verified') {
+        blockingReasons.push({
+          code: prepared.nativeWindowEvidence.reason,
+          state: 'unknown',
+        })
+      }
+      const complete = value !== null && exactLineage && nativeWindowVerified
       observations.push({
         contract_id: contract.id,
         trader_id: traderId,
         exchange_trader_id: row.exchangeTraderId,
         value,
-        quality: 'unknown',
+        quality: complete ? 'complete' : 'unknown',
         history_state: 'source_owned',
         price_state: 'source_owned',
         cost_basis_state: 'source_owned',
         population_state: 'verified',
-        window_state: 'unknown',
+        window_state: nativeWindowVerified ? 'verified' : 'unknown',
         unit_state: 'verified',
         freshness_state: 'verified',
         blocking_reasons: blockingReasons,

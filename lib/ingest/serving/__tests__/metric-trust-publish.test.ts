@@ -8,6 +8,7 @@ import {
   LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
 } from '../../acquisition-manifest'
 import type { ParsedLeaderboardRow, RawPage, SourceRow } from '../../core/types'
+import { binanceLeaderboardListRequestSha256 } from '../../leaderboard-request-evidence'
 import {
   fenceAttemptBoundLeaderboardPublicationCommit,
   prepareLeaderboardMetricTrust,
@@ -152,6 +153,28 @@ function attemptBoundTrustFixture(source: SourceRow = src) {
   return trustBundle(
     buildLeaderboardAcquisitionManifestV3({
       ...manifestInput(source),
+      acquisition_attempt: {
+        binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+        attempt_id: '00000000-0000-4000-8000-000000000001',
+        attempt_seq: 41,
+      },
+    })
+  )
+}
+
+function exactWindowAttemptBoundTrustFixture(source: SourceRow = src) {
+  const input = manifestInput(source)
+  const requestSha256 = binanceLeaderboardListRequestSha256({
+    sourceSlug: source.slug,
+    pageIndex: 1,
+    pageSize: source.page_size ?? 20,
+    timeframe: 30,
+  })
+  if (requestSha256 === null) throw new Error('test source has no reviewed request contract')
+  input.source_pages[0].request_sha256 = requestSha256
+  return trustBundle(
+    buildLeaderboardAcquisitionManifestV3({
+      ...input,
       acquisition_attempt: {
         binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
         attempt_id: '00000000-0000-4000-8000-000000000001',
@@ -479,6 +502,101 @@ describe('Tier-A metric trust transaction writer', () => {
             { code: 'field_lineage_unknown', state: 'unknown' },
             { code: 'native_window_boundary_unverified', state: 'unknown' },
           ],
+        }),
+      ])
+    )
+  })
+
+  it('writes complete observations only when the reviewed native-window request also matches', async () => {
+    const query = jest.fn(async (sqlInput: unknown, params: unknown[] = []) => {
+      const sql = String(sqlInput)
+      if (sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')) {
+        return { rows: [{ attempt_seq: '41' }], rowCount: 1 }
+      }
+      if (sql.includes('INSERT INTO arena.metric_trust_runs')) return { rows: [], rowCount: 1 }
+      if (sql.includes('FROM arena.metric_source_contracts')) {
+        return { rows: contracts, rowCount: contracts.length }
+      }
+      if (sql.includes('INSERT INTO arena.metric_trust_observations')) {
+        const input = JSON.parse(String(params[0])) as Array<{
+          contract_id: string
+          trader_id: number
+        }>
+        return {
+          rows: input.map((observation, index) => ({
+            id: String(301 + index),
+            contract_id: observation.contract_id,
+            trader_id: String(observation.trader_id),
+          })),
+          rowCount: input.length,
+        }
+      }
+      if (sql.includes('INSERT INTO arena.metric_trust_artifacts')) {
+        const input = JSON.parse(String(params[0])) as Array<Record<string, unknown>>
+        return { rows: input, rowCount: input.length }
+      }
+      throw new Error(`unexpected SQL: ${sql}`)
+    })
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: exactWindowAttemptBoundTrustFixture(),
+    })
+
+    expect(prepared.nativeWindowEvidence).toMatchObject({
+      state: 'verified',
+      semantics: 'provider_native_period_aggregate',
+    })
+    await writeLeaderboardMetricTrust(queryClient(query), prepared, {
+      snapshotId: 77,
+      snapshotScrapedAt: '2026-07-21T10:00:03.000Z',
+      traderIds: new Map([
+        ['one', 1_001],
+        ['two', 1_002],
+      ]),
+    })
+
+    const observationCall = query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO arena.metric_trust_observations')
+    )!
+    const observations = JSON.parse(String(observationCall[1][0])) as Array<{
+      exchange_trader_id: string
+      contract_id: string
+      quality: string
+      window_state: string
+      blocking_reasons: unknown[]
+    }>
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          exchange_trader_id: 'one',
+          contract_id: '11',
+          quality: 'complete',
+          window_state: 'verified',
+          blocking_reasons: [],
+        }),
+        expect.objectContaining({
+          exchange_trader_id: 'one',
+          contract_id: '12',
+          quality: 'complete',
+          window_state: 'verified',
+          blocking_reasons: [],
+        }),
+        expect.objectContaining({
+          exchange_trader_id: 'two',
+          contract_id: '11',
+          quality: 'unknown',
+          window_state: 'verified',
+          blocking_reasons: [{ code: 'field_lineage_unknown', state: 'unknown' }],
+        }),
+        expect.objectContaining({
+          exchange_trader_id: 'two',
+          contract_id: '12',
+          quality: 'complete',
+          window_state: 'verified',
+          blocking_reasons: [],
         }),
       ])
     )
