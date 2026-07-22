@@ -11,6 +11,13 @@ export const METRIC_TRUST_READINESS_CONTRACT = 'arena.metric-trust-release-readi
 export const PRODUCTION_SUPABASE_ORIGIN = 'https://iknktzifjdyujdccyhsv.supabase.co'
 
 const TRANSIENT_STATUS = new Set([429, 502, 503, 504])
+const READINESS_KEYS = [
+  'contract',
+  'legacy_complete_verified_count',
+  'missing',
+  'ready',
+  'source_page_lineage_column',
+]
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -18,23 +25,41 @@ function isRecord(value) {
 
 export function validateMetricTrustReadiness(payload) {
   if (!isRecord(payload)) return { ready: false, reason: 'readiness payload is not an object' }
+  if (JSON.stringify(Object.keys(payload).sort()) !== JSON.stringify(READINESS_KEYS)) {
+    return { ready: false, reason: 'readiness payload keys are malformed' }
+  }
   if (payload.contract !== METRIC_TRUST_READINESS_CONTRACT) {
     return { ready: false, reason: 'readiness contract is missing or unsupported' }
   }
-  if (!Array.isArray(payload.missing) || payload.missing.some((item) => typeof item !== 'string')) {
+  if (
+    !Array.isArray(payload.missing) ||
+    payload.missing.some(
+      (item) => typeof item !== 'string' || item.length === 0 || item.trim() !== item
+    ) ||
+    new Set(payload.missing).size !== payload.missing.length
+  ) {
     return { ready: false, reason: 'readiness missing-object list is malformed' }
   }
-  if (!Number.isSafeInteger(payload.legacy_complete_verified_count)) {
+  if (
+    !Number.isSafeInteger(payload.legacy_complete_verified_count) ||
+    payload.legacy_complete_verified_count < 0
+  ) {
     return { ready: false, reason: 'legacy observation count is malformed' }
+  }
+  if (typeof payload.ready !== 'boolean') {
+    return { ready: false, reason: 'readiness ready flag is malformed' }
   }
   if (payload.source_page_lineage_column !== true) {
     return { ready: false, reason: 'source-page lineage is not durably available' }
   }
-  if (payload.ready !== true || payload.missing.length !== 0) {
+  if (payload.missing.length !== 0) {
     return { ready: false, reason: 'required metric-trust database objects are missing' }
   }
   if (payload.legacy_complete_verified_count !== 0) {
     return { ready: false, reason: 'legacy complete observations require quarantine' }
+  }
+  if (payload.ready !== true) {
+    return { ready: false, reason: 'readiness ready flag is inconsistent' }
   }
   return { ready: true, reason: 'metric-trust database release contract is ready' }
 }
@@ -85,7 +110,9 @@ export async function verifyMetricTrustReleaseReadiness({
     } catch (error) {
       lastFailure = error instanceof Error ? error.message : 'readiness request failed'
       if (
-        /contract|malformed|missing|lineage|quarantine|credentials|origin|project/.test(lastFailure)
+        /contract|malformed|missing|lineage|quarantine|inconsistent|credentials|origin|project/.test(
+          lastFailure
+        )
       ) {
         break
       }
