@@ -1015,6 +1015,368 @@ BEGIN
 END
 $missing_and_predating_expiry_are_durable$;
 
+DO $expanded_completion_exact_lifecycle$
+DECLARE
+  v_result jsonb;
+  v_tip_id uuid;
+  v_expires_at timestamptz;
+  v_now timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+BEGIN
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    4600,
+    'expanded exact completion',
+    3600
+  );
+  v_tip_id := (v_result ->> 'tip_id')::uuid;
+  v_expires_at := (v_result ->> 'checkout_expires_at')::timestamptz;
+  v_result := public.bind_tip_checkout_session_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'cs_tip_expanded_exact',
+    v_expires_at
+  );
+  IF v_result ->> 'status' <> 'bound' THEN
+    RAISE EXCEPTION 'expanded exact Session did not bind: %', v_result;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_tip_expanded_exact',
+    'pi_tip_expanded_exact',
+    'ch_tip_expanded_exact',
+    'cs_tip_expanded_exact',
+    4600,
+    'usd',
+    v_now,
+    v_tip_id::text,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4600,
+    v_expires_at,
+    'evt_tip_expanded_exact'
+  );
+  IF v_result ->> 'status' <> 'completed'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_tip_id
+        AND tip.status = 'completed'
+        AND tip.checkout_expires_at = v_expires_at
+        AND tip.checkout_post_id =
+          'd5200000-0000-4000-8000-000000000001'
+        AND tip.checkout_to_user_id =
+          'd5100000-0000-4000-8000-000000000002'
+        AND tip.stripe_checkout_session_id = 'cs_tip_expanded_exact'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.tip_checkout_legacy_completion_audits AS audit
+      WHERE audit.tip_id = v_tip_id
+    )
+  THEN
+    RAISE EXCEPTION 'expanded exact lifecycle completion failed: %', v_result;
+  END IF;
+END
+$expanded_completion_exact_lifecycle$;
+
+DO $expanded_completion_snapshot_drift$
+DECLARE
+  v_result jsonb;
+  v_tip_id uuid;
+  v_expires_at timestamptz;
+  v_now timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+BEGIN
+  v_result := public.reserve_tip_checkout_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    4700,
+    'expanded snapshot drift',
+    3600
+  );
+  v_tip_id := (v_result ->> 'tip_id')::uuid;
+  v_expires_at := (v_result ->> 'checkout_expires_at')::timestamptz;
+  PERFORM public.bind_tip_checkout_session_atomic(
+    v_tip_id,
+    'd5100000-0000-4000-8000-000000000001',
+    'cs_tip_expanded_snapshot',
+    v_expires_at
+  );
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_tip_expanded_snapshot',
+    'pi_tip_expanded_snapshot',
+    'ch_tip_expanded_snapshot',
+    'cs_tip_expanded_snapshot',
+    4700,
+    'usd',
+    v_now,
+    v_tip_id::text,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000002',
+    'd5100000-0000-4000-8000-000000000002',
+    4700,
+    v_expires_at,
+    'evt_tip_expanded_snapshot_drift'
+  );
+  IF v_result ->> 'status' <> 'manual_review'
+    OR v_result ->> 'reason_key' <>
+      'tip_checkout_completion_snapshot_drift'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'tip_checkout_completion'
+        AND review.object_id = 'evt_tip_expanded_snapshot_drift'
+        AND review.reason_key =
+          'tip_checkout_completion_snapshot_drift'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = v_tip_id
+        AND tip.status = 'pending'
+        AND tip.stripe_customer_id IS NULL
+        AND tip.stripe_payment_intent_id IS NULL
+        AND tip.stripe_charge_id IS NULL
+    )
+  THEN
+    RAISE EXCEPTION 'expanded snapshot drift was not fail-closed: %', v_result;
+  END IF;
+
+  -- The deterministic conflict did not consume or mutate payment authority;
+  -- a later exact signed event can still complete the same bound Session.
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    v_tip_id,
+    'cus_tip_expanded_snapshot',
+    'pi_tip_expanded_snapshot',
+    'ch_tip_expanded_snapshot',
+    'cs_tip_expanded_snapshot',
+    4700,
+    'usd',
+    v_now,
+    v_tip_id::text,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4700,
+    v_expires_at,
+    'evt_tip_expanded_snapshot_exact'
+  );
+  IF v_result ->> 'status' <> 'completed' THEN
+    RAISE EXCEPTION 'exact retry after snapshot review failed: %', v_result;
+  END IF;
+END
+$expanded_completion_snapshot_drift$;
+
+DO $expanded_completion_exact_legacy_audit_and_refund$
+DECLARE
+  v_result jsonb;
+  v_refund jsonb;
+  v_now timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+  v_stripe_expires_at timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp())
+      + interval '1 hour';
+BEGIN
+  INSERT INTO public.tips (
+    id, post_id, from_user_id, to_user_id, amount_cents, status
+  ) VALUES (
+    'd5300000-0000-4000-8000-000000000030',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4800,
+    'pending'
+  );
+  UPDATE public.tips
+  SET stripe_checkout_session_id = 'cs_tip_expanded_legacy'
+  WHERE id = 'd5300000-0000-4000-8000-000000000030';
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    'd5300000-0000-4000-8000-000000000030',
+    'cus_tip_expanded_legacy',
+    'pi_tip_expanded_legacy',
+    'ch_tip_expanded_legacy',
+    'cs_tip_expanded_legacy',
+    4800,
+    'usd',
+    v_now,
+    NULL,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4800,
+    v_stripe_expires_at,
+    'evt_tip_expanded_legacy_complete'
+  );
+  IF v_result ->> 'status' <> 'completed'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_checkout_legacy_completion_audits AS audit
+      WHERE audit.tip_id = 'd5300000-0000-4000-8000-000000000030'
+        AND audit.checkout_session_id = 'cs_tip_expanded_legacy'
+        AND audit.stripe_customer_id = 'cus_tip_expanded_legacy'
+        AND audit.stripe_payment_intent_id = 'pi_tip_expanded_legacy'
+        AND audit.stripe_charge_id = 'ch_tip_expanded_legacy'
+        AND audit.client_reference_id IS NULL
+        AND audit.metadata_user_id =
+          'd5100000-0000-4000-8000-000000000001'
+        AND audit.metadata_from_user_id =
+          'd5100000-0000-4000-8000-000000000001'
+        AND audit.metadata_post_id =
+          'd5200000-0000-4000-8000-000000000001'
+        AND audit.metadata_to_user_id =
+          'd5100000-0000-4000-8000-000000000002'
+        AND audit.metadata_amount_cents = 4800
+        AND audit.amount_paid = 4800
+        AND audit.currency = 'usd'
+        AND audit.checkout_expires_at = v_stripe_expires_at
+        AND audit.initial_event_id =
+          'evt_tip_expanded_legacy_complete'
+    )
+  THEN
+    RAISE EXCEPTION 'exact legacy completion audit failed: %', v_result;
+  END IF;
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    'd5300000-0000-4000-8000-000000000030',
+    'cus_tip_expanded_legacy',
+    'pi_tip_expanded_legacy',
+    'ch_tip_expanded_legacy',
+    'cs_tip_expanded_legacy',
+    4800,
+    'usd',
+    v_now,
+    NULL,
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4800,
+    v_stripe_expires_at,
+    'evt_tip_expanded_legacy_replay'
+  );
+  IF v_result ->> 'status' <> 'already_completed' THEN
+    RAISE EXCEPTION 'exact legacy completion replay failed: %', v_result;
+  END IF;
+
+  v_refund := public.record_charge_refund_tombstone_atomic(
+    'd5100000-0000-4000-8000-000000000001',
+    'cus_tip_expanded_legacy',
+    'pi_tip_expanded_legacy',
+    'ch_tip_expanded_legacy',
+    true,
+    4800,
+    'usd',
+    4800,
+    'succeeded',
+    'evt_tip_expanded_legacy_refund',
+    v_now + interval '1 second'
+  );
+  IF v_refund ->> 'status' <> 'recorded'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = 'd5300000-0000-4000-8000-000000000030'
+        AND tip.status = 'refunded'
+        AND tip.checkout_expires_at IS NULL
+        AND tip.stripe_checkout_session_id = 'cs_tip_expanded_legacy'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tip_checkout_legacy_completion_audits AS audit
+      WHERE audit.tip_id = 'd5300000-0000-4000-8000-000000000030'
+        AND audit.initial_event_id =
+          'evt_tip_expanded_legacy_complete'
+    )
+  THEN
+    RAISE EXCEPTION 'legacy audited refund compatibility failed: %', v_refund;
+  END IF;
+
+  BEGIN
+    UPDATE public.tip_checkout_legacy_completion_audits
+    SET currency = 'eur'
+    WHERE tip_id = 'd5300000-0000-4000-8000-000000000030';
+    RAISE EXCEPTION 'legacy completion audit mutation unexpectedly succeeded';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+END
+$expanded_completion_exact_legacy_audit_and_refund$;
+
+DO $expanded_completion_legacy_shape_rejected$
+DECLARE
+  v_result jsonb;
+  v_now timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp());
+  v_stripe_expires_at timestamptz :=
+    pg_catalog.date_trunc('second', pg_catalog.clock_timestamp())
+      + interval '1 hour';
+BEGIN
+  INSERT INTO public.tips (
+    id, post_id, from_user_id, to_user_id, amount_cents, status
+  ) VALUES (
+    'd5300000-0000-4000-8000-000000000031',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4900,
+    'pending'
+  );
+  UPDATE public.tips
+  SET stripe_checkout_session_id = 'cs_tip_expanded_legacy_rejected'
+  WHERE id = 'd5300000-0000-4000-8000-000000000031';
+
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    'd5300000-0000-4000-8000-000000000031',
+    'cus_tip_expanded_legacy_rejected',
+    'pi_tip_expanded_legacy_rejected',
+    'ch_tip_expanded_legacy_rejected',
+    'cs_tip_expanded_legacy_rejected',
+    4900,
+    'usd',
+    v_now,
+    'd5300000-0000-4000-8000-000000000031',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000001',
+    'd5200000-0000-4000-8000-000000000001',
+    'd5100000-0000-4000-8000-000000000002',
+    4900,
+    v_stripe_expires_at,
+    'evt_tip_expanded_legacy_rejected'
+  );
+  IF v_result ->> 'status' <> 'manual_review'
+    OR v_result ->> 'reason_key' <>
+      'tip_checkout_completion_legacy_shape_drift'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id = 'd5300000-0000-4000-8000-000000000031'
+        AND tip.status = 'pending'
+        AND tip.stripe_customer_id IS NULL
+        AND tip.stripe_payment_intent_id IS NULL
+        AND tip.stripe_charge_id IS NULL
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.tip_checkout_legacy_completion_audits AS audit
+      WHERE audit.tip_id = 'd5300000-0000-4000-8000-000000000031'
+    )
+  THEN
+    RAISE EXCEPTION 'legacy shape was not rejected: %', v_result;
+  END IF;
+END
+$expanded_completion_legacy_shape_rejected$;
+
 DO $function_acl_and_role_guard$
 BEGIN
   IF pg_catalog.has_function_privilege(
@@ -1035,6 +1397,16 @@ BEGIN
     OR NOT pg_catalog.has_function_privilege(
       'service_role',
       'public.reserve_tip_checkout_atomic(uuid,uuid,bigint,text,integer)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.complete_tip_with_stripe_ownership_atomic(uuid,text,text,text,text,bigint,text,timestamp with time zone,text,uuid,uuid,uuid,uuid,bigint,timestamp with time zone,text)',
+      'EXECUTE'
+    )
+    OR NOT pg_catalog.has_function_privilege(
+      'service_role',
+      'public.complete_tip_with_stripe_ownership_atomic(uuid,text,text,text,text,bigint,text,timestamp with time zone,text,uuid,uuid,uuid,uuid,bigint,timestamp with time zone,text)',
       'EXECUTE'
     )
   THEN

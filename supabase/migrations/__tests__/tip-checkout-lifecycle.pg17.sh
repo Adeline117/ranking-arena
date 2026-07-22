@@ -17,6 +17,7 @@ MIGRATION_181836="$ROOT_DIR/supabase/migrations/20260718183600_fix_stripe_lifeti
 MIGRATION_181845="$ROOT_DIR/supabase/migrations/20260718184500_classify_non_entitlement_stripe_payments.sql"
 MIGRATION_18184550="$ROOT_DIR/supabase/migrations/20260718184550_durable_tip_completion_notification.sql"
 MIGRATION_21210000="$ROOT_DIR/supabase/migrations/20260721210000_tip_checkout_lifecycle_atomic.sql"
+MIGRATION_21211000="$ROOT_DIR/supabase/migrations/20260721211000_tip_checkout_completion_identity.sql"
 DUPLICATE_DRIFT="$ROOT_DIR/supabase/migrations/__tests__/tip-checkout-lifecycle.duplicate-drift.psql"
 AUTH_DRIFT="$ROOT_DIR/supabase/migrations/__tests__/tip-checkout-lifecycle.auth-select-only-drift.psql"
 AUTH_MODE="$ROOT_DIR/supabase/migrations/__tests__/tip-checkout-lifecycle.managed-auth-mode.psql"
@@ -24,12 +25,58 @@ AUTH_BYPASS_DRIFT="$ROOT_DIR/supabase/migrations/__tests__/tip-checkout-lifecycl
 RESTORE_POSTGRES="$ROOT_DIR/supabase/migrations/__tests__/tip-checkout-lifecycle.restore-postgres-super.psql"
 FIXTURE="$ROOT_DIR/supabase/migrations/__tests__/tip-checkout-lifecycle.fixture.psql"
 CONCURRENCY="$ROOT_DIR/supabase/migrations/__tests__/tip-checkout-lifecycle.concurrency.pg17.sh"
-FAILURE_LOG="$(mktemp /tmp/tip-checkout-lifecycle-preflight.XXXXXX.log)"
+FAILURE_LOG="$(mktemp /tmp/tip-checkout-lifecycle-preflight.XXXXXX)"
+EXACT_LEDGER_SETUP="$(mktemp /tmp/tip-checkout-lifecycle-ledger-exact.XXXXXX)"
+DRIFTED_LEDGER_SETUP="$(mktemp /tmp/tip-checkout-lifecycle-ledger-drift.XXXXXX)"
+LIFECYCLE_SHA256='d10a9959b52e20d127553c1683b154a62c97d85c455ff12e831c3a1d5c7ef1ab'
 
 cleanup() {
-  rm -f "$FAILURE_LOG"
+  rm -f "$FAILURE_LOG" "$EXACT_LEDGER_SETUP" "$DRIFTED_LEDGER_SETUP"
 }
 trap cleanup EXIT
+
+if [[ "$(shasum -a 256 "$MIGRATION_21210000" | awk '{print $1}')" != \
+  "$LIFECYCLE_SHA256" ]]; then
+  echo "Tip checkout lifecycle fixture hash drifted" >&2
+  exit 1
+fi
+
+write_ledger_schema() {
+  printf '%s\n' \
+    'CREATE SCHEMA extensions AUTHORIZATION postgres;' \
+    'CREATE EXTENSION pgcrypto WITH SCHEMA extensions;' \
+    'CREATE SCHEMA supabase_migrations AUTHORIZATION postgres;' \
+    'CREATE TABLE supabase_migrations.schema_migrations (' \
+    '  version text PRIMARY KEY,' \
+    '  statements text[] NOT NULL,' \
+    '  name text NOT NULL,' \
+    '  created_by text NOT NULL,' \
+    '  idempotency_key text NOT NULL' \
+    ');'
+}
+
+{
+  write_ledger_schema
+  printf '%s' \
+    "INSERT INTO supabase_migrations.schema_migrations" \
+    " (version, statements, name, created_by, idempotency_key)" \
+    " VALUES ('20260721210000', ARRAY[\$tip_lifecycle_exact_body\$"
+  perl -0pe '' "$MIGRATION_21210000"
+  printf '%s\n' \
+    "\$tip_lifecycle_exact_body\$]::text[]," \
+    " 'tip_checkout_lifecycle_atomic', 'codex'," \
+    " 'codex:20260721210000:$LIFECYCLE_SHA256');"
+} >"$EXACT_LEDGER_SETUP"
+
+{
+  write_ledger_schema
+  printf '%s\n' \
+    'INSERT INTO supabase_migrations.schema_migrations' \
+    '  (version, statements, name, created_by, idempotency_key)' \
+    "VALUES ('20260721210000', ARRAY['drifted lifecycle body']::text[]," \
+    "  'tip_checkout_lifecycle_atomic', 'codex'," \
+    "  'codex:20260721210000:$LIFECYCLE_SHA256');"
+} >"$DRIFTED_LEDGER_SETUP"
 
 SETUP_CHAIN="$NOTIFICATION_PRE_SETUP:$NON_ENTITLEMENT_SETUP:$NOTIFICATION_SETUP:$LIFECYCLE_SETUP"
 BASE_MIGRATION_CHAIN="$MIGRATION_181835:$MIGRATION_181836:$OWNERSHIP_DRIFT:$MIGRATION_181845:$MIGRATION_18184550:$AUTH_MODE"
@@ -44,6 +91,34 @@ if ! grep -Fq \
   'duplicate pending Tip checkout reservations require explicit review' \
   "$FAILURE_LOG"; then
   echo "duplicate reservation preflight failed for an unexpected reason" >&2
+  sed -n '1,180p' "$FAILURE_LOG" >&2
+  exit 1
+fi
+
+if STRIPE_ENTITLEMENT_EXTRA_SETUP_SQLS="$SETUP_CHAIN" \
+  STRIPE_ENTITLEMENT_EXTRA_MIGRATIONS="$BASE_MIGRATION_CHAIN:$MIGRATION_21210000:$MIGRATION_21211000" \
+  "$BASE_HARNESS" >"$FAILURE_LOG" 2>&1; then
+  echo "Tip completion identity unexpectedly accepted a missing lifecycle ledger" >&2
+  exit 1
+fi
+if ! grep -Fq \
+  'Tip completion identity requires the exact 20260721210000 migration ledger' \
+  "$FAILURE_LOG"; then
+  echo "missing lifecycle ledger preflight failed for an unexpected reason" >&2
+  sed -n '1,180p' "$FAILURE_LOG" >&2
+  exit 1
+fi
+
+if STRIPE_ENTITLEMENT_EXTRA_SETUP_SQLS="$SETUP_CHAIN" \
+  STRIPE_ENTITLEMENT_EXTRA_MIGRATIONS="$BASE_MIGRATION_CHAIN:$MIGRATION_21210000:$DRIFTED_LEDGER_SETUP:$MIGRATION_21211000" \
+  "$BASE_HARNESS" >"$FAILURE_LOG" 2>&1; then
+  echo "Tip completion identity unexpectedly accepted a drifted lifecycle ledger" >&2
+  exit 1
+fi
+if ! grep -Fq \
+  'Tip completion identity requires the exact 20260721210000 migration ledger' \
+  "$FAILURE_LOG"; then
+  echo "drifted lifecycle ledger preflight failed for an unexpected reason" >&2
   sed -n '1,180p' "$FAILURE_LOG" >&2
   exit 1
 fi
@@ -77,7 +152,7 @@ if ! grep -Fq \
 fi
 
 export STRIPE_ENTITLEMENT_EXTRA_SETUP_SQLS="$SETUP_CHAIN"
-export STRIPE_ENTITLEMENT_EXTRA_MIGRATIONS="$BASE_MIGRATION_CHAIN:$MIGRATION_21210000:$RESTORE_POSTGRES"
+export STRIPE_ENTITLEMENT_EXTRA_MIGRATIONS="$BASE_MIGRATION_CHAIN:$MIGRATION_21210000:$EXACT_LEDGER_SETUP:$MIGRATION_21211000:$RESTORE_POSTGRES"
 export STRIPE_ENTITLEMENT_EXTRA_PROOF_SQLS="$FIXTURE"
 export STRIPE_ENTITLEMENT_EXTRA_PROOF_SHELLS="$CONCURRENCY"
 

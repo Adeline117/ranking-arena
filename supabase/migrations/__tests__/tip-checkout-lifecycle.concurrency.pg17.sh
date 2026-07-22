@@ -645,7 +645,15 @@ terminal_complete_sql="
     'cs_tip_expiry_completion_race',
     5000,
     'usd',
-    '$TERMINAL_EVENT_CREATED'
+    '$TERMINAL_EVENT_CREATED',
+    '$TERMINAL_TIP_ID',
+    'c6100000-0000-4000-8000-000000000001',
+    'c6100000-0000-4000-8000-000000000001',
+    'c6200000-0000-4000-8000-000000000004',
+    'c6100000-0000-4000-8000-000000000002',
+    5000,
+    '$TERMINAL_EXPIRES_AT',
+    'evt_tip_expiry_completion_complete'
   ) AS result;
   /* tip_checkout_expiry_completion_payment */
 "
@@ -655,14 +663,14 @@ run_ordered_pair \
   "$terminal_expire_sql" \
   "$terminal_complete_sql"
 if [[ "$PAIR_FIRST_RESULT" != "expired"
-  || "$PAIR_SECOND_RESULT" != "identity_conflict" ]]; then
+  || "$PAIR_SECOND_RESULT" != "manual_review" ]]; then
   echo "expiry/completion race did not commit the signed first terminal" >&2
   printf '%s\n%s\n' "$PAIR_FIRST_RESULT" "$PAIR_SECOND_RESULT" >&2
   exit 1
 fi
 assert_query \
   "expiry/completion single terminal" \
-  "failed|evt_tip_expiry_completion_race||||0" \
+  "failed|evt_tip_expiry_completion_race||||0|1" \
   "
     SELECT status, checkout_failure_event_id,
       stripe_payment_intent_id, stripe_charge_id, completed_at,
@@ -675,6 +683,14 @@ assert_query \
           OR ownership.stripe_charge_id = 'ch_tip_expiry_completion_race'
           OR ownership.checkout_session_id =
             'cs_tip_expiry_completion_race'
+      ),
+      (
+        SELECT pg_catalog.count(*)
+        FROM public.stripe_manual_reviews AS review
+        WHERE review.object_type = 'tip_checkout_completion'
+          AND review.object_id = 'evt_tip_expiry_completion_complete'
+          AND review.reason_key =
+            'tip_checkout_completion_after_expiry'
       )
     FROM public.tips AS tip
     WHERE tip.id = '$TERMINAL_TIP_ID';

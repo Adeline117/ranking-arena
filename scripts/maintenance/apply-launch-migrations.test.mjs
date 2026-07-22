@@ -30,11 +30,12 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
   const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
 
-  assert.equal(predeploy.length, 63)
+  assert.equal(predeploy.length, 64)
   assert.deepEqual(independentPredeploy, [
     '20260721140000_idempotent_equivalent_refund_events.sql',
     '20260721175746_arena_score_inputs_publish_bundle.sql',
     '20260721210000_tip_checkout_lifecycle_atomic.sql',
+    '20260721211000_tip_checkout_completion_identity.sql',
   ])
   assert.ok(independentPredeploy.every((migration) => predeploy.includes(migration)))
   assert.deepEqual(postdeploy, [
@@ -69,6 +70,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260721150000_metric_trust_raw_artifact_identity.sql',
           '20260721175746_arena_score_inputs_publish_bundle.sql',
           '20260721210000_tip_checkout_lifecycle_atomic.sql',
+          '20260721211000_tip_checkout_completion_identity.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -86,9 +88,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716083256_repair_legacy_exchange_logo_paths.sql',
   ])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 74)
+  assert.equal(new Set(all).size, 75)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-22), [
+  assert.deepEqual(predeploy.slice(-23), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -111,6 +113,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260721150000_metric_trust_raw_artifact_identity.sql',
     '20260721175746_arena_score_inputs_publish_bundle.sql',
     '20260721210000_tip_checkout_lifecycle_atomic.sql',
+    '20260721211000_tip_checkout_completion_identity.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -124,6 +127,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260721150000_metric_trust_raw_artifact_identity.sql'))
   assert.ok(predeploy.includes('20260721175746_arena_score_inputs_publish_bundle.sql'))
   assert.ok(predeploy.includes('20260721210000_tip_checkout_lifecycle_atomic.sql'))
+  assert.ok(predeploy.includes('20260721211000_tip_checkout_completion_identity.sql'))
   assert.ok(!postdeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260717120000_trader_follows_composite_identity.sql'))
   assert.ok(
@@ -154,6 +158,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   )
   assert.ok(!recoveryPrerequisites.includes('20260721175746_arena_score_inputs_publish_bundle.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260721210000_tip_checkout_lifecycle_atomic.sql'))
+  assert.ok(!recoveryPrerequisites.includes('20260721211000_tip_checkout_completion_identity.sql'))
 })
 
 test('runner records exact file bodies and hashes in the same transaction', () => {
@@ -379,6 +384,7 @@ test('Tip checkout production apply requires a dedicated freeze attestation befo
   const sqlPath = resolve(directory, 'sql')
   const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
   const lifecycle = '20260721210000_tip_checkout_lifecycle_atomic.sql'
+  const completionIdentity = '20260721211000_tip_checkout_completion_identity.sql'
   const independent = '20260721140000_idempotent_equivalent_refund_events.sql'
   try {
     writeFileSync(
@@ -387,7 +393,7 @@ test('Tip checkout production apply requires a dedicated freeze attestation befo
         '#!/usr/bin/env bash',
         'printf "%s\\n" "$*" >> "$FAKE_PSQL_CALLS"',
         'if [[ " $* " == *" -Atc "* ]]; then',
-        '  if [[ "$*" == *"20260721210000"* || "$*" == *"20260721140000"* ]]; then',
+        '  if [[ "$*" == *"20260721210000"* || "$*" == *"20260721211000"* || "$*" == *"20260721140000"* ]]; then',
         "    printf '%s\\n' missing",
         '  else',
         "    printf '%s\\n' exact",
@@ -463,6 +469,43 @@ test('Tip checkout production apply requires a dedicated freeze attestation befo
     const lifecycleSql = readFileSync(sqlPath, 'utf8')
     assert.match(lifecycleSql, /\\echo APPLY 20260721210000_tip_checkout_lifecycle_atomic\.sql/)
     assert.ok(lifecycleSql.trimEnd().endsWith('COMMIT;'))
+
+    const completionIdentityEnv = {
+      ...baseOptions.env,
+      ARENA_PRODUCTION_MIGRATION_CONFIRM: 'APPLY_PREDEPLOY_ONE_20260721211000',
+    }
+    resetEvidence()
+    assertRejectedBeforePsql(
+      spawnSync('bash', [script, 'apply-predeploy-one', completionIdentity], {
+        ...baseOptions,
+        env: completionIdentityEnv,
+      })
+    )
+
+    resetEvidence()
+    const completionIdentityApply = spawnSync(
+      'bash',
+      [script, 'apply-predeploy-one', completionIdentity],
+      {
+        ...baseOptions,
+        env: {
+          ...completionIdentityEnv,
+          ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM: 'TIP_CHECKOUT_FROZEN_PENDING_ZERO',
+        },
+      }
+    )
+    assert.equal(completionIdentityApply.status, 0, completionIdentityApply.stderr)
+    const completionIdentitySql = readFileSync(sqlPath, 'utf8')
+    assert.match(
+      completionIdentitySql,
+      /\\echo APPLY 20260721211000_tip_checkout_completion_identity\.sql/
+    )
+    assert.equal(completionIdentitySql.match(/^\\echo APPLY /gm)?.length, 1)
+    assert.doesNotMatch(
+      completionIdentitySql,
+      /\\echo APPLY 20260721210000_tip_checkout_lifecycle_atomic\.sql/
+    )
+    assert.ok(completionIdentitySql.trimEnd().endsWith('COMMIT;'))
 
     resetEvidence()
     const independentApply = spawnSync('bash', [script, 'apply-predeploy-one', independent], {
