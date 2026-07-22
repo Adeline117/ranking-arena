@@ -51,10 +51,16 @@ describe('Tip checkout cutover at the Next.js proxy boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     delete process.env.STRIPE_TIP_CHECKOUT_ENABLED
+    delete process.env.STRIPE_SECRET_KEY
+    delete process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    delete process.env.VERCEL_ENV
   })
 
   afterAll(() => {
     delete process.env.STRIPE_TIP_CHECKOUT_ENABLED
+    delete process.env.STRIPE_SECRET_KEY
+    delete process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    delete process.env.VERCEL_ENV
   })
 
   it.each([undefined, 'false', 'TRUE'])(
@@ -79,4 +85,23 @@ describe('Tip checkout cutover at the Next.js proxy boundary', () => {
       expect(mockGenerateRequestId).not.toHaveBeenCalled()
     }
   )
+
+  it('returns 503 before other proxy work when the flag is true but Stripe is test mode', async () => {
+    process.env.STRIPE_TIP_CHECKOUT_ENABLED = 'true'
+    process.env.STRIPE_SECRET_KEY = 'sk_test_tip'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_tip'
+
+    const response = await proxy({
+      nextUrl: { pathname: '/api/tip/checkout' },
+      method: 'POST',
+    } as never)
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({
+      error: 'Tip checkout is temporarily unavailable.',
+      code: 'TIP_CHECKOUT_UNAVAILABLE',
+    })
+    expect(mockClassifyProxyStrictRateLimit).not.toHaveBeenCalled()
+    expect(mockGenerateRequestId).not.toHaveBeenCalled()
+  })
 })

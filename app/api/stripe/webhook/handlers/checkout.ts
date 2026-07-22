@@ -19,6 +19,17 @@ import type { Json } from '@/lib/supabase/database.types'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const reservationNoncePattern = /^[A-Za-z0-9_.:-]{8,128}$/
+const stripeCheckoutIdPattern = /^cs_[A-Za-z0-9_]+$/
+const stripeEventIdPattern = /^evt_[A-Za-z0-9_]+$/
+const tipExpiryMetadataKeys = [
+  'amount_cents',
+  'from_user_id',
+  'post_id',
+  'tip_id',
+  'to_user_id',
+  'type',
+  'user_id',
+] as const
 
 function rpcStatus(value: unknown): string | null {
   return value && !Array.isArray(value) && typeof value === 'object'
@@ -29,6 +40,23 @@ function rpcStatus(value: unknown): string | null {
 function canonicalUuid(value: string | null | undefined): string | null {
   const candidate = value?.trim()
   return candidate && uuidPattern.test(candidate) ? candidate.toLowerCase() : null
+}
+
+function exactCanonicalLowerUuid(value: string | null | undefined): string | null {
+  return value && value === value.trim() && value === value.toLowerCase() && uuidPattern.test(value)
+    ? value
+    : null
+}
+
+export function carriesTipCheckoutIdentity(metadata: Stripe.Metadata | null | undefined): boolean {
+  const candidate = metadata || {}
+  return (
+    candidate.type === 'tip' ||
+    Object.prototype.hasOwnProperty.call(candidate, 'tip_id') ||
+    (Object.prototype.hasOwnProperty.call(candidate, 'from_user_id') &&
+      Object.prototype.hasOwnProperty.call(candidate, 'post_id') &&
+      Object.prototype.hasOwnProperty.call(candidate, 'to_user_id'))
+  )
 }
 
 export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
@@ -289,6 +317,8 @@ export async function handleTipPaymentCompleted(
     supabase: getSupabaseAdmin(),
     sessionId: session.id,
     eventId: event.id,
+    eventLivemode: event.livemode,
+    snapshotLivemode: session.livemode,
   })
   logger.info('Tip checkout reached a durable terminal state', {
     sessionId: session.id,
@@ -303,6 +333,117 @@ export async function handleCheckoutExpired(
   session: Stripe.Checkout.Session,
   event: StripeWebhookEventContext
 ) {
+  const sessionMetadata = session.metadata || {}
+
+  // Tip expiration is a signed financial lifecycle transition. Handle it
+  // before generic funnel abandonment so it cannot be reduced to analytics.
+  if (carriesTipCheckoutIdentity(sessionMetadata)) {
+    const tipId = exactCanonicalLowerUuid(sessionMetadata.tip_id)
+    const userId = exactCanonicalLowerUuid(sessionMetadata.user_id)
+    const fromUserId = exactCanonicalLowerUuid(sessionMetadata.from_user_id)
+    const postId = exactCanonicalLowerUuid(sessionMetadata.post_id)
+    const toUserId = exactCanonicalLowerUuid(sessionMetadata.to_user_id)
+    const amountCents = Number(sessionMetadata.amount_cents)
+    const metadataKeys = Object.keys(sessionMetadata).sort()
+    const eventCreatedIsValid =
+      Number.isSafeInteger(event.created) && event.created > 0 && event.created <= 253_402_300_799
+    const sessionExpiresAtIsValid =
+      Number.isSafeInteger(session.expires_at) &&
+      Number(session.expires_at) > 0 &&
+      Number(session.expires_at) <= 253_402_300_799
+    const metadataIsExact =
+      metadataKeys.length === tipExpiryMetadataKeys.length &&
+      tipExpiryMetadataKeys.every((key, index) => metadataKeys[index] === key) &&
+      sessionMetadata.type === 'tip' &&
+      !!tipId &&
+      !!userId &&
+      !!fromUserId &&
+      userId === fromUserId &&
+      !!postId &&
+      !!toUserId &&
+      Number.isSafeInteger(amountCents) &&
+      amountCents >= 100 &&
+      amountCents <= 50000 &&
+      sessionMetadata.amount_cents === String(amountCents) &&
+      session.object === 'checkout.session' &&
+      session.mode === 'payment' &&
+      session.status === 'expired' &&
+      session.payment_status === 'unpaid' &&
+      session.subscription === null &&
+      session.livemode === true &&
+      event.livemode === true &&
+      session.livemode === event.livemode &&
+      stripeCheckoutIdPattern.test(session.id) &&
+      stripeEventIdPattern.test(event.id) &&
+      eventCreatedIsValid &&
+      sessionExpiresAtIsValid &&
+      session.client_reference_id === tipId
+
+    if (!metadataIsExact || !tipId || !fromUserId || !postId || !toUserId || !session.expires_at) {
+      await recordStripeCheckoutManualReview({
+        supabase: getSupabaseAdmin(),
+        sessionId: session.id || 'unknown_checkout_session',
+        userId: userId && userId === fromUserId ? userId : null,
+        reasonKey: 'tip_checkout_expiry_metadata_invalid',
+        reason: 'An expired Tip Checkout Session had incomplete or malformed exact identity.',
+        context: {
+          event_id: event.id,
+          event_created: event.created,
+          event_livemode: event.livemode,
+          session_id: session.id,
+          session_livemode: session.livemode ?? null,
+          session_mode: session.mode ?? null,
+          session_status: session.status ?? null,
+          session_payment_status: session.payment_status ?? null,
+          session_subscription_present: session.subscription !== null,
+          client_reference_id: session.client_reference_id || null,
+          checkout_expires_at: session.expires_at || null,
+          metadata_type: sessionMetadata.type || null,
+          metadata_tip_id: sessionMetadata.tip_id || null,
+          metadata_user_id: sessionMetadata.user_id || null,
+          metadata_from_user_id: sessionMetadata.from_user_id || null,
+          metadata_post_id: sessionMetadata.post_id || null,
+          metadata_to_user_id: sessionMetadata.to_user_id || null,
+          metadata_amount_cents: sessionMetadata.amount_cents || null,
+        },
+      })
+      return
+    }
+
+    const { data, error } = await getSupabaseAdmin().rpc('expire_pending_tip_checkout_atomic', {
+      p_tip_id: tipId,
+      p_from_user_id: fromUserId,
+      p_post_id: postId,
+      p_to_user_id: toUserId,
+      p_amount_cents: amountCents,
+      p_checkout_session_id: session.id,
+      p_checkout_expires_at: new Date(session.expires_at * 1000).toISOString(),
+      p_event_id: event.id,
+      p_event_created_at: new Date(event.created * 1000).toISOString(),
+    })
+    if (error) {
+      throw new Error(`Failed to expire pending Tip checkout: ${error.message}`)
+    }
+    const status = rpcStatus(data)
+    const acceptedStatuses = new Set([
+      'expired',
+      'already_expired',
+      'identity_conflict',
+      'already_terminal',
+      'not_found',
+    ])
+    if (!acceptedStatuses.has(String(status))) {
+      throw new Error(`Tip checkout expiry returned unexpected status ${status || 'missing'}`)
+    }
+    logger.info('Tip checkout expiry reached a durable terminal state', {
+      sessionId: session.id,
+      eventId: event.id,
+      tipId,
+      status,
+    })
+    return
+  }
+
   const userId = session.metadata?.userId || session.metadata?.supabase_user_id
   const plan = session.metadata?.plan
 
@@ -314,7 +455,6 @@ export async function handleCheckoutExpired(
     amountTotal: session.amount_total,
   })
 
-  const sessionMetadata = session.metadata || {}
   const carriesLifetimeReservationIdentity =
     Object.prototype.hasOwnProperty.call(sessionMetadata, LIFETIME_RESERVATION_ID_METADATA_KEY) ||
     Object.prototype.hasOwnProperty.call(sessionMetadata, LIFETIME_RESERVATION_NONCE_METADATA_KEY)

@@ -78,6 +78,9 @@ export const NULLABLE_RPC_ARGS = {
   claim_stripe_payment_ownership_atomic: {
     p_stripe_payment_intent_id: { type: 'string', optional: false },
   },
+  complete_tip_with_stripe_ownership_atomic: {
+    p_client_reference_id: { type: 'string', optional: false },
+  },
   create_group_channel_atomic: {
     p_description: { type: 'string', optional: false },
   },
@@ -431,24 +434,33 @@ function collectViewEdits(sourceFile, sections, edits) {
 function collectRpcEdits(sourceFile, functions, manifest, edits) {
   for (const [functionName, expectedArgs] of Object.entries(manifest)) {
     const fn = requiredProperty(functions, functionName, 'Database.public.Functions')
-    const fnProperties = propertyMap(
-      fn.type,
-      sourceFile,
-      `Database.public.Functions.${functionName}`
-    )
-    const args = requiredProperty(fnProperties, 'Args', `Database.public.Functions.${functionName}`)
-    const argProperties = propertyMap(
-      args.type,
-      sourceFile,
-      `Database.public.Functions.${functionName}.Args`
-    )
+    const functionTypes = ts.isUnionTypeNode(fn.type) ? [...fn.type.types] : [fn.type]
+    const variants = functionTypes.map((functionType, index) => {
+      const variantLabel = `Database.public.Functions.${functionName}.variant[${index}]`
+      const fnProperties = propertyMap(functionType, sourceFile, variantLabel)
+      const args = requiredProperty(fnProperties, 'Args', variantLabel)
+      return {
+        argProperties: propertyMap(args.type, sourceFile, `${variantLabel}.Args`),
+        label: variantLabel,
+      }
+    })
+    const expectedArgNames = Object.keys(expectedArgs)
+    let selectedVariant = variants[0]
+    if (variants.length > 1) {
+      const matchingVariants = variants.filter(({ argProperties }) =>
+        expectedArgNames.every((argName) => argProperties.has(argName))
+      )
+      if (matchingVariants.length !== 1) {
+        throw new Error(
+          `Database.public.Functions.${functionName} expected exactly one overload containing ${expectedArgNames.join(', ')}, found ${matchingVariants.length}`
+        )
+      }
+      selectedVariant = matchingVariants[0]
+    }
+    const { argProperties, label: variantLabel } = selectedVariant
 
     for (const [argName, contract] of Object.entries(expectedArgs)) {
-      const arg = requiredProperty(
-        argProperties,
-        argName,
-        `Database.public.Functions.${functionName}.Args`
-      )
+      const arg = requiredProperty(argProperties, argName, `${variantLabel}.Args`)
       if (Boolean(arg.questionToken) !== contract.optional) {
         throw new Error(
           `Database.public.Functions.${functionName}.Args.${argName} optional marker changed`

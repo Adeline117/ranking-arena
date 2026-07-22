@@ -9,6 +9,7 @@ export const getSupabase = () => getSupabaseAdmin() as SupabaseClient
 export type StripeWebhookEventContext = {
   id: string
   created: number
+  livemode: boolean
 }
 
 // Retry wrapper for database operations

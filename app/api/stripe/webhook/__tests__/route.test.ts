@@ -30,6 +30,16 @@ const mockHandleRefundLifecycle = jest.fn()
 const mockHandleChargeDisputeCreated = jest.fn()
 
 jest.mock('@/app/api/stripe/webhook/handlers/checkout', () => ({
+  carriesTipCheckoutIdentity: (metadata: Record<string, string> | null | undefined) => {
+    const candidate = metadata || {}
+    return (
+      candidate.type === 'tip' ||
+      Object.prototype.hasOwnProperty.call(candidate, 'tip_id') ||
+      (Object.prototype.hasOwnProperty.call(candidate, 'from_user_id') &&
+        Object.prototype.hasOwnProperty.call(candidate, 'post_id') &&
+        Object.prototype.hasOwnProperty.call(candidate, 'to_user_id'))
+    )
+  },
   handleCheckoutComplete: (...args: unknown[]) => mockHandleCheckoutComplete(...args),
   handleCheckoutExpired: (...args: unknown[]) => mockHandleCheckoutExpired(...args),
   handleTipPaymentCompleted: (...args: unknown[]) => mockHandleTipPaymentCompleted(...args),
@@ -80,6 +90,7 @@ function event(type = 'checkout.session.completed') {
   return {
     id: 'evt_test_retryable',
     created: 1_800_000_000,
+    livemode: true,
     type,
     data: {
       object: {
@@ -216,7 +227,7 @@ describe('POST /api/stripe/webhook', () => {
     expect(mockHandleTipPaymentCompleted).toHaveBeenCalledTimes(1)
     expect(mockHandleTipPaymentCompleted).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'cs_tip' }),
-      { id: 'evt_test_retryable', created: 1_800_000_000 }
+      { id: 'evt_test_retryable', created: 1_800_000_000, livemode: true }
     )
     expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
     expect(mockRpc).toHaveBeenCalledWith('finish_stripe_event', {
@@ -225,6 +236,43 @@ describe('POST /api/stripe/webhook', () => {
       p_error: 'Failed to mark tip completed',
     })
   })
+
+  it.each([
+    ['tip_id marker', { type: 'group', tip_id: 'tip-123' }],
+    [
+      'snapshot tuple markers',
+      {
+        type: 'group',
+        from_user_id: 'from-123',
+        post_id: 'post-123',
+        to_user_id: 'to-123',
+      },
+    ],
+  ])(
+    'routes a completed Tip with drifted type via %s to durable Tip review',
+    async (_, metadata) => {
+      constructEventMock.mockReturnValue({
+        ...event(),
+        data: {
+          object: {
+            id: 'cs_tip_drift',
+            customer: 'cus_123',
+            metadata,
+          },
+        },
+      })
+      mockHandleTipPaymentCompleted.mockResolvedValueOnce({
+        status: 'manual_review',
+        reviewCode: 'invalid_session_state',
+      })
+
+      const response = await POST(createRequest())
+
+      expect(response.status).toBe(200)
+      expect(mockHandleTipPaymentCompleted).toHaveBeenCalledTimes(1)
+      expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
+    }
+  )
 
   it.each([
     ['customer.subscription.updated', mockHandleSubscriptionUpdate],
@@ -248,6 +296,7 @@ describe('POST /api/stripe/webhook', () => {
       expect(handler).toHaveBeenCalledWith(expect.anything(), {
         id: 'evt_test_retryable',
         created: 1_800_000_000,
+        livemode: true,
       })
     }
   })

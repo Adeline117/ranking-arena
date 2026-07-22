@@ -8,7 +8,10 @@ jest.mock('@/lib/stripe/lifetime-entitlement', () => ({
 import type Stripe from 'stripe'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
-import { completeTipCheckout, type TipCompletionStatus } from '@/lib/stripe/tip-completion'
+import {
+  completeTipCheckout as completeTipCheckoutImpl,
+  type TipCompletionStatus,
+} from '@/lib/stripe/tip-completion'
 
 const TIP_ID = '21e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const SESSION_ID = 'cs_tip_123'
@@ -18,11 +21,41 @@ const CHARGE_ID = 'ch_tip_123'
 const EVENT_ID = 'evt_tip_123'
 const AMOUNT = 500
 const CHARGE_CREATED = 1_800_000_000
+const CHECKOUT_EXPIRES_AT = 1_800_003_600
+const FROM_USER_ID = '4d97d4ef-8ff0-432c-a638-dc15959575a1'
+const TO_USER_ID = '1126f050-b745-4a3f-8603-cd52473e7cd7'
+const POST_ID = '3126f050-b745-4a3f-8603-cd52473e7cd7'
 
 type Scenario = {
   session: Stripe.Checkout.Session
   paymentIntent: Stripe.PaymentIntent
   charge: Stripe.Charge
+}
+
+type CompleteTipCheckoutParams = Parameters<typeof completeTipCheckoutImpl>[0]
+
+function completeTipCheckout(
+  params: Omit<CompleteTipCheckoutParams, 'eventLivemode' | 'snapshotLivemode'> &
+    Partial<Pick<CompleteTipCheckoutParams, 'eventLivemode' | 'snapshotLivemode'>>
+) {
+  return completeTipCheckoutImpl({
+    eventLivemode: true,
+    snapshotLivemode: true,
+    ...params,
+  })
+}
+
+function tipMetadata(overrides: Record<string, string> = {}) {
+  return {
+    type: 'tip',
+    tip_id: TIP_ID,
+    user_id: FROM_USER_ID,
+    from_user_id: FROM_USER_ID,
+    post_id: POST_ID,
+    to_user_id: TO_USER_ID,
+    amount_cents: String(AMOUNT),
+    ...overrides,
+  }
 }
 
 function checkoutSession(
@@ -35,19 +68,22 @@ function checkoutSession(
     amount_total: AMOUNT,
     currency: 'usd',
     customer: CUSTOMER_ID,
+    client_reference_id: TIP_ID,
+    expires_at: CHECKOUT_EXPIRES_AT,
     livemode: true,
-    metadata: {
-      type: 'tip',
-      tip_id: TIP_ID,
-      amount_cents: String(AMOUNT),
-      from_user_id: '4d97d4ef-8ff0-432c-a638-dc15959575a1',
-      to_user_id: '1126f050-b745-4a3f-8603-cd52473e7cd7',
-    },
+    metadata: tipMetadata(),
     mode: 'payment',
+    invoice: null,
     payment_intent: PAYMENT_INTENT_ID,
     payment_status: 'paid',
     status: 'complete',
     subscription: null,
+    after_expiration: null,
+    allow_promotion_codes: false,
+    automatic_tax: { enabled: false },
+    adaptive_pricing: { enabled: false },
+    discounts: [],
+    shipping_cost: null,
     total_details: {
       amount_discount: 0,
       amount_shipping: 0,
@@ -148,6 +184,46 @@ describe('completeTipCheckout', () => {
     maybeSingleTombstone.mockResolvedValue({ data: null, error: null })
   })
 
+  it.each([
+    ['test-mode signed event', false, true],
+    ['test-mode signed snapshot', true, false],
+    ['consistent test mode', false, false],
+  ])(
+    'durably reviews %s before Stripe retrieval or the completion RPC',
+    async (_, eventLivemode, snapshotLivemode) => {
+      const { stripe, retrieveSession, retrievePaymentIntent, retrieveCharge } =
+        stripeFor(baseScenario())
+
+      await expect(
+        completeTipCheckout({
+          stripe,
+          supabase,
+          sessionId: SESSION_ID,
+          eventId: EVENT_ID,
+          eventLivemode,
+          snapshotLivemode,
+        })
+      ).resolves.toEqual({ status: 'manual_review', reviewCode: 'object_mismatch' })
+
+      expect(retrieveSession).not.toHaveBeenCalled()
+      expect(retrievePaymentIntent).not.toHaveBeenCalled()
+      expect(retrieveCharge).not.toHaveBeenCalled()
+      expect(rpc).not.toHaveBeenCalled()
+      expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          objectType: 'tip_checkout',
+          sessionId: SESSION_ID,
+          reasonKey: 'tip_checkout_authority:signed_mode:object_mismatch',
+          context: {
+            event_id: EVENT_ID,
+            event_livemode: eventLivemode,
+            snapshot_livemode: snapshotLivemode,
+          },
+        })
+      )
+    }
+  )
+
   it('resolves a fresh Session -> PaymentIntent -> Charge chain and performs one atomic write', async () => {
     const scenario = baseScenario()
     const { stripe, retrieveSession, retrievePaymentIntent, retrieveCharge } = stripeFor(scenario)
@@ -174,12 +250,27 @@ describe('completeTipCheckout', () => {
       p_amount_paid: AMOUNT,
       p_currency: 'usd',
       p_completed_at: '2027-01-15T08:00:00.000Z',
+      p_client_reference_id: TIP_ID,
+      p_metadata_user_id: FROM_USER_ID,
+      p_metadata_from_user_id: FROM_USER_ID,
+      p_metadata_post_id: POST_ID,
+      p_metadata_to_user_id: TO_USER_ID,
+      p_metadata_amount_cents: AMOUNT,
+      p_checkout_expires_at: new Date(CHECKOUT_EXPIRES_AT * 1000).toISOString(),
+      p_event_id: EVENT_ID,
     })
     expect(outcome).toEqual({
       status: 'completed',
       authority: {
         tipId: TIP_ID,
+        clientReferenceId: TIP_ID,
+        metadataUserId: FROM_USER_ID,
+        metadataFromUserId: FROM_USER_ID,
+        metadataPostId: POST_ID,
+        metadataToUserId: TO_USER_ID,
+        metadataAmountCents: AMOUNT,
         sessionId: SESSION_ID,
+        checkoutExpiresAt: new Date(CHECKOUT_EXPIRES_AT * 1000).toISOString(),
         customerId: CUSTOMER_ID,
         paymentIntentId: PAYMENT_INTENT_ID,
         chargeId: CHARGE_ID,
@@ -373,7 +464,7 @@ describe('completeTipCheckout', () => {
     ['mode', { mode: 'subscription' }],
     ['completion status', { status: 'open' }],
     ['payment status', { payment_status: 'unpaid' }],
-    ['product type', { metadata: { type: 'group', tip_id: TIP_ID, amount_cents: '500' } }],
+    ['product type', { metadata: tipMetadata({ type: 'group' }) }],
     ['subscription presence', { subscription: 'sub_wrong' }],
   ] as Array<[string, Partial<Stripe.Checkout.Session>]>)(
     'durably reviews an invalid tip Checkout Session %s',
@@ -395,8 +486,10 @@ describe('completeTipCheckout', () => {
     ['non-canonical uppercase', TIP_ID.toUpperCase(), 'identity_invalid'],
   ])('durably reviews a %s tip_id', async (_label, tipId, reviewCode) => {
     const scenario = baseScenario()
+    const invalidMetadata: Record<string, string> = tipMetadata(tipId ? { tip_id: tipId } : {})
+    if (!tipId) delete invalidMetadata.tip_id
     scenario.session = checkoutSession({
-      metadata: { type: 'tip', amount_cents: String(AMOUNT), ...(tipId ? { tip_id: tipId } : {}) },
+      metadata: invalidMetadata,
     })
     const { stripe } = stripeFor(scenario)
 
@@ -407,6 +500,54 @@ describe('completeTipCheckout', () => {
       reviewCode,
     })
     expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['user/from conflict', { metadata: tipMetadata({ user_id: TO_USER_ID }) }, 'identity_conflict'],
+    [
+      'post snapshot identity',
+      { metadata: tipMetadata({ post_id: 'not-a-uuid' }) },
+      'identity_invalid',
+    ],
+    [
+      'extra mutable metadata',
+      { metadata: tipMetadata({ creator_handle: 'mutable' }) },
+      'identity_invalid',
+    ],
+    ['client reference', { client_reference_id: TO_USER_ID }, 'object_mismatch'],
+    ['unsafe expiry', { expires_at: Number.MAX_SAFE_INTEGER }, 'invalid_object'],
+  ] as Array<[string, Partial<Stripe.Checkout.Session>, string]>)(
+    'durably reviews Checkout %s drift before the DB transition',
+    async (_label, overrides, reviewCode) => {
+      const scenario = baseScenario()
+      scenario.session = checkoutSession(overrides)
+      const { stripe } = stripeFor(scenario)
+
+      await expect(
+        completeTipCheckout({ stripe, supabase, sessionId: SESSION_ID, eventId: EVENT_ID })
+      ).resolves.toEqual({ status: 'manual_review', reviewCode })
+      expect(rpc).not.toHaveBeenCalled()
+    }
+  )
+
+  it('passes a null client reference only as an exact legacy compatibility candidate', async () => {
+    const scenario = baseScenario()
+    scenario.session = checkoutSession({ client_reference_id: null })
+    const { stripe } = stripeFor(scenario)
+
+    await expect(
+      completeTipCheckout({ stripe, supabase, sessionId: SESSION_ID, eventId: EVENT_ID })
+    ).resolves.toMatchObject({
+      status: 'completed',
+      authority: { clientReferenceId: null },
+    })
+    expect(rpc).toHaveBeenCalledWith(
+      'complete_tip_with_stripe_ownership_atomic',
+      expect.objectContaining({
+        p_client_reference_id: null,
+        p_checkout_expires_at: new Date(CHECKOUT_EXPIRES_AT * 1000).toISOString(),
+      })
+    )
   })
 
   it('durably reviews a non-succeeded PaymentIntent', async () => {
@@ -464,6 +605,27 @@ describe('completeTipCheckout', () => {
     expect(rpc).not.toHaveBeenCalled()
   })
 
+  it('durably reviews an internally consistent test-mode payment chain', async () => {
+    const scenario = baseScenario()
+    scenario.session = checkoutSession({ livemode: false })
+    scenario.paymentIntent = paymentIntent({ livemode: false })
+    scenario.charge = charge({ livemode: false })
+    const { stripe } = stripeFor(scenario)
+
+    await expect(
+      completeTipCheckout({ stripe, supabase, sessionId: SESSION_ID, eventId: EVENT_ID })
+    ).resolves.toEqual({
+      status: 'manual_review',
+      reviewCode: 'object_mismatch',
+    })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonKey: 'tip_checkout_authority:charge:object_mismatch',
+      })
+    )
+  })
+
   it.each([
     [
       'session subtotal',
@@ -481,7 +643,7 @@ describe('completeTipCheckout', () => {
       'metadata amount',
       (scenario: Scenario) =>
         (scenario.session = checkoutSession({
-          metadata: { type: 'tip', tip_id: TIP_ID, amount_cents: '499' },
+          metadata: tipMetadata({ amount_cents: '499' }),
         })),
     ],
     [
@@ -523,6 +685,19 @@ describe('completeTipCheckout', () => {
       status: 'manual_review',
       reviewCode: 'currency_mismatch',
     })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('durably reviews a consistently non-USD Tip payment', async () => {
+    const scenario = baseScenario()
+    scenario.session = checkoutSession({ currency: 'eur' })
+    scenario.paymentIntent = paymentIntent({ currency: 'eur' })
+    scenario.charge = charge({ currency: 'eur' })
+    const { stripe } = stripeFor(scenario)
+
+    await expect(
+      completeTipCheckout({ stripe, supabase, sessionId: SESSION_ID, eventId: EVENT_ID })
+    ).resolves.toEqual({ status: 'manual_review', reviewCode: 'currency_mismatch' })
     expect(rpc).not.toHaveBeenCalled()
   })
 

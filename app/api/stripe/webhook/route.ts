@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { constructWebhookEvent } from '@/lib/stripe'
 import { getSupabase, logger } from './handlers/shared'
 import {
+  carriesTipCheckoutIdentity,
   handleCheckoutComplete,
   handleCheckoutExpired,
   handleTipPaymentCompleted,
@@ -102,10 +103,11 @@ export async function POST(request: NextRequest) {
         switch (event.type) {
           case 'checkout.session.completed': {
             const session = event.data.object as Stripe.Checkout.Session
-            if (session.metadata?.type === 'tip') {
+            if (carriesTipCheckoutIdentity(session.metadata)) {
               await handleTipPaymentCompleted(session, {
                 id: event.id,
                 created: event.created,
+                livemode: event.livemode,
               })
             } else {
               await handleCheckoutComplete(session)
@@ -117,6 +119,7 @@ export async function POST(request: NextRequest) {
             await handleCheckoutExpired(event.data.object as Stripe.Checkout.Session, {
               id: event.id,
               created: event.created,
+              livemode: event.livemode,
             })
             break
 
