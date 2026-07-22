@@ -5,6 +5,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260721120000_metric_trust_shadow_gate.sql"
 IDENTITY_MIGRATION="$ROOT_DIR/supabase/migrations/20260721150000_metric_trust_raw_artifact_identity.sql"
+SCORE_INPUT_MIGRATION="$ROOT_DIR/supabase/migrations/20260721180903_metric_rankable_score_inputs_shadow.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -72,12 +73,21 @@ CREATE TABLE arena.sources (
   slug text UNIQUE NOT NULL,
   status text NOT NULL,
   serving_mode text NOT NULL,
-  currency text NOT NULL
+  currency text NOT NULL,
+  product_type text NOT NULL,
+  meta jsonb NOT NULL DEFAULT '{}',
+  timeframes_native integer[] NOT NULL DEFAULT '{}',
+  timeframes_derived integer[] NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE arena.traders (
   id bigint PRIMARY KEY,
-  source_id smallint NOT NULL REFERENCES arena.sources(id)
+  source_id smallint NOT NULL REFERENCES arena.sources(id),
+  exchange_trader_id text NOT NULL,
+  nickname text,
+  avatar_url_mirror text,
+  avatar_url_origin text,
+  trader_kind text NOT NULL DEFAULT 'human'
 );
 
 CREATE TABLE arena.leaderboard_snapshots (
@@ -96,6 +106,8 @@ CREATE TABLE arena.leaderboard_entries (
   snapshot_id bigint NOT NULL,
   trader_id bigint NOT NULL REFERENCES arena.traders(id),
   timeframe smallint NOT NULL,
+  rank int NOT NULL,
+  currency text NOT NULL,
   PRIMARY KEY (scraped_at, snapshot_id, trader_id)
 );
 
@@ -113,9 +125,12 @@ CREATE TABLE arena.raw_objects (
   meta jsonb NOT NULL DEFAULT '{}'
 );
 
-INSERT INTO arena.sources (id, slug, status, serving_mode, currency) VALUES
-  (1, 'binance_futures', 'active', 'serving', 'USDT'),
-  (2, 'binance_web3_bsc', 'active', 'serving', 'USDT');
+INSERT INTO arena.sources (
+  id, slug, status, serving_mode, currency, product_type, meta,
+  timeframes_native, timeframes_derived
+) VALUES
+  (1, 'binance_futures', 'active', 'serving', 'USDT', 'futures', '{}', '{30}', '{}'),
+  (2, 'binance_web3_bsc', 'active', 'serving', 'USDT', 'onchain', '{}', '{30}', '{}');
 
 GRANT USAGE ON SCHEMA arena TO service_role;
 GRANT SELECT ON ALL TABLES IN SCHEMA arena TO service_role;
@@ -123,9 +138,16 @@ SQL
 
 psql_cmd -q -f "$MIGRATION"
 psql_cmd -q -f "$IDENTITY_MIGRATION"
+psql_cmd -q -f "$SCORE_INPUT_MIGRATION"
 
 psql_cmd -q <<'SQL'
-INSERT INTO arena.traders (id, source_id) VALUES (10, 1), (11, 1), (12, 1), (13, 1);
+INSERT INTO arena.traders (
+  id, source_id, exchange_trader_id, nickname, trader_kind
+) VALUES
+  (10, 1, 'portfolio-10', 'Ten', 'human'),
+  (11, 1, 'portfolio-11', 'Eleven', 'human'),
+  (12, 1, 'portfolio-12', 'Twelve', 'human'),
+  (13, 1, 'portfolio-13', 'Thirteen', 'human');
 
 -- The run id is the digest of the canonical population manifest. Two extra
 -- RAW objects exercise digest and snapshot-payload forgery checks below.
@@ -182,8 +204,16 @@ SELECT
 FROM arena.raw_objects
 WHERE job_type = 'tier_a';
 
-INSERT INTO arena.leaderboard_entries (scraped_at, snapshot_id, trader_id, timeframe)
-SELECT snapshot.scraped_at, snapshot.id, trader.id, snapshot.timeframe
+INSERT INTO arena.leaderboard_entries (
+  scraped_at, snapshot_id, trader_id, timeframe, rank, currency
+)
+SELECT
+  snapshot.scraped_at,
+  snapshot.id,
+  trader.id,
+  snapshot.timeframe,
+  (pg_catalog.row_number() OVER (ORDER BY trader.id))::int,
+  'USDT'
 FROM arena.leaderboard_snapshots AS snapshot
 CROSS JOIN arena.traders AS trader
 WHERE snapshot.id = 100;
@@ -492,6 +522,11 @@ SQL
 
 IDENTITY="$(
   psql_cmd -Atqc "
+    WITH bundle AS (
+      SELECT public.arena_metric_rankable_score_inputs_shadow_json(
+        '30D', 1000, 48
+      ) AS payload
+    )
     SELECT
       (SELECT count(*) FROM arena.metric_source_contracts
         WHERE field_path NOT LIKE 'test.%') || '|' ||
@@ -501,13 +536,301 @@ IDENTITY="$(
         WHERE trader_id = 12) || '|' ||
       (SELECT count(*) FROM arena.metric_rankable_input_sets_shadow
         WHERE trader_id = 13) || '|' ||
-      (SELECT bool_and(rank_eligible) FROM arena.metric_rankable_input_sets_shadow);
+      (SELECT bool_and(rank_eligible) FROM arena.metric_rankable_input_sets_shadow) || '|' ||
+      (SELECT count(*) FROM arena.metric_rankable_score_inputs_shadow) || '|' ||
+      pg_catalog.jsonb_array_length(bundle.payload->'scoreRows') || '|' ||
+      pg_catalog.jsonb_array_length(bundle.payload->'cohorts') || '|' ||
+      (SELECT cohort->>'evidence_state'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'publication_action'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'rows_authoritative'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'evidence_state'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '2') || '|' ||
+      (SELECT cohort->>'publication_action'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '2') || '|' ||
+      (SELECT bool_and(
+         win_rate IS NULL
+         AND max_drawdown IS NULL
+         AND sharpe_ratio IS NULL
+         AND valid_until > pg_catalog.now()
+         AND board_as_of IS NOT NULL
+       ) FROM arena.metric_rankable_score_inputs_shadow) || '|' ||
+      (bundle.payload->>'authorityScope') || '|' ||
+      (bundle.payload->>'rankingMethodId') || '|' ||
+      (bundle.payload->>'comparisonCurrency') || '|' ||
+      (bundle.payload->>'enforcementMode') || '|' ||
+      (SELECT cohort->>'returned_count'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'rank_depth'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'compatible_entry_count'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1')
+    FROM bundle;
   "
 )"
-if [[ "$IDENTITY" != "7|8|2|0|1|true" ]]; then
+if [[ "$IDENTITY" != "7|8|2|0|1|true|2|2|2|rankable|publish|true|ranking_contract_currency_mismatch|hold|true|persisted_leaderboard_snapshot_attempts|arena-core-roi-pnl-30d-usdt@1|USDT|shadow|2|1000|4" ]]; then
   echo "metric trust eligible identity drifted: $IDENTITY" >&2
   exit 1
 fi
+
+# The row projection and registry-complete envelope must share one timeframe
+# universe. Removing a capability can never leave orphan scoreRows behind.
+psql_cmd -q -c "UPDATE arena.sources SET timeframes_native = '{}' WHERE id = 1;"
+
+REGISTRY_DRIFT="$(
+  psql_cmd -Atqc "
+    WITH bundle AS (
+      SELECT public.arena_metric_rankable_score_inputs_shadow_json(
+        '30D', 1000, 48
+      ) AS payload
+    )
+    SELECT
+      (SELECT count(*) FROM arena.metric_rankable_score_inputs_shadow) || '|' ||
+      pg_catalog.jsonb_array_length(bundle.payload->'scoreRows') || '|' ||
+      pg_catalog.jsonb_array_length(bundle.payload->'cohorts') || '|' ||
+      (SELECT count(*)
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1')
+    FROM bundle;
+  "
+)"
+if [[ "$REGISTRY_DRIFT" != "0|0|1|0" ]]; then
+  echo "timeframe registry drift left orphan score rows: $REGISTRY_DRIFT" >&2
+  exit 1
+fi
+psql_cmd -q -c "UPDATE arena.sources SET timeframes_native = '{30}' WHERE id = 1;"
+
+# Total row count alone is insufficient: one cross-currency row must make both
+# the projection and cohort fail closed even though actual_count still equals 4.
+psql_cmd -q -c "UPDATE arena.leaderboard_entries SET currency = 'USD' WHERE snapshot_id = 100 AND trader_id = 13;"
+
+INCOMPATIBLE_ENTRY="$(
+  psql_cmd -Atqc "
+    WITH bundle AS (
+      SELECT public.arena_metric_rankable_score_inputs_shadow_json(
+        '30D', 1000, 48
+      ) AS payload
+    )
+    SELECT
+      (SELECT count(*) FROM arena.metric_rankable_score_inputs_shadow) || '|' ||
+      pg_catalog.jsonb_array_length(bundle.payload->'scoreRows') || '|' ||
+      (SELECT cohort->>'evidence_state'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'compatible_entry_count'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'publication_action'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1')
+    FROM bundle;
+  "
+)"
+if [[ "$INCOMPATIBLE_ENTRY" != "0|0|population_count_mismatch|3|withdraw" ]]; then
+  echo "incompatible physical entry did not fail closed: $INCOMPATIBLE_ENTRY" >&2
+  exit 1
+fi
+psql_cmd -q -c "UPDATE arena.leaderboard_entries SET currency = 'USDT' WHERE snapshot_id = 100 AND trader_id = 13;"
+
+# A newer PASSED board with its complete physical entries but no exact trust
+# run suppresses the older pair and remains a non-destructive hold state.
+psql_cmd -q <<'SQL'
+INSERT INTO arena.leaderboard_snapshots (
+  id, source_id, timeframe, scraped_at, actual_count,
+  count_check_passed, is_derived, raw_object_id
+) VALUES (
+  101, 1, 30, statement_timestamp(), 4,
+  true, false, NULL
+);
+
+INSERT INTO arena.leaderboard_entries (
+  scraped_at, snapshot_id, trader_id, timeframe, rank, currency
+)
+SELECT
+  snapshot.scraped_at,
+  snapshot.id,
+  trader.id,
+  snapshot.timeframe,
+  (pg_catalog.row_number() OVER (ORDER BY trader.id))::int,
+  'USDT'
+FROM arena.leaderboard_snapshots AS snapshot
+CROSS JOIN arena.traders AS trader
+WHERE snapshot.id = 101;
+SQL
+
+CURRENT_ONLY="$(
+  psql_cmd -Atqc "
+    WITH bundle AS (
+      SELECT public.arena_metric_rankable_score_inputs_shadow_json(
+        '30D', 1000, 48
+      ) AS payload
+    )
+    SELECT
+      (SELECT count(*) FROM arena.metric_rankable_input_sets_shadow) || '|' ||
+      (SELECT count(*) FROM arena.metric_rankable_score_inputs_shadow) || '|' ||
+      pg_catalog.jsonb_array_length(bundle.payload->'scoreRows') || '|' ||
+      (SELECT cohort->>'evidence_state'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'withdrawal_allowed'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'publication_action'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1')
+    FROM bundle;
+  "
+)"
+if [[ "$CURRENT_ONLY" != "2|0|0|trust_run_missing|false|hold" ]]; then
+  echo "current PASSED population did not suppress old score pairs: $CURRENT_ONLY" >&2
+  exit 1
+fi
+psql_cmd -q -c "DELETE FROM arena.leaderboard_entries WHERE snapshot_id = 101;"
+psql_cmd -q -c "DELETE FROM arena.leaderboard_snapshots WHERE id = 101;"
+
+# A newer failed/partial persisted board is current. It cannot fall back to the
+# older PASSED pair and explicitly authorizes withdrawal of the old cohort.
+psql_cmd -q <<'SQL'
+INSERT INTO arena.leaderboard_snapshots (
+  id, source_id, timeframe, scraped_at, actual_count,
+  count_check_passed, is_derived, raw_object_id
+) VALUES (
+  102, 1, 30, statement_timestamp(), 0,
+  false, false, NULL
+);
+SQL
+
+FAILED_CURRENT="$(
+  psql_cmd -Atqc "
+    WITH bundle AS (
+      SELECT public.arena_metric_rankable_score_inputs_shadow_json(
+        '30D', 1000, 48
+      ) AS payload
+    )
+    SELECT
+      (SELECT count(*) FROM arena.metric_rankable_score_inputs_shadow) || '|' ||
+      pg_catalog.jsonb_array_length(bundle.payload->'scoreRows') || '|' ||
+      (SELECT cohort->>'evidence_state'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'withdrawal_allowed'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'publication_action'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1')
+    FROM bundle;
+  "
+)"
+if [[ "$FAILED_CURRENT" != "0|0|snapshot_partial|true|withdraw" ]]; then
+  echo "failed current board did not suppress/withdraw old score pairs: $FAILED_CURRENT" >&2
+  exit 1
+fi
+psql_cmd -q -c "DELETE FROM arena.leaderboard_snapshots WHERE id = 102;"
+
+# A future-dated newest board suppresses old rows but cannot authorize a
+# destructive replacement because its clock evidence is not current.
+psql_cmd -q <<'SQL'
+INSERT INTO arena.leaderboard_snapshots (
+  id, source_id, timeframe, scraped_at, actual_count,
+  count_check_passed, is_derived, raw_object_id
+) VALUES (
+  103, 1, 30, statement_timestamp() + interval '10 minutes', 0,
+  true, false, NULL
+);
+SQL
+
+FUTURE_CURRENT="$(
+  psql_cmd -Atqc "
+    WITH bundle AS (
+      SELECT public.arena_metric_rankable_score_inputs_shadow_json(
+        '30D', 1000, 48
+      ) AS payload
+    )
+    SELECT
+      (SELECT count(*) FROM arena.metric_rankable_score_inputs_shadow) || '|' ||
+      pg_catalog.jsonb_array_length(bundle.payload->'scoreRows') || '|' ||
+      (SELECT cohort->>'evidence_state'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'withdrawal_allowed'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'publication_action'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1')
+    FROM bundle;
+  "
+)"
+if [[ "$FUTURE_CURRENT" != "0|0|snapshot_future|false|hold" ]]; then
+  echo "future current board did not fail closed: $FUTURE_CURRENT" >&2
+  exit 1
+fi
+psql_cmd -q -c "DELETE FROM arena.leaderboard_snapshots WHERE id = 103;"
+
+# Simulate privileged storage drift to prove a future acquisition completion
+# cannot enter the projection even if all lower-level observations remain live.
+psql_cmd -q <<'SQL'
+ALTER TABLE arena.metric_trust_runs
+  DISABLE TRIGGER metric_trust_runs_reject_direct_mutation;
+UPDATE arena.metric_trust_runs
+SET completed_at = statement_timestamp() + interval '10 minutes';
+ALTER TABLE arena.metric_trust_runs
+  ENABLE TRIGGER metric_trust_runs_reject_direct_mutation;
+SQL
+
+FUTURE_RUN="$(
+  psql_cmd -Atqc "
+    WITH bundle AS (
+      SELECT public.arena_metric_rankable_score_inputs_shadow_json(
+        '30D', 1000, 48
+      ) AS payload
+    )
+    SELECT
+      (SELECT count(*) FROM arena.metric_rankable_score_inputs_shadow) || '|' ||
+      pg_catalog.jsonb_array_length(bundle.payload->'scoreRows') || '|' ||
+      (SELECT cohort->>'evidence_state'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1') || '|' ||
+      (SELECT cohort->>'withdrawal_allowed'
+         FROM pg_catalog.jsonb_array_elements(bundle.payload->'cohorts') AS cohort
+        WHERE cohort->>'source_id' = '1')
+    FROM bundle;
+  "
+)"
+if [[ "$FUTURE_RUN" != "0|0|trust_run_future|false" ]]; then
+  echo "future trust run did not fail closed: $FUTURE_RUN" >&2
+  exit 1
+fi
+
+psql_cmd -q <<'SQL'
+ALTER TABLE arena.metric_trust_runs
+  DISABLE TRIGGER metric_trust_runs_reject_direct_mutation;
+UPDATE arena.metric_trust_runs
+SET completed_at = statement_timestamp() - interval '1 minute';
+ALTER TABLE arena.metric_trust_runs
+  ENABLE TRIGGER metric_trust_runs_reject_direct_mutation;
+SQL
+
+expect_failure \
+  "invalid score-input canary window" \
+  "SELECT public.arena_metric_rankable_score_inputs_shadow_json('1Y', 1000, 48);"
+expect_failure \
+  "invalid score-input canary limit" \
+  "SELECT public.arena_metric_rankable_score_inputs_shadow_json('30D', 0, 48);"
+expect_failure \
+  "invalid score-input canary max age" \
+  "SELECT public.arena_metric_rankable_score_inputs_shadow_json('30D', 1000, 0);"
 
 expect_failure \
   "forged artifact digest" \
@@ -590,10 +913,20 @@ PRIVILEGES="$(
       has_table_privilege('service_role',
         'arena.metric_trust_observations', 'UPDATE,DELETE') || '|' ||
       has_table_privilege('anon',
-        'arena.metric_trust_observations', 'SELECT');
+        'arena.metric_trust_observations', 'SELECT') || '|' ||
+      has_table_privilege('service_role',
+        'arena.metric_rankable_score_inputs_shadow', 'SELECT') || '|' ||
+      has_table_privilege('anon',
+        'arena.metric_rankable_score_inputs_shadow', 'SELECT') || '|' ||
+      has_function_privilege('service_role',
+        'public.arena_metric_rankable_score_inputs_shadow_json(text,integer,integer)',
+        'EXECUTE') || '|' ||
+      has_function_privilege('authenticated',
+        'public.arena_metric_rankable_score_inputs_shadow_json(text,integer,integer)',
+        'EXECUTE');
   "
 )"
-if [[ "$PRIVILEGES" != "true|false|true|false|true|false|false" ]]; then
+if [[ "$PRIVILEGES" != "true|false|true|false|true|false|false|true|false|true|false" ]]; then
   echo "metric trust privileges drifted: $PRIVILEGES" >&2
   exit 1
 fi
@@ -603,11 +936,16 @@ fi
 SERVICE_READ="$(
   psql_cmd -Atqc "
     SET ROLE service_role;
-    SELECT count(*) FROM arena.metric_trust_runs;
+    SELECT
+      (SELECT count(*) FROM arena.metric_trust_runs) || '|' ||
+      pg_catalog.jsonb_array_length(
+        public.arena_metric_rankable_score_inputs_shadow_json('30D', 1000, 48)
+        ->'scoreRows'
+      );
     RESET ROLE;
   "
 )"
-if [[ "$SERVICE_READ" != "1" ]]; then
+if [[ "$SERVICE_READ" != "1|2" ]]; then
   echo "service_role could not read private trust runs: $SERVICE_READ" >&2
   exit 1
 fi
@@ -620,6 +958,11 @@ expect_failure \
 expect_failure \
   "anonymous trust read" \
   "SET ROLE anon; SELECT count(*) FROM arena.metric_trust_runs;"
+
+expect_failure \
+  "anonymous score-input canary execution" \
+  "SET ROLE anon;
+   SELECT public.arena_metric_rankable_score_inputs_shadow_json('30D', 1000, 48);"
 
 # RAW cleanup remains possible. ON DELETE CASCADE removes the evidence link,
 # and the shadow input fails closed immediately instead of blocking cleanup.
