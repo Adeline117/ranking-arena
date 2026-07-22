@@ -101,6 +101,7 @@ PREDEPLOY_MIGRATIONS=(
   20260722051000_leaderboard_score_input_manifest_contract.sql
   20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql
   20260722053000_binance_spot_metric_source_contract.sql
+  20260722054000_metric_trust_source_page_lineage.sql
 )
 
 TIP_CHECKOUT_CUTOVER_VERSIONS=(
