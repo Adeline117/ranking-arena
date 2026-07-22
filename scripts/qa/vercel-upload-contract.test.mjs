@@ -163,6 +163,20 @@ test('waits for Vercel READY within the job budget before allowing promotion', (
   )
 })
 
+test('revokes production write authority when a candidate is no longer exact main', () => {
+  assert.match(deployGate, /Deploy decision \(run SHA is exact main and newer than serving\?\)/)
+  assert.equal(deployGate.match(/^\s+MAIN_SHA=\$\(git rev-parse FETCH_HEAD\)$/gm)?.length, 2)
+  assert.equal(deployGate.match(/if \[ "\$HEAD_SHA" != "\$MAIN_SHA" \]; then/g)?.length, 2)
+  assert.match(deployGate, /skip stale candidate[\s\S]*echo "deploy=false"/)
+  assert.match(deployGate, /superseded during build[\s\S]*echo "promoted=false"[\s\S]*exit 0/)
+  assert.match(deployGate, /PROMOTE_MAIN_SHA=\$\(git rev-parse FETCH_HEAD\)/)
+  assert.match(
+    deployGate,
+    /if \[ "\$HEAD_SHA" != "\$PROMOTE_MAIN_SHA" \]; then[\s\S]*echo "promoted=false"[\s\S]*exit 0[\s\S]*echo "promoted=true"[\s\S]*npx vercel@56\.2\.1 promote/
+  )
+  assert.doesNotMatch(deployGate, /不再要求恰好等于 HEAD/)
+})
+
 test('reasserts the single production writer without ever skipping promoted smoke', () => {
   assert.match(
     deployGate,
