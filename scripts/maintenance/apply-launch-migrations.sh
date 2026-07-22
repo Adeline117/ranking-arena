@@ -114,6 +114,7 @@ PREDEPLOY_MIGRATIONS=(
   20260722042000_leaderboard_terminal_publication_fence.sql
   20260722050000_metric_trust_attempt_outcome_authority.sql
   20260722051000_leaderboard_score_input_manifest_contract.sql
+  20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql
 )
 
 TIP_CHECKOUT_CUTOVER_VERSIONS=(

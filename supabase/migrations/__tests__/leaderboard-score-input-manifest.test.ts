@@ -1,9 +1,12 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const root = process.cwd()
 const migrationName = '20260722051000_leaderboard_score_input_manifest_contract.sql'
 const migration = readFileSync(resolve(root, 'supabase/migrations', migrationName), 'utf8')
+const pnlMigrationName = '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql'
+const pnlMigration = readFileSync(resolve(root, 'supabase/migrations', pnlMigrationName), 'utf8')
 const runner = readFileSync(resolve(root, 'scripts/maintenance/apply-launch-migrations.sh'), 'utf8')
 const pg17 = readFileSync(
   resolve(root, 'supabase/migrations/__tests__/leaderboard-score-input-manifest.pg17.sh'),
@@ -20,6 +23,23 @@ const fixture = JSON.parse(
 ) as Record<string, unknown>
 
 describe('private leaderboard score-input manifest contract', () => {
+  it('keeps the production-applied 51000 body immutable and forward-migrates PnL', () => {
+    expect(createHash('sha256').update(migration).digest('hex')).toBe(
+      'fdf578522865afc7b81d7f1fedd99e4bf6e007d0460d3ba678babf4414a4829c'
+    )
+    expect(migration).not.toContain('leaderboard_score_input_manifest_rank_eligible_pnl')
+    expect(migration).not.toContain('leaderboard score-input PnL must be a finite JSON number')
+    expect(pnlMigration).toContain(
+      '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl'
+    )
+    expect(pnlMigration).toContain(
+      'codex:20260722051000:fdf578522865afc7b81d7f1fedd99e4bf6e007d0460d3ba678babf4414a4829c'
+    )
+    expect(pnlMigration).toContain('FOR SHARE')
+    expect(pnlMigration).toContain('immutable 51000 encoder was rewritten')
+    expect(runner).toContain(pnlMigrationName)
+  })
+
   it('is inert and has no PostgREST-callable builder or leaderboard writer', () => {
     expect(migration).toContain('This migration deliberately exposes no public RPC')
     expect(migration).toContain('changes no leaderboard row')
@@ -76,19 +96,28 @@ describe('private leaderboard score-input manifest contract', () => {
   })
 
   it('narrows leaderboard inputs to observed finite PnL without excluding zero or losses', () => {
-    expect(migration).toContain('leaderboard_score_input_manifest_rank_eligible_pnl')
-    expect(migration).toContain("input_row.value->'pnl'")
-    expect(migration).toContain("IS DISTINCT FROM 'number'")
-    expect(migration).toContain('leaderboard score-input PnL must be a finite JSON number')
-    expect(migration).toContain('pg_catalog.jsonb_path_query_array')
-    expect(migration).toContain('@.pnl.type() == "number"')
-    expect(migration).toContain('score-input manifest PnL table constraint drifted')
-    expect(pg17).toContain("'missing'")
-    expect(pg17).toContain("'null'")
-    expect(pg17).toContain("'string'")
+    expect(pnlMigration).toContain('CREATE OR REPLACE FUNCTION arena.encode_')
+    expect(pnlMigration).toContain('leaderboard_score_input_manifest_rank_eligible_pnl')
+    expect(pnlMigration).toContain("input_row.value->'pnl'")
+    expect(pnlMigration).toContain("IS DISTINCT FROM 'number'")
+    expect(pnlMigration).toContain('leaderboard score-input PnL must be a finite JSON number')
+    expect(pnlMigration).toContain('pg_catalog.jsonb_path_query_array')
+    expect(pnlMigration).toContain('@.pnl.type() == "number"')
+    expect(pnlMigration).toMatch(/jsonb_path_query_array\([\s\S]*?\)\s*\)\s*IS TRUE/)
+    expect(pnlMigration).toContain('NOT VALID')
+    expect(pnlMigration).toContain('VALIDATE CONSTRAINT')
+    expect(pnlMigration).toContain('score-input manifest PnL table constraint drifted')
+    expect(pnlMigration).toContain('rank-eligible score-input encoder leaked EXECUTE')
+    for (const kind of ['missing', 'null', 'string', 'object', 'array', 'boolean']) {
+      expect(pg17).toContain(`'${kind}'`)
+    }
     expect(pg17).toContain("RAISE EXCEPTION '% PnL unexpectedly sealed'")
     expect(pg17).toContain('zero/loss PnL manifest failed verification')
     expect(pg17).toContain('table CHECK accepted a non-numeric PnL')
+    expect(pg17).toContain('table CHECK accepted missing inputs')
+    expect(pg17).toContain('failed 52000 migration left partial state')
+    expect(pg17).toContain('failed post-DDL 52000 migration left partial state')
+    expect(pg17).toContain('rank-eligible PnL migration accepted a drifted 51000 ledger')
   })
 
   it('makes table, codec, seal and verifier owner-only despite hostile defaults', () => {

@@ -83,7 +83,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
   const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
 
-  assert.equal(predeploy.length, 70)
+  assert.equal(predeploy.length, 71)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -123,6 +123,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260722042000_leaderboard_terminal_publication_fence.sql',
           '20260722050000_metric_trust_attempt_outcome_authority.sql',
           '20260722051000_leaderboard_score_input_manifest_contract.sql',
+          '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -140,9 +141,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716083256_repair_legacy_exchange_logo_paths.sql',
   ])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 81)
+  assert.equal(new Set(all).size, 82)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-29), [
+  assert.deepEqual(predeploy.slice(-30), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -172,6 +173,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260722042000_leaderboard_terminal_publication_fence.sql',
     '20260722050000_metric_trust_attempt_outcome_authority.sql',
     '20260722051000_leaderboard_score_input_manifest_contract.sql',
+    '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -192,6 +194,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260722042000_leaderboard_terminal_publication_fence.sql'))
   assert.ok(predeploy.includes('20260722050000_metric_trust_attempt_outcome_authority.sql'))
   assert.ok(predeploy.includes('20260722051000_leaderboard_score_input_manifest_contract.sql'))
+  assert.ok(
+    predeploy.includes('20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql')
+  )
   assert.ok(!postdeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260717120000_trader_follows_composite_identity.sql'))
   assert.ok(

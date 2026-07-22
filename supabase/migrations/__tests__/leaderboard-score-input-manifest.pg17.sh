@@ -9,6 +9,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SCORER_MIGRATION="$ROOT_DIR/supabase/migrations/20260722041000_pure_arena_score_v4_scorer.sql"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260722051000_leaderboard_score_input_manifest_contract.sql"
+PNL_MIGRATION="$ROOT_DIR/supabase/migrations/20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql"
 FIXTURE="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-score-input-manifest-v1.json"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
@@ -101,6 +102,167 @@ psql_cmd -q <<'SQL'
 REVOKE ALL ON FUNCTION arena.arena_score_v4_round2(double precision) FROM PUBLIC;
 SQL
 psql_cmd -q -f "$MIGRATION"
+
+# The forward migration is independently deployable only when the exact 51000
+# ledger/body is present. First prove drift and a legacy invalid row each make
+# 52000 fail without partial state, then repair only the test fixture and apply.
+# Command substitution strips trailing newlines; append the single canonical
+# file newline so the simulated ledger hashes the exact checked-in body.
+psql_cmd -q -v migration_body="$(<"$MIGRATION")"$'\n' <<'SQL'
+CREATE SCHEMA supabase_migrations;
+CREATE TABLE supabase_migrations.schema_migrations (
+  version text PRIMARY KEY,
+  statements text[] NOT NULL,
+  name text NOT NULL,
+  created_by text NOT NULL,
+  idempotency_key text NOT NULL
+);
+INSERT INTO supabase_migrations.schema_migrations (
+  version, statements, name, created_by, idempotency_key
+) VALUES (
+  '20260722051000',
+  ARRAY[:'migration_body']::text[],
+  'leaderboard_score_input_manifest_contract',
+  'codex',
+  'codex:20260722051000:deliberate-drift'
+);
+SQL
+
+set +e
+ledger_drift_output="$(psql_cmd -q -f "$PNL_MIGRATION" 2>&1)"
+ledger_drift_status=$?
+set -e
+if ((ledger_drift_status == 0)); then
+  echo "rank-eligible PnL migration accepted a drifted 51000 ledger" >&2
+  exit 1
+fi
+if [[ "$ledger_drift_output" != *"requires exact immutable 20260722051000 ledger"* ]]; then
+  echo "rank-eligible PnL ledger preflight failed for the wrong reason" >&2
+  echo "$ledger_drift_output" >&2
+  exit 1
+fi
+
+psql_cmd -q <<'SQL'
+UPDATE supabase_migrations.schema_migrations
+SET idempotency_key =
+  'codex:20260722051000:fdf578522865afc7b81d7f1fedd99e4bf6e007d0460d3ba678babf4414a4829c'
+WHERE version = '20260722051000';
+
+WITH invalid AS (
+  SELECT
+    pg_catalog.repeat('e', 64) AS digest,
+    pg_catalog.statement_timestamp() + interval '1 hour' AS valid_until
+)
+INSERT INTO arena.leaderboard_score_input_manifests (
+  manifest_digest, period, manifest, valid_until
+)
+SELECT
+  invalid.digest,
+  '30D',
+  pg_catalog.jsonb_build_object(
+    'contract', 'leaderboard-score-input-manifest@1',
+    'manifestDigest', invalid.digest,
+    'period', '30D',
+    'validUntil', invalid.valid_until,
+    'inputs', pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object('pnl', NULL)
+    )
+  ),
+  invalid.valid_until
+FROM invalid;
+SQL
+
+set +e
+legacy_invalid_output="$(psql_cmd -q -f "$PNL_MIGRATION" 2>&1)"
+legacy_invalid_status=$?
+set -e
+if ((legacy_invalid_status == 0)); then
+  echo "rank-eligible PnL migration accepted a legacy invalid row" >&2
+  exit 1
+fi
+if [[ "$legacy_invalid_output" != *"existing score-input manifest has non-numeric rank-eligible PnL"* ]]; then
+  echo "rank-eligible PnL legacy-row preflight failed for the wrong reason" >&2
+  echo "$legacy_invalid_output" >&2
+  exit 1
+fi
+
+rollback_state="$(psql_cmd -q -Atc "SELECT
+  (SELECT count(*) FROM pg_catalog.pg_constraint
+   WHERE conrelid = 'arena.leaderboard_score_input_manifests'::regclass
+     AND conname = 'leaderboard_score_input_manifest_rank_eligible_pnl')::text
+  || '|' ||
+  (pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'arena.encode_leaderboard_score_input_manifest_v1(text,text,text,text,jsonb,text,jsonb,text,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'leaderboard score-input PnL must be a finite JSON number'
+  ) = 0)::text;")"
+if [[ "$rollback_state" != "0|true" ]]; then
+  echo "failed 52000 migration left partial state: $rollback_state" >&2
+  exit 1
+fi
+
+psql_cmd -q -c "DELETE FROM arena.leaderboard_score_input_manifests WHERE manifest_digest = pg_catalog.repeat('e', 64);"
+
+# Force a post-DDL failure at the migration's valid-zero semantic probe. This
+# proves CREATE OR REPLACE + ADD/VALIDATE CHECK roll back together, rather than
+# only exercising a preflight rejection before any state changes.
+psql_cmd -q <<'SQL'
+CREATE FUNCTION public.reject_rank_eligible_zero_probe()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $trigger$
+BEGIN
+  IF NEW.manifest->'inputs'->0->'pnl' = '0'::jsonb THEN
+    RAISE EXCEPTION 'deliberate postflight zero rejection';
+  END IF;
+  RETURN NEW;
+END
+$trigger$;
+CREATE TRIGGER reject_rank_eligible_zero_probe
+BEFORE INSERT ON arena.leaderboard_score_input_manifests
+FOR EACH ROW EXECUTE FUNCTION public.reject_rank_eligible_zero_probe();
+SQL
+
+set +e
+post_ddl_output="$(psql_cmd -q -f "$PNL_MIGRATION" 2>&1)"
+post_ddl_status=$?
+set -e
+if ((post_ddl_status == 0)); then
+  echo "rank-eligible PnL migration ignored the post-DDL rollback barrier" >&2
+  exit 1
+fi
+if [[ "$post_ddl_output" != *"deliberate postflight zero rejection"* ]]; then
+  echo "rank-eligible PnL post-DDL rollback failed for the wrong reason" >&2
+  echo "$post_ddl_output" >&2
+  exit 1
+fi
+
+post_ddl_state="$(psql_cmd -q -Atc "SELECT
+  (SELECT count(*) FROM pg_catalog.pg_constraint
+   WHERE conrelid = 'arena.leaderboard_score_input_manifests'::regclass
+     AND conname = 'leaderboard_score_input_manifest_rank_eligible_pnl')::text
+  || '|' ||
+  (pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'arena.encode_leaderboard_score_input_manifest_v1(text,text,text,text,jsonb,text,jsonb,text,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'leaderboard score-input PnL must be a finite JSON number'
+  ) = 0)::text
+  || '|' ||
+  (SELECT count(*) FROM supabase_migrations.schema_migrations
+   WHERE version = '20260722052000')::text;")"
+if [[ "$post_ddl_state" != "0|true|0" ]]; then
+  echo "failed post-DDL 52000 migration left partial state: $post_ddl_state" >&2
+  exit 1
+fi
+
+psql_cmd -q <<'SQL'
+DROP TRIGGER reject_rank_eligible_zero_probe
+  ON arena.leaderboard_score_input_manifests;
+DROP FUNCTION public.reject_rank_eligible_zero_probe();
+SQL
+psql_cmd -q -f "$PNL_MIGRATION"
 
 psql_cmd -q -v fixture_json="$(<"$FIXTURE")" <<'SQL'
 CREATE TABLE public.manifest_fixture (
@@ -404,6 +566,7 @@ DECLARE
   v_sealed jsonb;
   v_verified jsonb;
   v_manifest jsonb;
+  v_constraint_name text;
 BEGIN
   BEGIN
     INSERT INTO arena.leaderboard_score_input_manifests (
@@ -423,8 +586,8 @@ BEGIN
   END;
 
   -- The lower-level scorer accepts null PnL, but leaderboard manifests must
-  -- not turn ROI-only rows into rankable evidence. Missing/null/string PnL
-  -- fail; JSON number zero and losses remain eligible.
+  -- not turn ROI-only rows into rankable evidence. Every non-number JSON kind
+  -- fails closed; JSON number zero and losses remain eligible.
   FOR v_bad_kind, v_bad_inputs IN
     SELECT bad.kind, bad.inputs
     FROM (VALUES
@@ -443,6 +606,18 @@ BEGIN
       (
         'string',
         pg_catalog.jsonb_set(v_fixture->'inputs', '{0,pnl}', '"100"'::jsonb)
+      ),
+      (
+        'object',
+        pg_catalog.jsonb_set(v_fixture->'inputs', '{0,pnl}', '{}'::jsonb)
+      ),
+      (
+        'array',
+        pg_catalog.jsonb_set(v_fixture->'inputs', '{0,pnl}', '[]'::jsonb)
+      ),
+      (
+        'boolean',
+        pg_catalog.jsonb_set(v_fixture->'inputs', '{0,pnl}', 'true'::jsonb)
       )
     ) AS bad(kind, inputs)
   LOOP
@@ -527,7 +702,41 @@ BEGIN
     );
     RAISE EXCEPTION 'table CHECK accepted a non-numeric PnL';
   EXCEPTION
-    WHEN check_violation THEN NULL;
+    WHEN check_violation THEN
+      GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;
+      IF v_constraint_name IS DISTINCT FROM
+           'leaderboard_score_input_manifest_rank_eligible_pnl' THEN
+        RAISE EXCEPTION 'unexpected direct-write PnL constraint: %',
+          v_constraint_name;
+      END IF;
+  END;
+
+  v_manifest := pg_catalog.jsonb_set(
+    v_manifest - 'inputs',
+    '{manifestDigest}',
+    pg_catalog.to_jsonb(pg_catalog.repeat('c', 64))
+  );
+  BEGIN
+    INSERT INTO arena.leaderboard_score_input_manifests (
+      manifest_digest,
+      period,
+      manifest,
+      valid_until
+    ) VALUES (
+      pg_catalog.repeat('c', 64),
+      v_manifest->>'period',
+      v_manifest,
+      (v_manifest->>'validUntil')::timestamp with time zone
+    );
+    RAISE EXCEPTION 'table CHECK accepted missing inputs';
+  EXCEPTION
+    WHEN check_violation THEN
+      GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;
+      IF v_constraint_name IS DISTINCT FROM
+           'leaderboard_score_input_manifest_rank_eligible_pnl' THEN
+        RAISE EXCEPTION 'unexpected missing-input constraint: %',
+          v_constraint_name;
+      END IF;
   END;
 
   BEGIN
