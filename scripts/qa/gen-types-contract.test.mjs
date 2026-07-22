@@ -218,10 +218,10 @@ function generatedView(name, fields) {
 }
 
 function functionRange(source, functionName) {
-  const marker = `      ${functionName}: {`
+  const marker = `      ${functionName}:`
   const start = source.indexOf(marker)
   assert.notEqual(start, -1, `${functionName} fixture is missing`)
-  const next = source.slice(start + marker.length).search(/\n      [a-z0-9_]+: \{/)
+  const next = source.slice(start + marker.length).search(/\n      [a-z0-9_]+:/)
   const end = next === -1 ? source.indexOf('\n    }', start) : start + marker.length + next
   assert.notEqual(end, -1, `${functionName} fixture boundary is missing`)
   return { start, end }
@@ -314,8 +314,8 @@ test('semantic override manifest stays narrow and auditable', () => {
     'group_member_moderation_directory',
     'own_group_memberships',
   ])
-  assert.equal(Object.keys(NULLABLE_RPC_ARGS).length, 26)
-  assert.equal(fieldCount(NULLABLE_RPC_ARGS), 59)
+  assert.equal(Object.keys(NULLABLE_RPC_ARGS).length, 27)
+  assert.equal(fieldCount(NULLABLE_RPC_ARGS), 60)
   assert.equal(Object.keys(GROUP_CUTOVER_NULLABLE_RPC_ARGS).length, 7)
   assert.equal(fieldCount(GROUP_CUTOVER_NULLABLE_RPC_ARGS), 11)
   assert.deepEqual(Object.keys(NULLABLE_RPC_RETURNS).sort(), [

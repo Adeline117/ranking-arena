@@ -17,6 +17,7 @@ const lifecycleConcurrency = readFileSync(
   'utf8'
 )
 const runner = readFileSync(resolve(root, 'scripts/maintenance/apply-launch-migrations.sh'), 'utf8')
+const databaseTypes = readFileSync(resolve(root, 'lib/supabase/database.types.ts'), 'utf8')
 
 function expandedCompletionBody(): string {
   const signature =
@@ -48,6 +49,7 @@ describe('Tip checkout completion identity migration', () => {
       'p_event_id',
     ]) {
       expect(migration).toContain(argument)
+      expect(databaseTypes).toContain(`${argument}:`)
     }
     expect(migration).toContain('function_row.oid <> v_completion')
   })
@@ -101,6 +103,7 @@ describe('Tip checkout completion identity migration', () => {
     expect(body).toContain('p_client_reference_id IS NOT NULL')
     expect(body).toContain('tip_checkout_completion_legacy_shape_drift')
     expect(body).toContain('tip_checkout_legacy_completion_audits')
+    expect(databaseTypes).toContain('tip_checkout_legacy_completion_audits: {')
     expect(migration).toContain('client_reference_id IS NULL')
     expect(migration).toContain('trg_tip_checkout_legacy_completion_audits_immutable')
     expect(migration).toContain('Tip legacy completion audit rows are immutable')

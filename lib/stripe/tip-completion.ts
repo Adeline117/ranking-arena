@@ -13,6 +13,15 @@ import { recordStripeCheckoutManualReview } from '@/lib/stripe/lifetime-entitlem
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const STRIPE_TIMESTAMP_MAX_SECONDS = 253_402_300_799
+const TIP_METADATA_KEYS = [
+  'amount_cents',
+  'from_user_id',
+  'post_id',
+  'tip_id',
+  'to_user_id',
+  'type',
+  'user_id',
+] as const
 
 const terminalStatuses = new Set([
   'completed',
@@ -33,7 +42,14 @@ export type TipCompletionStatus =
 
 export type TipPaymentAuthority = {
   tipId: string
+  clientReferenceId: string | null
+  metadataUserId: string
+  metadataFromUserId: string
+  metadataPostId: string
+  metadataToUserId: string
+  metadataAmountCents: number
   sessionId: string
+  checkoutExpiresAt: string
   customerId: string
   paymentIntentId: string
   chargeId: string
@@ -113,7 +129,13 @@ function stripeId(
   objectIds: StripeAuthorityObjectIds
 ): string {
   const candidate = typeof value === 'string' ? value : value?.id
-  if (!candidate || candidate.trim() !== candidate || !candidate.startsWith(prefix)) {
+  if (
+    !candidate ||
+    candidate.trim() !== candidate ||
+    candidate.length > 255 ||
+    !candidate.startsWith(prefix) ||
+    !/^[A-Za-z0-9_]+$/.test(candidate)
+  ) {
     authorityError('invalid_object', stage, `${label} is missing or malformed.`, objectIds, {
       label,
       value: candidate || null,
@@ -246,52 +268,62 @@ function assertAllEqual<T>(
   return distinct[0]
 }
 
-function canonicalTipId(
+function canonicalMetadataUuid(
   value: string | null | undefined,
+  label: string,
   objectIds: StripeAuthorityObjectIds
 ): string {
   if (!value) {
     authorityError(
       'identity_missing',
       'identity',
-      'Tip checkout metadata is missing tip_id.',
-      objectIds
+      `Tip checkout metadata is missing ${label}.`,
+      objectIds,
+      { field: label }
     )
   }
   if (!UUID_PATTERN.test(value)) {
     authorityError(
       'identity_invalid',
       'identity',
-      'Tip checkout metadata tip_id is not a canonical UUID.',
+      `Tip checkout metadata ${label} is not a canonical UUID.`,
       objectIds,
       {
-        tip_id: value,
+        field: label,
+        value,
       }
     )
   }
   return value
 }
 
+function exactStripeTimestamp(
+  value: number | null | undefined,
+  stage: StripeAuthorityErrorStage,
+  label: string,
+  objectIds: StripeAuthorityObjectIds
+): string {
+  if (
+    !Number.isSafeInteger(value) ||
+    (value as number) <= 0 ||
+    (value as number) > STRIPE_TIMESTAMP_MAX_SECONDS
+  ) {
+    authorityError('invalid_object', stage, `${label} is missing or unsafe.`, objectIds, {
+      [label]: value ?? null,
+    })
+  }
+  return new Date((value as number) * 1000).toISOString()
+}
+
+function isEmptyOptionalStripeCollection(value: unknown): boolean {
+  return value == null || (Array.isArray(value) && value.length === 0)
+}
+
 function authoritativeCompletedAt(
   created: number | null | undefined,
   objectIds: StripeAuthorityObjectIds
 ): string {
-  if (
-    !Number.isSafeInteger(created) ||
-    (created as number) <= 0 ||
-    (created as number) > STRIPE_TIMESTAMP_MAX_SECONDS
-  ) {
-    authorityError(
-      'invalid_object',
-      'charge',
-      'Charge creation time is missing or unsafe.',
-      objectIds,
-      {
-        charge_created: created ?? null,
-      }
-    )
-  }
-  return new Date((created as number) * 1000).toISOString()
+  return exactStripeTimestamp(created, 'charge', 'charge_created', objectIds)
 }
 
 function stableReviewObjectId(sessionId: unknown, eventId: unknown): string {
@@ -380,7 +412,77 @@ async function resolveTipPaymentAuthority(
     )
   }
 
-  const tipId = canonicalTipId(session.metadata?.tip_id, objectIds)
+  const metadata = session.metadata ?? {}
+  const metadataKeys = Object.keys(metadata).sort()
+  const tipId = canonicalMetadataUuid(metadata.tip_id, 'tip_id', objectIds)
+  const metadataUserId = canonicalMetadataUuid(metadata.user_id, 'user_id', objectIds)
+  const metadataFromUserId = canonicalMetadataUuid(metadata.from_user_id, 'from_user_id', objectIds)
+  const metadataPostId = canonicalMetadataUuid(metadata.post_id, 'post_id', objectIds)
+  const metadataToUserId = canonicalMetadataUuid(metadata.to_user_id, 'to_user_id', objectIds)
+  if (
+    metadataKeys.length !== TIP_METADATA_KEYS.length ||
+    !TIP_METADATA_KEYS.every((key, index) => metadataKeys[index] === key)
+  ) {
+    authorityError(
+      'identity_invalid',
+      'identity',
+      'Tip checkout metadata keys do not match the exact identity contract.',
+      objectIds,
+      { metadata_keys: metadataKeys }
+    )
+  }
+  if (metadataUserId !== metadataFromUserId) {
+    authorityError(
+      'identity_conflict',
+      'identity',
+      'Tip checkout user_id and from_user_id do not match.',
+      objectIds,
+      { metadata_user_id: metadataUserId, metadata_from_user_id: metadataFromUserId }
+    )
+  }
+
+  const clientReferenceId = session.client_reference_id
+  if (clientReferenceId !== null && clientReferenceId !== tipId) {
+    authorityError(
+      'object_mismatch',
+      'checkout_session',
+      'Tip checkout client_reference_id does not match tip_id.',
+      objectIds,
+      { client_reference_id: clientReferenceId ?? null, tip_id: tipId }
+    )
+  }
+  const checkoutExpiresAt = exactStripeTimestamp(
+    session.expires_at,
+    'checkout_session',
+    'checkout_expires_at',
+    objectIds
+  )
+
+  if (
+    session.invoice !== null ||
+    session.after_expiration !== null ||
+    session.allow_promotion_codes === true ||
+    session.automatic_tax?.enabled !== false ||
+    session.adaptive_pricing?.enabled === true ||
+    !isEmptyOptionalStripeCollection(session.discounts) ||
+    session.shipping_cost != null
+  ) {
+    authorityError(
+      'invalid_session_state',
+      'checkout_session',
+      'Completed Tip Checkout Session contains unsupported mutable payment options.',
+      objectIds,
+      {
+        invoice_present: session.invoice !== null,
+        after_expiration_present: session.after_expiration !== null,
+        allow_promotion_codes: session.allow_promotion_codes ?? null,
+        automatic_tax_enabled: session.automatic_tax?.enabled ?? null,
+        adaptive_pricing_enabled: session.adaptive_pricing?.enabled ?? null,
+        discounts_present: !isEmptyOptionalStripeCollection(session.discounts),
+        shipping_cost_present: session.shipping_cost != null,
+      }
+    )
+  }
   const customerId = stripeId(
     session.customer,
     'cus_',
@@ -499,6 +601,7 @@ async function resolveTipPaymentAuthority(
     typeof session.livemode !== 'boolean' ||
     typeof paymentIntent.livemode !== 'boolean' ||
     typeof charge.livemode !== 'boolean' ||
+    session.livemode !== true ||
     session.livemode !== paymentIntent.livemode ||
     session.livemode !== charge.livemode
   ) {
@@ -578,14 +681,14 @@ async function resolveTipPaymentAuthority(
   if (shippingAmount !== null && shippingAmount !== undefined) {
     exactZeroAmount(shippingAmount, 'checkout_session.total_details.amount_shipping', objectIds)
   }
-  if (session.metadata?.amount_cents !== String(amount)) {
+  if (metadata.amount_cents !== String(amount)) {
     authorityError(
       'amount_mismatch',
       'product',
       'Tip checkout metadata amount does not match payment authority.',
       objectIds,
       {
-        metadata_amount_cents: session.metadata?.amount_cents ?? null,
+        metadata_amount_cents: metadata.amount_cents ?? null,
         authoritative_amount: amount,
       }
     )
@@ -609,10 +712,22 @@ async function resolveTipPaymentAuthority(
     'currency_mismatch',
     objectIds
   )
+  if (currency !== 'usd') {
+    authorityError('currency_mismatch', 'product', 'Tip payments must use USD.', objectIds, {
+      currency,
+    })
+  }
 
   return {
     tipId,
+    clientReferenceId,
+    metadataUserId,
+    metadataFromUserId,
+    metadataPostId,
+    metadataToUserId,
+    metadataAmountCents: amount,
     sessionId: requestedSessionId,
+    checkoutExpiresAt,
     customerId,
     paymentIntentId,
     chargeId,
@@ -716,16 +831,39 @@ function readCompletionStatus(data: Json, authority: TipPaymentAuthority): TipCo
 }
 
 /**
- * Complete a tip from fresh Stripe authority. The signed webhook snapshot is
- * used only for its Checkout Session id; every mutable payment field is
- * retrieved again before the single service-role database transition.
+ * Complete a tip from fresh Stripe authority. The signed event and Session
+ * snapshot attest live mode and identify the Checkout Session; every mutable
+ * payment field is retrieved again before the single service-role transition.
  */
 export async function completeTipCheckout(params: {
   stripe: Stripe
   supabase: SupabaseClient<Database>
   sessionId: string
   eventId: string
+  eventLivemode: boolean
+  snapshotLivemode: boolean
 }): Promise<TipCompletionOutcome> {
+  if (
+    params.eventLivemode !== true ||
+    params.snapshotLivemode !== true ||
+    params.eventLivemode !== params.snapshotLivemode
+  ) {
+    await recordStripeCheckoutManualReview({
+      supabase: params.supabase,
+      objectType: 'tip_checkout',
+      sessionId: stableReviewObjectId(params.sessionId, params.eventId),
+      userId: null,
+      reasonKey: 'tip_checkout_authority:signed_mode:object_mismatch',
+      reason: 'The signed Tip event and Checkout Session snapshot must both be live mode.',
+      context: {
+        event_id: params.eventId || null,
+        event_livemode: params.eventLivemode,
+        snapshot_livemode: params.snapshotLivemode,
+      },
+    })
+    return { status: 'manual_review', reviewCode: 'object_mismatch' }
+  }
+
   let authority: TipPaymentAuthority
   try {
     authority = await resolveTipPaymentAuthority(params.stripe, params.sessionId)
@@ -754,6 +892,14 @@ export async function completeTipCheckout(params: {
     p_amount_paid: authority.amount,
     p_currency: authority.currency,
     p_completed_at: authority.completedAt,
+    p_client_reference_id: authority.clientReferenceId,
+    p_metadata_user_id: authority.metadataUserId,
+    p_metadata_from_user_id: authority.metadataFromUserId,
+    p_metadata_post_id: authority.metadataPostId,
+    p_metadata_to_user_id: authority.metadataToUserId,
+    p_metadata_amount_cents: authority.metadataAmountCents,
+    p_checkout_expires_at: authority.checkoutExpiresAt,
+    p_event_id: params.eventId,
   })
   if (error) {
     throw new Error(`Failed to complete tip atomically: ${error.message}`)

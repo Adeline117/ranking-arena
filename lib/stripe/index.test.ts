@@ -77,6 +77,7 @@ beforeEach(() => {
     STRIPE_PRO_YEARLY_PRICE_ID: 'price_yearly_123',
   }
   delete process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS
+  delete process.env.STRIPE_TIP_CHECKOUT_ENABLED
 })
 
 afterAll(() => {
@@ -287,6 +288,17 @@ describe('Stripe payment runtime readiness', () => {
     process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_live_123'
 
     expect(() => assertStripePaymentRuntimeReady()).not.toThrow()
+  })
+
+  test('requires live keys when Tip checkout is enabled even without VERCEL_ENV', () => {
+    delete process.env.VERCEL_ENV
+    process.env.STRIPE_TIP_CHECKOUT_ENABLED = 'true'
+    process.env.STRIPE_SECRET_KEY = 'sk_test_123'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_123'
+
+    expect(() => assertStripePaymentRuntimeReady()).toThrow(
+      'Stripe live mode is required for Production payment actions'
+    )
   })
 })
 
@@ -633,8 +645,80 @@ describe('createOneTimePaymentSession', () => {
     )
   })
 
+  test('accepts durable caller-owned Checkout identity without changing legacy callers', async () => {
+    process.env.VERCEL_ENV = 'preview'
+    stripe.checkout.sessions.create = jest.fn().mockResolvedValue({
+      id: 'cs_tip_atomic',
+      url: 'https://checkout.stripe.com/tip-atomic',
+    })
+
+    await createOneTimePaymentSession({
+      customerId: 'cus_tip_atomic',
+      userId: '11111111-1111-4111-8111-111111111111',
+      discriminator: 'tip_atomic',
+      idempotencyKey: 'checkout_tip_v1_22222222-2222-4222-8222-222222222222',
+      expiresAt: 1_800_000_000,
+      clientReferenceId: '22222222-2222-4222-8222-222222222222',
+      lineItems: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: { name: 'Arena creator tip' },
+            unit_amount: 500,
+          },
+          quantity: 1,
+        },
+      ],
+      successUrl: 'https://example.com/tip/success',
+      cancelUrl: 'https://example.com/post/33333333-3333-4333-8333-333333333333',
+      metadata: { type: 'tip', tip_id: '22222222-2222-4222-8222-222222222222' },
+    })
+
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: 'cus_tip_atomic',
+        client_reference_id: '22222222-2222-4222-8222-222222222222',
+        expires_at: 1_800_000_000,
+      }),
+      {
+        idempotencyKey: 'checkout_tip_v1_22222222-2222-4222-8222-222222222222',
+      }
+    )
+  })
+
   test('refuses a Production test-mode tip before creating Checkout', async () => {
     process.env.VERCEL_ENV = 'production'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_123'
+    stripe.checkout.sessions.create = jest.fn()
+
+    await expect(
+      createOneTimePaymentSession({
+        customerId: 'cus_123',
+        userId: 'user-123',
+        discriminator: 'tip_post-123_500',
+        lineItems: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: { name: 'Tip' },
+              unit_amount: 500,
+            },
+            quantity: 1,
+          },
+        ],
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel',
+        metadata: { type: 'tip', tip_id: 'tip-123' },
+      })
+    ).rejects.toThrow('Stripe live mode is required for Production payment actions')
+
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
+  })
+
+  test('refuses an enabled Tip checkout in test mode when VERCEL_ENV is absent', async () => {
+    delete process.env.VERCEL_ENV
+    process.env.STRIPE_TIP_CHECKOUT_ENABLED = 'true'
+    process.env.STRIPE_SECRET_KEY = 'sk_test_123'
     process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_123'
     stripe.checkout.sessions.create = jest.fn()
 

@@ -6536,6 +6536,69 @@ export type Database = {
           },
         ]
       }
+      tip_checkout_legacy_completion_audits: {
+        Row: {
+          amount_paid: number
+          checkout_expires_at: string
+          checkout_session_id: string
+          client_reference_id: string | null
+          completed_at: string
+          created_at: string
+          currency: string
+          id: string
+          initial_event_id: string
+          metadata_amount_cents: number
+          metadata_from_user_id: string
+          metadata_post_id: string
+          metadata_to_user_id: string
+          metadata_user_id: string
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_payment_intent_id: string
+          tip_id: string
+        }
+        Insert: {
+          amount_paid: number
+          checkout_expires_at: string
+          checkout_session_id: string
+          client_reference_id?: string | null
+          completed_at: string
+          created_at?: string
+          currency: string
+          id?: string
+          initial_event_id: string
+          metadata_amount_cents: number
+          metadata_from_user_id: string
+          metadata_post_id: string
+          metadata_to_user_id: string
+          metadata_user_id: string
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_payment_intent_id: string
+          tip_id: string
+        }
+        Update: {
+          amount_paid?: number
+          checkout_expires_at?: string
+          checkout_session_id?: string
+          client_reference_id?: string | null
+          completed_at?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          initial_event_id?: string
+          metadata_amount_cents?: number
+          metadata_from_user_id?: string
+          metadata_post_id?: string
+          metadata_to_user_id?: string
+          metadata_user_id?: string
+          stripe_charge_id?: string
+          stripe_customer_id?: string
+          stripe_payment_intent_id?: string
+          tip_id?: string
+        }
+        Relationships: []
+      }
       tip_completion_notification_deliveries: {
         Row: {
           actor_user_id: string
@@ -9906,19 +9969,41 @@ export type Database = {
         Args: { max_val: number; min_val: number; val: number }
         Returns: number
       }
-      complete_tip_with_stripe_ownership_atomic: {
-        Args: {
-          p_amount_paid: number
-          p_checkout_session_id: string
-          p_completed_at: string
-          p_currency: string
-          p_stripe_charge_id: string
-          p_stripe_customer_id: string
-          p_stripe_payment_intent_id: string
-          p_tip_id: string
-        }
-        Returns: Json
-      }
+      complete_tip_with_stripe_ownership_atomic:
+        | {
+            Args: {
+              p_amount_paid: number
+              p_checkout_session_id: string
+              p_completed_at: string
+              p_currency: string
+              p_stripe_charge_id: string
+              p_stripe_customer_id: string
+              p_stripe_payment_intent_id: string
+              p_tip_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_amount_paid: number
+              p_checkout_expires_at: string
+              p_checkout_session_id: string
+              p_client_reference_id: string | null
+              p_completed_at: string
+              p_currency: string
+              p_event_id: string
+              p_metadata_amount_cents: number
+              p_metadata_from_user_id: string
+              p_metadata_post_id: string
+              p_metadata_to_user_id: string
+              p_metadata_user_id: string
+              p_stripe_charge_id: string
+              p_stripe_customer_id: string
+              p_stripe_payment_intent_id: string
+              p_tip_id: string
+            }
+            Returns: Json
+          }
       complete_tip_with_stripe_ownership_financial_legacy_v2: {
         Args: {
           p_amount_paid: number

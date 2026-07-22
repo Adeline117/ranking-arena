@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { API_PRICING, PRICING } from '@/app/(app)/user-center/membership-config'
 import { stripeMetadataUserId } from '@/lib/stripe/identity'
 import { STRIPE_API_VERSION } from '@/lib/stripe/version'
+import { isTipCheckoutEnabled } from '@/lib/security/tip-checkout-cutover'
 
 /**
  * Validates that a required Stripe environment variable is set.
@@ -56,7 +57,7 @@ export function assertStripePaymentRuntimeReady(): void {
     throw new Error('STRIPE_WEBHOOK_SECRET_PREVIOUS must differ from STRIPE_WEBHOOK_SECRET')
   }
 
-  if (process.env.VERCEL_ENV === 'production') {
+  if (process.env.VERCEL_ENV === 'production' || isTipCheckoutEnabled()) {
     const publishableKey = requireEnv('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY')
     if (!secretKey.startsWith('sk_live_') || !publishableKey.startsWith('pk_live_')) {
       throw new Error('Stripe live mode is required for Production payment actions')
@@ -375,8 +376,8 @@ export async function createCheckoutSession(params: {
  * Create a one-time payment checkout session with MANDATORY idempotency.
  * Use for lifetime purchases, tips, group payments — anything mode:'payment'.
  *
- * Idempotency key is auto-generated from userId + a discriminator + minute window.
- * Stripe deduplicates within 24h, preventing double-charges on retry/double-click.
+ * Legacy callers receive a user/discriminator/minute key. Durable workflows
+ * may supply their own stable key plus exact expiry and client identity.
  */
 export async function createOneTimePaymentSession(params: {
   customerId?: string
@@ -388,13 +389,21 @@ export async function createOneTimePaymentSession(params: {
   successUrl: string
   cancelUrl: string
   metadata: Record<string, string>
+  /** Stable caller-owned key for durable workflows. Legacy callers keep the minute-scoped key. */
+  idempotencyKey?: string
+  /** Stripe Checkout expiration as an exact Unix timestamp in seconds. */
+  expiresAt?: number
+  /** Durable application identity copied to Checkout's client_reference_id. */
+  clientReferenceId?: string
 }): Promise<Stripe.Checkout.Session> {
   // Tips are reachable independently of the Pro promo gate. Keep every
   // one-time Production payment closed until live keys and signed webhook
   // fulfillment are configured, just like the paid group runtime.
   assertStripePaymentRuntimeReady()
 
-  const idempotencyKey = `payment_${params.userId}_${params.discriminator}_${Math.floor(Date.now() / 60_000)}`
+  const idempotencyKey =
+    params.idempotencyKey ??
+    `payment_${params.userId}_${params.discriminator}_${Math.floor(Date.now() / 60_000)}`
 
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     customer: params.customerId,
@@ -408,6 +417,8 @@ export async function createOneTimePaymentSession(params: {
     mode: 'payment',
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
+    expires_at: params.expiresAt,
+    client_reference_id: params.clientReferenceId,
     metadata: { ...params.metadata, user_id: params.userId },
     // One-time product writers persist an exact amount before fulfillment.
     // Dashboard defaults must not make that payable amount mutable.

@@ -76,6 +76,7 @@ function checkoutSession(
     id: 'cs_test_123',
     mode: 'subscription',
     payment_status: 'paid',
+    livemode: true,
     customer: 'cus_test_123',
     subscription: 'sub_test_123',
     metadata: { userId: 'user-123', plan: 'monthly' },
@@ -86,8 +87,40 @@ function checkoutSession(
 const lifetimeUserId = '21e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const lifetimeReservationId = '9a8df3e8-e908-4f27-9cb4-8b892d748cc7'
 const lifetimeRequestNonce = `lifetime:${lifetimeUserId}:123`
-const expiredEvent = { id: 'evt_expired_123', created: 1_800_000_000 }
-const tipEvent = { id: 'evt_tip_123', created: 1_800_000_000 }
+const expiredEvent = { id: 'evt_expired_123', created: 1_800_000_000, livemode: true }
+const tipEvent = { id: 'evt_tip_123', created: 1_800_000_000, livemode: true }
+const tipCheckoutId = '31e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const tipPostId = '41e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const tipRecipientId = '51e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const tipCheckoutExpiresAt = 1_900_000_000
+
+function expiredTipSession(
+  metadataOverrides: Record<string, string> = {},
+  sessionOverrides: Partial<Stripe.Checkout.Session> = {}
+): Stripe.Checkout.Session {
+  return checkoutSession({
+    id: 'cs_tip_expired_123',
+    object: 'checkout.session',
+    mode: 'payment',
+    payment_status: 'unpaid',
+    status: 'expired',
+    subscription: null,
+    client_reference_id: tipCheckoutId,
+    expires_at: tipCheckoutExpiresAt,
+    livemode: true,
+    metadata: {
+      type: 'tip',
+      tip_id: tipCheckoutId,
+      user_id: lifetimeUserId,
+      from_user_id: lifetimeUserId,
+      post_id: tipPostId,
+      to_user_id: tipRecipientId,
+      amount_cents: '500',
+      ...metadataOverrides,
+    },
+    ...sessionOverrides,
+  })
+}
 
 function expiredLifetimeSession(
   metadataOverrides: Record<string, string> = {}
@@ -411,6 +444,109 @@ describe('handleCheckoutComplete entitlement safety', () => {
   )
 })
 
+describe('handleCheckoutExpired Tip lifecycle', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockRpc.mockResolvedValue({ data: { status: 'expired' }, error: null })
+    mockRecordStripeCheckoutManualReview.mockResolvedValue(undefined)
+  })
+
+  it('uses exact signed Session identity to expire the pending Tip before generic abandonment', async () => {
+    await handleCheckoutExpired(expiredTipSession(), expiredEvent)
+
+    expect(mockRpc).toHaveBeenCalledWith('expire_pending_tip_checkout_atomic', {
+      p_tip_id: tipCheckoutId,
+      p_from_user_id: lifetimeUserId,
+      p_post_id: tipPostId,
+      p_to_user_id: tipRecipientId,
+      p_amount_cents: 500,
+      p_checkout_session_id: 'cs_tip_expired_123',
+      p_checkout_expires_at: new Date(tipCheckoutExpiresAt * 1000).toISOString(),
+      p_event_id: 'evt_expired_123',
+      p_event_created_at: '2027-01-15T08:00:00.000Z',
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it.each(['already_expired', 'identity_conflict', 'already_terminal', 'not_found'])(
+    'acknowledges durable Tip expiry status %s because the DB records conflicts',
+    async (status) => {
+      mockRpc.mockResolvedValue({ data: { status }, error: null })
+
+      await expect(
+        handleCheckoutExpired(expiredTipSession(), expiredEvent)
+      ).resolves.toBeUndefined()
+
+      expect(mockRpc).toHaveBeenCalledTimes(1)
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    ['metadata user conflict', { user_id: tipRecipientId }, {}],
+    ['invalid amount', { amount_cents: '500.5' }, {}],
+    ['snapshot drift', { post_id: 'not-a-uuid' }, {}],
+    ['uppercase UUID', { tip_id: tipCheckoutId.toUpperCase() }, {}],
+    ['whitespace-padded UUID', { tip_id: ` ${tipCheckoutId}` }, {}],
+    ['client reference drift', {}, { client_reference_id: tipPostId }],
+  ])('records %s durably and never falls through to analytics', async (_, metadataDrift, drift) => {
+    await expect(
+      handleCheckoutExpired(expiredTipSession(metadataDrift, drift), expiredEvent)
+    ).resolves.toBeUndefined()
+
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'cs_tip_expired_123',
+        reasonKey: 'tip_checkout_expiry_metadata_invalid',
+      })
+    )
+  })
+
+  it.each([
+    ['test-mode Session', expiredTipSession({}, { livemode: false }), expiredEvent],
+    ['test-mode event', expiredTipSession(), { ...expiredEvent, livemode: false }],
+    ['wrong Session mode', expiredTipSession({}, { mode: 'subscription' }), expiredEvent],
+    ['wrong Session status', expiredTipSession({}, { status: 'open' }), expiredEvent],
+    ['paid Session', expiredTipSession({}, { payment_status: 'paid' }), expiredEvent],
+    ['subscription Session', expiredTipSession({}, { subscription: 'sub_wrong' }), expiredEvent],
+  ])('durably reviews a %s and never expires the Tip', async (_, session, event) => {
+    await expect(handleCheckoutExpired(session, event)).resolves.toBeUndefined()
+
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'cs_tip_expired_123',
+        reasonKey: 'tip_checkout_expiry_metadata_invalid',
+        context: expect.objectContaining({
+          event_livemode: event.livemode,
+          session_livemode: session.livemode,
+        }),
+      })
+    )
+  })
+
+  it('throws so Stripe retries when the signed Tip expiry DB transition fails', async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'database unavailable' } })
+
+    await expect(handleCheckoutExpired(expiredTipSession(), expiredEvent)).rejects.toThrow(
+      'Failed to expire pending Tip checkout: database unavailable'
+    )
+  })
+
+  it('fails closed on an unknown Tip expiry result', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'unexpected' }, error: null })
+
+    await expect(handleCheckoutExpired(expiredTipSession(), expiredEvent)).rejects.toThrow(
+      'Tip checkout expiry returned unexpected status unexpected'
+    )
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+})
+
 describe('handleCheckoutExpired lifetime reservation release', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -702,6 +838,8 @@ describe('handleTipPaymentCompleted persistence', () => {
       supabase: { rpc: mockRpc },
       sessionId: 'cs_test_123',
       eventId: 'evt_tip_123',
+      eventLivemode: true,
+      snapshotLivemode: true,
     })
     expect(mockFrom).not.toHaveBeenCalled()
   })
