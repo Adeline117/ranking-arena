@@ -26,8 +26,25 @@ import {
   LeaderboardCaptureUpstreamError,
   type LeaderboardCapture,
 } from '@/lib/ingest/fetch/capture'
-import { buildLeaderboardAcquisitionManifest } from '@/lib/ingest/acquisition-manifest'
-import { writeLeaderboardRawArtifactSet, writeRawObject } from '@/lib/ingest/raw'
+import {
+  buildLeaderboardAcquisitionManifest,
+  buildLeaderboardAcquisitionManifestV3,
+} from '@/lib/ingest/acquisition-manifest'
+import {
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+  finishLeaderboardAcquisitionAttempt,
+  hasRegisteredAttemptBoundLeaderboardAcquisitionContract,
+  startLeaderboardAcquisitionAttempt,
+  type LeaderboardAcquisitionAttempt,
+  type LeaderboardAcquisitionFailureStage,
+  type LeaderboardAcquisitionReasonCode,
+} from '@/lib/ingest/acquisition-attempts'
+import {
+  writeAttemptBoundLeaderboardRawArtifactSet,
+  writeLeaderboardRawArtifactSet,
+  writeRawObject,
+  type RawObjectReceipt,
+} from '@/lib/ingest/raw'
 import { STRICT_CANONICAL_JSON_CONTRACT } from '@/lib/ingest/strict-canonical-json'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
@@ -92,6 +109,10 @@ function verifiedRunnerGitSha(): string | null {
   return /^[0-9a-f]{40}$/.test(value) ? value : null
 }
 
+function configuredWorkerRegion(): string | null {
+  return process.env.INGEST_LOCAL_REGION?.trim() || null
+}
+
 function completedTimeframesFrom(value: unknown): RankingTimeframe[] {
   if (!Array.isArray(value)) return []
   const completed = new Set(value.filter((timeframe) => RANKING_TIMEFRAMES.includes(timeframe)))
@@ -135,7 +156,28 @@ class TierACaptureProcessingError extends AggregateError {
   }
 }
 
-function buildCaptureManifest(input: {
+class TierAAttemptFinalizationError extends AggregateError {
+  constructor(
+    sourceSlug: string,
+    timeframe: RankingTimeframe,
+    priorFailures: readonly unknown[],
+    finalizationCause: unknown
+  ) {
+    super(
+      [...priorFailures.map(asError), asError(finalizationCause)],
+      `[tier-a] ${sourceSlug} ${timeframe}d acquisition finalization failed`
+    )
+    this.name = 'TierAAttemptFinalizationError'
+  }
+}
+
+type AttemptLifecycle = 'not_started' | 'open' | 'finalizing' | 'terminal'
+type ProcessingFailureReason = Exclude<
+  LeaderboardAcquisitionReasonCode,
+  'legacy_unverified' | 'lease_lost' | 'worker_crash' | 'stale_timeout'
+>
+
+interface CaptureManifestInput {
   src: SourceRow
   timeframe: RankingTimeframe
   startedAt: string
@@ -146,7 +188,11 @@ function buildCaptureManifest(input: {
   capturedFailure: boolean
   acceptedPopulation: number
   rejectedRowCount: number
-}) {
+}
+
+function captureManifestInput(
+  input: CaptureManifestInput
+): Parameters<typeof buildLeaderboardAcquisitionManifest>[0] {
   const { src, capture } = input
   const unavailableCapture = input.capturedFailure && capture.sourcePages.length === 0
   if (
@@ -163,7 +209,7 @@ function buildCaptureManifest(input: {
   ) {
     throw new TypeError('[tier-a] captured upstream evidence must terminate as upstream_error')
   }
-  return buildLeaderboardAcquisitionManifest({
+  return {
     source: {
       id: src.id,
       slug: src.slug,
@@ -192,6 +238,23 @@ function buildCaptureManifest(input: {
     parser_transformation: capture.parserTransformation,
     accepted_population: input.acceptedPopulation,
     rejected_row_count: input.rejectedRowCount,
+  }
+}
+
+function buildCaptureManifest(input: CaptureManifestInput) {
+  return buildLeaderboardAcquisitionManifest(captureManifestInput(input))
+}
+
+function buildAttemptBoundCaptureManifest(
+  input: CaptureManifestInput & { attempt: LeaderboardAcquisitionAttempt }
+) {
+  return buildLeaderboardAcquisitionManifestV3({
+    ...captureManifestInput(input),
+    acquisition_attempt: {
+      binding_contract: input.attempt.attemptBindingContract,
+      attempt_id: input.attempt.attemptId,
+      attempt_seq: input.attempt.attemptSeq,
+    },
   })
 }
 
@@ -243,9 +306,10 @@ async function persistUnprocessedCaptureRaw(input: {
   completedAt: string
   capture: LeaderboardCapture
   priorFailures: readonly unknown[]
-}): Promise<void> {
+  attempt?: LeaderboardAcquisitionAttempt | null
+}): Promise<RawObjectReceipt> {
   try {
-    await writeRawObject({
+    return await writeRawObject({
       sourceId: input.src.id,
       sourceSlug: input.src.slug,
       jobType: 'tier_a_failure',
@@ -255,6 +319,18 @@ async function persistUnprocessedCaptureRaw(input: {
       meta: {
         pageCount: input.capture.sourcePages.length,
         ...(input.cycleId ? { observation_cycle_id: input.cycleId } : {}),
+        ...(input.attempt
+          ? {
+              acquisition_attempt: {
+                binding_contract: input.attempt.attemptBindingContract,
+                attempt_id: input.attempt.attemptId,
+                attempt_seq: input.attempt.attemptSeq,
+                runner_git_sha: input.attempt.runnerGitSha,
+                capture_started_at: input.attempt.recordedStartedAt,
+                capture_completed_at: input.completedAt,
+              },
+            }
+          : {}),
         trust_evidence: {
           state: 'unknown',
           rank_eligible: false,
@@ -325,27 +401,76 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
 
   const adapter = getAdapter(src.adapter_slug)
   const cycleId = observationCycleId(job, 'tier-a', src.slug)
+  const attemptBoundCapture = await hasRegisteredAttemptBoundLeaderboardAcquisitionContract({
+    sourceId: src.id,
+    adapterSlug: src.adapter_slug,
+  })
+  const workerRegion = configuredWorkerRegion()
   // Freeze provenance before the first upstream request. A long-running crawl
   // must not bind later timeframes to a different checkout/deployment SHA.
   const runnerGitSha = adapter.captureLeaderboard ? verifiedRunnerGitSha() : null
+  if (attemptBoundCapture && !adapter.captureLeaderboard) {
+    throw new Error(
+      `[tier-a] ${src.slug} is registered for attempt-bound capture but its adapter has no capture implementation`
+    )
+  }
+  if (attemptBoundCapture && runnerGitSha === null) {
+    throw new Error(
+      `[tier-a] ${src.slug} attempt-bound capture requires an exact deployed runner SHA`
+    )
+  }
+  if (attemptBoundCapture && workerRegion === null) {
+    throw new Error(
+      `[tier-a] ${src.slug} attempt-bound capture requires an explicit INGEST_LOCAL_REGION`
+    )
+  }
   const results: TierAResult[] = []
   const failures: Array<{ timeframe: number; error: Error }> = []
   let terminalFailure: { error: unknown } | null = null
   let sessionCloseFailure: Error | null = null
   let persistedJobData: TierJobData = { ...job.data }
-  // Compute every potentially-throwing input before acquiring the source's
-  // persistent-profile lease. Once acquired, the try/finally begins
-  // immediately so future edits cannot strand the unsuffixed Tier-A lane.
-  const session = await openSession(src)
+  // Unregistered sources retain their existing session/capture path. A
+  // registered source opens lazily only after the first pending window has a
+  // durable attempt, so session-open failure is itself terminal evidence.
+  let session = attemptBoundCapture ? null : await openSession(src)
 
   try {
     for (const timeframe of pendingTimeframes) {
+      let acquisitionAttempt: LeaderboardAcquisitionAttempt | null = null
+      let attemptLifecycle: AttemptLifecycle = 'not_started'
+      let failureStage: LeaderboardAcquisitionFailureStage = 'upstream_fetch'
+      let failureReason: ProcessingFailureReason = 'unknown_failure'
+      let captureCompletedAt: string | null = null
+      let diagnosticRawObjectId: number | null = null
+      let finalizationPriorFailures: readonly unknown[] = []
       try {
-        const scrapedAt = new Date().toISOString()
+        if (attemptBoundCapture) {
+          acquisitionAttempt = await startLeaderboardAcquisitionAttempt({
+            sourceId: src.id,
+            timeframe,
+            observationCycleId: cycleId,
+            queueJobId: job.id === undefined ? null : String(job.id),
+            queueAttempt: job.attemptsMade,
+            captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+            runnerGitSha,
+            workerRegion,
+          })
+          attemptLifecycle = 'open'
+          failureStage = 'session_open'
+          failureReason = 'upstream_unavailable'
+          if (session === null) session = await openSession(src)
+        }
+        if (session === null) {
+          throw new Error('source session was not opened')
+        }
+
+        const scrapedAt = acquisitionAttempt?.recordedStartedAt ?? new Date().toISOString()
+        failureStage = 'upstream_fetch'
+        failureReason = 'unknown_failure'
         const acquisition = await acquireLeaderboard(adapter, session, src, timeframe)
         const capture = acquisition.kind === 'legacy' ? null : acquisition.capture
         // This is the acquisition boundary, not a parser/runtime duration.
-        const captureCompletedAt = capture ? new Date().toISOString() : null
+        captureCompletedAt = capture ? new Date().toISOString() : null
         const capturedError = acquisition.kind === 'captured_error' ? acquisition.error : null
         const pages =
           acquisition.kind === 'legacy' ? acquisition.pages : [...acquisition.capture.parsePages]
@@ -396,29 +521,45 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         let rows: ReturnType<typeof parseLeaderboardRows>
         let validated: ReturnType<typeof validateLeaderboardRows>
         let built: ReturnType<typeof buildCaptureManifest> | null
+        let attemptBoundBuilt: ReturnType<typeof buildAttemptBoundCaptureManifest> | null
+        failureStage = 'parse_validate_manifest'
+        failureReason = 'parse_failed'
         try {
           rows = parseLeaderboardRows({ adapter, pages, ctx, pageSize })
+          failureReason = 'validation_failed'
           validated = validateLeaderboardRows(rows, requiredFields)
-          built = capture
-            ? buildCaptureManifest({
+          failureReason = 'manifest_failed'
+          const manifestInput = capture
+            ? {
                 src,
                 timeframe,
                 startedAt: scrapedAt,
                 completedAt: captureCompletedAt!,
-                runnerGitSha,
+                runnerGitSha: acquisitionAttempt?.runnerGitSha ?? runnerGitSha,
                 cycleId,
                 capture,
                 capturedFailure: capturedError !== null,
                 acceptedPopulation: validated.valid.length,
                 rejectedRowCount: validated.rejects.length,
-              })
+              }
             : null
+          attemptBoundBuilt =
+            manifestInput && acquisitionAttempt
+              ? buildAttemptBoundCaptureManifest({
+                  ...manifestInput,
+                  attempt: acquisitionAttempt,
+                })
+              : null
+          built = manifestInput && !acquisitionAttempt ? buildCaptureManifest(manifestInput) : null
         } catch (processingCause) {
           if (capture) {
+            const processingReason = failureReason
             const priorFailures = capturedError
               ? [capturedError, processingCause]
               : [processingCause]
-            await persistUnprocessedCaptureRaw({
+            failureStage = 'raw_persistence'
+            failureReason = 'raw_persistence_failed'
+            const diagnostic = await persistUnprocessedCaptureRaw({
               src,
               timeframe,
               cycleId,
@@ -426,7 +567,11 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
               completedAt: captureCompletedAt!,
               capture,
               priorFailures,
+              attempt: acquisitionAttempt,
             })
+            diagnosticRawObjectId = diagnostic.id
+            failureStage = 'parse_validate_manifest'
+            failureReason = processingReason
             throw new TierACaptureProcessingError(src.slug, timeframe, priorFailures)
           }
           throw processingCause
@@ -434,7 +579,56 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
 
         const { valid, rejects } = validated
 
-        if (capture && built) {
+        if (capture && attemptBoundBuilt && acquisitionAttempt) {
+          let artifactSet
+          failureStage = 'raw_persistence'
+          failureReason = 'raw_persistence_failed'
+          try {
+            artifactSet = await writeAttemptBoundLeaderboardRawArtifactSet({
+              attempt: acquisitionAttempt,
+              built: attemptBoundBuilt,
+              sourcePages: rawPages,
+            })
+          } catch (persistenceCause) {
+            throw new TierAEvidencePersistenceError(
+              src.slug,
+              timeframe,
+              capturedError ? [capturedError] : [],
+              persistenceCause
+            )
+          }
+          rawObjectId = artifactSet.sourcePayload.id
+          metricTrust = {
+            sourceRunId: attemptBoundBuilt.sourceRunId,
+            manifest: attemptBoundBuilt.manifest,
+            artifacts: artifactSet,
+          }
+
+          attemptLifecycle = 'finalizing'
+          finalizationPriorFailures = capturedError ? [capturedError] : []
+          failureStage = 'attempt_finalize'
+          failureReason = 'attempt_finalize_failed'
+          await finishLeaderboardAcquisitionAttempt({
+            kind: 'manifest',
+            attempt: acquisitionAttempt,
+            projection: artifactSet.projection,
+            sourcePayloadRawObjectId: artifactSet.sourcePayload.id,
+            manifestRawObjectId: artifactSet.populationManifest.id,
+          })
+          attemptLifecycle = 'terminal'
+
+          // The failed/partial response is now durable and terminal. Preserve
+          // the upstream error for retry classification, but never publish it.
+          if (capturedError) throw capturedError
+          if (artifactSet.projection.terminalState !== 'complete') {
+            throw new Error(
+              `acquisition trust gate FAILED: acquisition=` +
+                `${artifactSet.projection.acquisitionState}, population=` +
+                `${artifactSet.projection.populationState}, source_run=` +
+                `${artifactSet.projection.sourceRunId}`
+            )
+          }
+        } else if (capture && built) {
           let artifactSet
           try {
             artifactSet = await writeLeaderboardRawArtifactSet({
@@ -487,10 +681,14 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         // series-specific bug cannot erase an otherwise truthful manifest.
         const boardSeries = parseLeaderboardSeriesWindow({ adapter, pages, ctx, timeframe })
 
-        const trustedBundle =
+        const registeredMetricTrust =
           metricTrust !== null && hasRegisteredLeaderboardMetricTrust(src, timeframe)
-            ? metricTrust
-            : null
+        if (acquisitionAttempt && !registeredMetricTrust) {
+          throw new Error(
+            `[tier-a] ${src.slug} ${timeframe}d attempt-bound capture has no reviewed metric trust contract`
+          )
+        }
+        const trustedBundle = registeredMetricTrust ? metricTrust : null
         const result = trustedBundle
           ? await publishTrustedLeaderboardSnapshot({
               src,
@@ -584,16 +782,56 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
           snapshotId: result.snapshotId,
         })
       } catch (cause) {
+        if (attemptBoundCapture) {
+          if (acquisitionAttempt === null || attemptLifecycle === 'not_started') {
+            const detail = cause instanceof Error ? cause.message : String(cause)
+            throw new Error(`[tier-a] ${src.slug} ${timeframe}d attempt start failed: ${detail}`, {
+              cause,
+            })
+          }
+          if (attemptLifecycle === 'finalizing') {
+            throw new TierAAttemptFinalizationError(
+              src.slug,
+              timeframe,
+              finalizationPriorFailures,
+              cause
+            )
+          }
+          if (attemptLifecycle === 'open') {
+            attemptLifecycle = 'finalizing'
+            try {
+              await finishLeaderboardAcquisitionAttempt({
+                kind: 'processing_failed',
+                attempt: acquisitionAttempt,
+                captureCompletedAt,
+                diagnosticRawObjectId,
+                failureStage,
+                reasonCode: failureReason,
+              })
+              attemptLifecycle = 'terminal'
+            } catch (finalizationCause) {
+              throw new TierAAttemptFinalizationError(
+                src.slug,
+                timeframe,
+                [cause],
+                finalizationCause
+              )
+            }
+          }
+        }
+
         const detail = cause instanceof Error ? cause.message : String(cause)
         const error = new Error(`[tier-a] ${src.slug} ${timeframe}d failed: ${detail}`, { cause })
         console.error(error.message)
+        if (attemptBoundCapture && failureStage === 'session_open') throw error
         // Missing capture evidence or an unknown parser outcome is terminal:
         // later windows must not pile more state onto an unexplainable run.
         // Throw these AggregateErrors directly to preserve every original
         // failure object for retry classification and incident diagnosis.
         if (
           cause instanceof TierAEvidencePersistenceError ||
-          cause instanceof TierACaptureProcessingError
+          cause instanceof TierACaptureProcessingError ||
+          cause instanceof TierAAttemptFinalizationError
         ) {
           throw cause
         }
@@ -607,13 +845,15 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
   } catch (error) {
     terminalFailure = { error }
   } finally {
-    try {
-      await session.close()
-    } catch (cause) {
-      const detail = cause instanceof Error ? cause.message : String(cause)
-      sessionCloseFailure = new Error(`[tier-a] ${src.slug} session close failed: ${detail}`, {
-        cause,
-      })
+    if (session !== null) {
+      try {
+        await session.close()
+      } catch (cause) {
+        const detail = cause instanceof Error ? cause.message : String(cause)
+        sessionCloseFailure = new Error(`[tier-a] ${src.slug} session close failed: ${detail}`, {
+          cause,
+        })
+      }
     }
   }
 
