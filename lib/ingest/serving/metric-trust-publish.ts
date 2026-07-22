@@ -615,12 +615,160 @@ function rawRefForRole(
   return null
 }
 
+/**
+ * A v3 manifest is trusted only after the append-only acquisition ledger has
+ * recorded the exact terminal outcome for the same attempt and RAW pair.
+ * This query runs on the publisher's transaction client, so a missing,
+ * unfinished, or differently-bound attempt rolls the whole publication back.
+ * The v2 path remains unchanged while its workers are still live.
+ */
+async function assertAttemptBoundAcquisitionOutcome(
+  client: PoolClient,
+  prepared: PreparedLeaderboardMetricTrust
+): Promise<void> {
+  const manifest = prepared.manifest
+  if (manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT) return
+
+  const populationReport = manifest.population.reports.population
+  const pageCountReport = manifest.population.reports.page_count
+  const expected = {
+    attempt_id: manifest.acquisition_attempt.attempt_id,
+    attempt_seq: manifest.acquisition_attempt.attempt_seq,
+    binding_contract: manifest.acquisition_attempt.binding_contract,
+    capture_contract: manifest.data_contract,
+    source_id: prepared.src.id,
+    source_slug: prepared.src.slug,
+    adapter_slug: prepared.src.adapter_slug,
+    timeframe: prepared.timeframe,
+    observation_cycle_id: manifest.observation_cycle_id,
+    runner_git_sha: manifest.runner_git_sha,
+    started_at: manifest.started_at,
+    completed_at: manifest.completed_at,
+    terminal_state: 'complete',
+    acquisition_state: manifest.assessment.acquisition_state,
+    population_state: manifest.assessment.population_state,
+    capture_evidence_state: manifest.capture_evidence_state,
+    termination_reason: manifest.termination_reason,
+    source_run_id: prepared.sourceRunId,
+    source_payload_raw_object_id: prepared.artifacts.sourcePayload.id,
+    source_payload_content_hash: prepared.artifacts.sourcePayload.contentHash,
+    source_payload_storage_path: prepared.artifacts.sourcePayload.storagePath,
+    manifest_raw_object_id: prepared.artifacts.populationManifest.id,
+    manifest_content_hash: prepared.artifacts.populationManifest.contentHash,
+    manifest_storage_path: prepared.artifacts.populationManifest.storagePath,
+    reported_population: populationReport.state === 'consistent' ? populationReport.value : null,
+    population_report_state: populationReport.state,
+    source_page_count: manifest.source_pages.length,
+    reported_page_count: pageCountReport.state === 'consistent' ? pageCountReport.value : null,
+    page_count_report_state: pageCountReport.state,
+    observed_population: manifest.population.observed_row_count,
+    accepted_population: manifest.population.accepted_population,
+    rejected_row_count: manifest.population.rejected_row_count,
+    deduplicated_row_count: manifest.population.deduplicated_row_count,
+    caller_limited: manifest.caller_limited,
+    safety_limited: manifest.safety_limited,
+  }
+
+  const { rows } = await client.query<{ attempt_seq: string }>(
+    `WITH expected AS (
+       SELECT *
+         FROM jsonb_to_record($1::jsonb) AS binding(
+           attempt_id uuid,
+           attempt_seq bigint,
+           binding_contract text,
+           capture_contract text,
+           source_id smallint,
+           source_slug text,
+           adapter_slug text,
+           timeframe smallint,
+           observation_cycle_id text,
+           runner_git_sha text,
+           started_at timestamptz,
+           completed_at timestamptz,
+           terminal_state text,
+           acquisition_state text,
+           population_state text,
+           capture_evidence_state text,
+           termination_reason text,
+           source_run_id text,
+           source_payload_raw_object_id bigint,
+           source_payload_content_hash text,
+           source_payload_storage_path text,
+           manifest_raw_object_id bigint,
+           manifest_content_hash text,
+           manifest_storage_path text,
+           reported_population integer,
+           population_report_state text,
+           source_page_count integer,
+           reported_page_count integer,
+           page_count_report_state text,
+           observed_population integer,
+           accepted_population integer,
+           rejected_row_count integer,
+           deduplicated_row_count integer,
+           caller_limited boolean,
+           safety_limited boolean
+         )
+     )
+     SELECT terminal.attempt_seq::text AS attempt_seq
+       FROM expected
+       JOIN arena.latest_terminal_leaderboard_acquisitions AS terminal
+         ON terminal.source_id = expected.source_id
+        AND terminal.timeframe = expected.timeframe
+      WHERE terminal.attempt_id = expected.attempt_id
+        AND terminal.attempt_seq = expected.attempt_seq
+        AND terminal.source_slug = expected.source_slug
+        AND terminal.adapter_slug = expected.adapter_slug
+        AND terminal.capture_contract = expected.capture_contract
+        AND terminal.attempt_binding_contract = expected.binding_contract
+        AND terminal.observation_cycle_id IS NOT DISTINCT FROM expected.observation_cycle_id
+        AND terminal.runner_git_sha IS NOT DISTINCT FROM expected.runner_git_sha
+        AND terminal.recorded_started_at = expected.started_at
+        AND terminal.terminal_state = expected.terminal_state
+        AND terminal.acquisition_state = expected.acquisition_state
+        AND terminal.population_state = expected.population_state
+        AND terminal.capture_evidence_state = expected.capture_evidence_state
+        AND terminal.termination_reason = expected.termination_reason
+        AND terminal.capture_started_at = expected.started_at
+        AND terminal.capture_completed_at = expected.completed_at
+        AND terminal.source_run_id = expected.source_run_id
+        AND terminal.source_payload_raw_object_id = expected.source_payload_raw_object_id
+        AND terminal.source_payload_content_hash = expected.source_payload_content_hash
+        AND terminal.source_payload_storage_path = expected.source_payload_storage_path
+        AND terminal.manifest_raw_object_id = expected.manifest_raw_object_id
+        AND terminal.manifest_content_hash = expected.manifest_content_hash
+        AND terminal.manifest_storage_path = expected.manifest_storage_path
+        AND terminal.reported_population IS NOT DISTINCT FROM expected.reported_population
+        AND terminal.population_report_state = expected.population_report_state
+        AND terminal.source_page_count = expected.source_page_count
+        AND terminal.reported_page_count IS NOT DISTINCT FROM expected.reported_page_count
+        AND terminal.page_count_report_state = expected.page_count_report_state
+        AND terminal.observed_population = expected.observed_population
+        AND terminal.accepted_population = expected.accepted_population
+        AND terminal.rejected_row_count = expected.rejected_row_count
+        AND terminal.deduplicated_row_count = expected.deduplicated_row_count
+        AND terminal.caller_limited = expected.caller_limited
+        AND terminal.safety_limited = expected.safety_limited
+        AND terminal.diagnostic_raw_object_id IS NULL
+        AND terminal.failure_stage IS NULL
+        AND terminal.reason_code IS NULL`,
+    [JSON.stringify(expected)]
+  )
+
+  if (rows.length !== 1) {
+    throw publicationError(
+      'attempt-bound trusted publication requires one exact complete acquisition outcome'
+    )
+  }
+}
+
 export async function writeLeaderboardMetricTrust(
   client: PoolClient,
   prepared: PreparedLeaderboardMetricTrust,
   context: MetricTrustSnapshotContext
 ): Promise<MetricTrustWriteReceipt> {
   const manifest = prepared.manifest
+  await assertAttemptBoundAcquisitionOutcome(client, prepared)
   const run = await client.query(
     `INSERT INTO arena.metric_trust_runs
        (source_run_id, source_id, timeframe, snapshot_id, snapshot_scraped_at,
@@ -856,6 +1004,7 @@ export async function reconcileLeaderboardMetricTrust(
   if (runResult.rows.length === 0) return null
   if (runResult.rows.length !== 1)
     throw publicationError('source run resolved to multiple snapshots')
+  await assertAttemptBoundAcquisitionOutcome(client, prepared)
   const run = runResult.rows[0]
   const manifest = prepared.manifest
   if (
