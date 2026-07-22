@@ -90,6 +90,7 @@ describe('reconcileSchedulers cleanup/revival', () => {
     jest.clearAllMocks()
     mockQueue.getJobSchedulers.mockResolvedValue([])
     mockQueue.getJob.mockResolvedValue(null)
+    mockQueue.getJobs.mockResolvedValue([])
     mockDbQuery.mockReset().mockResolvedValue({ rows: [] })
   })
 
@@ -361,5 +362,100 @@ describe('reconcileSchedulers cleanup/revival', () => {
       expect.anything(),
       expect.anything()
     )
+  })
+
+  it('keeps pending first-party jobs for different authorizations', async () => {
+    const authA = {
+      id: 'fp-a',
+      name: 'firstparty:sync',
+      data: { authorizationId: 'auth-a' },
+      timestamp: 100,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    const authB = {
+      id: 'fp-b',
+      name: 'firstparty:sync',
+      data: { authorizationId: 'auth-b' },
+      timestamp: 200,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    mockQueue.getJobs.mockResolvedValue([authA, authB])
+
+    await reconcileSchedulers()
+
+    expect(authA.remove).not.toHaveBeenCalled()
+    expect(authB.remove).not.toHaveBeenCalled()
+  })
+
+  it('dedupes only the older pending job for the same authorization', async () => {
+    const older = {
+      id: 'fp-old',
+      name: 'firstparty:sync',
+      data: { authorizationId: 'auth-a' },
+      timestamp: 100,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    const newer = {
+      id: 'fp-new',
+      name: 'firstparty:sync',
+      data: { authorizationId: 'auth-a' },
+      timestamp: 200,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    mockQueue.getJobs.mockResolvedValue([older, newer])
+
+    await reconcileSchedulers()
+
+    expect(older.remove).toHaveBeenCalledTimes(1)
+    expect(newer.remove).not.toHaveBeenCalled()
+  })
+
+  it('uses the BullMQ job id to break equal-timestamp ties deterministically', async () => {
+    const lowerId = {
+      id: 'fp-a',
+      name: 'firstparty:sync',
+      data: { authorizationId: 'auth-a' },
+      timestamp: 100,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    const higherId = {
+      id: 'fp-b',
+      name: 'firstparty:sync',
+      data: { authorizationId: 'auth-a' },
+      timestamp: 100,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    mockQueue.getJobs.mockResolvedValue([higherId, lowerId])
+
+    await reconcileSchedulers()
+
+    expect(lowerId.remove).toHaveBeenCalledTimes(1)
+    expect(higherId.remove).not.toHaveBeenCalled()
+  })
+
+  it('keeps malformed first-party jobs instead of merging them destructively', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const malformedA = {
+      id: 'fp-a',
+      name: 'firstparty:sync',
+      data: {},
+      timestamp: 100,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    const malformedB = {
+      id: 'fp-b',
+      name: 'firstparty:sync',
+      data: { authorizationId: '  ' },
+      timestamp: 200,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    mockQueue.getJobs.mockResolvedValue([malformedA, malformedB])
+
+    await reconcileSchedulers()
+
+    expect(malformedA.remove).not.toHaveBeenCalled()
+    expect(malformedB.remove).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('kept 2 unscoped pending jobs'))
+    warn.mockRestore()
   })
 })

@@ -56,6 +56,57 @@ const PRIORITY_BY_PREFIX: Record<string, number> = {
   tierbs: 9,
 }
 
+const SOURCE_SCOPED_JOBS = new Set<string>([
+  INGEST_JOB.TIER_A,
+  INGEST_JOB.TIER_B,
+  INGEST_JOB.TIER_B_SERIES,
+  INGEST_JOB.TIER_D,
+  INGEST_JOB.DERIVE_BOARDS,
+])
+
+const GLOBAL_MAINTENANCE_JOBS = new Set<string>(STATIC_SCHEDULERS.map((job) => job.name))
+
+type PendingJobIdentity = {
+  id?: string
+  name: string
+  data: unknown
+  timestamp?: number
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null
+}
+
+/**
+ * Return the logical identity used by the destructive orphan cleanup pass.
+ * Unknown or malformed jobs deliberately have no identity: keeping an extra
+ * pending job is safer than deleting work that belongs to another account.
+ */
+function orphanDedupKey(job: PendingJobIdentity): string | null {
+  const data = job.data && typeof job.data === 'object' ? (job.data as Record<string, unknown>) : {}
+
+  if (job.name === INGEST_JOB.FIRST_PARTY) {
+    const authorizationId = nonEmptyString(data.authorizationId)
+    return authorizationId ? `${job.name}:authorizationId:${authorizationId}` : null
+  }
+
+  if (SOURCE_SCOPED_JOBS.has(job.name)) {
+    const sourceSlug = nonEmptyString(data.sourceSlug)
+    return sourceSlug ? `${job.name}:sourceSlug:${sourceSlug}` : null
+  }
+
+  if (GLOBAL_MAINTENANCE_JOBS.has(job.name)) return `${job.name}:global`
+  return null
+}
+
+function comparePendingJobs(a: PendingJobIdentity, b: PendingJobIdentity): number {
+  const timestampDelta = (a.timestamp ?? 0) - (b.timestamp ?? 0)
+  if (timestampDelta !== 0) return timestampDelta
+  // BullMQ ids are unique. The lexical fallback makes equal-timestamp cleanup
+  // deterministic instead of retaining every duplicate indefinitely.
+  return (a.id ?? '').localeCompare(b.id ?? '')
+}
+
 export async function reconcileSchedulers(): Promise<void> {
   const sources = await getActiveSources()
   // scheduler key → the queue NAME it must live on. A Set isn't enough: a
@@ -325,25 +376,33 @@ export async function reconcileSchedulers(): Promise<void> {
 
   // Orphan-dedup maintenance (2026-07-09, take-7b companion): worker restarts
   // and historical revive waves can leave multiple pending instances of the
-  // same (name, sourceSlug) job in a queue. take-7b stopped NEW orphans at the
+  // same logical job in a queue. take-7b stopped NEW orphans at the
   // source (rebuild now removes the superseded iteration); this pass drains
   // whatever legacy/restart debris still accumulates — keep only the NEWEST
-  // per (name, slug). Idempotent-by-design jobs (cursor-driven tierbs, board
-  // crawls) lose nothing. Fail-soft: dedup errors never abort the reconcile.
+  // per proven logical identity. Idempotent-by-design jobs (cursor-driven
+  // tierbs, board crawls) lose nothing. Fail-soft: dedup errors never abort
+  // the reconcile.
   let deduped = 0
   try {
     for (const region of INGEST_REGIONS) {
       const q = getRegionQueue(region)
       const jobs = await q.getJobs(['prioritized', 'waiting'], 0, 500)
-      const newest = new Map<string, number>()
+      const newest = new Map<string, (typeof jobs)[number]>()
+      let unscoped = 0
       for (const j of jobs) {
-        const k = `${j.name}:${(j.data as { sourceSlug?: string })?.sourceSlug ?? ''}`
-        const t = j.timestamp ?? 0
-        if (!newest.has(k) || t > (newest.get(k) ?? 0)) newest.set(k, t)
+        const k = orphanDedupKey(j)
+        if (!k) {
+          unscoped++
+          continue
+        }
+        const current = newest.get(k)
+        if (!current || comparePendingJobs(j, current) > 0) newest.set(k, j)
       }
       for (const j of jobs) {
-        const k = `${j.name}:${(j.data as { sourceSlug?: string })?.sourceSlug ?? ''}`
-        if ((j.timestamp ?? 0) < (newest.get(k) ?? 0)) {
+        const k = orphanDedupKey(j)
+        if (!k) continue
+        const winner = newest.get(k)
+        if (winner && comparePendingJobs(j, winner) < 0) {
           try {
             await j.remove()
             deduped++
@@ -351,6 +410,12 @@ export async function reconcileSchedulers(): Promise<void> {
             /* active/locked — leave it */
           }
         }
+      }
+      if (unscoped > 0) {
+        console.warn(
+          `[ingest-scheduler] orphan-dedup kept ${unscoped} unscoped pending jobs ` +
+            `in ${regionQueueName(region)}`
+        )
       }
     }
   } catch (err) {
