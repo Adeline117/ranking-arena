@@ -19,11 +19,16 @@ import {
   type ParsedLeaderboardRow,
   type RankingTimeframe,
   type RawPage,
+  type SourceRow,
 } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
-import type { LeaderboardCapture } from '@/lib/ingest/fetch/capture'
+import {
+  LeaderboardCaptureUpstreamError,
+  type LeaderboardCapture,
+} from '@/lib/ingest/fetch/capture'
 import { buildLeaderboardAcquisitionManifest } from '@/lib/ingest/acquisition-manifest'
-import { writeRawObject } from '@/lib/ingest/raw'
+import { writeLeaderboardRawArtifactSet, writeRawObject } from '@/lib/ingest/raw'
+import { STRICT_CANONICAL_JSON_CONTRACT } from '@/lib/ingest/strict-canonical-json'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
 import { publishBoardSeries, publishLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
@@ -42,6 +47,11 @@ export interface TierAResult {
 
 type TierAAcquisition =
   | { kind: 'capture'; capture: LeaderboardCapture }
+  | {
+      kind: 'captured_error'
+      capture: LeaderboardCapture
+      error: LeaderboardCaptureUpstreamError
+    }
   | { kind: 'legacy'; pages: RawPage[] }
 
 async function acquireLeaderboard(
@@ -51,9 +61,16 @@ async function acquireLeaderboard(
   timeframe: RankingTimeframe
 ): Promise<TierAAcquisition> {
   if (adapter.captureLeaderboard) {
-    return {
-      kind: 'capture',
-      capture: await adapter.captureLeaderboard(session, src, timeframe),
+    try {
+      return {
+        kind: 'capture',
+        capture: await adapter.captureLeaderboard(session, src, timeframe),
+      }
+    } catch (cause) {
+      if (cause instanceof LeaderboardCaptureUpstreamError) {
+        return { kind: 'captured_error', capture: cause.capture, error: cause }
+      }
+      throw cause
     }
   }
 
@@ -78,6 +95,175 @@ class TierACheckpointPersistenceError extends Error {
     const detail = options.cause instanceof Error ? options.cause.message : String(options.cause)
     super(`checkpoint persistence failed for ${sourceSlug} ${timeframe}d: ${detail}`, options)
     this.name = 'TierACheckpointPersistenceError'
+  }
+}
+
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value))
+}
+
+class TierAEvidencePersistenceError extends AggregateError {
+  constructor(
+    sourceSlug: string,
+    timeframe: RankingTimeframe,
+    priorFailures: readonly unknown[],
+    persistenceCause: unknown
+  ) {
+    super(
+      [...priorFailures.map(asError), asError(persistenceCause)],
+      `[tier-a] ${sourceSlug} ${timeframe}d evidence persistence failed`
+    )
+    this.name = 'TierAEvidencePersistenceError'
+  }
+}
+
+class TierACaptureProcessingError extends AggregateError {
+  constructor(sourceSlug: string, timeframe: RankingTimeframe, failures: readonly unknown[]) {
+    super(
+      failures.map(asError),
+      `[tier-a] ${sourceSlug} ${timeframe}d capture processing failed after RAW fallback`
+    )
+    this.name = 'TierACaptureProcessingError'
+  }
+}
+
+function buildCaptureManifest(input: {
+  src: SourceRow
+  timeframe: RankingTimeframe
+  startedAt: string
+  completedAt: string
+  runnerGitSha: string | null
+  cycleId: string | null
+  capture: LeaderboardCapture
+  capturedFailure: boolean
+  acceptedPopulation: number
+  rejectedRowCount: number
+}) {
+  const { src, capture } = input
+  const unavailableCapture = input.capturedFailure && capture.sourcePages.length === 0
+  if (
+    unavailableCapture &&
+    (capture.parsePages.length !== 0 ||
+      capture.parserTransformation.source_page_ordinals.length !== 0)
+  ) {
+    throw new TypeError('[tier-a] unavailable capture cannot contain parser pages')
+  }
+  if (
+    input.capturedFailure &&
+    !unavailableCapture &&
+    capture.terminationReason !== 'upstream_error'
+  ) {
+    throw new TypeError('[tier-a] captured upstream evidence must terminate as upstream_error')
+  }
+  return buildLeaderboardAcquisitionManifest({
+    source: {
+      id: src.id,
+      slug: src.slug,
+      adapter_slug: src.adapter_slug,
+      configured_page_size: src.page_size,
+      configured_pagination_kind: src.pagination_kind,
+    },
+    surface: 'tier_a_leaderboard',
+    timeframe: input.timeframe,
+    started_at: input.startedAt,
+    completed_at: input.completedAt,
+    runner_git_sha: input.runnerGitSha,
+    observation_cycle_id: input.cycleId,
+    capture_evidence_state: unavailableCapture ? 'unavailable' : 'verified',
+    termination_reason: unavailableCapture ? 'unknown' : capture.terminationReason,
+    capture_config: capture.captureConfig,
+    source_pages: capture.sourcePages.map((sourcePage) => ({
+      raw_page: sourcePage.rawPage,
+      source_row_count: sourcePage.sourceRowCount,
+      request_sha256: sourcePage.requestSha256,
+      http_status: sourcePage.httpStatus,
+      pagination_position: sourcePage.paginationPosition,
+      source_reports: sourcePage.sourceReports,
+    })),
+    parse_pages: capture.parsePages,
+    parser_transformation: capture.parserTransformation,
+    accepted_population: input.acceptedPopulation,
+    rejected_row_count: input.rejectedRowCount,
+  })
+}
+
+function parseLeaderboardRows(input: {
+  adapter: SourceAdapter
+  pages: readonly RawPage[]
+  ctx: ParseCtx
+  pageSize: number
+}): ParsedLeaderboardRow[] {
+  const rows: ParsedLeaderboardRow[] = []
+  for (const page of input.pages) {
+    const parsed = input.adapter.parseLeaderboard(page.payload, input.ctx)
+    for (const row of parsed.rows) {
+      rows.push({ ...row, rank: (page.pageIndex - 1) * input.pageSize + row.rank })
+    }
+  }
+  return rows
+}
+
+function parseLeaderboardSeriesWindow(input: {
+  adapter: SourceAdapter
+  pages: readonly RawPage[]
+  ctx: ParseCtx
+  timeframe: RankingTimeframe
+}): Map<string, BoardSeriesBlock[]> {
+  const boardSeries = new Map<string, BoardSeriesBlock[]>()
+  if (!input.adapter.parseLeaderboardSeries) return boardSeries
+
+  for (const page of input.pages) {
+    const pageSeries = input.adapter.parseLeaderboardSeries(
+      page.payload,
+      input.ctx,
+      input.timeframe
+    )
+    for (const [traderId, blocks] of pageSeries) {
+      const existing = boardSeries.get(traderId)
+      if (existing) existing.push(...blocks)
+      else boardSeries.set(traderId, blocks)
+    }
+  }
+  return boardSeries
+}
+
+async function persistUnprocessedCaptureRaw(input: {
+  src: SourceRow
+  timeframe: RankingTimeframe
+  cycleId: string | null
+  startedAt: string
+  completedAt: string
+  capture: LeaderboardCapture
+  priorFailures: readonly unknown[]
+}): Promise<void> {
+  try {
+    await writeRawObject({
+      sourceId: input.src.id,
+      sourceSlug: input.src.slug,
+      jobType: 'tier_a_failure',
+      timeframe: input.timeframe,
+      payload: input.capture.sourcePages.map((sourcePage) => sourcePage.rawPage),
+      serialization: STRICT_CANONICAL_JSON_CONTRACT,
+      meta: {
+        pageCount: input.capture.sourcePages.length,
+        ...(input.cycleId ? { observation_cycle_id: input.cycleId } : {}),
+        trust_evidence: {
+          state: 'unknown',
+          rank_eligible: false,
+          failure_stage: 'parse_validate_or_manifest',
+          termination_reason: input.capture.terminationReason,
+          capture_started_at: input.startedAt,
+          capture_completed_at: input.completedAt,
+        },
+      },
+    })
+  } catch (persistenceCause) {
+    throw new TierAEvidencePersistenceError(
+      input.src.slug,
+      input.timeframe,
+      input.priorFailures,
+      persistenceCause
+    )
   }
 }
 
@@ -149,26 +335,35 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
       try {
         const scrapedAt = new Date().toISOString()
         const acquisition = await acquireLeaderboard(adapter, session, src, timeframe)
+        const capture = acquisition.kind === 'legacy' ? null : acquisition.capture
+        // This is the acquisition boundary, not a parser/runtime duration.
+        const captureCompletedAt = capture ? new Date().toISOString() : null
+        const capturedError = acquisition.kind === 'captured_error' ? acquisition.error : null
         const pages =
-          acquisition.kind === 'capture' ? [...acquisition.capture.parsePages] : acquisition.pages
+          acquisition.kind === 'legacy' ? acquisition.pages : [...acquisition.capture.parsePages]
         const rawPages =
-          acquisition.kind === 'capture'
-            ? acquisition.capture.sourcePages.map((sourcePage) => sourcePage.rawPage)
-            : acquisition.pages
+          acquisition.kind === 'legacy'
+            ? acquisition.pages
+            : acquisition.capture.sourcePages.map((sourcePage) => sourcePage.rawPage)
+        let rawObjectId: number | null = null
 
-        // RAW first — any downstream bug becomes a re-parse (spec §5.5).
-        const rawReceipt = await writeRawObject({
-          sourceId: src.id,
-          sourceSlug: src.slug,
-          jobType: 'tier_a',
-          timeframe,
-          payload: rawPages,
-          meta: {
-            pageCount: rawPages.length,
-            ...(cycleId ? { observation_cycle_id: cycleId } : {}),
-          },
-        })
-        const rawObjectId = rawReceipt.id
+        // Legacy adapters retain the existing RAW-first path. Capture-aware
+        // adapters atomically persist source payload + manifest after the
+        // parser has produced honest accepted/rejected counts below.
+        if (acquisition.kind === 'legacy') {
+          const rawReceipt = await writeRawObject({
+            sourceId: src.id,
+            sourceSlug: src.slug,
+            jobType: 'tier_a',
+            timeframe,
+            payload: rawPages,
+            meta: {
+              pageCount: rawPages.length,
+              ...(cycleId ? { observation_cycle_id: cycleId } : {}),
+            },
+          })
+          rawObjectId = rawReceipt.id
+        }
 
         // Upstream field radar (P1): sample the first page's shape while it's
         // still in memory (RAW blobs aren't SQL-queryable). Fire-and-forget —
@@ -185,66 +380,78 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
           meta: src.meta,
         }
 
-        // Parse pages and re-anchor positional in-page ranks globally.
         const pageSize = src.page_size ?? 100
-        const rows: ParsedLeaderboardRow[] = []
-        // Board-level "free series" (spec §13.1): merged across pages, keyed by
-        // exchange_trader_id. Only populated for sources whose board embeds a
-        // per-trader sparkline (okx/toobit/xt/blofin/bitunix/binance_web3) — adapters without
-        // parseLeaderboardSeries contribute nothing and pay zero cost.
-        const boardSeries = new Map<string, BoardSeriesBlock[]>()
-        for (const page of pages) {
-          const parsed = adapter.parseLeaderboard(page.payload, ctx)
-          for (const row of parsed.rows) {
-            rows.push({ ...row, rank: (page.pageIndex - 1) * pageSize + row.rank })
-          }
-          if (adapter.parseLeaderboardSeries) {
-            const pageSeries = adapter.parseLeaderboardSeries(page.payload, ctx, timeframe)
-            for (const [traderId, blocks] of pageSeries) {
-              const existing = boardSeries.get(traderId)
-              if (existing) existing.push(...blocks)
-              else boardSeries.set(traderId, blocks)
-            }
-          }
-        }
-
         const requiredFields = ((src.meta.required_fields as string[]) ?? []) as Array<
           keyof ParsedLeaderboardRow
         >
-        const { valid, rejects } = validateLeaderboardRows(rows, requiredFields)
+        let rows: ReturnType<typeof parseLeaderboardRows>
+        let validated: ReturnType<typeof validateLeaderboardRows>
+        let built: ReturnType<typeof buildCaptureManifest> | null
+        try {
+          rows = parseLeaderboardRows({ adapter, pages, ctx, pageSize })
+          validated = validateLeaderboardRows(rows, requiredFields)
+          built = capture
+            ? buildCaptureManifest({
+                src,
+                timeframe,
+                startedAt: scrapedAt,
+                completedAt: captureCompletedAt!,
+                runnerGitSha,
+                cycleId,
+                capture,
+                capturedFailure: capturedError !== null,
+                acceptedPopulation: validated.valid.length,
+                rejectedRowCount: validated.rejects.length,
+              })
+            : null
+        } catch (processingCause) {
+          if (capture) {
+            const priorFailures = capturedError
+              ? [capturedError, processingCause]
+              : [processingCause]
+            await persistUnprocessedCaptureRaw({
+              src,
+              timeframe,
+              cycleId,
+              startedAt: scrapedAt,
+              completedAt: captureCompletedAt!,
+              capture,
+              priorFailures,
+            })
+            throw new TierACaptureProcessingError(src.slug, timeframe, priorFailures)
+          }
+          throw processingCause
+        }
 
-        if (acquisition.kind === 'capture') {
-          const capture = acquisition.capture
-          const built = buildLeaderboardAcquisitionManifest({
-            source: {
-              id: src.id,
-              slug: src.slug,
-              adapter_slug: src.adapter_slug,
-              configured_page_size: src.page_size,
-              configured_pagination_kind: src.pagination_kind,
-            },
-            surface: 'tier_a_leaderboard',
-            timeframe,
-            started_at: scrapedAt,
-            completed_at: new Date().toISOString(),
-            runner_git_sha: runnerGitSha,
-            observation_cycle_id: cycleId,
-            capture_evidence_state: 'verified',
-            termination_reason: capture.terminationReason,
-            capture_config: capture.captureConfig,
-            source_pages: capture.sourcePages.map((sourcePage) => ({
-              raw_page: sourcePage.rawPage,
-              source_row_count: sourcePage.sourceRowCount,
-              request_sha256: sourcePage.requestSha256,
-              http_status: sourcePage.httpStatus,
-              pagination_position: sourcePage.paginationPosition,
-              source_reports: sourcePage.sourceReports,
-            })),
-            parse_pages: capture.parsePages,
-            parser_transformation: capture.parserTransformation,
-            accepted_population: valid.length,
-            rejected_row_count: rejects.length,
-          })
+        const { valid, rejects } = validated
+
+        if (capture && built) {
+          let artifactSet
+          try {
+            artifactSet = await writeLeaderboardRawArtifactSet({
+              sourceId: src.id,
+              sourceSlug: src.slug,
+              timeframe,
+              sourceRunId: built.sourceRunId,
+              sourcePages: rawPages,
+              manifest: built.manifest,
+              observationCycleId: cycleId,
+            })
+          } catch (persistenceCause) {
+            throw new TierAEvidencePersistenceError(
+              src.slug,
+              timeframe,
+              capturedError ? [capturedError] : [],
+              persistenceCause
+            )
+          }
+          rawObjectId = artifactSet.sourcePayload.id
+
+          // The failed response is now durable. Preserve the exact upstream
+          // error object so BullMQ retry classification and operator evidence
+          // remain intact; an unknown manifest can never reach publication.
+          if (capturedError) throw capturedError
+
           if (
             built.manifest.assessment.acquisition_state !== 'complete' ||
             built.manifest.assessment.population_state !== 'verified'
@@ -256,6 +463,15 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
             )
           }
         }
+
+        if (rawObjectId === null) {
+          throw new Error('capture evidence completed without a source RAW pointer')
+        }
+
+        // Series are additive serving material, not population evidence.
+        // Parse them only after the capture pair passed its trust gate so a
+        // series-specific bug cannot erase an otherwise truthful manifest.
+        const boardSeries = parseLeaderboardSeriesWindow({ adapter, pages, ctx, timeframe })
 
         const result = await publishLeaderboardSnapshot({
           src,
@@ -344,9 +560,19 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         const detail = cause instanceof Error ? cause.message : String(cause)
         const error = new Error(`[tier-a] ${src.slug} ${timeframe}d failed: ${detail}`, { cause })
         console.error(error.message)
-        // A checkpoint failure is infrastructure-level and must fail closed.
-        // Continuing could let a later updateData call persist a checkpoint
-        // whose Redis acknowledgement was lost for this window.
+        // Missing capture evidence or an unknown parser outcome is terminal:
+        // later windows must not pile more state onto an unexplainable run.
+        // Throw these AggregateErrors directly to preserve every original
+        // failure object for retry classification and incident diagnosis.
+        if (
+          cause instanceof TierAEvidencePersistenceError ||
+          cause instanceof TierACaptureProcessingError
+        ) {
+          throw cause
+        }
+        // A checkpoint failure is also infrastructure-level and must fail
+        // closed. Continuing could persist a later checkpoint after Redis lost
+        // acknowledgement for this window.
         if (cause instanceof TierACheckpointPersistenceError) throw error
         failures.push({ timeframe, error })
       }
