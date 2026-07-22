@@ -841,6 +841,8 @@ export async function writeLeaderboardRawArtifactSet(
       {
         ...commonMeta,
         pageCount: normalizedInput.sourcePages.length,
+        parserPageCount: manifest.parser_input.page_count,
+        parserSourcePageOrdinals: manifest.parser_input.transformation.source_page_ordinals,
       }
     ),
     prepareLeaderboardTrustArtifact(normalizedInput, 'population_manifest', manifest, {
@@ -930,6 +932,8 @@ export async function writeAttemptBoundLeaderboardRawArtifactSet(
       {
         ...commonMeta,
         pageCount: normalizedInput.sourcePages.length,
+        parserPageCount: manifest.parser_input.page_count,
+        parserSourcePageOrdinals: manifest.parser_input.transformation.source_page_ordinals,
       }
     ),
     prepareLeaderboardTrustArtifact(normalizedInput, 'population_manifest', manifest, {
