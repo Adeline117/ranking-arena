@@ -8,8 +8,9 @@ name: Deploy Gate (CI-green production deploy)
 # 的 push 折叠取消（per-ref concurrency），Data Consistency 是
 # continue-on-error 的 advisory——都不算门禁。
 #
-# 防乱序：CI 完成顺序 ≠ push 顺序，部署前核对该 run 的 SHA 仍是 origin/main
-# HEAD，被超越则跳过（否则旧 commit 的迟到 CI 会把生产回滚到旧版本）。
+# 防乱序：CI 完成顺序 ≠ push 顺序。候选构建前和 promote 前都必须核对
+# 该 run 的 SHA 仍精确等于 origin/main HEAD；被超越就跳过。祖先关系只能
+# 证明不是回退，不能授权把一个已知过期的中间版本写到生产。
 #
 # 部署后内嵌 smoke + 自动回滚（CLI 部署不产生 deployment_status 事件，
 # post-deploy-smoke.yml 只覆盖 [deploy-force] 的 git 直接部署路径）。
@@ -22,7 +23,7 @@ on:
 
 # cancel-in-progress 必须 false：杀死正在 vercel deploy 的 run 并不能撤销
 # 已上传的部署——它会在服务端继续构建并可能晚于新部署抢占生产别名（回退）。
-# false = 串行排队；排队中的旧 run 启动时会被 ancestry 检查拦下。
+# false = 串行排队；排队中的旧 run 启动时会被 exact-main 检查拦下。
 concurrency:
   group: deploy-gate-main
   cancel-in-progress: false
@@ -114,14 +115,19 @@ jobs:
       - name: Enforce single production writer before deploy
         run: node "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
 
-      # 部署条件 = 本 run 的 SHA 比当前线上 SHA 新（git 祖先关系）。
-      # 不再要求恰好等于 HEAD——连续推送爆发期里 HEAD 永远前移会饿死部署
-      # （2026-07-02 实测连续 4 轮 superseded）；部署"已验证但稍旧"的 SHA
-      # 是净改善，且 ancestry 检查杜绝旧 SHA 迟到回退生产。
-      - name: Deploy decision (run SHA newer than serving SHA?)
+      # 部署条件同时要求本 run 仍是当前 main，且比当前线上 SHA 新。连续
+      # push 时旧 run 会被跳过；push 稳定后的最新 CI 才有生产写权限。
+      - name: Deploy decision (run SHA is exact main and newer than serving?)
         id: fresh
         run: |
           git fetch origin main --quiet
+          MAIN_SHA=$(git rev-parse FETCH_HEAD)
+          echo "main=$MAIN_SHA run=$HEAD_SHA"
+          if [ "$HEAD_SHA" != "$MAIN_SHA" ]; then
+            echo "Run ${HEAD_SHA:0:8} was superseded by main ${MAIN_SHA:0:8} — skip stale candidate"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # READY 列表会包含 --skip-domain 的未提升候选，第一条不等于线上。
           # 线上 /api/health 才是 alias 当前真正服务的 release identity。
           SERVING=$(curl -fsS "https://www.arenafi.org/api/health?release_check=$(date +%s)" \
@@ -263,9 +269,15 @@ jobs:
         if: steps.fresh.outputs.deploy == 'true' && steps.wait_candidate.outcome == 'success'
         run: |
           git fetch origin main --quiet
+          MAIN_SHA=$(git rev-parse FETCH_HEAD)
+          if [ "$HEAD_SHA" != "$MAIN_SHA" ]; then
+            echo "Candidate ${HEAD_SHA:0:8} was superseded during build by main ${MAIN_SHA:0:8} — skip promotion"
+            echo "promoted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           LIVE_SHA=$(curl -fsS "https://www.arenafi.org/api/health?release_check=$(date +%s)" \
             | jq -r '.commit // empty')
-          echo "post-build live=$LIVE_SHA candidate=$HEAD_SHA"
+          echo "post-build live=$LIVE_SHA candidate=$HEAD_SHA main=$MAIN_SHA"
           if [ -z "$LIVE_SHA" ]; then
             echo "::error::Cannot resolve live SHA after build; refusing blind promotion"
             exit 1
@@ -277,6 +289,15 @@ jobs:
             echo "Candidate ${HEAD_SHA:0:8} became stale while building; live ${LIVE_SHA:0:8} is newer — skip promotion"
             echo "promoted=false" >> "$GITHUB_OUTPUT"
           elif git merge-base --is-ancestor "$LIVE_SHA" "$HEAD_SHA" 2>/dev/null; then
+            # Close the build/live-check window immediately before the only
+            # production write. A superseding push revokes this run's grant.
+            git fetch origin main --quiet
+            PROMOTE_MAIN_SHA=$(git rev-parse FETCH_HEAD)
+            if [ "$HEAD_SHA" != "$PROMOTE_MAIN_SHA" ]; then
+              echo "Candidate ${HEAD_SHA:0:8} was superseded before promotion by main ${PROMOTE_MAIN_SHA:0:8} — skip"
+              echo "promoted=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             # Record the production-write intent before calling Vercel. If the
             # CLI changes the alias and then exits non-zero, always() smoke must
             # still inspect and, if needed, roll back the public release.
