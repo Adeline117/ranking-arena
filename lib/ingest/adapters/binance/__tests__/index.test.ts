@@ -1,8 +1,13 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import {
+  LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+  buildLeaderboardAcquisitionManifestV3,
+} from '../../../acquisition-manifest'
 import type { SourceRow } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
 import { LeaderboardCaptureUpstreamError } from '../../../fetch/capture'
+import { assessLeaderboardNativeWindowRequest } from '../../../leaderboard-request-evidence'
 import { binanceAdapter, projectBinanceLeaderboardRequest } from '../index'
 
 function fixture(name: string): Record<string, unknown> {
@@ -179,6 +184,70 @@ describe('Binance evidence-preserving leaderboard capture', () => {
     expect(seven.terminationReason).toBe('short_page')
     expect(seven.sourcePages[0].sourceReports.population).toEqual({ state: 'not_reported' })
     expect(seven.sourcePages[0].requestSha256).not.toBe(thirty.sourcePages[0].requestSha256)
+  })
+
+  it('round-trips a real adapter capture into the reviewed v3 window contract', async () => {
+    const sourceRow = source()
+    const original = fixture('leaderboard-p1.json')
+    const payload = withRows(
+      'leaderboard-p1.json',
+      [(original.data as { list: Array<Record<string, unknown>> }).list[0]],
+      1
+    )
+    const startedAt = new Date(Date.now() - 1_000).toISOString()
+    const capture = await binanceAdapter.captureLeaderboard!(
+      session(async () => ({ status: 200, json: payload })).session,
+      sourceRow,
+      30
+    )
+    const completedAt = new Date(Date.now() + 1_000).toISOString()
+    const parsed = binanceAdapter.parseLeaderboard(capture.parsePages[0].payload, {
+      sourceSlug: sourceRow.slug,
+      currency: sourceRow.currency,
+      tfLabelMap: sourceRow.tf_label_map,
+      scrapedAt: completedAt,
+      meta: sourceRow.meta,
+    })
+    const built = buildLeaderboardAcquisitionManifestV3({
+      source: {
+        id: sourceRow.id,
+        slug: sourceRow.slug,
+        adapter_slug: sourceRow.adapter_slug,
+        configured_page_size: sourceRow.page_size,
+        configured_pagination_kind: sourceRow.pagination_kind,
+      },
+      surface: 'tier_a_leaderboard',
+      timeframe: 30,
+      started_at: startedAt,
+      completed_at: completedAt,
+      runner_git_sha: 'a'.repeat(40),
+      observation_cycle_id: 'tier-a:binance_futures:adapter-round-trip',
+      capture_evidence_state: 'verified',
+      termination_reason: capture.terminationReason,
+      capture_config: capture.captureConfig,
+      source_pages: capture.sourcePages.map((page) => ({
+        raw_page: page.rawPage,
+        source_row_count: page.sourceRowCount,
+        request_sha256: page.requestSha256,
+        http_status: page.httpStatus,
+        pagination_position: page.paginationPosition,
+        source_reports: page.sourceReports,
+      })),
+      parse_pages: capture.parsePages,
+      parser_transformation: capture.parserTransformation,
+      accepted_population: parsed.rows.length,
+      rejected_row_count: 0,
+      acquisition_attempt: {
+        binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+        attempt_id: '00000000-0000-4000-8000-000000000001',
+        attempt_seq: 1,
+      },
+    })
+
+    expect(assessLeaderboardNativeWindowRequest(built.manifest)).toMatchObject({
+      state: 'verified',
+      semantics: 'provider_native_period_aggregate',
+    })
   })
 
   it('excludes headers and rejects unknown query/body request semantics', () => {

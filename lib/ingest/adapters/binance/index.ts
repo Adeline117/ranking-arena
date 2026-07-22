@@ -33,15 +33,19 @@ import type {
   Timeframe,
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
-import type { FetchSession, ReplayRequestTemplate } from '../../fetch/types'
+import type { FetchSession } from '../../fetch/types'
 import {
   captureNumericLeaderboard,
   pageFetcher,
   replayJson,
   replayPaged,
-  type LeaderboardPublicRequestProjectionInput,
   type NumericLeaderboardPageMeta,
 } from '../../fetch/capture'
+import {
+  BINANCE_LEADERBOARD_LIST_URLS,
+  buildBinanceLeaderboardListBody,
+  projectBinanceLeaderboardRequest,
+} from '../../leaderboard-request-evidence'
 import {
   parseBinanceHistory,
   parseBinanceLeaderboardPage,
@@ -58,7 +62,7 @@ const SPOT_PUB = `${BAPI}/public/future/spot-copy-trade`
 /** Per-board endpoint families (verified by live capture 2026-06-11). */
 const ENDPOINTS: Record<string, Record<string, string>> = {
   futures: {
-    list: `${FUT}/home-page/query-list`,
+    list: BINANCE_LEADERBOARD_LIST_URLS.futures,
     detail: `${FUT}/lead-portfolio/detail`,
     performance: `${FUT_PUB}/lead-portfolio/performance`,
     chart: `${FUT_PUB}/lead-portfolio/chart-data`,
@@ -70,7 +74,7 @@ const ENDPOINTS: Record<string, Record<string, string>> = {
     copiers: `${FUT}/lead-portfolio/copy-traders`,
   },
   spot: {
-    list: `${SPOT}/common/home-page-list`,
+    list: BINANCE_LEADERBOARD_LIST_URLS.spot,
     detail: `${SPOT}/lead-portfolio/detail`,
     performance: `${SPOT_PUB}/lead-portfolio/performance`,
     chart: `${SPOT_PUB}/lead-portfolio/performance-chart-data`,
@@ -152,38 +156,6 @@ async function cachedDetail(
   return value
 }
 
-/** Shared leaderboard body — `useAiRecommended:false` + portfolioType ALL
- *  = the "All Portfolios" tab without the Smart Filter (full population). */
-function listBody(pageIndex: number, pageSize: number, timeframe: RankingTimeframe) {
-  return {
-    pageNumber: pageIndex,
-    pageSize,
-    timeRange: timeRangeOf(timeframe),
-    dataType: 'ROI',
-    favoriteOnly: false,
-    hideFull: false,
-    nickname: '',
-    order: 'DESC',
-    userAsset: 0,
-    portfolioType: 'ALL',
-    useAiRecommended: false,
-  }
-}
-
-const PUBLIC_LIST_BODY_FIELDS = [
-  'pageNumber',
-  'pageSize',
-  'timeRange',
-  'dataType',
-  'favoriteOnly',
-  'hideFull',
-  'nickname',
-  'order',
-  'userAsset',
-  'portfolioType',
-  'useAiRecommended',
-] as const
-
 function recordOf(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -227,38 +199,7 @@ function binanceLeaderboardMeta(payload: unknown): NumericLeaderboardPageMeta {
   }
 }
 
-/** Explicit allowlist: credentials and adapter-only fields never enter RAW provenance. */
-export function projectBinanceLeaderboardRequest(
-  request: ReplayRequestTemplate
-): LeaderboardPublicRequestProjectionInput {
-  if (request.method !== 'POST') {
-    throw new TypeError('[binance] leaderboard request must be POST')
-  }
-  const publicUrl = new URL(request.url)
-  if ([...publicUrl.searchParams].length > 0) {
-    throw new TypeError('[binance] leaderboard list endpoint must not contain query parameters')
-  }
-  const body = recordOf(request.body)
-  if (!body) throw new TypeError('[binance] leaderboard request body must be an object')
-  const unknownFields = Object.keys(body).filter(
-    (field) => !PUBLIC_LIST_BODY_FIELDS.includes(field as (typeof PUBLIC_LIST_BODY_FIELDS)[number])
-  )
-  if (unknownFields.length > 0) {
-    throw new TypeError(
-      `[binance] leaderboard request contains non-public fields: ${unknownFields.join(', ')}`
-    )
-  }
-
-  const publicBody: Record<string, unknown> = {}
-  for (const field of PUBLIC_LIST_BODY_FIELDS) {
-    if (!Object.prototype.hasOwnProperty.call(body, field)) {
-      throw new TypeError(`[binance] leaderboard request is missing public field ${field}`)
-    }
-    publicBody[field] = body[field]
-  }
-  publicUrl.hash = ''
-  return { method: 'POST', url: publicUrl.href, body: publicBody }
-}
+export { projectBinanceLeaderboardRequest } from '../../leaderboard-request-evidence'
 
 const binanceAdapter: SourceAdapter = {
   slug: 'binance',
@@ -284,7 +225,7 @@ const binanceAdapter: SourceAdapter = {
         url: listUrl,
         method: 'POST',
         headers: HEADERS,
-        body: listBody(pageIndex, pageSize, timeframe),
+        body: buildBinanceLeaderboardListBody(pageIndex, pageSize, timeframe),
       }),
       projectPublicRequest: projectBinanceLeaderboardRequest,
       pageBinding: { location: 'body', path: ['pageNumber'] },
@@ -316,7 +257,7 @@ const binanceAdapter: SourceAdapter = {
         url: listUrl,
         method: 'POST',
         headers: HEADERS,
-        body: listBody(pageIndex, pageSize, timeframe),
+        body: buildBinanceLeaderboardListBody(pageIndex, pageSize, timeframe),
       }),
       extractMeta: (payload) => {
         const parsed = parseBinanceLeaderboardPage(payload, dummyCtx(src))
