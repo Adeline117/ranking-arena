@@ -185,6 +185,8 @@ jobs:
       - run: npm run gen:types:contract
       - name: Migration history shape ratchet
         run: npm run qa:migration-history-shape
+      - name: Launch migration runner fail-closed contract
+        run: npm run qa:launch-migration-runner
       - run: npm run lint
       - run: npx tsc --noEmit
       - name: VPS process topology safety

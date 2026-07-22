@@ -4,44 +4,29 @@
 #
 # Usage:
 #   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh status
-#   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh dry-run-all
-#   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh \
-#     dry-run-predeploy-one 20260721120000_metric_trust_shadow_gate.sql
-#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY_ONE_20260721120000 \
-#     ARENA_PRODUCTION_MIGRATION_BODY_SHA256=<exact-file-sha256> \
-#     ARENA_PRODUCTION_RELEASE_SHA=<full-origin-main-sha> \
-#     ARENA_PRODUCTION_PROJECT_REF=iknktzifjdyujdccyhsv \
-#     ARENA_ORDERED_PSQL_CHANNEL_APPROVAL=ADR_023_FUTURE_ADDENDUM_ORDERED_PSQL_V1_APPROVED \
-#     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh \
-#     apply-predeploy-one 20260721120000_metric_trust_shadow_gate.sql
-#   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh dry-run-recovery
-#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY_ONE_20260721210000 \
-#     ARENA_PRODUCTION_MIGRATION_BODY_SHA256=<exact-file-sha256> \
-#     ARENA_PRODUCTION_RELEASE_SHA=<full-origin-main-sha> \
-#     ARENA_PRODUCTION_PROJECT_REF=iknktzifjdyujdccyhsv \
-#     ARENA_ORDERED_PSQL_CHANNEL_APPROVAL=ADR_023_FUTURE_ADDENDUM_ORDERED_PSQL_V1_APPROVED \
-#     ARENA_TIP_CHECKOUT_CUTOVER_CONFIRM=TIP_CHECKOUT_FROZEN_PENDING_ZERO \
-#     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh \
-#     apply-predeploy-one 20260721210000_tip_checkout_lifecycle_atomic.sql
-#   Legacy predeploy/postdeploy/recovery write commands are disabled pending
-#   production-channel governance.
+#   scripts/maintenance/apply-launch-migrations.sh \
+#     render-predeploy-one 20260721120000_metric_trust_shadow_gate.sql
+#   dry-run-predeploy-one is a compatibility alias for the same render-only
+#   command. dry-run-all and dry-run-recovery are disabled.
+#   Every psql-backed write command, including apply-predeploy-one, is disabled
+#   pending production-channel governance.
 #
-# The psql-backed single-predeploy command is a dormant candidate break-glass
-# channel, not an approved production path. ADR-023 keeps Supabase MCP
-# apply_migration as the only approved channel until a future addendum adopts
-# this candidate and authorizes its separate governance literal. Candidate
-# predeploy is intentionally ordered and single-file. Its session lock is
-# acquired before BEGIN so a repeatable-read target cannot take an old snapshot
-# while waiting. Migration files keep their original transaction statements in
-# the ledger. Exact rows are skipped as new launch migrations are appended,
-# while drift always fails closed.
+# ADR-023 keeps Supabase MCP apply_migration as the only approved production
+# channel. The psql-backed ordered emitter remains a preview and disposable-PG17
+# proof only until every production schema channel shares one serialization
+# boundary. The targeted preview performs no database access and only prints
+# SQL; it never sends the migration body to production. Preview bytes come from
+# one snapshot of the verified origin/main Git object, never the mutable
+# worktree. Manually executing rendered ROLLBACK SQL can still advance sequences
+# or trigger other non-transactional side effects and is not an approved path.
 
 set -Eeuo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MIGRATIONS_DIR="$ROOT/supabase/migrations"
 PRODUCTION_PROJECT_REF='iknktzifjdyujdccyhsv'
-ORDERED_PSQL_CHANNEL_APPROVAL='ADR_023_FUTURE_ADDENDUM_ORDERED_PSQL_V1_APPROVED'
+ORDERED_PREDEPLOY_RELEASE_SHA=''
+ORDERED_PREDEPLOY_SNAPSHOT_DIR=''
 
 PREDEPLOY_MIGRATIONS=(
   20260716111600_atomic_group_application_review.sql
@@ -245,6 +230,17 @@ migration_name() {
   printf '%s' "${without_extension#*_}"
 }
 
+migration_body_sha256() {
+  local migration="$1"
+  local cached_hash="$ORDERED_PREDEPLOY_SNAPSHOT_DIR/.sha256-$migration"
+
+  if [[ -n "$ORDERED_PREDEPLOY_SNAPSHOT_DIR" && -f "$cached_hash" ]]; then
+    perl -0pe '' "$cached_hash"
+    return
+  fi
+  shasum -a 256 "$MIGRATIONS_DIR/$migration" | awk '{print $1}'
+}
+
 validate_transactional_migration_file() {
   local migration="$1"
   local file="$MIGRATIONS_DIR/$migration"
@@ -337,7 +333,7 @@ emit_ledger_exact_preflight() {
 
   version="$(migration_version "$migration")"
   name="$(migration_name "$migration")"
-  hash="$(shasum -a 256 "$file" | awk '{print $1}')"
+  hash="$(migration_body_sha256 "$migration")"
   tag="arena_ledger_exact_${version}"
 
   # Re-attest and lock an exact ledger row inside the migration transaction.
@@ -375,7 +371,7 @@ emit_ledger_insert() {
 
   version="$(migration_version "$migration")"
   name="$(migration_name "$migration")"
-  hash="$(shasum -a 256 "$file" | awk '{print $1}')"
+  hash="$(migration_body_sha256 "$migration")"
   tag="arena_ledger_body_${version}"
 
   if rg -F -q "\$$tag\$" "$file"; then
@@ -498,6 +494,9 @@ const isSessionPort = parsed.port === '5432'
 const isPostgresDatabase = database === '/postgres'
 const sslModes = parsed.searchParams.getAll('sslmode')
 const hasVerifiedTls = sslModes.length === 1 && sslModes[0] === 'verify-full'
+const hasOnlyApprovedParameters = [...parsed.searchParams.keys()].every(
+  (parameter) => parameter === 'sslmode'
+)
 const isDirect = host === `db.${expected}.supabase.co` && username === 'postgres'
 const isPooler =
   host === 'aws-0-us-west-2.pooler.supabase.com' && username === `postgres.${expected}`
@@ -506,6 +505,7 @@ if (
   !isSessionPort ||
   !isPostgresDatabase ||
   !hasVerifiedTls ||
+  !hasOnlyApprovedParameters ||
   (!isDirect && !isPooler)
 ) {
   process.stderr.write('single predeploy requires the exact production session endpoint\n')
@@ -514,25 +514,16 @@ if (
 NODE
 }
 
-require_ordered_psql_channel_approval() {
-  if [[ "${ARENA_ORDERED_PSQL_CHANNEL_APPROVAL:-}" != \
-    "$ORDERED_PSQL_CHANNEL_APPROVAL" ]]; then
-    echo \
-      "ordered psql candidate is dormant pending an ADR-023 addendum; channel approval is absent" \
-      >&2
-    exit 1
-  fi
-}
-
 require_release_provenance() {
   local migration="$1"
   local head_sha
   local origin_main_sha
-  local remote_main_line
-  local remote_main_sha
   local dirty
 
   require_tracked_migration "$migration"
+  # Cleanliness is an operator guard, not artifact provenance: index flags can
+  # hide worktree edits. Snapshot bytes come from the verified HEAD object, so
+  # hidden or concurrent worktree changes can never enter the preview.
   dirty="$(git -C "$ROOT" status --porcelain=v1 --untracked-files=all)"
   if [[ -n "$dirty" ]]; then
     echo "single predeploy requires a clean worktree" >&2
@@ -544,6 +535,18 @@ require_release_provenance() {
     echo "single predeploy requires HEAD to equal the pushed origin/main SHA" >&2
     exit 1
   fi
+  ORDERED_PREDEPLOY_RELEASE_SHA="$head_sha"
+  require_live_origin_main
+}
+
+require_live_origin_main() {
+  local remote_main_line
+  local remote_main_sha
+
+  if [[ ! "$ORDERED_PREDEPLOY_RELEASE_SHA" =~ ^[0-9a-f]{40,64}$ ]]; then
+    echo "single predeploy has no verified release SHA" >&2
+    exit 1
+  fi
   if ! remote_main_line="$(
     GIT_TERMINAL_PROMPT=0 git -C "$ROOT" ls-remote --exit-code origin refs/heads/main 2>/dev/null
   )"; then
@@ -551,51 +554,100 @@ require_release_provenance() {
     exit 1
   fi
   remote_main_sha="$(printf '%s\n' "$remote_main_line" | awk 'NR == 1 {print $1}')"
-  if [[ ! "$remote_main_sha" =~ ^[0-9a-f]{40,64}$ || "$head_sha" != "$remote_main_sha" ]]; then
-    echo "single predeploy requires HEAD to equal the live pushed origin/main SHA" >&2
+  if [[ ! "$remote_main_sha" =~ ^[0-9a-f]{40,64}$ || \
+    "$ORDERED_PREDEPLOY_RELEASE_SHA" != "$remote_main_sha" ]]; then
+    echo "single predeploy release no longer equals the live pushed origin/main SHA" >&2
     exit 1
   fi
-  require_production_project_ref
 }
 
-require_single_predeploy_confirmation() {
-  local migration="$1"
-  local version
-  local body_sha
-  local head_sha
-  local confirmation
+cleanup_ordered_predeploy_snapshot() {
+  local status=$?
+  trap - EXIT INT TERM
+  if [[ -n "$ORDERED_PREDEPLOY_SNAPSHOT_DIR" && \
+    -d "$ORDERED_PREDEPLOY_SNAPSHOT_DIR" ]]; then
+    chmod -R u+w "$ORDERED_PREDEPLOY_SNAPSHOT_DIR" 2>/dev/null || true
+    rm -rf -- "$ORDERED_PREDEPLOY_SNAPSHOT_DIR"
+  fi
+  exit "$status"
+}
 
-  version="$(migration_version "$migration")"
-  body_sha="$(shasum -a 256 "$MIGRATIONS_DIR/$migration" | awk '{print $1}')"
-  head_sha="$(git -C "$ROOT" rev-parse --verify HEAD)"
-  confirmation="APPLY_PREDEPLOY_ONE_$version"
-  if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "$confirmation" ]]; then
-    echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=$confirmation" >&2
+snapshot_ordered_predeploy_manifest() {
+  local target="$1"
+  local migration
+  local relative_path
+  local snapshot
+  local found=false
+
+  if [[ ! "$ORDERED_PREDEPLOY_RELEASE_SHA" =~ ^[0-9a-f]{40,64}$ ]]; then
+    echo "cannot snapshot predeploy without a verified release SHA" >&2
     exit 1
   fi
-  if [[ "${ARENA_PRODUCTION_MIGRATION_BODY_SHA256:-}" != "$body_sha" ]]; then
-    echo "set ARENA_PRODUCTION_MIGRATION_BODY_SHA256=$body_sha" >&2
+  snapshot="$(mktemp -d "${TMPDIR:-/tmp}/arena-predeploy-snapshot.XXXXXX")"
+  ORDERED_PREDEPLOY_SNAPSHOT_DIR="$snapshot"
+  trap cleanup_ordered_predeploy_snapshot EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  for migration in "${PREDEPLOY_MIGRATIONS[@]}"; do
+    relative_path="supabase/migrations/$migration"
+    if ! git -C "$ROOT" show \
+      "$ORDERED_PREDEPLOY_RELEASE_SHA:$relative_path" >"$snapshot/$migration"; then
+      echo "verified release is missing migration object: $relative_path" >&2
+      exit 1
+    fi
+    shasum -a 256 "$snapshot/$migration" | awk '{print $1}' \
+      >"$snapshot/.sha256-$migration"
+    chmod 0400 "$snapshot/$migration" "$snapshot/.sha256-$migration"
+    if [[ "$migration" == "$target" ]]; then
+      found=true
+      break
+    fi
+  done
+  if [[ "$found" != "true" ]]; then
+    echo "predeploy target was not captured in the verified release snapshot: $target" >&2
     exit 1
   fi
-  if [[ "${ARENA_PRODUCTION_RELEASE_SHA:-}" != "$head_sha" ]]; then
-    echo "set ARENA_PRODUCTION_RELEASE_SHA=$head_sha" >&2
-    exit 1
-  fi
-  if [[ "${ARENA_PRODUCTION_PROJECT_REF:-}" != "$PRODUCTION_PROJECT_REF" ]]; then
-    echo "set ARENA_PRODUCTION_PROJECT_REF=$PRODUCTION_PROJECT_REF" >&2
-    exit 1
-  fi
+  chmod 0500 "$snapshot"
+  MIGRATIONS_DIR="$snapshot"
+}
+
+prepare_ordered_predeploy_artifacts() {
+  local target="$1"
+
+  require_predeploy_target "$target"
+  require_release_provenance "$target"
+  snapshot_ordered_predeploy_manifest "$target"
 }
 
 ORDERED_PREDEPLOY_PREREQUISITES=()
 
+prepare_ordered_predeploy_preview_target() {
+  local target="$1"
+  local migration
+
+  require_predeploy_target "$target"
+  ORDERED_PREDEPLOY_PREREQUISITES=()
+  for migration in "${PREDEPLOY_MIGRATIONS[@]}"; do
+    validate_transactional_migration_file "$migration"
+    if [[ "$migration" == "$target" ]]; then
+      return
+    fi
+    ORDERED_PREDEPLOY_PREREQUISITES+=("$migration")
+  done
+
+  echo "predeploy preview target is not in the ordered manifest: $target" >&2
+  exit 1
+}
+
+# Database-aware target selection is exercised only by the disposable PG17
+# harness. No production CLI command wires this helper to a SQL write path.
 prepare_ordered_predeploy_target() {
   local target="$1"
   local migration
   local state
 
   require_predeploy_target "$target"
-  require_release_provenance "$target"
   ORDERED_PREDEPLOY_PREREQUISITES=()
   for migration in "${PREDEPLOY_MIGRATIONS[@]}"; do
     validate_transactional_migration_file "$migration"
@@ -679,7 +731,7 @@ ledger_state() {
 
   version="$(migration_version "$migration")"
   name="$(migration_name "$migration")"
-  hash="$(shasum -a 256 "$MIGRATIONS_DIR/$migration" | awk '{print $1}')"
+  hash="$(migration_body_sha256 "$migration")"
 
   psql_with_database -X -q -v ON_ERROR_STOP=1 -Atc \
     "SELECT CASE
@@ -825,7 +877,7 @@ status() {
         local hash
         version="$(migration_version "$migration")"
         name="$(migration_name "$migration")"
-        hash="$(shasum -a 256 "$MIGRATIONS_DIR/$migration" | awk '{print $1}')"
+        hash="$(migration_body_sha256 "$migration")"
         printf "%s  ('%s', '%s', %d, '%s', '%s')" \
           "$separator" "$version" "$phase" "$ordinal" "$name" "$hash"
         separator=$',\n'
@@ -864,91 +916,43 @@ run_sql_stream() {
 }
 
 main() {
-  require_environment
   local command="${1:-status}"
-  if [[ "$command" != "status" ]]; then
-    require_session_connection
-  fi
+
+  # ADR-023 approves only the Supabase MCP production channel. Reject every
+  # psql-backed schema write before environment parsing, ledger access or a
+  # psql connection; no public environment literal can activate these paths.
+  case "$command" in
+    apply-concurrent-recovery | apply-predeploy | apply-predeploy-one | apply-postdeploy | apply-recovery)
+      echo "$command is disabled by ADR-023 pending shared production-channel serialization" >&2
+      exit 2
+      ;;
+    dry-run-all | dry-run-recovery)
+      echo "$command is disabled because rollback is not a side-effect-free dry run" >&2
+      exit 2
+      ;;
+  esac
+
   case "$command" in
     status)
+      require_environment
       status
       ;;
-    dry-run-all)
-      emit_all_dry_run | run_sql_stream
-      ;;
-    dry-run-predeploy-one)
+    dry-run-predeploy-one | render-predeploy-one)
       if [[ "$#" != "2" ]]; then
-        echo "usage: $0 dry-run-predeploy-one <manifest-migration.sql>" >&2
+        echo "usage: $0 $command <manifest-migration.sql>" >&2
         exit 2
       fi
       local migration="$2"
-      prepare_ordered_predeploy_target "$migration"
-      emit_ordered_predeploy_transaction 'ROLLBACK' "$migration" | run_sql_stream
-      ;;
-    dry-run-recovery)
-      local migration
-      local state
-      local begin_statement
-      require_exact_migrations \
-        'recovery' \
-        "${RECOVERY_PREREQUISITE_MIGRATIONS[@]}"
-      for migration in "${RECOVERY_MIGRATIONS[@]}"; do
-        validate_transactional_migration_file "$migration"
-        state="$(ledger_state "$migration")"
-        if [[ "$state" == "exact" ]]; then
-          echo "SKIP exact ledger: $migration"
-          continue
-        fi
-        if [[ "$state" != "missing" ]]; then
-          echo "refusing drifted ledger: $migration" >&2
-          exit 1
-        fi
-        begin_statement="$(transaction_begin_for_migrations "$migration")"
-        {
-          printf '%s\n' \
-            "$begin_statement" \
-            "SET LOCAL client_min_messages = 'warning';"
-          emit_cutover_ledger_requirement
-          emit_migration "$migration"
-          printf '%s\n' 'ROLLBACK;'
-        } | run_sql_stream
-      done
-      ;;
-    apply-concurrent-recovery)
-      echo "apply-concurrent-recovery is disabled by ADR-023 pending channel governance" >&2
-      exit 2
-      ;;
-    apply-predeploy)
-      echo \
-        "apply-predeploy is disabled by ADR-023; use apply-predeploy-one for the first missing migration" \
-        >&2
-      exit 2
-      ;;
-    apply-predeploy-one)
-      if [[ "$#" != "2" ]]; then
-        echo "usage: $0 apply-predeploy-one <manifest-migration.sql>" >&2
-        exit 2
-      fi
-      local migration="$2"
-      require_predeploy_target "$migration"
-      require_tracked_migration "$migration"
-      require_ordered_psql_channel_approval
-      require_single_predeploy_confirmation "$migration"
-      require_tip_checkout_cutover_for_target "$migration"
-      prepare_ordered_predeploy_target "$migration"
-      echo "CANDIDATE BREAK-GLASS: applying one ordered predeploy migration" >&2
-      emit_ordered_predeploy_transaction 'COMMIT' "$migration" | run_sql_stream
-      ;;
-    apply-postdeploy)
-      echo "apply-postdeploy is disabled by ADR-023 pending channel governance" >&2
-      exit 2
-      ;;
-    apply-recovery)
-      echo "apply-recovery is disabled by ADR-023 pending channel governance" >&2
-      exit 2
+      prepare_ordered_predeploy_artifacts "$migration"
+      prepare_ordered_predeploy_preview_target "$migration"
+      # The manifest can take time to render. Refuse a preview labeled with a
+      # release that ceased to be current during preparation.
+      require_live_origin_main
+      printf '\\echo VERIFIED_RELEASE %s\n' "$ORDERED_PREDEPLOY_RELEASE_SHA"
+      emit_ordered_predeploy_transaction 'ROLLBACK' "$migration"
       ;;
     *)
-      echo "usage: $0 {status|dry-run-all|dry-run-predeploy-one|dry-run-recovery|apply-concurrent-recovery|apply-predeploy|apply-predeploy-one|apply-postdeploy|apply-recovery}" >&2
+      echo "usage: $0 {status|render-predeploy-one|dry-run-predeploy-one|dry-run-all|dry-run-recovery|apply-concurrent-recovery|apply-predeploy|apply-predeploy-one|apply-postdeploy|apply-recovery}" >&2
       exit 2
       ;;
   esac

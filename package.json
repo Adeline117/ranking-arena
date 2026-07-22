@@ -86,6 +86,7 @@
     "qa:api-auth": "node scripts/qa/api-auth-coverage-check.mjs",
     "qa:migrations": "node scripts/qa/check-migration-ledger.mjs",
     "qa:migration-history-shape": "node scripts/qa/migration-history-shape.mjs",
+    "qa:launch-migration-runner": "node --test scripts/maintenance/apply-launch-migrations.test.mjs",
     "qa:buttons": "node scripts/qa/button-sweep.mjs",
     "qa:auth-e2e": "playwright test --config=playwright.authenticated.config.ts",
     "qa:controlled-write": "node scripts/qa/controlled-write-sweep.mjs",
