@@ -3,7 +3,8 @@
 # Real PostgreSQL 17 transaction/locking harness for the dormant ordered
 # single-predeploy candidate. This sources the production emitter, but replaces
 # only its repository paths and database adapter inside this disposable cluster.
-# It does not expose or exercise a production-approval bypass.
+# It does not expose or exercise a production-approval bypass, prove Git/CLI
+# provenance, or prove serialization with the separately approved MCP channel.
 
 set -Eeuo pipefail
 
@@ -199,7 +200,7 @@ try_and_release_global_lock() {
      FROM acquired;"
 }
 
-echo 'PG17: dry-run rolls back migration body and ledger atomically'
+echo 'PG17: rollback removes transactional rows and ledger but does not rewind sequences'
 reset_case
 DRY_SQL="$TMP_ROOT/dry-run.sql"
 emit_ordered_sql ROLLBACK "$DRY_SQL"
@@ -212,6 +213,9 @@ PGAPPNAME='runner-dry-run' \
 assert_equal '0|0' \
   "$(psql_query "SELECT (SELECT count(*) FROM runner_harness.effects) || '|' || (SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version = '$TARGET_VERSION');")" \
   'dry-run rollback state'
+assert_equal '1|true' \
+  "$(psql_query "SELECT last_value || '|' || is_called FROM runner_harness.effects_id_seq;")" \
+  'rollback sequence boundary'
 assert_equal 'true|true' "$(try_and_release_global_lock)" \
   'dry-run conditional unlock and subsequent lock availability'
 
@@ -424,4 +428,4 @@ assert_equal '0|0' \
 assert_equal 'true|true' "$(try_and_release_global_lock)" \
   'mid-body failure disconnect lock release'
 
-echo 'PG17 HARNESS PASS: rollback, ordering, serialization, timeout, and disconnect invariants hold'
+echo 'PG17 EMITTER HARNESS PASS: transactional rollback boundary, cooperative serialization, timeout, and disconnect invariants hold'
