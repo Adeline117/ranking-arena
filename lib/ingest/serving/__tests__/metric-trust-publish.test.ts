@@ -371,6 +371,7 @@ interface WrittenObservationInput {
   source_as_of: string
   window_start: string
   window_end: string
+  source_page_ordinal: number | null
 }
 
 function longCaptureReconciliationQuery(
@@ -408,6 +409,7 @@ function longCaptureReconciliationQuery(
       ).toISOString(),
       window_start: timeSource.window_start,
       window_end: timeSource.window_end,
+      source_page_ordinal: input.source_page_ordinal,
     }
   })
   const artifacts = observationRows.flatMap((observation) => [
@@ -825,6 +827,7 @@ describe('Tier-A metric trust transaction writer', () => {
             { code: 'source_page_lineage_unknown', state: 'unknown' },
             { code: 'native_window_boundary_unverified', state: 'unknown' },
           ],
+          source_page_ordinal: null,
         }),
       ])
     )
@@ -930,6 +933,7 @@ describe('Tier-A metric trust transaction writer', () => {
           quality: 'unknown',
           window_state: 'unknown',
           blocking_reasons: [{ code: 'native_window_boundary_unverified', state: 'unknown' }],
+          source_page_ordinal: 1,
         }),
         expect.objectContaining({
           exchange_trader_id: 'two',
@@ -940,6 +944,7 @@ describe('Tier-A metric trust transaction writer', () => {
             { code: 'field_lineage_unknown', state: 'unknown' },
             { code: 'native_window_boundary_unverified', state: 'unknown' },
           ],
+          source_page_ordinal: null,
         }),
         expect.objectContaining({
           exchange_trader_id: 'two',
@@ -950,6 +955,7 @@ describe('Tier-A metric trust transaction writer', () => {
             { code: 'source_page_lineage_mismatch', state: 'unknown' },
             { code: 'native_window_boundary_unverified', state: 'unknown' },
           ],
+          source_page_ordinal: null,
         }),
       ])
     )
@@ -991,6 +997,7 @@ describe('Tier-A metric trust transaction writer', () => {
         source_as_of: '2026-07-21T10:00:01.000Z',
         window_start: '2026-06-21T10:00:01.000Z',
         window_end: '2026-07-21T10:00:01.000Z',
+        source_page_ordinal: 1,
       }),
       expect.objectContaining({
         quality: 'unknown',
@@ -1000,6 +1007,7 @@ describe('Tier-A metric trust transaction writer', () => {
         source_as_of: '2026-07-21T10:00:01.000Z',
         window_start: '2026-06-21T10:00:01.000Z',
         window_end: '2026-07-21T10:00:01.000Z',
+        source_page_ordinal: 1,
       }),
     ])
     expect(observations.filter((observation) => observation.exchange_trader_id === 'two')).toEqual([
@@ -1011,6 +1019,7 @@ describe('Tier-A metric trust transaction writer', () => {
         source_as_of: '2026-07-21T10:10:01.000Z',
         window_start: '2026-06-21T10:10:01.000Z',
         window_end: '2026-07-21T10:10:01.000Z',
+        source_page_ordinal: 2,
       }),
       expect.objectContaining({
         quality: 'unknown',
@@ -1020,6 +1029,7 @@ describe('Tier-A metric trust transaction writer', () => {
         source_as_of: '2026-07-21T10:10:01.000Z',
         window_start: '2026-06-21T10:10:01.000Z',
         window_end: '2026-07-21T10:10:01.000Z',
+        source_page_ordinal: 2,
       }),
     ])
     expect(observations.some((observation) => observation.source_as_of.includes('10:20:01'))).toBe(
@@ -1091,6 +1101,7 @@ describe('Tier-A metric trust transaction writer', () => {
         { code: 'source_page_lineage_unknown', state: 'unknown' },
         { code: 'native_window_boundary_unverified', state: 'unknown' },
       ],
+      source_page_ordinal: null,
     })
 
     const invalidRows = JSON.parse(JSON.stringify(fixture.rows)) as ParsedLeaderboardRow[]
@@ -1136,6 +1147,7 @@ describe('Tier-A metric trust transaction writer', () => {
         { code: 'native_window_boundary_unverified', state: 'unknown' },
       ],
       source_as_of: '2026-07-21T10:00:01.000Z',
+      source_page_ordinal: null,
     })
 
     const conflictingRows = JSON.parse(JSON.stringify(fixture.rows)) as ParsedLeaderboardRow[]
@@ -1175,6 +1187,7 @@ describe('Tier-A metric trust transaction writer', () => {
           { code: 'source_page_lineage_conflict', state: 'unknown' },
           { code: 'native_window_boundary_unverified', state: 'unknown' },
         ],
+        source_page_ordinal: null,
       }),
       expect.objectContaining({
         quality: 'unknown',
@@ -1184,6 +1197,7 @@ describe('Tier-A metric trust transaction writer', () => {
           { code: 'source_page_lineage_conflict', state: 'unknown' },
           { code: 'native_window_boundary_unverified', state: 'unknown' },
         ],
+        source_page_ordinal: null,
       }),
     ])
   })
@@ -1523,6 +1537,7 @@ function reconciliationQuery(
     valid_until: '2026-07-21 16:00:01+00',
     window_start: '2026-06-21 10:00:01+00',
     window_end: '2026-07-21 10:00:01+00',
+    source_page_ordinal: observation.id === '203' ? null : '1',
   }))
   const artifacts = observationRows.flatMap((observation) => [
     {
