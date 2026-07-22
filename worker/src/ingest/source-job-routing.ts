@@ -24,22 +24,26 @@ export const GLOBAL_JOB_LEASE_LANES = {
   [INGEST_JOB.ONCHAIN_ENRICH]: 'onchain-enrich',
 } as const
 
+/** User-owned jobs are isolated by authorization, not by exchange source. */
+export const AUTHORIZATION_JOB_LEASE_LANES = {
+  [INGEST_JOB.FIRST_PARTY]: 'first-party',
+} as const
+
 export interface SourceJobLike {
   id?: string
   name: string
-  data?: { sourceSlug?: unknown }
+  data?: { sourceSlug?: unknown; authorizationId?: unknown }
 }
 
-export interface CoalescedSourceJob {
-  coalesced: true
-  sourceSlug: string
-  lane: string
-}
+export type CoalescedSourceJob =
+  | { coalesced: true; sourceSlug: string; lane: string }
+  | { coalesced: true; authorizationId: string; lane: string }
 
 export function sourceJobLeaseLane(jobName: string): string | null {
   return (
     SOURCE_JOB_LEASE_LANES[jobName as keyof typeof SOURCE_JOB_LEASE_LANES] ??
     GLOBAL_JOB_LEASE_LANES[jobName as keyof typeof GLOBAL_JOB_LEASE_LANES] ??
+    AUTHORIZATION_JOB_LEASE_LANES[jobName as keyof typeof AUTHORIZATION_JOB_LEASE_LANES] ??
     null
   )
 }
@@ -64,17 +68,28 @@ export async function routeJobWithSourceLease<T>({
   if (!lane) return run()
 
   const isGlobalJob = Object.prototype.hasOwnProperty.call(GLOBAL_JOB_LEASE_LANES, job.name)
-  const sourceSlug = isGlobalJob ? 'global' : job.data?.sourceSlug
-  if (typeof sourceSlug !== 'string' || sourceSlug.length === 0) {
-    throw new Error(`[ingest-worker] ${job.name} job is missing sourceSlug`)
+  const isAuthorizationJob = Object.prototype.hasOwnProperty.call(
+    AUTHORIZATION_JOB_LEASE_LANES,
+    job.name
+  )
+  const scopeId = isGlobalJob
+    ? 'global'
+    : isAuthorizationJob
+      ? job.data?.authorizationId
+      : job.data?.sourceSlug
+  const scopeName = isAuthorizationJob ? 'authorizationId' : 'sourceSlug'
+  if (typeof scopeId !== 'string' || scopeId.trim().length === 0) {
+    throw new Error(`[ingest-worker] ${job.name} job is missing ${scopeName}`)
   }
 
-  const result = await withSourceJobLease({ redis, lane, sourceSlug, run })
+  const result = await withSourceJobLease({ redis, lane, sourceSlug: scopeId, run })
   if (!result.coalesced) return result.value as T
 
   log(
     `[ingest-worker] ↪ coalesced duplicate ${job.name} iteration ${job.id ?? 'unknown'} ` +
-      `(${sourceSlug})`
+      `(${scopeId})`
   )
-  return { coalesced: true, sourceSlug, lane }
+  return isAuthorizationJob
+    ? { coalesced: true, authorizationId: scopeId, lane }
+    : { coalesced: true, sourceSlug: scopeId, lane }
 }
