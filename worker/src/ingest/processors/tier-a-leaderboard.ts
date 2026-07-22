@@ -113,6 +113,10 @@ function configuredWorkerRegion(): string | null {
   return process.env.INGEST_LOCAL_REGION?.trim() || null
 }
 
+function attemptBoundCaptureEnabled(): boolean {
+  return process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED === 'true'
+}
+
 function completedTimeframesFrom(value: unknown): RankingTimeframe[] {
   if (!Array.isArray(value)) return []
   const completed = new Set(value.filter((timeframe) => RANKING_TIMEFRAMES.includes(timeframe)))
@@ -401,10 +405,15 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
 
   const adapter = getAdapter(src.adapter_slug)
   const cycleId = observationCycleId(job, 'tier-a', src.slug)
-  const attemptBoundCapture = await hasRegisteredAttemptBoundLeaderboardAcquisitionContract({
-    sourceId: src.id,
-    adapterSlug: src.adapter_slug,
-  })
+  // A registered contract means the database can understand v3 evidence; it
+  // is not rollout approval. Keep acquisition on v2 until an operator enables
+  // the worker only after the v3 database authority and canaries are live.
+  const attemptBoundCapture =
+    attemptBoundCaptureEnabled() &&
+    (await hasRegisteredAttemptBoundLeaderboardAcquisitionContract({
+      sourceId: src.id,
+      adapterSlug: src.adapter_slug,
+    }))
   const workerRegion = configuredWorkerRegion()
   // Freeze provenance before the first upstream request. A long-running crawl
   // must not bind later timeframes to a different checkout/deployment SHA.
