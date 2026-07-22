@@ -75,4 +75,18 @@ describe('fetchPhase1FromArena board watermark boundary', () => {
       })
     )
   })
+
+  it('preserves the legacy reader numeric coercion around the shared pure mapper', async () => {
+    const rows = Array.from({ length: 3_000 }, (_, index) => rpcRow(index))
+    rows[0].roi_pct = '12.5'
+    rows[0].pnl_usd = 'not-finite'
+    const supabase = supabaseReturning(rows)
+    const addToTraderMap = jest.fn()
+
+    await fetchPhase1FromArena(supabase as never, '30D', addToTraderMap)
+
+    expect(addToTraderMap.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ roi: 12.5, pnl: null })
+    )
+  })
 })

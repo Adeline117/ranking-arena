@@ -20,6 +20,7 @@
 import { getSupabaseAdmin } from '@/lib/api'
 import type { Period } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
+import { mapArenaScoreRowToTraderRow } from './arena-score-row-mapper'
 import type { TraderRow } from './trader-row'
 
 const logger = createLogger('compute-leaderboard')
@@ -120,34 +121,24 @@ export async function fetchPhase1FromArena(
   }
 
   for (const d of rows) {
-    addToTraderMap({
-      source: d.platform,
-      source_trader_id: d.trader_key,
-      roi: num(d.roi_pct),
-      pnl: num(d.pnl_usd),
-      win_rate: num(d.win_rate),
-      max_drawdown: num(d.max_drawdown),
-      trades_count: num(d.trades_count),
-      followers: null, // arena pipeline does not surface a generic follower count
-      copiers: num(d.copiers),
-      arena_score: null, // recomputed downstream; the input value is unused
-      captured_at: d.as_of,
-      source_board_as_of: d.board_as_of,
-      full_confidence_at: null,
-      profitability_score: null,
-      risk_control_score: null,
-      execution_score: null,
-      score_completeness: null,
-      trading_style: null,
-      avg_holding_hours: null,
-      style_confidence: null,
-      sharpe_ratio: num(d.sharpe_ratio),
-      sortino_ratio: num(d.sortino_ratio),
-      profit_factor: null,
-      calmar_ratio: num(d.calmar_ratio),
-      trader_type: d.trader_kind === 'bot' ? 'bot' : null,
-      metrics_estimated: false,
-    })
+    addToTraderMap(
+      mapArenaScoreRowToTraderRow({
+        platform: d.platform,
+        trader_key: d.trader_key,
+        roi_pct: num(d.roi_pct),
+        pnl_usd: num(d.pnl_usd),
+        win_rate: num(d.win_rate),
+        max_drawdown: num(d.max_drawdown),
+        copiers: num(d.copiers),
+        trades_count: num(d.trades_count),
+        sharpe_ratio: num(d.sharpe_ratio),
+        sortino_ratio: num(d.sortino_ratio),
+        calmar_ratio: num(d.calmar_ratio),
+        trader_kind: d.trader_kind,
+        as_of: d.as_of,
+        board_as_of: d.board_as_of,
+      })
+    )
     countBySource.set(d.platform, (countBySource.get(d.platform) ?? 0) + 1)
   }
 
