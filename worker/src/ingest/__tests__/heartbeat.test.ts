@@ -1,4 +1,4 @@
-import { diskUsedPct, parseDiskUsedPct } from '../heartbeat'
+import { diskUsedPct, parseDiskUsedPct, startHeartbeat } from '../heartbeat'
 
 describe('worker heartbeat disk usage', () => {
   test('parses Linux and macOS POSIX df output', () => {
@@ -39,5 +39,24 @@ describe('worker heartbeat disk usage', () => {
         throw new Error('df failed')
       })
     ).toBeUndefined()
+  })
+
+  test('reports the attempt-bound capture runtime flag explicitly', () => {
+    const original = process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+    let timer: NodeJS.Timeout | undefined
+    try {
+      process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = 'true'
+      const hset = jest.fn().mockResolvedValue(1)
+
+      timer = startHeartbeat({ hset } as never, ['local'])
+
+      const payload = JSON.parse(hset.mock.calls[0][2])
+      expect(payload.attempt_bound_capture).toBe(true)
+      expect(payload.regions).toEqual(['local'])
+    } finally {
+      if (timer) clearInterval(timer)
+      if (original === undefined) delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+      else process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = original
+    }
   })
 })

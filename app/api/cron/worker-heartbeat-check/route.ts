@@ -24,13 +24,18 @@ import { withCron } from '@/lib/api/with-cron'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
+import {
+  REQUIRED_RELEASE_REGIONS,
+  WORKER_HEARTBEAT_DECOMMISSION_MS,
+  WORKER_HEARTBEAT_STALE_MS,
+} from '@/lib/ingest/worker-release-readiness'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 const ROSTER_KEY = 'arena:worker:roster'
-const STALE_MS = 5 * 60_000 // heartbeat older than this → node is down
-const DECOMMISSION_MS = 24 * 3600_000 // older than this → assume retired, prune
+const STALE_MS = WORKER_HEARTBEAT_STALE_MS // heartbeat older than this → node is down
+const DECOMMISSION_MS = WORKER_HEARTBEAT_DECOMMISSION_MS // older → assume retired, prune
 
 /**
  * Regions that MUST have a fresh consumer for crawling to function — the
@@ -46,7 +51,7 @@ const DECOMMISSION_MS = 24 * 3600_000 // older than this → assume retired, pru
  * no healthy consumer, no matter which node identities come and go.
  * vps_jp intentionally absent (aspirational region, no sources pinned yet).
  */
-const REQUIRED_REGIONS = ['local', 'vps_sg']
+const REQUIRED_REGIONS: readonly string[] = REQUIRED_RELEASE_REGIONS
 
 interface HeartbeatPayload {
   ts: number
@@ -54,11 +59,13 @@ interface HeartbeatPayload {
   pid?: number
   node?: string
   sha?: string
+  attempt_bound_capture?: boolean
   disk?: number
 }
 
-// Root-fs used % at/above which we page. SG VPS sits ~95% (52GB/46GB used), a
-// near-term hard failure; 88 gives runway before a crashloop from a full disk.
+// Worker-checkout filesystem used % at/above which we page. This resolves to
+// the macOS Data volume and the SG VPS root volume; 88 gives runway before a
+// crashloop from a full disk.
 const DISK_WARN_PCT = 88
 
 function parseBeat(raw: unknown): HeartbeatPayload | null {

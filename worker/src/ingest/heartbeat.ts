@@ -60,6 +60,9 @@ interface HeartbeatPayload {
   pid: number
   node: string
   sha: string
+  /** Runtime cutover flag, reported explicitly so release gating cannot infer
+   *  v3 attempt-bound capture from the code SHA alone. */
+  attempt_bound_capture: boolean
   /** Used % for the filesystem containing the worker checkout, so the Vercel
    *  heartbeat-check cron can page before a node fills up and crashloops.
    *  Optional — older workers omit it; the cron treats absent as unknown. */
@@ -117,6 +120,7 @@ export function startHeartbeat(redis: IORedis, regions: string[]): NodeJS.Timeou
       pid: process.pid,
       node,
       sha,
+      attempt_bound_capture: process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED === 'true',
       disk: diskUsedPct(),
     }
     try {
