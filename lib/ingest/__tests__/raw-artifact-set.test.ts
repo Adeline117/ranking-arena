@@ -381,6 +381,13 @@ describe('writeLeaderboardRawArtifactSet', () => {
       input.manifest.completed_at,
       input.manifest.completed_at,
     ])
+    expect(
+      database.pointers.find((pointer) => pointer.trust_artifact_role === 'source_payload')?.meta
+    ).toMatchObject({
+      pageCount: 2,
+      parserPageCount: 2,
+      parserSourcePageOrdinals: [1, 2],
+    })
     expect(mockUpload).toHaveBeenCalledTimes(4)
     expect(mockDownload).toHaveBeenCalledTimes(2)
     const insertSql = database.query.mock.calls
@@ -450,7 +457,11 @@ describe('writeLeaderboardRawArtifactSet', () => {
     const manifestPointer = database.pointers.find(
       (pointer) => pointer.trust_artifact_role === 'population_manifest'
     )!
-    expect(sourcePointer.meta).toMatchObject({ pageCount: 2 })
+    expect(sourcePointer.meta).toMatchObject({
+      pageCount: 2,
+      parserPageCount: 2,
+      parserSourcePageOrdinals: [1, 2],
+    })
     expect(manifestPointer.meta).toMatchObject({
       data_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
     })
