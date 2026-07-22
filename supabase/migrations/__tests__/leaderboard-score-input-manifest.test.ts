@@ -75,6 +75,22 @@ describe('private leaderboard score-input manifest contract', () => {
     expect(migration).not.toMatch(/'createdAt'.*v_manifest_basis/s)
   })
 
+  it('narrows leaderboard inputs to observed finite PnL without excluding zero or losses', () => {
+    expect(migration).toContain('leaderboard_score_input_manifest_rank_eligible_pnl')
+    expect(migration).toContain("input_row.value->'pnl'")
+    expect(migration).toContain("IS DISTINCT FROM 'number'")
+    expect(migration).toContain('leaderboard score-input PnL must be a finite JSON number')
+    expect(migration).toContain('pg_catalog.jsonb_path_query_array')
+    expect(migration).toContain('@.pnl.type() == "number"')
+    expect(migration).toContain('score-input manifest PnL table constraint drifted')
+    expect(pg17).toContain("'missing'")
+    expect(pg17).toContain("'null'")
+    expect(pg17).toContain("'string'")
+    expect(pg17).toContain("RAISE EXCEPTION '% PnL unexpectedly sealed'")
+    expect(pg17).toContain('zero/loss PnL manifest failed verification')
+    expect(pg17).toContain('table CHECK accepted a non-numeric PnL')
+  })
+
   it('makes table, codec, seal and verifier owner-only despite hostile defaults', () => {
     expect(migration).toMatch(
       /REVOKE ALL ON TABLE arena\.leaderboard_score_input_manifests\s+FROM PUBLIC, anon, authenticated, service_role;/
