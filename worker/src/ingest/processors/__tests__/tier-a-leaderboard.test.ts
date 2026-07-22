@@ -255,10 +255,12 @@ describe('Tier-A board-series publication guard', () => {
   let job: Job<TierJobData>
   let expectedCycleId: string
   const originalIngestLocalRegion = process.env.INGEST_LOCAL_REGION
+  const originalAttemptBoundCaptureEnabled = process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
 
   beforeEach(() => {
     jest.clearAllMocks()
     process.env.INGEST_LOCAL_REGION = 'local'
+    process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = 'true'
     mockJobUpdateData.mockResolvedValue(undefined)
     job = makeJob()
     expectedCycleId = `tier-a:${src.slug}:${job.id}:${job.timestamp}`
@@ -362,6 +364,11 @@ describe('Tier-A board-series publication guard', () => {
   afterAll(() => {
     if (originalIngestLocalRegion === undefined) delete process.env.INGEST_LOCAL_REGION
     else process.env.INGEST_LOCAL_REGION = originalIngestLocalRegion
+    if (originalAttemptBoundCaptureEnabled === undefined) {
+      delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+    } else {
+      process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = originalAttemptBoundCaptureEnabled
+    }
   })
 
   function configureAttemptBoundSource(
@@ -384,6 +391,19 @@ describe('Tier-A board-series publication guard', () => {
     })
     return captureLeaderboard
   }
+
+  it('keeps a registered v3 contract inert without explicit rollout approval', async () => {
+    delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+    mockHasRegisteredAttemptBoundContract.mockResolvedValue(true)
+
+    await expect(processTierA(job)).resolves.toEqual([
+      expect.objectContaining({ timeframe: 30, snapshotId: 777, passed: true }),
+    ])
+
+    expect(mockHasRegisteredAttemptBoundContract).not.toHaveBeenCalled()
+    expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+  })
 
   it('passes the exact live snapshot identity before publishing replacement series', async () => {
     await expect(processTierA(job)).resolves.toEqual([
