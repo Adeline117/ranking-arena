@@ -99,6 +99,7 @@ PREDEPLOY_MIGRATIONS=(
   20260721150000_metric_trust_raw_artifact_identity.sql
   20260721175746_arena_score_inputs_publish_bundle.sql
   20260721210000_tip_checkout_lifecycle_atomic.sql
+  20260721211000_tip_checkout_completion_identity.sql
 )
 
 # A selective apply bypasses manifest ordering, so it is more restrictive than
@@ -109,9 +110,13 @@ INDEPENDENT_PREDEPLOY_MIGRATIONS=(
   20260721140000_idempotent_equivalent_refund_events.sql
   20260721175746_arena_score_inputs_publish_bundle.sql
   20260721210000_tip_checkout_lifecycle_atomic.sql
+  20260721211000_tip_checkout_completion_identity.sql
 )
 
-TIP_CHECKOUT_LIFECYCLE_VERSION='20260721210000'
+TIP_CHECKOUT_CUTOVER_VERSIONS=(
+  20260721210000
+  20260721211000
+)
 TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 
 # These contracts revoke compatibility writes or change identity uniqueness
@@ -477,10 +482,15 @@ require_tip_checkout_cutover_attestation() {
 
 require_tip_checkout_cutover_for_target() {
   local migration="$1"
-  if [[ "$(migration_version "$migration")" == \
-    "$TIP_CHECKOUT_LIFECYCLE_VERSION" ]]; then
-    require_tip_checkout_cutover_attestation
-  fi
+  local version
+  local protected_version
+  version="$(migration_version "$migration")"
+  for protected_version in "${TIP_CHECKOUT_CUTOVER_VERSIONS[@]}"; do
+    if [[ "$version" == "$protected_version" ]]; then
+      require_tip_checkout_cutover_attestation
+      return
+    fi
+  done
 }
 
 emit_concurrent_migration() {
