@@ -176,10 +176,16 @@ describe('private leaderboard score-input manifest contract', () => {
     expect(JSON.stringify(fixture)).toContain('profitFactorSource')
   })
 
-  it('is wired after the private scorer in both selective and full predeploy paths', () => {
-    expect(runner.match(new RegExp(migrationName.replace('.', '\\.'), 'g'))).toHaveLength(2)
-    expect(runner.indexOf('20260722041000_pure_arena_score_v4_scorer.sql')).toBeLessThan(
-      runner.indexOf(migrationName)
+  it('is wired after the private scorer in the ordered predeploy path', () => {
+    const predeploy = runner.slice(
+      runner.indexOf('PREDEPLOY_MIGRATIONS=('),
+      runner.indexOf('TIP_CHECKOUT_CUTOVER_VERSIONS=(')
     )
+    expect(predeploy).toContain(migrationName)
+    expect(predeploy.indexOf('20260722041000_pure_arena_score_v4_scorer.sql')).toBeLessThan(
+      predeploy.indexOf(migrationName)
+    )
+    expect(runner.match(new RegExp(migrationName.replace('.', '\\.'), 'g'))).toHaveLength(1)
+    expect(runner).toContain('prepare_ordered_predeploy_target')
   })
 })

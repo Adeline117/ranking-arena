@@ -175,17 +175,14 @@ describe('Tip checkout completion identity migration', () => {
 
     const predeploy = runner.slice(
       runner.indexOf('PREDEPLOY_MIGRATIONS=('),
-      runner.indexOf('INDEPENDENT_PREDEPLOY_MIGRATIONS=(')
-    )
-    const independent = runner.slice(
-      runner.indexOf('INDEPENDENT_PREDEPLOY_MIGRATIONS=('),
-      runner.indexOf('POSTDEPLOY_MIGRATIONS=(')
+      runner.indexOf('TIP_CHECKOUT_CUTOVER_VERSIONS=(')
     )
     expect(predeploy).toContain(migrationName)
     expect(predeploy.indexOf('20260721210000_tip_checkout_lifecycle_atomic.sql')).toBeLessThan(
       predeploy.indexOf(migrationName)
     )
-    expect(independent).toContain(migrationName)
+    expect(runner.match(new RegExp(migrationName.replace('.', '\\.')))).toHaveLength(1)
+    expect(runner).toContain('prepare_ordered_predeploy_target')
     expect(runner).toContain('TIP_CHECKOUT_CUTOVER_VERSIONS=(')
     expect(runner).toContain('20260721211000')
   })

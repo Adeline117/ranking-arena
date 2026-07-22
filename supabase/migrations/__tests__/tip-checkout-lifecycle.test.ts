@@ -172,14 +172,11 @@ describe('Tip checkout lifecycle migration', () => {
     const file = '20260721210000_tip_checkout_lifecycle_atomic.sql'
     const predeploy = runner.slice(
       runner.indexOf('PREDEPLOY_MIGRATIONS=('),
-      runner.indexOf('INDEPENDENT_PREDEPLOY_MIGRATIONS=(')
-    )
-    const independent = runner.slice(
-      runner.indexOf('INDEPENDENT_PREDEPLOY_MIGRATIONS=('),
-      runner.indexOf('POSTDEPLOY_MIGRATIONS=(')
+      runner.indexOf('TIP_CHECKOUT_CUTOVER_VERSIONS=(')
     )
     expect(predeploy).toContain(file)
-    expect(independent).toContain(file)
+    expect(runner.match(new RegExp(file.replace('.', '\\.')))).toHaveLength(1)
+    expect(runner).toContain('prepare_ordered_predeploy_target')
     expect(runner).toContain('TIP_CHECKOUT_CUTOVER_VERSIONS=(')
     expect(runner).toContain('20260721210000')
     expect(runner).toContain('20260721211000')
