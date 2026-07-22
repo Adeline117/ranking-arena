@@ -105,6 +105,7 @@ PREDEPLOY_MIGRATIONS=(
   20260722041000_pure_arena_score_v4_scorer.sql
   20260722042000_leaderboard_terminal_publication_fence.sql
   20260722050000_metric_trust_attempt_outcome_authority.sql
+  20260722051000_leaderboard_score_input_manifest_contract.sql
 )
 
 # A selective apply bypasses manifest ordering, so it is more restrictive than
@@ -117,6 +118,7 @@ INDEPENDENT_PREDEPLOY_MIGRATIONS=(
   20260721210000_tip_checkout_lifecycle_atomic.sql
   20260721211000_tip_checkout_completion_identity.sql
   20260722041000_pure_arena_score_v4_scorer.sql
+  20260722051000_leaderboard_score_input_manifest_contract.sql
 )
 
 TIP_CHECKOUT_CUTOVER_VERSIONS=(
