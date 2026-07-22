@@ -461,7 +461,18 @@ describe('Tier-A board-series publication guard', () => {
     const listLeaderboard = jest.fn(async function* () {
       throw new Error('legacy stream must not run')
     })
-    const parseLeaderboard = jest.fn(() => ({ rows: [row], reportedTotal: 1 }))
+    const parseLeaderboard = jest.fn(() => ({
+      rows: [
+        {
+          ...row,
+          headlineMetricSources: {
+            roi: { fieldPath: 'result.items[].roi', sourcePageOrdinal: 999 },
+            pnl: { fieldPath: 'result.items[].pnl' },
+          },
+        },
+      ],
+      reportedTotal: 1,
+    }))
     mockGetAdapter.mockReturnValue({
       captureLeaderboard,
       listLeaderboard,
@@ -499,6 +510,14 @@ describe('Tier-A board-series publication guard', () => {
     )
     expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
+        rows: [
+          expect.objectContaining({
+            headlineMetricSources: {
+              roi: { fieldPath: 'result.items[].roi', sourcePageOrdinal: 1 },
+              pnl: { fieldPath: 'result.items[].pnl', sourcePageOrdinal: 1 },
+            },
+          }),
+        ],
         trust: expect.objectContaining({
           sourceRunId: artifactInput.sourceRunId,
           manifest: artifactInput.manifest,

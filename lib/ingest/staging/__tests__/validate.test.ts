@@ -109,6 +109,7 @@ describe('validateLeaderboardRows — zod + 必填 + 去重', () => {
       },
       { volatility: { fieldPath: 'data.list[].volatility' } },
       { roi: { fieldPath: ' ' } },
+      { roi: { fieldPath: 'data.list[].roi', sourcePageOrdinal: 0 } },
     ]
     for (const headlineMetricSources of invalidSources) {
       const { valid, rejects } = validateLeaderboardRows([
@@ -162,11 +163,24 @@ describe('validateLeaderboardRows — zod + 必填 + 去重', () => {
 
   it('同 exchangeTraderId 去重，保留更优（更低）rank', () => {
     const { valid } = validateLeaderboardRows([
-      row({ exchangeTraderId: 'dup', rank: 5 }),
-      row({ exchangeTraderId: 'dup', rank: 2 }),
+      row({
+        exchangeTraderId: 'dup',
+        rank: 5,
+        headlineMetricSources: {
+          roi: { fieldPath: 'data.list[].roi', sourcePageOrdinal: 2 },
+        },
+      }),
+      row({
+        exchangeTraderId: 'dup',
+        rank: 2,
+        headlineMetricSources: {
+          roi: { fieldPath: 'data.list[].roi', sourcePageOrdinal: 1 },
+        },
+      }),
     ])
     expect(valid).toHaveLength(1)
     expect(valid[0].rank).toBe(2)
+    expect(valid[0].headlineMetricSources?.roi?.sourcePageOrdinal).toBe(1)
   })
 
   it('输出按 rank 升序排序', () => {
