@@ -1,6 +1,12 @@
 import type { PoolClient } from 'pg'
 
-import { buildLeaderboardAcquisitionManifest } from '../../acquisition-manifest'
+import {
+  buildLeaderboardAcquisitionManifest,
+  buildLeaderboardAcquisitionManifestV3,
+  LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+  LEADERBOARD_ACQUISITION_MANIFEST_V2_CONTRACT,
+  LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
+} from '../../acquisition-manifest'
 import type { ParsedLeaderboardRow, RawPage, SourceRow } from '../../core/types'
 import {
   prepareLeaderboardMetricTrust,
@@ -72,8 +78,10 @@ const rows: ParsedLeaderboardRow[] = [
   },
 ]
 
-function trustFixture(source: SourceRow = src) {
-  const built = buildLeaderboardAcquisitionManifest({
+function manifestInput(
+  source: SourceRow
+): Parameters<typeof buildLeaderboardAcquisitionManifest>[0] {
+  return {
     source: {
       id: source.id,
       slug: source.slug,
@@ -109,7 +117,14 @@ function trustFixture(source: SourceRow = src) {
     parser_transformation: { kind: 'identity_projection', source_page_ordinals: [1] },
     accepted_population: 2,
     rejected_row_count: 0,
-  })
+  }
+}
+
+function trustBundle(
+  built:
+    | ReturnType<typeof buildLeaderboardAcquisitionManifest>
+    | ReturnType<typeof buildLeaderboardAcquisitionManifestV3>
+) {
   return {
     sourceRunId: built.sourceRunId,
     manifest: built.manifest,
@@ -126,6 +141,23 @@ function trustFixture(source: SourceRow = src) {
       },
     },
   }
+}
+
+function trustFixture(source: SourceRow = src) {
+  return trustBundle(buildLeaderboardAcquisitionManifest(manifestInput(source)))
+}
+
+function attemptBoundTrustFixture(source: SourceRow = src) {
+  return trustBundle(
+    buildLeaderboardAcquisitionManifestV3({
+      ...manifestInput(source),
+      acquisition_attempt: {
+        binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+        attempt_id: '00000000-0000-4000-8000-000000000001',
+        attempt_seq: 41,
+      },
+    })
+  )
 }
 
 const contracts = [
@@ -166,6 +198,60 @@ const contracts = [
 ]
 
 describe('Tier-A metric trust transaction writer', () => {
+  it('prepares an attempt-bound v3 manifest through its version-specific parser', () => {
+    const fixture = attemptBoundTrustFixture()
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: fixture,
+    })
+
+    expect(prepared.sourceRunId).toBe(fixture.sourceRunId)
+    expect(prepared.manifest).toMatchObject({
+      data_contract: LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
+      acquisition_attempt: {
+        binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+        attempt_id: '00000000-0000-4000-8000-000000000001',
+        attempt_seq: 41,
+      },
+      assessment: { acquisition_state: 'complete', population_state: 'verified' },
+    })
+  })
+
+  it('keeps v2 and v3 manifest parsers isolated and rejects unknown versions', () => {
+    const v3 = attemptBoundTrustFixture()
+    const v2 = trustFixture()
+    const prepare = (manifest: typeof v3.manifest) =>
+      prepareLeaderboardMetricTrust({
+        src,
+        timeframe: 30,
+        rows,
+        rejectedRowCount: 0,
+        bundle: { ...v3, manifest },
+      })
+
+    expect(() =>
+      prepare({
+        ...v3.manifest,
+        data_contract: LEADERBOARD_ACQUISITION_MANIFEST_V2_CONTRACT,
+      } as unknown as typeof v3.manifest)
+    ).toThrow()
+    expect(() =>
+      prepare({
+        ...v2.manifest,
+        data_contract: LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
+      } as unknown as typeof v3.manifest)
+    ).toThrow()
+    expect(() =>
+      prepare({
+        ...v3.manifest,
+        data_contract: 'arena.ingest.leaderboard-acquisition-manifest@4',
+      } as unknown as typeof v3.manifest)
+    ).toThrow('unsupported acquisition manifest contract')
+  })
+
   it('writes run, fail-closed window observations, and exact RAW refs on one client', async () => {
     const query = jest.fn(async (sqlInput: unknown, params: unknown[] = []) => {
       const sql = String(sqlInput)
