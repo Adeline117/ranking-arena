@@ -255,6 +255,9 @@ describe('Tier-A metric trust transaction writer', () => {
   it('writes run, fail-closed window observations, and exact RAW refs on one client', async () => {
     const query = jest.fn(async (sqlInput: unknown, params: unknown[] = []) => {
       const sql = String(sqlInput)
+      if (sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')) {
+        return { rows: [{ attempt_seq: '41' }], rowCount: 1 }
+      }
       if (sql.includes('INSERT INTO arena.metric_trust_runs')) return { rows: [], rowCount: 1 }
       if (sql.includes('FROM arena.metric_source_contracts')) {
         return { rows: contracts, rowCount: contracts.length }
@@ -285,7 +288,7 @@ describe('Tier-A metric trust transaction writer', () => {
       timeframe: 30,
       rows,
       rejectedRowCount: 0,
-      bundle: trustFixture(),
+      bundle: attemptBoundTrustFixture(),
     })
 
     await expect(
@@ -322,6 +325,48 @@ describe('Tier-A metric trust transaction writer', () => {
       'complete',
       'verified',
     ])
+
+    const outcomeCall = query.mock.calls.find(([sql]) =>
+      String(sql).includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')
+    )!
+    expect(query.mock.calls.indexOf(outcomeCall)).toBeLessThan(query.mock.calls.indexOf(runCall))
+    expect(JSON.parse(String(outcomeCall[1][0]))).toEqual({
+      attempt_id: '00000000-0000-4000-8000-000000000001',
+      attempt_seq: 41,
+      binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+      capture_contract: LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
+      source_id: 1,
+      source_slug: 'binance_futures',
+      adapter_slug: 'binance',
+      timeframe: 30,
+      observation_cycle_id: 'tier-a:binance_futures:job-1:1784628000000',
+      runner_git_sha: 'a'.repeat(40),
+      started_at: '2026-07-21T10:00:00.000Z',
+      completed_at: '2026-07-21T10:00:03.000Z',
+      terminal_state: 'complete',
+      acquisition_state: 'complete',
+      population_state: 'verified',
+      capture_evidence_state: 'verified',
+      termination_reason: 'reported_population_reached',
+      source_run_id: prepared.sourceRunId,
+      source_payload_raw_object_id: 101,
+      source_payload_content_hash: 'c'.repeat(64),
+      source_payload_storage_path: 'binance_futures/tier_a_trust/source.json.gz',
+      manifest_raw_object_id: 102,
+      manifest_content_hash: prepared.sourceRunId,
+      manifest_storage_path: 'binance_futures/tier_a_trust/manifest.json.gz',
+      reported_population: 2,
+      population_report_state: 'consistent',
+      source_page_count: 1,
+      reported_page_count: null,
+      page_count_report_state: 'unknown',
+      observed_population: 2,
+      accepted_population: 2,
+      rejected_row_count: 0,
+      deduplicated_row_count: 0,
+      caller_limited: false,
+      safety_limited: false,
+    })
 
     const observationCall = query.mock.calls.find(([sql]) =>
       String(sql).includes('INSERT INTO arena.metric_trust_observations')
@@ -360,6 +405,37 @@ describe('Tier-A metric trust transaction writer', () => {
         }),
       ])
     )
+  })
+
+  it('rejects an attempt-bound write before inserts without the exact latest outcome', async () => {
+    const query = jest.fn(async (sqlInput: unknown) => {
+      const sql = String(sqlInput)
+      if (sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')) {
+        return { rows: [], rowCount: 0 }
+      }
+      throw new Error(`unexpected SQL: ${sql}`)
+    })
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: attemptBoundTrustFixture(),
+    })
+
+    await expect(
+      writeLeaderboardMetricTrust(queryClient(query), prepared, {
+        snapshotId: 77,
+        snapshotScrapedAt: '2026-07-21T10:00:03.000Z',
+        traderIds: new Map([
+          ['one', 1_001],
+          ['two', 1_002],
+        ]),
+      })
+    ).rejects.toThrow('requires one exact complete acquisition outcome')
+    expect(
+      query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO arena.metric_trust_runs'))
+    ).toBe(false)
   })
 
   it('rejects trusted publication when no reviewed population contract exists', () => {
@@ -460,6 +536,27 @@ describe('Tier-A metric trust transaction writer', () => {
         replayed: true,
       },
     })
+  })
+
+  it('rejects an attempt-bound replay when the latest terminal outcome no longer authorizes it', async () => {
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: attemptBoundTrustFixture(),
+    })
+    const baseQuery = reconciliationQuery(prepared)
+    const query = jest.fn(async (sqlInput: unknown, params?: unknown[]) => {
+      if (String(sqlInput).includes('arena.latest_terminal_leaderboard_acquisitions')) {
+        return { rows: [], rowCount: 0 }
+      }
+      return baseQuery(sqlInput, params)
+    })
+
+    await expect(reconcileLeaderboardMetricTrust(queryClient(query), prepared)).rejects.toThrow(
+      'requires one exact complete acquisition outcome'
+    )
   })
 
   it('rejects an idempotent retry when one persisted artifact hash differs', async () => {
