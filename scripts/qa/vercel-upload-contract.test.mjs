@@ -180,7 +180,7 @@ test('revokes production write authority when a candidate is no longer exact mai
 test('reasserts the single production writer without ever skipping promoted smoke', () => {
   assert.match(
     deployGate,
-    /- name: Pin release-control helpers for this Gate run\n        run: \|[\s\S]*install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"[\s\S]*install -m 700 scripts\/ci\/validate-release-health\.mjs "\$RUNNER_TEMP\/validate-release-health\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-metric-trust-release-readiness\.mjs "\$RUNNER_TEMP\/verify-metric-trust-release-readiness\.mjs"/
+    /- name: Pin release-control helpers for this Gate run\n        run: \|[\s\S]*install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"[\s\S]*install -m 700 scripts\/ci\/validate-release-health\.mjs "\$RUNNER_TEMP\/validate-release-health\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-metric-trust-release-readiness\.mjs "\$RUNNER_TEMP\/verify-metric-trust-release-readiness\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-worker-release-readiness\.mjs "\$RUNNER_TEMP\/verify-worker-release-readiness\.mjs"/
   )
   assert.equal(
     deployGate.match(/node "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"/g)?.length,
@@ -197,6 +197,24 @@ test('reasserts the single production writer without ever skipping promoted smok
   assert.ok(
     deployGate.indexOf('Require production metric-trust schema before deploy') <
       deployGate.indexOf('Deploy to Vercel (build on Vercel infra)')
+  )
+  assert.match(
+    deployGate,
+    /- name: Require exact ingest worker fleet before promotion[\s\S]*id: worker_fleet[\s\S]*CRON_SECRET: \$\{\{ secrets\.CRON_SECRET \}\}[\s\S]*WORKER_READINESS_BASE_URL: \$\{\{ steps\.deploy_candidate\.outputs\.url \}\}[\s\S]*npx vercel@56\.2\.1 curl[\s\S]*--deployment "\$WORKER_READINESS_BASE_URL" \\[\s\S]*-- \\[\s\S]*--max-redirs 0[\s\S]*WORKER_READINESS_PAYLOAD_FILE="\$PAYLOAD_FILE"[\s\S]*node "\$RUNNER_TEMP\/verify-worker-release-readiness\.mjs"/
+  )
+  assert.doesNotMatch(deployGate, /vercel@56\.2\.1 curl[\s\S]{0,500}--token/)
+  assert.doesNotMatch(deployGate, /secrets\.VERCEL_AUTOMATION_BYPASS_SECRET/)
+  assert.ok(
+    deployGate.indexOf('Wait for candidate READY (bounded)') <
+      deployGate.indexOf('Require exact ingest worker fleet before promotion')
+  )
+  assert.ok(
+    deployGate.indexOf('Require exact ingest worker fleet before promotion') <
+      deployGate.indexOf('Promote only if candidate is not stale after build')
+  )
+  assert.match(
+    deployGate,
+    /if: steps\.fresh\.outputs\.deploy == 'true' && steps\.wait_candidate\.outcome == 'success' && steps\.worker_fleet\.outcome == 'success'/
   )
   assert.match(
     deployGate,
@@ -263,7 +281,7 @@ test('makes every deploy-gate Telegram failure observable without blocking the g
   )
   assert.equal(workflow.match(/send_telegram_alert\(\) \{/g)?.length, 3)
   assert.equal(workflow.match(/--connect-timeout 5 --max-time 10/g)?.length, 3)
-  assert.equal(workflow.match(/--write-out '%\{http_code\}'/g)?.length, 3)
+  assert.equal(workflow.match(/--output \/dev\/null --write-out '%\{http_code\}'/g)?.length, 3)
   assert.equal(workflow.match(/\[\[ "\$\{http:-000\}" != 2\* \]\]/g)?.length, 3)
   assert.equal(workflow.match(/::warning title=Telegram alert delivery failed::/g)?.length, 6)
   assert.equal(

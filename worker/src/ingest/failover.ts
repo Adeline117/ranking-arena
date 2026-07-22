@@ -25,8 +25,9 @@ import { Worker, type Job } from 'bullmq'
 import type IORedis from 'ioredis'
 import { ingestConnection, regionQueueName, INGEST_REGIONS, type IngestRegion } from './queues'
 import { WORKER_ROSTER_KEY, workerNodeId } from './heartbeat'
+import { WORKER_FAILOVER_FLAG_KEY } from '@/lib/ingest/worker-release-readiness'
 
-export const FAILOVER_FLAG_KEY = 'arena:failover:regions'
+export const FAILOVER_FLAG_KEY = WORKER_FAILOVER_FLAG_KEY
 const RECONCILE_MS = 30_000
 const FRESH_MS = 5 * 60_000 // a native heartbeat newer than this "covers" its regions
 
