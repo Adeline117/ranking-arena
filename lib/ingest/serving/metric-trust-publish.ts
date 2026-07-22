@@ -128,6 +128,7 @@ interface ObservationInput {
   source_as_of: string
   window_start: string
   window_end: string
+  source_page_ordinal: number | null
 }
 
 interface InsertedObservationRow {
@@ -203,6 +204,7 @@ interface ExistingObservationRow {
   valid_until: string
   window_start: string
   window_end: string
+  source_page_ordinal: string | null
 }
 
 interface ExistingArtifactRow {
@@ -582,6 +584,7 @@ function buildObservationInputs(
       const lineage = assessMetricLineage(prepared, claim, contract.field_path)
       let sourceAsOf = prepared.sourceAsOf
       let windowStart = prepared.windowStart
+      let sourcePageOrdinal: number | null = null
       let freshnessVerified = false
       const blockingReasons: ObservationInput['blocking_reasons'] = []
       if (value === null) blockingReasons.push({ code: 'value_unknown', state: 'unknown' })
@@ -600,6 +603,7 @@ function buildObservationInputs(
         windowStart = new Date(
           Date.parse(sourceAsOf) - prepared.timeframe * 24 * 60 * 60 * 1000
         ).toISOString()
+        sourcePageOrdinal = lineage.sourcePageOrdinal
         freshnessVerified = true
       }
       // Request-body evidence can prove the requested 7D/30D/90D label, but
@@ -623,6 +627,7 @@ function buildObservationInputs(
         source_as_of: sourceAsOf,
         window_start: windowStart,
         window_end: sourceAsOf,
+        source_page_ordinal: sourcePageOrdinal,
       })
     }
   }
@@ -630,7 +635,7 @@ function buildObservationInputs(
 }
 
 type MetricLineageAssessment =
-  | { state: 'verified'; sourceAsOf: string }
+  | { state: 'verified'; sourceAsOf: string; sourcePageOrdinal: number }
   | {
       state: 'unknown'
       code:
@@ -673,6 +678,7 @@ function assessMetricLineage(
   return {
     state: 'verified',
     sourceAsOf: canonicalTimestamp(sourcePage.fetched_at, 'source page fetched_at'),
+    sourcePageOrdinal: ordinal,
   }
 }
 
@@ -922,7 +928,8 @@ export async function writeLeaderboardMetricTrust(
         provenance, methodology_version, value, value_unit, currency,
         source_as_of, valid_until, window_start, window_end, quality,
         history_state, price_state, cost_basis_state, population_state,
-        window_state, unit_state, freshness_state, blocking_reasons)
+        window_state, unit_state, freshness_state, blocking_reasons,
+        source_page_ordinal)
      SELECT contract.id,
             input.trader_id,
             $2,
@@ -950,7 +957,8 @@ export async function writeLeaderboardMetricTrust(
             input.window_state,
             input.unit_state,
             input.freshness_state,
-            input.blocking_reasons
+            input.blocking_reasons,
+            input.source_page_ordinal
        FROM jsonb_to_recordset($1::jsonb) AS input(
          contract_id bigint,
          trader_id bigint,
@@ -966,7 +974,8 @@ export async function writeLeaderboardMetricTrust(
          blocking_reasons jsonb,
          source_as_of timestamptz,
          window_start timestamptz,
-         window_end timestamptz
+         window_end timestamptz,
+         source_page_ordinal integer
        )
        JOIN arena.metric_source_contracts AS contract
          ON contract.id = input.contract_id
@@ -1217,7 +1226,8 @@ export async function reconcileLeaderboardMetricTrust(
             observation.source_as_of::text AS source_as_of,
             observation.valid_until::text AS valid_until,
             observation.window_start::text AS window_start,
-            observation.window_end::text AS window_end
+            observation.window_end::text AS window_end,
+            observation.source_page_ordinal::text AS source_page_ordinal
        FROM arena.metric_trust_observations AS observation
        JOIN arena.traders AS trader ON trader.id = observation.trader_id
       WHERE observation.snapshot_id = $1
@@ -1260,7 +1270,8 @@ export async function reconcileLeaderboardMetricTrust(
       !sameTimestamp(observation.source_as_of, expected.source_as_of) ||
       !sameTimestamp(observation.valid_until, validUntil) ||
       !sameTimestamp(observation.window_start, expected.window_start) ||
-      !sameTimestamp(observation.window_end, expected.window_end)
+      !sameTimestamp(observation.window_end, expected.window_end) ||
+      !sameNumeric(observation.source_page_ordinal, expected.source_page_ordinal)
     ) {
       throw publicationError(
         `existing metric observation mismatch for ${observation.exchange_trader_id}`
