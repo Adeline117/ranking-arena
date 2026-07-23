@@ -121,7 +121,7 @@
     "bullmq": "^5.77.6",
     "candlestick-convert": "^7.0.0",
     "ccxt": "^4.5.63",
-    "cockatiel": "^3.2.1",
+    "cockatiel": "^4.0.0",
     "currency.js": "^2.0.4",
     "ethers": "^6.16.0",
     "express": "^5.2.1",
