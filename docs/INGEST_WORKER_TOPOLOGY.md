@@ -1,101 +1,114 @@
-# Ingest Worker Topology & Deploy (two-node)
+# Ingest Worker Topology and Ownership
 
-The arena ingest worker runs on **two nodes** sharing one Supabase DB + Upstash Redis.
-A source's `arena.sources.fetch_region` decides which node crawls it (region-affine
-BullMQ queues, `worker/src/ingest/queues.ts`).
+Arena's ingest fleet serves customer-facing ranking freshness from two nodes
+sharing one Supabase database and Upstash Redis. A source's
+`arena.sources.fetch_region` selects a region-affine BullMQ queue.
 
-| Node               | Host                 | pm2 app                  | `INGEST_REGIONS` | Runs from                                         | Git?                |
-| ------------------ | -------------------- | ------------------------ | ---------------- | ------------------------------------------------- | ------------------- |
-| Mac Mini (primary) | local                | `arena-ingest-worker`    | `local,vps_jp`   | `/Users/adelinewen/ranking-arena-releases/<sha9>` | detached release    |
-| Singapore VPS      | `root@45.76.152.169` | `arena-ingest-worker-sg` | `vps_sg`         | **`/opt/arena-ingest`**                           | **NO — rsync copy** |
+| Logical node  | PM2 app                  | Required regions | Production cwd                                       |
+| ------------- | ------------------------ | ---------------- | ---------------------------------------------------- |
+| Mac Mini      | `arena-ingest-worker`    | `local,vps_jp`   | `/Users/adelinewen/ranking-arena-releases/<release>` |
+| Singapore VPS | `arena-ingest-worker-sg` | `vps_sg`         | `/opt/arena-ingest`                                  |
 
-## ⚠️ Gotchas (cost real debugging time 2026-06-29)
+The Mac owns local sources and the JP remote-browser lane. SG owns geo-blocked
+CEX sources assigned to `vps_sg`. A required region must have exactly one logical
+owner; neither missing, duplicate, nor combined-region owners are healthy.
 
-- **The SG ingest worker runs from `/opt/arena-ingest`, NOT `/opt/ranking-arena`.**
-  `/opt/ranking-arena` on the SG box is a stale March `master` checkout (7000+ commits
-  behind, on a dead branch) that the worker does **not** use — ignore it. Check
-  `pm2 describe arena-ingest-worker-sg` → `exec cwd` to confirm.
-- `/opt/arena-ingest` is **not a git repo** — it's an rsync'd copy of `lib/` + `worker/`
-  - `node_modules`. There is no `git pull` deploy; use the script below.
-- Region split: Mac consumes `local,vps_jp`; SG consumes `vps_sg`. A source set to
-  `vps_sg` (binance/okx/bitmart/toobit + binance_spot — geo-blocked CEX) is crawled
-  ONLY by SG. `local`-region pages that geo-redirect from the US IP (e.g. coinex's
-  board page → homepage) cannot be crawled from the Mac and must move to a VPS region.
+## Runtime locations
+
+- `/opt/arena-ingest` is the SG production directory. It is not a Git checkout.
+  It contains the complete runtime source, package inputs, `node_modules`, logs,
+  secrets excluded from sync, `DEPLOYED_SHA`, and `WORKER_RELEASE_ID`.
+- `/opt/ranking-arena` is a stale checkout and is never a deployment source.
+- Confirm SG ownership with `pm2 describe arena-ingest-worker-sg` and its exact
+  `exec cwd`; do not infer it from a directory name or Git state elsewhere.
+- The current Mac release predates the new transaction and has shared mutable
+  dependencies. Do not create another release with that pattern. New Mac deploys
+  remain restricted until the transactional local script is implemented.
 
 ## Deploy to SG
 
+Use **Actions → Deploy Ingest Worker (SG)** from `main`, provide the exact current
+40-character `origin/main` SHA, and choose `code-only` or `full`. The workflow is
+manual by design and its production Environment allows only the `main` ref.
+
+For a read-only preview:
+
 ```bash
-# from project root on the Mac Mini, after pushing to main:
-bash worker/deploy-ingest-sg.sh --dry-run   # inspect the changeset first
-bash worker/deploy-ingest-sg.sh --code-only # dep-free change: backup → rsync → restart → verify
+git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
+TARGET_SHA="$(git rev-parse origin/main)"
+bash worker/deploy-ingest-sg.sh --target-sha="$TARGET_SHA" --dry-run
 ```
 
-The script excludes `.env`/`.git`/`node_modules`/logs, backs up `/opt/arena-ingest`
-for rollback, stamps `DEPLOYED_SHA`, and does stop→sync→start to minimise scheduler
-split-brain (`queues.ts:66-85`).
-
-The verify step is deployment-scoped: a unique log marker must be followed by a
-new `ready` line and the exact target heartbeat SHA. Never accept a historical
-`ready` line as proof of the current PID.
-
-## Mac release discipline
-
-The Mac worker must not run from the shared/dirty live checkout. Create a detached
-release, link `node_modules`, `.arena-ingest`, `worker/logs`, `worker/.env` and
-`.env.local`, then use `pm2 stop` → `delete` → `start`. `pm2 restart` preserves the
-old cwd. Start from a minimal environment; runtime secrets belong in the mode-0600
-`worker/.env`, not the operator shell. Full commands live in
+The mutating script stages and verifies a complete candidate while the current
+worker remains online. It stops the sole PM2 owner only for the directory rename,
+then requires fresh ready, full SHA, and release-ID evidence. When connectivity
+and its token-fenced lease remain available, a failed cutover restores and proves
+the complete previous release. Full operational details live in
 `docs/INGEST_WORKER_DEPLOY.md`.
+
+Docker and Compose are intentionally disabled as SG rollout paths. The image
+workflow proves an OCI artifact can build and boot by digest; it does not grant
+that artifact production ownership.
+
+## Fleet topology and runtime drift
+
+Fresh heartbeats publish logical node identity, process audit data, region
+ownership, deployed SHA, deterministic worker release ID, and capture state. The
+15-minute `/api/cron/worker-heartbeat-check` evaluator requires:
+
+- one distinct owner for every required region (`local`, `vps_sg`);
+- no duplicate region owner and no combined owner;
+- well-formed fresh entries with capture enabled; and
+- one valid `WORKER_RELEASE_ID` across the active fleet.
+
+The release ID, not Git SHA alone, is the runtime drift identity. App-only
+commits can have different SHAs while preserving identical worker bytes. SHA is
+still retained as audit evidence.
+
+Deployment log readiness and fleet readiness are different proofs. The current
+deployment marker confirms that the restarted process emitted the expected
+identity after startup. The cron independently evaluates what Redis currently
+reports; neither proof should be described as the other.
+
+## Known process-cardinality gap
+
+The legacy roster is keyed by logical `WORKER_NODE_ID`. Two processes reusing
+the same ID overwrite the same Redis field, so the roster cannot prove real
+process cardinality even though the payload contains a PID. Authorized paths
+reduce this risk by requiring one exact PM2 owner and disabling the Docker path,
+but they do not close the data-model gap.
+
+The complete fix requires a per-node Redis ownership lease plus an independent
+per-boot instance record:
+
+- a random owner token and monotonic lease epoch;
+- atomic acquire, compare-renew, and compare-delete operations;
+- fail-closed self-fencing before the lease can expire;
+- no consumer, scheduler, failover, or heartbeat startup before ownership;
+- fresh owner and contender instances grouped by logical node; and
+- readiness failure on duplicate instances, contenders, or epoch mismatch.
+
+Until that protocol is deployed to both nodes, do not claim that the heartbeat
+roster alone rules out a manually started or malicious duplicate process.
 
 ## On-chain enrichment owner
 
 `maint:onchain-enrich` is reconciled every 12 hours on the local BullMQ queue and
-is the only recurring owner. The former Mac crontab calls to
-`scripts/onchain-enrich-web3.mts` were retired on 2026-07-15: the two paths have no
-shared lock and can otherwise duplicate RPC spend and overwrite the same extras.
+is the only recurring owner. The retired Mac crontab calls to
+`scripts/onchain-enrich-web3.mts` must stay disabled because the two paths have no
+shared lock and can duplicate provider spend and writes.
 
-## ⚠️ SG box npm-install hazard (2026-06-30 — learned the hard way)
+## SG dependency incident boundary
 
-The SG VPS (2 GB RAM, Vultr) **cannot reliably run a full `npm install`/`npm ci`**:
-the install exits 0 but **silently drops real `.js` files from a deterministic set
-of packages** (observed: luxon, abitype, ccxt, …). Reproduced across npm + pnpm,
-cache-clean, raised ulimit, freed memory, serial `--maxsockets 1`. The filesystem
-reports clean (ext4 rw, space + inodes free, no dmesg errors) and a _manual_
-single-package `npm pack && tar xzf` extracts the same files correctly — so it's
-something about large concurrent extraction on this box.
+The 2026-06-30 outage was caused by concurrent or interrupted package installs
+mutating the same live dependency tree. Packages appeared installed while
+runtime files were missing, and the worker crash-looped. The durable lessons are:
 
-**Investigation (2026-06-30):** no AV/security software, no quarantine, fs clean,
-disk + inodes free. The "many packages broken" count was mostly a FALSE POSITIVE
-of a naive `main`-existsSync check (modern pkgs use `.cjs`/`exports`, not a `.js`
-main). The ONLY genuinely-incomplete packages the worker actually failed on were
-**luxon** (`build/node/luxon.js` absent, `.js.map` present) and **abitype**
-(`dist/cjs/exports/index.js` absent). MOST LIKELY CAUSE: the transient corruption
-came from MY OWN panic — multiple concurrent + SIGHUP-interrupted `npm install`
-runs fighting over the same node_modules (npm is not concurrency-safe). After
-killing all installs, doing ONE tmux-detached install, and surgically repairing
-luxon+abitype, the worker is stable. So this may NOT be a persistent box fault —
-but a clean-reinstall test wasn't run (it would risk the now-working worker).
-Lesson: never run concurrent/interrupted installs; one tmux install, let it finish.
+- never install into live `/opt/arena-ingest/node_modules`;
+- never delete the only working live dependency tree;
+- build changed dependencies on a healthy Node 22 Linux x64 runner;
+- validate resolution and actual imports before cutover; and
+- switch code and dependencies as one complete candidate directory.
 
-Consequences:
-
-- **Do NOT blindly `npm ci` on `/opt/arena-ingest`** — it produces an incomplete
-  node_modules and crash-loops the worker (`Cannot find module …`). `deploy-ingest-sg.sh`
-  will hit this on any lock change until the box issue is fixed.
-- **NEVER `rm -rf node_modules` on the working SG install** — the box can't cleanly
-  rebuild it (this is how the 2026-06-30 outage happened).
-
-If node_modules must be rebuilt, until the box is fixed: install, then for each
-`Cannot find module X` the worker reports, repair that package surgically —
-`cd /tmp && npm pack <pkg>@<ver> && tar xzf *.tgz && cp -a package/. /opt/arena-ingest/node_modules/<pkg>/`
-— and restart, iterating until the worker reaches `ready`. Better: investigate the
-box (disk SMART, FS, npm config/registry mirror, memory) or rebuild node_modules on
-a healthy Linux x64 host and rsync the COMPLETE tree (platform-matched).
-
-## Drift detection
-
-Each worker publishes its commit in the heartbeat (`resolveDeployedSha()` in
-`worker/src/ingest/heartbeat.ts`). The 15-min Vercel cron
-`/api/cron/worker-heartbeat-check` alarms (Telegram) when ≥2 distinct SHAs are live —
-i.e. a fix landed on one node but not the other. This exists because the SG node
-once silently ran 18-day-old code across all geo-blocked sources.
+Do not revive the historical recovery loop of repeated installs or manual
+package extraction. Use the bound CI artifact and transactional workflow.
