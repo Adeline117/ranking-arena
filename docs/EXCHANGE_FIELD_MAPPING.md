@@ -2,7 +2,7 @@
 
 > 基准平台：Binance Copy Trading
 >
-> 最后更新：2026-07-16（DEX 证据刷新）
+> 最后更新：2026-07-24（OKX Wallet Web3 RAW/截图证据纠错）
 >
 > 范围：本文保留 2026-01 的跨平台 UI 调查，但“页面当时未展示”不等于“链上不可重建”。
 > GMX 当前生产契约以 adapter fixture、PnL v2 迁移和
@@ -148,7 +148,7 @@ unit / freshness / raw_refs+sha256 / blocking_reasons / rank_eligible`；RAW 引
 
 ### 核心字段对照
 
-| Binance 字段         | Bybit                | OKX                     | Bitget            | MEXC                        | GMX 当前契约                        |
+| Binance 字段         | Bybit                | OKX CEX（旧调查）       | Bitget            | MEXC                        | GMX 当前契约                        |
 | -------------------- | -------------------- | ----------------------- | ----------------- | --------------------------- | ----------------------------------- |
 | **ROI**              | ROI / 收益率         | ROI / pnlRate           | 收益率 / ROI      | roi / totalRoi              | realized-net PnL / maxCapital proxy |
 | **PnL**              | PnL / Profit / 收益  | pnl / profit / totalPnl | 总收益 / 累计收益 | totalPnl / pnl              | period realized-net PnL             |
@@ -163,6 +163,9 @@ unit / freshness / raw_refs+sha256 / blocking_reasons / rank_eligible`；RAW 引
 | **Avg Holding Time** | Avg Holding (D/days) | **无**                  | 平均持仓时长      | **无**                      | **NULL（当前 adapter）**            |
 | **Rank**             | 排名                 | 排名                    | 排名              | 排名                        | Arena 按 realized-net PnL 排序      |
 | **Nickname**         | 昵称                 | nickname / name         | 昵称              | 昵称                        | Address                             |
+
+上表的 `OKX CEX` 与下文 `OKX Wallet Web3` 是两种不同产品面和方法口径，不得合并字段或
+用同一个 `OKX` 标签推断可比性。
 
 ### 详细字段对照（按交易所）
 
@@ -183,28 +186,38 @@ unit / freshness / raw_refs+sha256 / blocking_reasons / rank_eligible`；RAW 引
 
 **时间范围**: 7D, 30D, 90D
 
-#### OKX (Web3 Copy Trading)
+#### OKX Wallet Web3（Solana）
 
-| Binance 字段 | OKX 对应                              | 备注                        |
-| ------------ | ------------------------------------- | --------------------------- |
-| ROI          | `roi` / `pnlRate`                     | 可能是小数（< 10 则 × 100） |
-| PnL          | `pnl` / `profit` / `totalPnl`         | USD                         |
-| Win Rate     | `winRate`                             | 检查是否 0-1，需标准化      |
-| Max Drawdown | `mdd` / `maxDrawdown`                 | 百分比                      |
-| Copiers      | `followers` / `copierCount`           | 整数                        |
-| Nickname     | `nickname` / `name` / `displayName`   |                             |
-| Avatar       | `avatar` / `avatarUrl`                |                             |
-| Trader ID    | `address` / `traderId` / `uid` / `id` | Web3 用钱包地址             |
+榜单 RAW 的精确字段是 `data.rankingInfos[].roi/pnl/winRate`；profile summary 对应
+`totalPnlRoi/totalPnl/totalWinRate`。ROI 与 Win Rate 已经是百分数，禁止再按数值大小乘
+100。截图中的 `$`、USD/SOL toggle 与已验证 parser 口径把 PnL、Volume、Avg Buy 作为 USD
+display values；生产 source 配置和抽查的最新 30D entry 却标成 `USDC`。必须先审计全部
+受影响行再纠正标签，禁止换算原始数值，也不能因为标签纠正而获得排名资格。
 
-**时间范围**: 7D, 30D, 90D
+Profile summary RAW 还原生提供 buy/sell transaction counts、buy/sell volume、avg cost、
+native SOL balance、unrealized PnL、top tokens、PnL calendar 与分布桶。其中
+`nativeTokenBalanceUsd` 是原生 SOL 余额，不是 AUM；钱包 transaction counts 也不等同于
+CEX 平仓笔数。当前 typed parser 保存 top-token 总 PnL，但完整 `topTokens[]` 仍只在 RAW；
+“RAW 已捕获”和“字段已进入 typed serving”必须分开统计。
 
-**缺失字段**:
+MDD、Sharpe、copier count 和 AUM 未在当前榜单/profile RAW 中提供，必须保持 NULL。在没有
+新增 source field 的当前证据下，MDD/Sharpe 若由 Arena 补齐，只能作为独立标记的
+`arena_rebuilt` 指标；钱包净值不得改名为 AUM。
 
-- Total Trades
-- Sharpe Ratio
-- AUM
-- Copiers' PnL
-- Avg Holding Time
+上游原生窗口是 1D/3D/7D/1M/3M；Arena 只把 7D/1M/3M 显式映射为 7/30/90。
+截图（`交易所细节.docx` image79–80）还显示 Active positions、History、Portfolio 等页面，
+但当前 adapter 只采集 board 与 profile summary，尚未实现这些重页面的 endpoint、fixture、
+parser 或分页。截图证明上游 surface 存在，不等于当前采集已覆盖或历史完整。
+
+2026-07-24 read-only live probe 已观测到相邻页 `totalCount` 漂移；该接口是实时 offset 分页且
+没有 snapshot cursor，因此多页合并的 `population_state=unknown`。另一方面，`periodType=30D`
+只证明请求了上游标签，没有可验证的绝对起止时间，所以 `window_state=unknown`；冻结人口并不
+会自动解决窗口证据。
+
+当前结果只能作为 partial/shadow 展示，不得产生公共 Arena Score/rank。要覆盖大部分公开钱包，
+必须建立可复现、有边界、可闭合或可独立对账的人口 census：可以来自上游 snapshot/version/
+cursor，也可以来自 Arena 链上事件 census 加独立对账。Partial 抓取和逐地址 profile/链上补证可
+同步推进，但抓到首屏 20 行绝不能写成“覆盖该来源”。
 
 #### Bitget
 
@@ -278,38 +291,38 @@ position history/orders/transfers。Copiers/Copiers' PnL 对无跟单关系的 D
 
 ### 1. ROI vs PnL 定义差异
 
-| 交易所  | ROI 定义                     | PnL 定义                      | 是否可直接对比    |
-| ------- | ---------------------------- | ----------------------------- | ----------------- |
-| Binance | 百分比收益率（基于初始资金） | 绝对盈亏金额（USD）           | ✅ 可对比         |
-| Bybit   | 同上                         | 同上                          | ✅ 可对比         |
-| OKX     | ⚠️ 可能是小数（0.xx）需 ×100 | 同上                          | ⚠️ 需标准化       |
-| Bitget  | 同上                         | 同上                          | ✅ 可对比         |
-| MEXC    | 同上                         | 同上                          | ✅ 可对比         |
-| GMX     | realized-net / maxCapital    | 扣费用/价格影响的已实现净 PnL | ⚠️ 仅方法感知对比 |
+| 交易所/产品面   | ROI 定义                                      | PnL 定义                                             | 是否可直接对比    |
+| --------------- | --------------------------------------------- | ---------------------------------------------------- | ----------------- |
+| Binance         | 百分比收益率（基于初始资金）                  | 绝对盈亏金额（USD）                                  | ✅ 可对比         |
+| Bybit           | 同上                                          | 同上                                                 | ✅ 可对比         |
+| OKX Wallet Web3 | 原生百分数；成本/资本基数须保留 source 方法学 | source-reported window PnL；组成口径随 source 方法学 | ⚠️ 仅方法感知对比 |
+| Bitget          | 百分比收益率（上游定义）                      | 绝对盈亏金额                                         | ✅ 可对比         |
+| MEXC            | 百分比收益率（上游定义）                      | 绝对盈亏金额                                         | ✅ 可对比         |
+| GMX             | realized-net / maxCapital                     | 扣费用/价格影响的已实现净 PnL                        | ⚠️ 仅方法感知对比 |
 
 GMX 与 Binance 的 ROI 资本基数、PnL 是否含未实现部分都不同；即使单位相同也不能写成“同上”。
 
 ### 2. Win Rate 定义差异
 
-| 交易所  | 格式                 | 定义                    | 是否可直接对比  |
-| ------- | -------------------- | ----------------------- | --------------- |
-| Binance | 0-100 (%)            | 盈利交易数 / 总交易数   | ✅ 基准         |
-| Bybit   | 0-100 (%)            | 同上                    | ✅ 可对比       |
-| OKX     | ⚠️ 可能 0-1 或 0-100 | 同上                    | ⚠️ 需检查       |
-| Bitget  | 0-100 (%)            | 同上                    | ✅ 可对比       |
-| MEXC    | 0-100 (%)            | 同上                    | ✅ 可对比       |
-| GMX     | 0-100 (%)            | 盈利闭合仓位 / 胜负仓位 | ⚠️ 方法感知对比 |
+| 交易所/产品面   | 格式      | 定义                         | 是否可直接对比    |
+| --------------- | --------- | ---------------------------- | ----------------- |
+| Binance         | 0-100 (%) | 盈利交易数 / 总交易数        | ✅ 基准           |
+| Bybit           | 0-100 (%) | 同上                         | ✅ 可对比         |
+| OKX Wallet Web3 | 0-100 (%) | 上游钱包胜率；分母口径须保留 | ⚠️ 仅方法感知对比 |
+| Bitget          | 0-100 (%) | 盈利交易数 / 总交易数        | ✅ 可对比         |
+| MEXC            | 0-100 (%) | 盈利交易数 / 总交易数        | ✅ 可对比         |
+| GMX             | 0-100 (%) | 盈利闭合仓位 / 胜负仓位      | ⚠️ 方法感知对比   |
 
 ### 3. 时间窗口差异
 
-| 交易所  | 支持的时间段                       | 默认展示          |
-| ------- | ---------------------------------- | ----------------- |
-| Binance | 7D, 30D, 90D, 1Y, All              | 30D               |
-| Bybit   | 7D, 30D, 90D                       | 30D               |
-| OKX     | 7D, 30D, 90D                       | 30D               |
-| Bitget  | 7D, 30D, 90D                       | 30D               |
-| MEXC    | 7D, 30D, 90D                       | 30D               |
-| GMX     | 7D, 30D, 90D（completed UTC days） | —（Arena 抓三窗） |
+| 交易所/产品面   | 支持的时间段                       | Arena 映射/默认    |
+| --------------- | ---------------------------------- | ------------------ |
+| Binance         | 7D, 30D, 90D, 1Y, All              | 30D                |
+| Bybit           | 7D, 30D, 90D                       | 30D                |
+| OKX Wallet Web3 | 1D, 3D, 7D, 1M, 3M                 | 7D/1M/3M → 7/30/90 |
+| Bitget          | 7D, 30D, 90D                       | 30D                |
+| MEXC            | 7D, 30D, 90D                       | 30D                |
+| GMX             | 7D, 30D, 90D（completed UTC days） | —（Arena 抓三窗）  |
 
 **⚠️ GMX 窗口按已完成 UTC 日对齐，不等同于任意时刻向前滚动 7/30/90×24 小时。**
 
@@ -326,15 +339,15 @@ mark-to-market/unrealized 另存，不得 `COALESCE` 进 headline。**
 
 ### 5. Copiers 定义差异
 
-| 交易所  | 字段名            | 含义               | 差异              |
-| ------- | ----------------- | ------------------ | ----------------- |
-| Binance | Current Copiers   | 当前正在跟单的人数 | 动态变化          |
-| Binance | Total Copiers     | 历史累计跟单人数   | 只增不减          |
-| Bybit   | Followers/Copiers | 混用，需确认       | ⚠️ 可能是 Current |
-| Bitget  | 累计跟单人数      | Total Copiers      | ✅ 明确           |
-| OKX     | copierCount       | 当前               | ⚠️ 可能是 Current |
-| MEXC    | followerCount     | 当前               | ⚠️ 可能是 Current |
-| GMX     | **无**            | 无跟单功能         | ❌                |
+| 交易所          | 字段名               | 含义                  | 差异              |
+| --------------- | -------------------- | --------------------- | ----------------- |
+| Binance         | Current Copiers      | 当前正在跟单的人数    | 动态变化          |
+| Binance         | Total Copiers        | 历史累计跟单人数      | 只增不减          |
+| Bybit           | Followers/Copiers    | 混用，需确认          | ⚠️ 可能是 Current |
+| Bitget          | 累计跟单人数         | Total Copiers         | ✅ 明确           |
+| OKX Wallet Web3 | **未 source-report** | Copy 是操作，不是人数 | unknown           |
+| MEXC            | followerCount        | 当前                  | ⚠️ 可能是 Current |
+| GMX             | **无**               | 无跟单功能            | ❌                |
 
 ---
 
@@ -348,18 +361,18 @@ mark-to-market/unrealized 另存，不得 `COALESCE` 进 headline。**
 
 ### 字段可用性与缺失影响
 
-| 字段             | GMX   | OKX | MEXC                                | Bitget | Bybit | 缺失影响 |
-| ---------------- | ----- | --- | ----------------------------------- | ------ | ----- | -------- |
-| ROI              | ✅    | ✅  | ✅                                  | ✅     | ✅    | -        |
-| PnL              | ✅    | ✅  | ✅                                  | ✅     | ✅    | -        |
-| Win Rate         | ✅    | ✅  | ✅                                  | ✅     | ✅    | **高**   |
-| Max Drawdown     | ❌    | ✅  | ✅                                  | ✅     | ✅    | **高**   |
-| Copiers          | ❌    | ✅  | ✅                                  | ✅     | ✅    | 可接受   |
-| Total Trades     | ✅    | ❌  | ✅                                  | ❌     | ✅    | 可接受   |
-| Sharpe Ratio     | ❌    | ❌  | ❌（更正 2026-07-07，API 无此字段） | ❌     | ✅    | 可接受   |
-| AUM              | proxy | ❌  | ❌                                  | ❌     | ✅    | 可接受   |
-| Avg Holding Time | ❌    | ❌  | ❌                                  | ✅     | ✅    | 可接受   |
-| 90D 时间段       | ✅    | ✅  | ✅                                  | ✅     | ✅    | **高**   |
+| 字段             | GMX   | OKX Wallet Web3                 | MEXC                                | Bitget | Bybit | 缺失影响 |
+| ---------------- | ----- | ------------------------------- | ----------------------------------- | ------ | ----- | -------- |
+| ROI              | ✅    | ✅                              | ✅                                  | ✅     | ✅    | -        |
+| PnL              | ✅    | ✅                              | ✅                                  | ✅     | ✅    | -        |
+| Win Rate         | ✅    | ✅                              | ✅                                  | ✅     | ✅    | **高**   |
+| Max Drawdown     | ❌    | ❌ source NULL                  | ✅                                  | ✅     | ✅    | **高**   |
+| Copiers          | ❌    | ❌ source NULL                  | ✅                                  | ✅     | ✅    | 可接受   |
+| Total Trades     | ✅    | ⚠️ wallet tx counts，方法不同   | ✅                                  | ❌     | ✅    | 可接受   |
+| Sharpe Ratio     | ❌    | ❌ source NULL                  | ❌（更正 2026-07-07，API 无此字段） | ❌     | ✅    | 可接受   |
+| AUM              | proxy | ❌；native SOL balance 不是 AUM | ❌                                  | ❌     | ✅    | 可接受   |
+| Avg Holding Time | ❌    | ❌ source NULL                  | ❌                                  | ✅     | ✅    | 可接受   |
+| 90D 时间段       | ✅    | ✅ 原生 3M                      | ✅                                  | ✅     | ✅    | **高**   |
 
 ### GMX 特别说明
 
@@ -411,17 +424,17 @@ mark-to-market/unrealized 另存，不得 `COALESCE` 进 headline。**
 
 ### OKX Web3 Copy Trading
 
-| 字段           | 页面可见 | 需要登录 | 需要特殊操作 | 抓取难度 |
-| -------------- | -------- | -------- | ------------ | -------- |
-| Wallet Address | ✅ 是    | ❌ 否    | ❌           | 简单     |
-| Nickname       | ✅ 是    | ❌ 否    | ❌           | 简单     |
-| ROI            | ✅ 是    | ❌ 否    | Tab 切换     | 简单     |
-| PnL            | ✅ 是    | ❌ 否    | Tab 切换     | 简单     |
-| Win Rate       | ✅ 是    | ❌ 否    | ❌           | 简单     |
-| Max Drawdown   | ✅ 是    | ❌ 否    | ❌           | 简单     |
-| Copiers        | ✅ 是    | ❌ 否    | ❌           | 简单     |
-| Sharpe Ratio   | ❌ 否    | -        | -            | 无法抓取 |
-| AUM            | ❌ 否    | -        | -            | 无法抓取 |
+| 字段                                      | 上游截图/RAW | 当前 adapter                                   | 备注                            |
+| ----------------------------------------- | ------------ | ---------------------------------------------- | ------------------------------- |
+| Wallet Address / alias / avatar           | ✅           | ✅ board typed；address 是 profile request key | profile response 不回传地址     |
+| ROI / PnL / Win Rate                      | ✅           | ✅ board/profile typed                         | ROI/Win Rate 已是百分数         |
+| PnL trend                                 | ✅           | ⚠️ `rankingInfos[].pnlHistory` board RAW       | 尚未进入 typed series           |
+| PnL calendar / distribution               | ✅           | ✅ profile summary typed                       | 窗口和来源方法必须保留          |
+| Buy/Sell transactions / volume / avg cost | ✅           | ✅ profile typed                               | 钱包交易口径，不等同 CEX trades |
+| Top tokens / native SOL balance           | ✅           | ⚠️ tokens RAW/总值 typed；余额 typed           | native balance 不是 AUM         |
+| Active positions / History / Portfolio    | ✅           | ❌ endpoint/parser/paging 未做                 | 目前只能标为未采集              |
+| Max Drawdown / Sharpe Ratio               | ❌           | ❌ source NULL                                 | 可重建前必须有完整可信序列      |
+| Copier count / AUM                        | ❌           | ❌ source NULL                                 | Copy 按钮不等于 copier count    |
 
 ### Bitget Copy Trading
 
@@ -562,26 +575,25 @@ mixed-basis 风险值填回来。
 ### ROI 标准化
 
 ```javascript
-function normalizeROI(value, source) {
-  // OKX 可能返回小数形式
-  if (source === 'okx' && Math.abs(value) < 10) {
-    return value * 100
-  }
-  return value
+function normalizeROI(value, fieldContract) {
+  // 只执行字段合同声明的确定性换算；禁止按数值大小猜单位。
+  return fieldContract.unit === 'ratio' ? value * 100 : value
 }
 ```
+
+OKX Wallet Web3 的 `roi` / `totalPnlRoi` 合同是原生百分数；例如真实 5% 必须保持 5，不能
+因为绝对值小于 10 被放大为 500%。
 
 ### Win Rate 标准化
 
 ```javascript
 function normalizeWinRate(value, source) {
-  // 确保在 0-100 范围
-  if (value > 0 && value <= 1) {
-    return value * 100
-  }
-  return value
+  return source.fieldContract.winRateUnit === 'ratio' ? value * 100 : value
 }
 ```
+
+`0-1` 与 `0-100` 只能由 source/field contract 区分，不能由运行时值猜测；0.5% 与 50% 都是
+可能的真实值。
 
 ### Copiers 统一处理
 
@@ -600,7 +612,12 @@ function normalizeWinRate(value, source) {
 2. **Bybit** - 非常完整（含 AUM、Sharpe）
 3. **Bitget** - 较完整（含平均持仓时长）
 4. **MEXC** - 中等（**无 Sharpe**，2026-07-07 更正：API payload 无此字段）
-5. **OKX** - 中等（缺少 AUM、Sharpe、交易次数）
+5. **OKX CEX** - 中等（旧 UI 调查；必须与 Wallet Web3 分开维护）
+
+**OKX Wallet Web3 不进入上述 CEX 富度顺序**：board/profile summary 有 ROI、PnL、胜率、
+交易次数/量、平均买入、top tokens、原生 SOL 余额、未实现 PnL 与 PnL 日历；当前 adapter
+尚未采集截图可见的 Active positions、History、Portfolio。其 source RAW 没有 MDD、Sharpe、
+copier count、AUM；这不等于链上永远不可重建，但重建前必须保持 NULL/partial 且不得排名。
 
 - **GMX 不进入上述 CEX UI 富度顺序**：DEX 方法不同；有 7/30/90、realized-net PnL、ROI、
   win rate、volume、maxCapital proxy 与 current positions；无同口径 MDD/Sharpe，Copiers 为 N/A
