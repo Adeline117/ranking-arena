@@ -164,7 +164,12 @@ jobs:
               printf '%s\n' "$digest"
               return 0
             fi
-            if grep -Eqi 'manifest unknown|name unknown|404 Not Found|failed to resolve source metadata.*: not found' <<<"$output"; then
+            # GHCR/buildx reports an absent tag as exactly
+            # `ERROR: <requested-ref>: not found`. Match the requested ref
+            # literally so an auth/network error cannot be mistaken for a
+            # safely creatable missing alias.
+            if grep -Fqx "ERROR: $ref: not found" <<<"$output" \
+              || grep -Eqi 'manifest unknown|name unknown|404 Not Found|failed to resolve source metadata.*: not found' <<<"$output"; then
               return 2
             fi
             echo "::error::could not safely inspect $ref" >&2

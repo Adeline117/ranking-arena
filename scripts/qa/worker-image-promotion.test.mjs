@@ -46,7 +46,11 @@ if [[ "$1 $2 $3" == "buildx imagetools inspect" ]]; then
     fi
   done < "$REGISTRY_STATE"
   if [[ -z "$found" ]]; then
-    echo "ERROR: manifest unknown" >&2
+    if [[ "\${INSPECT_FAILURE:-missing}" == "missing" ]]; then
+      echo "ERROR: $ref: not found" >&2
+    else
+      echo "ERROR: denied: token lacks package permission" >&2
+    fi
     exit 1
   fi
   printf 'Name: %s\\nMediaType: application/vnd.oci.image.index.v1+json\\nDigest: %s\\n' "$ref" "$found"
@@ -77,7 +81,7 @@ echo "unexpected docker invocation: $*" >&2
 exit 64
 `
 
-function runPromotion(initialTags = []) {
+function runPromotion(initialTags = [], inspectFailure = 'missing') {
   const root = mkdtempSync(join(tmpdir(), 'worker-image-promotion-'))
   const bin = join(root, 'bin')
   const state = join(root, 'registry-state')
@@ -108,6 +112,7 @@ function runPromotion(initialTags = []) {
         REGISTRY_STATE: state,
         GITHUB_OUTPUT: output,
         GITHUB_STEP_SUMMARY: summary,
+        INSPECT_FAILURE: inspectFailure,
       },
     })
 
@@ -162,4 +167,14 @@ test('missing formal aliases are created from and verified against the smoked di
     audit_sha: auditSha,
     quarantine_ref: `${image}:quarantine-test-run`,
   })
+})
+
+test('an unrelated registry inspection failure never creates a formal alias', () => {
+  const { result, dockerLog, output, releaseRecord } = runPromotion([], 'denied')
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stdout + result.stderr, /could not safely inspect/)
+  assert.doesNotMatch(dockerLog, /imagetools create/)
+  assert.equal(output, '')
+  assert.equal(releaseRecord, undefined)
 })
