@@ -19,37 +19,60 @@ import { sendAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { syncPipelineLog } from '@/lib/analytics/dual-write'
 import { pingHealthcheck } from '@/lib/utils/healthcheck'
 
-/** Wrap a DB write with a 15s timeout to prevent plog from hanging forever.
- *  Root cause: Supabase connection pool exhaustion causes await to hang indefinitely,
- *  leaving pipeline_logs entries as 'running' for 30+ minutes until cleanup-stuck-logs
- *  marks them as timeout. This affected compute-leaderboard, enrich-*, batch-enrich, etc. */
-/** Wrap a DB write (or any thenable) with a 15s timeout to prevent plog from hanging forever.
- *  Accepts Supabase query builders (PromiseLike) as well as native Promises. */
-async function withDbTimeout<T>(thenable: PromiseLike<T>, label: string): Promise<T | null> {
+/**
+ * Wrap a DB write (or any thenable) with a 15s timeout to prevent plog from
+ * hanging forever. Supabase resolves PostgREST failures as `{ error }` unless
+ * `throwOnError()` is used, so a resolved error must be treated as a failed
+ * write too.
+ */
+async function withDbTimeout(thenable: PromiseLike<unknown>, label: string): Promise<boolean> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
   try {
-    return await Promise.race([
+    const result = await Promise.race([
       Promise.resolve(thenable),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`plog DB write timed out after 15s (${label})`)), 15_000)
-      ),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`plog DB write timed out after 15s (${label})`)),
+          15_000
+        )
+      }),
     ])
+
+    if (result && typeof result === 'object' && 'error' in result) {
+      const resolvedError = (result as { error?: unknown }).error
+      if (resolvedError) {
+        const message =
+          resolvedError instanceof Error
+            ? resolvedError.message
+            : typeof resolvedError === 'object' &&
+                resolvedError !== null &&
+                'message' in resolvedError
+              ? String((resolvedError as { message: unknown }).message)
+              : String(resolvedError)
+        throw new Error(`PostgREST write failed: ${message}`)
+      }
+    }
+
+    return true
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     logger.warn(`[PipelineLogger] ${label}: ${msg}`)
-    // Fallback: send alert on DB write timeout so we don't lose visibility
+    // Alert on both transport timeouts and resolved PostgREST write errors.
     fireAndForget(
       sendRateLimitedAlert(
         {
-          title: `PipelineLogger DB timeout: ${label}`,
-          message: `DB write timed out after 15s. Error: ${msg}`,
+          title: `PipelineLogger DB write failed: ${label}`,
+          message: `Pipeline log finalization failed. Error: ${msg}`,
           level: 'warning',
         },
-        'plog-db-timeout',
+        'plog-db-write-failure',
         5 * 60 * 1000
       ),
-      'plog-timeout-alert'
+      'plog-db-write-failure-alert'
     )
-    return null
+    return false
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
   }
 }
 
@@ -256,7 +279,7 @@ export class PipelineLogger {
       ) {
         const durationMs = Date.now() - startedAt
         const endedAt = new Date().toISOString()
-        await withDbTimeout(
+        const partialUpdated = await withDbTimeout(
           client
             .from('pipeline_logs')
             .update({
@@ -278,6 +301,45 @@ export class PipelineLogger {
             .then((r) => r),
           `${jobName}:partial`
         )
+
+        // Compatibility fallback for deployments where application code reaches
+        // production before the partial_success constraint migration. `error` is
+        // accepted by the legacy constraint, so do not leave the row as running.
+        if (!partialUpdated) {
+          const partialMessage =
+            failedItems.length > 0
+              ? `${failedItems.length} items failed: ${failedItems.slice(0, 20).join(', ')}`
+              : 'Job completed with partial success'
+          const fallbackUpdated = await withDbTimeout(
+            client
+              .from('pipeline_logs')
+              .update({
+                status: 'error',
+                ended_at: endedAt,
+                records_processed: recordsProcessed,
+                error_message: `partial_success finalization fallback: ${partialMessage}`.slice(
+                  0,
+                  2000
+                ),
+                metadata: {
+                  ...metadata,
+                  ...meta,
+                  duration_ms: durationMs,
+                  failed_items: failedItems.slice(0, 50),
+                  intended_status: 'partial_success',
+                  finalization_fallback: true,
+                },
+              })
+              .eq('id', logId)
+              .then((r) => r),
+            `${jobName}:partial-fallback-error`
+          )
+          if (!fallbackUpdated) {
+            logger.error(
+              `[PipelineLogger] ${jobName}: partial_success and error fallback both failed; log ${logId} may remain running`
+            )
+          }
+        }
         // Ping healthchecks.io success (partial is still considered alive)
         if (hcSlug)
           pingHealthcheck(hcSlug, 'success').catch((err) => {
