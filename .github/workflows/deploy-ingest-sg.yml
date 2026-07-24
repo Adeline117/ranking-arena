@@ -1,165 +1,390 @@
 name: Deploy Ingest Worker (SG)
 
-# Builds the ingest worker's dependency tree on ubuntu-latest (Linux x64 — the SAME
-# arch as the Singapore VPS) and ships the complete tree to the SG box, so we NEVER
-# run `npm install` on SG. Root cause (2026-06-30): SG's npm is not concurrency-safe
-# and silently drops .js files mid-install → worker crash-loops on "Cannot find
-# module" → SG ingestion DOWN. A prebuilt, platform-matched tree copied over rsync
-# does not have that failure mode. See docs/INGEST_WORKER_TOPOLOGY.md + the hardened
-# worker/deploy-ingest-sg.sh.
-#
-# ─────────────────────────────────────────────────────────────────────────────
-# ACTIVATION (one-time, by a maintainer):
-#   1. Add repo secrets:
-#        INGEST_SG_SSH_KEY  — a private key whose pubkey is in SG's authorized_keys
-#        INGEST_SG_HOST     — e.g. root@45.76.152.169
-#   2. Run this workflow from the Actions tab (workflow_dispatch). The `build-deps`
-#      job works WITHOUT secrets (proves the artifact builds); `deploy-sg` skips
-#      itself with a warning until the secrets exist.
-#   3. Once a manual run is green, uncomment the `push:` trigger below to
-#      auto-deploy when deps change. Keep it the SINGLE channel for SG deploys
-#      (the `concurrency` group serializes runs — never two deploys at once).
-# ─────────────────────────────────────────────────────────────────────────────
+# SG receives a Linux-x64 dependency tree built on Node 22. Every run is an
+# explicit deployment of one full commit that must still be origin/main before
+# and after the remote cutover. The artifact manifest is verified independently
+# in the deploy job; it is never sourced as shell code.
 
 on:
   workflow_dispatch:
     inputs:
+      target_sha:
+        description: 'Exact 40-character lowercase main commit to deploy'
+        required: true
+        type: string
       mode:
-        description: 'full (rebuild + ship deps) or code-only (lib/worker only)'
+        description: 'full (rebuild + ship deps) or code-only (reuse attested SG deps)'
+        required: true
         type: choice
         options: [full, code-only]
         default: full
-  # Enable after the first green manual run:
-  # push:
-  #   branches: [main]
-  #   paths: ['package-lock.json']        # dep changes → rebuild + ship the tree
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-ingest-sg
-  cancel-in-progress: false               # never interrupt an in-flight SG deploy
+  cancel-in-progress: false
 
 jobs:
   build-deps:
-    # Skip the (expensive) dep build for code-only deploys.
-    if: ${{ github.event.inputs.mode != 'code-only' }}
-    runs-on: ubuntu-latest                # Linux x64 — matches the SG VPS
+    # A code-only deployment reuses the dependency tree already attested by the
+    # remote deploy script, so this intentionally reports "skipped" in that mode.
+    if: ${{ inputs.mode != 'code-only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TARGET_SHA: ${{ inputs.target_sha }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Validate the requested deployment identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::target_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 1
+          }
+
+      - name: Check out the exact target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_sha }}
+          fetch-depth: 0
+
+      - name: Guard target is the current origin/main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
+          HEAD_SHA="$(git rev-parse HEAD)"
+          MAIN_SHA="$(git rev-parse refs/remotes/origin/main)"
+          [ "$HEAD_SHA" = "$TARGET_SHA" ] || {
+            echo "::error::checkout mismatch: expected exact target_sha"
+            exit 1
+          }
+          [ "$MAIN_SHA" = "$TARGET_SHA" ] || {
+            echo "::error::target_sha is no longer current origin/main; dispatch the new main SHA"
+            exit 1
+          }
+
       - uses: actions/setup-node@v4
         with:
-          # MUST match the SG box's Node MAJOR (v22.22.0) — native N-API addons
-          # baked here carry a NODE_MODULE_VERSION; a mismatch (was '20') makes the
-          # shipped node_modules fail to load on SG and the worker won't boot
-          # (2026-07-07: artifact swap → worker dead → auto-rollback). Keep in lockstep
-          # with SG's node (ssh root@SG 'node -v').
+          # Must match the SG runtime. The deploy job also checks the live host.
           node-version: '22'
           cache: 'npm'
-      # Full install (NOT --omit=dev): the worker runs via tsx and imports
-      # devDeps (tsx/dotenv/playwright) at runtime.
+
       - name: npm ci (deterministic, full)
         run: npm ci
-      - name: Install Playwright Chromium
-        run: npx playwright install chromium
-      # Verify the tree actually LOADS before we ship it — catches an incomplete
-      # install (the .js-drop hazard) here in CI instead of as a crash-loop on SG.
-      # Covers the previously-dropped packages (luxon/abitype/bullmq/viem/esbuild)
-      # + the worker's runtime-critical deps (tsx/dotenv/playwright).
-      - name: Verify deps RESOLVE + LOAD (catch ABI/incomplete-install in CI, not on SG)
+
+      - name: Verify dependency tree resolves and loads
+        shell: bash
         run: |
-          set -e
-          # 1) require.resolve = files present (cheap incomplete-install gate — the
-          #    .js-drop hazard). Does NOT load native bindings.
-          for m in bullmq ioredis viem abitype luxon @supabase/supabase-js pg ccxt \
-                   playwright tsx dotenv esbuild; do
-            node -e "require.resolve('$m')" || { echo "::error::dep tree incomplete — '$m' missing/unresolved; refusing to ship a broken artifact"; exit 1; }
+          set -euo pipefail
+          for module in bullmq ioredis viem abitype luxon @supabase/supabase-js pg ccxt \
+                        playwright tsx dotenv esbuild; do
+            node -e "require.resolve('$module')" || {
+              echo "::error::dependency tree is incomplete: $module is unresolved"
+              exit 1
+            }
           done
-          # 2) Actually IMPORT each module under tsx (handles ESM+CJS) — this
-          #    instantiates native N-API addons, so a NODE_MODULE_VERSION / ABI
-          #    mismatch vs SG's Node throws HERE in CI instead of dead-worker +
-          #    auto-rollback on SG (2026-07-07 lesson). Plain import() has no
-          #    connection side-effects (Redis/pg connect only on `new`), so it
-          #    can't hang. Node major is pinned to SG's above.
-          # async IIFE — tsx --eval transforms to CJS which rejects top-level await.
           npx tsx --eval "
             (async () => {
-              const mods = ['bullmq','ioredis','pg','ccxt','viem','abitype','luxon','@supabase/supabase-js','dotenv','esbuild','playwright'];
-              for (const m of mods) {
-                try { await import(m); }
-                catch (e) { console.error('::error::LOAD FAILED for '+m+' (ABI/native mismatch?): '+String(e && (e.stack||e.message||e))); process.exit(1); }
+              const modules = ['bullmq','ioredis','pg','ccxt','viem','abitype','luxon','@supabase/supabase-js','dotenv','esbuild','playwright'];
+              for (const module of modules) {
+                try { await import(module); }
+                catch (error) {
+                  console.error('::error::dependency failed to load: '+module+': '+String(error && (error.stack||error.message||error)));
+                  process.exit(1);
+                }
               }
-              console.log('✓ all worker deps import + native bindings load (ABI matches SG Node)');
             })();
           "
-      - name: Package the platform-matched node_modules
-        run: tar -czf arena-ingest-deps.tgz node_modules
-      - uses: actions/upload-artifact@v4
+
+      - name: Package dependencies and write the bound manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKER_RELEASE_ID="$(node scripts/ci/worker-release-id.mjs "$TARGET_SHA")"
+          [[ "$WORKER_RELEASE_ID" =~ ^[0-9a-f]{64}$ ]] || {
+            echo "::error::worker release helper returned a malformed ID"
+            exit 1
+          }
+
+          DEP_INPUTS_SHA256="$({ sha256sum .npmrc package.json package-lock.json; } | sha256sum | awk '{print $1}')"
+          NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
+          ARCH="$(node -p 'process.arch')"
+          [ "$NODE_MAJOR" = '22' ] && [ "$ARCH" = 'x64' ] || {
+            echo "::error::artifact must be built with Node 22 on Linux x64"
+            exit 1
+          }
+
+          tar -czf arena-ingest-deps.tgz node_modules
+          tar -tzf arena-ingest-deps.tgz >/dev/null
+          TARBALL_SHA256="$(sha256sum arena-ingest-deps.tgz | awk '{print $1}')"
+
+          # Values are constrained hashes/digits/architecture identifiers. The
+          # consumer still parses this as data and never shell-sources it.
+          printf '%s\n' \
+            "TARGET_SHA=$TARGET_SHA" \
+            "WORKER_RELEASE_ID=$WORKER_RELEASE_ID" \
+            "DEP_INPUTS_SHA256=$DEP_INPUTS_SHA256" \
+            "NODE_MAJOR=$NODE_MAJOR" \
+            "ARCH=$ARCH" \
+            "TARBALL_SHA256=$TARBALL_SHA256" \
+            > arena-ingest-deps.manifest
+
+      - name: Upload dependency artifact and manifest
+        uses: actions/upload-artifact@v4
         with:
-          name: arena-ingest-deps
-          path: arena-ingest-deps.tgz
+          name: arena-ingest-deps-${{ inputs.target_sha }}
+          path: |
+            arena-ingest-deps.tgz
+            arena-ingest-deps.manifest
+          if-no-files-found: error
           retention-days: 3
 
   deploy-sg:
     needs: [build-deps]
-    if: ${{ always() && !cancelled() }}   # also runs for code-only (build-deps skipped)
+    # A skipped build is valid only for code-only. Full mode must prove that the
+    # build job succeeded before this job can reach any remote mutation.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TARGET_SHA: ${{ inputs.target_sha }}
+      DEPLOY_MODE: ${{ inputs.mode }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Guard — require SG secrets (skip cleanly if absent)
-        id: guard
+      - name: Validate dispatch and dependency-build outcome
+        env:
+          BUILD_DEPS_RESULT: ${{ needs.build-deps.result }}
+        shell: bash
         run: |
-          if [ -z "${{ secrets.INGEST_SG_SSH_KEY }}" ] || [ -z "${{ secrets.INGEST_SG_HOST }}" ]; then
-            echo "::warning::INGEST_SG_SSH_KEY/INGEST_SG_HOST not set — skipping SG deploy (build artifact is available for manual use)."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Download deps artifact
-        if: ${{ steps.guard.outputs.skip != 'true' && github.event.inputs.mode != 'code-only' }}
+          set -euo pipefail
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::target_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 1
+          }
+          case "$DEPLOY_MODE:$BUILD_DEPS_RESULT" in
+            full:success|code-only:skipped) ;;
+            *)
+              echo "::error::invalid build-deps outcome for mode ($DEPLOY_MODE:$BUILD_DEPS_RESULT)"
+              exit 1
+              ;;
+          esac
+
+      - name: Check out the exact target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_sha }}
+          fetch-depth: 0
+
+      - name: Guard target is current origin/main at deploy-job start
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
+          HEAD_SHA="$(git rev-parse HEAD)"
+          MAIN_SHA="$(git rev-parse refs/remotes/origin/main)"
+          [ "$HEAD_SHA" = "$TARGET_SHA" ] || {
+            echo "::error::checkout mismatch: expected exact target_sha"
+            exit 1
+          }
+          [ "$MAIN_SHA" = "$TARGET_SHA" ] || {
+            echo "::error::target_sha is no longer current origin/main"
+            exit 1
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Require all SG SSH trust inputs
+        env:
+          INGEST_SG_SSH_KEY: ${{ secrets.INGEST_SG_SSH_KEY }}
+          INGEST_SG_HOST: ${{ secrets.INGEST_SG_HOST }}
+          INGEST_SG_KNOWN_HOSTS: ${{ secrets.INGEST_SG_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "$INGEST_SG_SSH_KEY" ] || { echo "::error::INGEST_SG_SSH_KEY is required"; exit 1; }
+          [ -n "$INGEST_SG_HOST" ] || { echo "::error::INGEST_SG_HOST is required"; exit 1; }
+          [ -n "$INGEST_SG_KNOWN_HOSTS" ] || { echo "::error::INGEST_SG_KNOWN_HOSTS is required"; exit 1; }
+          [[ "$INGEST_SG_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+            echo "::error::INGEST_SG_HOST must be a fixed user@hostname value"
+            exit 1
+          }
+
+      - name: Download the exact dependency artifact
+        if: ${{ inputs.mode == 'full' }}
         uses: actions/download-artifact@v4
         with:
-          name: arena-ingest-deps
-      - name: Setup SSH
-        if: ${{ steps.guard.outputs.skip != 'true' }}
+          name: arena-ingest-deps-${{ inputs.target_sha }}
+
+      - name: Recompute and verify the artifact manifest independently
+        if: ${{ inputs.mode == 'full' }}
+        id: artifact_attestation
+        shell: bash
         run: |
+          set -euo pipefail
+          test -f arena-ingest-deps.tgz
+          test -f arena-ingest-deps.manifest
+          tar -tzf arena-ingest-deps.tgz >/dev/null
+
+          export EXPECTED_TARGET_SHA="$TARGET_SHA"
+          export EXPECTED_WORKER_RELEASE_ID="$(node scripts/ci/worker-release-id.mjs "$TARGET_SHA")"
+          export EXPECTED_DEP_INPUTS_SHA256="$({ sha256sum .npmrc package.json package-lock.json; } | sha256sum | awk '{print $1}')"
+          export EXPECTED_NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
+          export EXPECTED_ARCH="$(node -p 'process.arch')"
+          export EXPECTED_TARBALL_SHA256="$(sha256sum arena-ingest-deps.tgz | awk '{print $1}')"
+
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs'
+
+          const keys = [
+            'TARGET_SHA',
+            'WORKER_RELEASE_ID',
+            'DEP_INPUTS_SHA256',
+            'NODE_MAJOR',
+            'ARCH',
+            'TARBALL_SHA256',
+          ]
+          const raw = readFileSync('arena-ingest-deps.manifest', 'utf8')
+          if (!raw.endsWith('\n')) throw new Error('artifact manifest must end with one newline')
+          const lines = raw.slice(0, -1).split('\n')
+          if (lines.length !== keys.length) throw new Error('artifact manifest key count is invalid')
+
+          const manifest = new Map()
+          for (const line of lines) {
+            const match = /^([A-Z][A-Z0-9_]*)=([A-Za-z0-9._-]+)$/.exec(line)
+            if (!match || manifest.has(match[1])) throw new Error('artifact manifest is malformed')
+            manifest.set(match[1], match[2])
+          }
+          if (keys.some((key) => !manifest.has(key)) || [...manifest.keys()].some((key) => !keys.includes(key))) {
+            throw new Error('artifact manifest contains missing or unknown keys')
+          }
+
+          const expected = {
+            TARGET_SHA: process.env.EXPECTED_TARGET_SHA,
+            WORKER_RELEASE_ID: process.env.EXPECTED_WORKER_RELEASE_ID,
+            DEP_INPUTS_SHA256: process.env.EXPECTED_DEP_INPUTS_SHA256,
+            NODE_MAJOR: process.env.EXPECTED_NODE_MAJOR,
+            ARCH: process.env.EXPECTED_ARCH,
+            TARBALL_SHA256: process.env.EXPECTED_TARBALL_SHA256,
+          }
+          const formats = {
+            TARGET_SHA: /^[0-9a-f]{40}$/,
+            WORKER_RELEASE_ID: /^[0-9a-f]{64}$/,
+            DEP_INPUTS_SHA256: /^[0-9a-f]{64}$/,
+            NODE_MAJOR: /^22$/,
+            ARCH: /^x64$/,
+            TARBALL_SHA256: /^[0-9a-f]{64}$/,
+          }
+          for (const key of keys) {
+            const value = manifest.get(key)
+            if (!formats[key].test(value) || value !== expected[key]) {
+              throw new Error(`artifact manifest mismatch: ${key}`)
+            }
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `node_major=${manifest.get('NODE_MAJOR')}\n`)
+          appendFileSync(process.env.GITHUB_OUTPUT, `arch=${manifest.get('ARCH')}\n`)
+          NODE
+
+      - name: Configure pinned SSH host trust
+        env:
+          INGEST_SG_SSH_KEY: ${{ secrets.INGEST_SG_SSH_KEY }}
+          INGEST_SG_HOST: ${{ secrets.INGEST_SG_HOST }}
+          INGEST_SG_KNOWN_HOSTS: ${{ secrets.INGEST_SG_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.INGEST_SG_SSH_KEY }}" > ~/.ssh/id_sg
-          chmod 600 ~/.ssh/id_sg
-          host='${{ secrets.INGEST_SG_HOST }}'
-          hostname="${host#*@}"; user="${host%@*}"
-          ssh-keyscan -H "$hostname" >> ~/.ssh/known_hosts 2>/dev/null || true
-          # deploy-ingest-sg.sh uses plain `ssh`/`rsync`/`scp` (not GIT_SSH_COMMAND,
-          # which only affects git) — so map the host to id_sg via ssh_config, else
-          # they fall back to default key names and fail publickey auth (exit 255).
-          # Keepalives are ESSENTIAL here: the deploy runs a multi-minute remote
-          # `cp -a` backup during which the SSH channel is idle with no data — a
-          # NAT/firewall idle-timeout then drops it → exit 255 mid-deploy (observed
-          # 2026-07-08). ServerAlive* pings keep the channel warm through long
-          # remote ops; ConnectTimeout fails fast on a genuinely dead host.
+          printf '%s\n' "$INGEST_SG_SSH_KEY" > ~/.ssh/id_sg
+          printf '%s\n' "$INGEST_SG_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_sg ~/.ssh/known_hosts
+
+          hostname="${INGEST_SG_HOST#*@}"
+          user="${INGEST_SG_HOST%@*}"
+          ssh-keygen -F "$hostname" -f ~/.ssh/known_hosts >/dev/null || {
+            echo "::error::INGEST_SG_KNOWN_HOSTS has no pinned key for the configured hostname"
+            exit 1
+          }
           {
-            echo "Host $hostname"
-            echo "  User $user"
-            echo "  IdentityFile ~/.ssh/id_sg"
-            echo "  IdentitiesOnly yes"
-            echo "  ServerAliveInterval 20"
-            echo "  ServerAliveCountMax 15"
-            echo "  TCPKeepAlive yes"
-            echo "  ConnectTimeout 20"
-          } >> ~/.ssh/config
+            printf 'Host %s\n' "$hostname"
+            printf '  User %s\n' "$user"
+            printf '  IdentityFile ~/.ssh/id_sg\n'
+            printf '  IdentitiesOnly yes\n'
+            printf '  BatchMode yes\n'
+            printf '  StrictHostKeyChecking yes\n'
+            printf '  UserKnownHostsFile ~/.ssh/known_hosts\n'
+            printf '  ServerAliveInterval 20\n'
+            printf '  ServerAliveCountMax 15\n'
+            printf '  TCPKeepAlive yes\n'
+            printf '  ConnectTimeout 20\n'
+          } > ~/.ssh/config
           chmod 600 ~/.ssh/config
-      # Ships the prebuilt deps (full mode) + code, then restarts with auto-rollback.
-      # Reuses the hardened worker/deploy-ingest-sg.sh deploy logic via --from-artifact
-      # (extracts the tgz into node_modules atomically — NEVER npm-installs on SG).
-      - name: Deploy to SG (prebuilt artifact, no npm on box)
-        if: ${{ steps.guard.outputs.skip != 'true' }}
+
+      - name: Verify live SG runtime matches the deployment contract
         env:
           INGEST_SG_HOST: ${{ secrets.INGEST_SG_HOST }}
-          GIT_SSH_COMMAND: 'ssh -i ~/.ssh/id_sg -o BatchMode=yes'
+        shell: bash
         run: |
-          if [ "${{ github.event.inputs.mode }}" = "code-only" ]; then
-            bash worker/deploy-ingest-sg.sh --code-only
+          set -euo pipefail
+          REMOTE_RUNTIME="$(ssh "$INGEST_SG_HOST" "node -p \"process.versions.node.split('.')[0] + ' ' + process.arch\"")"
+          if [ "$DEPLOY_MODE" = 'full' ]; then
+            EXPECTED_RUNTIME='${{ steps.artifact_attestation.outputs.node_major }} ${{ steps.artifact_attestation.outputs.arch }}'
           else
-            bash worker/deploy-ingest-sg.sh --from-artifact="$PWD/arena-ingest-deps.tgz"
+            EXPECTED_RUNTIME='22 x64'
           fi
-      - name: Verify both nodes converged on one SHA (drift gate)
-        if: ${{ steps.guard.outputs.skip != 'true' }}
+          [ "$REMOTE_RUNTIME" = "$EXPECTED_RUNTIME" ] || {
+            echo "::error::SG runtime does not match artifact contract (expected $EXPECTED_RUNTIME)"
+            exit 1
+          }
+
+      - name: Recheck current origin/main immediately before deployment
+        shell: bash
         run: |
-          echo "Deployed ${GITHUB_SHA::9}. The 15-min worker-heartbeat-check cron alarms on >=2 live SHAs;"
-          echo "a follow-up gate that polls /api/cron/worker-heartbeat-check here is the A4 next step."
+          set -euo pipefail
+          git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
+          [ "$(git rev-parse HEAD)" = "$TARGET_SHA" ] || {
+            echo "::error::working tree no longer identifies target_sha"
+            exit 1
+          }
+          [ "$(git rev-parse refs/remotes/origin/main)" = "$TARGET_SHA" ] || {
+            echo "::error::origin/main advanced before deployment; refusing stale cutover"
+            exit 1
+          }
+
+      # deploy-ingest-sg.sh requires a fresh ready+heartbeat pair for this exact
+      # release and auto-rolls back on failure. That is the executable SG proof;
+      # this workflow intentionally makes no unverified cross-node claim.
+      - name: Deploy and require fresh SG readiness evidence
+        id: deploy
+        env:
+          INGEST_SG_HOST: ${{ secrets.INGEST_SG_HOST }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$DEPLOY_MODE" = 'code-only' ]; then
+            bash worker/deploy-ingest-sg.sh --target-sha="$TARGET_SHA" --code-only
+          else
+            bash worker/deploy-ingest-sg.sh \
+              --target-sha="$TARGET_SHA" \
+              --from-artifact="$PWD/arena-ingest-deps.tgz" \
+              --artifact-manifest="$PWD/arena-ingest-deps.manifest"
+          fi
+
+      - name: Guard deployed target remains current origin/main
+        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
+          [ "$(git rev-parse HEAD)" = "$TARGET_SHA" ] || {
+            echo "::error::post-deploy checkout identity changed"
+            exit 1
+          }
+          [ "$(git rev-parse refs/remotes/origin/main)" = "$TARGET_SHA" ] || {
+            echo "::error::origin/main advanced during deployment; deployed SG release is now stale"
+            exit 1
+          }
