@@ -84,6 +84,21 @@ preservation_fingerprint() {
     );"
 }
 
+rank_fingerprint() {
+  local database="$1"
+  psql_db "$database" -Atqc "
+    SELECT pg_catalog.md5(
+      COALESCE(
+        pg_catalog.string_agg(
+          pg_catalog.to_jsonb(rank_row)::text,
+          E'\\n' ORDER BY rank_row.season_id, rank_row.id
+        ),
+        ''
+      )
+    )
+    FROM public.leaderboard_ranks AS rank_row;"
+}
+
 setup_case() {
   local database="$1"
   local rank_id_type="$2"
@@ -93,6 +108,8 @@ setup_case() {
   local other_7d_id="$6"
   local other_30d_id="$7"
   local other_90d_id="$8"
+  local okx_extra_id="$9"
+  local other_extra_id="${10}"
 
   psql_db "$database" \
     -v rank_id_type="$rank_id_type" \
@@ -101,7 +118,9 @@ setup_case() {
     -v okx_90d_id="$okx_90d_id" \
     -v other_7d_id="$other_7d_id" \
     -v other_30d_id="$other_30d_id" \
-    -v other_90d_id="$other_90d_id" <<'SQL'
+    -v other_90d_id="$other_90d_id" \
+    -v okx_extra_id="$okx_extra_id" \
+    -v other_extra_id="$other_extra_id" <<'SQL'
 CREATE SCHEMA arena;
 GRANT USAGE ON SCHEMA public, arena TO anon, authenticated, service_role;
 
@@ -152,6 +171,8 @@ CREATE TABLE public.leaderboard_ranks (
   source_trader_id text NOT NULL,
   arena_score numeric,
   is_outlier boolean,
+  rank integer,
+  rank_change integer,
   computed_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
   PRIMARY KEY (id, season_id),
   UNIQUE (season_id, source, source_trader_id)
@@ -242,14 +263,16 @@ WHERE source.status = 'active'
   AND source.serving_mode = 'serving';
 
 INSERT INTO public.leaderboard_ranks (
-  id, season_id, source, source_trader_id, arena_score, is_outlier
+  id, season_id, source, source_trader_id, arena_score, is_outlier, rank, rank_change
 ) VALUES
-  (:'okx_7d_id':: :rank_id_type, '7D', 'okx_web3_solana', 'okx-7d', 50, false),
-  (:'okx_30d_id':: :rank_id_type, '30D', 'okx_web3_solana', 'okx-30d', 20, false),
-  (:'okx_90d_id':: :rank_id_type, '90D', 'okx_web3_solana', 'okx-90d', 5, false),
-  (:'other_7d_id':: :rank_id_type, '7D', 'hyperliquid', 'other-7d', 30, false),
-  (:'other_30d_id':: :rank_id_type, '30D', 'hyperliquid', 'other-30d', 9, false),
-  (:'other_90d_id':: :rank_id_type, '90D', 'hyperliquid', 'other-90d', 15, false);
+  (:'okx_7d_id':: :rank_id_type, '7D', 'okx_web3_solana', 'okx-7d', 50, false, 1, 2),
+  (:'okx_30d_id':: :rank_id_type, '30D', 'okx_web3_solana', 'okx-30d', 20, false, 1, 3),
+  (:'okx_90d_id':: :rank_id_type, '90D', 'okx_web3_solana', 'okx-90d', 5, false, 2, -1),
+  (:'other_7d_id':: :rank_id_type, '7D', 'hyperliquid', 'other-7d', 30, false, 2, -2),
+  (:'other_30d_id':: :rank_id_type, '30D', 'hyperliquid', 'other-30d', 9, false, 2, 4),
+  (:'other_90d_id':: :rank_id_type, '90D', 'hyperliquid', 'other-90d', 15, false, 1, 1),
+  (:'okx_extra_id':: :rank_id_type, '180D', 'okx_web3_solana', 'okx-180d', 80, false, 1, 8),
+  (:'other_extra_id':: :rank_id_type, '180D', 'hyperliquid', 'other-180d', 70, false, 2, -8);
 
 SELECT public.refresh_leaderboard_count_cache();
 SQL
@@ -290,8 +313,30 @@ BEGIN
     RAISE EXCEPTION 'OKX public ranks remain';
   END IF;
 
-  IF (SELECT count(*) FROM arena.okx_web3_rank_quarantine_rows) <> 3 THEN
-    RAISE EXCEPTION 'archive row count is not three';
+  IF EXISTS (
+    WITH ordered AS (
+      SELECT
+        id,
+        season_id,
+        ROW_NUMBER() OVER (
+          PARTITION BY season_id
+          ORDER BY arena_score DESC NULLS LAST, id
+        )::integer AS expected_rank
+      FROM public.leaderboard_ranks
+      WHERE season_id IN ('7D', '30D', '90D', '180D')
+    )
+    SELECT 1
+    FROM public.leaderboard_ranks AS rank_row
+    JOIN ordered
+      ON ordered.id = rank_row.id
+     AND ordered.season_id = rank_row.season_id
+    WHERE rank_row.rank IS DISTINCT FROM ordered.expected_rank
+  ) THEN
+    RAISE EXCEPTION 'remaining public rank order is incorrect';
+  END IF;
+
+  IF (SELECT count(*) FROM arena.okx_web3_rank_quarantine_rows) <> 4 THEN
+    RAISE EXCEPTION 'archive row count is not four';
   END IF;
 
   IF (SELECT count(*)
@@ -302,7 +347,7 @@ BEGIN
       ) AS restored
       WHERE restored.id::text = archive.live_rank_id
         AND restored.season_id = archive.season_id
-        AND restored.source_trader_id = archive.source_trader_id) <> 3 THEN
+        AND restored.source_trader_id = archive.source_trader_id) <> 4 THEN
     RAISE EXCEPTION 'full-row archive cannot reconstruct typed rank identities';
   END IF;
 
@@ -311,7 +356,7 @@ BEGIN
     FROM arena.okx_web3_rank_quarantine_batches
     WHERE batch_id = '20260724_okx_web3_unverified_rank_quarantine'
       AND state = 'COMPLETE'
-      AND archived_rank_count = 3
+      AND archived_rank_count = 4
       AND source_row_before->>'serving_mode' = 'serving'
       AND source_row_before->>'currency' = 'USDC'
   ) THEN
@@ -329,7 +374,11 @@ BEGIN
       ('90D', '_all', 1),
       ('90D', 'hyperliquid', 1),
       ('90D', '_all_gt0', 1),
-      ('90D', 'hyperliquid_gt0', 1)
+      ('90D', 'hyperliquid_gt0', 1),
+      ('180D', '_all', 1),
+      ('180D', 'hyperliquid', 1),
+      ('180D', '_all_gt0', 1),
+      ('180D', 'hyperliquid_gt0', 1)
   ), differences AS (
     (SELECT season_id, source, total_count FROM expected
      EXCEPT
@@ -386,12 +435,23 @@ run_success_case() {
   before_fingerprint="$(preservation_fingerprint "$database")"
   psql_db "$database" -f "$MIGRATION" >/dev/null
   verify_success_case "$database"
+  assert_equal \
+    "$database first-run rank changes reset" \
+    '0' \
+    "$(psql_db "$database" -Atqc "SELECT count(*) FROM public.leaderboard_ranks WHERE rank_change IS NOT NULL")"
   after_fingerprint="$(preservation_fingerprint "$database")"
   assert_equal "$database preserved source evidence" "$before_fingerprint" "$after_fingerprint"
 
   archive_fingerprint="$(psql_db "$database" -Atqc "SELECT archived_rank_count::text || ':' || archived_rank_digest FROM arena.okx_web3_rank_quarantine_batches WHERE batch_id = '20260724_okx_web3_unverified_rank_quarantine'")"
+  psql_db "$database" -c \
+    "UPDATE public.leaderboard_ranks SET rank_change = 7 WHERE source = 'hyperliquid' AND season_id = '7D'" \
+    >/dev/null
   psql_db "$database" -f "$MIGRATION" >/dev/null
   verify_success_case "$database"
+  assert_equal \
+    "$database replay preserves later organic rank changes" \
+    '7' \
+    "$(psql_db "$database" -Atqc "SELECT rank_change FROM public.leaderboard_ranks WHERE source = 'hyperliquid' AND season_id = '7D'")"
   replay_fingerprint="$(psql_db "$database" -Atqc "SELECT archived_rank_count::text || ':' || archived_rank_digest FROM arena.okx_web3_rank_quarantine_batches WHERE batch_id = '20260724_okx_web3_unverified_rank_quarantine'")"
   assert_equal "$database replay archive" "$archive_fingerprint" "$replay_fingerprint"
 
@@ -456,16 +516,18 @@ CREATE DATABASE rollback_case;
 SQL
 
 setup_case integer_case integer \
-  101 102 103 201 202 203
+  101 102 103 201 202 203 104 204
 setup_case uuid_case uuid \
   00000000-0000-0000-0000-000000000101 \
   00000000-0000-0000-0000-000000000102 \
   00000000-0000-0000-0000-000000000103 \
   00000000-0000-0000-0000-000000000201 \
   00000000-0000-0000-0000-000000000202 \
-  00000000-0000-0000-0000-000000000203
+  00000000-0000-0000-0000-000000000203 \
+  00000000-0000-0000-0000-000000000104 \
+  00000000-0000-0000-0000-000000000204
 setup_case rollback_case integer \
-  301 302 303 401 402 403
+  301 302 303 401 402 403 304 404
 
 run_success_case integer_case integer 999
 run_success_case uuid_case uuid 00000000-0000-0000-0000-000000000999
@@ -474,6 +536,7 @@ run_success_case uuid_case uuid 00000000-0000-0000-0000-000000000999
 # phase. PostgreSQL must roll back archive DDL, source shadowing, rank deletion,
 # cache changes, and guard creation as one transaction.
 ROLLBACK_FINGERPRINT_BEFORE="$(preservation_fingerprint rollback_case)"
+ROLLBACK_RANK_FINGERPRINT_BEFORE="$(rank_fingerprint rollback_case)"
 psql_db rollback_case <<'SQL' >/dev/null
 CREATE OR REPLACE FUNCTION public.refresh_leaderboard_count_cache()
 RETURNS void
@@ -496,8 +559,12 @@ assert_equal \
   "$(psql_db rollback_case -Atqc "SELECT serving_mode FROM arena.sources WHERE slug = 'okx_web3_solana'")"
 assert_equal \
   'failed migration preserved OKX ranks' \
-  '3' \
+  '4' \
   "$(psql_db rollback_case -Atqc "SELECT count(*) FROM public.leaderboard_ranks WHERE source = 'okx_web3_solana'")"
+assert_equal \
+  'failed migration rolled back rank order and movement' \
+  "$ROLLBACK_RANK_FINGERPRINT_BEFORE" \
+  "$(rank_fingerprint rollback_case)"
 assert_equal \
   'failed migration rolled back archive DDL' \
   '' \

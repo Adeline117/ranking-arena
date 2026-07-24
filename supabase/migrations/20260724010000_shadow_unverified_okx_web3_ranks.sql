@@ -138,6 +138,7 @@ DECLARE
   v_updated integer;
   v_deleted integer;
   v_blockers jsonb;
+  v_season_id text;
 BEGIN
   SELECT source.*
   INTO STRICT v_source
@@ -302,6 +303,55 @@ BEGIN
         v_deleted;
     END IF;
 
+    -- Removing a source is an administrative visibility change, not organic
+    -- trader movement. Clear the now-unprovable deltas and atomically close
+    -- every rank gap before refreshing any derived totals.
+    UPDATE public.leaderboard_ranks AS rank_row
+    SET rank_change = NULL
+    WHERE rank_row.season_id IN (
+      SELECT DISTINCT archive.season_id
+      FROM arena.okx_web3_rank_quarantine_rows AS archive
+      WHERE archive.batch_id = v_batch_id
+    )
+      AND rank_row.rank_change IS NOT NULL;
+
+    FOR v_season_id IN
+      SELECT DISTINCT archive.season_id
+      FROM arena.okx_web3_rank_quarantine_rows AS archive
+      WHERE archive.batch_id = v_batch_id
+      ORDER BY archive.season_id
+    LOOP
+      WITH ordered AS (
+        SELECT
+          rank_row.id,
+          rank_row.season_id,
+          pg_catalog.row_number() OVER (
+            ORDER BY rank_row.arena_score DESC NULLS LAST, rank_row.id
+          )::integer AS new_rank
+        FROM public.leaderboard_ranks AS rank_row
+        WHERE rank_row.season_id = v_season_id
+      )
+      UPDATE public.leaderboard_ranks AS rank_row
+      SET rank = ordered.new_rank
+      FROM ordered
+      WHERE rank_row.id = ordered.id
+        AND rank_row.season_id = ordered.season_id
+        AND rank_row.rank IS DISTINCT FROM ordered.new_rank;
+    END LOOP;
+
+    IF EXISTS (
+      SELECT 1
+      FROM public.leaderboard_ranks AS rank_row
+      WHERE rank_row.season_id IN (
+        SELECT DISTINCT archive.season_id
+        FROM arena.okx_web3_rank_quarantine_rows AS archive
+        WHERE archive.batch_id = v_batch_id
+      )
+        AND rank_row.rank_change IS NOT NULL
+    ) THEN
+      RAISE EXCEPTION 'administrative quarantine left unprovable rank changes';
+    END IF;
+
     PERFORM public.refresh_leaderboard_count_cache();
   END IF;
 END
@@ -382,6 +432,32 @@ BEGIN
     WHERE cache_row.source IN (v_source_slug, v_source_slug || '_gt0')
   ) THEN
     RAISE EXCEPTION 'OKX direct count-cache rows remain after quarantine';
+  END IF;
+
+  IF EXISTS (
+    WITH ordered AS (
+      SELECT
+        rank_row.id,
+        rank_row.season_id,
+        pg_catalog.row_number() OVER (
+          PARTITION BY rank_row.season_id
+          ORDER BY rank_row.arena_score DESC NULLS LAST, rank_row.id
+        )::integer AS expected_rank
+      FROM public.leaderboard_ranks AS rank_row
+      WHERE rank_row.season_id IN (
+        SELECT DISTINCT archive.season_id
+        FROM arena.okx_web3_rank_quarantine_rows AS archive
+        WHERE archive.batch_id = v_batch_id
+      )
+    )
+    SELECT 1
+    FROM public.leaderboard_ranks AS rank_row
+    JOIN ordered
+      ON ordered.id = rank_row.id
+     AND ordered.season_id = rank_row.season_id
+    WHERE rank_row.rank IS DISTINCT FROM ordered.expected_rank
+  ) THEN
+    RAISE EXCEPTION 'public rank ordering postflight failed';
   END IF;
 
   SELECT batch.*
