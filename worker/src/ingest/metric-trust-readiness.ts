@@ -1,12 +1,16 @@
 import { ingestClientConnect } from '@/lib/ingest/db'
 
 export const METRIC_TRUST_WORKER_READINESS_CONTRACT =
-  'arena.metric-trust-release-readiness@1' as const
+  'arena.metric-trust-release-readiness@2' as const
 export const METRIC_TRUST_RELEASE_MIGRATION_PATH =
-  'supabase/migrations/20260722054000_metric_trust_source_page_lineage.sql' as const
+  'supabase/migrations/20260722055000_metric_trust_source_page_lineage_forward_repair.sql' as const
 export const METRIC_TRUST_RELEASE_MIGRATION_SHA256 =
-  '93c512791e8bb7beb00742c7b65c6d79ecdf79ea49e26a3d67c3b3c438ae42cf' as const
+  'ed630f6f9f152a3b135569eda39f0cb4221894f7366d4a87954042f3f8b01271' as const
 export const ARENA_PRODUCTION_PROJECT_REF = 'iknktzifjdyujdccyhsv' as const
+
+const QUARANTINED_READINESS_CONTRACT = 'arena.metric-trust-release-readiness@1'
+const QUARANTINED_054_MIGRATION_SHA256 =
+  '93c512791e8bb7beb00742c7b65c6d79ecdf79ea49e26a3d67c3b3c438ae42cf'
 
 const READINESS_KEYS = [
   'contract',
@@ -79,18 +83,28 @@ export function validateMetricTrustWorkerReadiness(payload: unknown): void {
   if (JSON.stringify(Object.keys(payload).sort()) !== JSON.stringify(READINESS_KEYS)) {
     throw startupGateError('RPC payload keys are malformed')
   }
+  if (
+    payload.contract === QUARANTINED_READINESS_CONTRACT ||
+    payload.release_migration_sha256 === QUARANTINED_054_MIGRATION_SHA256
+  ) {
+    throw startupGateError('quarantined 054 readiness proof is unsupported')
+  }
   if (payload.contract !== METRIC_TRUST_WORKER_READINESS_CONTRACT) {
     throw startupGateError('RPC contract is not exact')
   }
   if (
     !Array.isArray(payload.missing) ||
-    !payload.missing.every((item) => typeof item === 'string')
+    payload.missing.some(
+      (item) => typeof item !== 'string' || item.length === 0 || item.trim() !== item
+    ) ||
+    new Set(payload.missing).size !== payload.missing.length
   ) {
     throw startupGateError('RPC missing-object list is malformed')
   }
   if (
-    !Number.isInteger(payload.legacy_complete_verified_count) ||
-    Number(payload.legacy_complete_verified_count) < 0
+    typeof payload.legacy_complete_verified_count !== 'number' ||
+    !Number.isSafeInteger(payload.legacy_complete_verified_count) ||
+    payload.legacy_complete_verified_count < 0
   ) {
     throw startupGateError('legacy lineage count is malformed')
   }

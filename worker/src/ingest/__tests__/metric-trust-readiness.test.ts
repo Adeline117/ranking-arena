@@ -62,14 +62,33 @@ describe('ingest worker metric-trust startup gate', () => {
       readyPayload({ ready: false }),
       readyPayload({ missing: ['arena.metric_trust_observations'] }),
       readyPayload({ missing: 'none' }),
+      readyPayload({ missing: [''] }),
+      readyPayload({ missing: [' '] }),
+      readyPayload({ missing: [' ledger:20260722055000'] }),
+      readyPayload({ missing: ['ledger:20260722055000', 'ledger:20260722055000'] }),
       readyPayload({ legacy_complete_verified_count: 1 }),
       readyPayload({ legacy_complete_verified_count: -1 }),
+      readyPayload({ legacy_complete_verified_count: Number.MAX_SAFE_INTEGER + 1 }),
       readyPayload({ release_migration_sha256: '0'.repeat(64) }),
       readyPayload({ source_page_lineage_column: false }),
       readyPayload({ extra: true }),
     ]) {
       expect(() => validateMetricTrustWorkerReadiness(payload)).toThrow(
         'metric-trust startup gate failed closed'
+      )
+    }
+  })
+
+  it('explicitly rejects either quarantined @1 or the exact 054 digest', () => {
+    for (const payload of [
+      readyPayload({ contract: 'arena.metric-trust-release-readiness@1' }),
+      readyPayload({
+        release_migration_sha256:
+          '93c512791e8bb7beb00742c7b65c6d79ecdf79ea49e26a3d67c3b3c438ae42cf',
+      }),
+    ]) {
+      expect(() => validateMetricTrustWorkerReadiness(payload)).toThrow(
+        'quarantined 054 readiness proof is unsupported'
       )
     }
   })
@@ -174,7 +193,7 @@ describe('ingest worker metric-trust startup gate', () => {
     expect(releases).toBe(1)
   })
 
-  it('pins the worker constant to the committed 054 bytes', () => {
+  it('pins the worker constant to the committed 055 bytes', () => {
     const migration = readFileSync(join(process.cwd(), METRIC_TRUST_RELEASE_MIGRATION_PATH))
     expect(createHash('sha256').update(migration).digest('hex')).toBe(
       METRIC_TRUST_RELEASE_MIGRATION_SHA256

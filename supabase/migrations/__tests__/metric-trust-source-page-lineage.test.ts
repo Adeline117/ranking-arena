@@ -148,23 +148,25 @@ describe('metric-trust source-page lineage migration', () => {
     expect(migration).toContain("NOTIFY pgrst, 'reload schema';")
   })
 
-  it('runs only after the exact 050 through 053 predeploy chain', () => {
+  it('is immutable history quarantined behind the 055 forward repair', () => {
     const predeploy = runner.slice(
       runner.indexOf('PREDEPLOY_MIGRATIONS=('),
-      runner.indexOf('TIP_CHECKOUT_CUTOVER_VERSIONS=(')
+      runner.indexOf('QUARANTINED_PREDEPLOY_MIGRATIONS=(')
     )
     const ordered = [
       '20260722050000_metric_trust_attempt_outcome_authority.sql',
       '20260722051000_leaderboard_score_input_manifest_contract.sql',
       '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql',
       '20260722053000_binance_spot_metric_source_contract.sql',
-      migrationName,
+      '20260722055000_metric_trust_source_page_lineage_forward_repair.sql',
     ]
 
     for (const migrationFile of ordered) expect(predeploy).toContain(migrationFile)
     for (let index = 1; index < ordered.length; index += 1) {
       expect(predeploy.indexOf(ordered[index - 1])).toBeLessThan(predeploy.indexOf(ordered[index]))
     }
+    expect(predeploy).not.toContain(migrationName)
+    expect(runner).toContain('QUARANTINED_PREDEPLOY_MIGRATIONS=(')
     expect(runner.match(new RegExp(migrationName.replace('.', '\\.'), 'g'))).toHaveLength(1)
     expect(migration).toContain("ledger.name = 'binance_spot_metric_source_contract'")
     expect(migration).toContain('1f4ce27a0a44cfc6f9c1d11c113dc2db7aa5eed170ef3b38b1469c0a1c758abc')

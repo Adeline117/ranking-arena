@@ -133,8 +133,16 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const recoveryPrerequisites = migrationArray('RECOVERY_PREREQUISITE_MIGRATIONS')
   const concurrentRecovery = migrationArray('CONCURRENT_RECOVERY_MIGRATIONS')
   const recovery = migrationArray('RECOVERY_MIGRATIONS')
+  const quarantined = migrationArray('QUARANTINED_PREDEPLOY_MIGRATIONS')
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
-  const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
+  const all = [
+    ...predeploy,
+    ...postdeploy,
+    ...concurrentRecovery,
+    ...recovery,
+    ...quarantined,
+    ...superseded,
+  ]
 
   assert.equal(predeploy.length, 73)
   assert.deepEqual(postdeploy, [
@@ -178,7 +186,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260722051000_leaderboard_score_input_manifest_contract.sql',
           '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql',
           '20260722053000_binance_spot_metric_source_contract.sql',
-          '20260722054000_metric_trust_source_page_lineage.sql',
+          '20260722055000_metric_trust_source_page_lineage_forward_repair.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -195,8 +203,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716112200_atomic_impression_recording.sql',
     '20260716083256_repair_legacy_exchange_logo_paths.sql',
   ])
+  assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 84)
+  assert.equal(new Set(all).size, 85)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
   assert.deepEqual(predeploy.slice(-32), [
     '20260718120000_leaderboard_source_freshness.sql',
@@ -230,7 +239,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260722051000_leaderboard_score_input_manifest_contract.sql',
     '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql',
     '20260722053000_binance_spot_metric_source_contract.sql',
-    '20260722054000_metric_trust_source_page_lineage.sql',
+    '20260722055000_metric_trust_source_page_lineage_forward_repair.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -255,7 +264,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     predeploy.includes('20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql')
   )
   assert.ok(predeploy.includes('20260722053000_binance_spot_metric_source_contract.sql'))
-  assert.ok(predeploy.includes('20260722054000_metric_trust_source_page_lineage.sql'))
+  assert.ok(
+    predeploy.includes('20260722055000_metric_trust_source_page_lineage_forward_repair.sql')
+  )
+  assert.ok(!predeploy.includes('20260722054000_metric_trust_source_page_lineage.sql'))
   assert.ok(!postdeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260717120000_trader_follows_composite_identity.sql'))
   assert.ok(
@@ -838,8 +850,14 @@ test('recovery emitters remain internal while every public recovery path is disa
   assert.match(source, /dry-run-all \| dry-run-recovery\)[\s\S]*exit 2/)
 })
 
-test('status makes the intentionally superseded migration explicit', () => {
-  assert.match(source, /phase in predeploy postdeploy concurrent-recovery recovery superseded/)
+test('status makes intentionally quarantined and superseded migrations explicit', () => {
+  assert.match(
+    source,
+    /phase in predeploy postdeploy concurrent-recovery recovery quarantined superseded/
+  )
+  assert.match(source, /quarantined-unapplied/)
+  assert.match(source, /quarantined-exact-forward-repair-required/)
+  assert.match(source, /quarantined-drift/)
   assert.match(source, /superseded-by-20260717230000/)
   assert.match(source, /missing-superseder/)
   assert.match(source, /THEN 'exact'/)
