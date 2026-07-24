@@ -29,8 +29,8 @@ const ctx: ParseCtx = {
 }
 
 describe('parseOkxWeb3LeaderboardPage', () => {
-  const fx = fixture('board-page.json') as { response: { data: unknown }; timeframe: number }
-  const payload = { data: fx.response.data, timeframe: 7 }
+  const fx = fixture('board-page.json') as { response: unknown; timeframe: number }
+  const payload = fx.response
 
   it('parses real rows: case-sensitive base58 identity, percent ROI/win rate', () => {
     const page = parseOkxWeb3LeaderboardPage(payload, ctx)
@@ -48,6 +48,11 @@ describe('parseOkxWeb3LeaderboardPage', () => {
     expect(page.rows[0].headlineRoi).toBeCloseTo(213.700576, 5) // already %
     expect(page.rows[0].headlinePnl).toBeCloseTo(64544.012921, 4)
     expect(page.rows[0].headlineWinRate).toBeCloseTo(22.5, 6)
+    expect(page.rows[0].headlineMetricSources).toEqual({
+      roi: { fieldPath: 'data.rankingInfos[].roi' },
+      pnl: { fieldPath: 'data.rankingInfos[].pnl' },
+      win_rate: { fieldPath: 'data.rankingInfos[].winRate' },
+    })
   })
 
   it('named KOL rows keep walletName + icon + kol label', () => {
@@ -61,10 +66,64 @@ describe('parseOkxWeb3LeaderboardPage', () => {
 
   it('skips rows without a plausible base58 identity', () => {
     const page = parseOkxWeb3LeaderboardPage(
-      { data: { rankingInfos: [{ walletAddress: 'short' }], totalCount: 1 }, timeframe: 7 },
+      {
+        data: {
+          rankingInfos: [
+            { walletAddress: 'short' },
+            { walletAddress: '0'.repeat(44) },
+            { walletAddress: '1'.repeat(33) },
+          ],
+          totalCount: 3,
+        },
+      },
       ctx
     )
     expect(page.rows).toHaveLength(0)
+  })
+
+  it('preserves the upstream rank slot after rejecting an invalid identity', () => {
+    const page = parseOkxWeb3LeaderboardPage(
+      {
+        data: {
+          rankingInfos: [
+            { walletAddress: 'invalid' },
+            {
+              walletAddress: '3CkgBB2ryzxQuSmzPSQ53jtVffPf1Wb1t1HBVs8GmGfw',
+              roi: '1',
+            },
+          ],
+          totalCount: 2,
+        },
+      },
+      ctx
+    )
+    expect(page.rows).toHaveLength(1)
+    expect(page.rows[0].rank).toBe(2)
+  })
+
+  it('declares field lineage only for metrics with numeric values', () => {
+    const page = parseOkxWeb3LeaderboardPage(
+      {
+        data: {
+          rankingInfos: [
+            {
+              walletAddress: '3CkgBB2ryzxQuSmzPSQ53jtVffPf1Wb1t1HBVs8GmGfw',
+              roi: false,
+              pnl: 'not-a-number',
+              winRate: '',
+            },
+          ],
+          totalCount: 1,
+        },
+      },
+      ctx
+    )
+    expect(page.rows[0]).toMatchObject({
+      headlineRoi: null,
+      headlinePnl: null,
+      headlineWinRate: null,
+      headlineMetricSources: {},
+    })
   })
 })
 
