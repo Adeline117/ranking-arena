@@ -63,6 +63,8 @@ describe('unverified OKX Web3 public-rank quarantine', () => {
     const archive = migration.indexOf('INSERT INTO arena.okx_web3_rank_quarantine_rows')
     const sourceShadow = migration.indexOf("serving_mode = 'shadow'")
     const rankDelete = migration.indexOf('DELETE FROM public.leaderboard_ranks AS rank_row')
+    const rankChangeReset = migration.indexOf('SET rank_change = NULL')
+    const rerank = migration.indexOf('SET rank = ordered.new_rank')
     const cacheRefresh = migration.indexOf('PERFORM public.refresh_leaderboard_count_cache()')
 
     expect(advisory).toBeGreaterThan(-1)
@@ -71,7 +73,9 @@ describe('unverified OKX Web3 public-rank quarantine', () => {
     expect(archive).toBeGreaterThan(rankLock)
     expect(sourceShadow).toBeGreaterThan(archive)
     expect(rankDelete).toBeGreaterThan(sourceShadow)
-    expect(cacheRefresh).toBeGreaterThan(rankDelete)
+    expect(rankChangeReset).toBeGreaterThan(rankDelete)
+    expect(rerank).toBeGreaterThan(rankChangeReset)
+    expect(cacheRefresh).toBeGreaterThan(rerank)
 
     expect(migration.match(/pg_catalog\.md5\(/g)).toHaveLength(3)
     expect(migration).toContain('v_archive_digest <> v_live_digest')
@@ -113,10 +117,16 @@ describe('unverified OKX Web3 public-rank quarantine', () => {
     )
   })
 
-  it('postflights shadow state, zero public/cache rows, archive identity, and both guards', () => {
+  it('postflights shadow state, contiguous ranks, unknown movement, archive identity, and both guards', () => {
     expect(migration).toContain("source.meta->>'rank_visibility' = 'shadow'")
     expect(migration).toContain("source.meta->'rank_visibility_blockers'")
     expect(migration).toContain("cache_row.source IN (v_source_slug, v_source_slug || '_gt0')")
+    expect(migration).toContain('PARTITION BY rank_row.season_id')
+    expect(migration).toContain('rank_row.rank IS DISTINCT FROM ordered.expected_rank')
+    expect(migration).toContain('public rank ordering postflight failed')
+    expect(migration).toMatch(
+      /SELECT DISTINCT archive\.season_id[\s\S]*WHERE archive\.batch_id = v_batch_id/
+    )
     expect(migration).toContain('v_archive_count <> v_batch.archived_rank_count')
     expect(migration).toContain('IF v_guard_count <> 2 THEN')
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
