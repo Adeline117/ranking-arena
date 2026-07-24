@@ -102,6 +102,7 @@ PREDEPLOY_MIGRATIONS=(
   20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql
   20260722053000_binance_spot_metric_source_contract.sql
   20260722055000_metric_trust_source_page_lineage_forward_repair.sql
+  20260724010000_shadow_unverified_okx_web3_ranks.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
