@@ -1,12 +1,11 @@
 name: Build Ingest Worker Image
 
 # Builds the release-stamped ingest-worker container (worker/Dockerfile.ingest) and
-# pushes it to GitHub Container Registry (ghcr.io). The SG box then `docker run`s a
-# verified digest — it NEVER runs npm/playwright-install (the 2026-06-30 crash-loop
-# hazard). Release/SHA tags are conflict-checked aliases; the recorded digest is the
-# authoritative deployment identity.
-# This is the container form of the dependency-safe deploy; see the tarball pipeline
-# in deploy-ingest-sg.yml and the cutover steps in docs/INGEST_WORKER_DEPLOY.md.
+# pushes it to GitHub Container Registry (ghcr.io). Release/SHA tags are
+# conflict-checked aliases; the recorded digest is the authoritative artifact
+# identity. Production SG rollout currently uses the transactional PM2 artifact
+# path; direct container cutover remains disabled until it has the same host lease
+# and automatic rollback guarantees.
 #
 # No extra secrets: pushing to ghcr.io uses the built-in GITHUB_TOKEN. The image is
 # private to the repo by default; the SG box pulls it with a read:packages PAT (set
