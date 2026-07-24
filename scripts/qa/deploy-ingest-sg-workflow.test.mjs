@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { parse } from 'yaml'
 
 const workflow = readFileSync('.github/workflows/deploy-ingest-sg.yml', 'utf8')
+const parsedWorkflow = parse(workflow)
 
 test('SG dispatch is bound to one exact current-main commit throughout deployment', () => {
   assert.match(workflow, /target_sha:\n\s+description:[^\n]+\n\s+required: true\n\s+type: string/)
@@ -20,10 +22,23 @@ test('SG dispatch is bound to one exact current-main commit throughout deploymen
     'both jobs must reject a non-full target SHA'
   )
   assert.match(workflow, /origin\/main advanced before deployment; refusing stale cutover/)
-  assert.match(
-    workflow,
-    /origin\/main advanced during deployment; deployed SG release is now stale/
-  )
+  assert.match(workflow, /origin\/main advanced after transactional success/)
+})
+
+test('production secrets are gated by a main-only deployment environment contract', () => {
+  const deployJob = parsedWorkflow.jobs['deploy-sg']
+  assert.equal(deployJob.environment, 'ingest-sg-production')
+  assert.equal(parsedWorkflow.on.workflow_dispatch.inputs.target_sha.required, true)
+  assert.match(workflow, /\[ "\$GITHUB_REF" = 'refs\/heads\/main' \]/)
+  assert.match(workflow, /\[ "\$GITHUB_SHA" = "\$TARGET_SHA" \]/)
+})
+
+test('third-party actions are pinned to immutable full commit SHAs', () => {
+  const uses = [...workflow.matchAll(/uses: ([^\s#]+)(?:\s+#.*)?$/gm)].map((match) => match[1])
+  assert.ok(uses.length > 0)
+  for (const action of uses) {
+    assert.match(action, /^[^@\s]+@[0-9a-f]{40}$/)
+  }
 })
 
 test('code-only accepts only an intentionally skipped dependency build', () => {
@@ -75,4 +90,5 @@ test('workflow claims only the SG readiness evidence executed by the deploy scri
   assert.match(workflow, /Deploy and require fresh SG readiness evidence/)
   assert.doesNotMatch(workflow, /Verify both nodes converged/)
   assert.doesNotMatch(workflow, /follow-up gate that polls/)
+  assert.match(workflow, /new rollout, not a\n\s+# failed old rollout/)
 })
