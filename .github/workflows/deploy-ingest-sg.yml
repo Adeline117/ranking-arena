@@ -13,7 +13,7 @@ on:
         required: true
         type: string
       mode:
-        description: 'full (rebuild + ship deps) or code-only (reuse attested SG deps)'
+        description: 'full (rebuild + ship deps) or code-only (reuse validated SG deps)'
         required: true
         type: choice
         options: [full, code-only]
@@ -28,8 +28,8 @@ concurrency:
 
 jobs:
   build-deps:
-    # A code-only deployment reuses the dependency tree already attested by the
-    # remote deploy script, so this intentionally reports "skipped" in that mode.
+    # A code-only deployment reuses the dependency tree checked by the remote
+    # deploy script, so this intentionally reports "skipped" in that mode.
     if: ${{ inputs.mode != 'code-only' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -361,8 +361,9 @@ jobs:
           }
 
       # deploy-ingest-sg.sh requires a fresh ready+heartbeat pair for this exact
-      # release and auto-rolls back on failure. That is the executable SG proof;
-      # this workflow intentionally makes no unverified cross-node claim.
+      # release. While SSH and its token-fenced lease remain available, it also
+      # auto-restores the previous release on failure. That is the executable SG
+      # proof; this workflow intentionally makes no unverified cross-node claim.
       - name: Deploy and require fresh SG readiness evidence
         id: deploy
         env:
