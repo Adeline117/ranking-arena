@@ -23,6 +23,7 @@ import { resolve } from 'node:path'
 
 export const WORKER_ROSTER_KEY = 'arena:worker:roster'
 const BEAT_INTERVAL_MS = 60_000
+const WORKER_RELEASE_ID = /^[0-9a-f]{64}$/
 
 /** Stable per-machine id; override with WORKER_NODE_ID when running multiple
  *  workers on one host or to give nodes friendly names. */
@@ -54,12 +55,33 @@ export function resolveDeployedSha(): string {
   return process.env.DEPLOYED_SHA || 'unknown'
 }
 
+/**
+ * Deterministic identity of the reviewed worker source/deployment inputs. Deployment
+ * writes this file from the reviewed Git commit (and the container build bakes
+ * it into the image). Runtime artifact digests are a separate attestation. An
+ * absent or malformed identity must remain visibly
+ * unknown so an old image cannot impersonate a new bundle with an env override.
+ */
+export function resolveWorkerReleaseId(
+  readReleaseFile: typeof readFileSync = readFileSync,
+  cwd = process.cwd()
+): string {
+  try {
+    const value = readReleaseFile(resolve(cwd, 'WORKER_RELEASE_ID'), 'utf8').trim()
+    return WORKER_RELEASE_ID.test(value) ? value : 'unknown'
+  } catch {
+    /* not a stamped worker release */
+  }
+  return 'unknown'
+}
+
 interface HeartbeatPayload {
   ts: number
   regions: string[]
   pid: number
   node: string
   sha: string
+  release_id: string
   /** Runtime cutover flag, reported explicitly so release gating cannot infer
    *  v3 attempt-bound capture from the code SHA alone. */
   attempt_bound_capture: boolean
@@ -113,6 +135,7 @@ export function diskUsedPct(
 export function startHeartbeat(redis: IORedis, regions: string[]): NodeJS.Timeout {
   const node = workerNodeId()
   const sha = resolveDeployedSha()
+  const releaseId = resolveWorkerReleaseId()
   const beat = async (): Promise<void> => {
     const payload: HeartbeatPayload = {
       ts: Date.now(),
@@ -120,6 +143,7 @@ export function startHeartbeat(redis: IORedis, regions: string[]): NodeJS.Timeou
       pid: process.pid,
       node,
       sha,
+      release_id: releaseId,
       attempt_bound_capture: process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED === 'true',
       disk: diskUsedPct(),
     }
@@ -134,7 +158,8 @@ export function startHeartbeat(redis: IORedis, regions: string[]): NodeJS.Timeou
   // Don't let the heartbeat timer keep the event loop alive on shutdown.
   if (typeof timer.unref === 'function') timer.unref()
   console.log(
-    `[heartbeat] node=${node} regions=${regions.join(',')} sha=${sha.slice(0, 9)} every ${BEAT_INTERVAL_MS / 1000}s`
+    `[heartbeat] node=${node} regions=${regions.join(',')} sha=${sha} ` +
+      `release=${releaseId} every ${BEAT_INTERVAL_MS / 1000}s`
   )
   return timer
 }

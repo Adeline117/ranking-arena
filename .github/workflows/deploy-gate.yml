@@ -113,6 +113,7 @@ jobs:
           install -m 700 scripts/ci/validate-release-health.mjs "$RUNNER_TEMP/validate-release-health.mjs"
           install -m 700 scripts/ci/verify-metric-trust-release-readiness.mjs "$RUNNER_TEMP/verify-metric-trust-release-readiness.mjs"
           install -m 700 scripts/ci/verify-worker-release-readiness.mjs "$RUNNER_TEMP/verify-worker-release-readiness.mjs"
+          install -m 700 scripts/ci/worker-release-id.mjs "$RUNNER_TEMP/worker-release-id.mjs"
 
       - name: Enforce single production writer before deploy
         run: node "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
@@ -164,9 +165,22 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node "$RUNNER_TEMP/verify-metric-trust-release-readiness.mjs"
 
+      - name: Bind candidate to reviewed worker release inputs
+        id: worker_release
+        if: steps.fresh.outputs.deploy == 'true'
+        run: |
+          RELEASE_ID=$(node "$RUNNER_TEMP/worker-release-id.mjs" "$HEAD_SHA")
+          if [[ ! "$RELEASE_ID" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::worker release ID is malformed"
+            exit 1
+          fi
+          printf 'id=%s\n' "$RELEASE_ID" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Vercel (build on Vercel infra)
         id: deploy_candidate
         if: steps.fresh.outputs.deploy == 'true'
+        env:
+          WORKER_RELEASE_ID: ${{ steps.worker_release.outputs.id }}
         run: |
           git checkout --quiet "$HEAD_SHA"
           # gateSha meta：CLI 部署没有 githubCommitSha，后续 run 的 ancestry
@@ -190,9 +204,11 @@ jobs:
           set +e
           npx vercel@56.2.1 deploy --prod --skip-domain --yes --no-wait --meta gateSha="$HEAD_SHA" \
             --build-env ARENA_RELEASE_SHA="$HEAD_SHA" \
+            --build-env ARENA_WORKER_RELEASE_ID="$WORKER_RELEASE_ID" \
             --build-env ARENA_CI_TYPES_ATTESTED=1 \
             --build-env VERCEL_BUILD_SYSTEM_REPORT=1 \
             --env ARENA_RELEASE_SHA="$HEAD_SHA" \
+            --env ARENA_WORKER_RELEASE_ID="$WORKER_RELEASE_ID" \
             --token="$VERCEL_TOKEN" > /tmp/deploy-url.txt \
             2> >(tee /tmp/vercel-deploy.stderr >&2)
           DEPLOY_EXIT=$?
@@ -279,13 +295,19 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           WORKER_READINESS_BASE_URL: ${{ steps.deploy_candidate.outputs.url }}
+          WORKER_RELEASE_ID: ${{ steps.worker_release.outputs.id }}
         run: |
+          RECOMPUTED_RELEASE_ID=$(node "$RUNNER_TEMP/worker-release-id.mjs" "$HEAD_SHA")
+          if [ "$RECOMPUTED_RELEASE_ID" != "$WORKER_RELEASE_ID" ]; then
+            echo "::error::worker release identity changed inside this Gate run"
+            exit 1
+          fi
           PAYLOAD_FILE="$RUNNER_TEMP/worker-release-readiness.json"
           STATUS_FILE="$RUNNER_TEMP/worker-release-readiness.status"
           rm -f "$PAYLOAD_FILE" "$STATUS_FILE"
           set +e
           npx vercel@56.2.1 curl \
-            "/api/health/worker-release-readiness?expected_sha=$HEAD_SHA" \
+            "/api/health/worker-release-readiness" \
             --deployment "$WORKER_READINESS_BASE_URL" \
             -- \
             --header "Authorization: Bearer $CRON_SECRET" \

@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { computeWorkerReleaseId } from './worker-release-id.mjs'
 
-export const WORKER_RELEASE_READINESS_CONTRACT = 'arena.worker-release-readiness@1'
+export const WORKER_RELEASE_READINESS_CONTRACT = 'arena.worker-release-readiness@2'
 export const REQUIRED_RELEASE_REGIONS = ['local', 'vps_sg']
 
 const READINESS_KEYS = [
   'contract',
+  'expected_release_id',
   'expected_sha',
   'failover_regions',
   'healthy_workers',
@@ -16,8 +20,9 @@ const READINESS_KEYS = [
   'required_regions',
   'stale_workers',
 ]
-const WORKER_KEYS = ['age_seconds', 'attempt_bound_capture', 'node', 'regions', 'sha']
+const WORKER_KEYS = ['age_seconds', 'attempt_bound_capture', 'node', 'regions', 'release_id', 'sha']
 const COMMIT_SHA = /^[0-9a-f]{40}$/
+const RELEASE_ID = /^[0-9a-f]{64}$/
 const STALE_SECONDS = 5 * 60
 const DECOMMISSION_SECONDS = 24 * 3600
 const MAX_PAYLOAD_BYTES = 64 * 1024
@@ -53,6 +58,7 @@ function validateWorkerList(value, { stale, nodes }) {
       worker.age_seconds >= (stale ? DECOMMISSION_SECONDS : STALE_SECONDS) ||
       typeof worker.attempt_bound_capture !== 'boolean' ||
       !isUniqueStringList(worker.regions) ||
+      !(worker.release_id === 'unknown' || RELEASE_ID.test(worker.release_id)) ||
       !(worker.sha === 'unknown' || COMMIT_SHA.test(worker.sha))
     ) {
       return false
@@ -62,9 +68,11 @@ function validateWorkerList(value, { stale, nodes }) {
   return true
 }
 
-export function validateWorkerReleaseReadiness(payload, expectedSha) {
+export function validateWorkerReleaseReadiness(payload, expectedSha, expectedReleaseId) {
   if (!COMMIT_SHA.test(expectedSha))
     return { ready: false, reason: 'expected worker SHA is invalid' }
+  if (!RELEASE_ID.test(expectedReleaseId))
+    return { ready: false, reason: 'expected worker release ID is invalid' }
   if (!isRecord(payload))
     return { ready: false, reason: 'worker readiness payload is not an object' }
   if (!exactKeys(payload, READINESS_KEYS)) {
@@ -75,6 +83,9 @@ export function validateWorkerReleaseReadiness(payload, expectedSha) {
   }
   if (payload.expected_sha !== expectedSha) {
     return { ready: false, reason: 'worker readiness response is bound to a different SHA' }
+  }
+  if (payload.expected_release_id !== expectedReleaseId) {
+    return { ready: false, reason: 'worker readiness response is bound to a different release ID' }
   }
   if (
     JSON.stringify(payload.required_regions) !== JSON.stringify(REQUIRED_RELEASE_REGIONS) ||
@@ -97,12 +108,12 @@ export function validateWorkerReleaseReadiness(payload, expectedSha) {
   const computedMissing = REQUIRED_RELEASE_REGIONS.filter(
     (region) =>
       !payload.healthy_workers.some(
-        (worker) => worker.sha === expectedSha && worker.regions.includes(region)
+        (worker) => worker.release_id === expectedReleaseId && worker.regions.includes(region)
       )
   )
   const exactOwners = REQUIRED_RELEASE_REGIONS.map((region) =>
     payload.healthy_workers.filter(
-      (worker) => worker.sha === expectedSha && worker.regions.includes(region)
+      (worker) => worker.release_id === expectedReleaseId && worker.regions.includes(region)
     )
   )
   const topologyIsExact =
@@ -112,7 +123,7 @@ export function validateWorkerReleaseReadiness(payload, expectedSha) {
   const hasMismatchedWorker = payload.healthy_workers.some(
     (worker) =>
       worker.regions.some((region) => REQUIRED_RELEASE_REGIONS.includes(region)) &&
-      worker.sha !== expectedSha
+      worker.release_id !== expectedReleaseId
   )
   const hasDisabledCapture = payload.healthy_workers.some((worker) => !worker.attempt_bound_capture)
   const computedReady =
@@ -133,22 +144,32 @@ export function validateWorkerReleaseReadiness(payload, expectedSha) {
     return {
       ready: false,
       reason:
-        'required ingest workers have failover flags, stale owners, duplicates, invalid state, disabled v3, or another SHA',
+        'required ingest workers have failover flags, stale owners, duplicates, invalid state, disabled v3, or another release ID',
     }
   }
   return {
     ready: true,
-    reason: 'two region owners are fresh, v3-enabled, and on the exact release SHA',
+    reason: 'two region owners are fresh, v3-enabled, and on the exact worker release ID',
   }
 }
 
 export function verifyWorkerReleaseReadinessPayload({
   env = process.env,
   readFileImpl = (path) => readFileSync(path, 'utf8'),
+  computeReleaseIdImpl = computeWorkerReleaseId,
 } = {}) {
   const expectedSha = env.HEAD_SHA?.trim() ?? ''
+  const expectedReleaseId = env.WORKER_RELEASE_ID?.trim() ?? ''
   const payloadFile = env.WORKER_READINESS_PAYLOAD_FILE?.trim() ?? ''
   if (!COMMIT_SHA.test(expectedSha)) throw new Error('expected worker SHA is invalid')
+  if (!RELEASE_ID.test(expectedReleaseId)) throw new Error('expected worker release ID is invalid')
+  const recomputedReleaseId = computeReleaseIdImpl(expectedSha, {
+    cwd: env.GITHUB_WORKSPACE?.trim() || process.cwd(),
+    env,
+  })
+  if (recomputedReleaseId !== expectedReleaseId) {
+    throw new Error('expected worker release ID is not exact HEAD')
+  }
   if (!payloadFile) throw new Error('worker readiness payload file is unavailable')
 
   let rawPayload
@@ -167,13 +188,16 @@ export function verifyWorkerReleaseReadinessPayload({
   } catch {
     throw new Error('worker readiness payload is not valid JSON')
   }
-  const result = validateWorkerReleaseReadiness(payload, expectedSha)
+  const result = validateWorkerReleaseReadiness(payload, expectedSha, expectedReleaseId)
   if (!result.ready) throw new Error(result.reason)
   return result
 }
 
 try {
-  if (import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  if (
+    typeof process.argv[1] === 'string' &&
+    import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+  ) {
     const result = verifyWorkerReleaseReadinessPayload()
     console.log(result.reason)
   }

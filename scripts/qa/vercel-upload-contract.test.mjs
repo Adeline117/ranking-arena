@@ -180,7 +180,7 @@ test('revokes production write authority when a candidate is no longer exact mai
 test('reasserts the single production writer without ever skipping promoted smoke', () => {
   assert.match(
     deployGate,
-    /- name: Pin release-control helpers for this Gate run\n        run: \|[\s\S]*install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"[\s\S]*install -m 700 scripts\/ci\/validate-release-health\.mjs "\$RUNNER_TEMP\/validate-release-health\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-metric-trust-release-readiness\.mjs "\$RUNNER_TEMP\/verify-metric-trust-release-readiness\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-worker-release-readiness\.mjs "\$RUNNER_TEMP\/verify-worker-release-readiness\.mjs"/
+    /- name: Pin release-control helpers for this Gate run\n        run: \|[\s\S]*install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"[\s\S]*install -m 700 scripts\/ci\/validate-release-health\.mjs "\$RUNNER_TEMP\/validate-release-health\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-metric-trust-release-readiness\.mjs "\$RUNNER_TEMP\/verify-metric-trust-release-readiness\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-worker-release-readiness\.mjs "\$RUNNER_TEMP\/verify-worker-release-readiness\.mjs"[\s\S]*install -m 700 scripts\/ci\/worker-release-id\.mjs "\$RUNNER_TEMP\/worker-release-id\.mjs"/
   )
   assert.equal(
     deployGate.match(/node "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"/g)?.length,
@@ -200,8 +200,10 @@ test('reasserts the single production writer without ever skipping promoted smok
   )
   assert.match(
     deployGate,
-    /- name: Require exact ingest worker fleet before promotion[\s\S]*id: worker_fleet[\s\S]*CRON_SECRET: \$\{\{ secrets\.CRON_SECRET \}\}[\s\S]*WORKER_READINESS_BASE_URL: \$\{\{ steps\.deploy_candidate\.outputs\.url \}\}[\s\S]*npx vercel@56\.2\.1 curl[\s\S]*--deployment "\$WORKER_READINESS_BASE_URL" \\[\s\S]*-- \\[\s\S]*--max-redirs 0[\s\S]*WORKER_READINESS_PAYLOAD_FILE="\$PAYLOAD_FILE"[\s\S]*node "\$RUNNER_TEMP\/verify-worker-release-readiness\.mjs"/
+    /- name: Require exact ingest worker fleet before promotion[\s\S]*id: worker_fleet[\s\S]*CRON_SECRET: \$\{\{ secrets\.CRON_SECRET \}\}[\s\S]*WORKER_READINESS_BASE_URL: \$\{\{ steps\.deploy_candidate\.outputs\.url \}\}[\s\S]*WORKER_RELEASE_ID: \$\{\{ steps\.worker_release\.outputs\.id \}\}[\s\S]*npx vercel@56\.2\.1 curl[\s\S]*"\/api\/health\/worker-release-readiness"[\s\S]*--deployment "\$WORKER_READINESS_BASE_URL" \\[\s\S]*-- \\[\s\S]*--max-redirs 0[\s\S]*WORKER_READINESS_PAYLOAD_FILE="\$PAYLOAD_FILE"[\s\S]*node "\$RUNNER_TEMP\/verify-worker-release-readiness\.mjs"/
   )
+  assert.match(deployGate, /--build-env ARENA_WORKER_RELEASE_ID="\$WORKER_RELEASE_ID"/)
+  assert.match(deployGate, /--env ARENA_WORKER_RELEASE_ID="\$WORKER_RELEASE_ID"/)
   assert.doesNotMatch(deployGate, /vercel@56\.2\.1 curl[\s\S]{0,500}--token/)
   assert.doesNotMatch(deployGate, /secrets\.VERCEL_AUTOMATION_BYPASS_SECRET/)
   assert.ok(
