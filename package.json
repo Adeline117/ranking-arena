@@ -128,7 +128,7 @@
     "ioredis": "^5.11.0",
     "lightweight-charts": "^5.1.0",
     "lucide-react": "^1.23.0",
-    "next": "^16.2.6",
+    "next": "^16.2.11",
     "otpauth": "^9.5.0",
     "pg": "^8.20.0",
     "posthog-js": "^1.396.5",
@@ -160,7 +160,7 @@
       "ws": "^8.21.0"
     },
     "sharp": "$sharp",
-    "postcss": "8.5.14"
+    "postcss": "8.5.23"
   },
   "pnpm": {
     "overrides": {
@@ -175,7 +175,7 @@
         "ws": "^8.21.0"
       },
       "sharp": "$sharp",
-      "postcss": "8.5.14"
+      "postcss": "8.5.23"
     }
   },
   "devDependencies": {
