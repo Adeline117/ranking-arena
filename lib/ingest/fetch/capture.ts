@@ -335,7 +335,8 @@ export interface CaptureNumericLeaderboardOptions {
   ) => LeaderboardPublicRequestProjectionInput
   /** Public query/body path whose exact value binds the canonical 1-based page. */
   pageBinding: LeaderboardNumericPageBinding
-  extractMeta: (payload: unknown) => NumericLeaderboardPageMeta
+  /** Validate one response against its exact 1-based request page. */
+  extractMeta: (payload: unknown, requestPageIndex: number) => NumericLeaderboardPageMeta
   pageSize: number | null
   isDegenerate?: (payload: unknown) => boolean
   /** Optional validation/smoke cap. It only counts as limiting if reached. */
@@ -741,7 +742,7 @@ export async function captureNumericLeaderboard(
 
     let meta: NumericLeaderboardPageMeta
     try {
-      const extractedMeta = extractMeta(payload)
+      const extractedMeta = extractMeta(payload, pageIndex)
       meta = {
         rowCount: extractedMeta.rowCount,
         reportedPopulation: extractedMeta.reportedPopulation,

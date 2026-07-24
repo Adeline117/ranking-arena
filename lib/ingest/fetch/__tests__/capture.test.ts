@@ -325,6 +325,26 @@ describe('captureNumericLeaderboard', () => {
     ])
   })
 
+  it('passes the exact request page index into response validation', async () => {
+    const validate = jest.fn((payload: unknown, requestPageIndex: number) => {
+      const page = payload as { rows: unknown[] }
+      return {
+        rowCount: page.rows.length,
+        reportedPopulation: null,
+        reportedPageCount: null,
+        reportedCurrentPage: requestPageIndex,
+        reportedPageSize: 2,
+      }
+    })
+    await captureNumericLeaderboard(
+      captureOptions(makeCaptureFetcher([{ rows: ['one', 'two'] }, { rows: ['three'] }]), {
+        extractMeta: validate,
+      })
+    )
+
+    expect(validate.mock.calls.map(([, requestPageIndex]) => requestPageIndex)).toEqual([1, 2])
+  })
+
   it('persists only the explicit public projection, never the authenticated request URL', async () => {
     let actualUrl = ''
     const capture = await captureNumericLeaderboard(
