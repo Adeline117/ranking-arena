@@ -458,6 +458,64 @@ SELECT
 FROM arena.metric_trust_observations
 WHERE trader_id = 10;
 
+-- A run-level verified population only proves that the acquisition counts
+-- closed. An observation for a live-offset multi-page board can still lack
+-- provider population authority. The database must accept that honest
+-- observation as discoverable evidence while excluding it from every ranking
+-- projection.
+WITH snapshot AS (
+  SELECT id, scraped_at
+  FROM arena.leaderboard_snapshots
+  WHERE id = 100
+), contracts AS (
+  SELECT id, metric, field_path, provenance, methodology_version
+  FROM arena.metric_source_contracts
+  WHERE source_id = 1
+    AND field_path IN ('test.normalized.roi', 'test.normalized.pnl')
+)
+INSERT INTO arena.metric_trust_observations (
+  contract_id, trader_id, source_id, snapshot_id, snapshot_scraped_at,
+  source_run_id, source_contract_version, timeframe, metric, field_path,
+  provenance, methodology_version, value, value_unit, currency,
+  source_as_of, valid_until, window_start, window_end, quality,
+  history_state, price_state, cost_basis_state, population_state,
+  window_state, unit_state, freshness_state, blocking_reasons
+)
+SELECT
+  contracts.id,
+  11,
+  1,
+  snapshot.id,
+  snapshot.scraped_at,
+  repeat('b', 64),
+  '1',
+  30,
+  contracts.metric,
+  contracts.field_path,
+  contracts.provenance,
+  contracts.methodology_version,
+  CASE contracts.metric WHEN 'roi' THEN 7.5 ELSE 700 END,
+  CASE contracts.metric WHEN 'roi' THEN 'percent' ELSE 'currency' END,
+  'USDT',
+  statement_timestamp() - interval '2 minutes',
+  statement_timestamp() + interval '5 hours',
+  statement_timestamp() - interval '30 days 2 minutes',
+  statement_timestamp() - interval '2 minutes',
+  'unknown',
+  'source_owned',
+  'source_owned',
+  'source_owned',
+  'unknown',
+  'unknown',
+  'verified',
+  'verified',
+  '[
+    {"code":"pagination_snapshot_unavailable","state":"unknown"},
+    {"code":"native_window_boundary_unverified","state":"unknown"}
+  ]'::jsonb
+FROM contracts
+CROSS JOIN snapshot;
+
 -- Both fields are individually complete, but board ROI and profile PnL are
 -- different registered metric sets and must never become one ranking input.
 WITH snapshot AS (
@@ -591,6 +649,29 @@ JOIN arena.raw_objects AS raw
   ON raw.job_type = evidence.job_type
 WHERE observation.snapshot_id = 100;
 SQL
+
+UNKNOWN_POPULATION_GATE="$(
+  psql_cmd -Atqc "
+    SELECT
+      (SELECT population_state
+         FROM arena.metric_trust_runs
+        WHERE source_run_id = repeat('b', 64)) || '|' ||
+      (SELECT count(*)
+         FROM arena.metric_trust_observations
+        WHERE trader_id = 11
+          AND population_state = 'unknown') || '|' ||
+      (SELECT count(*)
+         FROM arena.metric_rankable_observations
+        WHERE trader_id = 11) || '|' ||
+      (SELECT count(*)
+         FROM arena.metric_rankable_score_inputs_shadow
+        WHERE trader_id = 11);
+  "
+)"
+if [[ "$UNKNOWN_POPULATION_GATE" != "verified|2|0|0" ]]; then
+  echo "unknown observation escaped the verified-run ranking gate: $UNKNOWN_POPULATION_GATE" >&2
+  exit 1
+fi
 
 IDENTITY="$(
   psql_cmd -Atqc "
