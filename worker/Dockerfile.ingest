@@ -1,4 +1,4 @@
-# Arena INGEST worker — immutable container image.
+# Arena INGEST worker — release-stamped container image.
 #
 # Why (2026-06-30 incident): deploying to the SG VPS ran `npm ci` on the box, whose
 # npm is not concurrency-safe and silently drops .js files → worker crash-loop → SG
@@ -36,11 +36,20 @@ RUN npm ci --no-audit --no-fund
 
 # ── runtime ──
 FROM mcr.microsoft.com/playwright:${PW_VERSION} AS runtime
+ARG WORKER_RELEASE_ID
 ENV NODE_ENV=production \
     NODE_OPTIONS=--max-old-space-size=2560 \
     INGEST_REGIONS=vps_sg \
     INGEST_LOCAL_REGION=vps_sg
 WORKDIR /app
+
+# This baked stamp is computed from the reviewed Git blobs that make up the Worker
+# runtime. Never accept a runtime env override: an older image must not be able to
+# announce a newer release identity. Registry aliases are checked separately;
+# deployments use the verified OCI digest.
+RUN case "$WORKER_RELEASE_ID" in ''|*[!0-9a-f]*) exit 1 ;; esac \
+    && [ "${#WORKER_RELEASE_ID}" -eq 64 ] \
+    && printf '%s\n' "$WORKER_RELEASE_ID" > WORKER_RELEASE_ID
 
 COPY --from=deps /app/node_modules ./node_modules
 # Branded Google Chrome channel (some sources use sources.meta.browser_channel
