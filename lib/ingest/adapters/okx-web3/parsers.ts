@@ -26,11 +26,13 @@ import type {
   ParsedProfile,
   RankingTimeframe,
 } from '../../core/types'
+import { hasBase58DecodedByteLength } from '../../../utils/base58'
 
 type Dict = Record<string, unknown>
 
 function num(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null
+  if (typeof v !== 'number' && typeof v !== 'string') return null
+  if (typeof v === 'string' && (v.length === 0 || v.trim() !== v)) return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
 }
@@ -47,24 +49,34 @@ export function parseOkxWeb3LeaderboardPage(raw: unknown, _ctx: ParseCtx): Parse
   const items = Array.isArray(data.rankingInfos) ? (data.rankingInfos as Dict[]) : []
 
   const rows: ParsedLeaderboardRow[] = []
-  for (const item of items) {
-    const address = String(item.walletAddress ?? '').trim() // base58 — keep case!
-    if (address.length < 32) continue // no identity → cannot publish
+  for (const [itemIndex, item] of items.entries()) {
+    const address = typeof item.walletAddress === 'string' ? item.walletAddress.trim() : ''
+    if (!hasBase58DecodedByteLength(address, 32)) continue
 
     const labels = Array.isArray(item.labels)
       ? (item.labels as unknown[]).map((l) => String(l)).filter((l) => l.length > 0)
       : []
+    const headlineRoi = num(item.roi)
+    const headlinePnl = num(item.pnl)
+    const headlineWinRate = num(item.winRate)
     rows.push({
       exchangeTraderId: address,
-      rank: rows.length + 1, // page-local; tier-a re-anchors by page_size
+      rank: itemIndex + 1, // preserve upstream slot when an invalid identity is rejected
       nickname: str(item.addressAlias) ?? str(item.walletName),
       avatarUrlOrigin: str(item.walletIconUrl),
       walletAddress: address, // spec §1.4 on-chain identity
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: num(item.roi), // already canonical percent
-      headlinePnl: num(item.pnl),
-      headlineWinRate: num(item.winRate), // already canonical percent
+      headlineRoi, // already canonical percent
+      headlinePnl,
+      headlineWinRate, // already canonical percent
+      headlineMetricSources: {
+        ...(headlineRoi === null ? {} : { roi: { fieldPath: 'data.rankingInfos[].roi' } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.rankingInfos[].pnl' } }),
+        ...(headlineWinRate === null
+          ? {}
+          : { win_rate: { fieldPath: 'data.rankingInfos[].winRate' } }),
+      },
       // wallet category chips (spec §11.18) — durable per-trader facts
       traderMeta: labels.length > 0 ? { okx_web3_labels: labels } : null,
       raw: item, // pnlHistory sparkline + topTokens + volume verbatim
