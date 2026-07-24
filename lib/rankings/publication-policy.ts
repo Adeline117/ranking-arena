@@ -8,7 +8,9 @@
  * and a cache-epoch bump.
  */
 
-export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v1'
+export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v2'
+export const PUBLIC_RANKING_MAX_COMPUTED_AGE_MS = 48 * 60 * 60 * 1000
+export const PUBLIC_RANKING_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 
 export const PUBLIC_RANKING_SOURCE_QUARANTINES = [
   {
@@ -33,6 +35,143 @@ function canonicalSource(source: unknown): string | null {
   if (typeof source !== 'string') return null
   const normalized = source.trim().toLowerCase()
   return normalized.length > 0 ? normalized : null
+}
+
+function firstDefined(record: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (record[key] !== undefined) return record[key]
+  }
+  return undefined
+}
+
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function consistentStringAlias(
+  record: Record<string, unknown>,
+  keys: readonly string[],
+  normalize: (value: string) => string = (value) => value
+): string | null {
+  const values = keys.filter((key) => record[key] !== undefined).map((key) => record[key])
+  if (values.length === 0 || values.some((value) => typeof value !== 'string')) return null
+
+  const normalized = (values as string[]).map(normalize)
+  if (normalized.some((value) => value.length === 0 || value !== value.trim())) return null
+  return normalized.every((value) => value === normalized[0]) ? normalized[0] : null
+}
+
+const ISO_INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
+
+export interface PublicRankingRowEligibilityOptions {
+  expectedPeriod?: string
+  nowMs?: number
+}
+
+export interface SanitizePublicRankingPayloadOptions {
+  expectedPeriod?: string
+  nowMs?: number
+  sourceOf?: (row: unknown) => unknown
+}
+
+/**
+ * Minimum row-level proof required for public ranking publication.
+ *
+ * Raw/profile observations remain visible when this returns false. A row may
+ * enter a public ranking only when its identity is canonical, required score
+ * inputs are concrete (not partial/estimated), and its score computation is
+ * current. Source-level history/price/cost-basis authority remains a separate
+ * reviewed contract and quarantine gate.
+ */
+export function isPublicRankingRowEligible(
+  row: unknown,
+  options: PublicRankingRowEligibilityOptions = {}
+): boolean {
+  if (typeof row !== 'object' || row === null || Array.isArray(row)) return false
+  const record = row as Record<string, unknown>
+
+  const source = consistentStringAlias(record, ['source', 'platform'], (value) =>
+    value.toLowerCase()
+  )
+  const canonical = canonicalSource(source)
+  if (
+    source === null ||
+    ['source', 'platform'].some((key) => record[key] !== undefined && record[key] !== source) ||
+    canonical === null ||
+    source !== canonical ||
+    !isPublicRankingSourceAllowed(source)
+  ) {
+    return false
+  }
+
+  const traderIdentity = consistentStringAlias(record, [
+    'source_trader_id',
+    'traderKey',
+    'trader_key',
+  ])
+  if (traderIdentity === null) return false
+
+  if (firstDefined(record, 'score_completeness', 'scoreConfidence') !== 'full') return false
+  if (firstDefined(record, 'metrics_estimated', 'metricsEstimated') !== false) return false
+
+  const arenaScore = firstDefined(record, 'arena_score', 'arenaScore')
+  const roi = record.roi
+  const pnl = record.pnl
+  const winRate = firstDefined(record, 'win_rate', 'winRate')
+  const maxDrawdown = firstDefined(record, 'max_drawdown', 'maxDrawdown')
+  if (
+    !finiteNumber(arenaScore) ||
+    arenaScore <= 0 ||
+    arenaScore > 100 ||
+    !finiteNumber(roi) ||
+    !finiteNumber(pnl) ||
+    !finiteNumber(winRate) ||
+    winRate < 0 ||
+    winRate > 100 ||
+    !finiteNumber(maxDrawdown) ||
+    maxDrawdown < 0 ||
+    // 100 is commonly an upstream cap/sentinel, not proof of a measured
+    // full-loss drawdown. Keep it profile-visible but outside ranking.
+    maxDrawdown >= 100
+  ) {
+    return false
+  }
+
+  const computedAt = firstDefined(record, 'computed_at', 'lastUpdated')
+  if (typeof computedAt !== 'string' || !ISO_INSTANT_PATTERN.test(computedAt)) return false
+  const computedAtMs = Date.parse(computedAt)
+  if (!Number.isFinite(computedAtMs)) return false
+  const nowMs = options.nowMs ?? Date.now()
+  if (!Number.isFinite(nowMs)) return false
+  if (
+    computedAtMs < nowMs - PUBLIC_RANKING_MAX_COMPUTED_AGE_MS ||
+    computedAtMs > nowMs + PUBLIC_RANKING_FUTURE_TOLERANCE_MS
+  ) {
+    return false
+  }
+
+  if (options.expectedPeriod !== undefined) {
+    if (
+      typeof options.expectedPeriod !== 'string' ||
+      options.expectedPeriod.length === 0 ||
+      options.expectedPeriod !== options.expectedPeriod.trim()
+    ) {
+      return false
+    }
+
+    const period = consistentStringAlias(record, ['season_id', 'period'], (value) =>
+      value.toUpperCase()
+    )
+    if (
+      period === null ||
+      ['season_id', 'period'].some((key) => record[key] !== undefined && record[key] !== period) ||
+      period !== options.expectedPeriod.toUpperCase()
+    ) {
+      return false
+    }
+  }
+
+  return true
 }
 
 export function isPublicRankingSourceAllowed(source: unknown): boolean {
@@ -87,14 +226,39 @@ function freshnessRowSource(row: unknown): unknown {
  */
 export function sanitizePublicRankingPayload<T>(
   payload: T,
-  sourceOf: (row: unknown) => unknown = defaultRowSource
+  options: SanitizePublicRankingPayloadOptions = {}
 ): T {
   if (typeof payload !== 'object' || payload === null) return payload
 
   const record = payload as RankingPayload
+  const sourceOf = options.sourceOf ?? defaultRowSource
+  const topLevelPeriodKeys = ['period', 'window', 'timeRange'] as const
+  const hasTopLevelPeriod = topLevelPeriodKeys.some((key) => record[key] !== undefined)
+  const topLevelPeriod = hasTopLevelPeriod
+    ? consistentStringAlias(record, topLevelPeriodKeys, (value) => value.toUpperCase())
+    : null
+  const hasOptionPeriod = options.expectedPeriod !== undefined
+  const optionPeriod =
+    typeof options.expectedPeriod === 'string' &&
+    options.expectedPeriod.length > 0 &&
+    options.expectedPeriod === options.expectedPeriod.trim()
+      ? options.expectedPeriod.toUpperCase()
+      : null
+  const expectedPeriod = optionPeriod ?? topLevelPeriod
+  const periodContractValid =
+    expectedPeriod !== null &&
+    (!hasOptionPeriod || optionPeriod !== null) &&
+    (!hasTopLevelPeriod || topLevelPeriod !== null) &&
+    (optionPeriod === null || topLevelPeriod === null || optionPeriod === topLevelPeriod)
+  const nowMs = options.nowMs ?? Date.now()
   const originalTraders = Array.isArray(record.traders) ? record.traders : null
   const traders = originalTraders
-    ? filterPublicRankingRows(originalTraders, sourceOf)
+    ? originalTraders.filter(
+        (row) =>
+          periodContractValid &&
+          isPublicRankingSourceAllowed(sourceOf(row)) &&
+          isPublicRankingRowEligible(row, { expectedPeriod: expectedPeriod ?? undefined, nowMs })
+      )
     : originalTraders
   const availableSources = Array.isArray(record.availableSources)
     ? filterPublicRankingSources(record.availableSources)
@@ -119,13 +283,41 @@ export function sanitizePublicRankingPayload<T>(
 
   if (!removedTrader && !removedSource && !removedFreshness) return payload
 
+  const removedQuarantinedSource = Boolean(
+    originalTraders?.some((row) => isPublicRankingSourceQuarantined(sourceOf(row))) ||
+    (Array.isArray(record.availableSources) &&
+      record.availableSources.some(isPublicRankingSourceQuarantined)) ||
+    (Array.isArray(record.source_freshness) &&
+      record.source_freshness.some((row) =>
+        isPublicRankingSourceQuarantined(freshnessRowSource(row))
+      ))
+  )
+  const removedIneligibleRow = Boolean(
+    originalTraders?.some(
+      (row) =>
+        !isPublicRankingSourceQuarantined(sourceOf(row)) &&
+        (!periodContractValid ||
+          !isPublicRankingRowEligible(row, {
+            expectedPeriod: expectedPeriod ?? undefined,
+            nowMs,
+          }))
+    )
+  )
+  const removedInvalidMetadata = (removedSource || removedFreshness) && !removedQuarantinedSource
+  const visibilityReasons = [
+    ...(removedQuarantinedSource ? ['quarantined_source_removed'] : []),
+    ...(removedIneligibleRow ? ['ineligible_ranking_row_removed'] : []),
+    ...(removedInvalidMetadata ? ['invalid_source_metadata_removed'] : []),
+  ]
+
   const sanitized: RankingPayload = {
     ...record,
     ...(traders ? { traders } : {}),
     ...(availableSources ? { availableSources } : {}),
     ...(sourceFreshness ? { source_freshness: sourceFreshness } : {}),
     ranking_visibility: 'partial',
-    ranking_visibility_reason: 'quarantined_source_removed',
+    ranking_visibility_reason: 'publication_policy_filtered',
+    ranking_visibility_reasons: visibilityReasons,
   }
 
   if (removedTrader) {
