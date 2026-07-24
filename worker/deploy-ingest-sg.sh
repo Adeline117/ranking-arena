@@ -4,8 +4,9 @@
 # Production mutations require an explicit full target SHA that is still exact
 # origin/main. The committed source is materialized once, a complete candidate
 # is prepared beside the live tree, and PM2 is stopped only for the atomic
-# directory cutover. Any failure after stop restores the previous directory and
-# process while the same token-fenced remote lease is still held.
+# directory cutover. A failure after stop restores the previous directory and
+# process while remote connectivity and the same token-fenced lease remain
+# available; otherwise the script fails loudly for supervised recovery.
 #
 # Usage:
 #   bash worker/deploy-ingest-sg.sh --target-sha=<40hex> --dry-run
@@ -518,5 +519,7 @@ assert_deploy_lock
 require_exact_main
 DEPLOY_SUCCEEDED=1
 RECOVERY_REQUIRED=0
-ssh_sg "ls -d '$REMOTE_DIR'.bak-* 2>/dev/null | sort | head -n -3 | xargs -r rm -rf"
+if ! ssh_sg "ls -d '$REMOTE_DIR'.bak-* 2>/dev/null | sort | head -n -3 | xargs -r rm -rf"; then
+  echo "⚠ SG deploy succeeded, but old-backup retention cleanup failed" >&2
+fi
 echo "✓ SG deploy complete: sha=$SHA release=$WORKER_RELEASE_ID"

@@ -416,6 +416,21 @@ test_release_stamp_matches_exact_committed_inputs() {
   echo 'ok - release stamp is bound to exact committed code and dependency inputs'
 }
 
+test_post_success_retention_cleanup_is_best_effort() {
+  local deploy success_line cleanup_line complete_line
+  deploy="$(<"$DEPLOY_SCRIPT")"
+  assert_contains "$deploy" 'if ! ssh_sg "ls -d '\''$REMOTE_DIR'\''.bak-*' \
+    'backup retention cleanup must be explicitly best effort'
+  assert_contains "$deploy" 'SG deploy succeeded, but old-backup retention cleanup failed' \
+    'cleanup failure must remain visible without falsifying rollout status'
+  success_line="$(grep -n '^DEPLOY_SUCCEEDED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  cleanup_line="$(grep -n 'old-backup retention cleanup failed' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  complete_line="$(grep -n 'SG deploy complete' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  [ "$success_line" -lt "$cleanup_line" ] && [ "$cleanup_line" -lt "$complete_line" ] || \
+    fail 'retention cleanup must run only after transactional success and before completion reporting'
+  echo 'ok - post-success retention cleanup cannot falsify deploy failure'
+}
+
 bash -n "$DEPLOY_SCRIPT" "$DOCKER_SCRIPT" "$0"
 test_dry_run_itemizes_changes
 test_artifact_preflight_fails_before_remote_access
@@ -429,3 +444,4 @@ test_deploy_lease_is_fenced_and_recoverable
 test_container_bypass_is_disabled
 test_ready_check_requires_fresh_sha_evidence
 test_release_stamp_matches_exact_committed_inputs
+test_post_success_retention_cleanup_is_best_effort
