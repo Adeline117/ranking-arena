@@ -1,4 +1,4 @@
-import { diskUsedPct, parseDiskUsedPct, startHeartbeat } from '../heartbeat'
+import { diskUsedPct, parseDiskUsedPct, resolveWorkerReleaseId, startHeartbeat } from '../heartbeat'
 
 describe('worker heartbeat disk usage', () => {
   test('parses Linux and macOS POSIX df output', () => {
@@ -52,11 +52,22 @@ describe('worker heartbeat disk usage', () => {
 
       const payload = JSON.parse(hset.mock.calls[0][2])
       expect(payload.attempt_bound_capture).toBe(true)
+      expect(payload.release_id).toBe('unknown')
       expect(payload.regions).toEqual(['local'])
     } finally {
       if (timer) clearInterval(timer)
       if (original === undefined) delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
       else process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = original
     }
+  })
+
+  test('accepts only a release ID stamped into the deployment directory', () => {
+    const readReleaseFile = jest.fn(() => 'c'.repeat(64) + '\n')
+
+    expect(resolveWorkerReleaseId(readReleaseFile as never, '/srv/arena-release')).toBe(
+      'c'.repeat(64)
+    )
+    expect(readReleaseFile).toHaveBeenCalledWith('/srv/arena-release/WORKER_RELEASE_ID', 'utf8')
+    expect(resolveWorkerReleaseId((() => 'forged') as never, '/srv/arena-release')).toBe('unknown')
   })
 })
