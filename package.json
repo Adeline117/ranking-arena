@@ -160,7 +160,8 @@
       "ws": "^8.21.0"
     },
     "sharp": "$sharp",
-    "postcss": "8.5.23"
+    "postcss": "8.5.23",
+    "brace-expansion": "$brace-expansion"
   },
   "pnpm": {
     "overrides": {
@@ -170,12 +171,11 @@
       "@walletconnect/sign-client": "2.23.6",
       "@walletconnect/types": "2.23.6",
       "@walletconnect/utils": "2.23.6",
-      "viem": {
-        ".": "$viem",
-        "ws": "^8.21.0"
-      },
+      "viem": "$viem",
+      "viem>ws": "^8.21.0",
       "sharp": "$sharp",
-      "postcss": "8.5.23"
+      "postcss": "8.5.23",
+      "brace-expansion": "$brace-expansion"
     }
   },
   "devDependencies": {
@@ -207,6 +207,7 @@
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
     "babel-plugin-react-compiler": "^1.0.0",
+    "brace-expansion": "file:worker/vendor/brace-expansion-compat",
     "capacitor-native-biometric": "^4.2.2",
     "dotenv": "^17.4.2",
     "eslint": "^9.39.4",

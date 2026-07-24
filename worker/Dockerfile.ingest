@@ -32,6 +32,7 @@ WORKDIR /app
 # have a peerOptional typescript/@solana-kit conflict that strict `npm ci` rejects
 # with ERESOLVE (the whole repo installs with legacy-peer-deps; ci.yml does too).
 COPY package.json package-lock.json .npmrc ./
+COPY worker/vendor/brace-expansion-compat ./worker/vendor/brace-expansion-compat
 RUN npm ci --no-audit --no-fund
 
 # ── runtime ──

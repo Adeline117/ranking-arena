@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const imageWorkflow = readFileSync('.github/workflows/build-ingest-image.yml', 'utf8')
 const deployGate = readFileSync('.github/workflows/deploy-gate.yml', 'utf8')
+const ingestDockerfile = readFileSync('worker/Dockerfile.ingest', 'utf8')
 const dockerRunner = readFileSync('worker/docker-run-sg.sh', 'utf8')
 const dockerCompose = readFileSync('worker/docker-compose.sg.yml', 'utf8')
 
@@ -36,6 +37,10 @@ test('builds a deployable worker image whenever deterministic runtime inputs cha
   )
   assert.doesNotMatch(imageWorkflow, /\$\{\{ env\.IMAGE \}\}:latest/)
   assert.match(imageWorkflow, /\/app\/WORKER_RELEASE_ID/)
+  assert.match(
+    ingestDockerfile,
+    /COPY worker\/vendor\/brace-expansion-compat \.\/worker\/vendor\/brace-expansion-compat\nRUN npm ci/
+  )
   assert.match(dockerRunner, /disabled: use the exact-main transactional SG deploy workflow/)
   assert.match(dockerCompose, /services: \{\}/)
   assert.doesNotMatch(dockerCompose, /^\s+image:/m)
