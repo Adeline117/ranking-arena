@@ -24,8 +24,10 @@ import { withCron } from '@/lib/api/with-cron'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
+import { evaluateWorkerHeartbeatTopology } from '@/lib/ingest/worker-heartbeat-topology'
 import {
   REQUIRED_RELEASE_REGIONS,
+  summarizeWorkerRuntimeDrift,
   WORKER_HEARTBEAT_DECOMMISSION_MS,
   WORKER_HEARTBEAT_STALE_MS,
 } from '@/lib/ingest/worker-release-readiness'
@@ -34,6 +36,8 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 const ROSTER_KEY = 'arena:worker:roster'
+const COMMIT_SHA = /^[0-9a-f]{40}$/
+const RELEASE_ID = /^[0-9a-f]{64}$/
 const STALE_MS = WORKER_HEARTBEAT_STALE_MS // heartbeat older than this → node is down
 const DECOMMISSION_MS = WORKER_HEARTBEAT_DECOMMISSION_MS // older → assume retired, prune
 
@@ -55,10 +59,11 @@ const REQUIRED_REGIONS: readonly string[] = REQUIRED_RELEASE_REGIONS
 
 interface HeartbeatPayload {
   ts: number
-  regions?: string[]
+  regions: string[]
   pid?: number
   node?: string
   sha?: string
+  release_id?: string
   attempt_bound_capture?: boolean
   disk?: number
 }
@@ -69,16 +74,37 @@ interface HeartbeatPayload {
 const DISK_WARN_PCT = 88
 
 function parseBeat(raw: unknown): HeartbeatPayload | null {
-  if (raw == null) return null
   // Upstash REST may return the value already parsed (object) or as a string.
-  const obj = typeof raw === 'string' ? safeJson(raw) : (raw as Record<string, unknown>)
-  if (!obj || typeof obj.ts !== 'number') return null
-  return obj as unknown as HeartbeatPayload
+  const obj = typeof raw === 'string' ? safeJson(raw) : raw
+  if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return null
+  const beat = obj as Record<string, unknown>
+  if (!Number.isSafeInteger(beat.ts) || Number(beat.ts) <= 0) return null
+  if (
+    !Array.isArray(beat.regions) ||
+    beat.regions.length === 0 ||
+    beat.regions.some(
+      (region) =>
+        typeof region !== 'string' ||
+        region.length === 0 ||
+        region.length > 80 ||
+        region.trim() !== region
+    )
+  ) {
+    return null
+  }
+  return {
+    ...beat,
+    regions: [...new Set(beat.regions as string[])],
+    ts: Number(beat.ts),
+  } as HeartbeatPayload
 }
 
 function safeJson(s: string): Record<string, unknown> | null {
   try {
-    return JSON.parse(s) as Record<string, unknown>
+    const value: unknown = JSON.parse(s)
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null
   } catch {
     return null
   }
@@ -95,12 +121,13 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
   const roster = (await redis.hgetall(ROSTER_KEY)) as Record<string, unknown> | null
   const now = Date.now()
   const entries = Object.entries(roster ?? {})
+  const topology = evaluateWorkerHeartbeatTopology(roster, now)
 
   const down: Array<{ node: string; age_min: number; regions: string[] }> = []
   const healthy: string[] = []
   const healthyRegions = new Set<string>()
   const pruned: string[] = []
-  const liveShas: Array<{ node: string; sha: string }> = []
+  const liveReleases: Array<{ node: string; release_id: string; sha: string }> = []
   const highDisk: Array<{ node: string; disk: number }> = []
 
   for (const [node, raw] of entries) {
@@ -119,8 +146,15 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
       down.push({ node, age_min: Math.round(age / 60_000), regions: beat.regions ?? [] })
     } else {
       healthy.push(node)
-      for (const r of beat.regions ?? []) healthyRegions.add(r)
-      if (beat.sha && beat.sha !== 'unknown') liveShas.push({ node, sha: beat.sha })
+      for (const r of beat.regions) healthyRegions.add(r)
+      liveReleases.push({
+        node,
+        release_id:
+          typeof beat.release_id === 'string' && RELEASE_ID.test(beat.release_id)
+            ? beat.release_id
+            : 'unknown',
+        sha: typeof beat.sha === 'string' && COMMIT_SHA.test(beat.sha) ? beat.sha : 'unknown',
+      })
       if (typeof beat.disk === 'number' && beat.disk >= DISK_WARN_PCT) {
         highDisk.push({ node, disk: beat.disk })
       }
@@ -198,20 +232,67 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
     ).catch((err) => logger.warn('[worker-heartbeat-check] alert failed:', err))
   }
 
-  // Code-drift alarm: live nodes running different commits (the root cause of the
-  // SG node silently running 18-day-old ingest code). Alert when ≥2 distinct SHAs.
-  const distinctShas = [...new Set(liveShas.map((s) => s.sha))]
-  if (distinctShas.length > 1) {
-    const lines = liveShas.map((s) => `  ${s.node}: ${s.sha.slice(0, 9)}`)
+  // Continuous fleet topology invariant. Candidate-release readiness protects
+  // deployments; this independent cron catches a duplicate/combined owner or
+  // disabled capture that appears later while the fleet is already running.
+  if (!topology.ready) {
+    const evidence = [
+      topology.missing_regions.length > 0 ? `missing=${topology.missing_regions.join(',')}` : null,
+      topology.duplicate_regions.length > 0
+        ? `duplicate=${topology.duplicate_regions.join(',')}`
+        : null,
+      topology.combined_owner_nodes.length > 0
+        ? `combined=${topology.combined_owner_nodes.join(',')}`
+        : null,
+      topology.invalid_release_nodes.length > 0
+        ? `unknown_release=${topology.invalid_release_nodes.join(',')}`
+        : null,
+      topology.capture_disabled_nodes.length > 0
+        ? `capture_disabled=${topology.capture_disabled_nodes.join(',')}`
+        : null,
+      topology.distinct_release_ids.length > 1
+        ? `release_drift=${topology.distinct_release_ids.length}`
+        : null,
+      topology.invalid_nodes.length > 0
+        ? `malformed=${topology.invalid_nodes.map(({ node, reason }) => `${node}:${reason}`).join(',')}`
+        : null,
+    ].filter((item): item is string => item !== null)
+
     await sendRateLimitedAlert(
       {
-        title: `Ingest worker code drift: ${distinctShas.length} versions live`,
+        title: 'Ingest worker topology INVALID',
         message:
-          `Worker nodes are running DIFFERENT commits — fixes deployed to one node ` +
-          `are missing on the other (stale parsers / guards).\n${lines.join('\n')}\n\n` +
+          `Required regions must each have exactly one distinct owner on one valid worker ` +
+          `release with attempt-bound capture enabled.\n${evidence.join('\n')}`,
+        level: 'critical',
+        details: { topology },
+      },
+      'worker-heartbeat:topology',
+      15 * 60_000
+    ).catch((err) => logger.warn('[worker-heartbeat-check] topology alert failed:', err))
+  }
+
+  // Runtime-drift alarm: compare the deterministic worker bundle rather than
+  // monorepo commits. App-only commits may legitimately leave two audit SHAs
+  // while the actual worker code and dependencies remain identical.
+  const runtimeDrift = summarizeWorkerRuntimeDrift(liveReleases)
+  if (runtimeDrift.drift && topology.ready) {
+    const lines = liveReleases.map(
+      (release) =>
+        `  ${release.node}: release=${release.release_id.slice(0, 12)} sha=${release.sha.slice(0, 9)}`
+    )
+    await sendRateLimitedAlert(
+      {
+        title:
+          runtimeDrift.invalid_nodes.length > 0
+            ? `Ingest worker runtime identity invalid: ${runtimeDrift.invalid_nodes.join(', ')}`
+            : `Ingest worker runtime drift: ${runtimeDrift.distinct_release_ids.length} releases live`,
+        message:
+          `Worker nodes have missing/invalid release identity or are running DIFFERENT runtime ` +
+          `bundles — fixes deployed to one node may be missing on the other.\n${lines.join('\n')}\n\n` +
           `Resync the lagging node: bash worker/deploy-ingest-sg.sh`,
         level: 'warning',
-        details: { distinctShas, liveShas },
+        details: { runtimeDrift, liveReleases },
       },
       'worker-heartbeat:drift',
       6 * 3600_000 // 6h cooldown — drift is not urgent, but must not go unseen
@@ -220,7 +301,7 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
 
   logger.info(
     `[worker-heartbeat-check] ${healthy.length} healthy, ${down.length} down, ${pruned.length} pruned, ` +
-      `${distinctShas.length} live sha(s)`
+      `${runtimeDrift.distinct_release_ids.length} valid live worker release(s)`
   )
   return {
     count: entries.length,
@@ -229,5 +310,6 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
     down,
     uncovered: uncovered.length > 0 ? uncovered : undefined,
     pruned: pruned.length > 0 ? pruned : undefined,
+    topology,
   }
 })
