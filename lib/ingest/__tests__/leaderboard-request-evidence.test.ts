@@ -5,15 +5,19 @@ import {
   type BuildLeaderboardAcquisitionManifestInput,
 } from '@/lib/ingest/acquisition-manifest'
 import type { RankingTimeframe } from '@/lib/ingest/core/types'
+import { buildOkxWeb3LeaderboardListUrl } from '@/lib/ingest/adapters/okx-web3/request-evidence'
 import {
   BINANCE_LEADERBOARD_LIST_URLS,
   BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
   BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS,
   BINANCE_SINGLE_RESPONSE_POPULATION_CONTRACT,
+  OKX_WEB3_SOLANA_NATIVE_PERIOD_REQUEST_CONTRACT,
+  OKX_WEB3_SOLANA_SINGLE_RESPONSE_POPULATION_CONTRACT,
   assessLeaderboardMetricAuthorities,
   assessLeaderboardNativeWindowRequest,
   binanceLeaderboardListRequestSha256,
   buildBinanceLeaderboardListBody,
+  okxWeb3LeaderboardListRequestSha256,
 } from '@/lib/ingest/leaderboard-request-evidence'
 
 type BinanceSourceSlug = 'binance_futures' | 'binance_spot'
@@ -28,6 +32,7 @@ interface ManifestOptions {
   requestHashTimeframe?: RankingTimeframe
   requestSha256?: string
   url?: string
+  reportedCurrentPage?: number | null
   reportedPageSize?: number | null
   callerLimited?: boolean
   secondPageFetchedAt?: string
@@ -37,10 +42,33 @@ interface ManifestOptions {
   sourceRowCount?: number
 }
 
-function listUrl(sourceSlug: string): string {
+function isOkxWeb3(sourceSlug: string): boolean {
+  return sourceSlug === 'okx_web3_solana'
+}
+
+function listUrl(
+  sourceSlug: string,
+  pageIndex: number,
+  pageSize: number,
+  timeframe: RankingTimeframe
+): string {
+  if (isOkxWeb3(sourceSlug)) {
+    return buildOkxWeb3LeaderboardListUrl({ pageIndex, pageSize, timeframe })
+  }
   return sourceSlug === 'binance_spot'
     ? BINANCE_LEADERBOARD_LIST_URLS.spot
     : BINANCE_LEADERBOARD_LIST_URLS.futures
+}
+
+function reviewedRequestSha256(input: {
+  sourceSlug: string
+  pageIndex: number
+  pageSize: number
+  timeframe: RankingTimeframe
+}): string | null {
+  return isOkxWeb3(input.sourceSlug)
+    ? okxWeb3LeaderboardListRequestSha256(input)
+    : binanceLeaderboardListRequestSha256(input)
 }
 
 function manifest(options: ManifestOptions = {}) {
@@ -49,6 +77,7 @@ function manifest(options: ManifestOptions = {}) {
   const configuredPageSize =
     options.configuredPageSize === undefined ? 20 : options.configuredPageSize
   const effectivePageSize = configuredPageSize ?? 20
+  const okxWeb3 = isOkxWeb3(sourceSlug)
   const callerLimited = options.callerLimited ?? false
   const sourceRowCount = options.sourceRowCount ?? 1
   const reportedPopulation =
@@ -66,12 +95,12 @@ function manifest(options: ManifestOptions = {}) {
         list: Array.from({ length: sourceRowCount }, () => ({})),
       },
     },
-    url: options.url ?? listUrl(sourceSlug),
+    url: options.url ?? listUrl(sourceSlug, 1, effectivePageSize, timeframe),
     fetchedAt: '2026-07-21T10:00:01.000Z',
   }
   const requestSha256 =
     options.requestSha256 ??
-    binanceLeaderboardListRequestSha256({
+    reviewedRequestSha256({
       sourceSlug,
       pageIndex: options.requestHashPageIndex ?? 1,
       pageSize: options.requestHashPageSize ?? effectivePageSize,
@@ -92,18 +121,24 @@ function manifest(options: ManifestOptions = {}) {
             ? { state: 'not_reported' }
             : { state: 'reported', value: reportedPopulation },
         page_count: { state: 'not_reported' },
-        current_page: { state: 'not_reported' },
-        page_size:
-          options.reportedPageSize === null || options.reportedPageSize === undefined
+        current_page: okxWeb3
+          ? options.reportedCurrentPage === null
             ? { state: 'not_reported' }
-            : { state: 'reported', value: options.reportedPageSize },
+            : { state: 'reported', value: options.reportedCurrentPage ?? 1 }
+          : { state: 'not_reported' },
+        page_size:
+          okxWeb3 && options.reportedPageSize === undefined
+            ? { state: 'reported', value: effectivePageSize }
+            : options.reportedPageSize === null || options.reportedPageSize === undefined
+              ? { state: 'not_reported' }
+              : { state: 'reported', value: options.reportedPageSize },
       },
     },
   ]
   if (options.secondPageFetchedAt) {
     const secondRequestSha256 =
       options.secondRequestSha256 ??
-      binanceLeaderboardListRequestSha256({
+      reviewedRequestSha256({
         sourceSlug,
         pageIndex: 2,
         pageSize: effectivePageSize,
@@ -114,7 +149,7 @@ function manifest(options: ManifestOptions = {}) {
       raw_page: {
         pageIndex: 2,
         payload: { code: '000000', success: true, data: { total: 1, list: [] } },
-        url: options.url ?? listUrl(sourceSlug),
+        url: options.url ?? listUrl(sourceSlug, 2, effectivePageSize, timeframe),
         fetchedAt: options.secondPageFetchedAt,
       },
       source_row_count: 0,
@@ -124,8 +159,10 @@ function manifest(options: ManifestOptions = {}) {
       source_reports: {
         population: { state: 'reported', value: 1 },
         page_count: { state: 'not_reported' },
-        current_page: { state: 'not_reported' },
-        page_size: { state: 'not_reported' },
+        current_page: okxWeb3 ? { state: 'reported', value: 2 } : { state: 'not_reported' },
+        page_size: okxWeb3
+          ? { state: 'reported', value: effectivePageSize }
+          : { state: 'not_reported' },
       },
     })
   }
@@ -134,7 +171,7 @@ function manifest(options: ManifestOptions = {}) {
     source: {
       id: 1,
       slug: sourceSlug,
-      adapter_slug: options.adapterSlug ?? 'binance',
+      adapter_slug: options.adapterSlug ?? (okxWeb3 ? 'okx_web3' : 'binance'),
       configured_page_size: configuredPageSize,
       configured_pagination_kind: 'numeric',
     },
@@ -188,6 +225,58 @@ describe('reviewed leaderboard native-window request evidence', () => {
         })
       ).toBe(expectedSha256)
       expect(buildBinanceLeaderboardListBody(1, 20, timeframe).timeRange).toBe(`${timeframe}D`)
+    }
+  )
+
+  it.each([
+    [7, 1, 20, 'ee1c20e0869371d26c779c479831043de045409131729c1e53e2193a2e812309'],
+    [30, 1, 20, 'd3a91344415264887cfa9b356242d792b0aef0cbf049a97beb85e9621dba93a4'],
+    [90, 1, 20, '3e740c28a55655da793819414c6b9964d80d178f12c5b0c5648a67fea5238a56'],
+    [30, 2, 20, 'd6ffeca0f4ea4242f1a9f02804edf4f32722e04f10773343722250436b64e30e'],
+    [30, 1, 2, 'a7e934c00b83d9427d39b0e1de41313daf230ba3cb15903a8c6d2571034c64a5'],
+    [30, 2, 2, '2daefe10221095f90dbbcc00457fe03398f140d0baa8a00d8ebc87cb51c6ae3c'],
+  ] as const)(
+    'matches the reviewed OKX Solana %dD page %d size %d request digest',
+    (timeframe, pageIndex, pageSize, expectedSha256) => {
+      expect(okxWeb3LeaderboardListRequestSha256({ pageIndex, pageSize, timeframe })).toBe(
+        expectedSha256
+      )
+    }
+  )
+
+  it.each([7, 30, 90] as const)(
+    'separates the exact OKX Solana %dD request and single-response population from its unknown boundary',
+    (timeframe) => {
+      const input = manifest({ sourceSlug: 'okx_web3_solana', timeframe })
+      const authorities = assessLeaderboardMetricAuthorities(input)
+      expect(authorities).toMatchObject({
+        request: {
+          state: 'verified',
+          contractId: OKX_WEB3_SOLANA_NATIVE_PERIOD_REQUEST_CONTRACT,
+          semantics: 'provider_native_period_aggregate',
+        },
+        population: {
+          state: 'verified',
+          contractId: OKX_WEB3_SOLANA_SINGLE_RESPONSE_POPULATION_CONTRACT,
+          semantics: 'reviewed_board_single_response_population',
+        },
+        window: {
+          state: 'request_verified',
+          contractId: OKX_WEB3_SOLANA_NATIVE_PERIOD_REQUEST_CONTRACT,
+          reason: 'native_window_boundary_unverified',
+          diagnostic: 'provider_window_boundary_unavailable',
+        },
+      })
+      expect(
+        [
+          authorities,
+          authorities.request,
+          authorities.population,
+          authorities.window,
+          authorities.diagnostics,
+        ].every((value) => Object.isFrozen(value))
+      ).toBe(true)
+      expect(assessLeaderboardNativeWindowRequest(input)).toEqual(authorities.window)
     }
   )
 
@@ -449,6 +538,110 @@ describe('reviewed leaderboard native-window request evidence', () => {
       window: { state: 'unknown', diagnostic: 'request_digest_mismatch' },
     })
     expect(assessLeaderboardNativeWindowRequest(input)).toEqual(authorities.window)
+  })
+
+  it('keeps exact OKX multi-page requests but quarantines the live-offset population', () => {
+    const input = manifest({
+      sourceSlug: 'okx_web3_solana',
+      secondPageFetchedAt: '2026-07-21T10:00:02.000Z',
+    })
+    const authorities = assessLeaderboardMetricAuthorities(input)
+    expect(authorities).toMatchObject({
+      request: {
+        state: 'verified',
+        contractId: OKX_WEB3_SOLANA_NATIVE_PERIOD_REQUEST_CONTRACT,
+      },
+      population: {
+        state: 'unknown',
+        diagnostics: ['pagination_snapshot_unavailable'],
+      },
+      window: {
+        state: 'unknown',
+        diagnostic: 'pagination_snapshot_unavailable',
+      },
+    })
+  })
+
+  it.each([
+    ['missing reported current page', { reportedCurrentPage: null }, 'page_binding_mismatch'],
+    ['wrong reported current page', { reportedCurrentPage: 2 }, 'page_binding_mismatch'],
+    ['missing reported page size', { reportedPageSize: null }, 'page_binding_mismatch'],
+    ['wrong reported page size', { reportedPageSize: 19 }, 'page_binding_mismatch'],
+    ['adapter drift', { adapterSlug: 'okx' }, 'source_contract_mismatch'],
+    [
+      'query drift',
+      {
+        url: buildOkxWeb3LeaderboardListUrl({
+          pageIndex: 1,
+          pageSize: 20,
+          timeframe: 30,
+        }).replace('periodType=4', 'periodType=3'),
+      },
+      'page_binding_mismatch',
+    ],
+    ['digest drift', { requestSha256: '3'.repeat(64) }, 'request_digest_mismatch'],
+    [
+      'unsupported page size',
+      {
+        configuredPageSize: 21,
+        url: buildOkxWeb3LeaderboardListUrl({ pageIndex: 1, pageSize: 20, timeframe: 30 }),
+        requestSha256: '4'.repeat(64),
+      },
+      'source_contract_mismatch',
+    ],
+  ] as const)(
+    'fails the OKX request and population contracts on %s',
+    (_label, drift, diagnostic) => {
+      const authorities = assessLeaderboardMetricAuthorities(
+        manifest({ sourceSlug: 'okx_web3_solana', ...drift })
+      )
+      expect(authorities.request).toEqual({ state: 'unknown', diagnostics: [diagnostic] })
+      expect(authorities.population.state).toBe('unknown')
+      if (authorities.population.state !== 'unknown') throw new Error('expected unknown population')
+      expect(authorities.population.diagnostics).toContain(diagnostic)
+      expect(authorities.window.state).toBe('unknown')
+      expect(authorities.diagnostics).toContain(diagnostic)
+    }
+  )
+
+  it.each([
+    [2, ['attempt_binding_unavailable']],
+    [3, ['capture_not_rankable']],
+  ] as const)(
+    'keeps an exact OKX request while manifest mode %d leaves population unknown',
+    (manifestVersion, populationDiagnostics) => {
+      const authorities = assessLeaderboardMetricAuthorities(
+        manifest({
+          sourceSlug: 'okx_web3_solana',
+          manifestVersion,
+          callerLimited: manifestVersion === 3,
+        })
+      )
+      expect(authorities.request).toMatchObject({
+        state: 'verified',
+        contractId: OKX_WEB3_SOLANA_NATIVE_PERIOD_REQUEST_CONTRACT,
+      })
+      expect(authorities.population).toEqual({
+        state: 'unknown',
+        diagnostics: populationDiagnostics,
+      })
+      expect(authorities.window).toMatchObject({
+        state: 'unknown',
+        diagnostic: populationDiagnostics[0],
+      })
+    }
+  )
+
+  it('does not resolve prototype property names as reviewed sources', () => {
+    const authorities = assessLeaderboardMetricAuthorities(manifest({ sourceSlug: 'toString' }))
+    expect(authorities.request).toEqual({
+      state: 'unknown',
+      diagnostics: ['source_contract_unavailable'],
+    })
+    expect(authorities.population).toEqual({
+      state: 'unknown',
+      diagnostics: ['source_contract_unavailable'],
+    })
   })
 
   it('keeps board-specific endpoint hashes distinct', () => {
