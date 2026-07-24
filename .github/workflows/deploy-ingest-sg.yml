@@ -46,7 +46,7 @@ jobs:
           }
 
       - name: Check out the exact target commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 0
@@ -67,7 +67,7 @@ jobs:
             exit 1
           }
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           # Must match the SG runtime. The deploy job also checks the live host.
           node-version: '22'
@@ -134,7 +134,7 @@ jobs:
             > arena-ingest-deps.manifest
 
       - name: Upload dependency artifact and manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: arena-ingest-deps-${{ inputs.target_sha }}
           path: |
@@ -150,6 +150,7 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: ingest-sg-production
     env:
       TARGET_SHA: ${{ inputs.target_sha }}
       DEPLOY_MODE: ${{ inputs.mode }}
@@ -164,6 +165,10 @@ jobs:
             echo "::error::target_sha must be exactly 40 lowercase hexadecimal characters"
             exit 1
           }
+          [ "$GITHUB_REF" = 'refs/heads/main' ] && [ "$GITHUB_SHA" = "$TARGET_SHA" ] || {
+            echo "::error::production deployment workflow must itself run from the exact target on main"
+            exit 1
+          }
           case "$DEPLOY_MODE:$BUILD_DEPS_RESULT" in
             full:success|code-only:skipped) ;;
             *)
@@ -173,7 +178,7 @@ jobs:
           esac
 
       - name: Check out the exact target commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 0
@@ -194,7 +199,7 @@ jobs:
             exit 1
           }
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
 
@@ -216,7 +221,7 @@ jobs:
 
       - name: Download the exact dependency artifact
         if: ${{ inputs.mode == 'full' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: arena-ingest-deps-${{ inputs.target_sha }}
 
@@ -374,7 +379,11 @@ jobs:
               --artifact-manifest="$PWD/arena-ingest-deps.manifest"
           fi
 
-      - name: Guard deployed target remains current origin/main
+      # The script's final exact-main check is inside its rollback transaction.
+      # A commit arriving after that success point is a new rollout, not a
+      # failed old rollout; report it without pretending the completed cutover
+      # was rolled back.
+      - name: Report if main advances after successful deployment
         if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
         shell: bash
         run: |
@@ -384,7 +393,6 @@ jobs:
             echo "::error::post-deploy checkout identity changed"
             exit 1
           }
-          [ "$(git rev-parse refs/remotes/origin/main)" = "$TARGET_SHA" ] || {
-            echo "::error::origin/main advanced during deployment; deployed SG release is now stale"
-            exit 1
-          }
+          if [ "$(git rev-parse refs/remotes/origin/main)" != "$TARGET_SHA" ]; then
+            echo "::warning::origin/main advanced after transactional success; evaluate the new main release"
+          fi
