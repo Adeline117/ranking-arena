@@ -11,6 +11,7 @@ import type { ParsedLeaderboardRow, RawPage, SourceRow } from '../../core/types'
 import { binanceLeaderboardListRequestSha256 } from '../../leaderboard-request-evidence'
 import {
   fenceAttemptBoundLeaderboardPublicationCommit,
+  hasRegisteredLeaderboardMetricTrust,
   prepareLeaderboardMetricTrust,
   reconcileLeaderboardMetricTrust,
   writeLeaderboardMetricTrust,
@@ -1446,17 +1447,33 @@ describe('Tier-A metric trust transaction writer', () => {
     ).toBe(false)
   })
 
-  it('rejects trusted publication when no reviewed population contract exists', () => {
-    const spotSrc = { ...src, slug: 'binance_spot' }
-    expect(() =>
-      prepareLeaderboardMetricTrust({
-        src: spotSrc,
-        timeframe: 30,
-        rows,
-        rejectedRowCount: 0,
-        bundle: trustFixture(spotSrc),
-      })
-    ).toThrow('no registered population metric contracts')
+  it('prepares Binance Spot only from its reviewed board population contracts', () => {
+    const spotSrc = { ...src, slug: 'binance_spot', page_size: 20 }
+    expect(hasRegisteredLeaderboardMetricTrust(spotSrc, 30)).toBe(true)
+
+    const prepared = prepareLeaderboardMetricTrust({
+      src: spotSrc,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: trustFixture(spotSrc),
+    })
+    expect(prepared.expectedFields).toEqual([
+      expect.objectContaining({
+        metric: 'roi',
+        fieldPath: 'data.list[].roi',
+        sourcePayloadScope: 'population_snapshot',
+      }),
+      expect.objectContaining({
+        metric: 'pnl',
+        fieldPath: 'data.list[].pnl',
+        sourcePayloadScope: 'population_snapshot',
+      }),
+    ])
+    expect(prepared.nativeWindowEvidence).toMatchObject({
+      state: 'unknown',
+      diagnostic: 'attempt_binding_unavailable',
+    })
   })
 
   it('fails closed when database contracts drift from the reviewed registry', async () => {
