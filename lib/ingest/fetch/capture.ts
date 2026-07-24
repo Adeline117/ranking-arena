@@ -118,6 +118,7 @@ export interface LeaderboardPublicRequestProjectionInput {
 
 export type LeaderboardNumericPageBinding =
   | { location: 'query'; key: string }
+  | { location: 'query_offset'; key: string; page_size: number }
   | { location: 'body'; path: string[] }
 
 const SENSITIVE_EVIDENCE_KEY_PARTS = [
@@ -390,20 +391,49 @@ function canonicalPositivePageIndex(value: unknown): number {
   return numeric
 }
 
+function canonicalNonNegativePageOffset(value: unknown): number {
+  const numeric =
+    typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value) ? Number(value) : value
+  if (typeof numeric !== 'number') {
+    throw new TypeError(
+      '[ingest] public request page offset binding must resolve to a non-negative integer'
+    )
+  }
+  assertSafeInteger(numeric, 'public request page offset binding', 0)
+  return numeric
+}
+
+function queryBindingValue(url: URL, key: string): string {
+  if (key.length === 0 || key.trim() !== key) {
+    throw new TypeError('[ingest] public query page binding key must be canonical')
+  }
+  const values = url.searchParams.getAll(key)
+  if (values.length !== 1) {
+    throw new TypeError('[ingest] public query page binding must resolve exactly once')
+  }
+  return values[0]
+}
+
 function pageIndexFromPublicProjection(
   url: URL,
   body: unknown,
   binding: LeaderboardNumericPageBinding
 ): number {
   if (binding.location === 'query') {
-    if (binding.key.length === 0 || binding.key.trim() !== binding.key) {
-      throw new TypeError('[ingest] public query page binding key must be canonical')
+    return canonicalPositivePageIndex(queryBindingValue(url, binding.key))
+  }
+
+  if (binding.location === 'query_offset') {
+    assertSafeInteger(binding.page_size, 'public request page offset binding page size', 1)
+    const offset = canonicalNonNegativePageOffset(queryBindingValue(url, binding.key))
+    if (offset % binding.page_size !== 0) {
+      throw new TypeError(
+        '[ingest] public request page offset binding must align to the declared page size'
+      )
     }
-    const values = url.searchParams.getAll(binding.key)
-    if (values.length !== 1) {
-      throw new TypeError('[ingest] public query page binding must resolve exactly once')
-    }
-    return canonicalPositivePageIndex(values[0])
+    const pageIndex = offset / binding.page_size + 1
+    assertSafeInteger(pageIndex, 'public request page offset binding resolved page index', 1)
+    return pageIndex
   }
 
   if (
@@ -577,6 +607,11 @@ export async function captureNumericLeaderboard(
   assertSafeInteger(safetyPageCap, 'safety page cap', 1)
   if (callerPageCap !== null) assertSafeInteger(callerPageCap, 'caller page cap', 1)
   if (pageSize !== null) assertSafeInteger(pageSize, 'page size', 1)
+  if (pageBinding.location === 'query_offset' && pageBinding.page_size !== pageSize) {
+    throw new TypeError(
+      '[ingest] public request page offset binding page size must match capture page size'
+    )
+  }
 
   const sourcePages: CapturedLeaderboardSourcePage[] = []
   const parsePages: RawPage[] = []

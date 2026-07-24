@@ -211,6 +211,120 @@ describe('captureNumericLeaderboard', () => {
     ).toBe('https://example.com/board?x=1')
   })
 
+  it('binds canonical zero-based query offsets to one-based evidence pages', () => {
+    const pageBinding = {
+      location: 'query_offset' as const,
+      key: 'rankStart',
+      page_size: 20,
+    }
+    const firstPage = {
+      url: 'https://x.test/board?rankStart=0&rankEnd=20',
+      method: 'GET' as const,
+    }
+    const secondPage = {
+      url: 'https://x.test/board?rankStart=20&rankEnd=40',
+      method: 'GET' as const,
+    }
+
+    expect(leaderboardPublicRequestProjection(firstPage, pageBinding)).toEqual({
+      data_contract: LEADERBOARD_PUBLIC_REQUEST_PROJECTION_CONTRACT,
+      method: 'GET',
+      url: firstPage.url,
+      body: null,
+      pagination_binding: pageBinding,
+      request_page_index: 1,
+    })
+    expect(leaderboardPublicRequestProjection(secondPage, pageBinding).request_page_index).toBe(2)
+    expect(leaderboardPublicRequestSha256(firstPage, pageBinding)).toBe(
+      '1c977e764cf57d37d5c011b5225dc1f29ab5d9fa3291baaeeab61a3fc8f13898'
+    )
+    expect(leaderboardPublicRequestSha256(firstPage, pageBinding)).not.toBe(
+      leaderboardPublicRequestSha256(secondPage, pageBinding)
+    )
+
+    for (const offset of ['-0', '+0', '00', '1', '1.5', '9007199254740992']) {
+      expect(() =>
+        leaderboardPublicRequestProjection(
+          { url: `https://x.test/board?rankStart=${offset}`, method: 'GET' },
+          pageBinding
+        )
+      ).toThrow(/offset binding|align/)
+    }
+    expect(() =>
+      leaderboardPublicRequestProjection(
+        { url: 'https://x.test/board?rankStart=0&rankStart=20', method: 'GET' },
+        pageBinding
+      )
+    ).toThrow('must resolve exactly once')
+    expect(() =>
+      leaderboardPublicRequestProjection(
+        { url: 'https://x.test/board?rankEnd=20', method: 'GET' },
+        pageBinding
+      )
+    ).toThrow('must resolve exactly once')
+    for (const pageSize of [-0, 0, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() =>
+        leaderboardPublicRequestProjection(
+          { url: 'https://x.test/board?rankStart=0', method: 'GET' },
+          { ...pageBinding, page_size: pageSize }
+        )
+      ).toThrow(/page size|negative zero/)
+    }
+    expect(() =>
+      leaderboardPublicRequestProjection(
+        { url: `https://x.test/board?rankStart=${Number.MAX_SAFE_INTEGER}`, method: 'GET' },
+        { ...pageBinding, page_size: 1 }
+      )
+    ).toThrow('resolved page index')
+  })
+
+  it('captures zero-based query offsets as one-based pagination evidence', async () => {
+    const pages = [
+      { rows: ['one', 'two'], total: 3 },
+      { rows: ['three'], total: 3 },
+    ]
+    const capture = await captureNumericLeaderboard(
+      captureOptions(
+        async (template) => {
+          const offset = Number(new URL(template.url).searchParams.get('rankStart'))
+          return { status: 200, json: pages[offset / 2] }
+        },
+        {
+          buildRequest: (pageIndex) => ({
+            url: `https://x.test/board?rankStart=${(pageIndex - 1) * 2}&rankEnd=${pageIndex * 2}`,
+            method: 'GET',
+            headers: {},
+          }),
+          projectPublicRequest: (template) => ({
+            url: template.url,
+            method: template.method,
+          }),
+          pageBinding: { location: 'query_offset', key: 'rankStart', page_size: 2 },
+          pageSize: 2,
+          extractMeta: (payload) => {
+            const page = payload as { rows: unknown[]; total: number }
+            return {
+              rowCount: page.rows.length,
+              reportedPopulation: page.total,
+              reportedPageCount: null,
+              reportedCurrentPage: null,
+              reportedPageSize: null,
+            }
+          },
+        }
+      )
+    )
+
+    expect(capture.terminationReason).toBe('reported_population_reached')
+    expect(capture.sourcePages.map((page) => page.rawPage.url)).toEqual([
+      'https://x.test/board?rankStart=0&rankEnd=2',
+      'https://x.test/board?rankStart=2&rankEnd=4',
+    ])
+    expect(capture.sourcePages.map((page) => page.paginationPosition.request_page_index)).toEqual([
+      1, 2,
+    ])
+  })
+
   it('persists only the explicit public projection, never the authenticated request URL', async () => {
     let actualUrl = ''
     const capture = await captureNumericLeaderboard(
@@ -812,6 +926,22 @@ describe('captureNumericLeaderboard', () => {
         })
       )
     ).rejects.toThrow('public request method must match')
+    await expect(
+      captureNumericLeaderboard(
+        captureOptions(onePage, {
+          pageBinding: { location: 'query_offset', key: 'page', page_size: 3 },
+          pageSize: 2,
+        })
+      )
+    ).rejects.toThrow('must match capture page size')
+    await expect(
+      captureNumericLeaderboard(
+        captureOptions(onePage, {
+          pageBinding: { location: 'query_offset', key: 'page', page_size: 2 },
+          pageSize: null,
+        })
+      )
+    ).rejects.toThrow('must match capture page size')
 
     for (const status of [-0, 99, 600, 200.5]) {
       await expect(
