@@ -18,11 +18,16 @@ import {
   type LeaderboardPublicRequestProjectionInput,
 } from './fetch/capture'
 import type { ReplayRequestTemplate } from './fetch/types'
+import { buildOkxWeb3LeaderboardListUrl } from './adapters/okx-web3/request-evidence'
 
 export const BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT =
   'arena.metric-trust.binance-native-period-request@1' as const
 export const BINANCE_SINGLE_RESPONSE_POPULATION_CONTRACT =
   'arena.metric-trust.binance-single-response-population@1' as const
+export const OKX_WEB3_SOLANA_NATIVE_PERIOD_REQUEST_CONTRACT =
+  'arena.metric-trust.okx-web3-solana-native-period-request@1' as const
+export const OKX_WEB3_SOLANA_SINGLE_RESPONSE_POPULATION_CONTRACT =
+  'arena.metric-trust.okx-web3-solana-single-response-population@1' as const
 export const BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS = 5 * 60 * 1000
 
 export const BINANCE_LEADERBOARD_LIST_URLS = Object.freeze({
@@ -32,10 +37,19 @@ export const BINANCE_LEADERBOARD_LIST_URLS = Object.freeze({
 })
 
 const BINANCE_DEFAULT_PAGE_SIZE = 20
+const OKX_WEB3_DEFAULT_PAGE_SIZE = 20
 const BINANCE_PAGE_BINDING = Object.freeze({
   location: 'body' as const,
   path: ['pageNumber'],
 })
+
+type NativePeriodRequestContractId =
+  | typeof BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT
+  | typeof OKX_WEB3_SOLANA_NATIVE_PERIOD_REQUEST_CONTRACT
+
+type SingleResponsePopulationContractId =
+  | typeof BINANCE_SINGLE_RESPONSE_POPULATION_CONTRACT
+  | typeof OKX_WEB3_SOLANA_SINGLE_RESPONSE_POPULATION_CONTRACT
 
 export interface BinanceLeaderboardListBody {
   pageNumber: number
@@ -71,32 +85,90 @@ type LeaderboardMetricTrustManifest =
 
 type BinanceBoard = keyof typeof BINANCE_LEADERBOARD_LIST_URLS
 
-interface BinanceNativePeriodSourceContract {
-  adapterSlug: 'binance'
-  board: BinanceBoard
+interface NativePeriodExpectedPageInput {
+  pageIndex: number
+  pageSize: number
+  timeframe: RankingTimeframe
+}
+
+interface ReviewedNativePeriodSourceContract {
+  adapterSlug: 'binance' | 'okx_web3'
+  defaultPageSize: number
+  requestContractId: NativePeriodRequestContractId
+  populationContractId: SingleResponsePopulationContractId
+  maxPageSkewMs: number
+  paginationSnapshot: 'live_offset'
+  requireReportedPageBinding: boolean
   /**
-   * Reviewed provider semantics: timeRange selects the native ROI/PnL period
-   * shown by the Binance board. Arena does not claim to reconstruct the
+   * Reviewed provider semantics: the request selects the native ROI/PnL period
+   * shown by the provider board. Arena does not claim to reconstruct the
    * provider's internal trades, prices, or cost basis from this request.
    */
   windowSemantics: 'provider_native_period_aggregate'
+  buildExpectedPage(
+    input: NativePeriodExpectedPageInput
+  ): Readonly<{ url: string; requestSha256: string }>
 }
 
-const BINANCE_NATIVE_PERIOD_SOURCES: Readonly<Record<string, BinanceNativePeriodSourceContract>> =
+function binanceSourceContract(board: BinanceBoard): ReviewedNativePeriodSourceContract {
+  return Object.freeze({
+    adapterSlug: 'binance' as const,
+    defaultPageSize: BINANCE_DEFAULT_PAGE_SIZE,
+    requestContractId: BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
+    populationContractId: BINANCE_SINGLE_RESPONSE_POPULATION_CONTRACT,
+    maxPageSkewMs: BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS,
+    paginationSnapshot: 'live_offset' as const,
+    requireReportedPageBinding: false,
+    windowSemantics: 'provider_native_period_aggregate' as const,
+    buildExpectedPage: (input: NativePeriodExpectedPageInput) => {
+      const url = BINANCE_LEADERBOARD_LIST_URLS[board]
+      return Object.freeze({
+        url,
+        requestSha256: leaderboardPublicRequestSha256(
+          {
+            method: 'POST',
+            url,
+            body: buildBinanceLeaderboardListBody(input.pageIndex, input.pageSize, input.timeframe),
+          },
+          BINANCE_PAGE_BINDING
+        ),
+      })
+    },
+  })
+}
+
+const REVIEWED_NATIVE_PERIOD_SOURCES: Readonly<Record<string, ReviewedNativePeriodSourceContract>> =
   Object.freeze({
-    binance_futures: Object.freeze({
-      adapterSlug: 'binance',
-      board: 'futures',
+    binance_futures: binanceSourceContract('futures'),
+    binance_spot: binanceSourceContract('spot'),
+    okx_web3_solana: Object.freeze({
+      adapterSlug: 'okx_web3',
+      defaultPageSize: OKX_WEB3_DEFAULT_PAGE_SIZE,
+      requestContractId: OKX_WEB3_SOLANA_NATIVE_PERIOD_REQUEST_CONTRACT,
+      populationContractId: OKX_WEB3_SOLANA_SINGLE_RESPONSE_POPULATION_CONTRACT,
+      maxPageSkewMs: BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS,
+      paginationSnapshot: 'live_offset',
+      requireReportedPageBinding: true,
       windowSemantics: 'provider_native_period_aggregate',
-    }),
-    binance_spot: Object.freeze({
-      adapterSlug: 'binance',
-      board: 'spot',
-      windowSemantics: 'provider_native_period_aggregate',
+      buildExpectedPage: (input: NativePeriodExpectedPageInput) => {
+        const url = buildOkxWeb3LeaderboardListUrl(input)
+        return Object.freeze({
+          url,
+          requestSha256: okxWeb3LeaderboardListRequestSha256(input),
+        })
+      },
     }),
   })
 
-export type BinanceLeaderboardCaptureDiagnostic =
+function reviewedNativePeriodSourceContract(
+  sourceSlug: string
+): ReviewedNativePeriodSourceContract | null {
+  return Object.prototype.hasOwnProperty.call(REVIEWED_NATIVE_PERIOD_SOURCES, sourceSlug)
+    ? REVIEWED_NATIVE_PERIOD_SOURCES[sourceSlug]
+    : null
+}
+
+export type LeaderboardCaptureDiagnostic =
   | 'capture_not_rankable'
   | 'attempt_binding_unavailable'
   | 'source_contract_unavailable'
@@ -108,11 +180,14 @@ export type BinanceLeaderboardCaptureDiagnostic =
   | 'provider_window_boundary_unavailable'
   | 'request_digest_mismatch'
 
+/** Compatibility alias retained for existing consumers. */
+export type BinanceLeaderboardCaptureDiagnostic = LeaderboardCaptureDiagnostic
+
 export type NativeWindowRequestEvidence =
   | {
-      /** The request body matched; this is not provider window-boundary authority. */
+      /** The public request projection matched; this is not provider boundary authority. */
       state: 'request_verified'
-      contractId: typeof BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT
+      contractId: NativePeriodRequestContractId
       semantics: 'provider_native_period_aggregate'
       reason: 'native_window_boundary_unverified'
       diagnostic: 'provider_window_boundary_unavailable'
@@ -120,7 +195,7 @@ export type NativeWindowRequestEvidence =
   | {
       state: 'unknown'
       reason: 'native_window_boundary_unverified'
-      diagnostic: BinanceLeaderboardCaptureDiagnostic
+      diagnostic: LeaderboardCaptureDiagnostic
     }
 
 export type CaptureAuthorityDiagnostic = Exclude<
@@ -136,7 +211,7 @@ export type PopulationAuthorityDiagnostic = Exclude<
 export type PopulationAuthorityEvidence =
   | {
       state: 'verified'
-      contractId: typeof BINANCE_SINGLE_RESPONSE_POPULATION_CONTRACT
+      contractId: SingleResponsePopulationContractId
       semantics: 'reviewed_board_single_response_population'
     }
   | {
@@ -145,7 +220,7 @@ export type PopulationAuthorityEvidence =
     }
 
 export type RequestAuthorityDiagnostic = Extract<
-  BinanceLeaderboardCaptureDiagnostic,
+  LeaderboardCaptureDiagnostic,
   | 'capture_not_rankable'
   | 'source_contract_unavailable'
   | 'source_contract_mismatch'
@@ -156,7 +231,7 @@ export type RequestAuthorityDiagnostic = Extract<
 export type RequestAuthorityEvidence =
   | {
       state: 'verified'
-      contractId: typeof BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT
+      contractId: NativePeriodRequestContractId
       semantics: 'provider_native_period_aggregate'
     }
   | {
@@ -257,15 +332,22 @@ export function binanceLeaderboardListRequestSha256(input: {
   pageSize: number
   timeframe: RankingTimeframe
 }): string | null {
-  const contract = BINANCE_NATIVE_PERIOD_SOURCES[input.sourceSlug]
-  if (!contract) return null
+  if (input.sourceSlug !== 'binance_futures' && input.sourceSlug !== 'binance_spot') return null
+  return (
+    reviewedNativePeriodSourceContract(input.sourceSlug)?.buildExpectedPage(input).requestSha256 ??
+    null
+  )
+}
+
+export function okxWeb3LeaderboardListRequestSha256(input: {
+  pageIndex: number
+  pageSize: number
+  timeframe: RankingTimeframe
+}): string {
+  const url = buildOkxWeb3LeaderboardListUrl(input)
   return leaderboardPublicRequestSha256(
-    {
-      method: 'POST',
-      url: BINANCE_LEADERBOARD_LIST_URLS[contract.board],
-      body: buildBinanceLeaderboardListBody(input.pageIndex, input.pageSize, input.timeframe),
-    },
-    BINANCE_PAGE_BINDING
+    { method: 'GET', url },
+    { location: 'query_offset', key: 'rankStart', page_size: input.pageSize }
   )
 }
 
@@ -277,8 +359,8 @@ const unknownEvidence = (
   diagnostic,
 })
 
-interface BinanceLeaderboardCaptureInspection {
-  contract: BinanceNativePeriodSourceContract | null
+interface LeaderboardCaptureInspection {
+  contract: ReviewedNativePeriodSourceContract | null
   diagnostics: CaptureAuthorityDiagnostic[]
   requestDiagnostics: RequestAuthorityDiagnostic[]
   populationDiagnostics: PopulationAuthorityDiagnostic[]
@@ -289,7 +371,7 @@ function addDiagnostic<T extends string>(diagnostics: T[], diagnostic: T): void 
 }
 
 function addCaptureDiagnostic(
-  inspection: BinanceLeaderboardCaptureInspection,
+  inspection: LeaderboardCaptureInspection,
   diagnostic: CaptureAuthorityDiagnostic
 ): void {
   addDiagnostic(inspection.diagnostics, diagnostic)
@@ -298,7 +380,7 @@ function addCaptureDiagnostic(
 type RequestPopulationDiagnostic = RequestAuthorityDiagnostic & PopulationAuthorityDiagnostic
 
 function addRequestPopulationDiagnostic(
-  inspection: BinanceLeaderboardCaptureInspection,
+  inspection: LeaderboardCaptureInspection,
   diagnostic: RequestPopulationDiagnostic
 ): void {
   addCaptureDiagnostic(inspection, diagnostic)
@@ -307,7 +389,7 @@ function addRequestPopulationDiagnostic(
 }
 
 function addPopulationDiagnostic(
-  inspection: BinanceLeaderboardCaptureInspection,
+  inspection: LeaderboardCaptureInspection,
   diagnostic: PopulationAuthorityDiagnostic
 ): void {
   addCaptureDiagnostic(inspection, diagnostic)
@@ -319,10 +401,10 @@ function addPopulationDiagnostic(
  * Multiple diagnostics are retained because a v2 multi-page run can lack both
  * an attempt fence and a provider snapshot cursor at the same time.
  */
-function inspectBinanceLeaderboardCapture(
+function inspectLeaderboardCapture(
   manifest: LeaderboardMetricTrustManifest
-): BinanceLeaderboardCaptureInspection {
-  const inspection: BinanceLeaderboardCaptureInspection = {
+): LeaderboardCaptureInspection {
+  const inspection: LeaderboardCaptureInspection = {
     contract: null,
     diagnostics: [],
     requestDiagnostics: [],
@@ -350,7 +432,7 @@ function inspectBinanceLeaderboardCapture(
     addPopulationDiagnostic(inspection, 'attempt_binding_unavailable')
   }
 
-  const contract = BINANCE_NATIVE_PERIOD_SOURCES[manifest.source.slug]
+  const contract = reviewedNativePeriodSourceContract(manifest.source.slug)
   if (!contract) {
     addRequestPopulationDiagnostic(inspection, 'source_contract_unavailable')
     return inspection
@@ -364,15 +446,11 @@ function inspectBinanceLeaderboardCapture(
     return inspection
   }
 
-  const pageSize = manifest.source.configured_page_size ?? BINANCE_DEFAULT_PAGE_SIZE
-  const expectedUrl = BINANCE_LEADERBOARD_LIST_URLS[contract.board]
+  const pageSize = manifest.source.configured_page_size ?? contract.defaultPageSize
   const pageTimes = manifest.source_pages.map((page) => Date.parse(page.fetched_at))
   if (pageTimes.some((pageTime) => !Number.isFinite(pageTime))) {
     addCaptureDiagnostic(inspection, 'page_timestamp_invalid')
-  } else if (
-    Math.max(...pageTimes) - Math.min(...pageTimes) >
-    BINANCE_NATIVE_WINDOW_MAX_PAGE_SKEW_MS
-  ) {
+  } else if (Math.max(...pageTimes) - Math.min(...pageTimes) > contract.maxPageSkewMs) {
     // One run-wide timestamp would overstate both temporal coherence and the
     // exact native window of late pages.
     addCaptureDiagnostic(inspection, 'page_time_span_exceeds_tolerance')
@@ -381,31 +459,43 @@ function inspectBinanceLeaderboardCapture(
   for (const [index, page] of manifest.source_pages.entries()) {
     const position = page.pagination_position
     const pageIndex = index + 1
+    let expectedPage: Readonly<{ url: string; requestSha256: string }>
+    try {
+      expectedPage = contract.buildExpectedPage({
+        pageIndex,
+        pageSize,
+        timeframe: manifest.timeframe,
+      })
+    } catch {
+      addRequestPopulationDiagnostic(inspection, 'source_contract_mismatch')
+      continue
+    }
+    const reportedCurrentPage = page.source_reports?.current_page
     const reportedPageSize = page.source_reports?.page_size
+    const reportedPageBindingMismatch = contract.requireReportedPageBinding
+      ? reportedCurrentPage?.state !== 'reported' ||
+        reportedCurrentPage.value !== pageIndex ||
+        reportedPageSize?.state !== 'reported' ||
+        reportedPageSize.value !== pageSize
+      : reportedPageSize?.state === 'reported' && reportedPageSize.value !== pageSize
     if (
-      page.url !== expectedUrl ||
+      page.url !== expectedPage.url ||
       page.stored_page_index !== pageIndex ||
       position?.kind !== 'page_index' ||
       position.request_page_index !== pageIndex ||
-      (reportedPageSize?.state === 'reported' && reportedPageSize.value !== pageSize)
+      reportedPageBindingMismatch
     ) {
       addRequestPopulationDiagnostic(inspection, 'page_binding_mismatch')
     }
 
-    const expectedRequestSha256 = binanceLeaderboardListRequestSha256({
-      sourceSlug: manifest.source.slug,
-      pageIndex,
-      pageSize,
-      timeframe: manifest.timeframe,
-    })
-    if (expectedRequestSha256 === null || page.request_sha256 !== expectedRequestSha256) {
+    if (page.request_sha256 !== expectedPage.requestSha256) {
       addRequestPopulationDiagnostic(inspection, 'request_digest_mismatch')
     }
   }
 
-  if (manifest.source_pages.length > 1) {
-    // Binance pageNumber is a live offset, not a snapshot cursor. Stable totals,
-    // request hashes, and duplicate counts cannot prove one stitched population.
+  if (manifest.source_pages.length > 1 && contract.paginationSnapshot === 'live_offset') {
+    // Live numeric offsets are not snapshot cursors. Stable totals, request
+    // hashes, and duplicate counts cannot prove one stitched population.
     addPopulationDiagnostic(inspection, 'pagination_snapshot_unavailable')
   }
   return inspection
@@ -437,13 +527,13 @@ function frozenUnknownPopulation(
 export function assessLeaderboardMetricAuthorities(
   manifest: LeaderboardMetricTrustManifest
 ): LeaderboardMetricAuthorities {
-  const inspection = inspectBinanceLeaderboardCapture(manifest)
+  const inspection = inspectLeaderboardCapture(manifest)
   const contract = inspection.contract
   const request: RequestAuthorityEvidence =
     contract && inspection.requestDiagnostics.length === 0
       ? Object.freeze({
           state: 'verified' as const,
-          contractId: BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
+          contractId: contract.requestContractId,
           semantics: contract.windowSemantics,
         })
       : frozenUnknownRequest(
@@ -452,20 +542,24 @@ export function assessLeaderboardMetricAuthorities(
             : ['source_contract_unavailable']
         )
   const population: PopulationAuthorityEvidence =
-    inspection.populationDiagnostics.length === 0
+    contract && inspection.populationDiagnostics.length === 0
       ? Object.freeze({
           state: 'verified' as const,
-          contractId: BINANCE_SINGLE_RESPONSE_POPULATION_CONTRACT,
+          contractId: contract.populationContractId,
           semantics: 'reviewed_board_single_response_population' as const,
         })
-      : frozenUnknownPopulation(inspection.populationDiagnostics)
+      : frozenUnknownPopulation(
+          inspection.populationDiagnostics.length > 0
+            ? inspection.populationDiagnostics
+            : ['source_contract_unavailable']
+        )
   const window: NativeWindowRequestEvidence =
     inspection.diagnostics.length > 0
       ? Object.freeze(unknownEvidence(inspection.diagnostics[0]))
       : request.state === 'verified'
         ? Object.freeze({
             state: 'request_verified' as const,
-            contractId: BINANCE_NATIVE_PERIOD_REQUEST_CONTRACT,
+            contractId: request.contractId,
             semantics: request.semantics,
             reason: 'native_window_boundary_unverified' as const,
             diagnostic: 'provider_window_boundary_unavailable' as const,
