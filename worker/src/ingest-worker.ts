@@ -33,6 +33,7 @@ import {
 import { reconcileSchedulers } from './ingest/scheduler'
 import { startHeartbeat } from './ingest/heartbeat'
 import { startFailoverManager } from './ingest/failover'
+import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readiness'
 import { routeJobWithSourceLease } from './ingest/source-job-routing'
 import { routeTierCJobRegion } from './ingest/tier-c-region-router'
 
@@ -136,6 +137,11 @@ async function routeTierC(job: Job<TierCJobData>, region: IngestRegion): Promise
 
 async function main(): Promise<void> {
   console.log('[ingest-worker] starting…')
+
+  // No scheduler, BullMQ consumer, heartbeat, or failover worker may start
+  // until the production database proves the exact source-lineage contract.
+  await assertMetricTrustWorkerReadiness()
+  console.log('[ingest-worker] metric-trust database release contract ready')
 
   // Register adapters (side-effect imports add them to the registry).
   await import('@/lib/ingest/adapters/register')

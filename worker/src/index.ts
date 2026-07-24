@@ -9,6 +9,7 @@
  *
  * Required env vars:
  *   REDIS_URL                     — native Redis TCP (rediss://default:TOKEN@HOST:6379)
+ *   INGEST_DATABASE_URL           — Supabase session-pooler URI (port 5432)
  *   NEXT_PUBLIC_SUPABASE_URL      — Supabase project URL
  *   SUPABASE_SERVICE_ROLE_KEY     — Supabase service role key
  *
@@ -33,6 +34,7 @@ import { PIPELINE_WORKER_CONCURRENCY } from './pipeline-runtime'
 import { assertSuccessfulMeilisearchSyncResponse } from './pipeline-response'
 import { registerSchedules } from './scheduler'
 import { startDashboard } from './dashboard'
+import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readiness'
 
 // ENDGAME (ARENA_DATA_SPEC v1.2): legacy fetch/enrich removed — leaderboard
 // data is produced by arena-ingest-worker. This worker only keeps the
@@ -40,6 +42,12 @@ import { startDashboard } from './dashboard'
 
 async function main() {
   console.log('[worker] Arena Pipeline Worker starting...')
+
+  // Keep score schedules and consumers on the same exact database release as
+  // the ingest workers. A missing or stale readiness RPC stops startup before
+  // either process can mutate BullMQ state.
+  await assertMetricTrustWorkerReadiness()
+  console.log('[worker] metric-trust database release contract ready')
 
   // 1. Register repeatable schedules (idempotent)
   await registerSchedules()
