@@ -577,6 +577,182 @@ describe('persistent Chromium profile lanes', () => {
     }
   })
 
+  it('fails a wedged page.evaluate at the Node deadline and resets its context', async () => {
+    jest.useFakeTimers()
+    const launched = contextMock()
+    ;(launched.page.evaluate as jest.Mock).mockImplementation(
+      async () => new Promise<never>(() => undefined)
+    )
+    mockLaunchPersistentContext.mockResolvedValueOnce(launched.context)
+    const src = source('binance_wedged_page_evaluate')
+    src.meta = { page_fetch_timeout_ms: 5_000 }
+
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const session = await openSession(src)
+    const request = session.pageFetch({
+      url: 'https://example.test/wedged',
+      method: 'GET',
+      headers: {},
+    })
+    let settled = false
+    void request.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      }
+    )
+    const rejection = expect(request).rejects.toThrow(
+      '[ingest] page fetch timeout (binance_wedged_page_evaluate, 5000ms browser; ' +
+        '6000ms node deadline)'
+    )
+
+    await jest.advanceTimersByTimeAsync(5_999)
+    expect(settled).toBe(false)
+    expect(launched.close).not.toHaveBeenCalled()
+
+    await jest.advanceTimersByTimeAsync(1)
+    await rejection
+    expect(errorLog).toHaveBeenCalledWith(
+      expect.stringContaining('page.evaluate exceeded its 6000ms Node deadline')
+    )
+    expect(launched.close).toHaveBeenCalledTimes(1)
+    expect(mockLaunchPersistentContext).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
+
+    errorLog.mockRestore()
+    await session.close()
+  })
+
+  it('bounds a wedged context teardown and requests a worker restart', async () => {
+    jest.useFakeTimers()
+    const contextClose = deferred<void>()
+    const launched = contextMock({
+      close: () => contextClose.promise,
+    })
+    ;(launched.page.evaluate as jest.Mock).mockImplementation(
+      async () => new Promise<never>(() => undefined)
+    )
+    mockLaunchPersistentContext.mockResolvedValueOnce(launched.context)
+    const src = source('binance_wedged_context_teardown')
+    src.meta = { page_fetch_timeout_ms: 5_000 }
+
+    const exit = jest.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const session = await openSession(src)
+    const request = session.pageFetch({
+      url: 'https://example.test/wedged-teardown',
+      method: 'GET',
+      headers: {},
+    })
+    let settled = false
+    void request.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      }
+    )
+    const rejection = expect(request).rejects.toThrow(
+      '[ingest] WORKER_RESTART_REQUIRED (binance_wedged_context_teardown)'
+    )
+
+    // Browser fetch deadline (5s) + Node grace (1s) starts teardown.
+    await jest.advanceTimersByTimeAsync(6_000)
+    expect(launched.close).toHaveBeenCalledTimes(1)
+    expect(exit).not.toHaveBeenCalled()
+
+    await jest.advanceTimersByTimeAsync(9_999)
+    expect(settled).toBe(false)
+    expect(exit).not.toHaveBeenCalled()
+
+    await jest.advanceTimersByTimeAsync(1)
+    await rejection
+    expect(exit).toHaveBeenCalledWith(1)
+    expect(errorLog).toHaveBeenCalledWith(
+      expect.stringContaining('WORKER_RESTART_REQUIRED (binance_wedged_context_teardown)')
+    )
+    expect(jest.getTimerCount()).toBe(0)
+
+    // Processor finally blocks must also terminate immediately instead of
+    // awaiting the abandoned Playwright transport a second time.
+    await expect(session.close()).rejects.toThrow('WORKER_RESTART_REQUIRED')
+    await expect(openSession(src)).rejects.toThrow('has no healthy slots')
+
+    // A late transport rejection is already observed by Promise.race and must
+    // not become an unhandled rejection after the job/fatal path has settled.
+    contextClose.reject(new Error('late context close failure'))
+    await nextMicrotask()
+  })
+
+  it('clears page and Node timers for normal JSON and non-JSON responses', async () => {
+    jest.useFakeTimers()
+    const launched = contextMock()
+    const evaluatedInputs: unknown[] = []
+    ;(launched.page.evaluate as jest.Mock).mockImplementation(
+      async (callback: (input: unknown) => unknown, input: unknown) => {
+        evaluatedInputs.push(input)
+        return callback(input)
+      }
+    )
+    mockLaunchPersistentContext.mockResolvedValueOnce(launched.context)
+
+    const fetchMock = jest.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
+        throw new Error('unexpected fetch')
+      }
+    )
+    fetchMock
+      .mockResolvedValueOnce({
+        status: 200,
+        json: async () => ({ ok: true }),
+      } as Response)
+      .mockResolvedValueOnce({
+        status: 204,
+        json: async () => {
+          throw new SyntaxError('not JSON')
+        },
+      } as Response)
+
+    const originalFetch = globalThis.fetch
+    Object.defineProperty(globalThis, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    })
+    const session = await openSession(source('binance_page_fetch_responses'))
+    try {
+      await expect(
+        session.pageFetch({
+          url: 'https://example.test/json',
+          method: 'GET',
+          headers: {},
+        })
+      ).resolves.toEqual({ status: 200, json: { ok: true } })
+      expect(jest.getTimerCount()).toBe(0)
+
+      await expect(
+        session.pageFetch({
+          url: 'https://example.test/no-content',
+          method: 'GET',
+          headers: {},
+        })
+      ).resolves.toEqual({ status: 204, json: null })
+      expect(jest.getTimerCount()).toBe(0)
+      expect(evaluatedInputs).toEqual([
+        expect.objectContaining({ timeoutMs: 60_000 }),
+        expect.objectContaining({ timeoutMs: 60_000 }),
+      ])
+      expect(launched.close).not.toHaveBeenCalled()
+    } finally {
+      await session.close()
+      if (originalFetch) globalThis.fetch = originalFetch
+      else delete (globalThis as { fetch?: typeof fetch }).fetch
+    }
+  })
+
   it('caps a source page-fetch override below the worker lock budget', async () => {
     const launched = contextMock()
     let evaluatedInput: unknown

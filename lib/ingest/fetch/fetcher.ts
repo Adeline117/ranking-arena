@@ -53,10 +53,51 @@ const CONTEXT_OPTIONS = {
 
 const DEFAULT_PAGE_FETCH_TIMEOUT_MS = 60_000
 const MIN_PAGE_FETCH_TIMEOUT_MS = 5_000
+// Give the in-page AbortController a brief grace period to reject fetch() and
+// serialize its useful timeout error before the worker assumes page.evaluate()
+// itself is wedged. This Node-owned timer is the final backstop: page timers do
+// not fire when Chromium's renderer or the Playwright transport is stuck.
+const PAGE_FETCH_NODE_DEADLINE_GRACE_MS = 1_000
+// A stuck Playwright transport can also wedge page/context.close(). At that
+// point this process cannot prove the persistent profile is safe to reuse, so
+// fail fast and let the process supervisor kill Chromium with the worker.
+const CONTEXT_RESET_DEADLINE_MS = 10_000
 // Stay below the ingest workers' 180s lock/job budget. A per-source override
 // may relax the 60s default, but can never turn one request back into a
 // multi-minute slot holder.
 const MAX_PAGE_FETCH_TIMEOUT_MS = 90_000
+
+class PageFetchDeadlineError extends Error {
+  readonly code = 'PAGE_FETCH_DEADLINE'
+
+  constructor(sourceSlug: string, browserTimeoutMs: number, nodeDeadlineMs: number) {
+    super(
+      `[ingest] page fetch timeout (${sourceSlug}, ${browserTimeoutMs}ms browser; ` +
+        `${nodeDeadlineMs}ms node deadline)`
+    )
+    this.name = 'PageFetchDeadlineError'
+  }
+}
+
+class ContextResetDeadlineError extends Error {
+  constructor(sourceSlug: string) {
+    super(`[ingest] ${sourceSlug}: browser context reset exceeded ${CONTEXT_RESET_DEADLINE_MS}ms`)
+    this.name = 'ContextResetDeadlineError'
+  }
+}
+
+class WorkerRestartRequiredError extends AggregateError {
+  readonly code = 'WORKER_RESTART_REQUIRED'
+
+  constructor(sourceSlug: string, cause: Error) {
+    super(
+      [cause],
+      `[ingest] WORKER_RESTART_REQUIRED (${sourceSlug}): browser teardown could not be ` +
+        `confirmed within ${CONTEXT_RESET_DEADLINE_MS}ms`
+    )
+    this.name = 'WorkerRestartRequiredError'
+  }
+}
 
 function pageFetchTimeoutMs(src: SourceRow): number {
   const configured = src.meta?.page_fetch_timeout_ms
@@ -183,6 +224,8 @@ class PlaywrightFetchSession implements FetchSession {
   private state: 'open' | 'closing' | 'closed' = 'open'
   private closePromise: Promise<void> | null = null
   private terminalError: Error | null = null
+  /** A timed-out teardown is still pending and must never be awaited or reused. */
+  private teardownAbandoned = false
   /** Last main-frame http(s) URL — restored after a mid-session context reset. */
   private lastNavigatedUrl: string | null = null
   private readonly gate: PacedGate
@@ -410,12 +453,48 @@ class PlaywrightFetchSession implements FetchSession {
     this.assertOpen()
     if (this.resetPromise) return this.resetPromise
 
-    const reset = this.resetContextInternal()
+    const reset = this.resetContextWithinDeadline()
     const tracked = reset.finally(() => {
       if (this.resetPromise === tracked) this.resetPromise = null
     })
     this.resetPromise = tracked
     return tracked
+  }
+
+  private async resetContextWithinDeadline(): Promise<void> {
+    const reset = this.resetContextInternal()
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<never>((_resolve, reject) => {
+      deadlineTimer = setTimeout(
+        () => reject(new ContextResetDeadlineError(this.sourceSlug)),
+        CONTEXT_RESET_DEADLINE_MS
+      )
+      const nodeTimer = deadlineTimer as ReturnType<typeof setTimeout> & {
+        unref?: () => void
+      }
+      nodeTimer.unref?.()
+    })
+
+    try {
+      await Promise.race([reset, deadline])
+    } catch (error) {
+      if (!(error instanceof ContextResetDeadlineError)) throw error
+
+      // The losing reset promise remains handled by Promise.race even if the
+      // transport eventually rejects. Do not await or reuse it: quarantine the
+      // profile and crash-restart so the OS/PM2 tears down the browser tree.
+      const fatal = new WorkerRestartRequiredError(this.sourceSlug, error)
+      this.teardownAbandoned = true
+      this.terminalError = fatal
+      this.settleProfileLane('quarantine')
+      console.error(fatal.message)
+      process.exit(1)
+      // process.exit() is `never` in production; the throw keeps the contract
+      // deterministic under tests that stub exit and documents the fatal path.
+      throw fatal
+    } finally {
+      if (deadlineTimer !== undefined) clearTimeout(deadlineTimer)
+    }
   }
 
   private async resetContextInternal(): Promise<void> {
@@ -464,47 +543,86 @@ class PlaywrightFetchSession implements FetchSession {
     template: ReplayRequestTemplate
   ): Promise<{ status: number; json: unknown }> {
     const page = await this.page()
-    return page.evaluate(
-      async ({ request, timeoutMs, sourceSlug }) => {
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), timeoutMs)
-        try {
-          const resp = await fetch(request.url, {
-            method: request.method,
-            headers: request.headers,
-            body: request.body === undefined ? undefined : JSON.stringify(request.body),
-            signal: controller.signal,
-          })
-          let json: unknown = null
-          try {
-            json = await resp.json()
-          } catch {
-            if (controller.signal.aborted) {
-              throw new Error(`[ingest] page fetch timeout (${sourceSlug}, ${timeoutMs}ms)`)
-            }
-            // non-JSON body — caller decides
-          }
-          return { status: resp.status, json }
-        } catch (error) {
-          if (controller.signal.aborted) {
-            throw new Error(`[ingest] page fetch timeout (${sourceSlug}, ${timeoutMs}ms)`)
-          }
-          throw error
-        } finally {
-          clearTimeout(timer)
+    const timeoutMs = pageFetchTimeoutMs(this.src)
+    const nodeDeadlineMs = timeoutMs + PAGE_FETCH_NODE_DEADLINE_GRACE_MS
+    let nodeDeadlineTimer: ReturnType<typeof setTimeout> | undefined
+    const nodeDeadline = new Promise<never>((_resolve, reject) => {
+      nodeDeadlineTimer = setTimeout(
+        () => reject(new PageFetchDeadlineError(this.sourceSlug, timeoutMs, nodeDeadlineMs)),
+        nodeDeadlineMs
+      )
+      ;(
+        nodeDeadlineTimer as ReturnType<typeof setTimeout> & {
+          unref?: () => void
         }
-      },
-      {
-        request: {
-          url: template.url,
-          method: template.method,
-          headers: template.headers,
-          body: template.body,
+      ).unref?.()
+    })
+
+    try {
+      const evaluation = page.evaluate(
+        async ({ request, timeoutMs: browserTimeoutMs, sourceSlug }) => {
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), browserTimeoutMs)
+          try {
+            const resp = await fetch(request.url, {
+              method: request.method,
+              headers: request.headers,
+              body: request.body === undefined ? undefined : JSON.stringify(request.body),
+              signal: controller.signal,
+            })
+            let json: unknown = null
+            try {
+              json = await resp.json()
+            } catch {
+              if (controller.signal.aborted) {
+                throw new Error(
+                  `[ingest] page fetch timeout (${sourceSlug}, ${browserTimeoutMs}ms)`
+                )
+              }
+              // non-JSON body — caller decides
+            }
+            return { status: resp.status, json }
+          } catch (error) {
+            if (controller.signal.aborted) {
+              throw new Error(`[ingest] page fetch timeout (${sourceSlug}, ${browserTimeoutMs}ms)`)
+            }
+            throw error
+          } finally {
+            clearTimeout(timer)
+          }
         },
-        timeoutMs: pageFetchTimeoutMs(this.src),
-        sourceSlug: this.sourceSlug,
+        {
+          request: {
+            url: template.url,
+            method: template.method,
+            headers: template.headers,
+            body: template.body,
+          },
+          timeoutMs,
+          sourceSlug: this.sourceSlug,
+        }
+      )
+      return await Promise.race([evaluation, nodeDeadline])
+    } catch (error) {
+      if (!(error instanceof PageFetchDeadlineError)) throw error
+
+      console.error(
+        `[ingest] ${this.sourceSlug}: page.evaluate exceeded its ${nodeDeadlineMs}ms ` +
+          'Node deadline; resetting browser context'
+      )
+      try {
+        await this.resetContext()
+      } catch (resetError) {
+        if (resetError instanceof WorkerRestartRequiredError) throw resetError
+        throw new AggregateError(
+          [error, resetError],
+          `${error.message}; browser context reset failed`
+        )
       }
-    )
+      throw error
+    } finally {
+      if (nodeDeadlineTimer !== undefined) clearTimeout(nodeDeadlineTimer)
+    }
   }
 
   async paced<T>(fn: () => Promise<T>): Promise<T> {
@@ -638,6 +756,16 @@ class PlaywrightFetchSession implements FetchSession {
   private async closeInternal(): Promise<void> {
     let closureConfirmed = false
     try {
+      // A reset that exceeded its deadline owns an indeterminate Playwright
+      // transport. Waiting for it here would reintroduce the infinite BullMQ
+      // job; the fatal path above has already requested a supervisor restart.
+      if (this.teardownAbandoned) {
+        throw (
+          this.terminalError ??
+          new Error(`[ingest] ${this.sourceSlug}: browser teardown was abandoned`)
+        )
+      }
+
       // A close racing launch/connect must not release the ProcessSingleton
       // lane first. The creation promise assigns this.context before settling.
       const creation = this.contextCreation
