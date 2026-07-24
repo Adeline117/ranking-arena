@@ -1,197 +1,161 @@
-# Ingest Worker Deploy — Runbook (2026-06-30)
+# Ingest Worker Production Deployment Runbook
 
-How to deploy the Arena ingest worker safely, after the 2026-06-30 SG crash-loop
-incident (a concurrent lock change made the deploy `npm ci` on the SG box → npm
-dropped .js files → worker crash-loop → SG ingestion DOWN). The fixes below make
-deploys reproducible and self-healing. See also `docs/INGEST_WORKER_TOPOLOGY.md`
-(two-node topology + the npm hazard) and the plan in
-`~/.claude/plans/zany-orbiting-lerdorf.md`.
+This runbook defines the authorized production paths for Arena's customer-facing
+ingest workers. It replaces the incident-era Docker, shared-dependency, and
+in-place install instructions. See `docs/INGEST_WORKER_TOPOLOGY.md` for fleet
+ownership and monitoring semantics.
 
-## TL;DR — pick the path
+## Non-negotiable invariants
 
-| Your change                                                    | Path                                                     | Command                                       |
-| -------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------- |
-| Parser/logic, **no new dependency** (`package-lock` unchanged) | **code-only** (zero box risk)                            | `bash worker/deploy-ingest-sg.sh --code-only` |
-| **New/changed dependency** (`package-lock` changed)            | **CI artifact** (build deps on Linux-x64, ship the tree) | Actions tab → run `Deploy Ingest Worker (SG)` |
-| Mac Mini node (local/vps_jp)                                   | **immutable release worktree** + stop/delete/start       | See “Mac Mini release deploy” below           |
+- A production mutation deploys one explicit 40-character commit that is still
+  the exact current `origin/main`.
+- Reviewed worker bytes are identified by both `DEPLOYED_SHA` and the
+  deterministic `WORKER_RELEASE_ID` derived from committed runtime inputs.
+- Never run `npm install` or `npm ci` in the live SG directory.
+- SG has exactly one authorized PM2 owner. Docker and Compose are not production
+  rollout paths.
+- Candidate preparation and verification happen while the current worker stays
+  online. PM2 stops only for the complete-directory cutover.
+- A historical log line is not readiness evidence. Success requires a unique
+  post-cutover marker followed by fresh ready, full SHA, and release-ID evidence.
+- Do not bypass the worker's production database release-readiness gate.
 
-**Golden rule: never run `npm install`/`npm ci` on the SG box.** Its npm is not
-concurrency-safe and drops .js files under interruption. The script refuses it by
-default; `--force-npm-ci` is a documented last resort only.
+## Sole SG deployment channel
 
-## The two nodes
+Use **Actions → Deploy Ingest Worker (SG)** from the `main` workflow ref.
 
-- **Mac Mini** (`arena-ingest-worker`, regions `local,vps_jp`): runs `npx tsx
-worker/src/ingest-worker.ts` from an immutable detached worktree under
-  `/Users/adelinewen/ranking-arena-releases/<sha9>`. A plain `pm2 restart`
-  retains the old cwd and therefore does **not** deploy a new release.
-- **Singapore VPS** (`arena-ingest-worker-sg`, region `vps_sg`: binance / okx /
-  bitmart / toobit / binance_spot): runs from `/opt/arena-ingest`, a NON-git
-  rsync copy. Deploy via the CI workflow or `worker/deploy-ingest-sg.sh`.
+| Change                                                      | Input                                                   |
+| ----------------------------------------------------------- | ------------------------------------------------------- |
+| `.npmrc`, `package.json`, and `package-lock.json` unchanged | `target_sha=<exact current main SHA>`, `mode=code-only` |
+| Any dependency install input changed                        | `target_sha=<exact current main SHA>`, `mode=full`      |
 
-## CI artifact pipeline (the dependency-safe path)
-
-`.github/workflows/deploy-ingest-sg.yml`:
-
-1. **build-deps** (no secrets) — on `ubuntu-latest` (= SG's Linux-x64 arch):
-   `npm ci` + `npx playwright install chromium` → **verifies the tree resolves**
-   (require.resolve of bullmq/viem/luxon/abitype/esbuild/tsx/dotenv/… — a broken
-   tree fails the build, never ships) → tars `node_modules` → uploads artifact.
-2. **deploy-sg** (gated on secrets) — ships the artifact + runs
-   `deploy-ingest-sg.sh --from-artifact=<tgz>`, which **swaps `node_modules`
-   atomically** (`mv` rename; the `.bak` keeps the old tree) and **auto-rolls-back**
-   if the worker doesn't report `ready`.
-
-**Activation (one-time, maintainer):** add repo secrets `INGEST_SG_SSH_KEY`
-(private key whose pubkey is in SG's `authorized_keys`) + `INGEST_SG_HOST`
-(`root@45.76.152.169`) → run the workflow from the Actions tab → once green,
-uncomment the `push:` trigger so dep changes auto-deploy. Until the secrets exist,
-`build-deps` still runs (proves the artifact builds) and `deploy-sg` skips cleanly.
-
-It is the **single channel** for SG deploys (a `concurrency` group serializes
-runs) — never two sessions deploying at once, never concurrent `npm ci`.
-
-## Container path (the most robust — zero box-side install, A6)
-
-`worker/Dockerfile.ingest` + `.github/workflows/build-ingest-image.yml` bake a
-deterministic, platform-matched `node_modules` **and** the Playwright browsers into
-an immutable image ONCE in CI, pushed to `ghcr.io/<repo>/ingest-worker`. The SG box
-then only `docker run`s a pinned digest — it never runs npm/playwright-install, so
-the crash-loop hazard is structurally impossible (not just policy).
-
-- **Deps are built on `node:20`** (npm 10 — the SAME toolchain that generated
-  `package-lock.json`; the existing CI + the tarball pipeline also pin node 20). The
-  Playwright base image ships node 24 / npm 11, whose stricter optional-peer
-  resolution (jsdom / react-native) rejects this lock as "out of sync" — so deps are
-  NOT built on it. The tree is portable to the runtime stage (all native addons are
-  NAPI prebuilds, Linux-x64 on both). The runtime stage is the Playwright image (its
-  non-root `pwuser` runs Chromium without `--no-sandbox`).
-- CI **smoke-runs the image** (`node -e require.resolve(...)` of every critical
-  module) before trusting the tag — a dropped/missing module fails the build.
-- **Cutover** (`worker/docker-compose.sg.yml`): one-time `docker login ghcr.io` with a
-  read:packages PAT, then `docker compose -f worker/docker-compose.sg.yml pull && up -d`.
-  Rollback = re-pin `image:` to the previous `:<sha>` tag and `up -d`.
-- **Local-build note:** the image builds in CI (ubuntu — can pull node:20 + the
-  Playwright base). Building it on a locked-keychain macOS that can't pull the
-  node:20 base will fail at the pull, not the Dockerfile.
-
-### Build on the SG box directly (credential-free path — used 2026-07-01)
-
-When GHCR isn't set up (no PAT) and you can't build locally, build the image ON
-the box from the PUBLIC base images (node:20 + Playwright pull anonymously). The
-"never npm on SG" rule is about the HOST npm corrupting a running install under
-concurrency — inside an isolated `docker build` layer it's deterministic and
-can't touch the running worker. This is the credential-free way to get the
-container running:
+Obtain the target without abbreviating it:
 
 ```bash
-# 1. rsync the build context to an isolated dir (NOT /opt/arena-ingest — that's live)
-rsync -az --exclude node_modules --exclude logs --exclude .arena-ingest \
-  package.json package-lock.json .npmrc tsconfig.json lib worker \
-  root@SG:/opt/arena-ingest-build/
-# 2. build on the box (~25 min: npm ci 1869 pkgs + chrome; run detached via setsid)
-ssh SG 'cd /opt/arena-ingest-build && docker build -f worker/Dockerfile.ingest -t arena-ingest:local .'
-# 3. cut over: stop PM2 first; Docker deploy refuses to overlap it
-ssh SG 'bash -s -- stop-pm2'      < worker/docker-run-sg.sh
-ssh SG "DEPLOYED_SHA=$(git rev-parse HEAD) bash -s -- deploy-local" < worker/docker-run-sg.sh
-# rollback: ssh SG 'bash -s -- start-pm2' < worker/docker-run-sg.sh
+git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
+git rev-parse origin/main
 ```
 
-**Five deployment gotchas** (the first four each cost a failed verify run; all
-are handled by `docker-run-sg.sh`):
+The deploy job references the `ingest-sg-production` GitHub Environment. That
+Environment must retain a selected-branch rule allowing only `main`. Its three
+secrets are environment-scoped, never repository-scoped:
 
-1. **.env quotes** — the box `.env` has `KEY="value"`; docker `--env-file` does NOT
-   strip quotes → pg gets a quoted connection string → misparsed host `base`.
-   The script pre-strips quotes into a clean env-file.
-2. **non-root .env read** — the container runs as `pwuser` (uid 1000); it can't
-   read a `root:0600` `.env` via a bind-mount (dotenv loads 0 vars). Feed the
-   clean env-file via `--env-file` (docker reads as root at create time).
-3. **profile volume perms** — `pwuser` must OWN the mounted profile dir or
-   Chromium fails `mkdir profiles` (EACCES). The script chowns it to `1000:1000`
-   (root still writes it on a pm2 rollback — safe both ways).
-4. **heartbeat SHA** — the container isn't a git checkout → `resolveDeployedSha()`
-   returns `unknown` → drift sentinel sees Mac's real SHA + SG's `unknown` = two
-   live SHAs = false page. Pass `DEPLOYED_SHA=$(git rev-parse HEAD)`.
-5. **heartbeat node identity** — Docker's generated hostname changes on every
-   recreate and leaves a stale roster identity behind. Both SG container paths
-   pin the logical node to `vps-sg-docker`; PM2 and Docker deploy paths both
-   refuse to overlap the other active consumer.
+- `INGEST_SG_SSH_KEY`: dedicated Actions deploy private key.
+- `INGEST_SG_HOST`: fixed `user@hostname` value.
+- `INGEST_SG_KNOWN_HOSTS`: previously verified pinned host-key record.
 
-**Current SG state (2026-07-15):** PM2 `arena-ingest-worker-sg` is the sole active
-`vps_sg` consumer; the old `arena-ingest-worker-sg-ctr` container is stopped and
-retained only as a rollback path. Code-only PM2 deploys must keep that container
-stopped. A future Docker cutover must stop and save PM2 first. `.env` files remain
-`.dockerignore`d so image rebuilds never bake secrets.
+Missing trust inputs fail the workflow. Do not replace the pinned record with
+runtime `ssh-keyscan`, and do not copy the SSH secrets back to repository scope.
 
-## `worker/deploy-ingest-sg.sh` modes
+## What the workflow proves
 
-- `--dry-run` — preview itemized rsync changes, no writes.
-- `--code-only` — rsync `lib/ worker/ tsconfig.json` only (no `node_modules`,
-  no npm). Refuses if `package-lock` actually changed.
-- `--from-artifact=PATH.tgz` — ship a CI-built tree + atomic swap (what CI uses).
-- _(default full)_ — refuses `npm ci` on a lock change; points you to CI.
-- `--force-npm-ci` — last resort; runs the hazardous install, then verify `ready`
-  and surgically repair any missing package (`npm pack` + `tar` + `cp`). **Never
-  `rm -rf node_modules`** on the working install.
+In `full` mode, the build job:
 
-Before any mutating path, the script checks the VPS for a running SG ingest
-container and refuses to start PM2 until it is stopped. Then every path runs:
-backup → graceful stop → sync → restart → verify `ready` →
-**auto-rollback** (restores the code+node_modules pair from `.bak`) on failure.
-The ready gate writes a unique deployment marker and requires both a fresh
-`ready` line and the target heartbeat SHA after that marker; old log lines cannot
-make a failed restart look healthy.
+1. validates and checks out the exact target;
+2. proves it is current `origin/main`;
+3. builds dependencies on Node 22 Linux x64 with deterministic `npm ci`;
+4. resolves and actually imports every critical worker module; and
+5. emits a six-field manifest binding target SHA, worker release ID, dependency
+   input hash, Node major, architecture, and tarball SHA-256.
 
-## Mac Mini release deploy
+The deploy job independently recomputes and strictly parses that manifest. It
+also rechecks current main, pinned SSH trust, and the live Node 22/x64 runtime.
+Every third-party Action in this production workflow is pinned to a full commit.
 
-Create a detached release only after the target SHA is pushed. Reuse dependencies,
-runtime state, logs and secret files through symlinks; never copy secrets into the
-release. The source secret files must remain mode `0600`.
+`code-only` intentionally skips the artifact build. The remote transaction still
+requires matching dependency inputs, Node 22/x64, and successful critical-module
+loads from the isolated candidate. This proves the existing dependency tree is
+currently usable; it does not claim a content identity for every dependency file.
+
+## SG transaction
+
+`worker/deploy-ingest-sg.sh` performs the executable safety checks:
+
+1. Materialize only exact committed runtime inputs and derive
+   `WORKER_RELEASE_ID`.
+2. Acquire a token-fenced remote deploy lease before inspecting or mutating SG.
+3. Reject running ingest containers and require exactly one online PM2 owner at
+   `/opt/arena-ingest`.
+4. Clone the complete live directory to an isolated candidate, sync exact code,
+   prepare dependencies, import critical modules, and atomically write both
+   identity stamps.
+5. Recheck exact current main, then stop PM2 and rename the complete live and
+   candidate directories.
+6. Start PM2 from the exact canonical cwd and require fresh marker-bound ready,
+   SHA, and release evidence.
+7. Recheck main inside the transaction before declaring success.
+
+If a post-stop step fails while SSH and the same lease remain available, the
+script restores the complete previous directory, starts it, and requires fresh
+rollback identity evidence. Loss of connectivity or the lease makes automatic
+rollback unsafe; the script then fails loudly for supervised recovery. Retention
+cleanup for old successful backups is best-effort and cannot turn a completed
+cutover into a false deployment failure.
+
+## Direct script modes
+
+The GitHub workflow is the canonical mutating entrypoint. Direct use is for an
+inspected maintainer operation and still requires exact current main.
 
 ```bash
+git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
 TARGET_SHA="$(git rev-parse origin/main)"
-RELEASE="/Users/adelinewen/ranking-arena-releases/${TARGET_SHA:0:9}"
-git worktree add --detach "$RELEASE" "$TARGET_SHA"
-ln -s /Users/adelinewen/ranking-arena/node_modules "$RELEASE/node_modules"
-ln -s /Users/adelinewen/ranking-arena/.arena-ingest "$RELEASE/.arena-ingest"
-ln -s /Users/adelinewen/ranking-arena/worker/logs "$RELEASE/worker/logs"
-ln -s /Users/adelinewen/ranking-arena/worker/.env "$RELEASE/worker/.env"
-ln -s /Users/adelinewen/ranking-arena/.env.local "$RELEASE/.env.local"
-chmod 600 /Users/adelinewen/ranking-arena/{.env.local,worker/.env}
+bash worker/deploy-ingest-sg.sh --target-sha="$TARGET_SHA" --dry-run
 ```
 
-Switch cwd with stop/delete/start. Start PM2 from a minimal environment so
-unrelated shell/session tokens are not captured in the worker process record;
-`ingest-worker.ts` loads its required values from `worker/.env` itself.
+- `--dry-run`: itemized preview; no remote mutation.
+- `--code-only`: reuse the validated remote dependency tree only when all three
+  dependency inputs match.
+- `--from-artifact=<tgz> --artifact-manifest=<manifest>`: deploy a bound CI
+  dependency artifact.
+- Default full mode: reuse matching dependencies; refuse changed inputs unless
+  the emergency-only `--force-npm-ci` flag is supplied.
+- `--force-npm-ci`: install only inside the isolated candidate and require actual
+  module loads before cutover. It never modifies live `node_modules`.
 
-```bash
-pm2 stop arena-ingest-worker
-pm2 delete arena-ingest-worker
-env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" PM2_HOME="$HOME/.pm2" \
-  PATH="/opt/homebrew/bin:/usr/bin:/bin" \
-  /opt/homebrew/bin/pm2 start "$RELEASE/worker/ecosystem.config.cjs" \
-  --only arena-ingest-worker
-env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" PM2_HOME="$HOME/.pm2" \
-  PATH="/opt/homebrew/bin:/usr/bin:/bin" /opt/homebrew/bin/pm2 save
-```
+## Container deployment is disabled
 
-Do not restore the old standalone `onchain-enrich-web3.mts` crontab entries.
-`maint:onchain-enrich` on the local BullMQ queue is the sole recurring owner;
-running both paths has no shared lock and can duplicate provider calls/writes.
+`worker/Dockerfile.ingest` and the image workflow may build and digest-smoke a
+quarantined OCI artifact, but that artifact is not an authorized production
+rollout path. `worker/docker-run-sg.sh` exits with status 2 and
+`worker/docker-compose.sg.yml` intentionally defines no services.
 
-## Recovery (if SG crash-loops on `Cannot find module`)
+Do not deploy with `docker run`, Compose, or an SG-side image build. Container
+cutover may be re-enabled only after it shares the same host ownership lease,
+digest-bound transaction, single-owner cutover, readiness proof, and tested
+automatic recovery as the canonical PM2 path.
 
-This is the incident signature. Do NOT npm-install to "fix" it. Either:
+## Mac Mini deployment is temporarily restricted
 
-1. **Roll back** to the consistent pair: `ssh SG 'rm -rf /opt/arena-ingest && mv
-/opt/arena-ingest.bak-<TS> /opt/arena-ingest && pm2 restart arena-ingest-worker-sg'`
-   (the deploy script does this automatically now). Then redeploy via CI.
-2. If you only have dep-free fixes to land, `--code-only` onto the rolled-back tree.
+Do not create a new release by symlinking the shared development
+`node_modules`. That makes reviewed production code mutable after activation.
+Do not use plain `pm2 restart`, which retains the old cwd.
 
-## Multi-session discipline (so deploys don't collide)
+Keep the current local worker untouched until `worker/deploy-ingest-local.sh` is
+available and tested. A valid local transaction must provide release-owned
+Node 22 arm64 dependencies, exact SHA and release stamps, pre-stop module,
+browser and database readiness checks, exact-cwd PM2 cutover, fresh readiness
+evidence, and automatic restoration of the previous release. Runtime state,
+logs, and mode-0600 worker secrets may be shared; dependencies may not.
 
-- Work in a **per-session worktree**: `scripts/new-session-worktree.sh <name>`
-  (own branch, env + node_modules symlinked) → merge via the push lock. Roots out
-  the shared-working-tree collisions that caused this incident.
-- Keep concurrent sessions to **2–4**, not 7 (coordination + syspolicyd fork-storm).
-- Worker deploy is one channel — see above. (CLAUDE.md 多会话编排纪律 rules 5–7.)
+Do not restore the retired standalone `onchain-enrich-web3.mts` crontab entries.
+`maint:onchain-enrich` on the local BullMQ queue is the sole recurring owner.
+
+## Failure handling
+
+- A normal failed workflow leaves a non-zero result and the script attempts
+  rollback while it owns the remote lease.
+- Do not manually delete, rename, or restart `/opt/arena-ingest`; doing so bypasses
+  the transaction and can destroy the last consistent release pair.
+- Inspect the workflow and PM2 logs. If exact rollback evidence was obtained,
+  correct the cause and redeploy exact current main through the full workflow.
+- If the script says rollback evidence is unavailable, freeze further deploys
+  and perform supervised recovery with one operator. Preserve both live and
+  backup directories before any change.
+
+## Concurrent development discipline
+
+- Work in per-session worktrees via `scripts/new-session-worktree.sh <name>`.
+- Commit and push one verified atomic slice at a time.
+- Never run two SG deploy sessions; the workflow concurrency group and remote
+  lease are additional enforcement, not permission to create another path.
