@@ -11,10 +11,10 @@ import { resolve } from 'node:path'
  * facts; credentials and database connection strings are never printed.
  */
 
-export const METRIC_TRUST_READINESS_CONTRACT = 'arena.metric-trust-release-readiness@1'
+export const METRIC_TRUST_READINESS_CONTRACT = 'arena.metric-trust-release-readiness@2'
 export const PRODUCTION_SUPABASE_ORIGIN = 'https://iknktzifjdyujdccyhsv.supabase.co'
 export const METRIC_TRUST_RELEASE_MIGRATION_PATH =
-  'supabase/migrations/20260722054000_metric_trust_source_page_lineage.sql'
+  'supabase/migrations/20260722055000_metric_trust_source_page_lineage_forward_repair.sql'
 
 // PostgREST can briefly answer 404 while its schema cache reloads after the
 // migration's NOTIFY. Retry it, but still fail closed after the bounded loop.

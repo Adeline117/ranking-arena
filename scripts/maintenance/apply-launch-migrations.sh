@@ -101,6 +101,13 @@ PREDEPLOY_MIGRATIONS=(
   20260722051000_leaderboard_score_input_manifest_contract.sql
   20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql
   20260722053000_binance_spot_metric_source_contract.sql
+  20260722055000_metric_trust_source_page_lineage_forward_repair.sql
+)
+
+# 054 is retained as immutable history but is never an ordered candidate. 055
+# accepts it only when its exact reviewed ledger and complete object contract
+# are already present; a missing 054 is intentionally skipped.
+QUARANTINED_PREDEPLOY_MIGRATIONS=(
   20260722054000_metric_trust_source_page_lineage.sql
 )
 
@@ -859,7 +866,7 @@ status() {
       'WITH target(version, phase, ordinal, expected_name, expected_hash) AS (VALUES'
     local ordinal=0
     local separator=''
-    for phase in predeploy postdeploy concurrent-recovery recovery superseded; do
+    for phase in predeploy postdeploy concurrent-recovery recovery quarantined superseded; do
       local -a phase_migrations
       if [[ "$phase" == "predeploy" ]]; then
         phase_migrations=("${PREDEPLOY_MIGRATIONS[@]}")
@@ -869,6 +876,8 @@ status() {
         phase_migrations=("${CONCURRENT_RECOVERY_MIGRATIONS[@]}")
       elif [[ "$phase" == "recovery" ]]; then
         phase_migrations=("${RECOVERY_MIGRATIONS[@]}")
+      elif [[ "$phase" == "quarantined" ]]; then
+        phase_migrations=("${QUARANTINED_PREDEPLOY_MIGRATIONS[@]}")
       else
         phase_migrations=("${SUPERSEDED_MIGRATIONS[@]}")
       fi
@@ -894,6 +903,26 @@ status() {
       "      WHERE replacement.version = '20260717230000'" \
       "    ) THEN 'superseded-by-20260717230000'" \
       "    WHEN target.phase = 'superseded' THEN 'missing-superseder'" \
+      "    WHEN target.phase = 'quarantined' AND NOT EXISTS (" \
+      "      SELECT 1 FROM supabase_migrations.schema_migrations AS candidate" \
+      "      WHERE candidate.name = target.expected_name" \
+      "         OR candidate.version = target.version" \
+      "    ) THEN 'quarantined-unapplied'" \
+      "    WHEN target.phase = 'quarantined' AND (" \
+      "      SELECT pg_catalog.count(*)" \
+      "      FROM supabase_migrations.schema_migrations AS candidate" \
+      "      WHERE candidate.name = target.expected_name" \
+      "         OR candidate.version = target.version" \
+      "    ) = 1 AND EXISTS (" \
+      "      SELECT 1 FROM supabase_migrations.schema_migrations AS candidate" \
+      "      WHERE candidate.name = target.expected_name" \
+      "        AND pg_catalog.array_length(candidate.statements, 1) = 1" \
+      "        AND pg_catalog.encode(" \
+      "          extensions.digest(candidate.statements[1], 'sha256')," \
+      "          'hex'" \
+      "        ) = target.expected_hash" \
+      "    ) THEN 'quarantined-exact-forward-repair-required'" \
+      "    WHEN target.phase = 'quarantined' THEN 'quarantined-drift'" \
       "    WHEN ledger.version IS NULL THEN 'missing'" \
       "    WHEN ledger.name = target.expected_name" \
       "      AND ledger.created_by = 'codex'" \
