@@ -1,19 +1,41 @@
 import {
   PUBLIC_RANKING_CACHE_EPOCH,
+  PUBLIC_RANKING_FUTURE_TOLERANCE_MS,
+  PUBLIC_RANKING_MAX_COMPUTED_AGE_MS,
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
   PUBLIC_RANKING_QUARANTINED_SOURCES,
   PUBLIC_RANKING_SOURCE_QUARANTINES,
   filterPublicRankingRows,
   filterPublicRankingSources,
   hasActivePublicRankingQuarantine,
+  isPublicRankingRowEligible,
   isPublicRankingSourceAllowed,
   isPublicRankingSourceQuarantined,
   sanitizePublicRankingPayload,
 } from '../publication-policy'
 
+function eligibleRow(overrides: Record<string, unknown> = {}) {
+  return {
+    source: 'binance_futures',
+    source_trader_id: 'safe-trader',
+    season_id: '90D',
+    arena_score: 88,
+    roi: 20,
+    pnl: 1000,
+    win_rate: 60,
+    max_drawdown: 10,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    computed_at: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
 describe('public ranking publication policy', () => {
   it('binds the cache epoch to the reviewed OKX quarantine contract', () => {
-    expect(PUBLIC_RANKING_CACHE_EPOCH).toBe('public-rank-policy-v1')
+    expect(PUBLIC_RANKING_CACHE_EPOCH).toBe('public-rank-policy-v2')
+    expect(PUBLIC_RANKING_MAX_COMPUTED_AGE_MS).toBe(48 * 60 * 60 * 1000)
+    expect(PUBLIC_RANKING_FUTURE_TOLERANCE_MS).toBe(5 * 60 * 1000)
     expect(PUBLIC_RANKING_SOURCE_QUARANTINES).toEqual([
       {
         source: 'okx_web3_solana',
@@ -57,11 +79,49 @@ describe('public ranking publication policy', () => {
     ).toEqual(['binance_futures', 'hyperliquid'])
   })
 
+  it('requires complete, concrete, fresh metrics for row-level rank eligibility', () => {
+    const nowMs = Date.parse('2026-07-24T12:00:00.000Z')
+    const full = eligibleRow({ computed_at: '2026-07-24T11:00:00.000Z' })
+    expect(isPublicRankingRowEligible(full, { expectedPeriod: '90D', nowMs })).toBe(true)
+
+    for (const ineligible of [
+      eligibleRow({ score_completeness: 'partial', computed_at: full.computed_at }),
+      eligibleRow({ metrics_estimated: true, computed_at: full.computed_at }),
+      eligibleRow({ pnl: null, computed_at: full.computed_at }),
+      eligibleRow({ win_rate: Number.NaN, computed_at: full.computed_at }),
+      eligibleRow({ arena_score: 101, computed_at: full.computed_at }),
+      eligibleRow({ win_rate: 101, computed_at: full.computed_at }),
+      eligibleRow({ max_drawdown: 100, computed_at: full.computed_at }),
+      eligibleRow({ source_trader_id: ' ', computed_at: full.computed_at }),
+      eligibleRow({ source: ' HYPERLIQUID ', computed_at: full.computed_at }),
+      eligibleRow({ source: 'HYPERLIQUID', computed_at: full.computed_at }),
+      eligibleRow({ platform: 'okx_web3_solana', computed_at: full.computed_at }),
+      eligibleRow({ trader_key: 'different', computed_at: full.computed_at }),
+      eligibleRow({ computed_at: '2026-07-22T11:59:59.999Z' }),
+      eligibleRow({ computed_at: '2026-07-24T12:05:00.001Z' }),
+      eligibleRow({ computed_at: '2026-07-24' }),
+      eligibleRow({ season_id: '30D', computed_at: full.computed_at }),
+      eligibleRow({ period: '30D', computed_at: full.computed_at }),
+    ]) {
+      expect(isPublicRankingRowEligible(ineligible, { expectedPeriod: '90D', nowMs })).toBe(false)
+    }
+    expect(isPublicRankingRowEligible(full, { nowMs: Number.NaN })).toBe(false)
+    expect(
+      isPublicRankingRowEligible(eligibleRow({ season_id: undefined }), {
+        expectedPeriod: '',
+        nowMs,
+      })
+    ).toBe(false)
+    expect(isPublicRankingRowEligible(full, { expectedPeriod: ' 90D ', nowMs })).toBe(false)
+  })
+
   it('sanitizes a polluted cached payload and marks totals as a partial lower bound', () => {
+    const safeTrader = eligibleRow({ id: 1 })
     const payload = {
+      period: '90D',
       traders: [
-        { source: 'binance_futures', id: 1 },
-        { source: 'okx_web3_solana', id: 2 },
+        safeTrader,
+        eligibleRow({ source: 'okx_web3_solana', source_trader_id: 'blocked', id: 2 }),
       ],
       availableSources: ['binance_futures', 'okx_web3_solana'],
       source_freshness: [
@@ -80,7 +140,7 @@ describe('public ranking publication policy', () => {
     const sanitized = sanitizePublicRankingPayload(payload)
 
     expect(sanitized).not.toBe(payload)
-    expect(sanitized.traders).toEqual([{ source: 'binance_futures', id: 1 }])
+    expect(sanitized.traders).toEqual([safeTrader])
     expect(sanitized.availableSources).toEqual(['binance_futures'])
     expect(sanitized.source_freshness).toEqual([{ source: 'binance_futures', updated_at: 'safe' }])
     expect(sanitized).toEqual(
@@ -93,21 +153,116 @@ describe('public ranking publication policy', () => {
         next_cursor: null,
         nextCursor: null,
         ranking_visibility: 'partial',
-        ranking_visibility_reason: 'quarantined_source_removed',
+        ranking_visibility_reason: 'publication_policy_filtered',
+        ranking_visibility_reasons: ['quarantined_source_removed'],
       })
     )
     expect(payload.traders).toHaveLength(2)
   })
 
   it('supports platform-shaped rows and preserves already-safe payload identity', () => {
+    const platformTrader = eligibleRow({
+      source: undefined,
+      platform: 'hyperliquid',
+      source_trader_id: undefined,
+      traderKey: 'safe-platform-trader',
+    })
     const polluted = sanitizePublicRankingPayload({
-      traders: [{ platform: 'okx_web3_solana' }, { platform: 'hyperliquid' }],
+      period: '90D',
+      traders: [
+        eligibleRow({
+          source: undefined,
+          platform: 'okx_web3_solana',
+          source_trader_id: undefined,
+          traderKey: 'blocked-platform-trader',
+        }),
+        platformTrader,
+      ],
       totalCount: 2,
     })
-    expect(polluted.traders).toEqual([{ platform: 'hyperliquid' }])
+    expect(polluted.traders).toEqual([platformTrader])
 
-    const safe = { traders: [{ source: 'hyperliquid' }], totalCount: 10 }
+    const safe = {
+      period: '90D',
+      traders: [eligibleRow({ source: 'hyperliquid' })],
+      totalCount: 10,
+    }
     expect(sanitizePublicRankingPayload(safe)).toBe(safe)
+  })
+
+  it('removes partial or unknown rows even when their source is otherwise allowed', () => {
+    const safeTrader = eligibleRow({ source: 'hyperliquid', source_trader_id: 'full' })
+    const sanitized = sanitizePublicRankingPayload({
+      period: '90D',
+      traders: [
+        safeTrader,
+        eligibleRow({
+          source: 'hyperliquid',
+          source_trader_id: 'partial',
+          score_completeness: 'partial',
+        }),
+        eligibleRow({
+          source: 'binance_futures',
+          source_trader_id: 'estimated',
+          metrics_estimated: true,
+        }),
+        eligibleRow({ source: 'binance_futures', source_trader_id: 'unknown-cost', pnl: null }),
+      ],
+      totalCount: 4,
+      hasMore: true,
+    })
+
+    expect(sanitized.traders).toEqual([safeTrader])
+    expect(sanitized).toEqual(
+      expect.objectContaining({
+        totalCount: 1,
+        hasMore: false,
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'publication_policy_filtered',
+        ranking_visibility_reasons: ['ineligible_ranking_row_removed'],
+      })
+    )
+  })
+
+  it('binds real route-shaped proof rows to the payload period and never trusts id alone', () => {
+    const routeRow = eligibleRow({ id: 'public-id', source_trader_id: 'source-id' })
+    const crossPeriod = eligibleRow({
+      id: 'other-period',
+      source_trader_id: 'other-source-id',
+      season_id: '30D',
+    })
+    const idOnly = {
+      id: 'ambiguous-id',
+      source: 'hyperliquid',
+      arena_score: 80,
+      roi: 10,
+      pnl: 100,
+      win_rate: 55,
+      max_drawdown: 12,
+      score_completeness: 'full',
+      metrics_estimated: false,
+      computed_at: new Date().toISOString(),
+      season_id: '90D',
+    }
+
+    const sanitized = sanitizePublicRankingPayload({
+      period: '90D',
+      traders: [routeRow, crossPeriod, idOnly],
+      totalCount: 3,
+    })
+
+    expect(sanitized.traders).toEqual([routeRow])
+    expect(sanitized.totalCount).toBe(1)
+    expect(sanitized.ranking_visibility_reasons).toEqual(['ineligible_ranking_row_removed'])
+
+    const explicit = { traders: [routeRow], totalCount: 1 }
+    expect(sanitizePublicRankingPayload(explicit, { expectedPeriod: '90D' })).toBe(explicit)
+    expect(
+      sanitizePublicRankingPayload(
+        { period: '90D', traders: [routeRow], totalCount: 1 },
+        { expectedPeriod: ' 90D ' }
+      ).traders
+    ).toEqual([])
   })
 
   it('does not rewrite totals or pagination when only source metadata is quarantined', () => {
@@ -132,7 +287,8 @@ describe('public ranking publication policy', () => {
       hasMore: true,
       nextCursor: 200,
       ranking_visibility: 'partial',
-      ranking_visibility_reason: 'quarantined_source_removed',
+      ranking_visibility_reason: 'publication_policy_filtered',
+      ranking_visibility_reasons: ['quarantined_source_removed'],
     })
   })
 })
