@@ -29,6 +29,7 @@ jest.mock('@/lib/utils/healthcheck', () => ({
 
 import { PipelineLogger } from '../pipeline-logger'
 import { pingHealthcheck } from '@/lib/utils/healthcheck'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 
 // ============================================
 // Helpers
@@ -43,7 +44,8 @@ function mockInsertSuccess(logId: number) {
     insert: jest.fn().mockReturnValue(chain),
     update: jest.fn().mockReturnValue({
       eq: jest.fn().mockReturnValue({
-        then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
+        then: (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: null, error: null }).then(resolve),
       }),
     }),
     select: jest.fn().mockReturnThis(),
@@ -126,7 +128,8 @@ describe('PipelineLogger', () => {
 
       const mockUpdate = jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
-          then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
+          then: (resolve: (v: unknown) => unknown) =>
+            Promise.resolve({ data: null, error: null }).then(resolve),
         }),
       })
       mockSupabaseFrom.mockReturnValue({ update: mockUpdate })
@@ -139,6 +142,84 @@ describe('PipelineLogger', () => {
     })
   })
 
+  describe('handle.partialSuccess', () => {
+    it('treats a resolved PostgREST error as a failed write and falls back to error', async () => {
+      mockInsertSuccess(15)
+      const handle = await PipelineLogger.start('test-job')
+      const responses = [
+        { data: null, error: { message: 'pipeline_logs_status_check violated' } },
+        { data: null, error: null },
+      ]
+      const mockUpdate = jest.fn().mockImplementation(() => ({
+        eq: jest.fn().mockReturnValue({
+          then: (resolve: (v: unknown) => unknown) =>
+            Promise.resolve(responses.shift()).then(resolve),
+        }),
+      }))
+      mockSupabaseFrom.mockReturnValue({ update: mockUpdate })
+
+      await expect(handle.partialSuccess(5, ['binance:timeout'])).resolves.toBeUndefined()
+
+      expect(mockUpdate).toHaveBeenCalledTimes(2)
+      expect(mockUpdate.mock.calls[0][0]).toMatchObject({
+        status: 'partial_success',
+        records_processed: 5,
+      })
+      expect(mockUpdate.mock.calls[1][0]).toMatchObject({
+        status: 'error',
+        records_processed: 5,
+        metadata: expect.objectContaining({
+          intended_status: 'partial_success',
+          finalization_fallback: true,
+        }),
+      })
+      expect(mockUpdate.mock.calls[1][0].error_message).toContain(
+        'partial_success finalization fallback'
+      )
+      expect(sendRateLimitedAlert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'PipelineLogger DB write failed: test-job:partial',
+        }),
+        'plog-db-write-failure',
+        5 * 60 * 1000
+      )
+    })
+
+    it('does not fall back when the partial_success update succeeds', async () => {
+      mockInsertSuccess(16)
+      const handle = await PipelineLogger.start('test-job')
+      const mockUpdate = jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({
+          then: (resolve: (v: unknown) => unknown) =>
+            Promise.resolve({ data: null, error: null }).then(resolve),
+        }),
+      })
+      mockSupabaseFrom.mockReturnValue({ update: mockUpdate })
+
+      await handle.partialSuccess(2, ['one'])
+
+      expect(mockUpdate).toHaveBeenCalledTimes(1)
+      expect(mockUpdate.mock.calls[0][0].status).toBe('partial_success')
+    })
+
+    it('does not reject the business task when both finalization writes fail', async () => {
+      mockInsertSuccess(17)
+      const handle = await PipelineLogger.start('test-job')
+      const mockUpdate = jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({
+          then: (resolve: (v: unknown) => unknown) =>
+            Promise.resolve({ data: null, error: { message: 'database unavailable' } }).then(
+              resolve
+            ),
+        }),
+      })
+      mockSupabaseFrom.mockReturnValue({ update: mockUpdate })
+
+      await expect(handle.partialSuccess(0, [])).resolves.toBeUndefined()
+      expect(mockUpdate).toHaveBeenCalledTimes(2)
+    })
+  })
+
   describe('handle.error', () => {
     it('should update the log entry with error status and message', async () => {
       mockInsertSuccess(11)
@@ -146,7 +227,8 @@ describe('PipelineLogger', () => {
 
       const mockUpdate = jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
-          then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
+          then: (resolve: (v: unknown) => unknown) =>
+            Promise.resolve({ data: null, error: null }).then(resolve),
         }),
       })
       mockSupabaseFrom.mockReturnValue({ update: mockUpdate })
@@ -163,7 +245,8 @@ describe('PipelineLogger', () => {
 
       const mockUpdate = jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
-          then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
+          then: (resolve: (v: unknown) => unknown) =>
+            Promise.resolve({ data: null, error: null }).then(resolve),
         }),
       })
       mockSupabaseFrom.mockReturnValue({ update: mockUpdate })
@@ -179,7 +262,8 @@ describe('PipelineLogger', () => {
 
       const mockUpdate = jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
-          then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
+          then: (resolve: (v: unknown) => unknown) =>
+            Promise.resolve({ data: null, error: null }).then(resolve),
         }),
       })
       mockSupabaseFrom.mockReturnValue({ update: mockUpdate })
@@ -198,7 +282,8 @@ describe('PipelineLogger', () => {
 
       const mockUpdate = jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
-          then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
+          then: (resolve: (v: unknown) => unknown) =>
+            Promise.resolve({ data: null, error: null }).then(resolve),
         }),
       })
       mockSupabaseFrom.mockReturnValue({ update: mockUpdate })
@@ -212,7 +297,14 @@ describe('PipelineLogger', () => {
   describe('getJobStatuses', () => {
     it('should call RPC and return results', async () => {
       const mockData = [
-        { job_name: 'test', started_at: '2024-01-01', status: 'success', records_processed: 10, error_message: null, health_status: 'healthy' },
+        {
+          job_name: 'test',
+          started_at: '2024-01-01',
+          status: 'success',
+          records_processed: 10,
+          error_message: null,
+          health_status: 'healthy',
+        },
       ]
       mockSupabaseRpc.mockResolvedValue({ data: mockData, error: null })
 
