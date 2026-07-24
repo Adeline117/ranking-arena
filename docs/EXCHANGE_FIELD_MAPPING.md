@@ -29,7 +29,7 @@
 机器可执行判定见 `lib/metric-trust.ts`。它不接受一个孤立的 `verified` 布尔值，而是把指标值
 绑定到 subject、来源、采集 run、RAW 引用、真实窗口边界、单位/币种、`as_of/valid_until`，再与
 代码内静态登记的来源字段合同和排名方法合同核对；调用方不能随指标一起提交一份临时合同
-“自证”。注册表先从已核对的 Binance Futures 与 Binance Wallet 字段开始，未登记来源一律
+“自证”。注册表先从已核对的 Binance Futures、Binance Spot 与 Binance Wallet 字段开始，未登记来源一律
 fail closed，按来源逐个扩展。后续数据库/RPC 必须持久化逐指标
 `provenance / methodology_version / quality / history / price / cost_basis / population / window /
 unit / freshness / raw_refs+sha256 / blocking_reasons / rank_eligible`；RAW 引用还必须由数据库外键和

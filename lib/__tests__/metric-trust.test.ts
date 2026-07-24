@@ -3,6 +3,7 @@ import {
   METRIC_TRUST_SCHEMA_VERSION,
   evaluateMetricRankEligibility,
   evaluateRankingEligibility,
+  getRegisteredMetricSourceContract,
   type MetricTrustEvidence,
   type RankingMetric,
   type RankingMetricInput,
@@ -134,13 +135,20 @@ function rebuiltRoi(evidence: Partial<MetricTrustEvidence> = {}): RankingMetricI
   })
 }
 
-function binanceBoardMetric(metric: 'roi' | 'pnl'): RankingMetricInput {
+function binanceBoardMetric(
+  metric: 'roi' | 'pnl',
+  sourceId: 'binance_futures' | 'binance_spot' = 'binance_futures'
+): RankingMetricInput {
   return input(metric, {
     evidence: {
       methodologyVersion: metric === 'roi' ? 'binance-board-roi@1' : 'binance-board-pnl@1',
     },
     binding: {
+      subjectKey: `${sourceId}:trader-1`,
+      sourceId,
       fieldPath: metric === 'roi' ? 'data.list[].roi' : 'data.list[].pnl',
+      populationSnapshotRef: populationSnapshotRef(sourceId),
+      rawRefs: directRawRefs(sourceId),
     },
   })
 }
@@ -178,6 +186,53 @@ describe('metric trust ranking gate', () => {
   it('registers the real Binance Tier-A board paths separately from profile paths', () => {
     expect(evaluateMetricRankEligibility(binanceBoardMetric('roi'), NOW).eligible).toBe(true)
     expect(evaluateMetricRankEligibility(binanceBoardMetric('pnl'), NOW).eligible).toBe(true)
+  })
+
+  it('matches the reviewed Binance Spot database population contract exactly', () => {
+    expect(getRegisteredMetricSourceContract('binance_spot')).toEqual({
+      sourceId: 'binance_spot',
+      version: '1',
+      fields: [
+        expect.objectContaining({
+          metric: 'roi',
+          fieldPath: 'data.list[].roi',
+          provenance: 'source_reported',
+          methodologyVersion: 'binance-board-roi@1',
+          metricSetId: 'binance-board-roi-pnl@1',
+          windowKeys: ['7D', '30D', '90D'],
+          valueUnit: 'percent',
+          currencies: ['USDT'],
+          requiredRawRoles: ['source_payload', 'population_manifest'],
+          sourcePayloadScope: 'population_snapshot',
+          maxFreshnessMs: 6 * 60 * 60 * 1000,
+          maxWindowEndLagMs: 5 * 60 * 1000,
+        }),
+        expect.objectContaining({
+          metric: 'pnl',
+          fieldPath: 'data.list[].pnl',
+          provenance: 'source_reported',
+          methodologyVersion: 'binance-board-pnl@1',
+          metricSetId: 'binance-board-roi-pnl@1',
+          windowKeys: ['7D', '30D', '90D'],
+          valueUnit: 'currency',
+          currencies: ['USDT'],
+          requiredRawRoles: ['source_payload', 'population_manifest'],
+          sourcePayloadScope: 'population_snapshot',
+          maxFreshnessMs: 6 * 60 * 60 * 1000,
+          maxWindowEndLagMs: 5 * 60 * 1000,
+        }),
+      ],
+    })
+    expect(evaluateMetricRankEligibility(binanceBoardMetric('roi', 'binance_spot'), NOW)).toEqual({
+      eligible: true,
+      state: 'eligible',
+      reasons: [],
+    })
+    expect(evaluateMetricRankEligibility(binanceBoardMetric('pnl', 'binance_spot'), NOW)).toEqual({
+      eligible: true,
+      state: 'eligible',
+      reasons: [],
+    })
   })
 
   it('keeps Binance Wallet board metrics source-reported and USD-bound', () => {
