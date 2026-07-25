@@ -49,11 +49,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # No exact-main guard is needed here: the release ID is derived from the
-      # worker inputs, and there is no mutable `latest`. Formal aliases are only
-      # created after digest-level smoke and a conflict check.
-      # Allow an in-flight worker build to finish after an app/docs-only commit
-      # advances main; both commits deliberately have the same worker release ID.
+      # A manual run can otherwise select an arbitrary historical ref whose
+      # worker-input release ID matches main while its baked audit SHA differs.
+      # Refuse that ambiguous image before spending build or registry capacity.
+      - name: Require manual dispatch to target exact origin/main
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --prune origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          main_sha="$(git rev-parse --verify refs/remotes/origin/main^{commit})"
+          if [ "$GITHUB_SHA" != "$main_sha" ]; then
+            echo "::error::manual worker image source is not exact origin/main"
+            exit 1
+          fi
+      # Push builds may finish after an app/docs-only commit advances main; the
+      # triggering commit remains an immutable main commit. Manual builds are
+      # rechecked again immediately before formal aliases are promoted.
       - name: Derive deterministic worker release ID
         id: worker_release
         shell: bash
@@ -103,6 +116,7 @@ jobs:
           file: worker/Dockerfile.ingest
           push: true
           build-args: |
+            DEPLOYED_SHA=${{ github.sha }}
             WORKER_RELEASE_ID=${{ steps.worker_release.outputs.id }}
           tags: ${{ steps.quarantine.outputs.ref }}
           cache-from: type=gha
@@ -115,6 +129,7 @@ jobs:
         env:
           IMAGE: ${{ steps.image.outputs.name }}
           DIGEST: ${{ steps.build_quarantine.outputs.digest }}
+          DEPLOYED_SHA: ${{ github.sha }}
           WORKER_RELEASE_ID: ${{ steps.worker_release.outputs.id }}
         run: |
           set -euo pipefail
@@ -125,6 +140,11 @@ jobs:
           fi
           digest_ref="${IMAGE}@${DIGEST}"
           docker pull "$digest_ref"
+          baked_sha=$(docker run --rm --entrypoint cat \
+            "$digest_ref" /app/DEPLOYED_SHA)
+          [ "$baked_sha" = "$DEPLOYED_SHA" ] || {
+            echo "::error::image deployed SHA stamp is not exact"; exit 1;
+          }
           baked_release=$(docker run --rm --entrypoint cat \
             "$digest_ref" /app/WORKER_RELEASE_ID)
           [ "$baked_release" = "$WORKER_RELEASE_ID" ] || {
@@ -132,6 +152,18 @@ jobs:
           }
           docker run --rm --entrypoint node "$digest_ref" --import tsx --input-type=module -e \
             "for (const m of ['bullmq','ioredis','viem','abitype','luxon','playwright','tsx','dotenv','pg','ccxt']) await import(m); await import('./worker/src/ingest/heartbeat.ts'); console.log('worker-modules-loaded')"
+      - name: Recheck manual dispatch exact main before promotion
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --prune origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          main_sha="$(git rev-parse --verify refs/remotes/origin/main^{commit})"
+          if [ "$GITHUB_SHA" != "$main_sha" ]; then
+            echo "::error::manual worker image source stopped being exact origin/main"
+            exit 1
+          fi
       # Check every formal alias before creating any of them. An existing alias
       # may be reused only when it already resolves to this exact digest; a
       # different digest is a release collision and fails without retagging it.
