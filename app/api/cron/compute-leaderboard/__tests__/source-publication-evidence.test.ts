@@ -333,6 +333,51 @@ describe('source publication evidence', () => {
     captureError(() => parse([physicalBoard({ filter_source: '' })]), 'invalid_bundle')
   })
 
+  it('rejects completely identical score identities', () => {
+    const duplicate = scoreRow()
+    const error = captureError(
+      () =>
+        parse([physicalBoard({ actual_count: 2, entry_count: 2 })], [duplicate, { ...duplicate }]),
+      'duplicate_score_identity'
+    )
+
+    expect(error.message).toContain('platform=alpha')
+    expect(error.message).toContain('trader_key=trader-1')
+  })
+
+  it('rejects duplicate identities with complementary null metrics', () => {
+    captureError(
+      () =>
+        parse(
+          [physicalBoard({ actual_count: 2, entry_count: 2 })],
+          [scoreRow({ roi_pct: 12.5, pnl_usd: null }), scoreRow({ roi_pct: null, pnl_usd: 250 })]
+        ),
+      'duplicate_score_identity'
+    )
+  })
+
+  it('accepts the same trader key on different platforms', () => {
+    const parsed = parse(
+      [
+        physicalBoard(),
+        physicalBoard({
+          registry_slug: 'beta-futures',
+          filter_source: 'beta',
+          snapshot_id: 102,
+          latest_attempt_id: 102,
+        }),
+      ],
+      [scoreRow(), scoreRow({ platform: 'beta' })]
+    )
+
+    expect(parsed.freshScoreRows.map(({ platform, trader_key }) => [platform, trader_key])).toEqual(
+      [
+        ['alpha', 'trader-1'],
+        ['beta', 'trader-1'],
+      ]
+    )
+  })
+
   it('rejects a score-row watermark that differs from the physical alias MIN', () => {
     const error = captureError(
       () => parse([physicalBoard()], [scoreRow({ board_as_of: '2026-07-21T22:59:59Z' })]),

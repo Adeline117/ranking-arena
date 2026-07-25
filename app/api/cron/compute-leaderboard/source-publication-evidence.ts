@@ -84,6 +84,7 @@ export type SourcePublicationEvidenceErrorCode =
   | 'invalid_window'
   | 'invalid_count'
   | 'invalid_timestamp'
+  | 'duplicate_score_identity'
   | 'duplicate_registry_slug'
   | 'duplicate_snapshot_id'
   | 'unknown_alias'
@@ -249,6 +250,22 @@ function describeZodFailure(error: z.ZodError): string {
   const issue = error.issues[0]
   const path = issue?.path.length ? issue.path.join('.') : 'bundle'
   return `${path}: ${issue?.message ?? 'invalid value'}`
+}
+
+function requireUniqueScoreIdentities(rows: readonly SourcePublicationScoreRow[]): void {
+  const traderKeysByPlatform = new Map<string, Set<string>>()
+
+  for (const row of rows) {
+    const traderKeys = traderKeysByPlatform.get(row.platform) ?? new Set<string>()
+    if (traderKeys.has(row.trader_key)) {
+      fail(
+        'duplicate_score_identity',
+        `duplicate score identity: platform=${row.platform}, trader_key=${row.trader_key}`
+      )
+    }
+    traderKeys.add(row.trader_key)
+    traderKeysByPlatform.set(row.platform, traderKeys)
+  }
 }
 
 function requireSnapshotShape(board: PhysicalBoardRow): void {
@@ -456,6 +473,8 @@ export function parseSourcePublicationEvidence(
       `invalid score-input publish bundle: ${describeZodFailure(parsedBundle.error)}`
     )
   }
+
+  requireUniqueScoreIdentities(parsedBundle.data.scoreRows)
 
   const nowMicros = BigInt(now.getTime()) * 1000n
   const staleCutoffMicros = nowMicros - BigInt(maxAgeHours) * 60n * 60n * 1_000_000n
