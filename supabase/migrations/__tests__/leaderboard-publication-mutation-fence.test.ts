@@ -175,6 +175,12 @@ describe('leaderboard publication mutation fence migration', () => {
     expect(sealBody).toContain('v_existing.request_sha256 IS DISTINCT FROM v_request_sha256')
     expect(sealBody).toContain('score cohort id was reused with different publication input')
     expect(sealBody).toContain('score cohort receipt is no longer the current sealed publication')
+    const receiptFound = sealBody.indexOf('IF FOUND THEN')
+    const freshnessLock = sealBody.indexOf('FOR UPDATE OF freshness;')
+    const replayValidation = sealBody.indexOf('v_existing.source_count IS DISTINCT FROM')
+    expect(freshnessLock).toBeGreaterThan(receiptFound)
+    expect(freshnessLock).toBeLessThan(replayValidation)
+    expect(sealBody).toContain('ORDER BY freshness.source')
     expect(sealBody).toContain('freshness.rank_mutation_seq IS DISTINCT FROM')
     expect(sealBody).toContain('ranks.rank_publication_id IS DISTINCT FROM v_existing.id')
     expect(sealBody).toMatch(

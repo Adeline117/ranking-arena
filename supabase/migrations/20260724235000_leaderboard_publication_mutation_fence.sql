@@ -650,6 +650,19 @@ BEGIN
         USING ERRCODE = '23505';
     END IF;
 
+    -- Linearize response-loss replay against the expand-phase legacy writer.
+    -- A plain MVCC read can still see the old sealed tuple while a concurrent
+    -- UPDATE has already locked it and is about to clear the proof in the
+    -- guard. Wait for every receipt source in deterministic order, then let
+    -- the checks below take a new READ COMMITTED snapshot.
+    PERFORM freshness.source
+    FROM public.leaderboard_source_freshness AS freshness
+    JOIN pg_catalog.jsonb_array_elements(v_existing.proofs) AS audit(proof)
+      ON audit.proof->>'source' = freshness.source
+    WHERE freshness.season_id = v_existing.season_id
+    ORDER BY freshness.source
+    FOR UPDATE OF freshness;
+
     IF v_existing.source_count IS DISTINCT FROM
          pg_catalog.jsonb_array_length(v_existing.proofs)
        OR EXISTS (
