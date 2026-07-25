@@ -6,12 +6,15 @@ sharing one Supabase database and Upstash Redis. A source's
 
 | Logical node  | PM2 app                  | Required regions | Production cwd                                       |
 | ------------- | ------------------------ | ---------------- | ---------------------------------------------------- |
-| Mac Mini      | `arena-ingest-worker`    | `local,vps_jp`   | `/Users/adelinewen/ranking-arena-releases/<release>` |
+| Mac Mini      | `arena-ingest-worker`    | `local`          | `/Users/adelinewen/ranking-arena-releases/<release>` |
 | Singapore VPS | `arena-ingest-worker-sg` | `vps_sg`         | `/opt/arena-ingest`                                  |
 
-The Mac owns local sources and the JP remote-browser lane. SG owns geo-blocked
-CEX sources assigned to `vps_sg`. A required region must have exactly one logical
-owner; neither missing, duplicate, nor combined-region owners are healthy.
+The Mac owns local sources. SG owns geo-blocked CEX sources assigned to `vps_sg`.
+As verified on 2026-07-24, `vps_jp` has no source, queued job, browser endpoint,
+or runtime owner; do not advertise it in `INGEST_REGIONS`. Reintroducing it
+requires one explicit owner plus a proven browser endpoint and a coordinated
+source/queue migration. A required region must have exactly one logical owner;
+neither missing, duplicate, nor combined-region owners are healthy.
 
 ## Runtime locations
 
@@ -22,8 +25,8 @@ owner; neither missing, duplicate, nor combined-region owners are healthy.
 - Confirm SG ownership with `pm2 describe arena-ingest-worker-sg` and its exact
   `exec cwd`; do not infer it from a directory name or Git state elsewhere.
 - The current Mac release predates the new transaction and has shared mutable
-  dependencies. Do not create another release with that pattern. New Mac deploys
-  remain restricted until the transactional local script is implemented.
+  dependencies. Do not create another release with that pattern. Use only the
+  transactional local script after all of its pre-stop gates pass.
 
 ## Deploy to SG
 

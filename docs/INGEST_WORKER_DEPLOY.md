@@ -125,18 +125,24 @@ cutover may be re-enabled only after it shares the same host ownership lease,
 digest-bound transaction, single-owner cutover, readiness proof, and tested
 automatic recovery as the canonical PM2 path.
 
-## Mac Mini deployment is temporarily restricted
+## Mac Mini deployment is transactional and fail closed
 
 Do not create a new release by symlinking the shared development
 `node_modules`. That makes reviewed production code mutable after activation.
 Do not use plain `pm2 restart`, which retains the old cwd.
 
-Keep the current local worker untouched until `worker/deploy-ingest-local.sh` is
-available and tested. A valid local transaction must provide release-owned
-Node 22 arm64 dependencies, exact SHA and release stamps, pre-stop module,
-browser and database readiness checks, exact-cwd PM2 cutover, fresh readiness
-evidence, and automatic restoration of the previous release. Runtime state,
-logs, and mode-0600 worker secrets may be shared; dependencies may not.
+`worker/deploy-ingest-local.sh` is the only authorized local rollout path. It
+requires an exact current-main target, a real Node 22 arm64 binary, a canonical
+single PM2 owner, enough disk, mode-0600 worker secrets, `INGEST_REGIONS=local`,
+the metric-trust database contract, and real browser/Redis readiness before it
+stops the current worker. Runtime state and logs may be shared; dependencies and
+Playwright Chromium are release-owned.
+
+The cutover writes a durable recovery journal before PM2 stop. It then requires
+the exact direct worker entrypoint, Node arguments, PID, SHA, release ID, logical
+node, and fresh Redis roster payload. Any failure restores and proves the exact
+previous release; an interrupted or unproved recovery blocks subsequent deploys
+for supervised handling.
 
 Do not restore the retired standalone `onchain-enrich-web3.mts` crontab entries.
 `maint:onchain-enrich` on the local BullMQ queue is the sole recurring owner.
@@ -152,6 +158,17 @@ Do not restore the retired standalone `onchain-enrich-web3.mts` crontab entries.
 - If the script says rollback evidence is unavailable, freeze further deploys
   and perform supervised recovery with one operator. Preserve both live and
   backup directories before any change.
+
+For a local `.arena-ingest-deploy-blocked` record, never delete the record merely
+to retry. First preserve it and inspect its marker, phase, lock token, old release,
+and candidate release. Prove that exactly one `arena-ingest-worker` PM2 entry is
+online with the intended canonical cwd, interpreter, direct entrypoint, arguments,
+and PID. Then require a fresh Redis roster payload for that same PID, logical node,
+SHA, release ID, `local` region, and capture flag (the first legacy rollback may
+instead use its documented legacy log plus Redis/ancestry proof). Run `pm2 save`.
+Only after all evidence agrees may the operator archive and remove the same
+token-bearing block record. If any identity is ambiguous, leave it in place and
+preserve both releases.
 
 ## Concurrent development discipline
 
