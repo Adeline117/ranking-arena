@@ -107,6 +107,7 @@ PREDEPLOY_MIGRATIONS=(
   20260724234000_optimize_arena_score_inputs_json_hot_path.sql
   20260724235000_leaderboard_publication_mutation_fence.sql
   20260725011000_durable_ingest_worker_fence_substrate.sql
+  20260725012000_strengthen_arena_score_publish_evidence.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
