@@ -11,6 +11,7 @@ JSON_RPC_MIGRATION="$ROOT_DIR/supabase/migrations/20260612211910_arena_score_inp
 CURRENT_MIGRATION="$ROOT_DIR/supabase/migrations/20260716124500_rank_only_active_serving_sources.sql"
 NEW_MIGRATION="$ROOT_DIR/supabase/migrations/20260716135000_expire_stale_score_fallbacks.sql"
 BOARD_WATERMARK_MIGRATION="$ROOT_DIR/supabase/migrations/20260718184000_arena_score_inputs_board_as_of.sql"
+HOT_PATH_MIGRATION="$ROOT_DIR/supabase/migrations/20260724234000_optimize_arena_score_inputs_json_hot_path.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -28,7 +29,8 @@ for migration in \
   "$JSON_RPC_MIGRATION" \
   "$CURRENT_MIGRATION" \
   "$NEW_MIGRATION" \
-  "$BOARD_WATERMARK_MIGRATION"; do
+  "$BOARD_WATERMARK_MIGRATION" \
+  "$HOT_PATH_MIGRATION"; do
   if [[ ! -f "$migration" ]]; then
     echo "Required migration not found: $migration" >&2
     exit 1
@@ -115,13 +117,38 @@ CREATE TABLE arena.traders (
   meta jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE TABLE arena.leaderboard_entries (
+  scraped_at timestamptz NOT NULL,
   snapshot_id bigint NOT NULL,
   trader_id bigint NOT NULL,
   rank integer NOT NULL,
   headline_roi numeric,
   headline_pnl numeric,
   headline_win_rate numeric
-);
+) PARTITION BY RANGE (scraped_at);
+DO $partitions$
+DECLARE
+  month_index integer;
+  month_start date;
+  month_end date;
+BEGIN
+  FOR month_index IN 0..11 LOOP
+    month_start := date '2025-01-01' + (month_index || ' months')::interval;
+    month_end := month_start + interval '1 month';
+    EXECUTE pg_catalog.format(
+      'CREATE TABLE arena.leaderboard_entries_2025_%s PARTITION OF arena.leaderboard_entries FOR VALUES FROM (%L) TO (%L)',
+      pg_catalog.to_char(month_start, 'MM'),
+      month_start,
+      month_end
+    );
+  END LOOP;
+END
+$partitions$;
+CREATE TABLE arena.leaderboard_entries_current
+PARTITION OF arena.leaderboard_entries DEFAULT;
+CREATE INDEX leaderboard_entries_snapshot_rank
+  ON arena.leaderboard_entries (snapshot_id, rank);
+CREATE INDEX leaderboard_entries_trader_timeframe_scraped
+  ON arena.leaderboard_entries (trader_id, scraped_at DESC);
 CREATE TABLE arena.trader_stats (
   trader_id bigint NOT NULL,
   timeframe smallint NOT NULL,
@@ -187,18 +214,34 @@ VALUES
   (41, 4, 'legacy-board',             'Legacy board',   '{}'),
   (42, 4, 'legacy-first-party',       'Legacy owner',   '{"claimed":"true"}');
 INSERT INTO arena.leaderboard_entries
-  (snapshot_id, trader_id, rank, headline_roi, headline_pnl, headline_win_rate)
-VALUES
-  (10, 1, 1, NULL, NULL, NULL),
-  (10, 2, 2, NULL, NULL, NULL),
-  (10, 3, 3, 11, 110, 51),
-  (10, 4, 4, NULL, NULL, NULL),
-  (10, 5, 5, 15, 150, 55),
-  (10, 6, 6, 16, 160, 56),
-  (10, 7, 7, 17, 170, 57),
-  (20, 21, 1, 21, 210, 61),
-  (30, 31, 1, 31, 310, 71),
-  (40, 41, 1, 41, 410, 81);
+  (scraped_at, snapshot_id, trader_id, rank,
+   headline_roi, headline_pnl, headline_win_rate)
+SELECT
+  snapshot.scraped_at,
+  fixture.snapshot_id,
+  fixture.trader_id,
+  fixture.rank,
+  fixture.headline_roi,
+  fixture.headline_pnl,
+  fixture.headline_win_rate
+FROM (
+  VALUES
+    (10::bigint, 1::bigint, 1, NULL::numeric, NULL::numeric, NULL::numeric),
+    (10, 2, 2, NULL, NULL, NULL),
+    (10, 3, 3, 11, 110, 51),
+    (10, 4, 4, NULL, NULL, NULL),
+    (10, 5, 5, 15, 150, 55),
+    (10, 6, 6, 16, 160, 56),
+    (10, 7, 7, 17, 170, 57),
+    (20, 21, 1, 21, 210, 61),
+    (30, 31, 1, 31, 310, 71),
+    (40, 41, 1, 41, 410, 81)
+) AS fixture(
+  snapshot_id, trader_id, rank,
+  headline_roi, headline_pnl, headline_win_rate
+)
+JOIN arena.leaderboard_snapshots AS snapshot
+  ON snapshot.id = fixture.snapshot_id;
 INSERT INTO arena.trader_stats
   (trader_id, timeframe, as_of, roi, pnl, win_rate, mdd,
    copier_count, total_positions, sharpe, extras)
@@ -705,4 +748,423 @@ assert_equal "replayed board view OID" "$BOARD_VIEW_OID_BEFORE" \
 assert_equal "replayed board table RPC OID" "$BOARD_TABLE_RPC_OID_BEFORE" \
   "$(psql_cmd -Atqc "SELECT 'public.arena_score_inputs(text,integer,integer)'::regprocedure::oid")"
 
-echo "stale score fallback and independent board watermark PostgreSQL 17 proof passed"
+# Add non-empty 7D and 30D regular/first-party branches after the historical
+# freshness assertions, so the old/new matrix below exercises all supported
+# windows without changing those earlier fixture counts.
+psql_cmd <<'SQL'
+INSERT INTO arena.sources
+  (id, slug, product_type, currency, serving_mode, status, meta)
+VALUES
+  (6, 'sentinel_first_party', 'onchain', 'USDC', 'serving', 'active',
+   '{"legacy_platform":"null"}'::jsonb);
+INSERT INTO arena.traders
+  (id, source_id, exchange_trader_id, nickname, meta)
+VALUES
+  (61, 6, 'sentinel-first-party', 'Sentinel owner', '{"claimed":"true"}'::jsonb);
+INSERT INTO arena.leaderboard_snapshots
+  (id, source_id, timeframe, scraped_at, count_check_passed)
+VALUES
+  (11, 1, 7, now() - interval '1 hour', true),
+  (12, 1, 30, now() - interval '1 hour', true),
+  (60, 6, 90, now() - interval '1 hour', true);
+
+INSERT INTO arena.leaderboard_entries
+  (scraped_at, snapshot_id, trader_id, rank,
+   headline_roi, headline_pnl, headline_win_rate)
+SELECT
+  snapshot.scraped_at,
+  snapshot.id,
+  fixture.trader_id,
+  fixture.rank,
+  fixture.headline_roi,
+  fixture.headline_pnl,
+  fixture.headline_win_rate
+FROM (
+  VALUES
+    (11::bigint, 7::bigint, 1, 7::numeric, 70::numeric, 57::numeric),
+    (11, 5, 2, 15, 150, 55),
+    (12, 7, 1, 30, 300, 60),
+    (12, 5, 2, 35, 350, 65),
+    (60, 61, 1, 61, 610, 71)
+) AS fixture(
+  snapshot_id, trader_id, rank,
+  headline_roi, headline_pnl, headline_win_rate
+)
+JOIN arena.leaderboard_snapshots AS snapshot
+  ON snapshot.id = fixture.snapshot_id;
+
+INSERT INTO arena.trader_stats
+  (trader_id, timeframe, as_of, roi, pnl, win_rate, mdd,
+   copier_count, total_positions, sharpe, extras)
+VALUES
+  (5, 7, now() - interval '2 hours', 17, 170, 57, 17,
+   7, 70, 1.7,
+   '{"provenance":"first_party","sortino":1.8,"calmar":1.9,"volatility":17}'::jsonb),
+  (5, 30, now() - interval '2 hours', 37, 370, 67, 37,
+   30, 300, 3.7,
+   '{"provenance":"first_party","sortino":3.8,"calmar":3.9,"volatility":37}'::jsonb),
+  (61, 90, now() - interval '2 hours', 61, 610, 71, 61,
+   61, 610, 6.1,
+   '{"provenance":"first_party","sortino":6.2,"calmar":6.3,"volatility":61}'::jsonb);
+SQL
+
+# Snapshot every row field as JSONB for a cross-product of supported windows,
+# rank caps, and freshness caps. EXCEPT ALL below proves multiset equivalence,
+# including duplicates, without relying on jsonb_agg's unspecified array order.
+psql_cmd <<SQL
+CREATE TEMP TABLE hot_path_view_contract_before AS
+SELECT
+  'arena.score_inputs'::regclass::oid AS view_oid,
+  pg_catalog.pg_get_viewdef('arena.score_inputs'::regclass, true) AS view_definition;
+
+CREATE TEMP TABLE hot_path_function_contract_before AS
+SELECT
+  function_row.oid,
+  function_row.proowner,
+  function_row.proacl,
+  function_row.prorettype,
+  function_row.pronargdefaults,
+  function_row.proargdefaults::text AS proargdefaults,
+  function_row.prosecdef,
+  function_row.proconfig,
+  function_row.provolatile
+FROM pg_catalog.pg_proc AS function_row
+WHERE function_row.oid =
+  'public.arena_score_inputs_json(text,integer,integer)'::regprocedure;
+
+CREATE TEMP TABLE hot_path_payload_before AS
+SELECT
+  parameter.requested_window,
+  parameter.rank_limit,
+  parameter.max_age_hours,
+  payload.value
+FROM (
+  SELECT requested_window, rank_limit, max_age_hours
+  FROM pg_catalog.unnest(ARRAY['7D', '30D', '90D']::text[])
+    AS requested_window
+  CROSS JOIN pg_catalog.unnest(ARRAY[1, 5, 1000]::integer[])
+    AS rank_limit
+  CROSS JOIN pg_catalog.unnest(ARRAY[24, 48, 72]::integer[])
+    AS max_age_hours
+) AS parameter
+CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(
+  public.arena_score_inputs_json(
+    parameter.requested_window,
+    parameter.rank_limit,
+    parameter.max_age_hours
+  )
+) AS payload(value);
+
+\i $HOT_PATH_MIGRATION
+
+DO \$hot_path_equivalence\$
+DECLARE
+  v_before hot_path_function_contract_before%ROWTYPE;
+  v_after pg_catalog.pg_proc%ROWTYPE;
+  v_view_oid oid;
+  v_view_definition text;
+BEGIN
+  IF EXISTS (
+    WITH hot_path_payload_after AS (
+      SELECT
+        parameter.requested_window,
+        parameter.rank_limit,
+        parameter.max_age_hours,
+        payload.value
+      FROM (
+        SELECT requested_window, rank_limit, max_age_hours
+        FROM pg_catalog.unnest(ARRAY['7D', '30D', '90D']::text[])
+          AS requested_window
+        CROSS JOIN pg_catalog.unnest(ARRAY[1, 5, 1000]::integer[])
+          AS rank_limit
+        CROSS JOIN pg_catalog.unnest(ARRAY[24, 48, 72]::integer[])
+          AS max_age_hours
+      ) AS parameter
+      CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(
+        public.arena_score_inputs_json(
+          parameter.requested_window,
+          parameter.rank_limit,
+          parameter.max_age_hours
+        )
+      ) AS payload(value)
+    )
+    SELECT 1
+    FROM (
+      (
+        SELECT requested_window, rank_limit, max_age_hours, value
+        FROM hot_path_payload_before
+        EXCEPT ALL
+        SELECT requested_window, rank_limit, max_age_hours, value
+        FROM hot_path_payload_after
+      )
+      UNION ALL
+      (
+        SELECT requested_window, rank_limit, max_age_hours, value
+        FROM hot_path_payload_after
+        EXCEPT ALL
+        SELECT requested_window, rank_limit, max_age_hours, value
+        FROM hot_path_payload_before
+      )
+    ) AS difference
+  ) THEN
+    RAISE EXCEPTION 'optimized JSON RPC is not EXCEPT ALL equivalent';
+  END IF;
+
+  SELECT * INTO STRICT v_before
+  FROM hot_path_function_contract_before;
+  SELECT * INTO STRICT v_after
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid =
+    'public.arena_score_inputs_json(text,integer,integer)'::regprocedure;
+
+  IF v_after.oid IS DISTINCT FROM v_before.oid
+     OR v_after.proowner IS DISTINCT FROM v_before.proowner
+     OR v_after.proacl IS DISTINCT FROM v_before.proacl
+     OR v_after.prorettype IS DISTINCT FROM v_before.prorettype
+     OR v_after.pronargdefaults IS DISTINCT FROM v_before.pronargdefaults
+     OR v_after.proargdefaults::text IS DISTINCT FROM v_before.proargdefaults
+     OR v_after.prosecdef IS DISTINCT FROM v_before.prosecdef
+     OR v_after.proconfig IS DISTINCT FROM v_before.proconfig
+     OR v_after.provolatile IS DISTINCT FROM v_before.provolatile THEN
+    RAISE EXCEPTION 'optimized JSON RPC changed its callable catalog contract';
+  END IF;
+
+  SELECT view_oid, view_definition
+    INTO STRICT v_view_oid, v_view_definition
+  FROM hot_path_view_contract_before;
+  IF 'arena.score_inputs'::regclass::oid IS DISTINCT FROM v_view_oid
+     OR pg_catalog.pg_get_viewdef('arena.score_inputs'::regclass, true)
+          IS DISTINCT FROM v_view_definition THEN
+    RAISE EXCEPTION 'hot-path migration changed arena.score_inputs';
+  END IF;
+END
+\$hot_path_equivalence\$;
+
+-- The migration is replay-safe and retains exact row semantics on replay.
+\i $HOT_PATH_MIGRATION
+
+DO \$hot_path_replay\$
+BEGIN
+  IF EXISTS (
+    WITH replay_payload AS (
+      SELECT
+        parameter.requested_window,
+        parameter.rank_limit,
+        parameter.max_age_hours,
+        payload.value
+      FROM (
+        SELECT requested_window, rank_limit, max_age_hours
+        FROM pg_catalog.unnest(ARRAY['7D', '30D', '90D']::text[])
+          AS requested_window
+        CROSS JOIN pg_catalog.unnest(ARRAY[1, 5, 1000]::integer[])
+          AS rank_limit
+        CROSS JOIN pg_catalog.unnest(ARRAY[24, 48, 72]::integer[])
+          AS max_age_hours
+      ) AS parameter
+      CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(
+        public.arena_score_inputs_json(
+          parameter.requested_window,
+          parameter.rank_limit,
+          parameter.max_age_hours
+        )
+      ) AS payload(value)
+    )
+    SELECT 1
+    FROM (
+      (
+        SELECT requested_window, rank_limit, max_age_hours, value
+        FROM hot_path_payload_before
+        EXCEPT ALL
+        SELECT requested_window, rank_limit, max_age_hours, value
+        FROM replay_payload
+      )
+      UNION ALL
+      (
+        SELECT requested_window, rank_limit, max_age_hours, value
+        FROM replay_payload
+        EXCEPT ALL
+        SELECT requested_window, rank_limit, max_age_hours, value
+        FROM hot_path_payload_before
+      )
+    ) AS difference
+  ) THEN
+    RAISE EXCEPTION 'replayed optimized JSON RPC changed row semantics';
+  END IF;
+END
+\$hot_path_replay\$;
+SQL
+
+# A partition-key mismatch must abort before replacement instead of silently
+# dropping a score row. The failed transaction must leave identity and payload
+# untouched, after which repairing the invariant makes replay succeed.
+HOT_PATH_OID_BEFORE_FAILURE="$(psql_cmd -Atqc "SELECT 'public.arena_score_inputs_json(text,integer,integer)'::regprocedure::oid")"
+psql_cmd -c \
+  "UPDATE arena.leaderboard_entries SET scraped_at = scraped_at + interval '1 minute' WHERE snapshot_id = 10 AND trader_id = 7" \
+  >/dev/null
+HOT_PATH_PAYLOAD_BEFORE_FAILURE="$(psql_cmd -Atqc "SELECT public.arena_score_inputs_json('90D',1000,48)::text")"
+if psql_cmd -f "$HOT_PATH_MIGRATION" \
+  >"$TMP_ROOT/hot-path-invariant.out" \
+  2>"$TMP_ROOT/hot-path-invariant.err"; then
+  echo "hot-path migration accepted a mismatched entry partition key" >&2
+  exit 1
+fi
+if ! grep -q \
+  'latest served leaderboard entry scraped_at disagrees with its snapshot' \
+  "$TMP_ROOT/hot-path-invariant.err"; then
+  cat "$TMP_ROOT/hot-path-invariant.err" >&2
+  echo "hot-path mismatch failed for the wrong reason" >&2
+  exit 1
+fi
+assert_equal "failed hot-path migration function OID" "$HOT_PATH_OID_BEFORE_FAILURE" \
+  "$(psql_cmd -Atqc "SELECT 'public.arena_score_inputs_json(text,integer,integer)'::regprocedure::oid")"
+assert_equal "failed hot-path migration payload" "$HOT_PATH_PAYLOAD_BEFORE_FAILURE" \
+  "$(psql_cmd -Atqc "SELECT public.arena_score_inputs_json('90D',1000,48)::text")"
+psql_cmd -c \
+  "UPDATE arena.leaderboard_entries AS entry SET scraped_at = snapshot.scraped_at FROM arena.leaderboard_snapshots AS snapshot WHERE snapshot.id = entry.snapshot_id AND entry.snapshot_id = 10 AND entry.trader_id = 7" \
+  >/dev/null
+psql_cmd -f "$HOT_PATH_MIGRATION" >/dev/null
+
+# Production-shaped load: 30 active physical sources, 3,000 current members
+# per source/window (90,000 scanned rows per window), and twelve populated old
+# monthly partitions. The RPC still returns the exact 1,000/source cap.
+psql_cmd <<'SQL'
+TRUNCATE TABLE
+  arena.leaderboard_entries,
+  arena.trader_stats,
+  arena.traders,
+  arena.leaderboard_snapshots,
+  arena.sources;
+
+INSERT INTO arena.sources
+  (id, slug, product_type, currency, serving_mode, status, meta)
+SELECT
+  source_id::smallint,
+  'load_source_' || pg_catalog.lpad(source_id::text, 2, '0'),
+  CASE WHEN source_id % 5 = 0 THEN 'spot' ELSE 'onchain' END,
+  'USDT',
+  'serving',
+  'active',
+  '{}'::jsonb
+FROM pg_catalog.generate_series(1, 30) AS source_id;
+
+INSERT INTO arena.traders
+  (id, source_id, exchange_trader_id, nickname, meta)
+SELECT
+  ((source_id - 1) * 3000 + rank)::bigint,
+  source_id::smallint,
+  'load_trader_' || source_id::text || '_' || rank::text,
+  'Load trader ' || source_id::text || '/' || rank::text,
+  '{}'::jsonb
+FROM pg_catalog.generate_series(1, 30) AS source_id
+CROSS JOIN pg_catalog.generate_series(1, 3000) AS rank;
+
+INSERT INTO arena.leaderboard_snapshots
+  (id, source_id, timeframe, scraped_at, count_check_passed)
+SELECT
+  (timeframe * 100000 + source_id)::bigint,
+  source_id::smallint,
+  timeframe::smallint,
+  pg_catalog.now() - interval '1 hour',
+  true
+FROM pg_catalog.generate_series(1, 30) AS source_id
+CROSS JOIN pg_catalog.unnest(ARRAY[7, 30, 90]::integer[]) AS timeframe;
+
+INSERT INTO arena.leaderboard_snapshots
+  (id, source_id, timeframe, scraped_at, count_check_passed)
+SELECT
+  (100000000 + month_index * 1000 + source_id)::bigint,
+  source_id::smallint,
+  90::smallint,
+  (date '2025-01-15' + (month_index || ' months')::interval)::timestamptz,
+  true
+FROM pg_catalog.generate_series(0, 11) AS month_index
+CROSS JOIN pg_catalog.generate_series(1, 30) AS source_id;
+
+INSERT INTO arena.leaderboard_entries
+  (scraped_at, snapshot_id, trader_id, rank,
+   headline_roi, headline_pnl, headline_win_rate)
+SELECT
+  snapshot.scraped_at,
+  snapshot.id,
+  ((snapshot.source_id - 1) * 3000 + rank)::bigint,
+  rank,
+  (rank % 500)::numeric / 10,
+  (rank * 10)::numeric,
+  (40 + rank % 50)::numeric
+FROM arena.leaderboard_snapshots AS snapshot
+CROSS JOIN pg_catalog.generate_series(1, 3000) AS rank
+WHERE snapshot.scraped_at >= timestamptz '2026-01-01 00:00:00+00';
+
+INSERT INTO arena.leaderboard_entries
+  (scraped_at, snapshot_id, trader_id, rank,
+   headline_roi, headline_pnl, headline_win_rate)
+SELECT
+  snapshot.scraped_at,
+  snapshot.id,
+  ((snapshot.source_id - 1) * 3000 + rank)::bigint,
+  rank,
+  (rank % 500)::numeric / 10,
+  (rank * 10)::numeric,
+  (40 + rank % 50)::numeric
+FROM arena.leaderboard_snapshots AS snapshot
+CROSS JOIN pg_catalog.generate_series(1, 300) AS rank
+WHERE snapshot.scraped_at < timestamptz '2026-01-01 00:00:00+00';
+
+INSERT INTO arena.trader_stats
+  (trader_id, timeframe, as_of, roi, pnl, win_rate, mdd,
+   copier_count, total_positions, sharpe, extras)
+SELECT
+  trader.id,
+  timeframe::smallint,
+  pg_catalog.now() - interval '2 hours',
+  (trader.id % 500)::numeric / 10,
+  (trader.id % 10000)::numeric,
+  (40 + trader.id % 50)::numeric,
+  (trader.id % 80)::numeric,
+  (trader.id % 1000)::integer,
+  (20 + trader.id % 500)::integer,
+  ((trader.id % 30)::numeric / 10),
+  pg_catalog.jsonb_build_object(
+    'sortino', (trader.id % 40)::numeric / 10,
+    'calmar', (trader.id % 20)::numeric / 10,
+    'volatility', (trader.id % 100)::numeric
+  )
+FROM arena.traders AS trader
+CROSS JOIN pg_catalog.unnest(ARRAY[7, 30, 90]::integer[]) AS timeframe;
+
+ANALYZE arena.sources;
+ANALYZE arena.leaderboard_snapshots;
+ANALYZE arena.leaderboard_entries;
+ANALYZE arena.traders;
+ANALYZE arena.trader_stats;
+SQL
+
+PRUNING_PLAN="$(psql_cmd -Atqc "
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  SELECT pg_catalog.count(*)
+  FROM arena.leaderboard_entries AS entry
+  WHERE entry.snapshot_id = 9000001
+    AND entry.scraped_at = (
+      SELECT snapshot.scraped_at
+      FROM arena.leaderboard_snapshots AS snapshot
+      WHERE snapshot.id = 9000001
+    )
+")"
+if [[ "$(grep -Ec 'leaderboard_entries_2025_[0-9]+.*\(never executed\)' <<<"$PRUNING_PLAN")" != '12' ]] \
+  || ! grep -Eq 'leaderboard_entries_current.*actual rows=3000' <<<"$PRUNING_PLAN"; then
+  printf '%s\n' "$PRUNING_PLAN" >&2
+  echo "leaderboard entry plan executed an old partition instead of runtime-pruning it" >&2
+  exit 1
+fi
+
+for requested_window in 7D 30D 90D; do
+  row_count="$(psql_cmd -Atqc "
+    SET statement_timeout = '10s';
+    SELECT pg_catalog.jsonb_array_length(
+      public.arena_score_inputs_json('$requested_window', 1000, 48)
+    );
+  ")"
+  assert_equal "$requested_window high-cardinality payload count" '30000' "$row_count"
+done
+
+echo "stale fallback, board watermark, and optimized score-input hot path PostgreSQL 17 proof passed"
