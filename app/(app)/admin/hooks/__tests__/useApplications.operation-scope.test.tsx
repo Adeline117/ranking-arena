@@ -492,8 +492,12 @@ describe('useApplications operation/viewer scope', () => {
 
     let oldAction!: Promise<boolean>
     let oldErrorAction!: Promise<boolean>
+    // Bind the first deferred before another asynchronous operation fingerprint can overtake it.
     act(() => {
       oldAction = hook.result.current.approveEditApplication(APPLICATION_ID)
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    act(() => {
       oldErrorAction = hook.result.current.rejectEditApplication(
         EDIT_APPLICATION_B_ID,
         'old viewer reason'
