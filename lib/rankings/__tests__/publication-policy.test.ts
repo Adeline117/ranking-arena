@@ -255,6 +255,7 @@ describe('public ranking publication policy', () => {
     for (const ineligible of [
       eligibleRow({ score_completeness: 'partial', computed_at: full.computed_at }),
       eligibleRow({ metrics_estimated: true, computed_at: full.computed_at }),
+      eligibleRow({ is_outlier: true, computed_at: full.computed_at }),
       eligibleRow({ pnl: null, computed_at: full.computed_at }),
       eligibleRow({ win_rate: Number.NaN, computed_at: full.computed_at }),
       eligibleRow({ arena_score: 101, computed_at: full.computed_at }),

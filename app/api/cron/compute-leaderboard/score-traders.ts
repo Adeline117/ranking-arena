@@ -18,6 +18,7 @@ import { markOutliers, applyArenaFollowers } from './scoring-helpers'
 import type { TraderRow } from './trader-row'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
+import { hasConcretePublicRankingMetrics } from '@/lib/rankings/publication-policy'
 
 const logger = createLogger('compute-leaderboard')
 
@@ -199,9 +200,16 @@ export async function scoreTraders(
     `[${season}] Arena followers: ${applied} traders have followers (${uniqueAccounts} unique exchange accounts queried)`
   )
 
-  // Cohort membership is a data-eligibility decision, not a positive-score
-  // decision: finite zero/loss PnL remains rankable even when v3 computes 0.
-  const scoredFiltered = scored.filter((trader) => hasRankEligiblePnl(trader.pnl))
+  // Only rows with a concrete, non-estimated metric basis participate in the
+  // percentile cohort. Partial rows remain available in the upstream Arena
+  // model for profiles, but cannot influence or enter the public ranking.
+  const scoredFiltered = scored.filter(hasConcretePublicRankingMetrics)
+  const excludedForTrust = scored.length - scoredFiltered.length
+  if (excludedForTrust > 0) {
+    logger.warn(
+      `[${season}] Excluded ${excludedForTrust} trader(s) from ranking: partial, estimated, outlier, or untrusted metric basis`
+    )
+  }
 
   // ── Arena Score v4 — NOW THE FLAGSHIP ──
   // Batch percentile over the SERVED cohort (percentiles are relative to what
@@ -240,6 +248,13 @@ export async function scoreTraders(
     }
   })
 
-  logger.info(`[${season}] Arena Score v4 is now the flagship (${scoredFiltered.length} traders)`)
-  return { scored, scoredFiltered }
+  const publishedCohort = scoredFiltered.filter(
+    (trader) =>
+      typeof trader.arena_score === 'number' &&
+      Number.isFinite(trader.arena_score) &&
+      trader.arena_score > 0 &&
+      trader.arena_score <= 100
+  )
+  logger.info(`[${season}] Arena Score v4 is now the flagship (${publishedCohort.length} traders)`)
+  return { scored, scoredFiltered: publishedCohort }
 }
