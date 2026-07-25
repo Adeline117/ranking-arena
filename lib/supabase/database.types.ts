@@ -2718,6 +2718,7 @@ export type Database = {
           profitability_score: number | null
           rank: number | null
           rank_change: number | null
+          rank_publication_id: string | null
           risk_control_score: number | null
           roi: number | null
           score_completeness: string | null
@@ -2756,6 +2757,7 @@ export type Database = {
           profitability_score?: number | null
           rank?: number | null
           rank_change?: number | null
+          rank_publication_id?: string | null
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
@@ -2794,6 +2796,7 @@ export type Database = {
           profitability_score?: number | null
           rank?: number | null
           rank_change?: number | null
+          rank_publication_id?: string | null
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
@@ -2868,19 +2871,31 @@ export type Database = {
       }
       leaderboard_source_freshness: {
         Row: {
+          published_identity_sha256: string | null
+          published_rank_count: number | null
+          rank_mutation_seq: number | null
           recorded_at: string
+          score_cohort_id: string | null
           season_id: string
           source: string
           source_as_of: string
         }
         Insert: {
+          published_identity_sha256?: string | null
+          published_rank_count?: number | null
+          rank_mutation_seq?: number | null
           recorded_at?: string
+          score_cohort_id?: string | null
           season_id: string
           source: string
           source_as_of: string
         }
         Update: {
+          published_identity_sha256?: string | null
+          published_rank_count?: number | null
+          rank_mutation_seq?: number | null
           recorded_at?: string
+          score_cohort_id?: string | null
           season_id?: string
           source?: string
           source_as_of?: string
@@ -9593,6 +9608,21 @@ export type Database = {
           season_id: string
         }[]
       }
+      arena_leaderboard_publication_proofs: {
+        Args: { p_season_id: string; p_sources: string[] }
+        Returns: {
+          current_mutation_seq: number
+          is_sealed: boolean
+          published_identity_sha256: string | null
+          published_rank_count: number | null
+          rank_mutation_seq: number | null
+          recorded_at: string | null
+          score_cohort_id: string | null
+          season_id: string
+          source: string
+          source_as_of: string | null
+        }[]
+      }
       arena_latest_snapshot_at: { Args: never; Returns: string }
       arena_pipeline_panel: {
         Args: never
@@ -9691,6 +9721,14 @@ export type Database = {
         Returns: Json
       }
       arena_serving_sources: { Args: never; Returns: string[] }
+      seal_leaderboard_rank_publication: {
+        Args: {
+          p_score_cohort_id: string
+          p_season_id: string
+          p_source_publications: Json
+        }
+        Returns: Json
+      }
       arena_set_trader_claimed: {
         Args: {
           p_claimed: boolean

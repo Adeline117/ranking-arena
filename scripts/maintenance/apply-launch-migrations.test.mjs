@@ -144,7 +144,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 76)
+  assert.equal(predeploy.length, 77)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -190,6 +190,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260724010000_shadow_unverified_okx_web3_ranks.sql',
           '20260724232500_allow_pipeline_logs_partial_success.sql',
           '20260724234000_optimize_arena_score_inputs_json_hot_path.sql',
+          '20260724235000_leaderboard_publication_mutation_fence.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -208,9 +209,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 88)
+  assert.equal(new Set(all).size, 89)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-35), [
+  assert.deepEqual(predeploy.slice(-36), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -246,6 +247,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260724010000_shadow_unverified_okx_web3_ranks.sql',
     '20260724232500_allow_pipeline_logs_partial_success.sql',
     '20260724234000_optimize_arena_score_inputs_json_hot_path.sql',
+    '20260724235000_leaderboard_publication_mutation_fence.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -277,11 +279,15 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!recoveryPrerequisites.includes('20260724010000_shadow_unverified_okx_web3_ranks.sql'))
   assert.ok(predeploy.includes('20260724232500_allow_pipeline_logs_partial_success.sql'))
   assert.ok(predeploy.includes('20260724234000_optimize_arena_score_inputs_json_hot_path.sql'))
+  assert.ok(predeploy.includes('20260724235000_leaderboard_publication_mutation_fence.sql'))
   assert.ok(
     !recoveryPrerequisites.includes('20260724232500_allow_pipeline_logs_partial_success.sql')
   )
   assert.ok(
     !recoveryPrerequisites.includes('20260724234000_optimize_arena_score_inputs_json_hot_path.sql')
+  )
+  assert.ok(
+    !recoveryPrerequisites.includes('20260724235000_leaderboard_publication_mutation_fence.sql')
   )
   assert.ok(!predeploy.includes('20260722054000_metric_trust_source_page_lineage.sql'))
   assert.ok(!postdeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
