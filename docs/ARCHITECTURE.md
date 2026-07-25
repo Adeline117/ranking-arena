@@ -92,7 +92,7 @@ graph LR
     RLS[RLS on all tables]
   end
   subgraph Nodes[Ingest Worker 双节点]
-    MM[Mac Mini · regions local,vps_jp · PM2/BullMQ]
+    MM[Mac Mini · region local · PM2/BullMQ]
     SG[SG VPS 45.76.152.169 · region vps_sg · rsync copy]
   end
   MEILI[Meilisearch @ SG VPS]
