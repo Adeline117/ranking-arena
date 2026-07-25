@@ -43,6 +43,12 @@ import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { withPublic } from '@/lib/api/middleware'
 import { getOrSetWithLock } from '@/lib/cache'
 import { summarizeSourceFreshness, type SourceFreshnessRow } from '@/lib/rankings/source-freshness'
+import {
+  PUBLIC_RANKING_POSTGREST_EXCLUSION,
+  isPublicRankingSourceQuarantined,
+  publicRankingCacheKey,
+  sanitizePublicRankingSourcePayload,
+} from '@/lib/rankings/publication-policy'
 
 // Removed force-dynamic — it contradicted revalidate and prevented CDN caching.
 // With Redis cache + CDN s-maxage headers, this route is fast and scalable.
@@ -50,8 +56,8 @@ export const revalidate = 600 // ISR: revalidate every 10 minutes (data refreshe
 
 // ── Input validation schema ──────────────────────────────────────────────────
 const v2RankingsSchema = z.object({
-  window: z.enum(WINDOWS as unknown as [string, ...string[]]),
-  platform: z.enum(LEADERBOARD_PLATFORMS as unknown as [string, ...string[]]),
+  window: z.enum(WINDOWS),
+  platform: z.union([z.enum(LEADERBOARD_PLATFORMS), z.literal('okx_web3_solana')]),
   market_type: z.string().default('futures'),
   limit: z.coerce.number().int().min(1).max(500).catch(100),
   offset: z.coerce.number().int().min(0).catch(0),
@@ -81,7 +87,42 @@ export const GET = withPublic(
       )
     }
 
-    const { window, platform, market_type: marketType, limit, offset, sort } = parsed.data
+    const {
+      window,
+      platform: requestedPlatform,
+      market_type: marketType,
+      limit,
+      offset,
+      sort,
+    } = parsed.data
+
+    if (isPublicRankingSourceQuarantined(requestedPlatform)) {
+      return NextResponse.json(
+        {
+          traders: [],
+          meta: {
+            platform: requestedPlatform,
+            market_type: marketType,
+            window,
+            total_count: 0,
+            updated_at: null,
+            staleness_seconds: null,
+            is_stale: true,
+            source_freshness: [],
+          },
+          ranking_visibility: 'partial',
+          ranking_visibility_reason: 'publication_policy_filtered',
+          ranking_visibility_reasons: ['quarantined_source_requested'],
+        },
+        {
+          headers: {
+            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+          },
+        }
+      )
+    }
+
+    const platform = requestedPlatform as LeaderboardPlatform
     const tradingStyle = parsed.data.trading_style || null
     const _minAlpha = parsed.data.min_alpha ?? null
     const minSortino = parsed.data.min_sortino ?? null
@@ -106,7 +147,9 @@ export const GET = withPublic(
       : null
 
     // Redis cache — 120s TTL (data refreshes via cron every 30 min, 2-min cache is safe)
-    const cacheKey = `v2-rankings:v3:${platform}:${window}:${sort}:${offset}:${limit}:${tradingStyle || ''}:${minRoi ?? ''}:${minPnl ?? ''}:${minWinRate ?? ''}:${maxDrawdown ?? ''}:${minScore ?? ''}:${minSortino ?? ''}`
+    const cacheKey = publicRankingCacheKey(
+      `v2-rankings:v3:${platform}:${window}:${sort}:${offset}:${limit}:${tradingStyle || ''}:${minRoi ?? ''}:${minPnl ?? ''}:${minWinRate ?? ''}:${maxDrawdown ?? ''}:${minScore ?? ''}:${minSortino ?? ''}`
+    )
 
     const cached = await getOrSetWithLock<RankingsResponse>(
       cacheKey,
@@ -131,6 +174,10 @@ export const GET = withPublic(
           .eq('season_id', seasonId)
           .not('arena_score', 'is', null)
           .or('is_outlier.is.null,is_outlier.eq.false')
+
+        if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+          query = query.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+        }
 
         // V3 Filters
         if (normalizedStyle) {
@@ -195,11 +242,15 @@ export const GET = withPublic(
         // leaderboard_ranks already has handle + avatar_url — no need for separate
         // trader_profiles / trader_sources joins (eliminated 2 extra DB queries)
 
-        const { data: sourceWatermarkRows } = await supabase
+        let freshnessQuery = supabase
           .from('leaderboard_source_freshness')
           .select('source,source_as_of')
           .eq('season_id', seasonId)
           .eq('source', platform)
+        if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+          freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+        }
+        const { data: sourceWatermarkRows } = await freshnessQuery
         const freshnessSummary = summarizeSourceFreshness(
           (sourceWatermarkRows || []) as SourceFreshnessRow[],
           [platform]
@@ -264,10 +315,10 @@ export const GET = withPublic(
           }
         })
 
-        return {
+        return sanitizePublicRankingSourcePayload({
           traders,
           meta: {
-            platform: platform as LeaderboardPlatform,
+            platform,
             market_type: marketType as 'futures',
             window: window as Window,
             total_count: count || 0,
@@ -276,12 +327,14 @@ export const GET = withPublic(
             is_stale: freshnessSummary.isStale,
             source_freshness: freshnessSummary.sources,
           },
-        } as RankingsResponse
+        }) as RankingsResponse
       }, // end fetcher
       { ttl: 120 }
     ) // end getOrSetWithLock
 
-    return NextResponse.json(cached, {
+    const safeCached = sanitizePublicRankingSourcePayload(cached)
+
+    return NextResponse.json(safeCached, {
       headers: {
         'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
       },

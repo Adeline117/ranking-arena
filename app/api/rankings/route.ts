@@ -41,7 +41,6 @@ import { withPublic } from '@/lib/api/middleware'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
 import {
-  currentScoredCount,
   currentScoredSources,
   type LeaderboardCountCacheRow,
 } from '@/lib/data/leaderboard-count-cache'
@@ -50,6 +49,14 @@ import {
   summarizeSourceFreshness,
   type SourceFreshnessRow,
 } from '@/lib/rankings/source-freshness'
+import {
+  PUBLIC_RANKING_POSTGREST_EXCLUSION,
+  filterPublicRankingSources,
+  isPublicRankingSourceQuarantined,
+  publicRankingCacheKey,
+  publicRankingCountFromCache,
+  sanitizePublicRankingSourcePayload,
+} from '@/lib/rankings/publication-policy'
 
 const logger = createLogger('rankings-api')
 
@@ -69,19 +76,22 @@ async function getAvailableSources(
   supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
   seasonId: string
 ): Promise<string[]> {
-  return tieredGetOrSet<string[]>(
-    `rankings:available-sources:v2:${seasonId}`,
+  const sources = await tieredGetOrSet<string[]>(
+    publicRankingCacheKey(`rankings:available-sources:v2:${seasonId}`),
     async (): Promise<string[]> => {
       const { data: sourceRows } = await supabase
         .from('leaderboard_count_cache')
         .select('source,total_count,updated_at')
         .eq('season_id', seasonId)
         .like('source', '%_gt0')
-      return currentScoredSources((sourceRows || []) as LeaderboardCountCacheRow[])
+      return filterPublicRankingSources(
+        currentScoredSources((sourceRows || []) as LeaderboardCountCacheRow[])
+      )
     },
     'warm', // 2min memory / 15min Redis — shared across instances
     ['rankings', 'available-sources']
   )
+  return filterPublicRankingSources(Array.isArray(sources) ? sources : [])
 }
 
 const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite']
@@ -120,7 +130,11 @@ export const GET = withPublic(
     }
 
     const platform = searchParams.get('platform') as GranularPlatform | null
-    if (platform && !(GRANULAR_PLATFORMS as readonly string[]).includes(platform)) {
+    if (
+      platform &&
+      !isPublicRankingSourceQuarantined(platform) &&
+      !(GRANULAR_PLATFORMS as readonly string[]).includes(platform)
+    ) {
       throw ApiError.validation(`Invalid platform: ${platform}`)
     }
 
@@ -140,6 +154,27 @@ export const GET = withPublic(
       : undefined
     const traderType = searchParams.get('trader_type') as 'human' | 'bot' | null
 
+    if (isPublicRankingSourceQuarantined(platform)) {
+      return withCache(
+        apiSuccess({
+          traders: [],
+          window: normalizedWindow === 'composite' ? 'COMPOSITE' : normalizedWindow.toUpperCase(),
+          totalCount: 0,
+          totalcount: 0,
+          total_count: 0,
+          as_of: null,
+          is_stale: true,
+          source_freshness: [],
+          availableSources: [],
+          next_cursor: null,
+          ranking_visibility: 'partial',
+          ranking_visibility_reason: 'publication_policy_filtered',
+          ranking_visibility_reasons: ['quarantined_source_requested'],
+        }),
+        { maxAge: 60, staleWhileRevalidate: 300 }
+      )
+    }
+
     // Only cache "hot" default queries (no filters, default sort, first page)
     // Filtered/paginated queries skip cache to avoid key explosion (thousands of permutations)
     const isDefaultQuery =
@@ -152,7 +187,7 @@ export const GET = withPublic(
       !cursor &&
       offset === 0
     const cacheKey = isDefaultQuery
-      ? `api:rankings:v3:${normalizedWindow}:${category || 'all'}:${limit}`
+      ? publicRankingCacheKey(`api:rankings:v3:${normalizedWindow}:${category || 'all'}:${limit}`)
       : null // skip cache for filtered queries
 
     let result: unknown
@@ -188,26 +223,37 @@ export const GET = withPublic(
           sortBy === 'arena_score' &&
           sortDir === 'desc'
         ) {
-          // Serve from precomputed cache — slice for pagination
-          const traders = precomputed.traders.slice(offset, offset + limit)
+          // Quarantine the complete cached set before slicing so a hidden row
+          // never consumes a page slot or truncates later safe rows.
+          const publicPrecomputed = sanitizePublicRankingSourcePayload(precomputed)
+          const publicTraders = publicPrecomputed.traders
+          const totalCount = publicTraders.length
+          const traders = publicTraders.slice(offset, offset + limit)
           result = {
-            ...precomputed,
+            ...publicPrecomputed,
             traders,
             window: 'COMPOSITE',
+            totalCount,
+            totalcount: totalCount,
+            total_count: totalCount,
+            hasMore: offset + traders.length < totalCount,
+            next_cursor: null,
           }
         } else {
           // Fall back to real-time compute for filtered/sorted queries
-          const compositeFetcher = () =>
-            getCompositeRankings({
-              category: category || undefined,
-              platform: (platform || undefined) as Platform | undefined,
-              limit,
-              offset,
-              sort_by: sortBy,
-              sort_dir: sortDir,
-              min_pnl: minPnl,
-              min_trades: minTrades,
-            })
+          const compositeFetcher = async () =>
+            sanitizePublicRankingSourcePayload(
+              await getCompositeRankings({
+                category: category || undefined,
+                platform: (platform || undefined) as Platform | undefined,
+                limit,
+                offset,
+                sort_by: sortBy,
+                sort_dir: sortDir,
+                min_pnl: minPnl,
+                min_trades: minTrades,
+              })
+            )
           result = cacheKey
             ? await tieredGetOrSet(cacheKey, compositeFetcher, 'hot', ['rankings'])
             : await compositeFetcher()
@@ -225,7 +271,8 @@ export const GET = withPublic(
           min_trades: minTrades,
           trader_type: traderType || undefined,
         }
-        const rankingsFetcher = () => getRankingsFallback(query, cursor)
+        const rankingsFetcher = async () =>
+          sanitizePublicRankingSourcePayload(await getRankingsFallback(query, cursor))
         result = cacheKey
           ? await tieredGetOrSet(cacheKey, rankingsFetcher, 'hot', ['rankings'])
           : await rankingsFetcher()
@@ -257,6 +304,7 @@ export const GET = withPublic(
       }
     }
 
+    result = sanitizePublicRankingSourcePayload(result)
     const response = apiSuccess(result)
     return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 })
   },
@@ -308,9 +356,11 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   const platformFilter: string | undefined = platform || undefined
   let platformsInCategory: string[] | undefined
   if (!platformFilter && category) {
-    platformsInCategory = Object.entries(PLATFORM_CATEGORY)
-      .filter(([, cat]) => cat === category)
-      .map(([p]) => p)
+    platformsInCategory = filterPublicRankingSources(
+      Object.entries(PLATFORM_CATEGORY)
+        .filter(([, cat]) => cat === category)
+        .map(([p]) => p)
+    )
   }
 
   // Sorting
@@ -335,6 +385,10 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       .or('is_outlier.is.null,is_outlier.eq.false')
       .lte('roi', ROI_ANOMALY_THRESHOLD)
       .gte('roi', -ROI_ANOMALY_THRESHOLD)
+
+    if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+      q = q.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+    }
 
     if (platformFilter) {
       q = q.eq('source', platformFilter)
@@ -381,23 +435,27 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     // incl. arena_score<=0, so it UNDER-counts the served set (90D: 8811 vs the
     // real 9587) → the "N traders" figure was low AND `hasMore` truncated the
     // board ~776 rows early, hiding the lowest-ranked traders from themselves.
-    const cacheCountKey = `${platformFilter || '_all'}_gt0`
-    const countKeys = cacheCountKey === '_all_gt0' ? [cacheCountKey] : [cacheCountKey, '_all_gt0']
     const [result, countResult] = await Promise.all([
       buildBaseQuery().range(offset, offset + safeLimit - 1),
       supabase
         .from('leaderboard_count_cache')
         .select('source,total_count,updated_at')
         .eq('season_id', seasonId)
-        .in('source', countKeys),
+        .like('source', '%_gt0'),
     ])
     rows = (result.data || []) as Record<string, unknown>[]
     error = result.error
     // A retired source's old key must never claim rows. If the current cache
     // generation is unavailable, fall back to the rows we actually observed.
     totalCount =
-      currentScoredCount((countResult.data || []) as LeaderboardCountCacheRow[], cacheCountKey) ??
-      offset + rows.length
+      publicRankingCountFromCache(
+        (countResult.data || []) as LeaderboardCountCacheRow[],
+        platformFilter
+          ? { source: platformFilter }
+          : platformsInCategory
+            ? { sources: platformsInCategory }
+            : {}
+      ) ?? offset + rows.length
   } else {
     // Chunked fetch: first chunk, no count
     const firstResult = await buildBaseQuery().range(offset, offset + CHUNK_SIZE - 1)
@@ -447,12 +505,16 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   // substitute pipeline_logs or leaderboard_ranks.computed_at: both describe
   // Arena compute activity, not the age of exchange/protocol data.
   const seasonIdUpper = seasonId
+  let freshnessQuery = supabase
+    .from('leaderboard_source_freshness')
+    .select('source,source_as_of')
+    .eq('season_id', seasonIdUpper)
+  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+    freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+  }
   const [availableSources, freshnessResult] = await Promise.all([
     getAvailableSources(supabase, seasonIdUpper),
-    supabase
-      .from('leaderboard_source_freshness')
-      .select('source,source_as_of')
-      .eq('season_id', seasonIdUpper),
+    freshnessQuery,
   ])
 
   const observedSources = [

@@ -31,6 +31,10 @@ export const PUBLIC_RANKING_POSTGREST_EXCLUSION: string | null =
     ? `(${PUBLIC_RANKING_QUARANTINED_SOURCES.join(',')})`
     : null
 
+export function publicRankingCacheKey(key: string): string {
+  return `${PUBLIC_RANKING_CACHE_EPOCH}:${key}`
+}
+
 function canonicalSource(source: unknown): string | null {
   if (typeof source !== 'string') return null
   const normalized = source.trim().toLowerCase()
@@ -197,6 +201,267 @@ export function filterPublicRankingSources(sources: readonly unknown[]): string[
 
 export function filterPublicRankingRows<T>(rows: readonly T[], sourceOf: (row: T) => unknown): T[] {
   return rows.filter((row) => isPublicRankingSourceAllowed(sourceOf(row)))
+}
+
+export interface PublicRankingCountCacheRow {
+  source: string | null
+  total_count: number | null
+  updated_at: string | null
+}
+
+export interface PublicRankingCountSelection {
+  source?: unknown
+  sources?: readonly unknown[]
+}
+
+function countGeneration(rows: readonly PublicRankingCountCacheRow[]): string | null {
+  const timestamp = rows.find(({ source }) => source === '_all_gt0')?.updated_at
+  return typeof timestamp === 'string' && timestamp.length > 0 ? timestamp : null
+}
+
+function countForPublicSource(
+  rows: readonly PublicRankingCountCacheRow[],
+  source: string,
+  generation: string
+): number | null {
+  const row = rows.find(
+    (candidate) => candidate.source === `${source}_gt0` && candidate.updated_at === generation
+  )
+  if (!row) return 0
+  return typeof row.total_count === 'number' &&
+    Number.isFinite(row.total_count) &&
+    row.total_count >= 0
+    ? row.total_count
+    : null
+}
+
+/**
+ * Count only source quarantine. This deliberately makes no claim that every
+ * row satisfies the stricter row-publication proof contract.
+ */
+export function publicRankingCountFromCache(
+  rows: readonly PublicRankingCountCacheRow[],
+  selection: PublicRankingCountSelection = {}
+): number | null {
+  const generation = countGeneration(rows)
+  if (!generation) return null
+
+  const aggregate = rows.find(
+    (row) => row.source === '_all_gt0' && row.updated_at === generation
+  )?.total_count
+  if (typeof aggregate !== 'number' || !Number.isFinite(aggregate) || aggregate < 0) {
+    return null
+  }
+
+  if ('source' in selection) {
+    const source = canonicalSource(selection.source)
+    if (!source) return null
+    if (isPublicRankingSourceQuarantined(source)) return 0
+    return countForPublicSource(rows, source, generation)
+  }
+
+  if ('sources' in selection) {
+    let total = 0
+    for (const source of filterPublicRankingSources(selection.sources ?? [])) {
+      const count = countForPublicSource(rows, source, generation)
+      if (count === null) return null
+      total += count
+    }
+    return total
+  }
+
+  let quarantinedCount = 0
+  for (const source of PUBLIC_RANKING_QUARANTINED_SOURCES) {
+    const count = countForPublicSource(rows, source, generation)
+    if (count === null) return null
+    quarantinedCount += count
+  }
+  return Math.max(0, aggregate - quarantinedCount)
+}
+
+type SourceOnlyRankingPayload = Record<string, unknown> & {
+  traders?: unknown[]
+  data?: unknown[] | Record<string, unknown>
+  rankings?: unknown[]
+  availableSources?: unknown[]
+  available_sources?: unknown[]
+  source_freshness?: unknown[]
+  meta?: Record<string, unknown>
+  categoryCounts?: Record<string, unknown>
+}
+
+export interface SanitizePublicRankingSourcePayloadOptions {
+  sourceOf?: (row: unknown) => unknown
+}
+
+function withoutQuarantinedRows<T>(rows: readonly T[], sourceOf: (row: T) => unknown): T[] {
+  return rows.filter((row) => !isPublicRankingSourceQuarantined(sourceOf(row)))
+}
+
+function sanitizePublicSourceMetadata(
+  record: SourceOnlyRankingPayload
+): SourceOnlyRankingPayload | null {
+  const updates: SourceOnlyRankingPayload = {}
+
+  for (const key of ['availableSources', 'available_sources'] as const) {
+    const original = record[key]
+    if (!Array.isArray(original)) continue
+    const safe = original.filter((source) => !isPublicRankingSourceQuarantined(source))
+    if (safe.length !== original.length) updates[key] = safe
+  }
+
+  if (Array.isArray(record.source_freshness)) {
+    const safe = withoutQuarantinedRows(record.source_freshness, freshnessRowSource)
+    if (safe.length !== record.source_freshness.length) updates.source_freshness = safe
+  }
+
+  return Object.keys(updates).length > 0 ? updates : null
+}
+
+function sourceCategoryCounts(rows: readonly unknown[]): Record<string, number> {
+  return rows.reduce<Record<string, number>>(
+    (counts, row) => {
+      counts.all += 1
+      if (typeof row !== 'object' || row === null) return counts
+      const sourceType = (row as Record<string, unknown>).source_type
+      if (sourceType === 'spot') counts.spot += 1
+      else if (sourceType === 'web3') counts.onchain += 1
+      else counts.futures += 1
+      return counts
+    },
+    { all: 0, futures: 0, spot: 0, onchain: 0 }
+  )
+}
+
+function invalidatePaginationFields(
+  record: Record<string, unknown>,
+  safeCount: number
+): Record<string, unknown> {
+  const next = { ...record }
+  for (const key of ['total', 'totalCount', 'total_count', 'totalcount'] as const) {
+    if (key in next) next[key] = safeCount
+  }
+  for (const key of ['hasMore', 'has_more'] as const) {
+    if (key in next) next[key] = false
+  }
+  for (const key of ['cursor', 'nextCursor', 'next_cursor'] as const) {
+    if (key in next) next[key] = null
+  }
+  return next
+}
+
+function invalidateSourcePagination(
+  record: SourceOnlyRankingPayload,
+  safeRows: readonly unknown[]
+): SourceOnlyRankingPayload {
+  const safeCount = safeRows.length
+  const next = invalidatePaginationFields(record, safeCount) as SourceOnlyRankingPayload
+
+  if (next.meta && typeof next.meta === 'object' && !Array.isArray(next.meta)) {
+    const meta = invalidatePaginationFields(next.meta, safeCount)
+    if (meta.pagination && typeof meta.pagination === 'object' && !Array.isArray(meta.pagination)) {
+      meta.pagination = invalidatePaginationFields(
+        meta.pagination as Record<string, unknown>,
+        safeCount
+      )
+    }
+    next.meta = meta
+  }
+
+  if (next.categoryCounts && typeof next.categoryCounts === 'object') {
+    next.categoryCounts = { ...next.categoryCounts, ...sourceCategoryCounts(safeRows) }
+  }
+
+  return next
+}
+
+function invalidateSourceFreshnessSummary(
+  record: SourceOnlyRankingPayload
+): SourceOnlyRankingPayload {
+  const invalidate = (value: Record<string, unknown>) => {
+    const next = { ...value }
+    for (const key of ['lastUpdated', 'as_of', 'updated_at', 'source_as_of'] as const) {
+      if (key in next) next[key] = null
+    }
+    for (const key of ['isStale', 'is_stale'] as const) {
+      if (key in next) next[key] = true
+    }
+    for (const key of ['dataAgeMinutes', 'staleness_seconds'] as const) {
+      if (key in next) next[key] = null
+    }
+    return next
+  }
+
+  const next = invalidate(record) as SourceOnlyRankingPayload
+  if (next.meta && typeof next.meta === 'object' && !Array.isArray(next.meta)) {
+    next.meta = invalidate(next.meta)
+  }
+  return next
+}
+
+/**
+ * Source-quarantine-only defense for finite pages and cached payloads.
+ *
+ * Unlike sanitizePublicRankingPayload, this function never evaluates row proof,
+ * metric completeness, score freshness, or period evidence. Every non-quarantined
+ * row in the fetched page is retained.
+ */
+export function sanitizePublicRankingSourcePayload<T>(
+  payload: T,
+  options: SanitizePublicRankingSourcePayloadOptions = {}
+): T {
+  if (typeof payload !== 'object' || payload === null) return payload
+
+  const record = payload as SourceOnlyRankingPayload
+  const sourceOf = options.sourceOf ?? defaultRowSource
+  let sanitized: SourceOnlyRankingPayload = record
+  let safeRows: readonly unknown[] | null = null
+  let removedTopLevelRows = false
+
+  for (const key of ['traders', 'data', 'rankings'] as const) {
+    const original = record[key]
+    if (!Array.isArray(original)) continue
+    const safe = withoutQuarantinedRows(original, sourceOf)
+    if (safeRows === null) safeRows = safe
+    if (safe.length === original.length) continue
+    if (sanitized === record) sanitized = { ...record }
+    sanitized[key] = safe
+    removedTopLevelRows = true
+  }
+
+  if (record.data && typeof record.data === 'object' && !Array.isArray(record.data)) {
+    const safeData = sanitizePublicRankingSourcePayload(record.data, { sourceOf })
+    if (safeData !== record.data) {
+      if (sanitized === record) sanitized = { ...record }
+      sanitized.data = safeData as Record<string, unknown>
+    }
+  }
+
+  const metadata = sanitizePublicSourceMetadata(sanitized)
+  if (metadata) {
+    if (sanitized === record) sanitized = { ...record }
+    sanitized = { ...sanitized, ...metadata }
+  }
+
+  if (sanitized.meta && typeof sanitized.meta === 'object' && !Array.isArray(sanitized.meta)) {
+    const meta = sanitized.meta as SourceOnlyRankingPayload
+    const metaMetadata = sanitizePublicSourceMetadata(meta)
+    if (metaMetadata) {
+      if (sanitized === record) sanitized = { ...record }
+      sanitized.meta = { ...meta, ...metaMetadata }
+    }
+  }
+
+  if (sanitized === record) return payload
+  if (removedTopLevelRows) sanitized = invalidateSourcePagination(sanitized, safeRows ?? [])
+  sanitized = invalidateSourceFreshnessSummary(sanitized)
+
+  return {
+    ...sanitized,
+    ranking_visibility: 'partial',
+    ranking_visibility_reason: 'publication_policy_filtered',
+    ranking_visibility_reasons: ['quarantined_source_removed'],
+  } as T
 }
 
 type RankingPayload = Record<string, unknown> & {

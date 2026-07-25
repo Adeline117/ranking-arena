@@ -105,6 +105,8 @@ export async function getLeaderboard(
     minScore?: number
     excludeOutliers?: boolean
     sortBy?: 'rank' | 'arena_score' | 'roi' | 'pnl'
+    /** Optional source quarantine for ranking callers. */
+    excludeSources?: readonly string[]
     /** Allow data up to 24h old instead of 6h (graceful degradation) */
     allowStale?: boolean
   }
@@ -117,6 +119,7 @@ export async function getLeaderboard(
     minScore,
     excludeOutliers = true,
     sortBy = 'rank',
+    excludeSources = [],
   } = params
   const opts = params
 
@@ -124,6 +127,7 @@ export async function getLeaderboard(
   // These cover ~90% of homepage and ranking page loads
   const isDefaultQuery =
     !platform &&
+    excludeSources.length === 0 &&
     !minScore &&
     excludeOutliers &&
     (sortBy === 'rank' || sortBy === 'arena_score') &&
@@ -169,6 +173,9 @@ export async function getLeaderboard(
     )
     .eq(LR.season_id, period)
 
+  if (excludeSources.length > 0) {
+    query = query.not(LR.source, 'in', `(${excludeSources.join(',')})`)
+  }
   if (platform) {
     query = query.eq(LR.source, platform)
   }
