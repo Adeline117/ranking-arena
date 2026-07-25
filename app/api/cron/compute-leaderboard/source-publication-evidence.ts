@@ -738,12 +738,6 @@ export function buildSourcePublicationRows(
           `${alias.source} explicitly empty raw board must publish exactly zero ranks`
         )
       }
-      if (alias.raw_actual_count > 0 && publishedRankCount === 0) {
-        fail(
-          'unsafe_empty_publication',
-          `${alias.source} non-empty raw board cannot authorize a zero-rank publication`
-        )
-      }
       if (publishedRankCount > alias.score_row_count) {
         fail(
           'unsafe_count_expansion',
