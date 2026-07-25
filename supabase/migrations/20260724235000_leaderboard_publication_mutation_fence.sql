@@ -440,6 +440,138 @@ BEFORE INSERT OR UPDATE ON public.leaderboard_source_freshness
 FOR EACH ROW
 EXECUTE FUNCTION arena.guard_leaderboard_source_freshness_seal();
 
+CREATE OR REPLACE FUNCTION public.rerank_leaderboard_publication(
+  p_season_id text,
+  p_score_cohort_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+SET lock_timeout = '10s'
+AS $function$
+DECLARE
+  v_eligible_count integer;
+  v_updated_count integer;
+BEGIN
+  IF p_season_id IS NULL OR p_season_id NOT IN ('7D', '30D', '90D') THEN
+    RAISE EXCEPTION 'invalid leaderboard rerank season: %', p_season_id
+      USING ERRCODE = '22023';
+  END IF;
+  IF p_score_cohort_id IS NULL THEN
+    RAISE EXCEPTION 'score cohort id is required'
+      USING ERRCODE = '22023';
+  END IF;
+
+  -- Match seal's registry -> rank lock order. SHARE ROW EXCLUSIVE serializes
+  -- this terminal rank assignment with every parent INSERT/UPDATE/DELETE.
+  LOCK TABLE arena.sources, arena.exchanges IN SHARE MODE;
+  LOCK TABLE public.leaderboard_ranks IN SHARE ROW EXCLUSIVE MODE;
+
+  WITH rank_authority AS MATERIALIZED (
+    SELECT DISTINCT authority.filter_source AS source
+    FROM public.arena_freshness_expected_sources() AS authority
+    WHERE authority.season_id = p_season_id
+  ),
+  eligible AS MATERIALIZED (
+    SELECT ranks.id, ranks.rank_publication_id
+    FROM public.leaderboard_ranks AS ranks
+    JOIN rank_authority ON rank_authority.source = ranks.source
+    WHERE ranks.season_id = p_season_id
+      AND arena.leaderboard_rank_row_is_public_eligible(
+        ranks,
+        pg_catalog.statement_timestamp()
+      )
+  )
+  SELECT pg_catalog.count(*)::integer
+  INTO STRICT v_eligible_count
+  FROM eligible;
+
+  IF v_eligible_count > 250000 THEN
+    RAISE EXCEPTION 'leaderboard rerank exceeds 250000 eligible rows'
+      USING ERRCODE = '54000';
+  END IF;
+
+  IF EXISTS (
+    WITH rank_authority AS MATERIALIZED (
+      SELECT DISTINCT authority.filter_source AS source
+      FROM public.arena_freshness_expected_sources() AS authority
+      WHERE authority.season_id = p_season_id
+    )
+    SELECT 1
+    FROM public.leaderboard_ranks AS ranks
+    JOIN rank_authority ON rank_authority.source = ranks.source
+    WHERE ranks.season_id = p_season_id
+      AND arena.leaderboard_rank_row_is_public_eligible(
+        ranks,
+        pg_catalog.statement_timestamp()
+      )
+      AND ranks.rank_publication_id IS DISTINCT FROM p_score_cohort_id
+  ) THEN
+    RAISE EXCEPTION 'eligible leaderboard rows were not fully written by the score cohort'
+      USING ERRCODE = '23514';
+  END IF;
+
+  WITH rank_authority AS MATERIALIZED (
+    SELECT DISTINCT authority.filter_source AS source
+    FROM public.arena_freshness_expected_sources() AS authority
+    WHERE authority.season_id = p_season_id
+  ),
+  classified AS MATERIALIZED (
+    SELECT
+      ranks.id,
+      ranks.arena_score,
+      rank_authority.source IS NOT NULL
+        AND arena.leaderboard_rank_row_is_public_eligible(
+          ranks,
+          pg_catalog.statement_timestamp()
+        ) AS is_eligible
+    FROM public.leaderboard_ranks AS ranks
+    LEFT JOIN rank_authority ON rank_authority.source = ranks.source
+    WHERE ranks.season_id = p_season_id
+  ),
+  ordered AS MATERIALIZED (
+    SELECT
+      classified.id,
+      pg_catalog.row_number() OVER (
+        ORDER BY classified.arena_score DESC NULLS LAST, classified.id
+      )::integer AS expected_rank
+    FROM classified
+    WHERE classified.is_eligible
+  ),
+  desired AS MATERIALIZED (
+    SELECT classified.id, ordered.expected_rank
+    FROM classified
+    LEFT JOIN ordered ON ordered.id = classified.id
+  )
+  UPDATE public.leaderboard_ranks AS ranks
+  SET rank = desired.expected_rank
+  FROM desired
+  WHERE ranks.season_id = p_season_id
+    AND ranks.id = desired.id
+    AND ranks.rank IS DISTINCT FROM desired.expected_rank;
+
+  GET DIAGNOSTICS v_updated_count = ROW_COUNT;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'contract', 'leaderboard-public-rerank@1',
+    'season_id', p_season_id,
+    'score_cohort_id', p_score_cohort_id,
+    'eligible_rank_count', v_eligible_count,
+    'updated_rank_count', v_updated_count
+  );
+END;
+$function$;
+
+ALTER FUNCTION public.rerank_leaderboard_publication(text, uuid)
+  OWNER TO postgres;
+REVOKE ALL
+  ON FUNCTION public.rerank_leaderboard_publication(text, uuid)
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE
+  ON FUNCTION public.rerank_leaderboard_publication(text, uuid)
+  TO service_role;
+
 CREATE OR REPLACE FUNCTION public.seal_leaderboard_rank_publication(
   p_season_id text,
   p_score_cohort_id uuid,
@@ -1212,6 +1344,8 @@ COMMENT ON FUNCTION arena.leaderboard_rank_row_is_public_eligible(
   timestamptz
 ) IS
   'Canonical database row policy shared by seal, replay, proof, and the season-global public ROW_NUMBER population.';
+COMMENT ON FUNCTION public.rerank_leaderboard_publication(text, uuid) IS
+  'Terminal fatal rerank for one full authority cohort. Ineligible/non-authority rows receive NULL rank; every eligible authority row must already carry the caller cohort.';
 COMMENT ON COLUMN public.leaderboard_ranks.rank_publication_id IS
   'Caller-generated score cohort token; a source is public only when every row matches its immutable publication receipt.';
 COMMENT ON FUNCTION public.seal_leaderboard_rank_publication(text, uuid, jsonb) IS
@@ -1241,6 +1375,16 @@ BEGIN
      OR pg_catalog.has_function_privilege(
        'authenticated',
        'public.arena_leaderboard_publication_proofs(text,text[])',
+       'EXECUTE'
+     )
+     OR NOT pg_catalog.has_function_privilege(
+       'service_role',
+       'public.rerank_leaderboard_publication(text,uuid)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'anon',
+       'public.rerank_leaderboard_publication(text,uuid)',
        'EXECUTE'
      )
      OR pg_catalog.has_function_privilege(
@@ -1331,6 +1475,7 @@ BEGIN
       ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'public'
       AND procedure.proname IN (
+        'rerank_leaderboard_publication',
         'seal_leaderboard_rank_publication',
         'arena_leaderboard_publication_proofs'
       )

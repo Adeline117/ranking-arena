@@ -24,6 +24,7 @@ const sealBody = functionBody('public.seal_leaderboard_rank_publication')
 const proofBody = functionBody('public.arena_leaderboard_publication_proofs')
 const guardBody = functionBody('arena.guard_leaderboard_source_freshness_seal')
 const eligibilityBody = functionBody('arena.leaderboard_rank_row_is_public_eligible')
+const rerankBody = functionBody('public.rerank_leaderboard_publication')
 
 describe('leaderboard publication mutation fence migration', () => {
   it('expands nullable proof state without inventing a seal for legacy rows', () => {
@@ -151,6 +152,20 @@ describe('leaderboard publication mutation fence migration', () => {
     expect(sealBody.match(/pg_catalog\.row_number\(\) OVER \(/g)).toHaveLength(2)
     expect(proofBody).not.toMatch(
       /ranks\.source = freshness\.source[\s\S]{0,200}ranks\.rank::bigint IS DISTINCT FROM ordered\.expected_rank/
+    )
+  })
+
+  it('installs one fatal terminal rerank with the exact seal population', () => {
+    expect(rerankBody).not.toBe('')
+    expect(rerankBody).toContain('LOCK TABLE arena.sources, arena.exchanges IN SHARE MODE')
+    expect(rerankBody).toContain('LOCK TABLE public.leaderboard_ranks IN SHARE ROW EXCLUSIVE MODE')
+    expect(rerankBody).toContain('arena.leaderboard_rank_row_is_public_eligible(')
+    expect(rerankBody).toContain('ranks.rank_publication_id IS DISTINCT FROM p_score_cohort_id')
+    expect(rerankBody).toContain('ORDER BY classified.arena_score DESC NULLS LAST, classified.id')
+    expect(rerankBody).toContain('SET rank = desired.expected_rank')
+    expect(rerankBody).toContain("'contract', 'leaderboard-public-rerank@1'")
+    expect(migration).toMatch(
+      /GRANT EXECUTE\s+ON FUNCTION public\.rerank_leaderboard_publication\(text, uuid\)\s+TO service_role;/
     )
   })
 
