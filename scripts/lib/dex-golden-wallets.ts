@@ -151,10 +151,10 @@ function hasOrdinaryRecordPrototype(value: object): boolean {
   if (isProxy(prototype) || Object.getPrototypeOf(prototype) !== null) return false
 
   const prototypeKeys = Reflect.ownKeys(prototype)
-  return (
-    prototypeKeys.length === OBJECT_PROTOTYPE_KEYS.length &&
-    prototypeKeys.every((key) => OBJECT_PROTOTYPE_KEYS.includes(key))
-  )
+  // A foreign realm may add inert fields to its terminal Object prototype.
+  // The descriptor-only clone never reads inherited values, so require every
+  // intrinsic Object key without making harmless extra keys affect admission.
+  return OBJECT_PROTOTYPE_KEYS.every((key) => prototypeKeys.includes(key))
 }
 
 type GoldenJsonCloneContainer = Record<string, unknown> | unknown[]

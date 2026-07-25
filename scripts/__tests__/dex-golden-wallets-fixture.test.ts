@@ -106,6 +106,22 @@ describe('DEX golden-wallet production fixture', () => {
     expect(dexGoldenWalletSnapshotSha256(crossRealmFixture)).toBe(EXPECTED_FIXTURE_SHA256)
   })
 
+  it('ignores inert additions to a foreign terminal Object prototype', () => {
+    const crossRealmFixture = runInNewContext(
+      `
+        Object.defineProperty(Object.prototype, 'inheritedTrap', {
+          configurable: true,
+          get() { throw new Error('inherited fields must never be read') },
+        })
+        JSON.parse(serialized)
+      `,
+      { serialized: JSON.stringify(fixtureJson) }
+    ) as unknown
+
+    expect(parseDexGoldenWalletSnapshot(crossRealmFixture)).toEqual(fixture)
+    expect(dexGoldenWalletSnapshotSha256(crossRealmFixture)).toBe(EXPECTED_FIXTURE_SHA256)
+  })
+
   it('derives exact chain subsets that remain bound to the parent artifact', () => {
     const expectedSubsetHashes = {
       binance_web3_bsc: 'dcce3efd3ffd1afa47b832acd623e1455ad2150560f19d11941659aa152cc04d',
