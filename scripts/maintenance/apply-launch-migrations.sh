@@ -103,6 +103,8 @@ PREDEPLOY_MIGRATIONS=(
   20260722053000_binance_spot_metric_source_contract.sql
   20260722055000_metric_trust_source_page_lineage_forward_repair.sql
   20260724010000_shadow_unverified_okx_web3_ranks.sql
+  20260724232500_allow_pipeline_logs_partial_success.sql
+  20260724234000_optimize_arena_score_inputs_json_hot_path.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
