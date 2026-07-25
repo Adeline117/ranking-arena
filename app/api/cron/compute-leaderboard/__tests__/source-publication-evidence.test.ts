@@ -47,7 +47,10 @@ function physicalBoard(overrides: Record<string, unknown> = {}): Record<string, 
     scraped_at: '2026-07-21T23:00:00.000Z',
     actual_count: 1,
     entry_count: 1,
+    rank_limit: 1000,
+    rank_limited_entry_count: 1,
     evidence_status: 'passed',
+    latest_passed_tie_count: 1,
     latest_attempt_id: 101,
     latest_attempt_scraped_at: '2026-07-21T23:00:00.000Z',
     latest_attempt_passed: true,
@@ -61,7 +64,7 @@ function parse(
 ) {
   return parseSourcePublicationEvidence(
     { scoreRows, physicalBoards },
-    { window: '30D', now: NOW, maxAgeHours: 48 }
+    { window: '30D', rankLimit: 1000, now: NOW, maxAgeHours: 48 }
   )
 }
 
@@ -80,7 +83,7 @@ function captureError(
 }
 
 describe('source publication evidence', () => {
-  it('aggregates every shared physical board at MIN(scraped_at) and builds stable rows', () => {
+  it('sums every shared physical board at MIN(scraped_at) and builds stable rows', () => {
     const parsed = parse(
       [
         physicalBoard({
@@ -107,6 +110,12 @@ describe('source publication evidence', () => {
           platform: 'shared',
           board_as_of: '2026-07-21T22:00:00.123456Z',
         }),
+        scoreRow({
+          platform: 'shared',
+          trader_key: 'trader-2',
+          board_rank: 2,
+          board_as_of: '2026-07-21T22:00:00.123456Z',
+        }),
       ]
     )
 
@@ -115,6 +124,8 @@ describe('source publication evidence', () => {
         source: 'shared',
         source_as_of: '2026-07-21T22:00:00.123456Z',
         raw_actual_count: 3,
+        rank_limited_entry_count: 2,
+        score_row_count: 2,
         registry_slugs: ['shared-a', 'shared-z'],
         snapshot_ids: [201, 202],
       }),
@@ -123,13 +134,13 @@ describe('source publication evidence', () => {
     expect(
       buildSourcePublicationRows(parsed, {
         publishId: PUBLISH_ID,
-        finalRankCounts: new Map([['shared', 1]]),
+        finalRankCounts: new Map([['shared', 2]]),
       })
     ).toEqual([
       {
         source: 'shared',
         source_as_of: '2026-07-21T22:00:00.123456Z',
-        published_rank_count: 1,
+        published_rank_count: 2,
         score_cohort_id: PUBLISH_ID.toLowerCase(),
         registry_slugs: ['shared-a', 'shared-z'],
         snapshot_ids: [201, 202],
@@ -148,7 +159,9 @@ describe('source publication evidence', () => {
           scraped_at: null,
           actual_count: null,
           entry_count: null,
+          rank_limited_entry_count: null,
           evidence_status: 'missing',
+          latest_passed_tie_count: 0,
           latest_attempt_id: null,
           latest_attempt_scraped_at: null,
           latest_attempt_passed: null,
@@ -195,7 +208,9 @@ describe('source publication evidence', () => {
           scraped_at: null,
           actual_count: null,
           entry_count: null,
+          rank_limited_entry_count: null,
           evidence_status: 'failed',
+          latest_passed_tie_count: 0,
           latest_attempt_id: 202,
           latest_attempt_scraped_at: '2026-07-21T23:30:00.000Z',
           latest_attempt_passed: false,
@@ -245,7 +260,7 @@ describe('source publication evidence', () => {
     expect(parsed.freshScoreRows.map((row) => row.platform)).toEqual(['alpha'])
   })
 
-  it('allows a recent last-good PASSED board when the latest attempt failed', () => {
+  it('retains a recent last-good PASSED board when a later attempt failed', () => {
     const parsed = parse(
       [
         physicalBoard({
@@ -254,14 +269,165 @@ describe('source publication evidence', () => {
           latest_attempt_id: 302,
           latest_attempt_scraped_at: '2026-07-21T23:30:00.000Z',
           latest_attempt_passed: false,
+          evidence_status: 'latest_attempt_failed',
         }),
       ],
       [scoreRow({ board_as_of: '2026-07-21T22:00:00.000Z' })]
     )
 
-    expect(parsed.freshAliases).toEqual([
-      expect.objectContaining({ source: 'alpha', snapshot_ids: [301] }),
+    expect(parsed.freshAliases).toEqual([])
+    expect(parsed.retainedAliases).toEqual([
+      expect.objectContaining({
+        source: 'alpha',
+        snapshot_ids: [301],
+        denial_reasons: ['latest_attempt_failed'],
+      }),
     ])
+  })
+
+  it('retains an ambiguous latest PASSED snapshot tie without applying a score-count gate', () => {
+    const parsed = parse(
+      [
+        physicalBoard({
+          evidence_status: 'ambiguous_latest',
+          latest_passed_tie_count: 2,
+          rank_limited_entry_count: 7,
+          actual_count: 7,
+          entry_count: 7,
+        }),
+      ],
+      [scoreRow()]
+    )
+
+    expect(parsed.freshAliases).toEqual([])
+    expect(parsed.retainedAliases).toEqual([
+      expect.objectContaining({
+        source: 'alpha',
+        rank_limited_entry_count: 7,
+        score_row_count: 1,
+        denial_reasons: ['ambiguous_latest'],
+      }),
+    ])
+  })
+
+  it('uses tie-first status while retaining both ambiguous and later-failed diagnostics', () => {
+    const parsed = parse(
+      [
+        physicalBoard({
+          snapshot_id: 301,
+          scraped_at: '2026-07-21T22:00:00.000Z',
+          evidence_status: 'ambiguous_latest',
+          latest_passed_tie_count: 2,
+          latest_attempt_id: 302,
+          latest_attempt_scraped_at: '2026-07-21T23:30:00.000Z',
+          latest_attempt_passed: false,
+        }),
+      ],
+      [scoreRow({ board_as_of: '2026-07-21T22:00:00.000Z' })]
+    )
+
+    expect(parsed.retainedAliases).toEqual([
+      expect.objectContaining({
+        source: 'alpha',
+        denial_reasons: ['ambiguous_latest', 'latest_attempt_failed'],
+      }),
+    ])
+
+    captureError(
+      () =>
+        parse([
+          physicalBoard({
+            evidence_status: 'latest_attempt_failed',
+            latest_passed_tie_count: 2,
+            latest_attempt_id: 302,
+            latest_attempt_scraped_at: '2026-07-21T23:30:00.000Z',
+            latest_attempt_passed: false,
+          }),
+        ]),
+      'invalid_bundle'
+    )
+  })
+
+  it('accepts a real rank-gap board only when score rows equal the rank-limited count', () => {
+    const rankLimitedRows = Array.from({ length: 925 }, (_, index) =>
+      scoreRow({
+        trader_key: `rank-gap-${index + 1}`,
+        board_rank: index === 924 ? 1000 : index + 1,
+      })
+    )
+    const board = physicalBoard({
+      actual_count: 1588,
+      entry_count: 1588,
+      rank_limited_entry_count: 925,
+    })
+
+    const parsed = parse([board], rankLimitedRows)
+    expect(parsed.freshAliases).toEqual([
+      expect.objectContaining({
+        source: 'alpha',
+        raw_actual_count: 1588,
+        rank_limited_entry_count: 925,
+        score_row_count: 925,
+      }),
+    ])
+
+    captureError(() => parse([board], rankLimitedRows.slice(0, -1)), 'query_omission')
+  })
+
+  it('rejects extra score rows not covered by the exact rank-limited physical count', () => {
+    captureError(
+      () =>
+        parse(
+          [physicalBoard({ actual_count: 2, entry_count: 2 })],
+          [scoreRow(), scoreRow({ trader_key: 'boardless-extra' })]
+        ),
+      'query_omission'
+    )
+  })
+
+  it('binds every physical board to the requested rank limit', () => {
+    const error = captureError(
+      () => parse([physicalBoard({ rank_limit: 999 })], [scoreRow()]),
+      'invalid_count'
+    )
+    expect(error.message).toContain('rank_limit=999')
+    expect(error.message).toContain('expected 1000')
+  })
+
+  it.each([
+    ['snapshot without rank-limited count', physicalBoard({ rank_limited_entry_count: null })],
+    ['snapshot without a PASSED tie', physicalBoard({ latest_passed_tie_count: 0 })],
+    [
+      'missing snapshot with rank-limited count',
+      physicalBoard({
+        snapshot_id: null,
+        scraped_at: null,
+        actual_count: null,
+        entry_count: null,
+        evidence_status: 'missing',
+        latest_attempt_id: null,
+        latest_attempt_scraped_at: null,
+        latest_attempt_passed: null,
+        latest_passed_tie_count: 0,
+      }),
+    ],
+    [
+      'missing snapshot with a PASSED tie',
+      physicalBoard({
+        snapshot_id: null,
+        scraped_at: null,
+        actual_count: null,
+        entry_count: null,
+        rank_limited_entry_count: null,
+        evidence_status: 'missing',
+        latest_attempt_id: null,
+        latest_attempt_scraped_at: null,
+        latest_attempt_passed: null,
+        latest_passed_tie_count: 1,
+      }),
+    ],
+  ])('rejects %s', (_label, board) => {
+    captureError(() => parse([board]), 'invalid_bundle')
   })
 
   it('rejects incoherent latest-attempt diagnostics', () => {
@@ -288,6 +454,37 @@ describe('source publication evidence', () => {
         ]),
       'invalid_bundle'
     )
+
+    captureError(
+      () =>
+        parse([
+          physicalBoard({
+            snapshot_id: 301,
+            scraped_at: '2026-07-21T23:00:00.000Z',
+            evidence_status: 'latest_attempt_failed',
+            latest_attempt_id: 301,
+            latest_attempt_scraped_at: '2026-07-21T23:00:00.000Z',
+            latest_attempt_passed: false,
+          }),
+        ]),
+      'invalid_bundle'
+    )
+
+    expect(
+      parse(
+        [
+          physicalBoard({
+            snapshot_id: 301,
+            scraped_at: '2026-07-21T23:00:00.000Z',
+            evidence_status: 'latest_attempt_failed',
+            latest_attempt_id: 302,
+            latest_attempt_scraped_at: '2026-07-21T23:00:00.000Z',
+            latest_attempt_passed: false,
+          }),
+        ],
+        [scoreRow()]
+      ).retainedAliases[0]
+    ).toEqual(expect.objectContaining({ denial_reasons: ['latest_attempt_failed'] }))
   })
 
   it('accepts exactly five minutes of clock skew but not one microsecond more', () => {
@@ -317,6 +514,17 @@ describe('source publication evidence', () => {
     expect(future.retainedAliases[0]).toEqual(
       expect.objectContaining({ denial_reasons: ['future'] })
     )
+  })
+
+  it('requires score observations to be strictly newer than the max-age cutoff', () => {
+    captureError(
+      () => parse([physicalBoard()], [scoreRow({ as_of: '2026-07-20T00:00:00.000000Z' })]),
+      'invalid_timestamp'
+    )
+
+    expect(
+      parse([physicalBoard()], [scoreRow({ as_of: '2026-07-20T00:00:00.000001Z' })]).freshScoreRows
+    ).toHaveLength(1)
   })
 
   it('rejects duplicate physical identities and unknown or empty aliases', () => {
@@ -354,6 +562,31 @@ describe('source publication evidence', () => {
         ),
       'duplicate_score_identity'
     )
+  })
+
+  it('rejects case-variant EVM identities before complementary metrics can merge', () => {
+    const error = captureError(
+      () =>
+        parse(
+          [physicalBoard({ actual_count: 2, entry_count: 2, rank_limited_entry_count: 2 })],
+          [
+            scoreRow({ trader_key: '0xAbC', roi_pct: 12.5, pnl_usd: null }),
+            scoreRow({ trader_key: '0xabc', roi_pct: null, pnl_usd: 250 }),
+          ]
+        ),
+      'duplicate_score_identity'
+    )
+
+    expect(error.message).toContain('trader_key=0xabc')
+  })
+
+  it('rejects first-party score rows without a physical board rank', () => {
+    const error = captureError(
+      () => parse([physicalBoard()], [scoreRow({ board_rank: null })]),
+      'unattested_first_party_input'
+    )
+    expect(error.message).toContain('platform=alpha')
+    expect(error.message).toContain('trader_key=trader-1')
   })
 
   it('accepts the same trader key on different platforms', () => {
@@ -404,14 +637,16 @@ describe('source publication evidence', () => {
       () =>
         parseSourcePublicationEvidence(
           { scoreRows: [], physicalBoards: [physicalBoard()], unexpected: true },
-          { window: '30D', now: NOW }
+          { window: '30D', rankLimit: 1000, now: NOW }
         ),
       'invalid_bundle'
     )
   })
 
   it('distinguishes an explicitly empty board from query omission', () => {
-    const empty = parse([physicalBoard({ actual_count: 0, entry_count: 0 })])
+    const empty = parse([
+      physicalBoard({ actual_count: 0, entry_count: 0, rank_limited_entry_count: 0 }),
+    ])
     expect(empty.freshAliases[0]).toEqual(
       expect.objectContaining({ explicit_empty: true, raw_actual_count: 0, score_row_count: 0 })
     )
@@ -436,6 +671,7 @@ describe('source publication evidence', () => {
         snapshot_id: 402,
         actual_count: 0,
         entry_count: 0,
+        rank_limited_entry_count: 0,
         latest_attempt_id: 402,
       }),
       physicalBoard({
@@ -443,6 +679,7 @@ describe('source publication evidence', () => {
         snapshot_id: 401,
         actual_count: 0,
         entry_count: 0,
+        rank_limited_entry_count: 0,
         latest_attempt_id: 401,
       }),
     ])
@@ -500,7 +737,9 @@ describe('source publication evidence', () => {
   })
 
   it('rejects nonzero ranks for an explicitly empty board and unknown count aliases', () => {
-    const empty = parse([physicalBoard({ actual_count: 0, entry_count: 0 })])
+    const empty = parse([
+      physicalBoard({ actual_count: 0, entry_count: 0, rank_limited_entry_count: 0 }),
+    ])
     captureError(
       () =>
         buildSourcePublicationRows(empty, {

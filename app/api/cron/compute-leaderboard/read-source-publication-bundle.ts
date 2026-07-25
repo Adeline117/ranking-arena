@@ -203,6 +203,7 @@ export async function readSourcePublicationBundle(
   // passed the strict publication-evidence contract.
   const evidence = parseSourcePublicationEvidence(response.data, {
     window,
+    rankLimit: perAliasLimit,
     now: options.now,
     maxAgeHours,
   })

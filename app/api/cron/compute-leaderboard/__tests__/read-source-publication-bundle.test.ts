@@ -47,7 +47,10 @@ function physicalBoard(overrides: Record<string, unknown> = {}): Record<string, 
     scraped_at: '2026-07-21T23:00:00.000Z',
     actual_count: 1,
     entry_count: 1,
+    rank_limit: 1000,
+    rank_limited_entry_count: 1,
     evidence_status: 'passed',
+    latest_passed_tie_count: 1,
     latest_attempt_id: 101,
     latest_attempt_scraped_at: '2026-07-21T23:00:00.000Z',
     latest_attempt_passed: true,
@@ -92,6 +95,12 @@ describe('readSourcePublicationBundle', () => {
           board_as_of: '2026-07-21T22:00:00.123456Z',
         }),
         scoreRow({
+          platform: 'shared',
+          trader_key: 'shared-trader-2',
+          board_rank: 2,
+          board_as_of: '2026-07-21T22:00:00.123456Z',
+        }),
+        scoreRow({
           platform: 'retained',
           trader_key: 'old-trader',
           board_as_of: '2026-07-19T00:00:00.000Z',
@@ -118,6 +127,7 @@ describe('readSourcePublicationBundle', () => {
           snapshot_id: 301,
           actual_count: 0,
           entry_count: 0,
+          rank_limited_entry_count: 0,
           latest_attempt_id: 301,
         }),
         physicalBoard({
@@ -140,8 +150,8 @@ describe('readSourcePublicationBundle', () => {
       p_per_platform_limit: 1000,
       p_max_age_hours: 48,
     })
-    expect(result.evidence.scoreRows).toHaveLength(2)
-    expect(result.evidence.freshScoreRows.map((row) => row.platform)).toEqual(['shared'])
+    expect(result.evidence.scoreRows).toHaveLength(3)
+    expect(result.evidence.freshScoreRows.map((row) => row.platform)).toEqual(['shared', 'shared'])
     expect(result.evidence.retainedAliases.map((alias) => alias.source)).toEqual(['retained'])
     expect(result.evidence.freshAliases).toEqual([
       expect.objectContaining({ source: 'empty', explicit_empty: true }),
@@ -154,7 +164,7 @@ describe('readSourcePublicationBundle', () => {
     expect(result.freshRowCounts).toEqual(
       new Map([
         ['empty', 0],
-        ['shared', 1],
+        ['shared', 2],
       ])
     )
     expect(result.traderRows).toEqual([
@@ -163,6 +173,12 @@ describe('readSourcePublicationBundle', () => {
         source_trader_id: 'shared-trader',
         roi: 12.5,
         captured_at: '2026-07-21T22:30:00.000Z',
+        source_board_as_of: '2026-07-21T22:00:00.123456Z',
+      }),
+      expect.objectContaining({
+        source: 'shared',
+        source_trader_id: 'shared-trader-2',
+        pnl: 250,
         source_board_as_of: '2026-07-21T22:00:00.123456Z',
       }),
     ])
@@ -203,6 +219,60 @@ describe('readSourcePublicationBundle', () => {
       )
     ).rejects.toMatchObject<Partial<SourcePublicationEvidenceError>>({
       code: 'invalid_bundle',
+    })
+    expect(mapScoreRow).not.toHaveBeenCalled()
+  })
+
+  it('rejects an RPC rank limit that differs from the requested per-alias limit', async () => {
+    const supabase = supabaseReturning(bundle())
+    const mapScoreRow = jest.fn(mapArenaScoreRowToTraderRow)
+
+    await expect(
+      readSourcePublicationBundle(
+        supabase as never,
+        '30D',
+        { now: NOW, perAliasLimit: 925 },
+        { mapScoreRow }
+      )
+    ).rejects.toMatchObject<Partial<SourcePublicationEvidenceError>>({
+      code: 'invalid_count',
+    })
+    expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_json', {
+      p_window: '30D',
+      p_per_platform_limit: 925,
+      p_max_age_hours: 48,
+    })
+    expect(mapScoreRow).not.toHaveBeenCalled()
+  })
+
+  it('rejects unattested first-party rows before projection', async () => {
+    const mapScoreRow = jest.fn(mapArenaScoreRowToTraderRow)
+
+    await expect(
+      readSourcePublicationBundle(
+        supabaseReturning(bundle([scoreRow({ board_rank: null })])) as never,
+        '30D',
+        { now: NOW },
+        { mapScoreRow }
+      )
+    ).rejects.toMatchObject<Partial<SourcePublicationEvidenceError>>({
+      code: 'unattested_first_party_input',
+    })
+    expect(mapScoreRow).not.toHaveBeenCalled()
+  })
+
+  it('rejects score rows beyond the requested rank limit before projection', async () => {
+    const mapScoreRow = jest.fn(mapArenaScoreRowToTraderRow)
+
+    await expect(
+      readSourcePublicationBundle(
+        supabaseReturning(bundle([scoreRow({ board_rank: 1001 })])) as never,
+        '30D',
+        { now: NOW, perAliasLimit: 1000 },
+        { mapScoreRow }
+      )
+    ).rejects.toMatchObject<Partial<SourcePublicationEvidenceError>>({
+      code: 'rank_limit_exceeded',
     })
     expect(mapScoreRow).not.toHaveBeenCalled()
   })

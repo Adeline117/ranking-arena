@@ -46,6 +46,8 @@ const physicalBoardSchema = z
     scraped_at: identifierSchema.nullable(),
     actual_count: nonNegativeSafeIntegerSchema.nullable(),
     entry_count: nonNegativeSafeIntegerSchema.nullable(),
+    rank_limit: positiveSafeIntegerSchema,
+    rank_limited_entry_count: nonNegativeSafeIntegerSchema.nullable(),
     evidence_status: z.enum([
       'passed',
       'missing',
@@ -53,7 +55,10 @@ const physicalBoardSchema = z
       'future',
       'stale',
       'entry_count_mismatch',
+      'ambiguous_latest',
+      'latest_attempt_failed',
     ]),
+    latest_passed_tie_count: nonNegativeSafeIntegerSchema,
     latest_attempt_id: positiveSafeIntegerSchema.nullable(),
     latest_attempt_scraped_at: identifierSchema.nullable(),
     latest_attempt_passed: z.boolean().nullable(),
@@ -78,12 +83,16 @@ export type SourcePublicationRetainReason =
   | 'future'
   | 'stale'
   | 'count_mismatch'
+  | 'ambiguous_latest'
+  | 'latest_attempt_failed'
 
 export type SourcePublicationEvidenceErrorCode =
   | 'invalid_bundle'
   | 'invalid_window'
   | 'invalid_count'
   | 'invalid_timestamp'
+  | 'unattested_first_party_input'
+  | 'rank_limit_exceeded'
   | 'duplicate_score_identity'
   | 'duplicate_registry_slug'
   | 'duplicate_snapshot_id'
@@ -126,6 +135,7 @@ interface SourceAliasEvidenceBase {
   source: string
   source_as_of: string | null
   raw_actual_count: number | null
+  rank_limited_entry_count: number | null
   score_row_count: number
   registry_slugs: string[]
   snapshot_ids: number[]
@@ -136,6 +146,7 @@ export interface FreshSourcePublicationEvidence extends SourceAliasEvidenceBase 
   state: 'fresh'
   source_as_of: string
   raw_actual_count: number
+  rank_limited_entry_count: number
   denial_reasons: []
 }
 
@@ -168,6 +179,7 @@ export interface SourcePublicationRow {
 
 export interface ParseSourcePublicationEvidenceOptions {
   window: PublicationWindow
+  rankLimit: number
   now?: Date
   maxAgeHours?: number
 }
@@ -186,6 +198,8 @@ const RETAIN_REASON_ORDER: readonly SourcePublicationRetainReason[] = [
   'future',
   'stale',
   'count_mismatch',
+  'ambiguous_latest',
+  'latest_attempt_failed',
 ]
 
 function fail(code: SourcePublicationEvidenceErrorCode, message: string): never {
@@ -256,15 +270,38 @@ function requireUniqueScoreIdentities(rows: readonly SourcePublicationScoreRow[]
   const traderKeysByPlatform = new Map<string, Set<string>>()
 
   for (const row of rows) {
+    const canonicalTraderKey = row.trader_key.startsWith('0x')
+      ? row.trader_key.toLowerCase()
+      : row.trader_key
     const traderKeys = traderKeysByPlatform.get(row.platform) ?? new Set<string>()
-    if (traderKeys.has(row.trader_key)) {
+    if (traderKeys.has(canonicalTraderKey)) {
       fail(
         'duplicate_score_identity',
-        `duplicate score identity: platform=${row.platform}, trader_key=${row.trader_key}`
+        `duplicate score identity: platform=${row.platform}, trader_key=${canonicalTraderKey}`
       )
     }
-    traderKeys.add(row.trader_key)
+    traderKeys.add(canonicalTraderKey)
     traderKeysByPlatform.set(row.platform, traderKeys)
+  }
+}
+
+function requireAttestedBoardRanks(
+  rows: readonly SourcePublicationScoreRow[],
+  rankLimit: number
+): void {
+  for (const row of rows) {
+    if (row.board_rank === null) {
+      fail(
+        'unattested_first_party_input',
+        `score row has no physical board rank: platform=${row.platform}, trader_key=${row.trader_key}`
+      )
+    }
+    if (row.board_rank > rankLimit) {
+      fail(
+        'rank_limit_exceeded',
+        `score row rank ${row.board_rank} exceeds rank limit ${rankLimit}: platform=${row.platform}, trader_key=${row.trader_key}`
+      )
+    }
   }
 }
 
@@ -281,6 +318,26 @@ function requireSnapshotShape(board: PhysicalBoardRow): void {
     fail(
       'invalid_bundle',
       `${board.registry_slug} must provide all or none of snapshot_id/scraped_at/counts`
+    )
+  }
+
+  if (hasSnapshot) {
+    if (board.rank_limited_entry_count === null || board.latest_passed_tie_count < 1) {
+      fail(
+        'invalid_bundle',
+        `${board.registry_slug} snapshot must provide rank-limited count and a PASSED tie count`
+      )
+    }
+    if (board.entry_count !== null && board.rank_limited_entry_count > board.entry_count) {
+      fail(
+        'invalid_bundle',
+        `${board.registry_slug} rank-limited count exceeds its snapshot entry count`
+      )
+    }
+  } else if (board.rank_limited_entry_count !== null || board.latest_passed_tie_count !== 0) {
+    fail(
+      'invalid_bundle',
+      `${board.registry_slug} without a snapshot must have null rank-limited count and zero PASSED ties`
     )
   }
 
@@ -311,6 +368,20 @@ function requireSnapshotShape(board: PhysicalBoardRow): void {
     return
   }
 
+  const hasAmbiguousLatest = hasSnapshot && board.latest_passed_tie_count > 1
+  const hasLaterFailedAttempt = hasSnapshot && board.latest_attempt_passed === false
+
+  if (
+    (board.evidence_status === 'ambiguous_latest') !== hasAmbiguousLatest ||
+    (board.evidence_status === 'latest_attempt_failed') !==
+      (hasLaterFailedAttempt && !hasAmbiguousLatest)
+  ) {
+    fail(
+      'invalid_bundle',
+      `${board.registry_slug} evidence status does not match tie-first snapshot diagnostics`
+    )
+  }
+
   if (!hasSnapshot || !hasAttempt) {
     fail(
       'invalid_bundle',
@@ -326,6 +397,7 @@ function sortedReasons(reasons: ReadonlySet<SourcePublicationRetainReason>) {
 function parsePhysicalBoard(
   board: PhysicalBoardRow,
   expectedWindow: PublicationWindow,
+  expectedRankLimit: number,
   nowMicros: bigint,
   staleCutoffMicros: bigint
 ): ParsedPhysicalBoard {
@@ -333,6 +405,12 @@ function parsePhysicalBoard(
     fail(
       'invalid_window',
       `${board.registry_slug} declares ${board.window}, expected ${expectedWindow}`
+    )
+  }
+  if (board.rank_limit !== expectedRankLimit) {
+    fail(
+      'invalid_count',
+      `${board.registry_slug} declares rank_limit=${board.rank_limit}, expected ${expectedRankLimit}`
     )
   }
 
@@ -370,11 +448,18 @@ function parsePhysicalBoard(
           `${board.registry_slug} latest PASSED attempt must equal the selected PASSED snapshot`
         )
       }
-    } else if (latestAttemptTimestamp.epochMicros < scrapedTimestamp.epochMicros) {
-      fail(
-        'invalid_bundle',
-        `${board.registry_slug} failed latest attempt predates the selected PASSED snapshot`
-      )
+    } else {
+      const failedAttemptPredatesSnapshot =
+        latestAttemptTimestamp.epochMicros < scrapedTimestamp.epochMicros
+      const equalTimestampNeedsLaterId =
+        latestAttemptTimestamp.epochMicros === scrapedTimestamp.epochMicros &&
+        (board.latest_attempt_id ?? 0) <= (board.snapshot_id ?? 0)
+      if (failedAttemptPredatesSnapshot || equalTimestampNeedsLaterId) {
+        fail(
+          'invalid_bundle',
+          `${board.registry_slug} failed latest attempt does not follow the selected PASSED snapshot`
+        )
+      }
     }
   }
 
@@ -392,9 +477,15 @@ function parsePhysicalBoard(
     future: 'future',
     stale: 'stale',
     entry_count_mismatch: 'count_mismatch',
+    ambiguous_latest: 'ambiguous_latest',
+    latest_attempt_failed: 'latest_attempt_failed',
   }
   const explicitReason = statusReason[board.evidence_status]
   if (explicitReason) reasons.add(explicitReason)
+  if (board.latest_passed_tie_count > 1) reasons.add('ambiguous_latest')
+  if (board.snapshot_id !== null && board.latest_attempt_passed === false) {
+    reasons.add('latest_attempt_failed')
+  }
 
   return { ...board, scrapedTimestamp, denialReasons: sortedReasons(reasons) }
 }
@@ -414,15 +505,28 @@ function aggregateAlias(accumulator: SourceAliasAccumulator): SourceAliasPublica
   const rawActualCount = allCountsPresent
     ? boards.reduce((sum, board) => sum + (board.actual_count ?? 0), 0)
     : null
+  const allRankLimitedCountsPresent = boards.every(
+    (board) => board.rank_limited_entry_count !== null
+  )
+  const rankLimitedEntryCount = allRankLimitedCountsPresent
+    ? boards.reduce((sum, board) => sum + (board.rank_limited_entry_count ?? 0), 0)
+    : null
 
   if (rawActualCount !== null && !Number.isSafeInteger(rawActualCount)) {
     fail('invalid_count', `${accumulator.source} aggregate actual_count is not a safe integer`)
+  }
+  if (rankLimitedEntryCount !== null && !Number.isSafeInteger(rankLimitedEntryCount)) {
+    fail(
+      'invalid_count',
+      `${accumulator.source} aggregate rank_limited_entry_count is not a safe integer`
+    )
   }
 
   const base = {
     source: accumulator.source,
     source_as_of: timestamps[0]?.raw ?? null,
     raw_actual_count: rawActualCount,
+    rank_limited_entry_count: rankLimitedEntryCount,
     score_row_count: accumulator.scoreRowCount,
     registry_slugs: boards.map((board) => board.registry_slug),
     snapshot_ids: boards
@@ -433,7 +537,7 @@ function aggregateAlias(accumulator: SourceAliasAccumulator): SourceAliasPublica
   }
 
   if (reasons.size === 0) {
-    if (base.source_as_of === null || rawActualCount === null) {
+    if (base.source_as_of === null || rawActualCount === null || rankLimitedEntryCount === null) {
       fail('invalid_bundle', `${accumulator.source} fresh evidence is incomplete`)
     }
     return {
@@ -441,6 +545,7 @@ function aggregateAlias(accumulator: SourceAliasAccumulator): SourceAliasPublica
       state: 'fresh',
       source_as_of: base.source_as_of,
       raw_actual_count: rawActualCount,
+      rank_limited_entry_count: rankLimitedEntryCount,
       denial_reasons: [],
     }
   }
@@ -465,6 +570,9 @@ export function parseSourcePublicationEvidence(
   if (!Number.isSafeInteger(maxAgeHours) || maxAgeHours <= 0) {
     fail('invalid_count', 'maxAgeHours must be a positive safe integer')
   }
+  if (!Number.isSafeInteger(options.rankLimit) || options.rankLimit <= 0) {
+    fail('invalid_count', 'rankLimit must be a positive safe integer')
+  }
 
   const parsedBundle = scoreInputPublishBundleSchema.safeParse(rawBundle)
   if (!parsedBundle.success) {
@@ -475,6 +583,7 @@ export function parseSourcePublicationEvidence(
   }
 
   requireUniqueScoreIdentities(parsedBundle.data.scoreRows)
+  requireAttestedBoardRanks(parsedBundle.data.scoreRows, options.rankLimit)
 
   const nowMicros = BigInt(now.getTime()) * 1000n
   const staleCutoffMicros = nowMicros - BigInt(maxAgeHours) * 60n * 60n * 1_000_000n
@@ -495,7 +604,13 @@ export function parseSourcePublicationEvidence(
       snapshotIds.add(rawBoard.snapshot_id)
     }
 
-    const board = parsePhysicalBoard(rawBoard, windowResult.data, nowMicros, staleCutoffMicros)
+    const board = parsePhysicalBoard(
+      rawBoard,
+      windowResult.data,
+      options.rankLimit,
+      nowMicros,
+      staleCutoffMicros
+    )
     const accumulator = aliases.get(board.filter_source) ?? {
       source: board.filter_source,
       boards: [],
@@ -519,6 +634,12 @@ export function parseSourcePublicationEvidence(
       nowMicros + BigInt(SOURCE_PUBLICATION_FUTURE_TOLERANCE_MS) * 1000n
     ) {
       fail('invalid_timestamp', `${row.platform}.as_of is more than five minutes in the future`)
+    }
+    if (observationTimestamp.epochMicros <= staleCutoffMicros) {
+      fail(
+        'invalid_timestamp',
+        `${row.platform}.as_of must be newer than the publication freshness cutoff`
+      )
     }
 
     const boardTimestamp = parseTimestamp(row.board_as_of, `${row.platform}.board_as_of`)
@@ -559,6 +680,12 @@ export function parseSourcePublicationEvidence(
       fail(
         'unsafe_count_expansion',
         `${alias.source} score rows exceed the physical raw board count`
+      )
+    }
+    if (alias.score_row_count !== alias.rank_limited_entry_count) {
+      fail(
+        'query_omission',
+        `${alias.source} score rows do not exactly match its physical rank-limited entries`
       )
     }
   }
