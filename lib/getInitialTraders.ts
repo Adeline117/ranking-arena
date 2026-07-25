@@ -24,6 +24,16 @@ import {
   type SourceFreshnessRow,
   type SourceFreshnessSummary,
 } from '@/lib/rankings/source-freshness'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import {
+  PUBLIC_RANKING_POSTGREST_EXCLUSION,
+  PUBLIC_RANKING_QUARANTINED_SOURCES,
+  filterPublicRankingRows,
+  filterPublicRankingSources,
+  publicRankingCacheKey,
+  publicRankingCountFromCache,
+  sanitizePublicRankingSourcePayload,
+} from '@/lib/rankings/publication-policy'
 
 /** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface InitialTrader {
@@ -121,8 +131,8 @@ export interface InitialTradersResult {
  */
 export function homeInitialTradersCacheKeys(timeRange: Period, page: number) {
   return {
-    cacheKey: `home-initial-traders-v4:${timeRange}:p${page}`,
-    fallbackKey: `home-initial-traders-fallback-v4:${timeRange}:p${page}`,
+    cacheKey: publicRankingCacheKey(`home-initial-traders-v4:${timeRange}:p${page}`),
+    fallbackKey: publicRankingCacheKey(`home-initial-traders-fallback-v4:${timeRange}:p${page}`),
   }
 }
 
@@ -172,10 +182,13 @@ export async function getInitialTraders(
   try {
     cached = await cache.get<InitialTradersResult>(cacheKey)
     if (cached && cached.traders && cached.traders.length > 0) {
-      return cached
+      const safeCached = sanitizePublicRankingSourcePayload(cached)
+      if (safeCached.traders.length > 0) return safeCached
+      cached = safeCached
     }
     // Primary cache miss — try fallback (longer TTL, may be stale but better than empty)
     fallbackCached = await cache.get<InitialTradersResult>(fallbackKey)
+    if (fallbackCached) fallbackCached = sanitizePublicRankingSourcePayload(fallbackCached)
   } catch (_err) {
     // Redis unavailable — fall through to DB
   }
@@ -183,12 +196,14 @@ export async function getInitialTraders(
   // DB fetch with 5s timeout — SSR must never hang
   const TIMEOUT_MS = 5000
   try {
-    const result = await Promise.race([
-      fetchLeaderboardFromDB(timeRange, limit, page),
-      new Promise<InitialTradersResult>((_, reject) =>
-        setTimeout(() => reject(new Error('SSR DB timeout')), TIMEOUT_MS)
-      ),
-    ])
+    const result = sanitizePublicRankingSourcePayload(
+      await Promise.race([
+        fetchLeaderboardFromDB(timeRange, limit, page),
+        new Promise<InitialTradersResult>((_, reject) =>
+          setTimeout(() => reject(new Error('SSR DB timeout')), TIMEOUT_MS)
+        ),
+      ])
+    )
 
     // Cache successful result — TTL aligned with compute-leaderboard frequency (2h).
     // warm-cache cron refreshes every 30 min, so data is always reasonably fresh.
@@ -211,7 +226,7 @@ export async function getInitialTraders(
     // diverse RPC + category counts spike to 15-30s. Returning empty zeros
     // produces user-visible "0 traders" flash on the homepage. Stale data
     // (even hours old) is much better than nothing.
-    const stale = cached ?? fallbackCached
+    const stale = sanitizePublicRankingSourcePayload(cached ?? fallbackCached)
     if (stale && stale.traders && stale.traders.length > 0) {
       logger.info(
         `[getInitialTraders] Serving STALE cache after DB timeout (page=${page}, traders=${stale.traders.length})`
@@ -234,8 +249,9 @@ export async function getInitialTraders(
  * Exported so the cron refresh route can call it without triggering cache reads.
  *
  * Strategy:
- * 1. Try SQL RPC `get_diverse_leaderboard` (returns ~50 rows, ~10KB payload)
- * 2. Fallback to getLeaderboard(2000) + JS-side diversity filter (~400KB) if RPC missing
+ * 1. With an active source quarantine, query through getLeaderboard so SQL
+ *    excludes the source before LIMIT.
+ * 2. Otherwise use the diverse RPC for page zero; deeper pages use direct SQL.
  */
 export async function fetchLeaderboardFromDB(
   timeRange: Period = '90D',
@@ -250,12 +266,21 @@ export async function fetchLeaderboardFromDB(
   const timer = setTimeout(() => controller.abort(), 5_000)
 
   try {
+    let tradersPromise: Promise<{ traders: InitialTrader[]; lastUpdated: string | null }>
+    if (page > 0) {
+      tradersPromise = fetchPaginatedFromDB(supabase, timeRange, limit, page)
+    } else if (PUBLIC_RANKING_QUARANTINED_SOURCES.length > 0) {
+      // The diverse RPC applies LIMIT internally. While a quarantine is active,
+      // use the direct reader so source exclusion happens in SQL before LIMIT.
+      tradersPromise = fetchLeaderboardLegacy(supabase, timeRange, limit)
+    } else {
+      tradersPromise = fetchViaDiverseRPC(supabase, timeRange, limit)
+    }
+
     // Fetch traders + category counts in parallel
-    const [tradersResult, counts, freshnessRows] = await Promise.race([
+    const [tradersResult, rawCounts, freshnessRows] = await Promise.race([
       Promise.all([
-        page === 0
-          ? fetchViaDiverseRPC(supabase, timeRange, limit)
-          : fetchPaginatedFromDB(supabase, timeRange, limit, page),
+        tradersPromise,
         fetchCategoryCounts(supabase, timeRange),
         fetchInitialFreshnessRows(supabase, timeRange),
       ]),
@@ -270,19 +295,20 @@ export async function fetchLeaderboardFromDB(
     // Prefer our own CDN mirror over the exchange-CDN proxy (no 429 cold-burst).
     // Fail-open: missing mirrors leave avatar_url untouched (origin proxy still works).
     const enrichedTraders = await attachAvatarMirrors(supabase, tradersResult.traders)
+    const counts = publicInitialCategoryCounts(freshnessRows.countRows, enrichedTraders, rawCounts)
     const freshness = summarizeInitialTraderFreshness({
       countRows: freshnessRows.countRows,
       watermarkRows: freshnessRows.watermarkRows,
       observedSources: enrichedTraders.map((trader) => trader.source),
     })
-    return {
+    return sanitizePublicRankingSourcePayload({
       ...tradersResult,
       traders: enrichedTraders,
       lastUpdated: freshness.asOf,
       isStale: freshness.isStale,
       totalCount: counts.all,
       categoryCounts: counts,
-    }
+    })
   } catch (err: unknown) {
     clearTimeout(timer)
     const isTimeout =
@@ -311,16 +337,21 @@ async function fetchInitialFreshnessRows(
   countRows: LeaderboardCountCacheRow[]
   watermarkRows: SourceFreshnessRow[]
 }> {
+  let watermarkQuery = supabase
+    .from('leaderboard_source_freshness')
+    .select('source,source_as_of')
+    .eq('season_id', timeRange)
+  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+    watermarkQuery = watermarkQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+  }
+
   const [countResult, watermarkResult] = await Promise.all([
     supabase
       .from('leaderboard_count_cache')
       .select('source,total_count,updated_at')
       .eq('season_id', timeRange)
       .like('source', '%_gt0'),
-    supabase
-      .from('leaderboard_source_freshness')
-      .select('source,source_as_of')
-      .eq('season_id', timeRange),
+    watermarkQuery,
   ])
 
   return {
@@ -341,13 +372,47 @@ export function summarizeInitialTraderFreshness(params: {
   observedSources: readonly string[]
   nowMs?: number
 }): SourceFreshnessSummary {
-  const liveSources = currentScoredSources(params.countRows)
+  const liveSources = filterPublicRankingSources(currentScoredSources(params.countRows))
   const nowMs = params.nowMs ?? Date.now()
   if (liveSources.length === 0 && params.observedSources.length > 0) {
     const observed = summarizeSourceFreshness(params.watermarkRows, params.observedSources, nowMs)
     return { ...observed, isStale: true }
   }
   return summarizeSourceFreshness(params.watermarkRows, liveSources, nowMs)
+}
+
+/** Source-only counts from one atomic count-cache generation. */
+export function publicInitialCategoryCounts(
+  countRows: readonly LeaderboardCountCacheRow[],
+  visibleTraders: readonly InitialTrader[],
+  fallback: CategoryCounts
+): CategoryCounts {
+  if (PUBLIC_RANKING_QUARANTINED_SOURCES.length === 0) return fallback
+
+  const publicSources = filterPublicRankingSources(currentScoredSources(countRows))
+  const sourceGroups = {
+    futures: publicSources.filter((source) => (SOURCE_TYPE_MAP[source] || 'futures') === 'futures'),
+    spot: publicSources.filter((source) => SOURCE_TYPE_MAP[source] === 'spot'),
+    onchain: publicSources.filter((source) => SOURCE_TYPE_MAP[source] === 'web3'),
+  }
+  const all = publicRankingCountFromCache(countRows)
+  const futures = publicRankingCountFromCache(countRows, { sources: sourceGroups.futures })
+  const spot = publicRankingCountFromCache(countRows, { sources: sourceGroups.spot })
+  const onchain = publicRankingCountFromCache(countRows, { sources: sourceGroups.onchain })
+  if (all !== null && futures !== null && spot !== null && onchain !== null) {
+    return { all, futures, spot, onchain }
+  }
+
+  return visibleTraders.reduce<CategoryCounts>(
+    (counts, trader) => {
+      counts.all += 1
+      if (trader.source_type === 'spot') counts.spot += 1
+      else if (trader.source_type === 'web3') counts.onchain += 1
+      else counts.futures += 1
+      return counts
+    },
+    { all: 0, futures: 0, spot: 0, onchain: 0 }
+  )
 }
 
 /**
@@ -416,7 +481,10 @@ async function fetchViaDiverseRPC(
         setTimeout(() => reject(new Error('Diverse RPC timeout (2s)')), 2_000)
       ),
     ])
-    data = rpcResult.data as Record<string, unknown>[] | null
+    data = filterPublicRankingRows(
+      (rpcResult.data || []) as Record<string, unknown>[],
+      (row) => row.source
+    )
     error = rpcResult.error
   } catch (_err) {
     logger.warn('[getInitialTraders] Diverse RPC slow (>2s), falling back to covering-index query')
@@ -501,12 +569,18 @@ async function fetchPaginatedFromDB(
   // (raw_data, metrics_estimated, internal flags, etc.) adding 30-80ms.
   const SSR_COLS =
     'source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, avatar_url, rank, rank_change, is_new, computed_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier, season_id'
-  const { data, error } = await supabase
+  let query = supabase
     .from('leaderboard_ranks')
     .select(SSR_COLS)
     .eq('season_id', timeRange)
     .gt('arena_score', 0)
     .or('is_outlier.is.null,is_outlier.eq.false')
+
+  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+    query = query.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+  }
+
+  const { data, error } = await query
     .order('arena_score', { ascending: false })
     .range(offset, offset + limit - 1)
 
@@ -537,6 +611,7 @@ async function fetchLeaderboardLegacy(
     minScore: 10,
     excludeOutliers: true,
     sortBy: 'arena_score',
+    excludeSources: PUBLIC_RANKING_QUARANTINED_SOURCES,
   })
 
   const initialTraders = unifiedTraders.map(mapUnifiedToInitial)

@@ -290,23 +290,31 @@ describe('GET /api/rankings', () => {
         },
       ]
       const countRows = [
-        { source: '_all_gt0', total_count: 2, updated_at: generation },
+        { source: '_all_gt0', total_count: 3, updated_at: generation },
         { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
+        { source: 'okx_web3_solana_gt0', total_count: 1, updated_at: generation },
         { source: 'hyperliquid_gt0', total_count: 1, updated_at: generation },
       ]
+      let rankingQuery: ReturnType<typeof makeChainableQuery> | undefined
+      let freshnessQuery: ReturnType<typeof makeChainableQuery> | undefined
       mockSupabaseQuery.mockImplementation((table: string) => {
         if (table === 'leaderboard_ranks') {
-          return makeChainableQuery({ data: rankingRows, error: null, count: 2 })
+          rankingQuery = makeChainableQuery({ data: rankingRows, error: null, count: 2 })
+          return rankingQuery
         }
         if (table === 'leaderboard_count_cache') {
-          return makeChainableQuery({ data: countRows, error: null, count: 3 })
+          return makeChainableQuery({ data: countRows, error: null, count: 4 })
         }
         if (table === 'leaderboard_source_freshness') {
-          return makeChainableQuery({
+          freshnessQuery = makeChainableQuery({
             data: [
               {
                 source: 'binance_futures',
                 source_as_of: '2026-07-18T11:00:00.000Z',
+              },
+              {
+                source: 'okx_web3_solana',
+                source_as_of: '2026-07-01T00:00:00.000Z',
               },
               {
                 source: 'hyperliquid',
@@ -314,8 +322,9 @@ describe('GET /api/rankings', () => {
               },
             ],
             error: null,
-            count: 2,
+            count: 3,
           })
+          return freshnessQuery
         }
         return makeChainableQuery()
       })
@@ -326,6 +335,8 @@ describe('GET /api/rankings', () => {
       const data = body.data ?? body
 
       expect(res.status).toBe(200)
+      expect(data.totalCount).toBe(2)
+      expect(data.availableSources).toEqual(['binance_futures', 'hyperliquid'])
       expect(data.as_of).toBe('2026-07-16T09:00:00.000Z')
       expect(data.is_stale).toBe(true)
       expect(data.source_freshness).toEqual([
@@ -357,6 +368,8 @@ describe('GET /api/rankings', () => {
           is_stale: true,
         })
       )
+      expect(rankingQuery?.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
+      expect(freshnessQuery?.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
     } finally {
       jest.useRealTimers()
     }
@@ -448,6 +461,115 @@ describe('GET /api/rankings', () => {
     const res = await GET(req)
 
     expect(res.status).toBe(200)
+    expect(mockTieredGet).toHaveBeenCalledWith('precomputed:composite:all:v2', 'hot')
+  })
+
+  it('keeps the composite writer key aligned while sanitizing its cached payload', async () => {
+    const first = { platform: 'binance_futures', trader_key: 'first' }
+    const last = { platform: 'hyperliquid', trader_key: 'last' }
+    const nextPage = { platform: 'bybit', trader_key: 'next-page' }
+    mockTieredGet.mockResolvedValue({
+      data: {
+        traders: [{ platform: 'okx_web3_solana', trader_key: 'blocked' }, first, last, nextPage],
+        totalcount: 999,
+        total_count: 999,
+        as_of: 'blocked-aggregate-watermark',
+        is_stale: false,
+        availableSources: ['binance_futures', 'okx_web3_solana', 'hyperliquid', 'bybit'],
+        source_freshness: [
+          { source: 'binance_futures', updated_at: 'safe' },
+          { source: 'okx_web3_solana', updated_at: 'blocked' },
+          { source: 'hyperliquid', updated_at: 'safe' },
+          { source: 'bybit', updated_at: 'safe' },
+        ],
+      },
+    })
+
+    const req = new NextRequest('http://localhost/api/rankings?window=composite&limit=2')
+    const res = await GET(req)
+    const body = await res.json()
+    const data = body.data ?? body
+
+    expect(mockTieredGet).toHaveBeenCalledWith('precomputed:composite:all:v2', 'hot')
+    expect(data.traders).toEqual([first, last])
+    expect(data.totalCount).toBe(3)
+    expect(data.totalcount).toBe(3)
+    expect(data.total_count).toBe(3)
+    expect(data.hasMore).toBe(true)
+    expect(data.as_of).toBeNull()
+    expect(data.is_stale).toBe(true)
+    expect(data.availableSources).toEqual(['binance_futures', 'hyperliquid', 'bybit'])
+    expect(data.source_freshness.map((row: { source: string }) => row.source)).toEqual([
+      'binance_futures',
+      'hyperliquid',
+      'bybit',
+    ])
+  })
+
+  it('sanitizes a polluted hot-cache page without dropping safe rows after it', async () => {
+    const first = { platform: 'binance_futures', trader_key: 'first' }
+    const last = { platform: 'hyperliquid', trader_key: 'last' }
+    mockTieredGetOrSet.mockResolvedValue({
+      traders: [first, { platform: 'okx_web3_solana', trader_key: 'blocked' }, last],
+      window: '90D',
+      totalCount: 999,
+      totalcount: 999,
+      total_count: 999,
+      hasMore: true,
+      next_cursor: 'blocked-cursor',
+      as_of: 'blocked-aggregate-watermark',
+      is_stale: false,
+      availableSources: ['binance_futures', 'okx_web3_solana', 'hyperliquid'],
+      source_freshness: [
+        { source: 'binance_futures', updated_at: 'safe' },
+        { source: 'okx_web3_solana', updated_at: 'blocked' },
+        { source: 'hyperliquid', updated_at: 'safe' },
+      ],
+    })
+
+    const req = new NextRequest('http://localhost/api/rankings?window=90d')
+    const res = await GET(req)
+    const body = await res.json()
+    const data = body.data ?? body
+
+    expect(mockTieredGetOrSet).toHaveBeenCalledWith(
+      expect.stringMatching(/^public-rank-policy-v2:api:rankings:v3:/),
+      expect.any(Function),
+      'hot',
+      ['rankings']
+    )
+    expect(data.traders).toEqual([first, last])
+    expect(data).toEqual(
+      expect.objectContaining({
+        totalCount: 2,
+        totalcount: 2,
+        total_count: 2,
+        hasMore: false,
+        next_cursor: null,
+        as_of: null,
+        is_stale: true,
+      })
+    )
+    expect(data.availableSources).toEqual(['binance_futures', 'hyperliquid'])
+    expect(data.source_freshness.map((row: { source: string }) => row.source)).toEqual([
+      'binance_futures',
+      'hyperliquid',
+    ])
+  })
+
+  it('returns 200 empty for an explicitly quarantined platform without cache or DB access', async () => {
+    const req = new NextRequest('http://localhost/api/rankings?window=90d&platform=okx_web3_solana')
+    const res = await GET(req)
+    const body = await res.json()
+    const data = body.data ?? body
+
+    expect(res.status).toBe(200)
+    expect(data).toEqual(
+      expect.objectContaining({ traders: [], totalCount: 0, availableSources: [] })
+    )
+    expect(mockTieredGetOrSet).not.toHaveBeenCalled()
+    expect(mockTieredGet).not.toHaveBeenCalled()
+    expect(mockSupabaseQuery).not.toHaveBeenCalled()
   })
 
   // --- Error Handling ---

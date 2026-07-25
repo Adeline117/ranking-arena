@@ -25,7 +25,6 @@ import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-tr
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import {
-  currentScoredCount,
   currentScoredSources,
   type LeaderboardCountCacheRow,
 } from '@/lib/data/leaderboard-count-cache'
@@ -35,6 +34,14 @@ import {
   summarizeSourceFreshness,
   type SourceFreshnessRow,
 } from '@/lib/rankings/source-freshness'
+import {
+  PUBLIC_RANKING_POSTGREST_EXCLUSION,
+  filterPublicRankingSources,
+  isPublicRankingSourceQuarantined,
+  publicRankingCacheKey,
+  publicRankingCountFromCache,
+  sanitizePublicRankingSourcePayload,
+} from '@/lib/rankings/publication-policy'
 
 const logger = createLogger('traders-api')
 
@@ -94,25 +101,51 @@ export const GET = withPublic(
 
     const effectiveSortBy = sortBy || 'arena_score'
 
-    // Cache key
-    const cacheKey = `leaderboard:v3:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
+    if (isPublicRankingSourceQuarantined(exchangeFilter)) {
+      return NextResponse.json({
+        traders: [],
+        timeRange,
+        totalCount: 0,
+        rankingMode: 'arena_score',
+        lastUpdated: null,
+        isStale: true,
+        dataAgeMinutes: null,
+        source_freshness: [],
+        nextCursor: null,
+        hasMore: false,
+        page: useLegacyPaging ? Math.max(0, page) : undefined,
+        limit,
+        availableSources: [],
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'publication_policy_filtered',
+        ranking_visibility_reasons: ['quarantined_source_requested'],
+      })
+    }
 
-    const cachedData = await getOrSetWithLock(
-      cacheKey,
-      async () => {
-        return await fetchFromLeaderboard(supabase, {
-          timeRange,
-          exchangeFilter: exchangeFilter ?? null,
-          categoryFilter: categoryFilter ?? null,
-          sortBy: effectiveSortBy,
-          order,
-          cursor: cursor ? safeParseInt(cursor, 0) : null,
-          limit,
-          useLegacyPaging,
-          page: useLegacyPaging ? Math.max(0, page) : 0,
-        })
-      },
-      { ttl: 300, lockTtl: 10 }
+    // Cache key
+    const cacheKey = publicRankingCacheKey(
+      `leaderboard:v3:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
+    )
+
+    const cachedData = sanitizePublicRankingSourcePayload(
+      await getOrSetWithLock(
+        cacheKey,
+        async () =>
+          sanitizePublicRankingSourcePayload(
+            await fetchFromLeaderboard(supabase, {
+              timeRange,
+              exchangeFilter: exchangeFilter ?? null,
+              categoryFilter: categoryFilter ?? null,
+              sortBy: effectiveSortBy,
+              order,
+              cursor: cursor ? safeParseInt(cursor, 0) : null,
+              limit,
+              useLegacyPaging,
+              page: useLegacyPaging ? Math.max(0, page) : 0,
+            })
+          ),
+        { ttl: 300, lockTtl: 10 }
+      )
     )
 
     // Dev-only: validate output shape to catch response drift early (no-op in prod)
@@ -180,6 +213,10 @@ async function fetchFromLeaderboard(
     .from('leaderboard_ranks')
     .select(LEADERBOARD_COLUMNS)
     .eq('season_id', timeRange)
+
+  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+    query = query.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+  }
 
   if (exchangeFilter) {
     query = query.eq('source', exchangeFilter)
@@ -249,16 +286,23 @@ async function fetchFromLeaderboard(
   // Read the `_gt0` count variant to match the serving query's `arena_score>0`
   // filter. The plain key counts arena_score<=0 rows too → under-counts the
   // served set and makes `hasMore` truncate the board early (see rankings/route).
-  const countSource = `${exchangeFilter || '_all'}_gt0`
-  const countKeys = countSource === '_all_gt0' ? [countSource] : [countSource, '_all_gt0']
   const { data: cacheRows } = await supabase
     .from('leaderboard_count_cache')
     .select('source,total_count,updated_at')
     .eq('season_id', timeRange)
-    .in('source', countKeys)
-  const cachedTotal = currentScoredCount(
-    (cacheRows || []) as LeaderboardCountCacheRow[],
-    countSource
+    .like('source', '%_gt0')
+  const countRows = (cacheRows || []) as LeaderboardCountCacheRow[]
+  const publicSources = filterPublicRankingSources(currentScoredSources(countRows))
+  const categorySourceType =
+    categoryFilter === 'onchain' ? 'web3' : categoryFilter === 'spot' ? 'spot' : 'futures'
+  const categorySources = categoryFilter
+    ? publicSources.filter(
+        (source) => (SOURCE_TYPE_MAP[source] || 'futures') === categorySourceType
+      )
+    : []
+  const cachedTotal = publicRankingCountFromCache(
+    countRows,
+    exchangeFilter ? { source: exchangeFilter } : categoryFilter ? { sources: categorySources } : {}
   )
   const pageStart = useLegacyPaging ? page * limit : 0
   const totalCount = cachedTotal ?? pageStart + (data?.length || 0)
@@ -358,35 +402,26 @@ async function fetchFromLeaderboard(
   const hasMore = useLegacyPaging ? (page + 1) * limit < totalCount : traders.length === limit
 
   // Available sources (for UI filter) — cached in-memory with 5-min TTL
-  const sourceCacheEntry = availableSourcesCache.get(timeRange)
+  const sourcesCacheKey = publicRankingCacheKey(timeRange)
+  const sourceCacheEntry = availableSourcesCache.get(sourcesCacheKey)
   let availableSources: string[]
   if (sourceCacheEntry && Date.now() - sourceCacheEntry.ts < SOURCES_TTL) {
-    availableSources = sourceCacheEntry.sources
+    availableSources = filterPublicRankingSources(sourceCacheEntry.sources)
   } else {
     // Extract distinct sources from the current page, then supplement them from
     // the same score-visible cache generation used by totalCount.
     const allSourceSet = new Set<string>()
     for (const r of data || []) allSourceSet.add((r as { source: string }).source)
-    // Supplementary: get distinct sources from pre-computed count cache
-    // (replaces the broken leaderboard_ranks LIMIT 500 query that returned
-    // rows from a single physical index page — same bug fixed in /api/rankings)
-    const { data: sourceRows } = await supabase
-      .from('leaderboard_count_cache')
-      .select('source,total_count,updated_at')
-      .eq('season_id', timeRange)
-      .like('source', '%_gt0')
-    for (const source of currentScoredSources((sourceRows || []) as LeaderboardCountCacheRow[])) {
+    for (const source of publicSources) {
       allSourceSet.add(source)
     }
-    availableSources = [...allSourceSet].sort()
+    availableSources = filterPublicRankingSources([...allSourceSet])
     if (availableSourcesCache.size >= SOURCES_CACHE_MAX) {
       availableSourcesCache.clear()
     }
-    availableSourcesCache.set(timeRange, { sources: availableSources, ts: Date.now() })
+    availableSourcesCache.set(sourcesCacheKey, { sources: availableSources, ts: Date.now() })
   }
 
-  const categorySourceType =
-    categoryFilter === 'onchain' ? 'web3' : categoryFilter === 'spot' ? 'spot' : 'futures'
   const relevantSources = exchangeFilter
     ? [exchangeFilter]
     : categoryFilter
@@ -394,10 +429,14 @@ async function fetchFromLeaderboard(
           (source) => (SOURCE_TYPE_MAP[source] || 'futures') === categorySourceType
         )
       : availableSources
-  const { data: sourceWatermarks } = await supabase
+  let freshnessQuery = supabase
     .from('leaderboard_source_freshness')
     .select('source,source_as_of')
     .eq('season_id', timeRange)
+  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+    freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+  }
+  const { data: sourceWatermarks } = await freshnessQuery
   const freshnessSummary = summarizeSourceFreshness(
     (sourceWatermarks || []) as SourceFreshnessRow[],
     relevantSources

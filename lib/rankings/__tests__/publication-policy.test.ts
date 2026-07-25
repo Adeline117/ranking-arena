@@ -11,7 +11,10 @@ import {
   isPublicRankingRowEligible,
   isPublicRankingSourceAllowed,
   isPublicRankingSourceQuarantined,
+  publicRankingCacheKey,
+  publicRankingCountFromCache,
   sanitizePublicRankingPayload,
+  sanitizePublicRankingSourcePayload,
 } from '../publication-policy'
 
 function eligibleRow(overrides: Record<string, unknown> = {}) {
@@ -77,6 +80,171 @@ describe('public ranking publication policy', () => {
         null,
       ])
     ).toEqual(['binance_futures', 'hyperliquid'])
+  })
+
+  it('source-only sanitation keeps every safe row in a finite page without requiring proof', () => {
+    const first = { source: 'binance_futures', id: 'first' }
+    const blocked = { source: 'okx_web3_solana', id: 'blocked' }
+    const last = { platform: 'hyperliquid', id: 'last' }
+    const payload = {
+      traders: [first, blocked, last],
+      total: 300,
+      totalCount: 300,
+      hasMore: true,
+      nextCursor: 100,
+      availableSources: ['binance_futures', 'okx_web3_solana', 'hyperliquid'],
+      source_freshness: [
+        { source: 'binance_futures', updated_at: 'safe' },
+        { source: 'okx_web3_solana', updated_at: 'blocked' },
+        { source: 'hyperliquid', updated_at: 'safe' },
+      ],
+      meta: {
+        total_count: 300,
+        has_more: true,
+        next_cursor: 'blocked-cursor',
+        source_freshness: [
+          { source: 'binance_futures', updated_at: 'safe' },
+          { source: 'okx_web3_solana', updated_at: 'blocked' },
+        ],
+      },
+    }
+
+    const sanitized = sanitizePublicRankingSourcePayload(payload)
+
+    expect(sanitized.traders).toEqual([first, last])
+    expect(sanitized.availableSources).toEqual(['binance_futures', 'hyperliquid'])
+    expect(sanitized.source_freshness.map(({ source }) => source)).toEqual([
+      'binance_futures',
+      'hyperliquid',
+    ])
+    expect(sanitized.meta.source_freshness).toEqual([
+      { source: 'binance_futures', updated_at: 'safe' },
+    ])
+    expect(sanitized).toEqual(
+      expect.objectContaining({
+        total: 2,
+        totalCount: 2,
+        hasMore: false,
+        nextCursor: null,
+        ranking_visibility_reasons: ['quarantined_source_removed'],
+      })
+    )
+    expect(sanitized.meta).toEqual(
+      expect.objectContaining({ total_count: 2, has_more: false, next_cursor: null })
+    )
+  })
+
+  it('source-only sanitation preserves a safe incomplete page by identity', () => {
+    const payload = {
+      rankings: [{ source: 'binance_futures', id: 'no-row-proof' }],
+      total_count: 999,
+      has_more: true,
+      cursor: 'safe-cursor',
+      available_sources: ['binance_futures'],
+    }
+
+    expect(sanitizePublicRankingSourcePayload(payload)).toBe(payload)
+  })
+
+  it('filters quarantined cached metadata without clearing correct page totals or cursors', () => {
+    const safeTrader = { source: 'binance_futures', id: 'safe-without-proof' }
+    const payload = {
+      traders: [safeTrader],
+      totalCount: 321,
+      hasMore: true,
+      nextCursor: 50,
+      as_of: 'blocked-aggregate-watermark',
+      is_stale: false,
+      availableSources: ['binance_futures', 'okx_web3_solana'],
+      source_freshness: [
+        { source: 'binance_futures', updated_at: 'safe' },
+        { source: 'okx_web3_solana', updated_at: 'blocked' },
+      ],
+      meta: {
+        total_count: 321,
+        has_more: true,
+        next_cursor: 'safe-cursor',
+        updated_at: 'blocked-aggregate-watermark',
+        staleness_seconds: 1,
+        is_stale: false,
+        source_freshness: [
+          { source: 'binance_futures', updated_at: 'safe' },
+          { source: 'okx_web3_solana', updated_at: 'blocked' },
+        ],
+      },
+    }
+
+    const sanitized = sanitizePublicRankingSourcePayload(payload)
+
+    expect(sanitized.traders).toEqual([safeTrader])
+    expect(sanitized).toEqual(
+      expect.objectContaining({
+        totalCount: 321,
+        hasMore: true,
+        nextCursor: 50,
+        as_of: null,
+        is_stale: true,
+      })
+    )
+    expect(sanitized.meta).toEqual(
+      expect.objectContaining({
+        total_count: 321,
+        has_more: true,
+        next_cursor: 'safe-cursor',
+        updated_at: null,
+        staleness_seconds: null,
+        is_stale: true,
+      })
+    )
+    expect(sanitized.availableSources).toEqual(['binance_futures'])
+    expect(sanitized.source_freshness).toEqual([{ source: 'binance_futures', updated_at: 'safe' }])
+    expect(sanitized.meta.source_freshness).toEqual([
+      { source: 'binance_futures', updated_at: 'safe' },
+    ])
+  })
+
+  it('uses only the active atomic generation for source-quarantine counts', () => {
+    const generation = '2026-07-24T12:00:00.000Z'
+    const rows = [
+      { source: '_all_gt0', total_count: 18, updated_at: generation },
+      { source: 'binance_futures_gt0', total_count: 10, updated_at: generation },
+      { source: 'hyperliquid_gt0', total_count: 5, updated_at: generation },
+      { source: 'okx_web3_solana_gt0', total_count: 3, updated_at: generation },
+    ]
+
+    expect(publicRankingCountFromCache(rows)).toBe(15)
+    expect(publicRankingCountFromCache(rows, { source: 'binance_futures' })).toBe(10)
+    expect(publicRankingCountFromCache(rows, { source: 'okx_web3_solana' })).toBe(0)
+    expect(publicRankingCountFromCache(rows, { sources: ['binance_futures', 'hyperliquid'] })).toBe(
+      15
+    )
+    expect(
+      publicRankingCountFromCache([
+        ...rows.slice(0, 3),
+        {
+          source: 'okx_web3_solana_gt0',
+          total_count: 99,
+          updated_at: 'stale-generation',
+        },
+      ])
+    ).toBe(18)
+    expect(
+      publicRankingCountFromCache([
+        ...rows.slice(0, 3),
+        {
+          source: 'okx_web3_solana_gt0',
+          total_count: Number.NaN,
+          updated_at: generation,
+        },
+      ])
+    ).toBeNull()
+    expect(publicRankingCountFromCache(rows.slice(1))).toBeNull()
+  })
+
+  it('epochs ordinary public ranking cache keys', () => {
+    expect(publicRankingCacheKey('leaderboard:v3:90D')).toBe(
+      'public-rank-policy-v2:leaderboard:v3:90D'
+    )
   })
 
   it('requires complete, concrete, fresh metrics for row-level rank eligibility', () => {

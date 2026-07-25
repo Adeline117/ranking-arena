@@ -29,7 +29,17 @@ jest.mock('@/lib/utils/logger', () => ({
   },
 }))
 
-import { safeQuery, withTimeout } from '../queries'
+import { getLeaderboard, safeQuery, withTimeout } from '../queries'
+
+function chainableQuery() {
+  const query: Record<string, jest.Mock> = {}
+  for (const method of ['select', 'eq', 'not', 'or', 'gt', 'gte', 'order', 'range']) {
+    query[method] = jest.fn(() => query)
+  }
+  query.abortSignal = jest.fn().mockResolvedValue({ data: [], error: null })
+  query.maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null })
+  return query
+}
 
 describe('safeQuery', () => {
   it('successful query → { ok: true, data: result }', async () => {
@@ -141,19 +151,40 @@ describe('safeQuery', () => {
 
 describe('withTimeout', () => {
   it('resolves before timeout → returns result', async () => {
-    const result = await withTimeout(
-      Promise.resolve('hello'),
-      5000
-    )
+    const result = await withTimeout(Promise.resolve('hello'), 5000)
     expect(result).toBe('hello')
   })
 
   it('exceeds timeout → rejects with timeout error', async () => {
-    const slowPromise = new Promise<string>(resolve =>
+    const slowPromise = new Promise<string>((resolve) =>
       setTimeout(() => resolve('too late'), 5000)
     )
-    await expect(
-      withTimeout(slowPromise, 10)
-    ).rejects.toThrow('Query timeout after 10ms')
+    await expect(withTimeout(slowPromise, 10)).rejects.toThrow('Query timeout after 10ms')
+  })
+})
+
+describe('getLeaderboard source exclusion', () => {
+  it('applies an exclusion before the finite DB page even with a platform filter', async () => {
+    const leaderboardQuery = chainableQuery()
+    const countQuery = chainableQuery()
+    const supabase = {
+      from: jest.fn((table: string) =>
+        table === 'leaderboard_ranks' ? leaderboardQuery : countQuery
+      ),
+    }
+
+    await getLeaderboard(supabase as never, {
+      period: '90D',
+      platform: 'okx_web3_solana',
+      excludeSources: ['okx_web3_solana'],
+      limit: 20,
+    })
+
+    expect(leaderboardQuery.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
+    expect(leaderboardQuery.eq).toHaveBeenCalledWith('source', 'okx_web3_solana')
+    expect(leaderboardQuery.range).toHaveBeenCalledWith(0, 19)
+    expect(leaderboardQuery.not.mock.invocationCallOrder[0]).toBeLessThan(
+      leaderboardQuery.range.mock.invocationCallOrder[0]
+    )
   })
 })
