@@ -37,11 +37,19 @@ export interface ExpectedLocalHeartbeat {
 interface ExistingLocalHeartbeat {
   sha: string
   releaseId: string
+  notBeforeMs?: number
 }
 
 export interface ExistingLocalNodeIdentity {
   nodeId: string
   heartbeatPid: number
+}
+
+export interface LocalHeartbeatPollingOptions {
+  timeoutMs?: number
+  pollIntervalMs?: number
+  now?: () => number
+  delay?: (milliseconds: number) => Promise<void>
 }
 
 function hasExactPayloadKeys(record: Record<string, unknown>, legacy = false): boolean {
@@ -143,7 +151,7 @@ export function discoverExistingLocalNode(
         (legacy ||
           (record.release_id === expected.releaseId && record.attempt_bound_capture === true)) &&
         hasExpectedRegions(record.regions, legacy) &&
-        isFreshTimestamp(record.ts, now)
+        isFreshTimestamp(record.ts, now, expected.notBeforeMs)
       ) {
         matches.push({ nodeId: field, heartbeatPid: record.pid })
       }
@@ -163,6 +171,12 @@ function parsePositiveInteger(value: string | undefined, label: string): number 
     throw new Error(`[local-heartbeat-proof] ${label} is malformed`)
   }
   return parsed
+}
+
+export function discoveryRequestTimeoutMs(value: string | undefined): number {
+  return value === undefined
+    ? 5_000
+    : Math.min(5_000, parsePositiveInteger(value, 'discovery request timeout'))
 }
 
 function parseExpected(args: string[]): ExpectedLocalHeartbeat {
@@ -194,6 +208,41 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   }
 }
 
+export async function waitForExpectedLocalHeartbeat(
+  readPayload: () => Promise<string | null>,
+  expected: ExpectedLocalHeartbeat,
+  options: LocalHeartbeatPollingOptions = {}
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 90_000
+  const pollIntervalMs = options.pollIntervalMs ?? 1_000
+  const now = options.now ?? Date.now
+  const delay =
+    options.delay ??
+    ((milliseconds: number) =>
+      new Promise<void>((resolveDelay) => setTimeout(resolveDelay, milliseconds)))
+  if (
+    !Number.isSafeInteger(timeoutMs) ||
+    timeoutMs <= 0 ||
+    !Number.isSafeInteger(pollIntervalMs) ||
+    pollIntervalMs <= 0
+  ) {
+    throw new Error('[local-heartbeat-proof] polling configuration is malformed')
+  }
+
+  const deadline = now() + timeoutMs
+  let lastError = 'no roster observation'
+  while (now() < deadline) {
+    try {
+      validateLocalHeartbeatPayload(await readPayload(), expected, now())
+      return
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
+    }
+    await delay(pollIntervalMs)
+  }
+  throw new Error(`[local-heartbeat-proof] ${lastError}`)
+}
+
 async function main(): Promise<void> {
   config({ path: resolve(process.cwd(), 'worker', '.env'), override: false, quiet: true })
   const [{ getConnection }, { WORKER_ROSTER_KEY }] = await Promise.all([
@@ -205,40 +254,38 @@ async function main(): Promise<void> {
   try {
     if (args[0] === '--discover-existing') {
       if (
-        args.length !== 3 ||
+        (args.length !== 3 && args.length !== 4 && args.length !== 5) ||
         !SHA.test(args[1] ?? '') ||
-        !((args[2] ?? '') === 'unknown' || RELEASE.test(args[2] ?? ''))
+        !((args[2] ?? '') === 'unknown' || RELEASE.test(args[2] ?? '')) ||
+        (args.length === 5 && args[3] === undefined)
       ) {
         throw new Error('[local-heartbeat-proof] discovery arguments are malformed')
       }
-      const roster = await withTimeout(redis.hgetall(WORKER_ROSTER_KEY), 5_000, 'Redis HGETALL')
+      const notBeforeMs =
+        args[3] === undefined
+          ? undefined
+          : parsePositiveInteger(args[3], 'discovery not-before time')
+      const requestTimeoutMs = discoveryRequestTimeoutMs(args[4])
+      const roster = await withTimeout(
+        redis.hgetall(WORKER_ROSTER_KEY),
+        requestTimeoutMs,
+        'Redis HGETALL'
+      )
       const identity = discoverExistingLocalNode(roster, {
         sha: args[1],
         releaseId: args[2],
+        notBeforeMs,
       })
       console.log(`ARENA_LOCAL_EXISTING_ROSTER\t${identity.nodeId}\t${identity.heartbeatPid}`)
       return
     }
 
     const expected = parseExpected(args)
-    const deadline = Date.now() + 90_000
-    let lastError = 'no roster observation'
-    while (Date.now() < deadline) {
-      try {
-        const raw = await withTimeout(
-          redis.hget(WORKER_ROSTER_KEY, expected.nodeId),
-          5_000,
-          'Redis HGET'
-        )
-        validateLocalHeartbeatPayload(raw, expected)
-        console.log('[local-heartbeat-proof] exact fresh Redis roster identity ready')
-        return
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error)
-      }
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_000))
-    }
-    throw new Error(`[local-heartbeat-proof] ${lastError}`)
+    await waitForExpectedLocalHeartbeat(
+      () => withTimeout(redis.hget(WORKER_ROSTER_KEY, expected.nodeId), 5_000, 'Redis HGET'),
+      expected
+    )
+    console.log('[local-heartbeat-proof] exact fresh Redis roster identity ready')
   } finally {
     redis.disconnect(false)
   }

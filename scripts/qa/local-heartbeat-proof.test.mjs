@@ -2,10 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { tsImport } from 'tsx/esm/api'
 
-const { discoverExistingLocalNode, validateLocalHeartbeatPayload } = await tsImport(
-  '../../worker/verify-local-heartbeat.ts',
-  import.meta.url
-)
+const {
+  discoverExistingLocalNode,
+  discoveryRequestTimeoutMs,
+  validateLocalHeartbeatPayload,
+  waitForExpectedLocalHeartbeat,
+} = await tsImport('../../worker/verify-local-heartbeat.ts', import.meta.url)
 
 const NOW = 1_800_000_000_000
 const SHA = 'a'.repeat(40)
@@ -58,6 +60,67 @@ test('accepts only the exact fresh post-start local roster identity', () => {
   assert.throws(() => validateLocalHeartbeatPayload('{', EXPECTED, NOW))
 })
 
+test('polls past a stale post-boundary heartbeat until an exact fresh payload arrives', async () => {
+  let now = NOW
+  let reads = 0
+  const expected = { ...EXPECTED, notBeforeMs: NOW }
+  const payloads = [
+    JSON.stringify(modernPayload({ ts: NOW - 1 })),
+    JSON.stringify(modernPayload({ ts: NOW + 500 })),
+  ]
+
+  await waitForExpectedLocalHeartbeat(
+    async () => payloads[Math.min(reads++, payloads.length - 1)],
+    expected,
+    {
+      timeoutMs: 3_000,
+      pollIntervalMs: 1_000,
+      now: () => now,
+      delay: async (milliseconds) => {
+        now += milliseconds
+      },
+    }
+  )
+
+  assert.equal(reads, 2)
+})
+
+test('times out when every post-boundary heartbeat remains stale', async () => {
+  let now = NOW
+  let reads = 0
+  const expected = { ...EXPECTED, notBeforeMs: NOW }
+
+  await assert.rejects(
+    waitForExpectedLocalHeartbeat(
+      async () => {
+        reads += 1
+        return JSON.stringify(modernPayload({ ts: NOW - 1 }))
+      },
+      expected,
+      {
+        timeoutMs: 2_500,
+        pollIntervalMs: 1_000,
+        now: () => now,
+        delay: async (milliseconds) => {
+          now += milliseconds
+        },
+      }
+    ),
+    /roster identity or freshness is not exact/
+  )
+
+  assert.equal(reads, 3)
+})
+
+test('caps each legacy HGETALL to the remaining global deadline budget', () => {
+  assert.equal(discoveryRequestTimeoutMs(undefined), 5_000)
+  assert.equal(discoveryRequestTimeoutMs('90000'), 5_000)
+  assert.equal(discoveryRequestTimeoutMs('2400'), 2_400)
+  assert.equal(discoveryRequestTimeoutMs('1'), 1)
+  assert.throws(() => discoveryRequestTimeoutMs('0'), /request timeout.*malformed/)
+  assert.throws(() => discoveryRequestTimeoutMs('not-a-number'), /request timeout.*malformed/)
+})
+
 test('discovers one stamped local owner from the modern roster schema', () => {
   assert.deepEqual(
     discoverExistingLocalNode(
@@ -71,6 +134,14 @@ test('discovers one stamped local owner from the modern roster schema', () => {
       NOW
     ),
     { nodeId: NODE, heartbeatPid: 42 }
+  )
+
+  assert.throws(() =>
+    discoverExistingLocalNode(
+      { [NODE]: JSON.stringify(modernPayload()) },
+      { sha: SHA, releaseId: RELEASE, notBeforeMs: NOW },
+      NOW
+    )
   )
 })
 
@@ -90,6 +161,13 @@ test('allows only the exact legacy Mac schema during first migration', () => {
       NOW
     ),
     { nodeId: NODE, heartbeatPid: 84 }
+  )
+  assert.throws(() =>
+    discoverExistingLocalNode(
+      { [NODE]: JSON.stringify(legacy) },
+      { sha: SHA, releaseId: 'unknown', notBeforeMs: NOW },
+      NOW
+    )
   )
 
   assert.deepEqual(

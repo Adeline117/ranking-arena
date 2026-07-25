@@ -481,6 +481,7 @@ write_failed_recovery_block() {
 }
 
 clear_recovery_journal() {
+  assert_local_lock || return 1
   [ "$RECOVERY_JOURNAL_WRITTEN" = 1 ] || return 1
   [ -f "$RECOVERY_BLOCK_FILE" ] && [ ! -L "$RECOVERY_BLOCK_FILE" ] || return 1
   grep -Fqx "lock_token=$LOCK_TOKEN" "$RECOVERY_BLOCK_FILE" || return 1
@@ -525,6 +526,25 @@ wait_for_pm2_exact() {
   return 1
 }
 
+pm2_exact_pid_once() {
+  local expected_cwd="$1" expected_interpreter="$2" expected_exec_path="$3"
+  local expected_args="$4" expected_exec_mode="$5" expected_instances="$6"
+  local expected_node_args="$7" expected_restarts="$8"
+  local snapshot pid status cwd interpreter exec_path restarts args node_args exec_mode instances
+  snapshot="$(pm2_snapshot 2>/dev/null || true)"
+  [ -n "$snapshot" ] || return 1
+  IFS=$'\x1f' read -r pid status cwd interpreter exec_path restarts args node_args exec_mode \
+    instances <<<"$snapshot"
+  [ "$status" = online ] && [ "$cwd" = "$expected_cwd" ] && \
+    [ "$interpreter" = "$expected_interpreter" ] && \
+    [ "$exec_path" = "$expected_exec_path" ] && [ "$args" = "$expected_args" ] && \
+    [ "$node_args" = "$expected_node_args" ] && \
+    [ "$exec_mode" = "$expected_exec_mode" ] && \
+    [ "$instances" = "$expected_instances" ] && [ "$restarts" = "$expected_restarts" ] && \
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  printf '%s\n' "$pid"
+}
+
 require_candidate_stability() {
   local i observed_pid
   for i in $(seq 1 11); do
@@ -538,9 +558,28 @@ require_candidate_stability() {
   return 1
 }
 
+require_rollback_stability() {
+  local expected_pid="$1" expected_cwd="$2" expected_interpreter="$3" expected_exec_path="$4"
+  local expected_args="$5" expected_exec_mode="$6" expected_instances="$7"
+  local expected_node_args="$8" expected_restarts="$9" i observed_pid
+  for i in $(seq 1 11); do
+    assert_local_lock || return 1
+    observed_pid="$(pm2_exact_pid_once "$expected_cwd" "$expected_interpreter" \
+      "$expected_exec_path" "$expected_args" "$expected_exec_mode" "$expected_instances" \
+      "$expected_node_args" "$expected_restarts")" || return 1
+    [ "$observed_pid" = "$expected_pid" ] || return 1
+    assert_local_lock || return 1
+    [ "$i" = 11 ] && return 0
+    sleep 1
+  done
+  return 1
+}
+
 prove_pid_descends_from() {
   local ancestor="$1" current="$2" parent depth=0
   [[ "$ancestor" =~ ^[1-9][0-9]*$ ]] && [[ "$current" =~ ^[1-9][0-9]*$ ]] || return 1
+  kill -0 "$ancestor" 2>/dev/null || return 1
+  kill -0 "$current" 2>/dev/null || return 1
   while [ "$depth" -lt 16 ]; do
     [ "$current" = "$ancestor" ] && return 0
     parent="$(ps -o ppid= -p "$current" 2>/dev/null | tr -d '[:space:]')" || return 1
@@ -552,14 +591,26 @@ prove_pid_descends_from() {
 }
 
 discover_existing_runtime_identity() {
-  local release_dir="$1" ancestor_pid="$2" proof marker node heartbeat_pid extra
+  local release_dir="$1" ancestor_pid="$2" not_before_ms="${3:-}"
+  local request_timeout_ms="${4:-}"
+  local proof marker node heartbeat_pid extra
+  local -a discovery_args=(--discover-existing "$OLD_SHA" "$OLD_ROSTER_RELEASE_ID")
+  if [ -n "$not_before_ms" ]; then
+    [[ "$not_before_ms" =~ ^[1-9][0-9]*$ ]] || return 1
+    discovery_args+=("$not_before_ms")
+  fi
+  if [ -n "$request_timeout_ms" ]; then
+    [ -n "$not_before_ms" ] || return 1
+    [[ "$request_timeout_ms" =~ ^[1-9][0-9]*$ ]] || return 1
+    discovery_args+=("$request_timeout_ms")
+  fi
   proof="$(
     (
       cd "$release_dir" && env -i \
         HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
         PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
         "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
-        --discover-existing "$OLD_SHA" "$OLD_ROSTER_RELEASE_ID"
+        "${discovery_args[@]}"
     ) | awk -F '\t' '
       $1 == "ARENA_LOCAL_EXISTING_ROSTER" && NF == 3 { matches += 1; proof = $0 }
       END { if (matches != 1) exit 45; print proof }
@@ -573,16 +624,28 @@ discover_existing_runtime_identity() {
   printf '%s\x1f%s\n' "$node" "$heartbeat_pid"
 }
 
-wait_for_discovered_node() {
-  local release_dir="$1" ancestor_pid="$2" expected_node="$3" timeout i identity node _pid
-  timeout="${ARENA_READY_TIMEOUT_SECONDS:-180}"
+wait_for_discovered_identity() {
+  local release_dir="$1" ancestor_pid="$2" expected_node="$3" not_before_ms="${4:-}"
+  local timeout deadline remaining_ms identity node _pid
+  timeout="${ARENA_LEGACY_DISCOVERY_TIMEOUT_SECONDS:-90}"
   [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || return 1
-  for i in $(seq 1 "$timeout"); do
-    identity="$(discover_existing_runtime_identity "$release_dir" "$ancestor_pid" 2>/dev/null || true)"
+  [ "$timeout" -le 90 ] || timeout=90
+  deadline=$((SECONDS + timeout))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    assert_local_lock || return 1
+    remaining_ms=$(((deadline - SECONDS) * 1000))
+    [ "$remaining_ms" -gt 0 ] || break
+    identity="$(discover_existing_runtime_identity "$release_dir" "$ancestor_pid" \
+      "$not_before_ms" "$remaining_ms" 2>/dev/null || true)"
+    assert_local_lock || return 1
     if [ -n "$identity" ]; then
       IFS=$'\x1f' read -r node _pid <<<"$identity"
-      [ "$node" = "$expected_node" ] && return 0
+      if [ "$node" = "$expected_node" ]; then
+        printf '%s\n' "$identity"
+        return 0
+      fi
     fi
+    [ "$SECONDS" -lt "$deadline" ] || break
     sleep 1
   done
   return 1
@@ -756,7 +819,9 @@ start_release_config() {
 
 recover_previous_release() {
   local rollback_marker rollback_log rollback_config expected_interpreter displaced_pid
-  local rollback_pid rollback_not_before_ms current_snapshot current_roster_identity current_env_sha
+  local rollback_pid rollback_not_before_ms rollback_final_not_before_ms final_rollback_pid
+  local current_snapshot current_roster_identity current_env_sha
+  local rollback_roster_identity final_rollback_roster_identity
   local displaced_tree
   assert_local_lock || {
     echo '✗✗ local deploy lock was lost; automatic rollback is unsafe' >&2
@@ -774,7 +839,56 @@ recover_previous_release() {
       discover_existing_runtime_identity "$RELEASE_DIR" "$OLD_PID" 2>/dev/null || true
     )"
     if [ "$current_roster_identity" = "$OLD_ROSTER_IDENTITY" ]; then
+      require_rollback_stability "$OLD_PID" "$OLD_CWD" "$OLD_INTERPRETER" \
+        "$OLD_EXEC_PATH" "$OLD_ARGS_JSON" "$OLD_EXEC_MODE" "$OLD_INSTANCES" \
+        "$OLD_NODE_ARGS_JSON" "$OLD_RESTARTS" || {
+        echo '✗✗ previous owner did not remain continuously stable for ten seconds' >&2
+        return 1
+      }
+      assert_local_lock || return 1
+      rollback_final_not_before_ms="$("$NODE_BIN" -p 'Date.now()')" || return 1
+      [[ "$rollback_final_not_before_ms" =~ ^[1-9][0-9]*$ ]] || return 1
+      assert_local_lock || return 1
+      if [ -n "$OLD_RELEASE_ID" ]; then
+        (cd "$RELEASE_DIR" && env -i \
+          HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
+          PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
+          "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
+          "$OLD_PID" "$OLD_SHA" "$OLD_RELEASE_ID" "$OLD_NODE_ID" \
+          "$rollback_final_not_before_ms") || {
+          echo '✗✗ previous stamped owner lacks final fresh Redis evidence' >&2
+          return 1
+        }
+      else
+        final_rollback_roster_identity="$(wait_for_discovered_identity "$RELEASE_DIR" \
+          "$OLD_PID" "$OLD_NODE_ID" "$rollback_final_not_before_ms")" || {
+          echo '✗✗ previous legacy owner lacks final fresh Redis/ancestry evidence' >&2
+          return 1
+        }
+        [ "$final_rollback_roster_identity" = "$OLD_ROSTER_IDENTITY" ] || {
+          echo '✗✗ previous legacy owner heartbeat PID changed during stability proof' >&2
+          return 1
+        }
+      fi
+      assert_local_lock || return 1
+      final_rollback_pid="$(pm2_exact_pid_once "$OLD_CWD" "$OLD_INTERPRETER" \
+        "$OLD_EXEC_PATH" "$OLD_ARGS_JSON" "$OLD_EXEC_MODE" "$OLD_INSTANCES" \
+        "$OLD_NODE_ARGS_JSON" "$OLD_RESTARTS")" || {
+        echo '✗✗ previous owner lost its exact PM2 identity after final Redis proof' >&2
+        return 1
+      }
+      [ "$final_rollback_pid" = "$OLD_PID" ] || {
+        echo '✗✗ previous owner PID changed after final Redis proof' >&2
+        return 1
+      }
+      assert_local_lock || return 1
+      [ "$(hash_shared_env 2>/dev/null || true)" = "$SHARED_ENV_SHA256" ] || {
+        echo '✗✗ shared worker environment changed during rollback verification' >&2
+        return 1
+      }
+      assert_local_lock || return 1
       pm2_command save >/dev/null || return 1
+      assert_local_lock || return 1
       clear_recovery_journal || return 1
       ROLLBACK_SUCCEEDED=1
       echo "✓ previous local release never left ownership: cwd=$OLD_CWD sha=$OLD_SHA" >&2
@@ -872,12 +986,63 @@ $NEW_PROCESS_TREE}" || {
       echo '✗✗ previous legacy release lacks fresh rollback evidence' >&2
       return 1
     }
-    wait_for_discovered_node "$RELEASE_DIR" "$rollback_pid" "$OLD_NODE_ID" || {
+    rollback_roster_identity="$(wait_for_discovered_identity "$RELEASE_DIR" "$rollback_pid" \
+      "$OLD_NODE_ID" "$rollback_not_before_ms")" || {
       echo '✗✗ previous legacy release lacks fresh Redis/ancestry rollback evidence' >&2
       return 1
     }
   fi
+
+  assert_local_lock || return 1
+  require_rollback_stability "$rollback_pid" "$OLD_CWD" "$expected_interpreter" \
+    "$OLD_EXEC_PATH" "$OLD_ARGS_JSON" "$OLD_EXEC_MODE" "$OLD_INSTANCES" \
+    "$OLD_NODE_ARGS_JSON" 0 || {
+    echo '✗✗ previous release was not continuously stable for ten seconds after rollback proof' >&2
+    return 1
+  }
+  assert_local_lock || return 1
+  rollback_final_not_before_ms="$("$NODE_BIN" -p 'Date.now()')" || return 1
+  [[ "$rollback_final_not_before_ms" =~ ^[1-9][0-9]*$ ]] || return 1
+  assert_local_lock || return 1
+  if [ -n "$OLD_RELEASE_ID" ]; then
+    (cd "$RELEASE_DIR" && env -i \
+      HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
+      PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
+      "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
+      "$rollback_pid" "$OLD_SHA" "$OLD_RELEASE_ID" "$OLD_NODE_ID" \
+      "$rollback_final_not_before_ms") || {
+      echo '✗✗ previous stamped release lacks final fresh Redis rollback evidence' >&2
+      return 1
+    }
+  else
+    final_rollback_roster_identity="$(wait_for_discovered_identity "$RELEASE_DIR" \
+      "$rollback_pid" "$OLD_NODE_ID" "$rollback_final_not_before_ms")" || {
+      echo '✗✗ previous legacy release lacks final fresh Redis/ancestry rollback evidence' >&2
+      return 1
+    }
+    [ "$final_rollback_roster_identity" = "$rollback_roster_identity" ] || {
+      echo '✗✗ previous legacy release heartbeat PID changed during stability proof' >&2
+      return 1
+    }
+  fi
+  assert_local_lock || return 1
+  final_rollback_pid="$(pm2_exact_pid_once "$OLD_CWD" "$expected_interpreter" "$OLD_EXEC_PATH" \
+    "$OLD_ARGS_JSON" "$OLD_EXEC_MODE" "$OLD_INSTANCES" "$OLD_NODE_ARGS_JSON" 0)" || {
+    echo '✗✗ previous release lost its exact PM2 identity after final Redis proof' >&2
+    return 1
+  }
+  [ "$final_rollback_pid" = "$rollback_pid" ] || {
+    echo '✗✗ previous release PID changed after final Redis proof' >&2
+    return 1
+  }
+  assert_local_lock || return 1
+  [ "$(hash_shared_env 2>/dev/null || true)" = "$SHARED_ENV_SHA256" ] || {
+    echo '✗✗ shared worker environment changed during rollback verification' >&2
+    return 1
+  }
+  assert_local_lock || return 1
   pm2_command save >/dev/null || return 1
+  assert_local_lock || return 1
   clear_recovery_journal || {
     echo '✗✗ rollback succeeded but the durable cutover journal could not be cleared' >&2
     return 1
