@@ -178,6 +178,7 @@ INSERT INTO arena.sources (
     ('idempotent_empty', 'idempotent_empty', 'Replay', '90D'),
     ('eligibility_bad', 'eligibility_bad', 'Eligibility bad', '7D'),
     ('eligibility_good', 'eligibility_good', 'Eligibility good', '7D'),
+    ('freshness_replay_race', 'freshness_replay_race', 'Freshness replay race', '30D'),
     ('registry_race', 'registry_race', 'Registry race', '30D');
 SQL
 
@@ -633,6 +634,64 @@ expect_failure \
   "SET ROLE service_role; SELECT public.seal_leaderboard_rank_publication(
      '7D', '70000000-0000-4000-8000-000000000002',
      '[{\"source\":\"eligibility_good\",\"source_as_of\":\"2000-01-01T00:00:00Z\",\"trader_ids\":[\"public-full\"]}]'::jsonb);"
+
+# A response-loss replay must wait for a legacy freshness UPDATE that already
+# owns the row lock and is about to clear the proof. Plain MVCC would return
+# the old receipt as sealed before that invalidation commits.
+psql_cmd -q <<'SQL'
+INSERT INTO public.leaderboard_ranks (
+  season_id, source, source_trader_id, rank, arena_score, roi, pnl,
+  win_rate, max_drawdown, score_completeness, metrics_estimated,
+  is_outlier, computed_at, rank_publication_id
+) VALUES (
+  '30D', 'freshness_replay_race', 'replay-row', 1, 88, 12, 220, 57, 11,
+  'full', false, false, pg_catalog.now(),
+  '70000000-0000-4000-8000-000000000004'
+);
+SET ROLE service_role;
+SELECT public.seal_leaderboard_rank_publication(
+  '30D',
+  '70000000-0000-4000-8000-000000000004',
+  '[{"source":"freshness_replay_race","source_as_of":"2000-01-01T00:00:00Z","trader_ids":["replay-row"]}]'::jsonb
+);
+RESET ROLE;
+SQL
+
+psql_cmd -q >"$TMP_ROOT/freshness-replay-writer.log" 2>&1 <<'SQL' &
+BEGIN;
+SET ROLE service_role;
+UPDATE public.leaderboard_source_freshness
+SET source_as_of = source_as_of,
+    recorded_at = pg_catalog.clock_timestamp()
+WHERE season_id = '30D' AND source = 'freshness_replay_race';
+SELECT pg_catalog.pg_sleep(2);
+COMMIT;
+SQL
+freshness_replay_writer_pid=$!
+sleep 0.4
+expect_failure \
+  'freshness invalidation vs cohort replay' \
+  'no longer the current sealed publication' \
+  "SET ROLE service_role; SELECT public.seal_leaderboard_rank_publication(
+     '30D', '70000000-0000-4000-8000-000000000004',
+     '[{\"source\":\"freshness_replay_race\",\"source_as_of\":\"2000-01-01T00:00:00Z\",\"trader_ids\":[\"replay-row\"]}]'::jsonb);"
+wait "$freshness_replay_writer_pid"
+
+psql_cmd -q <<'SQL'
+DO $proof$
+DECLARE
+  v_proof record;
+BEGIN
+  SELECT * INTO STRICT v_proof
+  FROM public.arena_leaderboard_publication_proofs(
+    '30D', ARRAY['freshness_replay_race']::text[]
+  );
+  IF v_proof.is_sealed OR v_proof.score_cohort_id IS NOT NULL THEN
+    RAISE EXCEPTION 'freshness invalidation race retained a replayable seal: %', v_proof;
+  END IF;
+END
+$proof$;
+SQL
 
 # A registry quarantine racing an empty-source seal must win before authority
 # is checked. Without the registry SHARE lock, MVCC would expose the old
