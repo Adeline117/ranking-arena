@@ -137,4 +137,24 @@ describe('scoreTraders PnL eligibility boundary', () => {
       'loss-score',
     ])
   })
+
+  it('keeps partial and estimated rows out of both percentile influence and publication', async () => {
+    const partial = trader('partial', 100)
+    partial.max_drawdown = null
+    const estimated = trader('estimated', 100)
+    estimated.metrics_estimated = true
+    const full = trader('full', 100)
+
+    const result = await scoreTraders(
+      [partial, estimated, full],
+      new Map(),
+      new Set(),
+      '30D',
+      {} as never
+    )
+
+    expect(mockComputeArenaScoresV4.mock.calls[0][0]).toHaveLength(1)
+    expect(result.scored).toHaveLength(3)
+    expect(result.scoredFiltered.map((row) => row.source_trader_id)).toEqual(['full'])
+  })
 })

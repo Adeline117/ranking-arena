@@ -79,18 +79,12 @@ export interface SanitizePublicRankingPayloadOptions {
 }
 
 /**
- * Minimum row-level proof required for public ranking publication.
- *
- * Raw/profile observations remain visible when this returns false. A row may
- * enter a public ranking only when its identity is canonical, required score
- * inputs are concrete (not partial/estimated), and its score computation is
- * current. Source-level history/price/cost-basis authority remains a separate
- * reviewed contract and quarantine gate.
+ * Concrete source/identity/metric basis required before a row may participate
+ * in the Arena Score percentile cohort. This deliberately excludes score and
+ * computation-time checks because those values do not exist until after the
+ * cohort has been scored.
  */
-export function isPublicRankingRowEligible(
-  row: unknown,
-  options: PublicRankingRowEligibilityOptions = {}
-): boolean {
+export function hasConcretePublicRankingMetrics(row: unknown): boolean {
   if (typeof row !== 'object' || row === null || Array.isArray(row)) return false
   const record = row as Record<string, unknown>
 
@@ -117,27 +111,44 @@ export function isPublicRankingRowEligible(
 
   if (firstDefined(record, 'score_completeness', 'scoreConfidence') !== 'full') return false
   if (firstDefined(record, 'metrics_estimated', 'metricsEstimated') !== false) return false
+  if (firstDefined(record, 'is_outlier', 'isOutlier') === true) return false
 
-  const arenaScore = firstDefined(record, 'arena_score', 'arenaScore')
   const roi = record.roi
   const pnl = record.pnl
   const winRate = firstDefined(record, 'win_rate', 'winRate')
   const maxDrawdown = firstDefined(record, 'max_drawdown', 'maxDrawdown')
-  if (
-    !finiteNumber(arenaScore) ||
-    arenaScore <= 0 ||
-    arenaScore > 100 ||
-    !finiteNumber(roi) ||
-    !finiteNumber(pnl) ||
-    !finiteNumber(winRate) ||
-    winRate < 0 ||
-    winRate > 100 ||
-    !finiteNumber(maxDrawdown) ||
-    maxDrawdown < 0 ||
+  return (
+    finiteNumber(roi) &&
+    finiteNumber(pnl) &&
+    finiteNumber(winRate) &&
+    winRate >= 0 &&
+    winRate <= 100 &&
+    finiteNumber(maxDrawdown) &&
+    maxDrawdown >= 0 &&
     // 100 is commonly an upstream cap/sentinel, not proof of a measured
     // full-loss drawdown. Keep it profile-visible but outside ranking.
-    maxDrawdown >= 100
-  ) {
+    maxDrawdown < 100
+  )
+}
+
+/**
+ * Minimum row-level proof required for public ranking publication.
+ *
+ * Raw/profile observations remain visible when this returns false. A row may
+ * enter a public ranking only when its identity is canonical, required score
+ * inputs are concrete (not partial/estimated), and its score computation is
+ * current. Source-level history/price/cost-basis authority remains a separate
+ * reviewed contract and quarantine gate.
+ */
+export function isPublicRankingRowEligible(
+  row: unknown,
+  options: PublicRankingRowEligibilityOptions = {}
+): boolean {
+  if (!hasConcretePublicRankingMetrics(row)) return false
+  const record = row as Record<string, unknown>
+
+  const arenaScore = firstDefined(record, 'arena_score', 'arenaScore')
+  if (!finiteNumber(arenaScore) || arenaScore <= 0 || arenaScore > 100) {
     return false
   }
 
