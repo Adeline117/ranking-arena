@@ -695,7 +695,7 @@ describe('source publication evidence', () => {
     ).toEqual(['alpha', 'zeta'])
   })
 
-  it('fails closed when final counts omit a fresh source or collapse a non-empty raw board', () => {
+  it('fails closed when final counts omit a fresh source', () => {
     const parsed = parse([physicalBoard()], [scoreRow()])
     captureError(
       () =>
@@ -705,15 +705,39 @@ describe('source publication evidence', () => {
         }),
       'missing_rank_count'
     )
-    captureError(
-      () =>
-        buildSourcePublicationRows(parsed, {
-          publishId: PUBLISH_ID,
-          finalRankCounts: new Map([['alpha', 0]]),
-        }),
-      'unsafe_empty_publication'
-    )
   })
+
+  it('allows complete non-empty input to publish zero ranks when every row is ineligible', () => {
+    const parsed = parse([physicalBoard()], [scoreRow({ pnl_usd: null })])
+
+    expect(
+      buildSourcePublicationRows(parsed, {
+        publishId: PUBLISH_ID,
+        finalRankCounts: new Map([['alpha', 0]]),
+      })
+    ).toEqual([
+      expect.objectContaining({
+        source: 'alpha',
+        published_rank_count: 0,
+        snapshot_ids: [101],
+      }),
+    ])
+  })
+
+  it.each([-1, 0.5, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects invalid final rank count %s',
+    (count) => {
+      const parsed = parse([physicalBoard()], [scoreRow()])
+      captureError(
+        () =>
+          buildSourcePublicationRows(parsed, {
+            publishId: PUBLISH_ID,
+            finalRankCounts: new Map([['alpha', count]]),
+          }),
+        'invalid_count'
+      )
+    }
+  )
 
   it('rejects count expansion from raw rows through final publication', () => {
     captureError(
