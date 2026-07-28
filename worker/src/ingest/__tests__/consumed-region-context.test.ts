@@ -173,6 +173,7 @@ describe('consumed queue region context', () => {
         `${context.consumedRegion}/${context.executionRegion}`
     )
     const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    expect(consume).toHaveLength(3)
 
     await expect(consume('before-open')).rejects.toThrow('consumer admission is closed')
     expect(route).not.toHaveBeenCalled()
@@ -183,6 +184,103 @@ describe('consumed queue region context', () => {
     admission.close()
     await expect(consume('after-close')).rejects.toThrow('consumer admission is closed')
     expect(() => admission.open()).toThrow('consumer admission cannot reopen')
+    await lifecycle.stopAfterDrain(async () => undefined)
+  })
+
+  it('forwards BullMQ cancellation signals without invoking a cancelled route', async () => {
+    const { lifecycle } = await lifecycleHarness()
+    const admission = createConsumedRegionAdmission(lifecycle, 'local')
+    const route = jest.fn(async () => 'ran')
+    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const controller = new AbortController()
+    admission.open()
+    controller.abort(new Error('cancelled'))
+
+    await expect(consume('job', 'token', controller.signal)).rejects.toThrow(
+      'consumer job was cancelled'
+    )
+    expect(route).not.toHaveBeenCalled()
+    await lifecycle.stopAfterDrain(async () => undefined)
+  })
+
+  it('returns a prefetched BullMQ job to wait when admission has closed', async () => {
+    const { lifecycle } = await lifecycleHarness()
+    const admission = createConsumedRegionAdmission(lifecycle, 'local')
+    const job = { moveToWait: jest.fn(async () => 1) }
+    const route = jest.fn(async () => 'ran')
+    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+
+    await expect(consume(job, 'bullmq-token')).rejects.toMatchObject({ name: 'WaitingError' })
+    expect(job.moveToWait).toHaveBeenCalledWith('bullmq-token')
+    expect(route).not.toHaveBeenCalled()
+    await lifecycle.stopAfterDrain(async () => undefined)
+  })
+
+  it('returns a job to wait when cancellation arrives during its route', async () => {
+    const { lifecycle } = await lifecycleHarness()
+    const admission = createConsumedRegionAdmission(lifecycle, 'local')
+    const job = { moveToWait: jest.fn(async () => 1) }
+    let finishRoute!: () => void
+    let markStarted!: () => void
+    const routeGate = new Promise<void>((resolve) => {
+      finishRoute = resolve
+    })
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve
+    })
+    const route = jest.fn(async () => {
+      markStarted()
+      await routeGate
+      return 'ran'
+    })
+    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const controller = new AbortController()
+    admission.open()
+
+    const result = consume(job, 'bullmq-token', controller.signal)
+    await started
+    controller.abort(new Error('shutdown'))
+    finishRoute()
+
+    await expect(result).rejects.toMatchObject({ name: 'WaitingError' })
+    expect(job.moveToWait).toHaveBeenCalledWith('bullmq-token')
+    await lifecycle.stopAfterDrain(async () => undefined)
+  })
+
+  it('combines BullMQ cancellation with authority loss for downstream routes', async () => {
+    const { authority, lifecycle } = await lifecycleHarness()
+    const admission = createConsumedRegionAdmission(lifecycle, 'local')
+    let routedSignal: AbortSignal | undefined
+    const route = jest.fn(
+      async (_job: string, _context: typeof admission.context, signal?: AbortSignal) => {
+        routedSignal = signal
+        return 'ran'
+      }
+    )
+    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const jobController = new AbortController()
+    admission.open()
+
+    await expect(consume('job', 'token', jobController.signal)).resolves.toBe('ran')
+    expect(routedSignal?.aborted).toBe(false)
+
+    authority.controller.abort(new Error('authority lost'))
+    expect(routedSignal?.aborted).toBe(true)
+    await lifecycle.stopAfterDrain(async () => undefined).catch(() => undefined)
+  })
+
+  it('rejects forged authorized contexts and generic-binder downgrades', async () => {
+    const { lifecycle } = await lifecycleHarness()
+    const admission = createConsumedRegionAdmission(lifecycle, 'local')
+    const route = jest.fn(async () => 'ran')
+    const forged = { ...admission.context }
+
+    expect(() => bindAuthorizedConsumedRegion(forged, route)).toThrow(
+      'authorized consumer binding requires managed admission'
+    )
+    expect(() => bindConsumedRegion(admission.context, route)).toThrow(
+      'authorized consumer context requires authorized binding'
+    )
     await lifecycle.stopAfterDrain(async () => undefined)
   })
 
