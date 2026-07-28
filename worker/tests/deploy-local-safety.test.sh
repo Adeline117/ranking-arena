@@ -1725,8 +1725,16 @@ test_unproven_rollback_preserves_candidate_and_blocks_redeploy() {
 }
 
 test_fresh_identity_and_retention_contract() {
-  local deploy
+  local deploy handoff_timeout
   deploy="$(<"$DEPLOY_SCRIPT")"
+  handoff_timeout="$(sed -n 's/^AUTHORITY_HANDOFF_TIMEOUT_SECONDS=//p' "$DEPLOY_SCRIPT")"
+  [ "$handoff_timeout" = 300 ] || \
+    fail 'candidate and rollback readiness must reserve the exact 300-second authority handoff window'
+  assert_contains "$deploy" \
+    'ARENA_READY_TIMEOUT_SECONDS:-$AUTHORITY_HANDOFF_TIMEOUT_SECONDS' \
+    'readiness must default to the authority handoff window while retaining the test override'
+  assert_contains "$deploy" '[[ "$timeout" =~ ^[1-9][0-9]*$ ]] || return 1' \
+    'the readiness timeout override must remain a strict positive integer'
   assert_matches "$deploy" '(READY|DEPLOY)_MARKER=' \
     'each start must write a unique readiness boundary'
   assert_contains "$deploy" 'index($0, marker)' \

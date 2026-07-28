@@ -34,6 +34,9 @@ REMOTE_DIR="/opt/arena-ingest"
 PM2_APP="arena-ingest-worker-sg"
 SG_WORKER_NODE_ID="vps_sg"
 SG_ROSTER_READY_TOKEN="[sg-heartbeat-proof] exact fresh Redis roster identity ready"
+# Allow the previous PM2 owner to exit (30s), its ownership lease to expire
+# (180s), and one renewal/jitter interval (30s), with an additional 60s margin.
+AUTHORITY_HANDOFF_TIMEOUT_SECONDS=300
 DEPLOY_LOCK_DIR="$REMOTE_DIR.deploy-lock"
 # Manual removal is safe only after proving either (a) PM2 jlist plus both
 # dump.pm2 files contain no untrusted SG owner, or (b) the current owner has
@@ -294,7 +297,7 @@ wait_for_candidate_log_evidence() {
   local marker="$1" expected_sha="$2" expected_release="$3"
   [[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] || return 1
   [[ "$expected_release" =~ ^[0-9a-f]{64}$ ]] || return 1
-  ssh_sg "for i in \$(seq 1 90); do
+  ssh_sg "for i in \$(seq 1 $AUTHORITY_HANDOFF_TIMEOUT_SECONDS); do
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN' || exit 1
     awk -v marker='$marker' -v node='$SG_WORKER_NODE_ID' \
       -v sha='$expected_sha' -v release='$expected_release' \
