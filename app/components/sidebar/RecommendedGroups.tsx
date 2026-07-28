@@ -91,15 +91,20 @@ function GroupAvatar({
 }
 
 async function fetchRecommendedGroups(
-  accessToken: string | null
+  accessToken: string | null,
+  signal?: AbortSignal
 ): Promise<{ groups: Group[]; personalized: boolean }> {
   if (accessToken) {
     try {
       const res = await fetch('/api/recommendations/groups?limit=8', {
         headers: { Authorization: `Bearer ${accessToken}` },
+        signal,
       })
       if (res.ok) {
         const json = await res.json()
+        if (signal?.aborted) {
+          throw signal.reason ?? new Error('Recommendation request cancelled')
+        }
         if (json.success && json.data?.groups?.length > 0) {
           return {
             groups: json.data.groups as Group[],
@@ -107,7 +112,8 @@ async function fetchRecommendedGroups(
           }
         }
       }
-    } catch {
+    } catch (error) {
+      if (signal?.aborted) throw error
       /* fall through to default */
     }
   }
@@ -125,23 +131,29 @@ async function fetchRecommendedGroups(
 export default function RecommendedGroups() {
   const { language, t } = useLanguage()
   const auth = useAuthSession()
+  const canLoad =
+    auth.viewerKey === 'anon' || (auth.viewerKey.startsWith('user:') && Boolean(auth.accessToken))
 
   const {
     data,
     error,
-    isLoading: loading,
+    isLoading: queryLoading,
     refetch,
   } = useQuery({
-    queryKey: ['recommended-groups', auth.accessToken],
-    queryFn: () => fetchRecommendedGroups(auth.accessToken),
+    // Personalized recommendations are private viewer state. Include the
+    // canonical principal and identity generation so A's data is never used
+    // as B's placeholder (including logout/login back into the same account).
+    queryKey: ['recommended-groups', auth.viewerKey, auth.sessionGeneration],
+    queryFn: ({ signal }) => fetchRecommendedGroups(auth.accessToken, signal),
+    enabled: canLoad,
     refetchOnWindowFocus: false,
     staleTime: STALE_STATIC,
-    placeholderData: (prev) => prev,
     retry: 3,
     retryDelay: (attempt) => 1000 * Math.pow(2, attempt),
   })
   const mutate = () => refetch()
 
+  const loading = !canLoad || queryLoading
   const groups = data?.groups || []
   const isPersonalized = data?.personalized || false
 
