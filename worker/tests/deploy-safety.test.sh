@@ -242,7 +242,7 @@ test_pm2_stop_failure_restores_previous_process() {
     fi
     if [[ "$*" == *"cat '/opt/arena-ingest/DEPLOYED_SHA'"* ]]; then printf '%s\n' "$OLD_SHA"; return 0; fi
     if [[ "$*" == *"cat '/opt/arena-ingest/WORKER_RELEASE_ID'"* ]]; then printf '%s\n' "$OLD_RELEASE"; return 0; fi
-    if [[ "$*" == *'for i in $(seq 1 90)'* ]]; then printf '%s\n' READY; return 0; fi
+    if [[ "$*" == *'for i in $(seq 1 300)'* ]]; then printf '%s\n' READY; return 0; fi
     if [[ "$*" == *"test \"\$(cat '/opt/arena-ingest.deploy-lock/owner'"* ]]; then return 0; fi
     return 0
   }
@@ -311,7 +311,7 @@ test_failed_candidate_readiness_rolls_back_complete_directory() {
     fi
     if [[ "$*" == *"cat '/opt/arena-ingest/DEPLOYED_SHA'"* ]]; then printf '%s\n' "$OLD_SHA"; return 0; fi
     if [[ "$*" == *"cat '/opt/arena-ingest/WORKER_RELEASE_ID'"* ]]; then printf '%s\n' "$OLD_RELEASE"; return 0; fi
-    if [[ "$*" == *'for i in $(seq 1 90)'* ]]; then
+    if [[ "$*" == *'for i in $(seq 1 300)'* ]]; then
       count="$(<"$READY_COUNT_FILE")"
       count=$((count + 1))
       printf '%s\n' "$count" > "$READY_COUNT_FILE"
@@ -486,7 +486,7 @@ run_post_cutover_fault() {
     fi
     if [[ "$*" == *"cat '/opt/arena-ingest/DEPLOYED_SHA'"* ]]; then printf '%s\n' "$OLD_SHA"; return 0; fi
     if [[ "$*" == *"cat '/opt/arena-ingest/WORKER_RELEASE_ID'"* ]]; then printf '%s\n' "$OLD_RELEASE"; return 0; fi
-    if [[ "$*" == *'for i in $(seq 1 90)'* ]]; then return 0; fi
+    if [[ "$*" == *'for i in $(seq 1 300)'* ]]; then return 0; fi
     if [[ "$POST_CUTOVER_FAULT" == pre-stop-heartbeat-* ]] && \
         [[ "$*" == *"mkdir -p '/opt/arena-ingest.staging-"* ]] && \
         [[ "$*" == *'ingest-out.log'* ]]; then
@@ -1204,9 +1204,14 @@ test_container_bypass_is_disabled() {
 }
 
 test_ready_check_requires_fresh_sha_evidence() {
-  local deploy verifier marker_line not_before_line start_line
+  local deploy verifier marker_line not_before_line start_line handoff_timeout
   deploy="$(<"$DEPLOY_SCRIPT")"
   verifier="$(<"$LOG_VERIFIER")"
+  handoff_timeout="$(sed -n 's/^AUTHORITY_HANDOFF_TIMEOUT_SECONDS=//p' "$DEPLOY_SCRIPT")"
+  [ "$handoff_timeout" = 300 ] || \
+    fail 'candidate readiness must reserve the exact 300-second authority handoff window'
+  assert_contains "$deploy" 'seq 1 $AUTHORITY_HANDOFF_TIMEOUT_SECONDS' \
+    'candidate readiness must consume the authority handoff constant'
   assert_contains "$deploy" 'READY_MARKER="arena-deploy-' \
     'PM2 deploy must create a unique readiness marker'
   assert_contains "$verifier" 'index($0, marker)' \

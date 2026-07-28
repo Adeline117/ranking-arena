@@ -31,6 +31,9 @@ INVOKED_SCRIPT="$SCRIPT_SOURCE_DIR/$(basename "$0")"
 cd "$REPO_DIR"
 
 PM2_APP='arena-ingest-worker'
+# Allow the previous PM2 owner to exit (30s), its ownership lease to expire
+# (180s), and one renewal/jitter interval (30s), with an additional 60s margin.
+AUTHORITY_HANDOFF_TIMEOUT_SECONDS=300
 TARGET_SHA=''
 DRY_RUN=0
 
@@ -760,7 +763,7 @@ wait_for_pm2_absent() {
 
 wait_for_stamped_ready() {
   local marker="$1" log_file="$2" expected_sha="$3" expected_release="$4" expected_node="$5"
-  local timeout="${ARENA_READY_TIMEOUT_SECONDS:-180}" i
+  local timeout="${ARENA_READY_TIMEOUT_SECONDS:-$AUTHORITY_HANDOFF_TIMEOUT_SECONDS}" i
   [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || return 1
   for i in $(seq 1 "$timeout"); do
     awk -v marker="$marker" -v sha="$expected_sha" -v release="$expected_release" -v node="$expected_node" '
@@ -784,7 +787,7 @@ wait_for_stamped_ready() {
 
 wait_for_legacy_ready() {
   local marker="$1" log_file="$2" expected_sha="$3" expected_node="$4" short_sha i
-  local timeout="${ARENA_READY_TIMEOUT_SECONDS:-180}"
+  local timeout="${ARENA_READY_TIMEOUT_SECONDS:-$AUTHORITY_HANDOFF_TIMEOUT_SECONDS}"
   short_sha="${expected_sha:0:9}"
   [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || return 1
   for i in $(seq 1 "$timeout"); do
