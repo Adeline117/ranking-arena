@@ -31,6 +31,7 @@ const MobileProfileMenu = dynamic(() => import('@/app/components/profile/MobileP
 })
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
+import ErrorState from '@/app/components/ui/ErrorState'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import PageHeader from '@/app/components/ui/PageHeader'
 import { useActiveSection } from './hooks/useActiveSection'
@@ -56,7 +57,7 @@ import { logger } from '@/lib/logger'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { captureSettingsViewer, isSettingsViewerCurrent } from './hooks/settings-viewer-scope'
 
-function SettingsContent() {
+export function SettingsContent() {
   const router = useRouter()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
@@ -222,6 +223,27 @@ function SettingsContent() {
             {t('loading')}
           </Text>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </Box>
+      </Box>
+    )
+  }
+
+  if (h.profileLoadFailed) {
+    return (
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
+        <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <PageHeader title={t('settingsTitle')} compact />
+          <ErrorState
+            description={t('loadFailedRetryShort')}
+            retry={() => void h.loadProfile()}
+            variant="compact"
+          />
         </Box>
       </Box>
     )
