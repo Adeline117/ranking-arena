@@ -318,6 +318,39 @@ describe('PipelineLogger', () => {
       const statuses = await PipelineLogger.getJobStatuses()
       expect(statuses).toEqual([])
     })
+
+    it('passes an abort signal to health aggregation RPCs', async () => {
+      const statusAbortSignal = jest.fn().mockResolvedValue({ data: [], error: null })
+      const statsAbortSignal = jest.fn().mockResolvedValue({ data: [], error: null })
+      mockSupabaseRpc
+        .mockReturnValueOnce({ abortSignal: statusAbortSignal })
+        .mockReturnValueOnce({ abortSignal: statsAbortSignal })
+      const signal = new AbortController().signal
+
+      await PipelineLogger.getJobStatuses(signal)
+      await PipelineLogger.getJobStats(signal)
+
+      expect(statusAbortSignal).toHaveBeenCalledWith(signal)
+      expect(statsAbortSignal).toHaveBeenCalledWith(signal)
+    })
+
+    it('passes an abort signal to the recent failures query', async () => {
+      const abortSignal = jest.fn().mockResolvedValue({ data: [], error: null })
+      const chain = {
+        select: jest.fn().mockReturnThis(),
+        in: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        abortSignal,
+      }
+      mockSupabaseFrom.mockReturnValueOnce(chain)
+      const signal = new AbortController().signal
+
+      await PipelineLogger.getRecentFailures(10, 120, signal)
+
+      expect(abortSignal).toHaveBeenCalledWith(signal)
+    })
   })
 
   describe('getConsecutiveFailures', () => {

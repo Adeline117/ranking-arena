@@ -7,6 +7,15 @@ import { timingSafeEqual } from 'crypto'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 
+export type AdminAuthResult =
+  | { status: 'authorized' }
+  | { status: 'invalid' }
+  | { status: 'unavailable'; error: unknown }
+
+interface VerifyAdminAuthOptions {
+  signal?: AbortSignal
+}
+
 function safeCompare(a: string, b: string): boolean {
   const bufA = Buffer.from(a)
   const bufB = Buffer.from(b)
@@ -42,20 +51,35 @@ export function verifyServiceAuth(request: Request): boolean {
   return false
 }
 
+function isInvalidCredentialError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+
+  const candidate = error as { status?: unknown; code?: unknown; message?: unknown }
+  if (candidate.status === 400 || candidate.status === 401 || candidate.status === 403) return true
+
+  const code = typeof candidate.code === 'string' ? candidate.code.toLowerCase() : ''
+  if (['bad_jwt', 'invalid_jwt', 'session_not_found', 'user_not_found'].includes(code)) return true
+
+  const message = typeof candidate.message === 'string' ? candidate.message.toLowerCase() : ''
+  return message.includes('invalid jwt') || message.includes('jwt expired')
+}
+
 /**
- * Verify admin access — accepts CRON_SECRET, x-admin-token, or admin user JWT.
- * For use in admin dashboard API endpoints that need to be callable from both
- * cron jobs and the admin UI.
+ * Verify admin access while preserving the distinction between invalid
+ * credentials and an unavailable authentication authority.
  */
-export async function verifyAdminAuth(request: Request): Promise<boolean> {
+export async function verifyAdminAuthResult(
+  request: Request,
+  options: VerifyAdminAuthOptions = {}
+): Promise<AdminAuthResult> {
   // Check cron/service secret first (fast path)
-  if (verifyCronSecret(request)) return true
+  if (verifyCronSecret(request)) return { status: 'authorized' }
 
   // Check x-admin-token header (prefer ADMIN_API_KEY, fall back to CRON_SECRET)
   const adminApiKey = process.env.ADMIN_API_KEY || env.CRON_SECRET
   if (adminApiKey) {
     const adminToken = request.headers.get('x-admin-token')
-    if (adminToken && safeCompare(adminToken, adminApiKey)) return true
+    if (adminToken && safeCompare(adminToken, adminApiKey)) return { status: 'authorized' }
   }
 
   // Check admin user JWT — must pass BOTH DB role AND email whitelist in production
@@ -67,15 +91,24 @@ export async function verifyAdminAuth(request: Request): Promise<boolean> {
         data: { user },
         error,
       } = await getSupabaseAdmin().auth.getUser(token)
-      if (error || !user) return false
-      const { data: profile, error: profileError } = await getSupabaseAdmin()
+      if (error) {
+        return isInvalidCredentialError(error)
+          ? { status: 'invalid' }
+          : { status: 'unavailable', error }
+      }
+      if (!user) return { status: 'invalid' }
+
+      const profileQuery = getSupabaseAdmin()
         .from('user_profiles')
         .select('role, banned_at, deleted_at')
         .eq('id', user.id)
-        .maybeSingle()
-      if (profileError || !profile || profile.banned_at || profile.deleted_at) return false
+      const { data: profile, error: profileError } = await (
+        options.signal ? profileQuery.abortSignal(options.signal) : profileQuery
+      ).maybeSingle()
+      if (profileError) return { status: 'unavailable', error: profileError }
+      if (!profile || profile.banned_at || profile.deleted_at) return { status: 'invalid' }
       const isAdminByRole = profile?.role === 'admin'
-      if (!isAdminByRole) return false
+      if (!isAdminByRole) return { status: 'invalid' }
 
       // Production: enforce email whitelist (same as lib/admin/auth.ts)
       const adminEmails = (process.env.ADMIN_EMAILS || '')
@@ -83,15 +116,22 @@ export async function verifyAdminAuth(request: Request): Promise<boolean> {
         .map((e) => e.trim())
         .filter((e) => e.length > 0)
       if (process.env.NODE_ENV === 'production' && adminEmails.length > 0) {
-        if (!user.email || !adminEmails.includes(user.email)) return false
+        if (!user.email || !adminEmails.includes(user.email)) return { status: 'invalid' }
       }
-      return true
-    } catch {
-      return false
+      return { status: 'authorized' }
+    } catch (error) {
+      return { status: 'unavailable', error }
     }
   }
 
-  return false
+  return { status: 'invalid' }
+}
+
+/**
+ * Backward-compatible boolean wrapper for existing admin routes.
+ */
+export async function verifyAdminAuth(request: Request): Promise<boolean> {
+  return (await verifyAdminAuthResult(request)).status === 'authorized'
 }
 
 export { safeCompare }

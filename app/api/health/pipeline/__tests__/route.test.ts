@@ -1,4 +1,4 @@
-const mockVerifyAdminAuth = jest.fn()
+const mockVerifyAdminAuthResult = jest.fn()
 const mockTieredGet = jest.fn()
 const mockTieredSet = jest.fn()
 const mockGetJobStatuses = jest.fn()
@@ -10,9 +10,10 @@ const mockBuildPlatformHealth = jest.fn()
 const mockClassifyPlatformHealth = jest.fn()
 const mockLoggerWarn = jest.fn()
 const mockLoggerError = jest.fn()
+const observedSupabaseSignals: AbortSignal[] = []
 
 jest.mock('@/lib/auth/verify-service-auth', () => ({
-  verifyAdminAuth: (...args: unknown[]) => mockVerifyAdminAuth(...args),
+  verifyAdminAuthResult: (...args: unknown[]) => mockVerifyAdminAuthResult(...args),
 }))
 
 jest.mock('@/lib/cache/redis-layer', () => ({
@@ -92,6 +93,10 @@ function resolvedPipelineLogQuery(result: { data: unknown[]; error: unknown }) {
     gte: () => chain,
     not: () => chain,
     gt: () => chain,
+    abortSignal: (signal: AbortSignal) => {
+      observedSupabaseSignals.push(signal)
+      return Promise.resolve(result)
+    },
     then: (
       onFulfilled: (value: typeof result) => unknown,
       onRejected?: (error: unknown) => unknown
@@ -100,11 +105,21 @@ function resolvedPipelineLogQuery(result: { data: unknown[]; error: unknown }) {
   return chain
 }
 
+function abortableQuery<T>(result: Promise<T> | T) {
+  return {
+    abortSignal(signal: AbortSignal) {
+      observedSupabaseSignals.push(signal)
+      return Promise.resolve(result)
+    },
+  }
+}
+
 describe('GET /api/health/pipeline', () => {
   beforeEach(() => {
     jest.resetModules()
     jest.clearAllMocks()
-    mockVerifyAdminAuth.mockResolvedValue(true)
+    observedSupabaseSignals.length = 0
+    mockVerifyAdminAuthResult.mockResolvedValue({ status: 'authorized' })
     mockTieredGet.mockResolvedValue({ data: null, layer: null })
     mockTieredSet.mockResolvedValue(undefined)
     mockGetJobStatuses.mockResolvedValue([
@@ -130,10 +145,12 @@ describe('GET /api/health/pipeline', () => {
     ])
     mockGetRecentFailures.mockResolvedValue([])
     mockFrom.mockReturnValue(resolvedPipelineLogQuery({ data: [], error: null }))
-    mockRpc.mockResolvedValue({
-      data: [{ platform: 'binance', latest: '2026-07-28T00:00:00.000Z' }],
-      error: null,
-    })
+    mockRpc.mockReturnValue(
+      abortableQuery({
+        data: [{ platform: 'binance', latest: '2026-07-28T00:00:00.000Z' }],
+        error: null,
+      })
+    )
     mockBuildPlatformHealth.mockReturnValue([
       {
         platform: 'binance',
@@ -151,27 +168,34 @@ describe('GET /api/health/pipeline', () => {
 
   it('reports an unavailable authentication authority within its own database budget', async () => {
     jest.useFakeTimers()
-    mockVerifyAdminAuth.mockReturnValueOnce(new Promise(() => undefined))
+    mockVerifyAdminAuthResult.mockReturnValueOnce(new Promise(() => undefined))
 
     try {
       const { GET } = await import('../route')
+      const startedAt = Date.now()
       const responsePromise = GET({} as never)
-      await jest.advanceTimersByTimeAsync(5_000)
+      await jest.advanceTimersByTimeAsync(3_000)
       const response = await responsePromise
       const body = await response.json()
 
+      expect(Date.now() - startedAt).toBeLessThan(9_500)
       expect(response.status).toBe(503)
       expect(body.status).toBe('critical')
       expect(body.authority).toEqual({ status: 'unavailable', unavailable: ['admin_auth'] })
       expect(body.error.code).toBe('PIPELINE_AUTH_TIMEOUT')
       expect(mockTieredGet).not.toHaveBeenCalled()
+      const authSignal = mockVerifyAdminAuthResult.mock.calls[0][1].signal as AbortSignal
+      expect(authSignal.aborted).toBe(true)
+      expect(jest.getTimerCount()).toBe(0)
     } finally {
       jest.useRealTimers()
     }
   })
 
   it('preserves an authentication authority rejection as a structured 503', async () => {
-    mockVerifyAdminAuth.mockRejectedValueOnce(new Error('auth database transport unavailable'))
+    mockVerifyAdminAuthResult.mockRejectedValueOnce(
+      new Error('auth database transport unavailable')
+    )
 
     const { GET } = await import('../route')
     const response = await GET({} as never)
@@ -191,8 +215,27 @@ describe('GET /api/health/pipeline', () => {
     expect(mockTieredGet).not.toHaveBeenCalled()
   })
 
+  it('preserves a real unavailable authentication verdict as a structured 503', async () => {
+    mockVerifyAdminAuthResult.mockResolvedValueOnce({
+      status: 'unavailable',
+      error: new Error('auth database transport unavailable'),
+    })
+
+    const { GET } = await import('../route')
+    const response = await GET({} as never)
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.error).toEqual({
+      code: 'PIPELINE_AUTH_UNAVAILABLE',
+      message: 'Pipeline health authentication authority is unavailable',
+    })
+    expect(JSON.stringify(body)).not.toContain('database transport')
+    expect(mockTieredGet).not.toHaveBeenCalled()
+  })
+
   it('keeps an explicit invalid credential response as 401', async () => {
-    mockVerifyAdminAuth.mockResolvedValueOnce(false)
+    mockVerifyAdminAuthResult.mockResolvedValueOnce({ status: 'invalid' })
 
     const { GET } = await import('../route')
     const response = await GET({} as never)
@@ -211,17 +254,19 @@ describe('GET /api/health/pipeline', () => {
     mockGetJobStats.mockReturnValueOnce(pending)
     mockGetRecentFailures.mockReturnValueOnce(pending)
     mockFrom.mockReturnValueOnce(resolvedPipelineLogQuery({ data: [], error: null }))
-    mockRpc.mockReturnValueOnce(pending)
+    mockRpc.mockReturnValueOnce(abortableQuery(pending))
 
     try {
       const { GET } = await import('../route')
+      const startedAt = Date.now()
       const responsePromise = GET({} as never)
 
-      await jest.advanceTimersByTimeAsync(1_500)
-      await jest.advanceTimersByTimeAsync(10_000)
+      await jest.advanceTimersByTimeAsync(1_000)
+      await jest.advanceTimersByTimeAsync(7_500)
       const response = await responsePromise
       const body = await response.json()
 
+      expect(Date.now() - startedAt).toBeLessThan(9_500)
       expect(response.status).toBe(503)
       expect(response.headers.get('X-Degraded')).toBe('1')
       expect(body.status).toBe('critical')
@@ -233,6 +278,52 @@ describe('GET /api/health/pipeline', () => {
         code: 'PIPELINE_HEALTH_UNAVAILABLE',
         message: 'active platform freshness authority is unavailable',
       })
+      const pipelineSignals = [
+        mockGetJobStatuses.mock.calls[0][0],
+        mockGetJobStats.mock.calls[0][0],
+        mockGetRecentFailures.mock.calls[0][2],
+      ] as AbortSignal[]
+      expect(pipelineSignals.every((signal) => signal.aborted)).toBe(true)
+      expect(observedSupabaseSignals.some((signal) => signal.aborted)).toBe(true)
+      expect(jest.getTimerCount()).toBe(0)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('uses the remaining absolute budget after slow JWT auth and cache phases', async () => {
+    jest.useFakeTimers()
+    const pending = new Promise(() => undefined)
+    mockVerifyAdminAuthResult.mockImplementationOnce(
+      () => new Promise((resolve) => setTimeout(() => resolve({ status: 'authorized' }), 2_999))
+    )
+    mockTieredGet.mockReturnValueOnce(pending)
+    mockGetJobStatuses.mockReturnValueOnce(pending)
+    mockGetJobStats.mockReturnValueOnce(pending)
+    mockGetRecentFailures.mockReturnValueOnce(pending)
+
+    try {
+      const { GET } = await import('../route')
+      const startedAt = Date.now()
+      const responsePromise = GET({} as never)
+
+      await jest.advanceTimersByTimeAsync(2_999)
+      await jest.advanceTimersByTimeAsync(1_000)
+      await jest.advanceTimersByTimeAsync(5_251)
+      const response = await responsePromise
+      const body = await response.json()
+
+      expect(Date.now() - startedAt).toBeLessThanOrEqual(9_250)
+      expect(15_000 - (Date.now() - startedAt)).toBeGreaterThanOrEqual(5_750)
+      expect(response.status).toBe(503)
+      expect(body.error.code).toBe('PIPELINE_HEALTH_TIMEOUT')
+      const pipelineSignals = [
+        mockGetJobStatuses.mock.calls[0][0],
+        mockGetJobStats.mock.calls[0][0],
+        mockGetRecentFailures.mock.calls[0][2],
+      ] as AbortSignal[]
+      expect(pipelineSignals.every((signal) => signal.aborted)).toBe(true)
+      expect(jest.getTimerCount()).toBe(0)
     } finally {
       jest.useRealTimers()
     }
@@ -270,5 +361,8 @@ describe('GET /api/health/pipeline', () => {
       'warm',
       ['pipeline-health']
     )
+    expect(mockGetJobStatuses.mock.calls[0][0]).toBeInstanceOf(AbortSignal)
+    expect(mockGetJobStats.mock.calls[0][0]).toBeInstanceOf(AbortSignal)
+    expect(mockGetRecentFailures.mock.calls[0][2]).toBeInstanceOf(AbortSignal)
   })
 })

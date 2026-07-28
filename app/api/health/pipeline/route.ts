@@ -14,7 +14,7 @@ import { DEAD_BLOCKED_PLATFORMS, EXCHANGE_CONFIG } from '@/lib/constants/exchang
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { getFireAndForgetStats, logger } from '@/lib/utils/logger'
-import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
+import { verifyAdminAuthResult, type AdminAuthResult } from '@/lib/auth/verify-service-auth'
 import { getRateLimitStats } from '@/lib/ratelimit/TokenBucket'
 import {
   buildPlatformHealth,
@@ -27,16 +27,42 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-// The external monitor gives this route 60s, but waiting most of that budget
-// turns a database outage into an ambiguous transport timeout. Keep enough
-// room for the normal 3-5s aggregation RPCs while returning a structured 503
-// before the caller's own deadline.
-const CACHE_READ_DEADLINE_MS = 1_500
-const ADMIN_AUTH_DEADLINE_MS = 5_000
-const FAST_QUERY_DEADLINE_MS = 8_000
-const DATABASE_QUERY_DEADLINE_MS = 10_000
-const PLATFORM_HEALTH_DEADLINE_MS = 11_000
-const COMPUTE_DEADLINE_MS = 12_000
+// The shortest production caller aborts at 15s. Every phase consumes one shared
+// absolute handler budget instead of adding independent sequential ceilings.
+const HANDLER_DEADLINE_MS = 9_500
+const RESPONSE_RESERVE_MS = 250
+const CACHE_READ_DEADLINE_MS = 1_000
+const ADMIN_AUTH_DEADLINE_MS = 3_000
+const FAST_QUERY_DEADLINE_MS = 6_000
+const DATABASE_QUERY_DEADLINE_MS = 7_500
+const PLATFORM_HEALTH_DEADLINE_MS = 8_000
+const COMPUTE_DEADLINE_MS = 9_000
+
+interface RequestDeadline {
+  signal: AbortSignal
+  remaining: (phaseCapMs: number) => number
+  close: () => void
+}
+
+function createRequestDeadline(): RequestDeadline {
+  const controller = new AbortController()
+  const deadlineAt = Date.now() + HANDLER_DEADLINE_MS
+  const timeout = setTimeout(
+    () => controller.abort(new Error('pipeline health deadline exceeded')),
+    HANDLER_DEADLINE_MS
+  )
+
+  return {
+    signal: controller.signal,
+    remaining: (phaseCapMs) =>
+      Math.max(0, Math.min(phaseCapMs, deadlineAt - Date.now() - RESPONSE_RESERVE_MS)),
+    close: () => {
+      clearTimeout(timeout)
+      if (!controller.signal.aborted)
+        controller.abort(new Error('pipeline health response complete'))
+    },
+  }
+}
 
 function buildUnavailableSnapshot(
   code: string,
@@ -76,47 +102,82 @@ function buildUnavailableSnapshot(
 }
 
 /**
- * Race any promise against a hard timeout — returns fallback if it exceeds the deadline.
- * Critical: /api/health/pipeline must never hang the monitor. Each sub-query gets a cap.
- * Accepts PromiseLike so Supabase query builders can be passed directly.
+ * Start an operation lazily with a linked AbortSignal and return its fallback
+ * when either the phase cap or the request's absolute deadline is exhausted.
  */
 async function withDeadline<T>(
-  promise: PromiseLike<T>,
-  ms: number,
+  deadline: RequestDeadline,
+  phaseCapMs: number,
   fallback: T,
-  label: string
+  label: string,
+  operation: (signal: AbortSignal) => PromiseLike<T>,
+  parentSignal: AbortSignal = deadline.signal
 ): Promise<T> {
+  const ms = deadline.remaining(phaseCapMs)
+  if (ms <= 0 || deadline.signal.aborted || parentSignal.aborted) {
+    logger.warn(`[health/pipeline] ${label} skipped because the request deadline is exhausted`)
+    return fallback
+  }
+
   return new Promise<T>((resolve, reject) => {
     let settled = false
+    const controller = new AbortController()
+    const parentSignals =
+      parentSignal === deadline.signal ? [deadline.signal] : [deadline.signal, parentSignal]
+    const abortListeners = parentSignals.map((signal) => {
+      const listener = () => {
+        if (!controller.signal.aborted) controller.abort(signal.reason)
+        if (!settled) {
+          settled = true
+          cleanup()
+          resolve(fallback)
+        }
+      }
+      signal.addEventListener('abort', listener, { once: true })
+      return { signal, listener }
+    })
+    const cleanup = () => {
+      clearTimeout(timeout)
+      for (const { signal, listener } of abortListeners) {
+        signal.removeEventListener('abort', listener)
+      }
+    }
     const timeout = setTimeout(() => {
       if (!settled) {
         settled = true
+        controller.abort(new Error(`${label} deadline exceeded`))
+        cleanup()
         logger.warn(`[health/pipeline] ${label} exceeded ${ms}ms, returning fallback`)
         resolve(fallback)
       }
     }, ms)
 
-    Promise.resolve(promise).then(
-      (value) => {
-        if (settled) return
-        settled = true
-        clearTimeout(timeout)
-        resolve(value)
-      },
-      (error: unknown) => {
-        if (settled) return
-        settled = true
-        clearTimeout(timeout)
-        reject(error)
-      }
-    )
+    Promise.resolve()
+      .then(() => operation(controller.signal))
+      .then(
+        (value) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          resolve(value)
+        },
+        (error: unknown) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          reject(error)
+        }
+      )
   })
 }
 
 /**
  * Check per-platform data health from the active arena source registry.
  */
-async function getPlatformHealthData(): Promise<PlatformHealth[]> {
+async function getPlatformHealthData(
+  deadline: RequestDeadline,
+  parentSignal: AbortSignal
+): Promise<PlatformHealth[]> {
   const supabase = getSupabaseAdmin()
   const now = Date.now()
   const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -129,27 +190,9 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
   // occasionally hangs 30s+ under load and was causing the entire endpoint
   // (and therefore the external monitor) to time out. Individual queries must
   // fail fast so the overall response still returns within the monitor budget.
-  const logsQuery = supabase
-    .from('pipeline_logs')
-    .select('job_name, records_processed')
-    .eq('status', 'success')
-    .gte('started_at', sevenDaysAgo)
-    .not('records_processed', 'is', null)
-    .gt('records_processed', 0)
-    .then(({ data, error }) => ({ data, error }))
-  const freshnessQuery = supabase.rpc('get_platform_freshness').then(
-    ({
-      data,
-      error,
-    }): {
-      data: PlatformFreshnessRow[] | null
-      error: unknown
-    } => ({ data, error })
-  )
-
   const [allLogsRes, lbLatestRes] = await Promise.all([
     withDeadline(
-      logsQuery,
+      deadline,
       FAST_QUERY_DEADLINE_MS,
       {
         data: [],
@@ -161,17 +204,42 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
           code: 'HEALTH_TIMEOUT',
         },
       },
-      'pipeline_logs records_processed'
+      'pipeline_logs records_processed',
+      (signal) =>
+        supabase
+          .from('pipeline_logs')
+          .select('job_name, records_processed')
+          .eq('status', 'success')
+          .gte('started_at', sevenDaysAgo)
+          .not('records_processed', 'is', null)
+          .gt('records_processed', 0)
+          .abortSignal(signal)
+          .then(({ data, error }) => ({ data, error })),
+      parentSignal
     ),
     // get_platform_freshness() returns FETCH freshness per source from
     // arena.leaderboard_snapshots.scraped_at (when last crawled) — not score
     // freshness, which would false-alert sources that fetched but weren't scored.
     // (Migrated off retiring trader_latest 2026-06-15; RPC keyed by legacy alias.)
     withDeadline(
-      freshnessQuery,
+      deadline,
       DATABASE_QUERY_DEADLINE_MS,
       { data: null, error: new Error('platform freshness query timed out') },
-      'platform_freshness'
+      'platform_freshness',
+      (signal) =>
+        supabase
+          .rpc('get_platform_freshness')
+          .abortSignal(signal)
+          .then(
+            ({
+              data,
+              error,
+            }): {
+              data: PlatformFreshnessRow[] | null
+              error: unknown
+            } => ({ data, error })
+          ),
+      parentSignal
     ),
   ])
 
@@ -199,43 +267,59 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
 }
 
 export async function GET(req: NextRequest) {
-  let authResult: { authorized: boolean; timedOut: boolean }
+  const deadline = createRequestDeadline()
   try {
-    authResult = await withDeadline(
-      verifyAdminAuth(req).then((authorized) => ({ authorized, timedOut: false })),
-      ADMIN_AUTH_DEADLINE_MS,
-      { authorized: false, timedOut: true },
-      'admin authentication'
-    )
-  } catch (err) {
-    const internalMessage = err instanceof Error ? err.message : String(err)
-    logger.error('[health/pipeline] Admin authentication authority failed', {
-      error: internalMessage,
-    })
-    const message = 'Pipeline health authentication authority is unavailable'
-    return NextResponse.json(
-      buildUnavailableSnapshot('PIPELINE_AUTH_UNAVAILABLE', message, 'admin_auth'),
-      {
-        status: 503,
-        headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
-      }
-    )
-  }
-  if (authResult.timedOut) {
-    const message = `Pipeline health authentication authority timed out after ${ADMIN_AUTH_DEADLINE_MS}ms`
-    return NextResponse.json(
-      buildUnavailableSnapshot('PIPELINE_AUTH_TIMEOUT', message, 'admin_auth'),
-      {
-        status: 503,
-        headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
-      }
-    )
-  }
-  if (!authResult.authorized) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    let authResult: AdminAuthResult | { status: 'timed_out' }
+    try {
+      authResult = await withDeadline<AdminAuthResult | { status: 'timed_out' }>(
+        deadline,
+        ADMIN_AUTH_DEADLINE_MS,
+        { status: 'timed_out' },
+        'admin authentication',
+        (signal) => verifyAdminAuthResult(req, { signal })
+      )
+    } catch (err) {
+      const internalMessage = err instanceof Error ? err.message : String(err)
+      logger.error('[health/pipeline] Admin authentication authority failed', {
+        error: internalMessage,
+      })
+      const message = 'Pipeline health authentication authority is unavailable'
+      return NextResponse.json(
+        buildUnavailableSnapshot('PIPELINE_AUTH_UNAVAILABLE', message, 'admin_auth'),
+        {
+          status: 503,
+          headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
+        }
+      )
+    }
+    if (authResult.status === 'timed_out') {
+      const message = `Pipeline health authentication authority timed out after ${ADMIN_AUTH_DEADLINE_MS}ms`
+      return NextResponse.json(
+        buildUnavailableSnapshot('PIPELINE_AUTH_TIMEOUT', message, 'admin_auth'),
+        {
+          status: 503,
+          headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
+        }
+      )
+    }
+    if (authResult.status === 'unavailable') {
+      logger.error('[health/pipeline] Admin authentication authority failed', {
+        error:
+          authResult.error instanceof Error ? authResult.error.message : String(authResult.error),
+      })
+      const message = 'Pipeline health authentication authority is unavailable'
+      return NextResponse.json(
+        buildUnavailableSnapshot('PIPELINE_AUTH_UNAVAILABLE', message, 'admin_auth'),
+        {
+          status: 503,
+          headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
+        }
+      )
+    }
+    if (authResult.status === 'invalid') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  try {
     // Cache the entire health response for 2 minutes (health data doesn't change fast).
     //
     // ROOT CAUSE FIX (2026-04-09): previously used tieredGetOrSet which cached
@@ -259,10 +343,11 @@ export async function GET(req: NextRequest) {
     // never reuse a snapshot that masked an empty database result as healthy.
     const CACHE_KEY = 'api:health:pipeline:v7'
     const cached = await withDeadline(
-      tieredGet(CACHE_KEY, 'warm'),
+      deadline,
       CACHE_READ_DEADLINE_MS,
       { data: null, layer: null },
-      'cache read'
+      'cache read',
+      () => tieredGet(CACHE_KEY, 'warm')
     )
     if (cached.data !== null) {
       // Defensive: even on cache hit, validate the cached entry isn't degraded.
@@ -287,28 +372,41 @@ export async function GET(req: NextRequest) {
       // Fall through to recompute; degraded cache entries are ignored.
     }
 
-    const compute = async () => {
+    const compute = async (parentSignal: AbortSignal) => {
       // Hard per-query deadlines: if any one query gets stuck, we still return
       // a (partial) response instead of hanging the monitor's fetch.
       const [jobStatuses, jobStats, recentFailuresRaw, platformHealth] = await Promise.all([
         withDeadline(
-          PipelineLogger.getJobStatuses(),
+          deadline,
           DATABASE_QUERY_DEADLINE_MS,
           [],
-          'getJobStatuses'
+          'getJobStatuses',
+          (signal) => PipelineLogger.getJobStatuses(signal),
+          parentSignal
         ),
-        withDeadline(PipelineLogger.getJobStats(), DATABASE_QUERY_DEADLINE_MS, [], 'getJobStats'),
         withDeadline(
-          PipelineLogger.getRecentFailures(10),
+          deadline,
+          DATABASE_QUERY_DEADLINE_MS,
+          [],
+          'getJobStats',
+          (signal) => PipelineLogger.getJobStats(signal),
+          parentSignal
+        ),
+        withDeadline(
+          deadline,
           FAST_QUERY_DEADLINE_MS,
           [],
-          'getRecentFailures'
+          'getRecentFailures',
+          (signal) => PipelineLogger.getRecentFailures(10, 120, signal),
+          parentSignal
         ),
         withDeadline<PlatformHealth[] | null>(
-          getPlatformHealthData(),
+          deadline,
           PLATFORM_HEALTH_DEADLINE_MS,
           null,
-          'getPlatformHealthData'
+          'getPlatformHealthData',
+          (signal) => getPlatformHealthData(deadline, signal),
+          parentSignal
         ),
       ])
 
@@ -482,14 +580,15 @@ export async function GET(req: NextRequest) {
     }
 
     const result = await withDeadline<Awaited<ReturnType<typeof compute>> | null>(
-      compute(),
+      deadline,
       COMPUTE_DEADLINE_MS,
       null,
-      'complete pipeline health computation'
+      'complete pipeline health computation',
+      (signal) => compute(signal)
     )
 
     if (result === null) {
-      const message = `Pipeline health database authority timed out after ${COMPUTE_DEADLINE_MS}ms`
+      const message = 'Pipeline health database authority exceeded the request deadline'
       logger.error('[health/pipeline] ' + message)
       return NextResponse.json(buildUnavailableSnapshot('PIPELINE_HEALTH_TIMEOUT', message), {
         status: 503,
@@ -535,5 +634,7 @@ export async function GET(req: NextRequest) {
       status: 503,
       headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
     })
+  } finally {
+    deadline.close()
   }
 }
