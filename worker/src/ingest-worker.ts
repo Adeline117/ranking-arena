@@ -34,6 +34,7 @@ import { reconcileSchedulers } from './ingest/scheduler'
 import { startHeartbeat } from './ingest/heartbeat'
 import { startFailoverManager } from './ingest/failover'
 import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readiness'
+import { startIngestServingAfterHeartbeat } from './ingest/startup-gate'
 import { routeJobWithSourceLease } from './ingest/source-job-routing'
 import { routeTierCJobRegion } from './ingest/tier-c-region-router'
 
@@ -147,100 +148,110 @@ async function main(): Promise<void> {
   await import('@/lib/ingest/adapters/register')
 
   const regions = consumedRegions()
-  const workers = regions.map((region) => {
-    const w = new Worker(regionQueueName(region), route, {
-      connection: ingestConnection(),
-      concurrency: INGEST_CONCURRENCY,
-      // Tier-A full crawls run 25-90 min; default 30s lock + stall detection
-      // misfires across pm2 restarts ("job stalled more than allowable limit").
-      // Longer lock + renewal headroom; stalled jobs still recover via retry.
-      lockDuration: 180_000,
-      stalledInterval: 300_000,
-      maxStalledCount: 2,
-    })
-    w.on('completed', (job) => {
-      console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}]`)
-    })
-    w.on('failed', (job, err) => {
-      console.error(`[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}]:`, err.message)
-    })
-    return w
-  })
 
-  // Fast-lane workers: a separate pool per consumed region for light Tier-A
-  // crawls (siphoned by reconcileSchedulers). The bulk pool's hours-long
-  // crawls can never occupy these slots, so small user-facing leaderboards
-  // stay fresh regardless of giant-board backlog. Gated by INGEST_FAST_LANE so
-  // the lane only spins up once BOTH nodes are enabled together (see queues.ts).
-  const fastWorkers = !fastLaneEnabled()
-    ? []
-    : regions.map((region) => {
-        const w = new Worker(regionFastQueueName(region), route, {
-          connection: ingestConnection(),
-          concurrency: FAST_CONCURRENCY,
+  // The first liveness write is deployment evidence, not a best-effort timer:
+  // no scheduler or queue consumer may start until shared Redis confirms it.
+  const { heartbeatTimer, consumers, reconcileTimer, failover } =
+    await startIngestServingAfterHeartbeat({
+      startHeartbeat: () => startHeartbeat(getConnection(), regions),
+      createConsumers: () => {
+        const workers = regions.map((region) => {
+          const w = new Worker(regionQueueName(region), route, {
+            connection: ingestConnection(),
+            concurrency: INGEST_CONCURRENCY,
+            // Tier-A full crawls run 25-90 min; default 30s lock + stall detection
+            // misfires across pm2 restarts ("job stalled more than allowable limit").
+            // Longer lock + renewal headroom; stalled jobs still recover via retry.
+            lockDuration: 180_000,
+            stalledInterval: 300_000,
+            maxStalledCount: 2,
+          })
+          w.on('completed', (job) => {
+            console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}]`)
+          })
+          w.on('failed', (job, err) => {
+            console.error(`[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}]:`, err.message)
+          })
+          return w
+        })
+
+        // Fast-lane workers: a separate pool per consumed region for light Tier-A
+        // crawls (siphoned by reconcileSchedulers). The bulk pool's hours-long
+        // crawls can never occupy these slots, so small user-facing leaderboards
+        // stay fresh regardless of giant-board backlog. Gated by INGEST_FAST_LANE so
+        // the lane only spins up once BOTH nodes are enabled together (see queues.ts).
+        const fastWorkers = !fastLaneEnabled()
+          ? []
+          : regions.map((region) => {
+              const w = new Worker(regionFastQueueName(region), route, {
+                connection: ingestConnection(),
+                concurrency: FAST_CONCURRENCY,
+                lockDuration: 180_000,
+                stalledInterval: 300_000,
+                maxStalledCount: 2,
+              })
+              w.on('completed', (job) => {
+                console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}/fast]`)
+              })
+              w.on('failed', (job, err) => {
+                console.error(
+                  `[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}/fast]:`,
+                  err.message
+                )
+              })
+              return w
+            })
+
+        // Dedicated Tier-C workers: user-facing on-demand fetches get their own
+        // region-affine slots so they never queue behind bulk work or run from the
+        // wrong egress. The local queue keeps the historical name and reroutes old
+        // remote-source jobs only after their authoritative queue accepts them.
+        const tiercWorkers = regions.map((region) => {
+          const worker = new Worker<TierCJobData>(
+            tierCQueueName(region),
+            (job) => routeTierC(job, region),
+            {
+              connection: ingestConnection(),
+              concurrency: 2,
+            }
+          )
+          worker.on('completed', (job) => {
+            console.log(`[ingest-worker] ✓ tierc ${job.id} [${region}]`)
+          })
+          worker.on('failed', (job, err) => {
+            console.error(`[ingest-worker] ✗ tierc ${job?.id} [${region}]:`, err.message)
+          })
+          return worker
+        })
+
+        return { workers, fastWorkers, tiercWorkers }
+      },
+      reconcileSchedulers,
+      // Re-reconcile hourly: sources rows are the live config (spec §2.1).
+      startReconcileTimer: () =>
+        setInterval(() => {
+          reconcileSchedulers().catch((err) =>
+            console.error('[ingest-worker] reconcile failed:', err)
+          )
+        }, 60 * 60_000),
+
+      // Standby failover: when an operator sets arena:failover:regions in response
+      // to a heartbeat-down page, this worker temporarily consumes the downed
+      // node's queue (auto-stands-down when that node's heartbeat returns).
+      startFailover: () =>
+        startFailoverManager(getConnection(), regions, route, {
+          concurrency: INGEST_CONCURRENCY,
           lockDuration: 180_000,
           stalledInterval: 300_000,
           maxStalledCount: 2,
-        })
-        w.on('completed', (job) => {
-          console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}/fast]`)
-        })
-        w.on('failed', (job, err) => {
-          console.error(
-            `[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}/fast]:`,
-            err.message
-          )
-        })
-        return w
-      })
-
-  // Dedicated Tier-C workers: user-facing on-demand fetches get their own
-  // region-affine slots so they never queue behind bulk work or run from the
-  // wrong egress. The local queue keeps the historical name and reroutes old
-  // remote-source jobs only after their authoritative queue accepts them.
-  const tiercWorkers = regions.map((region) => {
-    const worker = new Worker<TierCJobData>(
-      tierCQueueName(region),
-      (job) => routeTierC(job, region),
-      {
-        connection: ingestConnection(),
-        concurrency: 2,
-      }
-    )
-    worker.on('completed', (job) => {
-      console.log(`[ingest-worker] ✓ tierc ${job.id} [${region}]`)
+        }),
+      markReady: () =>
+        console.log(
+          `[ingest-worker] ready (regions=${regions.join(',')}, concurrency=${INGEST_CONCURRENCY}` +
+            `, fast-lane=${fastLaneEnabled() ? `on×${FAST_CONCURRENCY}` : 'off'})`
+        ),
     })
-    worker.on('failed', (job, err) => {
-      console.error(`[ingest-worker] ✗ tierc ${job?.id} [${region}]:`, err.message)
-    })
-    return worker
-  })
-
-  await reconcileSchedulers()
-  // Re-reconcile hourly: sources rows are the live config (spec §2.1).
-  const reconcileTimer = setInterval(() => {
-    reconcileSchedulers().catch((err) => console.error('[ingest-worker] reconcile failed:', err))
-  }, 60 * 60_000)
-
-  // Liveness heartbeat → shared cloud Redis, read by the worker-heartbeat-check
-  // Vercel cron (de-single-point: detect this node dying within ~15min,
-  // independent of crawl cadence and of this node being alive).
-  const heartbeatTimer = startHeartbeat(getConnection(), regions)
-
-  // Standby failover: when an operator sets arena:failover:regions in response
-  // to a heartbeat-down page, this worker temporarily consumes the downed
-  // node's queue (auto-stands-down when that node's heartbeat returns).
-  const failover = startFailoverManager(getConnection(), regions, route, {
-    concurrency: INGEST_CONCURRENCY,
-    lockDuration: 180_000,
-    stalledInterval: 300_000,
-    maxStalledCount: 2,
-  })
-
-  console.log(
-    `[ingest-worker] ready (regions=${regions.join(',')}, concurrency=${INGEST_CONCURRENCY}` +
-      `, fast-lane=${fastLaneEnabled() ? `on×${FAST_CONCURRENCY}` : 'off'})`
-  )
+  const { workers, fastWorkers, tiercWorkers } = consumers
 
   let shuttingDown = false
   const shutdown = async (signal: string) => {

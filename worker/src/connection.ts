@@ -31,8 +31,9 @@ export function getConnection(): IORedis {
     tls: url.startsWith('rediss://') ? {} : undefined,
   })
 
-  connection.on('error', (err) => {
-    console.error('[worker] Redis connection error:', err.message)
+  connection.on('error', () => {
+    // IORedis errors may embed the credential-bearing connection URL.
+    console.error('[worker] Redis connection error')
   })
 
   connection.on('connect', () => {

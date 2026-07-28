@@ -23,6 +23,7 @@ import { resolve } from 'node:path'
 
 export const WORKER_ROSTER_KEY = 'arena:worker:roster'
 const BEAT_INTERVAL_MS = 60_000
+export const INITIAL_HEARTBEAT_TIMEOUT_MS = 5_000
 const WORKER_RELEASE_ID = /^[0-9a-f]{64}$/
 
 /** Stable per-machine id; override with WORKER_NODE_ID when running multiple
@@ -128,32 +129,75 @@ export function diskUsedPct(
 }
 
 /**
- * Start emitting heartbeats. Writes once immediately, then every 60s. Returns
- * the timer so the caller can clearInterval on shutdown. Failures are logged,
- * never thrown — a heartbeat hiccup must not crash the worker.
+ * Start emitting heartbeats. The first Redis HSET is awaited and must commit
+ * within a bounded window before the worker is allowed to become ready. Later
+ * heartbeat failures remain non-fatal so a transient Redis outage does not
+ * crash an already-running worker.
  */
-export function startHeartbeat(redis: IORedis, regions: string[]): NodeJS.Timeout {
+export async function startHeartbeat(redis: IORedis, regions: string[]): Promise<NodeJS.Timeout> {
   const node = workerNodeId()
   const sha = resolveDeployedSha()
   const releaseId = resolveWorkerReleaseId()
-  const beat = async (): Promise<void> => {
-    const payload: HeartbeatPayload = {
-      ts: Date.now(),
-      regions,
-      pid: process.pid,
-      node,
-      sha,
-      release_id: releaseId,
-      attempt_bound_capture: process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED === 'true',
-      disk: diskUsedPct(),
-    }
+  const attemptBoundCaptureEnabled = process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED === 'true'
+  if ((node === 'vps_sg' || regions.includes('vps_sg')) && !attemptBoundCaptureEnabled) {
+    throw new Error('[heartbeat] SG attempt-bound capture must be enabled')
+  }
+  const buildPayload = (): HeartbeatPayload => ({
+    ts: Date.now(),
+    regions,
+    pid: process.pid,
+    node,
+    sha,
+    release_id: releaseId,
+    attempt_bound_capture: attemptBoundCaptureEnabled,
+    disk: diskUsedPct(),
+  })
+  const commit = async (payload: HeartbeatPayload): Promise<void> => {
+    let result: unknown
     try {
-      await redis.hset(WORKER_ROSTER_KEY, node, JSON.stringify(payload))
-    } catch (err) {
-      console.error('[heartbeat] write failed:', err instanceof Error ? err.message : err)
+      result = await redis.hset(WORKER_ROSTER_KEY, node, JSON.stringify(payload))
+    } catch {
+      throw new Error('[heartbeat] Redis HSET failed')
+    }
+    if (result !== 0 && result !== 1) {
+      throw new Error('[heartbeat] Redis HSET returned an invalid acknowledgement')
     }
   }
-  void beat()
+  const beat = async (): Promise<void> => {
+    const payload: HeartbeatPayload = {
+      ...buildPayload(),
+    }
+    try {
+      await commitWithTimeout(payload)
+    } catch {
+      console.error('[heartbeat] periodic Redis HSET failed')
+    }
+  }
+
+  const commitWithTimeout = async (payload: HeartbeatPayload): Promise<void> => {
+    let timeout: NodeJS.Timeout | undefined
+    try {
+      await Promise.race([
+        commit(payload),
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error('[heartbeat] Redis HSET timed out')),
+            INITIAL_HEARTBEAT_TIMEOUT_MS
+          )
+        }),
+      ])
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
+  }
+
+  const initialPayload = buildPayload()
+  await commitWithTimeout(initialPayload)
+  console.log(
+    `[heartbeat] redis-hset-committed node=${node} pid=${initialPayload.pid} ` +
+      `sha=${sha} release=${releaseId} ts=${initialPayload.ts}`
+  )
+
   const timer = setInterval(() => void beat(), BEAT_INTERVAL_MS)
   // Don't let the heartbeat timer keep the event loop alive on shutdown.
   if (typeof timer.unref === 'function') timer.unref()

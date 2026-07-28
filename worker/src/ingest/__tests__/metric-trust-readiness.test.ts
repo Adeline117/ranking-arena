@@ -208,7 +208,7 @@ describe('ingest worker metric-trust startup gate', () => {
         laterActions: [
           "await import('@/lib/ingest/adapters/register')",
           'new Worker(',
-          'await reconcileSchedulers()',
+          'reconcileSchedulers,',
           'startHeartbeat(',
           'startFailoverManager(',
           '[ingest-worker] ready',
@@ -229,6 +229,21 @@ describe('ingest worker metric-trust startup gate', () => {
       for (const laterAction of entrypoint.laterActions) {
         expect(main.indexOf(laterAction)).toBeGreaterThan(gate)
       }
+    }
+  })
+
+  it('awaits the first Redis heartbeat before creating any ingest consumer or scheduler', () => {
+    const source = readFileSync(join(process.cwd(), 'worker/src/ingest-worker.ts'), 'utf8')
+    const main = source.slice(source.indexOf('async function main(): Promise<void>'))
+    const heartbeat = main.indexOf('await startIngestServingAfterHeartbeat({')
+    expect(heartbeat).toBeGreaterThan(-1)
+    for (const laterAction of [
+      'new Worker(',
+      'reconcileSchedulers,',
+      'startFailoverManager(',
+      '[ingest-worker] ready',
+    ]) {
+      expect(main.indexOf(laterAction)).toBeGreaterThan(heartbeat)
     }
   })
 })

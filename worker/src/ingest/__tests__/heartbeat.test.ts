@@ -1,6 +1,26 @@
-import { diskUsedPct, parseDiskUsedPct, resolveWorkerReleaseId, startHeartbeat } from '../heartbeat'
+import {
+  INITIAL_HEARTBEAT_TIMEOUT_MS,
+  diskUsedPct,
+  parseDiskUsedPct,
+  resolveWorkerReleaseId,
+  startHeartbeat,
+} from '../heartbeat'
+
+const ORIGINAL_CAPTURE_FLAG = process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
 
 describe('worker heartbeat disk usage', () => {
+  beforeEach(() => {
+    process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = 'true'
+  })
+
+  afterAll(() => {
+    if (ORIGINAL_CAPTURE_FLAG === undefined) {
+      delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+    } else {
+      process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = ORIGINAL_CAPTURE_FLAG
+    }
+  })
+
   test('parses Linux and macOS POSIX df output', () => {
     expect(
       parseDiskUsedPct(
@@ -41,23 +61,140 @@ describe('worker heartbeat disk usage', () => {
     ).toBeUndefined()
   })
 
-  test('reports the attempt-bound capture runtime flag explicitly', () => {
+  test('awaits a valid first HSET before emitting the committed token', async () => {
     const original = process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+    const originalNode = process.env.WORKER_NODE_ID
     let timer: NodeJS.Timeout | undefined
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {})
     try {
       process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = 'true'
-      const hset = jest.fn().mockResolvedValue(1)
+      process.env.WORKER_NODE_ID = 'sg-test-node'
+      let acknowledge!: (value: number) => void
+      const hset = jest.fn(
+        () =>
+          new Promise<number>((resolveAcknowledgement) => {
+            acknowledge = resolveAcknowledgement
+          })
+      )
 
-      timer = startHeartbeat({ hset } as never, ['local'])
+      const started = startHeartbeat({ hset } as never, ['vps_sg'])
+      expect(log.mock.calls.some(([line]) => String(line).includes('redis-hset-committed'))).toBe(
+        false
+      )
+      acknowledge(1)
+      timer = await started
 
       const payload = JSON.parse(hset.mock.calls[0][2])
       expect(payload.attempt_bound_capture).toBe(true)
       expect(payload.release_id).toBe('unknown')
-      expect(payload.regions).toEqual(['local'])
+      expect(payload.regions).toEqual(['vps_sg'])
+      expect(log).toHaveBeenCalledWith(
+        `[heartbeat] redis-hset-committed node=sg-test-node pid=${process.pid} ` +
+          `sha=${payload.sha} release=unknown ts=${payload.ts}`
+      )
     } finally {
       if (timer) clearInterval(timer)
+      log.mockRestore()
       if (original === undefined) delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
       else process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = original
+      if (originalNode === undefined) delete process.env.WORKER_NODE_ID
+      else process.env.WORKER_NODE_ID = originalNode
+    }
+  })
+
+  test('accepts Redis HSET acknowledgement zero', async () => {
+    const timer = await startHeartbeat({ hset: jest.fn().mockResolvedValue(0) } as never, ['local'])
+    clearInterval(timer)
+  })
+
+  test('fails closed when the first Redis HSET rejects', async () => {
+    const secretUrl = 'rediss://user:super-secret@host'
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {})
+    let failure: unknown
+    try {
+      await startHeartbeat({ hset: jest.fn().mockRejectedValue(new Error(secretUrl)) } as never, [
+        'vps_sg',
+      ])
+    } catch (error) {
+      failure = error
+    } finally {
+      expect(log.mock.calls.some(([line]) => String(line).includes('redis-hset-committed'))).toBe(
+        false
+      )
+      log.mockRestore()
+    }
+
+    expect(failure).toBeInstanceOf(Error)
+    const message = (failure as Error).message
+    expect(message).toBe('[heartbeat] Redis HSET failed')
+    expect(message).not.toContain('rediss://')
+    expect(message).not.toContain('super-secret')
+  })
+
+  test.each([undefined, 'false'])(
+    'refuses SG startup before HSET when attempt-bound capture is %p',
+    async (captureFlag) => {
+      if (captureFlag === undefined) delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+      else process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = captureFlag
+      const hset = jest.fn()
+      const log = jest.spyOn(console, 'log').mockImplementation(() => {})
+      try {
+        await expect(startHeartbeat({ hset } as never, ['vps_sg'])).rejects.toThrow(
+          '[heartbeat] SG attempt-bound capture must be enabled'
+        )
+        expect(hset).not.toHaveBeenCalled()
+        expect(log.mock.calls.some(([line]) => String(line).includes('redis-hset-committed'))).toBe(
+          false
+        )
+      } finally {
+        log.mockRestore()
+      }
+    }
+  )
+
+  test.each([2, -1, '1', null])(
+    'fails closed when the first Redis HSET acknowledgement is invalid (%p)',
+    async (acknowledgement) => {
+      await expect(
+        startHeartbeat({ hset: jest.fn().mockResolvedValue(acknowledgement) } as never, ['vps_sg'])
+      ).rejects.toThrow('[heartbeat] Redis HSET returned an invalid acknowledgement')
+    }
+  )
+
+  test('fails closed when the first Redis HSET exceeds the bounded timeout', async () => {
+    jest.useFakeTimers()
+    try {
+      const started = startHeartbeat(
+        { hset: jest.fn(() => new Promise<never>(() => {})) } as never,
+        ['vps_sg']
+      )
+      const rejected = expect(started).rejects.toThrow('[heartbeat] Redis HSET timed out')
+      await jest.advanceTimersByTimeAsync(INITIAL_HEARTBEAT_TIMEOUT_MS)
+      await rejected
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test('keeps later periodic HSET failures non-fatal', async () => {
+    jest.useFakeTimers()
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {})
+    let timer: NodeJS.Timeout | undefined
+    try {
+      const hset = jest
+        .fn()
+        .mockResolvedValueOnce(1)
+        .mockRejectedValueOnce(new Error('temporary Redis outage'))
+      timer = await startHeartbeat({ hset } as never, ['local'])
+
+      await jest.advanceTimersByTimeAsync(60_000)
+
+      expect(hset).toHaveBeenCalledTimes(2)
+      expect(error).toHaveBeenCalledWith('[heartbeat] periodic Redis HSET failed')
+    } finally {
+      if (timer) clearInterval(timer)
+      error.mockRestore()
+      jest.useRealTimers()
     }
   })
 
