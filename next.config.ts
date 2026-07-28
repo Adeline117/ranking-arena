@@ -76,85 +76,11 @@ const nextConfig = {
         fs: false,
       }
 
-      // Chunk consolidation — reduce HTTP requests on slow networks
-      // Heavy web3 packages are split into a separate async chunk that only
-      // loads when the user triggers wallet connect (siwe, ethers, wagmi, rainbowkit).
-      config.optimization.splitChunks = {
-        chunks: 'all',
-        maxInitialRequests: 25,
-        minSize: 20000,
-        cacheGroups: {
-          default: {
-            minChunks: 2,
-            priority: -20,
-            reuseExistingChunk: true,
-          },
-          // Heavy web3 / crypto packages: isolated into async-only chunk
-          web3: {
-            test: /[\\/]node_modules[\\/](ethers|siwe|@walletconnect|@rainbow-me|wagmi|viem|abitype)[\\/]/,
-            name: 'web3',
-            chunks: 'async', // Only included in async chunks, never in initial load
-            priority: 30,
-            enforce: true,
-          },
-          // Chart libraries: isolated — only loaded on trader detail & market pages
-          charts: {
-            test: /[\\/]node_modules[\\/](lightweight-charts|fancy-canvas)[\\/]/,
-            name: 'charts',
-            chunks: 'async',
-            priority: 25,
-            enforce: true,
-          },
-          // Stripe: only loaded on pricing/checkout pages
-          stripe: {
-            test: /[\\/]node_modules[\\/](@stripe|stripe)[\\/]/,
-            name: 'stripe',
-            chunks: 'async',
-            priority: 25,
-            enforce: true,
-          },
-          // DOMPurify: only used in social features (posts, comments) — not on homepage
-          sanitize: {
-            test: /[\\/]node_modules[\\/](isomorphic-dompurify|dompurify)[\\/]/,
-            name: 'sanitize',
-            chunks: 'async',
-            priority: 25,
-            enforce: true,
-          },
-          // Privy/Auth: loaded lazily via dynamic() in Providers
-          auth: {
-            test: /[\\/]node_modules[\\/](@privy-io)[\\/]/,
-            name: 'auth',
-            chunks: 'async',
-            priority: 25,
-            enforce: true,
-          },
-          // Supabase: deferred to async — homepage SSR doesn't need client SDK.
-          // useAuthSession + PremiumProvider already use dynamic import().
-          supabase: {
-            test: /[\\/]node_modules[\\/](@supabase)[\\/]/,
-            name: 'supabase',
-            chunks: 'async',
-            priority: 25,
-            enforce: true,
-          },
-          // Sentry: loaded via requestIdleCallback in instrumentation-client.ts.
-          // Force async to prevent withSentryConfig from injecting into initial bundle.
-          sentry: {
-            test: /[\\/]node_modules[\\/](@sentry)[\\/]/,
-            name: 'sentry',
-            chunks: 'async',
-            priority: 25,
-            enforce: true,
-          },
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendor',
-            priority: -10,
-            chunks: 'all',
-          },
-        },
-      }
+      // Preserve Next.js' client chunk policy. It derives shared chunks from
+      // route entrypoints, while the app's dynamic imports keep wallet, auth,
+      // chart, Stripe, Supabase, sanitization, and Sentry code off unrelated
+      // routes. Replacing it with one named node_modules bucket makes every
+      // route pay for a site-wide vendor payload.
     }
     config.plugins.push(
       // eslint-disable-next-line @typescript-eslint/no-require-imports
