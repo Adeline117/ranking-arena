@@ -1,11 +1,28 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import NotificationsList from '../NotificationsList'
+import { __resetViewerScopeForTests, synchronizeViewerScope } from '@/lib/auth/viewer-scope'
+import { useInboxStore } from '@/lib/stores/inboxStore'
 
 const mockShowToast = jest.fn()
+const token = (subject: string) => {
+  const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
+  return `${encode({ alg: 'none' })}.${encode({ sub: subject })}.signature`
+}
+const mockAuthState = {
+  accessToken: token('user-1'),
+  authChecked: true,
+  email: 'user-1@example.com',
+  isLoggedIn: true,
+  loading: false,
+  sessionGeneration: 1,
+  user: { id: 'user-1', user_metadata: {} },
+  userId: 'user-1',
+  viewerKey: 'user:user-1',
+}
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
-  useAuthSession: () => ({ accessToken: 'access-token' }),
+  useAuthSession: () => mockAuthState,
 }))
 
 jest.mock('@/app/components/ui/Toast', () => ({
@@ -31,6 +48,18 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
 const originalFetch = global.fetch
 
 describe('NotificationsList load failure', () => {
+  beforeEach(() => {
+    __resetViewerScopeForTests()
+    const scope = synchronizeViewerScope(true, 'user-1')
+    mockAuthState.sessionGeneration = scope.sessionGeneration
+    useInboxStore.setState({
+      ownerScopeKey: null,
+      panelOpen: false,
+      unreadMessages: 0,
+      unreadNotifications: 0,
+    })
+  })
+
   afterEach(() => {
     global.fetch = originalFetch
   })
@@ -38,7 +67,11 @@ describe('NotificationsList load failure', () => {
   it('shows a persistent retry state instead of an empty inbox', async () => {
     const fetchMock = jest
       .fn()
-      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: 'Unavailable' }),
+      })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
