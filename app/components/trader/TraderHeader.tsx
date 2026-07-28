@@ -28,6 +28,8 @@ interface TraderHeaderProps {
   handle: string
   displayName?: string
   traderId: string
+  /** Canonical user_profiles.id used by platform-user social actions. */
+  registeredUserId?: string
   avatarUrl?: string
   coverUrl?: string
   isRegistered?: boolean
@@ -85,6 +87,7 @@ export default function TraderHeader({
   handle,
   displayName: displayNameProp,
   traderId,
+  registeredUserId,
   avatarUrl,
   coverUrl,
   isRegistered,
@@ -418,6 +421,7 @@ export default function TraderHeader({
       {/* Action buttons — Follow + Share (exchange links moved to ExchangeLinksBar below) */}
       <TraderHeaderActions
         traderId={traderId}
+        registeredUserId={registeredUserId}
         handle={handle}
         source={source}
         displayName={displayNameProp}

@@ -101,6 +101,7 @@ describe('serving → legacy adapter', () => {
     expect(p.display_name).toBe('Whale')
     expect(p.copiers).toBe(200)
     expect(p.source).toBe('binance_futures')
+    expect(p.isRegistered).toBe(false)
   })
 
   it('merges per-timeframe serving stats into TraderPerformance slots', () => {

@@ -177,6 +177,7 @@ import { useServingTabData } from './hooks/useServingTabData'
 import { useOnchainEnrichTrigger } from './hooks/useOnchainEnrichTrigger'
 import { TraderProfileError } from './components/TraderProfileError'
 import { TraderStaleBanner, TraderPlatformDeadBanner } from './components/TraderStatusBanners'
+import { resolveTraderProfileOwnership } from './profile-ownership'
 
 // NO_PORTFOLIO_PLATFORMS removed — Portfolio tab shown for ALL platforms
 // When no position data exists, the Portfolio component shows an empty state
@@ -398,9 +399,7 @@ export default function TraderProfileClient({
     })
   }, [data.source, data.handle, data.source_trader_id])
 
-  const [isVerifiedTrader, setIsVerifiedTrader] = useState(false)
   const [proUpsellOpen, setProUpsellOpen] = useState(false)
-  const [isOwner, setIsOwner] = useState(false)
 
   // Active account state machine extracted into hook (./hooks/useTraderActiveAccount).
   // Owns: activeAccount string, parsed activeAccountRaw, change handler. Critical
@@ -545,14 +544,18 @@ export default function TraderProfileClient({
     staleTime: STALE_STANDARD,
   })
 
-  // Derive verified/owner state from SWR claim data or bundled claim data
-  useEffect(() => {
-    // Prefer bundled claim data from merged endpoint
-    const claimSource = bundledClaimData ?? claimData?.data
-    const isVerified = !!claimSource?.is_verified
-    setIsVerifiedTrader(isVerified)
-    setIsOwner(isVerified && !!currentUserId && claimSource?.owner_id === currentUserId)
-  }, [bundledClaimData, claimData, currentUserId])
+  // The exact /u profile is authoritative for a signed-in platform user even
+  // when the optional bound/claim probe is unavailable. Keep the verified
+  // claim-owner path as an independent authority for /trader routes.
+  const claimSource = bundledClaimData ?? claimData?.data
+  const isVerifiedTrader = !!claimSource?.is_verified
+  const { isProfileOwner, isVerifiedClaimOwner } = resolveTraderProfileOwnership({
+    currentUserId,
+    claimedUserId: claimedUser?.id,
+    isVerifiedClaim: isVerifiedTrader,
+    claimOwnerId: claimSource?.owner_id,
+  })
+  const isProfilePageOwner = isProfileOwner || isVerifiedClaimOwner
 
   // Rank history for sparkline (7-day trajectory)
   // P7: Skip separate fetch when bundled data is available from the merged endpoint
@@ -853,9 +856,10 @@ export default function TraderProfileClient({
             handle={traderProfile?.handle || data.handle}
             displayName={displayName}
             traderId={traderProfile?.id || data.source_trader_id}
+            registeredUserId={claimedUser?.id}
             avatarUrl={traderProfile?.avatar_url || data.avatar_url || undefined}
             isRegistered={!!claimedUser}
-            isOwnProfile={isOwner}
+            isOwnProfile={isProfilePageOwner}
             followers={traderProfile?.followers ?? undefined}
             source={traderProfile?.source || data.source}
             roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi : undefined)}
@@ -947,7 +951,7 @@ export default function TraderProfileClient({
               : undefined
           }
           activeAccount={activeAccount}
-          isOwnProfile={isOwner}
+          isOwnProfile={isProfilePageOwner}
         />
 
         {/* Serving mode (spec §2.4): the body below the header reads from
@@ -1079,7 +1083,7 @@ export default function TraderProfileClient({
                     aggregatedData={aggregatedData}
                     linkedAccounts={linkedAccounts}
                     currentUserId={currentUserId}
-                    isOwner={isOwner}
+                    isVerifiedClaimOwner={isVerifiedClaimOwner}
                     isVerifiedTrader={isVerifiedTrader}
                     claimedUser={claimedUser}
                   />

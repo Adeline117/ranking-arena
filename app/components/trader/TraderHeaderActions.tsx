@@ -18,6 +18,8 @@ import { useToast } from '@/app/components/ui/Toast'
 
 interface TraderHeaderActionsProps {
   traderId: string
+  /** Canonical user_profiles.id for a claimed/registered trader. */
+  registeredUserId?: string
   handle: string
   source?: string
   displayName?: string
@@ -125,6 +127,7 @@ function CompareToggle({
  */
 export function TraderHeaderActions({
   traderId,
+  registeredUserId,
   handle,
   source,
   displayName,
@@ -201,15 +204,19 @@ export function TraderHeaderActions({
       )}
 
       {/* Follow icon — rendered for anonymous users too. The buttons carry the
-          exact trader route and intended action through full-page login. */}
+          exact trader route and intended action through full-page login. A
+          registered profile must also carry its canonical user UUID; never
+          fall back to the exchange account ID for /api/users/follow. */}
       {!isOwnProfile &&
         (isRegistered ? (
-          <UserFollowButton
-            targetUserId={traderId}
-            currentUserId={userId}
-            size="sm"
-            loginReturnPath={loginReturnPath}
-          />
+          registeredUserId ? (
+            <UserFollowButton
+              targetUserId={registeredUserId}
+              currentUserId={userId}
+              size="sm"
+              loginReturnPath={loginReturnPath}
+            />
+          ) : null
         ) : (
           <TraderFollowButton
             traderId={traderId}

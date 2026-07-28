@@ -8,6 +8,8 @@ function source(relativePath: string): string {
 describe('claimed trader routing contract', () => {
   const page = source('app/(app)/trader/[handle]/page.tsx')
   const client = source('app/(app)/trader/[handle]/TraderProfileClient.tsx')
+  const overview = source('app/components/trader/tabs/OverviewTab.tsx')
+  const claimProfileRoute = source('app/api/traders/claim/profile/route.ts')
 
   it('never resolves claim ownership from a source-blind URL handle', () => {
     expect(page).not.toContain('cachedFindUserHandleByTrader(decodedHandle)')
@@ -21,6 +23,22 @@ describe('claimed trader routing contract', () => {
     expect(page).not.toMatch(/\bredirect\s*\(/)
     expect(client).toContain('claimedTraderCanonicalHref({')
     expect(client).toContain('requestedPlatformValidated: Boolean(override)')
+  })
+
+  it('wires the claimed user identity into serving profile social actions and ownership', () => {
+    expect(client).toContain('const { userId: currentUserId } = useAuthSession()')
+    expect(client).toContain('registeredUserId={claimedUser?.id}')
+    expect(client).toContain('resolveTraderProfileOwnership({')
+    expect(client).toContain('claimedUserId: claimedUser?.id')
+    expect(client).toContain('isVerifiedClaim: isVerifiedTrader')
+    expect(client).toContain('claimOwnerId: claimSource?.owner_id')
+    expect(client).toContain('isOwnProfile={isProfilePageOwner}')
+    expect(client).toContain('isVerifiedClaimOwner={isVerifiedClaimOwner}')
+    expect(overview).toContain('isVerifiedClaimOwner: boolean')
+    expect(overview).toContain('{isVerifiedClaimOwner ? (')
+    expect(overview).not.toContain('{isOwner ? (')
+    expect(claimProfileRoute).toContain('getUserVerifiedTrader(supabase, user.id)')
+    expect(claimProfileRoute).toContain('You do not have a verified trader profile.')
   })
 
   it('uses the trader detail platform parameter after a claim and from a bot owner link', () => {

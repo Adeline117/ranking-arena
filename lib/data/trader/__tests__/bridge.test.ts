@@ -119,7 +119,9 @@ describe('profile 映射', () => {
     const d = detail({ trader: { handle: null, followers: null } })
     const profile = toTraderPageData(d).profile as Record<string, unknown>
     expect(profile.handle).toBe('tk-1')
+    expect(profile.id).toBe('tk-1')
     expect(profile.followers).toBe(0)
+    expect(profile.isRegistered).toBe(false)
   })
 
   it("bio 字符串 'null'/'undefined'(脏数据)→ null", () => {
