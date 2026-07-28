@@ -75,6 +75,20 @@ expect_failure() {
   }
 }
 
+expect_sqlstate_failure() {
+  local description="$1"
+  local sql="$2"
+  local sqlstate="$3"
+  local pattern="$4"
+  if psql_cmd -v VERBOSITY=verbose -qAt -c "$sql" >"$ERROR_FILE" 2>&1; then
+    fail "$description unexpectedly succeeded"
+  fi
+  grep -Eq "$sqlstate:.*$pattern" "$ERROR_FILE" || {
+    cat "$ERROR_FILE" >&2
+    fail "$description failed with the wrong SQLSTATE or message"
+  }
+}
+
 wait_for_activity() {
   local application_name="$1"
   local predicate="$2"
@@ -647,6 +661,54 @@ ROLLBACK;
 SQL
 EPOCH_F="$(psql_cmd -qAt -c "SELECT ($(activate_sql "$INSTANCE_F" "$TOKEN_F" 5 1800000005000))->>'epoch'")"
 ((EPOCH_F > EPOCH_C + 1)) || fail 'rolled-back activation reused a database epoch'
+
+# Exercise the production API's normal deferred path: deliberately do not
+# issue SET CONSTRAINTS ... IMMEDIATE. A transaction that begins while the
+# lease is live, performs a business write, and then crosses lease_expires_at
+# must be rejected by the initially-deferred trigger at COMMIT.
+assert_query 'commit assertion remains deferrable and initially deferred' 't,t' "
+  SELECT pg_catalog.concat_ws(',', trigger_row.tgdeferrable, trigger_row.tginitdeferred)
+  FROM pg_catalog.pg_trigger AS trigger_row
+  WHERE trigger_row.tgrelid = 'arena.ingest_worker_write_guards'::pg_catalog.regclass
+    AND trigger_row.tgname = 'ingest_worker_fence_commit_assertion'
+    AND NOT trigger_row.tgisinternal
+"
+psql_cmd -q <<'SQL'
+CREATE TABLE public.ingest_worker_fence_commit_probe (
+  probe_id bigint PRIMARY KEY,
+  marker text NOT NULL
+);
+SQL
+psql_cmd -q -c "
+  UPDATE arena.ingest_worker_authorities
+  SET lease_expires_at = pg_catalog.date_trunc(
+        'milliseconds', pg_catalog.clock_timestamp() + INTERVAL '5 seconds'
+      )
+  WHERE authority_scope = '$SCOPE'
+    AND active_epoch = $EPOCH_F
+    AND active_instance_id = '$INSTANCE_F'
+"
+expect_sqlstate_failure 'deferred commit fences a write that crosses lease expiry' "
+  BEGIN;
+  SELECT $(begin_write_sql "$INSTANCE_F" "$TOKEN_F" 5 "$EPOCH_F");
+  INSERT INTO public.ingest_worker_fence_commit_probe (probe_id, marker)
+  VALUES (1, 'must roll back');
+  SELECT pg_catalog.pg_sleep((
+    SELECT GREATEST(
+             0.0,
+             EXTRACT(EPOCH FROM (
+               authority.lease_expires_at - pg_catalog.clock_timestamp()
+             ))
+           ) + 0.250
+    FROM arena.ingest_worker_authorities AS authority
+    WHERE authority.authority_scope = '$SCOPE'
+  )::double precision);
+  COMMIT;
+" '55000' 'ingest worker write transaction was fenced before commit'
+assert_query 'fenced transaction business write was rolled back' '0' \
+  'SELECT pg_catalog.count(*) FROM public.ingest_worker_fence_commit_probe'
+assert_query 'fenced transaction guard was rolled back' '0' \
+  'SELECT pg_catalog.count(*) FROM arena.ingest_worker_write_guards'
 
 psql_cmd -q -c "
   UPDATE arena.ingest_worker_authorities
