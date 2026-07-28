@@ -27,6 +27,25 @@ export const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'win
 export const LS_KEY_COLUMNS = 'ranking-visible-columns'
 // View mode type — auto-detected only (mobile→card, desktop→table), no manual toggle
 export type ViewMode = 'table' | 'card'
+export const MOBILE_CARD_MEDIA_QUERY = '(max-width: 767px)'
+
+type MatchMedia = (query: string) => Pick<MediaQueryList, 'matches'>
+
+/**
+ * Resolve the ranking layout before the first client paint.
+ *
+ * The interactive homepage is mounted behind a client-only boundary, so it is
+ * safe to read the viewport here. Falling back to table keeps non-browser test
+ * and tooling environments deterministic.
+ */
+export function getInitialRankingViewMode(
+  matchMedia: MatchMedia | null | undefined = typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function'
+    ? window.matchMedia.bind(window)
+    : undefined
+): ViewMode {
+  return matchMedia?.(MOBILE_CARD_MEDIA_QUERY).matches ? 'card' : 'table'
+}
 
 export type SortColumn = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'
 export type SortDir = 'asc' | 'desc'

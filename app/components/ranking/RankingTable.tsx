@@ -47,6 +47,8 @@ import {
   type ViewMode,
   DEFAULT_VISIBLE_COLUMNS,
   LS_KEY_COLUMNS,
+  MOBILE_CARD_MEDIA_QUERY,
+  getInitialRankingViewMode,
   getStoredColumns,
 } from './RankingTableTypes'
 
@@ -197,7 +199,11 @@ function RankingTableInner(props: {
 
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
   const [showColumnSettings, setShowColumnSettings] = useState(false)
-  const [viewMode, setViewMode] = useState<ViewMode>('table')
+  // HomeInteractiveRoot is client-only. Resolve the viewport in the state
+  // initializer so the first mounted tree already matches the SSR shell:
+  // mobile card -> mobile card, desktop table -> desktop table. Waiting for an
+  // effect here briefly painted the desktop table at 320/375px before reflowing.
+  const [viewMode, setViewMode] = useState<ViewMode>(getInitialRankingViewMode)
 
   // Row density (1.4) — comfortable (default) / compact. Persisted to
   // localStorage like the column-visibility settings; drives data-density on the
@@ -239,10 +245,10 @@ function RankingTableInner(props: {
     }
 
     // Auto-detect: mobile → card, desktop → table
-    const isMobile = window.matchMedia('(max-width: 767px)').matches
+    const isMobile = window.matchMedia(MOBILE_CARD_MEDIA_QUERY).matches
     setViewMode(isMobile ? 'card' : 'table')
 
-    const mql = window.matchMedia('(max-width: 767px)')
+    const mql = window.matchMedia(MOBILE_CARD_MEDIA_QUERY)
     const handleResize = (e: MediaQueryListEvent) => {
       setViewMode(e.matches ? 'card' : 'table')
     }
