@@ -344,6 +344,92 @@ describe('regional consumer runtime', () => {
     expect(authority.release).toHaveBeenCalledTimes(1)
   })
 
+  it('releases authority without constructing consumers when startup is already closed', async () => {
+    const events: string[] = []
+    const authority = await lifecycleHarness(events)
+    const startup = new AbortController()
+    const createConsumers = jest.fn()
+    startup.abort(new Error('startup closed'))
+
+    await expect(
+      prepareRegionConsumerRuntime({
+        createConsumers,
+        executionRegion: 'local',
+        lifecycle: authority.lifecycle,
+        onUnexpectedStop: jest.fn(),
+        startupSignal: startup.signal,
+      })
+    ).rejects.toMatchObject({ code: 'prepare_failed' })
+
+    expect(createConsumers).not.toHaveBeenCalled()
+    expect(authority.release).toHaveBeenCalledTimes(1)
+    expect(events).toEqual(['authority:release'])
+  })
+
+  it('abandons readiness and rolls back immediately when process startup closes', async () => {
+    const events: string[] = []
+    const authority = await lifecycleHarness(events)
+    const startup = new AbortController()
+    const ready = deferred<unknown>()
+    const consumer = consumerHarness('consumer', events)
+    ;(consumer.waitUntilReady as jest.Mock).mockReturnValueOnce(ready.promise)
+    const preparing = prepareRegionConsumerRuntime({
+      createConsumers: (_context, register) => {
+        register(consumer)
+      },
+      executionRegion: 'local',
+      lifecycle: authority.lifecycle,
+      onUnexpectedStop: jest.fn(),
+      startupSignal: startup.signal,
+    })
+    await Promise.resolve()
+    expect(consumer.waitUntilReady).toHaveBeenCalledTimes(1)
+
+    startup.abort(new Error('startup closed'))
+
+    await expect(preparing).rejects.toMatchObject({ code: 'prepare_failed' })
+    expect(consumer.cancelAllJobs).toHaveBeenCalledWith('regional consumer startup aborted')
+    expect(consumer.close).toHaveBeenCalledWith(true)
+    expect(consumer.run).not.toHaveBeenCalled()
+    expect(authority.release).toHaveBeenCalledTimes(1)
+
+    ready.resolve(undefined)
+    await Promise.resolve()
+    expect(authority.release).toHaveBeenCalledTimes(1)
+  })
+
+  it('owns the registered consumer when startup closes synchronously inside its factory', async () => {
+    const events: string[] = []
+    const authority = await lifecycleHarness(events)
+    const startup = new AbortController()
+    const first = consumerHarness('first', events)
+    const second = consumerHarness('second', events)
+    const registerSecond = jest.fn((register: Registrar) => register(second))
+    ;(first.isRunning as jest.Mock).mockImplementationOnce(() => {
+      startup.abort(new Error('startup closed'))
+      return false
+    })
+
+    await expect(
+      prepareRegionConsumerRuntime({
+        createConsumers: (_context, register) => {
+          register(first)
+          registerSecond(register)
+        },
+        executionRegion: 'local',
+        lifecycle: authority.lifecycle,
+        onUnexpectedStop: jest.fn(),
+        startupSignal: startup.signal,
+      })
+    ).rejects.toMatchObject({ code: 'prepare_failed' })
+
+    expect(registerSecond).not.toHaveBeenCalled()
+    expect(first.cancelAllJobs).toHaveBeenCalledWith('regional consumer startup aborted')
+    expect(first.close).toHaveBeenCalledWith(true)
+    expect(second.close).not.toHaveBeenCalled()
+    expect(authority.release).toHaveBeenCalledTimes(1)
+  })
+
   it('abandons readiness and rolls back immediately when authority aborts', async () => {
     const events: string[] = []
     const authority = await lifecycleHarness(events)

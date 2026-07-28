@@ -63,6 +63,7 @@ export interface PrepareRegionConsumerRuntimeOptions {
     shutdown: Promise<void>
   ) => Promise<void> | void
   readyTimeoutMs?: number
+  startupSignal?: AbortSignal
 }
 
 export interface RegionConsumerRuntime {
@@ -96,7 +97,7 @@ function settleCalls<T>(calls: ReadonlyArray<() => PromiseLike<T> | T>) {
 
 async function waitUntilReady(
   consumer: RegionConsumer,
-  authoritySignal: AbortSignal,
+  preparationSignal: AbortSignal,
   timeoutMs: number
 ): Promise<void> {
   let timeout: NodeJS.Timeout | undefined
@@ -110,13 +111,13 @@ async function waitUntilReady(
       }),
       new Promise<never>((_resolve, reject) => {
         abort = () => reject(runtimeError('prepare_failed'))
-        if (authoritySignal.aborted) abort()
-        else authoritySignal.addEventListener('abort', abort, { once: true })
+        if (preparationSignal.aborted) abort()
+        else preparationSignal.addEventListener('abort', abort, { once: true })
       }),
     ])
   } finally {
     if (timeout) clearTimeout(timeout)
-    if (abort) authoritySignal.removeEventListener('abort', abort)
+    if (abort) preparationSignal.removeEventListener('abort', abort)
   }
 }
 
@@ -132,11 +133,21 @@ export async function prepareRegionConsumerRuntime({
   lifecycle,
   onUnexpectedStop,
   readyTimeoutMs = REGION_CONSUMER_READY_TIMEOUT_MS,
+  startupSignal,
 }: PrepareRegionConsumerRuntimeOptions): Promise<RegionConsumerRuntime> {
   if (!Number.isSafeInteger(readyTimeoutMs) || readyTimeoutMs <= 0) {
     await lifecycle.stopAfterDrain(async () => undefined).catch(() => undefined)
     throw runtimeError('prepare_failed')
   }
+
+  if (startupSignal?.aborted) {
+    await lifecycle.stopAfterDrain(async () => undefined).catch(() => undefined)
+    throw runtimeError('prepare_failed')
+  }
+
+  const preparationSignal = startupSignal
+    ? AbortSignal.any([lifecycle.fence.signal, startupSignal])
+    : lifecycle.fence.signal
 
   let admission: ConsumedRegionAdmission
   try {
@@ -177,6 +188,10 @@ export async function prepareRegionConsumerRuntime({
         notifyFatal(runtimeError('consumer_error'), 'consumer_failed')
       }
     })
+    if (preparationSignal.aborted) {
+      preparationErrored = true
+      throw runtimeError('prepare_failed')
+    }
     try {
       if (consumer.isRunning()) {
         preparationRunObserved = true
@@ -184,6 +199,10 @@ export async function prepareRegionConsumerRuntime({
       }
     } catch {
       preparationRunObserved = true
+      throw runtimeError('prepare_failed')
+    }
+    if (preparationSignal.aborted) {
+      preparationErrored = true
       throw runtimeError('prepare_failed')
     }
     return consumer
@@ -212,6 +231,7 @@ export async function prepareRegionConsumerRuntime({
   }
 
   try {
+    if (preparationSignal.aborted) throw runtimeError('prepare_failed')
     const creationResult = createConsumers(admission.context, register)
     if (creationResult !== undefined) {
       // TypeScript permits an async callback where `void` is expected. Reject
@@ -221,11 +241,16 @@ export async function prepareRegionConsumerRuntime({
       throw runtimeError('prepare_failed')
     }
     acceptingRegistrations = false
-    if (prepared.length === 0 || lifecycle.state !== 'active' || preparationErrored) {
+    if (
+      prepared.length === 0 ||
+      lifecycle.state !== 'active' ||
+      preparationErrored ||
+      preparationSignal.aborted
+    ) {
       throw runtimeError('prepare_failed')
     }
     await Promise.all(
-      prepared.map((consumer) => waitUntilReady(consumer, lifecycle.fence.signal, readyTimeoutMs))
+      prepared.map((consumer) => waitUntilReady(consumer, preparationSignal, readyTimeoutMs))
     )
     for (const consumer of prepared) {
       try {
@@ -234,7 +259,12 @@ export async function prepareRegionConsumerRuntime({
         preparationRunObserved = true
       }
     }
-    if (lifecycle.state !== 'active' || preparationErrored || preparationRunObserved) {
+    if (
+      lifecycle.state !== 'active' ||
+      preparationErrored ||
+      preparationRunObserved ||
+      preparationSignal.aborted
+    ) {
       throw runtimeError('prepare_failed')
     }
   } catch {
@@ -403,6 +433,10 @@ export async function prepareRegionConsumerRuntime({
   if (lifecycle.fence.signal.aborted) {
     stopOnAuthorityLoss()
     await stop('authority_lost').catch(() => undefined)
+    throw runtimeError('prepare_failed')
+  }
+  if (preparationSignal.aborted) {
+    await stop('startup_failed').catch(() => undefined)
     throw runtimeError('prepare_failed')
   }
 
