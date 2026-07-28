@@ -200,50 +200,97 @@ describe('ingest worker metric-trust startup gate', () => {
     )
   })
 
-  it('awaits readiness before every scheduler, consumer, heartbeat, or failover', () => {
-    const entrypoints = [
-      {
-        path: 'worker/src/ingest-worker.ts',
-        main: 'async function main(): Promise<void>',
-        laterActions: [
-          "await import('@/lib/ingest/adapters/register')",
-          'new Worker(',
-          'reconcileSchedulers,',
-          'startHeartbeat(',
-          'startFailoverManager(',
-          '[ingest-worker] ready',
-        ],
-      },
-      {
-        path: 'worker/src/index.ts',
-        main: 'async function main()',
-        laterActions: ['await registerSchedules()', 'new Worker(', '[worker] Ready'],
-      },
-    ]
+  it('installs process handlers before the first await and gates every native setup phase', () => {
+    const source = readFileSync(join(process.cwd(), 'worker/src/ingest-worker.ts'), 'utf8')
+    const main = source.slice(source.indexOf('async function main(): Promise<void>'))
+    const handlers = main.indexOf('installProcessHandlers()')
+    const firstAwaitLine = /^\s*await\b/m.exec(main)
+    const firstAwait =
+      firstAwaitLine === null ? -1 : firstAwaitLine.index + firstAwaitLine[0].indexOf('await')
+    const metricGate = main.indexOf('await assertMetricTrustWorkerReadiness()')
 
-    for (const entrypoint of entrypoints) {
-      const source = readFileSync(join(process.cwd(), entrypoint.path), 'utf8')
-      const main = source.slice(source.indexOf(entrypoint.main))
-      const gate = main.indexOf('await assertMetricTrustWorkerReadiness()')
-      expect(gate).toBeGreaterThan(-1)
-      for (const laterAction of entrypoint.laterActions) {
-        expect(main.indexOf(laterAction)).toBeGreaterThan(gate)
-      }
+    expect(handlers).toBeGreaterThan(-1)
+    expect(handlers).toBeLessThan(firstAwait)
+    expect(metricGate).toBe(firstAwait)
+
+    // This is the source-level construction boundary. startup-gate.test.ts
+    // executes the callbacks and proves their heartbeat/reconcile/start/ready order.
+    for (const laterPhase of [
+      "await import('@/lib/ingest/adapters/register')",
+      'resolveNativeRegionConfig(regions, executionRegion)',
+      'await acquireRegionAuthorityLifecycleWithRetry({',
+      'await prepareRegionConsumerRuntime({',
+      'await startNativeIngestServing({',
+      '[ingest-worker] ready (regions=',
+    ]) {
+      expect(main.indexOf(laterPhase)).toBeGreaterThan(metricGate)
     }
   })
 
-  it('awaits the first Redis heartbeat before creating any ingest consumer or scheduler', () => {
+  it('keeps the legacy worker entrypoint behind the same metric-trust gate', () => {
+    const source = readFileSync(join(process.cwd(), 'worker/src/index.ts'), 'utf8')
+    const main = source.slice(source.indexOf('async function main()'))
+    const metricGate = main.indexOf('await assertMetricTrustWorkerReadiness()')
+
+    expect(metricGate).toBeGreaterThan(-1)
+    for (const laterAction of ['await registerSchedules()', 'new Worker(', '[worker] Ready']) {
+      expect(main.indexOf(laterAction)).toBeGreaterThan(metricGate)
+    }
+  })
+
+  it('selects one native region and prepares only inert consumers after retrying authority', () => {
     const source = readFileSync(join(process.cwd(), 'worker/src/ingest-worker.ts'), 'utf8')
     const main = source.slice(source.indexOf('async function main(): Promise<void>'))
-    const heartbeat = main.indexOf('await startIngestServingAfterHeartbeat({')
-    expect(heartbeat).toBeGreaterThan(-1)
-    for (const laterAction of [
-      'new Worker(',
-      'reconcileSchedulers,',
-      'startFailoverManager(',
-      '[ingest-worker] ready',
+    const acquisition = main.indexOf('await acquireRegionAuthorityLifecycleWithRetry({')
+    const preparation = main.indexOf('const runtime = await prepareRegionConsumerRuntime({')
+    const serving = main.indexOf('await startNativeIngestServing({')
+
+    expect(main.match(/\bconsumedRegions\(\)/g)).toHaveLength(1)
+    expect(main.match(/\bresolveNativeRegionConfig\(/g)).toHaveLength(1)
+    expect(main).toContain('const region = nativeConfig.nativeRegion')
+    expect(main).not.toMatch(/for\s*\(\s*const\s+region\s+of\s+regions\s*\)/)
+    expect(main).not.toMatch(/\bacquireRegionAuthorityLifecycle\s*\(/)
+    expect(acquisition).toBeGreaterThan(-1)
+    expect(preparation).toBeGreaterThan(acquisition)
+    expect(serving).toBeGreaterThan(preparation)
+    expect(main.match(/\bautorun:\s*false\b/g)).toHaveLength(3)
+    expect(main).not.toMatch(/\bautorun:\s*true\b/)
+  })
+
+  it('binds one identity and every owned resource before emitting ordinary readiness', () => {
+    const source = readFileSync(join(process.cwd(), 'worker/src/ingest-worker.ts'), 'utf8')
+    const main = source.slice(source.indexOf('async function main(): Promise<void>'))
+    const acquisition = main.indexOf('await acquireRegionAuthorityLifecycleWithRetry({')
+    const bindLifecycle = main.indexOf('processCoordinator.bindLifecycle(lifecycle)')
+    const preparation = main.indexOf('const runtime = await prepareRegionConsumerRuntime({')
+    const bindRuntime = main.indexOf('processCoordinator.bindRuntime(runtime)')
+    const serving = main.indexOf('await startNativeIngestServing({')
+    const authorityReady = main.indexOf('${NATIVE_AUTHORITY_READY_TOKEN}')
+    const ordinaryReady = main.indexOf('[ingest-worker] ready (regions=')
+
+    expect(main.match(/\bresolveWorkerRuntimeIdentity\(\)/g)).toHaveLength(1)
+    expect(main).toContain('createWorkerOwnershipHeartbeatFactory(runtimeIdentity, region)')
+    expect(main).toContain('startHeartbeat(redis, nativeConfig.consumedRegions, runtimeIdentity)')
+    expect(main).toContain('signal: processCoordinator.startupSignal')
+    expect(main).toContain('startupSignal: processCoordinator.startupSignal')
+    expect(bindLifecycle).toBeGreaterThan(acquisition)
+    expect(preparation).toBeGreaterThan(bindLifecycle)
+    expect(bindRuntime).toBeGreaterThan(preparation)
+    expect(serving).toBeGreaterThan(bindRuntime)
+    for (const binding of [
+      'processCoordinator.bindLifecycle(lifecycle)',
+      'processCoordinator.bindRuntime(runtime)',
+      'processCoordinator.bindHeartbeatTimer(',
+      'processCoordinator.bindReconcileTimer(',
     ]) {
-      expect(main.indexOf(laterAction)).toBeGreaterThan(heartbeat)
+      expect(main.match(new RegExp(binding.replace(/[()]/g, '\\$&'), 'g'))).toHaveLength(1)
     }
+    expect(authorityReady).toBeGreaterThan(-1)
+    expect(ordinaryReady).toBeGreaterThan(authorityReady)
+    expect(main).toContain('console.log(`${NATIVE_AUTHORITY_READY_TOKEN} region=${region}`)')
+    expect(main).toContain('return processCoordinator.requestShutdown(')
+    expect(source).not.toContain('startFailoverManager')
+    expect(source).not.toMatch(/\bprocess\.exit\s*\(/)
+    expect(source).toContain('process.exitCode = code')
   })
 })

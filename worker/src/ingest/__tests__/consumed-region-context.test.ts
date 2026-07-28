@@ -334,20 +334,21 @@ describe('consumed queue region context', () => {
     await stop
   })
 
-  it('keeps every queue consumer bound to its closure context', () => {
+  it('hands every inert native consumer to the authorized regional runtime', () => {
     const entrypoint = readFileSync(join(process.cwd(), 'worker/src/ingest-worker.ts'), 'utf8')
-    const failover = readFileSync(join(process.cwd(), 'worker/src/ingest/failover.ts'), 'utf8')
     const tierA = readFileSync(
       join(process.cwd(), 'worker/src/ingest/processors/tier-a-leaderboard.ts'),
       'utf8'
     )
 
-    expect(entrypoint.match(/bindConsumedRegion\(contextFor\(region\), route\)/g)).toHaveLength(2)
-    expect(entrypoint).toContain('bindConsumedRegion(contextFor(region), routeTierC)')
-    expect(entrypoint).not.toMatch(/region(?:Fast)?QueueName\(region\),\s*route\s*,/)
-    expect(failover).toContain(
-      'new Worker(regionQueueName(region), bindConsumedRegion(context, route)'
-    )
+    expect(entrypoint.match(/bindAuthorizedConsumedRegion\(context, route\)/g)).toHaveLength(2)
+    expect(entrypoint.match(/bindAuthorizedConsumedRegion\(context, routeTierC\)/g)).toHaveLength(1)
+    expect(entrypoint.match(/\bnew Worker(?:<[^>]+>)?\s*\(/g)).toHaveLength(3)
+    expect(entrypoint.match(/register\(\s*new Worker(?:<[^>]+>)?\s*\(/g)).toHaveLength(3)
+    expect(entrypoint.match(/\bautorun:\s*false\b/g)).toHaveLength(3)
+    expect(entrypoint).not.toMatch(/\bbindConsumedRegion\s*\(/)
+    expect(entrypoint).not.toContain('contextFor')
+    expect(entrypoint).not.toContain('startFailoverManager')
     expect(tierA).not.toContain('INGEST_LOCAL_REGION')
     expect(tierA).toContain('const workerRegion = context.executionRegion')
   })
