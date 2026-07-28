@@ -11,7 +11,8 @@
  */
 
 import { execFileSync } from 'child_process'
-import { createReadStream, statSync, unlinkSync } from 'fs'
+import { randomBytes } from 'node:crypto'
+import { createReadStream, unlinkSync } from 'fs'
 import { resolve } from 'path'
 import { pathToFileURL } from 'url'
 import {
@@ -21,16 +22,21 @@ import {
   DeleteObjectsCommand,
 } from '@aws-sdk/client-s3'
 import 'dotenv/config'
+import {
+  assertBackupArtifact,
+  ARENA_BACKUP_COMPLETION_CONTRACT,
+  arenaBackupCompletionSentinel,
+  COMPLETE_BACKUP_MIN_BYTES,
+  preparePostgresConnection,
+} from './backup-restore-contract.mjs'
+import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
+
+export { assertBackupArtifact, COMPLETE_BACKUP_MIN_BYTES }
 
 // Retention: daily (trader-tables) backups kept this many days; full backups
 // keep the N newest regardless of age (they are the only complete restore points)
 const DAILY_RETENTION_DAYS = 14
 const FULL_BACKUPS_TO_KEEP = 3
-
-// Complete arena+public/full backups are currently ~5 GB compressed.  Keep the
-// same conservative 1 GB floor as the independent freshness sentinel, but
-// enforce it before an object can be uploaded or an older restore point pruned.
-export const COMPLETE_BACKUP_MIN_BYTES = 1024 * 1024 * 1024
 
 const TRADER_TABLES = [
   // Core trader data
@@ -95,13 +101,24 @@ const fullMode = process.argv.includes('--full')
 // （数据已迁 arena schema，见 2026-07 发现），GH Actions 备份用此模式抓完整 app 数据，
 // 跳过 storage.objects(2.2GB 文件元数据，实体在 Supabase Storage)/auth 系统 schema。
 const schemasEnv = (process.env.BACKUP_SCHEMAS || '').trim()
-const schemaMode = schemasEnv.length > 0
-const backupSchemas = schemaMode
-  ? schemasEnv
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-  : []
+
+export function normalizeCompleteBackupSchemas(value) {
+  const schemas = [
+    ...new Set(
+      String(value ?? '')
+        .split(',')
+        .map((schema) => schema.trim())
+        .filter(Boolean)
+    ),
+  ]
+  if (schemas.length > 0 && (!schemas.includes('arena') || !schemas.includes('public'))) {
+    throw new Error('BACKUP_SCHEMAS complete mode requires both arena and public')
+  }
+  return schemas
+}
+
+const backupSchemas = normalizeCompleteBackupSchemas(schemasEnv)
+const schemaMode = backupSchemas.length > 0
 
 /**
  * Keep database credentials out of pg_dump's argv. libpq accepts the password
@@ -109,75 +126,7 @@ const backupSchemas = schemaMode
  * stays as the database argument.
  */
 export function preparePgDumpConnection(databaseUrl) {
-  let parsedUrl
-  try {
-    parsedUrl = new URL(databaseUrl)
-  } catch {
-    throw new Error('DATABASE_URL must be a valid PostgreSQL URL')
-  }
-
-  if (parsedUrl.protocol !== 'postgres:' && parsedUrl.protocol !== 'postgresql:') {
-    throw new Error('DATABASE_URL must use the postgres or postgresql protocol')
-  }
-  if (parsedUrl.hash !== '') {
-    throw new Error('DATABASE_URL fragments are unsupported')
-  }
-
-  const decodePassword = (value) => {
-    try {
-      return decodeURIComponent(value)
-    } catch {
-      throw new Error('DATABASE_URL password has invalid percent-encoding')
-    }
-  }
-
-  const authorityStart = databaseUrl.indexOf('://') + 3
-  const authorityEndOffset = databaseUrl.slice(authorityStart).search(/[/?#]/)
-  const authorityEnd =
-    authorityEndOffset === -1 ? databaseUrl.length : authorityStart + authorityEndOffset
-  const authority = databaseUrl.slice(authorityStart, authorityEnd)
-  const atIndex = authority.lastIndexOf('@')
-  const userInfo = atIndex >= 0 ? authority.slice(0, atIndex) : ''
-  const passwordSeparator = userInfo.indexOf(':')
-  const hasAuthorityPassword = passwordSeparator >= 0
-  const authorityPassword = hasAuthorityPassword
-    ? decodePassword(userInfo.slice(passwordSeparator + 1))
-    : undefined
-  const sanitizedAuthority = hasAuthorityPassword
-    ? `${userInfo.slice(0, passwordSeparator)}${authority.slice(atIndex)}`
-    : authority
-
-  // Query parameters are parsed after the authority by libpq, so an explicit
-  // ?password= value takes precedence over user:password@host. Preserve that
-  // behavior while removing every password occurrence from the public argv.
-  // Work on the raw query so unrelated libpq values such as `a+b` are not
-  // normalized by URLSearchParams and retain their exact connection meaning.
-  const remainder = databaseUrl.slice(authorityEnd)
-  const queryIndex = remainder.indexOf('?')
-  const path = queryIndex === -1 ? remainder : remainder.slice(0, queryIndex)
-  const rawQuery = queryIndex === -1 ? null : remainder.slice(queryIndex + 1)
-  const queryPasswords = []
-  const safeQueryParts = []
-
-  if (rawQuery !== null) {
-    for (const part of rawQuery.split('&')) {
-      const separator = part.indexOf('=')
-      const rawKey = separator === -1 ? part : part.slice(0, separator)
-      if (decodePassword(rawKey) === 'password') {
-        queryPasswords.push(decodePassword(separator === -1 ? '' : part.slice(separator + 1)))
-      } else {
-        safeQueryParts.push(part)
-      }
-    }
-  }
-
-  const safeQuery = safeQueryParts.length > 0 ? `?${safeQueryParts.join('&')}` : ''
-  const password = queryPasswords.length > 0 ? queryPasswords.at(-1) : authorityPassword
-
-  return {
-    connectionUrl: `${databaseUrl.slice(0, authorityStart)}${sanitizedAuthority}${path}${safeQuery}`,
-    password,
-  }
+  return preparePostgresConnection(databaseUrl, 'DATABASE_URL')
 }
 
 /**
@@ -194,9 +143,23 @@ export function runPgDumpPipeline({
   password,
   pgDumpArgs,
   outputPath,
+  completionToken,
   timeoutMs = 1_800_000,
 }) {
-  const pgDumpEnv = password === undefined ? process.env : { ...process.env, PGPASSWORD: password }
+  const pgDumpEnv = cleanPostgresConnectionEnv(
+    process.env,
+    password === undefined ? {} : { PGPASSWORD: password }
+  )
+  for (const name of [
+    'DATABASE_URL',
+    'R2_ACCOUNT_ID',
+    'R2_ACCESS_KEY_ID',
+    'R2_SECRET_ACCESS_KEY',
+    'R2_BUCKET',
+  ]) {
+    delete pgDumpEnv[name]
+  }
+  const completionSentinel = arenaBackupCompletionSentinel(completionToken)
 
   execFileSync(
     '/bin/bash',
@@ -204,12 +167,14 @@ export function runPgDumpPipeline({
       '-o',
       'pipefail',
       '-c',
-      'output=$1; shift; "$@" | /usr/bin/gzip -c > "$output"',
+      'output=$1; sentinel=$2; shift 2; { "$@" && printf "%s" "$sentinel"; } | /usr/bin/gzip -c > "$output"',
       'arena-backup-pipeline',
       outputPath,
+      completionSentinel,
       pgDumpPath,
-      connectionUrl,
       ...pgDumpArgs,
+      `--restrict-key=${completionToken}`,
+      connectionUrl,
     ],
     {
       env: pgDumpEnv,
@@ -219,39 +184,21 @@ export function runPgDumpPipeline({
   )
 }
 
-/** Validate the local artifact before any irreversible remote operation. */
-export function assertBackupArtifact(localPath, minimumBytes) {
-  const size = statSync(localPath).size
-  if (!Number.isSafeInteger(minimumBytes) || minimumBytes < 1) {
-    throw new Error('backup minimum size contract is invalid')
-  }
-  if (size < minimumBytes) {
-    throw new Error(`backup artifact is incomplete: ${size} bytes < required ${minimumBytes} bytes`)
-  }
-
-  try {
-    execFileSync('/usr/bin/gzip', ['--test', localPath], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      // Current compressed artifacts are ~5 GB. Integrity verification must
-      // read the complete stream and can legitimately take several minutes on
-      // the Mac backup host, while still remaining bounded.
-      timeout: 10 * 60_000,
-    })
-  } catch {
-    throw new Error('backup artifact failed gzip integrity verification')
-  }
-
-  return size
-}
-
 /**
  * Keep production side effects behind a validated local artifact. Injection is
  * deliberate: tests execute the real producer and prove rejected artifacts
  * cannot reach either the upload or retention boundary.
  */
-export async function produceAndCommitBackup({ produce, localPath, minimumBytes, upload, prune }) {
+export async function produceAndCommitBackup({
+  produce,
+  localPath,
+  minimumBytes,
+  completionToken,
+  upload,
+  prune,
+}) {
   await produce()
-  const size = assertBackupArtifact(localPath, minimumBytes)
+  const size = await assertBackupArtifact(localPath, minimumBytes, { completionToken })
   await upload(size)
   unlinkSync(localPath)
   await prune()
@@ -296,6 +243,7 @@ async function run() {
     // trader_snapshots_v2 size. 30min budget prevents false ETIMEDOUT.
     const { connectionUrl, password } = preparePgDumpConnection(DATABASE_URL)
     const minimumBytes = schemaMode || fullMode ? COMPLETE_BACKUP_MIN_BYTES : 1
+    const completionToken = randomBytes(32).toString('hex')
     const r2Key = `db-backups/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${filename}`
     await produceAndCommitBackup({
       produce: () =>
@@ -305,9 +253,11 @@ async function run() {
           password,
           pgDumpArgs: [...selectionArgs, '--no-owner', '--no-privileges'],
           outputPath: localPath,
+          completionToken,
         }),
       localPath,
       minimumBytes,
+      completionToken,
       upload: async (size) => {
         const sizeMB = (size / 1024 / 1024).toFixed(1)
         console.log(`[backup] Dump complete: ${sizeMB} MB`)
@@ -331,6 +281,8 @@ async function run() {
                 : fullMode
                   ? 'all'
                   : TRADER_TABLES.join(','),
+              'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT,
+              'completion-token': completionToken,
             },
           })
         )

@@ -10,6 +10,7 @@
  */
 
 import { spawn } from 'node:child_process'
+import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
 
 const QUERY_ENV = new Map([
   ['application_name', 'PGAPPNAME'],
@@ -33,39 +34,6 @@ const QUERY_ENV = new Map([
   ['sslpassword', 'PGSSLPASSWORD'],
   ['sslrootcert', 'PGSSLROOTCERT'],
   ['target_session_attrs', 'PGTARGETSESSIONATTRS'],
-])
-
-const CONNECTION_ENV = new Set([
-  'PGAPPNAME',
-  'PGCHANNELBINDING',
-  'PGCONNECT_TIMEOUT',
-  'PGDATABASE',
-  'PGGSSENCMODE',
-  'PGHOST',
-  'PGHOSTADDR',
-  'PGKEEPALIVES',
-  'PGKEEPALIVESCOUNT',
-  'PGKEEPALIVESIDLE',
-  'PGKEEPALIVESINTERVAL',
-  'PGKRBSRVNAME',
-  'PGOPTIONS',
-  'PGPASSFILE',
-  'PGPASSWORD',
-  'PGPORT',
-  'PGREQUIREAUTH',
-  'PGREQUIREPEER',
-  'PGSERVICE',
-  'PGSERVICEFILE',
-  'PGSSLCERT',
-  'PGSSLCRL',
-  'PGSSLCRLDIR',
-  'PGSSLKEY',
-  'PGSSLMODE',
-  'PGSSLNEGOTIATION',
-  'PGSSLPASSWORD',
-  'PGSSLROOTCERT',
-  'PGTARGETSESSIONATTRS',
-  'PGUSER',
 ])
 
 function fail(message) {
@@ -148,8 +116,7 @@ function parseDatabaseUrl(raw) {
   return libpq
 }
 
-const childEnv = { ...process.env }
-for (const name of CONNECTION_ENV) delete childEnv[name]
+const childEnv = cleanPostgresConnectionEnv(process.env)
 const libpq = parseDatabaseUrl(process.env.DATABASE_URL)
 
 if (process.argv[2] === '--check-session-connection') {

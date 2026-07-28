@@ -326,7 +326,7 @@ Sources: `lib/utils/arena-score.ts`,
 > 使用裸 `db push` 或 `migration repair --status reverted`。
 
 **备份是什么**:`backup-to-r2.mjs` 每日 dump `-n arena -n public`(PLAIN SQL,
-`--no-owner --no-privileges`)→ gzip → R2 `db-backups/YYYY/MM/arena-backup-<date>-schemas.sql.gz`
+`--no-owner --no-privileges`)→ gzip → R2 `db-backups/YYYY/MM/arena-backup-YYYYMMDD-schemas.sql.gz`
 (实测 ~4.8GB/份,保留 12 份)。**不含 `auth`/`storage` schema** —— 用户账号
 靠 Supabase 托管 PITR(付费档),不在 R2 dump 里。
 
@@ -341,9 +341,10 @@ node scripts/maintenance/restore-from-r2.mjs --list
 ```bash
 # 1. 建一个空 Postgres(本地 docker 或新 Supabase 项目),拿其连接串
 export RESTORE_TARGET_URL='postgres://…/scratch'
-# 2. 恢复最新(或 --key 指定某份)
+# 2. 默认只验证并恢复 newest；若它损坏会硬失败，不会自动降级到旧备份
+#    需恢复旧对象时，先独立验证，再用 --key 明确指定
 node scripts/maintenance/restore-from-r2.mjs
-#    脚本 gunzip|psql(ON_ERROR_STOP)+ 恢复后打印四张主表行数
+#    脚本 gunzip|psql(ON_ERROR_STOP)+ 恢复后打印三张关键表行数
 # 3. 记录耗时 = 真实 RTO,写回 SLO.md
 ```
 
@@ -361,7 +362,8 @@ canonical baseline 必须在独立维护波次中捕获，并在空白 PG17/shad
 schema、权限、R2 数据恢复与 `npm run qa:schema` 演练后才能进入本 runbook。
 
 **脚本安全**:`RESTORE_TARGET_URL == DATABASE_URL`(生产)时硬拒绝,除非
-`--force-prod`(几乎永远不该用)。
+`--force-prod`(几乎永远不该用)。缺少 `DATABASE_URL` 生产身份基准时默认硬拒绝；
+只有已独立证明 scratch 隔离后才可显式传 `--allow-unverified-target`。
 
 ## Deployment Rollback
 

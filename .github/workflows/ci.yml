@@ -189,6 +189,8 @@ jobs:
         run: npm run qa:launch-migration-runner
       - name: Backup pipeline fail-closed contract
         run: node --test scripts/maintenance/backup-to-r2.test.mjs
+      - name: Restore pipeline fail-closed contract
+        run: node --test scripts/maintenance/restore-from-r2.test.mjs
       - run: npm run lint
       - run: npx tsc --noEmit
       - name: Lint ingest worker
