@@ -16,6 +16,10 @@ import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { publishPositions } from '@/lib/ingest/serving/publish'
 import type { TierJobData } from '../queues'
+import {
+  assertSourceMatchesConsumedRegion,
+  type ConsumedRegionContext,
+} from '../consumed-region-context'
 
 interface TargetTrader {
   id: number
@@ -63,8 +67,12 @@ export interface TierDResult {
   errors: number
 }
 
-export async function processTierD(job: Job<TierJobData>): Promise<TierDResult> {
+export async function processTierD(
+  job: Job<TierJobData>,
+  context: ConsumedRegionContext
+): Promise<TierDResult> {
   const src = await getSourceBySlug(job.data.sourceSlug)
+  assertSourceMatchesConsumedRegion(src, context)
   if (src.status !== 'active') return { tradersCrawled: 0, positionsWritten: 0, errors: 0 }
 
   const adapter = getAdapter(src.adapter_slug)

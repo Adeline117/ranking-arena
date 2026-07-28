@@ -37,6 +37,14 @@ import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readines
 import { startIngestServingAfterHeartbeat } from './ingest/startup-gate'
 import { routeJobWithSourceLease } from './ingest/source-job-routing'
 import { routeTierCJobRegion } from './ingest/tier-c-region-router'
+import { getSourceBySlug } from '@/lib/ingest/sources'
+import {
+  assertSourceJobMatchesConsumedRegion,
+  bindConsumedRegion,
+  createConsumedRegionContext,
+  requireWorkerExecutionRegion,
+  type ConsumedRegionContext,
+} from './ingest/consumed-region-context'
 
 // Per-region worker concurrency. Bumped 3→5 (2026-06-12): at 3 the drain
 // rate (~12-18 jobs/h, dragged by giant crawls like bybit_mt5's 29k rows)
@@ -62,19 +70,19 @@ const INGEST_CONCURRENCY = Number(process.env.INGEST_CONCURRENCY) || 5
 // peak extra concurrent browsers stay low because each session is short-lived.
 const FAST_CONCURRENCY = 3
 
-async function runJob(job: Job): Promise<unknown> {
+async function runJob(job: Job, context: ConsumedRegionContext): Promise<unknown> {
   switch (job.name) {
     case INGEST_JOB.TIER_A: {
       const { processTierA } = await import('./ingest/processors/tier-a-leaderboard')
-      return processTierA(job)
+      return processTierA(job, context)
     }
     case INGEST_JOB.TIER_B: {
       const { processTierB } = await import('./ingest/processors/tier-b-profiles')
-      return processTierB(job)
+      return processTierB(job, context)
     }
     case INGEST_JOB.TIER_B_SERIES: {
       const { processTierBSeries } = await import('./ingest/processors/tier-b-series')
-      return processTierBSeries(job)
+      return processTierBSeries(job, context)
     }
     case INGEST_JOB.TIER_C: {
       throw new Error('[ingest-worker] Tier-C job arrived on a bulk queue')
@@ -85,11 +93,11 @@ async function runJob(job: Job): Promise<unknown> {
     }
     case INGEST_JOB.TIER_D: {
       const { processTierD } = await import('./ingest/processors/tier-d-positions')
-      return processTierD(job)
+      return processTierD(job, context)
     }
     case INGEST_JOB.DERIVE_BOARDS: {
       const { processDeriveBoards } = await import('./ingest/processors/derive-boards')
-      return processDeriveBoards(job)
+      return processDeriveBoards(job, context)
     }
     case INGEST_JOB.AVATAR_MIRROR: {
       const { processAvatarMirror } = await import('./ingest/processors/avatar-mirror')
@@ -116,16 +124,26 @@ async function runJob(job: Job): Promise<unknown> {
   }
 }
 
-async function route(job: Job): Promise<unknown> {
+async function route(job: Job, context: ConsumedRegionContext): Promise<unknown> {
   return routeJobWithSourceLease({
     redis: getConnection(),
     job,
-    run: () => runJob(job),
+    run: async () => {
+      await assertSourceJobMatchesConsumedRegion(
+        job,
+        context,
+        async (sourceSlug) => (await getSourceBySlug(sourceSlug)).fetch_region
+      )
+      return runJob(job, context)
+    },
   })
 }
 
-async function routeTierC(job: Job<TierCJobData>, region: IngestRegion): Promise<unknown> {
-  const decision = await routeTierCJobRegion(job, region)
+async function routeTierC(
+  job: Job<TierCJobData>,
+  context: ConsumedRegionContext
+): Promise<unknown> {
+  const decision = await routeTierCJobRegion(job, context.consumedRegion)
   if (decision.action === 'rerouted') {
     console.warn(
       `[ingest-worker] ↪ tierc ${decision.jobId} rerouted ${decision.from} → ${decision.to}`
@@ -133,7 +151,7 @@ async function routeTierC(job: Job<TierCJobData>, region: IngestRegion): Promise
     return decision
   }
   const { processTierC } = await import('./ingest/processors/tier-c-profile')
-  return processTierC(job, region)
+  return processTierC(job, context.consumedRegion)
 }
 
 async function main(): Promise<void> {
@@ -148,6 +166,15 @@ async function main(): Promise<void> {
   await import('@/lib/ingest/adapters/register')
 
   const regions = consumedRegions()
+  const executionRegion = requireWorkerExecutionRegion(process.env.INGEST_LOCAL_REGION)
+  const regionContexts = new Map(
+    regions.map((region) => [region, createConsumedRegionContext(region, executionRegion)] as const)
+  )
+  const contextFor = (region: IngestRegion): ConsumedRegionContext => {
+    const context = regionContexts.get(region)
+    if (!context) throw new Error(`[ingest-worker] missing consumed-region context for ${region}`)
+    return context
+  }
 
   // The first liveness write is deployment evidence, not a best-effort timer:
   // no scheduler or queue consumer may start until shared Redis confirms it.
@@ -156,16 +183,20 @@ async function main(): Promise<void> {
       startHeartbeat: () => startHeartbeat(getConnection(), regions),
       createConsumers: () => {
         const workers = regions.map((region) => {
-          const w = new Worker(regionQueueName(region), route, {
-            connection: ingestConnection(),
-            concurrency: INGEST_CONCURRENCY,
-            // Tier-A full crawls run 25-90 min; default 30s lock + stall detection
-            // misfires across pm2 restarts ("job stalled more than allowable limit").
-            // Longer lock + renewal headroom; stalled jobs still recover via retry.
-            lockDuration: 180_000,
-            stalledInterval: 300_000,
-            maxStalledCount: 2,
-          })
+          const w = new Worker(
+            regionQueueName(region),
+            bindConsumedRegion(contextFor(region), route),
+            {
+              connection: ingestConnection(),
+              concurrency: INGEST_CONCURRENCY,
+              // Tier-A full crawls run 25-90 min; default 30s lock + stall detection
+              // misfires across pm2 restarts ("job stalled more than allowable limit").
+              // Longer lock + renewal headroom; stalled jobs still recover via retry.
+              lockDuration: 180_000,
+              stalledInterval: 300_000,
+              maxStalledCount: 2,
+            }
+          )
           w.on('completed', (job) => {
             console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}]`)
           })
@@ -183,13 +214,17 @@ async function main(): Promise<void> {
         const fastWorkers = !fastLaneEnabled()
           ? []
           : regions.map((region) => {
-              const w = new Worker(regionFastQueueName(region), route, {
-                connection: ingestConnection(),
-                concurrency: FAST_CONCURRENCY,
-                lockDuration: 180_000,
-                stalledInterval: 300_000,
-                maxStalledCount: 2,
-              })
+              const w = new Worker(
+                regionFastQueueName(region),
+                bindConsumedRegion(contextFor(region), route),
+                {
+                  connection: ingestConnection(),
+                  concurrency: FAST_CONCURRENCY,
+                  lockDuration: 180_000,
+                  stalledInterval: 300_000,
+                  maxStalledCount: 2,
+                }
+              )
               w.on('completed', (job) => {
                 console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}/fast]`)
               })
@@ -209,7 +244,7 @@ async function main(): Promise<void> {
         const tiercWorkers = regions.map((region) => {
           const worker = new Worker<TierCJobData>(
             tierCQueueName(region),
-            (job) => routeTierC(job, region),
+            bindConsumedRegion(contextFor(region), routeTierC),
             {
               connection: ingestConnection(),
               concurrency: 2,
@@ -239,7 +274,7 @@ async function main(): Promise<void> {
       // to a heartbeat-down page, this worker temporarily consumes the downed
       // node's queue (auto-stands-down when that node's heartbeat returns).
       startFailover: () =>
-        startFailoverManager(getConnection(), regions, route, {
+        startFailoverManager(getConnection(), regions, executionRegion, route, {
           concurrency: INGEST_CONCURRENCY,
           lockDuration: 180_000,
           stalledInterval: 300_000,

@@ -1,17 +1,4 @@
-jest.mock('../queues', () => ({
-  INGEST_JOB: {
-    TIER_A: 'tiera:leaderboard',
-    TIER_B: 'tierb:profiles',
-    TIER_B_SERIES: 'tierb:series',
-    TIER_D: 'tierd:positions',
-    DERIVE_BOARDS: 'derive:boards',
-    FIRST_PARTY: 'firstparty:sync',
-    FRESHNESS: 'maint:freshness',
-    ONCHAIN_ENRICH: 'maint:onchain-enrich',
-  },
-}))
-
-import { INGEST_JOB } from '../queues'
+import { INGEST_JOB } from '../job-names'
 import {
   AUTHORIZATION_JOB_LEASE_LANES,
   GLOBAL_JOB_LEASE_LANES,

@@ -26,6 +26,10 @@ import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/inge
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { fireAndForget, logger } from '@/lib/utils/logger'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
+import {
+  assertSourceMatchesConsumedRegion,
+  type ConsumedRegionContext,
+} from '../consumed-region-context'
 
 /**
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
@@ -149,7 +153,10 @@ async function crawlTraderHistories(
   return written
 }
 
-export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> {
+export async function processTierB(
+  job: Job<TierJobData>,
+  context: ConsumedRegionContext
+): Promise<TierBResult> {
   const empty: TierBResult = {
     tradersCrawled: 0,
     surfacesFetched: 0,
@@ -160,6 +167,7 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
     remaining: 0,
   }
   const src = await getSourceBySlug(job.data.sourceSlug)
+  assertSourceMatchesConsumedRegion(src, context)
   if (src.status !== 'active') return empty
 
   const adapter = getAdapter(src.adapter_slug)

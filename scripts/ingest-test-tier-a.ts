@@ -25,6 +25,9 @@ async function main() {
 
   await import('@/lib/ingest/adapters/register')
   const { processTierA } = await import('@/worker/src/ingest/processors/tier-a-leaderboard')
+  const { getSourceBySlug } = await import('@/lib/ingest/sources')
+  const { createConsumedRegionContext, requireWorkerExecutionRegion } =
+    await import('@/worker/src/ingest/consumed-region-context')
   const { getIngestPool, closeIngestPool } = await import('@/lib/ingest/db')
 
   const startedAt = new Date().toISOString()
@@ -37,7 +40,12 @@ async function main() {
         this.data = nextData
       },
     }
-    results = await processTierA(fakeJob as never)
+    const src = await getSourceBySlug(slug)
+    const executionRegion = requireWorkerExecutionRegion(process.env.INGEST_LOCAL_REGION)
+    results = await processTierA(
+      fakeJob as never,
+      createConsumedRegionContext(src.fetch_region, executionRegion)
+    )
     console.log(JSON.stringify(results, null, 2))
   } finally {
     if (smoke) {

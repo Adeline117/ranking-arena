@@ -26,6 +26,11 @@ import type IORedis from 'ioredis'
 import { ingestConnection, regionQueueName, INGEST_REGIONS, type IngestRegion } from './queues'
 import { WORKER_ROSTER_KEY, workerNodeId } from './heartbeat'
 import { WORKER_FAILOVER_FLAG_KEY } from '@/lib/ingest/worker-release-readiness'
+import {
+  bindConsumedRegion,
+  createConsumedRegionContext,
+  type ConsumedRegionContext,
+} from './consumed-region-context'
 
 export const FAILOVER_FLAG_KEY = WORKER_FAILOVER_FLAG_KEY
 const RECONCILE_MS = 30_000
@@ -75,7 +80,8 @@ async function nativelyCoveredRegions(redis: IORedis, selfNode: string): Promise
 export function startFailoverManager(
   redis: IORedis,
   nativeRegions: readonly IngestRegion[],
-  route: (job: Job) => Promise<unknown>,
+  executionRegion: IngestRegion,
+  route: (job: Job, context: ConsumedRegionContext) => Promise<unknown>,
   opts: FailoverWorkerOpts
 ): { stop: () => Promise<void> } {
   const selfNode = workerNodeId()
@@ -84,7 +90,8 @@ export function startFailoverManager(
 
   const startRegion = (region: IngestRegion): void => {
     if (active.has(region)) return
-    const w = new Worker(regionQueueName(region), route, {
+    const context = createConsumedRegionContext(region, executionRegion)
+    const w = new Worker(regionQueueName(region), bindConsumedRegion(context, route), {
       connection: ingestConnection(),
       concurrency: opts.concurrency,
       lockDuration: opts.lockDuration,

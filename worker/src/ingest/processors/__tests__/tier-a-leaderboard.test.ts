@@ -91,7 +91,13 @@ jest.mock('@/worker/src/ingest/heartbeat', () => ({
   resolveDeployedSha: () => mockResolveDeployedSha(),
 }))
 
-import { processTierA } from '../tier-a-leaderboard'
+import { processTierA as processTierAInRegion } from '../tier-a-leaderboard'
+import { createConsumedRegionContext } from '../../consumed-region-context'
+
+const processTierA = (job: Parameters<typeof processTierAInRegion>[0]) => {
+  const region = job.data.sourceSlug.startsWith('binance_') ? 'vps_sg' : 'local'
+  return processTierAInRegion(job, createConsumedRegionContext(region, region))
+}
 
 const src = {
   id: 19,
@@ -104,6 +110,7 @@ const src = {
   page_size: 100,
   pagination_kind: 'numeric',
   trader_kind_scope: 'human',
+  fetch_region: 'local',
 } as SourceRow
 
 const binanceSrc = {
@@ -424,6 +431,17 @@ describe('Tier-A board-series publication guard', () => {
     })
     return captureLeaderboard
   }
+
+  it('rejects a source moved away from the consumed queue before opening a session', async () => {
+    mockGetSourceBySlug.mockResolvedValue({ ...src, fetch_region: 'vps_sg' })
+
+    await expect(processTierA(job)).rejects.toThrow(
+      'belongs to vps_sg, not consumed queue region local'
+    )
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
 
   it('keeps a registered v3 contract inert without explicit rollout approval', async () => {
     delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
@@ -1786,7 +1804,7 @@ describe('Tier-A board-series publication guard', () => {
         queueJobId: job.id,
         queueAttempt: job.attemptsMade,
         runnerGitSha: 'c'.repeat(40),
-        workerRegion: 'local',
+        workerRegion: 'vps_sg',
       }),
       expect.objectContaining({ timeframe: 30 }),
     ])
@@ -1861,17 +1879,15 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
-  it('fails before begin or upstream I/O when the actual worker region is not configured', async () => {
+  it('records execution provenance separately from the consumed queue authority', async () => {
     configureAttemptBoundSource()
-    delete process.env.INGEST_LOCAL_REGION
 
-    await expect(processTierA(job)).rejects.toThrow(
-      'attempt-bound capture requires an explicit INGEST_LOCAL_REGION'
+    await expect(
+      processTierAInRegion(job, createConsumedRegionContext('vps_sg', 'local'))
+    ).resolves.toHaveLength(1)
+    expect(mockStartLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ workerRegion: 'local' })
     )
-    expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
-    expect(mockOpenSession).not.toHaveBeenCalled()
-    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
-    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('does not open a session when the first registered-window begin fails', async () => {
