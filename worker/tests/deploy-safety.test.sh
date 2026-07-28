@@ -1214,14 +1214,20 @@ test_ready_check_requires_fresh_sha_evidence() {
     'candidate readiness must consume the authority handoff constant'
   assert_contains "$deploy" 'READY_MARKER="arena-deploy-' \
     'PM2 deploy must create a unique readiness marker'
-  assert_contains "$verifier" 'index($0, marker)' \
+  assert_contains "$verifier" '$0 == marker' \
     'readiness must ignore log lines before the deployment marker'
   assert_contains "$verifier" '[heartbeat] redis-hset-committed' \
     'candidate logs must use only the post-HSET commit token'
-  assert_contains "$verifier" 'exactToken($0, "sha=", sha)' \
-    'readiness must require the exact deployed heartbeat SHA token'
-  assert_contains "$verifier" 'exactToken($0, "release=", release)' \
-    'readiness must require the exact worker release ID token'
+  assert_contains "$verifier" '[ingest-worker] metric-trust database release contract ready' \
+    'candidate logs must prove database release readiness first'
+  assert_contains "$verifier" '[ingest-worker] native regional authority ready region=' \
+    'candidate logs must prove native regional authority before worker readiness'
+  assert_contains "$deploy" "-v region='vps_sg'" \
+    'SG readiness must bind the authority token to the exact vps_sg region'
+  assert_contains "$verifier" 'exactCommittedHeartbeat($0, node, pid, sha, release)' \
+    'readiness must require one canonical heartbeat bound to node, PID, SHA, and release'
+  assert_contains "$deploy" "-v sha='\$expected_sha' -v release='\$expected_release' -v pid='\$expected_pid'" \
+    'readiness must pass the exact candidate identity into the canonical verifier'
   assert_contains "$deploy" 'verify_sg_roster --candidate "$SHA" "$WORKER_RELEASE_ID"' \
     'candidate success must require an independent Redis roster readback'
   assert_contains "$deploy" 'verify_sg_roster --rollback "$rollback_sha" "$rollback_release"' \
@@ -1274,40 +1280,148 @@ test_log_verifier_rejects_old_or_forged_evidence() {
   release="$(printf 'b%.0s' {1..64})"
 
   if printf '%s\n' \
+      '[ingest-worker] metric-trust database release contract ready' \
       "[heartbeat] redis-hset-committed node=vps_sg pid=41 sha=$TEST_SHA release=$release ts=1800000000001" \
-      '[ingest-worker] ready' \
+      '[ingest-worker] native regional authority ready region=vps_sg' \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' \
       "$marker" \
-      '[ingest-worker] ready' |
-      awk -v marker="$marker" -v node=vps_sg -v sha="$TEST_SHA" -v release="$release" \
+      '[ingest-worker] metric-trust database release contract ready' \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
         -f "$LOG_VERIFIER"; then
     fail 'valid-looking lines before the unique marker must not pass'
   fi
 
   if printf '%s\n' \
       "$marker" \
+      '[ingest-worker] metric-trust database release contract ready' \
       "[heartbeat] node=vps_sg pid=41 sha=$TEST_SHA release=$release every 60s" \
-      '[ingest-worker] ready' |
-      awk -v marker="$marker" -v node=vps_sg -v sha="$TEST_SHA" -v release="$release" \
+      '[ingest-worker] native regional authority ready region=vps_sg' \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
         -f "$LOG_VERIFIER"; then
     fail 'the legacy pre-HSET heartbeat line must not pass'
   fi
 
   if printf '%s\n' \
       "$marker" \
+      '[ingest-worker] metric-trust database release contract ready' \
       "[heartbeat] redis-hset-committed node=vps_sg pid=41 sha=$TEST_SHA release=wrong ts=1800000000001" \
-      '[ingest-worker] ready' |
-      awk -v marker="$marker" -v node=vps_sg -v sha="$TEST_SHA" -v release="$release" \
+      '[ingest-worker] native regional authority ready region=vps_sg' \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
         -f "$LOG_VERIFIER"; then
     fail 'wrong release token must not pass'
   fi
 
+  if printf '%s\n' \
+      "$marker" \
+      '[ingest-worker] metric-trust database release contract ready' \
+      "[heartbeat] redis-hset-committed node=vps_sg pid=3131 sha=$TEST_SHA release=$release ts=1800000000001" \
+      '[ingest-worker] native regional authority ready region=vps_sg' \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
+        -f "$LOG_VERIFIER"; then
+    fail 'a canonical heartbeat from the wrong PM2 PID must not pass'
+  fi
+
+  if printf '%s\n' \
+      "$marker" \
+      '[ingest-worker] metric-trust database release contract ready' \
+      "[heartbeat] redis-hset-committed node=vps_sg pid=41 sha=$TEST_SHA release=$release ts=1800000000001" \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
+        -f "$LOG_VERIFIER"; then
+    fail 'missing native authority evidence must not pass'
+  fi
+
+  if printf '%s\n' \
+      "$marker" \
+      '[ingest-worker] metric-trust database release contract ready' \
+      "[heartbeat] redis-hset-committed node=vps_sg pid=41 sha=$TEST_SHA release=$release ts=1800000000001" \
+      '[ingest-worker] native regional authority ready region=local' \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
+        -f "$LOG_VERIFIER"; then
+    fail 'an authority token for the wrong region must not pass'
+  fi
+
+  if printf '%s\n' \
+      "$marker" \
+      '[ingest-worker] metric-trust database release contract ready' \
+      "[heartbeat] redis-hset-committed node=vps_sg pid=41 sha=$TEST_SHA release=$release ts=1800000000001" \
+      '[ingest-worker] native regional authority ready region=vps_sg control_epoch=forged' \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
+        -f "$LOG_VERIFIER"; then
+    fail 'an authority token with forged suffix fields must not pass'
+  fi
+
+  if printf '%s\n' \
+      "$marker" \
+      '[ingest-worker] metric-trust database release contract ready' \
+      '[ingest-worker] native regional authority ready region=vps_sg' \
+      "[heartbeat] redis-hset-committed node=vps_sg pid=41 sha=$TEST_SHA release=$release ts=1800000000001" \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
+        -f "$LOG_VERIFIER"; then
+    fail 'authority evidence before the committed heartbeat must not pass'
+  fi
+
+  if printf '%s\n' \
+      '[ingest-worker] native regional authority ready region=vps_sg' \
+      "$marker" \
+      '[ingest-worker] metric-trust database release contract ready' \
+      "[heartbeat] redis-hset-committed node=vps_sg pid=41 sha=$TEST_SHA release=$release ts=1800000000001" \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
+        -f "$LOG_VERIFIER"; then
+    fail 'authority evidence before the unique marker must not pass'
+  fi
+
+  if printf '%s\n' \
+      "$marker" \
+      'noise [ingest-worker] metric-trust database release contract ready' \
+      "noise [heartbeat] redis-hset-committed node=vps_sg pid=41 sha=$TEST_SHA release=$release ts=1800000000001" \
+      'noise [ingest-worker] native regional authority ready region=vps_sg' \
+      'noise [ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
+        -f "$LOG_VERIFIER"; then
+    fail 'embedded readiness substrings outside a canonical PM2 payload must not pass'
+  fi
+
+  if printf '%s\n' \
+      "$marker" \
+      '[ingest-worker] metric-trust database release contract ready' \
+      "[heartbeat] redis-hset-committed node=wrong node=vps_sg pid=41 sha=$TEST_SHA release=$release ts=1800000000001" \
+      '[ingest-worker] native regional authority ready region=vps_sg' \
+      '[ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+      awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
+        -f "$LOG_VERIFIER"; then
+    fail 'duplicate heartbeat identity fields must not pass canonical evidence'
+  fi
+
   printf '%s\n' \
     "$marker" \
-    "[heartbeat] redis-hset-committed node=vps_sg pid=41 sha=$TEST_SHA release=$release ts=1800000000001" \
-    '[ingest-worker] ready' |
-    awk -v marker="$marker" -v node=vps_sg -v sha="$TEST_SHA" -v release="$release" \
+    '2026-07-28 12:00:00: [ingest-worker] metric-trust database release contract ready' \
+    "2026-07-28 12:00:01: [heartbeat] redis-hset-committed node=vps_sg pid=41 sha=$TEST_SHA release=$release ts=1800000000001" \
+    '2026-07-28 12:00:02: [ingest-worker] native regional authority ready region=vps_sg' \
+    '2026-07-28 12:00:03: [ingest-worker] ready (regions=vps_sg, concurrency=5, fast-lane=off)' |
+    awk -v marker="$marker" -v node=vps_sg -v region=vps_sg \
+        -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
       -f "$LOG_VERIFIER" || fail 'exact fresh committed log evidence must pass'
-  echo 'ok - candidate log verifier rejects old, legacy, and forged identity evidence'
+  echo 'ok - candidate log verifier enforces fresh ordered native-authority evidence'
 }
 
 test_release_stamp_matches_exact_committed_inputs() {
@@ -1329,8 +1443,9 @@ test_release_stamp_matches_exact_committed_inputs() {
     'every post-stop failure must run the centralized rollback path'
   assert_contains "$deploy" 'quarantine_uncommitted_pm2_owner || {' \
     'an uncommitted failed rollback must be removed from live and saved PM2 state'
-  assert_contains "$deploy" 'wait_for_candidate_log_evidence "$READY_MARKER" "$SHA" "$WORKER_RELEASE_ID"' \
-    'fresh candidate logs must compare the full SHA and release ID'
+  assert_contains "$deploy" \
+    '"$READY_MARKER" "$SHA" "$WORKER_RELEASE_ID" "$CANDIDATE_PM2_PID"' \
+    'fresh candidate logs must bind the full SHA, release ID, and exact candidate PID'
   echo 'ok - release stamp is bound to exact committed code and dependency inputs'
 }
 

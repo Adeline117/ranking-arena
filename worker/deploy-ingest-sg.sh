@@ -294,13 +294,15 @@ remote_now_ms() {
 }
 
 wait_for_candidate_log_evidence() {
-  local marker="$1" expected_sha="$2" expected_release="$3"
+  local marker="$1" expected_sha="$2" expected_release="$3" expected_pid="$4"
   [[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] || return 1
   [[ "$expected_release" =~ ^[0-9a-f]{64}$ ]] || return 1
+  [[ "$expected_pid" =~ ^[1-9][0-9]*$ ]] || return 1
   ssh_sg "for i in \$(seq 1 $AUTHORITY_HANDOFF_TIMEOUT_SECONDS); do
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN' || exit 1
     awk -v marker='$marker' -v node='$SG_WORKER_NODE_ID' \
-      -v sha='$expected_sha' -v release='$expected_release' \
+      -v region='vps_sg' \
+      -v sha='$expected_sha' -v release='$expected_release' -v pid='$expected_pid' \
       -f '$REMOTE_DIR/worker/verify-sg-ready-log.awk' \
       '$REMOTE_DIR/worker/logs/ingest-out.log' && exit 0
     sleep 1
@@ -818,8 +820,9 @@ CANDIDATE_PM2_PID="$(exact_pm2_pid)" || {
   echo "✗ candidate has no exact live PM2 PID" >&2
   exit 1
 }
-if ! wait_for_candidate_log_evidence "$READY_MARKER" "$SHA" "$WORKER_RELEASE_ID"; then
-  echo "✗ candidate did not report fresh Redis-committed log evidence" >&2
+if ! wait_for_candidate_log_evidence \
+    "$READY_MARKER" "$SHA" "$WORKER_RELEASE_ID" "$CANDIDATE_PM2_PID"; then
+  echo "✗ candidate did not report fresh Redis-committed log evidence in the ordered database/authority readiness sequence" >&2
   exit 1
 fi
 assert_deploy_lock

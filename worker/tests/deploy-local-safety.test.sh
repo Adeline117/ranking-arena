@@ -585,15 +585,25 @@ install_common_fake_functions() {
         release="$(sed -n '1p' "$release_dir/WORKER_RELEASE_ID" 2>/dev/null || true)"
         marker="$(grep 'arena-\(deploy\|rollback\)-' "$log_file" | tail -1 || true)"
         [ -n "$marker" ] || marker='arena-test-marker'
-        printf '%s\n' \
-          '[ingest-worker] metric-trust database release contract ready' \
-          '[ingest-worker] ready (regions=local, concurrency=5)' \
-          >> "$log_file"
-        if [ -n "$release" ]; then
-          printf '%s\n' "[heartbeat] node=mac-mini pid=4242 sha=$sha release=$release" \
+        if [ "$release_dir" != "$OLD_CWD" ]; then
+          printf '%s\n' \
+            '[ingest-worker] metric-trust database release contract ready' \
+            "[heartbeat] redis-hset-committed node=mac-mini pid=4242 sha=$sha release=$release ts=1800000000001" \
+            '[ingest-worker] native regional authority ready region=local' \
+            '[ingest-worker] ready (regions=local, concurrency=5, fast-lane=off)' \
+            >> "$log_file"
+        elif [ -n "$release" ]; then
+          printf '%s\n' \
+            '[ingest-worker] metric-trust database release contract ready' \
+            '[ingest-worker] ready (regions=local, concurrency=5)' \
+            "[heartbeat] node=mac-mini pid=4242 sha=$sha release=$release" \
             >> "$log_file"
         else
-          printf '%s\n' "[heartbeat] node=mac-mini pid=4242 sha=$sha" >> "$log_file"
+          printf '%s\n' \
+            '[ingest-worker] metric-trust database release contract ready' \
+            '[ingest-worker] ready (regions=local, concurrency=5)' \
+            "[heartbeat] node=mac-mini pid=4242 sha=$sha" \
+            >> "$log_file"
         fi
         ;;
       *) fail "unexpected fake PM2 command: $*" ;;
@@ -1724,6 +1734,134 @@ test_unproven_rollback_preserves_candidate_and_blocks_redeploy() {
   echo 'ok - unproven rollback preserves evidence and blocks automatic redeploy'
 }
 
+test_native_ready_log_requires_ordered_local_authority() (
+  local tmp log marker function_source heartbeat
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+  log="$tmp/ingest-out.log"
+  marker='arena-local-deploy-authority-test'
+  heartbeat="[heartbeat] redis-hset-committed node=mac-mini pid=4242 sha=$TEST_SHA release=$TEST_RELEASE ts=1800000000001"
+  function_source="$(awk '
+    /^wait_for_stamped_ready\(\) \{/ { capture = 1 }
+    capture { print }
+    capture && /^}$/ { exit }
+  ' "$DEPLOY_SCRIPT")"
+  [ -n "$function_source" ] || fail 'unable to load the production readiness verifier'
+  eval "$function_source"
+  sleep() { :; }
+  AUTHORITY_HANDOFF_TIMEOUT_SECONDS=300
+  ARENA_READY_TIMEOUT_SECONDS=1
+
+  printf '%s\n' \
+    "$marker" \
+    "[heartbeat] redis-hset-committed node=mac-mini pid=3131 sha=$OLD_SHA release=$OLD_RELEASE ts=1800000000000" \
+    '2026-07-28 12:00:00: [ingest-worker] metric-trust database release contract ready' \
+    "2026-07-28 12:00:01: $heartbeat" \
+    '2026-07-28 12:00:02: [ingest-worker] native regional authority ready region=local' \
+    '2026-07-28 12:00:03: [ingest-worker] ready (regions=local, concurrency=5, fast-lane=off)' > "$log"
+  wait_for_stamped_ready native "$marker" "$log" \
+    "$TEST_SHA" "$TEST_RELEASE" mac-mini 4242 || \
+    fail 'the exact ordered local authority sequence must pass'
+
+  printf '%s\n' \
+    "$marker" \
+    '[ingest-worker] metric-trust database release contract ready' \
+    "$heartbeat" \
+    '[ingest-worker] ready (regions=local, concurrency=5, fast-lane=off)' > "$log"
+  if wait_for_stamped_ready native "$marker" "$log" \
+      "$TEST_SHA" "$TEST_RELEASE" mac-mini 4242; then
+    fail 'native candidate readiness must reject a missing authority token'
+  fi
+
+  printf '%s\n' \
+    "$marker" \
+    '[ingest-worker] metric-trust database release contract ready' \
+    "$heartbeat" \
+    '[ingest-worker] native regional authority ready region=vps_sg' \
+    '[ingest-worker] ready (regions=local, concurrency=5, fast-lane=off)' > "$log"
+  if wait_for_stamped_ready native "$marker" "$log" \
+      "$TEST_SHA" "$TEST_RELEASE" mac-mini 4242; then
+    fail 'native candidate readiness must reject an authority token for the wrong region'
+  fi
+
+  printf '%s\n' \
+    "$marker" \
+    '[ingest-worker] metric-trust database release contract ready' \
+    "$heartbeat" \
+    '[ingest-worker] native regional authority ready region=local database_epoch=forged' \
+    '[ingest-worker] ready (regions=local, concurrency=5, fast-lane=off)' > "$log"
+  if wait_for_stamped_ready native "$marker" "$log" \
+      "$TEST_SHA" "$TEST_RELEASE" mac-mini 4242; then
+    fail 'native candidate readiness must reject authority suffix fields'
+  fi
+
+  printf '%s\n' \
+    "$marker" \
+    '[ingest-worker] metric-trust database release contract ready' \
+    '[ingest-worker] native regional authority ready region=local' \
+    "$heartbeat" \
+    '[ingest-worker] ready (regions=local, concurrency=5, fast-lane=off)' > "$log"
+  if wait_for_stamped_ready native "$marker" "$log" \
+      "$TEST_SHA" "$TEST_RELEASE" mac-mini 4242; then
+    fail 'native candidate readiness must reject authority before the committed heartbeat'
+  fi
+
+  printf '%s\n' \
+    '[ingest-worker] native regional authority ready region=local' \
+    "$marker" \
+    '[ingest-worker] metric-trust database release contract ready' \
+    "$heartbeat" \
+    '[ingest-worker] ready (regions=local, concurrency=5, fast-lane=off)' > "$log"
+  if wait_for_stamped_ready native "$marker" "$log" \
+      "$TEST_SHA" "$TEST_RELEASE" mac-mini 4242; then
+    fail 'native candidate readiness must reject authority evidence before the marker'
+  fi
+
+  printf '%s\n' \
+    "$marker" \
+    'noise [ingest-worker] metric-trust database release contract ready' \
+    "noise $heartbeat" \
+    'noise [ingest-worker] native regional authority ready region=local' \
+    'noise [ingest-worker] ready (regions=local, concurrency=5, fast-lane=off)' > "$log"
+  if wait_for_stamped_ready native "$marker" "$log" \
+      "$TEST_SHA" "$TEST_RELEASE" mac-mini 4242; then
+    fail 'embedded readiness substrings outside a canonical PM2 payload must not pass'
+  fi
+
+  printf '%s\n' \
+    "$marker" \
+    '[ingest-worker] metric-trust database release contract ready' \
+    "[heartbeat] redis-hset-committed node=wrong node=mac-mini pid=4242 sha=$TEST_SHA release=$TEST_RELEASE ts=1800000000001" \
+    '[ingest-worker] native regional authority ready region=local' \
+    '[ingest-worker] ready (regions=local, concurrency=5, fast-lane=off)' > "$log"
+  if wait_for_stamped_ready native "$marker" "$log" \
+      "$TEST_SHA" "$TEST_RELEASE" mac-mini 4242; then
+    fail 'duplicate heartbeat identity fields must not pass canonical evidence'
+  fi
+
+  printf '%s\n' \
+    "$marker" \
+    '[ingest-worker] metric-trust database release contract ready' \
+    "[heartbeat] redis-hset-committed node=mac-mini pid=3131 sha=$TEST_SHA release=$TEST_RELEASE ts=1800000000001" \
+    '[ingest-worker] native regional authority ready region=local' \
+    '[ingest-worker] ready (regions=local, concurrency=5, fast-lane=off)' > "$log"
+  if wait_for_stamped_ready native "$marker" "$log" \
+      "$TEST_SHA" "$TEST_RELEASE" mac-mini 4242; then
+    fail 'a canonical heartbeat from the previous PID must not pass candidate readiness'
+  fi
+
+  printf '%s\n' \
+    "$marker" \
+    '[ingest-worker] metric-trust database release contract ready' \
+    '[ingest-worker] ready (regions=local, concurrency=5)' \
+    "[heartbeat] node=mac-mini pid=4242 sha=$OLD_SHA release=$OLD_RELEASE" > "$log"
+  wait_for_stamped_ready legacy "$marker" "$log" \
+    "$OLD_SHA" "$OLD_RELEASE" mac-mini 4242 || \
+    fail 'stamped rollback must remain compatible with the legacy readiness contract'
+
+  echo 'ok - native readiness is ordered and legacy stamped rollback stays compatible'
+)
+
 test_fresh_identity_and_retention_contract() {
   local deploy handoff_timeout
   deploy="$(<"$DEPLOY_SCRIPT")"
@@ -1737,8 +1875,17 @@ test_fresh_identity_and_retention_contract() {
     'the readiness timeout override must remain a strict positive integer'
   assert_matches "$deploy" '(READY|DEPLOY)_MARKER=' \
     'each start must write a unique readiness boundary'
-  assert_contains "$deploy" 'index($0, marker)' \
+  assert_contains "$deploy" '$0 == marker' \
     'readiness must ignore all log evidence before the marker'
+  assert_contains "$deploy" \
+    '[ingest-worker] native regional authority ready region=' \
+    'native candidate readiness must require the exact authority token'
+  assert_contains "$deploy" \
+    'wait_for_stamped_ready native "$DEPLOY_MARKER"' \
+    'candidate readiness must use the strict native authority protocol'
+  assert_contains "$deploy" \
+    'wait_for_stamped_ready legacy "$rollback_marker"' \
+    'stamped rollback must explicitly retain the legacy readiness protocol'
   assert_contains "$deploy" '[ingest-worker] ready' \
     'readiness must require a fresh worker-ready line'
   assert_matches "$deploy" 'sha=.*expected_sha|sha=.*\$.*SHA|index\(\$0,.*sha' \
@@ -1874,7 +2021,7 @@ test_deep_runtime_and_crash_recovery_contracts() {
     'legacy rollback discovery must support an exact post-start freshness boundary'
   assert_contains "$deploy" 'verify-local-heartbeat.ts' \
     'deploy must invoke strict post-start Redis roster proof'
-  assert_before 'wait_for_stamped_ready "\$DEPLOY_MARKER"' \
+  assert_before 'wait_for_stamped_ready native "\$DEPLOY_MARKER"' \
     'verify-local-heartbeat\.ts' \
     'log readiness must precede independent Redis roster proof'
   assert_before 'verify-local-heartbeat\.ts' 'DEPLOY_SUCCEEDED=1' \
@@ -1890,6 +2037,12 @@ test_deep_runtime_and_crash_recovery_contracts() {
   assert_before 'pm2_command delete "\$PM2_APP"' \
     'wait_for_pm2_absent "\$OLD_PID"' \
     'cutover must prove the deleted old PM2 owner is absent before candidate start'
+  assert_before 'wait_for_pm2_absent "\$OLD_PID"' \
+    'printf.*"\$DEPLOY_MARKER".*"\$DEPLOY_LOG"' \
+    'candidate log evidence must begin only after the previous owner is exactly absent'
+  assert_before 'printf.*"\$DEPLOY_MARKER".*"\$DEPLOY_LOG"' \
+    'start_release_config "\$RELEASE_DIR"' \
+    'the fresh candidate marker must be durable before the candidate starts'
   assert_matches "$deploy" 'ROLLBACK_SUCCEEDED|rollback.*succeeded' \
     'candidate cleanup must be fenced by proven rollback success'
   assert_contains "$deploy" 'require_rollback_stability' \
@@ -2032,6 +2185,7 @@ test_rollback_stability_lock_loss_is_rejected
 test_rollback_finalization_lock_gaps_are_rejected
 test_legacy_discovery_uses_real_deadline_and_bounded_requests
 test_unproven_rollback_preserves_candidate_and_blocks_redeploy
+test_native_ready_log_requires_ordered_local_authority
 test_fresh_identity_and_retention_contract
 test_deep_runtime_and_crash_recovery_contracts
 test_success_keeps_only_current_and_previous_immutable_releases
