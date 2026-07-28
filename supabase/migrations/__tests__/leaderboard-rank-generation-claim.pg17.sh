@@ -8,6 +8,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260725015000_leaderboard_rank_generation_claim.sql"
+CAPACITY_MIGRATION="$ROOT_DIR/supabase/migrations/20260725015500_bound_leaderboard_rank_generation_batches.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -66,6 +67,20 @@ expect_migration_failure() {
   local label="$1"
   local pattern="$2"
   if psql_cmd -q -f "$MIGRATION" >"$ERROR_FILE" 2>&1; then
+    echo "$label unexpectedly succeeded" >&2
+    exit 1
+  fi
+  if ! rg -q "$pattern" "$ERROR_FILE"; then
+    echo "$label failed for an unexpected reason" >&2
+    sed -n '1,220p' "$ERROR_FILE" >&2
+    exit 1
+  fi
+}
+
+expect_capacity_migration_failure() {
+  local label="$1"
+  local pattern="$2"
+  if psql_cmd -q -f "$CAPACITY_MIGRATION" >"$ERROR_FILE" 2>&1; then
     echo "$label unexpectedly succeeded" >&2
     exit 1
   fi
@@ -1217,5 +1232,257 @@ DROP FUNCTION arena.fixture_rogue_generation_head_trigger();
 SQL
 
 psql_cmd -q -f "$MIGRATION"
+
+# The forward capacity guard must reject pre-existing impossible claims without
+# partially installing its constraint. The immutable-row trigger is disabled
+# only to remove this deliberately invalid owner fixture after the failed test.
+psql_cmd -q <<'SQL'
+WITH claimed AS (
+  SELECT pg_catalog.clock_timestamp() AS claimed_at
+)
+INSERT INTO arena.leaderboard_rank_generation_claims (
+  contract,
+  season_id,
+  generation_seq,
+  score_cohort_id,
+  write_set_sha256,
+  expected_rank_count,
+  expected_batch_count,
+  computed_at,
+  lease_seconds,
+  claimed_at,
+  lease_expires_at
+)
+SELECT
+  'leaderboard-rank-generation-claim@1',
+  '7D',
+  8000000000000000,
+  '71717171-7171-4171-8171-717171717171'::uuid,
+  pg_catalog.repeat('7', 64),
+  2001,
+  2,
+  '2026-07-25 00:09:00+00'::timestamptz,
+  300,
+  claimed.claimed_at,
+  claimed.claimed_at + interval '300 seconds'
+FROM claimed;
+SQL
+expect_capacity_migration_failure \
+  "capacity migration accepted an impossible existing claim" \
+  "existing generation claim exceeds bounded batch capacity"
+if [[ "$(psql_cmd -Atqc "SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = 'arena.leaderboard_rank_generation_claims'::regclass AND conname = 'leaderboard_rank_generation_claims_batch_capacity_check');")" != "t" ]] \
+   || [[ "$(psql_cmd -Atqc "SELECT pg_catalog.to_regprocedure('public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)') IS NOT NULL;")" != "t" ]]; then
+  echo "failed capacity preflight left partial state" >&2
+  exit 1
+fi
+psql_cmd -q <<'SQL'
+ALTER TABLE arena.leaderboard_rank_generation_claims DISABLE TRIGGER USER;
+DELETE FROM ONLY arena.leaderboard_rank_generation_claims
+WHERE score_cohort_id = '71717171-7171-4171-8171-717171717171'::uuid;
+ALTER TABLE arena.leaderboard_rank_generation_claims ENABLE TRIGGER USER;
+SQL
+
+# A hostile BEFORE INSERT trigger can rewrite an oversized request into a
+# durable smaller claim while the old RPC still echoes the caller's values.
+# The upgrade must treat every extra trigger/rule/policy as hostile evidence
+# before it rewrites the RPC or installs the capacity constraint.
+psql_cmd -q <<'SQL'
+DROP TRIGGER leaderboard_rank_generation_claim_immutable
+  ON arena.leaderboard_rank_generation_claims;
+CREATE TRIGGER leaderboard_rank_generation_claim_immutable
+BEFORE UPDATE OF write_set_sha256 OR DELETE
+ON arena.leaderboard_rank_generation_claims
+FOR EACH ROW
+EXECUTE FUNCTION arena.reject_leaderboard_rank_publication_mutation();
+SQL
+expect_capacity_migration_failure \
+  "capacity migration accepted a column-restricted immutable trigger" \
+  "generation table trigger, rule, or policy drifted"
+psql_cmd -q <<'SQL'
+DROP TRIGGER leaderboard_rank_generation_claim_immutable
+  ON arena.leaderboard_rank_generation_claims;
+CREATE TRIGGER leaderboard_rank_generation_claim_immutable
+BEFORE UPDATE OR DELETE
+ON arena.leaderboard_rank_generation_claims
+FOR EACH ROW
+EXECUTE FUNCTION arena.reject_leaderboard_rank_publication_mutation();
+
+CREATE FUNCTION arena.fixture_rewrite_generation_claim()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  NEW.expected_rank_count := 1;
+  NEW.expected_batch_count := 1;
+  RETURN NEW;
+END;
+$function$;
+CREATE TRIGGER fixture_rewrite_generation_claim
+BEFORE INSERT ON arena.leaderboard_rank_generation_claims
+FOR EACH ROW
+EXECUTE FUNCTION arena.fixture_rewrite_generation_claim();
+SQL
+HOSTILE_TRIGGER_FUNCTION_SHA_BEFORE="$(psql_cmd -Atqc "SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_catalog.pg_proc WHERE oid = 'public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)'::regprocedure;")"
+expect_capacity_migration_failure \
+  "capacity migration accepted a claim-rewriting trigger" \
+  "generation table trigger, rule, or policy drifted"
+if [[ "$(psql_cmd -Atqc "SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_catalog.pg_proc WHERE oid = 'public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)'::regprocedure;")" != "$HOSTILE_TRIGGER_FUNCTION_SHA_BEFORE" ]] \
+   || [[ "$(psql_cmd -Atqc "SELECT to_regclass('arena.leaderboard_rank_generation_claims') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = 'arena.leaderboard_rank_generation_claims'::regclass AND conname = 'leaderboard_rank_generation_claims_batch_capacity_check');")" != "t" ]]; then
+  echo "hostile trigger rejection changed the RPC or installed partial capacity state" >&2
+  exit 1
+fi
+psql_cmd -q <<'SQL'
+DROP TRIGGER fixture_rewrite_generation_claim
+  ON arena.leaderboard_rank_generation_claims;
+DROP FUNCTION arena.fixture_rewrite_generation_claim();
+
+CREATE POLICY fixture_generation_claim_read
+ON arena.leaderboard_rank_generation_claims
+FOR SELECT
+USING (true);
+SQL
+expect_capacity_migration_failure \
+  "capacity migration accepted a rogue claim policy" \
+  "generation table trigger, rule, or policy drifted"
+psql_cmd -q <<'SQL'
+DROP POLICY fixture_generation_claim_read
+  ON arena.leaderboard_rank_generation_claims;
+
+CREATE RULE fixture_generation_claim_insert AS
+ON INSERT TO arena.leaderboard_rank_generation_claims
+DO ALSO NOTHING;
+SQL
+expect_capacity_migration_failure \
+  "capacity migration accepted a rogue claim rule" \
+  "generation table trigger, rule, or policy drifted"
+psql_cmd -q <<'SQL'
+DROP RULE fixture_generation_claim_insert
+  ON arena.leaderboard_rank_generation_claims;
+
+ALTER TABLE ONLY arena.leaderboard_rank_generation_claims
+  DROP CONSTRAINT leaderboard_rank_generation_claims_cohort_key;
+ALTER TABLE ONLY arena.leaderboard_rank_generation_claims
+  ADD CONSTRAINT fixture_generation_claims_cohort_key
+  UNIQUE (score_cohort_id, season_id);
+SQL
+expect_capacity_migration_failure \
+  "capacity migration accepted a replaced cohort identity constraint" \
+  "generation foundational constraint contract drifted"
+psql_cmd -q <<'SQL'
+ALTER TABLE ONLY arena.leaderboard_rank_generation_claims
+  DROP CONSTRAINT fixture_generation_claims_cohort_key;
+ALTER TABLE ONLY arena.leaderboard_rank_generation_claims
+  ADD CONSTRAINT leaderboard_rank_generation_claims_cohort_key
+  UNIQUE (score_cohort_id);
+SQL
+
+psql_cmd -q -f "$CAPACITY_MIGRATION"
+CAPACITY_OID_BEFORE="$(psql_cmd -Atqc "SELECT oid FROM pg_catalog.pg_constraint WHERE conrelid = 'arena.leaderboard_rank_generation_claims'::regclass AND conname = 'leaderboard_rank_generation_claims_batch_capacity_check';")"
+CAPACITY_FUNCTION_OID_BEFORE="$(psql_cmd -Atqc "SELECT 'public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)'::regprocedure::oid;")"
+CAPACITY_FUNCTION_SHA_BEFORE="$(psql_cmd -Atqc "SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_catalog.pg_proc WHERE oid = 'public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)'::regprocedure;")"
+CAPACITY_STATE_BEFORE="$(psql_cmd -Atqc "SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(claim) ORDER BY claim.season_id, claim.generation_seq)::text FROM ONLY arena.leaderboard_rank_generation_claims AS claim;")"
+psql_cmd -q -f "$CAPACITY_MIGRATION"
+CAPACITY_OID_AFTER="$(psql_cmd -Atqc "SELECT oid FROM pg_catalog.pg_constraint WHERE conrelid = 'arena.leaderboard_rank_generation_claims'::regclass AND conname = 'leaderboard_rank_generation_claims_batch_capacity_check';")"
+CAPACITY_FUNCTION_OID_AFTER="$(psql_cmd -Atqc "SELECT 'public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)'::regprocedure::oid;")"
+CAPACITY_FUNCTION_SHA_AFTER="$(psql_cmd -Atqc "SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_catalog.pg_proc WHERE oid = 'public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)'::regprocedure;")"
+CAPACITY_STATE_AFTER="$(psql_cmd -Atqc "SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(claim) ORDER BY claim.season_id, claim.generation_seq)::text FROM ONLY arena.leaderboard_rank_generation_claims AS claim;")"
+if [[ -z "$CAPACITY_OID_BEFORE" ]] \
+   || [[ "$CAPACITY_OID_BEFORE" != "$CAPACITY_OID_AFTER" ]] \
+   || [[ "$CAPACITY_FUNCTION_OID_BEFORE" != "$CAPACITY_FUNCTION_OID_AFTER" ]] \
+   || [[ "$CAPACITY_FUNCTION_SHA_BEFORE" != "09f136557ede5e00ef5c519736c81abf44ea7780f336e216591304a746a746a2" ]] \
+   || [[ "$CAPACITY_FUNCTION_SHA_BEFORE" != "$CAPACITY_FUNCTION_SHA_AFTER" ]] \
+   || [[ "$CAPACITY_STATE_BEFORE" != "$CAPACITY_STATE_AFTER" ]]; then
+  echo "capacity migration replay changed RPC, constraint identity, or claim state" >&2
+  exit 1
+fi
+
+# Both dimensions fail at the RPC boundary and leave the generation head
+# untouched. The exact capacity boundary remains claimable and replayable.
+psql_cmd -q <<'SQL'
+UPDATE ONLY arena.leaderboard_rank_generation_heads
+SET phase = 'failed', lease_expires_at = NULL, updated_at = pg_catalog.clock_timestamp()
+WHERE season_id = '30D';
+SQL
+CAPACITY_HEAD_BEFORE="$(psql_cmd -Atqc "SELECT pg_catalog.to_jsonb(head)::text FROM ONLY arena.leaderboard_rank_generation_heads AS head WHERE season_id = '30D';")"
+CAPACITY_CLAIM_COUNT_BEFORE="$(psql_cmd -Atqc 'SELECT count(*) FROM ONLY arena.leaderboard_rank_generation_claims;')"
+expect_failure \
+  "generation claim exceeded one-batch row capacity" \
+  "generation rank and batch counts are inconsistent" \
+  "SET ROLE service_role; SELECT public.claim_leaderboard_rank_generation('30D','72727272-7272-4272-8272-727272727272',repeat('7',64),1001,1,'2026-07-25 00:10:00+00',300);"
+expect_failure \
+  "generation claim exceeded receipt capacity" \
+  "generation rank and batch counts are inconsistent" \
+  "SET ROLE service_role; SELECT public.claim_leaderboard_rank_generation('30D','73737373-7373-4373-8373-737373737373',repeat('7',64),4097,4097,'2026-07-25 00:10:00+00',300);"
+expect_failure \
+  "generation claim exceeded authoritative scorer capacity" \
+  "generation rank and batch counts are inconsistent" \
+  "SET ROLE service_role; SELECT public.claim_leaderboard_rank_generation('30D','75757575-7575-4575-8575-757575757575',repeat('7',64),64001,65,'2026-07-25 00:10:00+00',300);"
+if [[ "$CAPACITY_HEAD_BEFORE" != "$(psql_cmd -Atqc "SELECT pg_catalog.to_jsonb(head)::text FROM ONLY arena.leaderboard_rank_generation_heads AS head WHERE season_id = '30D';")" ]] \
+   || [[ "$CAPACITY_CLAIM_COUNT_BEFORE" != "$(psql_cmd -Atqc 'SELECT count(*) FROM ONLY arena.leaderboard_rank_generation_claims;')" ]]; then
+  echo "rejected capacity claims changed durable state" >&2
+  exit 1
+fi
+
+CAPACITY_BOUNDARY="$(psql_cmd -Atqc "SET ROLE service_role; SELECT (result->>'expected_rank_count') || '|' || (result->>'expected_batch_count') FROM (SELECT public.claim_leaderboard_rank_generation('30D','74747474-7474-4474-8474-747474747474',repeat('7',64),64000,64,'2026-07-25 00:10:00+00',300) AS result) AS claimed;")"
+if [[ "$CAPACITY_BOUNDARY" != "64000|64" ]]; then
+  echo "generation claim rejected the exact scorer and batch capacity boundary" >&2
+  exit 1
+fi
+
+# Same-name weakened drift is evidence, never something replay may converge.
+psql_cmd -q <<'SQL'
+ALTER TABLE ONLY arena.leaderboard_rank_generation_claims
+  DROP CONSTRAINT leaderboard_rank_generation_claims_batch_capacity_check;
+ALTER TABLE ONLY arena.leaderboard_rank_generation_claims
+  ADD CONSTRAINT leaderboard_rank_generation_claims_batch_capacity_check
+  CHECK (expected_batch_count <= 5000);
+SQL
+expect_capacity_migration_failure \
+  "capacity migration accepted a weakened same-name constraint" \
+  "generation batch capacity constraint drifted"
+psql_cmd -q <<'SQL'
+ALTER TABLE ONLY arena.leaderboard_rank_generation_claims
+  DROP CONSTRAINT leaderboard_rank_generation_claims_batch_capacity_check;
+ALTER TABLE ONLY arena.leaderboard_rank_generation_claims
+  ADD CONSTRAINT leaderboard_rank_generation_claims_batch_capacity_check
+  CHECK (
+    expected_batch_count <= 4096
+    AND expected_rank_count <= 64000
+    AND expected_rank_count::bigint <=
+      expected_batch_count::bigint * 1000
+  );
+SQL
+psql_cmd -q -f "$CAPACITY_MIGRATION"
+
+# A same-signature hostile body after installation must not be converged back
+# to trusted code by replay. Put this final because the intentionally hostile
+# body should remain installed after the expected failure.
+psql_cmd -q <<'SQL'
+CREATE OR REPLACE FUNCTION public.claim_leaderboard_rank_generation(
+  p_season_id text,
+  p_score_cohort_id uuid,
+  p_write_set_sha256 text,
+  p_expected_rank_count integer,
+  p_expected_batch_count integer,
+  p_computed_at timestamptz,
+  p_lease_seconds integer
+)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+SET lock_timeout = '10s'
+AS $function$
+  SELECT pg_catalog.jsonb_build_object('hostile', true)
+$function$;
+SQL
+HOSTILE_FUNCTION_SHA="$(psql_cmd -Atqc "SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_catalog.pg_proc WHERE oid = 'public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)'::regprocedure;")"
+expect_capacity_migration_failure \
+  "capacity migration repaired a hostile same-signature RPC" \
+  "generation claim RPC body does not match the install state"
+if [[ "$HOSTILE_FUNCTION_SHA" != "$(psql_cmd -Atqc "SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_catalog.pg_proc WHERE oid = 'public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)'::regprocedure;")" ]]; then
+  echo "hostile claim RPC rejection silently repaired function evidence" >&2
+  exit 1
+fi
 
 echo "leaderboard rank generation claim PG17 proof passed"

@@ -122,6 +122,27 @@ describe('claimLeaderboardRankGeneration', () => {
     ).resolves.toMatchObject({ expected_rank_count: 0, expected_batch_count: 0 })
   })
 
+  it('accepts the exact globally comparable scorer and batch-capacity boundary', async () => {
+    const supabase = supabaseReturning(
+      envelope(
+        successfulResponse({
+          expected_rank_count: LEADERBOARD_RANK_GENERATION_MAX_ROWS,
+          expected_batch_count: 64,
+        })
+      )
+    )
+
+    await expect(
+      claimLeaderboardRankGeneration(
+        supabase as never,
+        input({
+          expectedRankCount: LEADERBOARD_RANK_GENERATION_MAX_ROWS,
+          expectedBatchCount: 64,
+        })
+      )
+    ).resolves.toMatchObject({ expected_rank_count: 64_000, expected_batch_count: 64 })
+  })
+
   it('reads then once when AbortSignal binding returns the same mutable query', async () => {
     let thenReads = 0
     const realThen = (resolve: (value: unknown) => void, reject: (reason: unknown) => void) =>
