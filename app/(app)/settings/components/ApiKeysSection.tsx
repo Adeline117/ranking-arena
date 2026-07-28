@@ -240,12 +240,7 @@ export function ApiKeysSection() {
 
   const copyKey = async (key: string) => {
     const scope = captureSettingsViewer(authRef.current)
-    if (
-      !scope ||
-      !stateBelongsToViewer(scope) ||
-      (justCreatedKey !== key &&
-        !keys.some((candidate) => candidate.active && candidate.key === key))
-    ) {
+    if (!scope || !stateBelongsToViewer(scope) || justCreatedKey !== key) {
       return
     }
 
@@ -293,12 +288,9 @@ export function ApiKeysSection() {
     return (
       <SectionCard id="api-keys" title={t('apiKeysSection')} description={t('apiKeysDesc')}>
         <Box
+          className="api-key-load-error"
           role="alert"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: tokens.spacing[3],
             padding: tokens.spacing[4],
             borderRadius: tokens.radius.md,
             border: `1px solid ${alpha(tokens.colors.accent.error, 20)}`,
@@ -309,6 +301,7 @@ export function ApiKeysSection() {
             {t('loadFailedRetryShort')}
           </Text>
           <Button
+            className="api-key-load-retry"
             size="sm"
             variant="secondary"
             onClick={() => {
@@ -328,6 +321,7 @@ export function ApiKeysSection() {
       {/* Just-created key banner */}
       {visibleJustCreatedKey && (
         <Box
+          className="api-created-key-banner"
           style={{
             padding: tokens.spacing[4],
             borderRadius: tokens.radius.md,
@@ -343,10 +337,10 @@ export function ApiKeysSection() {
           >
             {t('apiKeyCopyNowWarning')}
           </Text>
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          <div className="api-created-key-secret">
             <code
+              className="api-created-key-code"
               style={{
-                flex: 1,
                 padding: tokens.spacing[2],
                 borderRadius: tokens.radius.sm,
                 background: 'var(--color-bg-tertiary)',
@@ -357,11 +351,16 @@ export function ApiKeysSection() {
             >
               {visibleJustCreatedKey}
             </code>
-            <Button size="sm" onClick={() => void copyKey(visibleJustCreatedKey)}>
+            <Button
+              className="api-created-key-copy"
+              size="sm"
+              onClick={() => void copyKey(visibleJustCreatedKey)}
+            >
               {t('copy')}
             </Button>
           </div>
           <button
+            className="api-created-key-dismiss"
             onClick={dismissCreatedKey}
             style={{
               marginTop: tokens.spacing[2],
@@ -387,7 +386,7 @@ export function ApiKeysSection() {
       />
 
       {/* Create new key */}
-      <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
+      <Box className="api-key-create-row" style={{ marginBottom: tokens.spacing[4] }}>
         <input
           type="text"
           placeholder={t('apiKeyNamePlaceholder')}
@@ -405,6 +404,7 @@ export function ApiKeysSection() {
           }}
         />
         <Button
+          className="api-key-create-button"
           onClick={createKey}
           disabled={!stateReady || visibleCreating || activeKeys.length >= 5}
           size="sm"
@@ -439,7 +439,6 @@ export function ApiKeysSection() {
               key={k.id}
               apiKey={k}
               onRevoke={revokeKey}
-              onCopy={copyKey}
               isRevoking={visibleRevokingId === k.id}
             />
           ))}
@@ -453,13 +452,7 @@ export function ApiKeysSection() {
                 {t('apiKeyRevokedSection')}
               </Text>
               {revokedKeys.map((k) => (
-                <KeyRow
-                  key={k.id}
-                  apiKey={k}
-                  onRevoke={revokeKey}
-                  onCopy={copyKey}
-                  isRevoking={false}
-                />
+                <KeyRow key={k.id} apiKey={k} onRevoke={revokeKey} isRevoking={false} />
               ))}
             </div>
           )}
@@ -680,18 +673,16 @@ function ApiTierBanner({
 
   return (
     <Box
+      className="api-tier-banner"
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         padding: tokens.spacing[3],
         borderRadius: tokens.radius.md,
         background: 'var(--color-bg-tertiary)',
         marginBottom: tokens.spacing[4],
       }}
     >
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+      <div className="api-tier-banner-summary">
+        <div className="api-tier-banner-meta">
           <Text size="sm" weight="bold">
             {t('apiPlanLabel')}
           </Text>
@@ -707,7 +698,11 @@ function ApiTierBanner({
           >
             {t(tier.labelKey)}
           </span>
-          <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
+          <Text
+            className="api-tier-banner-limit"
+            size="xs"
+            style={{ color: 'var(--color-text-tertiary)' }}
+          >
             {t(tier.limitKey)}
           </Text>
         </div>
@@ -718,7 +713,7 @@ function ApiTierBanner({
         )}
       </div>
       {currentTier !== 'pro' && (
-        <div style={{ display: 'flex', gap: tokens.spacing[2] }}>
+        <div className="api-tier-banner-actions">
           {currentTier === 'free' && (
             <Button
               size="sm"
@@ -746,12 +741,10 @@ function ApiTierBanner({
 function KeyRow({
   apiKey,
   onRevoke,
-  onCopy,
   isRevoking,
 }: {
   apiKey: ApiKey
   onRevoke: (id: string) => void
-  onCopy: (key: string) => void
   isRevoking: boolean
 }) {
   const { t, language } = useLanguage()
@@ -762,21 +755,19 @@ function KeyRow({
 
   return (
     <div
+      className="api-key-row"
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: tokens.spacing[3],
-        padding: `${tokens.spacing[3]} 0`,
         borderBottom: '1px solid var(--color-border-primary)',
         opacity: apiKey.active ? 1 : 0.5,
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="sm" weight="bold" style={{ whiteSpace: 'nowrap' }}>
+      <div className="api-key-row-main">
+        <div className="api-key-row-identity">
+          <Text className="api-key-row-name" size="sm" weight="bold">
             {apiKey.name}
           </Text>
           <code
+            className="api-key-row-code"
             style={{
               fontSize: 12,
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
@@ -786,7 +777,7 @@ function KeyRow({
             {apiKey.key}
           </code>
         </div>
-        <div style={{ display: 'flex', gap: tokens.spacing[3], marginTop: 2 }}>
+        <div className="api-key-row-metadata">
           <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
             {t('apiKeyCreatedLabel')} {created}
           </Text>
@@ -803,10 +794,7 @@ function KeyRow({
       </div>
 
       {apiKey.active && (
-        <div style={{ display: 'flex', gap: tokens.spacing[2], flexShrink: 0 }}>
-          <Button size="sm" variant="ghost" onClick={() => onCopy(apiKey.key)}>
-            {t('copy')}
-          </Button>
+        <div className="api-key-row-actions">
           <Button
             size="sm"
             variant="danger"

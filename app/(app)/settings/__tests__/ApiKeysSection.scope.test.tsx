@@ -170,7 +170,6 @@ describe('ApiKeysSection viewer ownership', () => {
     const view = render(<ApiKeysSection />)
 
     await screen.findByText('user-a private key')
-    const oldCopyButton = screen.getByRole('button', { name: 'copy' })
     const oldRevokeButton = screen.getByRole('button', { name: 'revoke' })
     const input = screen.getByPlaceholderText('apiKeyNamePlaceholder') as HTMLInputElement
     fireEvent.change(input, { target: { value: 'A private draft' } })
@@ -187,7 +186,6 @@ describe('ApiKeysSection viewer ownership', () => {
     expect(inputForB.value).toBe('')
     expect(inputForB).toBeDisabled()
 
-    fireEvent.click(oldCopyButton)
     fireEvent.click(oldRevokeButton)
     expect(mockClipboardWrite).not.toHaveBeenCalled()
     expect(mockAuthedFetch.mock.calls.some((call) => call[1] === 'PATCH')).toBe(false)
@@ -262,7 +260,7 @@ describe('ApiKeysSection viewer ownership', () => {
     )
   })
 
-  it('discards late A revoke and clipboard completions instead of updating B UI', async () => {
+  it('does not copy listed masks and drops late created-key copy and revoke completions', async () => {
     const listB = deferred<FetchResult>()
     const revokeA = deferred<FetchResult>()
     const clipboardA = deferred<void>()
@@ -270,6 +268,13 @@ describe('ApiKeysSection viewer ownership', () => {
     mockClipboardWrite.mockReturnValue(clipboardA.promise)
     mockAuthedFetch.mockImplementation(
       (url: string, method: string, accessToken: string | null) => {
+        if (url === '/api/user/api-keys' && method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            status: 201,
+            data: { data: { key: 'arena_sk_full_secret_for_a' } },
+          })
+        }
         if (url === '/api/user/api-keys' && method === 'PATCH') return revokeA.promise
         if (url.includes('/usage')) {
           return Promise.resolve({
@@ -289,9 +294,17 @@ describe('ApiKeysSection viewer ownership', () => {
     const view = render(<ApiKeysSection />)
     await screen.findByText('user-a private key')
 
+    expect(screen.queryByRole('button', { name: 'copy' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText('apiKeyNamePlaceholder'), {
+      target: { value: 'Alpha secret' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'apiKeyCreate' }))
+    await screen.findByText('arena_sk_full_secret_for_a')
     fireEvent.click(screen.getByRole('button', { name: 'copy' }))
     fireEvent.click(screen.getByRole('button', { name: 'revoke' }))
-    await waitFor(() => expect(mockClipboardWrite).toHaveBeenCalledWith('arena_user-a_masked'))
+    await waitFor(() =>
+      expect(mockClipboardWrite).toHaveBeenCalledWith('arena_sk_full_secret_for_a')
+    )
     await waitFor(() =>
       expect(mockAuthedFetch.mock.calls.some((call) => call[1] === 'PATCH')).toBe(true)
     )
