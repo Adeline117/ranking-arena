@@ -215,7 +215,7 @@ const HIDDEN_PATHS = ['/login', '/onboarding', '/reset-password', '/auth/callbac
    Dynamic properties (color, transform, opacity) are applied inline. */
 
 const SPACER_STYLE: React.CSSProperties = {
-  height: 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px))',
+  height: 'calc(var(--mobile-nav-height, 60px) + var(--safe-area-inset-bottom, 0px))',
 }
 
 const NAV_BASE_STYLE: React.CSSProperties = {
@@ -223,7 +223,7 @@ const NAV_BASE_STYLE: React.CSSProperties = {
   bottom: 0,
   left: 0,
   right: 0,
-  height: 60,
+  height: 'calc(var(--mobile-nav-height, 60px) + var(--safe-area-inset-bottom, 0px))',
   // Fully opaque (was glass.bg.primary = 95% + blur). That last 5% + blur still
   // ghosted sharp ticker/price text through the nav on scroll — the recurring
   // U7-13 bleed. A bottom nav gains nothing from translucency, so make it solid;
@@ -234,7 +234,7 @@ const NAV_BASE_STYLE: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'space-around',
   zIndex: tokens.zIndex.sticky,
-  paddingBottom: 'env(safe-area-inset-bottom, 0)',
+  paddingBottom: 'var(--safe-area-inset-bottom, 0px)',
   transition: 'transform 0.3s ease',
 }
 

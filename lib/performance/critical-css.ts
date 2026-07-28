@@ -34,6 +34,10 @@ html[lang="ja"] .pro-promo-lang[data-pro-promo-lang="en"],html[lang="ko"] .pro-p
 /* 字体变量 */
 :root{
   --font-inter:'Inter',system-ui,sans-serif;
+  --safe-area-inset-top:env(safe-area-inset-top,0px);
+  --safe-area-inset-right:env(safe-area-inset-right,0px);
+  --safe-area-inset-bottom:env(safe-area-inset-bottom,0px);
+  --safe-area-inset-left:env(safe-area-inset-left,0px);
 }
 
 /* 深色主题颜色 (default) */
@@ -94,9 +98,9 @@ html[lang="ja"] .pro-promo-lang[data-pro-promo-lang="en"],html[lang="ko"] .pro-p
 .three-col-center{min-height:calc(100vh - 60px);min-width:0;overflow-x:clip}
 
 /* Safe Area (iPhone 刘海屏) */
-.safe-area-inset-bottom{padding-bottom:env(safe-area-inset-bottom,0)}
-.safe-area-inset-top{padding-top:env(safe-area-inset-top,0)}
-.has-mobile-nav{padding-bottom:calc(var(--mobile-nav-height,60px) + env(safe-area-inset-bottom,0))}
+.safe-area-inset-bottom{padding-bottom:var(--safe-area-inset-bottom,0px)}
+.safe-area-inset-top{padding-top:var(--safe-area-inset-top,0px)}
+.has-mobile-nav{padding-bottom:calc(var(--mobile-nav-height,60px) + var(--safe-area-inset-bottom,0px))}
 @media(min-width:768px){.has-mobile-nav{padding-bottom:0}}
 
 /* 移动端容器 */

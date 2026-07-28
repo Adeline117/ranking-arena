@@ -1,11 +1,15 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { isFloatingActionRoute } from '@/lib/features'
+import {
+  announceBottomOverlayOpen,
+  subscribeToBottomOverlayOpen,
+} from '@/lib/ui/bottomOverlayCoordinator'
 
 export default function FloatingActionButton() {
   const router = useRouter()
@@ -14,6 +18,10 @@ export default function FloatingActionButton() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const launcherRef = useRef<HTMLButtonElement>(null)
+  const firstMenuItemRef = useRef<HTMLButtonElement>(null)
+  const wasMenuOpenRef = useRef(false)
+  const restoreLauncherOnCloseRef = useRef(false)
 
   useEffect(() => {
     // Use getSession() — reads from local storage, no network request
@@ -26,12 +34,55 @@ export default function FloatingActionButton() {
     if (!menuOpen) return
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        restoreLauncherOnCloseRef.current = false
         setMenuOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [menuOpen])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      restoreLauncherOnCloseRef.current = true
+      setMenuOpen(false)
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [menuOpen])
+
+  useLayoutEffect(() => {
+    if (menuOpen) {
+      wasMenuOpenRef.current = true
+      restoreLauncherOnCloseRef.current = false
+      firstMenuItemRef.current?.focus({ preventScroll: true })
+      return
+    }
+    if (!wasMenuOpenRef.current) return
+    wasMenuOpenRef.current = false
+    if (restoreLauncherOnCloseRef.current) {
+      launcherRef.current?.focus({ preventScroll: true })
+    }
+    restoreLauncherOnCloseRef.current = false
+  }, [menuOpen])
+
+  useEffect(
+    () =>
+      subscribeToBottomOverlayOpen((owner) => {
+        if (owner === 'fab-menu') return
+        restoreLauncherOnCloseRef.current = false
+        setMenuOpen(false)
+      }),
+    []
+  )
+
+  useEffect(() => {
+    restoreLauncherOnCloseRef.current = false
+    setMenuOpen(false)
+  }, [pathname])
 
   // Only show on feed and groups pages when social is enabled
   const shouldShow = isAuthenticated && isFloatingActionRoute(pathname)
@@ -45,7 +96,7 @@ export default function FloatingActionButton() {
       style={{
         position: 'fixed',
         bottom:
-          'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + var(--transient-bottom-offset, 0px) + 20px)',
+          'calc(var(--mobile-nav-height, 60px) + var(--safe-area-inset-bottom, 0px) + var(--transient-bottom-offset, 0px) + var(--page-bottom-overlay-offset, 0px) + 20px)',
         right: 20,
         zIndex: tokens.zIndex.sticky + 1,
       }}
@@ -53,11 +104,14 @@ export default function FloatingActionButton() {
       {/* Popup menu */}
       {menuOpen && (
         <div
-          className="dropdown-enter"
+          className="dropdown-enter fab-menu"
           style={{
             position: 'absolute',
             bottom: 64,
-            right: 0,
+            // Keep the expanded menu left of the persistent right-hand widget
+            // column. Vertical stacking alone cannot fit it between Compare,
+            // Feedback, ScrollToTop and the FAB on a 320px-wide short screen.
+            right: 'calc(100% + 12px)',
             background: tokens.glass.bg.secondary,
             backdropFilter: tokens.glass.blur.xl,
             WebkitBackdropFilter: tokens.glass.blur.xl,
@@ -72,7 +126,9 @@ export default function FloatingActionButton() {
           }}
         >
           <button
+            ref={firstMenuItemRef}
             onClick={() => {
+              restoreLauncherOnCloseRef.current = false
               setMenuOpen(false)
               // Try last-used group, otherwise go to first available group
               const lastGroup =
@@ -134,6 +190,7 @@ export default function FloatingActionButton() {
           </button>
           <button
             onClick={() => {
+              restoreLauncherOnCloseRef.current = false
               setMenuOpen(false)
               router.push('/groups')
             }}
@@ -182,7 +239,17 @@ export default function FloatingActionButton() {
 
       {/* FAB button */}
       <button
-        onClick={() => setMenuOpen(!menuOpen)}
+        ref={launcherRef}
+        onClick={() => {
+          if (menuOpen) {
+            restoreLauncherOnCloseRef.current = false
+            setMenuOpen(false)
+            return
+          }
+          restoreLauncherOnCloseRef.current = false
+          announceBottomOverlayOpen('fab-menu')
+          setMenuOpen(true)
+        }}
         aria-label={t('createPost')}
         aria-expanded={menuOpen}
         aria-haspopup="true"

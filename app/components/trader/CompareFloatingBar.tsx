@@ -2,6 +2,7 @@
 
 import { memo, useMemo } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { X, BarChart3, ChevronUp, ChevronDown } from 'lucide-react'
 import { tokens } from '@/lib/design-tokens'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
@@ -9,6 +10,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { buildCompareUrl, compareAccountKey } from '@/lib/compare/identity'
+import { isFloatingActionRoute } from '@/lib/features'
 
 /**
  * Floating comparison bar that shows selected traders for comparison
@@ -16,6 +18,11 @@ import { buildCompareUrl, compareAccountKey } from '@/lib/compare/identity'
  */
 function CompareFloatingBar() {
   const { t } = useLanguage()
+  const pathname = usePathname()
+  const hasFab = isFloatingActionRoute(pathname)
+  const persistentStackOffset = hasFab ? 208 : 128
+  const bottomPosition = `calc(var(--mobile-nav-height, 60px) + var(--safe-area-inset-bottom, 0px) + var(--transient-bottom-offset, 0px) + var(--page-bottom-overlay-offset, 0px) + ${persistentStackOffset}px)`
+  const expandedMaxHeight = `calc(100dvh - var(--safe-area-inset-top, 0px) - var(--mobile-nav-height, 60px) - var(--safe-area-inset-bottom, 0px) - var(--transient-bottom-offset, 0px) - var(--page-bottom-overlay-offset, 0px) - ${persistentStackOffset}px - 8px)`
   const { selectedTraders, isBarExpanded, removeTrader, clearAll, toggleBar } = useComparisonStore(
     useShallow((s) => ({
       selectedTraders: s.selectedTraders,
@@ -43,10 +50,12 @@ function CompareFloatingBar() {
       className="compare-floating-bar"
       style={{
         position: 'fixed',
-        // Clear the 56px FloatingActionButton (bottom+20) so the compare bar
-        // stacks ABOVE it instead of covering it — /watchlist & /saved render
-        // both bottom-right on mobile (U9 overlap fix). +88px = 56 FAB + gap.
-        bottom: 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 88px)',
+        // Own the slot above the active persistent bottom-right stack. FAB routes
+        // need 208px to clear FAB + ScrollToTop + Feedback; ordinary routes need
+        // 128px to clear ScrollToTop + Feedback. Both retain a real 12px gap.
+        // Page-owned and transient bottom overlays are measured at runtime; snap
+        // to their new total immediately so this bar never animates through them.
+        bottom: bottomPosition,
         right: 16,
         zIndex: tokens.zIndex.overlay,
         background: tokens.glass.bg.heavy,
@@ -56,19 +65,36 @@ function CompareFloatingBar() {
         borderRadius: tokens.radius.xl,
         boxShadow: tokens.shadow.xl,
         overflow: 'hidden',
-        transition: `all ${tokens.transition.slow}`,
+        display: 'flex',
+        flexDirection: 'column',
+        transition: `width ${tokens.transition.slow}, max-width ${tokens.transition.slow}`,
+        maxHeight: isBarExpanded ? expandedMaxHeight : 56,
         maxWidth: isBarExpanded ? 'min(320px, calc(100vw - 32px))' : 56,
         width: isBarExpanded ? 'min(320px, calc(100vw - 32px))' : 56,
       }}
     >
       {/* Header */}
-      <div
+      <button
+        type="button"
+        className="compare-floating-toggle"
+        aria-expanded={isBarExpanded}
+        aria-label={isBarExpanded ? `${t('collapse')} ${t('compare')}` : t('compare')}
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: isBarExpanded ? '12px 14px' : '12px',
           borderBottom: isBarExpanded ? tokens.glass.border.light : 'none',
+          borderTop: 'none',
+          borderRight: 'none',
+          borderLeft: 'none',
+          background: 'transparent',
+          color: 'inherit',
+          font: 'inherit',
+          textAlign: 'left',
+          width: '100%',
+          minHeight: 44,
+          flexShrink: 0,
           cursor: 'pointer',
         }}
         onClick={toggleBar}
@@ -107,16 +133,19 @@ function CompareFloatingBar() {
         ) : (
           <ChevronUp size={18} color={tokens.colors.text.secondary} />
         )}
-      </div>
+      </button>
 
       {/* Expanded content */}
       {isBarExpanded && (
         <>
           {/* Trader list */}
           <div
+            className="compare-trader-list"
             style={{
               padding: '8px 12px',
               maxHeight: 200,
+              minHeight: 0,
+              flex: '1 1 200px',
               overflowY: 'auto',
             }}
           >
@@ -212,11 +241,13 @@ function CompareFloatingBar() {
               display: 'flex',
               gap: 8,
               borderTop: tokens.glass.border.light,
+              flexShrink: 0,
             }}
           >
             <button
+              type="button"
               onClick={clearAll}
-              className="btn-press"
+              className="btn-press compare-clear-button"
               style={{
                 flex: 1,
                 padding: '8px 12px',
@@ -235,7 +266,7 @@ function CompareFloatingBar() {
             <Link
               key={compareUrl}
               href={compareUrl}
-              className="btn-press"
+              className="btn-press compare-view-link"
               style={{
                 flex: 2,
                 padding: '8px 12px',
