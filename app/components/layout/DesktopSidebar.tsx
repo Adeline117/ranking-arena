@@ -2,11 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { PRIMARY_NAV_ITEMS, type PrimaryNavIconKind } from '@/lib/config/primary-nav'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { supabase } from '@/lib/supabase/client'
+import { useViewerProfileHandle } from '@/lib/hooks/useViewerProfileHandle'
 
 function TrophyIcon({ active }: { active: boolean }) {
   return (
@@ -113,48 +112,7 @@ const ICON_MAP: Record<PrimaryNavIconKind, (props: { active: boolean }) => React
 export default function DesktopSidebar() {
   const pathname = usePathname()
   const { t } = useLanguage()
-  const [userHandle, setUserHandle] = useState<string | null>(null)
-
-  useEffect(() => {
-    let alive = true
-
-    function loadHandle(userId: string, email?: string) {
-      supabase
-        .from('user_profiles')
-        .select('handle')
-        .eq('id', userId)
-        .maybeSingle()
-        .then(({ data: profile }) => {
-          if (!alive) return
-          if (profile?.handle) setUserHandle(profile.handle)
-          else if (email) setUserHandle(email.split('@')[0])
-        })
-    }
-
-    // Initial load from local session (no network)
-    supabase.auth.getSession().then(({ data }) => {
-      if (!alive) return
-      const userId = data.session?.user?.id
-      if (userId) loadHandle(userId, data.session?.user?.email ?? undefined)
-    })
-
-    // Listen for auth changes (login/logout)
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!alive) return
-      if (session?.user?.id) {
-        loadHandle(session.user.id, session.user.email ?? undefined)
-      } else {
-        setUserHandle(null)
-      }
-    })
-
-    return () => {
-      alive = false
-      subscription.unsubscribe()
-    }
-  }, [])
+  const userHandle = useViewerProfileHandle()
 
   // Shared canonical core (Rankings/Market/Groups/Hot) + surface-specific "Me".
   const navItems = [
