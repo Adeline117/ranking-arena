@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Box, Text, Button } from '../base'
 import { tokens } from '@/lib/design-tokens'
@@ -8,14 +8,16 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import EmptyState from '@/app/components/ui/EmptyState'
 import ErrorMessage from '@/app/components/ui/ErrorMessage'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
-// Sub-components
 import { AlertRow } from './AlertRowComponents'
 import { AlertHistory, type HistoryItem } from './AlertHistory'
-
-// ── Types ──────────────────────────────────────────────────────────────────
 
 interface AlertConfigProps {
   traderId: string
@@ -23,6 +25,7 @@ interface AlertConfigProps {
   source?: string
   userId?: string
   onClose?: () => void
+  resourceScopeRef?: { current: string }
 }
 
 interface AlertData {
@@ -39,12 +42,40 @@ interface AlertData {
   enabled: boolean
 }
 
-interface AlertMutationResponse {
+interface TraderAlertsPayload {
   error?: unknown
-  data?: { alert?: { enabled?: unknown } }
+  data?: { alerts?: unknown; alert?: AlertMutationResult }
+  alerts?: unknown
 }
 
-const DEFAULT_ALERT: AlertData = {
+interface AlertHistoryPayload {
+  error?: unknown
+  data?: { history?: unknown }
+  history?: unknown
+}
+
+interface AlertMutationResult {
+  id?: unknown
+  enabled?: unknown
+}
+
+interface AlertMutationPayload {
+  success?: unknown
+  error?: unknown
+  data?: {
+    alert?: AlertMutationResult
+    deleted?: unknown
+  }
+}
+
+type AlertOperation = {
+  id: number
+  resourceScopeKey: string
+  viewer: SettingsViewerSnapshot
+  controller: AbortController
+}
+
+const defaultAlert = (): AlertData => ({
   alert_roi_change: true,
   roi_change_threshold: 10,
   alert_drawdown: true,
@@ -55,223 +86,477 @@ const DEFAULT_ALERT: AlertData = {
   rank_change_threshold: 5,
   one_time: false,
   enabled: true,
+})
+
+function alertConfigScopeKey(
+  viewer: SettingsViewerSnapshot,
+  traderId: string,
+  source?: string
+): string {
+  return `${viewer.viewerKey}\u0000${viewer.sessionGeneration}\u0000${traderId}\u0000${source ?? ''}`
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
+function responseError(payload: { error?: unknown } | null, fallback: string): string {
+  return typeof payload?.error === 'string' && payload.error.trim()
+    ? payload.error.trim()
+    : fallback
+}
 
-export default function AlertConfig({
+function readAlerts(payload: TraderAlertsPayload | null): unknown[] | null {
+  const alerts = payload?.data?.alerts ?? payload?.alerts
+  return Array.isArray(alerts) ? alerts : null
+}
+
+function readHistory(payload: AlertHistoryPayload | null): HistoryItem[] | null {
+  const history = payload?.data?.history ?? payload?.history
+  return Array.isArray(history) ? (history as HistoryItem[]) : null
+}
+
+function booleanOr(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function numberOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function readAlert(value: unknown): AlertData | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  if (typeof record.id !== 'string' || !record.id.trim()) return null
+  return {
+    id: record.id,
+    alert_roi_change: booleanOr(record.alert_roi_change, true),
+    roi_change_threshold: numberOr(record.roi_change_threshold, 10),
+    alert_drawdown: booleanOr(record.alert_drawdown, true),
+    drawdown_threshold: numberOr(record.drawdown_threshold, 20),
+    alert_score_change: booleanOr(record.alert_score_change, false),
+    score_change_threshold: numberOr(record.score_change_threshold, 5),
+    alert_rank_change: booleanOr(record.alert_rank_change, false),
+    rank_change_threshold: numberOr(record.rank_change_threshold, 5),
+    one_time: booleanOr(record.one_time, false),
+    enabled: booleanOr(record.enabled, true),
+  }
+}
+
+function readMutationAlert(payload: AlertMutationPayload | null): AlertMutationResult | null {
+  return payload?.data?.alert ?? null
+}
+
+function isSuccessfulMutationPayload(payload: AlertMutationPayload | null): boolean {
+  return payload?.success === true && payload.error === undefined
+}
+
+function isDeleteAcknowledged(payload: AlertMutationPayload | null): boolean {
+  return payload?.data?.deleted === true
+}
+
+/**
+ * The auth gate owns the remount boundary. A principal or trader identity
+ * change cannot reuse local alert/history state from the previous scope.
+ */
+export default function AlertConfig(props: AlertConfigProps) {
+  const auth = useAuthSession()
+  const { t } = useLanguage()
+  const viewer = captureSettingsViewer(auth)
+  const exactViewer = viewer && viewer.userId === props.userId ? viewer : null
+  const scopeKey = exactViewer
+    ? alertConfigScopeKey(exactViewer, props.traderId, props.source)
+    : `invalid:${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${props.traderId}\u0000${props.source ?? ''}`
+  const localResourceScopeRef = useRef(scopeKey)
+  localResourceScopeRef.current = scopeKey
+  const resourceScopeRef = props.resourceScopeRef ?? localResourceScopeRef
+
+  if (!exactViewer) {
+    if (!props.userId || (auth.authChecked && !auth.loading && !auth.userId)) {
+      return (
+        <Box style={{ padding: 16, textAlign: 'center' }}>
+          <Text style={{ color: tokens.colors.text.secondary }}>{t('loginRequired')}</Text>
+        </Box>
+      )
+    }
+    if (!auth.authChecked || auth.loading) {
+      return (
+        <Box style={{ padding: 16, textAlign: 'center' }}>
+          <Text style={{ color: tokens.colors.text.secondary }}>{t('loading')}</Text>
+        </Box>
+      )
+    }
+    return (
+      <Box style={{ padding: tokens.spacing[4] }}>
+        <ErrorMessage message={t('loginRequired')} />
+      </Box>
+    )
+  }
+
+  return (
+    <ViewerScopedAlertConfig
+      key={scopeKey}
+      {...props}
+      operationResourceScopeKey={scopeKey}
+      resourceScopeRef={resourceScopeRef}
+      viewer={exactViewer}
+    />
+  )
+}
+
+function ViewerScopedAlertConfig({
   traderId,
   traderHandle,
   source,
-  userId,
   onClose,
-}: AlertConfigProps) {
+  viewer,
+  operationResourceScopeKey,
+  resourceScopeRef,
+}: AlertConfigProps & {
+  viewer: SettingsViewerSnapshot
+  operationResourceScopeKey: string
+  resourceScopeRef: { current: string }
+}) {
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const viewerRef = useRef(viewer)
+  viewerRef.current = viewer
   const { t } = useLanguage()
+  const tRef = useRef(t)
+  tRef.current = t
   const { showToast } = useToast()
-  // /api/trader-alerts and /api/alerts require the Authorization Bearer header
-  // (server auth never reads cookies) — without it every call here 401'd.
-  const { accessToken } = useAuthSession()
-  const [alert, setAlert] = useState<AlertData>(DEFAULT_ALERT)
+  const showToastRef = useRef(showToast)
+  showToastRef.current = showToast
+
+  const [alert, setAlert] = useState<AlertData>(defaultAlert)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [forbidden, setForbidden] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [toggling, setToggling] = useState(false)
-  const toggleInFlightRef = useRef(false)
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
-  const authHeaders = useCallback(
-    (): Record<string, string> => (accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    [accessToken]
-  )
+  const mountedRef = useRef(false)
+  const nextOperationIdRef = useRef(0)
+  const loadOperationRef = useRef<AlertOperation | null>(null)
+  const saveOperationRef = useRef<AlertOperation | null>(null)
+  const deleteOperationRef = useRef<AlertOperation | null>(null)
+  const toggleOperationRef = useRef<AlertOperation | null>(null)
 
-  const fetchAlert = useCallback(async () => {
+  const viewerIsCurrent = (snapshot: SettingsViewerSnapshot): boolean =>
+    mountedRef.current && isSettingsViewerCurrent(snapshot, authRef.current)
+
+  const operationIsCurrent = (
+    operation: AlertOperation,
+    operationRef: { current: AlertOperation | null }
+  ): boolean =>
+    operationRef.current?.id === operation.id &&
+    resourceScopeRef.current === operation.resourceScopeKey &&
+    viewerIsCurrent(operation.viewer)
+
+  const mutationsInFlight = (): boolean =>
+    Boolean(saveOperationRef.current || deleteOperationRef.current || toggleOperationRef.current)
+  const resourceIsCurrent = (): boolean => resourceScopeRef.current === operationResourceScopeKey
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      loadOperationRef.current?.controller.abort()
+      saveOperationRef.current?.controller.abort()
+      deleteOperationRef.current?.controller.abort()
+      toggleOperationRef.current?.controller.abort()
+      loadOperationRef.current = null
+      saveOperationRef.current = null
+      deleteOperationRef.current = null
+      toggleOperationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const operation: AlertOperation = {
+      id: ++nextOperationIdRef.current,
+      resourceScopeKey: operationResourceScopeKey,
+      viewer: viewerRef.current,
+      controller: new AbortController(),
+    }
+    if (
+      resourceScopeRef.current !== operationResourceScopeKey ||
+      !viewerIsCurrent(operation.viewer)
+    ) {
+      return
+    }
+    loadOperationRef.current = operation
+    const loadIsCurrent = () =>
+      loadOperationRef.current?.id === operation.id &&
+      resourceScopeRef.current === operation.resourceScopeKey &&
+      viewerIsCurrent(operation.viewer)
     setLoading(true)
     setLoadError(null)
     setForbidden(false)
-    if (!accessToken) {
-      setLoadError(t('loginRequired'))
-      setLoading(false)
-      return
-    }
-    try {
-      const query = new URLSearchParams({ trader_id: traderId })
-      if (source) query.set('source', source)
-      const res = await fetch(`/api/trader-alerts?${query}`, {
-        headers: authHeaders(),
-        signal: AbortSignal.timeout(15_000),
-      })
-      const data = await res.json().catch(() => null)
-      if (res.status === 403) {
-        setForbidden(true)
-        return
-      }
-      if (!res.ok) {
-        throw new Error(
-          typeof data?.error === 'string' && data.error.trim()
-            ? data.error.trim()
-            : t('adminLoadFailed')
-        )
-      }
-      if (!Array.isArray(data?.data?.alerts)) {
-        throw new Error(t('adminLoadFailed'))
-      }
+    setAlert(defaultAlert())
+    setHistory([])
 
-      if (data.data.alerts.length > 0) {
-        const existing = data.data.alerts[0]
-        setAlert({
-          id: existing.id,
-          alert_roi_change: existing.alert_roi_change ?? true,
-          roi_change_threshold: existing.roi_change_threshold ?? 10,
-          alert_drawdown: existing.alert_drawdown ?? true,
-          drawdown_threshold: existing.drawdown_threshold ?? 20,
-          alert_score_change: existing.alert_score_change ?? false,
-          score_change_threshold: existing.score_change_threshold ?? 5,
-          alert_rank_change: existing.alert_rank_change ?? false,
-          rank_change_threshold: existing.rank_change_threshold ?? 5,
-          one_time: existing.one_time ?? false,
-          enabled: existing.enabled ?? true,
-        })
+    void (async () => {
+      try {
+        const query = new URLSearchParams({ trader_id: traderId })
+        if (source) query.set('source', source)
+        const result = await authedFetch<TraderAlertsPayload>(
+          `/api/trader-alerts?${query}`,
+          'GET',
+          operation.viewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: operation.controller.signal,
+          }
+        )
+        if (!loadIsCurrent() || result.stale) return
+        if (result.status === 403) {
+          setForbidden(true)
+          return
+        }
+        if (!result.ok) {
+          throw new Error(responseError(result.data, tRef.current('adminLoadFailed')))
+        }
+        const rows = readAlerts(result.data)
+        if (!rows) throw new Error(tRef.current('adminLoadFailed'))
+        if (rows.length === 0) return
+
+        const existing = readAlert(rows[0])
+        if (!existing) throw new Error(tRef.current('adminLoadFailed'))
+        let nextHistory: HistoryItem[] = []
         if (existing.id) {
-          const histRes = await fetch(`/api/alerts?alert_id=${existing.id}&limit=20`, {
-            headers: authHeaders(),
-            signal: AbortSignal.timeout(15_000),
-          })
-          const histData = await histRes.json().catch(() => null)
-          if (histRes.status === 403) {
+          const historyResult = await authedFetch<AlertHistoryPayload>(
+            `/api/alerts?alert_id=${encodeURIComponent(existing.id)}&limit=20`,
+            'GET',
+            operation.viewer.accessToken,
+            undefined,
+            15_000,
+            {
+              expectedUserId: operation.viewer.userId,
+              expectedSessionGeneration: operation.viewer.sessionGeneration,
+              signal: operation.controller.signal,
+            }
+          )
+          if (!loadIsCurrent() || historyResult.stale) return
+          if (historyResult.status === 403) {
             setForbidden(true)
             return
           }
-          if (!histRes.ok || !Array.isArray(histData?.data?.history)) {
-            throw new Error(
-              typeof histData?.error === 'string' && histData.error.trim()
-                ? histData.error.trim()
-                : t('adminLoadFailed')
-            )
+          if (!historyResult.ok) {
+            throw new Error(responseError(historyResult.data, tRef.current('adminLoadFailed')))
           }
-          setHistory(histData.data.history)
+          const parsedHistory = readHistory(historyResult.data)
+          if (!parsedHistory) throw new Error(tRef.current('adminLoadFailed'))
+          nextHistory = parsedHistory
+        }
+        if (!loadIsCurrent()) return
+        setAlert(existing)
+        setHistory(nextHistory)
+      } catch (error) {
+        if (!loadIsCurrent()) return
+        const message =
+          error instanceof Error && error.message ? error.message : tRef.current('adminLoadFailed')
+        setLoadError(message)
+        showToastRef.current(message, 'error')
+      } finally {
+        if (loadIsCurrent()) {
+          setLoading(false)
+          loadOperationRef.current = null
         }
       }
-    } catch (error) {
-      const message = error instanceof Error && error.message ? error.message : t('adminLoadFailed')
-      setLoadError(message)
-      showToast(message, 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [traderId, source, accessToken, authHeaders, showToast, t])
+    })()
 
-  useEffect(() => {
-    if (userId) fetchAlert()
-    else setLoading(false)
-  }, [userId, fetchAlert])
+    return () => {
+      operation.controller.abort()
+      if (loadOperationRef.current?.id === operation.id) loadOperationRef.current = null
+    }
+    // Viewer/token freshness is deliberately read through refs. Identity and
+    // resource changes remount this keyed component; retries change loadAttempt.
+  }, [loadAttempt, operationResourceScopeKey, resourceScopeRef, source, traderId])
 
   const handleSave = async () => {
+    const operationViewer = viewerRef.current
+    if (!resourceIsCurrent() || !viewerIsCurrent(operationViewer) || mutationsInFlight()) return
+    const operation: AlertOperation = {
+      id: ++nextOperationIdRef.current,
+      resourceScopeKey: operationResourceScopeKey,
+      viewer: operationViewer,
+      controller: new AbortController(),
+    }
+    const alertSnapshot = { ...alert }
+    saveOperationRef.current = operation
     setSaving(true)
     try {
-      const res = await fetch('/api/trader-alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders(), ...getCsrfHeaders() },
-        body: JSON.stringify({ trader_id: traderId, source, ...alert }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        showToast(t('alertEnabled'), 'success')
-        if (data.data?.alert?.id) {
-          setAlert((prev) => ({ ...prev, id: data.data.alert.id }))
+      const result = await authedFetch<AlertMutationPayload>(
+        '/api/trader-alerts',
+        'POST',
+        operation.viewer.accessToken,
+        { trader_id: traderId, source, ...alertSnapshot },
+        15_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
         }
-      } else {
-        showToast(data.error || t('saveFailed2'), 'error')
+      )
+      if (!operationIsCurrent(operation, saveOperationRef) || result.stale) return
+      if (!result.ok) {
+        throw new Error(responseError(result.data, tRef.current('saveFailed2')))
       }
-    } catch {
-      showToast(t('saveFailed2'), 'error')
+      if (!isSuccessfulMutationPayload(result.data)) {
+        throw new Error(responseError(result.data, tRef.current('saveFailed2')))
+      }
+      const savedAlert = readMutationAlert(result.data)
+      if (
+        typeof savedAlert?.id !== 'string' ||
+        !savedAlert.id.trim() ||
+        (alertSnapshot.id !== undefined && savedAlert.id !== alertSnapshot.id)
+      ) {
+        throw new Error(tRef.current('saveFailed2'))
+      }
+      const savedAlertId = savedAlert.id
+      setAlert((current) => ({ ...current, id: savedAlertId }))
+      showToastRef.current(tRef.current('alertEnabled'), 'success')
+    } catch (error) {
+      if (!operationIsCurrent(operation, saveOperationRef)) return
+      showToastRef.current(
+        error instanceof Error && error.message ? error.message : tRef.current('saveFailed2'),
+        'error'
+      )
     } finally {
-      setSaving(false)
+      const canCommit = operationIsCurrent(operation, saveOperationRef)
+      if (saveOperationRef.current?.id === operation.id) saveOperationRef.current = null
+      if (canCommit) setSaving(false)
     }
   }
 
   const handleDelete = async () => {
-    if (!alert.id) return
+    const operationViewer = viewerRef.current
+    const alertId = alert.id
+    if (
+      !alertId ||
+      !resourceIsCurrent() ||
+      !viewerIsCurrent(operationViewer) ||
+      mutationsInFlight()
+    ) {
+      return
+    }
+    const operation: AlertOperation = {
+      id: ++nextOperationIdRef.current,
+      resourceScopeKey: operationResourceScopeKey,
+      viewer: operationViewer,
+      controller: new AbortController(),
+    }
+    deleteOperationRef.current = operation
+    setDeleting(true)
     try {
-      const res = await fetch(`/api/trader-alerts?id=${alert.id}`, {
-        method: 'DELETE',
-        headers: { ...authHeaders(), ...getCsrfHeaders() },
-      })
-
-      let data: AlertMutationResponse | null = null
-      try {
-        data = (await res.json()) as AlertMutationResponse
-      } catch {
-        // A proxy may return a non-JSON error page. The status still decides failure.
+      const result = await authedFetch<AlertMutationPayload>(
+        `/api/trader-alerts?id=${encodeURIComponent(alertId)}`,
+        'DELETE',
+        operation.viewer.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
+        }
+      )
+      if (!operationIsCurrent(operation, deleteOperationRef) || result.stale) return
+      if (!result.ok) {
+        throw new Error(responseError(result.data, tRef.current('saveFailed2')))
       }
-
-      if (!res.ok) {
-        throw new Error(
-          typeof data?.error === 'string' && data.error.trim()
-            ? data.error.trim()
-            : t('saveFailed2')
-        )
+      if (!isSuccessfulMutationPayload(result.data)) {
+        throw new Error(responseError(result.data, tRef.current('saveFailed2')))
       }
-
-      setAlert(DEFAULT_ALERT)
+      if (!isDeleteAcknowledged(result.data)) throw new Error(tRef.current('saveFailed2'))
+      setAlert(defaultAlert())
       setHistory([])
-      showToast(t('alertDisabled'), 'success')
+      showToastRef.current(tRef.current('alertDisabled'), 'success')
     } catch (error) {
-      showToast(error instanceof Error && error.message ? error.message : t('saveFailed2'), 'error')
+      if (!operationIsCurrent(operation, deleteOperationRef)) return
+      showToastRef.current(
+        error instanceof Error && error.message ? error.message : tRef.current('saveFailed2'),
+        'error'
+      )
+    } finally {
+      const canCommit = operationIsCurrent(operation, deleteOperationRef)
+      if (deleteOperationRef.current?.id === operation.id) deleteOperationRef.current = null
+      if (canCommit) setDeleting(false)
     }
   }
 
   const handleToggle = async () => {
-    if (!alert.id || toggleInFlightRef.current) return
-
-    toggleInFlightRef.current = true
+    const operationViewer = viewerRef.current
+    if (
+      !alert.id ||
+      !resourceIsCurrent() ||
+      !viewerIsCurrent(operationViewer) ||
+      mutationsInFlight()
+    ) {
+      return
+    }
+    const operation: AlertOperation = {
+      id: ++nextOperationIdRef.current,
+      resourceScopeKey: operationResourceScopeKey,
+      viewer: operationViewer,
+      controller: new AbortController(),
+    }
+    const alertSnapshot = { ...alert }
+    const previousEnabled = alertSnapshot.enabled
+    const newEnabled = !previousEnabled
+    toggleOperationRef.current = operation
     setToggling(true)
-    const previousEnabled = alert.enabled
-    const newEnabled = !alert.enabled
-    setAlert((prev) => ({ ...prev, enabled: newEnabled }))
+    setAlert((current) => ({ ...current, enabled: newEnabled }))
 
     try {
-      const res = await fetch('/api/trader-alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders(), ...getCsrfHeaders() },
-        body: JSON.stringify({ trader_id: traderId, source, ...alert, enabled: newEnabled }),
-      })
-
-      let data: AlertMutationResponse | null = null
-      try {
-        data = (await res.json()) as AlertMutationResponse
-      } catch {
-        // A proxy may return an HTML error page. The status still decides failure.
+      const result = await authedFetch<AlertMutationPayload>(
+        '/api/trader-alerts',
+        'POST',
+        operation.viewer.accessToken,
+        { trader_id: traderId, source, ...alertSnapshot, enabled: newEnabled },
+        15_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
+        }
+      )
+      if (!operationIsCurrent(operation, toggleOperationRef) || result.stale) return
+      if (!result.ok) {
+        throw new Error(responseError(result.data, tRef.current('saveFailed2')))
       }
-
-      if (!res.ok) {
-        throw new Error(
-          typeof data?.error === 'string' && data.error.trim()
-            ? data.error.trim()
-            : t('saveFailed2')
-        )
+      if (!isSuccessfulMutationPayload(result.data)) {
+        throw new Error(responseError(result.data, tRef.current('saveFailed2')))
       }
-      if (data?.data?.alert?.enabled !== newEnabled) {
-        throw new Error(t('saveFailed2'))
+      const updatedAlert = readMutationAlert(result.data)
+      if (
+        typeof updatedAlert?.id !== 'string' ||
+        !updatedAlert.id.trim() ||
+        updatedAlert.id !== alertSnapshot.id ||
+        updatedAlert.enabled !== newEnabled
+      ) {
+        throw new Error(tRef.current('saveFailed2'))
       }
-
-      showToast(newEnabled ? t('alertEnabled') : t('alertDisabled'), 'success')
+      showToastRef.current(
+        newEnabled ? tRef.current('alertEnabled') : tRef.current('alertDisabled'),
+        'success'
+      )
     } catch (error) {
-      setAlert((prev) => ({ ...prev, enabled: previousEnabled }))
-      showToast(error instanceof Error && error.message ? error.message : t('saveFailed2'), 'error')
+      if (!operationIsCurrent(operation, toggleOperationRef)) return
+      setAlert((current) => ({ ...current, enabled: previousEnabled }))
+      showToastRef.current(
+        error instanceof Error && error.message ? error.message : tRef.current('saveFailed2'),
+        'error'
+      )
     } finally {
-      toggleInFlightRef.current = false
-      setToggling(false)
+      const canCommit = operationIsCurrent(operation, toggleOperationRef)
+      if (toggleOperationRef.current?.id === operation.id) toggleOperationRef.current = null
+      if (canCommit) setToggling(false)
     }
-  }
-
-  // Loading / auth gates
-  if (!userId) {
-    return (
-      <Box style={{ padding: 16, textAlign: 'center' }}>
-        <Text style={{ color: tokens.colors.text.secondary }}>{t('loginRequired')}</Text>
-      </Box>
-    )
   }
 
   if (loading) {
@@ -316,7 +601,7 @@ export default function AlertConfig({
       <Box style={{ padding: tokens.spacing[4] }}>
         <ErrorMessage
           message={loadError}
-          onRetry={accessToken ? () => void fetchAlert() : undefined}
+          onRetry={() => setLoadAttempt((attempt) => attempt + 1)}
         />
       </Box>
     )
@@ -331,6 +616,8 @@ export default function AlertConfig({
     }
     return labels[type] || type
   }
+
+  const mutationBusy = saving || deleting || toggling
 
   return (
     <Box
@@ -357,7 +644,7 @@ export default function AlertConfig({
           {alert.id && (
             <Button
               onClick={handleToggle}
-              disabled={toggling || saving}
+              disabled={mutationBusy}
               aria-busy={toggling}
               style={{
                 padding: '4px 12px',
@@ -368,8 +655,8 @@ export default function AlertConfig({
                   : tokens.colors.bg.tertiary,
                 color: alert.enabled ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                 border: 'none',
-                cursor: toggling || saving ? 'not-allowed' : 'pointer',
-                opacity: toggling || saving ? 0.6 : 1,
+                cursor: mutationBusy ? 'not-allowed' : 'pointer',
+                opacity: mutationBusy ? 0.6 : 1,
               }}
             >
               {alert.enabled ? t('alertEnabled') : t('alertDisabled')}
@@ -465,7 +752,7 @@ export default function AlertConfig({
       <Box style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <Button
           onClick={handleSave}
-          disabled={saving}
+          disabled={mutationBusy}
           style={{
             flex: 1,
             padding: '8px 16px',
@@ -473,8 +760,8 @@ export default function AlertConfig({
             background: tokens.colors.accent.primary,
             color: 'var(--color-on-accent)',
             border: 'none',
-            cursor: saving ? 'not-allowed' : 'pointer',
-            opacity: saving ? 0.6 : 1,
+            cursor: mutationBusy ? 'not-allowed' : 'pointer',
+            opacity: mutationBusy ? 0.6 : 1,
             fontWeight: 600,
           }}
         >
@@ -483,13 +770,16 @@ export default function AlertConfig({
         {alert.id && (
           <Button
             onClick={handleDelete}
+            disabled={mutationBusy}
+            aria-busy={deleting}
             style={{
               padding: '8px 16px',
               borderRadius: tokens.radius.md,
               background: 'transparent',
               color: tokens.colors.accent.error,
               border: `1px solid ${tokens.colors.accent.error}`,
-              cursor: 'pointer',
+              cursor: mutationBusy ? 'not-allowed' : 'pointer',
+              opacity: mutationBusy ? 0.6 : 1,
             }}
           >
             {t('delete')}

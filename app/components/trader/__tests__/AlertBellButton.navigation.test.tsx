@@ -1,14 +1,43 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-const mockFetch = jest.fn()
+const mockAuthedFetch = jest.fn()
 const mockOpenLoginModal = jest.fn()
 const mockTrackEvent = jest.fn()
 const mockAlertConfig = jest.fn(() => null)
-let mockAuthState = {
-  isLoggedIn: true,
-  userId: 'user-1' as string | null,
-  accessToken: 'access-token' as string | null,
+
+function jwt(userId: string): string {
+  const encode = (value: unknown) =>
+    btoa(JSON.stringify(value)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `${encode({ alg: 'none' })}.${encode({ sub: userId })}.signature`
 }
+
+function authFor(userId: string, sessionGeneration: number) {
+  return {
+    accessToken: jwt(userId),
+    authChecked: true,
+    email: `${userId}@example.com`,
+    isLoggedIn: true,
+    loading: false,
+    sessionGeneration,
+    userId,
+    viewerKey: `user:${userId}` as const,
+  }
+}
+
+function signedOutAuth(sessionGeneration: number) {
+  return {
+    accessToken: null,
+    authChecked: true,
+    email: null,
+    isLoggedIn: false,
+    loading: false,
+    sessionGeneration,
+    userId: null,
+    viewerKey: 'anon' as const,
+  }
+}
+
+let mockAuthState: ReturnType<typeof authFor> | ReturnType<typeof signedOutAuth>
 
 jest.mock('next/dynamic', () => ({
   __esModule: true,
@@ -33,6 +62,10 @@ jest.mock('next/link', () => ({
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
   useAuthSession: () => mockAuthState,
+}))
+
+jest.mock('@/lib/api/client', () => ({
+  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
 }))
 
 jest.mock('@/lib/hooks/useLoginModal', () => ({
@@ -60,14 +93,17 @@ jest.mock('@/app/components/ui/ModalOverlay', () => ({
     open,
     children,
     label,
+    onClose,
   }: {
     open: boolean
     children: React.ReactNode
     label: string
+    onClose: () => void
   }) =>
     open ? (
       <div role="dialog" aria-label={label}>
         {children}
+        <button onClick={onClose}>Close alert dialog</button>
       </div>
     ) : null,
 }))
@@ -77,20 +113,32 @@ jest.mock('@/lib/analytics/track', () => ({
 }))
 
 import AlertBellButton from '../AlertBellButton'
+import {
+  __resetViewerScopeForTests,
+  beginViewerTransition,
+  commitViewerTransition,
+  synchronizeViewerScope,
+} from '@/lib/auth/viewer-scope'
+
+function ok(data: unknown) {
+  return { ok: true, status: 200, data }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
 
 describe('AlertBellButton durable navigation', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    global.fetch = mockFetch
-    mockAuthState = {
-      isLoggedIn: true,
-      userId: 'user-1',
-      accessToken: 'access-token',
-    }
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: { alerts: [{ id: 'alert-1' }] } }),
-    })
+    __resetViewerScopeForTests()
+    const scope = synchronizeViewerScope(true, 'user-1')
+    mockAuthState = authFor('user-1', scope.sessionGeneration)
+    mockAuthedFetch.mockResolvedValue(ok({ data: { alerts: [{ id: 'alert-1' }] } }))
   })
 
   it('keeps per-trader configuration in the modal and links to persisted alerts', async () => {
@@ -120,15 +168,12 @@ describe('AlertBellButton durable navigation', () => {
     fireEvent.click(screen.getByRole('link', { name: 'View all alerts' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
   })
 
   it('leaves signed-out users on the trader route by opening the login modal', () => {
-    mockAuthState = {
-      isLoggedIn: false,
-      userId: null,
-      accessToken: null,
-    }
+    const scope = synchronizeViewerScope(true, null)
+    mockAuthState = signedOutAuth(scope.sessionGeneration)
 
     render(<AlertBellButton traderId="trader-1" traderHandle="Trader One" source="binance" />)
 
@@ -136,21 +181,160 @@ describe('AlertBellButton durable navigation', () => {
 
     expect(mockOpenLoginModal).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockAuthedFetch).not.toHaveBeenCalled()
   })
 
   it('still opens configuration when the active-status check fails', async () => {
-    mockFetch.mockRejectedValueOnce(new Error('temporary status failure'))
+    mockAuthedFetch.mockRejectedValueOnce(new Error('temporary status failure'))
 
     render(<AlertBellButton traderId="trader-1" traderHandle="Trader One" source="binance" />)
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
     fireEvent.click(screen.getByRole('button', { name: 'Set alert' }))
 
     expect(screen.getByRole('dialog', { name: 'Set alert' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'View all alerts' })).toHaveAttribute(
       'href',
       '/saved?tab=alerts'
+    )
+  })
+
+  it('fails empty and closes A configuration on the first B render', async () => {
+    const userB = deferred<ReturnType<typeof ok>>()
+    mockAuthedFetch.mockImplementation(
+      (
+        _url: string,
+        _method: string,
+        _token: string,
+        _body: unknown,
+        _timeout: number,
+        scope: { expectedUserId: string }
+      ) =>
+        scope.expectedUserId === 'user-1'
+          ? Promise.resolve(ok({ data: { alerts: [{ id: 'alert-a' }] } }))
+          : userB.promise
+    )
+
+    const view = render(
+      <AlertBellButton traderId="trader-1" traderHandle="Trader One" source="binance" />
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Alerts active' }))
+    expect(screen.getByRole('dialog', { name: 'Set alert' })).toBeInTheDocument()
+
+    const scopeB = synchronizeViewerScope(true, 'user-2')
+    mockAuthState = authFor('user-2', scopeB.sessionGeneration)
+    view.rerender(
+      <AlertBellButton traderId="trader-1" traderHandle="Trader One" source="binance" />
+    )
+
+    expect(screen.getByRole('button', { name: 'Set alert' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await act(async () => userB.resolve(ok({ data: { alerts: [] } })))
+    expect(screen.getByRole('button', { name: 'Set alert' })).toBeEnabled()
+  })
+
+  it('fails empty and closes configuration for a new generation of the same user', async () => {
+    const nextGenerationStatus = deferred<ReturnType<typeof ok>>()
+    const view = render(
+      <AlertBellButton traderId="trader-1" traderHandle="Trader One" source="binance" />
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Alerts active' }))
+    expect(screen.getByRole('dialog', { name: 'Set alert' })).toBeInTheDocument()
+
+    mockAuthedFetch.mockReturnValueOnce(nextGenerationStatus.promise)
+    const pendingGeneration = beginViewerTransition('user-1')
+    const nextScope = commitViewerTransition(pendingGeneration, 'user-1')
+    expect(nextScope).not.toBeNull()
+    mockAuthState = authFor('user-1', nextScope!.sessionGeneration)
+    view.rerender(
+      <AlertBellButton traderId="trader-1" traderHandle="Trader One" source="binance" />
+    )
+
+    expect(screen.getByRole('button', { name: 'Set alert' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await act(async () => nextGenerationStatus.resolve(ok({ data: { alerts: [] } })))
+    expect(screen.getByRole('button', { name: 'Set alert' })).toBeEnabled()
+    expect(mockAuthedFetch).toHaveBeenLastCalledWith(
+      expect.stringContaining('/api/trader-alerts?'),
+      'GET',
+      jwt('user-1'),
+      undefined,
+      15_000,
+      expect.objectContaining({ expectedSessionGeneration: nextScope!.sessionGeneration })
+    )
+  })
+
+  it('discards a delayed A status response after B becomes current', async () => {
+    const userA = deferred<ReturnType<typeof ok>>()
+    mockAuthedFetch.mockImplementation(
+      (
+        _url: string,
+        _method: string,
+        _token: string,
+        _body: unknown,
+        _timeout: number,
+        scope: { expectedUserId: string }
+      ) =>
+        scope.expectedUserId === 'user-1'
+          ? userA.promise
+          : Promise.resolve(ok({ data: { alerts: [] } }))
+    )
+
+    const view = render(
+      <AlertBellButton traderId="trader-1" traderHandle="Trader One" source="binance" />
+    )
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+
+    const scopeB = synchronizeViewerScope(true, 'user-2')
+    mockAuthState = authFor('user-2', scopeB.sessionGeneration)
+    view.rerender(
+      <AlertBellButton traderId="trader-1" traderHandle="Trader One" source="binance" />
+    )
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+
+    await act(async () => userA.resolve(ok({ data: { alerts: [{ id: 'alert-a' }] } })))
+    expect(screen.getByRole('button', { name: 'Set alert' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+  })
+
+  it('rejects old-resource status before passive cleanup once render authority advances', async () => {
+    const refreshA = deferred<ReturnType<typeof ok>>()
+    render(<AlertBellButton traderId="trader-a" traderHandle="Trader A" source="binance" />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Alerts active' }))
+    const configProps = mockAlertConfig.mock.calls.at(-1)?.[0] as {
+      resourceScopeRef: { current: string }
+    }
+    expect(configProps.resourceScopeRef.current).toBe(
+      `user:user-1\u0000${mockAuthState.sessionGeneration}\u0000trader-a\u0000binance`
+    )
+
+    mockAuthedFetch.mockReturnValueOnce(refreshA.promise)
+    fireEvent.click(screen.getByRole('button', { name: 'Close alert dialog' }))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('button', { name: 'Set alert' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+
+    // This is the same ref AlertBellButton updates synchronously during a
+    // trader/source render, before the old effect's passive cleanup runs.
+    configProps.resourceScopeRef.current = `user:user-1\u0000${mockAuthState.sessionGeneration}\u0000trader-b\u0000binance`
+    await act(async () => refreshA.resolve(ok({ data: { alerts: [{ id: 'stale-alert-a' }] } })))
+
+    expect(screen.getByRole('button', { name: 'Set alert' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
     )
   })
 })

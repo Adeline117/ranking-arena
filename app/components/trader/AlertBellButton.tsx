@@ -10,7 +10,7 @@
  * trader (no notification spam), reusing all existing infra.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -19,6 +19,13 @@ import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { trackEvent } from '@/lib/analytics/track'
+import { authedFetch } from '@/lib/api/client'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 // Heavy config panel — load only when the modal opens (keeps the header light).
 const AlertConfig = dynamic(() => import('@/app/components/alerts/AlertConfig'), { ssr: false })
@@ -29,55 +36,133 @@ interface AlertBellButtonProps {
   source?: string
 }
 
-export default function AlertBellButton({ traderId, traderHandle, source }: AlertBellButtonProps) {
-  const { isLoggedIn, userId, accessToken } = useAuthSession()
-  const { t } = useLanguage()
-  const [open, setOpen] = useState(false)
-  const [active, setActive] = useState(false)
+type TraderAlertsPayload = {
+  data?: { alerts?: unknown }
+  alerts?: unknown
+}
 
-  const refreshActive = useCallback(() => {
-    if (!isLoggedIn || !accessToken) {
-      setActive(false)
-      return
-    }
-    let cancelled = false
-    const query = new URLSearchParams({ trader_id: traderId })
-    if (source) query.set('source', source)
-    fetch(`/api/trader-alerts?${query}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (cancelled) return
-        // withAuth wraps in { success, data } for some routes and returns the
-        // handler value directly for others — handle both shapes.
-        const alerts = d?.data?.alerts ?? d?.alerts ?? []
-        setActive(Array.isArray(alerts) && alerts.length > 0)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [isLoggedIn, accessToken, traderId, source])
+type ActiveStatusOperation = {
+  id: number
+  resourceScopeKey: string
+  viewer: SettingsViewerSnapshot
+}
+
+function alertResourceScopeKey(
+  viewer: SettingsViewerSnapshot | null,
+  fallback: { viewerKey: string; sessionGeneration: number },
+  traderId: string,
+  source?: string
+): string {
+  const viewerScope = viewer
+    ? `${viewer.viewerKey}\u0000${viewer.sessionGeneration}`
+    : `invalid:${fallback.viewerKey}\u0000${fallback.sessionGeneration}`
+  return `${viewerScope}\u0000${traderId}\u0000${source ?? ''}`
+}
+
+function hasPersistedAlerts(payload: TraderAlertsPayload | null): boolean {
+  const alerts = payload?.data?.alerts ?? payload?.alerts
+  return Array.isArray(alerts) && alerts.length > 0
+}
+
+export default function AlertBellButton({ traderId, traderHandle, source }: AlertBellButtonProps) {
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const { t } = useLanguage()
+  const currentViewer = captureSettingsViewer(auth)
+  const scopeKey = alertResourceScopeKey(currentViewer, auth, traderId, source)
+  const resourceScopeKeyRef = useRef(scopeKey)
+  resourceScopeKeyRef.current = scopeKey
+  const [open, setOpen] = useViewerOwnedState(false, () => false, scopeKey)
+  const [active, setActive] = useViewerOwnedState(false, () => false, scopeKey)
+  const [loadAttempt, setLoadAttempt] = useViewerOwnedState(0, () => 0, scopeKey)
+  const mountedRef = useRef(false)
+  const nextOperationIdRef = useRef(0)
+  const statusOperationRef = useRef<ActiveStatusOperation | null>(null)
+
+  const operationIsCurrent = (operation: ActiveStatusOperation): boolean =>
+    mountedRef.current &&
+    statusOperationRef.current?.id === operation.id &&
+    resourceScopeKeyRef.current === operation.resourceScopeKey &&
+    isSettingsViewerCurrent(operation.viewer, authRef.current)
 
   useEffect(() => {
-    const cleanup = refreshActive()
-    return cleanup
-  }, [refreshActive])
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      statusOperationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const viewer = captureSettingsViewer(authRef.current)
+    if (!viewer || resourceScopeKeyRef.current !== scopeKey) return
+    const operation: ActiveStatusOperation = {
+      id: ++nextOperationIdRef.current,
+      resourceScopeKey: scopeKey,
+      viewer,
+    }
+    const controller = new AbortController()
+    statusOperationRef.current = operation
+    setActive(false)
+    const query = new URLSearchParams({ trader_id: traderId })
+    if (source) query.set('source', source)
+
+    void (async () => {
+      try {
+        const result = await authedFetch<TraderAlertsPayload>(
+          `/api/trader-alerts?${query}`,
+          'GET',
+          operation.viewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: controller.signal,
+          }
+        )
+        if (!operationIsCurrent(operation) || result.stale || !result.ok) return
+        setActive(hasPersistedAlerts(result.data))
+      } catch {
+        // The bell remains usable when status lookup temporarily fails.
+      } finally {
+        if (statusOperationRef.current?.id === operation.id) {
+          statusOperationRef.current = null
+        }
+      }
+    })()
+
+    return () => {
+      controller.abort()
+      if (statusOperationRef.current?.id === operation.id) {
+        statusOperationRef.current = null
+      }
+    }
+    // Token rotation does not change viewer ownership, but does give a later
+    // lookup fresh credentials.
+  }, [auth.accessToken, loadAttempt, scopeKey, setActive, source, traderId])
 
   const handleClick = () => {
-    if (!isLoggedIn) {
-      useLoginModal.getState().openLoginModal()
+    const viewer = captureSettingsViewer(authRef.current)
+    if (!viewer || resourceScopeKeyRef.current !== scopeKey) {
+      if (authRef.current.authChecked && !authRef.current.loading && !authRef.current.userId) {
+        useLoginModal.getState().openLoginModal()
+      }
       return
     }
     trackEvent('create_trader_alert', { traderId, source: source || '', step: 'open' })
     setOpen(true)
   }
 
+  const signedOut = auth.authChecked && !auth.loading && !auth.userId
+  const authPending = !currentViewer && !signedOut
+
   return (
     <>
       <button
         onClick={handleClick}
+        disabled={authPending}
         aria-label={active ? t('alertsActive') : t('setAlert')}
         aria-pressed={active}
         title={active ? t('alertsActive') : t('setAlert')}
@@ -93,7 +178,8 @@ export default function AlertBellButton({ traderId, traderHandle, source }: Aler
             ? 'var(--color-accent-warning-10, rgba(245, 158, 11, 0.1))'
             : tokens.glass.bg.light,
           color: active ? 'var(--color-accent-warning, #f59e0b)' : tokens.colors.text.secondary,
-          cursor: 'pointer',
+          cursor: authPending ? 'not-allowed' : 'pointer',
+          opacity: authPending ? 0.6 : 1,
           display: 'flex',
           alignItems: 'center',
           gap: 6,
@@ -124,38 +210,43 @@ export default function AlertBellButton({ traderId, traderHandle, source }: Aler
       </button>
 
       <ModalOverlay
-        open={open}
+        open={open && Boolean(currentViewer)}
         onClose={() => {
           setOpen(false)
-          refreshActive()
+          setLoadAttempt((attempt) => attempt + 1)
         }}
         label={t('setAlert')}
         maxWidth={480}
       >
         <div style={{ padding: 24 }}>
-          <AlertConfig
-            traderId={traderId}
-            traderHandle={traderHandle}
-            source={source}
-            userId={userId ?? undefined}
-          />
-          <Link
-            href="/saved?tab=alerts"
-            onClick={() => setOpen(false)}
-            aria-label={t('viewAllAlerts')}
-            style={{
-              display: 'inline-flex',
-              minHeight: 44,
-              alignItems: 'center',
-              marginTop: tokens.spacing[3],
-              color: tokens.colors.accent.primary,
-              fontSize: tokens.typography.fontSize.sm,
-              fontWeight: tokens.typography.fontWeight.semibold,
-              textDecoration: 'none',
-            }}
-          >
-            {t('viewAllAlerts')} →
-          </Link>
+          {currentViewer && (
+            <>
+              <AlertConfig
+                traderId={traderId}
+                traderHandle={traderHandle}
+                source={source}
+                userId={currentViewer.userId}
+                resourceScopeRef={resourceScopeKeyRef}
+              />
+              <Link
+                href="/saved?tab=alerts"
+                onClick={() => setOpen(false)}
+                aria-label={t('viewAllAlerts')}
+                style={{
+                  display: 'inline-flex',
+                  minHeight: 44,
+                  alignItems: 'center',
+                  marginTop: tokens.spacing[3],
+                  color: tokens.colors.accent.primary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  textDecoration: 'none',
+                }}
+              >
+                {t('viewAllAlerts')} →
+              </Link>
+            </>
+          )}
         </div>
       </ModalOverlay>
     </>

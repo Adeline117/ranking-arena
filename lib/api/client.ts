@@ -487,6 +487,100 @@ function captureFetchScope(accessToken: string | null, options?: AuthedFetchScop
   }
 }
 
+type BoundedRequestSignal = {
+  cleanup: () => void
+  signal: AbortSignal
+}
+
+/**
+ * Compose caller cancellation with a cancelable deadline without relying on
+ * AbortSignal.timeout/any. The native shell still supports iOS 15, where
+ * those static helpers are absent, and a manual timer can be cleared as soon
+ * as the complete request (including refresh/retry/body parsing) settles.
+ */
+function boundedRequestSignal(
+  callerSignal: AbortSignal | undefined,
+  timeoutMs: number
+): BoundedRequestSignal {
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > 2_147_483_647) {
+    throw new RangeError('timeoutMs must be between 0 and 2147483647')
+  }
+  const controller = new AbortController()
+  let cleaned = false
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    callerSignal?.removeEventListener('abort', abortFromCaller)
+    controller.signal.removeEventListener('abort', cleanup)
+  }
+
+  const abortController = (reason: unknown) => {
+    if (!controller.signal.aborted) controller.abort(reason)
+  }
+
+  function abortFromCaller() {
+    if (callerSignal) abortController(abortReason(callerSignal))
+  }
+
+  controller.signal.addEventListener('abort', cleanup, { once: true })
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      abortFromCaller()
+    } else {
+      callerSignal.addEventListener('abort', abortFromCaller, { once: true })
+    }
+  }
+  if (!controller.signal.aborted) {
+    timeoutId = setTimeout(
+      () => abortController(new DOMException('The operation timed out', 'TimeoutError')),
+      Math.trunc(timeoutMs)
+    )
+  }
+
+  return { cleanup, signal: controller.signal }
+}
+
+function consumePromise(work: Promise<unknown>): void {
+  void work.then(
+    () => undefined,
+    () => undefined
+  )
+}
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
+}
+
+function waitWithinSignal<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    // The work expression is evaluated before this helper is called. Always
+    // observe it even when cancellation won the race, or its later rejection
+    // would surface as an unhandled promise rejection.
+    consumePromise(work)
+    return Promise.reject(abortReason(signal))
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortReason(signal))
+    signal.addEventListener('abort', onAbort, { once: true })
+    work.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      }
+    )
+  })
+}
+
 export async function authedFetch<T>(
   url: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
@@ -512,95 +606,140 @@ export async function authedFetch<T>(
   if (scopeBound && !isViewerScopeCurrent(requestScope)) {
     return { ok: false, status: 0, data: null, stale: true }
   }
+  const boundedRequest = boundedRequestSignal(scopeOptions?.signal, timeoutMs)
+  const requestSignal = boundedRequest.signal
 
-  const headers: Record<string, string> = {}
-
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`
-  }
-
-  if (method !== 'GET') {
-    headers['Content-Type'] = 'application/json'
-    Object.assign(headers, getCsrfHeaders())
-  }
-
-  let response: Response
   try {
-    response = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-      signal: scopeOptions?.signal ?? AbortSignal.timeout(timeoutMs),
-    })
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      // Convert AbortError from timeout into a structured FetchResult
-      // so callers get a clear status instead of an unhandled exception
-      return { ok: false, status: 0, data: null }
-    }
-    throw error
-  }
+    if (requestSignal.aborted) return { ok: false, status: 0, data: null }
 
-  // On 401 with an auth token, attempt refresh and retry once
-  if (response.status === 401 && accessToken && typeof window !== 'undefined') {
-    if (scopeBound && !isViewerScopeCurrent(requestScope)) {
-      return { ok: false, status: 0, data: null, stale: true }
+    const headers: Record<string, string> = {}
+
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`
     }
-    const newToken = await tokenRefreshCoordinator.forceRefresh({
-      expectedUserId: requestScope.userId,
-      sessionGeneration: requestScope.sessionGeneration,
-    })
-    if (newToken) {
-      if (requestScope.userId && jwtSubject(newToken) !== requestScope.userId) {
-        return { ok: false, status: 0, data: null, stale: true }
-      }
-      if (scopeBound && !isViewerScopeCurrent(requestScope)) {
-        return { ok: false, status: 0, data: null, stale: true }
-      }
-      headers['Authorization'] = `Bearer ${newToken}`
-      let retryResponse: Response
-      try {
-        retryResponse = await fetch(url, {
+
+    if (method !== 'GET') {
+      headers['Content-Type'] = 'application/json'
+      Object.assign(headers, getCsrfHeaders())
+    }
+
+    let response: Response
+    try {
+      if (requestSignal.aborted) return { ok: false, status: 0, data: null }
+      response = await waitWithinSignal(
+        fetch(url, {
           method,
           headers,
           body: body ? JSON.stringify(body) : undefined,
-          signal: scopeOptions?.signal ?? AbortSignal.timeout(timeoutMs),
-        })
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return { ok: false, status: 0, data: null }
-        }
-        throw error
+          signal: requestSignal,
+        }),
+        requestSignal
+      )
+    } catch (error) {
+      if (
+        requestSignal.aborted ||
+        (error instanceof DOMException &&
+          (error.name === 'AbortError' || error.name === 'TimeoutError'))
+      ) {
+        // Convert cancellation into a structured FetchResult so callers get a
+        // clear status instead of an unhandled exception.
+        return { ok: false, status: 0, data: null }
       }
-      const retryData = await retryResponse.json().catch(() => {
-        const ct = retryResponse.headers.get('content-type') || ''
-        if (!ct.includes('application/json')) {
-          logger.warn(
-            `[api-client] Retry response is not JSON (status=${retryResponse.status}, content-type=${ct}), likely HTML error page`
-          )
-        }
-        return null
-      })
+      throw error
+    }
+
+    // On 401 with an auth token, attempt refresh and retry once. Refresh,
+    // retry transport, and body parsing all share the original deadline.
+    if (response.status === 401 && accessToken && typeof window !== 'undefined') {
       if (scopeBound && !isViewerScopeCurrent(requestScope)) {
         return { ok: false, status: 0, data: null, stale: true }
       }
-      return { ok: retryResponse.ok, status: retryResponse.status, data: retryData }
+      if (requestSignal.aborted) return { ok: false, status: 0, data: null }
+      let newToken: string | null
+      try {
+        newToken = await waitWithinSignal(
+          tokenRefreshCoordinator.forceRefresh({
+            expectedUserId: requestScope.userId,
+            sessionGeneration: requestScope.sessionGeneration,
+          }),
+          requestSignal
+        )
+      } catch (error) {
+        if (requestSignal.aborted) return { ok: false, status: 0, data: null }
+        throw error
+      }
+      if (newToken) {
+        if (requestScope.userId && jwtSubject(newToken) !== requestScope.userId) {
+          return { ok: false, status: 0, data: null, stale: true }
+        }
+        if (scopeBound && !isViewerScopeCurrent(requestScope)) {
+          return { ok: false, status: 0, data: null, stale: true }
+        }
+        if (requestSignal.aborted) return { ok: false, status: 0, data: null }
+        headers['Authorization'] = `Bearer ${newToken}`
+        let retryResponse: Response
+        try {
+          retryResponse = await waitWithinSignal(
+            fetch(url, {
+              method,
+              headers,
+              body: body ? JSON.stringify(body) : undefined,
+              signal: requestSignal,
+            }),
+            requestSignal
+          )
+        } catch (error) {
+          if (
+            requestSignal.aborted ||
+            (error instanceof DOMException &&
+              (error.name === 'AbortError' || error.name === 'TimeoutError'))
+          ) {
+            return { ok: false, status: 0, data: null }
+          }
+          throw error
+        }
+        let retryData: T | null = null
+        try {
+          if (requestSignal.aborted) return { ok: false, status: 0, data: null }
+          retryData = await waitWithinSignal(retryResponse.json(), requestSignal)
+        } catch {
+          if (requestSignal.aborted) return { ok: false, status: 0, data: null }
+          const ct = retryResponse.headers.get('content-type') || ''
+          if (!ct.includes('application/json')) {
+            logger.warn(
+              `[api-client] Retry response is not JSON (status=${retryResponse.status}, content-type=${ct}), likely HTML error page`
+            )
+          }
+        }
+        if (scopeBound && !isViewerScopeCurrent(requestScope)) {
+          return { ok: false, status: 0, data: null, stale: true }
+        }
+        if (requestSignal.aborted) return { ok: false, status: 0, data: null }
+        return { ok: retryResponse.ok, status: retryResponse.status, data: retryData }
+      }
     }
-  }
 
-  const data = await response.json().catch(() => {
-    const ct = response.headers.get('content-type') || ''
-    if (!ct.includes('application/json')) {
-      logger.warn(
-        `[api-client] Response is not JSON (status=${response.status}, content-type=${ct}), likely HTML error page`
-      )
+    let data: T | null = null
+    try {
+      if (requestSignal.aborted) return { ok: false, status: 0, data: null }
+      data = await waitWithinSignal(response.json(), requestSignal)
+    } catch {
+      if (requestSignal.aborted) return { ok: false, status: 0, data: null }
+      const ct = response.headers.get('content-type') || ''
+      if (!ct.includes('application/json')) {
+        logger.warn(
+          `[api-client] Response is not JSON (status=${response.status}, content-type=${ct}), likely HTML error page`
+        )
+      }
     }
-    return null
-  })
-  if (scopeBound && !isViewerScopeCurrent(requestScope)) {
-    return { ok: false, status: 0, data: null, stale: true }
+    if (scopeBound && !isViewerScopeCurrent(requestScope)) {
+      return { ok: false, status: 0, data: null, stale: true }
+    }
+    if (requestSignal.aborted) return { ok: false, status: 0, data: null }
+    return { ok: response.ok, status: response.status, data }
+  } finally {
+    boundedRequest.cleanup()
   }
-  return { ok: response.ok, status: response.status, data }
 }
 
 /**
