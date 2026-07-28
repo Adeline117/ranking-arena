@@ -3,6 +3,7 @@ import type { PoolClient, QueryConfig, QueryResult } from 'pg'
 import {
   acquireWorkerDbFenceAuthority,
   WORKER_DB_FENCE_CONTRACT,
+  WORKER_DB_FENCE_WRITE_LOCK_TIMEOUT_MS,
   WORKER_DB_FENCE_WRITE_QUERY_CAP_MS,
   WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS,
   WorkerDbFenceError,
@@ -84,10 +85,12 @@ interface DatabaseBehavior {
   leaseExpiresAtMs?: number
   leaseRemainingMs?: number
   mutatePayload?: (payload: Record<string, unknown>) => void
+  mutateTimeoutConfiguration?: (payload: Record<string, unknown>) => void
   operation?: DatabaseOperation
   rollbackError?: Error
   rowCount?: number | null
   serverTimeMs?: number
+  timeoutConfigurationError?: Error
   transactionId?: unknown
   xactStatus?: unknown
 }
@@ -362,21 +365,24 @@ function databaseHarness(
           const values = observed.valuesReference
           if (
             values === undefined ||
-            values.length !== 2 ||
+            values.length !== 3 ||
             typeof values[0] !== 'string' ||
-            values[0] !== values[1]
+            values[0] !== values[1] ||
+            values[2] !== `${WORKER_DB_FENCE_WRITE_LOCK_TIMEOUT_MS}ms`
           ) {
             throw new Error('write timeout configuration is malformed')
           }
+          if (behavior.timeoutConfigurationError) throw behavior.timeoutConfigurationError
+          const payload: Record<string, unknown> = {
+            worker_db_fence_lock_timeout: values[2],
+            worker_db_fence_statement_timeout: values[0],
+            worker_db_fence_transaction_timeout: values[1],
+          }
+          behavior.mutateTimeoutConfiguration?.(payload)
           return {
             command: 'SELECT',
             rowCount: 1,
-            rows: [
-              {
-                worker_db_fence_statement_timeout: values[0],
-                worker_db_fence_transaction_timeout: values[1],
-              },
-            ],
+            rows: [payload],
           } as QueryResult
         }
 
@@ -1236,11 +1242,23 @@ describe('worker database fenced writes', () => {
     const writeClient = database.clients[2]
     expect(writeClient.observedQueries.map(({ text }) => text)).toEqual([
       'BEGIN ISOLATION LEVEL READ COMMITTED',
-      expect.stringContaining("pg_catalog.set_config('statement_timeout'"),
+      expect.stringMatching(
+        /set_config\('statement_timeout',[\s\S]+set_config\('transaction_timeout',[\s\S]+set_config\('lock_timeout'/
+      ),
       expect.stringContaining('arena.begin_ingest_worker_fenced_write'),
       'INSERT INTO arena.test_rows(value) VALUES ($1) RETURNING id',
       'COMMIT',
     ])
+    const timeoutConfiguration = writeClient.observedQueries[1]
+    expect(timeoutConfiguration.text).toContain("set_config('lock_timeout', $3::text, true)")
+    expect(timeoutConfiguration.text).not.toContain('5000ms')
+    expect(timeoutConfiguration.valuesAtCall).toEqual([
+      expect.stringMatching(/^[1-9][0-9]*ms$/),
+      expect.stringMatching(/^[1-9][0-9]*ms$/),
+      `${WORKER_DB_FENCE_WRITE_LOCK_TIMEOUT_MS}ms`,
+    ])
+    expect(timeoutConfiguration.valuesAtCall?.[0]).toBe(timeoutConfiguration.valuesAtCall?.[1])
+    expect(Object.isFrozen(timeoutConfiguration.valuesReference)).toBe(true)
     expect(writeClient.observedQueries.some(({ text }) => /SET\s+CONSTRAINTS/i.test(text))).toBe(
       false
     )
@@ -1262,6 +1280,90 @@ describe('worker database fenced writes', () => {
     expect(Object.keys(facade as object).sort()).toEqual(['query', 'signal'])
     expect('release' in (facade as object)).toBe(false)
     expect(writeClient.release).toHaveBeenCalledWith(false)
+
+    await fence.release()
+    expect(database.remainingBehaviors).toHaveLength(0)
+  })
+
+  it('rolls back and self-fences before authority assertion when timeout configuration fails', async () => {
+    const callback = jest.fn(async () => 'must-not-run')
+    const database = databaseHarness(
+      [
+        { operation: 'activate' },
+        { operation: 'renew' },
+        {
+          operation: 'write',
+          timeoutConfigurationError: connectionError(
+            '42501',
+            'timeout configuration was denied with private database detail'
+          ),
+        },
+        { operation: 'release' },
+      ],
+      [],
+      true
+    )
+    const { fence } = await acquireActiveFence(database)
+
+    await expect(fence.withFencedWrite(callback)).rejects.toMatchObject({
+      code: 'control_plane_unavailable',
+      operation: 'write',
+      retryPolicy: 'reacquire',
+    })
+
+    const writeClient = database.clients[2]
+    expect(callback).not.toHaveBeenCalled()
+    expect(writeClient.observedQueries.map(({ text }) => text)).toEqual([
+      'BEGIN ISOLATION LEVEL READ COMMITTED',
+      expect.stringContaining("pg_catalog.set_config('lock_timeout'"),
+      'ROLLBACK',
+    ])
+    expect(
+      writeClient.observedQueries.some(({ text }) =>
+        text.includes('arena.begin_ingest_worker_fenced_write')
+      )
+    ).toBe(false)
+    expect(writeClient.release).toHaveBeenCalledWith(false)
+    expect(fence.state).toBe('fenced')
+    expect(fence.signal.reason).toMatchObject({
+      code: 'control_plane_unavailable',
+      operation: 'write',
+      retryPolicy: 'reacquire',
+    })
+
+    await fence.release()
+    expect(database.remainingBehaviors).toHaveLength(0)
+  })
+
+  it('rejects an unverified lock-timeout result and fails closed before invoking the callback', async () => {
+    const callback = jest.fn(async () => 'must-not-run')
+    const database = databaseHarness(
+      [
+        { operation: 'activate' },
+        { operation: 'renew' },
+        {
+          mutateTimeoutConfiguration: (payload) => {
+            payload.worker_db_fence_lock_timeout = '1ms'
+          },
+          operation: 'write',
+        },
+        { operation: 'release' },
+      ],
+      [],
+      true
+    )
+    const { fence } = await acquireActiveFence(database)
+
+    await expect(fence.withFencedWrite(callback)).rejects.toMatchObject({
+      code: 'rpc_contract_violation',
+      operation: 'write',
+      retryPolicy: 'never',
+    })
+
+    expect(callback).not.toHaveBeenCalled()
+    expect(database.clients[2].observedQueries.at(-1)?.text).toBe('ROLLBACK')
+    expect(database.clients[2].release).toHaveBeenCalledWith(false)
+    expect(fence.state).toBe('fenced')
 
     await fence.release()
     expect(database.remainingBehaviors).toHaveLength(0)
@@ -1341,7 +1443,10 @@ describe('worker database fenced writes', () => {
   })
 
   it.each([
-    ['transaction control', 'BEGIN'],
+    ['transaction begin', 'BEGIN'],
+    ['transaction commit', 'COMMIT'],
+    ['transaction rollback', 'ROLLBACK'],
+    ['session control', "SET LOCAL lock_timeout = '0'"],
     ['multiple statements', 'SELECT 1; SELECT 2'],
     ['DDL', 'CREATE TABLE arena.forbidden(id bigint)'],
     [
@@ -1349,6 +1454,7 @@ describe('worker database fenced writes', () => {
       "SELECT arena.begin_ingest_worker_fenced_write('region:local', 'local', 'node', '00000000-0000-4000-8000-000000000000', repeat('a', 64), 1, 1)",
     ],
     ['timeout bypass', "SELECT pg_catalog.set_config('statement_timeout', '0', true)"],
+    ['lock-timeout bypass', "SELECT pg_catalog.set_config('lock_timeout', '0', true)"],
     ['fence substrate read', 'SELECT * FROM arena.ingest_worker_authorities'],
     ['quoted fence identifier', 'SELECT * FROM arena."ingest_worker_authorities"'],
     [
@@ -1808,7 +1914,11 @@ describe('worker database fenced writes', () => {
       })
       await callbackEntered.promise
       const oldTimeoutConfiguration = database.clients[2].observedQueries[1]
-      expect(oldTimeoutConfiguration.valuesAtCall).toEqual(['80000ms', '80000ms'])
+      expect(oldTimeoutConfiguration.valuesAtCall).toEqual([
+        '80000ms',
+        '80000ms',
+        `${WORKER_DB_FENCE_WRITE_LOCK_TIMEOUT_MS}ms`,
+      ])
 
       monotonicNow = 40_000
       jest.advanceTimersByTime(40_000)

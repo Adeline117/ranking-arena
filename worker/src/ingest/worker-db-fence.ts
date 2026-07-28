@@ -18,6 +18,7 @@ import {
 export const WORKER_DB_FENCE_CONTRACT = 'arena.worker-db-fence@1' as const
 export const WORKER_DB_FENCE_SAFETY_MARGIN_MS = 30_000
 export const WORKER_DB_FENCE_WRITE_FINALIZE_MARGIN_MS = 10_000
+export const WORKER_DB_FENCE_WRITE_LOCK_TIMEOUT_MS = 5_000
 export const WORKER_DB_FENCE_WRITE_QUERY_CAP_MS = 120_000
 export const WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS = 120_000
 export const WORKER_DB_FENCE_XACT_STATUS_TIMEOUT_MS = 5_000
@@ -78,11 +79,13 @@ const BEGIN_WRITE_SQL = `SELECT arena.begin_ingest_worker_fenced_write(
 const XACT_STATUS_ALIAS = 'worker_db_fence_xact_status'
 const XACT_STATUS_SQL = `SELECT pg_catalog.pg_xact_status($1::pg_catalog.xid8) AS ${XACT_STATUS_ALIAS}`
 
+const LOCK_TIMEOUT_ALIAS = 'worker_db_fence_lock_timeout'
 const STATEMENT_TIMEOUT_ALIAS = 'worker_db_fence_statement_timeout'
 const TRANSACTION_TIMEOUT_ALIAS = 'worker_db_fence_transaction_timeout'
 const CONFIGURE_WRITE_TIMEOUTS_SQL = `SELECT
     pg_catalog.set_config('statement_timeout', $1::text, true) AS ${STATEMENT_TIMEOUT_ALIAS},
-    pg_catalog.set_config('transaction_timeout', $2::text, true) AS ${TRANSACTION_TIMEOUT_ALIAS}`
+    pg_catalog.set_config('transaction_timeout', $2::text, true) AS ${TRANSACTION_TIMEOUT_ALIAS},
+    pg_catalog.set_config('lock_timeout', $3::text, true) AS ${LOCK_TIMEOUT_ALIAS}`
 
 const BEGIN_READ_COMMITTED = 'BEGIN ISOLATION LEVEL READ COMMITTED'
 
@@ -648,16 +651,18 @@ function validateTransactionCommand(
 
 function validateWriteTimeouts(
   result: QueryResult<QueryResultRow>,
-  expectedTimeoutMs: number
+  expectedTimeoutMs: number,
+  expectedLockTimeoutMs: number
 ): void {
   const row = result.rows.length === 1 ? strictRecord(result.rows[0]) : undefined
   if (
     result.command !== 'SELECT' ||
     result.rowCount !== 1 ||
     row === undefined ||
-    !exactKeys(row, [STATEMENT_TIMEOUT_ALIAS, TRANSACTION_TIMEOUT_ALIAS]) ||
+    !exactKeys(row, [LOCK_TIMEOUT_ALIAS, STATEMENT_TIMEOUT_ALIAS, TRANSACTION_TIMEOUT_ALIAS]) ||
     parsePostgresDurationMs(row[STATEMENT_TIMEOUT_ALIAS]) !== expectedTimeoutMs ||
-    parsePostgresDurationMs(row[TRANSACTION_TIMEOUT_ALIAS]) !== expectedTimeoutMs
+    parsePostgresDurationMs(row[TRANSACTION_TIMEOUT_ALIAS]) !== expectedTimeoutMs ||
+    parsePostgresDurationMs(row[LOCK_TIMEOUT_ALIAS]) !== expectedLockTimeoutMs
   ) {
     throw new RpcContractViolation()
   }
@@ -1323,12 +1328,20 @@ export async function acquireWorkerDbFenceAuthority({
 
       const configuredTimeoutMs = availableQueryTimeoutMs()
       const configuredTimeout = `${configuredTimeoutMs}ms`
-      const timeoutValues: unknown[] = [configuredTimeout, configuredTimeout]
+      const timeoutValues: unknown[] = [
+        configuredTimeout,
+        configuredTimeout,
+        `${WORKER_DB_FENCE_WRITE_LOCK_TIMEOUT_MS}ms`,
+      ]
       Object.freeze(timeoutValues)
       const timeoutResult = await connectedClient.query<QueryResultRow, unknown[]>(
         extendedQuery(CONFIGURE_WRITE_TIMEOUTS_SQL, timeoutValues, availableQueryTimeoutMs())
       )
-      validateWriteTimeouts(timeoutResult, configuredTimeoutMs)
+      validateWriteTimeouts(
+        timeoutResult,
+        configuredTimeoutMs,
+        WORKER_DB_FENCE_WRITE_LOCK_TIMEOUT_MS
+      )
 
       const controlParams: unknown[] = [
         privateIdentity.authorityScope,
