@@ -690,7 +690,7 @@ export function workerOwnershipKeys(node: string, region: WorkerOwnershipRegion)
   } as const
 }
 
-function normalizeHeartbeat(
+export function normalizeWorkerOwnershipHeartbeat(
   heartbeat: WorkerOwnershipHeartbeatInput
 ): WorkerOwnershipHeartbeatInput {
   const ownKeys = Object.keys(heartbeat)
@@ -860,7 +860,7 @@ export async function acquireWorkerOwnership({
   monotonicNow = () => performance.now(),
   redis,
 }: AcquireWorkerOwnershipOptions): Promise<WorkerOwnershipAcquireResult> {
-  const initialHeartbeat = normalizeHeartbeat(heartbeat)
+  const initialHeartbeat = normalizeWorkerOwnershipHeartbeat(heartbeat)
   const region = initialHeartbeat.regions[0]
   const authorityScope = workerAuthorityScope(region)
   const ownerIdentity = { ...(identity ?? createIdentity(authorityScope)) }
@@ -969,7 +969,7 @@ export async function acquireWorkerOwnership({
         if (!isOwned()) return false
         const renewStartedAt = monotonicNow()
         try {
-          const normalizedHeartbeat = normalizeHeartbeat(nextHeartbeat)
+          const normalizedHeartbeat = normalizeWorkerOwnershipHeartbeat(nextHeartbeat)
           if (!sameImmutableHeartbeat(initialHeartbeat, normalizedHeartbeat)) {
             throw new Error('[ingest-worker] worker ownership identity evidence cannot change')
           }
