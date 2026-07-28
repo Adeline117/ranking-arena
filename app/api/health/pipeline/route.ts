@@ -27,6 +27,54 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
+// The external monitor gives this route 60s, but waiting most of that budget
+// turns a database outage into an ambiguous transport timeout. Keep enough
+// room for the normal 3-5s aggregation RPCs while returning a structured 503
+// before the caller's own deadline.
+const CACHE_READ_DEADLINE_MS = 1_500
+const ADMIN_AUTH_DEADLINE_MS = 5_000
+const FAST_QUERY_DEADLINE_MS = 8_000
+const DATABASE_QUERY_DEADLINE_MS = 10_000
+const PLATFORM_HEALTH_DEADLINE_MS = 11_000
+const COMPUTE_DEADLINE_MS = 12_000
+
+function buildUnavailableSnapshot(
+  code: string,
+  message: string,
+  unavailableAuthority = 'pipeline_database'
+) {
+  return {
+    status: 'critical' as const,
+    timestamp: new Date().toISOString(),
+    summary: {
+      totalJobs: 0,
+      healthyJobs: 0,
+      failedJobs: 0,
+      staleJobs: 0,
+      stuckJobs: 0,
+      avgSuccessRate7d: 0,
+      platformHealthy: 0,
+      platformWarning: 0,
+      platformCritical: 0,
+      platformNeverFetched: 0,
+      totalPlatforms: 0,
+      backgroundFailureCount: 0,
+      circuitsOpen: 0,
+      circuitsHalfOpen: 0,
+      hotRateLimitedExchanges: 0,
+    },
+    platformHealth: [],
+    jobs: [],
+    stats: [],
+    recentFailures: [],
+    authority: { status: 'unavailable' as const, unavailable: [unavailableAuthority] },
+    backgroundFailures: [],
+    circuits: { states: {}, open: [], halfOpen: [], total: 0 },
+    rateLimits: { perExchange: {}, hotExchanges: [] },
+    error: { code, message },
+  }
+}
+
 /**
  * Race any promise against a hard timeout — returns fallback if it exceeds the deadline.
  * Critical: /api/health/pipeline must never hang the monitor. Each sub-query gets a cap.
@@ -100,14 +148,28 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
   )
 
   const [allLogsRes, lbLatestRes] = await Promise.all([
-    withDeadline(logsQuery, 10_000, { data: [], error: null }, 'pipeline_logs records_processed'),
+    withDeadline(
+      logsQuery,
+      FAST_QUERY_DEADLINE_MS,
+      {
+        data: [],
+        error: {
+          name: 'PostgrestError',
+          message: 'pipeline log averages query timed out',
+          details: '',
+          hint: '',
+          code: 'HEALTH_TIMEOUT',
+        },
+      },
+      'pipeline_logs records_processed'
+    ),
     // get_platform_freshness() returns FETCH freshness per source from
     // arena.leaderboard_snapshots.scraped_at (when last crawled) — not score
     // freshness, which would false-alert sources that fetched but weren't scored.
     // (Migrated off retiring trader_latest 2026-06-15; RPC keyed by legacy alias.)
     withDeadline(
       freshnessQuery,
-      25_000,
+      DATABASE_QUERY_DEADLINE_MS,
       { data: null, error: new Error('platform freshness query timed out') },
       'platform_freshness'
     ),
@@ -137,7 +199,36 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
 }
 
 export async function GET(req: NextRequest) {
-  if (!(await verifyAdminAuth(req))) {
+  let authResult: { authorized: boolean; timedOut: boolean }
+  try {
+    authResult = await withDeadline(
+      verifyAdminAuth(req).then((authorized) => ({ authorized, timedOut: false })),
+      ADMIN_AUTH_DEADLINE_MS,
+      { authorized: false, timedOut: true },
+      'admin authentication'
+    )
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    logger.error('[health/pipeline] Admin authentication authority failed', { error: message })
+    return NextResponse.json(
+      buildUnavailableSnapshot('PIPELINE_AUTH_UNAVAILABLE', message, 'admin_auth'),
+      {
+        status: 503,
+        headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
+      }
+    )
+  }
+  if (authResult.timedOut) {
+    const message = `Pipeline health authentication authority timed out after ${ADMIN_AUTH_DEADLINE_MS}ms`
+    return NextResponse.json(
+      buildUnavailableSnapshot('PIPELINE_AUTH_TIMEOUT', message, 'admin_auth'),
+      {
+        status: 503,
+        headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
+      }
+    )
+  }
+  if (!authResult.authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -161,8 +252,15 @@ export async function GET(req: NextRequest) {
     // v5 (2026-04-16): added `rateLimits` field + hot-exchange escalation.
     // v6 (2026-07-18): platform membership now comes from active arena.sources;
     // discard v5 entries that still contain retired/inactive static sources.
-    const CACHE_KEY = 'api:health:pipeline:v6'
-    const cached = await tieredGet(CACHE_KEY, 'warm')
+    // v7 (2026-07-28): cache entries must carry an explicit authority verdict;
+    // never reuse a snapshot that masked an empty database result as healthy.
+    const CACHE_KEY = 'api:health:pipeline:v7'
+    const cached = await withDeadline(
+      tieredGet(CACHE_KEY, 'warm'),
+      CACHE_READ_DEADLINE_MS,
+      { data: null, layer: null },
+      'cache read'
+    )
     if (cached.data !== null) {
       // Defensive: even on cache hit, validate the cached entry isn't degraded.
       // ANY of the three lists empty == degraded (production has 100+ jobs and
@@ -171,11 +269,13 @@ export async function GET(req: NextRequest) {
         jobs?: unknown[]
         stats?: unknown[]
         platformHealth?: unknown[]
+        authority?: { status?: string }
       }
       const cachedDegraded =
         (cachedTyped?.jobs?.length ?? 0) === 0 ||
         (cachedTyped?.stats?.length ?? 0) === 0 ||
-        (cachedTyped?.platformHealth?.length ?? 0) === 0
+        (cachedTyped?.platformHealth?.length ?? 0) === 0 ||
+        cachedTyped?.authority?.status !== 'available'
       if (!cachedDegraded) {
         return NextResponse.json(cached.data, {
           headers: { 'Cache-Control': 'no-store', 'X-Cache': 'HIT' },
@@ -188,12 +288,22 @@ export async function GET(req: NextRequest) {
       // Hard per-query deadlines: if any one query gets stuck, we still return
       // a (partial) response instead of hanging the monitor's fetch.
       const [jobStatuses, jobStats, recentFailuresRaw, platformHealth] = await Promise.all([
-        withDeadline(PipelineLogger.getJobStatuses(), 15_000, [], 'getJobStatuses'),
-        withDeadline(PipelineLogger.getJobStats(), 15_000, [], 'getJobStats'),
-        withDeadline(PipelineLogger.getRecentFailures(10), 10_000, [], 'getRecentFailures'),
+        withDeadline(
+          PipelineLogger.getJobStatuses(),
+          DATABASE_QUERY_DEADLINE_MS,
+          [],
+          'getJobStatuses'
+        ),
+        withDeadline(PipelineLogger.getJobStats(), DATABASE_QUERY_DEADLINE_MS, [], 'getJobStats'),
+        withDeadline(
+          PipelineLogger.getRecentFailures(10),
+          FAST_QUERY_DEADLINE_MS,
+          [],
+          'getRecentFailures'
+        ),
         withDeadline<PlatformHealth[] | null>(
           getPlatformHealthData(),
-          20_000,
+          PLATFORM_HEALTH_DEADLINE_MS,
           null,
           'getPlatformHealthData'
         ),
@@ -229,6 +339,11 @@ export async function GET(req: NextRequest) {
       const platformCritical = platformHealth.filter((p) => p.status === 'critical').length
       const platformNeverFetched = platformHealth.filter((p) => p.lastUpdate === null).length
       const platformStatus = classifyPlatformHealth(platformHealth)
+      const unavailableAuthorities = [
+        ...(jobStatuses.length === 0 ? ['job_statuses'] : []),
+        ...(jobStats.length === 0 ? ['job_stats'] : []),
+        ...(platformHealth.length === 0 ? ['platform_freshness'] : []),
+      ]
 
       let overallStatus: 'healthy' | 'degraded' | 'critical' = 'healthy'
       // Root cause fix: previous thresholds were too aggressive:
@@ -238,7 +353,12 @@ export async function GET(req: NextRequest) {
       // New thresholds: tolerate up to 10% failures as normal, require >2 stuck
       // jobs for critical (single stuck is often just a slow run).
       const failedPct = totalJobs > 0 ? failedJobs / totalJobs : 0
-      if (platformStatus === 'critical' || stuckJobs >= 3 || failedPct > 0.3) {
+      if (
+        unavailableAuthorities.length > 0 ||
+        platformStatus === 'critical' ||
+        stuckJobs >= 3 ||
+        failedPct > 0.3
+      ) {
         overallStatus = 'critical'
       } else if (
         platformStatus === 'degraded' ||
@@ -347,19 +467,37 @@ export async function GET(req: NextRequest) {
         jobs: jobStatuses,
         stats: jobStats,
         recentFailures,
+        authority: {
+          status:
+            unavailableAuthorities.length > 0 ? ('unavailable' as const) : ('available' as const),
+          unavailable: unavailableAuthorities,
+        },
         backgroundFailures,
         circuits,
         rateLimits,
       }
     }
 
-    const result = await compute()
+    const result = await withDeadline<Awaited<ReturnType<typeof compute>> | null>(
+      compute(),
+      COMPUTE_DEADLINE_MS,
+      null,
+      'complete pipeline health computation'
+    )
+
+    if (result === null) {
+      const message = `Pipeline health database authority timed out after ${COMPUTE_DEADLINE_MS}ms`
+      logger.error('[health/pipeline] ' + message)
+      return NextResponse.json(buildUnavailableSnapshot('PIPELINE_HEALTH_TIMEOUT', message), {
+        status: 503,
+        headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
+      })
+    }
 
     // Detect degraded response. ANY of these signals → degraded → skip cache.
     // Production has 100+ active cron jobs and 30+ platforms, so legitimately
     // empty jobs[] / stats[] is impossible. Empty == query failure.
-    const isDegraded =
-      result.jobs.length === 0 || result.stats.length === 0 || result.platformHealth.length === 0
+    const isDegraded = result.authority.status === 'unavailable'
 
     if (!isDegraded) {
       // Fire-and-forget cache write — don't block the response on Redis,
@@ -374,6 +512,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json(result, {
+      status: isDegraded ? 503 : 200,
       headers: {
         'Cache-Control': 'no-store',
         'X-Cache': 'MISS',
@@ -388,9 +527,10 @@ export async function GET(req: NextRequest) {
       error: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
     })
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500, headers: { 'Cache-Control': 'no-store' } }
-    )
+    const message = err instanceof Error ? err.message : String(err)
+    return NextResponse.json(buildUnavailableSnapshot('PIPELINE_HEALTH_UNAVAILABLE', message), {
+      status: 503,
+      headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
+    })
   }
 }

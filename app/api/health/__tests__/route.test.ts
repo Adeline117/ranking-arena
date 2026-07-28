@@ -9,6 +9,30 @@ const mockFrom = jest.fn()
 const mockRedisPing = jest.fn()
 const mockGetSharedRedis = jest.fn()
 
+function installFetchMock(implementation?: jest.Mock) {
+  const originalFetch = globalThis.fetch
+  const fetchMock = implementation || jest.fn()
+  Object.defineProperty(globalThis, 'fetch', {
+    configurable: true,
+    writable: true,
+    value: fetchMock,
+  })
+  return {
+    fetchMock,
+    restore() {
+      if (originalFetch) {
+        Object.defineProperty(globalThis, 'fetch', {
+          configurable: true,
+          writable: true,
+          value: originalFetch,
+        })
+      } else {
+        delete (globalThis as { fetch?: typeof fetch }).fetch
+      }
+    },
+  }
+}
+
 jest.mock('@/lib/rankings/build-freshness-report', () => ({
   buildFreshnessReport: (...args: unknown[]) => mockBuildFreshnessReport(...args),
 }))
@@ -233,7 +257,7 @@ describe('GET /api/health', () => {
     try {
       const { GET } = await import('../route')
       const responsePromise = GET()
-      await jest.advanceTimersByTimeAsync(8000)
+      await jest.advanceTimersByTimeAsync(8_000)
       const response = await responsePromise
       const body = await response.json()
 
@@ -243,6 +267,110 @@ describe('GET /api/health', () => {
         message: 'Freshness authority timed out',
       })
     } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('returns unhealthy within the core budget and skips supplementary VPS work when DB hangs', async () => {
+    jest.useFakeTimers()
+    process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
+    process.env.VPS_PROXY_KEY = 'vps-key'
+    const { fetchMock, restore } = installFetchMock()
+    mockFrom.mockImplementationOnce(() => ({
+      select: () => ({
+        limit: () => new Promise(() => undefined),
+      }),
+    }))
+
+    try {
+      const { GET } = await import('../route')
+      const responsePromise = GET()
+      await jest.advanceTimersByTimeAsync(8_000)
+      const response = await responsePromise
+      const body = await response.json()
+
+      expect(response.status).toBe(503)
+      expect(body.status).toBe('unhealthy')
+      expect(body.responseTimeMs).toBeLessThanOrEqual(8_000)
+      expect(body.checks.database).toMatchObject({
+        status: 'fail',
+        message: 'DB check timed out (8s)',
+      })
+      expect(body.checks.vps).toEqual({
+        status: 'skip',
+        message: 'Skipped because the core database is unavailable',
+      })
+      expect(fetchMock).not.toHaveBeenCalled()
+    } finally {
+      restore()
+      jest.useRealTimers()
+    }
+  })
+
+  it('preserves an explicit database failure as unhealthy', async () => {
+    mockFrom.mockImplementationOnce(() => ({
+      select: () => ({
+        limit: () =>
+          Promise.resolve({ data: null, error: { message: 'database transport unavailable' } }),
+      }),
+    }))
+
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.status).toBe('unhealthy')
+    expect(body.checks.database).toMatchObject({
+      status: 'fail',
+      message: 'database transport unavailable',
+    })
+  })
+
+  it('bounds the VPS database heartbeat fallback', async () => {
+    jest.useFakeTimers()
+    process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
+    process.env.VPS_PROXY_KEY = 'vps-key'
+    const fetchMock = jest.fn().mockResolvedValue({ ok: false, status: 503 } as Response)
+    const { restore } = installFetchMock(fetchMock)
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'trader_sources') {
+        return {
+          select: () => ({
+            limit: () => Promise.resolve({ data: [{ id: 1 }], error: null }),
+          }),
+        }
+      }
+      if (table === 'pipeline_logs') {
+        const chain = {
+          eq: () => chain,
+          or: () => chain,
+          gte: () => chain,
+          limit: () => chain,
+          maybeSingle: () => new Promise(() => undefined),
+        }
+        return { select: () => chain }
+      }
+      throw new Error(`unexpected table: ${table}`)
+    })
+
+    try {
+      const { GET } = await import('../route')
+      const responsePromise = GET()
+      await jest.advanceTimersByTimeAsync(3_000)
+      const response = await responsePromise
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body.checks.vps).toMatchObject({
+        status: 'skip',
+        message: expect.stringContaining('no recent heartbeat'),
+      })
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        '[health] checkVpsHeartbeat timed out after 3000ms'
+      )
+    } finally {
+      restore()
       jest.useRealTimers()
     }
   })
