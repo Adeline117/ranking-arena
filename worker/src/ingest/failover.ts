@@ -74,15 +74,15 @@ async function nativelyCoveredRegions(redis: IORedis, selfNode: string): Promise
  */
 export function startFailoverManager(
   redis: IORedis,
-  nativeRegions: string[],
+  nativeRegions: readonly IngestRegion[],
   route: (job: Job) => Promise<unknown>,
   opts: FailoverWorkerOpts
 ): { stop: () => Promise<void> } {
   const selfNode = workerNodeId()
-  const native = new Set(nativeRegions)
-  const active = new Map<string, Worker>() // region → failover Worker
+  const native = new Set<IngestRegion>(nativeRegions)
+  const active = new Map<IngestRegion, Worker>() // region → failover Worker
 
-  const startRegion = (region: string): void => {
+  const startRegion = (region: IngestRegion): void => {
     if (active.has(region)) return
     const w = new Worker(regionQueueName(region), route, {
       connection: ingestConnection(),
@@ -99,7 +99,7 @@ export function startFailoverManager(
     console.warn(`[failover] ACTIVATED — now consuming ${region} (primary appears down)`)
   }
 
-  const stopRegion = async (region: string): Promise<void> => {
+  const stopRegion = async (region: IngestRegion): Promise<void> => {
     const w = active.get(region)
     if (!w) return
     active.delete(region)
