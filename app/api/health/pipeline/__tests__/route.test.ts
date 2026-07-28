@@ -105,6 +105,21 @@ function resolvedPipelineLogQuery(result: { data: unknown[]; error: unknown }) {
   return chain
 }
 
+function pendingPipelineLogQuery(pending: Promise<never>) {
+  const chain = {
+    select: () => chain,
+    eq: () => chain,
+    gte: () => chain,
+    not: () => chain,
+    gt: () => chain,
+    abortSignal: (signal: AbortSignal) => {
+      observedSupabaseSignals.push(signal)
+      return pending
+    },
+  }
+  return chain
+}
+
 function abortableQuery<T>(result: Promise<T> | T) {
   return {
     abortSignal(signal: AbortSignal) {
@@ -246,6 +261,120 @@ describe('GET /api/health/pipeline', () => {
     expect(mockTieredGet).not.toHaveBeenCalled()
   })
 
+  it('logs dependency failures without returning internal connection details', async () => {
+    const internalError = 'postgres://health-reader:super-secret@private-db.internal/postgres'
+    mockTieredGet.mockRejectedValueOnce(new Error(internalError))
+
+    const { GET } = await import('../route')
+    const response = await GET({} as never)
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.error).toEqual({
+      code: 'PIPELINE_HEALTH_UNAVAILABLE',
+      message: 'Pipeline health authority is unavailable',
+    })
+    expect(JSON.stringify(body)).not.toContain('super-secret')
+    expect(JSON.stringify(body)).not.toContain('private-db.internal')
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      '[health/pipeline] Unhandled error while computing health snapshot',
+      expect.objectContaining({ error: internalError })
+    )
+  })
+
+  it('fails closed and skips cache writes when recent-failure authority rejects', async () => {
+    const internalError = 'permission denied at private-db.internal'
+    mockGetRecentFailures.mockRejectedValueOnce(new Error(internalError))
+
+    const { GET } = await import('../route')
+    const response = await GET({} as never)
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.error).toEqual({
+      code: 'PIPELINE_HEALTH_UNAVAILABLE',
+      message: 'Pipeline health authority is unavailable',
+    })
+    expect(JSON.stringify(body)).not.toContain('private-db.internal')
+    expect(mockGetRecentFailures).toHaveBeenCalledWith(10, 120, expect.any(AbortSignal), true)
+    expect(mockTieredSet).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when recent-failure authority alone exceeds its phase budget', async () => {
+    jest.useFakeTimers()
+    mockGetRecentFailures.mockReturnValueOnce(new Promise(() => undefined))
+
+    try {
+      const { GET } = await import('../route')
+      const responsePromise = GET({} as never)
+
+      await jest.advanceTimersByTimeAsync(6_000)
+      const response = await responsePromise
+      const body = await response.json()
+
+      expect(response.status).toBe(503)
+      expect(body.status).toBe('critical')
+      expect(body.authority).toEqual({
+        status: 'unavailable',
+        unavailable: ['recent_failures'],
+      })
+      expect(mockGetRecentFailures.mock.calls[0][2]).toBeInstanceOf(AbortSignal)
+      expect((mockGetRecentFailures.mock.calls[0][2] as AbortSignal).aborted).toBe(true)
+      expect(mockTieredSet).not.toHaveBeenCalled()
+      expect(jest.getTimerCount()).toBe(0)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('fails closed and skips cache writes when pipeline log averages reject', async () => {
+    mockFrom.mockReturnValueOnce(
+      resolvedPipelineLogQuery({
+        data: [],
+        error: { message: 'permission denied at private-db.internal' },
+      })
+    )
+
+    const { GET } = await import('../route')
+    const response = await GET({} as never)
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.error).toEqual({
+      code: 'PIPELINE_HEALTH_UNAVAILABLE',
+      message: 'Pipeline health authority is unavailable',
+    })
+    expect(JSON.stringify(body)).not.toContain('private-db.internal')
+    expect(mockTieredSet).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when pipeline log averages alone exceed their phase budget', async () => {
+    jest.useFakeTimers()
+    const pending = new Promise<never>(() => undefined)
+    mockFrom.mockReturnValueOnce(pendingPipelineLogQuery(pending))
+
+    try {
+      const { GET } = await import('../route')
+      const responsePromise = GET({} as never)
+
+      await jest.advanceTimersByTimeAsync(6_000)
+      const response = await responsePromise
+      const body = await response.json()
+
+      expect(response.status).toBe(503)
+      expect(body.error).toEqual({
+        code: 'PIPELINE_HEALTH_UNAVAILABLE',
+        message: 'Pipeline health authority is unavailable',
+      })
+      expect(observedSupabaseSignals).toHaveLength(2)
+      expect(observedSupabaseSignals.filter((signal) => signal.aborted)).toHaveLength(1)
+      expect(mockTieredSet).not.toHaveBeenCalled()
+      expect(jest.getTimerCount()).toBe(0)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('returns a structured critical 503 before the transport deadline when DB work hangs', async () => {
     jest.useFakeTimers()
     const pending = new Promise(() => undefined)
@@ -276,7 +405,7 @@ describe('GET /api/health/pipeline', () => {
       })
       expect(body.error).toEqual({
         code: 'PIPELINE_HEALTH_UNAVAILABLE',
-        message: 'active platform freshness authority is unavailable',
+        message: 'Pipeline health authority is unavailable',
       })
       const pipelineSignals = [
         mockGetJobStatuses.mock.calls[0][0],

@@ -175,6 +175,30 @@ describe('verifyAdminAuth', () => {
     expect(await verifyAdminAuth(req)).toBe(false)
   })
 
+  test('production rejects an admin JWT when the email allowlist is empty', async () => {
+    const originalNodeEnv = process.env.NODE_ENV
+    const originalAdminEmails = process.env.ADMIN_EMAILS
+    process.env.NODE_ENV = 'production'
+    delete process.env.ADMIN_EMAILS
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'admin@example.com' } },
+      error: null,
+    })
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { role: 'admin', banned_at: null, deleted_at: null },
+      error: null,
+    })
+
+    try {
+      const req = makeRequest({ authorization: 'Bearer valid-admin-jwt-token' })
+      await expect(verifyAdminAuthResult(req)).resolves.toEqual({ status: 'invalid' })
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv
+      if (originalAdminEmails === undefined) delete process.env.ADMIN_EMAILS
+      else process.env.ADMIN_EMAILS = originalAdminEmails
+    }
+  })
+
   test.each([
     [{ role: 'admin', banned_at: '2026-07-15T00:00:00.000Z', deleted_at: null }, null],
     [{ role: 'admin', banned_at: null, deleted_at: '2026-07-15T00:00:00.000Z' }, null],
@@ -215,13 +239,34 @@ describe('verifyAdminAuth', () => {
         data: { user: null },
         error: new Error('authentication service transport unavailable'),
       })
+      .mockResolvedValueOnce({
+        data: { user: null },
+        error: { status: 401, code: 'unexpected_failure', message: 'Invalid API key' },
+      })
+      .mockResolvedValueOnce({
+        data: { user: null },
+        error: {
+          name: 'AuthSessionMissingError',
+          status: 400,
+          code: undefined,
+          message: 'Auth session missing!',
+        },
+      })
 
     const invalidRequest = makeRequest({ authorization: 'Bearer invalid-jwt' })
     const unavailableRequest = makeRequest({ authorization: 'Bearer authority-down-jwt' })
+    const gatewayFailureRequest = makeRequest({ authorization: 'Bearer gateway-failure-jwt' })
+    const missingSessionRequest = makeRequest({ authorization: 'Bearer missing-session-jwt' })
 
     await expect(verifyAdminAuthResult(invalidRequest)).resolves.toEqual({ status: 'invalid' })
     await expect(verifyAdminAuthResult(unavailableRequest)).resolves.toMatchObject({
       status: 'unavailable',
+    })
+    await expect(verifyAdminAuthResult(gatewayFailureRequest)).resolves.toMatchObject({
+      status: 'unavailable',
+    })
+    await expect(verifyAdminAuthResult(missingSessionRequest)).resolves.toEqual({
+      status: 'invalid',
     })
   })
 

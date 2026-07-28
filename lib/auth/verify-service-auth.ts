@@ -54,14 +54,39 @@ export function verifyServiceAuth(request: Request): boolean {
 function isInvalidCredentialError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
 
-  const candidate = error as { status?: unknown; code?: unknown; message?: unknown }
-  if (candidate.status === 400 || candidate.status === 401 || candidate.status === 403) return true
+  const candidate = error as { name?: unknown; code?: unknown; message?: unknown }
+  const name = typeof candidate.name === 'string' ? candidate.name : ''
+  if (
+    ['AuthSessionMissingError', 'AuthInvalidJwtError', 'AuthInvalidCredentialsError'].includes(name)
+  ) {
+    return true
+  }
 
   const code = typeof candidate.code === 'string' ? candidate.code.toLowerCase() : ''
-  if (['bad_jwt', 'invalid_jwt', 'session_not_found', 'user_not_found'].includes(code)) return true
+  if (
+    [
+      'bad_jwt',
+      'invalid_jwt',
+      'no_authorization',
+      'user_not_found',
+      'session_not_found',
+      'session_expired',
+      'user_banned',
+      'invalid_credentials',
+    ].includes(code)
+  ) {
+    return true
+  }
 
   const message = typeof candidate.message === 'string' ? candidate.message.toLowerCase() : ''
-  return message.includes('invalid jwt') || message.includes('jwt expired')
+  return (
+    message.includes('invalid jwt') ||
+    message.includes('jwt expired') ||
+    message.includes('invalid token') ||
+    message.includes('auth session missing') ||
+    message.includes('session not found') ||
+    message.includes('user not found')
+  )
 }
 
 /**
@@ -115,7 +140,7 @@ export async function verifyAdminAuthResult(
         .split(',')
         .map((e) => e.trim())
         .filter((e) => e.length > 0)
-      if (process.env.NODE_ENV === 'production' && adminEmails.length > 0) {
+      if (process.env.NODE_ENV === 'production') {
         if (!user.email || !adminEmails.includes(user.email)) return { status: 'invalid' }
       }
       return { status: 'authorized' }
