@@ -28,6 +28,9 @@ describe('HomeFirstPaintShell', () => {
     expect(
       within(screen.getByTestId('first-paint-center')).getByText('Server rankings')
     ).toBeVisible()
+
+    const sidebarCards = Array.from(container.querySelectorAll<HTMLElement>('.sidebar-card'))
+    expect(sidebarCards.map((card) => card.style.minHeight)).toEqual(['262px', '192px', '252px'])
   })
 
   it('keeps first-paint grid geometry aligned with the loaded stylesheet', () => {
