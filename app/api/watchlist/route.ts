@@ -20,8 +20,9 @@ const log = createLogger('api:watchlist')
  * exists in the repo but was never applied to the production database
  * (PostgREST returns PGRST205 "Could not find the table").
  *
- * Until that migration is applied, this route degrades gracefully instead of
- * 500ing: GET returns an empty watchlist; POST/DELETE return 503.
+ * Until that migration is applied, every method returns 503. Returning an
+ * empty GET would falsely tell clients that the user's persisted list is
+ * authoritative and empty while writes are unavailable.
  * Restoration = apply the existing migration (table + RLS + indexes), no code
  * changes needed — these guards become dead paths automatically.
  */
@@ -53,9 +54,8 @@ export const GET = withAuth(
 
     if (error) {
       if (isTableMissing(error)) {
-        // Table missing in prod — return empty list instead of 500 (see header comment)
-        log.warn('trader_watchlist table missing — returning empty watchlist')
-        return NextResponse.json({ watchlist: [] })
+        log.warn('trader_watchlist table missing — watchlist reads disabled')
+        return watchlistUnavailable()
       }
       log.error('GET query failed', { error: error.message })
       return serverError('Internal server error')
