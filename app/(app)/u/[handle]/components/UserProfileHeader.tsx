@@ -31,6 +31,7 @@ interface UserProfileHeaderProps {
   followersCount: number
   followingCount: number
   onFollowersCountChange: (delta: number) => void
+  onFollowingClick: () => void
   onFollowersClick: () => void
 }
 
@@ -43,6 +44,7 @@ export default function UserProfileHeader({
   followersCount,
   followingCount,
   onFollowersCountChange,
+  onFollowingClick,
   onFollowersClick,
 }: UserProfileHeaderProps) {
   const router = useRouter()
@@ -356,7 +358,8 @@ export default function UserProfileHeader({
               }}
             >
               {(() => {
-                const followingInteractive = isOwnProfile
+                const followingInteractive =
+                  profile.isRegistered && (isOwnProfile || profile.show_following === true)
                 const followersInteractive =
                   profile.isRegistered && (isOwnProfile || profile.show_followers !== false)
                 const statButtonStyle = (interactive: boolean): CSSProperties => ({
@@ -376,7 +379,14 @@ export default function UserProfileHeader({
                   <>
                     <button
                       type="button"
-                      onClick={() => followingInteractive && router.push('/following')}
+                      onClick={() => {
+                        if (!followingInteractive) return
+                        if (isOwnProfile) {
+                          router.push('/following')
+                          return
+                        }
+                        onFollowingClick()
+                      }}
                       disabled={!followingInteractive}
                       aria-label={`${followingCount} ${t('following')}`}
                       style={statButtonStyle(followingInteractive)}

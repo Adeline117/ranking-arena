@@ -213,6 +213,84 @@ describe('GET /api/users/[handle]/follow public profile boundary', () => {
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
   })
 
+  it('serves a public following list to another viewer', async () => {
+    const followingId = '30000000-0000-4000-8000-000000000001'
+    const targetQuery = makeQuery({ data: activeTarget({ show_following: true }), error: null })
+    const edgeQuery = makeQuery({
+      data: [
+        {
+          id: 'edge-following-1',
+          following_id: followingId,
+          created_at: '2026-07-16T00:00:00.000Z',
+        },
+      ],
+      error: null,
+    })
+    const profilesQuery = makeQuery({
+      data: [activeListProfile(followingId)],
+      error: null,
+    })
+    mockFrom
+      .mockReturnValueOnce(targetQuery)
+      .mockReturnValueOnce(edgeQuery)
+      .mockReturnValueOnce(profilesQuery)
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/users/alice/follow?list=following'),
+      { params: Promise.resolve({ handle: 'alice' }) }
+    )
+    const body = await response.json()
+
+    expect(body.following).toHaveLength(1)
+    expect(body.following[0].id).toBe(followingId)
+    expect(body.hidden).toBeUndefined()
+    expect(edgeQuery.eq).toHaveBeenCalledWith('follower_id', TARGET_ID)
+  })
+
+  it.each([false, null, undefined])(
+    'does not read following edges when another viewer requests a non-public list (%s)',
+    async (showFollowing) => {
+      const targetQuery = makeQuery({
+        data: activeTarget({ show_following: showFollowing }),
+        error: null,
+      })
+      mockFrom.mockReturnValueOnce(targetQuery)
+
+      const response = await GET(
+        new NextRequest('http://localhost/api/users/alice/follow?list=following'),
+        { params: Promise.resolve({ handle: 'alice' }) }
+      )
+      const body = await response.json()
+
+      expect(body).toMatchObject({ following: [], hidden: true })
+      expect(mockFrom).toHaveBeenCalledTimes(1)
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    }
+  )
+
+  it.each([false, null, undefined])(
+    'lets the authenticated owner read their non-public following list (%s)',
+    async (showFollowing) => {
+      mockMiddlewareUser = { id: TARGET_ID }
+      const targetQuery = makeQuery({
+        data: activeTarget({ show_following: showFollowing }),
+        error: null,
+      })
+      const edgeQuery = makeQuery({ data: [], error: null })
+      mockFrom.mockReturnValueOnce(targetQuery).mockReturnValueOnce(edgeQuery)
+
+      const response = await GET(
+        new NextRequest('http://localhost/api/users/alice/follow?list=following'),
+        { params: Promise.resolve({ handle: 'alice' }) }
+      )
+      const body = await response.json()
+
+      expect(body).toEqual({ following: [], count: 0 })
+      expect(mockFrom).toHaveBeenCalledTimes(2)
+      expect(edgeQuery.eq).toHaveBeenCalledWith('follower_id', TARGET_ID)
+    }
+  )
+
   it('binds default counts to the currently authorized profile id', async () => {
     const targetQuery = makeQuery({ data: activeTarget(), error: null })
     mockFrom.mockReturnValueOnce(targetQuery)

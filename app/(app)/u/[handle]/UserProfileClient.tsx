@@ -129,6 +129,11 @@ export default function UserProfileClient({
           followersCount={followersCount}
           followingCount={followingCount}
           onFollowersCountChange={(delta) => setFollowersCount((prev) => prev + delta)}
+          onFollowingClick={() => {
+            if (!isOwnProfile && profile.isRegistered && profile.show_following === true) {
+              setModalType('following')
+            }
+          }}
           onFollowersClick={() => {
             if (profile.isRegistered && (isOwnProfile || profile.show_followers !== false)) {
               setModalType('followers')
@@ -159,16 +164,20 @@ export default function UserProfileClient({
           />
         </div>
 
-        {/* Followers modal — hidden when social is off */}
-        {features.social && profile.isRegistered && (
+        {/* Follow-list modal — hidden when social is off or no list is selected */}
+        {features.social && profile.isRegistered && modalType && (
           <FollowListModal
-            isOpen={modalType === 'followers'}
+            isOpen={true}
             onClose={() => setModalType(null)}
-            type="followers"
+            type={modalType}
             handle={profile.handle}
             currentUserId={currentUserId}
             isOwnProfile={isOwnProfile}
-            isPublic={profile.show_followers !== false}
+            isPublic={
+              modalType === 'following'
+                ? profile.show_following === true
+                : profile.show_followers !== false
+            }
           />
         )}
 
