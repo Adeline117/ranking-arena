@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '../base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
+import MessageButton from '../ui/MessageButton'
 import WatchlistToggleButton from './WatchlistToggleButton'
 import AlertBellButton from './AlertBellButton'
 import TraderShareActions from './TraderShareActions'
@@ -144,6 +145,8 @@ export function TraderHeaderActions({
   const { t } = useLanguage()
   const [moreOpen, setMoreOpen] = useState(false)
   const actionsRef = useRef<HTMLDivElement>(null)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
+  const secondaryActionsId = useId()
   const loginReturnPath = `/trader/${encodeURIComponent(handle)}${
     source ? `?platform=${encodeURIComponent(source)}` : ''
   }`
@@ -154,7 +157,10 @@ export function TraderHeaderActions({
       if (!actionsRef.current?.contains(event.target as Node)) setMoreOpen(false)
     }
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMoreOpen(false)
+      if (event.key === 'Escape') {
+        setMoreOpen(false)
+        moreButtonRef.current?.focus()
+      }
     }
     document.addEventListener('mousedown', close)
     document.addEventListener('keydown', closeOnEscape)
@@ -203,10 +209,10 @@ export function TraderHeaderActions({
         </ActionButton>
       )}
 
-      {/* Follow icon — rendered for anonymous users too. The buttons carry the
+      {/* Follow — rendered for anonymous users too. The button carries the
           exact trader route and intended action through full-page login. A
           registered profile must also carry its canonical user UUID; never
-          fall back to the exchange account ID for /api/users/follow. */}
+          fall back to the exchange account ID for user follow. */}
       {!isOwnProfile &&
         (isRegistered ? (
           registeredUserId ? (
@@ -240,11 +246,12 @@ export function TraderHeaderActions({
       )}
 
       <button
+        ref={moreButtonRef}
         type="button"
         className="trader-actions-more"
         aria-label={t('more')}
         aria-expanded={moreOpen}
-        aria-haspopup="menu"
+        aria-controls={secondaryActionsId}
         onClick={() => setMoreOpen((open) => !open)}
       >
         <span aria-hidden="true">•••</span>
@@ -252,10 +259,22 @@ export function TraderHeaderActions({
       </button>
 
       <div
+        id={secondaryActionsId}
         className="trader-secondary-actions"
         data-open={moreOpen ? 'true' : 'false'}
-        role={moreOpen ? 'menu' : undefined}
       >
+        {/* Message stays directly visible on desktop. On narrow screens the
+            existing responsive secondary group moves it behind More, keeping
+            one mounted instance so a login intent can only be consumed once. */}
+        {!isOwnProfile && isRegistered && registeredUserId && (
+          <MessageButton
+            targetUserId={registeredUserId}
+            currentUserId={userId}
+            size="sm"
+            loginReturnPath={loginReturnPath}
+          />
+        )}
+
         {/* Alert bell — notify me when this trader's rank/ROI/score moves (A4).
             Explicit opt-in; opens the existing AlertConfig in a modal. */}
         {!isOwnProfile && source && (
