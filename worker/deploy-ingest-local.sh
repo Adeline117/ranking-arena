@@ -762,23 +762,118 @@ wait_for_pm2_absent() {
 }
 
 wait_for_stamped_ready() {
-  local marker="$1" log_file="$2" expected_sha="$3" expected_release="$4" expected_node="$5"
+  local mode="$1" marker="$2" log_file="$3" expected_sha="$4" expected_release="$5"
+  local expected_node="$6" expected_pid="${7:-}" expected_region
   local timeout="${ARENA_READY_TIMEOUT_SECONDS:-$AUTHORITY_HANDOFF_TIMEOUT_SECONDS}" i
+  case "$mode" in
+    native)
+      expected_region=local
+      [[ "$expected_pid" =~ ^[1-9][0-9]*$ ]] || return 1
+      ;;
+    legacy) expected_region='' ;;
+    *) return 1 ;;
+  esac
   [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || return 1
   for i in $(seq 1 "$timeout"); do
-    awk -v marker="$marker" -v sha="$expected_sha" -v release="$expected_release" -v node="$expected_node" '
+    awk -v mode="$mode" -v marker="$marker" -v sha="$expected_sha" -v pid="$expected_pid" \
+      -v release="$expected_release" -v node="$expected_node" \
+      -v region="$expected_region" '
       function exactToken(line, value, count, fields, fieldIndex) {
         count = split(line, fields, /[[:space:]]+/)
         for (fieldIndex = 1; fieldIndex <= count; fieldIndex++)
           if (fields[fieldIndex] == value) return 1
         return 0
       }
-      index($0, marker) { after = 1; db = 0; ready = 0; heartbeat = 0; next }
-      after && index($0, "metric-trust database release contract ready") { db = 1 }
-      after && index($0, "[ingest-worker] ready") { ready = 1 }
-      after && index($0, "[heartbeat]") && exactToken($0, "node=" node) &&
-        exactToken($0, "sha=" sha) && exactToken($0, "release=" release) { heartbeat = 1 }
-      END { exit !(after && db && ready && heartbeat) }
+      function positiveIntegerToken(line, prefix, count, fields, fieldIndex, value) {
+        count = split(line, fields, /[[:space:]]+/)
+        for (fieldIndex = 1; fieldIndex <= count; fieldIndex++) {
+          if (index(fields[fieldIndex], prefix) == 1) {
+            value = substr(fields[fieldIndex], length(prefix) + 1)
+            if (value ~ /^[1-9][0-9]*$/) return 1
+          }
+        }
+        return 0
+      }
+      function canonicalPayload(line, prefix, payload) {
+        if (substr(line, 1, 1) == "[") return line
+        prefix = substr(line, 1, 21)
+        if (prefix !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]: $/) return ""
+        payload = substr(line, 22)
+        if (substr(payload, 1, 1) != "[") return ""
+        return payload
+      }
+      function metricReady(line) {
+        return index(line, "[ingest-worker] metric-trust database release contract ready")
+      }
+      function nativeMetricReady(line) {
+        return canonicalPayload(line) == "[ingest-worker] metric-trust database release contract ready"
+      }
+      function committedHeartbeat(line) {
+        return index(canonicalPayload(line), "[heartbeat] redis-hset-committed ") == 1
+      }
+      function exactCommittedHeartbeat(line, expectedNode, expectedPid, expectedSha, expectedRelease, payload, count, fields) {
+        payload = canonicalPayload(line)
+        count = split(payload, fields, / /)
+        if (count != 7) return 0
+        if (fields[1] != "[heartbeat]" || fields[2] != "redis-hset-committed") return 0
+        if (fields[3] != "node=" expectedNode || fields[4] != "pid=" expectedPid) return 0
+        if (fields[5] != "sha=" expectedSha || fields[6] != "release=" expectedRelease) return 0
+        return fields[7] ~ /^ts=[1-9][0-9]*$/
+      }
+      function authorityReady(line) {
+        return index(canonicalPayload(line), "[ingest-worker] native regional authority ready") == 1
+      }
+      function exactAuthorityReady(line, expectedRegion) {
+        return canonicalPayload(line) == "[ingest-worker] native regional authority ready region=" expectedRegion
+      }
+      function workerReady(line) {
+        return index(line, "[ingest-worker] ready")
+      }
+      function nativeWorkerReady(line, expectedRegion, payload) {
+        payload = canonicalPayload(line)
+        return payload ~ ("^\\[ingest-worker\\] ready \\(regions=" expectedRegion ", concurrency=[1-9][0-9]*, fast-lane=(off|on×[1-9][0-9]*)\\)$")
+      }
+      $0 == marker {
+        after = 1
+        db = 0
+        ready = 0
+        heartbeat = 0
+        stage = 0
+        invalid = 0
+        next
+      }
+      mode == "native" && after && stage < 4 && nativeMetricReady($0) {
+        if (stage == 0) stage = 1
+        else invalid = 1
+        next
+      }
+      mode == "native" && after && stage < 4 && committedHeartbeat($0) {
+        expectedHeartbeat = exactCommittedHeartbeat($0, node, pid, sha, release)
+        if (expectedHeartbeat) {
+          if (stage == 1) stage = 2
+          else invalid = 1
+        }
+        next
+      }
+      mode == "native" && after && stage < 4 && authorityReady($0) {
+        if (stage == 2 && exactAuthorityReady($0, region)) stage = 3
+        else invalid = 1
+        next
+      }
+      mode == "native" && after && stage < 4 && index(canonicalPayload($0), "[ingest-worker] ready") == 1 {
+        if (stage == 3 && nativeWorkerReady($0, region)) stage = 4
+        else invalid = 1
+        next
+      }
+      mode == "legacy" && after && metricReady($0) { db = 1 }
+      mode == "legacy" && after && workerReady($0) { ready = 1 }
+      mode == "legacy" && after && index($0, "[heartbeat]") &&
+        exactToken($0, "node=" node) && exactToken($0, "sha=" sha) &&
+        exactToken($0, "release=" release) { heartbeat = 1 }
+      END {
+        if (mode == "native") exit !(after && !invalid && stage == 4)
+        exit !(after && db && ready && heartbeat)
+      }
     ' "$log_file" && return 0
     sleep 1
   done
@@ -971,7 +1066,8 @@ $NEW_PROCESS_TREE}" || {
     return 1
   }
   if [ -n "$OLD_RELEASE_ID" ]; then
-    wait_for_stamped_ready "$rollback_marker" "$rollback_log" "$OLD_SHA" "$OLD_RELEASE_ID" "$OLD_NODE_ID" || {
+    wait_for_stamped_ready legacy "$rollback_marker" "$rollback_log" \
+      "$OLD_SHA" "$OLD_RELEASE_ID" "$OLD_NODE_ID" "$rollback_pid" || {
       echo '✗✗ previous stamped release lacks fresh rollback evidence' >&2
       return 1
     }
@@ -1193,7 +1289,6 @@ PLAYWRIGHT_DIR="$RELEASE_DIR/.playwright-browsers"
 
 DEPLOY_MARKER="arena-local-deploy-$TS-${SHA:0:9}"
 DEPLOY_LOG="$RELEASE_DIR/worker/logs/ingest-out.log"
-printf '%s\n' "$DEPLOY_MARKER" >> "$DEPLOY_LOG"
 
 echo '7/8 stopping the exact previous owner and switching PM2 cwd'
 OLD_PROCESS_TREE="$(process_tree_pids "$OLD_PID")" || \
@@ -1208,6 +1303,7 @@ wait_for_profile_owners_exit "$OLD_CWD" || fail 'a previous browser still owns a
 pm2_command delete "$PM2_APP" >/dev/null 2>&1 || true
 wait_for_pm2_absent "$OLD_PID" || fail 'previous PM2 owner was not deleted exactly'
 assert_local_lock
+printf '%s\n' "$DEPLOY_MARKER" >> "$DEPLOY_LOG"
 CANDIDATE_EXEC_PATH="$RELEASE_DIR/worker/src/ingest-worker.ts"
 CANDIDATE_ARGS_JSON='[]'
 CANDIDATE_EXEC_MODE='fork_mode'
@@ -1230,8 +1326,9 @@ NEW_PROCESS_TREE="$(process_tree_pids "$NEW_PID")" || \
   fail 'unable to capture the candidate process tree'
 
 echo '8/8 requiring fresh exact identity and committing PM2 state'
-wait_for_stamped_ready "$DEPLOY_MARKER" "$DEPLOY_LOG" "$SHA" "$WORKER_RELEASE_ID" "$OLD_NODE_ID" || \
-  fail 'candidate lacks fresh database, ready, SHA, and release evidence'
+wait_for_stamped_ready native "$DEPLOY_MARKER" "$DEPLOY_LOG" \
+  "$SHA" "$WORKER_RELEASE_ID" "$OLD_NODE_ID" "$NEW_PID" || \
+  fail 'candidate lacks ordered database, heartbeat, local authority, and ready evidence'
 (cd "$RELEASE_DIR" && env -i \
   HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
   PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
