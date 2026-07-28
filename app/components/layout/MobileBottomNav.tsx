@@ -6,18 +6,8 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { PRIMARY_NAV_ITEMS, type PrimaryNavIconKind } from '@/lib/config/primary-nav'
 import { useLanguage } from '../Providers/LanguageProvider'
-// Supabase: dynamic import to avoid pulling ~50KB into initial client bundle.
-// Only needed for auth state (getSession + onAuthStateChange).
-type SupabaseClient = Awaited<typeof import('@/lib/supabase/client')>['supabase']
-let _sb: SupabaseClient | null = null
-const getSb = () =>
-  _sb
-    ? Promise.resolve(_sb)
-    : import('@/lib/supabase/client').then((m) => {
-        _sb = m.supabase
-        return _sb
-      })
 import { useCapacitorHaptics } from '@/lib/hooks/useCapacitor'
+import { useViewerProfileHandle } from '@/lib/hooks/useViewerProfileHandle'
 
 interface IconProps {
   active: boolean
@@ -164,86 +154,6 @@ const ICON_MAP: Record<PrimaryNavIconKind, (props: IconProps) => React.ReactElem
   market: MarketIcon,
   groups: GroupsIcon,
   hot: FireIcon,
-}
-
-// Cache key for persisting user handle across navigations
-const USER_HANDLE_CACHE_KEY = 'arena:user_handle'
-
-function useUserHandle(): string | null {
-  const [userHandle, setUserHandle] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null
-    try {
-      return sessionStorage.getItem(USER_HANDLE_CACHE_KEY)
-    } catch {
-      return null
-    }
-  })
-
-  // Run once on mount — no [userHandle] dep to avoid subscription churn
-  useEffect(() => {
-    let alive = true
-    let subscriptionRef: { unsubscribe: () => void } | null = null
-
-    getSb().then((sb) => {
-      if (!alive) return
-
-      function loadHandle(userId: string, email?: string | null) {
-        const emailHandle = email?.split('@')[0] || null
-        // Read from sessionStorage directly (not React state) to avoid stale closure
-        try {
-          if (sessionStorage.getItem(USER_HANDLE_CACHE_KEY)) return
-        } catch {
-          /* ignore */
-        }
-        sb.from('user_profiles')
-          .select('handle')
-          .eq('id', userId)
-          .maybeSingle()
-          .then(({ data: profile, error: profileError }) => {
-            if (!alive) return
-            const resolved = profileError ? emailHandle : profile?.handle || emailHandle
-            setUserHandle(resolved)
-            if (resolved) {
-              try {
-                sessionStorage.setItem(USER_HANDLE_CACHE_KEY, resolved)
-              } catch {
-                /* ignore */
-              }
-            }
-          })
-      }
-
-      sb.auth.getSession().then(({ data, error }) => {
-        if (!alive || error) return
-        const userId = data.session?.user?.id
-        if (userId) loadHandle(userId, data.session?.user?.email)
-      })
-
-      const {
-        data: { subscription },
-      } = sb.auth.onAuthStateChange((_event, session) => {
-        if (!alive) return
-        if (session?.user?.id) {
-          loadHandle(session.user.id, session.user.email)
-        } else {
-          setUserHandle(null)
-          try {
-            sessionStorage.removeItem(USER_HANDLE_CACHE_KEY)
-          } catch {
-            /* ignore */
-          }
-        }
-      })
-      subscriptionRef = subscription
-    })
-
-    return () => {
-      alive = false
-      subscriptionRef?.unsubscribe()
-    }
-  }, [])
-
-  return userHandle
 }
 
 function useScrollVisibility(): boolean {
@@ -415,7 +325,7 @@ export default function MobileBottomNav(): React.ReactElement {
   const pathname = usePathname()
   const { t } = useLanguage()
   const { impact } = useCapacitorHaptics()
-  const userHandle = useUserHandle()
+  const userHandle = useViewerProfileHandle()
   const isVisible = useScrollVisibility()
   const keyboardOpen = useKeyboardOpen()
 
