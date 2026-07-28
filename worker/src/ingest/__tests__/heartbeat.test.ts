@@ -1,7 +1,9 @@
 import {
   INITIAL_HEARTBEAT_TIMEOUT_MS,
+  createWorkerOwnershipHeartbeatFactory,
   diskUsedPct,
   parseDiskUsedPct,
+  resolveWorkerRuntimeIdentity,
   resolveWorkerReleaseId,
   startHeartbeat,
 } from '../heartbeat'
@@ -59,6 +61,93 @@ describe('worker heartbeat disk usage', () => {
         throw new Error('df failed')
       })
     ).toBeUndefined()
+  })
+
+  test('freezes one immutable runtime identity for both control planes', () => {
+    const identity = resolveWorkerRuntimeIdentity()
+
+    expect(Object.isFrozen(identity)).toBe(true)
+    expect(identity).toMatchObject({
+      attempt_bound_capture: true,
+      node: expect.any(String),
+      pid: process.pid,
+      release_id: expect.any(String),
+      sha: expect.any(String),
+    })
+  })
+
+  test('refreshes only disk evidence across exact one-region authority heartbeats', () => {
+    const identity = {
+      attempt_bound_capture: true,
+      node: 'fixed-worker',
+      pid: 42,
+      release_id: 'a'.repeat(64),
+      sha: 'b'.repeat(40),
+    }
+    const readDisk = jest.fn().mockReturnValueOnce(91).mockReturnValueOnce(92)
+    const buildHeartbeat = createWorkerOwnershipHeartbeatFactory(identity, 'local', readDisk)
+    identity.node = 'mutated-worker'
+    identity.sha = 'f'.repeat(40)
+
+    expect(buildHeartbeat()).toEqual({
+      attempt_bound_capture: true,
+      disk: 91,
+      node: 'fixed-worker',
+      pid: 42,
+      release_id: 'a'.repeat(64),
+      regions: ['local'],
+      sha: 'b'.repeat(40),
+    })
+    expect(buildHeartbeat()).toEqual({
+      attempt_bound_capture: true,
+      disk: 92,
+      node: 'fixed-worker',
+      pid: 42,
+      release_id: 'a'.repeat(64),
+      regions: ['local'],
+      sha: 'b'.repeat(40),
+    })
+    expect(readDisk).toHaveBeenCalledTimes(2)
+  })
+
+  test('snapshots supplied identity and regions instead of rereading mutable inputs', async () => {
+    jest.useFakeTimers()
+    const identity = {
+      attempt_bound_capture: true,
+      node: 'frozen-sg-worker',
+      pid: 77,
+      release_id: 'c'.repeat(64),
+      sha: 'd'.repeat(40),
+    }
+    const regions = ['vps_sg']
+    const previous = process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+    let timer: NodeJS.Timeout | undefined
+    try {
+      process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = 'false'
+      const hset = jest.fn().mockResolvedValue(1)
+      timer = await startHeartbeat({ hset } as never, regions, identity)
+      identity.node = 'mutated-worker'
+      identity.sha = 'e'.repeat(40)
+      regions[0] = 'local'
+      await jest.advanceTimersByTimeAsync(60_000)
+
+      expect(hset).toHaveBeenCalledTimes(2)
+      for (const call of hset.mock.calls) {
+        expect(JSON.parse(call[2])).toMatchObject({
+          attempt_bound_capture: true,
+          node: 'frozen-sg-worker',
+          pid: 77,
+          regions: ['vps_sg'],
+          release_id: 'c'.repeat(64),
+          sha: 'd'.repeat(40),
+        })
+      }
+    } finally {
+      if (timer) clearInterval(timer)
+      if (previous === undefined) delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+      else process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = previous
+      jest.useRealTimers()
+    }
   })
 
   test('awaits a valid first HSET before emitting the committed token', async () => {
