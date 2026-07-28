@@ -27,24 +27,30 @@ const PLATFORM_THRESHOLD_OVERRIDES: Record<string, { stale: number; critical: nu
  * are independent authorities. Keeping all three prevents one recent source
  * from hiding a missing or stale source/window behind a global MAX timestamp.
  */
-export async function buildFreshnessReport(): Promise<FreshnessReport> {
+export async function buildFreshnessReport(signal?: AbortSignal): Promise<FreshnessReport> {
   const supabase = getSupabaseAdmin()
   const now = Date.now()
 
+  const expectedQuery = supabase.rpc('arena_freshness_expected_sources')
+  const watermarkQuery = supabase
+    .from('leaderboard_source_freshness')
+    .select('season_id,source,source_as_of')
+    .in('season_id', [...RANKING_SEASONS])
+
   const [expectedResult, visibleBySeason, watermarkResult] = await Promise.all([
-    supabase.rpc('arena_freshness_expected_sources'),
+    signal ? expectedQuery.abortSignal(signal) : expectedQuery,
     Promise.all(
-      RANKING_SEASONS.map(async (season) => ({
-        season,
-        result: await supabase.rpc('arena_visible_sources', {
+      RANKING_SEASONS.map(async (season) => {
+        const visibleQuery = supabase.rpc('arena_visible_sources', {
           p_season_id: season,
-        }),
-      }))
+        })
+        return {
+          season,
+          result: await (signal ? visibleQuery.abortSignal(signal) : visibleQuery),
+        }
+      })
     ),
-    supabase
-      .from('leaderboard_source_freshness')
-      .select('season_id,source,source_as_of')
-      .in('season_id', [...RANKING_SEASONS]),
+    signal ? watermarkQuery.abortSignal(signal) : watermarkQuery,
   ])
 
   if (expectedResult.error) {

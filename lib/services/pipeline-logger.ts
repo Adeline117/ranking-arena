@@ -512,7 +512,7 @@ export class PipelineLogger {
    * WHERE clause, then DISTINCT ON in SQL. Server-side aggregation also
    * bypasses the PostgREST 1000-row cap. Returns ~100 rows in 1-3s.
    */
-  static async getJobStatuses(): Promise<
+  static async getJobStatuses(signal?: AbortSignal): Promise<
     Array<{
       job_name: string
       started_at: string
@@ -523,7 +523,8 @@ export class PipelineLogger {
     }>
   > {
     const client = getClient()
-    const { data, error } = await client.rpc('get_pipeline_job_statuses_recent')
+    const query = client.rpc('get_pipeline_job_statuses_recent')
+    const { data, error } = await (signal ? query.abortSignal(signal) : query)
 
     if (error) {
       logger.warn(`[PipelineLogger] Failed to get job statuses: ${error.message}`)
@@ -551,7 +552,7 @@ export class PipelineLogger {
    * Fix: use the new `get_pipeline_job_stats_recent()` RPC. Returns ~133 rows
    * in 3-5s. Same time bound + GROUP BY but isolated from view contention.
    */
-  static async getJobStats(): Promise<
+  static async getJobStats(signal?: AbortSignal): Promise<
     Array<{
       job_name: string
       total_runs: number
@@ -563,7 +564,8 @@ export class PipelineLogger {
     }>
   > {
     const client = getClient()
-    const { data, error } = await client.rpc('get_pipeline_job_stats_recent')
+    const query = client.rpc('get_pipeline_job_stats_recent')
+    const { data, error } = await (signal ? query.abortSignal(signal) : query)
 
     if (error) {
       logger.warn(`[PipelineLogger] Failed to get job stats: ${error.message}`)
@@ -594,7 +596,8 @@ export class PipelineLogger {
    */
   static async getRecentFailures(
     limit = 20,
-    withinMinutes = 120
+    withinMinutes = 120,
+    signal?: AbortSignal
   ): Promise<
     Array<{
       job_name: string
@@ -605,13 +608,14 @@ export class PipelineLogger {
   > {
     const client = getClient()
     const cutoff = new Date(Date.now() - withinMinutes * 60 * 1000).toISOString()
-    const { data, error } = await client
+    const query = client
       .from('pipeline_logs')
       .select('job_name, started_at, error_message, metadata')
       .in('status', ['error', 'timeout'])
       .gte('started_at', cutoff)
       .order('started_at', { ascending: false })
       .limit(limit)
+    const { data, error } = await (signal ? query.abortSignal(signal) : query)
 
     if (error) {
       logger.warn(`[PipelineLogger] Failed to get recent failures: ${error.message}`)

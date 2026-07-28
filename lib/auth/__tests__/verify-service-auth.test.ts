@@ -15,13 +15,20 @@ jest.mock('@/lib/env', () => ({
 // Mock @/lib/supabase/server — returns a controllable mock client
 const mockGetUser = jest.fn()
 const mockMaybeSingle = jest.fn()
+const mockProfileAbortSignal = jest.fn()
+const mockProfileTerminal = { maybeSingle: mockMaybeSingle }
+const mockProfileQuery = {
+  maybeSingle: mockMaybeSingle,
+  abortSignal: (signal: AbortSignal) => {
+    mockProfileAbortSignal(signal)
+    return mockProfileTerminal
+  },
+}
 const mockSupabaseAdmin = {
   auth: { getUser: mockGetUser },
   from: jest.fn().mockReturnValue({
     select: jest.fn().mockReturnValue({
-      eq: jest.fn().mockReturnValue({
-        maybeSingle: mockMaybeSingle,
-      }),
+      eq: jest.fn().mockReturnValue(mockProfileQuery),
     }),
   }),
 }
@@ -29,7 +36,12 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => mockSupabaseAdmin),
 }))
 
-import { verifyCronSecret, verifyServiceAuth, verifyAdminAuth } from '../verify-service-auth'
+import {
+  verifyCronSecret,
+  verifyServiceAuth,
+  verifyAdminAuth,
+  verifyAdminAuthResult,
+} from '../verify-service-auth'
 
 // Helper to create a Request with specific headers
 function makeRequest(headers: Record<string, string> = {}): Request {
@@ -191,5 +203,59 @@ describe('verifyAdminAuth', () => {
   test('no auth header at all returns false', async () => {
     const req = makeRequest()
     expect(await verifyAdminAuth(req)).toBe(false)
+  })
+
+  test('distinguishes an invalid JWT from an unavailable auth authority', async () => {
+    mockGetUser
+      .mockResolvedValueOnce({
+        data: { user: null },
+        error: { status: 401, code: 'bad_jwt', message: 'invalid token' },
+      })
+      .mockResolvedValueOnce({
+        data: { user: null },
+        error: new Error('authentication service transport unavailable'),
+      })
+
+    const invalidRequest = makeRequest({ authorization: 'Bearer invalid-jwt' })
+    const unavailableRequest = makeRequest({ authorization: 'Bearer authority-down-jwt' })
+
+    await expect(verifyAdminAuthResult(invalidRequest)).resolves.toEqual({ status: 'invalid' })
+    await expect(verifyAdminAuthResult(unavailableRequest)).resolves.toMatchObject({
+      status: 'unavailable',
+    })
+  })
+
+  test('passes a request abort signal to the admin profile query', async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'admin@example.com' } },
+      error: null,
+    })
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { role: 'admin', banned_at: null, deleted_at: null },
+      error: null,
+    })
+    const signal = new AbortController().signal
+
+    await expect(
+      verifyAdminAuthResult(makeRequest({ authorization: 'Bearer valid-admin-jwt-token' }), {
+        signal,
+      })
+    ).resolves.toEqual({ status: 'authorized' })
+    expect(mockProfileAbortSignal).toHaveBeenCalledWith(signal)
+  })
+
+  test('reports a profile query failure as authority unavailable', async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: 'user-1' } },
+      error: null,
+    })
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'profile database unavailable' },
+    })
+
+    await expect(
+      verifyAdminAuthResult(makeRequest({ authorization: 'Bearer valid-user-jwt-token' }))
+    ).resolves.toMatchObject({ status: 'unavailable' })
   })
 })

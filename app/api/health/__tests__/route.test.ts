@@ -8,6 +8,16 @@ const mockLoggerWarn = jest.fn()
 const mockFrom = jest.fn()
 const mockRedisPing = jest.fn()
 const mockGetSharedRedis = jest.fn()
+const observedSupabaseSignals: AbortSignal[] = []
+
+function abortableResult<T>(result: T | Promise<T>) {
+  return {
+    abortSignal(signal: AbortSignal) {
+      observedSupabaseSignals.push(signal)
+      return Promise.resolve(result)
+    },
+  }
+}
 
 function installFetchMock(implementation?: jest.Mock) {
   const originalFetch = globalThis.fetch
@@ -92,6 +102,7 @@ describe('GET /api/health', () => {
   beforeEach(() => {
     jest.resetModules()
     jest.clearAllMocks()
+    observedSupabaseSignals.length = 0
     mockBuildFreshnessReport.mockResolvedValue({
       ok: true,
       checked_at: '2026-07-21T20:00:00.000Z',
@@ -103,7 +114,7 @@ describe('GET /api/health', () => {
       if (table !== 'trader_sources') throw new Error(`unexpected table: ${table}`)
       return {
         select: () => ({
-          limit: () => Promise.resolve({ data: [{ id: 1 }], error: null }),
+          limit: () => abortableResult(Promise.resolve({ data: [{ id: 1 }], error: null })),
         }),
       }
     })
@@ -226,6 +237,7 @@ describe('GET /api/health', () => {
       const { GET } = await import('../route')
       const response = await GET()
       expect(response.status).toBe(200)
+      expect(jest.getTimerCount()).toBe(0)
 
       await jest.advanceTimersByTimeAsync(15_000)
       expect(mockLoggerWarn).not.toHaveBeenCalled()
@@ -242,6 +254,7 @@ describe('GET /api/health', () => {
       const { GET } = await import('../route')
       const response = await GET()
       expect(response.status).toBe(202)
+      expect(jest.getTimerCount()).toBe(0)
 
       await jest.advanceTimersByTimeAsync(15_000)
       expect(mockLoggerWarn).not.toHaveBeenCalled()
@@ -266,6 +279,8 @@ describe('GET /api/health', () => {
         status: 'fail',
         message: 'Freshness authority timed out',
       })
+      expect((mockBuildFreshnessReport.mock.calls[0][0] as AbortSignal).aborted).toBe(true)
+      expect(jest.getTimerCount()).toBe(0)
     } finally {
       jest.useRealTimers()
     }
@@ -278,7 +293,7 @@ describe('GET /api/health', () => {
     const { fetchMock, restore } = installFetchMock()
     mockFrom.mockImplementationOnce(() => ({
       select: () => ({
-        limit: () => new Promise(() => undefined),
+        limit: () => abortableResult(new Promise(() => undefined)),
       }),
     }))
 
@@ -301,6 +316,8 @@ describe('GET /api/health', () => {
         message: 'Skipped because the core database is unavailable',
       })
       expect(fetchMock).not.toHaveBeenCalled()
+      expect(observedSupabaseSignals.some((signal) => signal.aborted)).toBe(true)
+      expect(jest.getTimerCount()).toBe(0)
     } finally {
       restore()
       jest.useRealTimers()
@@ -311,7 +328,9 @@ describe('GET /api/health', () => {
     mockFrom.mockImplementationOnce(() => ({
       select: () => ({
         limit: () =>
-          Promise.resolve({ data: null, error: { message: 'database transport unavailable' } }),
+          abortableResult(
+            Promise.resolve({ data: null, error: { message: 'database transport unavailable' } })
+          ),
       }),
     }))
 
@@ -337,7 +356,7 @@ describe('GET /api/health', () => {
       if (table === 'trader_sources') {
         return {
           select: () => ({
-            limit: () => Promise.resolve({ data: [{ id: 1 }], error: null }),
+            limit: () => abortableResult(Promise.resolve({ data: [{ id: 1 }], error: null })),
           }),
         }
       }
@@ -347,6 +366,10 @@ describe('GET /api/health', () => {
           or: () => chain,
           gte: () => chain,
           limit: () => chain,
+          abortSignal: (signal: AbortSignal) => {
+            observedSupabaseSignals.push(signal)
+            return chain
+          },
           maybeSingle: () => new Promise(() => undefined),
         }
         return { select: () => chain }
@@ -357,7 +380,7 @@ describe('GET /api/health', () => {
     try {
       const { GET } = await import('../route')
       const responsePromise = GET()
-      await jest.advanceTimersByTimeAsync(3_000)
+      await jest.advanceTimersByTimeAsync(1_000)
       const response = await responsePromise
       const body = await response.json()
 
@@ -367,8 +390,70 @@ describe('GET /api/health', () => {
         message: expect.stringContaining('no recent heartbeat'),
       })
       expect(mockLoggerWarn).toHaveBeenCalledWith(
-        '[health] checkVpsHeartbeat timed out after 3000ms'
+        '[health] checkVpsHeartbeat timed out after 1000ms'
       )
+      expect(observedSupabaseSignals.some((signal) => signal.aborted)).toBe(true)
+      expect(jest.getTimerCount()).toBe(0)
+    } finally {
+      restore()
+      jest.useRealTimers()
+    }
+  })
+
+  it('bounds the full core-plus-VPS worst path below the 15s caller budget', async () => {
+    jest.useFakeTimers()
+    process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
+    process.env.VPS_PROXY_KEY = 'vps-key'
+    const observedFetchSignals: AbortSignal[] = []
+    const fetchMock = jest.fn((_url: string, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal
+      observedFetchSignals.push(signal)
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    const { restore } = installFetchMock(fetchMock)
+    const delayed = <T>(value: T) =>
+      new Promise<T>((resolve) => setTimeout(() => resolve(value), 7_999))
+    mockFrom.mockImplementationOnce(() => ({
+      select: () => ({
+        limit: () => abortableResult(delayed({ data: [{ id: 1 }], error: null })),
+      }),
+    }))
+    mockGetSharedRedis.mockImplementationOnce(() =>
+      delayed({ ping: jest.fn().mockResolvedValue('PONG') })
+    )
+    mockBuildFreshnessReport.mockImplementationOnce(() =>
+      delayed({
+        ok: true,
+        checked_at: '2026-07-28T00:00:00.000Z',
+        summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+        thresholds: { stale_hours: 8, critical_hours: 24 },
+        platforms: [],
+      })
+    )
+
+    try {
+      const { GET } = await import('../route')
+      const startedAt = Date.now()
+      const responsePromise = GET()
+
+      await jest.advanceTimersByTimeAsync(7_999)
+      await jest.advanceTimersByTimeAsync(1_251)
+      const response = await responsePromise
+      const body = await response.json()
+
+      expect(Date.now() - startedAt).toBeLessThanOrEqual(9_250)
+      expect(15_000 - (Date.now() - startedAt)).toBeGreaterThanOrEqual(5_750)
+      expect(response.status).toBe(200)
+      expect(body.checks.vps).toMatchObject({
+        status: 'skip',
+        message: expect.stringContaining('deadline was exhausted'),
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(observedFetchSignals).toHaveLength(1)
+      expect(observedFetchSignals[0].aborted).toBe(true)
+      expect(jest.getTimerCount()).toBe(0)
     } finally {
       restore()
       jest.useRealTimers()
