@@ -108,7 +108,7 @@ export interface OverviewTabProps {
 
   // Auth/claim state
   currentUserId: string | null
-  isOwner: boolean
+  isVerifiedClaimOwner: boolean
   isVerifiedTrader: boolean
   claimedUser: { handle: string } | null | undefined
 }
@@ -126,7 +126,7 @@ const OverviewTab = React.memo(function OverviewTab({
   aggregatedData,
   linkedAccounts,
   currentUserId,
-  isOwner,
+  isVerifiedClaimOwner,
   isVerifiedTrader,
   claimedUser,
 }: OverviewTabProps) {
@@ -395,7 +395,7 @@ const OverviewTab = React.memo(function OverviewTab({
         )}
 
         {/* Verified trader edit OR Claim CTA */}
-        {isOwner ? (
+        {isVerifiedClaimOwner ? (
           <VerifiedTraderEditor
             traderId={data.source_trader_id}
             source={data.source}

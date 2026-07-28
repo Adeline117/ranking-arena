@@ -138,9 +138,10 @@ export default function TraderProfileView({
           }
           displayName={traderProfile?.display_name || undefined}
           traderId={traderProfile?.id || profile.id}
+          registeredUserId={profile.isRegistered ? profile.id : undefined}
           avatarUrl={traderProfile?.avatar_url || profile.avatar_url}
           coverUrl={traderProfile?.cover_url || profile.cover_url}
-          isRegistered={traderProfile?.isRegistered ?? profile.isRegistered}
+          isRegistered={profile.isRegistered}
           isOwnProfile={isOwn}
           followers={traderProfile?.followers ?? profile.followers}
           source={traderProfile?.source}
