@@ -1753,12 +1753,18 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     (!canonicalViewer ||
       !profileLoadOutcome ||
       !settingsScopeMatches(profileLoadOutcome, canonicalViewer))
+  const profileLoadFailed =
+    !!canonicalViewer &&
+    !!profileLoadOutcome &&
+    settingsScopeMatches(profileLoadOutcome, canonicalViewer) &&
+    profileLoadOutcome.status === 'failed'
 
   return {
     // Auth state
     email,
     userId,
     loading: loading || auth.loading || !auth.authChecked || viewerBoundaryPending,
+    profileLoadFailed,
     saving,
 
     // Profile state

@@ -193,9 +193,11 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.initialValuesRef.current?.handle).toBe('bravo')
   })
 
-  it('keeps sensitive defaults non-writable when the sensitive row is missing', async () => {
+  it('exposes a retryable failure instead of writable defaults when the sensitive row is missing', async () => {
     mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
-    mockSensitiveMaybeSingle.mockResolvedValue({ data: null, error: null })
+    mockSensitiveMaybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce(sensitiveProfile())
     const scope = synchronizeViewerScope(true, 'user-a')
     const hook = renderHook(() =>
       useSettingsHandlers({
@@ -207,6 +209,7 @@ describe('useSettingsHandlers viewer ownership', () => {
     )
 
     await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    expect(hook.result.current.profileLoadFailed).toBe(true)
     expect(hook.result.current.initialValuesRef.current).toBeNull()
     expect(hook.result.current.handle).toBe('')
 
@@ -214,6 +217,14 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(mockAuthedFetch).not.toHaveBeenCalled()
     expect(hook.result.current.emailDigest).toBe('none')
     expect(showToast).toHaveBeenCalledWith('saveFailed', 'error')
+
+    await act(async () => {
+      await hook.result.current.loadProfile()
+    })
+
+    expect(hook.result.current.profileLoadFailed).toBe(false)
+    expect(hook.result.current.handle).toBe('alpha')
+    expect(hook.result.current.initialValuesRef.current?.handle).toBe('alpha')
   })
 
   it('blocks A form actions while B ownership is still unresolved', async () => {
