@@ -30,8 +30,8 @@ interface VerifiedTraderEditorProps {
 }
 
 export default function VerifiedTraderEditor({
-  traderId: _traderId,
-  source: _source,
+  traderId,
+  source,
   currentData,
   onSaved,
 }: VerifiedTraderEditorProps) {
@@ -66,6 +66,8 @@ export default function VerifiedTraderEditor({
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
+          trader_id: traderId,
+          source,
           display_name: displayName.trim() || null,
           bio: bio.trim() || null,
           twitter_url: twitter.trim() || null,
