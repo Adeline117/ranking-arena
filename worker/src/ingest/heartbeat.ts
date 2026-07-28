@@ -21,6 +21,11 @@ import { execFileSync, execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import type {
+  WorkerOwnershipHeartbeatInput,
+  WorkerOwnershipRegion,
+} from './worker-instance-ownership'
+
 export const WORKER_ROSTER_KEY = 'arena:worker:roster'
 const BEAT_INTERVAL_MS = 60_000
 export const INITIAL_HEARTBEAT_TIMEOUT_MS = 5_000
@@ -78,7 +83,7 @@ export function resolveWorkerReleaseId(
 
 interface HeartbeatPayload {
   ts: number
-  regions: string[]
+  regions: readonly string[]
   pid: number
   node: string
   sha: string
@@ -90,6 +95,14 @@ interface HeartbeatPayload {
    *  heartbeat-check cron can page before a node fills up and crashloops.
    *  Optional — older workers omit it; the cron treats absent as unknown. */
   disk?: number
+}
+
+export interface WorkerRuntimeIdentity {
+  readonly attempt_bound_capture: boolean
+  readonly node: string
+  readonly pid: number
+  readonly release_id: string
+  readonly sha: string
 }
 
 type DiskUsageReader = (target: string) => string
@@ -128,34 +141,84 @@ export function diskUsedPct(
   }
 }
 
+/** Freeze immutable boot identity once so legacy liveness and every regional
+ * authority proof describe the same executable process. */
+function snapshotWorkerRuntimeIdentity(identity: WorkerRuntimeIdentity): WorkerRuntimeIdentity {
+  return Object.freeze({
+    attempt_bound_capture: identity.attempt_bound_capture,
+    node: identity.node,
+    pid: identity.pid,
+    release_id: identity.release_id,
+    sha: identity.sha,
+  })
+}
+
+export function resolveWorkerRuntimeIdentity(): WorkerRuntimeIdentity {
+  return snapshotWorkerRuntimeIdentity({
+    attempt_bound_capture: process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED === 'true',
+    node: workerNodeId(),
+    pid: process.pid,
+    release_id: resolveWorkerReleaseId(),
+    sha: resolveDeployedSha(),
+  })
+}
+
+/** Snapshot one exact regional identity and return its heartbeat factory. Disk
+ * evidence is refreshed on every call; caller mutation cannot alter authority. */
+export function createWorkerOwnershipHeartbeatFactory(
+  identity: WorkerRuntimeIdentity,
+  region: WorkerOwnershipRegion,
+  readDisk: () => number | undefined = () => diskUsedPct()
+): () => WorkerOwnershipHeartbeatInput {
+  const frozenIdentity = snapshotWorkerRuntimeIdentity(identity)
+  return () => {
+    const heartbeat: WorkerOwnershipHeartbeatInput = {
+      attempt_bound_capture: frozenIdentity.attempt_bound_capture,
+      node: frozenIdentity.node,
+      pid: frozenIdentity.pid,
+      regions: [region],
+      release_id: frozenIdentity.release_id,
+      sha: frozenIdentity.sha,
+    }
+    const disk = readDisk()
+    if (disk !== undefined) heartbeat.disk = disk
+    return heartbeat
+  }
+}
+
 /**
  * Start emitting heartbeats. The first Redis HSET is awaited and must commit
  * within a bounded window before the worker is allowed to become ready. Later
  * heartbeat failures remain non-fatal so a transient Redis outage does not
  * crash an already-running worker.
  */
-export async function startHeartbeat(redis: IORedis, regions: string[]): Promise<NodeJS.Timeout> {
-  const node = workerNodeId()
-  const sha = resolveDeployedSha()
-  const releaseId = resolveWorkerReleaseId()
-  const attemptBoundCaptureEnabled = process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED === 'true'
-  if ((node === 'vps_sg' || regions.includes('vps_sg')) && !attemptBoundCaptureEnabled) {
+export async function startHeartbeat(
+  redis: IORedis,
+  regions: readonly string[],
+  runtimeIdentity: WorkerRuntimeIdentity = resolveWorkerRuntimeIdentity()
+): Promise<NodeJS.Timeout> {
+  const identity = snapshotWorkerRuntimeIdentity(runtimeIdentity)
+  const heartbeatRegions = Object.freeze([...regions])
+  if (
+    (identity.node === 'vps_sg' || heartbeatRegions.includes('vps_sg')) &&
+    !identity.attempt_bound_capture
+  ) {
     throw new Error('[heartbeat] SG attempt-bound capture must be enabled')
   }
   const buildPayload = (): HeartbeatPayload => ({
     ts: Date.now(),
-    regions,
-    pid: process.pid,
-    node,
-    sha,
-    release_id: releaseId,
-    attempt_bound_capture: attemptBoundCaptureEnabled,
+    regions: heartbeatRegions,
+    pid: identity.pid,
+    node: identity.node,
+    sha: identity.sha,
+    release_id: identity.release_id,
+    attempt_bound_capture: identity.attempt_bound_capture,
     disk: diskUsedPct(),
   })
   const commit = async (payload: HeartbeatPayload): Promise<void> => {
     let result: unknown
     try {
-      result = await redis.hset(WORKER_ROSTER_KEY, node, JSON.stringify(payload))
+      result = await redis.hset(WORKER_ROSTER_KEY, identity.node, JSON.stringify(payload))
     } catch {
       throw new Error('[heartbeat] Redis HSET failed')
     }
@@ -194,16 +257,16 @@ export async function startHeartbeat(redis: IORedis, regions: string[]): Promise
   const initialPayload = buildPayload()
   await commitWithTimeout(initialPayload)
   console.log(
-    `[heartbeat] redis-hset-committed node=${node} pid=${initialPayload.pid} ` +
-      `sha=${sha} release=${releaseId} ts=${initialPayload.ts}`
+    `[heartbeat] redis-hset-committed node=${identity.node} pid=${initialPayload.pid} ` +
+      `sha=${identity.sha} release=${identity.release_id} ts=${initialPayload.ts}`
   )
 
   const timer = setInterval(() => void beat(), BEAT_INTERVAL_MS)
   // Don't let the heartbeat timer keep the event loop alive on shutdown.
   if (typeof timer.unref === 'function') timer.unref()
   console.log(
-    `[heartbeat] node=${node} regions=${regions.join(',')} sha=${sha} ` +
-      `release=${releaseId} every ${BEAT_INTERVAL_MS / 1000}s`
+    `[heartbeat] node=${identity.node} regions=${heartbeatRegions.join(',')} sha=${identity.sha} ` +
+      `release=${identity.release_id} every ${BEAT_INTERVAL_MS / 1000}s`
   )
   return timer
 }
