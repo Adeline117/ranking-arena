@@ -5,7 +5,13 @@ const membershipQuery = jest.fn()
 const groupDirectoryQuery = jest.fn()
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
-  useAuthSession: () => ({ userId: 'viewer-1' }),
+  useAuthSession: () => ({
+    authChecked: true,
+    loading: false,
+    sessionGeneration: 1,
+    userId: 'viewer-1',
+    viewerKey: 'user:viewer-1',
+  }),
 }))
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
