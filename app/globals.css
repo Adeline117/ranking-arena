@@ -152,8 +152,15 @@ html.theme-transition #main-content {
   --background: #000000;
   --foreground: #ffffff;
   --mobile-nav-height: 60px;
+  /* Indirection keeps native env() support while allowing deterministic
+     browser tests to emulate notched devices (for example 34px on iPhone). */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
   --cookie-consent-height: 0px;
   --transient-bottom-offset: 0px;
+  --page-bottom-overlay-offset: 0px;
   /* Compatibility alias for existing floating widgets. New consumers should
      use --transient-bottom-offset directly. */
   --transient-bottom-bar: var(--transient-bottom-offset);
@@ -207,7 +214,8 @@ html.theme-transition #main-content {
   position: fixed;
   left: 0;
   right: 0;
-  padding: 12px max(16px, env(safe-area-inset-left)) 12px max(16px, env(safe-area-inset-right));
+  padding: 12px max(16px, var(--safe-area-inset-left, 0px)) 12px
+    max(16px, var(--safe-area-inset-right, 0px));
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
   border-top: 1px solid var(--color-brand-light);
@@ -317,15 +325,55 @@ html.theme-transition #main-content {
 
 html.has-cookie-consent {
   scroll-padding-bottom: calc(
-    var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) +
+    var(--mobile-nav-height, 60px) + var(--safe-area-inset-bottom, 0px) +
       var(--transient-bottom-offset, 0px) + 16px
   );
 }
 
 @media (max-width: 767px) {
+  /* A 320x568 viewport cannot fit the expanded feedback form alongside the
+     complete bottom-right widget stack. Treat the form as the single expanded
+     owner while keeping page-owned Save/Cookie controls available. */
+  html.has-feedback-panel .feedback-launch-button,
+  html.has-feedback-panel .compare-floating-bar,
+  html.has-feedback-panel .scroll-to-top-btn,
+  html.has-feedback-panel .fab-container {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+}
+
+@media (max-width: 767px) and (max-height: 640px) {
+  .feedback-panel {
+    padding: 8px !important;
+    gap: 8px !important;
+  }
+
+  .feedback-panel-body {
+    gap: 8px !important;
+  }
+
+  .feedback-panel-body textarea {
+    min-height: 64px !important;
+  }
+
+  .feedback-panel-required {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  /* Keep the desktop widget column usable while Feedback is open. */
+  .feedback-panel {
+    right: calc(max(16px, var(--safe-area-inset-right, 0px)) + 336px) !important;
+  }
+}
+
+@media (max-width: 767px) {
   .cookie-consent {
     max-height: calc(
-      100dvh - var(--mobile-nav-height, 60px) - env(safe-area-inset-bottom, 0px) - 72px
+      100dvh - var(--mobile-nav-height, 60px) - var(--safe-area-inset-bottom, 0px) - 72px
     );
     padding: 16px;
     overflow-y: auto;

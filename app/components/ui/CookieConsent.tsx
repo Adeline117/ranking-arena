@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -57,7 +57,7 @@ export default function CookieConsent() {
   // Publish the measured height rather than a guessed constant. Copy wraps
   // differently by viewport and language, so a fixed 44px offset still let the
   // sheet cover FABs and the last page controls.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement
     const banner = bannerRef.current
     if (!visible || !banner) return
@@ -75,10 +75,18 @@ export default function CookieConsent() {
     const observer =
       typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publishHeight)
     observer?.observe(banner)
+    const mutationObserver =
+      typeof MutationObserver === 'undefined' ? null : new MutationObserver(publishHeight)
+    mutationObserver?.observe(banner, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    })
     window.addEventListener('resize', publishHeight)
 
     return () => {
       observer?.disconnect()
+      mutationObserver?.disconnect()
       window.removeEventListener('resize', publishHeight)
       root.classList.remove('has-cookie-consent')
       root.style.removeProperty('--cookie-consent-height')
@@ -100,8 +108,8 @@ export default function CookieConsent() {
         className="cookie-consent"
         style={{
           bottom: isNavHidden
-            ? 'env(safe-area-inset-bottom, 0px)'
-            : 'var(--mobile-nav-height, 60px)',
+            ? 'var(--safe-area-inset-bottom, 0px)'
+            : 'calc(var(--mobile-nav-height, 60px) + var(--safe-area-inset-bottom, 0px))',
           zIndex: tokens.zIndex.overlay,
         }}
       >

@@ -46,6 +46,7 @@ jest.mock('../hooks/useSettingsHandlers', () => ({
     userId: 'user-a',
     profileLoadFailed: true,
     loadProfile: mockLoadProfile,
+    hasUnsavedChanges: () => false,
     loadBlockedUsers: jest.fn(),
     loadPasskeys: jest.fn(),
     loadSessions: jest.fn(),

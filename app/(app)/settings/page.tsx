@@ -56,6 +56,7 @@ import TraderAlertsManager from '@/app/components/alerts/TraderAlertsManager'
 import { logger } from '@/lib/logger'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { captureSettingsViewer, isSettingsViewerCurrent } from './hooks/settings-viewer-scope'
+import { useBottomOverlayReservation } from '@/lib/hooks/useBottomOverlayReservation'
 
 export function SettingsContent() {
   const router = useRouter()
@@ -65,6 +66,7 @@ export function SettingsContent() {
   const { activeSection, scrollToSection } = useActiveSection()
   const auth = useAuthSession()
   const authRef = useRef(auth)
+  const saveBarRef = useRef<HTMLDivElement>(null)
   authRef.current = auth
 
   // Lazy-load flags
@@ -73,6 +75,8 @@ export function SettingsContent() {
   const [blockedUsersLoaded, setBlockedUsersLoaded] = useState(false)
 
   const h = useSettingsHandlers({ auth, showToast, showConfirm, t })
+  const hasUnsavedChanges = h.hasUnsavedChanges()
+  useBottomOverlayReservation(saveBarRef, hasUnsavedChanges)
   const {
     loadBlockedUsers,
     loadPasskeys,
@@ -621,8 +625,10 @@ export function SettingsContent() {
           />
 
           {/* Floating Save Bar */}
-          {h.hasUnsavedChanges() && (
+          {hasUnsavedChanges && (
             <Box
+              ref={saveBarRef}
+              className="settings-save-bar"
               style={{
                 position: 'sticky',
                 bottom: tokens.spacing[4],
@@ -637,11 +643,19 @@ export function SettingsContent() {
                 zIndex: tokens.zIndex.sticky,
               }}
             >
-              <Text size="sm" style={{ color: tokens.colors.accent.warning }}>
+              <Text
+                className="settings-save-bar-status"
+                size="sm"
+                style={{ color: tokens.colors.accent.warning }}
+              >
                 {t('unsavedChanges')}
               </Text>
-              <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
+              <Box
+                className="settings-save-bar-actions"
+                style={{ display: 'flex', gap: tokens.spacing[3] }}
+              >
                 <Button
+                  className="settings-save-bar-button"
                   variant="secondary"
                   size="sm"
                   onClick={async () => {
@@ -669,6 +683,7 @@ export function SettingsContent() {
                   {t('discard')}
                 </Button>
                 <Button
+                  className="settings-save-bar-button"
                   variant="primary"
                   size="sm"
                   onClick={h.handleSaveProfile}
@@ -723,6 +738,37 @@ export function SettingsContent() {
           .settings-mobile-nav { display: flex !important; }
           .settings-mobile-nav::-webkit-scrollbar { display: none; }
           .settings-mobile-profile-menu { display: block !important; }
+          .settings-save-bar {
+            position: fixed !important;
+            left: max(${tokens.spacing[3]}, var(--safe-area-inset-left, 0px));
+            right: max(${tokens.spacing[3]}, var(--safe-area-inset-right, 0px));
+            bottom: calc(
+              var(--mobile-nav-height, 60px) + var(--safe-area-inset-bottom, 0px) +
+              var(--transient-bottom-offset, 0px) + ${tokens.spacing[2]}
+            ) !important;
+            padding: ${tokens.spacing[3]} !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: ${tokens.spacing[2]} !important;
+          }
+          .settings-save-bar-status {
+            min-width: 0;
+          }
+          .settings-save-bar-actions {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: ${tokens.spacing[2]} !important;
+            min-width: 0;
+            width: 100%;
+          }
+          .settings-save-bar-button {
+            min-width: 0;
+            min-height: 44px !important;
+            width: 100%;
+            padding-left: ${tokens.spacing[2]} !important;
+            padding-right: ${tokens.spacing[2]} !important;
+            white-space: normal;
+          }
         }
         @media (max-width: 400px) {
           .settings-mobile-nav { gap: ${tokens.spacing[1]} !important; }
