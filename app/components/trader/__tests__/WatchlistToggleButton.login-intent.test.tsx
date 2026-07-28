@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { profileTraderTarget, queueProfileActionLogin } from '@/lib/auth/profile-action-login'
 
 const mockPush = jest.fn()
@@ -8,20 +8,34 @@ const mockRemoveFromWatchlist = jest.fn()
 let mockIsLoggedIn = false
 let mockUserId: string | null = null
 let mockWatched = false
+let mockViewerKey = 'anon'
+let mockSessionGeneration = 1
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }))
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
-  useAuthSession: () => ({ isLoggedIn: mockIsLoggedIn, userId: mockUserId }),
+  useAuthSession: () => ({
+    isLoggedIn: mockIsLoggedIn,
+    userId: mockUserId,
+    viewerKey: mockViewerKey,
+    sessionGeneration: mockSessionGeneration,
+    loading: false,
+    authChecked: true,
+  }),
 }))
 
 jest.mock('@/lib/hooks/useWatchlist', () => ({
+  isWatchlistViewerChangedError: (error: unknown) =>
+    error instanceof Error && error.name === 'WatchlistViewerChangedError',
   useWatchlist: () => ({
     isWatched: () => mockWatched,
     addToWatchlist: mockAddToWatchlist,
     removeFromWatchlist: mockRemoveFromWatchlist,
+    isLoading: false,
+    error: null,
+    refetch: jest.fn(),
   }),
 }))
 
@@ -48,12 +62,22 @@ function renderButton() {
   )
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
 describe('WatchlistToggleButton login intent', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockIsLoggedIn = false
     mockUserId = null
     mockWatched = false
+    mockViewerKey = 'anon'
+    mockSessionGeneration = 1
     window.sessionStorage.clear()
     window.history.replaceState({}, '', '/trader/alice?platform=binance&tab=portfolio')
   })
@@ -124,5 +148,43 @@ describe('WatchlistToggleButton login intent', () => {
     expect(`${window.location.pathname}${window.location.search}`).toBe(
       '/trader/alice?platform=binance&tab=portfolio'
     )
+  })
+
+  it('lets B act while A is pending and never publishes A completion under B', async () => {
+    const userA = deferred<void>()
+    const userB = deferred<void>()
+    mockIsLoggedIn = true
+    mockUserId = 'user-a'
+    mockViewerKey = 'user:user-a'
+    mockAddToWatchlist.mockReturnValueOnce(userA.promise).mockReturnValueOnce(userB.promise)
+    const view = renderButton()
+
+    fireEvent.click(screen.getByRole('button', { name: 'addToWatchlist' }))
+    expect(mockAddToWatchlist).toHaveBeenCalledTimes(1)
+
+    mockUserId = 'user-b'
+    mockViewerKey = 'user:user-b'
+    mockSessionGeneration = 2
+    view.rerender(
+      <WatchlistToggleButton
+        source="binance"
+        sourceTraderID="trader-1"
+        handle="alice"
+        loginReturnPath="/trader/alice?platform=binance"
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'addToWatchlist' }))
+    expect(mockAddToWatchlist).toHaveBeenCalledTimes(2)
+
+    await act(async () => userA.resolve())
+    expect(mockShowToast).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'addToWatchlist' })).toHaveAttribute(
+      'aria-busy',
+      'true'
+    )
+
+    await act(async () => userB.resolve())
+    expect(mockShowToast).toHaveBeenCalledTimes(1)
+    expect(mockShowToast).toHaveBeenCalledWith('addedToWatchlist', 'success')
   })
 })
