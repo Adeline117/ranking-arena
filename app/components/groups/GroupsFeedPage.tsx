@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
@@ -15,9 +15,11 @@ import NewsFlash from '@/app/components/sidebar/NewsFlash'
 import PostFeed from '@/app/components/post/PostFeed'
 import { Box, Text } from '@/app/components/base'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import type { AuthSessionReturn } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import ErrorState from '@/app/components/ui/ErrorState'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 type Group = {
   id: string
@@ -31,6 +33,50 @@ type Group = {
 
 type SubTabKey = 'following' | 'recommended'
 
+type MembershipViewer = {
+  viewerKey: `user:${string}`
+  sessionGeneration: number
+  userId: string
+}
+
+type JoinedGroupsState = {
+  groups: Group[]
+  loading: boolean
+  error: boolean
+}
+
+type MembershipAuth = Pick<
+  AuthSessionReturn,
+  'authChecked' | 'loading' | 'sessionGeneration' | 'userId' | 'viewerKey'
+>
+
+function captureMembershipViewer(auth: MembershipAuth): MembershipViewer | null {
+  if (
+    auth.loading ||
+    !auth.authChecked ||
+    !auth.userId ||
+    auth.viewerKey !== `user:${auth.userId}`
+  ) {
+    return null
+  }
+
+  return {
+    viewerKey: auth.viewerKey as `user:${string}`,
+    sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
+  }
+}
+
+function isMembershipViewerCurrent(viewer: MembershipViewer, auth: MembershipAuth): boolean {
+  return (
+    !auth.loading &&
+    auth.authChecked &&
+    auth.viewerKey === viewer.viewerKey &&
+    auth.sessionGeneration === viewer.sessionGeneration &&
+    auth.userId === viewer.userId
+  )
+}
+
 interface GroupsFeedPageProps {
   initialPosts?: unknown[]
   initialGroups?: unknown[]
@@ -43,10 +89,45 @@ export default function GroupsFeedPage({
   initialGroupsStatus = 'success',
 }: GroupsFeedPageProps) {
   const { language, t } = useLanguage()
-  const { userId } = useAuthSession()
-  const [myGroups, setMyGroups] = useState<Group[]>([])
-  const [loadingGroups, setLoadingGroups] = useState(true)
-  const [groupsError, setGroupsError] = useState(false)
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const membershipViewer = useMemo(
+    () =>
+      captureMembershipViewer({
+        authChecked: auth.authChecked,
+        loading: auth.loading,
+        sessionGeneration: auth.sessionGeneration,
+        userId: auth.userId,
+        viewerKey: auth.viewerKey,
+      }),
+    [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId, auth.viewerKey]
+  )
+  const activeUserId = membershipViewer?.userId ?? null
+  const membershipScopeKey = membershipViewer
+    ? `resolved:${membershipViewer.viewerKey}\u0000${membershipViewer.sessionGeneration}\u0000${membershipViewer.userId}`
+    : `unresolved:${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${auth.userId ?? ''}`
+  const anonymous =
+    !auth.loading && auth.authChecked && auth.viewerKey === 'anon' && auth.userId === null
+  const emptyJoinedGroupsState = (): JoinedGroupsState => ({
+    groups: [],
+    loading: !anonymous,
+    error: false,
+  })
+  const [joinedGroupsState, setJoinedGroupsState] = useViewerOwnedState<JoinedGroupsState>(
+    emptyJoinedGroupsState,
+    emptyJoinedGroupsState,
+    membershipScopeKey
+  )
+  const activeMembershipScopeRef = useRef(membershipScopeKey)
+  activeMembershipScopeRef.current = membershipScopeKey
+  const nextGroupsOperationIdRef = useRef(0)
+  const activeGroupsOperationRef = useRef<{
+    id: number
+    scopeKey: string
+    viewer: MembershipViewer
+  } | null>(null)
+  const { groups: myGroups, loading: loadingGroups, error: groupsError } = joinedGroupsState
   const [groupsLoadAttempt, setGroupsLoadAttempt] = useState(0)
   const [subTab, setSubTab] = useState<SubTabKey>('recommended')
   const [groupQuery, setGroupQuery] = useState('')
@@ -60,21 +141,25 @@ export default function GroupsFeedPage({
 
   // Load user's joined groups
   useEffect(() => {
-    let cancelled = false
-
-    if (!userId) {
-      setMyGroups([])
-      setGroupsError(false)
-      setLoadingGroups(false)
-      return () => {
-        cancelled = true
-      }
+    if (!membershipViewer || !activeUserId) {
+      activeGroupsOperationRef.current = null
+      return
     }
 
+    const operation = {
+      id: ++nextGroupsOperationIdRef.current,
+      scopeKey: membershipScopeKey,
+      viewer: membershipViewer,
+    }
+    activeGroupsOperationRef.current = operation
+
+    const operationIsCurrent = () =>
+      activeGroupsOperationRef.current?.id === operation.id &&
+      activeMembershipScopeRef.current === operation.scopeKey &&
+      isMembershipViewerCurrent(operation.viewer, authRef.current)
+
     const loadMyGroups = async () => {
-      setMyGroups([])
-      setGroupsError(false)
-      setLoadingGroups(true)
+      setJoinedGroupsState({ groups: [], error: false, loading: true })
 
       try {
         // Private membership preferences come from the caller-scoped projection;
@@ -82,11 +167,12 @@ export default function GroupsFeedPage({
         const { data: memberships, error: membershipsError } = await supabase
           .from('own_group_memberships')
           .select('group_id, pinned')
-          .eq('user_id', userId)
+          .eq('user_id', operation.viewer.userId)
         if (membershipsError) throw membershipsError
+        if (!operationIsCurrent()) return
 
         if (!memberships || memberships.length === 0) {
-          if (!cancelled) setMyGroups([])
+          setJoinedGroupsState({ groups: [], error: false, loading: false })
           return
         }
 
@@ -96,6 +182,7 @@ export default function GroupsFeedPage({
           .select('id, name, name_en, avatar_url, member_count')
           .in('id', groupIds)
         if (joinedGroupsError) throw joinedGroupsError
+        if (!operationIsCurrent()) return
 
         const groupById = new Map((joinedGroups || []).map((group) => [group.id, group]))
 
@@ -107,24 +194,22 @@ export default function GroupsFeedPage({
           .filter((g): g is Group => g != null)
           // pinned first, then keep insertion order (recency of membership)
           .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned))
-        if (!cancelled) setMyGroups(groupsData)
+        setJoinedGroupsState({ groups: groupsData, error: false, loading: false })
       } catch (err) {
+        if (!operationIsCurrent()) return
         logger.error('Failed to load groups:', err)
-        if (!cancelled) {
-          setMyGroups([])
-          setGroupsError(true)
-        }
-      } finally {
-        if (!cancelled) setLoadingGroups(false)
+        setJoinedGroupsState({ groups: [], error: true, loading: false })
       }
     }
 
     void loadMyGroups()
 
     return () => {
-      cancelled = true
+      if (activeGroupsOperationRef.current?.id === operation.id) {
+        activeGroupsOperationRef.current = null
+      }
     }
-  }, [groupsLoadAttempt, userId])
+  }, [activeUserId, groupsLoadAttempt, membershipScopeKey, membershipViewer, setJoinedGroupsState])
 
   const myGroupIds = myGroups.map((g) => g.id)
   const showRecommendedGroups =
@@ -350,9 +435,9 @@ export default function GroupsFeedPage({
                 {t('noGroupsFollowedYet')}
               </Text>
               <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
-                {userId ? t('joinGroupsToSeePosts') : t('groupsLoginCta')}
+                {activeUserId ? t('joinGroupsToSeePosts') : t('groupsLoginCta')}
               </Text>
-              {!userId && (
+              {!activeUserId && (
                 <Link
                   href="/login?returnUrl=/groups"
                   style={{
@@ -545,7 +630,7 @@ export default function GroupsFeedPage({
                     </Box>
                   )
                 })()}
-                {!userId && (
+                {anonymous && (
                   <Box style={{ textAlign: 'center', marginTop: tokens.spacing[4] }}>
                     <Text size="xs" color="tertiary">
                       {t('groupsLoginCta')}
