@@ -3,6 +3,8 @@ import type { Job } from 'bullmq'
 import { isIngestRegion, type IngestRegion } from '@/lib/ingest/core/regions'
 
 import { SOURCE_JOB_LEASE_LANES } from './source-job-routing'
+import type { RegionAuthorityFence, RegionAuthorityLifecycle } from './region-authority-lifecycle'
+import { isManagedRegionAuthorityLifecycle } from './region-authority-lifecycle'
 
 export const WORKER_AUTHORITY_REGIONS = ['local', 'vps_sg'] as const
 export type WorkerAuthorityRegion = (typeof WORKER_AUTHORITY_REGIONS)[number]
@@ -20,6 +22,18 @@ function isWorkerAuthorityRegion(value: unknown): value is WorkerAuthorityRegion
 export interface ConsumedRegionContext {
   readonly consumedRegion: WorkerAuthorityRegion
   readonly executionRegion: IngestRegion
+}
+
+export interface AuthorizedConsumedRegionContext extends ConsumedRegionContext {
+  readonly authority: RegionAuthorityFence
+  assertCanConsume(): void
+}
+
+export interface ConsumedRegionAdmission {
+  readonly context: AuthorizedConsumedRegionContext
+  close(): void
+  isOpen(): boolean
+  open(): void
 }
 
 export function requireWorkerExecutionRegion(value: unknown): IngestRegion {
@@ -42,9 +56,77 @@ export function createConsumedRegionContext(
   })
 }
 
-export function bindConsumedRegion<TJob, TResult>(
-  context: ConsumedRegionContext,
-  route: (job: TJob, context: ConsumedRegionContext) => Promise<TResult>
+/**
+ * Build the only production-capable context from an already-active composite
+ * lifecycle. Admission starts closed so prepared BullMQ workers cannot process
+ * a job before every startup gate has completed.
+ */
+export function createConsumedRegionAdmission(
+  lifecycle: RegionAuthorityLifecycle,
+  executionRegion: string
+): ConsumedRegionAdmission {
+  if (!isManagedRegionAuthorityLifecycle(lifecycle)) {
+    throw new Error('[ingest-worker] consumer admission requires a managed authority lifecycle')
+  }
+  const { fence, region } = lifecycle
+  if (
+    lifecycle.state !== 'active' ||
+    fence.proof.region !== region ||
+    fence.proof.authorityScope !== `region:${region}` ||
+    !fence.isActive()
+  ) {
+    throw new Error(`[ingest-worker] ${region} authority is not active for consumer admission`)
+  }
+
+  const base = createConsumedRegionContext(region, executionRegion)
+  let state: 'closed' | 'open' | 'prepared' = 'prepared'
+  const close = () => {
+    state = 'closed'
+  }
+  const context: AuthorizedConsumedRegionContext = Object.freeze({
+    ...base,
+    authority: fence,
+    assertCanConsume: () => {
+      if (state !== 'open' || lifecycle.state !== 'active' || !fence.isActive()) {
+        throw new Error(`[ingest-worker] ${region} consumer admission is closed`)
+      }
+    },
+  })
+  fence.signal.addEventListener('abort', close, { once: true })
+
+  return Object.freeze({
+    close,
+    context,
+    isOpen: () => state === 'open' && lifecycle.state === 'active' && fence.isActive(),
+    open: () => {
+      if (state === 'closed') {
+        throw new Error(`[ingest-worker] ${region} consumer admission cannot reopen`)
+      }
+      if (lifecycle.state !== 'active' || !fence.isActive()) {
+        throw new Error(`[ingest-worker] ${region} authority is not active for consumer admission`)
+      }
+      state = 'open'
+    },
+  })
+}
+
+export function bindAuthorizedConsumedRegion<TJob, TResult>(
+  context: AuthorizedConsumedRegionContext,
+  route: (job: TJob, context: AuthorizedConsumedRegionContext) => Promise<TResult>
+): (job: TJob) => Promise<TResult> {
+  return async (job) => {
+    context.assertCanConsume()
+    return route(job, context)
+  }
+}
+
+export function bindConsumedRegion<
+  TJob,
+  TResult,
+  TContext extends ConsumedRegionContext = ConsumedRegionContext,
+>(
+  context: TContext,
+  route: (job: TJob, context: TContext) => Promise<TResult>
 ): (job: TJob) => Promise<TResult> {
   return (job) => route(job, context)
 }
