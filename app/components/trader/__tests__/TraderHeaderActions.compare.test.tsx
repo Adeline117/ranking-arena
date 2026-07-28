@@ -1,11 +1,24 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import en from '@/lib/i18n/en'
+import ja from '@/lib/i18n/ja'
+import ko from '@/lib/i18n/ko'
+import zh from '@/lib/i18n/zh'
 
 const mockPush = jest.fn()
 const mockShowToast = jest.fn()
 const mockTrackEvent = jest.fn()
-const mockUserFollowButton = jest.fn(() => null)
-const mockTraderFollowButton = jest.fn(() => null)
-const mockWatchlistToggleButton = jest.fn(() => null)
+const mockUserFollowButton = jest.fn(() => <button data-testid="user-follow-action">Follow</button>)
+const mockMessageButton = jest.fn(() => (
+  <button data-testid="message-action">Send a private message with a long label</button>
+))
+const mockTraderFollowButton = jest.fn(() => (
+  <button data-testid="trader-follow-action">Follow trader</button>
+))
+const mockWatchlistToggleButton = jest.fn(() => (
+  <button data-testid="watchlist-action" aria-label="Watchlist" />
+))
 const comparisonState = {
   isSelected: jest.fn(() => false),
   addTrader: jest.fn(() => false),
@@ -80,6 +93,10 @@ jest.mock('../../ui/UserFollowButton', () => ({
   __esModule: true,
   default: (props: unknown) => mockUserFollowButton(props),
 }))
+jest.mock('../../ui/MessageButton', () => ({
+  __esModule: true,
+  default: (props: unknown) => mockMessageButton(props),
+}))
 jest.mock('../WatchlistToggleButton', () => ({
   __esModule: true,
   default: (props: unknown) => mockWatchlistToggleButton(props),
@@ -101,6 +118,20 @@ function renderActions() {
   )
 }
 
+function renderClaimedActions(userId: string | null = null) {
+  return render(
+    <TraderHeaderActions
+      traderId="exchange-account-id"
+      registeredUserId="11111111-1111-4111-8111-111111111111"
+      handle="Trader One"
+      source="binance"
+      isOwnProfile={false}
+      isRegistered
+      userId={userId}
+    />
+  )
+}
+
 describe('TraderHeaderActions', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -109,7 +140,7 @@ describe('TraderHeaderActions', () => {
     comparisonState.canAddMore.mockReturnValue(false)
   })
 
-  it('uses the claimed user UUID for social follow without replacing the trader account ID', () => {
+  it('uses the claimed user UUID for social actions without replacing the trader account ID', () => {
     comparisonState.addTrader.mockReturnValue(true)
     comparisonState.canAddMore.mockReturnValue(true)
     render(
@@ -133,6 +164,16 @@ describe('TraderHeaderActions', () => {
     expect(mockUserFollowButton).not.toHaveBeenCalledWith(
       expect.objectContaining({ targetUserId: 'exchange-account-id' })
     )
+    expect(mockMessageButton).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetUserId: '11111111-1111-4111-8111-111111111111',
+        currentUserId: '22222222-2222-4222-8222-222222222222',
+        loginReturnPath: '/trader/Trader%20One?platform=binance',
+      })
+    )
+    expect(mockMessageButton).not.toHaveBeenCalledWith(
+      expect.objectContaining({ targetUserId: 'exchange-account-id' })
+    )
     expect(mockWatchlistToggleButton).toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'binance',
@@ -146,7 +187,74 @@ describe('TraderHeaderActions', () => {
     )
   })
 
-  it('does not fall back to an exchange account ID for a registered user follow', () => {
+  it('keeps the single message action in the responsive secondary disclosure', () => {
+    const { container } = renderClaimedActions()
+    const actions = container.querySelector('.profile-header-actions')
+    const secondary = actions?.querySelector(':scope > .trader-secondary-actions')
+    const follow = screen.getByTestId('user-follow-action')
+    const message = screen.getByTestId('message-action')
+    const watchlist = screen.getByTestId('watchlist-action')
+    const more = screen.getByRole('button', { name: 'More' })
+
+    expect(actions).not.toBeNull()
+    expect(secondary).not.toBeNull()
+    expect(actions?.querySelectorAll('[data-testid="message-action"]')).toHaveLength(1)
+    expect(secondary).toContainElement(message)
+    expect(secondary).not.toContainElement(follow)
+    expect(secondary).not.toContainElement(watchlist)
+    expect(more).toHaveAttribute('aria-controls', secondary?.id)
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(more)
+    expect(more).toHaveAttribute('aria-expanded', 'true')
+    expect(secondary).toHaveAttribute('data-open', 'true')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    expect(secondary).toHaveAttribute('data-open', 'false')
+    expect(more).toHaveFocus()
+  })
+
+  it.each([
+    ['English', en],
+    ['Japanese', ja],
+    ['Korean', ko],
+    ['Chinese', zh],
+  ])('keeps the 320px primary row within its conservative %s label budget', (_name, labels) => {
+    const responsiveCss = readFileSync(join(process.cwd(), 'public/styles/responsive.css'), 'utf8')
+    const actionCss = responsiveCss.slice(
+      responsiveCss.indexOf('/* Trader profile actions: Follow/Save stay primary')
+    )
+    const mobileActionCss = actionCss.slice(actionCss.indexOf('@media (max-width: 767px)'))
+
+    // Bind the arithmetic to the responsive contract: the long Message label
+    // is in the hidden secondary group until More opens, while the primary row
+    // stays nowrap with only Follow, Watch, and More.
+    expect(mobileActionCss).toContain('flex-wrap: nowrap !important')
+    expect(mobileActionCss).toMatch(/\.trader-secondary-actions\s*\{\s*display: none;/)
+    expect(mobileActionCss).toContain(".trader-secondary-actions[data-open='true']")
+
+    const codePointWidthUpperBound = 13
+    const latinAdvanceUpperBound = codePointWidthUpperBound * 0.75
+    const textWidth = (label: string) =>
+      [...label].reduce(
+        (width, character) =>
+          width +
+          (character.codePointAt(0)! <= 0x7f ? latinAdvanceUpperBound : codePointWidthUpperBound),
+        0
+      )
+    const availableWidth = 320 - 2 * 8 - 2 * 10 - 2
+    const followWidth = 2 * 16 + 2 + textWidth(labels.follow)
+    const watchWidth = 2 * 12 + 2 + 16
+    const moreWidth = 2 * 12 + 2 + 3 * codePointWidthUpperBound + 6 + textWidth(labels.more)
+    const primaryGapWidth = 2 * 6
+
+    expect(followWidth + watchWidth + moreWidth + primaryGapWidth).toBeLessThanOrEqual(
+      availableWidth
+    )
+  })
+
+  it('fails closed when a registered profile is missing its user UUID', () => {
     render(
       <TraderHeaderActions
         traderId="exchange-account-id"
@@ -159,7 +267,48 @@ describe('TraderHeaderActions', () => {
     )
 
     expect(mockUserFollowButton).not.toHaveBeenCalled()
+    expect(mockMessageButton).not.toHaveBeenCalled()
     expect(mockTraderFollowButton).not.toHaveBeenCalled()
+  })
+
+  it('never exposes user messaging for an unregistered exchange account', () => {
+    render(
+      <TraderHeaderActions
+        traderId="exchange-account-id"
+        handle="Trader One"
+        source="binance"
+        isOwnProfile={false}
+        isRegistered={false}
+        userId="22222222-2222-4222-8222-222222222222"
+      />
+    )
+
+    expect(mockMessageButton).not.toHaveBeenCalled()
+    expect(mockTraderFollowButton).toHaveBeenCalledWith(
+      expect.objectContaining({ traderId: 'exchange-account-id', source: 'binance' })
+    )
+  })
+
+  it('preserves the anonymous message login intent and exact trader return path', () => {
+    render(
+      <TraderHeaderActions
+        traderId="exchange-account-id"
+        registeredUserId="11111111-1111-4111-8111-111111111111"
+        handle="Trader One"
+        source="binance"
+        isOwnProfile={false}
+        isRegistered
+        userId={null}
+      />
+    )
+
+    expect(mockMessageButton).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetUserId: '11111111-1111-4111-8111-111111111111',
+        currentUserId: null,
+        loginReturnPath: '/trader/Trader%20One?platform=binance',
+      })
+    )
   })
 
   it('keeps edit and suppresses follow actions for the authenticated profile owner', () => {
@@ -177,6 +326,7 @@ describe('TraderHeaderActions', () => {
 
     expect(screen.getByRole('button', { name: 'Edit profile' })).toBeInTheDocument()
     expect(mockUserFollowButton).not.toHaveBeenCalled()
+    expect(mockMessageButton).not.toHaveBeenCalled()
     expect(mockTraderFollowButton).not.toHaveBeenCalled()
   })
 
