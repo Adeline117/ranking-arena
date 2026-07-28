@@ -29,22 +29,18 @@ const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME
   ? safeParseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, startTime)
   : startTime
 
-/**
- * Race any check against a timeout to prevent health endpoint from hanging.
- *
- * ROOT CAUSE FIX (2026-04-09): 5s cap was too tight for cold-start scenarios.
- * Vercel serverless instances can take 3-5s for Supabase client init + first
- * query on a cold start, which flipped the cap and produced alternating
- * healthy/unhealthy responses from the monitor depending on instance warmth.
- * 8s gives enough headroom for cold start without masking real DB issues.
- */
-// 15s timeout: 8s was too tight under cron load — connection pool exhaustion
-// caused false DB=fail alerts. 15s matches pg connectionTimeoutMillis in production.
+// A liveness endpoint must finish well inside the monitor's 30s transport
+// budget. Eight seconds still covers a cold Supabase/Redis connection, while a
+// dependency that cannot answer inside that window is unavailable for serving.
+const CORE_CHECK_TIMEOUT_MS = 8_000
+const VPS_HEARTBEAT_TIMEOUT_MS = 3_000
+
+/** Race any check against a timeout to prevent the health endpoint from hanging. */
 function withTimeout<T>(
   promise: Promise<T> | PromiseLike<T>,
   fallback: T,
   label: string,
-  ms: number = 15000
+  ms: number = CORE_CHECK_TIMEOUT_MS
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let settled = false
@@ -86,7 +82,7 @@ async function checkDatabase(): Promise<{
         .select('id')
         .limit(1)
         .then((r) => ({ ok: !r.error, msg: r.error?.message })),
-      { ok: false, msg: 'DB check timed out (15s)' },
+      { ok: false, msg: `DB check timed out (${CORE_CHECK_TIMEOUT_MS / 1000}s)` },
       'checkDatabase'
     )
     const latency = Date.now() - t0
@@ -108,13 +104,21 @@ async function checkRedis(): Promise<{
 }> {
   const t0 = Date.now()
   try {
-    const redis = await getSharedRedis()
-    if (!redis) return { status: 'skip', message: 'Not configured' }
-    const pong = await withTimeout(redis.ping(), 'TIMEOUT' as string, 'checkRedis')
-    const latency = Date.now() - t0
-    return pong === 'PONG'
-      ? { status: 'pass', latency }
-      : { status: 'fail', message: `Got: ${pong}`, latency }
+    const result = await withTimeout(
+      getSharedRedis().then(async (redis) => {
+        if (!redis) return { status: 'skip' as const, message: 'Not configured' }
+        const pong = await redis.ping()
+        return pong === 'PONG'
+          ? { status: 'pass' as const }
+          : { status: 'fail' as const, message: `Got: ${pong}` }
+      }),
+      {
+        status: 'fail' as const,
+        message: `Redis check timed out (${CORE_CHECK_TIMEOUT_MS / 1000}s)`,
+      },
+      'checkRedis'
+    )
+    return { ...result, latency: Date.now() - t0 }
   } catch (e: unknown) {
     return {
       status: 'fail',
@@ -131,7 +135,7 @@ async function checkFreshness(): Promise<{
 }> {
   const t0 = Date.now()
   try {
-    const report = await withTimeout(buildFreshnessReport(), null, 'checkFreshness', 8000)
+    const report = await withTimeout(buildFreshnessReport(), null, 'checkFreshness')
     const latency = Date.now() - t0
     if (!report) {
       return { status: 'fail', latency, message: 'Freshness authority timed out' }
@@ -167,11 +171,15 @@ export async function GET() {
     message: 'Responding',
   }
 
-  // VPS connectivity check (SG) — WAF-protected platforms depend on this
+  // VPS connectivity check (SG) — WAF-protected platforms depend on this.
+  // Do not serialize supplementary network work after a known core DB outage:
+  // the response is already unhealthy and must return within the core budget.
   let vps: { status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }
   const vpsHost = process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG
   const vpsKey = process.env.VPS_PROXY_KEY
-  if (vpsHost && vpsKey) {
+  if (database.status === 'fail') {
+    vps = { status: 'skip', message: 'Skipped because the core database is unavailable' }
+  } else if (vpsHost && vpsKey) {
     const t2 = Date.now()
     try {
       // Try scraper health first (:3457), then proxy (:3456) as fallback
@@ -198,16 +206,25 @@ export async function GET() {
         // (Vultr intermittently blocks Vercel's Tokyo IPs)
         // Check if any VPS-dependent pipeline succeeded recently
         // Note: bybit removed 2026-04-08 (dead platform), kept bitget + binance_futures
-        const { data: recentVpsJob } = await getSupabaseAdmin()
-          .from('pipeline_logs')
-          .select('job_name, started_at')
-          .eq('status', 'success')
-          .or(
-            'job_name.like.enrich-bitget%,job_name.like.enrich-binance_futures%,job_name.like.batch-fetch-traders-b2%,job_name.like.batch-fetch-traders-a1%'
-          )
-          .gte('started_at', new Date(Date.now() - 30 * 60000).toISOString())
-          .limit(1)
-          .maybeSingle()
+        const recentVpsJob = await withTimeout(
+          getSupabaseAdmin()
+            .from('pipeline_logs')
+            .select('job_name, started_at')
+            .eq('status', 'success')
+            .or(
+              'job_name.like.enrich-bitget%,job_name.like.enrich-binance_futures%,job_name.like.batch-fetch-traders-b2%,job_name.like.batch-fetch-traders-a1%'
+            )
+            .gte('started_at', new Date(Date.now() - 30 * 60000).toISOString())
+            .limit(1)
+            .maybeSingle()
+            .then(({ data, error }) => {
+              if (error) throw error
+              return data
+            }),
+          null,
+          'checkVpsHeartbeat',
+          VPS_HEARTBEAT_TIMEOUT_MS
+        )
 
         if (recentVpsJob) {
           vps = {

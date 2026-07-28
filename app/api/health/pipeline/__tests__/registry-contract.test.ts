@@ -14,12 +14,15 @@ describe('pipeline health registry contract', () => {
     expect(route).toContain('lbLatestRes.error || !lbLatestRes.data?.length')
     expect(route).toContain('active platform freshness authority is unavailable')
     expect(route).toContain('withDeadline<PlatformHealth[] | null>')
+    expect(route).toContain('COMPUTE_DEADLINE_MS')
+    expect(route).toContain('status: isDegraded ? 503 : 200')
+    expect(route).toContain('unavailableAuthorities.length > 0')
     expect(route).toContain('if (platformHealth === null)')
     expect(route).toContain('clearTimeout(timeout)')
   })
 
   it('invalidates legacy cache entries and classifies platform failures in the body', () => {
-    expect(route).toContain("const CACHE_KEY = 'api:health:pipeline:v6'")
+    expect(route).toContain("const CACHE_KEY = 'api:health:pipeline:v7'")
     expect(route).toContain('const platformStatus = classifyPlatformHealth(platformHealth)')
     expect(route).toContain("platformStatus === 'critical'")
     expect(route).toContain("platformStatus === 'degraded'")
