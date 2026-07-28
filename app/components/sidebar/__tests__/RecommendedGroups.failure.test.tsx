@@ -13,7 +13,11 @@ jest.mock('@tanstack/react-query', () => {
 })
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
-  useAuthSession: () => ({ accessToken: null }),
+  useAuthSession: () => ({
+    accessToken: null,
+    viewerKey: 'anon',
+    sessionGeneration: 1,
+  }),
 }))
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
