@@ -37,11 +37,24 @@ function jwt(userId: string): string {
   return `${encode({ alg: 'none' })}.${encode({ sub: userId })}.signature`
 }
 
+function responseWithJson(status: number, json: () => Promise<unknown>): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: jest.fn(json),
+    headers: new Headers({ 'content-type': 'application/json' }),
+  } as unknown as Response
+}
+
 describe('authedFetch viewer-bound retry', () => {
   beforeEach(() => {
     __resetViewerScopeForTests()
     mockForceRefresh.mockReset()
     global.fetch = jest.fn()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
   })
 
   it('never replays an A request with a token obtained after switching to B', async () => {
@@ -98,6 +111,211 @@ describe('authedFetch viewer-bound retry', () => {
 
     expect(result).toMatchObject({ ok: false, stale: true, status: 0 })
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('keeps the deadline when a caller also supplies an unmount signal', async () => {
+    jest.useFakeTimers()
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const unmountController = new AbortController()
+    ;(global.fetch as jest.Mock).mockReturnValueOnce(new Promise<Response>(() => {}))
+
+    const request = authedFetch('/api/private', 'GET', jwt('user-a'), undefined, 100, {
+      expectedUserId: 'user-a',
+      expectedSessionGeneration: scope.sessionGeneration,
+      signal: unmountController.signal,
+    })
+    await Promise.resolve()
+    const transportSignal = (global.fetch as jest.Mock).mock.calls[0][1].signal as AbortSignal
+
+    expect(transportSignal).not.toBe(unmountController.signal)
+    expect(transportSignal.aborted).toBe(false)
+    expect(jest.getTimerCount()).toBe(1)
+    await jest.advanceTimersByTimeAsync(100)
+
+    await expect(request).resolves.toEqual({ ok: false, status: 0, data: null })
+    expect(transportSignal.aborted).toBe(true)
+    expect(unmountController.signal.aborted).toBe(false)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('uses the same bounded deadline for the 401 retry transport', async () => {
+    jest.useFakeTimers()
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const unmountController = new AbortController()
+    ;(global.fetch as jest.Mock)
+      .mockResolvedValueOnce(response(401, { error: 'expired' }))
+      .mockReturnValueOnce(new Promise<Response>(() => {}))
+    mockForceRefresh.mockResolvedValueOnce(`${jwt('user-a')}.refreshed`)
+
+    const request = authedFetch('/api/private', 'POST', jwt('user-a'), {}, 100, {
+      expectedUserId: 'user-a',
+      expectedSessionGeneration: scope.sessionGeneration,
+      signal: unmountController.signal,
+    })
+    while ((global.fetch as jest.Mock).mock.calls.length < 2) await Promise.resolve()
+    const firstSignal = (global.fetch as jest.Mock).mock.calls[0][1].signal as AbortSignal
+    const retrySignal = (global.fetch as jest.Mock).mock.calls[1][1].signal as AbortSignal
+
+    expect(retrySignal).toBe(firstSignal)
+    expect(jest.getTimerCount()).toBe(1)
+    await jest.advanceTimersByTimeAsync(100)
+
+    await expect(request).resolves.toEqual({ ok: false, status: 0, data: null })
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('does not start transport for a caller signal that is already aborted', async () => {
+    jest.useFakeTimers()
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const callerController = new AbortController()
+    callerController.abort()
+
+    const result = await authedFetch('/api/private', 'GET', jwt('user-a'), undefined, 100, {
+      expectedUserId: 'user-a',
+      expectedSessionGeneration: scope.sessionGeneration,
+      signal: callerController.signal,
+    })
+
+    expect(result).toEqual({ ok: false, status: 0, data: null })
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('consumes a transport rejection when caller abort wins during fetch creation', async () => {
+    jest.useFakeTimers()
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const callerController = new AbortController()
+    ;(global.fetch as jest.Mock).mockImplementationOnce(() => {
+      callerController.abort()
+      return Promise.reject(new DOMException('transport aborted', 'AbortError'))
+    })
+
+    const result = await authedFetch('/api/private', 'GET', jwt('user-a'), undefined, 100, {
+      expectedUserId: 'user-a',
+      expectedSessionGeneration: scope.sessionGeneration,
+      signal: callerController.signal,
+    })
+    await Promise.resolve()
+
+    expect(result).toEqual({ ok: false, status: 0, data: null })
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('cancels a never-resolving transport when the caller aborts', async () => {
+    jest.useFakeTimers()
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const callerController = new AbortController()
+    ;(global.fetch as jest.Mock).mockReturnValueOnce(new Promise<Response>(() => {}))
+
+    const request = authedFetch('/api/private', 'GET', jwt('user-a'), undefined, 100, {
+      expectedUserId: 'user-a',
+      expectedSessionGeneration: scope.sessionGeneration,
+      signal: callerController.signal,
+    })
+    await Promise.resolve()
+    callerController.abort()
+
+    await expect(request).resolves.toEqual({ ok: false, status: 0, data: null })
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('works when iOS 15 has neither AbortSignal.timeout nor AbortSignal.any', async () => {
+    jest.useFakeTimers()
+    const timeoutDescriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'timeout')
+    const anyDescriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'any')
+    Object.defineProperty(AbortSignal, 'timeout', { configurable: true, value: undefined })
+    Object.defineProperty(AbortSignal, 'any', { configurable: true, value: undefined })
+    try {
+      const scope = synchronizeViewerScope(true, 'user-a')
+      const callerController = new AbortController()
+      ;(global.fetch as jest.Mock).mockReturnValueOnce(new Promise<Response>(() => {}))
+
+      const request = authedFetch('/api/private', 'GET', jwt('user-a'), undefined, 100, {
+        expectedUserId: 'user-a',
+        expectedSessionGeneration: scope.sessionGeneration,
+        signal: callerController.signal,
+      })
+      await jest.advanceTimersByTimeAsync(100)
+
+      await expect(request).resolves.toEqual({ ok: false, status: 0, data: null })
+      expect(jest.getTimerCount()).toBe(0)
+    } finally {
+      if (timeoutDescriptor) Object.defineProperty(AbortSignal, 'timeout', timeoutDescriptor)
+      if (anyDescriptor) Object.defineProperty(AbortSignal, 'any', anyDescriptor)
+    }
+  })
+
+  it('cleans its timer and caller listener immediately after a successful request', async () => {
+    jest.useFakeTimers()
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const callerController = new AbortController()
+    const removeListener = jest.spyOn(callerController.signal, 'removeEventListener')
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce(response(200, { success: true }))
+
+    const result = await authedFetch('/api/private', 'GET', jwt('user-a'), undefined, 100, {
+      expectedUserId: 'user-a',
+      expectedSessionGeneration: scope.sessionGeneration,
+      signal: callerController.signal,
+    })
+
+    expect(result).toMatchObject({ ok: true })
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('cleans its timer and caller listener when transport fails', async () => {
+    jest.useFakeTimers()
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const callerController = new AbortController()
+    const removeListener = jest.spyOn(callerController.signal, 'removeEventListener')
+    ;(global.fetch as jest.Mock).mockRejectedValueOnce(new Error('network failed'))
+
+    const request = authedFetch('/api/private', 'GET', jwt('user-a'), undefined, 100, {
+      expectedUserId: 'user-a',
+      expectedSessionGeneration: scope.sessionGeneration,
+      signal: callerController.signal,
+    })
+
+    await expect(request).rejects.toThrow('network failed')
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('bounds a never-resolving token refresh with the original deadline', async () => {
+    jest.useFakeTimers()
+    const scope = synchronizeViewerScope(true, 'user-a')
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce(response(401, { error: 'expired' }))
+    mockForceRefresh.mockReturnValueOnce(new Promise<string | null>(() => {}))
+
+    const request = authedFetch('/api/private', 'GET', jwt('user-a'), undefined, 100, {
+      expectedUserId: 'user-a',
+      expectedSessionGeneration: scope.sessionGeneration,
+    })
+    while (mockForceRefresh.mock.calls.length < 1) await Promise.resolve()
+    await jest.advanceTimersByTimeAsync(100)
+
+    await expect(request).resolves.toEqual({ ok: false, status: 0, data: null })
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('bounds never-resolving response JSON parsing with the original deadline', async () => {
+    jest.useFakeTimers()
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const responseValue = responseWithJson(200, () => new Promise<unknown>(() => {}))
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce(responseValue)
+
+    const request = authedFetch('/api/private', 'GET', jwt('user-a'), undefined, 100, {
+      expectedUserId: 'user-a',
+      expectedSessionGeneration: scope.sessionGeneration,
+    })
+    while ((responseValue.json as jest.Mock).mock.calls.length < 1) await Promise.resolve()
+    await jest.advanceTimersByTimeAsync(100)
+
+    await expect(request).resolves.toEqual({ ok: false, status: 0, data: null })
+    expect(jest.getTimerCount()).toBe(0)
   })
 
   it('apiRequest discards an A response that resolves after switching to B', async () => {
