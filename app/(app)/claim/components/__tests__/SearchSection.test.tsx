@@ -59,4 +59,39 @@ describe('SearchSection', () => {
     expect(await screen.findByText('alice')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+
+  it('preserves the complete trader id when a search identity contains colons', async () => {
+    const onSelect = jest.fn()
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          results: {
+            traders: [
+              {
+                id: 'binance_futures:vault:subaccount:42',
+                title: '@Colon Trader',
+                meta: { platform: 'binance_futures', arena_score: 91 },
+              },
+            ],
+          },
+        },
+      }),
+    }) as unknown as typeof fetch
+
+    render(<SearchSection onSelect={onSelect} />)
+
+    fireEvent.change(screen.getByPlaceholderText('Search traders'), {
+      target: { value: 'colon' },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: /Colon Trader/ }))
+
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'binance_futures',
+        source_trader_id: 'vault:subaccount:42',
+      })
+    )
+  })
 })
