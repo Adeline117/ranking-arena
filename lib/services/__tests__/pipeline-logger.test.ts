@@ -351,6 +351,24 @@ describe('PipelineLogger', () => {
 
       expect(abortSignal).toHaveBeenCalledWith(signal)
     })
+
+    it('can fail closed when recent failures are a required health authority', async () => {
+      const chain = {
+        select: jest.fn().mockReturnThis(),
+        in: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'private database endpoint rejected the query' },
+        }),
+      }
+      mockSupabaseFrom.mockReturnValueOnce(chain)
+
+      await expect(PipelineLogger.getRecentFailures(10, 120, undefined, true)).rejects.toThrow(
+        'Pipeline recent-failures authority is unavailable'
+      )
+    })
   })
 
   describe('getConsecutiveFailures', () => {

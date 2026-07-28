@@ -597,7 +597,8 @@ export class PipelineLogger {
   static async getRecentFailures(
     limit = 20,
     withinMinutes = 120,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    failOnError = false
   ): Promise<
     Array<{
       job_name: string
@@ -619,6 +620,9 @@ export class PipelineLogger {
 
     if (error) {
       logger.warn(`[PipelineLogger] Failed to get recent failures: ${error.message}`)
+      if (failOnError) {
+        throw new Error('Pipeline recent-failures authority is unavailable')
+      }
       return []
     }
     return data || []

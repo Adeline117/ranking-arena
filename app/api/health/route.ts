@@ -137,11 +137,12 @@ async function checkDatabase(deadline: RequestDeadline): Promise<{
   message?: string
 }> {
   const t0 = Date.now()
+  const timeoutMessage = `DB check timed out (${CORE_CHECK_TIMEOUT_MS / 1000}s)`
   try {
     const result = await withTimeout(
       deadline,
       CORE_CHECK_TIMEOUT_MS,
-      { ok: false, msg: `DB check timed out (${CORE_CHECK_TIMEOUT_MS / 1000}s)` },
+      { ok: false, msg: timeoutMessage },
       'checkDatabase',
       (signal) =>
         getSupabaseAdmin()
@@ -152,12 +153,24 @@ async function checkDatabase(deadline: RequestDeadline): Promise<{
           .then((r) => ({ ok: !r.error, msg: r.error?.message }))
     )
     const latency = Date.now() - t0
-    if (!result.ok) return { status: 'fail', message: result.msg, latency }
+    if (!result.ok) {
+      if (result.msg !== timeoutMessage) {
+        logger.warn('[health] Database dependency failed', { error: result.msg })
+      }
+      return {
+        status: 'fail',
+        message: result.msg === timeoutMessage ? timeoutMessage : 'Database unavailable',
+        latency,
+      }
+    }
     return { status: 'pass', latency }
   } catch (e: unknown) {
+    logger.warn('[health] Database dependency threw', {
+      error: e instanceof Error ? e.message : String(e),
+    })
     return {
       status: 'fail',
-      message: e instanceof Error ? e.message : 'Unknown',
+      message: 'Database unavailable',
       latency: Date.now() - t0,
     }
   }
@@ -180,18 +193,28 @@ async function checkRedis(deadline: RequestDeadline): Promise<{
       'checkRedis',
       () =>
         getSharedRedis().then(async (redis) => {
-          if (!redis) return { status: 'skip' as const, message: 'Not configured' }
+          if (!redis) {
+            const redisExpected = Boolean(
+              process.env.UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_TOKEN
+            )
+            return redisExpected
+              ? { status: 'fail' as const, message: 'Redis unavailable' }
+              : { status: 'skip' as const, message: 'Not configured' }
+          }
           const pong = await redis.ping()
           return pong === 'PONG'
             ? { status: 'pass' as const }
-            : { status: 'fail' as const, message: `Got: ${pong}` }
+            : { status: 'fail' as const, message: 'Redis unavailable' }
         })
     )
     return { ...result, latency: Date.now() - t0 }
   } catch (e: unknown) {
+    logger.warn('[health] Redis dependency threw', {
+      error: e instanceof Error ? e.message : String(e),
+    })
     return {
       status: 'fail',
-      message: e instanceof Error ? e.message : 'Unknown',
+      message: 'Redis unavailable',
       latency: Date.now() - t0,
     }
   }
@@ -354,11 +377,13 @@ export async function GET() {
       } catch (e: unknown) {
         // Same reasoning as above — network errors reaching Vultr from Vercel are
         // not a valid signal of VPS health; skip rather than fail.
+        logger.warn('[health] VPS SG dependency threw', {
+          error: e instanceof Error ? e.message : String(e),
+        })
         vps = {
           status: 'skip',
           latency: Date.now() - t2,
-          message:
-            e instanceof Error ? `direct unreachable: ${e.message}` : 'Unreachable (supplementary)',
+          message: 'VPS SG unavailable (supplementary)',
         }
       }
     } else if (vpsHost && vpsKey) {

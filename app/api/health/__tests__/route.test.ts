@@ -127,6 +127,8 @@ describe('GET /api/health', () => {
     delete process.env.VPS_SCRAPER_SG
     delete process.env.VPS_PROXY_SG
     delete process.env.VPS_PROXY_KEY
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
     process.env.ARENA_RELEASE_SHA = 'release-sha-for-test'
   })
 
@@ -325,12 +327,11 @@ describe('GET /api/health', () => {
   })
 
   it('preserves an explicit database failure as unhealthy', async () => {
+    const internalError = 'postgres://health-reader:super-secret@private-db.internal/postgres'
     mockFrom.mockImplementationOnce(() => ({
       select: () => ({
         limit: () =>
-          abortableResult(
-            Promise.resolve({ data: null, error: { message: 'database transport unavailable' } })
-          ),
+          abortableResult(Promise.resolve({ data: null, error: { message: internalError } })),
       }),
     }))
 
@@ -342,7 +343,58 @@ describe('GET /api/health', () => {
     expect(body.status).toBe('unhealthy')
     expect(body.checks.database).toMatchObject({
       status: 'fail',
-      message: 'database transport unavailable',
+      message: 'Database unavailable',
+    })
+    expect(JSON.stringify(body)).not.toContain('super-secret')
+    expect(JSON.stringify(body)).not.toContain('private-db.internal')
+    expect(mockLoggerWarn).toHaveBeenCalledWith('[health] Database dependency failed', {
+      error: internalError,
+    })
+  })
+
+  it('distinguishes an unconfigured Redis from a configured unavailable Redis', async () => {
+    mockGetSharedRedis.mockResolvedValue(null)
+
+    const { GET } = await import('../route')
+    const unconfiguredResponse = await GET()
+    const unconfiguredBody = await unconfiguredResponse.json()
+
+    expect(unconfiguredResponse.status).toBe(200)
+    expect(unconfiguredBody.checks.redis).toMatchObject({
+      status: 'skip',
+      message: 'Not configured',
+    })
+
+    process.env.UPSTASH_REDIS_REST_URL = 'https://configured-redis.example'
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'configured-token'
+    const unavailableResponse = await GET()
+    const unavailableBody = await unavailableResponse.json()
+
+    expect(unavailableResponse.status).toBe(202)
+    expect(unavailableBody.status).toBe('degraded')
+    expect(unavailableBody.checks.redis).toMatchObject({
+      status: 'fail',
+      message: 'Redis unavailable',
+    })
+  })
+
+  it('does not expose Redis SDK connection details', async () => {
+    const internalError = 'https://default:upstash-secret@redis.internal'
+    mockGetSharedRedis.mockRejectedValueOnce(new Error(internalError))
+
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body.checks.redis).toMatchObject({
+      status: 'fail',
+      message: 'Redis unavailable',
+    })
+    expect(JSON.stringify(body)).not.toContain('upstash-secret')
+    expect(JSON.stringify(body)).not.toContain('redis.internal')
+    expect(mockLoggerWarn).toHaveBeenCalledWith('[health] Redis dependency threw', {
+      error: internalError,
     })
   })
 
@@ -397,6 +449,44 @@ describe('GET /api/health', () => {
     } finally {
       restore()
       jest.useRealTimers()
+    }
+  })
+
+  it('does not expose VPS heartbeat authority errors', async () => {
+    process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
+    process.env.VPS_PROXY_KEY = 'vps-key'
+    const internalError = 'postgres://vps-reader:private-secret@heartbeat-db.internal/postgres'
+    const fetchMock = jest.fn().mockResolvedValue({ ok: false, status: 503 } as Response)
+    const { restore } = installFetchMock(fetchMock)
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'trader_sources') {
+        return {
+          select: () => ({
+            limit: () => abortableResult(Promise.resolve({ data: [{ id: 1 }], error: null })),
+          }),
+        }
+      }
+      if (table === 'pipeline_logs') throw new Error(internalError)
+      throw new Error(`unexpected table: ${table}`)
+    })
+
+    try {
+      const { GET } = await import('../route')
+      const response = await GET()
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body.checks.vps).toMatchObject({
+        status: 'skip',
+        message: 'VPS SG unavailable (supplementary)',
+      })
+      expect(JSON.stringify(body)).not.toContain('private-secret')
+      expect(JSON.stringify(body)).not.toContain('heartbeat-db.internal')
+      expect(mockLoggerWarn).toHaveBeenCalledWith('[health] VPS SG dependency threw', {
+        error: internalError,
+      })
+    } finally {
+      restore()
     }
   })
 

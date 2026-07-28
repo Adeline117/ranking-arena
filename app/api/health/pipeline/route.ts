@@ -247,7 +247,7 @@ async function getPlatformHealthData(
     throw new Error('active platform freshness authority is unavailable')
   }
   if (allLogsRes.error) {
-    logger.warn('[health/pipeline] pipeline log averages are unavailable')
+    throw new Error('pipeline log averages authority is unavailable')
   }
 
   // The RPC returns one row for every active registry source, including
@@ -392,12 +392,12 @@ export async function GET(req: NextRequest) {
           (signal) => PipelineLogger.getJobStats(signal),
           parentSignal
         ),
-        withDeadline(
+        withDeadline<Awaited<ReturnType<typeof PipelineLogger.getRecentFailures>> | null>(
           deadline,
           FAST_QUERY_DEADLINE_MS,
-          [],
+          null,
           'getRecentFailures',
-          (signal) => PipelineLogger.getRecentFailures(10, 120, signal),
+          (signal) => PipelineLogger.getRecentFailures(10, 120, signal, true),
           parentSignal
         ),
         withDeadline<PlatformHealth[] | null>(
@@ -422,7 +422,7 @@ export async function GET(req: NextRequest) {
         }
         return false
       }
-      const recentFailures = recentFailuresRaw.filter(
+      const recentFailures = (recentFailuresRaw ?? []).filter(
         (f: { job_name?: string }) => !isDeadPlatformJob(f.job_name || '')
       )
 
@@ -443,6 +443,7 @@ export async function GET(req: NextRequest) {
       const unavailableAuthorities = [
         ...(jobStatuses.length === 0 ? ['job_statuses'] : []),
         ...(jobStats.length === 0 ? ['job_stats'] : []),
+        ...(recentFailuresRaw === null ? ['recent_failures'] : []),
         ...(platformHealth.length === 0 ? ['platform_freshness'] : []),
       ]
 
@@ -629,11 +630,16 @@ export async function GET(req: NextRequest) {
       error: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
     })
-    const message = err instanceof Error ? err.message : String(err)
-    return NextResponse.json(buildUnavailableSnapshot('PIPELINE_HEALTH_UNAVAILABLE', message), {
-      status: 503,
-      headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
-    })
+    return NextResponse.json(
+      buildUnavailableSnapshot(
+        'PIPELINE_HEALTH_UNAVAILABLE',
+        'Pipeline health authority is unavailable'
+      ),
+      {
+        status: 503,
+        headers: { 'Cache-Control': 'no-store', 'X-Cache': 'MISS', 'X-Degraded': '1' },
+      }
+    )
   } finally {
     deadline.close()
   }
