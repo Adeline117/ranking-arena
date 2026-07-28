@@ -14,10 +14,13 @@ import {
   handleError,
   checkRateLimit,
   RateLimitPresets,
+  validateString,
 } from '@/lib/api'
 import { ApiError } from '@/lib/api/errors'
-import { getUserVerifiedTrader, updateVerifiedTrader } from '@/lib/data/trader-claims'
+import { updateVerifiedTrader } from '@/lib/data/trader-claims'
 import { createLogger } from '@/lib/utils/logger'
+import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
+import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
 
 const logger = createLogger('claim-profile')
 
@@ -28,14 +31,32 @@ export async function PUT(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
-
-    // Verify the user has a verified trader profile
-    const verified = await getUserVerifiedTrader(supabase, user.id)
-    if (!verified) {
-      throw ApiError.forbidden('You do not have a verified trader profile. Claim a profile first.')
+    const body = await request.json()
+    const rawTraderId = validateString(body.trader_id, {
+      required: true,
+      maxLength: 512,
+      fieldName: 'trader_id',
+    })
+    const rawSource = validateString(body.source, {
+      required: true,
+      maxLength: 100,
+      fieldName: 'source',
+    })
+    if (!rawTraderId || !rawSource) {
+      throw ApiError.validation('trader_id and source are required')
     }
 
-    const body = await request.json()
+    const source = rawSource.toLowerCase()
+    let traderId = rawTraderId
+    if (isDexWalletPlatform(source)) {
+      try {
+        traderId = canonicalizeWalletIdentity(rawTraderId, source)
+      } catch (error) {
+        throw ApiError.validation(
+          error instanceof Error ? error.message : 'Invalid trader identity'
+        )
+      }
+    }
 
     // Sanitize inputs
     const updates: Record<string, string | null | boolean | undefined> = {}
@@ -106,10 +127,25 @@ export async function PUT(request: NextRequest) {
       throw ApiError.validation('No fields to update')
     }
 
-    const updated = await updateVerifiedTrader(supabase, user.id, updates)
+    const updated = await updateVerifiedTrader(
+      supabase,
+      user.id,
+      { trader_id: traderId, source },
+      updates
+    )
+    if (
+      !updated ||
+      updated.user_id !== user.id ||
+      updated.trader_id !== traderId ||
+      updated.source !== source
+    ) {
+      throw ApiError.forbidden('You do not own this verified trader profile.')
+    }
 
     logger.info('Verified trader profile updated', {
       userId: user.id,
+      traderId,
+      source,
       fields: Object.keys(updates),
     })
 

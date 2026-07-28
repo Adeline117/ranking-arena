@@ -27,6 +27,7 @@ import {
   getUserClaimForTrader,
   reviewClaim,
   submitClaim,
+  updateVerifiedTrader,
   type TraderClaim,
   type VerifiedTrader,
   type UpdateVerifiedTraderInput,
@@ -51,6 +52,30 @@ function claim(overrides: Partial<TraderClaim> = {}): TraderClaim {
     reviewed_by: REVIEWER_ID,
     reviewed_at: '2026-07-16T10:00:00.000Z',
     verified_at: '2026-07-16T10:00:00.000Z',
+    created_at: '2026-07-15T10:00:00.000Z',
+    updated_at: '2026-07-16T10:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function verifiedTrader(overrides: Partial<VerifiedTrader> = {}): VerifiedTrader {
+  return {
+    id: 'verified-1',
+    user_id: USER_ID,
+    trader_id: 'trader-1',
+    source: 'binance_futures',
+    display_name: 'Trader One',
+    bio: 'Original bio',
+    avatar_url: null,
+    twitter_url: null,
+    telegram_url: null,
+    discord_url: null,
+    website_url: null,
+    verified_at: '2026-07-16T10:00:00.000Z',
+    verification_method: 'api_key',
+    can_pin_posts: false,
+    can_reply_reviews: true,
+    can_receive_messages: true,
     created_at: '2026-07-15T10:00:00.000Z',
     updated_at: '2026-07-16T10:00:00.000Z',
     ...overrides,
@@ -108,6 +133,156 @@ describe('trader claim identity scope', () => {
     await expect(getUserClaimForTrader(client, USER_ID, 'trader-b', 'drift')).resolves.toEqual(
       traderBClaim
     )
+  })
+})
+
+describe('verified trader profile identity scope', () => {
+  it('updates the requested identity without touching a sibling account', async () => {
+    const rows = [
+      verifiedTrader({ id: 'verified-a', trader_id: 'trader-a', display_name: 'Alpha' }),
+      verifiedTrader({ id: 'verified-b', trader_id: 'trader-b', display_name: 'Beta' }),
+    ]
+    const filters: Array<[keyof VerifiedTrader, unknown]> = []
+    let updateData: Partial<VerifiedTrader> = {}
+    const builder: Record<string, jest.Mock> = {}
+    builder.update = jest.fn((value: Partial<VerifiedTrader>) => {
+      updateData = value
+      return builder
+    })
+    builder.eq = jest.fn((field: keyof VerifiedTrader, value: unknown) => {
+      filters.push([field, value])
+      return builder
+    })
+    builder.select = jest.fn(() => builder)
+    builder.maybeSingle = jest.fn(async () => {
+      const matched = rows.filter((row) => filters.every(([field, value]) => row[field] === value))
+      for (const row of matched) Object.assign(row, updateData)
+      return { data: matched[0] ?? null, error: null }
+    })
+    const from = jest.fn(() => builder)
+    const client = { from } as unknown as SupabaseClient<Database>
+
+    await expect(
+      updateVerifiedTrader(
+        client,
+        USER_ID,
+        { trader_id: 'trader-b', source: 'binance_futures' },
+        { display_name: 'Beta Updated' }
+      )
+    ).resolves.toMatchObject({ id: 'verified-b', display_name: 'Beta Updated' })
+
+    expect(from).toHaveBeenCalledWith('verified_traders')
+    expect(builder.eq.mock.calls).toEqual([
+      ['user_id', USER_ID],
+      ['trader_id', 'trader-b'],
+      ['source', 'binance_futures'],
+    ])
+    expect(builder.maybeSingle).toHaveBeenCalledTimes(1)
+    expect(rows[0]).toMatchObject({ id: 'verified-a', display_name: 'Alpha' })
+    expect(rows[1]).toMatchObject({ id: 'verified-b', display_name: 'Beta Updated' })
+  })
+
+  it('returns null instead of falling back to another account owned by the user', async () => {
+    const builder: Record<string, jest.Mock> = {}
+    builder.update = jest.fn(() => builder)
+    builder.eq = jest.fn(() => builder)
+    builder.select = jest.fn(() => builder)
+    builder.maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null })
+    const client = { from: jest.fn(() => builder) } as unknown as SupabaseClient<Database>
+
+    await expect(
+      updateVerifiedTrader(
+        client,
+        USER_ID,
+        { trader_id: 'not-owned', source: 'bybit' },
+        { bio: 'Must not land elsewhere' }
+      )
+    ).resolves.toBeNull()
+  })
+
+  it.each([
+    ['user', { user_id: 'different-user' }],
+    ['trader', { trader_id: 'sibling-trader' }],
+    ['source', { source: 'bybit' }],
+  ])('rejects a mismatched %s update acknowledgement', async (_field, mismatch) => {
+    const builder: Record<string, jest.Mock> = {}
+    builder.update = jest.fn(() => builder)
+    builder.eq = jest.fn(() => builder)
+    builder.select = jest.fn(() => builder)
+    builder.maybeSingle = jest.fn().mockResolvedValue({
+      data: verifiedTrader({ trader_id: 'requested-trader', ...mismatch }),
+      error: null,
+    })
+    const client = { from: jest.fn(() => builder) } as unknown as SupabaseClient<Database>
+
+    await expect(
+      updateVerifiedTrader(
+        client,
+        USER_ID,
+        { trader_id: 'requested-trader', source: 'binance_futures' },
+        { bio: 'Scoped update' }
+      )
+    ).rejects.toThrow('Verified trader update returned a mismatched identity')
+  })
+
+  it('does not fall across sources when the same trader id exists elsewhere', async () => {
+    const sibling = verifiedTrader({
+      id: 'verified-spot',
+      trader_id: 'shared-trader-id',
+      source: 'binance_spot',
+      bio: 'Spot bio',
+    })
+    const filters: Array<[keyof VerifiedTrader, unknown]> = []
+    let updateData: Partial<VerifiedTrader> = {}
+    const builder: Record<string, jest.Mock> = {}
+    builder.update = jest.fn((value: Partial<VerifiedTrader>) => {
+      updateData = value
+      return builder
+    })
+    builder.eq = jest.fn((field: keyof VerifiedTrader, value: unknown) => {
+      filters.push([field, value])
+      return builder
+    })
+    builder.select = jest.fn(() => builder)
+    builder.maybeSingle = jest.fn(async () => {
+      const matches = [sibling].filter((row) =>
+        filters.every(([field, value]) => row[field] === value)
+      )
+      for (const row of matches) Object.assign(row, updateData)
+      return { data: matches[0] ?? null, error: null }
+    })
+    const client = {
+      from: jest.fn(() => builder),
+    } as unknown as SupabaseClient<Database>
+
+    await expect(
+      updateVerifiedTrader(
+        client,
+        USER_ID,
+        { trader_id: 'shared-trader-id', source: 'binance_futures' },
+        { bio: 'Futures bio' }
+      )
+    ).resolves.toBeNull()
+    expect(sibling.bio).toBe('Spot bio')
+  })
+
+  it('propagates the exact database error without accepting a row', async () => {
+    const databaseError = { code: 'PGRST116', message: 'Unexpected update cardinality' }
+    const builder: Record<string, jest.Mock> = {}
+    builder.update = jest.fn(() => builder)
+    builder.eq = jest.fn(() => builder)
+    builder.select = jest.fn(() => builder)
+    builder.maybeSingle = jest.fn().mockResolvedValue({ data: null, error: databaseError })
+    const client = { from: jest.fn(() => builder) } as unknown as SupabaseClient<Database>
+
+    await expect(
+      updateVerifiedTrader(
+        client,
+        USER_ID,
+        { trader_id: 'requested-trader', source: 'binance_futures' },
+        { bio: 'Scoped update' }
+      )
+    ).rejects.toBe(databaseError)
   })
 })
 

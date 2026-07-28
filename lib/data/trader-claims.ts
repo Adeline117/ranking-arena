@@ -89,6 +89,11 @@ export interface UpdateVerifiedTraderInput {
   can_receive_messages?: boolean
 }
 
+export interface VerifiedTraderIdentity {
+  trader_id: string
+  source: string
+}
+
 // ============================================
 // Field constants
 // ============================================
@@ -536,8 +541,9 @@ export async function activateClaim(
 export async function updateVerifiedTrader(
   supabase: SupabaseClient,
   userId: string,
+  identity: VerifiedTraderIdentity,
   input: UpdateVerifiedTraderInput
-): Promise<VerifiedTrader> {
+): Promise<VerifiedTrader | null> {
   const updateData: Record<string, unknown> = {}
 
   if (input.display_name !== undefined) updateData.display_name = input.display_name
@@ -554,12 +560,25 @@ export async function updateVerifiedTrader(
     .from('verified_traders')
     .update(updateData)
     .eq('user_id', userId)
-    .select()
-    .single()
+    .eq('trader_id', identity.trader_id)
+    .eq('source', identity.source)
+    .select(VERIFIED_TRADER_FIELDS)
+    .maybeSingle()
 
   if (error) {
     logger.error('[trader-claims] 更新认证资料失败:', error)
     throw error
+  }
+
+  if (
+    data &&
+    (data.user_id !== userId ||
+      data.trader_id !== identity.trader_id ||
+      data.source !== identity.source)
+  ) {
+    const identityError = new Error('Verified trader update returned a mismatched identity')
+    logger.error('[trader-claims] 更新认证资料身份不匹配:', identityError)
+    throw identityError
   }
 
   return data

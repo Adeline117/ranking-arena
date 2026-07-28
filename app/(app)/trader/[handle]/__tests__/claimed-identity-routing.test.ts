@@ -10,6 +10,7 @@ describe('claimed trader routing contract', () => {
   const client = source('app/(app)/trader/[handle]/TraderProfileClient.tsx')
   const overview = source('app/components/trader/tabs/OverviewTab.tsx')
   const claimProfileRoute = source('app/api/traders/claim/profile/route.ts')
+  const verifiedProfileRoute = source('app/api/traders/verified/route.ts')
 
   it('never resolves claim ownership from a source-blind URL handle', () => {
     expect(page).not.toContain('cachedFindUserHandleByTrader(decodedHandle)')
@@ -37,8 +38,11 @@ describe('claimed trader routing contract', () => {
     expect(overview).toContain('isVerifiedClaimOwner: boolean')
     expect(overview).toContain('{isVerifiedClaimOwner ? (')
     expect(overview).not.toContain('{isOwner ? (')
-    expect(claimProfileRoute).toContain('getUserVerifiedTrader(supabase, user.id)')
-    expect(claimProfileRoute).toContain('You do not have a verified trader profile.')
+    for (const profileWriteRoute of [claimProfileRoute, verifiedProfileRoute]) {
+      expect(profileWriteRoute).not.toContain('getUserVerifiedTrader(supabase, user.id)')
+      expect(profileWriteRoute).toContain('{ trader_id: traderId, source }')
+      expect(profileWriteRoute).toContain('You do not own this verified trader profile')
+    }
   })
 
   it('uses the trader detail platform parameter after a claim and from a bot owner link', () => {
