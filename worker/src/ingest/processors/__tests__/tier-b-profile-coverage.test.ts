@@ -61,7 +61,11 @@ jest.mock('../../queues', () => ({
   INGEST_JOB: { TIER_B: 'tier-b' },
 }))
 
-import { processTierB } from '../tier-b-profiles'
+import { processTierB as processTierBInRegion } from '../tier-b-profiles'
+import { createConsumedRegionContext } from '../../consumed-region-context'
+
+const processTierB = (job: Parameters<typeof processTierBInRegion>[0]) =>
+  processTierBInRegion(job, createConsumedRegionContext('local', 'local'))
 
 const src = {
   id: 34,
@@ -168,6 +172,17 @@ describe('Tier-B profile coverage accounting', () => {
       missingTimeframes: [],
     })
     mockDbQuery.mockResolvedValue({ rows: [], rowCount: 1 })
+  })
+
+  it('rejects a moved source before selecting traders or opening a session', async () => {
+    mockGetSourceBySlug.mockResolvedValue({ ...src, fetch_region: 'vps_sg' })
+
+    await expect(processTierB(job)).rejects.toThrow(
+      'belongs to vps_sg, not consumed queue region local'
+    )
+    expect(mockGetLatestPassedNativeCohort).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
   })
 
   it('does not mark a trader fresh when one timeframe is unproven', async () => {

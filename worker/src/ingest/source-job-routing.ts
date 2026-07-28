@@ -1,4 +1,4 @@
-import { INGEST_JOB } from './queues'
+import { INGEST_JOB } from './job-names'
 import { withSourceJobLease, type SourceJobRedis } from './source-job-lease'
 
 /**

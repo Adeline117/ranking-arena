@@ -25,6 +25,10 @@ import type { ParsedLeaderboardRow, TraderKind, BotStrategy } from '@/lib/ingest
 import { publishLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
 import type { TierJobData } from '../queues'
 import { observationCycleId } from '../observation-cycle'
+import {
+  assertSourceMatchesConsumedRegion,
+  type ConsumedRegionContext,
+} from '../consumed-region-context'
 
 /** sources.meta.derived_board_sort → trader_stats column (default roi —
  *  matches the native boards' default sort, spec §9 #6). */
@@ -80,8 +84,12 @@ function coveragePct(freshCount: number, eligibleCount: number): number {
   return eligibleCount === 0 ? 0 : (freshCount / eligibleCount) * 100
 }
 
-export async function processDeriveBoards(job: Job<TierJobData>): Promise<DeriveBoardResult[]> {
+export async function processDeriveBoards(
+  job: Job<TierJobData>,
+  context: ConsumedRegionContext
+): Promise<DeriveBoardResult[]> {
   const src = await getSourceBySlug(job.data.sourceSlug)
+  assertSourceMatchesConsumedRegion(src, context)
   if (src.status !== 'active') {
     console.log(`[derive-boards] ${src.slug} is ${src.status} — skipping`)
     return []

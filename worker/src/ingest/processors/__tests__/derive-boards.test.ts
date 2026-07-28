@@ -23,8 +23,12 @@ jest.mock('@/lib/ingest/serving/publish', () => ({
 import {
   DERIVED_COUNT_BASELINE_GENERATION,
   DERIVED_MIN_FRESH_COVERAGE_PCT,
-  processDeriveBoards,
+  processDeriveBoards as processDeriveBoardsInRegion,
 } from '../derive-boards'
+import { createConsumedRegionContext } from '../../consumed-region-context'
+
+const processDeriveBoards = (job: Parameters<typeof processDeriveBoardsInRegion>[0]) =>
+  processDeriveBoardsInRegion(job, createConsumedRegionContext('local', 'local'))
 
 const src = {
   id: 19,
@@ -35,6 +39,7 @@ const src = {
   timeframes_native: [7],
   timeframes_derived: [30],
   deep_profile_topn: 300,
+  fetch_region: 'local',
   meta: { derived_board_sort: 'roi' },
 } as SourceRow
 
@@ -96,6 +101,17 @@ describe('derived-board deterministic eligibility and coverage gate', () => {
 
   afterEach(() => {
     consoleError.mockRestore()
+  })
+
+  it('rejects a moved source before reading its cohort or publishing', async () => {
+    mockGetSourceBySlug.mockResolvedValue({ ...src, fetch_region: 'vps_sg' })
+
+    await expect(processDeriveBoards(job)).rejects.toThrow(
+      'belongs to vps_sg, not consumed queue region local'
+    )
+    expect(mockGetLatestPassedNativeCohort).not.toHaveBeenCalled()
+    expect(mockDbQuery).not.toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('publishes at the 90% boundary using the shared native top-N eligibility', async () => {

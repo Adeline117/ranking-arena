@@ -40,6 +40,10 @@ import { validateStats } from '@/lib/ingest/staging/validate'
 import { publishProfile } from '@/lib/ingest/serving/publish'
 import { logger } from '@/lib/logger'
 import type { TierJobData } from '../queues'
+import {
+  assertSourceMatchesConsumedRegion,
+  type ConsumedRegionContext,
+} from '../consumed-region-context'
 
 const DEFAULT_BATCH = 150
 /** Cursor rows for the backfill use a per-source sentinel trader id so they
@@ -197,7 +201,10 @@ export interface TierBSeriesResult {
   bandSize: number
 }
 
-export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSeriesResult> {
+export async function processTierBSeries(
+  job: Job<TierJobData>,
+  context: ConsumedRegionContext
+): Promise<TierBSeriesResult> {
   const empty: TierBSeriesResult = {
     tradersCrawled: 0,
     surfacesFetched: 0,
@@ -209,6 +216,7 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
     bandSize: 0,
   }
   const src = await getSourceBySlug(job.data.sourceSlug)
+  assertSourceMatchesConsumedRegion(src, context)
   if (src.status !== 'active') return empty
 
   const backfillTopN = Number(src.meta.series_backfill_topn ?? 0)

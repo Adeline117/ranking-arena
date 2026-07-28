@@ -60,6 +60,10 @@ import {
 import type { TierJobData } from '../queues'
 import { observationCycleId } from '../observation-cycle'
 import { resolveDeployedSha } from '@/worker/src/ingest/heartbeat'
+import {
+  assertSourceMatchesConsumedRegion,
+  type ConsumedRegionContext,
+} from '../consumed-region-context'
 
 export interface TierAResult {
   timeframe: number
@@ -107,10 +111,6 @@ async function acquireLeaderboard(
 function verifiedRunnerGitSha(): string | null {
   const value = resolveDeployedSha()
   return /^[0-9a-f]{40}$/.test(value) ? value : null
-}
-
-function configuredWorkerRegion(): string | null {
-  return process.env.INGEST_LOCAL_REGION?.trim() || null
 }
 
 function attemptBoundCaptureEnabled(): boolean {
@@ -483,8 +483,12 @@ async function persistCompletedTimeframe(
   }
 }
 
-export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]> {
+export async function processTierA(
+  job: Job<TierJobData>,
+  context: ConsumedRegionContext
+): Promise<TierAResult[]> {
   const src = await getSourceBySlug(job.data.sourceSlug)
+  assertSourceMatchesConsumedRegion(src, context)
   if (src.status !== 'active') {
     console.log(`[tier-a] ${src.slug} is ${src.status} — skipping`)
     return []
@@ -516,7 +520,7 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
       sourceId: src.id,
       adapterSlug: src.adapter_slug,
     }))
-  const workerRegion = configuredWorkerRegion()
+  const workerRegion = context.executionRegion
   // Freeze provenance before the first upstream request. A long-running crawl
   // must not bind later timeframes to a different checkout/deployment SHA.
   const runnerGitSha = adapter.captureLeaderboard ? verifiedRunnerGitSha() : null
@@ -528,11 +532,6 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
   if (attemptBoundCapture && runnerGitSha === null) {
     throw new Error(
       `[tier-a] ${src.slug} attempt-bound capture requires an exact deployed runner SHA`
-    )
-  }
-  if (attemptBoundCapture && workerRegion === null) {
-    throw new Error(
-      `[tier-a] ${src.slug} attempt-bound capture requires an explicit INGEST_LOCAL_REGION`
     )
   }
   const results: TierAResult[] = []

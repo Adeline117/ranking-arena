@@ -43,7 +43,11 @@ jest.mock('@/lib/ingest/serving/publish', () => ({
 }))
 jest.mock('@/lib/logger', () => ({ logger: { info: jest.fn() } }))
 
-import { processTierBSeries } from '../tier-b-series'
+import { processTierBSeries as processTierBSeriesInRegion } from '../tier-b-series'
+import { createConsumedRegionContext } from '../../consumed-region-context'
+
+const processTierBSeries = (job: Parameters<typeof processTierBSeriesInRegion>[0]) =>
+  processTierBSeriesInRegion(job, createConsumedRegionContext('local', 'local'))
 
 const src = {
   id: 34,
@@ -53,6 +57,7 @@ const src = {
   currency: 'USDT',
   tf_label_map: {},
   deep_profile_topn: 300,
+  fetch_region: 'local',
   meta: {
     series_backfill_topn: 302,
     series_backfill_batch: 1,
@@ -146,6 +151,17 @@ describe('Tier-B series quality scheduling', () => {
       }
       return { rows: [], rowCount: 0 }
     })
+  })
+
+  it('rejects a moved source before selecting its backfill band', async () => {
+    mockGetSourceBySlug.mockResolvedValue({ ...src, fetch_region: 'vps_sg' })
+
+    await expect(processTierBSeries(job)).rejects.toThrow(
+      'belongs to vps_sg, not consumed queue region local'
+    )
+    expect(mockDbQuery).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
   })
 
   it('cools never-published newcomer attempts for 24 hours', async () => {
