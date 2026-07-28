@@ -21,7 +21,11 @@ import { withPublic } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { ApiError } from '@/lib/api/errors'
-import { success as apiSuccess, withCache } from '@/lib/api/response'
+import {
+  success as apiSuccess,
+  unauthorized as apiUnauthorized,
+  withCache,
+} from '@/lib/api/response'
 import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
@@ -146,8 +150,15 @@ export async function GET(
       // Accept optional ?source= param to disambiguate traders with same handle across exchanges
       const sourceParam = req.nextUrl.searchParams.get('source') || ''
       const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}${sourceParam ? `:${sourceParam}` : ''}`
-      const consistencyProbe =
-        req.nextUrl.searchParams.get('consistency_probe') === '1' && verifyCronSecret(req)
+      const consistencyProbeRequested = req.nextUrl.searchParams.get('consistency_probe') === '1'
+      const consistencyProbe = consistencyProbeRequested && verifyCronSecret(req)
+      if (consistencyProbeRequested && !consistencyProbe) {
+        const response = apiUnauthorized('Unauthorized')
+        response.headers.set('Cache-Control', 'private, no-store, max-age=0')
+        response.headers.set('Pragma', 'no-cache')
+        response.headers.set('Vary', 'Authorization')
+        return response
+      }
 
       const fetchTraderData = async () => {
         // 3s timeout for the entire resolve+detail chain.

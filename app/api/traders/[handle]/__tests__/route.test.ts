@@ -328,15 +328,8 @@ describe('GET /api/traders/[handle]', () => {
     expect(res.headers.get('X-Arena-Consistency-Proof')).toBe('live-loader-v1')
   })
 
-  it('keeps an invalid consistency probe on the normal cache path without proof', async () => {
+  it('rejects an invalid consistency probe without touching shared caches', async () => {
     mockVerifyCronSecret.mockReturnValue(false)
-    mockTieredGetOrSet.mockResolvedValueOnce({
-      pageData: {
-        performance: { roi_90d: 42.5, pnl: 100, arena_score_90d: 88 },
-        profile: { handle: 'CachedTrader' },
-      },
-      resolved: { platform: 'binance_futures', traderKey: 'trader123' },
-    })
 
     const request = mockReq(
       'http://localhost/api/traders/CachedTrader?source=binance_futures&consistency_probe=1',
@@ -347,13 +340,14 @@ describe('GET /api/traders/[handle]', () => {
     const res = await GET(request as any, { params })
     const body = await res.json()
 
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(401)
     expect(mockVerifyCronSecret).toHaveBeenCalledWith(request)
-    expect(mockTieredGetOrSet).toHaveBeenCalledTimes(1)
-    expect(body.data.consistency_probe).toBeUndefined()
-    expect(res.headers.get('Cache-Control')).toBe(
-      'public, max-age=300, s-maxage=300, stale-while-revalidate=600'
-    )
+    expect(mockTieredGetOrSet).not.toHaveBeenCalled()
+    expect(mockResolveTrader).not.toHaveBeenCalled()
+    expect(body.error).toMatchObject({ code: 'UNAUTHORIZED' })
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(res.headers.get('Pragma')).toBe('no-cache')
+    expect(res.headers.get('Vary')).toBe('Authorization')
     expect(res.headers.get('X-Arena-Consistency-Proof')).toBeNull()
   })
 
