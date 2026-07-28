@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "plugins": [],
+    "types": ["jest", "node"]
+  },
+  "files": [
+    "worker/src/ingest/__tests__/worker-instance-ownership.test.ts",
+    "worker/src/ingest/__tests__/worker-instance-ownership.redis.test.ts"
+  ],
+  "include": [
+    "worker/src/connection.ts",
+    "worker/src/ingest-worker.ts",
+    "worker/src/ingest/**/*.ts",
+    "worker/preflight-local-release.ts",
+    "worker/preflight-sg-runtime.ts",
+    "worker/verify-local-heartbeat.ts",
+    "worker/verify-sg-heartbeat.ts"
+  ],
+  "exclude": ["node_modules", "worker/**/__tests__/**", "worker/**/*.test.ts"]
+}
