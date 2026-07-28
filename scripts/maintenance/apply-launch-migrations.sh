@@ -113,6 +113,7 @@ PREDEPLOY_MIGRATIONS=(
   20260725014500_close_rank_cleanup_public_execute.sql
   20260725015000_leaderboard_rank_generation_claim.sql
   20260725015500_bound_leaderboard_rank_generation_batches.sql
+  20260725016000_leaderboard_rank_generation_receipt_substrate.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
