@@ -10,7 +10,7 @@
  * Requires: DATABASE_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
  */
 
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import { createReadStream, statSync, unlinkSync } from 'fs'
 import { resolve } from 'path'
 import { pathToFileURL } from 'url'
@@ -26,6 +26,11 @@ import 'dotenv/config'
 // keep the N newest regardless of age (they are the only complete restore points)
 const DAILY_RETENTION_DAYS = 14
 const FULL_BACKUPS_TO_KEEP = 3
+
+// Complete arena+public/full backups are currently ~5 GB compressed.  Keep the
+// same conservative 1 GB floor as the independent freshness sentinel, but
+// enforce it before an object can be uploaded or an older restore point pruned.
+export const COMPLETE_BACKUP_MIN_BYTES = 1024 * 1024 * 1024
 
 const TRADER_TABLES = [
   // Core trader data
@@ -114,6 +119,9 @@ export function preparePgDumpConnection(databaseUrl) {
   if (parsedUrl.protocol !== 'postgres:' && parsedUrl.protocol !== 'postgresql:') {
     throw new Error('DATABASE_URL must use the postgres or postgresql protocol')
   }
+  if (parsedUrl.hash !== '') {
+    throw new Error('DATABASE_URL fragments are unsupported')
+  }
 
   const decodePassword = (value) => {
     try {
@@ -145,12 +153,9 @@ export function preparePgDumpConnection(databaseUrl) {
   // Work on the raw query so unrelated libpq values such as `a+b` are not
   // normalized by URLSearchParams and retain their exact connection meaning.
   const remainder = databaseUrl.slice(authorityEnd)
-  const fragmentIndex = remainder.indexOf('#')
-  const beforeFragment = fragmentIndex === -1 ? remainder : remainder.slice(0, fragmentIndex)
-  const fragment = fragmentIndex === -1 ? '' : remainder.slice(fragmentIndex)
-  const queryIndex = beforeFragment.indexOf('?')
-  const path = queryIndex === -1 ? beforeFragment : beforeFragment.slice(0, queryIndex)
-  const rawQuery = queryIndex === -1 ? null : beforeFragment.slice(queryIndex + 1)
+  const queryIndex = remainder.indexOf('?')
+  const path = queryIndex === -1 ? remainder : remainder.slice(0, queryIndex)
+  const rawQuery = queryIndex === -1 ? null : remainder.slice(queryIndex + 1)
   const queryPasswords = []
   const safeQueryParts = []
 
@@ -170,9 +175,87 @@ export function preparePgDumpConnection(databaseUrl) {
   const password = queryPasswords.length > 0 ? queryPasswords.at(-1) : authorityPassword
 
   return {
-    connectionUrl: `${databaseUrl.slice(0, authorityStart)}${sanitizedAuthority}${path}${safeQuery}${fragment}`,
+    connectionUrl: `${databaseUrl.slice(0, authorityStart)}${sanitizedAuthority}${path}${safeQuery}`,
     password,
   }
+}
+
+/**
+ * Stream pg_dump through gzip while preserving both programs' exit status.
+ *
+ * Bash receives every dynamic value as a positional argument, so database
+ * URLs, paths, schemas, and tables are never interpolated into shell source.
+ * `pipefail` is essential: without it a failed pg_dump followed by a successful
+ * gzip produces a valid 20-byte empty gzip and the backup falsely succeeds.
+ */
+export function runPgDumpPipeline({
+  pgDumpPath,
+  connectionUrl,
+  password,
+  pgDumpArgs,
+  outputPath,
+  timeoutMs = 1_800_000,
+}) {
+  const pgDumpEnv = password === undefined ? process.env : { ...process.env, PGPASSWORD: password }
+
+  execFileSync(
+    '/bin/bash',
+    [
+      '-o',
+      'pipefail',
+      '-c',
+      'output=$1; shift; "$@" | /usr/bin/gzip -c > "$output"',
+      'arena-backup-pipeline',
+      outputPath,
+      pgDumpPath,
+      connectionUrl,
+      ...pgDumpArgs,
+    ],
+    {
+      env: pgDumpEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: timeoutMs,
+    }
+  )
+}
+
+/** Validate the local artifact before any irreversible remote operation. */
+export function assertBackupArtifact(localPath, minimumBytes) {
+  const size = statSync(localPath).size
+  if (!Number.isSafeInteger(minimumBytes) || minimumBytes < 1) {
+    throw new Error('backup minimum size contract is invalid')
+  }
+  if (size < minimumBytes) {
+    throw new Error(`backup artifact is incomplete: ${size} bytes < required ${minimumBytes} bytes`)
+  }
+
+  try {
+    execFileSync('/usr/bin/gzip', ['--test', localPath], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // Current compressed artifacts are ~5 GB. Integrity verification must
+      // read the complete stream and can legitimately take several minutes on
+      // the Mac backup host, while still remaining bounded.
+      timeout: 10 * 60_000,
+    })
+  } catch {
+    throw new Error('backup artifact failed gzip integrity verification')
+  }
+
+  return size
+}
+
+/**
+ * Keep production side effects behind a validated local artifact. Injection is
+ * deliberate: tests execute the real producer and prove rejected artifacts
+ * cannot reach either the upload or retention boundary.
+ */
+export async function produceAndCommitBackup({ produce, localPath, minimumBytes, upload, prune }) {
+  await produce()
+  const size = assertBackupArtifact(localPath, minimumBytes)
+  await upload(size)
+  unlinkSync(localPath)
+  await prune()
+  return size
 }
 
 async function run() {
@@ -192,11 +275,11 @@ async function run() {
       : 'trader tables'
   console.log(`[backup] Starting ${modeLabel} backup — ${now.toISOString()}`)
 
-  const tableArgs = schemaMode
-    ? backupSchemas.map((s) => `-n ${s}`).join(' ')
+  const selectionArgs = schemaMode
+    ? backupSchemas.flatMap((s) => ['-n', s])
     : fullMode
-      ? '' // dump everything
-      : TRADER_TABLES.map((t) => `-t public.${t}`).join(' ')
+      ? [] // dump everything
+      : TRADER_TABLES.flatMap((t) => ['-t', `public.${t}`])
 
   const modeSuffix = schemaMode ? '-schemas' : fullMode ? '-full' : ''
   const filename = `arena-backup-${dateStr}${modeSuffix}.sql.gz`
@@ -212,46 +295,49 @@ async function run() {
     // 30 tables over network to Supabase can take 15-20min depending on
     // trader_snapshots_v2 size. 30min budget prevents false ETIMEDOUT.
     const { connectionUrl, password } = preparePgDumpConnection(DATABASE_URL)
-    const pgDumpEnv =
-      password === undefined ? process.env : { ...process.env, PGPASSWORD: password }
-    execSync(
-      `${pgDumpPath} "${connectionUrl}" ${tableArgs} --no-owner --no-privileges | gzip > ${localPath}`,
-      { env: pgDumpEnv, stdio: ['pipe', 'pipe', 'pipe'], timeout: 1_800_000 }
-    )
-
-    const size = statSync(localPath).size
-    const sizeMB = (size / 1024 / 1024).toFixed(1)
-    console.log(`[backup] Dump complete: ${sizeMB} MB`)
-
-    // Upload to R2
+    const minimumBytes = schemaMode || fullMode ? COMPLETE_BACKUP_MIN_BYTES : 1
     const r2Key = `db-backups/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${filename}`
-    console.log(`[backup] Uploading to R2: ${R2_BUCKET}/${r2Key}`)
-
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: r2Key,
-        Body: createReadStream(localPath),
-        ContentType: 'application/gzip',
-        ContentLength: size,
-        Metadata: {
-          'backup-date': now.toISOString(),
-          'backup-type': schemaMode
-            ? `schemas:${backupSchemas.join('+')}`
-            : fullMode
-              ? 'full'
-              : 'trader-tables',
-          tables: schemaMode ? backupSchemas.join(',') : fullMode ? 'all' : TRADER_TABLES.join(','),
-        },
-      })
-    )
-
-    console.log(`[backup] ✓ Uploaded successfully: ${r2Key} (${sizeMB} MB)`)
-
-    // Cleanup local file
-    unlinkSync(localPath)
-
-    await pruneOldBackups()
+    await produceAndCommitBackup({
+      produce: () =>
+        runPgDumpPipeline({
+          pgDumpPath,
+          connectionUrl,
+          password,
+          pgDumpArgs: [...selectionArgs, '--no-owner', '--no-privileges'],
+          outputPath: localPath,
+        }),
+      localPath,
+      minimumBytes,
+      upload: async (size) => {
+        const sizeMB = (size / 1024 / 1024).toFixed(1)
+        console.log(`[backup] Dump complete: ${sizeMB} MB`)
+        console.log(`[backup] Uploading to R2: ${R2_BUCKET}/${r2Key}`)
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: r2Key,
+            Body: createReadStream(localPath),
+            ContentType: 'application/gzip',
+            ContentLength: size,
+            Metadata: {
+              'backup-date': now.toISOString(),
+              'backup-type': schemaMode
+                ? `schemas:${backupSchemas.join('+')}`
+                : fullMode
+                  ? 'full'
+                  : 'trader-tables',
+              tables: schemaMode
+                ? backupSchemas.join(',')
+                : fullMode
+                  ? 'all'
+                  : TRADER_TABLES.join(','),
+            },
+          })
+        )
+        console.log(`[backup] ✓ Uploaded successfully: ${r2Key} (${sizeMB} MB)`)
+      },
+      prune: pruneOldBackups,
+    })
   } catch (err) {
     console.error(`[backup] ✗ Failed:`, err.message)
     try {
