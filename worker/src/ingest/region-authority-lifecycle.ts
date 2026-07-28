@@ -79,6 +79,16 @@ export interface RegionAuthorityRenewalTimer {
   unref?(): void
 }
 
+const MANAGED_REGION_AUTHORITY_LIFECYCLES = new WeakSet<object>()
+
+export function isManagedRegionAuthorityLifecycle(
+  value: unknown
+): value is RegionAuthorityLifecycle {
+  return (
+    value !== null && typeof value === 'object' && MANAGED_REGION_AUTHORITY_LIFECYCLES.has(value)
+  )
+}
+
 export interface AcquireRegionAuthorityLifecycleOptions {
   acquireAuthority?: AcquireAuthority
   heartbeat: () => WorkerOwnershipHeartbeatInput
@@ -314,5 +324,7 @@ export async function acquireRegionAuthorityLifecycle({
     },
   }
 
-  return Object.freeze({ lifecycle: Object.freeze(lifecycle), status: 'active' as const })
+  const managedLifecycle = Object.freeze(lifecycle)
+  MANAGED_REGION_AUTHORITY_LIFECYCLES.add(managedLifecycle)
+  return Object.freeze({ lifecycle: managedLifecycle, status: 'active' as const })
 }
