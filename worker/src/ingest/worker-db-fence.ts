@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 
-import type { PoolClient, QueryResult, QueryResultRow } from 'pg'
+import type { PoolClient, QueryConfig, QueryResult, QueryResultRow } from 'pg'
 
 import { ingestClientConnect } from '@/lib/ingest/db'
 
@@ -17,12 +17,20 @@ import {
 
 export const WORKER_DB_FENCE_CONTRACT = 'arena.worker-db-fence@1' as const
 export const WORKER_DB_FENCE_SAFETY_MARGIN_MS = 30_000
+export const WORKER_DB_FENCE_WRITE_FINALIZE_MARGIN_MS = 10_000
+export const WORKER_DB_FENCE_WRITE_QUERY_CAP_MS = 120_000
+export const WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS = 120_000
+export const WORKER_DB_FENCE_XACT_STATUS_TIMEOUT_MS = 5_000
 
 const MAX_SAFE_DATABASE_INTEGER = 9_007_199_254_740_000
 const DATABASE_RESULT_ALIAS = 'worker_db_fence'
 const CANONICAL_DECIMAL = /^[1-9][0-9]*$/
 const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const CANONICAL_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+const MAX_XID8 = 18_446_744_073_709_551_615n
+const WRITE_STATEMENT = /^(?:DELETE|INSERT|MERGE|SELECT|UPDATE|VALUES|WITH)\b/i
+const FENCE_CONTROL_SQL =
+  /\b(?:(?:activate|begin|release|renew)_ingest_worker_[a-z_]*|assert_ingest_worker_fence_at_commit|ingest_worker_(?:activations|authorities|instances|write_guards))\b/i
 
 const ACTIVATE_SQL = `SELECT arena.activate_ingest_worker_authority(
     p_scope => $1::text,
@@ -57,11 +65,32 @@ const RELEASE_SQL = `SELECT arena.release_ingest_worker_authority(
     p_epoch => $7::bigint
   ) AS ${DATABASE_RESULT_ALIAS}`
 
+const BEGIN_WRITE_SQL = `SELECT arena.begin_ingest_worker_fenced_write(
+    p_scope => $1::text,
+    p_region => $2::text,
+    p_node_id => $3::text,
+    p_instance_id => $4::uuid,
+    p_owner_token => $5::text,
+    p_control_epoch => $6::bigint,
+    p_epoch => $7::bigint
+  ) AS ${DATABASE_RESULT_ALIAS}`
+
+const XACT_STATUS_ALIAS = 'worker_db_fence_xact_status'
+const XACT_STATUS_SQL = `SELECT pg_catalog.pg_xact_status($1::pg_catalog.xid8) AS ${XACT_STATUS_ALIAS}`
+
+const STATEMENT_TIMEOUT_ALIAS = 'worker_db_fence_statement_timeout'
+const TRANSACTION_TIMEOUT_ALIAS = 'worker_db_fence_transaction_timeout'
+const CONFIGURE_WRITE_TIMEOUTS_SQL = `SELECT
+    pg_catalog.set_config('statement_timeout', $1::text, true) AS ${STATEMENT_TIMEOUT_ALIAS},
+    pg_catalog.set_config('transaction_timeout', $2::text, true) AS ${TRANSACTION_TIMEOUT_ALIAS}`
+
 const BEGIN_READ_COMMITTED = 'BEGIN ISOLATION LEVEL READ COMMITTED'
 
 export type WorkerDbFenceState = 'active' | 'releasing' | 'released' | 'fenced'
-export type WorkerDbFenceOperation = 'acquire' | 'activate' | 'renew' | 'release'
+export type WorkerDbFenceOperation = 'acquire' | 'activate' | 'renew' | 'release' | 'write'
 export type WorkerDbFenceErrorCode =
+  | 'commit_aborted'
+  | 'commit_outcome_unknown'
   | 'invalid_input'
   | 'invalid_state'
   | 'control_plane_unavailable'
@@ -69,6 +98,7 @@ export type WorkerDbFenceErrorCode =
   | 'rpc_contract_violation'
   | 'fenced'
   | 'lease_deadline_exceeded'
+  | 'write_deadline_exceeded'
 export type WorkerDbFenceRetryPolicy = 'never' | 'exact_control_only' | 'reacquire'
 
 export class WorkerDbFenceError extends Error {
@@ -109,6 +139,21 @@ export interface WorkerDbFence {
   isActive(): boolean
   release(): Promise<void>
   renewAndPublish(heartbeat: WorkerOwnershipHeartbeatInput): Promise<void>
+  /**
+   * Runs database-only work in one fenced transaction. The callback must not
+   * perform external side effects that PostgreSQL cannot roll back. The SQL
+   * filter prevents common mistakes; database-role privileges remain the
+   * actual security boundary.
+   */
+  withFencedWrite<T>(callback: (transaction: WorkerDbFencedWrite) => Promise<T>): Promise<T>
+}
+
+export interface WorkerDbFencedWrite {
+  readonly signal: AbortSignal
+  query<R extends QueryResultRow = QueryResultRow>(
+    text: string,
+    values?: readonly unknown[]
+  ): Promise<QueryResult<R>>
 }
 
 export type AcquireWorkerDbFenceResult =
@@ -155,6 +200,10 @@ interface ReleaseDatabaseProof {
   released: boolean
   serverTime: string
   status: 'fenced' | 'released'
+}
+
+interface AssertedWriteProof extends ActiveDatabaseProof {
+  transactionId: string
 }
 
 class RpcContractViolation extends Error {}
@@ -262,6 +311,21 @@ const RELEASE_KEYS = [
   'status',
 ] as const
 
+const ASSERTED_WRITE_KEYS = [
+  'authority_scope',
+  'contract',
+  'control_epoch',
+  'control_server_time_ms',
+  'epoch',
+  'instance_id',
+  'lease_expires_at',
+  'node_id',
+  'region',
+  'server_time',
+  'status',
+  'transaction_id',
+] as const
+
 function validateSharedIdentity(
   payload: Record<string, unknown>,
   identity: RpcIdentity,
@@ -338,10 +402,390 @@ function validateReleaseResult(
   }
 }
 
+function canonicalTransactionId(value: unknown): string {
+  if (typeof value !== 'string' || !CANONICAL_DECIMAL.test(value)) {
+    throw new RpcContractViolation()
+  }
+  const parsed = BigInt(value)
+  if (parsed < 1n || parsed > MAX_XID8) throw new RpcContractViolation()
+  return value
+}
+
+function validateAssertedWriteResult(
+  result: QueryResult<QueryResultRow>,
+  identity: RpcIdentity,
+  expectedDatabaseEpoch: number,
+  minimumControlServerTimeMs: number,
+  maximumControlServerTimeMs: number
+): AssertedWriteProof {
+  const payload = validateEnvelope(result)
+  validateSharedIdentity(payload, identity, ASSERTED_WRITE_KEYS)
+  if (payload.status !== 'asserted' || canonicalInteger(payload.epoch) !== expectedDatabaseEpoch) {
+    throw new RpcContractViolation()
+  }
+  const controlServerTimeMs = canonicalInteger(payload.control_server_time_ms)
+  if (
+    controlServerTimeMs < minimumControlServerTimeMs ||
+    controlServerTimeMs > maximumControlServerTimeMs
+  ) {
+    throw new RpcContractViolation()
+  }
+  const serverTime = canonicalTimestamp(payload.server_time)
+  const leaseExpiresAt = canonicalTimestamp(payload.lease_expires_at)
+  const leaseRemainingMs = leaseExpiresAt.timeMs - serverTime.timeMs
+  if (leaseRemainingMs <= 0 || leaseRemainingMs > WORKER_OWNER_LEASE_TTL_MS) {
+    throw new RpcContractViolation()
+  }
+  return {
+    controlServerTimeMs,
+    databaseEpoch: expectedDatabaseEpoch,
+    leaseExpiresAt: leaseExpiresAt.encoded,
+    leaseRemainingMs,
+    serverTime: serverTime.encoded,
+    transactionId: canonicalTransactionId(payload.transaction_id),
+  }
+}
+
+function validateXactStatus(
+  result: QueryResult<QueryResultRow>
+): 'aborted' | 'committed' | 'in progress' | null {
+  const row = result.rows.length === 1 ? strictRecord(result.rows[0]) : undefined
+  if (
+    result.command !== 'SELECT' ||
+    result.rowCount !== 1 ||
+    row === undefined ||
+    !exactKeys(row, [XACT_STATUS_ALIAS])
+  ) {
+    throw new RpcContractViolation()
+  }
+  const status = row[XACT_STATUS_ALIAS]
+  if (
+    status === null ||
+    status === 'aborted' ||
+    status === 'committed' ||
+    status === 'in progress'
+  ) {
+    return status
+  }
+  throw new RpcContractViolation()
+}
+
 function sqlState(error: unknown): string | undefined {
   if (error === null || typeof error !== 'object') return undefined
   const code = (error as { code?: unknown }).code
   return typeof code === 'string' ? code : undefined
+}
+
+function commitResponseMayBeUnknown(error: unknown): boolean {
+  const code = sqlState(error)
+  const severity =
+    error !== null && typeof error === 'object'
+      ? (error as { severity?: unknown }).severity
+      : undefined
+  if (severity === 'FATAL' || severity === 'PANIC') return true
+  if (code === undefined || code.startsWith('E') || !/^[0-9A-Z]{5}$/.test(code)) return true
+  return /^08/.test(code) || code === '25P04' || code === '40003' || /^57P0[123]$/.test(code)
+}
+
+function containsSelectInto(statement: string): boolean {
+  const tokens: Array<{ keyword: string; scope: number }> = []
+  const scopes = [0]
+  let nextScope = 1
+  for (let index = 0; index < statement.length; ) {
+    const character = statement[index]
+    if (character === "'") {
+      index += 1
+      while (index < statement.length) {
+        if (statement[index] !== "'") {
+          index += 1
+          continue
+        }
+        if (statement[index + 1] === "'") {
+          index += 2
+          continue
+        }
+        index += 1
+        break
+      }
+      continue
+    }
+    if (character === '(') {
+      scopes.push(nextScope)
+      nextScope += 1
+      index += 1
+      continue
+    }
+    if (character === ')') {
+      if (scopes.length > 1) scopes.pop()
+      index += 1
+      continue
+    }
+    if (!/[A-Za-z_]/.test(character)) {
+      index += 1
+      continue
+    }
+    let end = index + 1
+    while (end < statement.length && /[A-Za-z0-9_$]/.test(statement[end])) end += 1
+    tokens.push({ keyword: statement.slice(index, end).toUpperCase(), scope: scopes.at(-1) ?? 0 })
+    index = end
+  }
+
+  const openSelectByScope = new Map<number, boolean>()
+  for (const token of tokens) {
+    if (token.keyword === 'SELECT') {
+      openSelectByScope.set(token.scope, true)
+    } else if (token.keyword === 'FROM') {
+      openSelectByScope.set(token.scope, false)
+    } else if (token.keyword === 'INTO' && openSelectByScope.get(token.scope) === true) {
+      return true
+    }
+  }
+  return false
+}
+
+function validateWriteStatement(text: string): string {
+  const statement = text.trim()
+  if (
+    statement.length === 0 ||
+    statement.length > 1_000_000 ||
+    statement.includes(';') ||
+    /"|--|\/\*|\*\/|\$(?:\$|[A-Za-z_][A-Za-z0-9_]*\$)/.test(statement) ||
+    !WRITE_STATEMENT.test(statement) ||
+    FENCE_CONTROL_SQL.test(statement) ||
+    containsSelectInto(statement) ||
+    /\b(?:dblink|lo_export|lo_import|nextval|pg_advisory_(?:lock|unlock)[a-z_]*|pg_cancel_backend|pg_notify|pg_terminate_backend|set_config|setval)\s*\(/i.test(
+      statement
+    )
+  ) {
+    throw dbFenceError('invalid_input', 'write')
+  }
+  return statement
+}
+
+function snapshotWriteValue(value: unknown, ancestors: Set<object>): unknown {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return value
+  }
+  if (Buffer.isBuffer(value)) return Buffer.from(value)
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime())) throw dbFenceError('invalid_input', 'write')
+    return new Date(value.getTime())
+  }
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+    try {
+      return structuredClone(value)
+    } catch {
+      throw dbFenceError('invalid_input', 'write')
+    }
+  }
+  if (typeof value !== 'object' || ancestors.has(value)) {
+    throw dbFenceError('invalid_input', 'write')
+  }
+
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) {
+      const snapshot: unknown[] = new Array(value.length)
+      for (let index = 0; index < value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index))
+        if (descriptor === undefined) continue
+        if (!('value' in descriptor)) throw dbFenceError('invalid_input', 'write')
+        snapshot[index] = snapshotWriteValue(descriptor.value, ancestors)
+      }
+      return Object.freeze(snapshot)
+    }
+
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw dbFenceError('invalid_input', 'write')
+    }
+    if (Object.getOwnPropertySymbols(value).length !== 0) {
+      throw dbFenceError('invalid_input', 'write')
+    }
+    if (Object.getOwnPropertyNames(value).length !== Object.keys(value).length) {
+      throw dbFenceError('invalid_input', 'write')
+    }
+    const snapshot = Object.create(null) as Record<string, unknown>
+    for (const key of Object.keys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)
+      if (descriptor === undefined || !('value' in descriptor)) {
+        throw dbFenceError('invalid_input', 'write')
+      }
+      Object.defineProperty(snapshot, key, {
+        configurable: false,
+        enumerable: true,
+        value: snapshotWriteValue(descriptor.value, ancestors),
+        writable: false,
+      })
+    }
+    return Object.freeze(snapshot)
+  } finally {
+    ancestors.delete(value)
+  }
+}
+
+function snapshotWriteValues(values: readonly unknown[]): unknown[] {
+  const snapshot = values.map((value) => snapshotWriteValue(value, new Set<object>()))
+  Object.freeze(snapshot)
+  return snapshot
+}
+
+function validateTransactionCommand(
+  result: QueryResult<QueryResultRow>,
+  expected: 'BEGIN' | 'COMMIT' | 'ROLLBACK'
+): void {
+  if (result.command !== expected || result.rowCount !== null || result.rows.length !== 0) {
+    throw new RpcContractViolation()
+  }
+}
+
+function validateWriteTimeouts(
+  result: QueryResult<QueryResultRow>,
+  expectedTimeoutMs: number
+): void {
+  const row = result.rows.length === 1 ? strictRecord(result.rows[0]) : undefined
+  if (
+    result.command !== 'SELECT' ||
+    result.rowCount !== 1 ||
+    row === undefined ||
+    !exactKeys(row, [STATEMENT_TIMEOUT_ALIAS, TRANSACTION_TIMEOUT_ALIAS]) ||
+    parsePostgresDurationMs(row[STATEMENT_TIMEOUT_ALIAS]) !== expectedTimeoutMs ||
+    parsePostgresDurationMs(row[TRANSACTION_TIMEOUT_ALIAS]) !== expectedTimeoutMs
+  ) {
+    throw new RpcContractViolation()
+  }
+}
+
+function parsePostgresDurationMs(value: unknown): number {
+  if (typeof value !== 'string') throw new RpcContractViolation()
+  const match = /^(0|[1-9][0-9]*)(ms|s|min|h|d)$/.exec(value)
+  if (match === null) throw new RpcContractViolation()
+  const multiplier =
+    match[2] === 'ms'
+      ? 1
+      : match[2] === 's'
+        ? 1_000
+        : match[2] === 'min'
+          ? 60_000
+          : match[2] === 'h'
+            ? 3_600_000
+            : 86_400_000
+  const milliseconds = Number(match[1]) * multiplier
+  if (!Number.isSafeInteger(milliseconds) || milliseconds < 1) {
+    throw new RpcContractViolation()
+  }
+  return milliseconds
+}
+
+function mapWriteControlError(error: unknown): WorkerDbFenceError {
+  if (error instanceof WorkerDbFenceError) return error
+  if (error instanceof RpcContractViolation) {
+    return dbFenceError('rpc_contract_violation', 'write')
+  }
+  const code = sqlState(error)
+  if (code === '55000' || code === '55P03') {
+    return dbFenceError('fenced', 'write', 'reacquire')
+  }
+  if (code === '22023' || code === '25001') {
+    return dbFenceError('rpc_contract_violation', 'write')
+  }
+  return dbFenceError('control_plane_unavailable', 'write', 'reacquire')
+}
+
+type ExtendedQueryConfig = QueryConfig<unknown[]> & {
+  queryMode: 'extended'
+  query_timeout: number
+}
+
+function extendedQuery(
+  text: string,
+  values: unknown[],
+  queryTimeoutMs: number
+): ExtendedQueryConfig {
+  return {
+    queryMode: 'extended',
+    query_timeout: Math.max(1, Math.floor(queryTimeoutMs)),
+    text,
+    values,
+  }
+}
+
+async function readXactStatusOnce(
+  connect: WorkerDbFenceConnect,
+  transactionId: string,
+  timeoutMs: number
+): Promise<'aborted' | 'committed' | 'in progress' | null | undefined> {
+  let client: WorkerDbFenceClient | undefined
+  let expired = false
+  let timer: NodeJS.Timeout | undefined
+  try {
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        expired = true
+        if (client !== undefined) destroyClient(client, true)
+        reject(new RpcContractViolation())
+      }, timeoutMs)
+      timer.unref?.()
+    })
+    const connected = connect().then((value) => {
+      if (expired) {
+        destroyClient(value, true)
+        throw new RpcContractViolation()
+      }
+      client = value
+      return value
+    })
+    const connectedClient = await Promise.race([connected, timeout])
+    const values: unknown[] = [transactionId]
+    Object.freeze(values)
+    const result = await Promise.race([
+      connectedClient.query(extendedQuery(XACT_STATUS_SQL, values, timeoutMs)),
+      timeout,
+    ])
+    const status = validateXactStatus(result)
+    destroyClient(connectedClient, false)
+    client = undefined
+    return status
+  } catch {
+    if (client !== undefined) destroyClient(client, true)
+    return undefined
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+async function reconcileXactStatus(
+  connect: WorkerDbFenceConnect,
+  transactionId: string
+): Promise<'aborted' | 'committed' | 'unknown'> {
+  const deadlineAt = performance.now() + WORKER_DB_FENCE_XACT_STATUS_TIMEOUT_MS
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const remaining = Math.floor(deadlineAt - performance.now())
+    if (remaining < 1) return 'unknown'
+    const status = await readXactStatusOnce(connect, transactionId, remaining)
+    if (status === 'aborted' || status === 'committed') return status
+    if (status !== 'in progress') return 'unknown'
+    if (attempt < 7) {
+      const delayMs = Math.min(
+        1_000,
+        50 * 2 ** attempt,
+        Math.max(0, Math.floor(deadlineAt - performance.now()))
+      )
+      if (delayMs < 1) return 'unknown'
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, delayMs)
+        timer.unref?.()
+      })
+    }
+  }
+  return 'unknown'
 }
 
 function destroyClient(client: WorkerDbFenceClient, destroy: boolean): void {
@@ -702,6 +1146,7 @@ export async function acquireWorkerDbFenceAuthority({
   let watchdog: NodeJS.Timeout | undefined
   let operationTail: Promise<void> = Promise.resolve()
   let releasePromise: Promise<void> | undefined
+  const inFlightWrites = new Set<Promise<void>>()
   const abortController = new AbortController()
 
   const clearWatchdog = () => {
@@ -772,7 +1217,299 @@ export async function acquireWorkerDbFenceAuthority({
     { once: true }
   )
 
+  const runFencedWrite = async <T>(
+    callback: (transaction: WorkerDbFencedWrite) => Promise<T>
+  ): Promise<T> => {
+    const writeStartedAt = monotonicNow()
+    // A write snapshots its authority deadline. A concurrent authority renewal
+    // may serve new writes, but it cannot safely extend this transaction's
+    // already-armed PostgreSQL transaction_timeout.
+    const writeDeadlineAt = Math.min(
+      writeStartedAt + WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS,
+      databaseDeadlineAt - WORKER_DB_FENCE_WRITE_FINALIZE_MARGIN_MS
+    )
+    const writeAbortController = new AbortController()
+    const pendingQueries = new Set<Promise<void>>()
+    let firstQueryFailure: unknown
+    let hasQueryFailure = false
+    let facadeOpen = false
+    let client: WorkerDbFenceClient | undefined
+    let clientReleased = false
+    let began = false
+    let commitStarted = false
+    let controlPhase = true
+    let writeDeadlineTimer: NodeJS.Timeout | undefined
+
+    const writeAbortError = (): WorkerDbFenceError => {
+      const reason = writeAbortController.signal.reason
+      if (reason instanceof WorkerDbFenceError) return reason
+      return dbFenceError('invalid_state', 'write')
+    }
+    const releaseWriteClient = (destroy: boolean) => {
+      if (client === undefined || clientReleased) return
+      clientReleased = true
+      destroyClient(client, destroy)
+    }
+    const clearWriteDeadline = () => {
+      if (writeDeadlineTimer !== undefined) clearTimeout(writeDeadlineTimer)
+      writeDeadlineTimer = undefined
+    }
+    const abortWrite = (reason: WorkerDbFenceError) => {
+      facadeOpen = false
+      clearWriteDeadline()
+      if (!writeAbortController.signal.aborted) writeAbortController.abort(reason)
+      if (!commitStarted) releaseWriteClient(true)
+    }
+    const abortFromOuterFence = () => {
+      const outerReason = abortController.signal.reason
+      const reason =
+        outerReason instanceof WorkerDbFenceError
+          ? dbFenceError(outerReason.code, 'write', outerReason.retryPolicy)
+          : dbFenceError('invalid_state', 'write')
+      abortWrite(reason)
+    }
+    const scheduleWriteDeadline = () => {
+      clearWriteDeadline()
+      const remaining = writeDeadlineAt - monotonicNow()
+      if (remaining <= 0) {
+        abortWrite(dbFenceError('write_deadline_exceeded', 'write'))
+        return
+      }
+      writeDeadlineTimer = setTimeout(scheduleWriteDeadline, remaining)
+      writeDeadlineTimer.unref?.()
+    }
+    const availableQueryTimeoutMs = (): number => {
+      if (!isActive()) {
+        throw writeAbortController.signal.aborted
+          ? writeAbortError()
+          : dbFenceError('invalid_state', 'write', 'reacquire')
+      }
+      const remaining = writeDeadlineAt - monotonicNow()
+      const queryTimeoutMs = Math.floor(remaining)
+      if (queryTimeoutMs < 1) {
+        const reason = dbFenceError('write_deadline_exceeded', 'write')
+        abortWrite(reason)
+        throw reason
+      }
+      return Math.min(WORKER_DB_FENCE_WRITE_QUERY_CAP_MS, queryTimeoutMs)
+    }
+    const aborted = new Promise<never>((_resolve, reject) => {
+      writeAbortController.signal.addEventListener('abort', () => reject(writeAbortError()), {
+        once: true,
+      })
+    })
+
+    abortController.signal.addEventListener('abort', abortFromOuterFence, { once: true })
+    if (abortController.signal.aborted) abortFromOuterFence()
+
+    try {
+      scheduleWriteDeadline()
+      if (writeAbortController.signal.aborted) throw writeAbortError()
+      const connecting = connect().then((connectedClient) => {
+        if (writeAbortController.signal.aborted) {
+          destroyClient(connectedClient, true)
+          throw writeAbortError()
+        }
+        client = connectedClient
+        return connectedClient
+      })
+      const connectedClient = await Promise.race([connecting, aborted])
+
+      const beginResult = await connectedClient.query<QueryResultRow, unknown[]>(
+        extendedQuery(BEGIN_READ_COMMITTED, [], availableQueryTimeoutMs())
+      )
+      began = true
+      validateTransactionCommand(beginResult, 'BEGIN')
+
+      const configuredTimeoutMs = availableQueryTimeoutMs()
+      const configuredTimeout = `${configuredTimeoutMs}ms`
+      const timeoutValues: unknown[] = [configuredTimeout, configuredTimeout]
+      Object.freeze(timeoutValues)
+      const timeoutResult = await connectedClient.query<QueryResultRow, unknown[]>(
+        extendedQuery(CONFIGURE_WRITE_TIMEOUTS_SQL, timeoutValues, availableQueryTimeoutMs())
+      )
+      validateWriteTimeouts(timeoutResult, configuredTimeoutMs)
+
+      const controlParams: unknown[] = [
+        privateIdentity.authorityScope,
+        privateIdentity.region,
+        privateIdentity.nodeId,
+        privateIdentity.instanceId,
+        privateIdentity.ownerToken,
+        String(privateIdentity.controlEpoch),
+        String(proof.databaseEpoch),
+      ]
+      Object.freeze(controlParams)
+      const assertedResult = await connectedClient.query<QueryResultRow, unknown[]>(
+        extendedQuery(BEGIN_WRITE_SQL, controlParams, availableQueryTimeoutMs())
+      )
+      const asserted = validateAssertedWriteResult(
+        assertedResult,
+        privateIdentity,
+        proof.databaseEpoch,
+        proof.initialControlServerTimeMs,
+        lease.proof.controlServerTimeMs
+      )
+      if (writeAbortController.signal.aborted || !isActive()) {
+        throw writeAbortController.signal.aborted
+          ? writeAbortError()
+          : dbFenceError('invalid_state', 'write', 'reacquire')
+      }
+      controlPhase = false
+      facadeOpen = true
+
+      const trackQuery = <R extends QueryResultRow>(
+        query: Promise<QueryResult<R>>
+      ): Promise<QueryResult<R>> => {
+        const settlement = query.then(
+          () => undefined,
+          (error: unknown) => {
+            if (!hasQueryFailure) {
+              hasQueryFailure = true
+              firstQueryFailure = error
+            }
+          }
+        )
+        pendingQueries.add(settlement)
+        void settlement.then(() => pendingQueries.delete(settlement))
+        return query
+      }
+
+      const query = <R extends QueryResultRow = QueryResultRow>(
+        text: string,
+        values?: readonly unknown[]
+      ): Promise<QueryResult<R>> => {
+        if (!facadeOpen || writeAbortController.signal.aborted) {
+          return Promise.reject(
+            writeAbortController.signal.aborted
+              ? writeAbortError()
+              : dbFenceError('invalid_state', 'write')
+          )
+        }
+
+        let statement: string
+        let valuesSnapshot: unknown[]
+        let queryTimeoutMs: number
+        try {
+          if (typeof text !== 'string' || (values !== undefined && !Array.isArray(values))) {
+            throw dbFenceError('invalid_input', 'write')
+          }
+          statement = validateWriteStatement(text)
+          valuesSnapshot = snapshotWriteValues(values ?? [])
+          queryTimeoutMs = availableQueryTimeoutMs()
+        } catch (error) {
+          return trackQuery(Promise.reject(error))
+        }
+
+        let queryPromise: Promise<QueryResult<R>>
+        try {
+          queryPromise = connectedClient.query<R, unknown[]>(
+            extendedQuery(statement, valuesSnapshot, queryTimeoutMs)
+          )
+        } catch (error) {
+          queryPromise = Promise.reject(error)
+        }
+        return trackQuery(queryPromise)
+      }
+      Object.freeze(query)
+      const transaction = Object.freeze({
+        query,
+        signal: writeAbortController.signal,
+      })
+
+      let callbackResult!: T
+      let callbackFailure: unknown
+      let callbackFailed = false
+      const callbackPromise = Promise.resolve().then(() => {
+        if (writeAbortController.signal.aborted || !isActive()) {
+          throw writeAbortController.signal.aborted
+            ? writeAbortError()
+            : dbFenceError('invalid_state', 'write', 'reacquire')
+        }
+        return callback(transaction)
+      })
+      try {
+        callbackResult = await Promise.race([callbackPromise, aborted])
+      } catch (error) {
+        callbackFailed = true
+        callbackFailure = error
+      } finally {
+        facadeOpen = false
+      }
+
+      await Promise.all([...pendingQueries])
+      if (writeAbortController.signal.aborted) throw writeAbortError()
+      if (callbackFailed) throw callbackFailure
+      if (hasQueryFailure) throw firstQueryFailure
+      if (!isActive()) {
+        throw writeAbortController.signal.aborted
+          ? writeAbortError()
+          : dbFenceError('invalid_state', 'write', 'reacquire')
+      }
+
+      const commitTimeoutMs = Math.min(
+        WORKER_DB_FENCE_XACT_STATUS_TIMEOUT_MS,
+        availableQueryTimeoutMs()
+      )
+      commitStarted = true
+      try {
+        const commitResult = await connectedClient.query<QueryResultRow, unknown[]>(
+          extendedQuery('COMMIT', [], commitTimeoutMs)
+        )
+        validateTransactionCommand(commitResult, 'COMMIT')
+        releaseWriteClient(false)
+        return callbackResult
+      } catch (error) {
+        releaseWriteClient(true)
+        if (!commitResponseMayBeUnknown(error)) {
+          if (sqlState(error) === '55000') {
+            const fencedError = dbFenceError('fenced', 'write', 'reacquire')
+            fence(fencedError)
+            throw fencedError
+          }
+          throw dbFenceError('commit_aborted', 'write')
+        }
+
+        const status = await reconcileXactStatus(connect, asserted.transactionId)
+        if (status === 'committed') return callbackResult
+        if (status === 'aborted') throw dbFenceError('commit_aborted', 'write')
+        const unknown = dbFenceError('commit_outcome_unknown', 'write')
+        fence(unknown)
+        throw unknown
+      }
+    } catch (error) {
+      if (commitStarted) throw error
+
+      let rollbackFailed = false
+      if (began && !clientReleased && client !== undefined) {
+        try {
+          const rollbackResult = await client.query<QueryResultRow, unknown[]>(
+            extendedQuery('ROLLBACK', [], WORKER_DB_FENCE_XACT_STATUS_TIMEOUT_MS)
+          )
+          validateTransactionCommand(rollbackResult, 'ROLLBACK')
+        } catch {
+          rollbackFailed = true
+        }
+      }
+      releaseWriteClient(rollbackFailed || !began || writeAbortController.signal.aborted)
+
+      if (!controlPhase) throw error
+      const sanitized = mapWriteControlError(error)
+      if (state === 'active' && sanitized.code !== 'write_deadline_exceeded') {
+        fence(sanitized)
+      }
+      throw sanitized
+    } finally {
+      facadeOpen = false
+      clearWriteDeadline()
+      abortController.signal.removeEventListener('abort', abortFromOuterFence)
+    }
+  }
+
   const releaseBothPlanes = async (): Promise<void> => {
+    if (inFlightWrites.size > 0) {
+      await Promise.all([...inFlightWrites])
+    }
     try {
       await releaseDatabase(connect, monotonicNow, privateIdentity, proof.databaseEpoch)
     } catch (error) {
@@ -807,6 +1544,22 @@ export async function acquireWorkerDbFenceAuthority({
       return state
     },
     isActive,
+    withFencedWrite: (callback) => {
+      if (typeof callback !== 'function') {
+        return Promise.reject(dbFenceError('invalid_input', 'write'))
+      }
+      if (!isActive()) {
+        return Promise.reject(dbFenceError('invalid_state', 'write', 'reacquire'))
+      }
+      const write = runFencedWrite(callback)
+      const settlement = write.then(
+        () => undefined,
+        () => undefined
+      )
+      inFlightWrites.add(settlement)
+      void settlement.then(() => inFlightWrites.delete(settlement))
+      return write
+    },
     renewAndPublish: (nextHeartbeat) => {
       if (!isActive()) {
         return Promise.reject(dbFenceError('invalid_state', 'renew', 'reacquire'))
