@@ -3921,6 +3921,186 @@ td[data-numeric],
     var(--shadow-inset-subtle) !important;
 }
 
+/* Settings: keep API plan metadata and upgrade actions inside narrow cards. */
+.api-key-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.api-key-load-error > * {
+  min-width: 0;
+}
+.api-created-key-secret {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.api-created-key-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.api-key-create-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.api-key-create-row > input {
+  min-width: 0;
+}
+.api-tier-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.api-tier-banner-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.api-tier-banner-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.api-tier-banner-limit {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.api-tier-banner-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 100%;
+}
+.api-tier-banner-actions > button {
+  min-width: 0;
+}
+
+/* Settings: long API key names and codes must reflow without hiding key actions. */
+.api-key-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 0;
+}
+.api-key-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.api-key-row-identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.api-key-row-name,
+.api-key-row-code {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.api-key-row-code {
+  word-break: break-all;
+}
+.api-key-row-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  min-width: 0;
+  margin-top: 2px;
+}
+.api-key-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  max-width: 100%;
+}
+
+@media (max-width: 480px) {
+  .api-key-load-error,
+  .api-created-key-secret {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .api-key-load-retry,
+  .api-created-key-copy,
+  .api-key-create-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px !important;
+  }
+  .api-created-key-dismiss {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 8px !important;
+  }
+  .api-key-create-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+  .api-key-create-row > input {
+    min-height: 44px;
+  }
+  .api-tier-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .api-tier-banner-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .api-tier-banner-actions > button {
+    width: 100%;
+    min-height: 44px !important;
+    white-space: normal;
+  }
+  .api-tier-banner-actions > button:only-child {
+    grid-column: 1 / -1;
+  }
+  .api-tier-banner-actions > button > span {
+    justify-content: center;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: center;
+    white-space: normal;
+  }
+  .api-key-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .api-key-row-identity {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .api-key-row-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+  .api-key-row-actions > button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px !important;
+  }
+}
+
 /* Settings: section card subtle separator */
 .settings-section-card + .settings-section-card {
   border-top: 1px solid var(--color-border-primary);
