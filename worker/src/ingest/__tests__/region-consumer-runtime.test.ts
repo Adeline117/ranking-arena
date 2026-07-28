@@ -403,7 +403,7 @@ describe('regional consumer runtime', () => {
   it('uses graceful drain without cancelling active jobs for a process signal', async () => {
     const events: string[] = []
     const consumer = consumerHarness('consumer', events)
-    const { runtime } = await prepareHarness(events, (register) => {
+    const { onUnexpectedStop, runtime } = await prepareHarness(events, (register) => {
       register(consumer)
     })
     await runtime.start()
@@ -411,8 +411,121 @@ describe('regional consumer runtime', () => {
     await runtime.stop('signal')
 
     expect(consumer.cancelAllJobs).not.toHaveBeenCalledWith('signal')
+    expect(consumer.cancelAllJobs).not.toHaveBeenCalledWith('authority_lost')
     expect(consumer.pause).toHaveBeenCalledWith(true)
     expect(consumer.close).toHaveBeenCalledWith(false)
+    expect(onUnexpectedStop).not.toHaveBeenCalled()
+    expect(runtime.failure).toBeUndefined()
+  })
+
+  it('escalates a graceful drain synchronously when authority is genuinely lost', async () => {
+    const events: string[] = []
+    const closeGate = deferred<void>()
+    const consumer = consumerHarness('consumer', events)
+    ;(consumer.close as jest.Mock).mockImplementationOnce(async () => {
+      events.push('consumer:close:false')
+      await closeGate.promise
+    })
+    const onUnexpectedStop = jest.fn()
+    const { abort, context, release, runtime } = await prepareHarness(
+      events,
+      (register) => {
+        register(consumer)
+      },
+      onUnexpectedStop
+    )
+    await runtime.start()
+    events.length = 0
+
+    const shutdown = runtime.stop('signal')
+    expect(runtime.state).toBe('stopping')
+    expect(() => context.assertCanConsume()).toThrow('consumer admission is closed')
+    expect(consumer.cancelAllJobs).not.toHaveBeenCalled()
+
+    abort()
+
+    expect(consumer.cancelAllJobs).toHaveBeenCalledTimes(1)
+    expect(consumer.cancelAllJobs).toHaveBeenCalledWith('authority_lost')
+    expect(onUnexpectedStop).toHaveBeenCalledTimes(1)
+    expect(onUnexpectedStop.mock.calls[0][0]).toMatchObject({ code: 'authority_lost' })
+    expect(onUnexpectedStop.mock.calls[0][1]).toBe(shutdown)
+    expect(runtime.failure).toMatchObject({ code: 'authority_lost' })
+    expect(runtime.stop('authority_lost')).toBe(shutdown)
+
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(release).not.toHaveBeenCalled()
+
+    closeGate.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(release).not.toHaveBeenCalled()
+
+    consumer.runTask.resolve()
+    await expect(shutdown).rejects.toMatchObject({ code: 'authority_lost' })
+    expect(release).toHaveBeenCalledTimes(1)
+    expect(onUnexpectedStop).toHaveBeenCalledTimes(1)
+    expect(runtime.state).toBe('failed')
+  })
+
+  it('still fails closed when authority is lost while prepared', async () => {
+    const events: string[] = []
+    const consumer = consumerHarness('consumer', events)
+    const onUnexpectedStop = jest.fn()
+    const { abort, context, release, runtime } = await prepareHarness(
+      events,
+      (register) => {
+        register(consumer)
+      },
+      onUnexpectedStop
+    )
+
+    abort()
+
+    expect(() => context.assertCanConsume()).toThrow('consumer admission is closed')
+    expect(onUnexpectedStop).toHaveBeenCalledTimes(1)
+    expect(onUnexpectedStop.mock.calls[0][0]).toMatchObject({ code: 'authority_lost' })
+    const shutdown = onUnexpectedStop.mock.calls[0][1] as Promise<void>
+    expect(runtime.stop('signal')).toBe(shutdown)
+    await expect(shutdown).rejects.toMatchObject({ code: 'authority_lost' })
+    expect(consumer.run).not.toHaveBeenCalled()
+    expect(consumer.close).toHaveBeenCalledWith(true)
+    expect(release).toHaveBeenCalledTimes(1)
+  })
+
+  it('still fails closed when authority is lost while run loops are starting', async () => {
+    const events: string[] = []
+    const consumer = consumerHarness('consumer', events)
+    const onUnexpectedStop = jest.fn()
+    const { abort, context, release, runtime } = await prepareHarness(
+      events,
+      (register) => {
+        register(consumer)
+      },
+      onUnexpectedStop
+    )
+    let running = false
+    ;(consumer.isRunning as jest.Mock).mockImplementation(() => running)
+    ;(consumer.run as jest.Mock).mockImplementationOnce(() => {
+      events.push('consumer:run')
+      running = true
+      abort()
+      return consumer.runTask.promise
+    })
+    ;(consumer.close as jest.Mock).mockImplementationOnce(async (force?: boolean) => {
+      events.push(`consumer:close:${String(force)}`)
+      running = false
+      consumer.runTask.resolve()
+    })
+
+    await expect(runtime.start()).rejects.toMatchObject({ code: 'authority_lost' })
+
+    expect(() => context.assertCanConsume()).toThrow('consumer admission is closed')
+    expect(onUnexpectedStop).toHaveBeenCalledTimes(1)
+    expect(onUnexpectedStop.mock.calls[0][0]).toMatchObject({ code: 'authority_lost' })
+    expect(consumer.cancelAllJobs).toHaveBeenCalledWith('authority_lost')
+    expect(release).toHaveBeenCalledTimes(1)
+    expect(runtime.state).toBe('failed')
   })
 
   it('self-stops immediately when regional authority aborts', async () => {

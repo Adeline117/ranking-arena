@@ -306,10 +306,14 @@ export async function prepareRegionConsumerRuntime({
   function notifyFatal(
     nextFailure: RegionConsumerRuntimeError,
     reason: RegionConsumerStopReason,
-    includePrepared = false
+    includePrepared = false,
+    includeStopping = false
   ): void {
     const canStop =
-      state === 'running' || state === 'starting' || (includePrepared && state === 'prepared')
+      state === 'running' ||
+      state === 'starting' ||
+      (includePrepared && state === 'prepared') ||
+      (includeStopping && state === 'stopping')
     if (!canStop || unexpectedStopNotified) return
     unexpectedStopNotified = true
     if (!failure) failure = nextFailure
@@ -374,8 +378,27 @@ export async function prepareRegionConsumerRuntime({
     }
   }
 
-  const stopOnAuthorityLoss = () =>
-    notifyFatal(runtimeError('authority_lost'), 'authority_lost', true)
+  let authorityLossCancellationAttempted = false
+  const stopOnAuthorityLoss = () => {
+    // release() aborts the fence intentionally while the lifecycle is still
+    // stopping. Only a lifecycle that has already classified the abort as a
+    // real loss may escalate an in-flight graceful drain.
+    if (lifecycle.state !== 'lost') return
+
+    if (state === 'stopping' && !authorityLossCancellationAttempted) {
+      admission.close()
+      authorityLossCancellationAttempted = true
+      for (const consumer of consumers) {
+        try {
+          consumer.cancelAllJobs('authority_lost')
+        } catch {
+          drainErrored = true
+        }
+      }
+    }
+
+    notifyFatal(runtimeError('authority_lost'), 'authority_lost', true, true)
+  }
   lifecycle.fence.signal.addEventListener('abort', stopOnAuthorityLoss, { once: true })
   if (lifecycle.fence.signal.aborted) {
     stopOnAuthorityLoss()
