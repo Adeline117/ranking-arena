@@ -12,11 +12,13 @@ function SkeletonLines({ count, height }: { count: number; height: number }) {
 }
 
 function SidebarSkeleton({ rows, rowHeight }: { rows: number; rowHeight: number }) {
+  const verticalAllowance = Number.parseFloat(tokens.spacing[8])
+
   return (
     <div
       className="sidebar-card"
       style={{
-        minHeight: rowHeight * rows + tokens.spacing[8],
+        minHeight: rowHeight * rows + verticalAllowance,
         borderRadius: tokens.radius.lg,
       }}
     >
