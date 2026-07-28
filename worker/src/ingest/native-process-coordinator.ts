@@ -47,6 +47,7 @@ export interface NativeProcessCoordinator {
   readonly startupSettled: boolean
   readonly startupSignal: AbortSignal
   assertStartupOpen(): void
+  bindAuxiliaryRuntime(runtime: NativeProcessRegionalRuntime): void
   bindHeartbeatTimer(clear: () => void): void
   bindLifecycle(lifecycle: NativeProcessAuthorityLifecycle): void
   bindReconcileTimer(clear: () => void): void
@@ -100,6 +101,8 @@ export function createNativeProcessCoordinator({
   const reconcileOperations = new Set<TrackedOperation>()
   const shutdownReconcileOperations = new Set<TrackedOperation>()
   const regionalStopOperations = new Set<TrackedOperation>()
+  let auxiliaryRuntime: NativeProcessRegionalRuntime | undefined
+  let auxiliaryRuntimeStopPriority = -1
   let bareReleaseAttempted = false
   let cleanupPromise: Promise<void> | undefined
   let fatalMarked = false
@@ -193,6 +196,26 @@ export function createNativeProcessCoordinator({
     }
   }
 
+  const dispatchAuxiliaryRuntimeStop = (): void => {
+    if (auxiliaryRuntime === undefined || shutdownReason === undefined) return
+    const priority = SHUTDOWN_PRIORITY[shutdownReason]
+    if (priority <= auxiliaryRuntimeStopPriority) return
+    auxiliaryRuntimeStopPriority = priority
+    try {
+      observeRegionalStop(auxiliaryRuntime.stop(shutdownReason))
+    } catch {
+      recordSynchronousRegionalStopFailure()
+    }
+  }
+
+  const dispatchRegionalStops = (): void => {
+    // Keep failures isolated: each dispatcher catches its own synchronous
+    // failure so one regional runtime can never prevent the other from
+    // receiving the same process-wide shutdown reason.
+    dispatchRuntimeStop()
+    dispatchAuxiliaryRuntimeStop()
+  }
+
   const startBareLifecycleRelease = (): void => {
     if (bareReleaseAttempted || runtime !== undefined || lifecycle === undefined) return
     bareReleaseAttempted = true
@@ -234,7 +257,7 @@ export function createNativeProcessCoordinator({
     // A lifecycle acquired during a pending prepare must remain owned by that
     // prepare path. Only the caller's explicit startup settlement lets a bare
     // lifecycle release substitute for an absent runtime drain.
-    dispatchRuntimeStop()
+    dispatchRegionalStops()
     if (runtime === undefined) startBareLifecycleRelease()
 
     await waitForOperations([reconcileOperations, regionalStopOperations])
@@ -277,6 +300,14 @@ export function createNativeProcessCoordinator({
         throw coordinatorError('startup_closed')
       }
     },
+    bindAuxiliaryRuntime: (nextRuntime) => {
+      if (runtime === nextRuntime) throw coordinatorError('binding_conflict')
+      if (auxiliaryRuntime !== undefined && auxiliaryRuntime !== nextRuntime) {
+        throw coordinatorError('binding_conflict')
+      }
+      auxiliaryRuntime = nextRuntime
+      dispatchAuxiliaryRuntimeStop()
+    },
     bindHeartbeatTimer: (clear) => {
       heartbeatTimer = bindTimer(heartbeatTimer, clear)
     },
@@ -292,6 +323,7 @@ export function createNativeProcessCoordinator({
       reconcileTimer = bindTimer(reconcileTimer, clear)
     },
     bindRuntime: (nextRuntime) => {
+      if (auxiliaryRuntime === nextRuntime) throw coordinatorError('binding_conflict')
       if (runtime !== undefined && runtime !== nextRuntime) {
         throw coordinatorError('binding_conflict')
       }
@@ -319,7 +351,7 @@ export function createNativeProcessCoordinator({
         startupController.abort(coordinatorError('startup_closed'))
       }
       clearBoundTimers()
-      dispatchRuntimeStop()
+      dispatchRegionalStops()
       return shutdown
     },
     settleStartup: () => {
