@@ -29,6 +29,23 @@ function decodedUsername(url) {
   }
 }
 
+export function inferSupabaseProjectRef({ hostname, username }) {
+  const normalizedHost = hostname.toLowerCase()
+  const normalizedUser = username.toLowerCase()
+  const directMatch = normalizedHost.match(/^db\.([a-z0-9]{20})\.supabase\.co$/)
+  if (directMatch) return directMatch[1]
+
+  if (normalizedHost.endsWith('.pooler.supabase.com')) {
+    const candidate = normalizedUser.split('.').at(-1)
+    if (/^[a-z0-9]{20}$/.test(candidate)) return candidate
+  }
+  return null
+}
+
+export function databaseIdentityIsBoundToSupabaseProject(identity, expectedProjectRef) {
+  return inferSupabaseProjectRef(identity) === expectedProjectRef.toLowerCase()
+}
+
 export function validateDatabaseUrl(databaseUrl, expectedProjectRef = PRODUCTION_PROJECT_REF) {
   if (typeof databaseUrl !== 'string' || databaseUrl.length === 0) {
     throw sanitizedError('DATABASE_URL is required')
@@ -45,17 +62,10 @@ export function validateDatabaseUrl(databaseUrl, expectedProjectRef = PRODUCTION
     throw sanitizedError('DATABASE_URL must use postgres or postgresql')
   }
 
-  const hostnameLabels = parsed.hostname.toLowerCase().split('.')
   const hostname = parsed.hostname.toLowerCase()
   const username = decodedUsername(parsed).toLowerCase()
   const projectRef = expectedProjectRef.toLowerCase()
-  const hostIsBound =
-    hostnameLabels.includes(projectRef) && hostname === `db.${projectRef}.supabase.co`
-  const usernameIsBound =
-    hostname.endsWith('.pooler.supabase.com') &&
-    (username === projectRef || username.endsWith(`.${projectRef}`))
-
-  if (!hostIsBound && !usernameIsBound) {
+  if (!databaseIdentityIsBoundToSupabaseProject({ hostname, username }, projectRef)) {
     throw sanitizedError('DATABASE_URL host or username is not bound to the production project')
   }
 
