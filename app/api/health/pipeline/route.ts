@@ -208,8 +208,11 @@ export async function GET(req: NextRequest) {
       'admin authentication'
     )
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    logger.error('[health/pipeline] Admin authentication authority failed', { error: message })
+    const internalMessage = err instanceof Error ? err.message : String(err)
+    logger.error('[health/pipeline] Admin authentication authority failed', {
+      error: internalMessage,
+    })
+    const message = 'Pipeline health authentication authority is unavailable'
     return NextResponse.json(
       buildUnavailableSnapshot('PIPELINE_AUTH_UNAVAILABLE', message, 'admin_auth'),
       {

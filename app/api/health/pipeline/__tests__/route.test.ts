@@ -181,8 +181,13 @@ describe('GET /api/health/pipeline', () => {
     expect(body.authority).toEqual({ status: 'unavailable', unavailable: ['admin_auth'] })
     expect(body.error).toEqual({
       code: 'PIPELINE_AUTH_UNAVAILABLE',
-      message: 'auth database transport unavailable',
+      message: 'Pipeline health authentication authority is unavailable',
     })
+    expect(JSON.stringify(body)).not.toContain('database transport')
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      '[health/pipeline] Admin authentication authority failed',
+      { error: 'auth database transport unavailable' }
+    )
     expect(mockTieredGet).not.toHaveBeenCalled()
   })
 
