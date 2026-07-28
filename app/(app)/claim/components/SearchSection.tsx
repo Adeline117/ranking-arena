@@ -41,14 +41,22 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
           meta?: { platform?: string; arena_score?: number; roi?: number }
         }> = raw.data?.results?.traders || []
         setResults(
-          items.map((item) => ({
-            handle: item.title?.replace(/^@/, '') || item.id?.split(':')[1] || '',
-            source: item.meta?.platform || item.id?.split(':')[0] || '',
-            source_trader_id: item.id?.split(':')[1] || '',
-            avatar_url: item.avatar || undefined,
-            arena_score: item.meta?.arena_score,
-            roi: item.meta?.roi,
-          }))
+          items.map((item) => {
+            const identity = item.id || ''
+            const separatorIndex = identity.indexOf(':')
+            const identitySource =
+              separatorIndex >= 0 ? identity.slice(0, separatorIndex) : identity
+            const traderKey = separatorIndex >= 0 ? identity.slice(separatorIndex + 1) : ''
+
+            return {
+              handle: item.title?.replace(/^@/, '') || traderKey,
+              source: item.meta?.platform || identitySource,
+              source_trader_id: traderKey,
+              avatar_url: item.avatar || undefined,
+              arena_score: item.meta?.arena_score,
+              roi: item.meta?.roi,
+            }
+          })
         )
       } catch {
         setSearchError(searchFailedMessage)
