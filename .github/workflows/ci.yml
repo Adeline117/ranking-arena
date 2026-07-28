@@ -189,6 +189,10 @@ jobs:
         run: npm run qa:launch-migration-runner
       - run: npm run lint
       - run: npx tsc --noEmit
+      - name: Lint ingest worker
+        run: npm run lint:ingest-worker
+      - name: Type-check ingest worker and ownership control plane
+        run: npm run type-check:ingest-worker
       - name: VPS process topology safety
         run: npm run qa:vps-topology
       - name: UI sweep unit contracts

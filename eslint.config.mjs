@@ -385,6 +385,15 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    name: 'ingest-worker-runtime-logging',
+    files: ['worker/**/*.ts'],
+    rules: {
+      // PM2 and Docker consume stdout/stderr as the worker's operational log
+      // interface. Keep ad-hoc debug/info/table calls blocked.
+      'no-console': ['error', { allow: ['log', 'warn', 'error'] }],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Tooling / docs / vendor - don't block app lint
