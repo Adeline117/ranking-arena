@@ -22,6 +22,7 @@ import type { TraderProfile, TraderPerformance } from '@/lib/data/trader'
 import type { EquityCurveData } from '@/app/(app)/u/[handle]/components/types'
 import type { UnregisteredTraderData } from '@/app/(app)/trader/[handle]/TraderProfileClient'
 import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
+import type { VerifiedTraderProfileData } from '@/app/components/trader/VerifiedTraderEditor'
 
 /** Valid equity curve period keys. */
 type EquityCurvePeriod = keyof EquityCurveData
@@ -110,6 +111,7 @@ export interface OverviewTabProps {
   currentUserId: string | null
   isVerifiedClaimOwner: boolean
   isVerifiedTrader: boolean
+  verifiedTraderProfile: VerifiedTraderProfileData | null
   claimedUser: { handle: string } | null | undefined
 }
 
@@ -128,6 +130,7 @@ const OverviewTab = React.memo(function OverviewTab({
   currentUserId,
   isVerifiedClaimOwner,
   isVerifiedTrader,
+  verifiedTraderProfile,
   claimedUser,
 }: OverviewTabProps) {
   const { t } = useLanguage()
@@ -399,7 +402,7 @@ const OverviewTab = React.memo(function OverviewTab({
           <VerifiedTraderEditor
             traderId={data.source_trader_id}
             source={data.source}
-            currentData={{}}
+            currentData={verifiedTraderProfile ?? {}}
             onSaved={() => window.location.reload()}
           />
         ) : (
