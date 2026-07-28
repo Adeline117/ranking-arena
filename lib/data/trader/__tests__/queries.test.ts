@@ -167,6 +167,7 @@ describe('getLeaderboard source exclusion', () => {
   it('applies an exclusion before the finite DB page even with a platform filter', async () => {
     const leaderboardQuery = chainableQuery()
     const countQuery = chainableQuery()
+    const signal = new AbortController().signal
     const supabase = {
       from: jest.fn((table: string) =>
         table === 'leaderboard_ranks' ? leaderboardQuery : countQuery
@@ -178,11 +179,14 @@ describe('getLeaderboard source exclusion', () => {
       platform: 'okx_web3_solana',
       excludeSources: ['okx_web3_solana'],
       limit: 20,
+      signal,
     })
 
     expect(leaderboardQuery.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
     expect(leaderboardQuery.eq).toHaveBeenCalledWith('source', 'okx_web3_solana')
     expect(leaderboardQuery.range).toHaveBeenCalledWith(0, 19)
+    expect(leaderboardQuery.abortSignal).toHaveBeenCalledWith(signal)
+    expect(countQuery.abortSignal).toHaveBeenCalledWith(signal)
     expect(leaderboardQuery.not.mock.invocationCallOrder[0]).toBeLessThan(
       leaderboardQuery.range.mock.invocationCallOrder[0]
     )
