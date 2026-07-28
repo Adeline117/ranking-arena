@@ -36,6 +36,44 @@ export interface ConsumedRegionAdmission {
   open(): void
 }
 
+const AUTHORIZED_CONSUMED_REGION_CONTEXTS = new WeakSet<object>()
+
+class BullMqWaitingError extends Error {
+  constructor() {
+    super('bullmq:movedToWait')
+    this.name = 'WaitingError'
+  }
+}
+
+function isAuthorizedConsumedRegionContext(
+  value: unknown
+): value is AuthorizedConsumedRegionContext {
+  return (
+    value !== null && typeof value === 'object' && AUTHORIZED_CONSUMED_REGION_CONTEXTS.has(value)
+  )
+}
+
+async function returnJobToWaitOrReject<TJob>(
+  job: TJob,
+  token: string | undefined,
+  message: string
+): Promise<never> {
+  const candidate = job as { moveToWait?: (token?: string) => Promise<unknown> }
+  if (
+    typeof token === 'string' &&
+    token.length > 0 &&
+    typeof candidate?.moveToWait === 'function'
+  ) {
+    try {
+      await candidate.moveToWait.call(job, token)
+    } catch {
+      throw new Error(`${message} and could not return to wait`)
+    }
+    throw new BullMqWaitingError()
+  }
+  throw new Error(message)
+}
+
 export function requireWorkerExecutionRegion(value: unknown): IngestRegion {
   if (!isIngestRegion(value)) {
     throw new Error('[ingest-worker] INGEST_LOCAL_REGION must name the execution region')
@@ -92,6 +130,7 @@ export function createConsumedRegionAdmission(
       }
     },
   })
+  AUTHORIZED_CONSUMED_REGION_CONTEXTS.add(context)
   fence.signal.addEventListener('abort', close, { once: true })
 
   return Object.freeze({
@@ -112,11 +151,58 @@ export function createConsumedRegionAdmission(
 
 export function bindAuthorizedConsumedRegion<TJob, TResult>(
   context: AuthorizedConsumedRegionContext,
-  route: (job: TJob, context: AuthorizedConsumedRegionContext) => Promise<TResult>
-): (job: TJob) => Promise<TResult> {
-  return async (job) => {
-    context.assertCanConsume()
-    return route(job, context)
+  route: (
+    job: TJob,
+    context: AuthorizedConsumedRegionContext,
+    signal?: AbortSignal
+  ) => Promise<TResult>
+): (job: TJob, token?: string, signal?: AbortSignal) => Promise<TResult> {
+  if (!isAuthorizedConsumedRegionContext(context)) {
+    throw new Error('[ingest-worker] authorized consumer binding requires managed admission')
+  }
+  // BullMQ 5.77 enables job cancellation only when the processor declares all
+  // three parameters. Keep this explicit signature; a rest/default parameter
+  // would reduce Function.length and silently disable cancelAllJobs().
+  return async (job, _token, signal) => {
+    try {
+      context.assertCanConsume()
+    } catch {
+      return returnJobToWaitOrReject(
+        job,
+        _token,
+        `[ingest-worker] ${context.consumedRegion} consumer admission is closed`
+      )
+    }
+    const jobSignal = signal
+      ? AbortSignal.any([context.authority.signal, signal])
+      : context.authority.signal
+    if (jobSignal.aborted) {
+      return returnJobToWaitOrReject(
+        job,
+        _token,
+        `[ingest-worker] ${context.consumedRegion} consumer job was cancelled`
+      )
+    }
+    try {
+      const result = await route(job, context, jobSignal)
+      if (jobSignal.aborted) {
+        return returnJobToWaitOrReject(
+          job,
+          _token,
+          `[ingest-worker] ${context.consumedRegion} consumer job was cancelled`
+        )
+      }
+      return result
+    } catch (error) {
+      if (jobSignal.aborted) {
+        return returnJobToWaitOrReject(
+          job,
+          _token,
+          `[ingest-worker] ${context.consumedRegion} consumer job was cancelled`
+        )
+      }
+      throw error
+    }
   }
 }
 
@@ -128,6 +214,9 @@ export function bindConsumedRegion<
   context: TContext,
   route: (job: TJob, context: TContext) => Promise<TResult>
 ): (job: TJob) => Promise<TResult> {
+  if (isAuthorizedConsumedRegionContext(context)) {
+    throw new Error('[ingest-worker] authorized consumer context requires authorized binding')
+  }
   return (job) => route(job, context)
 }
 
