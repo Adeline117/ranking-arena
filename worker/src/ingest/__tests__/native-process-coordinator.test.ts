@@ -131,6 +131,83 @@ describe('native process coordinator', () => {
     expect(closeDatabase).toHaveBeenCalledTimes(1)
   })
 
+  it('stops native and auxiliary runtimes synchronously and waits for both before cleanup', async () => {
+    const nativeStop = deferred()
+    const auxiliaryStop = deferred()
+    const nativeRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(() => nativeStop.promise),
+    }
+    const auxiliaryRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(() => auxiliaryStop.promise),
+    }
+    const { closeDatabase, closeRedis, coordinator } = coordinatorHarness()
+    coordinator.bindRuntime(nativeRuntime)
+    coordinator.bindAuxiliaryRuntime(auxiliaryRuntime)
+
+    const shutdown = coordinator.requestShutdown('signal')
+
+    expect(nativeRuntime.stop).toHaveBeenCalledWith('signal')
+    expect(auxiliaryRuntime.stop).toHaveBeenCalledWith('signal')
+    coordinator.settleStartup()
+    nativeStop.resolve()
+    await flushMicrotasks()
+    await flushMicrotasks()
+    expect(closeDatabase).not.toHaveBeenCalled()
+    expect(closeRedis).not.toHaveBeenCalled()
+
+    auxiliaryStop.resolve()
+    await shutdown
+    expect(closeDatabase).toHaveBeenCalledTimes(1)
+    expect(closeRedis).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops an auxiliary runtime immediately when it binds after shutdown', async () => {
+    const auxiliaryStop = deferred()
+    const auxiliaryRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(() => auxiliaryStop.promise),
+    }
+    const { closeDatabase, coordinator } = coordinatorHarness()
+
+    const shutdown = coordinator.requestShutdown('signal')
+    coordinator.bindAuxiliaryRuntime(auxiliaryRuntime)
+
+    expect(auxiliaryRuntime.stop).toHaveBeenCalledWith('signal')
+    coordinator.settleStartup()
+    await flushMicrotasks()
+    expect(closeDatabase).not.toHaveBeenCalled()
+
+    auxiliaryStop.resolve()
+    await shutdown
+    expect(closeDatabase).toHaveBeenCalledTimes(1)
+  })
+
+  it('binds one stable auxiliary runtime and rejects native or replacement aliases', () => {
+    const auxiliaryRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(async () => undefined),
+    }
+    const replacementRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(async () => undefined),
+    }
+    const first = coordinatorHarness().coordinator
+
+    first.bindAuxiliaryRuntime(auxiliaryRuntime)
+    first.bindAuxiliaryRuntime(auxiliaryRuntime)
+    expect(() => first.bindAuxiliaryRuntime(replacementRuntime)).toThrow(
+      expect.objectContaining({ code: 'binding_conflict' })
+    )
+    expect(() => first.bindRuntime(auxiliaryRuntime)).toThrow(
+      expect.objectContaining({ code: 'binding_conflict' })
+    )
+
+    const second = coordinatorHarness().coordinator
+    second.bindRuntime(auxiliaryRuntime)
+    expect(() => second.bindAuxiliaryRuntime(auxiliaryRuntime)).toThrow(
+      expect.objectContaining({ code: 'binding_conflict' })
+    )
+    expect(auxiliaryRuntime.stop).not.toHaveBeenCalled()
+    expect(replacementRuntime.stop).not.toHaveBeenCalled()
+  })
+
   it('upgrades the runtime stop reason while preserving one global cleanup promise', async () => {
     const regionalStop = deferred()
     const runtime: NativeProcessRegionalRuntime = {
@@ -155,6 +232,59 @@ describe('native process coordinator', () => {
     coordinator.settleStartup()
     regionalStop.resolve()
     await signalShutdown
+  })
+
+  it('tracks native and auxiliary stop priorities independently across late binding and upgrades', async () => {
+    const nativeRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(async () => undefined),
+    }
+    const auxiliaryRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(async () => undefined),
+    }
+    const { coordinator } = coordinatorHarness()
+    coordinator.bindRuntime(nativeRuntime)
+
+    const shutdown = coordinator.requestShutdown('signal')
+    coordinator.bindAuxiliaryRuntime(auxiliaryRuntime)
+    coordinator.requestShutdown('consumer_failed')
+    coordinator.requestShutdown('authority_lost')
+    coordinator.requestShutdown('startup_failed')
+
+    expect(nativeRuntime.stop).toHaveBeenNthCalledWith(1, 'signal')
+    expect(nativeRuntime.stop).toHaveBeenNthCalledWith(2, 'consumer_failed')
+    expect(nativeRuntime.stop).toHaveBeenNthCalledWith(3, 'authority_lost')
+    expect(auxiliaryRuntime.stop).toHaveBeenNthCalledWith(1, 'signal')
+    expect(auxiliaryRuntime.stop).toHaveBeenNthCalledWith(2, 'consumer_failed')
+    expect(auxiliaryRuntime.stop).toHaveBeenNthCalledWith(3, 'authority_lost')
+    expect(nativeRuntime.stop).toHaveBeenCalledTimes(3)
+    expect(auxiliaryRuntime.stop).toHaveBeenCalledTimes(3)
+
+    coordinator.settleStartup()
+    await shutdown
+  })
+
+  it('keeps native bare lifecycle release independent from an auxiliary runtime', async () => {
+    const auxiliaryStop = deferred()
+    const lifecycle = lifecycleHarness()
+    const auxiliaryRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(() => auxiliaryStop.promise),
+    }
+    const { closeDatabase, coordinator } = coordinatorHarness()
+    coordinator.bindLifecycle(lifecycle)
+    coordinator.bindAuxiliaryRuntime(auxiliaryRuntime)
+
+    const shutdown = coordinator.requestShutdown('signal')
+    coordinator.settleStartup()
+    await flushMicrotasks()
+    await flushMicrotasks()
+
+    expect(lifecycle.stopAfterDrain).toHaveBeenCalledTimes(1)
+    expect(auxiliaryRuntime.stop).toHaveBeenCalledWith('signal')
+    expect(closeDatabase).not.toHaveBeenCalled()
+
+    auxiliaryStop.resolve()
+    await shutdown
+    expect(closeDatabase).toHaveBeenCalledTimes(1)
   })
 
   it('waits for an upgraded regional stop added while reconciliation is draining', async () => {
@@ -323,6 +453,54 @@ describe('native process coordinator', () => {
     expect(markFatal).toHaveBeenCalledWith('regional_stop_failed')
     expect(markFatal).toHaveBeenCalledTimes(1)
     expect(setExitCode).toHaveBeenCalledTimes(1)
+  })
+
+  it('isolates a synchronous auxiliary stop failure and still stops native and closes resources', async () => {
+    const nativeRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(async () => undefined),
+    }
+    const auxiliaryRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(() => {
+        throw new Error('secret synchronous auxiliary stop failure')
+      }),
+    }
+    const { closeDatabase, closeRedis, coordinator, markFatal, setExitCode } = coordinatorHarness()
+    coordinator.bindRuntime(nativeRuntime)
+    coordinator.bindAuxiliaryRuntime(auxiliaryRuntime)
+
+    const shutdown = coordinator.requestShutdown('signal')
+    coordinator.settleStartup()
+    await shutdown
+
+    expect(nativeRuntime.stop).toHaveBeenCalledWith('signal')
+    expect(auxiliaryRuntime.stop).toHaveBeenCalledWith('signal')
+    expect(markFatal).toHaveBeenCalledWith('regional_stop_failed')
+    expect(setExitCode).toHaveBeenCalledWith(1)
+    expect(closeDatabase).toHaveBeenCalledTimes(1)
+    expect(closeRedis).toHaveBeenCalledTimes(1)
+  })
+
+  it('observes an asynchronous auxiliary stop rejection before closing resources', async () => {
+    const auxiliaryStop = deferred()
+    const auxiliaryRuntime: NativeProcessRegionalRuntime = {
+      stop: jest.fn(() => auxiliaryStop.promise),
+    }
+    const { closeDatabase, closeRedis, coordinator, markFatal, setExitCode } = coordinatorHarness()
+    coordinator.bindAuxiliaryRuntime(auxiliaryRuntime)
+
+    const shutdown = coordinator.requestShutdown('signal')
+    coordinator.settleStartup()
+    await flushMicrotasks()
+    expect(closeDatabase).not.toHaveBeenCalled()
+    expect(closeRedis).not.toHaveBeenCalled()
+
+    auxiliaryStop.reject(new Error('secret asynchronous auxiliary stop failure'))
+    await shutdown
+
+    expect(markFatal).toHaveBeenCalledWith('regional_stop_failed')
+    expect(setExitCode).toHaveBeenCalledWith(1)
+    expect(closeDatabase).toHaveBeenCalledTimes(1)
+    expect(closeRedis).toHaveBeenCalledTimes(1)
   })
 
   it('settles duplicate requests once and performs exactly one bare lifecycle release', async () => {
