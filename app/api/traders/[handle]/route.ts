@@ -24,6 +24,7 @@ import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
 const handleSchema = z.string().min(1).max(255)
@@ -145,47 +146,55 @@ export async function GET(
       // Accept optional ?source= param to disambiguate traders with same handle across exchanges
       const sourceParam = req.nextUrl.searchParams.get('source') || ''
       const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}${sourceParam ? `:${sourceParam}` : ''}`
+      const consistencyProbe =
+        req.nextUrl.searchParams.get('consistency_probe') === '1' && verifyCronSecret(req)
 
-      // ── Unified data layer: resolveTrader → getTraderDetail (cached in Redis, 5 min) ──
-      const data = await tieredGetOrSet(
-        cacheKey,
-        async () => {
-          // 3s timeout for the entire resolve+detail chain.
-          // Non-existent traders were taking 31s as resolveTrader searches multiple sources.
-          const result = await Promise.race([
-            (async () => {
-              const resolved = await resolveTrader(supabase, {
-                handle: decodedHandle,
-                platform: sourceParam || undefined,
-              })
+      const fetchTraderData = async () => {
+        // 3s timeout for the entire resolve+detail chain.
+        // Non-existent traders were taking 31s as resolveTrader searches multiple sources.
+        const result = await Promise.race([
+          (async () => {
+            const resolved = await resolveTrader(supabase, {
+              handle: decodedHandle,
+              platform: sourceParam || undefined,
+            })
 
-              if (!resolved) {
-                throw ApiError.notFound('Trader not found')
-              }
+            if (!resolved) {
+              throw ApiError.notFound('Trader not found')
+            }
 
-              const detail = await getTraderDetail(supabase, {
-                platform: resolved.platform,
-                traderKey: resolved.traderKey,
-              })
+            const detail = await getTraderDetail(supabase, {
+              platform: resolved.platform,
+              traderKey: resolved.traderKey,
+            })
 
-              if (!detail) {
-                throw ApiError.notFound('No data for trader')
-              }
+            if (!detail) {
+              throw ApiError.notFound('No data for trader')
+            }
 
-              return {
-                pageData: toTraderPageData(detail),
-                resolved: { platform: resolved.platform, traderKey: resolved.traderKey },
-              }
-            })(),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(ApiError.notFound('Trader lookup timed out')), 3_000)
-            ),
-          ])
-          return result
-        },
-        'warm', // warm tier: 2 min memory, 15 min Redis
-        ['trader']
-      )
+            return {
+              pageData: toTraderPageData(detail),
+              resolved: { platform: resolved.platform, traderKey: resolved.traderKey },
+            }
+          })(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(ApiError.notFound('Trader lookup timed out')), 3_000)
+          ),
+        ])
+        return result
+      }
+
+      // The CI consistency probe compares the API with a just-read authoritative
+      // leaderboard row. Its CRON_SECRET-authenticated path must bypass the warm
+      // 2m memory / 15m Redis tier; otherwise expected cache age looks like drift.
+      const data = consistencyProbe
+        ? await fetchTraderData()
+        : await tieredGetOrSet(
+            cacheKey,
+            fetchTraderData,
+            'warm', // warm tier: 2 min memory, 15 min Redis
+            ['trader']
+          )
 
       const { pageData, resolved } = data
 
@@ -353,10 +362,22 @@ export async function GET(
         await Promise.all(promises)
       }
 
-      const responseData = { ...(pageData as Record<string, unknown>), ...extras }
+      const responseData = {
+        ...(pageData as Record<string, unknown>),
+        ...extras,
+        ...(consistencyProbe
+          ? { consistency_probe: { cache_bypassed: true, loader: 'unified-live' } }
+          : {}),
+      }
 
       const duration = Date.now() - startTime
       const response = apiSuccess({ ...responseData, cached: false, fetchTime: duration })
+      if (consistencyProbe) {
+        response.headers.set('Cache-Control', 'private, no-store, max-age=0')
+        response.headers.set('Pragma', 'no-cache')
+        response.headers.set('X-Arena-Consistency-Proof', 'live-loader-v1')
+        return response
+      }
       return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
     },
     { name: 'trader-detail', rateLimit: 'public' }

@@ -103,7 +103,9 @@ jest.mock('@/lib/api/versioning', () => ({
 
 const mockResolveTrader = jest.fn().mockResolvedValue(null)
 const mockGetTraderDetail = jest.fn().mockResolvedValue(null)
-const mockToTraderPageData = jest.fn().mockReturnValue({ performance: null, profile: null, equityCurve: null })
+const mockToTraderPageData = jest
+  .fn()
+  .mockReturnValue({ performance: null, profile: null, equityCurve: null })
 
 jest.mock('@/lib/data/unified', () => ({
   resolveTrader: (...args: unknown[]) => mockResolveTrader(...args),
@@ -152,6 +154,11 @@ jest.mock('@/lib/data/linked-traders', () => ({
   findUserByTrader: jest.fn().mockResolvedValue(null),
 }))
 
+const mockVerifyCronSecret = jest.fn().mockReturnValue(false)
+jest.mock('@/lib/auth/verify-service-auth', () => ({
+  verifyCronSecret: (...args: unknown[]) => mockVerifyCronSecret(...args),
+}))
+
 const mockTieredGetOrSet = jest.fn(async (_key: string, fetcher: () => unknown) => fetcher())
 jest.mock('@/lib/cache/redis-layer', () => ({
   tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
@@ -159,12 +166,18 @@ jest.mock('@/lib/cache/redis-layer', () => ({
 
 import { GET } from '../route'
 
-/** Build a minimal mock request with headers needed by withApiMiddleware */
-function mockReq(url: string) {
+/** Build a minimal mock request with headers needed by withApiMiddleware. */
+function mockReq(url: string, authorization?: string) {
   return {
     nextUrl: new URL(url),
     method: 'GET',
-    headers: { get: (key: string) => key === 'user-agent' ? 'Mozilla/5.0 (Jest Test Runner)' : null },
+    headers: {
+      get: (key: string) => {
+        if (key === 'user-agent') return 'Mozilla/5.0 (Jest Test Runner)'
+        if (key === 'authorization') return authorization || null
+        return null
+      },
+    },
     cookies: { get: () => undefined },
   }
 }
@@ -175,6 +188,7 @@ describe('GET /api/traders/[handle]', () => {
     mockGetServerCache.mockReturnValue(null)
     mockResolveTrader.mockResolvedValue(null)
     mockGetTraderDetail.mockResolvedValue(null)
+    mockVerifyCronSecret.mockReturnValue(false)
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
   })
@@ -274,6 +288,73 @@ describe('GET /api/traders/[handle]', () => {
     const res = await GET(request as any, { params })
 
     expect(res.status).toBe(200)
+    expect(res.headers.get('Cache-Control')).toBe(
+      'public, max-age=300, s-maxage=300, stale-while-revalidate=600'
+    )
+    expect(res.headers.get('X-Arena-Consistency-Proof')).toBeNull()
+  })
+
+  it('bypasses both cache tiers only for an authenticated consistency probe', async () => {
+    mockVerifyCronSecret.mockReturnValue(true)
+    mockResolveTrader.mockResolvedValueOnce({
+      platform: 'binance_futures',
+      traderKey: 'trader123',
+    })
+    mockGetTraderDetail.mockResolvedValueOnce({ trader: {} })
+    mockToTraderPageData.mockReturnValueOnce({
+      performance: { roi_90d: 42.5, pnl: 100, arena_score_90d: 88 },
+      profile: { handle: 'FreshTrader' },
+    })
+
+    const request = mockReq(
+      'http://localhost/api/traders/FreshTrader?source=binance_futures&consistency_probe=1',
+      'Bearer valid-cron-secret'
+    )
+    const params = Promise.resolve({ handle: 'FreshTrader' })
+
+    const res = await GET(request as any, { params })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(mockVerifyCronSecret).toHaveBeenCalledWith(request)
+    expect(mockTieredGetOrSet).not.toHaveBeenCalled()
+    expect(mockResolveTrader).toHaveBeenCalledTimes(1)
+    expect(body.data.consistency_probe).toEqual({
+      cache_bypassed: true,
+      loader: 'unified-live',
+    })
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(res.headers.get('Pragma')).toBe('no-cache')
+    expect(res.headers.get('X-Arena-Consistency-Proof')).toBe('live-loader-v1')
+  })
+
+  it('keeps an invalid consistency probe on the normal cache path without proof', async () => {
+    mockVerifyCronSecret.mockReturnValue(false)
+    mockTieredGetOrSet.mockResolvedValueOnce({
+      pageData: {
+        performance: { roi_90d: 42.5, pnl: 100, arena_score_90d: 88 },
+        profile: { handle: 'CachedTrader' },
+      },
+      resolved: { platform: 'binance_futures', traderKey: 'trader123' },
+    })
+
+    const request = mockReq(
+      'http://localhost/api/traders/CachedTrader?source=binance_futures&consistency_probe=1',
+      'Bearer invalid-cron-secret'
+    )
+    const params = Promise.resolve({ handle: 'CachedTrader' })
+
+    const res = await GET(request as any, { params })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(mockVerifyCronSecret).toHaveBeenCalledWith(request)
+    expect(mockTieredGetOrSet).toHaveBeenCalledTimes(1)
+    expect(body.data.consistency_probe).toBeUndefined()
+    expect(res.headers.get('Cache-Control')).toBe(
+      'public, max-age=300, s-maxage=300, stale-while-revalidate=600'
+    )
+    expect(res.headers.get('X-Arena-Consistency-Proof')).toBeNull()
   })
 
   // --- Error Handling ---
