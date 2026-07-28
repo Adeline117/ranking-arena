@@ -125,12 +125,10 @@ function isLegacyTierCJob(job: Job<TierCJobData>, queueRegion: IngestRegion): bo
     throw new Error(`[tier-c] directed job claims ${claimedRegion} but arrived on ${queueRegion}`)
   }
 
-  const hasToken = tierCRouteToken !== undefined
-  const hasHop = tierCRouteHop !== undefined
-  if (hasToken !== hasHop) {
+  if ((tierCRouteToken === undefined) !== (tierCRouteHop === undefined)) {
     throw new Error('[tier-c] directed job has incomplete routing metadata')
   }
-  if (!hasToken) {
+  if (tierCRouteToken === undefined || tierCRouteHop === undefined) {
     // Current producers and jobs handed off by the first rolling worker build
     // have fetchRegion but no token/hop. They may run only on that exact queue.
     return false

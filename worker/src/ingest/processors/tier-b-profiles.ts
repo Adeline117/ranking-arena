@@ -8,7 +8,7 @@
 import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
-import { getLatestPassedNativeCohort } from '@/lib/ingest/native-cohort'
+import { getLatestPassedNativeCohort, type NativeCohortTrader } from '@/lib/ingest/native-cohort'
 import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
 import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
 import { supportsSourceSurface } from '@/lib/ingest/core/surface-capabilities'
@@ -100,7 +100,7 @@ async function crawlTraderHistories(
   session: FetchSession,
   adapter: SourceAdapter,
   src: SourceRow,
-  trader: TopTrader,
+  trader: NativeCohortTrader,
   ctx: ParseCtx
 ): Promise<number> {
   let written = 0
