@@ -22,16 +22,16 @@ const GoProButton = dynamic(() => import('./GoProButton'), { ssr: false })
 const MobileSearchOverlay = dynamic(() => import('../search/MobileSearchOverlay'), { ssr: false })
 const InboxPanel = dynamic(() => import('../inbox/InboxPanel'), { ssr: false })
 
-export default function TopNavClient({ email = null }: { email?: string | null }) {
+export default function TopNavClient() {
   const router = useRouter()
 
   const {
-    authLoggedIn,
-    authChecked,
-    isReady,
+    authPending,
     myId,
     myHandle,
     myAvatarUrl,
+    myEmail,
+    viewerScopeKey,
     showUserMenu,
     setShowUserMenu,
     searchQuery,
@@ -129,28 +129,25 @@ export default function TopNavClient({ email = null }: { email?: string | null }
         <div className="top-nav-theme-action">
           <ThemeToggle />
         </div>
-        {!isReady ? (
-          authChecked && authLoggedIn ? (
-            <div
-              className="skeleton"
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: '50%',
-                flexShrink: 0,
-              }}
-            />
-          ) : (
-            <LoginButton />
-          )
+        {authPending ? (
+          <div
+            className="skeleton"
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: '50%',
+              flexShrink: 0,
+            }}
+          />
         ) : myId ? (
           <>
             <NotificationButton totalUnread={totalUnread} />
             <UserMenuDropdown
+              key={viewerScopeKey}
               myId={myId}
               myHandle={myHandle}
               myAvatarUrl={myAvatarUrl}
-              email={email ?? null}
+              email={myEmail}
               showUserMenu={showUserMenu}
               setShowUserMenu={setShowUserMenu}
               totalUnread={totalUnread}

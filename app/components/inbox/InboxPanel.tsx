@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { tokens } from '@/lib/design-tokens'
-import { useInboxStore } from '@/lib/stores/inboxStore'
+import { selectScopedPanelOpen, useInboxStore } from '@/lib/stores/inboxStore'
 import { useLanguage, LanguageProvider } from '@/app/components/Providers/LanguageProvider'
 import { ToastProvider } from '@/app/components/ui/Toast'
 import NotificationsList from './NotificationsList'
 import ConversationsList from './ConversationsList'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { captureInboxViewer } from '@/lib/inbox/viewer-scope'
 
 // Self-contained providers (2026-07-04 修 U10-1,二次修):首页 TopNav 刻意在
 // Providers 外渲染保 LCP;点铃铛打开本面板时其子组件(NotificationsList/
@@ -26,10 +28,17 @@ function getInboxQueryClient(): QueryClient {
 }
 
 function InboxPanelInner(): React.ReactElement | null {
-  const panelOpen = useInboxStore((s) => s.panelOpen)
-  const closePanel = useInboxStore((s) => s.closePanel)
+  const auth = useAuthSession()
+  const viewer = useMemo(() => captureInboxViewer(auth), [auth])
+  const panelOpen = useInboxStore((state) =>
+    viewer ? selectScopedPanelOpen(state, viewer) : false
+  )
+  const closePanelForViewer = useInboxStore((state) => state.closePanel)
   const panelRef = useRef<HTMLDivElement>(null)
   const { t } = useLanguage()
+  const closePanel = useCallback(() => {
+    if (viewer) closePanelForViewer(viewer)
+  }, [closePanelForViewer, viewer])
 
   useEffect(() => {
     if (!panelOpen) return
@@ -53,7 +62,7 @@ function InboxPanelInner(): React.ReactElement | null {
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleEsc)
     }
-  }, [panelOpen, closePanel])
+  }, [closePanel, panelOpen])
 
   if (!panelOpen) return null
 

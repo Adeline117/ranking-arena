@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo, useId } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
@@ -13,12 +13,22 @@ import Avatar from '@/app/components/ui/Avatar'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import dynamic from 'next/dynamic'
+import {
+  captureInboxViewer,
+  inboxViewerScopeKey,
+  isInboxViewerCurrent,
+} from '@/lib/inbox/viewer-scope'
+import { authedFetch } from '@/lib/api/client'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
+import {
+  removeOwnedRealtimeChannels,
+  subscribeOwnedRealtimeChannel,
+} from '@/lib/realtime/owned-channel'
 
 // Lazy load: modal only opens on user action
 const CreateGroupModal = dynamic(() => import('@/app/components/features/CreateGroupModal'), {
   ssr: false,
 })
-import { getCsrfHeaders } from '@/lib/api/client'
 import { Skeleton, SkeletonAvatar } from '@/app/components/ui/Skeleton'
 import ErrorMessage from '@/app/components/ui/ErrorMessage'
 
@@ -284,33 +294,48 @@ export default function ConversationsList({
 }: {
   initialFilter?: ChatFilter
 } = {}): React.ReactElement | null {
-  const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [chatFilter, setChatFilter] = useState<ChatFilter>(initialFilter)
+  const realtimeOwnerId = useId().replace(/[^a-zA-Z0-9_-]/g, '') || 'conversations'
+  const directRealtimeAttemptRef = useRef(0)
+  const groupRealtimeAttemptRef = useRef(0)
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const viewer = useMemo(() => captureInboxViewer(auth), [auth])
+  const scopeKey = viewer
+    ? inboxViewerScopeKey(viewer)
+    : `invalid:${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  const [showCreateGroup, setShowCreateGroup] = useViewerOwnedState(false, () => false, scopeKey)
+  const activateViewer = useInboxStore((state) => state.activateViewer)
   const setUnreadMessages = useInboxStore((s) => s.setUnreadMessages)
   const { language, t } = useLanguage()
-  const {
-    user,
-    accessToken,
-    getAuthHeadersAsync,
-    isLoggedIn,
-    loading: authLoading,
-    authChecked,
-    viewerKey,
-  } = useAuthSession()
   const { showToast } = useToast()
   const queryClient = useQueryClient()
-  const authPending = authLoading || !authChecked
-  const canLoad = !authPending && isLoggedIn && Boolean(accessToken)
+  const authPending = auth.loading || !auth.authChecked || (auth.isLoggedIn && !viewer)
+  const canLoad = Boolean(viewer)
   const conversationQueryKey = useMemo(
-    () => ['inbox-conversations', viewerKey] as const,
-    [viewerKey]
+    () =>
+      [
+        'inbox-conversations',
+        viewer?.viewerKey ?? 'inactive',
+        viewer?.sessionGeneration ?? -1,
+      ] as const,
+    [viewer?.sessionGeneration, viewer?.viewerKey]
   )
   const groupChannelQueryKey = useMemo(
-    () => ['inbox-group-channels', viewerKey] as const,
-    [viewerKey]
+    () =>
+      [
+        'inbox-group-channels',
+        viewer?.viewerKey ?? 'inactive',
+        viewer?.sessionGeneration ?? -1,
+      ] as const,
+    [viewer?.sessionGeneration, viewer?.viewerKey]
   )
 
   useEffect(() => setChatFilter(initialFilter), [initialFilter])
+  useEffect(() => {
+    if (viewer) activateViewer(viewer)
+  }, [activateViewer, scopeKey, viewer])
 
   const {
     data: conversations = [],
@@ -321,10 +346,24 @@ export default function ConversationsList({
   } = useQuery({
     queryKey: conversationQueryKey,
     queryFn: async () => {
-      const headers = await getAuthHeadersAsync()
-      const response = await fetch('/api/conversations', { headers })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return readCollection<Conversation>(await response.json(), 'conversations')
+      if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) {
+        throw new Error('stale inbox viewer')
+      }
+      const result = await authedFetch<unknown>(
+        '/api/conversations',
+        'GET',
+        viewer.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: viewer.userId,
+          expectedSessionGeneration: viewer.sessionGeneration,
+        }
+      )
+      if (!result.ok || result.stale || !isInboxViewerCurrent(viewer, authRef.current)) {
+        throw new Error(`HTTP ${result.status}`)
+      }
+      return readCollection<Conversation>(result.data, 'conversations')
     },
     enabled: canLoad,
     staleTime: STALE_STANDARD,
@@ -340,10 +379,24 @@ export default function ConversationsList({
   } = useQuery({
     queryKey: groupChannelQueryKey,
     queryFn: async () => {
-      const headers = await getAuthHeadersAsync()
-      const response = await fetch('/api/channels?type=group', { headers })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return readCollection<GroupChannel>(await response.json(), 'channels')
+      if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) {
+        throw new Error('stale inbox viewer')
+      }
+      const result = await authedFetch<unknown>(
+        '/api/channels?type=group',
+        'GET',
+        viewer.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: viewer.userId,
+          expectedSessionGeneration: viewer.sessionGeneration,
+        }
+      )
+      if (!result.ok || result.stale || !isInboxViewerCurrent(viewer, authRef.current)) {
+        throw new Error(`HTTP ${result.status}`)
+      }
+      return readCollection<GroupChannel>(result.data, 'channels')
     },
     enabled: canLoad,
     staleTime: STALE_STANDARD,
@@ -351,27 +404,34 @@ export default function ConversationsList({
   })
 
   useEffect(() => {
-    if (conversationsLoaded) {
-      setUnreadMessages(calculateTotalUnread(conversations))
+    if (viewer && conversationsLoaded && isInboxViewerCurrent(viewer, authRef.current)) {
+      setUnreadMessages(viewer, calculateTotalUnread(conversations))
     }
-  }, [conversations, conversationsLoaded, setUnreadMessages])
+  }, [conversations, conversationsLoaded, scopeKey, setUnreadMessages, viewer])
 
   // Swipe-to-delete: clear conversation history and hide from list
   const handleDeleteConversation = useCallback(
     async (conversationId: string) => {
-      if (!accessToken) return
+      if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) return
+      const operation = viewer
       try {
-        const headers = await getAuthHeadersAsync()
-        const res = await fetch(`/api/chat/${conversationId}/settings`, {
-          method: 'PATCH',
-          headers: { ...headers, 'Content-Type': 'application/json', ...getCsrfHeaders() },
-          body: JSON.stringify({ cleared_before: new Date().toISOString() }),
-        })
-        if (res.ok) {
+        const result = await authedFetch(
+          `/api/chat/${conversationId}/settings`,
+          'PATCH',
+          operation.accessToken,
+          { cleared_before: new Date().toISOString() },
+          15_000,
+          {
+            expectedUserId: operation.userId,
+            expectedSessionGeneration: operation.sessionGeneration,
+          }
+        )
+        if (result.stale || !isInboxViewerCurrent(operation, authRef.current)) return
+        if (result.ok) {
           // Remove from local list immediately
           queryClient.setQueryData<Conversation[]>(conversationQueryKey, (current = []) => {
             const updated = current.filter((c) => c.id !== conversationId)
-            setUnreadMessages(calculateTotalUnread(updated))
+            setUnreadMessages(operation, calculateTotalUnread(updated))
             return updated
           })
           showToast(t('conversationDeleted'), 'success')
@@ -379,18 +439,11 @@ export default function ConversationsList({
           showToast(t('unexpectedError'), 'error')
         }
       } catch {
+        if (!isInboxViewerCurrent(operation, authRef.current)) return
         showToast(t('unexpectedError'), 'error')
       }
     },
-    [
-      accessToken,
-      conversationQueryKey,
-      getAuthHeadersAsync,
-      queryClient,
-      setUnreadMessages,
-      showToast,
-      t,
-    ]
+    [conversationQueryKey, queryClient, setUnreadMessages, showToast, t, viewer]
   )
 
   const loadConversations = useCallback(() => {
@@ -403,113 +456,149 @@ export default function ConversationsList({
 
   // Realtime: auto-refresh when new DMs arrive for this user
   useEffect(() => {
-    if (!user?.id) return
-    const channel = supabase
-      .channel(`inbox:${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'direct_messages',
-          filter: `receiver_id=eq.${user.id}`,
-        },
-        (payload) => {
-          // Incremental update: update the affected conversation in-place
-          const newMsg = payload.new as {
-            conversation_id?: string
-            content?: string
-            created_at?: string
-            sender_id?: string
-          }
-          if (!newMsg.conversation_id) {
-            loadConversations()
-            return
-          }
-          let needsRefresh = false
-          queryClient.setQueryData<Conversation[]>(conversationQueryKey, (current = []) => {
-            const idx = current.findIndex((c) => c.id === newMsg.conversation_id)
-            if (idx === -1) {
-              needsRefresh = true
-              return current
+    if (!viewer) return
+    const operation = viewer
+    const attempt = ++directRealtimeAttemptRef.current
+    const channel = subscribeOwnedRealtimeChannel({
+      client: supabase,
+      context: 'inbox-direct-messages',
+      topic: `inbox:${operation.userId}:${operation.sessionGeneration}:${realtimeOwnerId}:${attempt}`,
+      configure: (ownedChannel) => {
+        ownedChannel.on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'direct_messages',
+            filter: `receiver_id=eq.${operation.userId}`,
+          },
+          (payload) => {
+            if (!isInboxViewerCurrent(operation, authRef.current)) return
+            // Incremental update: update the affected conversation in-place
+            const newMsg = payload.new as {
+              conversation_id?: string
+              content?: string
+              created_at?: string
+              sender_id?: string
             }
-            const updated = [...current]
-            updated[idx] = {
-              ...updated[idx],
-              last_message_at: newMsg.created_at || new Date().toISOString(),
-              last_message_preview: newMsg.content || '',
-              unread_count: updated[idx].unread_count + 1,
+            if (!newMsg.conversation_id) {
+              void loadConversations()
+              return
             }
-            // Re-sort by last_message_at descending
-            updated.sort(
-              (a, b) =>
-                new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
-            )
-            setUnreadMessages(calculateTotalUnread(updated))
-            return updated
-          })
-          if (needsRefresh) loadConversations()
-        }
-      )
-      .subscribe()
+            let needsRefresh = false
+            queryClient.setQueryData<Conversation[]>(conversationQueryKey, (current = []) => {
+              const idx = current.findIndex((c) => c.id === newMsg.conversation_id)
+              if (idx === -1) {
+                needsRefresh = true
+                return current
+              }
+              const updated = [...current]
+              updated[idx] = {
+                ...updated[idx],
+                last_message_at: newMsg.created_at || new Date().toISOString(),
+                last_message_preview: newMsg.content || '',
+                unread_count: updated[idx].unread_count + 1,
+              }
+              // Re-sort by last_message_at descending
+              updated.sort(
+                (a, b) =>
+                  new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+              )
+              setUnreadMessages(operation, calculateTotalUnread(updated))
+              return updated
+            })
+            if (needsRefresh && isInboxViewerCurrent(operation, authRef.current)) {
+              void loadConversations()
+            }
+          }
+        )
+      },
+    })
+    if (!channel) return
     return () => {
-      supabase.removeChannel(channel)
+      void removeOwnedRealtimeChannels(supabase, [channel], 'inbox-direct-messages-cleanup')
     }
-  }, [conversationQueryKey, loadConversations, queryClient, setUnreadMessages, user?.id])
+  }, [
+    conversationQueryKey,
+    loadConversations,
+    queryClient,
+    realtimeOwnerId,
+    scopeKey,
+    setUnreadMessages,
+    viewer,
+  ])
 
   // Realtime: auto-refresh when new group channel messages arrive
   useEffect(() => {
-    if (!user?.id || groupChannels.length === 0) return
-    const channel = supabase
-      .channel(`group-inbox:${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'channel_messages',
-        },
-        (payload) => {
-          const newMsg = payload.new as {
-            channel_id?: string
-            content?: string
-            created_at?: string
-            sender_id?: string
-          }
-          // Skip messages sent by ourselves
-          if (newMsg.sender_id === user.id) return
-          // Update the affected group channel in-place
-          if (!newMsg.channel_id) {
-            loadGroupChannels()
-            return
-          }
-          let needsRefresh = false
-          queryClient.setQueryData<GroupChannel[]>(groupChannelQueryKey, (current = []) => {
-            const idx = current.findIndex((ch) => ch.id === newMsg.channel_id)
-            if (idx === -1) {
-              needsRefresh = true
-              return current
+    if (!viewer || groupChannels.length === 0) return
+    const operation = viewer
+    const attempt = ++groupRealtimeAttemptRef.current
+    const channel = subscribeOwnedRealtimeChannel({
+      client: supabase,
+      context: 'inbox-group-messages',
+      topic: `group-inbox:${operation.userId}:${operation.sessionGeneration}:${realtimeOwnerId}:${attempt}`,
+      configure: (ownedChannel) => {
+        ownedChannel.on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'channel_messages',
+          },
+          (payload) => {
+            if (!isInboxViewerCurrent(operation, authRef.current)) return
+            const newMsg = payload.new as {
+              channel_id?: string
+              content?: string
+              created_at?: string
+              sender_id?: string
             }
-            const updated = [...current]
-            updated[idx] = {
-              ...updated[idx],
-              last_message_at: newMsg.created_at || new Date().toISOString(),
-              last_message_preview: newMsg.content || '',
+            // Skip messages sent by ourselves
+            if (newMsg.sender_id === operation.userId) return
+            // Update the affected group channel in-place
+            if (!newMsg.channel_id) {
+              void loadGroupChannels()
+              return
             }
-            updated.sort(
-              (a, b) =>
-                new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
-            )
-            return updated
-          })
-          if (needsRefresh) loadGroupChannels()
-        }
-      )
-      .subscribe()
+            let needsRefresh = false
+            queryClient.setQueryData<GroupChannel[]>(groupChannelQueryKey, (current = []) => {
+              const idx = current.findIndex((ch) => ch.id === newMsg.channel_id)
+              if (idx === -1) {
+                needsRefresh = true
+                return current
+              }
+              const updated = [...current]
+              updated[idx] = {
+                ...updated[idx],
+                last_message_at: newMsg.created_at || new Date().toISOString(),
+                last_message_preview: newMsg.content || '',
+              }
+              updated.sort(
+                (a, b) =>
+                  new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+              )
+              return updated
+            })
+            if (needsRefresh && isInboxViewerCurrent(operation, authRef.current)) {
+              void loadGroupChannels()
+            }
+          }
+        )
+      },
+    })
+    if (!channel) return
     return () => {
-      supabase.removeChannel(channel)
+      void removeOwnedRealtimeChannels(supabase, [channel], 'inbox-group-messages-cleanup')
     }
-  }, [groupChannelQueryKey, groupChannels.length, loadGroupChannels, queryClient, user?.id])
+  }, [
+    groupChannelQueryKey,
+    groupChannels.length,
+    loadGroupChannels,
+    queryClient,
+    realtimeOwnerId,
+    scopeKey,
+    viewer,
+  ])
 
   function formatTime(dateString: string): string {
     const date = new Date(dateString)

@@ -7,8 +7,19 @@ import {
   type CompareTrader,
 } from '../comparisonStore'
 import { useQuizStore } from '../quizStore'
-import { useInboxStore, selectTotalUnread } from '../inboxStore'
+import {
+  selectScopedPanelOpen,
+  selectScopedTotalUnread,
+  selectTotalUnread,
+  useInboxStore,
+} from '../inboxStore'
 import { usePeriodStore } from '../periodStore'
+import {
+  __resetViewerScopeForTests,
+  beginViewerTransition,
+  commitViewerTransition,
+  synchronizeViewerScope,
+} from '@/lib/auth/viewer-scope'
 
 const trader = (id: string, source = 'bybit'): CompareTrader => ({
   id,
@@ -102,20 +113,85 @@ describe('quizStore — 测验进度', () => {
 })
 
 describe('inboxStore — 未读计数 + 面板', () => {
+  beforeEach(() => {
+    __resetViewerScopeForTests()
+    useInboxStore.setState({
+      ownerScopeKey: null,
+      panelOpen: false,
+      unreadMessages: 0,
+      unreadNotifications: 0,
+    })
+  })
+
   it('selectTotalUnread = 通知 + 私信', () => {
-    useInboxStore.getState().setUnreadNotifications(3)
-    useInboxStore.getState().setUnreadMessages(2)
+    const viewer = synchronizeViewerScope(true, 'user-a')
+    useInboxStore.getState().activateViewer(viewer)
+    useInboxStore.getState().setUnreadNotifications(viewer, 3)
+    useInboxStore.getState().setUnreadMessages(viewer, 2)
     expect(selectTotalUnread(useInboxStore.getState())).toBe(5)
   })
 
   it('togglePanel / openPanel / closePanel', () => {
-    useInboxStore.getState().closePanel()
-    useInboxStore.getState().togglePanel()
+    const viewer = synchronizeViewerScope(true, 'user-a')
+    useInboxStore.getState().activateViewer(viewer)
+    useInboxStore.getState().closePanel(viewer)
+    useInboxStore.getState().togglePanel(viewer)
     expect(useInboxStore.getState().panelOpen).toBe(true)
-    useInboxStore.getState().closePanel()
+    useInboxStore.getState().closePanel(viewer)
     expect(useInboxStore.getState().panelOpen).toBe(false)
-    useInboxStore.getState().openPanel()
+    useInboxStore.getState().openPanel(viewer)
     expect(useInboxStore.getState().panelOpen).toBe(true)
+  })
+
+  it('fails empty immediately on A → pending/B and rejects every old-A writer', () => {
+    const viewerA = synchronizeViewerScope(true, 'user-a')
+    const store = useInboxStore.getState()
+    store.activateViewer(viewerA)
+    store.setUnreadNotifications(viewerA, 7)
+    store.setUnreadMessages(viewerA, 4)
+    store.openPanel(viewerA)
+
+    const pendingGeneration = beginViewerTransition('user-b')
+    const pending = {
+      viewerKey: 'pending' as const,
+      sessionGeneration: pendingGeneration,
+      userId: null,
+    }
+    expect(selectScopedTotalUnread(useInboxStore.getState(), pending)).toBe(0)
+    expect(selectScopedPanelOpen(useInboxStore.getState(), pending)).toBe(false)
+    expect(useInboxStore.getState().setUnreadNotifications(viewerA, 99)).toBe(false)
+    expect(useInboxStore.getState().setUnreadMessages(viewerA, 99)).toBe(false)
+    expect(useInboxStore.getState().togglePanel(viewerA)).toBe(false)
+
+    const viewerB = commitViewerTransition(pendingGeneration, 'user-b')
+    expect(viewerB).not.toBeNull()
+    expect(selectScopedTotalUnread(useInboxStore.getState(), viewerB!)).toBe(0)
+    expect(useInboxStore.getState().activateViewer(viewerB!)).toBe(true)
+    expect(useInboxStore.getState()).toMatchObject({
+      unreadNotifications: 0,
+      unreadMessages: 0,
+      panelOpen: false,
+    })
+    expect(useInboxStore.getState().setUnreadNotifications(viewerA, 11)).toBe(false)
+    expect(useInboxStore.getState().setUnreadNotifications(viewerB!, 2)).toBe(true)
+    expect(selectScopedTotalUnread(useInboxStore.getState(), viewerB!)).toBe(2)
+  })
+
+  it('treats a new generation for the same user as a different owner', () => {
+    const first = synchronizeViewerScope(true, 'user-a')
+    useInboxStore.getState().activateViewer(first)
+    useInboxStore.getState().setUnreadNotifications(first, 8)
+
+    const transition = beginViewerTransition('user-a')
+    const second = commitViewerTransition(transition, 'user-a')
+    expect(second).not.toBeNull()
+    expect(second!.sessionGeneration).not.toBe(first.sessionGeneration)
+    expect(selectScopedTotalUnread(useInboxStore.getState(), second!)).toBe(0)
+    expect(useInboxStore.getState().setUnreadNotifications(first, 30)).toBe(false)
+
+    useInboxStore.getState().activateViewer(second!)
+    expect(useInboxStore.getState().unreadNotifications).toBe(0)
+    expect(useInboxStore.getState().setUnreadNotifications(second!, 1)).toBe(true)
   })
 })
 

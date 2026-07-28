@@ -1,21 +1,26 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { formatTimeAgo } from '@/lib/utils/date'
-import { useInboxStore } from '@/lib/stores/inboxStore'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { selectScopedUnreadNotifications, useInboxStore } from '@/lib/stores/inboxStore'
+import { authedFetch } from '@/lib/api/client'
 import { type NotificationWithActor } from '@/lib/types'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { logger } from '@/lib/logger'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import ErrorMessage from '@/app/components/ui/ErrorMessage'
+import {
+  captureInboxViewer,
+  inboxViewerScopeKey,
+  isInboxViewerCurrent,
+} from '@/lib/inbox/viewer-scope'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 type Notification = NotificationWithActor
 
@@ -77,15 +82,27 @@ export default function NotificationsList({
   const [collapsed, setCollapsed] = useState(false)
   const effectiveCollapsed = isPanel ? collapsed : false
   const PAGE_SIZE = 20
-  const { accessToken } = useAuthSession()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const viewer = useMemo(() => captureInboxViewer(auth), [auth])
+  const scopeKey = viewer
+    ? inboxViewerScopeKey(viewer)
+    : `invalid:${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  const activateViewer = useInboxStore((state) => state.activateViewer)
   const setUnreadNotifications = useInboxStore((s) => s.setUnreadNotifications)
-  const unreadNotifications = useInboxStore((s) => s.unreadNotifications)
-  const queryClient = useQueryClient()
+  const unreadNotifications = useInboxStore((state) =>
+    viewer ? selectScopedUnreadNotifications(state, viewer) : 0
+  )
   const { showToast } = useToast()
   const { t, language } = useLanguage()
   // 用于防止重复请求和回滚
-  const pendingMarkAllRef = useRef(false)
+  const pendingMarkAllRef = useRef<string | null>(null)
   const pendingMarkRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (viewer) activateViewer(viewer)
+  }, [activateViewer, scopeKey, viewer])
 
   // React Query infinite scroll for notifications
   const {
@@ -97,19 +114,40 @@ export default function NotificationsList({
     isError: loadFailed,
     refetch: refetchNotifications,
   } = useInfiniteQuery({
-    queryKey: ['notifications', accessToken],
+    queryKey: ['notifications', viewer?.viewerKey ?? 'inactive', viewer?.sessionGeneration ?? -1],
     queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
-      const res = await fetch(`/api/notifications?offset=${pageParam}&limit=${PAGE_SIZE}`, {
-        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const result = await res.json()
-      const data = result.data || result
+      if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) {
+        throw new Error('stale inbox viewer')
+      }
+      const result = await authedFetch<unknown>(
+        `/api/notifications?offset=${pageParam}&limit=${PAGE_SIZE}`,
+        'GET',
+        viewer.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: viewer.userId,
+          expectedSessionGeneration: viewer.sessionGeneration,
+        }
+      )
+      if (!result.ok || result.stale || !isInboxViewerCurrent(viewer, authRef.current)) {
+        throw new Error(`HTTP ${result.status}`)
+      }
+      const envelope = result.data
+      const data =
+        envelope && typeof envelope === 'object' && 'data' in envelope
+          ? (envelope as { data?: unknown }).data
+          : envelope
+      if (!data || typeof data !== 'object') throw new Error('Invalid notifications response')
+      const record = data as Record<string, unknown>
+      if (!Array.isArray(record.notifications)) throw new Error('Invalid notifications response')
       return {
-        notifications: (data.notifications || []) as Notification[],
-        unread_count: (data.unread_count as number) || 0,
-        hasMore: (data.notifications || []).length >= PAGE_SIZE,
+        notifications: record.notifications as Notification[],
+        unread_count:
+          typeof record.unread_count === 'number' && Number.isFinite(record.unread_count)
+            ? Math.max(0, Math.floor(record.unread_count))
+            : 0,
+        hasMore: record.notifications.length >= PAGE_SIZE,
       }
     },
     initialPageParam: 0,
@@ -117,7 +155,7 @@ export default function NotificationsList({
       if (!lastPage.hasMore) return undefined
       return allPages.reduce((sum, p) => sum + p.notifications.length, 0)
     },
-    enabled: !!accessToken,
+    enabled: Boolean(viewer),
     staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
   })
@@ -127,10 +165,14 @@ export default function NotificationsList({
     [notifData]
   )
   // Local state for optimistic mark-as-read mutations
-  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [notifications, setNotifications] = useViewerOwnedState<Notification[]>(
+    [],
+    () => [],
+    scopeKey
+  )
   useEffect(() => {
     setNotifications(fetchedNotifications)
-  }, [fetchedNotifications])
+  }, [fetchedNotifications, scopeKey, setNotifications])
   const hasMore = hasNextPage ?? false
 
   // U10-2/U10-3: filter by the chip using the type map, and drive the empty
@@ -146,10 +188,10 @@ export default function NotificationsList({
 
   // Sync unread count from first page
   useEffect(() => {
-    if (notifData?.pages[0]) {
-      setUnreadNotifications(notifData.pages[0].unread_count)
+    if (viewer && notifData?.pages[0] && isInboxViewerCurrent(viewer, authRef.current)) {
+      setUnreadNotifications(viewer, notifData.pages[0].unread_count)
     }
-  }, [notifData, setUnreadNotifications])
+  }, [notifData, scopeKey, setUnreadNotifications, viewer])
 
   const loadNotifications = useCallback(() => {
     refetchNotifications()
@@ -161,83 +203,110 @@ export default function NotificationsList({
   // useInfiniteQuery handles abort/cleanup internally — no manual effect needed
 
   const markAllAsRead = useCallback(async () => {
-    if (!accessToken || pendingMarkAllRef.current) return
-    pendingMarkAllRef.current = true
+    if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) return
+    const operation = viewer
+    const operationScopeKey = inboxViewerScopeKey(operation)
+    if (pendingMarkAllRef.current === operationScopeKey) return
+    pendingMarkAllRef.current = operationScopeKey
 
     // Delta: capture IDs that were unread (not a full snapshot — just the delta set)
     const unreadIds = new Set(notifications.filter((n) => !n.read).map((n) => n.id))
-    const unreadCount = unreadIds.size
+    const previousUnreadCount = unreadNotifications
 
     // Optimistic update
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-    setUnreadNotifications(0)
+    setUnreadNotifications(operation, 0)
 
     try {
-      const response = await fetch('/api/notifications', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({ mark_all: true }),
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!response.ok) {
-        throw new Error('Failed to mark all as read')
+      const result = await authedFetch(
+        '/api/notifications',
+        'PUT',
+        operation.accessToken,
+        { mark_all: true },
+        15_000,
+        {
+          expectedUserId: operation.userId,
+          expectedSessionGeneration: operation.sessionGeneration,
+        }
+      )
+      if (result.stale || !isInboxViewerCurrent(operation, authRef.current)) return
+      if (!result.ok) {
+        throw new Error(`Failed to mark all as read: ${result.status}`)
       }
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return
+    } catch {
+      if (!isInboxViewerCurrent(operation, authRef.current)) return
       // Delta rollback: only restore read=false for IDs that were unread before
       setNotifications((prev) => prev.map((n) => (unreadIds.has(n.id) ? { ...n, read: false } : n)))
-      setUnreadNotifications(unreadCount)
+      setUnreadNotifications(operation, previousUnreadCount)
       showToast(t('operationFailed'), 'error')
     } finally {
-      pendingMarkAllRef.current = false
+      if (pendingMarkAllRef.current === operationScopeKey) pendingMarkAllRef.current = null
     }
-  }, [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast, t])
+  }, [
+    notifications,
+    setNotifications,
+    setUnreadNotifications,
+    showToast,
+    t,
+    unreadNotifications,
+    viewer,
+  ])
 
   const markAsRead = useCallback(
     async (id: string) => {
-      if (!accessToken || pendingMarkRef.current.has(id)) return
-      pendingMarkRef.current.add(id)
+      if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) return
+      const operation = viewer
+      const pendingKey = `${inboxViewerScopeKey(operation)}\u0000${id}`
+      if (pendingMarkRef.current.has(pendingKey)) return
+      pendingMarkRef.current.add(pendingKey)
 
       // 找到当前通知的状态
       const currentNotification = notifications.find((n) => n.id === id)
       if (!currentNotification || currentNotification.read) {
-        pendingMarkRef.current.delete(id)
+        pendingMarkRef.current.delete(pendingKey)
         return
       }
 
       // Optimistic update (delta-based)
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
-      setUnreadNotifications(Math.max(0, unreadNotifications - 1))
+      setUnreadNotifications(operation, Math.max(0, unreadNotifications - 1))
 
       try {
-        const response = await fetch('/api/notifications', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ notification_id: id }),
-          signal: AbortSignal.timeout(15000),
-        })
-        if (!response.ok) {
-          throw new Error('Failed to mark as read')
+        const result = await authedFetch(
+          '/api/notifications',
+          'PUT',
+          operation.accessToken,
+          { notification_id: id },
+          15_000,
+          {
+            expectedUserId: operation.userId,
+            expectedSessionGeneration: operation.sessionGeneration,
+          }
+        )
+        if (result.stale || !isInboxViewerCurrent(operation, authRef.current)) return
+        if (!result.ok) {
+          throw new Error(`Failed to mark as read: ${result.status}`)
         }
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return
+      } catch {
+        if (!isInboxViewerCurrent(operation, authRef.current)) return
         // Delta rollback: reverse the -1 from current state
         setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: false } : n)))
-        setUnreadNotifications(useInboxStore.getState().unreadNotifications + 1)
+        const currentCount = selectScopedUnreadNotifications(useInboxStore.getState(), operation)
+        setUnreadNotifications(operation, currentCount + 1)
         showToast(t('operationFailed'), 'error')
       } finally {
-        pendingMarkRef.current.delete(id)
+        pendingMarkRef.current.delete(pendingKey)
       }
     },
-    [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast, t]
+    [
+      notifications,
+      setNotifications,
+      setUnreadNotifications,
+      showToast,
+      t,
+      unreadNotifications,
+      viewer,
+    ]
   )
 
   function getIcon(type: string): string {

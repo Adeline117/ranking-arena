@@ -6,6 +6,8 @@ import { Box } from '../base'
 import { NotificationIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useInboxStore } from '@/lib/stores/inboxStore'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { captureInboxViewer, isInboxViewerCurrent } from '@/lib/inbox/viewer-scope'
 
 export interface NotificationButtonProps {
   totalUnread: number
@@ -14,6 +16,8 @@ export interface NotificationButtonProps {
 export default function NotificationButton({ totalUnread }: NotificationButtonProps) {
   const { t } = useLanguage()
   const router = useRouter()
+  const auth = useAuthSession()
+  const viewer = captureInboxViewer(auth)
 
   return (
     <button
@@ -21,11 +25,12 @@ export default function NotificationButton({ totalUnread }: NotificationButtonPr
       className="top-nav-notif-btn"
       aria-label={t('inbox')}
       onClick={() => {
+        if (!viewer || !isInboxViewerCurrent(viewer, auth)) return
         // On mobile, navigate to inbox page; on desktop, toggle panel
         if (window.innerWidth < 1024) {
           router.push('/inbox')
         } else {
-          useInboxStore.getState().togglePanel()
+          useInboxStore.getState().togglePanel(viewer)
         }
       }}
       style={{
@@ -70,7 +75,9 @@ export default function NotificationButton({ totalUnread }: NotificationButtonPr
             boxShadow: tokens.shadow.glowError,
           }}
         >
-          <span style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.white, lineHeight: 1 }}>
+          <span
+            style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.white, lineHeight: 1 }}
+          >
             {totalUnread > 99 ? '99+' : totalUnread}
           </span>
         </Box>

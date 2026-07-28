@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ConversationsList from '../ConversationsList'
+import { __resetViewerScopeForTests, synchronizeViewerScope } from '@/lib/auth/viewer-scope'
 
 jest.mock('next/dynamic', () => ({
   __esModule: true,
@@ -10,17 +11,42 @@ jest.mock('next/dynamic', () => ({
 const mockShowToast = jest.fn()
 const mockSetUnreadMessages = jest.fn()
 const mockRemoveChannel = jest.fn()
-const mockSubscribe = jest.fn()
-const mockOn = jest.fn(() => ({ subscribe: mockSubscribe }))
-const mockChannel = jest.fn(() => ({ on: mockOn }))
+type MockRealtimeChannel = {
+  name: string
+  on: jest.Mock
+  subscribe: jest.Mock
+  topic: string
+}
+const mockRegisteredChannels: MockRealtimeChannel[] = []
+const mockChannel = jest.fn((name: string) => {
+  const existing = mockRegisteredChannels.find(
+    (candidate) => candidate.topic === `realtime:${name}`
+  )
+  if (existing) return existing
+
+  const channel: MockRealtimeChannel = {
+    name,
+    topic: `realtime:${name}`,
+    on: jest.fn(() => channel),
+    subscribe: jest.fn(() => channel),
+  }
+  mockRegisteredChannels.push(channel)
+  return channel
+})
+const token = (subject: string) => {
+  const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
+  return `${encode({ alg: 'none' })}.${encode({ sub: subject })}.signature`
+}
 const mockAuthState = {
   user: { id: 'user-1' } as { id: string } | null,
-  accessToken: 'access-token' as string | null,
+  userId: 'user-1' as string | null,
+  email: 'user-1@example.com' as string | null,
+  accessToken: token('user-1') as string | null,
   isLoggedIn: true,
   loading: false,
   authChecked: true,
+  sessionGeneration: 1,
   viewerKey: 'user:user-1',
-  getAuthHeadersAsync: async () => ({ Authorization: 'Bearer access-token' }),
 }
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
@@ -55,12 +81,14 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
 jest.mock('@/lib/supabase/client', () => ({
   supabase: {
     channel: (...args: unknown[]) => mockChannel(...args),
+    getChannels: () => [...mockRegisteredChannels],
     removeChannel: (...args: unknown[]) => mockRemoveChannel(...args),
   },
 }))
 
 jest.mock('@/lib/stores/inboxStore', () => {
   const state = {
+    activateViewer: jest.fn(),
     setUnreadMessages: (...args: unknown[]) => mockSetUnreadMessages(...args),
   }
   const useInboxStore = (selector: (value: typeof state) => unknown) => selector(state)
@@ -72,11 +100,22 @@ const originalFetch = global.fetch
 describe('ConversationsList load failure', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockRegisteredChannels.splice(0)
+    mockRemoveChannel.mockImplementation(async (channel: MockRealtimeChannel) => {
+      const index = mockRegisteredChannels.indexOf(channel)
+      if (index >= 0) mockRegisteredChannels.splice(index, 1)
+      return 'ok'
+    })
+    __resetViewerScopeForTests()
+    const scope = synchronizeViewerScope(true, 'user-1')
     mockAuthState.user = { id: 'user-1' }
-    mockAuthState.accessToken = 'access-token'
+    mockAuthState.userId = 'user-1'
+    mockAuthState.email = 'user-1@example.com'
+    mockAuthState.accessToken = token('user-1')
     mockAuthState.isLoggedIn = true
     mockAuthState.loading = false
     mockAuthState.authChecked = true
+    mockAuthState.sessionGeneration = scope.sessionGeneration
     mockAuthState.viewerKey = 'user:user-1'
   })
 
@@ -86,6 +125,8 @@ describe('ConversationsList load failure', () => {
 
   it('keeps auth bootstrap in a loading state without requesting or showing empty data', () => {
     mockAuthState.user = null
+    mockAuthState.userId = null
+    mockAuthState.email = null
     mockAuthState.accessToken = null
     mockAuthState.isLoggedIn = false
     mockAuthState.loading = true
@@ -116,7 +157,13 @@ describe('ConversationsList load failure', () => {
       const url = String(input)
       if (url === '/api/conversations') {
         conversationAttempts += 1
-        if (conversationAttempts === 1) return { ok: false, status: 503 }
+        if (conversationAttempts === 1) {
+          return {
+            ok: false,
+            status: 503,
+            json: async () => ({ error: 'Unavailable' }),
+          }
+        }
         return {
           ok: true,
           status: 200,
@@ -179,7 +226,13 @@ describe('ConversationsList load failure', () => {
       }
 
       groupAttempts += 1
-      if (groupAttempts === 1) return { ok: false, status: 503 }
+      if (groupAttempts === 1) {
+        return {
+          ok: false,
+          status: 503,
+          json: async () => ({ error: 'Unavailable' }),
+        }
+      }
       return {
         ok: true,
         status: 200,
@@ -219,5 +272,44 @@ describe('ConversationsList load failure', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(conversationAttempts).toBe(1)
     expect(groupAttempts).toBe(2)
+  })
+
+  it('gives two same-viewer instances independent physical realtime topics', async () => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      return {
+        ok: true,
+        status: 200,
+        json: async () => (url === '/api/conversations' ? { conversations: [] } : { channels: [] }),
+      } as Response
+    }) as typeof fetch
+    const unhandledRejection = jest.fn()
+    process.on('unhandledRejection', unhandledRejection)
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationsList />
+        <ConversationsList />
+      </QueryClientProvider>
+    )
+
+    try {
+      await waitFor(() => {
+        const directTopics = mockChannel.mock.calls
+          .map(([name]) => String(name))
+          .filter((name) => name.startsWith(`inbox:user-1:${mockAuthState.sessionGeneration}:`))
+        expect(directTopics).toHaveLength(2)
+        expect(new Set(directTopics)).toHaveProperty('size', 2)
+      })
+      expect(mockRegisteredChannels).toHaveLength(2)
+      expect(unhandledRejection).not.toHaveBeenCalled()
+    } finally {
+      view.unmount()
+      await waitFor(() => expect(mockRegisteredChannels).toHaveLength(0))
+      process.removeListener('unhandledRejection', unhandledRejection)
+    }
   })
 })

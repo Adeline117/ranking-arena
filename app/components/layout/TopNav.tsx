@@ -9,7 +9,7 @@ import TopNavClient from './TopNavClient'
  * Interactive parts (search, user menu, notifications) live in TopNavClient.
  * This split reduces the initial JS bundle and improves TTFB.
  */
-export default function TopNav({ email = null }: { email?: string | null }) {
+export default function TopNav() {
   return (
     <header
       className="top-nav glass top-nav-header"
@@ -78,7 +78,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
         </div>
 
         {/* Center + Right: interactive client parts */}
-        <TopNavClient email={email} />
+        <TopNavClient />
       </div>
     </header>
   )
