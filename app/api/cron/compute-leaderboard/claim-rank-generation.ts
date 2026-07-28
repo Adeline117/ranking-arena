@@ -5,7 +5,10 @@ export const LEADERBOARD_RANK_GENERATION_CLAIM_CONTRACT = 'leaderboard-rank-gene
 export const LEADERBOARD_RANK_GENERATION_CLAIM_RPC_TIMEOUT_MS = 30_000
 export const LEADERBOARD_RANK_GENERATION_CLAIM_MAX_TIMEOUT_MS = 60_000
 export const LEADERBOARD_RANK_GENERATION_CLAIM_LEASE_TIMEOUT_DIVISOR = 3
-export const LEADERBOARD_RANK_GENERATION_MAX_ROWS = 250_000
+// The authoritative PG17 scorer/manifest accepts one globally comparable
+// cohort of at most 64,000 inputs. Raising this requires a scorer upgrade, not
+// independent chunk scoring whose percentiles would no longer be comparable.
+export const LEADERBOARD_RANK_GENERATION_MAX_ROWS = 64_000
 export const LEADERBOARD_RANK_GENERATION_MAX_BATCHES = 4_096
 export const LEADERBOARD_RANK_GENERATION_MAX_ROWS_PER_BATCH = 1_000
 export const LEADERBOARD_RANK_GENERATION_MAX_SEQUENCE = 9_007_199_254_740_000
