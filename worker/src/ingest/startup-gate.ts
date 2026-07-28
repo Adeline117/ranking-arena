@@ -1,39 +1,6 @@
 import type { RegionAuthorityLifecycle } from './region-authority-lifecycle'
 import type { RegionConsumerRuntime } from './region-consumer-runtime'
 
-export interface IngestServingStartupSteps<TConsumers, TFailover> {
-  startHeartbeat: () => Promise<NodeJS.Timeout>
-  createConsumers: () => TConsumers
-  reconcileSchedulers: () => Promise<void>
-  startReconcileTimer: () => NodeJS.Timeout
-  startFailover: () => TFailover
-  markReady: () => void
-}
-
-export interface IngestServingRuntime<TConsumers, TFailover> {
-  heartbeatTimer: NodeJS.Timeout
-  consumers: TConsumers
-  reconcileTimer: NodeJS.Timeout
-  failover: TFailover
-}
-
-/**
- * The first shared-Redis HSET is the serving boundary. Keeping every consumer,
- * scheduler, failover process, and ready log behind one awaited orchestration
- * point makes a rejected heartbeat structurally unable to become fail-open.
- */
-export async function startIngestServingAfterHeartbeat<TConsumers, TFailover>(
-  steps: IngestServingStartupSteps<TConsumers, TFailover>
-): Promise<IngestServingRuntime<TConsumers, TFailover>> {
-  const heartbeatTimer = await steps.startHeartbeat()
-  const consumers = steps.createConsumers()
-  await steps.reconcileSchedulers()
-  const reconcileTimer = steps.startReconcileTimer()
-  const failover = steps.startFailover()
-  steps.markReady()
-  return { heartbeatTimer, consumers, reconcileTimer, failover }
-}
-
 export type NativeIngestStartupFailureCode =
   | 'authority_lost'
   | 'invalid_runtime'
@@ -95,7 +62,7 @@ function assertRuntimeState(
 /**
  * Cross the serving boundary for an already-prepared, inert regional runtime.
  * The runtime owns consumer rollback and authority release; this gate owns the
- * legacy heartbeat and scheduler timers around it. No ready evidence is emitted
+ * shared Redis heartbeat and scheduler timers around it. No ready evidence is emitted
  * until every prerequisite is active and consumer admission has opened.
  */
 export async function startNativeIngestServing({

@@ -27,24 +27,29 @@ import {
   regionFastQueueName,
   tierCQueueName,
   fastLaneEnabled,
-  type IngestRegion,
   type TierCJobData,
 } from './ingest/queues'
 import { reconcileSchedulers } from './ingest/scheduler'
-import { startHeartbeat } from './ingest/heartbeat'
-import { startFailoverManager } from './ingest/failover'
+import {
+  createWorkerOwnershipHeartbeatFactory,
+  resolveWorkerRuntimeIdentity,
+  startHeartbeat,
+} from './ingest/heartbeat'
 import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readiness'
-import { startIngestServingAfterHeartbeat } from './ingest/startup-gate'
+import { startNativeIngestServing } from './ingest/startup-gate'
 import { routeJobWithSourceLease } from './ingest/source-job-routing'
 import { routeTierCJobRegion } from './ingest/tier-c-region-router'
 import { getSourceBySlug } from '@/lib/ingest/sources'
 import {
   assertSourceJobMatchesConsumedRegion,
-  bindConsumedRegion,
-  createConsumedRegionContext,
+  bindAuthorizedConsumedRegion,
   requireWorkerExecutionRegion,
-  type ConsumedRegionContext,
+  type AuthorizedConsumedRegionContext,
 } from './ingest/consumed-region-context'
+import { resolveNativeRegionConfig } from './ingest/native-region-config'
+import { acquireRegionAuthorityLifecycleWithRetry } from './ingest/region-authority-acquisition'
+import { prepareRegionConsumerRuntime } from './ingest/region-consumer-runtime'
+import { createNativeProcessCoordinator } from './ingest/native-process-coordinator'
 
 // Per-region worker concurrency. Bumped 3→5 (2026-06-12): at 3 the drain
 // rate (~12-18 jobs/h, dragged by giant crawls like bybit_mt5's 29k rows)
@@ -69,8 +74,10 @@ const INGEST_CONCURRENCY = Number(process.env.INGEST_CONCURRENCY) || 5
 // small (seconds-to-minutes) so a modest pool keeps all ~26 small boards fresh;
 // peak extra concurrent browsers stay low because each session is short-lived.
 const FAST_CONCURRENCY = 3
+const RECONCILE_INTERVAL_MS = 60 * 60_000
+const NATIVE_AUTHORITY_READY_TOKEN = '[ingest-worker] native regional authority ready'
 
-async function runJob(job: Job, context: ConsumedRegionContext): Promise<unknown> {
+async function runJob(job: Job, context: AuthorizedConsumedRegionContext): Promise<unknown> {
   switch (job.name) {
     case INGEST_JOB.TIER_A: {
       const { processTierA } = await import('./ingest/processors/tier-a-leaderboard')
@@ -124,7 +131,7 @@ async function runJob(job: Job, context: ConsumedRegionContext): Promise<unknown
   }
 }
 
-async function route(job: Job, context: ConsumedRegionContext): Promise<unknown> {
+async function route(job: Job, context: AuthorizedConsumedRegionContext): Promise<unknown> {
   return routeJobWithSourceLease({
     redis: getConnection(),
     job,
@@ -141,7 +148,7 @@ async function route(job: Job, context: ConsumedRegionContext): Promise<unknown>
 
 async function routeTierC(
   job: Job<TierCJobData>,
-  context: ConsumedRegionContext
+  context: AuthorizedConsumedRegionContext
 ): Promise<unknown> {
   const decision = await routeTierCJobRegion(job, context.consumedRegion)
   if (decision.action === 'rerouted') {
@@ -154,186 +161,239 @@ async function routeTierC(
   return processTierC(job, context.consumedRegion)
 }
 
+const processCoordinator = createNativeProcessCoordinator({
+  closeDatabase: async () => {
+    const { closeIngestPool } = await import('@/lib/ingest/db')
+    await closeIngestPool()
+  },
+  closeRedis: closeConnection,
+  markFatal: (code) => {
+    console.error(`[ingest-worker] native process shutdown failed (${code})`)
+  },
+  setExitCode: (code) => {
+    process.exitCode = code
+  },
+})
+
+let processHandlersInstalled = false
+
+function installProcessHandlers(): void {
+  if (processHandlersInstalled) return
+  processHandlersInstalled = true
+
+  const requestSignalShutdown = (signal: 'SIGINT' | 'SIGTERM') => {
+    console.log(`[ingest-worker] ${signal} — shutting down…`)
+    void processCoordinator.requestShutdown('signal')
+  }
+  process.once('SIGINT', () => requestSignalShutdown('SIGINT'))
+  process.once('SIGTERM', () => requestSignalShutdown('SIGTERM'))
+
+  process.on('unhandledRejection', () => {
+    console.error('[ingest-worker] unhandled rejection')
+    void processCoordinator.requestShutdown('consumer_failed')
+  })
+  process.on('uncaughtException', () => {
+    console.error('[ingest-worker] uncaught exception')
+    void processCoordinator.requestShutdown('consumer_failed')
+  })
+}
+
 async function main(): Promise<void> {
+  // Signals and fatal process events must be captured before the first await;
+  // startup may already own a database or Redis operation when they arrive.
+  installProcessHandlers()
   console.log('[ingest-worker] starting…')
 
-  // No scheduler, BullMQ consumer, heartbeat, or failover worker may start
-  // until the production database proves the exact source-lineage contract.
-  await assertMetricTrustWorkerReadiness()
-  console.log('[ingest-worker] metric-trust database release contract ready')
+  try {
+    // No scheduler, BullMQ consumer, heartbeat, or authority attempt may start
+    // until the production database proves the exact source-lineage contract.
+    await assertMetricTrustWorkerReadiness()
+    processCoordinator.assertStartupOpen()
+    console.log('[ingest-worker] metric-trust database release contract ready')
 
-  // Register adapters (side-effect imports add them to the registry).
-  await import('@/lib/ingest/adapters/register')
+    // Register adapters (side-effect imports add them to the registry).
+    await import('@/lib/ingest/adapters/register')
+    processCoordinator.assertStartupOpen()
 
-  const regions = consumedRegions()
-  const executionRegion = requireWorkerExecutionRegion(process.env.INGEST_LOCAL_REGION)
-  const regionContexts = new Map(
-    regions.map((region) => [region, createConsumedRegionContext(region, executionRegion)] as const)
-  )
-  const contextFor = (region: IngestRegion): ConsumedRegionContext => {
-    const context = regionContexts.get(region)
-    if (!context) throw new Error(`[ingest-worker] missing consumed-region context for ${region}`)
-    return context
-  }
+    const regions = consumedRegions()
+    const executionRegion = requireWorkerExecutionRegion(process.env.INGEST_LOCAL_REGION)
+    const nativeConfig = resolveNativeRegionConfig(regions, executionRegion)
+    const region = nativeConfig.nativeRegion
+    const redis = getConnection()
+    const runtimeIdentity = resolveWorkerRuntimeIdentity()
+    const buildAuthorityHeartbeat = createWorkerOwnershipHeartbeatFactory(runtimeIdentity, region)
 
-  // The first liveness write is deployment evidence, not a best-effort timer:
-  // no scheduler or queue consumer may start until shared Redis confirms it.
-  const { heartbeatTimer, consumers, reconcileTimer, failover } =
-    await startIngestServingAfterHeartbeat({
-      startHeartbeat: () => startHeartbeat(getConnection(), regions),
-      createConsumers: () => {
-        const workers = regions.map((region) => {
-          const w = new Worker(
-            regionQueueName(region),
-            bindConsumedRegion(contextFor(region), route),
-            {
+    console.warn(
+      '[ingest-worker] cross-region failover disabled pending a fenced target authority lifecycle'
+    )
+    const lifecycle = await acquireRegionAuthorityLifecycleWithRetry({
+      heartbeat: buildAuthorityHeartbeat,
+      log: (message) => console.warn(message),
+      onLost: (failure) => {
+        console.error(`[ingest-worker] regional authority lost (${failure.code})`)
+        void processCoordinator.requestShutdown('authority_lost')
+      },
+      redis,
+      region,
+      signal: processCoordinator.startupSignal,
+    })
+    processCoordinator.bindLifecycle(lifecycle)
+    processCoordinator.assertStartupOpen()
+
+    const fastLane = fastLaneEnabled()
+    const runtime = await prepareRegionConsumerRuntime({
+      createConsumers: (context, register) => {
+        const bulkWorker = register(
+          new Worker(regionQueueName(region), bindAuthorizedConsumedRegion(context, route), {
+            autorun: false,
+            connection: ingestConnection(),
+            concurrency: INGEST_CONCURRENCY,
+            // Tier-A full crawls run 25-90 min; default 30s lock + stall detection
+            // misfires across pm2 restarts ("job stalled more than allowable limit").
+            lockDuration: 180_000,
+            stalledInterval: 300_000,
+            maxStalledCount: 2,
+          })
+        )
+        bulkWorker.on('completed', (job) => {
+          console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}]`)
+        })
+        bulkWorker.on('failed', (job, error) => {
+          console.error(`[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}]:`, error.message)
+        })
+
+        if (fastLane) {
+          const fastWorker = register(
+            new Worker(regionFastQueueName(region), bindAuthorizedConsumedRegion(context, route), {
+              autorun: false,
               connection: ingestConnection(),
-              concurrency: INGEST_CONCURRENCY,
-              // Tier-A full crawls run 25-90 min; default 30s lock + stall detection
-              // misfires across pm2 restarts ("job stalled more than allowable limit").
-              // Longer lock + renewal headroom; stalled jobs still recover via retry.
+              concurrency: FAST_CONCURRENCY,
               lockDuration: 180_000,
               stalledInterval: 300_000,
               maxStalledCount: 2,
-            }
-          )
-          w.on('completed', (job) => {
-            console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}]`)
-          })
-          w.on('failed', (job, err) => {
-            console.error(`[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}]:`, err.message)
-          })
-          return w
-        })
-
-        // Fast-lane workers: a separate pool per consumed region for light Tier-A
-        // crawls (siphoned by reconcileSchedulers). The bulk pool's hours-long
-        // crawls can never occupy these slots, so small user-facing leaderboards
-        // stay fresh regardless of giant-board backlog. Gated by INGEST_FAST_LANE so
-        // the lane only spins up once BOTH nodes are enabled together (see queues.ts).
-        const fastWorkers = !fastLaneEnabled()
-          ? []
-          : regions.map((region) => {
-              const w = new Worker(
-                regionFastQueueName(region),
-                bindConsumedRegion(contextFor(region), route),
-                {
-                  connection: ingestConnection(),
-                  concurrency: FAST_CONCURRENCY,
-                  lockDuration: 180_000,
-                  stalledInterval: 300_000,
-                  maxStalledCount: 2,
-                }
-              )
-              w.on('completed', (job) => {
-                console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}/fast]`)
-              })
-              w.on('failed', (job, err) => {
-                console.error(
-                  `[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}/fast]:`,
-                  err.message
-                )
-              })
-              return w
             })
+          )
+          fastWorker.on('completed', (job) => {
+            console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}/fast]`)
+          })
+          fastWorker.on('failed', (job, error) => {
+            console.error(
+              `[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}/fast]:`,
+              error.message
+            )
+          })
+        }
 
-        // Dedicated Tier-C workers: user-facing on-demand fetches get their own
-        // region-affine slots so they never queue behind bulk work or run from the
-        // wrong egress. The local queue keeps the historical name and reroutes old
-        // remote-source jobs only after their authoritative queue accepts them.
-        const tiercWorkers = regions.map((region) => {
-          const worker = new Worker<TierCJobData>(
+        const tierCWorker = register(
+          new Worker<TierCJobData>(
             tierCQueueName(region),
-            bindConsumedRegion(contextFor(region), routeTierC),
+            bindAuthorizedConsumedRegion(context, routeTierC),
             {
+              autorun: false,
               connection: ingestConnection(),
               concurrency: 2,
             }
           )
-          worker.on('completed', (job) => {
-            console.log(`[ingest-worker] ✓ tierc ${job.id} [${region}]`)
-          })
-          worker.on('failed', (job, err) => {
-            console.error(`[ingest-worker] ✗ tierc ${job?.id} [${region}]:`, err.message)
-          })
-          return worker
+        )
+        tierCWorker.on('completed', (job) => {
+          console.log(`[ingest-worker] ✓ tierc ${job.id} [${region}]`)
         })
-
-        return { workers, fastWorkers, tiercWorkers }
+        tierCWorker.on('failed', (job, error) => {
+          console.error(`[ingest-worker] ✗ tierc ${job?.id} [${region}]:`, error.message)
+        })
       },
-      reconcileSchedulers,
-      // Re-reconcile hourly: sources rows are the live config (spec §2.1).
-      startReconcileTimer: () =>
-        setInterval(() => {
-          reconcileSchedulers().catch((err) =>
-            console.error('[ingest-worker] reconcile failed:', err)
-          )
-        }, 60 * 60_000),
-
-      // Standby failover: when an operator sets arena:failover:regions in response
-      // to a heartbeat-down page, this worker temporarily consumes the downed
-      // node's queue (auto-stands-down when that node's heartbeat returns).
-      startFailover: () =>
-        startFailoverManager(getConnection(), regions, executionRegion, route, {
-          concurrency: INGEST_CONCURRENCY,
-          lockDuration: 180_000,
-          stalledInterval: 300_000,
-          maxStalledCount: 2,
-        }),
-      markReady: () =>
-        console.log(
-          `[ingest-worker] ready (regions=${regions.join(',')}, concurrency=${INGEST_CONCURRENCY}` +
-            `, fast-lane=${fastLaneEnabled() ? `on×${FAST_CONCURRENCY}` : 'off'})`
-        ),
+      executionRegion: nativeConfig.executionRegion,
+      lifecycle,
+      onUnexpectedStop: (failure, regionalShutdown) => {
+        console.error(`[ingest-worker] regional consumers stopped (${failure.code})`)
+        return processCoordinator.requestShutdown(
+          failure.code === 'authority_lost' ? 'authority_lost' : 'consumer_failed',
+          regionalShutdown
+        )
+      },
+      startupSignal: processCoordinator.startupSignal,
     })
-  const { workers, fastWorkers, tiercWorkers } = consumers
+    processCoordinator.bindRuntime(runtime)
+    processCoordinator.assertStartupOpen()
 
-  let shuttingDown = false
-  const shutdown = async (signal: string) => {
-    // SIGINT+SIGTERM can both fire (pm2 stop) — double closeIngestPool()
-    // throws "Called end on pool more than once" as an unhandled rejection.
-    if (shuttingDown) return
-    shuttingDown = true
-    console.log(`[ingest-worker] ${signal} — shutting down…`)
-    clearInterval(reconcileTimer)
-    clearInterval(heartbeatTimer)
-    await failover.stop()
-    await Promise.all([...workers, ...fastWorkers, ...tiercWorkers].map((w) => w.close()))
-    const { closeIngestPool } = await import('@/lib/ingest/db')
-    await closeIngestPool()
-    await closeConnection()
-    process.exit(0)
-  }
-  process.on('SIGINT', () => void shutdown('SIGINT'))
-  process.on('SIGTERM', () => void shutdown('SIGTERM'))
-
-  // Crash visibility — PM2 restarts us; never die silently.
-  process.on('unhandledRejection', (reason) => {
-    console.error('[ingest-worker] UNHANDLED REJECTION:', reason)
-  })
-  process.on('uncaughtException', (err) => {
-    // Defense-in-depth ONLY. The REAL fix is ingestClientConnect() (lib/ingest/db.ts):
-    // it attaches client.on('error') at every pool.connect() site, so a mid-transaction
-    // connection death (Supavisor closing the socket) is absorbed there and never
-    // reaches here. This broad net stays as a last resort — the drop messages vary
-    // ("terminating connection…", "(EDBHANDLEREXITED) connection to database closed",
-    // "Connection terminated unexpectedly" — all verified in
-    // scripts/test-edbhandler-repro.mts), so a fragile string match alone is NOT the fix.
-    const msg = String((err as { message?: string })?.message ?? err)
-    if (
-      /EDBHANDLEREXITED|connection to database closed|terminating connection|Connection terminated|ECONNRESET/i.test(
-        msg
-      )
-    ) {
-      console.error('[ingest-worker] recoverable DB connection drop (non-fatal):', msg)
-      return
+    let reconcileInFlight: Promise<void> | undefined
+    const reconcileOnce = (): Promise<void> => {
+      if (reconcileInFlight !== undefined) return reconcileInFlight
+      processCoordinator.assertStartupOpen()
+      const reconciliation = reconcileSchedulers()
+      processCoordinator.trackReconcile(reconciliation)
+      const operation = reconciliation.then(() => processCoordinator.assertStartupOpen())
+      reconcileInFlight = operation
+      const clear = () => {
+        if (reconcileInFlight === operation) reconcileInFlight = undefined
+      }
+      void operation.then(clear, clear)
+      return operation
     }
-    console.error('[ingest-worker] UNCAUGHT EXCEPTION:', err)
-    process.exit(1)
-  })
+
+    await startNativeIngestServing({
+      lifecycle,
+      markReady: () => {
+        processCoordinator.assertStartupOpen()
+        console.log(`${NATIVE_AUTHORITY_READY_TOKEN} region=${region}`)
+        console.log(
+          `[ingest-worker] ready (regions=${nativeConfig.consumedRegions.join(',')}, ` +
+            `concurrency=${INGEST_CONCURRENCY}, ` +
+            `fast-lane=${fastLane ? `on×${FAST_CONCURRENCY}` : 'off'})`
+        )
+      },
+      reconcileSchedulers: reconcileOnce,
+      runtime,
+      startHeartbeat: async () => {
+        const timer = await startHeartbeat(redis, nativeConfig.consumedRegions, runtimeIdentity)
+        try {
+          processCoordinator.bindHeartbeatTimer(() => clearInterval(timer))
+          processCoordinator.assertStartupOpen()
+          return timer
+        } catch (error) {
+          clearInterval(timer)
+          throw error
+        }
+      },
+      startReconcileTimer: () => {
+        const timer = setInterval(() => {
+          if (processCoordinator.shutdownReason !== undefined) return
+          void reconcileOnce().catch(() => {
+            if (processCoordinator.shutdownReason === undefined) {
+              console.error('[ingest-worker] periodic reconcile failed')
+            }
+          })
+        }, RECONCILE_INTERVAL_MS)
+        timer.unref?.()
+        try {
+          processCoordinator.bindReconcileTimer(() => clearInterval(timer))
+          processCoordinator.assertStartupOpen()
+          return timer
+        } catch (error) {
+          clearInterval(timer)
+          throw error
+        }
+      },
+    })
+    processCoordinator.assertStartupOpen()
+  } catch {
+    if (processCoordinator.shutdownReason === undefined) {
+      console.error('[ingest-worker] startup failed')
+    }
+    void processCoordinator.requestShutdown(processCoordinator.shutdownReason ?? 'startup_failed')
+  } finally {
+    processCoordinator.settleStartup()
+  }
+
+  const shutdownReason = processCoordinator.shutdownReason
+  if (shutdownReason !== undefined) {
+    await processCoordinator.requestShutdown(shutdownReason)
+  }
 }
 
-main().catch((err) => {
-  console.error('[ingest-worker] fatal:', err)
-  process.exit(1)
+void main().catch(() => {
+  const shutdownReason = processCoordinator.shutdownReason
+  if (shutdownReason === undefined) console.error('[ingest-worker] fatal main failure')
+  processCoordinator.settleStartup()
+  void processCoordinator.requestShutdown(shutdownReason ?? 'startup_failed')
 })
