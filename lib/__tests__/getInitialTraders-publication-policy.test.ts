@@ -1,13 +1,14 @@
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 const mockCacheGet = jest.fn()
+const mockAttachAvatarMirrors = jest.fn(async (_supabase: unknown, traders: unknown[]) => traders)
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: () => ({ from: mockFrom, rpc: mockRpc }),
 }))
 
 jest.mock('@/lib/data/avatar-mirrors', () => ({
-  attachAvatarMirrors: jest.fn(async (_supabase: unknown, traders: unknown[]) => traders),
+  attachAvatarMirrors: (...args: unknown[]) => mockAttachAvatarMirrors(...args),
 }))
 
 jest.mock('@/lib/cache', () => ({
@@ -42,6 +43,40 @@ function queryResult(data: unknown[], error: unknown = null) {
   return proxy
 }
 
+function abortablePendingQuery() {
+  let signal: AbortSignal | undefined
+  const methods: Record<string, jest.Mock> = {}
+  const proxy = new Proxy<Record<string, unknown>>(
+    {},
+    {
+      get(_target, property) {
+        if (property === 'then') {
+          return (_resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
+            const rejectAbort = () => {
+              const error = new Error('request aborted')
+              error.name = 'AbortError'
+              reject(error)
+            }
+            if (signal?.aborted) rejectAbort()
+            else signal?.addEventListener('abort', rejectAbort, { once: true })
+          }
+        }
+        if (property === 'abortSignal') {
+          methods.abortSignal ??= jest.fn((nextSignal: AbortSignal) => {
+            signal = nextSignal
+            return proxy
+          })
+          return methods.abortSignal
+        }
+        const key = String(property)
+        methods[key] ??= jest.fn(() => proxy)
+        return methods[key]
+      },
+    }
+  )
+  return proxy
+}
+
 import { fetchLeaderboardFromDB, getInitialTraders } from '../getInitialTraders'
 
 describe('SSR public ranking source quarantine', () => {
@@ -62,13 +97,10 @@ describe('SSR public ranking source quarantine', () => {
 
     mockRpc.mockImplementation((name: string) => {
       if (name === 'get_leaderboard_category_counts') {
-        return Promise.resolve({
-          data: [
-            { source_type: 'futures', count: 1 },
-            { source_type: 'web3', count: 2 },
-          ],
-          error: null,
-        })
+        return queryResult([
+          { source_type: 'futures', count: 1 },
+          { source_type: 'web3', count: 2 },
+        ])
       }
       throw new Error(`unexpected RPC ${name}`)
     })
@@ -139,13 +171,10 @@ describe('SSR public ranking source quarantine', () => {
 
     mockRpc.mockImplementation((name: string) => {
       if (name === 'get_leaderboard_category_counts') {
-        return Promise.resolve({
-          data: [
-            { source_type: 'futures', count: 3 },
-            { source_type: 'web3', count: 1 },
-          ],
-          error: null,
-        })
+        return queryResult([
+          { source_type: 'futures', count: 3 },
+          { source_type: 'web3', count: 1 },
+        ])
       }
       throw new Error(`unexpected RPC ${name}`)
     })
@@ -233,5 +262,123 @@ describe('SSR public ranking source quarantine', () => {
     expect(result.isStale).toBe(true)
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('serves a non-empty fallback cache immediately and always marks it stale', async () => {
+    const fallback = {
+      traders: [{ source: 'binance_futures', source_type: 'futures', id: 'cached-trader' }],
+      lastUpdated: '2026-07-24T10:00:00.000Z',
+      isStale: false,
+      totalCount: 1,
+      categoryCounts: { all: 1, futures: 1, spot: 0, onchain: 0 },
+    }
+    mockCacheGet.mockResolvedValueOnce(null).mockResolvedValueOnce(fallback)
+    mockFrom.mockImplementation(() => {
+      throw new Error('DB must not start when stale fallback data is available')
+    })
+
+    const result = await getInitialTraders('90D', 20, 0)
+
+    expect(mockCacheGet).toHaveBeenNthCalledWith(
+      1,
+      'public-rank-policy-v2:home-initial-traders-v4:90D:p0'
+    )
+    expect(mockCacheGet).toHaveBeenNthCalledWith(
+      2,
+      'public-rank-policy-v2:home-initial-traders-fallback-v4:90D:p0'
+    )
+    expect(result).toEqual({ ...fallback, isStale: true })
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('passes one shared AbortSignal through every related Supabase read', async () => {
+    const rankingQuery = queryResult([
+      {
+        source: 'binance_futures',
+        source_trader_id: 'shared-signal',
+        source_type: 'futures',
+        handle: 'Shared Signal',
+        arena_score: 90,
+        computed_at: '2026-07-24T11:55:00.000Z',
+      },
+    ])
+    const categoryQuery = queryResult([{ source_type: 'futures', count: 1 }])
+    const countQuery = queryResult([
+      {
+        source: '_all_gt0',
+        total_count: 1,
+        updated_at: '2026-07-24T11:59:00.000Z',
+      },
+      {
+        source: 'binance_futures_gt0',
+        total_count: 1,
+        updated_at: '2026-07-24T11:59:00.000Z',
+      },
+    ])
+    const freshnessQuery = queryResult([
+      { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+    ])
+
+    mockRpc.mockImplementation((name: string) => {
+      if (name === 'get_leaderboard_category_counts') return categoryQuery
+      throw new Error(`unexpected RPC ${name}`)
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') return rankingQuery
+      if (table === 'leaderboard_count_cache') return countQuery
+      if (table === 'leaderboard_source_freshness') return freshnessQuery
+      throw new Error(`unexpected table ${table}`)
+    })
+
+    const result = await fetchLeaderboardFromDB('90D', 1, 1)
+    const signal = (rankingQuery.abortSignal as jest.Mock).mock.calls[0]?.[0] as AbortSignal
+
+    expect(result.traders.map(({ id }) => id)).toEqual(['shared-signal'])
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(categoryQuery.abortSignal).toHaveBeenCalledWith(signal)
+    expect(countQuery.abortSignal).toHaveBeenCalledWith(signal)
+    expect(freshnessQuery.abortSignal).toHaveBeenCalledWith(signal)
+    expect(mockAttachAvatarMirrors).toHaveBeenCalledWith(expect.anything(), result.traders, signal)
+    expect(signal.aborted).toBe(false)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('uses one timeout to abort the underlying query instead of racing abandoned work', async () => {
+    const rankingQuery = abortablePendingQuery()
+    const categoryQuery = queryResult([])
+    const countQuery = queryResult([])
+    const freshnessQuery = queryResult([])
+
+    mockRpc.mockImplementation((name: string) => {
+      if (name === 'get_leaderboard_category_counts') return categoryQuery
+      throw new Error(`unexpected RPC ${name}`)
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') return rankingQuery
+      if (table === 'leaderboard_count_cache') return countQuery
+      if (table === 'leaderboard_source_freshness') return freshnessQuery
+      throw new Error(`unexpected table ${table}`)
+    })
+
+    const pending = getInitialTraders('90D', 20, 1)
+    await jest.advanceTimersByTimeAsync(0)
+
+    const signal = (rankingQuery.abortSignal as jest.Mock).mock.calls[0]?.[0] as AbortSignal
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(signal.aborted).toBe(false)
+    expect(jest.getTimerCount()).toBe(1)
+
+    await jest.advanceTimersByTimeAsync(5_000)
+    await expect(pending).resolves.toEqual({
+      traders: [],
+      lastUpdated: null,
+      isStale: true,
+      totalCount: 0,
+      categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 },
+    })
+    expect(signal.aborted).toBe(true)
+    expect(jest.getTimerCount()).toBe(0)
   })
 })

@@ -24,13 +24,14 @@ interface MirrorRow {
 
 export async function attachAvatarMirrors<
   T extends { source: string; id: string; avatar_url_mirror?: string | null },
->(supabase: SupabaseClient, traders: T[]): Promise<T[]> {
+>(supabase: SupabaseClient, traders: T[], signal?: AbortSignal): Promise<T[]> {
   if (!traders.length) return traders
   try {
-    const { data, error } = await supabase.rpc('arena_avatar_mirrors', {
+    const query = supabase.rpc('arena_avatar_mirrors', {
       p_sources: traders.map((t) => t.source),
       p_trader_ids: traders.map((t) => t.id),
     })
+    const { data, error } = await (signal ? query.abortSignal(signal) : query)
     if (error || !Array.isArray(data)) {
       if (error) logger.warn('[attachAvatarMirrors] RPC error:', error.message)
       return traders

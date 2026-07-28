@@ -120,6 +120,13 @@ export interface InitialTradersResult {
   categoryCounts: CategoryCounts
 }
 
+function staleCacheResult(
+  ...candidates: Array<InitialTradersResult | null>
+): InitialTradersResult | null {
+  const stale = candidates.find((candidate) => candidate && candidate.traders.length > 0)
+  return stale ? { ...stale, isStale: true } : null
+}
+
 /**
  * Single source of truth for the SSR homepage cache keys — shared by the
  * reader (getInitialTraders) and the warm-cache writers so they can never
@@ -188,22 +195,29 @@ export async function getInitialTraders(
     }
     // Primary cache miss — try fallback (longer TTL, may be stale but better than empty)
     fallbackCached = await cache.get<InitialTradersResult>(fallbackKey)
-    if (fallbackCached) fallbackCached = sanitizePublicRankingSourcePayload(fallbackCached)
+    if (fallbackCached) {
+      fallbackCached = sanitizePublicRankingSourcePayload(fallbackCached)
+      const stale = staleCacheResult(fallbackCached)
+      if (stale) return stale
+    }
   } catch (_err) {
     // Redis unavailable — fall through to DB
   }
 
-  // DB fetch with 5s timeout — SSR must never hang
-  const TIMEOUT_MS = 5000
+  // fetchLeaderboardFromDB owns the single 5s timeout and aborts the actual
+  // Supabase requests. Do not race it with a second timer here: that used to
+  // abandon still-running PostgREST requests whenever the outer race won.
   try {
     const result = sanitizePublicRankingSourcePayload(
-      await Promise.race([
-        fetchLeaderboardFromDB(timeRange, limit, page),
-        new Promise<InitialTradersResult>((_, reject) =>
-          setTimeout(() => reject(new Error('SSR DB timeout')), TIMEOUT_MS)
-        ),
-      ])
+      await fetchLeaderboardFromDB(timeRange, limit, page)
     )
+
+    // Defensive fallback for DB errors/timeouts that are normalized to an
+    // empty result by fetchLeaderboardFromDB. In normal serving, a non-empty
+    // fallback already returned above without starting the DB request.
+    if (result.traders.length === 0) {
+      return staleCacheResult(cached, fallbackCached) ?? result
+    }
 
     // Cache successful result — TTL aligned with compute-leaderboard frequency (2h).
     // warm-cache cron refreshes every 30 min, so data is always reasonably fresh.
@@ -226,8 +240,11 @@ export async function getInitialTraders(
     // diverse RPC + category counts spike to 15-30s. Returning empty zeros
     // produces user-visible "0 traders" flash on the homepage. Stale data
     // (even hours old) is much better than nothing.
-    const stale = sanitizePublicRankingSourcePayload(cached ?? fallbackCached)
-    if (stale && stale.traders && stale.traders.length > 0) {
+    const stale = staleCacheResult(
+      sanitizePublicRankingSourcePayload(cached),
+      sanitizePublicRankingSourcePayload(fallbackCached)
+    )
+    if (stale) {
       logger.info(
         `[getInitialTraders] Serving STALE cache after DB timeout (page=${page}, traders=${stale.traders.length})`
       )
@@ -264,37 +281,34 @@ export async function fetchLeaderboardFromDB(
   // 5s timeout — paginated queries with OFFSET can be slower than page 0 RPC
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 5_000)
+  const { signal } = controller
 
   try {
     let tradersPromise: Promise<{ traders: InitialTrader[]; lastUpdated: string | null }>
     if (page > 0) {
-      tradersPromise = fetchPaginatedFromDB(supabase, timeRange, limit, page)
+      tradersPromise = fetchPaginatedFromDB(supabase, timeRange, limit, page, signal)
     } else if (PUBLIC_RANKING_QUARANTINED_SOURCES.length > 0) {
       // The diverse RPC applies LIMIT internally. While a quarantine is active,
       // use the direct reader so source exclusion happens in SQL before LIMIT.
-      tradersPromise = fetchLeaderboardLegacy(supabase, timeRange, limit)
+      tradersPromise = fetchLeaderboardLegacy(supabase, timeRange, limit, signal)
     } else {
-      tradersPromise = fetchViaDiverseRPC(supabase, timeRange, limit)
+      tradersPromise = fetchViaDiverseRPC(supabase, timeRange, limit, signal)
     }
 
-    // Fetch traders + category counts in parallel
-    const [tradersResult, rawCounts, freshnessRows] = await Promise.race([
-      Promise.all([
-        tradersPromise,
-        fetchCategoryCounts(supabase, timeRange),
-        fetchInitialFreshnessRows(supabase, timeRange),
-      ]),
-      new Promise<never>((_, reject) => {
-        controller.signal.addEventListener('abort', () =>
-          reject(new Error('Query timeout after 5000ms'))
-        )
-      }),
+    // Fetch traders + category counts in parallel. Every top-level PostgREST
+    // request shares this deadline (the diverse RPC derives a shorter child
+    // deadline), so timeout cancels DB work instead of abandoning a race loser.
+    const [tradersResult, rawCounts, freshnessRows] = await Promise.all([
+      tradersPromise,
+      fetchCategoryCounts(supabase, timeRange, signal),
+      fetchInitialFreshnessRows(supabase, timeRange, signal),
     ])
+    if (signal.aborted) throw signal.reason
 
-    clearTimeout(timer)
     // Prefer our own CDN mirror over the exchange-CDN proxy (no 429 cold-burst).
     // Fail-open: missing mirrors leave avatar_url untouched (origin proxy still works).
-    const enrichedTraders = await attachAvatarMirrors(supabase, tradersResult.traders)
+    const enrichedTraders = await attachAvatarMirrors(supabase, tradersResult.traders, signal)
+    if (signal.aborted) throw signal.reason
     const counts = publicInitialCategoryCounts(freshnessRows.countRows, enrichedTraders, rawCounts)
     const freshness = summarizeInitialTraderFreshness({
       countRows: freshnessRows.countRows,
@@ -310,7 +324,6 @@ export async function fetchLeaderboardFromDB(
       categoryCounts: counts,
     })
   } catch (err: unknown) {
-    clearTimeout(timer)
     const isTimeout =
       err instanceof Error && (err.name === 'AbortError' || err.message.includes('timeout'))
     if (isTimeout) {
@@ -327,12 +340,15 @@ export async function fetchLeaderboardFromDB(
       totalCount: 0,
       categoryCounts: emptyCounts,
     }
+  } finally {
+    clearTimeout(timer)
   }
 }
 
 async function fetchInitialFreshnessRows(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  timeRange: Period
+  timeRange: Period,
+  signal: AbortSignal
 ): Promise<{
   countRows: LeaderboardCountCacheRow[]
   watermarkRows: SourceFreshnessRow[]
@@ -350,8 +366,9 @@ async function fetchInitialFreshnessRows(
       .from('leaderboard_count_cache')
       .select('source,total_count,updated_at')
       .eq('season_id', timeRange)
-      .like('source', '%_gt0'),
-    watermarkQuery,
+      .like('source', '%_gt0')
+      .abortSignal(signal),
+    watermarkQuery.abortSignal(signal),
   ])
 
   return {
@@ -420,11 +437,14 @@ export function publicInitialCategoryCounts(
  */
 async function fetchCategoryCounts(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  timeRange: Period
+  timeRange: Period,
+  signal: AbortSignal
 ): Promise<CategoryCounts> {
-  const { data, error } = await supabase.rpc('get_leaderboard_category_counts', {
-    p_season_id: timeRange,
-  })
+  const { data, error } = await supabase
+    .rpc('get_leaderboard_category_counts', {
+      p_season_id: timeRange,
+    })
+    .abortSignal(signal)
 
   if (!error && data && Array.isArray(data)) {
     const counts: CategoryCounts = { all: 0, futures: 0, spot: 0, onchain: 0 }
@@ -456,7 +476,8 @@ async function fetchCategoryCounts(
 async function fetchViaDiverseRPC(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   timeRange: Period,
-  limit: number
+  limit: number,
+  signal: AbortSignal
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   // Fetch more rows with per-platform cap, then enforce JS-side category diversity.
   // Without this, DEX platforms (high ROI → high score) dominate all 50 slots.
@@ -470,25 +491,34 @@ async function fetchViaDiverseRPC(
   // fetchLeaderboardLegacy which uses the covering index (28ms).
   let data: Record<string, unknown>[] | null = null
   let error: { message: string } | null = null
+  const rpcController = new AbortController()
+  const abortFromParent = () => rpcController.abort(signal.reason)
+  if (signal.aborted) abortFromParent()
+  else signal.addEventListener('abort', abortFromParent, { once: true })
+  const rpcTimer = setTimeout(
+    () => rpcController.abort(new DOMException('Diverse RPC timeout (2s)', 'TimeoutError')),
+    2_000
+  )
   try {
-    const rpcResult = await Promise.race([
-      supabase.rpc('get_diverse_leaderboard', {
+    const rpcResult = await supabase
+      .rpc('get_diverse_leaderboard', {
         p_season_id: timeRange,
         p_per_platform: MAX_PER_PLATFORM,
         p_total_limit: limit * 2,
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Diverse RPC timeout (2s)')), 2_000)
-      ),
-    ])
+      })
+      .abortSignal(rpcController.signal)
     data = filterPublicRankingRows(
       (rpcResult.data || []) as Record<string, unknown>[],
       (row) => row.source
     )
     error = rpcResult.error
   } catch (_err) {
+    if (signal.aborted) throw signal.reason
     logger.warn('[getInitialTraders] Diverse RPC slow (>2s), falling back to covering-index query')
-    return fetchLeaderboardLegacy(supabase, timeRange, limit)
+    return fetchLeaderboardLegacy(supabase, timeRange, limit, signal)
+  } finally {
+    clearTimeout(rpcTimer)
+    signal.removeEventListener('abort', abortFromParent)
   }
 
   if (!error && data && Array.isArray(data) && data.length > 0) {
@@ -549,7 +579,7 @@ async function fetchViaDiverseRPC(
     )
   }
 
-  return fetchLeaderboardLegacy(supabase, timeRange, limit)
+  return fetchLeaderboardLegacy(supabase, timeRange, limit, signal)
 }
 
 /**
@@ -560,7 +590,8 @@ async function fetchPaginatedFromDB(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   timeRange: Period,
   limit: number,
-  page: number
+  page: number,
+  signal: AbortSignal
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const offset = page * limit
   // Explicit column list (not select('*')) so Postgres can use the
@@ -583,6 +614,7 @@ async function fetchPaginatedFromDB(
   const { data, error } = await query
     .order('arena_score', { ascending: false })
     .range(offset, offset + limit - 1)
+    .abortSignal(signal)
 
   if (error || !data) {
     logger.error('[fetchPaginatedFromDB] Error:', error?.message)
@@ -603,7 +635,8 @@ async function fetchPaginatedFromDB(
 async function fetchLeaderboardLegacy(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   timeRange: Period,
-  limit: number
+  limit: number,
+  signal: AbortSignal
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const { traders: unifiedTraders } = await getLeaderboard(supabase, {
     period: timeRange as '7D' | '30D' | '90D',
@@ -612,6 +645,7 @@ async function fetchLeaderboardLegacy(
     excludeOutliers: true,
     sortBy: 'arena_score',
     excludeSources: PUBLIC_RANKING_QUARANTINED_SOURCES,
+    signal,
   })
 
   const initialTraders = unifiedTraders.map(mapUnifiedToInitial)

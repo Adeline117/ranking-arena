@@ -109,6 +109,8 @@ export async function getLeaderboard(
     excludeSources?: readonly string[]
     /** Allow data up to 24h old instead of 6h (graceful degradation) */
     allowStale?: boolean
+    /** Share a caller-owned cancellation deadline across related Supabase queries. */
+    signal?: AbortSignal
   }
 ): Promise<{ traders: UnifiedTrader[]; total: number; error?: string }> {
   const {
@@ -120,6 +122,7 @@ export async function getLeaderboard(
     excludeOutliers = true,
     sortBy = 'rank',
     excludeSources = [],
+    signal,
   } = params
   const opts = params
 
@@ -141,12 +144,13 @@ export async function getLeaderboard(
         // Total from count cache, not data length
         let total = traders.length
         try {
-          const { data: cacheRow } = await supabase
+          let countQuery = supabase
             .from('leaderboard_count_cache')
             .select('total_count')
             .eq('season_id', period)
             .eq('source', '_all')
-            .maybeSingle()
+          if (signal) countQuery = countQuery.abortSignal(signal)
+          const { data: cacheRow } = await countQuery.maybeSingle()
           if (cacheRow && cacheRow.total_count > 0) total = cacheRow.total_count
         } catch {
           /* fall back to data length */
@@ -212,9 +216,8 @@ export async function getLeaderboard(
 
   query = query.range(offset, offset + limit - 1)
 
-  const { data, error } = await Promise.resolve(
-    query.abortSignal(AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS))
-  ).catch(() => ({
+  const querySignal = signal ?? AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS)
+  const { data, error } = await Promise.resolve(query.abortSignal(querySignal)).catch(() => ({
     data: null as Record<string, unknown>[] | null,
     error: { message: `Query timeout after ${SSR_HEAVY_QUERY_TIMEOUT_MS}ms` },
   }))
@@ -231,12 +234,13 @@ export async function getLeaderboard(
   let total = traders.length
   try {
     const source = platform || '_all'
-    const { data: cacheRow } = await supabase
+    let countQuery = supabase
       .from('leaderboard_count_cache')
       .select('total_count')
       .eq('season_id', period)
       .eq('source', source)
-      .maybeSingle()
+    if (signal) countQuery = countQuery.abortSignal(signal)
+    const { data: cacheRow } = await countQuery.maybeSingle()
     if (cacheRow?.total_count && cacheRow.total_count > 0) {
       total = cacheRow.total_count
     }
