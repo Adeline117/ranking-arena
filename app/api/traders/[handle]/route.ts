@@ -116,7 +116,12 @@ const E2E_FIXTURES: Record<string, () => unknown> = {
         },
       ],
     },
-    claim_status: { is_verified: false, owner_id: null },
+    claim_status: {
+      trader_id: 'e2e-primary-key',
+      source: 'binance_futures',
+      is_verified: false,
+      owner_id: null,
+    },
     rank_history: { history: [] },
   }),
 }
@@ -236,9 +241,11 @@ export async function GET(
                   .maybeSingle()
 
                 if (!verified) {
-                  extras.claim_status = { is_verified: false }
+                  extras.claim_status = { trader_id: traderId, source, is_verified: false }
                 } else {
                   extras.claim_status = {
+                    trader_id: traderId,
+                    source,
                     is_verified: true,
                     owner_id: verified.user_id,
                     profile: {
@@ -256,7 +263,12 @@ export async function GET(
                 logger.warn('include=claim failed', {
                   error: e instanceof Error ? e.message : String(e),
                 })
-                extras.claim_status = { is_verified: false, _error: 'fetch_failed' }
+                extras.claim_status = {
+                  trader_id: resolved.traderKey,
+                  source: resolved.platform,
+                  is_verified: false,
+                  _error: 'fetch_failed',
+                }
               }
             })()
           )

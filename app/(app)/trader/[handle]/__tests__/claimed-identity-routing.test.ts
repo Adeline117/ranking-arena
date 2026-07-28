@@ -10,6 +10,8 @@ describe('claimed trader routing contract', () => {
   const client = source('app/(app)/trader/[handle]/TraderProfileClient.tsx')
   const overview = source('app/components/trader/tabs/OverviewTab.tsx')
   const claimProfileRoute = source('app/api/traders/claim/profile/route.ts')
+  const claimStatusRoute = source('app/api/traders/claim/status/route.ts')
+  const traderDetailRoute = source('app/api/traders/[handle]/route.ts')
   const verifiedProfileRoute = source('app/api/traders/verified/route.ts')
 
   it('never resolves claim ownership from a source-blind URL handle', () => {
@@ -18,6 +20,29 @@ describe('claimed trader routing contract', () => {
       'cachedFindUserHandleByTrader(servingResolved.source, servingResolved.exchangeTraderId)'
     )
     expect(page).toContain('cachedFindUserHandleByTrader(resolved.platform, resolved.traderKey)')
+  })
+
+  it('injects the exact claimed trader profile into the partial editor', () => {
+    expect(client).toContain('claim_status?: ExactTraderClaimData')
+    expect(client).toContain('verifiedTraderProfile={authorizationClaimSource?.profile ?? null}')
+    expect(client).toContain('isFetchedAfterMount: claimDataFetchedAfterMount')
+    expect(client).toContain('claimDataFetchedAfterMount && !claimDataError')
+    expect(client).toContain('staleTime: 0')
+    expect(client).toContain('retry: false')
+    expect(client).toContain('exactClaim: freshExactClaim')
+    expect(overview).toContain('verifiedTraderProfile: VerifiedTraderProfileData | null')
+    expect(overview).toContain('currentData={verifiedTraderProfile ?? {}}')
+    expect(overview).not.toContain('currentData={{}}')
+
+    for (const exactProfileRead of [claimStatusRoute, traderDetailRoute]) {
+      expect(exactProfileRead).toContain(".eq('trader_id', traderId)")
+      expect(exactProfileRead).toContain(".eq('source', source)")
+      expect(exactProfileRead).toContain('trader_id: traderId')
+      expect(exactProfileRead).toContain('source,')
+      expect(exactProfileRead).toContain('display_name: verified.display_name')
+      expect(exactProfileRead).toContain('bio: verified.bio')
+    }
+    expect(claimStatusRoute).toContain("response.headers.set('Cache-Control', 'private, no-store")
   })
 
   it('does not issue an ISR server redirect that can discard an explicit platform variant', () => {
@@ -31,8 +56,8 @@ describe('claimed trader routing contract', () => {
     expect(client).toContain('registeredUserId={claimedUser?.id}')
     expect(client).toContain('resolveTraderProfileOwnership({')
     expect(client).toContain('claimedUserId: claimedUser?.id')
-    expect(client).toContain('isVerifiedClaim: isVerifiedTrader')
-    expect(client).toContain('claimOwnerId: claimSource?.owner_id')
+    expect(client).toContain('isVerifiedClaim: !!authorizationClaimSource?.is_verified')
+    expect(client).toContain('claimOwnerId: authorizationClaimSource?.owner_id')
     expect(client).toContain('isOwnProfile={isProfilePageOwner}')
     expect(client).toContain('isVerifiedClaimOwner={isVerifiedClaimOwner}')
     expect(overview).toContain('isVerifiedClaimOwner: boolean')

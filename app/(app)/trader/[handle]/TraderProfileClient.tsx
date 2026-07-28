@@ -178,6 +178,7 @@ import { useOnchainEnrichTrigger } from './hooks/useOnchainEnrichTrigger'
 import { TraderProfileError } from './components/TraderProfileError'
 import { TraderStaleBanner, TraderPlatformDeadBanner } from './components/TraderStatusBanners'
 import { resolveTraderProfileOwnership } from './profile-ownership'
+import { resolveTraderClaimSources, type ExactTraderClaimData } from './profile-claim-source'
 
 // NO_PORTFOLIO_PLATFORMS removed — Portfolio tab shown for ALL platforms
 // When no position data exists, the Portfolio component shows an empty state
@@ -457,11 +458,7 @@ export default function TraderProfileClient({
     return base
   }, [effectivePlatform, effectiveHandle, isPrimaryAccount])
   type TraderDataWithExtras = TraderPageData & {
-    claim_status?: {
-      is_verified: boolean
-      owner_id?: string | null
-      profile?: Record<string, unknown>
-    }
+    claim_status?: ExactTraderClaimData
     aggregate?: { aggregated: unknown; accounts: unknown[]; totalAccounts: number }
     rank_history?: { history: { date: string; rank: number; arena_score: number }[] }
   }
@@ -469,6 +466,7 @@ export default function TraderProfileClient({
     data: traderData,
     error: traderError,
     isLoading: traderLoading,
+    isPlaceholderData: traderDataIsPlaceholder,
   } = useQuery<TraderDataWithExtras>({
     queryKey: ['trader-profile', traderApiUrl],
     queryFn: () => traderFetcher<TraderDataWithExtras>(traderApiUrl),
@@ -527,33 +525,54 @@ export default function TraderProfileClient({
     traderData?.aggregate
   )
 
-  // Check if this trader is verified (claimed) and if current user is the owner.
-  // P7: Skip separate fetch when bundled claim data is available from merged endpoint
+  // Anonymous visitors can use an exact, non-placeholder bundle for the public
+  // badge. Signed-in ownership/editor controls always require the no-store exact
+  // probe so a cached bundle can never authorize or hydrate another identity.
+  const bundledClaimMatchesVisibleIdentity =
+    !traderDataIsPlaceholder &&
+    bundledClaimData?.trader_id === data.source_trader_id &&
+    bundledClaimData.source === data.source
   const claimUrl =
-    !bundledClaimData && data.source_trader_id && data.source
+    (Boolean(currentUserId) || !bundledClaimMatchesVisibleIdentity) &&
+    data.source_trader_id &&
+    data.source
       ? `/api/traders/claim/status?trader_id=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}`
       : null
-  const { data: claimData } = useQuery<{
+  const {
+    data: claimData,
+    error: claimDataError,
+    isFetchedAfterMount: claimDataFetchedAfterMount,
+  } = useQuery<{
     success: boolean
-    data: { is_verified: boolean; owner_id: string | null }
+    data: ExactTraderClaimData
   }>({
     queryKey: ['trader-claim-status', data.source_trader_id, data.source],
     queryFn: () => fetcher(claimUrl!),
     enabled: !!claimUrl,
     refetchOnWindowFocus: true,
-    staleTime: STALE_STANDARD,
+    retry: false,
+    // HTTP no-store does not control React Query's memory cache. Always
+    // revalidate this authorization probe and do not authorize from data that
+    // only predates the current observer mount or whose refresh has failed.
+    staleTime: 0,
   })
+  const freshExactClaim = claimDataFetchedAfterMount && !claimDataError ? claimData?.data : null
 
-  // The exact /u profile is authoritative for a signed-in platform user even
-  // when the optional bound/claim probe is unavailable. Keep the verified
-  // claim-owner path as an independent authority for /trader routes.
-  const claimSource = bundledClaimData ?? claimData?.data
-  const isVerifiedTrader = !!claimSource?.is_verified
+  // Keep public badge data separate from owner authorization/editor data.
+  const { publicClaimSource, authorizationClaimSource } = resolveTraderClaimSources({
+    traderId: data.source_trader_id,
+    source: data.source,
+    bundledClaim: bundledClaimData,
+    bundledIsPlaceholder: traderDataIsPlaceholder,
+    exactClaim: freshExactClaim,
+    requireExactAuthorization: Boolean(currentUserId),
+  })
+  const isVerifiedTrader = !!publicClaimSource?.is_verified
   const { isProfileOwner, isVerifiedClaimOwner } = resolveTraderProfileOwnership({
     currentUserId,
     claimedUserId: claimedUser?.id,
-    isVerifiedClaim: isVerifiedTrader,
-    claimOwnerId: claimSource?.owner_id,
+    isVerifiedClaim: !!authorizationClaimSource?.is_verified,
+    claimOwnerId: authorizationClaimSource?.owner_id,
   })
   const isProfilePageOwner = isProfileOwner || isVerifiedClaimOwner
 
@@ -1085,6 +1104,7 @@ export default function TraderProfileClient({
                     currentUserId={currentUserId}
                     isVerifiedClaimOwner={isVerifiedClaimOwner}
                     isVerifiedTrader={isVerifiedTrader}
+                    verifiedTraderProfile={authorizationClaimSource?.profile ?? null}
                     claimedUser={claimedUser}
                   />
                 </Box>
