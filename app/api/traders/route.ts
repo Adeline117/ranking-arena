@@ -46,6 +46,13 @@ const logger = createLogger('traders-api')
 export const runtime = 'nodejs'
 export const preferredRegion = ['iad1', 'sfo1', 'hnd1']
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+const RANKING_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 // ── Input validation schema ──────────────────────────────────────────────────
 const tradersQuerySchema = z.object({
@@ -137,24 +144,27 @@ export const GET = withPublic(
     const effectiveSortBy = sortBy || 'arena_score'
 
     if (isPublicRankingSourceQuarantined(canonicalExchange)) {
-      return NextResponse.json({
-        traders: [],
-        timeRange,
-        totalCount: 0,
-        rankingMode: 'arena_score',
-        lastUpdated: null,
-        isStale: true,
-        dataAgeMinutes: null,
-        source_freshness: [],
-        nextCursor: null,
-        hasMore: false,
-        page: useLegacyPaging ? Math.max(0, page) : undefined,
-        limit,
-        availableSources: [],
-        ranking_visibility: 'partial',
-        ranking_visibility_reason: 'publication_policy_filtered',
-        ranking_visibility_reasons: ['quarantined_source_requested'],
-      })
+      return NextResponse.json(
+        {
+          traders: [],
+          timeRange,
+          totalCount: 0,
+          rankingMode: 'arena_score',
+          lastUpdated: null,
+          isStale: true,
+          dataAgeMinutes: null,
+          source_freshness: [],
+          nextCursor: null,
+          hasMore: false,
+          page: useLegacyPaging ? Math.max(0, page) : undefined,
+          limit,
+          availableSources: [],
+          ranking_visibility: 'partial',
+          ranking_visibility_reason: 'publication_policy_filtered',
+          ranking_visibility_reasons: ['quarantined_source_requested'],
+        },
+        { headers: RANKING_NO_STORE_HEADERS }
+      )
     }
 
     const authoritySources = await readLeaderboardPublicationAuthority(supabase, timeRange, {
@@ -166,28 +176,31 @@ export const GET = withPublic(
       categoryFilter ?? null
     )
     if (expectedSources.length === 0) {
-      return NextResponse.json({
-        traders: [],
-        timeRange,
-        totalCount: 0,
-        rankingMode: 'arena_score',
-        lastUpdated: null,
-        isStale: true,
-        dataAgeMinutes: null,
-        source_freshness: [],
-        nextCursor: null,
-        hasMore: false,
-        page: useLegacyPaging ? Math.max(0, page) : undefined,
-        limit,
-        availableSources: [],
-        ranking_visibility: 'partial',
-        ranking_visibility_reason: 'publication_authority_filtered',
-        ranking_visibility_reasons: [
-          canonicalExchange
-            ? 'source_outside_publication_authority'
-            : 'category_outside_publication_authority',
-        ],
-      })
+      return NextResponse.json(
+        {
+          traders: [],
+          timeRange,
+          totalCount: 0,
+          rankingMode: 'arena_score',
+          lastUpdated: null,
+          isStale: true,
+          dataAgeMinutes: null,
+          source_freshness: [],
+          nextCursor: null,
+          hasMore: false,
+          page: useLegacyPaging ? Math.max(0, page) : undefined,
+          limit,
+          availableSources: [],
+          ranking_visibility: 'partial',
+          ranking_visibility_reason: 'publication_authority_filtered',
+          ranking_visibility_reasons: [
+            canonicalExchange
+              ? 'source_outside_publication_authority'
+              : 'category_outside_publication_authority',
+          ],
+        },
+        { headers: RANKING_NO_STORE_HEADERS }
+      )
     }
 
     const authorityFingerprint = createHash('sha256')
@@ -266,7 +279,9 @@ export const GET = withPublic(
 
     // Data is already sanitized before caching (in the fetcher below)
     const response = NextResponse.json(cachedData)
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
+    for (const [header, value] of Object.entries(RANKING_NO_STORE_HEADERS)) {
+      response.headers.set(header, value)
+    }
     // Expose data age for monitoring and frontend staleness indicators
     if (cachedData?.dataAgeMinutes != null) {
       response.headers.set('X-Data-Age-Minutes', String(cachedData.dataAgeMinutes))
