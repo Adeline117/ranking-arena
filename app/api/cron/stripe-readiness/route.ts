@@ -31,6 +31,7 @@ export const REQUIRED_WEBHOOK_EVENTS = [
   'refund.updated',
   'refund.failed',
   'charge.dispute.created',
+  'charge.dispute.funds_reinstated',
 ] as const
 
 const ENTITLEMENT_READINESS_METRIC_KEYS = [

@@ -1805,3 +1805,163 @@ export async function handleChargeDisputeCreated(
     })
   }
 }
+
+const DISPUTE_REINSTATEMENT_STATUSES = new Set([
+  'restored',
+  'already_restored',
+  'refund_preserved',
+  'awaiting_dispute_created',
+  'identity_conflict',
+  'manual_review',
+  'action_in_flight',
+])
+
+function readDisputeReinstatementAcknowledgement(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Stripe dispute reinstatement RPC returned a malformed acknowledgement')
+  }
+  const result = value as Record<string, unknown>
+  if (
+    typeof result.status !== 'string' ||
+    !DISPUTE_REINSTATEMENT_STATUSES.has(result.status) ||
+    !hasExactKeys(result, ['status'])
+  ) {
+    throw new Error('Stripe dispute reinstatement RPC returned a contradictory acknowledgement')
+  }
+  return result.status
+}
+
+/**
+ * Stripe emits this only after disputed funds return to the account. Restore
+ * the exact owned benefit unless a succeeded refund independently keeps it
+ * revoked. An in-flight remote cancellation remains retryable before restore.
+ */
+export async function handleChargeDisputeFundsReinstated(
+  dispute: Stripe.Dispute,
+  context: StripeRefundEventContext
+) {
+  const durableResult = await withDeterministicRefundReview(async () => {
+    const event = readRefundEventIdentity(context, 'dispute', dispute?.id)
+    const disputeId = stripeObjectId(dispute.id)
+    const signedChargeId = stripeObjectId(dispute.charge)
+    if (
+      !disputeId ||
+      !disputeId.startsWith('dp_') ||
+      !signedChargeId ||
+      !signedChargeId.startsWith('ch_') ||
+      dispute.livemode !== event.livemode
+    ) {
+      deterministicPoison({
+        objectType: 'dispute',
+        objectId: reviewObjectId(disputeId, event.eventId),
+        userId: null,
+        reasonKey: 'signed_dispute_reinstatement_identity_invalid',
+        reason: 'A signed Stripe dispute reinstatement has invalid immutable identity or mode.',
+        evidence: {
+          event_id: event.eventId,
+          dispute_id: safeEvidenceString(disputeId),
+          charge_id: safeEvidenceString(signedChargeId),
+          dispute_livemode: typeof dispute.livemode === 'boolean' ? dispute.livemode : null,
+          event_livemode: event.livemode,
+        },
+      })
+    }
+
+    const freshDispute = await getStripe()
+      .disputes.retrieve(disputeId)
+      .catch((error: unknown) => {
+        if (isStripeResourceMissing(error)) {
+          deterministicPoison({
+            objectType: 'dispute',
+            objectId: disputeId,
+            userId: null,
+            reasonKey: 'stripe_dispute_reinstatement_resource_missing',
+            reason:
+              'The reinstated Stripe Dispute is missing from the configured account and mode.',
+            evidence: {
+              event_id: event.eventId,
+              dispute_id: disputeId,
+              stripe_error_code: 'resource_missing',
+            },
+          })
+        }
+        throw error
+      })
+
+    const chargeId = stripeObjectId(freshDispute.charge)
+    const currency = freshDispute.currency?.trim().toLowerCase()
+    if (
+      freshDispute.id !== disputeId ||
+      freshDispute.livemode !== event.livemode ||
+      chargeId !== signedChargeId ||
+      freshDispute.amount !== dispute.amount ||
+      freshDispute.currency !== dispute.currency ||
+      freshDispute.reason !== dispute.reason ||
+      freshDispute.status !== 'won' ||
+      !Number.isSafeInteger(freshDispute.amount) ||
+      freshDispute.amount <= 0 ||
+      !currency ||
+      !/^[a-z]{3}$/.test(currency) ||
+      !freshDispute.reason
+    ) {
+      deterministicPoison({
+        objectType: 'dispute',
+        objectId: disputeId,
+        userId: null,
+        reasonKey: 'fresh_dispute_reinstatement_identity_conflict',
+        reason:
+          'Fresh Stripe authority does not confirm a won dispute with exact reinstatement identity.',
+        evidence: {
+          event_id: event.eventId,
+          dispute_id: disputeId,
+          signed_charge_id: signedChargeId,
+          fresh_charge_id: safeEvidenceString(chargeId),
+          signed_amount: dispute.amount,
+          fresh_amount: freshDispute.amount,
+          signed_currency: safeEvidenceString(dispute.currency),
+          fresh_currency: safeEvidenceString(freshDispute.currency),
+          signed_reason: safeEvidenceString(dispute.reason),
+          fresh_reason: safeEvidenceString(freshDispute.reason),
+          fresh_status: safeEvidenceString(freshDispute.status),
+        },
+      })
+    }
+
+    const charge = await retrieveFreshChargeRefundSnapshot(chargeId, event)
+    const { data, error } = await getSupabase().rpc(
+      'record_stripe_charge_dispute_reinstatement_atomic',
+      {
+        p_livemode: event.livemode,
+        p_stripe_event_id: event.eventId,
+        p_stripe_event_created: context.eventCreatedAt,
+        p_stripe_dispute_id: freshDispute.id,
+        p_dispute_status: freshDispute.status,
+        p_dispute_reason: freshDispute.reason,
+        p_dispute_amount: freshDispute.amount,
+        p_currency: currency,
+        p_stripe_customer_id: charge.customerId,
+        p_stripe_payment_intent_id: charge.paymentIntentId,
+        p_stripe_charge_id: charge.chargeId,
+        p_captured_amount: charge.capturedAmount,
+        p_refund_succeeded_amount: charge.stripeRefundedAmount,
+      }
+    )
+    if (error) {
+      throw new Error(`Failed to persist Stripe dispute reinstatement: ${error.message}`)
+    }
+    const status = readDisputeReinstatementAcknowledgement(data)
+    return { status, chargeId, freshDispute }
+  })
+
+  if (!durableResult) return
+  if (durableResult.status === 'action_in_flight') {
+    throw new Error('Stripe dispute reinstatement is waiting for an in-flight cancellation')
+  }
+
+  logger.info('Chargeback funds reinstatement reached durable authority', {
+    disputeId: durableResult.freshDispute.id,
+    chargeId: durableResult.chargeId,
+    amount: durableResult.freshDispute.amount,
+    status: durableResult.status,
+  })
+}

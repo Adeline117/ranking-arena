@@ -49,6 +49,7 @@ const HEALTHY_CANONICAL_EVENTS = [
   'refund.updated',
   'refund.failed',
   'charge.dispute.created',
+  'charge.dispute.funds_reinstated',
 ] as const
 
 const readyEntitlementAuthority = {
@@ -131,7 +132,7 @@ describe('GET /api/cron/stripe-readiness', () => {
 
   it('pins the independently specified canonical webhook event contract', () => {
     expect(REQUIRED_WEBHOOK_EVENTS).toEqual(HEALTHY_CANONICAL_EVENTS)
-    expect(REQUIRED_WEBHOOK_EVENTS).toHaveLength(15)
+    expect(REQUIRED_WEBHOOK_EVENTS).toHaveLength(16)
     expect(REQUIRED_WEBHOOK_EVENTS).not.toEqual(
       expect.arrayContaining(['charge.refunded', 'charge.refund.updated'])
     )

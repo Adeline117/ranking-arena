@@ -28,6 +28,7 @@ const mockHandleInvoiceFinalizationFailed = jest.fn()
 const mockHandleChargeRefunded = jest.fn()
 const mockHandleRefundLifecycle = jest.fn()
 const mockHandleChargeDisputeCreated = jest.fn()
+const mockHandleChargeDisputeFundsReinstated = jest.fn()
 
 jest.mock('@/app/api/stripe/webhook/handlers/checkout', () => ({
   carriesTipCheckoutIdentity: (metadata: Record<string, string> | null | undefined) => {
@@ -60,6 +61,8 @@ jest.mock('@/app/api/stripe/webhook/handlers/refund', () => ({
   handleChargeRefunded: (...args: unknown[]) => mockHandleChargeRefunded(...args),
   handleRefundLifecycle: (...args: unknown[]) => mockHandleRefundLifecycle(...args),
   handleChargeDisputeCreated: (...args: unknown[]) => mockHandleChargeDisputeCreated(...args),
+  handleChargeDisputeFundsReinstated: (...args: unknown[]) =>
+    mockHandleChargeDisputeFundsReinstated(...args),
 }))
 
 jest.mock('@/lib/stripe', () => ({
@@ -289,6 +292,7 @@ describe('POST /api/stripe/webhook', () => {
     ['invoice.payment_action_required', mockHandlePaymentActionRequired],
     ['invoice.finalization_failed', mockHandleInvoiceFinalizationFailed],
     ['charge.dispute.created', mockHandleChargeDisputeCreated],
+    ['charge.dispute.funds_reinstated', mockHandleChargeDisputeFundsReinstated],
     ['checkout.session.expired', mockHandleCheckoutExpired],
     ['customer.subscription.trial_will_end', mockHandleTrialWillEnd],
   ])('dispatches %s', async (type, handler) => {
@@ -326,7 +330,7 @@ describe('POST /api/stripe/webhook', () => {
         type: 'invoice.payment_failed',
       })
     }
-    if (type === 'charge.dispute.created') {
+    if (type === 'charge.dispute.created' || type === 'charge.dispute.funds_reinstated') {
       expect(handler).toHaveBeenCalledWith(expect.anything(), {
         eventId: 'evt_test_retryable',
         eventCreatedAt: 1_800_000_000,

@@ -23,6 +23,7 @@ import {
   handleChargeRefunded,
   handleRefundLifecycle,
   handleChargeDisputeCreated,
+  handleChargeDisputeFundsReinstated,
 } from './handlers/refund'
 import { getOrCreateCorrelationId, runWithCorrelationId } from '@/lib/api/correlation'
 import { env } from '@/lib/env'
@@ -204,6 +205,14 @@ export async function POST(request: NextRequest) {
 
           case 'charge.dispute.created':
             await handleChargeDisputeCreated(event.data.object as Stripe.Dispute, {
+              eventId: event.id,
+              eventCreatedAt: event.created,
+              livemode: event.livemode,
+            })
+            break
+
+          case 'charge.dispute.funds_reinstated':
+            await handleChargeDisputeFundsReinstated(event.data.object as Stripe.Dispute, {
               eventId: event.id,
               eventCreatedAt: event.created,
               livemode: event.livemode,

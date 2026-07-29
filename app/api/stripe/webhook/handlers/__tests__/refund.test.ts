@@ -53,6 +53,7 @@ jest.mock('@/lib/alerts/send-alert', () => ({
 
 import {
   handleChargeDisputeCreated,
+  handleChargeDisputeFundsReinstated,
   handleChargeRefunded,
   handleRefundLifecycle,
   type StripeRefundEventContext,
@@ -927,5 +928,66 @@ describe('refund webhook product ownership routing', () => {
         }),
       })
     )
+  })
+
+  it('restores exact dispute authority only from a fresh won dispute and fresh refund state', async () => {
+    const dispute = disputeObject({ status: 'won' })
+    mockRetrieveDispute.mockResolvedValueOnce(dispute)
+    mockRetrieveCharge.mockResolvedValueOnce(
+      refundedCharge({
+        amount_refunded: 0,
+        refunded: false,
+      })
+    )
+    mockRpc.mockResolvedValueOnce({
+      data: { status: 'restored' },
+      error: null,
+    })
+
+    await handleChargeDisputeFundsReinstated(dispute, {
+      eventId: 'evt_dispute_reinstated',
+      eventCreatedAt: 1_700_000_100,
+      livemode: true,
+    })
+
+    expect(mockRpc).toHaveBeenCalledWith('record_stripe_charge_dispute_reinstatement_atomic', {
+      p_livemode: true,
+      p_stripe_event_id: 'evt_dispute_reinstated',
+      p_stripe_event_created: 1_700_000_100,
+      p_stripe_dispute_id: 'dp_generic',
+      p_dispute_status: 'won',
+      p_dispute_reason: 'fraudulent',
+      p_dispute_amount: 2500,
+      p_currency: 'usd',
+      p_stripe_customer_id: 'cus_owner',
+      p_stripe_payment_intent_id: 'pi_refunded',
+      p_stripe_charge_id: 'ch_refunded',
+      p_captured_amount: 2500,
+      p_refund_succeeded_amount: 0,
+    })
+    expect(mockDrainApiTierReversalActions).not.toHaveBeenCalled()
+  })
+
+  it('retries funds reinstatement while exact remote cancellation is in flight', async () => {
+    const dispute = disputeObject({ status: 'won' })
+    mockRetrieveDispute.mockResolvedValueOnce(dispute)
+    mockRetrieveCharge.mockResolvedValueOnce(
+      refundedCharge({
+        amount_refunded: 0,
+        refunded: false,
+      })
+    )
+    mockRpc.mockResolvedValueOnce({
+      data: { status: 'action_in_flight' },
+      error: null,
+    })
+
+    await expect(
+      handleChargeDisputeFundsReinstated(dispute, {
+        eventId: 'evt_dispute_reinstated_retry',
+        eventCreatedAt: 1_700_000_101,
+        livemode: true,
+      })
+    ).rejects.toThrow('waiting for an in-flight cancellation')
   })
 })
