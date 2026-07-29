@@ -67,4 +67,4 @@ export const GET = withCron('health-check-all', async (request: NextRequest) => 
   }
 
   return { count: report.checks.length, score: report.score, overall: report.overall }
-})
+}, { safetyTimeoutMs: 55_000 })

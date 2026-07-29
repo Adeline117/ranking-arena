@@ -312,4 +312,4 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
     pruned: pruned.length > 0 ? pruned : undefined,
     topology,
   }
-})
+}, { safetyTimeoutMs: 25_000 })

@@ -122,4 +122,4 @@ export const GET = withCron('snapshot-ranks', async (_request: NextRequest) => {
   }
 
   return { count: totalInserted, date: today, periods: PERIODS.length }
-})
+}, { safetyTimeoutMs: 55_000 })

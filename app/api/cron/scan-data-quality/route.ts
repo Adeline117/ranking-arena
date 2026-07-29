@@ -67,4 +67,4 @@ export const GET = withCron('scan-data-quality', async (_request: NextRequest) =
   }
 
   return { count: anomalies.length, anomalies }
-})
+}, { safetyTimeoutMs: 55_000 })

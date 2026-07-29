@@ -32,4 +32,4 @@ export const GET = withCron('sync-ranking-store', async (_request: NextRequest, 
   }
   const count = Object.values(synced).reduce((a, b) => a + b, 0)
   return { count, synced }
-})
+}, { safetyTimeoutMs: 55_000 })

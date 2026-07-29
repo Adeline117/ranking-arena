@@ -148,4 +148,4 @@ export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
     stuckJobs,
     cleanupComplete,
   }
-})
+}, { safetyTimeoutMs: 25_000 })
