@@ -9,6 +9,7 @@ import { NextRequest } from 'next/server'
 import { withAdminAuth } from '@/lib/api/with-admin-auth'
 import { success as apiSuccess } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
+import { AdminUserSanctionError, setAdminUserSanctionAtomic } from '@/lib/admin/user-sanctions'
 import {
   CommentMutationRolloutError,
   moderateCommentWithRollout,
@@ -98,48 +99,52 @@ export async function POST(req: NextRequest) {
         }
 
         case 'ban_user': {
-          // Check user exists and is not already banned
-          const { data: targetUser, error: userError } = await supabase
-            .from('user_profiles')
-            .select('id, handle, banned_at')
-            .eq('id', targetId)
-            .maybeSingle()
-
-          if (userError || !targetUser) {
-            throw ApiError.notFound('User not found')
-          }
-
-          if (targetUser.banned_at) {
-            throw ApiError.validation('User is already banned')
-          }
-
           if (targetId === admin.id) {
             throw ApiError.validation('Cannot ban yourself')
           }
 
-          const { error: banError } = await supabase
-            .from('user_profiles')
-            .update({
-              banned_at: new Date().toISOString(),
-              banned_reason: reason || null,
-              banned_by: admin.id,
+          let result: Awaited<ReturnType<typeof setAdminUserSanctionAtomic>>
+          try {
+            result = await setAdminUserSanctionAtomic(supabase, {
+              actorId: admin.id,
+              targetId,
+              action: 'ban',
+              reason: typeof reason === 'string' ? reason : null,
             })
-            .eq('id', targetId)
-
-          if (banError) {
-            logger.error('Error banning user', { error: banError, userId: targetId })
-            throw ApiError.database(banError.message)
+          } catch (error) {
+            if (error instanceof AdminUserSanctionError) {
+              if (error.kind === 'validation') throw ApiError.validation('Invalid ban request')
+              if (error.kind === 'forbidden') throw ApiError.forbidden('Ban action forbidden')
+              if (error.kind === 'conflict') {
+                throw ApiError.validation('User lifecycle changed concurrently; retry the ban')
+              }
+            }
+            logger.error('Error banning user', {
+              userId: targetId,
+              adminId: admin.id,
+              ...(error instanceof AdminUserSanctionError && error.databaseCode
+                ? { code: error.databaseCode }
+                : {}),
+            })
+            throw ApiError.database('Failed to ban user')
           }
 
-          await supabase.from('admin_logs').insert({
-            admin_id: admin.id,
-            action: 'ban_user',
-            target_type: 'user',
-            target_id: targetId,
-            details: { reason: reason || null, handle: targetUser.handle },
-          })
+          if (result.status === 'not_found' || result.status === 'target_deleted') {
+            throw ApiError.notFound('User not found')
+          }
+          if (result.status === 'already_banned') {
+            throw ApiError.validation('User is already banned')
+          }
+          if (!result.applied || result.status !== 'applied') {
+            throw ApiError.database('Invalid ban acknowledgement')
+          }
 
-          logger.info('User banned via moderate', { userId: targetId, adminId: admin.id, reason })
+          logger.info('User banned via moderate', {
+            userId: targetId,
+            adminId: admin.id,
+            reason,
+            handle: result.target_handle,
+          })
           return apiSuccess({ message: 'User banned successfully' })
         }
 

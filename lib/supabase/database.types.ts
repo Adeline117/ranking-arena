@@ -12805,6 +12805,21 @@ export type Database = {
         Args: { p_actor_id: string; p_group_id: string }
         Returns: boolean
       }
+      set_admin_user_sanction_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_reason?: string | null
+          p_target_id: string
+        }
+        Returns: {
+          applied: boolean
+          result_action: string
+          result_target_id: string
+          status: string
+          target_handle: string | null
+        }[]
+      }
       set_group_member_role_atomic: {
         Args: {
           p_actor_id: string
