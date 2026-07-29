@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { cache } from 'react'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { EXCHANGE_CONFIG, resolveExchangeSlug } from '@/lib/constants/exchanges'
@@ -16,8 +17,10 @@ import {
   type ExchangeSchemaInput,
 } from '@/lib/seo/structured-data'
 
-// ISR: regenerate exchange pages every 30 minutes
-export const revalidate = 1800
+// Ranking rows are authorized by live publication proofs. Persisting the HTML
+// would let an older cohort bypass those checks after a publication cutover.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export function generateStaticParams() {
   return TOP_EXCHANGE_SLUGS.map((slug) => ({ slug }))
@@ -63,7 +66,7 @@ interface ExchangeData {
   }>
 }
 
-async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null> {
+async function fetchExchangeDataUncached(sourceKey: string): Promise<ExchangeData | null> {
   const config = EXCHANGE_CONFIG[sourceKey as keyof typeof EXCHANGE_CONFIG]
   if (!config) return null
   const [publicSource] = filterPublicRankingSources([sourceKey])
@@ -122,6 +125,10 @@ async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null
     topTraders,
   }
 }
+
+// Metadata and the page render request the same snapshot. React cache dedupes
+// that work within this request without persisting it across publications.
+const fetchExchangeData = cache(fetchExchangeDataUncached)
 
 export async function generateMetadata({
   params,

@@ -11,6 +11,12 @@ describe('exchange ranking page generation contract', () => {
     expect(page).toContain('publication.proofs[0].published_rank_count')
   })
 
+  it('does not persist an authorized generation in ISR HTML', () => {
+    expect(page).toContain("export const dynamic = 'force-dynamic'")
+    expect(page).toContain('export const revalidate = 0')
+    expect(page).toContain('const fetchExchangeData = cache(fetchExchangeDataUncached)')
+  })
+
   it('fails closed and never combines rows with a generic cross-generation count', () => {
     expect(page).toContain('if (topResult.error)')
     expect(page).toContain('throw new Error(`exchange ranking query failed:')
