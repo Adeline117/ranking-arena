@@ -214,7 +214,7 @@ describe('POST /api/exchange/oauth/callback', () => {
       p_user_id: USER_A,
       p_exchange: 'binance',
       p_state: 'oauth-state',
-      p_lease_seconds: 120,
+      p_lease_seconds: 300,
     })
     expect(mockUpsert).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: USER_A, exchange: 'binance' }),

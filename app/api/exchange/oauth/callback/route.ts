@@ -4,6 +4,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { fetchWithTimeout } from '@/lib/utils/error-messages'
 import { env } from '@/lib/env'
 
 const logger = createLogger('exchange-oauth-callback')
@@ -143,7 +144,7 @@ export async function POST(request: NextRequest) {
         p_user_id: userId,
         p_exchange: exchange,
         p_state: state,
-        p_lease_seconds: 120,
+        p_lease_seconds: 300,
       }
     )
     if (claimError) {
@@ -180,13 +181,17 @@ export async function POST(request: NextRequest) {
       }
 
       // 交换 code 获取 access_token
-      const tokenResponse = await fetch(config.tokenUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+      const tokenResponse = await fetchWithTimeout(
+        config.tokenUrl,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: tokenParams.toString(),
         },
-        body: tokenParams.toString(),
-      })
+        20_000
+      )
 
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text()
@@ -222,11 +227,15 @@ export async function POST(request: NextRequest) {
       let exchangeUserId: string | null = null
       if (config.userInfoUrl) {
         try {
-          const userInfoResponse = await fetch(config.userInfoUrl, {
-            headers: {
-              Authorization: `Bearer ${access_token}`,
+          const userInfoResponse = await fetchWithTimeout(
+            config.userInfoUrl,
+            {
+              headers: {
+                Authorization: `Bearer ${access_token}`,
+              },
             },
-          })
+            10_000
+          )
           if (userInfoResponse.ok) {
             const userInfo = await userInfoResponse.json()
             // Binance 返回格式: { code: "000000", data: { userId: "...", email: "..." } }

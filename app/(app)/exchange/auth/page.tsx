@@ -1,114 +1,173 @@
 'use client'
 
-import { useCallback, useEffect, useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
-import { bootstrapClientAuth } from '@/lib/auth/client-auth-bootstrap'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
-import ErrorState from '@/app/components/ui/ErrorState'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { t as staticT } from '@/lib/i18n'
+import { useAuthSession, type AuthSessionReturn } from '@/lib/hooks/useAuthSession'
+import {
+  captureExchangeViewer,
+  isExchangeViewerCurrent,
+  type ExchangeViewerSnapshot,
+} from '@/lib/exchange/viewer-scope'
 import { EXCHANGE_BIND_LIST } from './api-key/exchange-configs'
-import { readCurrentOAuthAccessToken, requestExchangeOAuthUrl } from './oauth-client'
+import { requestExchangeOAuthUrl } from './oauth-client'
 
 // Single source of truth: display names + OAuth capability live in exchange-configs.
 const EXCHANGES = EXCHANGE_BIND_LIST
 
-interface ExchangeAuthScope {
-  userId: string
+type ExchangeAuthContentProps = {
+  auth: AuthSessionReturn
+  redirectToOAuth?: (url: string) => void
 }
 
-function ExchangeAuthContent() {
+type OAuthOperation = {
+  id: number
+  viewer: ExchangeViewerSnapshot
+  exchange: string
+  controller: AbortController
+}
+
+type OAuthUiOwner = Pick<ExchangeViewerSnapshot, 'viewerKey' | 'sessionGeneration' | 'userId'>
+
+function sameOAuthViewer(
+  owner: OAuthUiOwner | null,
+  viewer: ExchangeViewerSnapshot | null
+): boolean {
+  return (
+    owner !== null &&
+    viewer !== null &&
+    owner.viewerKey === viewer.viewerKey &&
+    owner.sessionGeneration === viewer.sessionGeneration &&
+    owner.userId === viewer.userId
+  )
+}
+
+function defaultOAuthRedirect(url: string): void {
+  window.location.href = url
+}
+
+export function ExchangeAuthContent({
+  auth,
+  redirectToOAuth = defaultOAuthRedirect,
+}: ExchangeAuthContentProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const push = router.push
   const { showToast } = useToast()
   const { t } = useLanguage()
   const exchangeParam = searchParams.get('exchange')
-  const [authScope, setAuthScope] = useState<ExchangeAuthScope | null>(null)
-  const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const loadAuth = useCallback(async () => {
-    setAuthStatus('loading')
-    setAuthScope(null)
-    const result = await bootstrapClientAuth(supabase.auth)
-
-    if (result.status === 'signed-out') {
-      push('/login?redirect=/exchange/auth')
-      return
-    }
-    if (result.status === 'error') {
-      setAuthStatus('error')
-      return
-    }
-
-    if (!result.session?.access_token) {
-      setAuthStatus('error')
-      return
-    }
-
-    setAuthScope({ userId: result.user.id })
-    setAuthStatus('ready')
-  }, [push])
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const mountedRef = useRef(false)
+  const operationRef = useRef<OAuthOperation | null>(null)
+  const nextOperationIdRef = useRef(0)
+  const [loadingState, setLoading] = useState(false)
+  const [uiOwner, setUiOwner] = useState<OAuthUiOwner | null>(null)
+  const [errorState, setError] = useState<string | null>(null)
+  const renderedViewer = captureExchangeViewer(auth, auth.userId)
+  const ownsUi = sameOAuthViewer(uiOwner, renderedViewer)
+  const loading = ownsUi ? loadingState : false
+  const error = ownsUi ? errorState : null
 
   useEffect(() => {
-    void loadAuth()
-  }, [loadAuth])
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      operationRef.current?.controller.abort()
+      operationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const operation = operationRef.current
+    if (
+      operation &&
+      !isExchangeViewerCurrent(operation.viewer, authRef.current, authRef.current.userId)
+    ) {
+      operation.controller.abort()
+      operationRef.current = null
+    }
+
+    if (auth.authChecked && !auth.loading && !auth.userId) {
+      router.replace(`/login?redirect=${encodeURIComponent('/exchange/auth')}`)
+    }
+  }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId, auth.viewerKey, router])
 
   const handleOAuth = async (exchange: string) => {
-    if (!authScope) {
+    const viewer = captureExchangeViewer(authRef.current, authRef.current.userId)
+    if (!viewer) {
       showToast(t('pleaseLogin'), 'warning')
-      router.push('/login?redirect=/exchange')
+      if (authRef.current.authChecked && !authRef.current.loading && !authRef.current.userId) {
+        router.push(`/login?redirect=${encodeURIComponent('/exchange/auth')}`)
+      }
       return
     }
 
+    const activeOperation = operationRef.current
+    if (
+      activeOperation &&
+      isExchangeViewerCurrent(activeOperation.viewer, authRef.current, authRef.current.userId)
+    ) {
+      return
+    }
+    activeOperation?.controller.abort()
+
+    const operation: OAuthOperation = {
+      id: ++nextOperationIdRef.current,
+      viewer,
+      exchange,
+      controller: new AbortController(),
+    }
+    operationRef.current = operation
+    setUiOwner(viewer)
     setLoading(true)
     setError(null)
+    const operationIsCurrent = () =>
+      mountedRef.current &&
+      operationRef.current?.id === operation.id &&
+      operationRef.current.exchange === exchange &&
+      isExchangeViewerCurrent(viewer, authRef.current, authRef.current.userId)
 
     try {
-      const accessToken = await readCurrentOAuthAccessToken(
-        () => supabase.auth.getSession(),
-        authScope.userId
+      const authUrl = await requestExchangeOAuthUrl(
+        exchange,
+        {
+          accessToken: viewer.accessToken,
+          sessionGeneration: viewer.sessionGeneration,
+          userId: viewer.userId,
+        },
+        operation.controller.signal
       )
-      // 重定向到交易所 OAuth 页面
-      window.location.href = await requestExchangeOAuthUrl(exchange, accessToken)
+      // Last CAS immediately before the irreversible cross-origin navigation.
+      if (!operationIsCurrent()) return
+      redirectToOAuth(authUrl)
     } catch (_err: unknown) {
-      setError(t('authorizationFailed'))
-      setLoading(false)
+      if (operationIsCurrent()) setError(t('authorizationFailed'))
+    } finally {
+      if (operationIsCurrent()) {
+        setLoading(false)
+        operationRef.current = null
+      }
     }
+  }
+
+  const navigateWithinViewer = (path: string) => {
+    const viewer = captureExchangeViewer(authRef.current, authRef.current.userId)
+    if (!viewer || !isExchangeViewerCurrent(viewer, authRef.current, authRef.current.userId)) return
+    operationRef.current?.controller.abort()
+    operationRef.current = null
+    router.push(path)
   }
 
   const handleApiKey = (exchange: string) => {
-    router.push(`/exchange/auth/api-key?exchange=${exchange}`)
+    navigateWithinViewer(`/exchange/auth/api-key?exchange=${exchange}`)
   }
 
-  if (authStatus === 'error') {
-    return (
-      <Box
-        style={{
-          minHeight: '100vh',
-          background: tokens.colors.bg.primary,
-          color: tokens.colors.text.primary,
-        }}
-      >
-        <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10] }}>
-          <ErrorState
-            title={t('somethingWentWrong')}
-            description={t('loadFailedRetryShort')}
-            retry={() => void loadAuth()}
-            variant="compact"
-          />
-        </Box>
-      </Box>
-    )
-  }
-
-  if (authStatus === 'loading' || !authScope) {
+  if (!renderedViewer) {
     return (
       <Box
         style={{
@@ -225,7 +284,7 @@ function ExchangeAuthContent() {
                 <Button
                   key={exchange.id}
                   variant="secondary"
-                  onClick={() => router.push(`/exchange/auth?exchange=${exchange.id}`)}
+                  onClick={() => navigateWithinViewer(`/exchange/auth?exchange=${exchange.id}`)}
                   style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}
                 >
                   <ExchangeLogo exchange={exchange.id} size={20} />
@@ -296,7 +355,7 @@ function ExchangeAuthContent() {
 
         <Button
           variant="text"
-          onClick={() => router.push('/settings')}
+          onClick={() => navigateWithinViewer('/settings')}
           style={{ marginTop: tokens.spacing[4] }}
         >
           ← {t('returnToSettings')}
@@ -307,6 +366,8 @@ function ExchangeAuthContent() {
 }
 
 export default function ExchangeAuthPage() {
+  const auth = useAuthSession()
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
   return (
     <Suspense
       fallback={
@@ -323,7 +384,7 @@ export default function ExchangeAuthPage() {
         </Box>
       }
     >
-      <ExchangeAuthContent />
+      <ExchangeAuthContent key={scopeKey} auth={auth} />
     </Suspense>
   )
 }

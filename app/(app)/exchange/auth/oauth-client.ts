@@ -1,58 +1,95 @@
+import { authedFetch, type AuthedFetchScope, type ScopedFetchResult } from '@/lib/api/client'
+
 type OAuthAuthorizeResponse = {
-  authUrl?: unknown
+  success?: unknown
   error?: unknown
+  data?: {
+    viewerId?: unknown
+    exchange?: unknown
+    authUrl?: unknown
+  }
+}
+
+export type OAuthViewerRequest = {
+  accessToken: string
+  sessionGeneration: number
+  userId: string
 }
 
 type OAuthFetch = (
   input: string,
-  init: { headers: { Authorization: string } }
-) => Promise<Pick<Response, 'json' | 'ok'>>
+  method: 'GET',
+  accessToken: string,
+  body: undefined,
+  timeoutMs: number,
+  scope: AuthedFetchScope
+) => Promise<ScopedFetchResult<OAuthAuthorizeResponse>>
 
-interface OAuthSession {
-  access_token: string
-  user: { id: string }
-}
-
-type OAuthSessionReader = () => Promise<{
-  data: { session: OAuthSession | null }
-  error: unknown
-}>
-
-export async function readCurrentOAuthAccessToken(
-  getSession: OAuthSessionReader,
-  expectedUserId: string
-): Promise<string> {
-  const { data, error } = await getSession()
-  if (error) {
-    throw error instanceof Error ? error : new Error('Failed to read the current session')
+function isSecureOAuthUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:'
+  } catch {
+    return false
   }
-  if (
-    typeof data.session?.access_token !== 'string' ||
-    data.session.access_token.length === 0 ||
-    data.session.user.id !== expectedUserId
-  ) {
-    throw new Error('Authenticated viewer changed')
-  }
-  return data.session.access_token
 }
 
 export async function requestExchangeOAuthUrl(
   exchange: string,
-  accessToken: string,
-  fetcher: OAuthFetch = fetch
+  viewer: OAuthViewerRequest,
+  signal?: AbortSignal,
+  fetcher: OAuthFetch = authedFetch
 ): Promise<string> {
-  const response = await fetcher(
+  const result = await fetcher(
     `/api/exchange/oauth/authorize?${new URLSearchParams({ exchange }).toString()}`,
+    'GET',
+    viewer.accessToken,
+    undefined,
+    15_000,
     {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      expectedUserId: viewer.userId,
+      expectedSessionGeneration: viewer.sessionGeneration,
+      signal,
     }
   )
-  const payload = (await response.json().catch(() => null)) as OAuthAuthorizeResponse | null
-  if (!response.ok) {
+
+  if (result.stale) throw new Error('Authenticated viewer changed')
+  const payload = result.data
+  if (!result.ok) {
     throw new Error(typeof payload?.error === 'string' ? payload.error : 'Failed to get OAuth URL')
   }
-  if (typeof payload?.authUrl !== 'string' || payload.authUrl.length === 0) {
-    throw new Error('OAuth authorize response is missing authUrl')
+
+  const acknowledgement = payload?.data
+  if (
+    payload?.success !== true ||
+    acknowledgement?.viewerId !== viewer.userId ||
+    acknowledgement.exchange !== exchange ||
+    typeof acknowledgement.authUrl !== 'string' ||
+    !isSecureOAuthUrl(acknowledgement.authUrl)
+  ) {
+    throw new Error('OAuth authorize response identity mismatch')
   }
-  return payload.authUrl
+
+  return acknowledgement.authUrl
+}
+
+const OAUTH_CALLBACK_EXCHANGES = new Set(['binance', 'bybit'])
+
+export function resolveOAuthCallbackExchange(
+  exchangeParam: string | null,
+  state: string
+): string | null {
+  const normalizedParam = exchangeParam?.trim().toLowerCase() || null
+  const delimiter = state.indexOf('.')
+  const stateExchange =
+    delimiter > 0 && OAUTH_CALLBACK_EXCHANGES.has(state.slice(0, delimiter).toLowerCase())
+      ? state.slice(0, delimiter).toLowerCase()
+      : null
+
+  if (normalizedParam) {
+    if (!OAUTH_CALLBACK_EXCHANGES.has(normalizedParam)) return null
+    if (stateExchange && stateExchange !== normalizedParam) return null
+    return normalizedParam
+  }
+
+  return stateExchange
 }

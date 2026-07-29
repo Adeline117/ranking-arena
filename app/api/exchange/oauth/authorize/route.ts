@@ -80,7 +80,10 @@ export async function GET(request: NextRequest) {
     }
 
     // 生成 state（用于防止 CSRF 攻击）
-    const state = crypto.randomBytes(20).toString('hex')
+    // The provider returns state but does not preserve arbitrary page query
+    // parameters. Prefix the random nonce so the callback can recover the
+    // exact exchange without weakening the 160-bit CSRF secret.
+    const state = `${exchange}.${crypto.randomBytes(20).toString('hex')}`
 
     // PKCE 相关参数
     let codeVerifier: string | null = null
