@@ -35,10 +35,12 @@ import {
   type LeaderboardAcquisitionAttempt,
 } from '@/lib/ingest/acquisition-attempts'
 import {
+  type IngestTransactionRunner,
   writeAttemptBoundLeaderboardRawArtifactSet,
   writeLeaderboardRawArtifactSet,
 } from '@/lib/ingest/raw'
 import type { RawPage } from '@/lib/ingest/core/types'
+import type { IngestQueryExecutor } from '@/lib/ingest/db'
 import { strictCanonicalJson, strictCanonicalSha256 } from '@/lib/ingest/strict-canonical-json'
 
 interface PointerRow {
@@ -552,6 +554,46 @@ describe('writeLeaderboardRawArtifactSet', () => {
     expect(insertSql[0]).toContain("job_type = 'tier_a'")
     expect(insertSql[0]).toContain('trader_id IS NULL')
     expect(insertSql[1]).toContain("trust_artifact_role = 'population_manifest'")
+    expect(mockConnect).toHaveBeenCalledTimes(2)
+    expect(database.query.mock.calls.filter(([sql]) => sql === 'BEGIN')).toHaveLength(2)
+    expect(database.query.mock.calls.filter(([sql]) => sql === 'COMMIT')).toHaveLength(2)
+  })
+
+  it('runs the pointer pair on one caller transaction only after both Storage uploads', async () => {
+    const database = makeDatabaseHarness()
+    const events: string[] = []
+    mockUpload.mockImplementation(async (path: string, payload: Buffer) => {
+      events.push(`upload:${events.length + 1}`)
+      storage.set(path, Buffer.from(payload))
+      return { error: null }
+    })
+    const executorQuery = jest.fn((sql: string, values?: readonly unknown[]) =>
+      database.query(sql, values ? [...values] : [])
+    )
+    const transaction = { query: executorQuery } as unknown as IngestQueryExecutor
+    const runTransaction: IngestTransactionRunner = async (operation) => {
+      events.push('runner')
+      return operation(transaction)
+    }
+
+    await expect(writeLeaderboardRawArtifactSet(artifactInput(), runTransaction)).resolves.toEqual({
+      sourcePayload: expect.objectContaining({ id: 101 }),
+      populationManifest: expect.objectContaining({ id: 102 }),
+    })
+
+    expect(events).toEqual(['upload:1', 'upload:2', 'runner'])
+    expect(mockConnect).not.toHaveBeenCalled()
+    expect(executorQuery).toHaveBeenCalledTimes(database.query.mock.calls.length)
+    expect(executorQuery.mock.calls.map(([sql]) => String(sql))).toEqual([
+      expect.stringContaining('pg_advisory_xact_lock'),
+      expect.stringMatching(/^SELECT id, source_id/),
+      expect.stringMatching(/^INSERT INTO arena\.raw_objects/),
+      expect.stringMatching(/^INSERT INTO arena\.raw_objects/),
+      expect.stringMatching(/^SELECT id, source_id/),
+    ])
+    expect(executorQuery.mock.calls.map(([sql]) => String(sql))).not.toEqual(
+      expect.arrayContaining(['BEGIN', 'COMMIT', 'ROLLBACK'])
+    )
   })
 
   it('writes one attempt-bound pair with the same complete identity summary on both RAW objects', async () => {
@@ -621,6 +663,57 @@ describe('writeLeaderboardRawArtifactSet', () => {
     })
     expect(mockUpload).toHaveBeenCalledTimes(4)
     expect(mockDownload).toHaveBeenCalledTimes(2)
+  })
+
+  it('runs an attempt-bound pointer pair through the supplied transaction capability', async () => {
+    const database = makeDatabaseHarness()
+    const executorQuery = jest.fn((sql: string, values?: readonly unknown[]) =>
+      database.query(sql, values ? [...values] : [])
+    )
+    const transaction = { query: executorQuery } as unknown as IngestQueryExecutor
+    const runTransaction = jest.fn(
+      async <T>(operation: (executor: IngestQueryExecutor) => Promise<T>): Promise<T> =>
+        operation(transaction)
+    ) as IngestTransactionRunner
+
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet(attemptBoundArtifactInput(), runTransaction)
+    ).resolves.toMatchObject({
+      sourcePayload: { id: 101 },
+      populationManifest: { id: 102 },
+      projection: { terminalState: 'complete' },
+    })
+
+    expect(runTransaction).toHaveBeenCalledTimes(1)
+    expect(mockConnect).not.toHaveBeenCalled()
+    expect(database.pointers).toHaveLength(2)
+    expect(
+      executorQuery.mock.calls.every(([sql]) => !/^(?:BEGIN|COMMIT|ROLLBACK)$/.test(sql))
+    ).toBe(true)
+  })
+
+  it('does not retry or fall back when the caller transaction fails after its callback', async () => {
+    const database = makeDatabaseHarness()
+    const transaction = { query: database.query } as unknown as IngestQueryExecutor
+    const failure = new Error('caller transaction commit failed')
+    let operationCalls = 0
+    const runTransaction: IngestTransactionRunner = async (operation) => {
+      operationCalls += 1
+      await operation(transaction)
+      throw failure
+    }
+
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet(attemptBoundArtifactInput(), runTransaction)
+    ).rejects.toBe(failure)
+
+    expect(operationCalls).toBe(1)
+    expect(mockConnect).not.toHaveBeenCalled()
+    expect(
+      database.query.mock.calls.filter(([sql]) =>
+        String(sql).startsWith('INSERT INTO arena.raw_objects')
+      )
+    ).toHaveLength(2)
   })
 
   it('writes exact V4 source RAW and reconstructs its partitioned parser projection', async () => {
@@ -899,13 +992,15 @@ describe('writeLeaderboardRawArtifactSet', () => {
   })
 
   it('does not open a database transaction when the second upload fails', async () => {
+    const runTransaction = jest.fn() as unknown as IngestTransactionRunner
     mockUpload
       .mockResolvedValueOnce({ error: null })
       .mockResolvedValueOnce({ error: { message: 'bucket unavailable', statusCode: 400 } })
 
-    await expect(writeLeaderboardRawArtifactSet(artifactInput())).rejects.toThrow(
+    await expect(writeLeaderboardRawArtifactSet(artifactInput(), runTransaction)).rejects.toThrow(
       'bucket unavailable'
     )
+    expect(runTransaction).not.toHaveBeenCalled()
     expect(mockConnect).not.toHaveBeenCalled()
     expect(mockDownload).not.toHaveBeenCalled()
   })

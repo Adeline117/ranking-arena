@@ -12,7 +12,7 @@ import { TextDecoder } from 'node:util'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { PoolClient } from 'pg'
-import { getIngestPool, ingestClientConnect } from './db'
+import { getIngestPool, ingestClientConnect, type IngestQueryExecutor } from './db'
 import type { RankingTimeframe, RawPage } from './core/types'
 import {
   LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
@@ -131,6 +131,16 @@ export interface RawObjectReceipt {
   storagePath: string
   contentHash: string
 }
+
+/**
+ * Caller-owned short transaction boundary for publishing Postgres pointers
+ * after their immutable Storage objects are durable. The RAW module invokes a
+ * supplied runner exactly once and never performs transaction control or
+ * connection fallback inside its callback.
+ */
+export type IngestTransactionRunner = <T>(
+  operation: (transaction: IngestQueryExecutor) => Promise<T>
+) => Promise<T>
 
 export interface WriteLeaderboardRawArtifactSetInput {
   sourceId: number
@@ -563,7 +573,7 @@ function trustPointerSelectSql(forUpdate: boolean): string {
 }
 
 async function loadLeaderboardTrustPointers(
-  client: PoolClient,
+  client: IngestQueryExecutor,
   artifacts: readonly PreparedLeaderboardTrustArtifact[],
   sourceRunId: string,
   forUpdate: boolean
@@ -661,7 +671,7 @@ function validateLeaderboardTrustPointers(
 }
 
 async function insertLeaderboardTrustPointer(
-  client: PoolClient,
+  client: IngestQueryExecutor,
   input: NormalizedLeaderboardRawArtifactSetInput,
   artifact: PreparedLeaderboardTrustArtifact
 ): Promise<void> {
@@ -699,7 +709,7 @@ async function insertLeaderboardTrustPointer(
 }
 
 async function bindUnboundLeaderboardTrustPointers(
-  client: PoolClient,
+  client: IngestQueryExecutor,
   input: NormalizedLeaderboardRawArtifactSetInput,
   artifacts: readonly PreparedLeaderboardTrustArtifact[],
   receipts: LeaderboardRawArtifactSetReceipt
@@ -773,34 +783,7 @@ async function persistLeaderboardTrustPointers(
       `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
       [`arena.leaderboard-raw-artifact-set:${input.sourceRunId}`]
     )
-
-    const existing = await loadLeaderboardTrustPointers(client, artifacts, input.sourceRunId, true)
-    if (existing.length === 0) {
-      for (const artifact of artifacts) {
-        await insertLeaderboardTrustPointer(client, input, artifact)
-      }
-    } else if (existing.length !== artifacts.length) {
-      throw artifactSetError('database contains only part of the expected RAW pointer pair')
-    }
-
-    let verified = validateLeaderboardTrustPointers(
-      existing.length === 0
-        ? await loadLeaderboardTrustPointers(client, artifacts, input.sourceRunId, true)
-        : existing,
-      artifacts,
-      input,
-      true
-    )
-    if (verified.state === 'unbound') {
-      await bindUnboundLeaderboardTrustPointers(client, input, artifacts, verified.receipts)
-      verified = validateLeaderboardTrustPointers(
-        await loadLeaderboardTrustPointers(client, artifacts, input.sourceRunId, true),
-        artifacts,
-        input,
-        false
-      )
-    }
-    receipts = verified.receipts
+    receipts = await persistLeaderboardTrustPointersInTransaction(client, input, artifacts, true)
 
     commitAttempted = true
     await client.query('COMMIT')
@@ -835,6 +818,53 @@ async function persistLeaderboardTrustPointers(
   return receipts
 }
 
+async function persistLeaderboardTrustPointersInTransaction(
+  transaction: IngestQueryExecutor,
+  input: NormalizedLeaderboardRawArtifactSetInput,
+  artifacts: readonly PreparedLeaderboardTrustArtifact[],
+  lockAlreadyHeld = false
+): Promise<LeaderboardRawArtifactSetReceipt> {
+  if (!lockAlreadyHeld) {
+    await transaction.query(
+      `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
+      [`arena.leaderboard-raw-artifact-set:${input.sourceRunId}`]
+    )
+  }
+
+  const existing = await loadLeaderboardTrustPointers(
+    transaction,
+    artifacts,
+    input.sourceRunId,
+    true
+  )
+  if (existing.length === 0) {
+    for (const artifact of artifacts) {
+      await insertLeaderboardTrustPointer(transaction, input, artifact)
+    }
+  } else if (existing.length !== artifacts.length) {
+    throw artifactSetError('database contains only part of the expected RAW pointer pair')
+  }
+
+  let verified = validateLeaderboardTrustPointers(
+    existing.length === 0
+      ? await loadLeaderboardTrustPointers(transaction, artifacts, input.sourceRunId, true)
+      : existing,
+    artifacts,
+    input,
+    true
+  )
+  if (verified.state === 'unbound') {
+    await bindUnboundLeaderboardTrustPointers(transaction, input, artifacts, verified.receipts)
+    verified = validateLeaderboardTrustPointers(
+      await loadLeaderboardTrustPointers(transaction, artifacts, input.sourceRunId, true),
+      artifacts,
+      input,
+      false
+    )
+  }
+  return verified.receipts
+}
+
 /**
  * Persist one capture payload and its canonical population manifest as an
  * idempotent pair. Storage is written before the short PG transaction; a
@@ -842,7 +872,8 @@ async function persistLeaderboardTrustPointers(
  * the same database pointers. No failure path deletes Storage evidence.
  */
 export async function writeLeaderboardRawArtifactSet(
-  input: WriteLeaderboardRawArtifactSetInput
+  input: WriteLeaderboardRawArtifactSetInput,
+  runTransaction?: IngestTransactionRunner
 ): Promise<LeaderboardRawArtifactSetReceipt> {
   const manifest = validateLeaderboardRawArtifactSetInput(input)
   // Snapshot every later-read binding before the first Storage await. Callers
@@ -889,6 +920,11 @@ export async function writeLeaderboardRawArtifactSet(
 
   for (const artifact of artifacts) {
     artifact.durableCompressedBytes = await uploadDeterministicRaw(artifact)
+  }
+  if (runTransaction) {
+    return runTransaction((transaction) =>
+      persistLeaderboardTrustPointersInTransaction(transaction, normalizedInput, artifacts)
+    )
   }
   return persistLeaderboardTrustPointers(normalizedInput, artifacts)
 }
@@ -937,7 +973,8 @@ function prepareAttemptBoundLeaderboardManifest(
  * acquisition ledger after both RAW pointers are durable.
  */
 export async function writeAttemptBoundLeaderboardRawArtifactSet(
-  input: WriteAttemptBoundLeaderboardRawArtifactSetInput
+  input: WriteAttemptBoundLeaderboardRawArtifactSetInput,
+  runTransaction?: IngestTransactionRunner
 ): Promise<AttemptBoundLeaderboardRawArtifactSetReceipt> {
   // Snapshot all caller-owned identity and evidence before the first await.
   const attempt: LeaderboardAcquisitionAttempt = Object.freeze({ ...input.attempt })
@@ -1013,12 +1050,43 @@ export async function writeAttemptBoundLeaderboardRawArtifactSet(
   for (const artifact of artifacts) {
     artifact.durableCompressedBytes = await uploadDeterministicRaw(artifact)
   }
-  const receipts = await persistLeaderboardTrustPointers(normalizedInput, artifacts)
+  const receipts = runTransaction
+    ? await runTransaction((transaction) =>
+        persistLeaderboardTrustPointersInTransaction(transaction, normalizedInput, artifacts)
+      )
+    : await persistLeaderboardTrustPointers(normalizedInput, artifacts)
   return { ...receipts, projection }
 }
 
+interface PreparedRawObjectPointer {
+  contentHash: string
+  storagePath: string
+  values: readonly unknown[]
+}
+
+async function persistRawObjectPointer(
+  transaction: IngestQueryExecutor,
+  prepared: PreparedRawObjectPointer
+): Promise<RawObjectReceipt> {
+  const { rows } = await transaction.query<{ id: number }>(
+    `INSERT INTO arena.raw_objects
+       (source_id, job_type, trader_id, timeframe, storage_path, bytes, content_hash, meta)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id`,
+    prepared.values
+  )
+  return {
+    id: rows[0].id,
+    storagePath: prepared.storagePath,
+    contentHash: prepared.contentHash,
+  }
+}
+
 /** Write one raw payload; returns its durable pointer and computed content identity. */
-export async function writeRawObject(input: WriteRawInput): Promise<RawObjectReceipt> {
+export async function writeRawObject(
+  input: WriteRawInput,
+  runTransaction?: IngestTransactionRunner
+): Promise<RawObjectReceipt> {
   const { json, serializationContract } = serializeRawPayload(input.payload, input.serialization)
   const jsonBytes = Buffer.from(json, 'utf8')
   const gz = gzipSync(jsonBytes)
@@ -1047,15 +1115,10 @@ export async function writeRawObject(input: WriteRawInput): Promise<RawObjectRec
   const storagePath =
     `${input.sourceSlug}/${input.jobType}/${yyyy}/${mm}/${dd}/` +
     `${now.getTime()}_${contentHash}.json.gz`
-
-  await uploadRawPayload(storagePath, gz)
-
-  const { rows } = await getIngestPool().query<{ id: number }>(
-    `INSERT INTO arena.raw_objects
-       (source_id, job_type, trader_id, timeframe, storage_path, bytes, content_hash, meta)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING id`,
-    [
+  const prepared: PreparedRawObjectPointer = {
+    contentHash,
+    storagePath,
+    values: Object.freeze([
       input.sourceId,
       input.jobType,
       input.traderId ?? null,
@@ -1064,13 +1127,15 @@ export async function writeRawObject(input: WriteRawInput): Promise<RawObjectRec
       gz.byteLength,
       contentHash,
       JSON.stringify(meta),
-    ]
-  )
-  return {
-    id: rows[0].id,
-    storagePath,
-    contentHash,
+    ]),
   }
+
+  await uploadRawPayload(storagePath, gz)
+
+  if (runTransaction) {
+    return runTransaction((transaction) => persistRawObjectPointer(transaction, prepared))
+  }
+  return persistRawObjectPointer(getIngestPool(), prepared)
 }
 
 /** Re-read a stored raw payload (re-parse path, spec §5.5). */
