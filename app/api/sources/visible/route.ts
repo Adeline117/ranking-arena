@@ -5,7 +5,7 @@ import { ApiError } from '@/lib/api/errors'
 import { withPublic } from '@/lib/api/middleware'
 import { success as apiSuccess, withCache } from '@/lib/api/response'
 import {
-  parseVisibleLeaderboardSources,
+  summarizePublicVisibleLeaderboardSources,
   type LeaderboardTimeRange,
 } from '@/lib/data/visible-leaderboard-sources'
 
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       })
       if (error) throw new Error(`arena_visible_sources failed: ${error.message}`)
 
-      const sources = parseVisibleLeaderboardSources(data)
+      const { sourceBoards: sources } = summarizePublicVisibleLeaderboardSources(data)
       return withCache(apiSuccess({ timeRange, sources }), {
         maxAge: 60,
         staleWhileRevalidate: 300,

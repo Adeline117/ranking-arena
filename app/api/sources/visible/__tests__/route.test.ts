@@ -67,7 +67,20 @@ describe('GET /api/sources/visible', () => {
   beforeEach(() => mockRpc.mockReset())
 
   it('returns validated current sources and normalizes the time range', async () => {
-    mockRpc.mockResolvedValue({ data: [validRow], error: null })
+    mockRpc.mockResolvedValue({
+      data: [
+        validRow,
+        {
+          ...validRow,
+          registry_slug: 'bitget_bots_futures',
+          filter_source: 'bitget_bots_futures',
+          exchange_slug: 'bitget',
+          exchange_name: 'Bitget',
+          trader_count: 90,
+        },
+      ],
+      error: null,
+    })
 
     const response = (await GET(request('?timeRange=7d'))) as unknown as MockResponse
     const body = await response.json()
