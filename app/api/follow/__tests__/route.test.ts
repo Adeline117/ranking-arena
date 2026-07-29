@@ -116,7 +116,39 @@ describe('/api/follow', () => {
         return jest.fn(() => new Proxy({}, handler))
       },
     }
-    return { from: jest.fn(() => new Proxy({}, handler)) }
+    const rpc = jest.fn(
+      (
+        _name: string,
+        args: {
+          p_actor_id: string
+          p_trader_id: string
+          p_source: string | null
+          p_action: 'follow' | 'unfollow'
+        }
+      ) =>
+        Promise.resolve({
+          data:
+            args.p_action === 'follow'
+              ? {
+                  status: 'followed',
+                  user_id: args.p_actor_id,
+                  trader_id: args.p_trader_id,
+                  source: args.p_source,
+                  following: true,
+                  current_count: 1,
+                  limit: 100,
+                }
+              : {
+                  status: 'unfollowed',
+                  user_id: args.p_actor_id,
+                  trader_id: args.p_trader_id,
+                  source: args.p_source,
+                  following: false,
+                },
+          error: null,
+        })
+    )
+    return { from: jest.fn(() => new Proxy({}, handler)), rpc }
   }
 
   function createStatefulUnfollowSupabase(
@@ -153,7 +185,37 @@ describe('/api/follow', () => {
       }
       return chain
     })
-    return { from }
+    const rpc = jest.fn(
+      (
+        _name: string,
+        args: {
+          p_actor_id: string
+          p_trader_id: string
+          p_source: string | null
+          p_action: 'follow' | 'unfollow'
+        }
+      ) => {
+        const index = rows.findIndex(
+          (row) =>
+            row.user_id === args.p_actor_id &&
+            row.trader_id === args.p_trader_id &&
+            row.source === args.p_source
+        )
+        const status = index === -1 ? 'not_following' : 'unfollowed'
+        if (index !== -1) rows.splice(index, 1)
+        return Promise.resolve({
+          data: {
+            status,
+            user_id: args.p_actor_id,
+            trader_id: args.p_trader_id,
+            source: args.p_source,
+            following: false,
+          },
+          error: null,
+        })
+      }
+    )
+    return { from, rpc }
   }
 
   beforeEach(() => {

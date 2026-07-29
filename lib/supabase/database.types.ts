@@ -10039,6 +10039,18 @@ export type Database = {
         Args: { p_limit: number; p_now: string }
         Returns: Json
       }
+      mutate_trader_follow_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_free_limit: number
+          p_pro_limit: number
+          p_promo_unlocked: boolean
+          p_source: string | null
+          p_trader_id: string
+        }
+        Returns: Json
+      }
       finish_api_tier_payment_backfill_target_atomic: {
         Args: {
           p_error: string | null
