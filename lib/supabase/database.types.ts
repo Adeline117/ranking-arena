@@ -12183,6 +12183,15 @@ export type Database = {
         }
         Returns: Json
       }
+      moderate_group_post_atomic: {
+        Args: {
+          p_actor_id: string
+          p_group_id: string
+          p_post_id: string
+          p_reason: string
+        }
+        Returns: Json
+      }
       moderate_report_queue_atomic: {
         Args: {
           p_action: string
