@@ -11,12 +11,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { createLogger, traceMessage } from '@/lib/utils/logger'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { socialFeatureGuard } from '@/lib/features'
 import { parseLimit } from '@/lib/utils/safe-parse'
-import { sendNotification } from '@/lib/data/notifications'
-import { getUserHandle } from '@/lib/supabase/server'
-import { fireAndForget } from '@/lib/utils/logger'
 
 const logger = createLogger('messages-api')
 
@@ -25,13 +21,121 @@ const SendMessageSchema = z.object({
   receiverId: z.string().uuid('Invalid receiver ID'),
   content: z
     .string()
+    .trim()
     .min(1, 'Message content cannot be empty')
     .max(2000, 'Message too long, max 2000 characters'),
-  media_url: z.string().url().max(2000).optional().nullable(),
-  media_type: z.string().max(50).optional().nullable(),
-  media_name: z.string().max(255).optional().nullable(),
+  media_url: z
+    .string()
+    .trim()
+    .url()
+    .max(2000)
+    .refine((value) => value.startsWith('https://'), 'Media URL must use HTTPS')
+    .optional()
+    .nullable(),
+  media_type: z.enum(['image', 'video', 'file']).optional().nullable(),
+  media_name: z.string().trim().min(1).max(255).optional().nullable(),
   reply_to_id: z.string().uuid('Invalid reply target ID').optional().nullable(),
 })
+
+const AtomicMessageSchema = z
+  .object({
+    id: z.string().uuid(),
+    conversation_id: z.string().uuid(),
+    sender_id: z.string().uuid(),
+    receiver_id: z.string().uuid(),
+    content: z.string().min(1).max(2000),
+    read: z.boolean(),
+    read_at: z.string().datetime().nullable(),
+    created_at: z.string().datetime(),
+    deleted_at: z.null(),
+    media_url: z.string().nullable(),
+    media_type: z.enum(['image', 'video', 'file']).nullable(),
+    media_name: z.string().nullable(),
+    reply_to_id: z.string().uuid().nullable(),
+  })
+  .passthrough()
+
+type AtomicSendResult =
+  | {
+      success: true
+      conversationId: string
+      message: z.infer<typeof AtomicMessageSchema>
+    }
+  | {
+      success: false
+      reason:
+        | 'BLOCKED'
+        | 'DM_DISABLED'
+        | 'INVALID_REPLY_TARGET'
+        | 'LIMIT_REACHED'
+        | 'SENDER_UNAVAILABLE'
+        | 'USER_NOT_FOUND'
+      sentCount?: number
+    }
+
+function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const sortedExpected = [...expected].sort()
+  return (
+    actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index])
+  )
+}
+
+function readAtomicSendResult(value: unknown): AtomicSendResult | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const result = value as Record<string, unknown>
+
+  if (result.success === true) {
+    if (
+      !exactKeys(result, ['allowed', 'conversation_id', 'message', 'success']) ||
+      result.allowed !== true ||
+      typeof result.conversation_id !== 'string'
+    ) {
+      return null
+    }
+    const parsedMessage = AtomicMessageSchema.safeParse(result.message)
+    if (!parsedMessage.success || parsedMessage.data.conversation_id !== result.conversation_id) {
+      return null
+    }
+    return {
+      success: true,
+      conversationId: result.conversation_id,
+      message: parsedMessage.data,
+    }
+  }
+
+  if (result.success !== false || result.allowed !== false || typeof result.reason !== 'string') {
+    return null
+  }
+  const reason = result.reason
+  if (reason === 'LIMIT_REACHED') {
+    if (
+      !exactKeys(result, ['allowed', 'reason', 'sent_count', 'success']) ||
+      !Number.isSafeInteger(result.sent_count) ||
+      (result.sent_count as number) < NON_MUTUAL_MESSAGE_LIMIT
+    ) {
+      return null
+    }
+    return { success: false, reason, sentCount: result.sent_count as number }
+  }
+  if (
+    !exactKeys(result, ['allowed', 'reason', 'success']) ||
+    ![
+      'BLOCKED',
+      'DM_DISABLED',
+      'INVALID_REPLY_TARGET',
+      'SENDER_UNAVAILABLE',
+      'USER_NOT_FOUND',
+    ].includes(reason)
+  ) {
+    return null
+  }
+  return {
+    success: false,
+    reason: reason as Exclude<AtomicSendResult, { success: true }>['reason'],
+  }
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -78,7 +182,7 @@ export const GET = withAuth(
     }
 
     // 构建查询（支持 cursor 分页）
-    let query = (supabase as SupabaseClient)
+    let query = supabase
       .from('direct_messages')
       .select(
         `
@@ -120,7 +224,7 @@ export const GET = withAuth(
     const resultMessages = (messages || []).slice(0, limit).reverse() // reverse back to ascending order
 
     // Enrich with reply previews (parent snippet) + emoji reactions — batched to avoid N+1
-    const sb = supabase as SupabaseClient
+    const sb = supabase
 
     const replyIds = Array.from(
       new Set(resultMessages.map((m) => m.reply_to_id).filter(Boolean))
@@ -252,19 +356,41 @@ export const POST = withAuth(
       )
     }
 
-    // Permission check via single RPC call (replaces 5-7 separate queries)
-    const { data: permCheck, error: permError } = await (supabase as SupabaseClient).rpc(
-      'check_dm_permission',
-      { p_sender_id: senderId, p_receiver_id: receiverId }
-    )
+    // Permission, non-mutual quota, canonical conversation creation, reply
+    // validation and the insert must share one database transaction. A
+    // route-level check followed by a service-role insert lets a concurrent
+    // block, privacy change or third send race through stale permission.
+    const { data: rawResult, error: sendError } = await supabase.rpc('send_direct_message_atomic', {
+      p_sender_id: senderId,
+      p_receiver_id: receiverId,
+      p_content: content,
+      p_media_url: media_url ?? null,
+      p_media_type: media_url ? media_type || 'file' : null,
+      p_media_name: media_url ? (media_name ?? null) : null,
+      p_reply_to_id: reply_to_id ?? null,
+    })
+    const sendResult = readAtomicSendResult(rawResult)
 
-    if (permError) {
-      logger.error('check_dm_permission RPC error', { error: permError.message })
-      return NextResponse.json({ error: 'Failed to check permissions' }, { status: 500 })
+    if (sendError || !sendResult) {
+      logger.error('Atomic direct-message send failed', {
+        code: sendError?.code,
+        senderId,
+        receiverId,
+      })
+      traceMessage({
+        event: 'failed',
+        senderId,
+        receiverId,
+        error: 'Atomic direct-message send failed',
+      })
+      return NextResponse.json(
+        { error: 'Service error, please try again later', error_code: 'SERVER_ERROR' },
+        { status: 500 }
+      )
     }
 
-    if (!permCheck?.allowed) {
-      const reason = permCheck?.reason
+    if (!sendResult.success) {
+      const reason = sendResult.reason
       traceMessage({
         event: 'failed',
         senderId,
@@ -289,9 +415,16 @@ export const POST = withAuth(
             error: `You are not mutual followers. You can only send ${NON_MUTUAL_MESSAGE_LIMIT} messages before they reply.`,
             error_code: 'PERMISSION_DENIED',
             limit_reached: true,
-            sent_count: permCheck?.sent_count,
+            sent_count: sendResult.sentCount,
           },
           { status: 403 }
+        )
+      }
+
+      if (reason === 'INVALID_REPLY_TARGET') {
+        return NextResponse.json(
+          { error: 'Reply target is no longer available', error_code: 'VALIDATION_ERROR' },
+          { status: 400 }
         )
       }
 
@@ -301,96 +434,27 @@ export const POST = withAuth(
       )
     }
 
-    // 获取或创建会话
-    const orderedUser1 = senderId < receiverId ? senderId : receiverId
-    const orderedUser2 = senderId < receiverId ? receiverId : senderId
-
-    let { data: conversation } = await supabase
-      .from('conversations')
-      .select('id, user1_id, user2_id, created_at')
-      .eq('user1_id', orderedUser1)
-      .eq('user2_id', orderedUser2)
-      .maybeSingle()
-
-    if (!conversation) {
-      const { data: newConv, error: convError } = await supabase
-        .from('conversations')
-        .insert({ user1_id: orderedUser1, user2_id: orderedUser2 })
-        .select()
-        .single()
-
-      if (convError) {
-        if (convError.code === '23505') {
-          const { data: existingConv } = await supabase
-            .from('conversations')
-            .select('id, user1_id, user2_id, created_at')
-            .eq('user1_id', orderedUser1)
-            .eq('user2_id', orderedUser2)
-            .single()
-          conversation = existingConv
-        } else {
-          logger.error('Create conversation error', { error: convError.message })
-          return NextResponse.json({ error: 'Failed to create conversation' }, { status: 500 })
-        }
-      } else {
-        conversation = newConv
-      }
-    }
-
-    if (!conversation) {
-      return NextResponse.json({ error: 'Unable to create conversation' }, { status: 500 })
-    }
-
-    // 发送消息
-    const messageData: {
-      conversation_id: string
-      sender_id: string
-      receiver_id: string
-      content: string
-      media_url?: string
-      media_type?: string
-      media_name?: string
-      reply_to_id?: string
-    } = {
-      conversation_id: conversation.id,
-      sender_id: senderId,
-      receiver_id: receiverId,
-      content: content.trim(),
-    }
-
-    // Add media fields if provided
-    if (media_url) {
-      messageData.media_url = media_url
-      messageData.media_type = media_type || 'file'
-      messageData.media_name = media_name ?? undefined
-    }
-
-    // Reply target (1:1 DM quote/reply) — verify the parent belongs to this conversation
-    if (reply_to_id) {
-      const { data: parentMsg } = await (supabase as SupabaseClient)
-        .from('direct_messages')
-        .select('id, conversation_id')
-        .eq('id', reply_to_id)
-        .maybeSingle()
-      if (parentMsg && parentMsg.conversation_id === conversation.id) {
-        messageData.reply_to_id = reply_to_id
-      }
-    }
-
-    const { data: message, error: msgError } = await supabase
-      .from('direct_messages')
-      .insert(messageData)
-      .select()
-      .single()
-
-    if (msgError) {
-      logger.error('Send message error', { error: msgError.message })
-      traceMessage({
-        event: 'failed',
-        conversationId: conversation.id,
+    const message = sendResult.message
+    if (
+      message.sender_id !== senderId ||
+      message.receiver_id !== receiverId ||
+      message.content !== content.trim() ||
+      message.media_url !== (media_url ?? null) ||
+      message.media_type !== (media_url ? media_type || 'file' : null) ||
+      message.media_name !== (media_url ? (media_name ?? null) : null) ||
+      message.reply_to_id !== (reply_to_id ?? null)
+    ) {
+      logger.error('Atomic direct-message send returned mismatched evidence', {
+        messageId: message.id,
         senderId,
         receiverId,
-        error: msgError.message,
+      })
+      traceMessage({
+        event: 'failed',
+        conversationId: sendResult.conversationId,
+        senderId,
+        receiverId,
+        error: 'Atomic direct-message acknowledgement mismatch',
       })
       return NextResponse.json(
         { error: 'Service error, please try again later', error_code: 'SERVER_ERROR' },
@@ -401,39 +465,15 @@ export const POST = withAuth(
     traceMessage({
       event: 'send',
       messageId: message.id,
-      conversationId: conversation.id,
+      conversationId: sendResult.conversationId,
       senderId,
       receiverId,
     })
 
-    // Notify the recipient when this message is a reply to one of their messages
-    // (DMs otherwise send no notification — reply is the one signal we surface).
-    if (messageData.reply_to_id) {
-      fireAndForget(
-        getUserHandle(senderId, user.email ?? undefined).then((handle) => {
-          sendNotification(
-            supabase,
-            {
-              user_id: receiverId,
-              type: 'message',
-              title: `${handle} replied to your message`,
-              message: content.trim().slice(0, 100) || 'replied to your message',
-              actor_id: senderId,
-              link: `/messages/${conversation.id}`,
-              reference_id: message.id,
-              read: false,
-            },
-            'DM reply notification'
-          )
-        }),
-        'DM reply notification setup'
-      )
-    }
-
     return NextResponse.json({
       success: true,
       message,
-      conversation_id: conversation.id,
+      conversation_id: sendResult.conversationId,
     })
   },
   { name: 'messages-send', rateLimit: 'write' }

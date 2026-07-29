@@ -214,9 +214,10 @@ describe('atomic direct-message send migration', () => {
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
   })
 
-  it('does not switch the application route in the SQL-first batch', () => {
+  it('keeps the deployed SQL authority connected to the application route', () => {
     const route = readFileSync(join(process.cwd(), 'app/api/messages/route.ts'), 'utf8')
-    expect(route).not.toContain('send_direct_message_atomic')
-    expect(route).toContain("'check_dm_permission'")
+    expect(route).toContain("'send_direct_message_atomic'")
+    expect(route).not.toContain("'check_dm_permission'")
+    expect(route).not.toContain(".from('direct_messages')\n      .insert")
   })
 })
