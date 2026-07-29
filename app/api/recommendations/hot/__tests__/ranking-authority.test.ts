@@ -5,13 +5,17 @@ const source = readFileSync(join(process.cwd(), 'lib/recommendations/hot-score.t
 const route = readFileSync(join(process.cwd(), 'app/api/recommendations/hot/route.ts'), 'utf8')
 
 describe('hot recommendation ranking authority', () => {
-  it('filters public sources and binds the finite page before computing signals', () => {
-    expect(source).toContain('const sealedRead = await readSealedRankingGeneration(')
+  it('uses complete dynamic authority and binds the finite page before computing signals', () => {
+    expect(source).toContain('const sealedRead = await readSealedRankingAuthorityGeneration(')
+    expect(source).toContain(
+      'const authoritySources = publication.proofs.map((proof) => proof.source)'
+    )
     expect(source).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
-    expect(source).toContain(".in('source', HOT_RANKING_SOURCES)")
-    expect(source.indexOf(".in('source', HOT_RANKING_SOURCES)")).toBeLessThan(
+    expect(source).toContain(".in('source', authoritySources)")
+    expect(source.indexOf(".in('source', authoritySources)")).toBeLessThan(
       source.indexOf('.limit(300)')
     )
+    expect(source).not.toContain('HOT_RANKING_SOURCES')
   })
 
   it('invalidates legacy unsealed recommendation cache entries', () => {
