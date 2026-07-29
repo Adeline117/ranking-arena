@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { badRequest } from '@/lib/api/response'
-import { getOrSetWithLock } from '@/lib/cache'
+import { del, getOrSetWithLock } from '@/lib/cache'
 import type { Period } from '@/lib/utils/arena-score'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
@@ -199,36 +199,63 @@ export const GET = withPublic(
       `leaderboard:sealed-v5:${authorityFingerprint}:${timeRange}:${canonicalExchange || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
     )
 
-    const cacheEntry = parseSealedRankingCacheEntry<TradersRankingResponse>(
-      await getOrSetWithLock(
-        cacheKey,
-        async () => {
-          const sealedRead = await fetchFromLeaderboard(
-            supabase,
-            {
-              timeRange,
-              exchangeFilter: canonicalExchange,
-              categoryFilter: categoryFilter ?? null,
-              sortBy: effectiveSortBy,
-              order,
-              cursor: cursor ? safeParseInt(cursor, 0) : null,
-              limit,
-              useLegacyPaging,
-              page: useLegacyPaging ? Math.max(0, page) : 0,
-            },
-            expectedSources
-          )
-          const safeRead = {
-            ...sealedRead,
-            value: sanitizePublicRankingSourcePayload(sealedRead.value),
-          }
-          return createSealedRankingCacheEntry(safeRead)
+    const fetchSealedEntry = async () => {
+      const sealedRead = await fetchFromLeaderboard(
+        supabase,
+        {
+          timeRange,
+          exchangeFilter: canonicalExchange,
+          categoryFilter: categoryFilter ?? null,
+          sortBy: effectiveSortBy,
+          order,
+          cursor: cursor ? safeParseInt(cursor, 0) : null,
+          limit,
+          useLegacyPaging,
+          page: useLegacyPaging ? Math.max(0, page) : 0,
         },
-        { ttl: 300, lockTtl: 10 }
-      ),
-      timeRange,
-      expectedSources
-    )
+        expectedSources
+      )
+      const safeRead = {
+        ...sealedRead,
+        value: sanitizePublicRankingSourcePayload(sealedRead.value),
+      }
+      return createSealedRankingCacheEntry(safeRead)
+    }
+
+    const readAuthorizedCache = async () => {
+      const cached = await getOrSetWithLock(cacheKey, fetchSealedEntry, { ttl: 300, lockTtl: 10 })
+      const cacheEntry = parseSealedRankingCacheEntry<TradersRankingResponse>(
+        cached,
+        timeRange,
+        expectedSources
+      )
+      if (!cacheEntry) return null
+
+      const currentGeneration = await readSealedRankingGeneration(
+        supabase,
+        { season: timeRange, sources: expectedSources },
+        async () => null,
+        { timeoutMs: 10_000 }
+      )
+      const currentSources = tradersProofSources(
+        currentGeneration.authoritySources,
+        canonicalExchange,
+        categoryFilter ?? null
+      )
+      const authorityUnchanged =
+        currentSources.length === expectedSources.length &&
+        currentSources.every((source, index) => source === expectedSources[index])
+      return authorityUnchanged &&
+        currentGeneration.publicationIdentity === cacheEntry.publicationIdentity
+        ? cacheEntry
+        : null
+    }
+
+    let cacheEntry = await readAuthorizedCache()
+    if (!cacheEntry) {
+      await del(cacheKey)
+      cacheEntry = await readAuthorizedCache()
+    }
     if (!cacheEntry) {
       throw new Error('traders ranking cache returned an unsealed value')
     }

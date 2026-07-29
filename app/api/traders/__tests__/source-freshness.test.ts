@@ -32,8 +32,10 @@ jest.mock('@/lib/api/middleware', () => ({
 }))
 
 const mockGetOrSetWithLock = jest.fn()
+const mockDel = jest.fn()
 jest.mock('@/lib/cache', () => ({
   getOrSetWithLock: (...args: unknown[]) => mockGetOrSetWithLock(...args),
+  del: (...args: unknown[]) => mockDel(...args),
 }))
 
 const mockReadSealedRankingGeneration = jest.fn()
@@ -90,8 +92,45 @@ function queryResult(data: unknown[], error: unknown = null) {
 import { GET } from '../route'
 
 const TEST_COHORT_ID = '11111111-1111-4111-8111-111111111111'
+let currentCohortId = TEST_COHORT_ID
 const TEST_AUTHORITY_SOURCES = ['binance_futures', 'hyperliquid']
 const proofOverrides = new Map<string, { sourceAsOf?: string; publishedRankCount?: number }>()
+
+function publicationFor(
+  season: '7D' | '30D' | '90D',
+  sources: readonly string[],
+  scoreCohortId = currentCohortId
+) {
+  return {
+    state: 'sealed' as const,
+    season,
+    scoreCohortId,
+    proofs: [...sources].sort().map((source) => ({
+      season_id: season,
+      source,
+      source_as_of: proofOverrides.get(source)?.sourceAsOf ?? '2026-07-18T11:00:00.000000Z',
+      recorded_at: '2026-07-18T11:55:00.000000Z',
+      score_cohort_id: scoreCohortId,
+      rank_mutation_seq: 9,
+      current_mutation_seq: 9,
+      published_rank_count: proofOverrides.get(source)?.publishedRankCount ?? 0,
+      published_identity_sha256: 'a'.repeat(64),
+      is_sealed: true as const,
+    })),
+  }
+}
+
+function sealedCacheEntry(value: unknown, scoreCohortId = currentCohortId) {
+  const publication = publicationFor('90D', TEST_AUTHORITY_SOURCES, scoreCohortId)
+  return {
+    contract: 'sealed-ranking-cache@1',
+    season: '90D',
+    publicationIdentity: JSON.stringify(publication),
+    publication,
+    cachedAt: '2026-07-18T11:56:00.000Z',
+    value,
+  }
+}
 
 async function readThroughSealedGeneration(
   _supabase: unknown,
@@ -114,23 +153,7 @@ async function readThroughSealedGeneration(
     }>
   }) => Promise<unknown>
 ) {
-  const publication = {
-    state: 'sealed' as const,
-    season: input.season,
-    scoreCohortId: TEST_COHORT_ID,
-    proofs: [...input.sources].sort().map((source) => ({
-      season_id: input.season,
-      source,
-      source_as_of: proofOverrides.get(source)?.sourceAsOf ?? '2026-07-18T11:00:00.000000Z',
-      recorded_at: '2026-07-18T11:55:00.000000Z',
-      score_cohort_id: TEST_COHORT_ID,
-      rank_mutation_seq: 9,
-      current_mutation_seq: 9,
-      published_rank_count: proofOverrides.get(source)?.publishedRankCount ?? 0,
-      published_identity_sha256: 'a'.repeat(64),
-      is_sealed: true as const,
-    })),
-  }
+  const publication = publicationFor(input.season, input.sources)
   const value = await reader(publication)
   return {
     value,
@@ -143,7 +166,9 @@ async function readThroughSealedGeneration(
 describe('GET /api/traders source freshness', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    currentCohortId = TEST_COHORT_ID
     proofOverrides.clear()
+    mockDel.mockResolvedValue(true)
     mockGetOrSetWithLock.mockImplementation(
       async (_key: string, fetcher: () => Promise<unknown>) => await fetcher()
     )
@@ -260,31 +285,7 @@ describe('GET /api/traders source freshness', () => {
         { source: 'hyperliquid', updated_at: 'safe' },
       ],
     }
-    const publication = {
-      state: 'sealed' as const,
-      season: '90D' as const,
-      scoreCohortId: TEST_COHORT_ID,
-      proofs: TEST_AUTHORITY_SOURCES.map((source) => ({
-        season_id: '90D' as const,
-        source,
-        source_as_of: '2026-07-18T11:00:00.000000Z',
-        recorded_at: '2026-07-18T11:55:00.000000Z',
-        score_cohort_id: TEST_COHORT_ID,
-        rank_mutation_seq: 9,
-        current_mutation_seq: 9,
-        published_rank_count: source === 'binance_futures' || source === 'hyperliquid' ? 1 : 0,
-        published_identity_sha256: 'a'.repeat(64),
-        is_sealed: true as const,
-      })),
-    }
-    mockGetOrSetWithLock.mockResolvedValue({
-      contract: 'sealed-ranking-cache@1',
-      season: '90D',
-      publicationIdentity: JSON.stringify(publication),
-      publication,
-      cachedAt: '2026-07-18T11:56:00.000Z',
-      value,
-    })
+    mockGetOrSetWithLock.mockResolvedValue(sealedCacheEntry(value))
 
     const response = await GET({
       nextUrl: new URL('http://localhost/api/traders?timeRange=90D'),
@@ -341,5 +342,35 @@ describe('GET /api/traders source freshness', () => {
     )
     expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('evicts a sealed cache page after the authority advances to another cohort', async () => {
+    const cachedTrader = { source: 'binance_futures', id: 'old-cache-row' }
+    mockGetOrSetWithLock
+      .mockResolvedValueOnce(
+        sealedCacheEntry(
+          {
+            traders: [cachedTrader],
+            timeRange: '90D',
+            totalCount: 1,
+            dataAgeMinutes: 1,
+            isStale: false,
+          },
+          '22222222-2222-4222-8222-222222222222'
+        )
+      )
+      .mockImplementation(async (_key: string, fetcher: () => Promise<unknown>) => fetcher())
+    mockFrom.mockReturnValue(queryResult([]))
+
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/traders?timeRange=90D'),
+    } as never)
+    const body = await response.json()
+
+    expect(body.traders).toEqual([])
+    expect(JSON.stringify(body)).not.toContain('old-cache-row')
+    expect(mockDel).toHaveBeenCalledWith(expect.stringContaining('leaderboard:sealed-v5:'))
+    expect(mockGetOrSetWithLock).toHaveBeenCalledTimes(2)
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(3)
   })
 })
