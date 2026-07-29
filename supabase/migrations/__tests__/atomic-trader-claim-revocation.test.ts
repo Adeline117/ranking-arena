@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const migration = readFileSync(
-  join(process.cwd(), 'supabase/migrations/20260729065000_atomic_trader_claim_revocation.sql'),
+  join(process.cwd(), 'supabase/migrations/20260729067000_atomic_trader_claim_revocation.sql'),
   'utf8'
 )
 
@@ -50,6 +50,12 @@ describe('atomic trader claim revocation migration', () => {
     )
     expect(unlinkFunction).toContain('public.arena_set_trader_claimed(')
     expect(unlinkFunction).toMatch(/linked_trader_count = v_remaining_count/)
+  })
+
+  it('removes stale Arena ownership metadata when the claimed flag is cleared', () => {
+    expect(migration).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.arena_set_trader_claimed[\s\S]*WHEN p_claimed THEN[\s\S]*- 'claimed_by_user_id'[\s\S]*- 'claimed_at'[\s\S]*jsonb_build_object\('claimed', false\)/
+    )
   })
 
   it('fails before commit when an ownership projection disappears', () => {

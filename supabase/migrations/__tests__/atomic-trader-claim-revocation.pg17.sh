@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# Executable PostgreSQL 17 proof for 20260729065000. It owns an isolated
+# Executable PostgreSQL 17 proof for 20260729067000. It owns an isolated
 # temporary cluster and never connects to a developer or remote database.
 
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-MIGRATION="$ROOT_DIR/supabase/migrations/20260729065000_atomic_trader_claim_revocation.sql"
+MIGRATION="$ROOT_DIR/supabase/migrations/20260729067000_atomic_trader_claim_revocation.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl postgres psql; do
@@ -237,6 +237,8 @@ BEGIN
     || pg_catalog.jsonb_build_object(
          'claimed',
          p_claimed,
+         'claimed_at',
+         pg_catalog.statement_timestamp(),
          'claimed_by_user_id',
          p_user_id::text
        )
@@ -491,6 +493,23 @@ SQL
 psql_cmd -f "$MIGRATION" >/dev/null
 
 psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION arena.cancel_broken_unclaim()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $trigger$
+BEGIN
+  IF OLD.exchange_trader_id = 'rollback-link'
+     AND NEW.meta->>'claimed' = 'false' THEN
+    RETURN NULL;
+  END IF;
+  RETURN NEW;
+END;
+$trigger$;
+CREATE TRIGGER cancel_broken_unclaim
+  BEFORE UPDATE ON arena.traders
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.cancel_broken_unclaim();
+
 DO $proof$
 BEGIN
   IF NOT EXISTS (
@@ -660,6 +679,8 @@ BEGIN
        WHERE source_row.slug = 'binance_futures'
          AND trader.exchange_trader_id = 'api-primary'
          AND trader.meta->>'claimed' = 'false'
+         AND NOT trader.meta ? 'claimed_by_user_id'
+         AND NOT trader.meta ? 'claimed_at'
      ) THEN
     RAISE EXCEPTION 'primary ownership revocation left a stale projection';
   END IF;

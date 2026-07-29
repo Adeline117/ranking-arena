@@ -210,6 +210,62 @@ BEGIN
 END;
 $function$;
 
+-- `claimed=false` must remove ownership identity, not merely overlay a flag
+-- while leaving the previous user's UUID and claim timestamp in public meta.
+CREATE OR REPLACE FUNCTION public.arena_set_trader_claimed(
+  p_platform text,
+  p_trader_key text,
+  p_user_id uuid,
+  p_claimed boolean
+)
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_source_id smallint;
+  v_trader_id bigint;
+BEGIN
+  SELECT source_row.id
+  INTO v_source_id
+  FROM arena.sources AS source_row
+  WHERE source_row.slug = p_platform
+     OR source_row.meta->>'legacy_platform' = p_platform
+  LIMIT 1;
+
+  IF v_source_id IS NULL THEN
+    RAISE EXCEPTION 'unknown platform %', p_platform;
+  END IF;
+
+  INSERT INTO arena.traders (source_id, exchange_trader_id, meta)
+  VALUES (v_source_id, p_trader_key, '{}'::jsonb)
+  ON CONFLICT (source_id, exchange_trader_id) DO NOTHING;
+
+  UPDATE arena.traders AS trader
+  SET meta = CASE
+    WHEN p_claimed THEN
+      COALESCE(trader.meta, '{}'::jsonb)
+      || pg_catalog.jsonb_build_object(
+           'claimed', true,
+           'claimed_at', pg_catalog.statement_timestamp(),
+           'claimed_by_user_id', p_user_id::text
+         )
+    ELSE
+      (
+        COALESCE(trader.meta, '{}'::jsonb)
+        - 'claimed_by_user_id'
+        - 'claimed_at'
+      ) || pg_catalog.jsonb_build_object('claimed', false)
+    END
+  WHERE trader.source_id = v_source_id
+    AND trader.exchange_trader_id = p_trader_key
+  RETURNING trader.id INTO v_trader_id;
+
+  RETURN v_trader_id;
+END;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.unlink_linked_trader(
   p_user_id uuid,
   p_link_id uuid
@@ -473,6 +529,18 @@ GRANT EXECUTE ON FUNCTION public.unlink_linked_trader(uuid, uuid)
   TO service_role;
 REVOKE ALL ON FUNCTION public.guard_trader_claim_activation_expiry()
   FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.arena_set_trader_claimed(
+  text,
+  text,
+  uuid,
+  boolean
+) FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.arena_set_trader_claimed(
+  text,
+  text,
+  uuid,
+  boolean
+) TO service_role;
 
 COMMENT ON FUNCTION public.unlink_linked_trader(uuid, uuid) IS
   'Service-only atomic revocation of linked identity, verified profile, claim, credentials, Arena marker, and primary profile projection.';
@@ -502,6 +570,16 @@ BEGIN
      OR NOT pg_catalog.has_function_privilege(
        'service_role',
        'public.unlink_linked_trader(uuid,uuid)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'authenticated',
+       'public.arena_set_trader_claimed(text,text,uuid,boolean)',
+       'EXECUTE'
+     )
+     OR NOT pg_catalog.has_function_privilege(
+       'service_role',
+       'public.arena_set_trader_claimed(text,text,uuid,boolean)',
        'EXECUTE'
      ) THEN
     RAISE EXCEPTION 'trader claim revocation privilege boundary is incorrect';
