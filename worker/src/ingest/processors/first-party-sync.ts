@@ -85,6 +85,7 @@ const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchange
     },
   },
   bitget: {
+    balanceSource: 'bitget_usdt_equity',
     balanceSemantics: 'total_includes_unrealized',
     realizedPnlSource: 'positions_history',
     positionHistoryMaxRangeDays: 90,

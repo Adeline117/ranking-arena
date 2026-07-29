@@ -135,6 +135,34 @@ describe('first-party account equity evidence', () => {
     })
   })
 
+  it('uses Bitget USDT-valued account equity', async () => {
+    const result = await fetchFirstPartyAccount(
+      client({
+        fetchBalance: jest.fn().mockResolvedValue({
+          total: { USDT: 11.13919278 },
+          info: [
+            {
+              marginCoin: 'USDT',
+              accountEquity: '11.13919278',
+              usdtEquity: '11.13921165',
+            },
+          ],
+        }),
+      }),
+      {
+        nowMs: NOW,
+        balanceSource: 'bitget_usdt_equity',
+        balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
+      }
+    )
+
+    expect(result).toMatchObject({
+      balanceNow: 11.13921165,
+      equityNow: 11.13921165,
+    })
+  })
+
   it('rejects a response with no finite stablecoin balance evidence', async () => {
     const missingBalance = client({
       fetchBalance: jest.fn().mockResolvedValue({ total: {} }),

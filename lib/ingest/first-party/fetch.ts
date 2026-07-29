@@ -57,6 +57,7 @@ export type FirstPartyBalanceSemantics = 'total_includes_unrealized' | 'wallet_e
 export type FirstPartyBalanceSource =
   | 'stable_totals'
   | 'binance_margin_balance'
+  | 'bitget_usdt_equity'
   | 'bybit_total_equity'
   | 'okx_total_equity'
 export type FirstPartyRealizedPnlSource = 'positions_history' | 'income_ledger'
@@ -93,6 +94,17 @@ function balanceEvidence(
   }
   if (source === 'binance_margin_balance') {
     return num((balance.info as { totalMarginBalance?: unknown })?.totalMarginBalance)
+  }
+  if (source === 'bitget_usdt_equity') {
+    const entries = balance.info as Array<{ usdtEquity?: unknown }>
+    if (!Array.isArray(entries) || entries.length === 0) return null
+    let total = 0
+    for (const entry of entries) {
+      const value = num(entry.usdtEquity)
+      if (value === null) return null
+      total += value
+    }
+    return total
   }
   if (source === 'okx_total_equity') {
     const info = balance.info as {
