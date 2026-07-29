@@ -163,9 +163,11 @@ interface CcxtClient {
 }
 type CcxtRegistry = Record<string, new (cfg: Record<string, unknown>) => CcxtClient>
 
-function num(v: unknown): number {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : 0
+function finiteNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 export async function syncExchangePortfolio(params: {
@@ -227,41 +229,69 @@ export async function syncExchangePortfolio(params: {
       options: { defaultType: 'swap' },
     })
 
-    const syncedAt = new Date().toISOString()
-    let rows: SyncedPositionRow[] = []
-    if (client.has?.['fetchPositions']) {
-      const positions = await client.fetchPositions()
-      rows = positions
-        .filter((p) => num(p.contracts ?? p.contractSize) > 0)
-        .map(
-          (p): SyncedPositionRow => ({
-            portfolio_id: params.portfolioId,
-            symbol: String(p.symbol ?? ''),
-            side: p.side === 'short' ? 'short' : 'long',
-            entry_price: num(p.entryPrice),
-            mark_price: num(p.markPrice),
-            size: num(p.contracts ?? p.contractSize),
-            pnl: num(p.unrealizedPnl),
-            pnl_pct: num(p.percentage),
-            leverage: num(p.leverage) || 1,
-            updated_at: syncedAt,
-          })
-        )
-        .filter((r) => r.symbol)
+    const positionsCapability = client.has?.['fetchPositions']
+    if (positionsCapability !== true && positionsCapability !== 'emulated') {
+      logger.error(`[${ex}] fetchPositions is not available`)
+      return { ok: false, reason: 'unsupported' }
     }
 
-    let equity = 0
-    try {
-      const bal = await client.fetchBalance()
-      equity = num(bal?.total?.USDT ?? bal?.total?.USD)
-    } catch (err) {
-      // Best-effort (positions still valid) but LOG it — otherwise a broken
-      // fetchBalance silently persists equity=0 and flatlines the equity curve
-      // at a fake zero forever with no signal.
-      logger.warn(
-        `[${ex}] balance fetch failed (equity=0):`,
-        err instanceof Error ? err.name : 'unknown'
-      )
+    const syncedAt = new Date().toISOString()
+    // A portfolio publication is one financial snapshot. Positions and equity
+    // therefore have to come from the same successful fetch attempt; persisting
+    // positions with a synthetic zero balance corrupts the historical chart.
+    const [positions, balance] = await Promise.all([client.fetchPositions(), client.fetchBalance()])
+    if (!Array.isArray(positions)) {
+      throw new Error('Exchange returned an invalid positions snapshot')
+    }
+
+    const total = balance?.total
+    const usdtEquity = finiteNumber(total?.USDT)
+    const usdEquity = finiteNumber(total?.USD)
+    const equity = usdtEquity ?? usdEquity
+    if (equity === null || equity < 0) {
+      throw new Error('Exchange returned an invalid equity snapshot')
+    }
+
+    const rows: SyncedPositionRow[] = []
+    for (const position of positions) {
+      const contracts = finiteNumber(position.contracts)
+      if (contracts === 0) continue
+
+      const symbol = typeof position.symbol === 'string' ? position.symbol.trim() : ''
+      const entryPrice = finiteNumber(position.entryPrice)
+      const markPrice = finiteNumber(position.markPrice)
+      const pnl = finiteNumber(position.unrealizedPnl)
+      const pnlPct = finiteNumber(position.percentage)
+      const leverage = finiteNumber(position.leverage)
+      if (
+        contracts === null ||
+        contracts < 0 ||
+        !symbol ||
+        (position.side !== 'long' && position.side !== 'short') ||
+        entryPrice === null ||
+        entryPrice <= 0 ||
+        markPrice === null ||
+        markPrice <= 0 ||
+        pnl === null ||
+        pnlPct === null ||
+        leverage === null ||
+        leverage <= 0
+      ) {
+        throw new Error('Exchange returned an incomplete active position')
+      }
+
+      rows.push({
+        portfolio_id: params.portfolioId,
+        symbol,
+        side: position.side,
+        entry_price: entryPrice,
+        mark_price: markPrice,
+        size: contracts,
+        pnl,
+        pnl_pct: pnlPct,
+        leverage,
+        updated_at: syncedAt,
+      })
     }
 
     const pnl = rows.reduce((s, r) => s + r.pnl, 0)
