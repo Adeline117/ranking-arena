@@ -107,6 +107,13 @@ function isSealedPublicationProofSet(
   return true
 }
 
+export function parseSealedRankingPublication(
+  value: unknown,
+  season: LeaderboardPublicationSeason
+): SealedLeaderboardPublicationProofSet | null {
+  return isSealedPublicationProofSet(value, season) ? value : null
+}
+
 /** Wrap a value that has completed the proof-A/read/proof-B authorization. */
 export function createSealedRankingCacheEntry<T>(
   read: SealedRankingGenerationRead<T>,
