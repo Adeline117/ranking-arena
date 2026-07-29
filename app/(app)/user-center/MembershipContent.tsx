@@ -50,6 +50,7 @@ export default function MembershipContent() {
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('yearly')
   const [subscribing, setSubscribing] = useState(false)
   const submittingRef = useRef(false)
+  const recurringOperationIdsRef = useRef(new Map<string, string>())
 
   useEffect(() => {
     if (!auth.authChecked) return
@@ -188,6 +189,18 @@ export default function MembershipContent() {
         router.push('/login?redirect=/user-center?tab=membership')
         return
       }
+      const operationKey =
+        selectedPlan === 'lifetime'
+          ? null
+          : `${capturedScope.userId || 'unknown'}:${selectedPlan}:paid`
+      let operationId: string | undefined
+      if (operationKey) {
+        operationId = recurringOperationIdsRef.current.get(operationKey)
+        if (!operationId) {
+          operationId = globalThis.crypto.randomUUID()
+          recurringOperationIdsRef.current.set(operationKey, operationId)
+        }
+      }
 
       const result = await apiRequest<{ url?: string; error?: string }>(
         '/api/stripe/create-checkout',
@@ -196,6 +209,7 @@ export default function MembershipContent() {
           headers: { Authorization: `Bearer ${accessToken}` },
           body: {
             plan: selectedPlan,
+            operationId,
             successUrl: `${window.location.origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
             cancelUrl: `${window.location.origin}/user-center?tab=membership`,
           },

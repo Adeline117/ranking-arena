@@ -16,6 +16,7 @@ import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCsrfHeaders } from '@/lib/api/csrf'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { jwtSubject } from '@/lib/auth/token-subject'
 import {
   buildPricingCheckoutLoginHref,
   type PricingCheckoutIntent,
@@ -34,6 +35,10 @@ export function useDirectCheckout() {
   // rapid double-click can fire two checkout() calls before the first re-render
   // disables the button — creating two Stripe sessions. A ref flips immediately.
   const inFlightRef = useRef(false)
+  // Keep one caller-owned operation across technical retries. Stripe and the
+  // durable reservation can then recover the same Session instead of turning a
+  // timeout/retry into a second admission attempt.
+  const recurringOperationIdsRef = useRef(new Map<string, string>())
 
   const checkout = useCallback(
     async (intent: DirectCheckoutIntent) => {
@@ -54,6 +59,21 @@ export function useDirectCheckout() {
           return
         }
 
+        const operationKey =
+          intent.plan === 'lifetime'
+            ? null
+            : `${jwtSubject(accessToken) || 'opaque'}:${intent.plan}:${
+                intent.trial === true ? 'trial' : 'paid'
+              }`
+        let operationId: string | undefined
+        if (operationKey) {
+          operationId = recurringOperationIdsRef.current.get(operationKey)
+          if (!operationId) {
+            operationId = globalThis.crypto.randomUUID()
+            recurringOperationIdsRef.current.set(operationKey, operationId)
+          }
+        }
+
         const res = await fetch('/api/stripe/create-checkout', {
           method: 'POST',
           headers: {
@@ -65,6 +85,7 @@ export function useDirectCheckout() {
             plan: intent.plan,
             promotionCode: intent.promotionCode,
             trial: intent.plan === 'lifetime' ? undefined : intent.trial,
+            operationId,
           }),
         })
 
