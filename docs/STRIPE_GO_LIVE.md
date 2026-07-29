@@ -1,6 +1,6 @@
 # Stripe 2C 收费上线 Runbook
 
-最后核验：2026-07-21。
+仓库契约核验：2026-07-29。生产环境观测基线：2026-07-21，执行切换前必须重新只读核验。
 
 ## 当前结论
 
@@ -15,8 +15,8 @@ ArenaFi 的 B2C Pro **尚未开始真实收费，当前支付入口必须保持�
 - `STRIPE_LIFETIME_CHECKOUT_ENABLED` 未配置；终身 Checkout 默认关闭，只有完成名额 reservation、退款和 readiness 验收后才能显式开启。
 - 测试价格已与产品唯一口径一致：月付 `$4.99`、年付 `$29.99`、终身 `$49.99`。
 - Checkout 会在创建 Customer/Session 前验证 Price、Product、币种、金额、周期和 test/live mode；未知 Price 不授予 Pro。
-- webhook 使用可重试状态机；业务处理失败不会再被误记为“已处理”。`20260718183000` entitlement authority 与 `20260718183500` NULL fail-closed 加固已经作为 PREDEPLOY 落库，但最终撤销旧 RPC、封禁 direct DML 的 Stripe POSTDEPLOY 尚未在仓库中实现或分配迁移版本，仍是付费上线硬阻断。当前 `20260718184000` 是榜单 `board_as_of` 水位迁移，与 Stripe 切换无关。
-- 每日 `stripe-readiness` 金丝雀检查三档 B2C 价格、密钥模式、webhook 事件契约、失败或卡住的 webhook 事件，以及数据库权威函数 `stripe_paid_launch_readiness_v2()` 的精确十三键契约。十三键必须同时包含 `unresolved_refund_tombstones`、API 套餐付款 ownership、backfill 和 reversal 阻断项；任何未合并的 Charge 退款墓碑、付款归属异常或未完成逆向动作都必须阻断付费开放。
+- webhook 使用可重试状态机；业务处理失败不会再被误记为“已处理”。Stripe 全局付款 mode、Charge dispute、dispute funds reinstatement 和 funds-withdrawal 权威分别由 `20260729065000`、`20260729066000`、`20260729069000`、`20260729073000` 四个有序 POSTDEPLOY 迁移实现并注册；是否已在目标库 exact 落账仍必须由迁移 ledger 核验，不能只看仓库文件。
+- 每日 `stripe-readiness` 金丝雀检查三档 B2C 价格、密钥模式、webhook 事件契约、失败或卡住的 webhook 事件，以及数据库权威函数 `stripe_paid_launch_readiness_v2()` 的精确 `status + 26` 个计数契约。它同时覆盖退款、ownership、backfill、reversal、mode、争议撤资与资金恢复；缺键、额外键、负数或任何阻断计数非零都必须阻断付费开放。
 
 因此当前状态是 **paid launch blocked by design**。不能把 test Price、test Customer 或其他 Stripe account/mode 的对象直接搬到 live mode，也不能仅补一个环境变量就开始收费。
 
@@ -27,8 +27,11 @@ ArenaFi 的 B2C Pro **尚未开始真实收费，当前支付入口必须保持�
 
 - 旧 test endpoint `we_1TtMgDCL6ewruupgKXyNH9Zf` 已 disabled；它保留作回滚目标，不再接收
   新事件。
-- 新 test endpoint `we_1TvnrtCL6ewruupgh3pNXkfo` 是 canonical URL 上唯一 enabled writer，
-  `api_version=2026-04-22.dahlia`，并且只订阅本 runbook 的精确 15 个事件。
+- 2026-07-21 时，新 test endpoint `we_1TvnrtCL6ewruupgh3pNXkfo` 是 canonical URL 上唯一
+  enabled writer，`api_version=2026-04-22.dahlia`，当时订阅 15 个事件。当前仓库契约已扩展为
+  17 个事件；执行下一次部署前必须在 Stripe Dashboard 增加
+  `charge.dispute.funds_withdrawn` 与 `charge.dispute.funds_reinstated`，重新核验后才能把该
+  endpoint 视为 canonical。
 - 新 endpoint 的 signing secret 只以 Sensitive Production 变量
   `STRIPE_WEBHOOK_SECRET_PREVIOUS` 保存；现有不可回读的旧密钥继续作为
   `STRIPE_WEBHOOK_SECRET` primary。新部署因此可以同时验证旧、新两个 endpoint，任何输出均不得
@@ -37,9 +40,10 @@ ArenaFi 的 B2C Pro **尚未开始真实收费，当前支付入口必须保持�
   状态下，Production deployment `dpl_7T9B3tPfZvoFBcecQgvvaafU4ELR` 返回 HTTP 200；数据库事件
   仍为 `processed`、`attempts=1`，Tip、交付记录与 `tip_received` 通知仍均为 `0`。Stripe
   `delivery_success=false` 全量分页结果为 `0`。
-- 正式 `stripe-readiness` 已不再报告 endpoint/event contract drift。它仍因两个历史模糊 Pro
-  投影阻断，并保留 test mode、free promo 和 previous secret 三个 warning；这些 owner gate
-  不能借本次 sandbox 修复清除。
+- 2026-07-21 的 `stripe-readiness` 不再报告当时的 endpoint/event contract drift。由于当前
+  契约已变为 17 个事件，旧观测不可复用；未补齐两个 dispute 事件前 readiness 必须 fail
+  closed。两个历史模糊 Pro 投影、test mode、free promo 和 previous secret 等 owner gate
+  也不能借 webhook 配置更新清除。
 
 当前回滚顺序必须是先重新启用并核对旧 endpoint，再停用新 endpoint。禁止出现两个都
 disabled 的窗口。test-mode 反向 primary/previous 是可回滚过渡态；在未来独立密钥切换前，
@@ -64,7 +68,7 @@ disabled 的窗口。test-mode 反向 primary/previous 是可回滚过渡态；�
   `https://www.arenafi.org/api/stripe/webhook`。必须新建 endpoint，不能原地更新旧版本
   endpoint；新 endpoint 的 `api_version` 必须精确等于 `2026-04-22.dahlia`，`null`、
   其他版本或账户默认版本均不合格。
-- 该唯一 enabled canonical endpoint 只能订阅以下精确 `15` 个事件：
+- 该唯一 enabled canonical endpoint 只能订阅以下精确 `17` 个事件：
   - `checkout.session.completed`
   - `checkout.session.expired`
   - `customer.subscription.created`
@@ -80,12 +84,21 @@ disabled 的窗口。test-mode 反向 primary/previous 是可回滚过渡态；�
   - `refund.updated`
   - `refund.failed`
   - `charge.dispute.created`
+  - `charge.dispute.funds_withdrawn`
+  - `charge.dispute.funds_reinstated`
     不得额外订阅 wildcard、`charge.refunded`、`charge.refund.updated` 或其他 legacy/额外事件。
+- `charge.dispute.created` 的 warning/inquiry 状态不代表资金被撤回，必须保留已付款权益；
+  只有 fresh Stripe 状态为 `needs_response`、`under_review` 或 `lost` 才能进入撤权边界。
+  `created` 与 `funds_withdrawn` 即使事件 ID 不同、乱序或重复投递，也只能生成一次 immutable
+  reversal；`funds_reinstated` 只能恢复同一个 exact dispute，且同一付款仍有其他 active
+  dispute 时不得恢复访问。
 - Production `STRIPE_WEBHOOK_SECRET` 是这个新建 live endpoint 生成的签名密钥，不能沿用旧 endpoint 的 `whsec_...`。切换窗口内只允许用 `STRIPE_WEBHOOK_SECRET_PREVIOUS` 暂存旧 endpoint 密钥；旧 endpoint 和其重试队列确认退出后，必须在独立里程碑删除该变量。任何日志、文档或验收输出都不得打印密钥值。
 - `STRIPE_LIFETIME_CHECKOUT_ENABLED` 只能在终身名额 reservation、Session 过期释放、退款回收和 200 席并发 canary 全部通过后设为精确值 `true`。
 - `stripe_events` 没有 `failed`，也没有超过 10 分钟的 `processing`。
 - 最新部署 SHA 与 `main` 一致，部署门禁、类型检查、相关支付测试均通过。
-- `/api/cron/stripe-readiness` 返回 `healthy=true`，且 `entitlementReadiness.status=ready`、八个计数全部为 `0`；关闭 promo 后必须进一步返回 `paidLaunchReady=true`。缺键、额外键、负数、非整数或 `unresolved_refund_tombstones>0` 一律 fail closed。
+- `/api/cron/stripe-readiness` 返回 `healthy=true`，且
+  `entitlementReadiness.status=ready`、26 个计数全部为 `0`；关闭 promo 后必须进一步返回
+  `paidLaunchReady=true`。缺键、额外键、负数、非整数或任一阻断计数非零一律 fail closed。
 
 ## 历史订阅隔离与证据门
 
@@ -126,13 +139,21 @@ SELECT s.id, s.user_id, s.stripe_subscription_id, s.stripe_customer_id,
 
 1. 保持免费 promo 开启、支付运行时门禁关闭、`STRIPE_LIFETIME_CHECKOUT_ENABLED` 不存在或不为 `true`；停止制造新的历史形状。
 2. 对历史模糊投影执行上一节的证据门。未解决项必须保持 open manual review，后续 readiness 和 POSTDEPLOY 应明确失败。
-3. 核对 additive `20260718183000` PREDEPLOY 与 `20260718183500` NULL hardening 在迁移 ledger 中均为 exact。不得把榜单水位迁移 `20260718184000` 当作 Stripe POSTDEPLOY。
+3. 核对 additive entitlement PREDEPLOY 链以及 `20260729065000`、`20260729066000`、
+   `20260729069000`、`20260729073000` Stripe POSTDEPLOY 链在迁移 ledger 中均为 exact；
+   顺序必须与受审 runner 一致。不得把同时间段的榜单迁移当作 Stripe 权威迁移。
 4. 部署所有身份完整 writer：Customer owner CAS、Checkout reservation、invoice/subscription/refund RPC、group/referral/admin/account lifecycle、effect consumer 和 projection reconciler；webhook 签名验证必须先支持可选的 `STRIPE_WEBHOOK_SECRET_PREVIOUS`，且 primary/previous 任一有效签名都可验证。退款必须先 fresh-retrieve Refund/Charge、分页核对全部 Refund，再通过中心 tombstone/ownership 原子路由；owner 已删除或 refund-first 时也不能提前 ACK 丢事件。
 5. 分页枚举并过期/对账所有旧 lifetime open Session；确认旧实例和旧 writer 已从流量中退出。
 6. 运行 writer-boundary 静态扫描、真实 canary 和 readiness。任何 open review、未完成 effect、paid-but-unbound payment、未合并 refund tombstone、reservation/projection/authority drift 都必须阻断。
-7. 只有 readiness 精确为 ready、同一待发布 SHA 的 canary 全绿，并且真正的 Stripe POSTDEPLOY 已另行实现、分配新版本、完成 PostgreSQL 17 对抗测试且注册到受审 runner 后，才可单独应用它来撤销旧 RPC 并启用数据库 direct-DML guard。当前仓库不具备这一步，因此 paid launch 必须保持 blocked；此后也不能靠回滚旧 app 恢复。
+7. 只有 readiness 精确为 ready、同一待发布 SHA 的 canary 全绿，才可按受审 runner 在新
+   应用已接管流量后应用四个 Stripe POSTDEPLOY。它们已经分配版本并具有 PostgreSQL 17
+   对抗证明，但目标库未显示 exact ledger 前一律视为未完成；应用后也不能靠回滚旧 app
+   恢复旧 writer。
 8. 在 Stripe Dashboard 切到 Live mode，创建/确认 B2C Pro 三档价格。
-9. 新建 live webhook endpoint，不要更新旧 endpoint：canonical URL、`api_version=2026-04-22.dahlia`、精确 `15` 个事件必须一次配置正确；安全保存新 signing secret 后立即把新 endpoint 暂时设为 disabled，此时不要停用旧 endpoint。这样密钥部署完成前不会让新 endpoint 向只认识旧密钥的生产实例投递。
+9. 新建 live webhook endpoint，不要更新旧 endpoint：canonical URL、
+   `api_version=2026-04-22.dahlia`、精确 `17` 个事件必须一次配置正确；安全保存新 signing
+   secret 后立即把新 endpoint 暂时设为 disabled，此时不要停用旧 endpoint。这样密钥部署
+   完成前不会让新 endpoint 向只认识旧密钥的生产实例投递。
 10. 在 Vercel Production 更新：
 
 | 变量                                 | Live 值                                         |

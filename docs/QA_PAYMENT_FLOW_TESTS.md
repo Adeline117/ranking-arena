@@ -360,6 +360,24 @@ if (!hasFeatureAccess(tier, 'premium_groups')) {
 
 ---
 
+### 【用例E-008B】Stripe inquiry、撤资与争议胜诉的精确边界
+
+- **前置条件**：准备一笔具有 exact Charge/PaymentIntent/Customer/ownership 的已付款权益，并能从 Stripe fresh retrieve 对应 Dispute 与 Charge
+- **操作步骤**：
+  1. 投递 `charge.dispute.created`，fresh Dispute 为 `warning_needs_response`
+  2. 将 inquiry 升级为实际争议，乱序、重复投递 `charge.dispute.funds_withdrawn` 与 `charge.dispute.created`
+  3. 对同一付款建立两个 active dispute，只对第一个投递 `charge.dispute.funds_reinstated`
+  4. 再对第二个 dispute 投递 `funds_reinstated`
+- **期望结果**：
+  - warning/inquiry 不写财务 reversal、不撤销本地权益、不排队取消远端订阅
+  - fresh 状态只有 `needs_response`、`under_review`、`lost` 时撤权；webhook payload 与 fresh Stripe immutable identity 冲突时 fail closed 并进入 durable review
+  - `created`/`funds_withdrawn` 无论先后、事件 ID 是否不同或重放多少次，都只有一个 dispute event、一个 projection 和一次产品副作用
+  - 第一个 dispute 胜诉时仍保持撤权；最后一个 active dispute 胜诉且不存在 full refund 时才恢复 exact 权益
+  - live 历史中出现把 warning/inquiry 当作撤资的旧记录时，POSTDEPLOY 必须中止并要求人工核验，不得猜测恢复或取消订阅
+- **严重程度**：致命（资金与付费权益）
+
+---
+
 ### 【用例E-009】价格变更后老用户续费
 
 - **前置条件**：用户以 $9.99/月 订阅，新价格 $14.99
