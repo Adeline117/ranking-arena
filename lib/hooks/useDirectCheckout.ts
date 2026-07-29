@@ -12,11 +12,12 @@
  *   <button onClick={() => checkout({ plan: 'yearly' })} disabled={isLoading}>Subscribe</button>
  */
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { getCsrfHeaders } from '@/lib/api/csrf'
-import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { authedFetch } from '@/lib/api/client'
 import { jwtSubject } from '@/lib/auth/token-subject'
+import { getViewerScope, isViewerScopeCurrent, type ViewerScope } from '@/lib/auth/viewer-scope'
+import { useAuthSession, type AuthSessionReturn } from '@/lib/hooks/useAuthSession'
 import {
   buildPricingCheckoutLoginHref,
   type PricingCheckoutIntent,
@@ -26,43 +27,147 @@ type DirectCheckoutIntent = PricingCheckoutIntent & {
   promotionCode?: string
 }
 
-export function useDirectCheckout() {
+type DirectCheckoutResponse = {
+  url?: string
+  error?: string
+  code?: string
+}
+
+type CheckoutViewerSnapshot = ViewerScope & {
+  accessToken: string
+  userId: string
+  viewerKey: `user:${string}`
+}
+
+type CheckoutOperation = {
+  id: number
+  viewer: CheckoutViewerSnapshot
+}
+
+type UseDirectCheckoutOptions = {
+  /** Test seam for the hard browser navigation used by Stripe Checkout. */
+  redirectToCheckout?: (url: string) => void
+}
+
+function defaultCheckoutRedirect(url: string): void {
+  window.location.href = url
+}
+
+function captureCheckoutViewer(auth: AuthSessionReturn): CheckoutViewerSnapshot | null {
+  if (
+    auth.loading ||
+    !auth.authChecked ||
+    !auth.userId ||
+    !auth.accessToken ||
+    auth.viewerKey !== `user:${auth.userId}` ||
+    jwtSubject(auth.accessToken) !== auth.userId
+  ) {
+    return null
+  }
+
+  const processScope = getViewerScope()
+  if (
+    processScope.viewerKey !== auth.viewerKey ||
+    processScope.userId !== auth.userId ||
+    processScope.sessionGeneration !== auth.sessionGeneration
+  ) {
+    return null
+  }
+
+  return {
+    viewerKey: auth.viewerKey as `user:${string}`,
+    sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
+    accessToken: auth.accessToken,
+  }
+}
+
+function checkoutViewerIsCurrent(viewer: CheckoutViewerSnapshot, auth: AuthSessionReturn): boolean {
+  return (
+    isViewerScopeCurrent(viewer) &&
+    auth.authChecked &&
+    !auth.loading &&
+    auth.viewerKey === viewer.viewerKey &&
+    auth.userId === viewer.userId &&
+    auth.sessionGeneration === viewer.sessionGeneration
+  )
+}
+
+function sameCheckoutViewer(
+  left: CheckoutViewerSnapshot | null,
+  right: CheckoutViewerSnapshot | null
+): boolean {
+  return (
+    left !== null &&
+    right !== null &&
+    left.viewerKey === right.viewerKey &&
+    left.userId === right.userId &&
+    left.sessionGeneration === right.sessionGeneration
+  )
+}
+
+export function useDirectCheckout(options: UseDirectCheckoutOptions = {}) {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [alreadySubscribed, setAlreadySubscribed] = useState(false)
-  // Synchronous re-entrancy guard. `isLoading` is React state (async), so a
-  // rapid double-click can fire two checkout() calls before the first re-render
-  // disables the button — creating two Stripe sessions. A ref flips immediately.
-  const inFlightRef = useRef(false)
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const redirectToCheckout = options.redirectToCheckout ?? defaultCheckoutRedirect
+  const mountedRef = useRef(false)
+  const [rawIsLoading, setRawIsLoading] = useState(false)
+  const [rawError, setRawError] = useState<string | null>(null)
+  const [rawAlreadySubscribed, setRawAlreadySubscribed] = useState(false)
+  const [uiOwner, setUiOwner] = useState<CheckoutViewerSnapshot | null>(null)
+  const operationRef = useRef<CheckoutOperation | null>(null)
+  const nextOperationIdRef = useRef(0)
   // Keep one caller-owned operation across technical retries. Stripe and the
   // durable reservation can then recover the same Session instead of turning a
   // timeout/retry into a second admission attempt.
   const recurringOperationIdsRef = useRef(new Map<string, string>())
 
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      operationRef.current = null
+    }
+  }, [])
+
   const checkout = useCallback(
     async (intent: DirectCheckoutIntent) => {
-      if (inFlightRef.current) return
-      inFlightRef.current = true
-      setIsLoading(true)
-      setError(null)
-      setAlreadySubscribed(false)
+      const loginHref = buildPricingCheckoutLoginHref(intent)
+      const viewer = captureCheckoutViewer(authRef.current)
+      if (!viewer) {
+        if (authRef.current.authChecked && !authRef.current.loading && !authRef.current.userId) {
+          router.push(loginHref)
+        }
+        return
+      }
+
+      const activeOperation = operationRef.current
+      if (activeOperation && checkoutViewerIsCurrent(activeOperation.viewer, authRef.current)) {
+        return
+      }
+
+      const operation: CheckoutOperation = {
+        id: ++nextOperationIdRef.current,
+        viewer,
+      }
+      operationRef.current = operation
+      setUiOwner(viewer)
+      setRawIsLoading(true)
+      setRawError(null)
+      setRawAlreadySubscribed(false)
+
+      const operationIsCurrent = () =>
+        mountedRef.current &&
+        operationRef.current?.id === operation.id &&
+        checkoutViewerIsCurrent(viewer, authRef.current)
 
       try {
-        const loginHref = buildPricingCheckoutLoginHref(intent)
-        // Server auth reads the Authorization Bearer header (cookie fallback is
-        // unreliable — sessions live in localStorage, not cookies). Without this
-        // header, logged-in users got a 401 and the subscribe button did nothing.
-        const accessToken = await tokenRefreshCoordinator.getValidToken()
-        if (!accessToken) {
-          router.push(loginHref)
-          return
-        }
-
         const operationKey =
           intent.plan === 'lifetime'
             ? null
-            : `${jwtSubject(accessToken) || 'opaque'}:${intent.plan}:${
+            : `${viewer.viewerKey}:${viewer.sessionGeneration}:${intent.plan}:${
                 intent.trial === true ? 'trial' : 'paid'
               }`
         let operationId: string | undefined
@@ -74,52 +179,69 @@ export function useDirectCheckout() {
           }
         }
 
-        const res = await fetch('/api/stripe/create-checkout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({
+        const response = await authedFetch<DirectCheckoutResponse>(
+          '/api/stripe/create-checkout',
+          'POST',
+          viewer.accessToken,
+          {
             plan: intent.plan,
             promotionCode: intent.promotionCode,
             trial: intent.plan === 'lifetime' ? undefined : intent.trial,
             operationId,
-          }),
-        })
+          },
+          20_000,
+          {
+            expectedUserId: viewer.userId,
+            expectedSessionGeneration: viewer.sessionGeneration,
+          }
+        )
 
-        const data = await res.json()
-
-        if (!res.ok) {
-          if (res.status === 401) {
+        if (!operationIsCurrent() || response.stale) return
+        const data = response.data
+        if (!response.ok) {
+          if (response.status === 401) {
             // Keep only the typed pricing intent in a fixed internal return path.
             // The pricing page restores the selection but never auto-starts payment.
             router.push(loginHref)
             return
           }
-          if (data.code === 'ALREADY_SUBSCRIBED') {
+          if (data?.code === 'ALREADY_SUBSCRIBED') {
             // Signal to caller so they can show feedback (toast, banner, etc.)
-            setAlreadySubscribed(true)
+            setRawAlreadySubscribed(true)
             router.push('/user-center?tab=membership')
             return
           }
-          setError(data.error || 'Checkout failed')
+          setRawError(data?.error || 'Checkout failed')
           return
         }
 
-        if (data.url) {
-          window.location.href = data.url
+        if (typeof data?.url === 'string' && data.url) {
+          // Last ownership CAS immediately before the irreversible navigation.
+          if (!operationIsCurrent()) return
+          redirectToCheckout(data.url)
+        } else {
+          setRawError('Checkout failed')
         }
       } catch {
-        setError('Network error. Please try again.')
+        if (operationIsCurrent()) setRawError('Network error. Please try again.')
       } finally {
-        setIsLoading(false)
-        inFlightRef.current = false
+        if (operationIsCurrent()) {
+          setRawIsLoading(false)
+          operationRef.current = null
+        }
       }
     },
-    [router]
+    [redirectToCheckout, router]
   )
 
-  return { checkout, isLoading, error, alreadySubscribed }
+  // Never expose A's billing state in the first render that observes B.
+  const currentViewer = captureCheckoutViewer(auth)
+  const uiBelongsToCurrentViewer = sameCheckoutViewer(uiOwner, currentViewer)
+
+  return {
+    checkout,
+    isLoading: uiBelongsToCurrentViewer ? rawIsLoading : false,
+    error: uiBelongsToCurrentViewer ? rawError : null,
+    alreadySubscribed: uiBelongsToCurrentViewer ? rawAlreadySubscribed : false,
+  }
 }
