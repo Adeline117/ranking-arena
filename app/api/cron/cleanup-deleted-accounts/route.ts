@@ -145,6 +145,7 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
             const stopped = await stopStripeSubscriptionRenewals({
               stripeClient,
               subscriptionIds,
+              expectedUserId: account.id,
               expectedCustomerId: account.stripe_customer_id,
               deletionMode: 'permanent',
             })

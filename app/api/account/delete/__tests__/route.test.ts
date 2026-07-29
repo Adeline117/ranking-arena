@@ -200,6 +200,7 @@ describe('account deletion scheduling', () => {
     })
     expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledWith({
       stripeClient: mockStripeClient,
+      expectedUserId: 'user-1',
       subscriptionIds: ['sub_123', 'sub_api'],
       expectedCustomerId: 'cus_owner',
       deletionMode: 'recoverable',

@@ -60,6 +60,22 @@ function assertPauseMarker(pauseMarker: string): void {
   }
 }
 
+async function assertStripeCustomerOwnedByUser(params: {
+  stripeClient: Stripe
+  customerId: string
+  expectedUserId: string
+}): Promise<void> {
+  assertCustomerId(params.customerId)
+  const customer = await params.stripeClient.customers.retrieve(params.customerId)
+  if (customer.id !== params.customerId || customer.deleted) {
+    throw new Error('Stripe customer identity could not be verified')
+  }
+  const metadataUserId = stripeMetadataUserId(customer.metadata, `Stripe customer ${customer.id}`)
+  if (metadataUserId !== params.expectedUserId) {
+    throw new Error('Stripe customer belongs to a different user')
+  }
+}
+
 async function loadStripeSubscriptions(params: {
   stripeClient: Stripe
   subscriptionIds: Array<string | null | undefined>
@@ -159,14 +175,11 @@ export async function discoverStripeSubscriptionBilling(params: {
     includeCustomerSubscriptions: params.includeCustomerSubscriptions ?? true,
   })
   if (customerId) {
-    const customer = await params.stripeClient.customers.retrieve(customerId)
-    if (customer.id !== customerId || customer.deleted) {
-      throw new Error('Derived Stripe customer identity could not be verified')
-    }
-    const metadataUserId = stripeMetadataUserId(customer.metadata, `Stripe customer ${customer.id}`)
-    if (metadataUserId !== params.expectedUserId) {
-      throw new Error('Derived Stripe customer belongs to a different user')
-    }
+    await assertStripeCustomerOwnedByUser({
+      stripeClient: params.stripeClient,
+      customerId,
+      expectedUserId: params.expectedUserId,
+    })
   }
   return {
     customerId,
@@ -187,6 +200,7 @@ export async function discoverStripeSubscriptionBilling(params: {
 export async function stopStripeSubscriptionRenewals(params: {
   stripeClient: Stripe
   subscriptionIds: Array<string | null | undefined>
+  expectedUserId: string
   expectedCustomerId?: string | null
   deletionMode: 'recoverable' | 'permanent'
   pauseMarker?: string
@@ -204,6 +218,13 @@ export async function stopStripeSubscriptionRenewals(params: {
     expectedCustomerId: params.expectedCustomerId,
     includeCustomerSubscriptions: params.includeCustomerSubscriptions ?? true,
   })
+  if (customerId) {
+    await assertStripeCustomerOwnedByUser({
+      stripeClient: params.stripeClient,
+      customerId,
+      expectedUserId: params.expectedUserId,
+    })
+  }
   const observedSubscriptionIds = subscriptions.map(({ id }) => id).sort()
 
   const changedSubscriptionIds: string[] = []
@@ -286,6 +307,7 @@ export async function stopStripeSubscriptionRenewals(params: {
 export async function resumeStripeSubscriptionRenewals(params: {
   stripeClient: Stripe
   subscriptionIds: string[]
+  expectedUserId: string
   expectedCustomerId: string
   includeCustomerSubscriptions?: boolean
   pauseMarker: string
@@ -299,6 +321,11 @@ export async function resumeStripeSubscriptionRenewals(params: {
     subscriptionIds: params.subscriptionIds,
     expectedCustomerId: params.expectedCustomerId,
     includeCustomerSubscriptions: params.includeCustomerSubscriptions ?? false,
+  })
+  await assertStripeCustomerOwnedByUser({
+    stripeClient: params.stripeClient,
+    customerId: params.expectedCustomerId,
+    expectedUserId: params.expectedUserId,
   })
   const observedSubscriptionIds = subscriptions.map(({ id }) => id).sort()
   const changedSubscriptionIds: string[] = []
@@ -347,6 +374,7 @@ export async function resumeStripeSubscriptionRenewals(params: {
       await stopStripeSubscriptionRenewals({
         stripeClient: params.stripeClient,
         subscriptionIds: params.subscriptionIds,
+        expectedUserId: params.expectedUserId,
         expectedCustomerId: customerId,
         deletionMode: 'permanent',
         includeCustomerSubscriptions: true,
@@ -543,9 +571,14 @@ async function listCheckoutSessions(params: {
 export async function expireOpenSubscriptionCheckouts(params: {
   stripeClient: Stripe
   customerId: string
-  expectedUserId?: string
+  expectedUserId: string
 }): Promise<ExpireOpenCheckoutsResult> {
   assertCustomerId(params.customerId)
+  await assertStripeCustomerOwnedByUser({
+    stripeClient: params.stripeClient,
+    customerId: params.customerId,
+    expectedUserId: params.expectedUserId,
+  })
 
   const openSessions = await listCheckoutSessions({
     stripeClient: params.stripeClient,
@@ -560,7 +593,7 @@ export async function expireOpenSubscriptionCheckouts(params: {
 
   const recordOneTimeSettlement = (session: Stripe.Checkout.Session): void => {
     if (session.mode !== 'payment') return
-    if ((session.status !== 'complete' && session.status !== 'expired') || !params.expectedUserId) {
+    if (session.status !== 'complete' && session.status !== 'expired') {
       throw new Error(`One-time Checkout Session ${session.id} has uncertain settlement state`)
     }
     const classification = classifyOneTimeCheckout(session, params.expectedUserId)

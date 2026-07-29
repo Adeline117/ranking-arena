@@ -108,6 +108,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       stopStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: ['sub_consumer', 'sub_api'],
         expectedCustomerId: 'cus_owner',
         deletionMode: 'recoverable',
@@ -148,6 +149,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       stopStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: ['sub_terminal', 'sub_paused', 'sub_deletion_paused'],
         expectedCustomerId: 'cus_owner',
         deletionMode: 'recoverable',
@@ -175,6 +177,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       stopStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: ['sub_terminal', 'sub_live'],
         deletionMode: 'permanent',
         includeCustomerSubscriptions: false,
@@ -199,6 +202,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       stopStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: [],
         expectedCustomerId: 'cus_owner',
         deletionMode: 'permanent',
@@ -251,6 +255,29 @@ describe('account deletion Stripe shutdown', () => {
     expect(mockExpireCheckout).not.toHaveBeenCalled()
   })
 
+  it('rejects a stale bound Customer before stopping any subscription', async () => {
+    mockListSubscriptions.mockResolvedValue(page([subscription('sub_foreign_customer')]))
+    mockRetrieveCustomer.mockResolvedValue({
+      object: 'customer',
+      id: 'cus_owner',
+      deleted: false,
+      metadata: { userId: 'another-user' },
+    })
+
+    await expect(
+      stopStripeSubscriptionRenewals({
+        stripeClient,
+        expectedUserId: USER_ID,
+        subscriptionIds: [],
+        expectedCustomerId: 'cus_owner',
+        deletionMode: 'permanent',
+      })
+    ).rejects.toThrow('belongs to a different user')
+
+    expect(mockUpdateSubscription).not.toHaveBeenCalled()
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
+  })
+
   it.each(['past_due', 'incomplete'] as Stripe.Subscription.Status[])(
     'immediately cancels %s subscriptions so invoice retries cannot charge a deleted account',
     async (status) => {
@@ -259,6 +286,7 @@ describe('account deletion Stripe shutdown', () => {
       await expect(
         stopStripeSubscriptionRenewals({
           stripeClient,
+          expectedUserId: USER_ID,
           subscriptionIds: ['sub_unpaid'],
           expectedCustomerId: 'cus_owner',
           deletionMode: 'recoverable',
@@ -294,6 +322,7 @@ describe('account deletion Stripe shutdown', () => {
 
     await stopStripeSubscriptionRenewals({
       stripeClient,
+      expectedUserId: USER_ID,
       subscriptionIds: ['sub_open_invoice'],
       expectedCustomerId: 'cus_owner',
       deletionMode: 'recoverable',
@@ -319,6 +348,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       stopStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: ['sub_past_due'],
         expectedCustomerId: 'cus_owner',
         deletionMode: 'recoverable',
@@ -344,6 +374,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       stopStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: ['sub_still_live'],
         expectedCustomerId: 'cus_owner',
         deletionMode: 'recoverable',
@@ -363,6 +394,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       stopStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: ['sub_consumer', 'sub_api'],
         expectedCustomerId: 'cus_owner',
         deletionMode: 'permanent',
@@ -427,6 +459,26 @@ describe('account deletion Stripe shutdown', () => {
     })
     expect(mockExpireCheckout).toHaveBeenCalledTimes(3)
     expect(mockExpireCheckout).toHaveBeenCalledWith('cs_tip')
+  })
+
+  it('rejects a stale bound Customer before expiring any Checkout', async () => {
+    mockRetrieveCustomer.mockResolvedValue({
+      object: 'customer',
+      id: 'cus_owner',
+      deleted: false,
+      metadata: { userId: 'another-user' },
+    })
+
+    await expect(
+      expireOpenSubscriptionCheckouts({
+        stripeClient,
+        customerId: 'cus_owner',
+        expectedUserId: USER_ID,
+      })
+    ).rejects.toThrow('belongs to a different user')
+
+    expect(mockListCheckouts).not.toHaveBeenCalled()
+    expect(mockExpireCheckout).not.toHaveBeenCalled()
   })
 
   it('fully paginates and classifies pre-existing complete one-time Checkouts', async () => {
@@ -573,6 +625,7 @@ describe('account deletion Stripe shutdown', () => {
       expireOpenSubscriptionCheckouts({
         stripeClient,
         customerId: 'cus_owner',
+        expectedUserId: USER_ID,
       })
     ).resolves.toEqual({
       expiredSessionIds: [],
@@ -627,6 +680,7 @@ describe('account deletion Stripe shutdown', () => {
       expireOpenSubscriptionCheckouts({
         stripeClient,
         customerId: 'cus_owner',
+        expectedUserId: USER_ID,
       })
     ).rejects.toThrow('remains payable')
   })
@@ -652,6 +706,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       resumeStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: ['sub_resume', 'sub_terminal'],
         expectedCustomerId: 'cus_owner',
         pauseMarker: PAUSE_MARKER,
@@ -676,6 +731,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       resumeStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: ['sub_foreign'],
         expectedCustomerId: '',
         pauseMarker: PAUSE_MARKER,
@@ -683,6 +739,34 @@ describe('account deletion Stripe shutdown', () => {
     ).rejects.toThrow('durably bound Stripe customer')
 
     expect(mockRetrieveSubscription).not.toHaveBeenCalled()
+    expect(mockUpdateSubscription).not.toHaveBeenCalled()
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
+  })
+
+  it('rejects a stale bound Customer before resuming any subscription', async () => {
+    mockRetrieveSubscription.mockResolvedValue(
+      subscription('sub_foreign_customer', {
+        cancel_at_period_end: true,
+        metadata: { [ACCOUNT_DELETION_PAUSE_METADATA_KEY]: PAUSE_MARKER },
+      })
+    )
+    mockRetrieveCustomer.mockResolvedValue({
+      object: 'customer',
+      id: 'cus_owner',
+      deleted: false,
+      metadata: { userId: 'another-user' },
+    })
+
+    await expect(
+      resumeStripeSubscriptionRenewals({
+        stripeClient,
+        expectedUserId: USER_ID,
+        subscriptionIds: ['sub_foreign_customer'],
+        expectedCustomerId: 'cus_owner',
+        pauseMarker: PAUSE_MARKER,
+      })
+    ).rejects.toThrow('belongs to a different user')
+
     expect(mockUpdateSubscription).not.toHaveBeenCalled()
     expect(mockCancelSubscription).not.toHaveBeenCalled()
   })
@@ -707,6 +791,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       resumeStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: [],
         expectedCustomerId: 'cus_owner',
         includeCustomerSubscriptions: true,
@@ -764,6 +849,7 @@ describe('account deletion Stripe shutdown', () => {
     await expect(
       resumeStripeSubscriptionRenewals({
         stripeClient,
+        expectedUserId: USER_ID,
         subscriptionIds: ['sub_ambiguous'],
         expectedCustomerId: 'cus_owner',
         includeCustomerSubscriptions: true,
