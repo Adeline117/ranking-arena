@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import { tokens } from '@/lib/design-tokens'
-import { supabase } from '@/lib/supabase/client'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import {
@@ -14,6 +13,12 @@ import {
   REFERRED_FRIEND_TRIAL_DAYS,
 } from '@/lib/constants/referral'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
 interface ReferralData {
   referral_code: string
@@ -21,98 +26,237 @@ interface ReferralData {
   referral_link: string
 }
 
+type ReferralOperation = {
+  controller: AbortController
+  id: number
+  viewer: SettingsViewerSnapshot
+}
+
+function readReferralData(value: unknown): ReferralData | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<ReferralData>
+  if (
+    typeof candidate.referral_code !== 'string' ||
+    typeof candidate.referral_link !== 'string' ||
+    typeof candidate.referral_count !== 'number' ||
+    !Number.isFinite(candidate.referral_count)
+  ) {
+    return null
+  }
+  return {
+    referral_code: candidate.referral_code,
+    referral_count: Math.max(0, candidate.referral_count),
+    referral_link: candidate.referral_link,
+  }
+}
+
+function readGeneratedReferral(
+  value: unknown
+): Pick<ReferralData, 'referral_code' | 'referral_link'> | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<ReferralData>
+  if (
+    typeof candidate.referral_code !== 'string' ||
+    !candidate.referral_code ||
+    typeof candidate.referral_link !== 'string' ||
+    !candidate.referral_link
+  ) {
+    return null
+  }
+  return {
+    referral_code: candidate.referral_code,
+    referral_link: candidate.referral_link,
+  }
+}
+
 export default function ReferralClient() {
+  const auth = useAuthSession()
+  const viewer = captureSettingsViewer(auth)
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+
+  return <ViewerScopedReferralClient key={scopeKey} scopeKey={scopeKey} viewer={viewer} />
+}
+
+function ViewerScopedReferralClient({
+  scopeKey,
+  viewer,
+}: {
+  scopeKey: string
+  viewer: SettingsViewerSnapshot | null
+}) {
   const { t } = useLanguage()
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const viewerRef = useRef(viewer)
+  viewerRef.current = viewer
+  const mountedRef = useRef(false)
+  const nextOperationIdRef = useRef(0)
+  const serverOperationRef = useRef<ReferralOperation | null>(null)
+  const copyOperationRef = useRef<ReferralOperation | null>(null)
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [referral, setReferral] = useState<ReferralData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const referralRef = useRef(referral)
+  referralRef.current = referral
+  const authPending = !viewer && (!auth.authChecked || auth.loading || Boolean(auth.userId))
+  const isAuthenticated: boolean | null = viewer ? true : authPending ? null : false
+  const [loading, setLoading] = useState(isAuthenticated !== false)
   const [copied, setCopied] = useState(false)
   const [generating, setGenerating] = useState(false)
 
+  const operationIsCurrent = (
+    operation: ReferralOperation,
+    operationRef: { current: ReferralOperation | null }
+  ): boolean =>
+    mountedRef.current &&
+    operationRef.current?.id === operation.id &&
+    isSettingsViewerCurrent(operation.viewer, authRef.current)
+
   useEffect(() => {
-    async function init() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
-        setIsAuthenticated(false)
-        setLoading(false)
-        return
-      }
-      setIsAuthenticated(true)
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) {
-        setLoading(false)
-        return
-      }
-
-      try {
-        const res = await fetch('/api/referral', {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        })
-        if (res.ok) {
-          const json = await res.json()
-          setReferral(json)
-        }
-      } catch (err) {
-        console.error('[referral] fetch failed:', err)
-      }
-      setLoading(false)
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      serverOperationRef.current?.controller.abort()
+      copyOperationRef.current?.controller.abort()
+      serverOperationRef.current = null
+      copyOperationRef.current = null
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
     }
-    init()
   }, [])
 
-  const handleCopy = useCallback(async () => {
-    if (!referral?.referral_link) return
-    try {
-      await navigator.clipboard.writeText(referral.referral_link)
+  useEffect(() => {
+    const operationViewer = viewerRef.current
+    if (!operationViewer) {
+      setLoading(false)
+      return
+    }
+    const operation: ReferralOperation = {
+      controller: new AbortController(),
+      id: ++nextOperationIdRef.current,
+      viewer: operationViewer,
+    }
+    serverOperationRef.current = operation
+    setReferral(null)
+    setLoading(true)
+    setGenerating(false)
+
+    void (async () => {
+      try {
+        const result = await authedFetch<unknown>(
+          '/api/referral',
+          'GET',
+          operation.viewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: operation.controller.signal,
+          }
+        )
+        if (!operationIsCurrent(operation, serverOperationRef) || result.stale) return
+        const nextReferral = result.ok ? readReferralData(result.data) : null
+        if (nextReferral) setReferral(nextReferral)
+      } catch {
+        // Referral data is best-effort; the scoped loading barrier still settles.
+      } finally {
+        if (operationIsCurrent(operation, serverOperationRef)) {
+          serverOperationRef.current = null
+          setLoading(false)
+        }
+      }
+    })()
+
+    return () => {
+      operation.controller.abort()
+      if (serverOperationRef.current?.id === operation.id) serverOperationRef.current = null
+    }
+  }, [scopeKey])
+
+  const handleCopy = async () => {
+    const operationViewer = captureSettingsViewer(authRef.current)
+    const referralLink = referralRef.current?.referral_link
+    if (!operationViewer || !referralLink) return
+    const operation: ReferralOperation = {
+      controller: new AbortController(),
+      id: ++nextOperationIdRef.current,
+      viewer: operationViewer,
+    }
+    copyOperationRef.current = operation
+
+    const finishCopy = () => {
+      if (!operationIsCurrent(operation, copyOperationRef)) return
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = setTimeout(() => {
+        if (!operationIsCurrent(operation, copyOperationRef)) return
+        setCopied(false)
+        copyOperationRef.current = null
+        copyTimeoutRef.current = null
+      }, 2000)
+    }
+
+    try {
+      await navigator.clipboard.writeText(referralLink)
+      finishCopy()
     } catch {
+      if (!operationIsCurrent(operation, copyOperationRef)) return
       // Fallback for older browsers / clipboard permission denied
       const textarea = document.createElement('textarea')
-      textarea.value = referral.referral_link
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      textarea.value = referralLink
+      try {
+        document.body.appendChild(textarea)
+        textarea.select()
+        if (document.execCommand('copy')) finishCopy()
+      } finally {
+        textarea.remove()
+      }
     }
-  }, [referral])
+  }
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = async () => {
+    const operationViewer = captureSettingsViewer(authRef.current)
+    if (!operationViewer || generating || serverOperationRef.current) return
+    const operation: ReferralOperation = {
+      controller: new AbortController(),
+      id: ++nextOperationIdRef.current,
+      viewer: operationViewer,
+    }
+    serverOperationRef.current = operation
     setGenerating(true)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) return
-
-      const res = await fetch('/api/referral', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
-        },
-      })
-      if (res.ok) {
-        const json = await res.json()
+      const result = await authedFetch<unknown>(
+        '/api/referral',
+        'POST',
+        operation.viewer.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
+        }
+      )
+      if (!operationIsCurrent(operation, serverOperationRef) || result.stale || !result.ok) {
+        return
+      }
+      const nextReferral = readGeneratedReferral(result.data)
+      if (nextReferral) {
         setReferral((prev) => ({
-          referral_code: json.referral_code,
-          referral_link: json.referral_link,
+          referral_code: nextReferral.referral_code,
+          referral_link: nextReferral.referral_link,
           referral_count: prev?.referral_count ?? 0,
         }))
       }
-    } catch (err) {
-      console.error('[referral] generate failed:', err)
+    } catch {
+      // Keep the existing referral visible; the user can retry.
     } finally {
-      setGenerating(false)
+      if (operationIsCurrent(operation, serverOperationRef)) {
+        serverOperationRef.current = null
+        setGenerating(false)
+      }
     }
-  }, [])
+  }
 
   const shareUrl = referral?.referral_link || ''
   const shareText = t('referralShareText')
@@ -389,7 +533,7 @@ export default function ReferralClient() {
               <div
                 style={{
                   height: 6,
-                  borderRadius: 3,
+                  borderRadius: tokens.radius.full,
                   background: tokens.glass.bg.medium,
                   overflow: 'hidden',
                 }}
@@ -398,7 +542,7 @@ export default function ReferralClient() {
                   style={{
                     height: '100%',
                     width: `${progress * 100}%`,
-                    borderRadius: 3,
+                    borderRadius: tokens.radius.full,
                     background: rewardEarned
                       ? tokens.colors.accent.success
                       : 'var(--color-accent-primary)',
