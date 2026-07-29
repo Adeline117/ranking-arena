@@ -12720,6 +12720,15 @@ export type Database = {
         Args: { p_actor_id: string; p_group_id: string }
         Returns: boolean
       }
+      set_group_member_role_atomic: {
+        Args: {
+          p_actor_id: string
+          p_group_id: string
+          p_role: string
+          p_target_id: string
+        }
+        Returns: Json
+      }
       set_primary_linked_trader: {
         Args: { p_link_id: string; p_user_id: string }
         Returns: {
