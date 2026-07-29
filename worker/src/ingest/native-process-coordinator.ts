@@ -49,6 +49,7 @@ export interface NativeProcessCoordinator {
   assertStartupOpen(): void
   bindAuxiliaryRuntime(runtime: NativeProcessRegionalRuntime): void
   bindHeartbeatTimer(clear: () => void): void
+  bindAttemptHealthTimer(clear: () => void): void
   bindLifecycle(lifecycle: NativeProcessAuthorityLifecycle): void
   bindReconcileTimer(clear: () => void): void
   bindRuntime(runtime: NativeProcessRegionalRuntime): void
@@ -103,6 +104,7 @@ export function createNativeProcessCoordinator({
   const regionalStopOperations = new Set<TrackedOperation>()
   let auxiliaryRuntime: NativeProcessRegionalRuntime | undefined
   let auxiliaryRuntimeStopPriority = -1
+  let attemptHealthTimer: BoundTimer | undefined
   let bareReleaseAttempted = false
   let cleanupPromise: Promise<void> | undefined
   let fatalMarked = false
@@ -178,6 +180,7 @@ export function createNativeProcessCoordinator({
   }
 
   const clearBoundTimers = (): void => {
+    clearTimer(attemptHealthTimer)
     clearTimer(heartbeatTimer)
     clearTimer(reconcileTimer)
   }
@@ -307,6 +310,9 @@ export function createNativeProcessCoordinator({
       }
       auxiliaryRuntime = nextRuntime
       dispatchAuxiliaryRuntimeStop()
+    },
+    bindAttemptHealthTimer: (clear) => {
+      attemptHealthTimer = bindTimer(attemptHealthTimer, clear)
     },
     bindHeartbeatTimer: (clear) => {
       heartbeatTimer = bindTimer(heartbeatTimer, clear)

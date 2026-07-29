@@ -342,13 +342,17 @@ describe('native process coordinator', () => {
     const reconcileClear = jest.fn()
 
     const shutdown = coordinator.requestShutdown('signal')
+    const attemptHealthClear = jest.fn()
+    coordinator.bindAttemptHealthTimer(attemptHealthClear)
     coordinator.bindHeartbeatTimer(heartbeatClear)
     coordinator.bindReconcileTimer(reconcileClear)
 
+    expect(attemptHealthClear).toHaveBeenCalledTimes(1)
     expect(heartbeatClear).toHaveBeenCalledTimes(1)
     expect(reconcileClear).toHaveBeenCalledTimes(1)
     expect(markFatal).toHaveBeenCalledWith('timer_clear_failed')
     expect(coordinator.requestShutdown('signal')).toBe(shutdown)
+    expect(attemptHealthClear).toHaveBeenCalledTimes(1)
     expect(heartbeatClear).toHaveBeenCalledTimes(1)
     expect(reconcileClear).toHaveBeenCalledTimes(1)
 

@@ -55,6 +55,7 @@ import { resolveNativeRegionConfig } from './ingest/native-region-config'
 import { acquireRegionAuthorityLifecycleWithRetry } from './ingest/region-authority-acquisition'
 import { prepareRegionConsumerRuntime } from './ingest/region-consumer-runtime'
 import { createNativeProcessCoordinator } from './ingest/native-process-coordinator'
+import { startBitgetBotAttemptHealthWatchdog } from './ingest/attempt-health-watchdog'
 
 // Per-region worker concurrency. Bumped 3→5 (2026-06-12): at 3 the drain
 // rate (~12-18 jobs/h, dragged by giant crawls like bybit_mt5's 29k rows)
@@ -390,6 +391,18 @@ async function main(): Promise<void> {
       },
     })
     processCoordinator.assertStartupOpen()
+
+    const attemptHealthWatchdog = startBitgetBotAttemptHealthWatchdog({
+      redis,
+      track: (operation) => processCoordinator.trackReconcile(operation),
+    })
+    try {
+      processCoordinator.bindAttemptHealthTimer(attemptHealthWatchdog.stop)
+      processCoordinator.assertStartupOpen()
+    } catch (error) {
+      attemptHealthWatchdog.stop()
+      throw error
+    }
   } catch (error) {
     if (processCoordinator.shutdownReason === undefined) {
       const message = error instanceof Error ? error.message : ''
