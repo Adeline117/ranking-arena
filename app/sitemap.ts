@@ -13,6 +13,12 @@
 import type { MetadataRoute } from 'next'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { BASE_URL } from '@/lib/constants/urls'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 // Single source of truth for /learn slugs — same list drives generateStaticParams
 // on the article route. Importing here prevents this sitemap from drifting from
 // the actual published articles. articles.ts is pure data (no client-only imports).
@@ -28,6 +34,9 @@ export const maxDuration = 60
 
 const TRADERS_PER_SITEMAP = 5000
 const MAX_OTHER_URLS = 500
+const SITEMAP_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 // Sitemap index IDs:
 // 0 = static + exchange pages
@@ -69,47 +78,61 @@ function getSitemapSupabase(): SupabaseClient {
   })
 }
 
+interface SitemapTrader {
+  handle: string
+  source: string
+  updated_at: string
+}
+
 /**
- * Fetch all trader handles from leaderboard_ranks
+ * Fetch one deterministic trader shard from a single sealed generation.
  */
-async function getAllTraders(): Promise<Array<{ handle: string; updated_at: string }>> {
-  try {
-    const supabase = getSitemapSupabase()
+async function getTraderShard(shardIndex: number): Promise<SitemapTrader[]> {
+  const supabase = getSitemapSupabase()
+  const start = shardIndex * TRADERS_PER_SITEMAP
+  const sealedRead = await readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: SITEMAP_RANKING_SOURCES },
+    async (publication) => {
+      const { data, error } = await supabase
+        .from('leaderboard_ranks')
+        .select('handle, source_trader_id, source, computed_at')
+        .in('source', SITEMAP_RANKING_SOURCES)
+        .eq('season_id', '90D')
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .order('source', { ascending: true })
+        .order('source_trader_id', { ascending: true })
+        .range(start, start + TRADERS_PER_SITEMAP - 1)
 
-    const { data, error } = await supabase
-      .from('leaderboard_ranks')
-      .select('handle, source_trader_id, computed_at')
-      .eq('season_id', '90D')
-      .not('handle', 'is', null)
-      .limit(49000)
+      if (error || data === null) {
+        throw new Error(`sitemap ranking query failed: ${error?.message ?? 'null payload'}`)
+      }
+      if (data.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+        throw new Error('sitemap ranking query crossed the public source boundary')
+      }
+      return data
+    },
+    { timeoutMs: 10_000 }
+  )
 
-    if (error) {
-      console.error('[sitemap] getAllTraders query error:', error.message, error.code)
-      return []
-    }
-
-    const seen = new Set<string>()
-    const results: Array<{ handle: string; updated_at: string }> = []
-    for (const t of data || []) {
-      const h = t.handle || t.source_trader_id
-      if (!h || seen.has(h)) continue
-      seen.add(h)
-      results.push({
-        handle: h,
-        updated_at: t.computed_at || new Date().toISOString(),
-      })
-    }
-
-    // eslint-disable-next-line no-console
-    console.log(`[sitemap] getAllTraders: ${results.length} traders fetched`)
-    return results
-  } catch (error) {
-    console.error(
-      '[sitemap] getAllTraders exception:',
-      error instanceof Error ? error.message : error
-    )
-    return []
+  const seen = new Set<string>()
+  const results: SitemapTrader[] = []
+  for (const row of sealedRead.value) {
+    const handle =
+      typeof row.handle === 'string' && /^[a-zA-Z0-9_.-]+$/.test(row.handle)
+        ? row.handle
+        : row.source_trader_id
+    if (!handle) continue
+    const canonicalIdentity = `${row.source}:${handle}`
+    if (seen.has(canonicalIdentity)) continue
+    seen.add(canonicalIdentity)
+    results.push({
+      handle,
+      source: row.source,
+      updated_at: row.computed_at || new Date(0).toISOString(),
+    })
   }
+  return results
 }
 
 async function getPopularPosts(): Promise<Array<{ id: string; updated_at: string }>> {
@@ -382,12 +405,10 @@ export default async function sitemap({
   const shardIndex = id - 1 // 0-based
   if (shardIndex < 0) return []
 
-  const traders = await getAllTraders()
-  const start = shardIndex * TRADERS_PER_SITEMAP
-  const slice = traders.slice(start, start + TRADERS_PER_SITEMAP)
+  const traders = await getTraderShard(shardIndex)
 
-  return slice.map((trader) => ({
-    url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`,
+  return traders.map((trader) => ({
+    url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.source)}`,
     lastModified: trader.updated_at,
     changeFrequency: 'daily' as const,
     priority: 0.8,
