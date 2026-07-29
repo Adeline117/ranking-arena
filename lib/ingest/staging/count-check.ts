@@ -10,10 +10,9 @@
  * evaluateCount is pure; getCountBaseline does the DB read (worker-only).
  */
 
-import { getIngestPool } from '../db'
-import type { PoolClient } from 'pg'
+import { getIngestPool, type IngestQueryExecutor } from '../db'
 
-export type CountBaselineQueryExecutor = Pick<PoolClient, 'query'>
+export type CountBaselineQueryExecutor = IngestQueryExecutor
 
 export interface CountVerdict {
   passed: boolean

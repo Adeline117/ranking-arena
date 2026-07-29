@@ -48,11 +48,7 @@ import {
 import { STRICT_CANONICAL_JSON_CONTRACT } from '@/lib/ingest/strict-canonical-json'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
-import {
-  publishBoardSeries,
-  publishLeaderboardSnapshot,
-  publishTrustedLeaderboardSnapshot,
-} from '@/lib/ingest/serving/publish'
+import { publishBoardSeries } from '@/lib/ingest/serving/publish'
 import {
   hasRegisteredLeaderboardMetricTrust,
   type LeaderboardMetricTrustBundle,
@@ -62,8 +58,12 @@ import { observationCycleId } from '../observation-cycle'
 import { resolveDeployedSha } from '@/worker/src/ingest/heartbeat'
 import {
   assertSourceMatchesConsumedRegion,
-  type ConsumedRegionContext,
+  type AuthorizedConsumedRegionContext,
 } from '../consumed-region-context'
+import {
+  publishFencedLeaderboardSnapshot,
+  publishFencedTrustedLeaderboardSnapshot,
+} from '../fenced-tier-a-publication'
 
 export interface TierAResult {
   timeframe: number
@@ -485,7 +485,7 @@ async function persistCompletedTimeframe(
 
 export async function processTierA(
   job: Job<TierJobData>,
-  context: ConsumedRegionContext
+  context: AuthorizedConsumedRegionContext
 ): Promise<TierAResult[]> {
   const src = await getSourceBySlug(job.data.sourceSlug)
   assertSourceMatchesConsumedRegion(src, context)
@@ -536,6 +536,7 @@ export async function processTierA(
   }
   const results: TierAResult[] = []
   const failures: Array<{ timeframe: number; error: Error }> = []
+  const pendingFieldInventory: Promise<void>[] = []
   let terminalFailure: { error: unknown } | null = null
   let sessionCloseFailure: Error | null = null
   let persistedJobData: TierJobData = { ...job.data }
@@ -610,10 +611,13 @@ export async function processTierA(
         }
 
         // Upstream field radar (P1): sample the first page's shape while it's
-        // still in memory (RAW blobs aren't SQL-queryable). Fire-and-forget —
-        // observation must never break the crawl.
+        // still in memory (RAW blobs aren't SQL-queryable). Inventory remains
+        // best-effort, but track it through processor drain so regional
+        // authority cannot be released while its database write is detached.
         if (pages.length > 0) {
-          recordFieldInventory(src.id, 'tier_a', pages[0].payload).catch(() => {})
+          pendingFieldInventory.push(
+            recordFieldInventory(src.id, 'tier_a', pages[0].payload).catch(() => undefined)
+          )
         }
 
         const ctx: ParseCtx = {
@@ -807,22 +811,28 @@ export async function processTierA(
         }
         const trustedBundle = registeredMetricTrust ? metricTrust : null
         const result = trustedBundle
-          ? await publishTrustedLeaderboardSnapshot({
-              src,
-              timeframe,
-              rows: valid,
-              rejects,
-              observationCycleId: cycleId ?? undefined,
-              trust: trustedBundle,
-            })
-          : await publishLeaderboardSnapshot({
-              src,
-              timeframe,
-              rows: valid,
-              rejects,
-              rawObjectId,
-              observationCycleId: cycleId ?? undefined,
-            })
+          ? await publishFencedTrustedLeaderboardSnapshot(
+              {
+                src,
+                timeframe,
+                rows: valid,
+                rejects,
+                observationCycleId: cycleId ?? undefined,
+                trust: trustedBundle,
+              },
+              context
+            )
+          : await publishFencedLeaderboardSnapshot(
+              {
+                src,
+                timeframe,
+                rows: valid,
+                rejects,
+                rawObjectId,
+                observationCycleId: cycleId ?? undefined,
+              },
+              context
+            )
 
         const status = result.published ? 'PUBLISHED' : 'GATED'
         console.log(
@@ -962,6 +972,7 @@ export async function processTierA(
   } catch (error) {
     terminalFailure = { error }
   } finally {
+    await Promise.all(pendingFieldInventory)
     if (session !== null) {
       try {
         await session.close()

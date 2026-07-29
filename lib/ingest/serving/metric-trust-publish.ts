@@ -2,12 +2,10 @@
  * Transaction-local metric-trust writer for captured Tier-A boards.
  *
  * RAW objects are durably written before this module is called. Everything
- * below runs on the SAME PoolClient transaction as the serving snapshot so a
+ * below runs on the SAME database transaction as the serving snapshot so a
  * trusted success can never leave entries without its run, observations, and
  * immutable artifact references.
  */
-
-import type { PoolClient } from 'pg'
 
 import {
   getRegisteredMetricSourceContract,
@@ -37,6 +35,7 @@ import {
 } from '../leaderboard-request-evidence'
 import type { LeaderboardRawArtifactSetReceipt } from '../raw'
 import { strictCanonicalSha256 } from '../strict-canonical-json'
+import type { IngestQueryExecutor } from '../db'
 
 const SHA256 = /^[0-9a-f]{64}$/
 const PROVIDER_PROVENANCE = new Set<MetricProvenance>(['source_reported', 'source_normalized'])
@@ -507,7 +506,7 @@ export function prepareLeaderboardMetricTrust(
 }
 
 async function loadMetricContracts(
-  client: PoolClient,
+  client: IngestQueryExecutor,
   prepared: PreparedLeaderboardMetricTrust
 ): Promise<MetricContractRow[]> {
   const { rows } = await client.query<MetricContractRow>(
@@ -726,7 +725,7 @@ function rawRefForRole(
  * The v2 path remains unchanged while its workers are still live.
  */
 async function assertAttemptBoundAcquisitionOutcome(
-  client: PoolClient,
+  client: IngestQueryExecutor,
   prepared: PreparedLeaderboardMetricTrust
 ): Promise<void> {
   assertPreparedManifestIntegrity(prepared)
@@ -876,13 +875,12 @@ async function assertAttemptBoundAcquisitionOutcome(
  * before COMMIT. Legacy v2 publications deliberately remain query-free here.
  */
 export async function fenceAttemptBoundLeaderboardPublicationCommit(
-  client: PoolClient,
+  client: IngestQueryExecutor,
   prepared: PreparedLeaderboardMetricTrust
 ): Promise<void> {
   assertPreparedManifestIntegrity(prepared)
   if (prepared.manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT) return
 
-  await client.query(`SET LOCAL lock_timeout = '5s'`)
   await client.query(
     `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
     [`arena.leaderboard-acquisition-source:${prepared.src.id}:${prepared.timeframe}`]
@@ -891,7 +889,7 @@ export async function fenceAttemptBoundLeaderboardPublicationCommit(
 }
 
 export async function writeLeaderboardMetricTrust(
-  client: PoolClient,
+  client: IngestQueryExecutor,
   prepared: PreparedLeaderboardMetricTrust,
   context: MetricTrustSnapshotContext
 ): Promise<MetricTrustWriteReceipt> {
@@ -1090,7 +1088,7 @@ export async function writeLeaderboardMetricTrust(
  * retry writes and after an uncertain COMMIT response.
  */
 export async function reconcileLeaderboardMetricTrust(
-  client: PoolClient,
+  client: IngestQueryExecutor,
   prepared: PreparedLeaderboardMetricTrust
 ): Promise<ExistingTrustedPublication | null> {
   assertPreparedManifestIntegrity(prepared)

@@ -75,10 +75,12 @@ jest.mock('@/lib/ingest/staging/validate', () => ({
   validateLeaderboardRows: (...args: unknown[]) => mockValidateLeaderboardRows(...args),
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
-  publishLeaderboardSnapshot: (...args: unknown[]) => mockPublishLeaderboardSnapshot(...args),
-  publishTrustedLeaderboardSnapshot: (...args: unknown[]) =>
-    mockPublishTrustedLeaderboardSnapshot(...args),
   publishBoardSeries: (...args: unknown[]) => mockPublishBoardSeries(...args),
+}))
+jest.mock('@/worker/src/ingest/fenced-tier-a-publication', () => ({
+  publishFencedLeaderboardSnapshot: (...args: unknown[]) => mockPublishLeaderboardSnapshot(...args),
+  publishFencedTrustedLeaderboardSnapshot: (...args: unknown[]) =>
+    mockPublishTrustedLeaderboardSnapshot(...args),
 }))
 jest.mock('@/lib/ingest/serving/metric-trust-publish', () => ({
   hasRegisteredLeaderboardMetricTrust: (...args: unknown[]) =>
@@ -92,11 +94,25 @@ jest.mock('@/worker/src/ingest/heartbeat', () => ({
 }))
 
 import { processTierA as processTierAInRegion } from '../tier-a-leaderboard'
-import { createConsumedRegionContext } from '../../consumed-region-context'
+import {
+  createConsumedRegionContext,
+  type AuthorizedConsumedRegionContext,
+} from '../../consumed-region-context'
+
+function createAuthorizedTestContext(
+  consumedRegion: 'local' | 'vps_sg',
+  executionRegion: 'local' | 'vps_sg'
+): AuthorizedConsumedRegionContext {
+  return {
+    ...createConsumedRegionContext(consumedRegion, executionRegion),
+    assertCanConsume: jest.fn(),
+    authority: {} as never,
+  }
+}
 
 const processTierA = (job: Parameters<typeof processTierAInRegion>[0]) => {
   const region = job.data.sourceSlug.startsWith('binance_') ? 'vps_sg' : 'local'
-  return processTierAInRegion(job, createConsumedRegionContext(region, region))
+  return processTierAInRegion(job, createAuthorizedTestContext(region, region))
 }
 
 const src = {
@@ -291,6 +307,14 @@ function attemptBoundRawReceipt(input: {
   }
 }
 
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void
+  const promise = new Promise<void>((settle) => {
+    resolve = settle
+  })
+  return { promise, resolve }
+}
+
 describe('Tier-A board-series publication guard', () => {
   let job: Job<TierJobData>
   let expectedCycleId: string
@@ -443,6 +467,35 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
+  it('drains best-effort field inventory before the processor can return', async () => {
+    const inventory = deferred()
+    const checkpoint = deferred()
+    mockRecordFieldInventory.mockReturnValueOnce(inventory.promise)
+    mockJobUpdateData.mockImplementationOnce(async () => {
+      checkpoint.resolve()
+    })
+
+    let settled = false
+    const run = processTierA(job)
+    void run.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      }
+    )
+    await checkpoint.promise
+    await Promise.resolve()
+
+    expect(settled).toBe(false)
+    expect(mockSessionClose).not.toHaveBeenCalled()
+
+    inventory.resolve()
+    await expect(run).resolves.toHaveLength(1)
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps a registered v3 contract inert without explicit rollout approval', async () => {
     delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
     mockHasRegisteredAttemptBoundContract.mockResolvedValue(true)
@@ -491,7 +544,8 @@ describe('Tier-A board-series publication guard', () => {
       expect.objectContaining({
         timeframe: 30,
         observationCycleId: expectedCycleId,
-      })
+      }),
+      expect.objectContaining({ consumedRegion: 'local' })
     )
     expect(mockJobUpdateData).toHaveBeenCalledWith({
       sourceSlug: src.slug,
@@ -577,7 +631,8 @@ describe('Tier-A board-series publication guard', () => {
             populationManifest: expect.objectContaining({ id: 9102 }),
           }),
         }),
-      })
+      }),
+      expect.objectContaining({ consumedRegion: 'local' })
     )
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
   })
@@ -618,7 +673,8 @@ describe('Tier-A board-series publication guard', () => {
         rejects: [],
         rawObjectId: 9101,
         observationCycleId: expectedCycleId,
-      })
+      }),
+      expect.objectContaining({ consumedRegion: 'local' })
     )
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
@@ -662,7 +718,8 @@ describe('Tier-A board-series publication guard', () => {
           expect.objectContaining({ exchangeTraderId: 'first-20', rank: 20 }),
           expect.objectContaining({ exchangeTraderId: 'second-1', rank: 21 }),
         ]),
-      })
+      }),
+      expect.objectContaining({ consumedRegion: 'local' })
     )
     expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1883,7 +1940,7 @@ describe('Tier-A board-series publication guard', () => {
     configureAttemptBoundSource()
 
     await expect(
-      processTierAInRegion(job, createConsumedRegionContext('vps_sg', 'local'))
+      processTierAInRegion(job, createAuthorizedTestContext('vps_sg', 'local'))
     ).resolves.toHaveLength(1)
     expect(mockStartLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
       expect.objectContaining({ workerRegion: 'local' })

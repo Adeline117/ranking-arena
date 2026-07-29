@@ -1,4 +1,6 @@
 import type { SourceRow } from '../../core/types'
+import type { IngestQueryExecutor } from '../../db'
+import { validateWorkerDbFencedWriteStatement } from '@/worker/src/ingest/worker-db-fence'
 
 const baselineQuery = jest.fn()
 const clientQuery = jest.fn()
@@ -9,7 +11,7 @@ jest.mock('../../db', () => ({
   ingestClientConnect: jest.fn(async () => ({ query: clientQuery, release })),
 }))
 
-import { publishLeaderboardSnapshot } from '../publish'
+import { publishLeaderboardSnapshot, publishLeaderboardSnapshotInTransaction } from '../publish'
 
 const src = {
   id: 19,
@@ -69,5 +71,52 @@ describe('publishLeaderboardSnapshot count baseline generation', () => {
       count_baseline_generation: generation,
     })
     expect(release).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs the required source guard after the publication lock without transaction control', async () => {
+    const fencedQuery = jest.fn((text: string, values?: readonly unknown[]) => {
+      validateWorkerDbFencedWriteStatement(text)
+      return clientQuery(text, values)
+    })
+    const transaction = { query: fencedQuery } as unknown as IngestQueryExecutor
+    const sourceGuard = jest.fn(async (guardedTransaction: IngestQueryExecutor) => {
+      expect(guardedTransaction).toBe(transaction)
+      await guardedTransaction.query(
+        'SELECT source.id FROM arena.sources AS source WHERE source.id = $1::smallint FOR SHARE OF source',
+        [src.id]
+      )
+    })
+
+    await expect(
+      publishLeaderboardSnapshotInTransaction(
+        transaction,
+        {
+          src,
+          timeframe: 30,
+          rows: [],
+          rejects: [],
+          rawObjectId: null,
+          isDerived: true,
+          expectedCountOverride: 300,
+        },
+        sourceGuard
+      )
+    ).resolves.toEqual(expect.objectContaining({ published: false, snapshotId: 77 }))
+
+    const statements = fencedQuery.mock.calls.map(([sql]) => String(sql))
+    const publicationLockIndex = fencedQuery.mock.calls.findIndex(
+      ([, params]) => (params as string[] | undefined)?.[0] === 'arena.publish-board-series:19'
+    )
+    const sourceGuardIndex = statements.findIndex((sql) => sql.includes('FROM arena.sources'))
+    const baselineIndex = statements.findIndex((sql) => sql.includes('WITH observations AS'))
+    expect(publicationLockIndex).toBeGreaterThanOrEqual(0)
+    expect(sourceGuardIndex).toBe(publicationLockIndex + 1)
+    expect(baselineIndex).toBeGreaterThan(sourceGuardIndex)
+    expect(statements.some((sql) => /^(?:BEGIN|COMMIT|ROLLBACK|SET)\b/i.test(sql.trim()))).toBe(
+      false
+    )
+    expect(statements.some((sql) => sql.includes('--'))).toBe(false)
+    expect(fencedQuery).toHaveBeenCalledTimes(clientQuery.mock.calls.length)
+    expect(release).not.toHaveBeenCalled()
   })
 })
