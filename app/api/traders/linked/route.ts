@@ -17,6 +17,8 @@ import {
 import { ApiError } from '@/lib/api/errors'
 import { logger } from '@/lib/logger'
 import { invalidateLinkedTraderCache } from '@/lib/data/linked-traders'
+import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -54,6 +56,17 @@ function throwRpcError(error: { code?: string; message?: string }): never {
   throw error
 }
 
+interface LinkedRankRow {
+  source_trader_id: string
+  source: string
+  arena_score: number | null
+  roi: number | null
+  pnl: number | null
+  rank: number | null
+  handle: string | null
+  avatar_url: string | null
+}
+
 /**
  * GET /api/traders/linked
  * Return all linked traders for the authenticated user, joined with leaderboard stats
@@ -81,17 +94,39 @@ export async function GET(request: NextRequest) {
       return success({ linked_traders: [], count: 0 })
     }
 
-    // Batch fetch stats from leaderboard_ranks (avoids N+1 queries)
+    // Batch fetch stats from one stable 90D publication generation.
     const traderKeys = linked.map((linkedTrader) => linkedTrader.trader_id)
-    const { data: allRanks, error: ranksError } = await supabase
-      .from('leaderboard_ranks')
-      .select('source_trader_id, source, arena_score, roi, pnl, rank, handle, avatar_url')
-      .in('source_trader_id', traderKeys)
-      .eq('season_id', '90D')
-    if (ranksError) throw ranksError
+    const proofSources = filterPublicRankingSources(
+      linked.map((linkedTrader) => linkedTrader.source)
+    )
+    const allRanks: LinkedRankRow[] =
+      proofSources.length === 0
+        ? []
+        : (
+            await readSealedRankingGeneration(
+              supabase,
+              { season: '90D', sources: proofSources },
+              async (publication) => {
+                const result = await supabase
+                  .from('leaderboard_ranks')
+                  .select(
+                    'source_trader_id, source, arena_score, roi, pnl, rank, handle, avatar_url'
+                  )
+                  .in('source_trader_id', traderKeys)
+                  .in('source', proofSources)
+                  .eq('season_id', '90D')
+                  .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+                if (result.error) {
+                  throw new Error(`linked trader rank query failed: ${result.error.message}`)
+                }
+                return (result.data ?? []) as LinkedRankRow[]
+              },
+              { timeoutMs: 10_000 }
+            )
+          ).value
 
-    const rankMap = new Map<string, typeof allRanks extends (infer T)[] | null ? T : never>()
-    for (const r of allRanks || []) {
+    const rankMap = new Map<string, LinkedRankRow>()
+    for (const r of allRanks) {
       rankMap.set(`${r.source}:${r.source_trader_id}`, r)
     }
 
