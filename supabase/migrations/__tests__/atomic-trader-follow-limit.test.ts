@@ -16,6 +16,10 @@ const pg17 = readFileSync(
 )
 const route = readFileSync(resolve(root, 'app/api/follow/route.ts'), 'utf8')
 const databaseTypes = readFileSync(resolve(root, 'lib/supabase/database.types.ts'), 'utf8')
+const launchRunner = readFileSync(
+  resolve(root, 'scripts/maintenance/apply-launch-migrations.sh'),
+  'utf8'
+)
 
 function functionBody(source: string, name: string): string {
   const start = source.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`)
@@ -36,6 +40,19 @@ describe('atomic trader follow limit authority', () => {
     expect(cutover).toContain('DROP POLICY IF EXISTS "Users can follow traders"')
     expect(cutover).toContain('DROP POLICY IF EXISTS "Users can unfollow traders"')
     expect(cutover).toContain('REVOKE INSERT, UPDATE, DELETE, TRUNCATE')
+
+    const predeploy = launchRunner.slice(
+      launchRunner.indexOf('PREDEPLOY_MIGRATIONS=('),
+      launchRunner.indexOf('QUARANTINED_PREDEPLOY_MIGRATIONS=(')
+    )
+    const postdeploy = launchRunner.slice(
+      launchRunner.indexOf('POSTDEPLOY_MIGRATIONS=('),
+      launchRunner.indexOf('RECOVERY_PREREQUISITE_MIGRATIONS=(')
+    )
+    expect(predeploy).toContain('20260729062000_atomic_trader_follow_limit.sql')
+    expect(predeploy).not.toContain('20260729063000_close_trader_follow_direct_writes.sql')
+    expect(postdeploy).toContain('20260729063000_close_trader_follow_direct_writes.sql')
+    expect(postdeploy).not.toContain('20260729062000_atomic_trader_follow_limit.sql')
   })
 
   it('serializes the exact limit, identity and mutation in one service-only transaction', () => {
