@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -5,18 +6,19 @@ jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
-    headers = new Map<string, string>()
+    headers: Headers
 
-    constructor(body: unknown, init: { status?: number } = {}) {
+    constructor(body: unknown, init: { status?: number; headers?: HeadersInit } = {}) {
       this._body = body
       this.status = init.status ?? 200
+      this.headers = new Headers(init.headers)
     }
 
     async json() {
       return this._body
     }
 
-    static json(body: unknown, init?: { status?: number }) {
+    static json(body: unknown, init?: { status?: number; headers?: HeadersInit }) {
       return new MockNextResponse(body, init)
     }
   }
@@ -115,6 +117,26 @@ function application(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function listedApplication(overrides: Record<string, unknown> = {}) {
+  return {
+    ...application(),
+    reject_reason: null,
+    reviewed_at: null,
+    ...overrides,
+  }
+}
+
+function listSuccess(overrides: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    actor_id: ACTOR_ID,
+    group_id: GROUP_ID,
+    applications: [],
+    has_more: false,
+    ...overrides,
+  }
+}
+
 function request(body: unknown = validBody(), groupId = GROUP_ID): NextRequest {
   return new NextRequest(`http://localhost/api/groups/${groupId}/edit-apply`, {
     method: 'POST',
@@ -126,6 +148,12 @@ function rawRequest(rawBody: string, groupId = GROUP_ID): NextRequest {
   return new NextRequest(`http://localhost/api/groups/${groupId}/edit-apply`, {
     method: 'POST',
     body: rawBody,
+  })
+}
+
+function getRequest(suffix = '', groupId = GROUP_ID): NextRequest {
+  return new NextRequest(`http://localhost/api/groups/${groupId}/edit-apply${suffix}`, {
+    method: 'GET',
   })
 }
 
@@ -360,44 +388,161 @@ describe('POST /api/groups/[id]/edit-apply atomic boundary', () => {
   })
 })
 
-describe('GET /api/groups/[id]/edit-apply owner read', () => {
+describe('GET /api/groups/[id]/edit-apply atomic owner read', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockRpc.mockResolvedValue({ data: listSuccess(), error: null })
   })
 
-  it('validates the group path before reading', async () => {
-    const response = await GET(request({}, 'not-a-uuid'))
+  it('validates the group path before RPC', async () => {
+    const response = await GET(getRequest('', 'not-a-uuid'))
 
     expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('preserves the owner-gated read path', async () => {
-    const memberQuery = {
-      select: jest.fn(),
-      eq: jest.fn(),
-      maybeSingle: jest.fn().mockResolvedValue({ data: { role: 'owner' }, error: null }),
-    }
-    memberQuery.select.mockReturnValue(memberQuery)
-    memberQuery.eq.mockReturnValue(memberQuery)
-    const applicationQuery = {
-      select: jest.fn(),
-      eq: jest.fn(),
-      order: jest.fn().mockResolvedValue({ data: [application()], error: null }),
-    }
-    applicationQuery.select.mockReturnValue(applicationQuery)
-    applicationQuery.eq.mockReturnValue(applicationQuery)
-    mockFrom.mockImplementation((table: string) =>
-      table === 'group_members' ? memberQuery : applicationQuery
-    )
+  it('returns an owner-authorized page through one actor/group-bound RPC', async () => {
+    const applications = [listedApplication()]
+    mockRpc.mockResolvedValue({ data: listSuccess({ applications }), error: null })
 
-    const response = await GET(request({}))
+    const response = await GET(getRequest())
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({ applications: [application()] })
-    expect(mockFrom).toHaveBeenCalledWith('group_members')
-    expect(mockFrom).toHaveBeenCalledWith('group_edit_applications')
-    expect(applicationQuery.eq).toHaveBeenCalledWith('group_id', GROUP_ID)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    await expect(response.json()).resolves.toEqual({
+      applications,
+      pagination: { limit: 50, has_more: false, next_cursor: null },
+    })
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenCalledWith('get_group_edit_applications_page_atomic', {
+      p_actor_id: ACTOR_ID,
+      p_group_id: GROUP_ID,
+      p_before_created_at: null,
+      p_before_id: null,
+      p_limit: 50,
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('uses a stable bounded created_at/id cursor', async () => {
+    const olderId = '22222222-3333-4333-8333-333333333333'
+    const applications = [
+      listedApplication({ id: APPLICATION_ID, created_at: '2026-07-16T20:00:00.000002Z' }),
+      listedApplication({ id: olderId, created_at: '2026-07-16T19:00:00.000001Z' }),
+    ]
+    mockRpc.mockResolvedValueOnce({
+      data: listSuccess({ applications, has_more: true }),
+      error: null,
+    })
+
+    const first = await GET(getRequest('?limit=2'))
+    const firstBody = await first.json()
+    expect(first.status).toBe(200)
+    const cursor = firstBody.pagination.next_cursor as string
+    expect(JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))).toEqual({
+      created_at: '2026-07-16T19:00:00.000001Z',
+      id: olderId,
+    })
+
+    mockRpc.mockResolvedValueOnce({ data: listSuccess(), error: null })
+    expect((await GET(getRequest(`?limit=2&cursor=${cursor}`))).status).toBe(200)
+    expect(mockRpc).toHaveBeenLastCalledWith('get_group_edit_applications_page_atomic', {
+      p_actor_id: ACTOR_ID,
+      p_group_id: GROUP_ID,
+      p_before_created_at: '2026-07-16T19:00:00.000001Z',
+      p_before_id: olderId,
+      p_limit: 2,
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['INVALID', 400, 'Invalid edit application request'],
+    ['ACTOR_UNAVAILABLE', 403, 'Permission denied'],
+    ['PERMISSION_DENIED', 403, 'Permission denied'],
+    ['GROUP_NOT_FOUND', 404, 'Group not found'],
+    ['GROUP_DISSOLVED', 409, 'The group has been dissolved'],
+  ])('maps canonical %s without a follow-up table query', async (reason, status, error) => {
+    mockRpc.mockResolvedValue({ data: { success: false, reason }, error: null })
+
+    const response = await GET(getRequest())
+
+    expect(response.status).toBe(status)
+    await expect(response.json()).resolves.toEqual({ error })
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    '?limit=0',
+    '?limit=101',
+    '?limit=01',
+    '?limit=2&limit=3',
+    '?offset=1',
+    '?cursor=not_base64!',
+    `?cursor=${Buffer.from(
+      JSON.stringify({ created_at: '2026-07-16T20:00:00.1234567Z', id: APPLICATION_ID }),
+      'utf8'
+    ).toString('base64url')}`,
+  ])('rejects malformed or ambiguous list input before RPC: %s', async (suffix) => {
+    const response = await GET(getRequest(suffix))
+
+    expect(response.status).toBe(400)
     expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { data: null, error: { code: 'XX001' } },
+    { data: null, error: null },
+    { data: { success: true }, error: null },
+    { data: { success: false, reason: 'UNKNOWN' }, error: null },
+    { data: { success: false, reason: 'PERMISSION_DENIED', leaked: true }, error: null },
+    { data: listSuccess({ actor_id: APPLICATION_ID }), error: null },
+    { data: listSuccess({ group_id: APPLICATION_ID }), error: null },
+    {
+      data: listSuccess({
+        applications: [listedApplication({ group_id: APPLICATION_ID })],
+      }),
+      error: null,
+    },
+    {
+      data: listSuccess({
+        applications: [listedApplication(), listedApplication()],
+      }),
+      error: null,
+    },
+    {
+      data: listSuccess({ applications: [], has_more: true }),
+      error: null,
+    },
+    {
+      data: listSuccess({
+        applications: [listedApplication({ reviewed_by: ACTOR_ID })],
+      }),
+      error: null,
+    },
+  ])('fails closed for RPC failure, malformed, or mismatched evidence %#', async (rpcResult) => {
+    mockRpc.mockResolvedValue(rpcResult)
+
+    const response = await GET(getRequest())
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({ error: 'Fetch failed' })
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('keeps the GET boundary RPC-only', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'app/api/groups/[id]/edit-apply/route.ts'),
+      'utf8'
+    )
+    const getSource = source.split('// 获取小组的修改申请列表')[1]
+    expect(getSource).toContain("'get_group_edit_applications_page_atomic'")
+    expect(getSource).not.toContain(".from('")
+    expect(getSource).not.toContain('.insert(')
+    expect(getSource).not.toContain('.update(')
+    expect(getSource).not.toContain('.delete(')
   })
 })

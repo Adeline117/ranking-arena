@@ -1,5 +1,7 @@
+import { Buffer } from 'node:buffer'
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 import logger from '@/lib/logger'
 import { withAuth } from '@/lib/api/middleware'
 import { socialFeatureGuard } from '@/lib/features'
@@ -12,33 +14,185 @@ import {
   type SubmitGroupEditApplicationResult,
 } from '../../edit-applications/contracts'
 
-// 检查用户是否是小组组长（兼容旧数据：admin + 创建者也视为组长）
-async function isGroupOwner(
-  supabase: SupabaseClient<Database>,
+const DEFAULT_LIST_LIMIT = 50
+const PRIVATE_NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' }
+const CanonicalUuidSchema = z
+  .string()
+  .uuid()
+  .transform((value) => value.toLowerCase())
+const ListLimitSchema = z
+  .string()
+  .regex(/^(?:[1-9]|[1-9][0-9]|100)$/)
+  .transform((value) => Number(value))
+const EncodedCursorSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .regex(/^[A-Za-z0-9_-]+$/)
+const TimestampSchema = z
+  .string()
+  .datetime({ offset: true })
+  .refine((value) => (value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1].length ?? 0) <= 6)
+const ListCursorSchema = z
+  .object({
+    created_at: TimestampSchema,
+    id: CanonicalUuidSchema,
+  })
+  .strict()
+const JsonValueSchema = z.union([
+  z.null(),
+  z.boolean(),
+  z.number(),
+  z.string(),
+  z.array(z.unknown()),
+  z.object({}).passthrough(),
+])
+const ListedApplicationSchema = z
+  .object({
+    id: CanonicalUuidSchema,
+    group_id: CanonicalUuidSchema,
+    applicant_id: CanonicalUuidSchema,
+    name: z.string().nullable(),
+    name_en: z.string().nullable(),
+    description: z.string().nullable(),
+    description_en: z.string().nullable(),
+    avatar_url: z.string().nullable(),
+    rules_json: JsonValueSchema,
+    rules: z.string().nullable(),
+    role_names: JsonValueSchema,
+    is_premium_only: z.boolean().nullable(),
+    status: z.enum(['pending', 'approved', 'rejected']),
+    reject_reason: z.string().nullable(),
+    reviewed_at: TimestampSchema.nullable(),
+    created_at: TimestampSchema,
+  })
+  .strict()
+const ListSuccessSchema = z
+  .object({
+    success: z.literal(true),
+    actor_id: CanonicalUuidSchema,
+    group_id: CanonicalUuidSchema,
+    applications: z.array(ListedApplicationSchema).max(100),
+    has_more: z.boolean(),
+  })
+  .strict()
+const ListFailureSchema = z
+  .object({
+    success: z.literal(false),
+    reason: z.enum([
+      'INVALID',
+      'ACTOR_UNAVAILABLE',
+      'GROUP_NOT_FOUND',
+      'GROUP_DISSOLVED',
+      'PERMISSION_DENIED',
+    ]),
+  })
+  .strict()
+const ListResultSchema = z.discriminatedUnion('success', [ListSuccessSchema, ListFailureSchema])
+
+type ListCursor = z.infer<typeof ListCursorSchema>
+
+function privateJson(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: PRIVATE_NO_STORE_HEADERS })
+}
+
+function decodeListCursor(value: string): ListCursor | null {
+  const encoded = EncodedCursorSchema.safeParse(value)
+  if (!encoded.success) return null
+  try {
+    const decoded = Buffer.from(encoded.data, 'base64url').toString('utf8')
+    if (Buffer.from(decoded, 'utf8').toString('base64url') !== encoded.data) return null
+    const parsed = ListCursorSchema.safeParse(JSON.parse(decoded))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
+function encodeListCursor(cursor: ListCursor): string {
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
+}
+
+function readListInput(url: URL): { limit: number; cursor: ListCursor | null } | null {
+  for (const key of url.searchParams.keys()) {
+    if (!['limit', 'cursor'].includes(key) || url.searchParams.getAll(key).length !== 1) return null
+  }
+  const rawLimit = url.searchParams.get('limit')
+  const parsedLimit = rawLimit === null ? null : ListLimitSchema.safeParse(rawLimit)
+  if (parsedLimit !== null && !parsedLimit.success) return null
+  const rawCursor = url.searchParams.get('cursor')
+  const cursor = rawCursor === null ? null : decodeListCursor(rawCursor)
+  if (rawCursor !== null && cursor === null) return null
+  return { limit: parsedLimit?.data ?? DEFAULT_LIST_LIMIT, cursor }
+}
+
+function timestampParts(value: string): readonly [milliseconds: number, submillisecond: number] {
+  const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? ''
+  const nanoseconds = Number(`${fraction}000000000`.slice(0, 9))
+  return [Date.parse(value), nanoseconds % 1_000_000]
+}
+
+function compareTimestamp(left: string, right: string): number {
+  const [leftMilliseconds, leftSubmillisecond] = timestampParts(left)
+  const [rightMilliseconds, rightSubmillisecond] = timestampParts(right)
+  if (leftMilliseconds !== rightMilliseconds) return leftMilliseconds - rightMilliseconds
+  return leftSubmillisecond - rightSubmillisecond
+}
+
+function isBeforeCursor(application: z.infer<typeof ListedApplicationSchema>, cursor: ListCursor) {
+  const timestampOrder = compareTimestamp(application.created_at, cursor.created_at)
+  return timestampOrder < 0 || (timestampOrder === 0 && application.id < cursor.id)
+}
+
+function matchesListRequest(
+  result: z.infer<typeof ListSuccessSchema>,
+  actorId: string,
   groupId: string,
-  userId: string
-): Promise<boolean> {
-  const { data: memberData } = await supabase
-    .from('group_members')
-    .select('role')
-    .eq('group_id', groupId)
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  if (memberData?.role === 'owner') return true
-
-  // 兼容旧数据：如果用户是 admin 且是小组创建者，也视为组长
-  if (memberData?.role === 'admin') {
-    const { data: groupData } = await supabase
-      .from('groups')
-      .select('created_by')
-      .eq('id', groupId)
-      .single()
-
-    if (groupData?.created_by === userId) return true
+  input: { limit: number; cursor: ListCursor | null }
+): boolean {
+  if (
+    result.actor_id !== actorId ||
+    result.group_id !== groupId ||
+    result.applications.length > input.limit ||
+    (result.has_more && result.applications.length !== input.limit)
+  ) {
+    return false
   }
 
-  return false
+  const ids = new Set<string>()
+  for (let index = 0; index < result.applications.length; index += 1) {
+    const application = result.applications[index]
+    if (
+      application.group_id !== groupId ||
+      ids.has(application.id) ||
+      (input.cursor && !isBeforeCursor(application, input.cursor))
+    ) {
+      return false
+    }
+    ids.add(application.id)
+    if (index > 0) {
+      const previous = result.applications[index - 1]
+      const timestampOrder = compareTimestamp(previous.created_at, application.created_at)
+      if (timestampOrder < 0 || (timestampOrder === 0 && previous.id <= application.id)) {
+        return false
+      }
+    }
+  }
+  return true
+}
+
+function listFailureResponse(reason: z.infer<typeof ListFailureSchema>['reason']) {
+  switch (reason) {
+    case 'INVALID':
+      return privateJson({ error: 'Invalid edit application request' }, 400)
+    case 'ACTOR_UNAVAILABLE':
+    case 'PERMISSION_DENIED':
+      return privateJson({ error: 'Permission denied' }, 403)
+    case 'GROUP_NOT_FOUND':
+      return privateJson({ error: 'Group not found' }, 404)
+    case 'GROUP_DISSOLVED':
+      return privateJson({ error: 'The group has been dissolved' }, 409)
+  }
 }
 
 /** Extract group id from URL path */
@@ -238,25 +392,67 @@ export const GET = withAuth(
     const groupId = parsedGroupId.data
     const sb: SupabaseClient<Database> = supabase
 
-    // 检查是否是组长
-    if (!(await isGroupOwner(sb, groupId, user.id))) {
-      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+    let url: URL
+    try {
+      url = new URL(request.url)
+    } catch {
+      return privateJson({ error: 'Invalid edit application request' }, 400)
     }
+    const input = readListInput(url)
+    const actorId = CanonicalUuidSchema.safeParse(user.id)
+    if (!input) return privateJson({ error: 'Invalid edit application request' }, 400)
+    if (!actorId.success) return privateJson({ error: 'Permission denied' }, 403)
 
-    const { data: applications, error } = await sb
-      .from('group_edit_applications')
-      .select(
-        'id, group_id, applicant_id, name, name_en, description, description_en, avatar_url, rules_json, rules, role_names, is_premium_only, status, reject_reason, reviewed_at, created_at'
-      )
-      .eq('group_id', groupId)
-      .order('created_at', { ascending: false })
+    const { data, error } = await sb.rpc('get_group_edit_applications_page_atomic', {
+      p_actor_id: actorId.data,
+      p_group_id: groupId,
+      p_before_created_at: input.cursor?.created_at ?? null,
+      p_before_id: input.cursor?.id ?? null,
+      p_limit: input.limit,
+    })
 
     if (error) {
-      logger.error('Fetch edit applications error:', error)
-      return NextResponse.json({ error: 'Fetch failed' }, { status: 500 })
+      logger.error('Atomic group edit-application page query failed', {
+        groupId,
+        actorId: actorId.data,
+        error,
+      })
+      return privateJson({ error: 'Fetch failed' }, 500)
     }
 
-    return NextResponse.json({ applications })
+    const parsedResult = ListResultSchema.safeParse(data)
+    if (!parsedResult.success) {
+      logger.error('Atomic group edit-application page returned an invalid result', {
+        groupId,
+        actorId: actorId.data,
+      })
+      return privateJson({ error: 'Fetch failed' }, 500)
+    }
+
+    const result = parsedResult.data
+    if (!result.success) return listFailureResponse(result.reason)
+    if (!matchesListRequest(result, actorId.data, groupId, input)) {
+      logger.error('Atomic group edit-application page returned mismatched evidence', {
+        groupId,
+        actorId: actorId.data,
+      })
+      return privateJson({ error: 'Fetch failed' }, 500)
+    }
+
+    const last = result.applications.at(-1)
+    const nextCursor =
+      result.has_more && last
+        ? encodeListCursor({ created_at: last.created_at, id: last.id })
+        : null
+
+    return privateJson({
+      applications: result.applications,
+      pagination: {
+        limit: input.limit,
+        has_more: result.has_more,
+        next_cursor: nextCursor,
+      },
+    })
   },
   { name: 'groups/edit-apply-get', rateLimit: 'read' }
 )
