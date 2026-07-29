@@ -16,9 +16,17 @@ import { getSupabaseAdmin, checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { getOrSetWithLock } from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'
 import {
+  filterPublicRankingRows,
+  filterPublicRankingSources,
   isPublicRankingSourceAllowed,
   publicRankingCacheKey,
 } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+  type SealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 const log = createLogger('api:movers')
 
@@ -34,18 +42,77 @@ interface Mover {
   avatar_url: string | null
 }
 
+interface MoversResponse {
+  risers: Mover[]
+  fallers: Mover[]
+  period: '90D'
+  snapshotDate: string
+  compareDate: string
+}
+
+function isMoversResponse(
+  value: unknown,
+  proofSources: readonly string[]
+): value is MoversResponse {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const risers = Reflect.get(value, 'risers')
+  const fallers = Reflect.get(value, 'fallers')
+  if (
+    Reflect.get(value, 'period') !== '90D' ||
+    typeof Reflect.get(value, 'snapshotDate') !== 'string' ||
+    typeof Reflect.get(value, 'compareDate') !== 'string' ||
+    !Array.isArray(risers) ||
+    !Array.isArray(fallers) ||
+    risers.length > 5 ||
+    fallers.length > 5
+  ) {
+    return false
+  }
+  const allowed = new Set(proofSources)
+  const validMover = (mover: unknown) =>
+    mover !== null &&
+    typeof mover === 'object' &&
+    !Array.isArray(mover) &&
+    allowed.has(Reflect.get(mover, 'platform')) &&
+    typeof Reflect.get(mover, 'trader_key') === 'string' &&
+    Number.isFinite(Reflect.get(mover, 'rank')) &&
+    (Reflect.get(mover, 'arena_score') === null ||
+      Number.isFinite(Reflect.get(mover, 'arena_score'))) &&
+    Number.isFinite(Reflect.get(mover, 'roiDelta'))
+
+  return (
+    risers.every(
+      (mover) =>
+        validMover(mover) && typeof mover === 'object' && Number(Reflect.get(mover, 'roiDelta')) > 0
+    ) &&
+    fallers.every(
+      (mover) =>
+        validMover(mover) &&
+        mover !== null &&
+        typeof mover === 'object' &&
+        Number(Reflect.get(mover, 'roiDelta')) < 0
+    )
+  )
+}
+
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
   if (rateLimitResponse) return rateLimitResponse
 
   try {
-    const result = await getOrSetWithLock(
-      publicRankingCacheKey('api:rankings:movers'),
+    const cached = await getOrSetWithLock<SealedRankingCacheEntry<MoversResponse>>(
+      publicRankingCacheKey('api:rankings:movers:sealed-v2'),
       async () => computeMovers(),
-      // 120s Redis TTL (was 600s). Movers computation is cheap (~100ms, 2 queries).
-      // Short TTL ensures empty results from leaderboard outages recover quickly.
+      // Short TTL keeps one sealed comparison generation visible briefly while
+      // avoiding a proof/database read on every request.
       { ttl: 120, lockTtl: 15 }
     )
+    const cachedEntry = parseSealedRankingCacheEntry<MoversResponse>(cached, '90D')
+    const proofSources = cachedEntry?.publication.proofs.map((proof) => proof.source) ?? []
+    if (!cachedEntry || !isMoversResponse(cachedEntry.value, proofSources)) {
+      throw new Error('movers cache did not contain a sealed scoped response')
+    }
+    const result = cachedEntry.value
 
     // Don't CDN-cache empty results for long — they recover within minutes
     const hasData = result.risers?.length > 0 || result.fallers?.length > 0
@@ -66,18 +133,12 @@ export async function GET(request: NextRequest) {
 }
 
 async function computeMovers() {
-  const TIMEOUT_MS = 5000
-
-  const result = await Promise.race([
-    computeMoversInner(),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('computeMovers timed out after 5s')), TIMEOUT_MS)
-    ),
-  ])
-  return result
+  const signal = AbortSignal.timeout(10_000)
+  const sealedRead = await computeMoversInner(signal)
+  return createSealedRankingCacheEntry(sealedRead)
 }
 
-async function computeMoversInner() {
+async function computeMoversInner(signal: AbortSignal) {
   const supabase = getSupabaseAdmin()
 
   // Find the two most recent distinct snapshot dates.
@@ -85,14 +146,16 @@ async function computeMoversInner() {
   // a small batch and deduplicate in code to find 2 distinct dates.
   // idx_daily_snapshots_date (btree date DESC) keeps this fast.
   const today = new Date().toISOString().slice(0, 10)
-  const { data: dateRows } = await supabase
+  const { data: dateRows, error: dateError } = await supabase
     .from('trader_daily_snapshots')
     .select('date')
     .lte('date', today)
     .order('date', { ascending: false })
     .limit(50)
+    .abortSignal(signal)
 
-  if (!dateRows || dateRows.length === 0) return { risers: [], fallers: [], period: '90D' }
+  if (dateError) throw new Error(`movers date lookup failed: ${dateError.message}`)
+  if (!dateRows || dateRows.length === 0) throw new Error('movers has no snapshot dates')
 
   const uniqueDates: string[] = []
   const seen = new Set<string>()
@@ -104,21 +167,23 @@ async function computeMoversInner() {
     }
   }
 
-  if (uniqueDates.length < 2) return { risers: [], fallers: [], period: '90D' }
+  if (uniqueDates.length < 2) throw new Error('movers requires two snapshot dates')
   const todayDate = uniqueDates[0]
   const yesterdayDate = uniqueDates[1]
 
   // Get PREVIOUS day's daily snapshots (to compare against current leaderboard)
-  const { data: yesterdaySnaps } = await supabase
+  const { data: yesterdaySnaps, error: snapshotError } = await supabase
     .from('trader_daily_snapshots')
     .select('platform, trader_key, roi')
     .eq('date', yesterdayDate)
     .not('roi', 'is', null)
+    .order('platform', { ascending: true })
+    .order('trader_key', { ascending: true })
     .limit(2000)
+    .abortSignal(signal)
 
-  if (!yesterdaySnaps?.length) {
-    return { risers: [], fallers: [], period: '90D' }
-  }
+  if (snapshotError) throw new Error(`movers snapshot lookup failed: ${snapshotError.message}`)
+  if (!yesterdaySnaps?.length) throw new Error('movers has no prior snapshot rows')
 
   // Group snapshot trader_keys by platform for efficient batch lookup
   const snapsByPlatform = new Map<string, string[]>()
@@ -131,46 +196,97 @@ async function computeMoversInner() {
     snapsByPlatform.get(s.platform)!.push(s.trader_key)
   }
 
-  // Fetch current leaderboard data — single query instead of N per-platform queries.
-  // The unique index (season_id, source, source_trader_id) makes this efficient.
-  const allTraderKeys = [...new Set(yesterdaySnaps.map((s) => s.trader_key))]
-  const { data: allCurrentRanks } = await supabase
-    .from('leaderboard_ranks')
-    .select('source, source_trader_id, rank, arena_score, roi, handle, avatar_url')
-    .eq('season_id', '90D')
-    .in('source_trader_id', allTraderKeys.slice(0, 1000))
-    .not('arena_score', 'is', null)
-    .limit(2000)
+  const proofSources = filterPublicRankingSources([...snapsByPlatform.keys()])
+  if (proofSources.length === 0) throw new Error('movers has no public snapshot sources')
 
-  if (!allCurrentRanks || allCurrentRanks.length === 0) {
-    return { risers: [], fallers: [], period: '90D' }
-  }
+  return readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: proofSources },
+    async (publication) => {
+      const requests: Array<
+        Promise<{ data: unknown[] | null; error: { message: string } | null }>
+      > = []
+      for (const source of proofSources) {
+        const traderKeys = [...new Set(snapsByPlatform.get(source) ?? [])]
+        for (let index = 0; index < traderKeys.length; index += 500) {
+          const chunk = traderKeys.slice(index, index + 500)
+          requests.push(
+            Promise.resolve(
+              supabase
+                .from('leaderboard_ranks')
+                .select('source, source_trader_id, rank, arena_score, roi, handle, avatar_url')
+                .eq('source', source)
+                .eq('season_id', '90D')
+                .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+                .in('source_trader_id', chunk)
+                .not('arena_score', 'is', null)
+                .limit(chunk.length)
+                .abortSignal(signal)
+            ).then(({ data, error }) => ({ data, error }))
+          )
+        }
+      }
 
-  // Compute ROI changes
-  const movers: Mover[] = []
-  for (const r of allCurrentRanks) {
-    if (!isPublicRankingSourceAllowed(r.source)) continue
-    const key = `${r.source}:${r.source_trader_id}`
-    const yesterdayRoi = yesterdayRoiMap.get(key)
-    if (yesterdayRoi == null || r.roi == null || r.arena_score == null) continue
+      const currentResults = await Promise.all(requests)
+      const currentError = currentResults.find((result) => result.error)?.error
+      if (currentError) throw new Error(`movers rank lookup failed: ${currentError.message}`)
+      const rawCurrentRanks = currentResults.flatMap((result) => result.data ?? []) as Array<
+        Record<string, unknown>
+      >
+      const allCurrentRanks = filterPublicRankingRows(rawCurrentRanks, (row) => row.source).filter(
+        (row) => {
+          const source = String(row.source)
+          const traderKey = String(row.source_trader_id)
+          return snapsByPlatform.get(source)?.includes(traderKey) === true
+        }
+      )
 
-    const roiDelta = r.roi - yesterdayRoi
-    if (Math.abs(roiDelta) < 0.5) continue
+      const movers: Mover[] = []
+      for (const row of allCurrentRanks) {
+        const source = String(row.source)
+        const traderKey = String(row.source_trader_id)
+        const yesterdayRoi = yesterdayRoiMap.get(`${source}:${traderKey}`)
+        if (yesterdayRoi == null || row.roi == null || row.arena_score == null) continue
 
-    movers.push({
-      platform: r.source,
-      trader_key: r.source_trader_id,
-      rank: r.rank ?? 0,
-      arena_score: r.arena_score,
-      roiDelta: Math.round(roiDelta * 100) / 100,
-      handle: r.handle,
-      avatar_url: r.avatar_url,
-    })
-  }
+        const roiDelta = Number(row.roi) - yesterdayRoi
+        if (!Number.isFinite(roiDelta) || Math.abs(roiDelta) < 0.5) continue
 
-  movers.sort((a, b) => b.roiDelta - a.roiDelta)
-  const risers = movers.filter((m) => m.roiDelta > 0).slice(0, 5)
-  const fallers = movers.filter((m) => m.roiDelta < 0).slice(0, 5)
+        movers.push({
+          platform: source,
+          trader_key: traderKey,
+          rank: row.rank != null ? Number(row.rank) : 0,
+          arena_score: Number(row.arena_score),
+          roiDelta: Math.round(roiDelta * 100) / 100,
+          handle: (row.handle as string) || null,
+          avatar_url: (row.avatar_url as string) || null,
+        })
+      }
 
-  return { risers, fallers, period: '90D', snapshotDate: yesterdayDate, compareDate: todayDate }
+      movers.sort(
+        (left, right) =>
+          right.roiDelta - left.roiDelta ||
+          left.platform.localeCompare(right.platform) ||
+          left.trader_key.localeCompare(right.trader_key)
+      )
+      const risers = movers.filter((mover) => mover.roiDelta > 0).slice(0, 5)
+      const fallers = movers
+        .filter((mover) => mover.roiDelta < 0)
+        .sort(
+          (left, right) =>
+            left.roiDelta - right.roiDelta ||
+            left.platform.localeCompare(right.platform) ||
+            left.trader_key.localeCompare(right.trader_key)
+        )
+        .slice(0, 5)
+
+      return {
+        risers,
+        fallers,
+        period: '90D' as const,
+        snapshotDate: yesterdayDate,
+        compareDate: todayDate,
+      }
+    },
+    { timeoutMs: 8_000, signal }
+  )
 }
