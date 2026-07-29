@@ -11,28 +11,53 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { formatDailyTopMovers, postTweet, type TopMover } from '@/lib/services/twitter-bot'
 import { logger } from '@/lib/logger'
 import { withCron } from '@/lib/api/with-cron'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
+const TWITTER_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 export const GET = withCron('auto-post-twitter', async (_request: NextRequest, { plog: _plog }) => {
   const supabase = getSupabaseAdmin()
 
   // Fetch top 5 traders by arena_score in 7D window (recent top performers)
-  const { data: topTraders, error } = await supabase
-    .from('leaderboard_ranks')
-    .select('source_trader_id, handle, source, roi, pnl, arena_score')
-    .eq('season_id', '7D')
-    .not('arena_score', 'is', null)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('arena_score', { ascending: false })
-    .limit(5)
+  const sealedRead = await readSealedRankingGeneration(
+    supabase,
+    { season: '7D', sources: TWITTER_RANKING_SOURCES },
+    async (publication) => {
+      const { data, error } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id, handle, source, roi, pnl, arena_score')
+        .in('source', TWITTER_RANKING_SOURCES)
+        .eq('season_id', '7D')
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .gt('arena_score', 0)
+        .or('is_outlier.is.null,is_outlier.eq.false')
+        .order('arena_score', { ascending: false })
+        .order('source', { ascending: true })
+        .order('source_trader_id', { ascending: true })
+        .limit(5)
 
-  if (error) {
-    throw new Error(`Failed to fetch top traders: ${error.message}`)
-  }
+      if (error || data === null) {
+        throw new Error(`Failed to fetch sealed top traders: ${error?.message ?? 'null payload'}`)
+      }
+      if (data.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+        throw new Error('Twitter ranking query crossed the public source boundary')
+      }
+      return data
+    },
+    { timeoutMs: 10_000 }
+  )
+  const topTraders = sealedRead.value
 
-  if (!topTraders?.length) {
+  if (topTraders.length === 0) {
     return { count: 0, skipped: true, reason: 'no traders found' }
   }
 
