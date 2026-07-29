@@ -41,6 +41,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/utils/logger'
 import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
+import { tryAcquireRedisLease, type RedisLease } from '@/lib/cache/redis-lease'
 
 export interface CronBudgetOptions {
   /** Cron job name for pipeline_logs (e.g. 'compute-leaderboard-90D') */
@@ -111,31 +112,28 @@ async function authorize(request: NextRequest | undefined): Promise<NextResponse
   return null
 }
 
-async function acquireLock(lockKey: string, ttlSec: number): Promise<boolean> {
+type LockResult =
+  | { status: 'acquired'; lease: RedisLease }
+  | { status: 'held' }
+  | { status: 'unavailable' }
+
+async function acquireLock(lockKey: string, ttlSec: number): Promise<LockResult> {
   try {
     const { getSharedRedis } = await import('@/lib/cache/redis-client')
     const redis = await getSharedRedis()
     if (!redis) {
-      // No Redis — proceed without lock. Callers that *require* idempotency
-      // should check `ctx.remainingMs` and defend themselves accordingly.
-      return true
+      logger.error('[withCronBudget] Redis unavailable; cron blocked')
+      return { status: 'unavailable' }
     }
-    const result = await redis.set(lockKey, new Date().toISOString(), { nx: true, ex: ttlSec })
-    return result === 'OK'
+    const lease = await tryAcquireRedisLease(redis, lockKey, ttlSec)
+    return lease ? { status: 'acquired', lease } : { status: 'held' }
   } catch (err) {
-    logger.warn(`[withCronBudget] Redis lock acquisition failed, proceeding without lock: ${err instanceof Error ? err.message : String(err)}`)
-    return true
-  }
-}
-
-async function releaseLock(lockKey: string): Promise<void> {
-  try {
-    const { getSharedRedis } = await import('@/lib/cache/redis-client')
-    const redis = await getSharedRedis()
-    if (redis) await redis.del(lockKey)
-  } catch (err) {
-    // Lock auto-expires via TTL — release failure is non-fatal.
-    logger.warn(`[withCronBudget] Redis lock release failed (will auto-expire): ${err instanceof Error ? err.message : String(err)}`)
+    logger.error(
+      `[withCronBudget] Redis lock acquisition failed; cron blocked: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    )
+    return { status: 'unavailable' }
   }
 }
 
@@ -145,7 +143,7 @@ async function releaseLock(lockKey: string): Promise<void> {
  */
 export async function withCronBudget(
   opts: CronBudgetOptions,
-  fn: (ctx: CronBudgetContext) => Promise<CronBudgetSuccess | void>,
+  fn: (ctx: CronBudgetContext) => Promise<CronBudgetSuccess | void>
 ): Promise<NextResponse> {
   // 1. Auth
   if (!opts.skipAuth) {
@@ -155,16 +153,24 @@ export async function withCronBudget(
 
   // 2. Idempotency lock (optional)
   const lockKey = opts.lockKey
-  const lockTtl = opts.lockTtlSec ?? 300
+  const lockTtl = Math.max(opts.lockTtlSec ?? 300, opts.maxDurationSec + 30)
+  let lockLease: RedisLease | null = null
   if (lockKey) {
-    const acquired = await acquireLock(lockKey, lockTtl)
-    if (!acquired) {
+    const lockResult = await acquireLock(lockKey, lockTtl)
+    if (lockResult.status === 'held') {
       return NextResponse.json({
         ok: true,
         message: `Already running (atomic lock: ${lockKey})`,
         cached: true,
       })
     }
+    if (lockResult.status === 'unavailable') {
+      return NextResponse.json(
+        { ok: false, skipped: true, reason: 'lock_unavailable' },
+        { status: 503 }
+      )
+    }
+    lockLease = lockResult.lease
   }
 
   // 3. PipelineLogger + time budget setup
@@ -226,15 +232,14 @@ export async function withCronBudget(
         job: opts.jobName,
         error: err instanceof Error ? err.message : String(err),
       },
-      { status: 500 },
+      { status: 500 }
     )
   } finally {
-    if (lockKey) {
-      // Await the lock release with a 2s safety timeout. A single Redis DEL
-      // is normally <10ms; TTL (opts.lockTtlSec) is the auto-expire fallback
-      // if the release call hangs.
+    if (lockLease) {
+      // Await compare-and-delete with a 2s safety timeout. TTL is the fallback
+      // if release hangs; an old invocation can never delete a newer lease.
       await Promise.race([
-        releaseLock(lockKey),
+        lockLease.release(),
         new Promise<void>((resolve) => setTimeout(resolve, 2000)),
       ])
     }

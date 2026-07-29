@@ -8,6 +8,7 @@
  */
 
 import { createLogger } from '@/lib/utils/logger'
+import { tryAcquireRedisLease } from '@/lib/cache/redis-lease'
 
 const logger = createLogger('cron-lock')
 
@@ -20,8 +21,8 @@ interface CronLockOptions {
  * Acquire a Redis lock for a cron job.
  * Returns a release function if acquired, `null` if already locked.
  *
- * Fail-open: if Redis is unavailable or errors, the job runs anyway
- * (availability > dedup correctness).
+ * Fail closed: if Redis is unavailable or errors, return `null`. Mutating
+ * jobs must retry later instead of running concurrently without fencing.
  */
 export async function acquireCronLock(
   jobName: string,
@@ -29,27 +30,26 @@ export async function acquireCronLock(
 ): Promise<(() => Promise<void>) | null> {
   const { ttlSeconds = 300 } = options
   const lockKey = `cron:lock:${jobName}`
+  const leaseTtlSeconds = ttlSeconds + 30
 
   try {
     const { getSharedRedis } = await import('@/lib/cache/redis-client')
     const redis = await getSharedRedis()
 
     if (!redis) {
-      // Redis unavailable — allow execution (fail open for availability)
-      logger.warn(`[${jobName}] Redis unavailable, running without lock`)
-      return async () => {}
+      logger.error(`[${jobName}] Redis unavailable; cron blocked`)
+      return null
     }
 
-    const result = await redis.set(lockKey, Date.now().toString(), { nx: true, ex: ttlSeconds })
-    if (result !== 'OK') {
+    const lease = await tryAcquireRedisLease(redis, lockKey, leaseTtlSeconds)
+    if (!lease) {
       logger.info(`[${jobName}] Skipped — already running (lock exists)`)
       return null
     }
 
-    // Return release function
     return async () => {
       try {
-        await redis.del(lockKey)
+        await lease.release()
       } catch (err) {
         logger.warn(
           `[${jobName}] Failed to release lock:`,
@@ -58,11 +58,10 @@ export async function acquireCronLock(
       }
     }
   } catch (err) {
-    // Redis error — allow execution (fail open)
-    logger.warn(
-      `[${jobName}] Lock check failed, running without lock:`,
+    logger.error(
+      `[${jobName}] Lock check failed; cron blocked:`,
       err instanceof Error ? err.message : String(err)
     )
-    return async () => {}
+    return null
   }
 }

@@ -24,6 +24,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { logger } from '@/lib/logger'
 import { getSharedRedis } from '@/lib/cache/redis-client'
+import { tryAcquireRedisLease, type RedisLease } from '@/lib/cache/redis-lease'
 import { getOrCreateCorrelationId, runWithCorrelationId } from '@/lib/api/correlation'
 import * as Sentry from '@sentry/nextjs'
 
@@ -69,31 +70,36 @@ export function withCron(jobName: string, handler: CronHandler, options: CronOpt
   async function runCron(request: NextRequest, correlationId: string): Promise<NextResponse> {
     // 2. Distributed lock — prevent concurrent execution of the same cron job
     const lockKey = `cron:lock:${jobName}`
-    const lockTtlSec = Math.ceil(safetyTimeoutMs / 1000)
-    let redis: Awaited<ReturnType<typeof getSharedRedis>> = null
-    let lockAcquired = false
+    // Keep the lease beyond the safety timer so the old invocation cannot
+    // overlap a retry while the serverless runtime is still terminating it.
+    const lockTtlSec = Math.ceil(safetyTimeoutMs / 1000) + 30
+    let lockLease: RedisLease | null = null
     try {
-      redis = await getSharedRedis()
-      if (redis) {
-        // SET NX with EX — atomic acquire
-        const result = await redis.set(lockKey, Date.now().toString(), { nx: true, ex: lockTtlSec })
-        if (result === 'OK') {
-          lockAcquired = true
-        } else {
-          // Another instance already holds the lock
-          logger.info(`[${jobName}] Skipped — concurrent execution (lock held)`)
-          const skipRes = NextResponse.json(
-            { ok: true, skipped: true, reason: 'concurrent execution' },
-            { status: 200 }
-          )
-          skipRes.headers.set('X-Correlation-ID', correlationId)
-          return skipRes
-        }
+      const redis = await getSharedRedis()
+      if (!redis) {
+        throw new Error('Redis unavailable')
       }
-      // If redis is null, proceed without lock (fail-open)
+      lockLease = await tryAcquireRedisLease(redis, lockKey, lockTtlSec)
+      if (!lockLease) {
+        // Another instance already holds the lock
+        logger.info(`[${jobName}] Skipped — concurrent execution (lock held)`)
+        const skipRes = NextResponse.json(
+          { ok: true, skipped: true, reason: 'concurrent execution' },
+          { status: 200 }
+        )
+        skipRes.headers.set('X-Correlation-ID', correlationId)
+        return skipRes
+      }
     } catch (lockErr) {
-      // Redis error — proceed without lock (fail-open for locks is correct)
-      logger.warn(`[${jobName}] Redis lock failed, proceeding without lock:`, lockErr)
+      // Mutating cron jobs must never run concurrently merely because the
+      // coordination service is unavailable. A later scheduled run can retry.
+      logger.error(`[${jobName}] Redis lock unavailable; cron blocked:`, lockErr)
+      const unavailableRes = NextResponse.json(
+        { ok: false, skipped: true, reason: 'lock_unavailable' },
+        { status: 503 }
+      )
+      unavailableRes.headers.set('X-Correlation-ID', correlationId)
+      return unavailableRes
     }
 
     Sentry.setTag('cron', jobName)
@@ -161,10 +167,11 @@ export function withCron(jobName: string, handler: CronHandler, options: CronOpt
       errRes.headers.set('X-Correlation-ID', correlationId)
       return errRes
     } finally {
-      // Release the distributed lock
-      if (lockAcquired && redis) {
+      // Release only the lease still owned by this invocation. If its TTL
+      // expired and a newer invocation acquired the key, release() is a no-op.
+      if (lockLease) {
         try {
-          await redis.del(lockKey)
+          await lockLease.release()
         } catch (unlockErr) {
           logger.warn(`[${jobName}] Failed to release lock:`, unlockErr)
         }
