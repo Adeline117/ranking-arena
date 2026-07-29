@@ -204,8 +204,8 @@ export async function GET(request: NextRequest) {
         rolledBack.push(season)
         stats.seasons[season] = previousCounts[season]
       } else if (count === -1) {
-        // Degradation skip is auto-recoverable (MAX_CONSECUTIVE_SKIPS=2 forces compute on 3rd attempt)
-        // Only treat as warning, not error, to avoid noisy OpenClaw alerts
+        // Automatic degradation is always fail-closed. A later healthy run, or
+        // an authenticated operator explicitly using force=1, may resume writes.
         const msg = `${season}: degradation detected, upsert SKIPPED (table: ${previousCounts[season]})`
         warnings.push(msg)
         rolledBack.push(season)
