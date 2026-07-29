@@ -85,6 +85,7 @@ describe('GET /api/traders/claim/status', () => {
         telegram_url: null,
         discord_url: null,
         website_url: null,
+        profile_version: 12,
       },
       error: null,
     })
@@ -99,9 +100,10 @@ describe('GET /api/traders/claim/status', () => {
         source: 'binance_futures',
         is_verified: true,
         owner_id: 'owner-id',
-        profile: { display_name: 'Exact profile', bio: 'Exact bio' },
+        profile: { display_name: 'Exact profile', bio: 'Exact bio', profile_version: 12 },
       },
     })
+    expect(mockSelect).toHaveBeenCalledWith(expect.stringContaining('profile_version'))
     expect(mockEq).toHaveBeenNthCalledWith(1, 'trader_id', 'account-42')
     expect(mockEq).toHaveBeenNthCalledWith(2, 'source', 'binance_futures')
   })

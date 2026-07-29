@@ -5013,6 +5013,8 @@ const zh = {
   verifiedTraderSaving: '保存中...',
   verifiedTraderSaved: '档案更新成功！',
   verifiedTraderSaveFailed: '保存档案修改失败。',
+  verifiedTraderSaveConflict: '此档案已在其他页面更新。草稿已保留，请刷新并核对后再保存。',
+  verifiedTraderReloadRequired: '请刷新此档案后再保存修改。',
   verifiedTraderDisplayName: '显示名称',
   verifiedTraderBio: '个人简介',
   verifiedTraderTwitter: 'Twitter/X',

@@ -235,7 +235,7 @@ export async function GET(
                 const { data: verified } = await supabase
                   .from('verified_traders')
                   .select(
-                    'id, user_id, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url'
+                    'id, user_id, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url, profile_version'
                   )
                   .eq('trader_id', traderId)
                   .eq('source', source)
@@ -257,6 +257,7 @@ export async function GET(
                       telegram_url: verified.telegram_url,
                       discord_url: verified.discord_url,
                       website_url: verified.website_url,
+                      profile_version: verified.profile_version,
                     },
                   }
                 }

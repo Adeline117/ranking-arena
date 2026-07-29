@@ -47,11 +47,12 @@ export interface VerifiedTrader {
   website_url: string | null
   verified_at: string
   verification_method: string
-  can_pin_posts: boolean
-  can_reply_reviews: boolean
-  can_receive_messages: boolean
-  created_at: string
-  updated_at: string
+  can_pin_posts: boolean | null
+  can_reply_reviews: boolean | null
+  can_receive_messages: boolean | null
+  profile_version: number
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface CreateClaimInput {
@@ -101,10 +102,18 @@ export interface VerifiedTraderIdentity {
 const CLAIM_FIELDS =
   'id, user_id, trader_id, source, verification_method, verification_data, status, reject_reason, reviewed_by, reviewed_at, verified_at, created_at, updated_at'
 const VERIFIED_TRADER_FIELDS =
-  'id, user_id, trader_id, source, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url, verified_at, verification_method, can_pin_posts, can_reply_reviews, can_receive_messages, created_at, updated_at'
+  'id, user_id, trader_id, source, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url, verified_at, verification_method, can_pin_posts, can_reply_reviews, can_receive_messages, profile_version, created_at, updated_at'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string'
+}
+
+function isNullableBoolean(value: unknown): value is boolean | null {
+  return value === null || typeof value === 'boolean'
 }
 
 function isVerificationMethod(value: unknown): value is VerificationMethod {
@@ -542,6 +551,7 @@ export async function updateVerifiedTrader(
   supabase: SupabaseClient,
   userId: string,
   identity: VerifiedTraderIdentity,
+  expectedVersion: number,
   input: UpdateVerifiedTraderInput
 ): Promise<VerifiedTrader | null> {
   const updateData: Record<string, unknown> = {}
@@ -556,32 +566,77 @@ export async function updateVerifiedTrader(
   if (input.can_receive_messages !== undefined)
     updateData.can_receive_messages = input.can_receive_messages
 
-  const { data, error } = await supabase
-    .from('verified_traders')
-    .update(updateData)
-    .eq('user_id', userId)
-    .eq('trader_id', identity.trader_id)
-    .eq('source', identity.source)
-    .select(VERIFIED_TRADER_FIELDS)
-    .maybeSingle()
+  const { data, error } = await supabase.rpc('update_verified_trader_profile_cas', {
+    p_user_id: userId,
+    p_trader_id: identity.trader_id,
+    p_source: identity.source,
+    p_expected_version: expectedVersion,
+    p_updates: updateData,
+  })
 
   if (error) {
+    if (error.code === 'P0002') return null
     logger.error('[trader-claims] 更新认证资料失败:', error)
     throw error
   }
 
+  const candidate = Array.isArray(data) && data.length === 1 ? data[0] : data
   if (
-    data &&
-    (data.user_id !== userId ||
-      data.trader_id !== identity.trader_id ||
-      data.source !== identity.source)
+    !isRecord(candidate) ||
+    typeof candidate.id !== 'string' ||
+    candidate.user_id !== userId ||
+    candidate.trader_id !== identity.trader_id ||
+    candidate.source !== identity.source ||
+    !isNullableString(candidate.display_name) ||
+    !isNullableString(candidate.bio) ||
+    !isNullableString(candidate.avatar_url) ||
+    !isNullableString(candidate.twitter_url) ||
+    !isNullableString(candidate.telegram_url) ||
+    !isNullableString(candidate.discord_url) ||
+    !isNullableString(candidate.website_url) ||
+    typeof candidate.verified_at !== 'string' ||
+    typeof candidate.verification_method !== 'string' ||
+    !isNullableBoolean(candidate.can_pin_posts) ||
+    !isNullableBoolean(candidate.can_reply_reviews) ||
+    !isNullableBoolean(candidate.can_receive_messages) ||
+    typeof candidate.profile_version !== 'number' ||
+    !Number.isSafeInteger(candidate.profile_version) ||
+    candidate.profile_version < expectedVersion ||
+    candidate.profile_version > expectedVersion + 1 ||
+    !isNullableString(candidate.created_at) ||
+    !isNullableString(candidate.updated_at) ||
+    Object.entries(updateData).some(([field, value]) => candidate[field] !== value)
   ) {
     const identityError = new Error('Verified trader update returned a mismatched identity')
     logger.error('[trader-claims] 更新认证资料身份不匹配:', identityError)
     throw identityError
   }
 
-  return data
+  return {
+    id: candidate.id,
+    user_id: userId,
+    trader_id: identity.trader_id,
+    source: identity.source,
+    display_name: candidate.display_name,
+    bio: candidate.bio,
+    avatar_url: candidate.avatar_url,
+    twitter_url: candidate.twitter_url,
+    telegram_url: candidate.telegram_url,
+    discord_url: candidate.discord_url,
+    website_url: candidate.website_url,
+    verified_at: candidate.verified_at,
+    verification_method: candidate.verification_method,
+    can_pin_posts: candidate.can_pin_posts,
+    can_reply_reviews: candidate.can_reply_reviews,
+    can_receive_messages: candidate.can_receive_messages,
+    profile_version: candidate.profile_version,
+    created_at: candidate.created_at,
+    updated_at: candidate.updated_at,
+  }
+}
+
+export function isVerifiedTraderProfileConflict(error: unknown): boolean {
+  return isRecord(error) && error.code === '40001'
 }
 
 /**

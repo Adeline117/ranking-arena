@@ -14,9 +14,10 @@ import {
   RateLimitPresets,
   validateString,
 } from '@/lib/api'
-import { ApiError } from '@/lib/api/errors'
+import { ApiError, ErrorCode } from '@/lib/api/errors'
 import {
   getVerifiedTrader,
+  isVerifiedTraderProfileConflict,
   updateVerifiedTrader,
   type UpdateVerifiedTraderInput,
 } from '@/lib/data/trader-claims'
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
             telegram_url: verified.telegram_url,
             discord_url: verified.discord_url,
             website_url: verified.website_url,
+            profile_version: verified.profile_version,
             verified_at: verified.verified_at,
             verification_method: verified.verification_method,
           }
@@ -89,6 +91,14 @@ export async function PUT(request: NextRequest) {
     if (!rawTraderId || !rawSource) {
       throw ApiError.validation('trader_id and source are required')
     }
+    if (
+      typeof body.profile_version !== 'number' ||
+      !Number.isSafeInteger(body.profile_version) ||
+      body.profile_version < 0
+    ) {
+      throw ApiError.validation('A valid profile_version is required')
+    }
+    const profileVersion = body.profile_version
     const source = rawSource.toLowerCase()
     let traderId = rawTraderId
     if (isDexWalletPlatform(source)) {
@@ -114,10 +124,15 @@ export async function PUT(request: NextRequest) {
     if (body.can_receive_messages !== undefined)
       input.can_receive_messages = !!body.can_receive_messages
 
+    if (Object.keys(input).length === 0) {
+      throw ApiError.validation('No fields to update')
+    }
+
     const updated = await updateVerifiedTrader(
       supabase,
       user.id,
       { trader_id: traderId, source },
+      profileVersion,
       input
     )
     if (
@@ -131,6 +146,14 @@ export async function PUT(request: NextRequest) {
 
     return success({ verified_trader: updated })
   } catch (error: unknown) {
+    if (isVerifiedTraderProfileConflict(error)) {
+      return handleError(
+        new ApiError('Profile changed since it was loaded; your draft was not saved', {
+          code: ErrorCode.DUPLICATE_ACTION,
+        }),
+        'verified trader PUT'
+      )
+    }
     return handleError(error, 'verified trader PUT')
   }
 }

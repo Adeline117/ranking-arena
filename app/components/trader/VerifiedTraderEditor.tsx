@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase/client'
 import { getCsrfHeaders } from '@/lib/api/client'
 
 export interface VerifiedTraderProfileData {
+  profile_version: number
   display_name?: string | null
   bio?: string | null
   avatar_url?: string | null
@@ -44,8 +45,55 @@ type EditableProfileField = (typeof EDITABLE_PROFILE_FIELDS)[number]
 type ProfileFormValues = Record<EditableProfileField, string>
 type ProfileUpdates = Partial<Record<EditableProfileField, string | null>>
 
+class VerifiedTraderProfileConflictError extends Error {}
+
 function normalizedProfileValue(value: string): string | null {
   return value.trim() || null
+}
+
+function profileValuesFromData(data: VerifiedTraderProfileData): ProfileFormValues {
+  return {
+    display_name: data.display_name ?? '',
+    bio: data.bio ?? '',
+    twitter_url: data.twitter_url ?? '',
+    telegram_url: data.telegram_url ?? '',
+    discord_url: data.discord_url ?? '',
+    website_url: data.website_url ?? '',
+  }
+}
+
+function isValidProfileVersion(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+function isProfileAcknowledgement(
+  value: unknown,
+  identity: { traderId: string; source: string },
+  expectedVersion: number,
+  updates: ProfileUpdates
+): value is VerifiedTraderProfileData & { trader_id: string; source: string } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const acknowledgement = value as Record<string, unknown>
+  return (
+    acknowledgement.trader_id === identity.traderId &&
+    acknowledgement.source === identity.source &&
+    isValidProfileVersion(acknowledgement.profile_version) &&
+    acknowledgement.profile_version >= expectedVersion &&
+    acknowledgement.profile_version <= expectedVersion + 1 &&
+    EDITABLE_PROFILE_FIELDS.every(
+      (field) => acknowledgement[field] === null || typeof acknowledgement[field] === 'string'
+    ) &&
+    Object.entries(updates).every(([field, update]) => acknowledgement[field] === update)
+  )
+}
+
+function responseErrorMessage(value: unknown): string {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return ''
+  const error = (value as Record<string, unknown>).error
+  if (typeof error === 'string') return error
+  if (typeof error !== 'object' || error === null || Array.isArray(error)) return ''
+  const message = (error as Record<string, unknown>).message
+  return typeof message === 'string' ? message : ''
 }
 
 function profileValuesEqual(left: ProfileFormValues, right: ProfileFormValues): boolean {
@@ -76,28 +124,15 @@ export default function VerifiedTraderEditor({
 
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const externalValues = useMemo(
-    () => ({
-      display_name: currentData.display_name ?? '',
-      bio: currentData.bio ?? '',
-      twitter_url: currentData.twitter_url ?? '',
-      telegram_url: currentData.telegram_url ?? '',
-      discord_url: currentData.discord_url ?? '',
-      website_url: currentData.website_url ?? '',
-    }),
-    [
-      currentData.bio,
-      currentData.discord_url,
-      currentData.display_name,
-      currentData.telegram_url,
-      currentData.twitter_url,
-      currentData.website_url,
-    ]
-  )
+  const externalVersion = currentData.profile_version
+  const externalValues = useMemo(() => profileValuesFromData(currentData), [currentData])
   const [formValues, setFormValues] = useState<ProfileFormValues>(() => externalValues)
   const initialValuesRef = useRef(externalValues)
   const lastExternalValuesRef = useRef(externalValues)
   const latestExternalValuesRef = useRef(externalValues)
+  const initialVersionRef = useRef(externalVersion)
+  const lastExternalVersionRef = useRef(externalVersion)
+  const latestExternalVersionRef = useRef(externalVersion)
   const identityKey = `${source}\u0000${traderId}`
   const identityKeyRef = useRef(identityKey)
   const renderedIdentityKeyRef = useRef(identityKey)
@@ -107,6 +142,7 @@ export default function VerifiedTraderEditor({
   // request may settle before effects for a new identity or refreshed profile
   // have run, so async completion must not rely on its render-time closure.
   latestExternalValuesRef.current = externalValues
+  latestExternalVersionRef.current = externalVersion
   renderedIdentityKeyRef.current = identityKey
 
   useEffect(
@@ -128,35 +164,52 @@ export default function VerifiedTraderEditor({
       // The old request may still finish, but it must become a complete no-op.
       saveGenerationRef.current += 1
       lastExternalValuesRef.current = externalValues
+      lastExternalVersionRef.current = externalVersion
       initialValuesRef.current = externalValues
+      initialVersionRef.current = externalVersion
       setFormValues(externalValues)
       setSaving(false)
       setIsEditing(false)
       return
     }
-    if (isEditing || profileValuesEqual(lastExternalValuesRef.current, externalValues)) return
+    if (
+      isEditing ||
+      (profileValuesEqual(lastExternalValuesRef.current, externalValues) &&
+        lastExternalVersionRef.current === externalVersion)
+    )
+      return
     lastExternalValuesRef.current = externalValues
+    lastExternalVersionRef.current = externalVersion
     initialValuesRef.current = externalValues
+    initialVersionRef.current = externalVersion
     setFormValues(externalValues)
-  }, [externalValues, identityKey, isEditing])
+  }, [externalValues, externalVersion, identityKey, isEditing])
 
   const resetToLatestProfile = () => {
-    const externalChanged = !profileValuesEqual(lastExternalValuesRef.current, externalValues)
+    const externalChanged =
+      !profileValuesEqual(lastExternalValuesRef.current, externalValues) ||
+      lastExternalVersionRef.current !== externalVersion
     const resetValues = externalChanged ? externalValues : initialValuesRef.current
     if (externalChanged) {
       lastExternalValuesRef.current = externalValues
+      lastExternalVersionRef.current = externalVersion
       initialValuesRef.current = externalValues
+      initialVersionRef.current = externalVersion
     }
     setFormValues(resetValues)
     setIsEditing(false)
   }
 
   const beginEditing = () => {
-    const externalChanged = !profileValuesEqual(lastExternalValuesRef.current, externalValues)
+    const externalChanged =
+      !profileValuesEqual(lastExternalValuesRef.current, externalValues) ||
+      lastExternalVersionRef.current !== externalVersion
     const editValues = externalChanged ? externalValues : initialValuesRef.current
     if (externalChanged) {
       lastExternalValuesRef.current = externalValues
+      lastExternalVersionRef.current = externalVersion
       initialValuesRef.current = externalValues
+      initialVersionRef.current = externalVersion
     }
     setFormValues(editValues)
     setIsEditing(true)
@@ -170,6 +223,11 @@ export default function VerifiedTraderEditor({
     const updates = changedProfileFields(initialValuesRef.current, formValues)
     if (Object.keys(updates).length === 0) {
       resetToLatestProfile()
+      return
+    }
+    const expectedVersion = initialVersionRef.current
+    if (!isValidProfileVersion(expectedVersion)) {
+      showToast(t('verifiedTraderReloadRequired'), 'error')
       return
     }
 
@@ -201,32 +259,49 @@ export default function VerifiedTraderEditor({
         body: JSON.stringify({
           trader_id: traderId,
           source,
+          profile_version: expectedVersion,
           ...updates,
         }),
       })
 
+      const responseData = await res.json().catch(() => null)
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
         if (!isCurrentSave()) return
-        throw new Error(data.error || 'Failed to save')
+        if (res.status === 409) throw new VerifiedTraderProfileConflictError()
+        throw new Error(responseErrorMessage(responseData) || 'Failed to save')
       }
       if (!isCurrentSave()) return
+      const acknowledgement =
+        typeof responseData === 'object' && responseData !== null && !Array.isArray(responseData)
+          ? (responseData as Record<string, unknown>).data
+          : null
+      const verifiedTrader =
+        typeof acknowledgement === 'object' &&
+        acknowledgement !== null &&
+        !Array.isArray(acknowledgement)
+          ? (acknowledgement as Record<string, unknown>).verified_trader
+          : null
+      if (
+        !isProfileAcknowledgement(verifiedTrader, { traderId, source }, expectedVersion, updates)
+      ) {
+        throw new Error('Invalid profile save acknowledgement')
+      }
 
       showToast(t('verifiedTraderSaved'), 'success')
-      const latestValues = latestExternalValuesRef.current
-      const savedValues = { ...latestValues }
-      for (const field of EDITABLE_PROFILE_FIELDS) {
-        if (Object.prototype.hasOwnProperty.call(updates, field)) {
-          savedValues[field] = updates[field] ?? ''
-        }
-      }
-      lastExternalValuesRef.current = latestValues
+      const savedValues = profileValuesFromData(verifiedTrader)
+      lastExternalValuesRef.current = latestExternalValuesRef.current
+      lastExternalVersionRef.current = latestExternalVersionRef.current
       initialValuesRef.current = savedValues
+      initialVersionRef.current = verifiedTrader.profile_version
       setFormValues(savedValues)
       setIsEditing(false)
       onSaved?.()
     } catch (error) {
       if (!isCurrentSave()) return
+      if (error instanceof VerifiedTraderProfileConflictError) {
+        showToast(t('verifiedTraderSaveConflict'), 'error')
+        return
+      }
       const msg = error instanceof Error ? error.message : ''
       showToast(`${t('verifiedTraderSaveFailed')} ${msg}`, 'error')
     } finally {

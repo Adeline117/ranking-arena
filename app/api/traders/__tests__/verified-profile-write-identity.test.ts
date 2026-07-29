@@ -42,6 +42,8 @@ jest.mock('@/lib/api', () => ({
 
 jest.mock('@/lib/data/trader-claims', () => ({
   getVerifiedTrader: jest.fn(),
+  isVerifiedTraderProfileConflict: (error: unknown) =>
+    (error as { code?: string } | null)?.code === '40001',
   updateVerifiedTrader: (...args: unknown[]) => mockUpdateVerifiedTrader(...args),
 }))
 
@@ -62,6 +64,7 @@ const verified = {
   user_id: 'user-1',
   trader_id: 'trader-b',
   source: 'binance_futures',
+  profile_version: 8,
 }
 
 describe.each([
@@ -78,6 +81,7 @@ describe.each([
       request({
         trader_id: 'trader-b',
         source: 'BINANCE_FUTURES',
+        profile_version: 7,
         display_name: 'Beta Updated',
       })
     )
@@ -87,8 +91,22 @@ describe.each([
       mockSupabase,
       'user-1',
       { trader_id: 'trader-b', source: 'binance_futures' },
+      7,
       expect.objectContaining({ display_name: 'Beta Updated' })
     )
+  })
+
+  it('rejects a write without the revision read with the profile', async () => {
+    const response = await updateProfile(
+      request({
+        trader_id: 'trader-b',
+        source: 'binance_futures',
+        display_name: 'Ambiguous revision',
+      })
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockUpdateVerifiedTrader).not.toHaveBeenCalled()
   })
 
   it('rejects a write without the target trader identity', async () => {
@@ -105,6 +123,7 @@ describe.each([
       request({
         trader_id: 'someone-elses-trader',
         source: 'bybit',
+        profile_version: 3,
         bio: 'Must not be saved',
       })
     )
@@ -114,6 +133,7 @@ describe.each([
       mockSupabase,
       'user-1',
       { trader_id: 'someone-elses-trader', source: 'bybit' },
+      3,
       expect.objectContaining({ bio: 'Must not be saved' })
     )
   })
@@ -132,10 +152,33 @@ describe.each([
       request({
         trader_id: 'trader-b',
         source: 'binance_futures',
+        profile_version: 7,
         bio: 'Scoped update',
       })
     )
 
     expect(response.status).toBe(403)
+  })
+
+  it('returns 409 when another editor committed the loaded revision first', async () => {
+    mockUpdateVerifiedTrader.mockRejectedValue({
+      code: '40001',
+      message: 'verified-trader profile changed since it was loaded',
+    })
+
+    const response = await updateProfile(
+      request({
+        trader_id: 'trader-b',
+        source: 'binance_futures',
+        profile_version: 7,
+        bio: 'Stale draft',
+      })
+    )
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('draft was not saved'),
+    })
   })
 })

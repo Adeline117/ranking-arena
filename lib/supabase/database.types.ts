@@ -9802,6 +9802,7 @@ export type Database = {
           display_name: string | null
           id: string
           is_primary: boolean | null
+          profile_version: number
           source: string
           telegram_url: string | null
           trader_id: string
@@ -9823,6 +9824,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           is_primary?: boolean | null
+          profile_version?: number
           source: string
           telegram_url?: string | null
           trader_id: string
@@ -9844,6 +9846,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           is_primary?: boolean | null
+          profile_version?: number
           source?: string
           telegram_url?: string | null
           trader_id?: string
@@ -12694,6 +12697,16 @@ export type Database = {
           removed_source: string
           removed_trader_id: string
         }[]
+      }
+      update_verified_trader_profile_cas: {
+        Args: {
+          p_expected_version: number
+          p_source: string
+          p_trader_id: string
+          p_updates: Json
+          p_user_id: string
+        }
+        Returns: Json
       }
       update_own_profile_settings: {
         Args: {
