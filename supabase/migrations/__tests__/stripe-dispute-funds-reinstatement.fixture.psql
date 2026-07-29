@@ -1,0 +1,559 @@
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+
+DO $restore_tip$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result :=
+    public.record_stripe_charge_dispute_reinstatement_atomic(
+      true,
+      'evt_reinstate_tip',
+      1900000101,
+      'dp_dispute_tip',
+      'won',
+      'fraudulent',
+      500,
+      'usd',
+      'cus_dispute_tip',
+      'pi_dispute_tip',
+      'ch_dispute_tip',
+      500,
+      0
+    );
+  IF v_result IS DISTINCT FROM '{"status":"restored"}'::jsonb THEN
+    RAISE EXCEPTION 'won Tip dispute was not restored: %', v_result;
+  END IF;
+
+  v_result :=
+    public.record_stripe_charge_dispute_reinstatement_atomic(
+      true,
+      'evt_reinstate_tip',
+      1900000101,
+      'dp_dispute_tip',
+      'won',
+      'fraudulent',
+      500,
+      'usd',
+      'cus_dispute_tip',
+      'pi_dispute_tip',
+      'ch_dispute_tip',
+      500,
+      0
+    );
+  IF v_result IS DISTINCT FROM
+    '{"status":"already_restored"}'::jsonb
+  THEN
+    RAISE EXCEPTION
+      'won Tip dispute replay was not idempotent: %',
+      v_result;
+  END IF;
+
+  IF NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      JOIN public.tip_completion_notification_deliveries AS delivery
+        ON delivery.tip_id = tip.id
+      JOIN public.notifications AS notification
+        ON notification.id = delivery.notification_id
+      WHERE tip.id =
+          'e6200000-0000-4000-8000-000000000001'
+        AND tip.status = 'completed'
+        AND delivery.disposition = 'delivered'
+        AND delivery.disposed_at IS NULL
+        AND notification.type = 'tip_received'
+        AND notification.reference_id = tip.id
+    )
+  THEN
+    RAISE EXCEPTION
+      'won Tip dispute did not restore durable notification authority';
+  END IF;
+END
+$restore_tip$;
+
+DO $hold_pro_while_cancellation_is_live$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result :=
+    public.record_stripe_charge_dispute_reinstatement_atomic(
+      true,
+      'evt_reinstate_pro',
+      1900000102,
+      'dp_dispute_pro',
+      'won',
+      'fraudulent',
+      1000,
+      'usd',
+      'cus_dispute_pro',
+      'pi_dispute_pro',
+      'ch_dispute_pro',
+      1000,
+      0
+    );
+  IF v_result IS DISTINCT FROM
+    '{"status":"action_in_flight"}'::jsonb
+  THEN
+    RAISE EXCEPTION
+      'live Pro cancellation lease was not fenced: %',
+      v_result;
+  END IF;
+  IF EXISTS (
+      SELECT 1
+      FROM public.stripe_charge_dispute_reinstatement_projections
+        AS projection
+      WHERE projection.livemode
+        AND projection.stripe_event_id = 'evt_reinstate_pro'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_profiles AS profile
+      WHERE profile.id =
+          'e6000000-0000-4000-8000-000000000003'
+        AND profile.is_pro
+    )
+  THEN
+    RAISE EXCEPTION
+      'live cancellation lease allowed premature Pro restoration';
+  END IF;
+END
+$hold_pro_while_cancellation_is_live$;
+
+UPDATE public.api_tier_reversal_actions
+SET lease_expires_at =
+      pg_catalog.clock_timestamp() - interval '1 second',
+    updated_at = pg_catalog.clock_timestamp()
+WHERE product_kind = 'pro_entitlement'
+  AND livemode
+  AND stripe_subscription_id = 'sub_dispute_pro'
+  AND state = 'leased';
+
+DO $hold_pro_after_ambiguous_expired_lease$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result :=
+    public.record_stripe_charge_dispute_reinstatement_atomic(
+      true,
+      'evt_reinstate_pro',
+      1900000102,
+      'dp_dispute_pro',
+      'won',
+      'fraudulent',
+      1000,
+      'usd',
+      'cus_dispute_pro',
+      'pi_dispute_pro',
+      'ch_dispute_pro',
+      1000,
+      0
+    );
+  IF v_result IS DISTINCT FROM
+    '{"status":"manual_review"}'::jsonb
+  THEN
+    RAISE EXCEPTION
+      'expired Pro cancellation lease was treated as safe: %',
+      v_result;
+  END IF;
+  IF EXISTS (
+      SELECT 1
+      FROM public.stripe_charge_dispute_reinstatement_projections
+        AS projection
+      WHERE projection.livemode
+        AND projection.stripe_event_id = 'evt_reinstate_pro'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_profiles AS profile
+      WHERE profile.id =
+          'e6000000-0000-4000-8000-000000000003'
+        AND profile.is_pro
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'dispute'
+        AND review.object_id = 'dp_dispute_pro'
+        AND review.reason_key =
+          'stripe_dispute_reinstatement_cancellation_outcome_unknown'
+    )
+  THEN
+    RAISE EXCEPTION
+      'ambiguous expired cancellation restored Pro or lost review';
+  END IF;
+END
+$hold_pro_after_ambiguous_expired_lease$;
+
+-- Simulate an operator proving that no remote cancellation occurred and
+-- explicitly returning the action to the only auto-neutralizable state.
+UPDATE public.api_tier_reversal_actions
+SET state = 'pending',
+    lease_token = NULL,
+    lease_expires_at = NULL,
+    updated_at = pg_catalog.clock_timestamp()
+WHERE product_kind = 'pro_entitlement'
+  AND livemode
+  AND stripe_subscription_id = 'sub_dispute_pro'
+  AND state = 'leased';
+
+DO $restore_pro_after_lease_expiry$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result :=
+    public.record_stripe_charge_dispute_reinstatement_atomic(
+      true,
+      'evt_reinstate_pro',
+      1900000102,
+      'dp_dispute_pro',
+      'won',
+      'fraudulent',
+      1000,
+      'usd',
+      'cus_dispute_pro',
+      'pi_dispute_pro',
+      'ch_dispute_pro',
+      1000,
+      0
+    );
+  IF v_result IS DISTINCT FROM '{"status":"restored"}'::jsonb THEN
+    RAISE EXCEPTION 'won Pro dispute was not restored: %', v_result;
+  END IF;
+  IF NOT EXISTS (
+      SELECT 1
+      FROM public.subscriptions AS subscription
+      JOIN public.user_profiles AS profile
+        ON profile.id = subscription.user_id
+      WHERE subscription.user_id =
+          'e6000000-0000-4000-8000-000000000003'
+        AND subscription.stripe_subscription_id =
+          'sub_dispute_pro'
+        AND subscription.status = 'active'
+        AND profile.is_pro
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.api_tier_reversal_actions AS action
+      WHERE action.product_kind = 'pro_entitlement'
+        AND action.livemode
+        AND action.stripe_subscription_id =
+          'sub_dispute_pro'
+        AND action.state = 'completed'
+        AND action.completed_disposition =
+          'funds_reinstated'
+    )
+  THEN
+    RAISE EXCEPTION
+      'won Pro dispute lost entitlement or cancellation neutralization';
+  END IF;
+END
+$restore_pro_after_lease_expiry$;
+
+DO $restore_group_pass$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result :=
+    public.record_stripe_charge_dispute_reinstatement_atomic(
+      true,
+      'evt_reinstate_group',
+      1900000103,
+      'dp_dispute_group',
+      'won',
+      'fraudulent',
+      2500,
+      'usd',
+      'cus_dispute_group',
+      'pi_dispute_group',
+      'ch_dispute_group',
+      2500,
+      0
+    );
+  IF v_result IS DISTINCT FROM '{"status":"restored"}'::jsonb THEN
+    RAISE EXCEPTION
+      'won Group Pass dispute was not restored: %',
+      v_result;
+  END IF;
+  IF NOT EXISTS (
+      SELECT 1
+      FROM public.group_payment_consumptions AS consumption
+      JOIN public.group_subscriptions AS subscription
+        ON subscription.id = consumption.subscription_id
+      JOIN public.group_members AS member
+        ON member.group_id = consumption.group_id
+       AND member.user_id = consumption.user_id
+      WHERE consumption.payment_intent_id =
+          'pi_dispute_group'
+        AND subscription.status = 'active'
+        AND subscription.expires_at >
+          pg_catalog.statement_timestamp()
+        AND member.role::text = 'member'
+    )
+  THEN
+    RAISE EXCEPTION
+      'won Group Pass dispute did not restore exact paid access';
+  END IF;
+END
+$restore_group_pass$;
+
+DO $preserve_full_refund$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result :=
+    public.record_stripe_charge_dispute_reinstatement_atomic(
+      true,
+      'evt_reinstate_refunded_tip',
+      1900000104,
+      'dp_dispute_first_tip',
+      'won',
+      'fraudulent',
+      700,
+      'usd',
+      'cus_dispute_first_tip',
+      'pi_dispute_first_tip',
+      'ch_dispute_first_tip',
+      700,
+      700
+    );
+  IF v_result IS DISTINCT FROM
+    '{"status":"refund_preserved"}'::jsonb
+  THEN
+    RAISE EXCEPTION
+      'full refund did not outrank dispute reinstatement: %',
+      v_result;
+  END IF;
+  IF NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      JOIN public.tip_completion_notification_deliveries AS delivery
+        ON delivery.tip_id = tip.id
+      WHERE tip.id =
+          'e6200000-0000-4000-8000-000000000002'
+        AND tip.status = 'refunded'
+        AND delivery.disposition = 'refund_suppressed'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.notifications AS notification
+      WHERE notification.type = 'tip_received'
+        AND notification.reference_id =
+          'e6200000-0000-4000-8000-000000000002'
+    )
+  THEN
+    RAISE EXCEPTION
+      'full-refunded Tip authority was revived';
+  END IF;
+END
+$preserve_full_refund$;
+
+INSERT INTO auth.users(id)
+VALUES ('e6000000-0000-4000-8000-000000000006');
+INSERT INTO public.user_profiles(
+  id,
+  handle,
+  stripe_customer_id
+) VALUES (
+  'e6000000-0000-4000-8000-000000000006',
+  'reinstatement_first_tip',
+  'cus_reinstatement_first_tip'
+);
+INSERT INTO public.posts(id, author_id, title, content)
+VALUES (
+  'e6100000-0000-4000-8000-000000000003',
+  'e6000000-0000-4000-8000-000000000002',
+  'reinstatement before dispute and payment',
+  'reinstatement before dispute and payment'
+);
+
+DO $record_reinstatement_before_dispute$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result :=
+    public.record_stripe_charge_dispute_reinstatement_atomic(
+      true,
+      'evt_reinstatement_first_tip',
+      1900000105,
+      'dp_reinstatement_first_tip',
+      'won',
+      'fraudulent',
+      900,
+      'usd',
+      'cus_reinstatement_first_tip',
+      'pi_reinstatement_first_tip',
+      'ch_reinstatement_first_tip',
+      900,
+      0
+    );
+  IF v_result IS DISTINCT FROM
+    '{"status":"awaiting_dispute_created"}'::jsonb
+  THEN
+    RAISE EXCEPTION
+      'reinstatement-first event was not durably accepted: %',
+      v_result;
+  END IF;
+
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_reinstatement_first_dispute',
+    1900000106,
+    'dp_reinstatement_first_tip',
+    'warning_needs_response',
+    'fraudulent',
+    900,
+    'usd',
+    'cus_reinstatement_first_tip',
+    'pi_reinstatement_first_tip',
+    'ch_reinstatement_first_tip',
+    900
+  );
+  IF v_result IS DISTINCT FROM '{"status":"not_api"}'::jsonb THEN
+    RAISE EXCEPTION
+      'reinstatement-first dispute was not durably accepted: %',
+      v_result;
+  END IF;
+END
+$record_reinstatement_before_dispute$;
+
+INSERT INTO public.tips(
+  id,
+  post_id,
+  from_user_id,
+  to_user_id,
+  amount_cents,
+  status,
+  stripe_checkout_session_id
+) VALUES (
+  'e6200000-0000-4000-8000-000000000003',
+  'e6100000-0000-4000-8000-000000000003',
+  'e6000000-0000-4000-8000-000000000006',
+  'e6000000-0000-4000-8000-000000000002',
+  900,
+  'pending',
+  'cs_reinstatement_first_tip'
+);
+
+SELECT public.complete_tip_with_stripe_ownership_atomic(
+  'e6200000-0000-4000-8000-000000000003',
+  'cus_reinstatement_first_tip',
+  'pi_reinstatement_first_tip',
+  'ch_reinstatement_first_tip',
+  'cs_reinstatement_first_tip',
+  900,
+  'usd',
+  pg_catalog.clock_timestamp()
+);
+
+DO $prove_reinstatement_first_convergence$
+DECLARE
+  v_readiness jsonb;
+BEGIN
+  IF NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      JOIN public.tip_completion_notification_deliveries AS delivery
+        ON delivery.tip_id = tip.id
+      JOIN public.notifications AS notification
+        ON notification.id = delivery.notification_id
+      WHERE tip.id =
+          'e6200000-0000-4000-8000-000000000003'
+        AND tip.status = 'completed'
+        AND delivery.disposition = 'delivered'
+        AND notification.type = 'tip_received'
+        AND notification.reference_id = tip.id
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_charge_dispute_projections AS projection
+      WHERE projection.livemode
+        AND projection.stripe_event_id =
+          'evt_reinstatement_first_dispute'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_charge_dispute_reinstatement_projections
+        AS projection
+      WHERE projection.livemode
+        AND projection.stripe_event_id =
+          'evt_reinstatement_first_tip'
+        AND projection.result ->> 'status' = 'restored'
+    )
+  THEN
+    RAISE EXCEPTION
+      'reinstatement-first/dispute-first/payment-last order did not converge';
+  END IF;
+
+  BEGIN
+    UPDATE public.stripe_charge_dispute_reinstatement_events
+    SET captured_amount = captured_amount + 1
+    WHERE livemode
+      AND stripe_event_id = 'evt_reinstate_tip';
+    RAISE EXCEPTION
+      'reinstatement event audit ledger accepted mutation';
+  EXCEPTION
+    WHEN check_violation THEN
+      NULL;
+  END;
+
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  -- The shared harness deliberately carries unrelated legacy readiness debt.
+  -- This proof owns only dispute/reinstatement and notification convergence.
+  IF COALESCE(
+      (v_readiness ->> 'unprojected_charge_disputes')::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'charge_dispute_identity_anomalies'
+      )::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'charge_dispute_authority_drift'
+      )::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'unprojected_dispute_reinstatements'
+      )::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'dispute_reinstatement_identity_anomalies'
+      )::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'dispute_reinstatement_authority_drift'
+      )::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'notification_delivery_anomalies'
+      )::integer,
+      -1
+    ) <> 0
+  THEN
+    RAISE EXCEPTION
+      'Stripe dispute reinstatement readiness did not converge: %',
+      v_readiness;
+  END IF;
+END
+$prove_reinstatement_first_convergence$;
+
+\echo 'Stripe dispute funds reinstatement fixture passed'

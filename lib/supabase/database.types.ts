@@ -6234,6 +6234,99 @@ export type Database = {
           },
         ]
       }
+      stripe_charge_dispute_reinstatement_events: {
+        Row: {
+          captured_amount: number
+          currency: string
+          dispute_amount: number
+          dispute_reason: string
+          dispute_status: string
+          livemode: boolean
+          recorded_at: string
+          refund_succeeded_amount: number
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_dispute_id: string
+          stripe_event_created: number
+          stripe_event_id: string
+          stripe_payment_intent_id: string | null
+        }
+        Insert: {
+          captured_amount: number
+          currency: string
+          dispute_amount: number
+          dispute_reason: string
+          dispute_status: string
+          livemode: boolean
+          recorded_at?: string
+          refund_succeeded_amount: number
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_dispute_id: string
+          stripe_event_created: number
+          stripe_event_id: string
+          stripe_payment_intent_id?: string | null
+        }
+        Update: {
+          captured_amount?: number
+          currency?: string
+          dispute_amount?: number
+          dispute_reason?: string
+          dispute_status?: string
+          livemode?: boolean
+          recorded_at?: string
+          refund_succeeded_amount?: number
+          stripe_charge_id?: string
+          stripe_customer_id?: string
+          stripe_dispute_id?: string
+          stripe_event_created?: number
+          stripe_event_id?: string
+          stripe_payment_intent_id?: string | null
+        }
+        Relationships: []
+      }
+      stripe_charge_dispute_reinstatement_projections: {
+        Row: {
+          livemode: boolean
+          ownership_id: string
+          product_kind: string
+          projected_at: string
+          result: Json
+          stripe_event_id: string
+        }
+        Insert: {
+          livemode: boolean
+          ownership_id: string
+          product_kind: string
+          projected_at?: string
+          result: Json
+          stripe_event_id: string
+        }
+        Update: {
+          livemode?: boolean
+          ownership_id?: string
+          product_kind?: string
+          projected_at?: string
+          result?: Json
+          stripe_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_charge_dispute_reinstatement_projection_event_fkey'
+            columns: ['livemode', 'stripe_event_id']
+            isOneToOne: true
+            referencedRelation: 'stripe_charge_dispute_reinstatement_events'
+            referencedColumns: ['livemode', 'stripe_event_id']
+          },
+          {
+            foreignKeyName: 'stripe_dispute_reinstatement_projection_owner_fkey'
+            columns: ['ownership_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_payment_ownerships'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       stripe_charge_refund_observation_modes: {
         Row: {
           livemode: boolean
@@ -10230,6 +10323,24 @@ export type Database = {
           p_dispute_reason: string
           p_dispute_status: string
           p_livemode: boolean
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_dispute_id: string
+          p_stripe_event_created: number
+          p_stripe_event_id: string
+          p_stripe_payment_intent_id: string | null
+        }
+        Returns: Json
+      }
+      record_stripe_charge_dispute_reinstatement_atomic: {
+        Args: {
+          p_captured_amount: number
+          p_currency: string
+          p_dispute_amount: number
+          p_dispute_reason: string
+          p_dispute_status: string
+          p_livemode: boolean
+          p_refund_succeeded_amount: number
           p_stripe_charge_id: string
           p_stripe_customer_id: string
           p_stripe_dispute_id: string

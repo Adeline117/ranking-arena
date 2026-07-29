@@ -152,6 +152,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const verifiedTraderProfileRevisionMigration =
     '20260729070000_atomic_verified_trader_profile_revision.sql'
   const publicPlatformStatsAuthorityMigration = '20260729065500_public_platform_stats_authority.sql'
+  const stripeDisputeReinstatementMigration =
+    '20260729069000_stripe_dispute_funds_reinstatement.sql'
 
   assert.equal(predeploy.length, 121)
   assert.deepEqual(postdeploy, [
@@ -161,6 +163,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729063000_close_trader_follow_direct_writes.sql',
     '20260729065000_stripe_entitlement_livemode_authority.sql',
     stripeDisputeAuthorityMigration,
+    stripeDisputeReinstatementMigration,
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   assert.deepEqual(recoveryPrerequisites, [
@@ -266,7 +269,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 137)
+  assert.equal(new Set(all).size, 138)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -276,16 +279,30 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     postdeploy.filter((migration) => migration === stripeDisputeAuthorityMigration).length,
     1
   )
+  assert.equal(
+    postdeploy.filter((migration) => migration === stripeDisputeReinstatementMigration).length,
+    1
+  )
   assert.ok(
     postdeploy.indexOf(stripeDisputeAuthorityMigration) >
       postdeploy.indexOf('20260729065000_stripe_entitlement_livemode_authority.sql')
   )
+  assert.ok(
+    postdeploy.indexOf(stripeDisputeReinstatementMigration) >
+      postdeploy.indexOf(stripeDisputeAuthorityMigration)
+  )
   assert.ok(!predeploy.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!predeploy.includes(stripeDisputeReinstatementMigration))
   assert.ok(!recoveryPrerequisites.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!recoveryPrerequisites.includes(stripeDisputeReinstatementMigration))
   assert.ok(!concurrentRecovery.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!concurrentRecovery.includes(stripeDisputeReinstatementMigration))
   assert.ok(!recovery.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!recovery.includes(stripeDisputeReinstatementMigration))
   assert.ok(!quarantined.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!quarantined.includes(stripeDisputeReinstatementMigration))
   assert.ok(!superseded.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!superseded.includes(stripeDisputeReinstatementMigration))
   assert.equal(predeploy.filter((migration) => migration === claimRevocationMigration).length, 1)
   assert.ok(!postdeploy.includes(claimRevocationMigration))
   assert.ok(!recoveryPrerequisites.includes(claimRevocationMigration))

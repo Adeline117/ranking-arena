@@ -76,6 +76,9 @@ const readyEntitlementAuthority = {
   unprojected_charge_disputes: 0,
   charge_dispute_identity_anomalies: 0,
   charge_dispute_authority_drift: 0,
+  unprojected_dispute_reinstatements: 0,
+  dispute_reinstatement_identity_anomalies: 0,
+  dispute_reinstatement_authority_drift: 0,
 }
 
 function chainable(result: { count: number | null; error: null | { message: string } }) {
