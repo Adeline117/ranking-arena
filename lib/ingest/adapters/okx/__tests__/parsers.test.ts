@@ -118,6 +118,16 @@ describe('parseOkxPositions', () => {
     expect(positions[0].markPrice).toBeCloseTo(1673.32, 2)
     expect(positions[0].unrealizedPnl).toBeCloseTo(47.1109, 4)
   })
+
+  it('allows only an explicit successful empty snapshot', () => {
+    expect(parseOkxPositions({ code: '0', data: [] }, ctx)).toEqual([])
+    expect(() => parseOkxPositions({ code: '50011', data: [] }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseOkxPositions({ code: '0', data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
 })
 
 describe('parseOkxHistory', () => {

@@ -139,6 +139,16 @@ describe('parseLbankPositions', () => {
     })
     expect(positions[0].entryPrice).toBeCloseTo(0.3595415, 5)
   })
+
+  it('allows only an explicit successful empty snapshot', () => {
+    expect(parseLbankPositions({ code: 200, data: [] }, ctx)).toEqual([])
+    expect(() => parseLbankPositions({ code: 403, data: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseLbankPositions({ code: 200, data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
 })
 
 describe('parseLbankHistory', () => {

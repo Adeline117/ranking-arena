@@ -263,11 +263,34 @@ export function parseToobitProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 // ── Positions (current-lead-orders, mask-aware) ──
 
 export function parseToobitPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const list = objects(((raw ?? {}) as { data?: unknown }).data)
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[toobit] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== 200) {
+    throw new TypeError(`[toobit] position response failed with code ${String(envelope.code)}`)
+  }
+  if (!Array.isArray(envelope.data)) {
+    throw new TypeError('[toobit] malformed position response data')
+  }
+  if (
+    envelope.data.some(
+      (item) =>
+        typeof item !== 'object' ||
+        item === null ||
+        Array.isArray(item) ||
+        Object.values(item as Dict).some((value) => value === '****' || value === '--')
+    )
+  ) {
+    throw new TypeError('[toobit] position response is visibility-masked or malformed')
+  }
+  const list = envelope.data as Dict[]
   const out: ParsedPosition[] = []
   for (const item of list) {
     const symbol = str(item.symbolId) ?? str(item.symbolName)
-    if (!symbol) continue // leader masked this position ("****")
+    if (!symbol) {
+      throw new TypeError('[toobit] position response row has no symbol')
+    }
     out.push({
       symbol,
       side: side(item.isLong),

@@ -141,6 +141,16 @@ describe('parseCoinexPositions', () => {
       unrealizedPnl: -0.22833,
     })
   })
+
+  it('allows only an explicit successful empty snapshot', () => {
+    expect(parseCoinexPositions({ code: 0, data: [] }, ctx)).toEqual([])
+    expect(() => parseCoinexPositions({ code: 400, data: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseCoinexPositions({ code: 0, data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
 })
 
 describe('parseCoinexHistory', () => {
