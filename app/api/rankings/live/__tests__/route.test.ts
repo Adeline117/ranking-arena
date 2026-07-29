@@ -161,6 +161,40 @@ import { PUBLIC_RANKING_POSTGREST_EXCLUSION } from '@/lib/rankings/publication-p
 import { GET } from '../route'
 
 const TEST_AUTHORITY_SOURCES = ['binance_futures', 'hyperliquid']
+const TEST_COHORT_ID = '11111111-1111-4111-8111-111111111111'
+let currentCohortId = TEST_COHORT_ID
+
+function publicationFor(season: '7D' | '30D' | '90D', scoreCohortId = currentCohortId) {
+  return {
+    state: 'sealed' as const,
+    season,
+    scoreCohortId,
+    proofs: TEST_AUTHORITY_SOURCES.map((source) => ({
+      season_id: season,
+      source,
+      source_as_of: '2026-07-29T10:00:00.000000Z',
+      recorded_at: '2026-07-29T10:01:00.000000Z',
+      score_cohort_id: scoreCohortId,
+      rank_mutation_seq: 9,
+      current_mutation_seq: 9,
+      published_rank_count: source === 'binance_futures' || source === 'hyperliquid' ? 1 : 0,
+      published_identity_sha256: 'a'.repeat(64),
+      is_sealed: true,
+    })),
+  }
+}
+
+function sealedCacheEntry(value: unknown, scoreCohortId = TEST_COHORT_ID) {
+  const publication = publicationFor('90D', scoreCohortId)
+  return {
+    contract: 'sealed-ranking-cache@1',
+    season: '90D',
+    publicationIdentity: JSON.stringify(publication),
+    publication,
+    cachedAt: '2026-07-29T10:02:00.000Z',
+    value,
+  }
+}
 
 function request() {
   return {
@@ -171,6 +205,7 @@ function request() {
 describe('GET /api/rankings/live publication authority', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    currentCohortId = TEST_COHORT_ID
     mockCheckRateLimit.mockResolvedValue(null)
     mockTieredGet.mockResolvedValue({ data: null, layer: null })
     mockTieredSet.mockResolvedValue(undefined)
@@ -187,24 +222,7 @@ describe('GET /api/rankings/live publication authority', () => {
           proofs: Array<{ published_rank_count: number }>
         }) => Promise<unknown>
       ) => {
-        const scoreCohortId = '11111111-1111-4111-8111-111111111111'
-        const publication = {
-          state: 'sealed' as const,
-          season,
-          scoreCohortId,
-          proofs: TEST_AUTHORITY_SOURCES.map((source) => ({
-            season_id: season,
-            source,
-            source_as_of: '2026-07-29T10:00:00.000000Z',
-            recorded_at: '2026-07-29T10:01:00.000000Z',
-            score_cohort_id: scoreCohortId,
-            rank_mutation_seq: 9,
-            current_mutation_seq: 9,
-            published_rank_count: source === 'binance_futures' || source === 'hyperliquid' ? 1 : 0,
-            published_identity_sha256: 'a'.repeat(64),
-            is_sealed: true,
-          })),
-        }
+        const publication = publicationFor(season)
         return {
           value: await reader(publication),
           publication,
@@ -310,5 +328,62 @@ describe('GET /api/rankings/live publication authority', () => {
     expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
     expect(mockFrom).toHaveBeenCalledWith('leaderboard_ranks')
     expect(mockTieredSet).toHaveBeenCalledTimes(1)
+  })
+
+  it('serves a sealed cache page only after its generation is still current', async () => {
+    mockTieredGet.mockResolvedValue({
+      layer: 'redis',
+      data: sealedCacheEntry({
+        traders: [{ id: 'current-cache-row', source: 'binance_futures', rank: 1 }],
+        total: 1,
+        totalCount: 1,
+        period: '90D',
+        source: 'database_sealed',
+        hasMore: false,
+      }),
+    })
+
+    const response = await GET(request())
+    const body = await response.json()
+
+    expect(body.traders).toEqual([
+      expect.objectContaining({ source: 'binance_futures', id: 'current-cache-row' }),
+    ])
+    expect(response.headers.get('X-Cache')).toBe('HIT')
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockTieredSet).not.toHaveBeenCalled()
+  })
+
+  it('rejects a sealed cache page after the authority advances to another cohort', async () => {
+    mockTieredGet.mockResolvedValue({
+      layer: 'redis',
+      data: sealedCacheEntry({
+        traders: [row('binance_futures', 'old-cache-row', 1)],
+        total: 1,
+        totalCount: 1,
+        period: '90D',
+        source: 'database_sealed',
+        hasMore: false,
+      }),
+    })
+    currentCohortId = '22222222-2222-4222-8222-222222222222'
+    const query = queryResult([row('binance_futures', 'current-db-row', 1)])
+    mockFrom.mockReturnValue(query)
+
+    const response = await GET(request())
+    const body = await response.json()
+
+    expect(body.traders).toEqual([
+      expect.objectContaining({ source: 'binance_futures', id: 'current-db-row' }),
+    ])
+    expect(JSON.stringify(body)).not.toContain('old-cache-row')
+    expect(response.headers.get('X-Cache')).toBe('MISS')
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(2)
+    expect(query.filter).toHaveBeenCalledWith(
+      'rank_publication_id',
+      'eq',
+      '22222222-2222-4222-8222-222222222222'
+    )
   })
 })

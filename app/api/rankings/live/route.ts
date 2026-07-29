@@ -61,27 +61,44 @@ export async function GET(request: NextRequest) {
   const { period, limit, offset } = parsed.data
 
   try {
+    const supabase = getSupabaseAdmin()
     // Dedicated read-through cache: generic live pages have no generation proof.
     const cacheKey = publicRankingCacheKey(`rankings:live:sealed-v6:${period}:${limit}:${offset}`)
     const cached = await tieredGet<unknown>(cacheKey, 'hot')
     const cachedEntry = parseSealedRankingCacheEntry<Record<string, unknown>>(cached.data, period)
     if (cachedEntry) {
-      const response = NextResponse.json(sanitizePublicRankingSourcePayload(cachedEntry.value))
-      // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
-      // the Vercel CDN instead of every client invoking the function.
-      // Keyed by full URL (period/limit/offset), no auth personalization.
-      response.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
-      response.headers.set('X-Cache', 'HIT')
-      response.headers.set('X-Cache-Layer', cached.layer || 'unknown')
-      return response
+      try {
+        const currentGeneration = await readSealedRankingAuthorityGeneration(
+          supabase,
+          period,
+          async () => null,
+          { timeoutMs: 10_000 }
+        )
+        if (currentGeneration.publicationIdentity === cachedEntry.publicationIdentity) {
+          const response = NextResponse.json(sanitizePublicRankingSourcePayload(cachedEntry.value))
+          // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
+          // the Vercel CDN instead of every client invoking the function.
+          // Keyed by full URL (period/limit/offset), no auth personalization.
+          response.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
+          response.headers.set('X-Cache', 'HIT')
+          response.headers.set('X-Cache-Layer', cached.layer || 'unknown')
+          return response
+        }
+      } catch (error) {
+        // A sealed envelope proves only that this was once a valid generation.
+        // If live authority cannot be re-established, continue to the strict DB
+        // read instead of exposing the cached page as current.
+        logger.warn(
+          '[rankings-live] Cache generation validation failed:',
+          error instanceof Error ? error.message : String(error)
+        )
+      }
     }
 
     // The legacy sorted set has no publication/cohort manifest. Its score order
     // can belong to a prior generation while DB enrichment belongs to the next,
     // so public reads stay on the sealed database generation until that store
     // carries and validates the same proof identity.
-    const supabase = getSupabaseAdmin()
-
     const sealedRead = await readSealedRankingAuthorityGeneration(
       supabase,
       period,
