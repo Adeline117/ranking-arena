@@ -40,23 +40,22 @@ jest.mock('siwe', () => ({
 const mockFrom = jest.fn()
 const mockSelect = jest.fn()
 const mockEq = jest.fn()
-const mockIs = jest.fn()
-const mockUpdate = jest.fn()
 const mockMaybeSingle = jest.fn()
 const query = {
   select: mockSelect,
   eq: mockEq,
-  is: mockIs,
-  update: mockUpdate,
   maybeSingle: mockMaybeSingle,
 }
+const mockRpc = jest.fn()
 const mockGenerateLink = jest.fn()
 const mockCreateUser = jest.fn()
 const mockGetUserById = jest.fn()
 const mockGetSupabaseAdmin = jest.fn()
+const mockGetUserAccountStatus = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: () => mockGetSupabaseAdmin(),
+  getUserAccountStatus: (...args: unknown[]) => mockGetUserAccountStatus(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -105,6 +104,21 @@ const existingProfile = {
   wallet_address: VALID_ADDRESS,
 }
 
+function activeBinding(profile: typeof existingProfile) {
+  return {
+    data: [
+      {
+        status: 'active',
+        result_user_id: profile.id,
+        result_handle: profile.handle,
+        result_email: profile.email,
+        result_wallet_address: VALID_ADDRESS,
+      },
+    ],
+    error: null,
+  }
+}
+
 describe('POST /api/auth/siwe/verify', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -116,9 +130,9 @@ describe('POST /api/auth/siwe/verify', () => {
     mockFrom.mockReturnValue(query)
     mockSelect.mockReturnValue(query)
     mockEq.mockReturnValue(query)
-    mockIs.mockReturnValue(query)
-    mockUpdate.mockReturnValue(query)
     mockMaybeSingle.mockResolvedValue({ data: existingProfile, error: null })
+    mockRpc.mockResolvedValue(activeBinding(existingProfile))
+    mockGetUserAccountStatus.mockResolvedValue('active')
     mockGenerateLink.mockResolvedValue({
       data: { properties: { hashed_token: 'verification-token' } },
       error: null,
@@ -130,6 +144,7 @@ describe('POST /api/auth/siwe/verify', () => {
     })
     mockGetSupabaseAdmin.mockReturnValue({
       from: mockFrom,
+      rpc: mockRpc,
       auth: {
         admin: {
           generateLink: mockGenerateLink,
@@ -236,7 +251,18 @@ describe('POST /api/auth/siwe/verify', () => {
       verificationToken: 'verification-token',
     })
     expect(mockDeleteCookie).toHaveBeenCalledWith('siwe-nonce')
+    expect(mockRpc).toHaveBeenCalledWith('bind_siwe_wallet_for_active_profile_atomic', {
+      p_user_id: 'user-1',
+      p_wallet_address: VALID_ADDRESS,
+    })
     expect(mockGetUserById).toHaveBeenCalledWith('user-1')
+    expect(mockGetUserAccountStatus).toHaveBeenCalledTimes(2)
+    expect(mockGetUserAccountStatus).toHaveBeenNthCalledWith(1, 'user-1', {
+      verifiedEmail: 'alice@test.com',
+    })
+    expect(mockGetUserAccountStatus).toHaveBeenNthCalledWith(2, 'user-1', {
+      verifiedEmail: 'alice@test.com',
+    })
     expect(mockGenerateLink).toHaveBeenCalledWith({
       type: 'magiclink',
       email: 'alice@test.com',
@@ -253,6 +279,50 @@ describe('POST /api/auth/siwe/verify', () => {
 
     expect(response.status).toBe(503)
     expect(mockCreateUser).not.toHaveBeenCalled()
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+  })
+
+  it.each(['suspended', 'missing'])(
+    'fails closed before Auth lookup when atomic wallet admission returns %s',
+    async (status) => {
+      mockRpc.mockResolvedValue({
+        data: [
+          {
+            status,
+            result_user_id: null,
+            result_handle: null,
+            result_email: null,
+            result_wallet_address: null,
+          },
+        ],
+        error: null,
+      })
+
+      const response = await POST(makeRequest({ message: 'hello', signature: '0xabc' }))
+
+      expect(response.status).toBe(status === 'suspended' ? 403 : 503)
+      expect(mockGetUserById).not.toHaveBeenCalled()
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+    }
+  )
+
+  it('maps an atomic wallet ownership conflict without minting a token', async () => {
+    mockRpc.mockResolvedValue({
+      data: [
+        {
+          status: 'conflict',
+          result_user_id: null,
+          result_handle: null,
+          result_email: null,
+          result_wallet_address: null,
+        },
+      ],
+      error: null,
+    })
+
+    const response = await POST(makeRequest({ message: 'hello', signature: '0xabc' }))
+
+    expect(response.status).toBe(409)
     expect(mockGenerateLink).not.toHaveBeenCalled()
   })
 
@@ -284,6 +354,28 @@ describe('POST /api/auth/siwe/verify', () => {
     expect(response.status).toBe(503)
   })
 
+  it('checks lifecycle authority before mint and withholds a minted token after a late ban', async () => {
+    mockGetUserAccountStatus.mockResolvedValueOnce('active').mockResolvedValueOnce('suspended')
+
+    const response = await POST(makeRequest({ message: 'hello', signature: '0xabc' }))
+
+    expect(response.status).toBe(403)
+    expect(mockGenerateLink).toHaveBeenCalledTimes(1)
+    expect(await response.json()).not.toHaveProperty('verificationToken')
+  })
+
+  it.each(['suspended', 'missing', 'unavailable'])(
+    'fails closed before mint when final lifecycle admission returns %s',
+    async (status) => {
+      mockGetUserAccountStatus.mockResolvedValue(status)
+
+      const response = await POST(makeRequest({ message: 'hello', signature: '0xabc' }))
+
+      expect(response.status).toBe(status === 'suspended' ? 403 : 503)
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+    }
+  )
+
   it('uses only the trigger-provisioned row for a new wallet user', async () => {
     const provisionedProfile = {
       id: 'new-user',
@@ -295,11 +387,11 @@ describe('POST /api/auth/siwe/verify', () => {
     mockMaybeSingle
       .mockResolvedValueOnce({ data: null, error: null })
       .mockResolvedValueOnce({ data: provisionedProfile, error: null })
-      .mockResolvedValueOnce({ data: boundProfile, error: null })
     mockCreateUser.mockResolvedValue({
       data: { user: { id: 'new-user', email: WALLET_EMAIL } },
       error: null,
     })
+    mockRpc.mockResolvedValue(activeBinding(boundProfile))
     mockGetUserById.mockResolvedValue({
       data: { user: { id: 'new-user', email: WALLET_EMAIL } },
       error: null,
@@ -315,10 +407,13 @@ describe('POST /api/auth/siwe/verify', () => {
       email: WALLET_EMAIL,
       verificationToken: 'verification-token',
     })
-    expect(mockUpdate).toHaveBeenCalledWith({ wallet_address: VALID_ADDRESS })
-    expect(mockIs).toHaveBeenCalledWith('wallet_address', null)
+    expect(mockRpc).toHaveBeenCalledWith('bind_siwe_wallet_for_active_profile_atomic', {
+      p_user_id: 'new-user',
+      p_wallet_address: VALID_ADDRESS,
+    })
     expect(query).not.toHaveProperty('insert')
     expect(query).not.toHaveProperty('upsert')
+    expect(query).not.toHaveProperty('update')
   })
 
   it('fails closed instead of recreating a missing trigger-provisioned profile', async () => {
@@ -333,11 +428,11 @@ describe('POST /api/auth/siwe/verify', () => {
     const response = await POST(makeRequest({ message: 'hello', signature: '0xabc' }))
 
     expect(response.status).toBe(503)
-    expect(mockUpdate).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
     expect(mockGenerateLink).not.toHaveBeenCalled()
   })
 
-  it('fails closed on a wallet-binding error or zero-row update', async () => {
+  it('fails closed on an atomic wallet-binding error or invalid acknowledgement', async () => {
     const provisionedProfile = {
       id: 'new-user',
       handle: 'wallet-user',
@@ -347,7 +442,7 @@ describe('POST /api/auth/siwe/verify', () => {
     mockMaybeSingle
       .mockResolvedValueOnce({ data: null, error: null })
       .mockResolvedValueOnce({ data: provisionedProfile, error: null })
-      .mockResolvedValueOnce({ data: null, error: { code: 'XX002', message: 'write failed' } })
+    mockRpc.mockResolvedValue({ data: null, error: { code: 'XX002', message: 'write failed' } })
     mockCreateUser.mockResolvedValue({
       data: { user: { id: 'new-user', email: WALLET_EMAIL } },
       error: null,
@@ -362,10 +457,9 @@ describe('POST /api/auth/siwe/verify', () => {
     mockFrom.mockReturnValue(query)
     mockSelect.mockReturnValue(query)
     mockEq.mockReturnValue(query)
-    mockIs.mockReturnValue(query)
-    mockUpdate.mockReturnValue(query)
     mockGetSupabaseAdmin.mockReturnValue({
       from: mockFrom,
+      rpc: mockRpc,
       auth: {
         admin: {
           generateLink: mockGenerateLink,
@@ -377,8 +471,7 @@ describe('POST /api/auth/siwe/verify', () => {
     mockMaybeSingle
       .mockResolvedValueOnce({ data: null, error: null })
       .mockResolvedValueOnce({ data: provisionedProfile, error: null })
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({ data: provisionedProfile, error: null })
+    mockRpc.mockResolvedValue({ data: [], error: null })
     mockCreateUser.mockResolvedValue({
       data: { user: { id: 'new-user', email: WALLET_EMAIL } },
       error: null,
@@ -398,10 +491,6 @@ describe('POST /api/auth/siwe/verify', () => {
     mockMaybeSingle
       .mockResolvedValueOnce({ data: null, error: null })
       .mockResolvedValueOnce({ data: unboundProfile, error: null })
-      .mockResolvedValueOnce({
-        data: { ...unboundProfile, wallet_address: VALID_ADDRESS },
-        error: null,
-      })
     mockCreateUser.mockResolvedValue({
       data: { user: null },
       error: { code: 'email_exists', message: 'already registered' },
@@ -410,6 +499,7 @@ describe('POST /api/auth/siwe/verify', () => {
       data: { user: { id: 'existing-wallet-user', email: WALLET_EMAIL } },
       error: null,
     })
+    mockRpc.mockResolvedValue(activeBinding({ ...unboundProfile, wallet_address: VALID_ADDRESS }))
 
     const response = await POST(makeRequest({ message: 'hello', signature: '0xabc' }))
 

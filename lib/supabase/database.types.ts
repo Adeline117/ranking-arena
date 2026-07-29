@@ -10256,6 +10256,10 @@ export type Database = {
       }
     }
     Functions: {
+      admit_verified_auth_profile_atomic: {
+        Args: { p_user_id: string; p_verified_email: string | null }
+        Returns: string
+      }
       apply_referral_attribution_atomic: {
         Args: {
           p_provider: string | null
@@ -10264,6 +10268,16 @@ export type Database = {
           p_signup_ip_hash: string | null
         }
         Returns: Json
+      }
+      bind_siwe_wallet_for_active_profile_atomic: {
+        Args: { p_user_id: string; p_wallet_address: string }
+        Returns: {
+          result_email: string | null
+          result_handle: string | null
+          result_user_id: string | null
+          result_wallet_address: string | null
+          status: string
+        }[]
       }
       assert_recurring_pro_checkout_completed_atomic: {
         Args: {

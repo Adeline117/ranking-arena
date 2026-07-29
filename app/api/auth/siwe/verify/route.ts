@@ -3,7 +3,7 @@ import { SiweMessage } from 'siwe'
 import { cookies } from 'next/headers'
 import { isAddress } from 'viem'
 import { z } from 'zod'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getSupabaseAdmin, getUserAccountStatus } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { consumeSiweNonce } from '@/lib/auth/siwe-nonce'
 import { resolveSiweRequestOrigin } from '@/lib/auth/siwe-origin'
@@ -28,6 +28,7 @@ type WalletProfile = {
 }
 
 class SiweConflictError extends Error {}
+class SiweSuspendedError extends Error {}
 
 function isExistingUserError(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false
@@ -76,49 +77,72 @@ async function requireProfileByWalletEmail(
   return data
 }
 
-async function bindWalletToExistingProfile(
+async function bindWalletToActiveProfile(
   supabase: AdminClient,
   profile: WalletProfile,
   walletAddress: string
 ): Promise<WalletProfile> {
-  const existingWallet = profile.wallet_address?.toLowerCase() || null
-  if (existingWallet && existingWallet !== walletAddress) {
-    throw new SiweConflictError('This account is already linked to a different wallet')
-  }
-  if (existingWallet === walletAddress) return profile
-
-  // The auth trigger owns row creation. This route may only bind the verified
-  // wallet to the already-provisioned row, and only while it is still unbound.
-  const { data, error } = await supabase
-    .from('user_profiles')
-    .update({ wallet_address: walletAddress })
-    .eq('id', profile.id)
-    .is('wallet_address', null)
-    .select('id, handle, email, wallet_address')
-    .maybeSingle()
+  // This database authority takes the same lifecycle lock as deletion and
+  // moderation, checks every current/legacy suspension marker, and only then
+  // performs an idempotent wallet bind. A service-role table UPDATE cannot
+  // provide that ordering.
+  const { data, error } = await supabase.rpc('bind_siwe_wallet_for_active_profile_atomic', {
+    p_user_id: profile.id,
+    p_wallet_address: walletAddress,
+  })
 
   if (error) {
-    if (error.code === '23505') {
-      throw new SiweConflictError('This wallet is already linked to another account')
-    }
-    logger.error('[SIWE verify] Wallet binding failed', {
+    logger.error('[SIWE verify] Atomic wallet admission failed', {
       userId: profile.id,
       code: error.code,
     })
     throw error
   }
 
-  if (data?.wallet_address?.toLowerCase() === walletAddress) return data
-
-  // A concurrent request may have won the conditional update. Re-read and
-  // accept only an idempotent binding to this exact signed wallet.
-  const current = await requireProfileById(supabase, profile.id)
-  const currentWallet = current.wallet_address?.toLowerCase() || null
-  if (currentWallet === walletAddress) return current
-  if (currentWallet) {
-    throw new SiweConflictError('This account is already linked to a different wallet')
+  const acknowledgement = Array.isArray(data) && data.length === 1 ? data[0] : null
+  if (acknowledgement?.status === 'suspended') {
+    throw new SiweSuspendedError('Account unavailable')
   }
-  throw new Error('Wallet binding affected no profile row')
+  if (acknowledgement?.status === 'conflict') {
+    throw new SiweConflictError('This wallet or account is already linked')
+  }
+  if (
+    acknowledgement?.status !== 'active' ||
+    acknowledgement.result_user_id !== profile.id ||
+    acknowledgement.result_wallet_address?.toLowerCase() !== walletAddress
+  ) {
+    throw new Error('Invalid atomic wallet admission acknowledgement')
+  }
+
+  return {
+    id: acknowledgement.result_user_id,
+    handle: acknowledgement.result_handle,
+    email: acknowledgement.result_email,
+    wallet_address: acknowledgement.result_wallet_address,
+  }
+}
+
+function walletBindingFailure(
+  error: unknown,
+  unavailableMessage = 'Verification service unavailable'
+) {
+  if (error instanceof SiweSuspendedError) {
+    return NextResponse.json({ error: error.message }, { status: 403 })
+  }
+  if (error instanceof SiweConflictError) {
+    return NextResponse.json({ error: error.message }, { status: 409 })
+  }
+  return NextResponse.json({ error: unavailableMessage }, { status: 503 })
+}
+
+async function requireActiveProfileAdmission(userId: string, verifiedEmail: string) {
+  const status = await getUserAccountStatus(userId, { verifiedEmail })
+  if (status === 'suspended') {
+    throw new SiweSuspendedError('Account unavailable')
+  }
+  if (status !== 'active') {
+    throw new Error(`Profile admission failed: ${status}`)
+  }
 }
 
 async function requireAuthEmail(supabase: AdminClient, userId: string): Promise<string> {
@@ -246,7 +270,11 @@ export async function POST(request: NextRequest) {
 
     if (walletProfile) {
       action = 'existing_user'
-      profile = walletProfile
+      try {
+        profile = await bindWalletToActiveProfile(supabase, walletProfile, walletAddress)
+      } catch (bindingError) {
+        return walletBindingFailure(bindingError)
+      }
     } else {
       const walletEmail = `${walletAddress}@wallet.arena`
       const requestedHandle = `0x${walletAddress.slice(2, 8)}`
@@ -267,33 +295,34 @@ export async function POST(request: NextRequest) {
 
         try {
           profile = await requireProfileByWalletEmail(supabase, walletEmail)
-          profile = await bindWalletToExistingProfile(supabase, profile, walletAddress)
+          profile = await bindWalletToActiveProfile(supabase, profile, walletAddress)
           action = 'existing_user'
         } catch (lookupError) {
-          if (lookupError instanceof SiweConflictError) {
-            return NextResponse.json({ error: lookupError.message }, { status: 409 })
-          }
-          return NextResponse.json({ error: 'Verification service unavailable' }, { status: 503 })
+          return walletBindingFailure(lookupError)
         }
       } else {
         try {
           // public.handle_new_user is the sole row provisioner. Never recreate a
           // missing row here from request/auth metadata.
           profile = await requireProfileById(supabase, created.user.id)
-          profile = await bindWalletToExistingProfile(supabase, profile, walletAddress)
+          profile = await bindWalletToActiveProfile(supabase, profile, walletAddress)
           action = 'new_user'
         } catch (profileError) {
-          if (profileError instanceof SiweConflictError) {
-            return NextResponse.json({ error: profileError.message }, { status: 409 })
-          }
-          return NextResponse.json({ error: 'Profile provisioning failed' }, { status: 503 })
+          return walletBindingFailure(profileError, 'Profile provisioning failed')
         }
       }
     }
 
     try {
       const email = await requireAuthEmail(supabase, profile.id)
+
+      // Auth token minting cannot share a transaction with Postgres. Check the
+      // database authority immediately before minting, and once more before
+      // releasing the token. A token produced during a losing race is never
+      // disclosed, while request admission blocks any later lifecycle change.
+      await requireActiveProfileAdmission(profile.id, email)
       const verificationToken = await requireVerificationToken(supabase, email, profile.id)
+      await requireActiveProfileAdmission(profile.id, email)
 
       return NextResponse.json({
         action,
@@ -303,7 +332,10 @@ export async function POST(request: NextRequest) {
         email,
         verificationToken,
       })
-    } catch {
+    } catch (sessionError) {
+      if (sessionError instanceof SiweSuspendedError) {
+        return NextResponse.json({ error: sessionError.message }, { status: 403 })
+      }
       return NextResponse.json({ error: 'Failed to create session' }, { status: 503 })
     }
   } catch (err) {

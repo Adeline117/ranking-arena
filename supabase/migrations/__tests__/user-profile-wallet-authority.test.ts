@@ -70,12 +70,12 @@ describe('user profile wallet authority migration', () => {
     expect(migration).toContain('safe profile update column was not preserved')
   })
 
-  it('matches SIWE lowercase and unique-conflict handling', () => {
+  it('matches SIWE lowercase and delegates verification binding to its atomic authority', () => {
     expect(linkRoute).toContain('const walletAddress = fields.address.toLowerCase()')
     expect(linkRoute).toContain("updateError?.code === '23505'")
     expect(linkRoute).toContain('This wallet is already linked to another account')
     expect(verifyRoute).toContain('const walletAddress = fields.address.toLowerCase()')
-    expect(verifyRoute).toContain("error.code === '23505'")
-    expect(verifyRoute).toContain('This wallet is already linked to another account')
+    expect(verifyRoute).toContain("'bind_siwe_wallet_for_active_profile_atomic'")
+    expect(verifyRoute).not.toMatch(/\.update\(\{ wallet_address: walletAddress \}\)/)
   })
 })
