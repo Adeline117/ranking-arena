@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { cookies } from 'next/headers'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { storeSiweNonce } from '@/lib/auth/siwe-nonce'
 import logger from '@/lib/logger'
 
 /**
@@ -16,6 +17,10 @@ export async function GET(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse
     const nonce = randomBytes(32).toString('hex')
 
+    // Persist before returning it. A cookie without this server-side single-use
+    // record is never accepted by either verifier.
+    await storeSiweNonce(nonce)
+
     const cookieStore = await cookies()
     cookieStore.set('siwe-nonce', nonce, {
       httpOnly: true,
@@ -28,9 +33,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ nonce })
   } catch (error) {
     logger.error('[siwe/nonce] Error:', error)
-    return NextResponse.json(
-      { error: 'Failed to generate nonce' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to generate nonce' }, { status: 500 })
   }
 }

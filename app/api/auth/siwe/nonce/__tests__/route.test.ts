@@ -23,6 +23,11 @@ jest.mock('@/lib/utils/rate-limit', () => ({
   RateLimitPresets: { auth: {} },
 }))
 
+const mockStoreSiweNonce = jest.fn()
+jest.mock('@/lib/auth/siwe-nonce', () => ({
+  storeSiweNonce: (...args: unknown[]) => mockStoreSiweNonce(...args),
+}))
+
 // Mock crypto.randomBytes to return a deterministic value for testing
 const MOCK_HEX = 'a'.repeat(64)
 jest.mock('crypto', () => ({
@@ -34,6 +39,7 @@ import { GET } from '../route'
 describe('GET /api/auth/siwe/nonce', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockStoreSiweNonce.mockResolvedValue(undefined)
   })
 
   it('returns 200 with a nonce string', async () => {
@@ -62,5 +68,18 @@ describe('GET /api/auth/siwe/nonce', () => {
       maxAge: 300,
       path: '/',
     })
+    expect(mockStoreSiweNonce).toHaveBeenCalledWith(MOCK_HEX)
+    expect(mockStoreSiweNonce.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSet.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('returns an error without setting a cookie when the single-use store is unavailable', async () => {
+    mockStoreSiweNonce.mockRejectedValue(new Error('Redis unavailable'))
+
+    const response = await GET()
+
+    expect(response.status).toBe(500)
+    expect(mockSet).not.toHaveBeenCalled()
   })
 })

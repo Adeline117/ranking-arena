@@ -5,6 +5,7 @@ import { isAddress } from 'viem'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { consumeSiweNonce } from '@/lib/auth/siwe-nonce'
 import logger from '@/lib/logger'
 
 const EXPECTED_CHAIN_ID = 8453 // Base mainnet (must match the client's chainId)
@@ -217,8 +218,13 @@ export async function POST(request: NextRequest) {
 
     const walletAddress = fields.address.toLowerCase()
 
-    // Consume the nonce before any account mutation. A partial failure must be
-    // retried with a fresh signature and can never replay the verified message.
+    // The cookie is only transport. Redis GETDEL is the cross-request
+    // single-winner boundary, so concurrent copies of one signed message can
+    // never each mint a session.
+    if (!(await consumeSiweNonce(storedNonce))) {
+      cookieStore.delete('siwe-nonce')
+      return NextResponse.json({ error: 'Nonce expired. Please try again.' }, { status: 400 })
+    }
     cookieStore.delete('siwe-nonce')
 
     const supabase = getSupabaseAdmin()

@@ -16,6 +16,11 @@ jest.mock('@/lib/utils/rate-limit', () => ({
   RateLimitPresets: { auth: { name: 'auth-test-policy' } },
 }))
 
+const mockConsumeSiweNonce = jest.fn()
+jest.mock('@/lib/auth/siwe-nonce', () => ({
+  consumeSiweNonce: (...args: unknown[]) => mockConsumeSiweNonce(...args),
+}))
+
 const VALID_ADDRESS = '0x1234567890abcdef1234567890abcdef12345678'
 const OTHER_ADDRESS = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd'
 const STORED_NONCE = 'stored-nonce-value'
@@ -97,6 +102,7 @@ describe('POST /api/auth/siwe/link', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCheckRateLimit.mockResolvedValue(null)
+    mockConsumeSiweNonce.mockResolvedValue(true)
     mockGetAuthUser.mockResolvedValue(MOCK_USER)
     mockGetCookie.mockReturnValue({ value: STORED_NONCE })
     mockVerify.mockResolvedValue({ success: true, error: null, data: validFields() })
@@ -183,6 +189,20 @@ describe('POST /api/auth/siwe/link', () => {
     expect(
       (await POST(makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' }))).status
     ).toBe(503)
+  })
+
+  it('rejects a replayed server-side nonce before every wallet mutation', async () => {
+    mockConsumeSiweNonce.mockResolvedValue(false)
+
+    const response = await POST(
+      makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' })
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockConsumeSiweNonce).toHaveBeenCalledWith(STORED_NONCE)
+    expect(mockDeleteCookie).toHaveBeenCalledWith('siwe-nonce')
+    expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 
   it('fails closed when wallet ownership lookup errors', async () => {

@@ -5,6 +5,7 @@ import { isAddress } from 'viem'
 import { z } from 'zod'
 import { getSupabaseAdmin, getProvisioningAuthUser } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { consumeSiweNonce } from '@/lib/auth/siwe-nonce'
 import logger from '@/lib/logger'
 
 // Must match the verify route's chainId — Base mainnet.
@@ -96,6 +97,10 @@ export async function POST(request: NextRequest) {
     }
     const walletAddress = fields.address.toLowerCase()
 
+    if (!(await consumeSiweNonce(storedNonce))) {
+      cookieStore.delete('siwe-nonce')
+      return NextResponse.json({ error: 'Nonce expired. Please try again.' }, { status: 400 })
+    }
     cookieStore.delete('siwe-nonce')
 
     const supabase = getSupabaseAdmin()
