@@ -5,7 +5,9 @@
 # production dependency in migration order. It then proves a two-batch mixed
 # insert/update write, failures after physical DML that roll the complete
 # transaction back, and receipt-backed zero-write replay after lease expiry,
-# manifest pruning, terminal head state, and legacy rank drift.
+# manifest pruning, terminal head state, and legacy rank drift. Setting
+# ARENA_ATOMIC_WRITER_BENCHMARK_64K=1 reuses the exact dependency bootstrap but
+# runs the durable 64k/64-batch release-capacity gate instead of the small proof.
 
 set -Eeuo pipefail
 
@@ -22,7 +24,19 @@ CODEC_MIGRATION="$ROOT_DIR/supabase/migrations/20260725016500_leaderboard_rank_p
 TYPED_MIGRATION="$ROOT_DIR/supabase/migrations/20260725017000_leaderboard_rank_typed_batch_contract.sql"
 MDD_MIGRATION="$ROOT_DIR/supabase/migrations/20260725017250_normalize_leaderboard_rank_max_drawdown.sql"
 WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql"
+CAPACITY_BENCHMARK="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-64k-benchmark.pg17.psql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
+BENCHMARK_64K="${ARENA_ATOMIC_WRITER_BENCHMARK_64K:-0}"
+BENCHMARK_SCENARIO="${ARENA_ATOMIC_WRITER_BENCHMARK_SCENARIO:-insert}"
+
+if [[ "$BENCHMARK_64K" != '0' && "$BENCHMARK_64K" != '1' ]]; then
+  echo 'ARENA_ATOMIC_WRITER_BENCHMARK_64K must be 0 or 1' >&2
+  exit 1
+fi
+if [[ "$BENCHMARK_SCENARIO" != 'insert' && "$BENCHMARK_SCENARIO" != 'update' ]]; then
+  echo 'ARENA_ATOMIC_WRITER_BENCHMARK_SCENARIO must be insert or update' >&2
+  exit 1
+fi
 
 for executable in initdb pg_ctl psql; do
   if [[ ! -x "$PG_BIN/$executable" ]]; then
@@ -46,7 +60,8 @@ for required_file in \
   "$CODEC_MIGRATION" \
   "$TYPED_MIGRATION" \
   "$MDD_MIGRATION" \
-  "$WRITER_MIGRATION"; do
+  "$WRITER_MIGRATION" \
+  "$CAPACITY_BENCHMARK"; do
   if [[ ! -f "$required_file" ]]; then
     echo "required atomic-writer proof input is missing: $required_file" >&2
     exit 1
@@ -227,10 +242,15 @@ SQL
   --encoding=UTF8 \
   --username=postgres \
   --no-locale >/dev/null
+if [[ "$BENCHMARK_64K" == '1' ]]; then
+  POSTGRES_OPTIONS="-p $PORT -k $SOCKET_DIR -c listen_addresses= -c fsync=on -c synchronous_commit=on -c full_page_writes=on"
+else
+  POSTGRES_OPTIONS="-F -p $PORT -k $SOCKET_DIR -c listen_addresses="
+fi
 "$PG_BIN/pg_ctl" \
   -D "$DATA_DIR" \
   -l "$LOG_FILE" \
-  -o "-F -p $PORT -k $SOCKET_DIR -c listen_addresses=" \
+  -o "$POSTGRES_OPTIONS" \
   -w start >/dev/null
 
 psql_cmd -q <<'SQL'
@@ -317,6 +337,15 @@ LEFT JOIN pg_catalog.pg_proc AS function_row
 ORDER BY expected.signature COLLATE pg_catalog."C";
 SQL
   exit 1
+fi
+
+if [[ "$BENCHMARK_64K" == '1' ]]; then
+  psql_cmd -q \
+    -v benchmark_scenario="$BENCHMARK_SCENARIO" \
+    -f "$CAPACITY_BENCHMARK"
+  printf 'PostgreSQL 17 atomic leaderboard-rank 64k/64-batch %s capacity gate passed.\n' \
+    "$BENCHMARK_SCENARIO"
+  exit 0
 fi
 
 # Build the exact typed payload from the same sealed manifest input/output

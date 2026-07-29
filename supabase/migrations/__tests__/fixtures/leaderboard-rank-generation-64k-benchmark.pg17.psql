@@ -1,0 +1,1108 @@
+-- Durable psql/PostgreSQL 17 capacity gate for the atomic typed rank writer.
+--
+-- The caller must run this fixture twice, each time against a fresh cluster:
+--
+--   psql -v benchmark_scenario=insert -f ...
+--   psql -v benchmark_scenario=update -f ...
+--
+-- Every batch is invoked by psql \gexec with AUTOCOMMIT enabled.  Consequently
+-- the 64 writer calls below are 64 independently durable transactions rather
+-- than savepoints hidden inside one procedural transaction.
+
+\set ON_ERROR_STOP on
+\set QUIET on
+
+\if :{?benchmark_scenario}
+\else
+  \echo 'benchmark_scenario must be supplied as insert or update'
+  \quit 3
+\endif
+
+SELECT :'benchmark_scenario' IN ('insert', 'update')
+  AS benchmark_scenario_is_valid
+\gset
+\if :benchmark_scenario_is_valid
+\else
+  \echo 'benchmark_scenario must be exactly insert or update'
+  \quit 3
+\endif
+
+\if :AUTOCOMMIT
+\else
+  \echo 'leaderboard rank capacity benchmark requires psql AUTOCOMMIT on'
+  \quit 3
+\endif
+
+\pset format unaligned
+\pset tuples_only on
+
+DO $settings$
+BEGIN
+  IF pg_catalog.current_setting('server_version_num')::integer / 10000 <> 17
+     OR pg_catalog.current_setting('fsync') <> 'on'
+     OR pg_catalog.current_setting('synchronous_commit') <> 'on'
+     OR pg_catalog.current_setting('full_page_writes') <> 'on'
+     OR pg_catalog.current_setting('transaction_isolation') <>
+          'read committed' THEN
+    RAISE EXCEPTION
+      'capacity benchmark requires PG17, fsync, synchronous_commit, full_page_writes, and READ COMMITTED';
+  END IF;
+END
+$settings$;
+
+CREATE TABLE arena.fixture_rank_generation_64k_meta (
+  scenario text PRIMARY KEY
+    CHECK (scenario IN ('insert', 'update')),
+  season_id text NOT NULL CHECK (season_id = '30D'),
+  score_cohort_id uuid NOT NULL UNIQUE,
+  computed_at timestamptz NOT NULL,
+  score_input_manifest_id uuid,
+  score_input_manifest_digest text,
+  batch_sha256_plan text[],
+  write_set_sha256 text,
+  generation_seq bigint,
+  claimed_at timestamptz,
+  lease_expires_at timestamptz,
+  finished_at timestamptz,
+  wal_start_lsn pg_lsn,
+  wal_end_lsn pg_lsn,
+  input_bytes bigint,
+  manifest_bytes bigint,
+  manifest_value_bytes bigint,
+  manifest_relation_bytes bigint,
+  rank_relation_bytes bigint,
+  seeded_rank_count integer NOT NULL DEFAULT 0
+);
+
+INSERT INTO arena.fixture_rank_generation_64k_meta (
+  scenario,
+  season_id,
+  score_cohort_id,
+  computed_at
+) VALUES (
+  :'benchmark_scenario',
+  '30D',
+  CASE :'benchmark_scenario'
+    WHEN 'insert' THEN '64000000-0000-4640-8640-000000000001'::uuid
+    WHEN 'update' THEN '64000000-0000-4640-8640-000000000002'::uuid
+    ELSE NULL::uuid
+  END,
+  pg_catalog.clock_timestamp()
+);
+
+CREATE TABLE arena.fixture_rank_generation_64k_identities (
+  ordinal_position integer PRIMARY KEY
+    CHECK (ordinal_position BETWEEN 1 AND 64000),
+  batch_index integer NOT NULL CHECK (batch_index BETWEEN 0 AND 63),
+  source_ordinal integer NOT NULL CHECK (source_ordinal BETWEEN 0 AND 99),
+  trader_ordinal integer NOT NULL CHECK (trader_ordinal BETWEEN 0 AND 639),
+  source text COLLATE pg_catalog."C" NOT NULL,
+  source_trader_id text COLLATE pg_catalog."C" NOT NULL,
+  input_value jsonb NOT NULL,
+  legacy_rank_id bigint,
+  UNIQUE (source, source_trader_id)
+);
+
+WITH generated AS MATERIALIZED (
+  SELECT
+    source_number,
+    trader_number,
+    source_number * 640 + trader_number + 1 AS ordinal_position,
+    'bench_' || pg_catalog.lpad(source_number::text, 3, '0') AS source,
+    'trader_' || pg_catalog.lpad(trader_number::text, 3, '0') || '_' ||
+      pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(
+            'leaderboard-rank-capacity-v1|' || source_number::text || '|' ||
+              trader_number::text,
+            'UTF8'
+          )
+        ),
+        'hex'
+      ) AS source_trader_id
+  FROM pg_catalog.generate_series(0, 99) AS source_series(source_number)
+  CROSS JOIN pg_catalog.generate_series(0, 639)
+    AS trader_series(trader_number)
+), inputs AS MATERIALIZED (
+  SELECT
+    generated.*,
+    pg_catalog.jsonb_build_object(
+      'source', generated.source,
+      'source_trader_id', generated.source_trader_id,
+      'roi', 20::numeric +
+        ((generated.ordinal_position * 37) % 1000)::numeric / 100::numeric,
+      'pnl', 10000::numeric +
+        generated.ordinal_position::numeric * 13.37::numeric,
+      'max_drawdown', 5::numeric +
+        ((generated.ordinal_position * 17) % 1000)::numeric / 100::numeric,
+      'win_rate', 55::numeric +
+        ((generated.ordinal_position * 19) % 3000)::numeric / 100::numeric,
+      'sharpe_ratio', 1::numeric +
+        ((generated.ordinal_position * 23) % 200)::numeric / 100::numeric,
+      'profit_factor', 1.2::numeric +
+        ((generated.ordinal_position * 29) % 180)::numeric / 100::numeric,
+      'trades_count', 80 + (generated.ordinal_position * 31) % 400
+    ) AS input_value
+  FROM generated
+)
+INSERT INTO arena.fixture_rank_generation_64k_identities (
+  ordinal_position,
+  batch_index,
+  source_ordinal,
+  trader_ordinal,
+  source,
+  source_trader_id,
+  input_value
+)
+SELECT
+  inputs.ordinal_position,
+  (inputs.ordinal_position - 1) / 1000,
+  inputs.source_number,
+  inputs.trader_number,
+  inputs.source,
+  inputs.source_trader_id,
+  inputs.input_value
+FROM inputs
+ORDER BY inputs.ordinal_position;
+
+DO $seal_manifest$
+DECLARE
+  v_inputs jsonb;
+  v_included jsonb;
+  v_sources jsonb;
+  v_seal jsonb;
+  v_manifest arena.leaderboard_score_input_manifests%ROWTYPE;
+  v_meta arena.fixture_rank_generation_64k_meta%ROWTYPE;
+BEGIN
+  SELECT meta.*
+  INTO STRICT v_meta
+  FROM arena.fixture_rank_generation_64k_meta AS meta;
+
+  SELECT
+    pg_catalog.jsonb_agg(
+      identity.input_value ORDER BY identity.ordinal_position
+    ),
+    pg_catalog.jsonb_agg(
+      identity.source || ':' || identity.source_trader_id
+      ORDER BY identity.ordinal_position
+    )
+  INTO STRICT v_inputs, v_included
+  FROM arena.fixture_rank_generation_64k_identities AS identity;
+
+  SELECT pg_catalog.jsonb_agg(source_row.source ORDER BY source_row.source)
+  INTO STRICT v_sources
+  FROM (
+    SELECT DISTINCT identity.source
+    FROM arena.fixture_rank_generation_64k_identities AS identity
+  ) AS source_row;
+
+  v_seal := arena.seal_leaderboard_score_input_manifest_v1(
+    v_meta.season_id,
+    pg_catalog.encode(
+      pg_catalog.sha256(
+        pg_catalog.convert_to(
+          pg_catalog.jsonb_build_array(
+            'leaderboard-rank-capacity-source-bundle@1',
+            v_sources
+          )::text,
+          'UTF8'
+        )
+      ),
+      'hex'
+    ),
+    pg_catalog.encode(
+      pg_catalog.sha256(pg_catalog.convert_to(v_inputs::text, 'UTF8')),
+      'hex'
+    ),
+    pg_catalog.encode(
+      pg_catalog.sha256(
+        pg_catalog.convert_to(
+          pg_catalog.jsonb_build_array(
+            'leaderboard-rank-capacity-physical-boards@1',
+            100,
+            64000
+          )::text,
+          'UTF8'
+        )
+      ),
+      'hex'
+    ),
+    pg_catalog.jsonb_build_object(
+      'contract', 'leaderboard-rank-capacity-source-evidence@1',
+      'sourceCount', 100,
+      'sources', v_sources,
+      'rowCount', 64000
+    ),
+    'leaderboard-enrichment-evidence@1',
+    pg_catalog.jsonb_build_object(
+      'contract', 'leaderboard-enrichment-evidence@1',
+      'rows', 64000,
+      'complete', true
+    ),
+    'leaderboard-eligibility-evidence@1',
+    pg_catalog.jsonb_build_object(
+      'contract', 'leaderboard-eligibility-evidence@1',
+      'canonicalIdentityCollisionCount', 0,
+      'included', v_included
+    ),
+    v_inputs,
+    pg_catalog.clock_timestamp() + interval '1 hour'
+  );
+
+  SELECT stored.*
+  INTO STRICT v_manifest
+  FROM ONLY arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest_id = (v_seal->>'manifestId')::uuid;
+
+  IF (v_manifest.manifest->>'inputCount')::integer <> 64000
+     OR pg_catalog.jsonb_array_length(
+          v_manifest.manifest->'outputs'
+        ) <> 64000
+     OR pg_catalog.jsonb_array_length(
+          pg_catalog.jsonb_path_query_array(
+            v_manifest.manifest->'outputs',
+            '$[*] ? (@.totalScore > 0)'::pg_catalog.jsonpath
+          )
+        ) <> 64000 THEN
+    RAISE EXCEPTION 'capacity manifest is not a 64000-row all-positive cohort';
+  END IF;
+
+  UPDATE arena.fixture_rank_generation_64k_meta AS meta
+  SET score_input_manifest_id = v_manifest.manifest_id,
+      score_input_manifest_digest = v_manifest.manifest_digest,
+      input_bytes = pg_catalog.octet_length(
+        (v_manifest.manifest->'inputs')::text
+      ),
+      manifest_bytes = pg_catalog.octet_length(v_manifest.manifest::text),
+      manifest_value_bytes = pg_catalog.pg_column_size(v_manifest.manifest),
+      manifest_relation_bytes = pg_catalog.pg_total_relation_size(
+        'arena.leaderboard_score_input_manifests'::pg_catalog.regclass
+      )
+  WHERE meta.scenario = v_meta.scenario;
+END
+$seal_manifest$;
+
+CREATE TABLE arena.fixture_rank_generation_64k_batches (
+  batch_index integer PRIMARY KEY CHECK (batch_index BETWEEN 0 AND 63),
+  rows arena.leaderboard_rank_batch_row_v1[] NOT NULL,
+  evidence jsonb,
+  batch_sha256 text,
+  call_xid pg_catalog.xid8,
+  started_at timestamptz,
+  writer_completed_at timestamptz,
+  finished_at timestamptz,
+  elapsed_ms numeric,
+  result jsonb
+);
+
+WITH meta AS MATERIALIZED (
+  SELECT singleton.*
+  FROM arena.fixture_rank_generation_64k_meta AS singleton
+), manifest_pairs AS MATERIALIZED (
+  SELECT
+    input_row.ordinality::integer AS ordinal_position,
+    input_row.value AS input_value,
+    output_row.value AS output_value,
+    output_row.value->'factors' AS factors
+  FROM meta
+  JOIN ONLY arena.leaderboard_score_input_manifests AS stored
+    ON stored.manifest_id = meta.score_input_manifest_id
+  CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(
+    stored.manifest->'inputs'
+  ) WITH ORDINALITY AS input_row(value, ordinality)
+  JOIN LATERAL pg_catalog.jsonb_array_elements(
+    stored.manifest->'outputs'
+  ) WITH ORDINALITY AS output_row(value, ordinality)
+    ON output_row.ordinality = input_row.ordinality
+), ranked AS MATERIALIZED (
+  SELECT
+    manifest_pairs.*,
+    pg_catalog.row_number() OVER (
+      ORDER BY
+        (manifest_pairs.output_value->>'totalScore')::double precision DESC,
+        manifest_pairs.input_value->>'source' COLLATE pg_catalog."C",
+        manifest_pairs.input_value->>'source_trader_id'
+          COLLATE pg_catalog."C"
+    )::integer AS public_rank
+  FROM manifest_pairs
+), typed AS MATERIALIZED (
+  SELECT
+    ranked.ordinal_position,
+    (ranked.ordinal_position - 1) / 1000 AS batch_index,
+    ROW(
+      ranked.input_value->>'source',
+      'futures'::text,
+      ranked.input_value->>'source_trader_id',
+      ranked.public_rank,
+      ((ranked.output_value->>'totalScore')::double precision)
+        ::numeric(10, 2),
+      ((ranked.input_value->>'roi')::double precision)::numeric(12, 4),
+      ((ranked.input_value->>'pnl')::double precision)::numeric(18, 2),
+      ((ranked.input_value->>'win_rate')::double precision)::numeric(5, 2),
+      ((ranked.input_value->>'max_drawdown')::double precision)
+        ::numeric(5, 2),
+      64001 - ranked.public_rank,
+      (ranked.input_value->>'trades_count')::bigint::integer,
+      'capacity-' || pg_catalog.substr(
+        ranked.input_value->>'source_trader_id', 1, 64
+      ),
+      'https://benchmark.invalid/avatar/' ||
+        pg_catalog.substr(ranked.input_value->>'source_trader_id', 12) ||
+        '.png',
+      pg_catalog.floor(
+        100::double precision * (
+          0.3::double precision *
+            (ranked.factors->>'pnl')::double precision +
+          0.2::double precision *
+            (ranked.factors->>'roi')::double precision
+        ) / 0.5::double precision + 0.5::double precision
+      )::numeric(6, 2),
+      CASE
+        WHEN pg_catalog.jsonb_typeof(ranked.factors->'drawdown') = 'null'
+             AND pg_catalog.jsonb_typeof(ranked.factors->'sharpe') = 'null'
+          THEN 0::numeric(6, 2)
+        WHEN pg_catalog.jsonb_typeof(ranked.factors->'drawdown') = 'null'
+          THEN pg_catalog.floor(
+            100::double precision *
+              (ranked.factors->>'sharpe')::double precision +
+              0.5::double precision
+          )::numeric(6, 2)
+        WHEN pg_catalog.jsonb_typeof(ranked.factors->'sharpe') = 'null'
+          THEN pg_catalog.floor(
+            100::double precision *
+              (ranked.factors->>'drawdown')::double precision +
+              0.5::double precision
+          )::numeric(6, 2)
+        ELSE pg_catalog.floor(
+          100::double precision * (
+            (ranked.factors->>'drawdown')::double precision +
+            (ranked.factors->>'sharpe')::double precision
+          ) / 2::double precision + 0.5::double precision
+        )::numeric(6, 2)
+      END,
+      CASE
+        WHEN pg_catalog.jsonb_typeof(ranked.factors->'consistency') = 'null'
+          THEN NULL::numeric(6, 2)
+        ELSE pg_catalog.floor(
+          100::double precision *
+            (ranked.factors->>'consistency')::double precision +
+            0.5::double precision
+        )::numeric(6, 2)
+      END,
+      'full'::text,
+      'swing'::text,
+      12.5::numeric,
+      0.9::numeric,
+      ((ranked.input_value->>'sharpe_ratio')::double precision)
+        ::numeric(10, 4),
+      2.5::numeric,
+      ((ranked.input_value->>'profit_factor')::double precision)
+        ::numeric(10, 4),
+      1.2::numeric,
+      'verified'::text,
+      false,
+      false,
+      0,
+      (SELECT meta.scenario = 'insert' FROM meta),
+      ranked.public_rank % 1000,
+      ((ranked.output_value->>'totalScore')::double precision)
+        ::numeric(10, 2),
+      ((ranked.output_value->>'totalScore')::double precision)
+        ::numeric(10, 2),
+      ranked.factors
+    )::arena.leaderboard_rank_batch_row_v1 AS rank_row
+  FROM ranked
+)
+INSERT INTO arena.fixture_rank_generation_64k_batches (
+  batch_index,
+  rows
+)
+SELECT
+  typed.batch_index,
+  pg_catalog.array_agg(typed.rank_row ORDER BY typed.ordinal_position)
+FROM typed
+GROUP BY typed.batch_index
+ORDER BY typed.batch_index;
+
+WITH built AS MATERIALIZED (
+  SELECT
+    batch.batch_index,
+    arena.build_leaderboard_rank_typed_batch_evidence_v1(
+      meta.season_id,
+      meta.score_cohort_id,
+      meta.computed_at,
+      batch.rows
+    ) AS evidence
+  FROM arena.fixture_rank_generation_64k_batches AS batch
+  CROSS JOIN arena.fixture_rank_generation_64k_meta AS meta
+)
+UPDATE arena.fixture_rank_generation_64k_batches AS batch
+SET evidence = built.evidence,
+    batch_sha256 = built.evidence->>'batch_sha256'
+FROM built
+WHERE built.batch_index = batch.batch_index;
+
+WITH plan AS MATERIALIZED (
+  SELECT pg_catalog.array_agg(
+    batch.batch_sha256 ORDER BY batch.batch_index
+  ) AS batch_sha256_plan
+  FROM arena.fixture_rank_generation_64k_batches AS batch
+)
+UPDATE arena.fixture_rank_generation_64k_meta AS meta
+SET batch_sha256_plan = plan.batch_sha256_plan,
+    write_set_sha256 =
+      arena.build_leaderboard_rank_generation_write_set_sha256_v1(
+        meta.season_id,
+        meta.score_cohort_id,
+        meta.score_input_manifest_digest,
+        meta.computed_at,
+        64000,
+        plan.batch_sha256_plan
+      )
+FROM plan;
+
+-- The update scenario seeds the complete identity set once, before claim.  It
+-- therefore measures a pure 64k conflict-update run.  The insert scenario has
+-- no seed rows and measures a pure 64k insert run.
+INSERT INTO public.leaderboard_ranks (
+  season_id,
+  source,
+  source_type,
+  source_trader_id,
+  rank,
+  arena_score,
+  roi,
+  pnl,
+  win_rate,
+  max_drawdown,
+  followers,
+  trades_count,
+  handle,
+  computed_at,
+  score_completeness,
+  rank_publication_id,
+  score_factors
+)
+SELECT
+  meta.season_id,
+  identity.source,
+  'stale-benchmark',
+  identity.source_trader_id,
+  identity.ordinal_position,
+  1,
+  0,
+  0,
+  0,
+  99,
+  0,
+  0,
+  'stale-' || pg_catalog.substr(identity.source_trader_id, 1, 40),
+  '2020-01-01 00:00:00+00'::timestamptz,
+  'partial',
+  '64000000-0000-4640-8640-ffffffffffff'::uuid,
+  '{}'::jsonb
+FROM arena.fixture_rank_generation_64k_identities AS identity
+CROSS JOIN arena.fixture_rank_generation_64k_meta AS meta
+WHERE meta.scenario = 'update'
+ORDER BY identity.ordinal_position;
+
+UPDATE arena.fixture_rank_generation_64k_identities AS identity
+SET legacy_rank_id = rank_row.id
+FROM public.leaderboard_ranks AS rank_row,
+     arena.fixture_rank_generation_64k_meta AS meta
+WHERE meta.scenario = 'update'
+  AND rank_row.season_id = meta.season_id
+  AND rank_row.source = identity.source
+  AND rank_row.source_trader_id = identity.source_trader_id;
+
+UPDATE arena.fixture_rank_generation_64k_meta AS meta
+SET seeded_rank_count = (
+  SELECT pg_catalog.count(*)::integer
+  FROM arena.fixture_rank_generation_64k_identities AS identity
+  WHERE identity.legacy_rank_id IS NOT NULL
+);
+
+DO $preclaim_proof$
+DECLARE
+  v_meta arena.fixture_rank_generation_64k_meta%ROWTYPE;
+  v_two_source_batches integer;
+  v_three_source_batches integer;
+  v_source_touches integer;
+  v_manifest jsonb;
+BEGIN
+  SELECT meta.* INTO STRICT v_meta
+  FROM arena.fixture_rank_generation_64k_meta AS meta;
+
+  SELECT
+    pg_catalog.count(*) FILTER (
+      WHERE (batch.evidence->>'source_count')::integer = 2
+    )::integer,
+    pg_catalog.count(*) FILTER (
+      WHERE (batch.evidence->>'source_count')::integer = 3
+    )::integer,
+    pg_catalog.sum((batch.evidence->>'source_count')::integer)::integer
+  INTO STRICT
+    v_two_source_batches,
+    v_three_source_batches,
+    v_source_touches
+  FROM arena.fixture_rank_generation_64k_batches AS batch;
+
+  SELECT stored.manifest INTO STRICT v_manifest
+  FROM ONLY arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest_id = v_meta.score_input_manifest_id;
+
+  IF (SELECT pg_catalog.count(*) FROM
+        arena.fixture_rank_generation_64k_identities) <> 64000
+     OR (SELECT pg_catalog.count(*) FROM
+          arena.fixture_rank_generation_64k_batches) <> 64
+     OR EXISTS (
+       SELECT 1
+       FROM arena.fixture_rank_generation_64k_batches AS batch
+       WHERE pg_catalog.cardinality(batch.rows) <> 1000
+          OR batch.evidence->>'batch_sha256' IS DISTINCT FROM
+               batch.batch_sha256
+     )
+     OR v_two_source_batches <> 32
+     OR v_three_source_batches <> 32
+     OR v_source_touches <> 160
+     OR pg_catalog.cardinality(v_meta.batch_sha256_plan) <> 64
+     OR (SELECT pg_catalog.count(DISTINCT batch.batch_sha256)
+         FROM arena.fixture_rank_generation_64k_batches AS batch) <> 64
+     OR v_meta.write_set_sha256 !~ '^[0-9a-f]{64}$'
+     OR v_meta.score_input_manifest_digest IS DISTINCT FROM
+          pg_catalog.encode(
+            pg_catalog.sha256(
+              pg_catalog.convert_to(
+                (v_manifest - 'manifestDigest')::text,
+                'UTF8'
+              )
+            ),
+            'hex'
+          )
+     OR v_manifest->>'manifestDigest' IS DISTINCT FROM
+          v_meta.score_input_manifest_digest
+     OR pg_catalog.jsonb_array_length(v_manifest->'inputs') <> 64000
+     OR pg_catalog.jsonb_array_length(v_manifest->'outputs') <> 64000
+     OR pg_catalog.jsonb_array_length(
+          v_manifest->'eligibility'->'evidence'->'included'
+        ) <> 64000 THEN
+    RAISE EXCEPTION 'capacity benchmark pre-claim topology drifted';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM (
+      SELECT
+        identity.source,
+        identity.source_trader_id,
+        pg_catalog.lag(identity.source) OVER (
+          ORDER BY identity.ordinal_position
+        ) AS previous_source,
+        pg_catalog.lag(identity.source_trader_id) OVER (
+          ORDER BY identity.ordinal_position
+        ) AS previous_source_trader_id
+      FROM arena.fixture_rank_generation_64k_identities AS identity
+    ) AS ordered
+    WHERE ordered.previous_source IS NOT NULL
+      AND ROW(
+            ordered.previous_source,
+            ordered.previous_source_trader_id
+          ) >= ROW(ordered.source, ordered.source_trader_id)
+  ) THEN
+    RAISE EXCEPTION 'capacity canonical identity C-order drifted';
+  END IF;
+
+  IF v_meta.scenario = 'insert' THEN
+    IF v_meta.seeded_rank_count <> 0
+       OR EXISTS (
+         SELECT 1 FROM public.leaderboard_ranks AS rank_row
+         WHERE rank_row.season_id = v_meta.season_id
+       )
+       OR EXISTS (
+         SELECT 1
+         FROM ONLY arena.leaderboard_rank_mutation_fences AS fence
+         WHERE fence.season_id = v_meta.season_id
+       ) THEN
+      RAISE EXCEPTION 'insert capacity scenario was not empty before claim';
+    END IF;
+  ELSE
+    IF v_meta.seeded_rank_count <> 64000
+       OR (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks AS rank_row
+           WHERE rank_row.season_id = v_meta.season_id) <> 64000
+       OR (SELECT pg_catalog.count(*)
+           FROM ONLY arena.leaderboard_rank_mutation_fences AS fence
+           WHERE fence.season_id = v_meta.season_id
+             AND fence.mutation_seq = 1) <> 100 THEN
+      RAISE EXCEPTION 'update capacity scenario seed drifted';
+    END IF;
+  END IF;
+END
+$preclaim_proof$;
+
+DO $claim$
+DECLARE
+  v_meta arena.fixture_rank_generation_64k_meta%ROWTYPE;
+  v_claim jsonb;
+  v_generation_seq bigint;
+  v_claimed_at timestamptz;
+  v_lease_expires_at timestamptz;
+BEGIN
+  SELECT meta.* INTO STRICT v_meta
+  FROM arena.fixture_rank_generation_64k_meta AS meta;
+
+  v_claim := public.claim_leaderboard_rank_generation(
+    v_meta.season_id,
+    v_meta.score_cohort_id,
+    v_meta.write_set_sha256,
+    64000,
+    64,
+    v_meta.computed_at,
+    300
+  );
+  v_generation_seq := (v_claim->>'generation_seq')::bigint;
+
+  SELECT claim.claimed_at, claim.lease_expires_at
+  INTO STRICT v_claimed_at, v_lease_expires_at
+  FROM ONLY arena.leaderboard_rank_generation_claims AS claim
+  WHERE claim.season_id = v_meta.season_id
+    AND claim.generation_seq = v_generation_seq
+    AND claim.score_cohort_id = v_meta.score_cohort_id;
+
+  UPDATE arena.fixture_rank_generation_64k_meta AS meta
+  SET generation_seq = v_generation_seq,
+      claimed_at = v_claimed_at,
+      lease_expires_at = v_lease_expires_at,
+      wal_start_lsn = pg_catalog.pg_current_wal_insert_lsn()
+  WHERE meta.scenario = v_meta.scenario;
+END
+$claim$;
+
+CREATE FUNCTION arena.fixture_write_rank_generation_64k_batch(
+  p_batch_index integer
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+CALLED ON NULL INPUT
+PARALLEL UNSAFE
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+SET "TimeZone" = 'UTC'
+AS $body$
+DECLARE
+  v_meta arena.fixture_rank_generation_64k_meta%ROWTYPE;
+  v_batch arena.fixture_rank_generation_64k_batches%ROWTYPE;
+  v_xid pg_catalog.xid8;
+  v_started_at timestamptz;
+  v_finished_at timestamptz;
+  v_result jsonb;
+  v_updated integer;
+BEGIN
+  IF p_batch_index IS NULL OR p_batch_index NOT BETWEEN 0 AND 63 THEN
+    RAISE EXCEPTION 'capacity batch index is invalid';
+  END IF;
+
+  SELECT meta.* INTO STRICT v_meta
+  FROM arena.fixture_rank_generation_64k_meta AS meta;
+  SELECT batch.* INTO STRICT v_batch
+  FROM arena.fixture_rank_generation_64k_batches AS batch
+  WHERE batch.batch_index = p_batch_index;
+
+  v_xid := pg_catalog.pg_current_xact_id();
+  v_started_at := pg_catalog.clock_timestamp();
+  v_result := arena.write_leaderboard_rank_generation_batch_v1(
+    v_meta.season_id,
+    v_meta.generation_seq,
+    v_meta.score_cohort_id,
+    p_batch_index,
+    v_meta.score_input_manifest_id,
+    v_meta.score_input_manifest_digest,
+    v_meta.batch_sha256_plan,
+    v_batch.rows
+  );
+  v_finished_at := pg_catalog.clock_timestamp();
+
+  UPDATE arena.fixture_rank_generation_64k_batches AS batch
+  SET call_xid = v_xid,
+      started_at = v_started_at,
+      writer_completed_at = (v_result->>'completed_at')::timestamptz,
+      finished_at = v_finished_at,
+      elapsed_ms = EXTRACT(
+        epoch FROM v_finished_at - v_started_at
+      ) * 1000::numeric,
+      result = v_result
+  WHERE batch.batch_index = p_batch_index
+    AND batch.result IS NULL;
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  IF v_updated <> 1 THEN
+    RAISE EXCEPTION 'capacity batch timing row was already written';
+  END IF;
+
+  RETURN v_result;
+END;
+$body$;
+
+-- Keep generated writer output out of the benchmark's one-line result.  The
+-- SELECT producing commands and every generated SELECT are separate psql
+-- autocommit transactions; only the latter 64 assign XIDs and mutate ranks.
+\o /dev/null
+SELECT pg_catalog.format(
+  'SELECT arena.fixture_write_rank_generation_64k_batch(%s);',
+  batch.batch_index
+)
+FROM arena.fixture_rank_generation_64k_batches AS batch
+ORDER BY batch.batch_index
+\gexec
+\o
+
+-- This statement begins only after the 64th generated SELECT committed.  Its
+-- timestamp is therefore an upper bound on claim-to-final-batch-commit time.
+UPDATE arena.fixture_rank_generation_64k_meta AS meta
+SET finished_at = pg_catalog.clock_timestamp(),
+    wal_end_lsn = pg_catalog.pg_current_wal_insert_lsn(),
+    rank_relation_bytes = pg_catalog.pg_total_relation_size(
+      'public.lr_30d'::pg_catalog.regclass
+    );
+
+DO $capacity_assertions$
+DECLARE
+  v_meta arena.fixture_rank_generation_64k_meta%ROWTYPE;
+  v_elapsed_ms numeric;
+  v_remaining_ms numeric;
+  v_wal_bytes numeric;
+  v_base_fence bigint;
+  v_p50_ms numeric;
+  v_p95_ms numeric;
+  v_max_ms numeric;
+BEGIN
+  SELECT meta.* INTO STRICT v_meta
+  FROM arena.fixture_rank_generation_64k_meta AS meta;
+  v_elapsed_ms := EXTRACT(
+    epoch FROM v_meta.finished_at - v_meta.claimed_at
+  ) * 1000::numeric;
+  v_remaining_ms := EXTRACT(
+    epoch FROM v_meta.lease_expires_at - v_meta.finished_at
+  ) * 1000::numeric;
+  v_wal_bytes := pg_catalog.pg_wal_lsn_diff(
+    v_meta.wal_end_lsn, v_meta.wal_start_lsn
+  );
+  v_base_fence := CASE WHEN v_meta.scenario = 'update' THEN 1 ELSE 0 END;
+  SELECT
+    pg_catalog.percentile_cont(0.50) WITHIN GROUP (
+      ORDER BY batch.elapsed_ms
+    )::numeric,
+    pg_catalog.percentile_cont(0.95) WITHIN GROUP (
+      ORDER BY batch.elapsed_ms
+    )::numeric,
+    pg_catalog.max(batch.elapsed_ms)
+  INTO STRICT v_p50_ms, v_p95_ms, v_max_ms
+  FROM arena.fixture_rank_generation_64k_batches AS batch;
+
+  IF (SELECT pg_catalog.count(*)
+      FROM arena.fixture_rank_generation_64k_batches AS batch
+      WHERE batch.result IS NOT NULL
+        AND batch.call_xid IS NOT NULL
+        AND batch.started_at IS NOT NULL
+        AND batch.finished_at IS NOT NULL
+        AND batch.elapsed_ms >= 0) <> 64
+     OR (SELECT pg_catalog.count(DISTINCT batch.call_xid::text)
+         FROM arena.fixture_rank_generation_64k_batches AS batch) <> 64
+     OR EXISTS (
+       SELECT 1
+       FROM arena.fixture_rank_generation_64k_batches AS batch
+       WHERE batch.xmin::text IS DISTINCT FROM batch.call_xid::text
+          OR batch.result->>'contract' IS DISTINCT FROM
+               'leaderboard-rank-generation-batch-write@1'
+          OR (batch.result->>'batch_index')::integer IS DISTINCT FROM
+               batch.batch_index
+          OR (batch.result->>'row_count')::integer <> 1000
+          OR batch.result->>'batch_sha256' IS DISTINCT FROM
+               batch.batch_sha256
+          OR (batch.result->>'completed_at')::timestamptz IS DISTINCT FROM
+               batch.writer_completed_at
+     ) THEN
+    RAISE EXCEPTION '64 independent batch transaction records drifted';
+  END IF;
+
+  IF (SELECT pg_catalog.count(*)
+      FROM ONLY arena.leaderboard_rank_generation_batch_receipts AS receipt
+      WHERE receipt.season_id = v_meta.season_id
+        AND receipt.generation_seq = v_meta.generation_seq) <> 64
+     OR (SELECT COALESCE(pg_catalog.sum(receipt.row_count), 0)
+         FROM ONLY arena.leaderboard_rank_generation_batch_receipts AS receipt
+         WHERE receipt.season_id = v_meta.season_id
+           AND receipt.generation_seq = v_meta.generation_seq) <> 64000
+     OR (SELECT COALESCE(pg_catalog.sum(receipt.source_count), 0)
+         FROM ONLY arena.leaderboard_rank_generation_batch_receipts AS receipt
+         WHERE receipt.season_id = v_meta.season_id
+           AND receipt.generation_seq = v_meta.generation_seq) <> 160
+     OR EXISTS (
+       SELECT 1
+       FROM ONLY arena.leaderboard_rank_generation_batch_receipts AS receipt
+       JOIN arena.fixture_rank_generation_64k_batches AS batch
+         ON batch.batch_index = receipt.batch_index
+       JOIN arena.fixture_rank_generation_64k_identities AS first_identity
+         ON first_identity.ordinal_position = receipt.batch_index * 1000 + 1
+       JOIN arena.fixture_rank_generation_64k_identities AS last_identity
+         ON last_identity.ordinal_position = (receipt.batch_index + 1) * 1000
+       WHERE receipt.season_id = v_meta.season_id
+         AND receipt.generation_seq = v_meta.generation_seq
+         AND (
+           receipt.xmin::text IS DISTINCT FROM batch.call_xid::text
+           OR receipt.row_count <> 1000
+           OR receipt.batch_sha256 IS DISTINCT FROM batch.batch_sha256
+           OR ROW(receipt.first_source, receipt.first_source_trader_id)
+                IS DISTINCT FROM ROW(
+                  first_identity.source,
+                  first_identity.source_trader_id
+                )
+           OR ROW(receipt.last_source, receipt.last_source_trader_id)
+                IS DISTINCT FROM ROW(
+                  last_identity.source,
+                  last_identity.source_trader_id
+                )
+         )
+     ) THEN
+    RAISE EXCEPTION 'batch receipt count, prefix, or XID binding drifted';
+  END IF;
+
+  IF (SELECT pg_catalog.count(*)
+      FROM ONLY arena.leaderboard_rank_generation_manifest_bindings AS binding
+      JOIN arena.fixture_rank_generation_64k_batches AS batch
+        ON batch.batch_index = 0
+      WHERE binding.season_id = v_meta.season_id
+        AND binding.generation_seq = v_meta.generation_seq
+        AND binding.score_cohort_id = v_meta.score_cohort_id
+        AND binding.score_input_manifest_id = v_meta.score_input_manifest_id
+        AND binding.score_input_manifest_digest =
+              v_meta.score_input_manifest_digest
+        AND binding.xmin::text = batch.call_xid::text) <> 1 THEN
+    RAISE EXCEPTION 'manifest binding was not created by batch zero XID';
+  END IF;
+
+  IF (SELECT pg_catalog.count(*)
+      FROM ONLY arena.leaderboard_rank_generation_source_fence_receipts
+        AS source_receipt
+      WHERE source_receipt.season_id = v_meta.season_id
+        AND source_receipt.generation_seq = v_meta.generation_seq) <> 160
+     OR EXISTS (
+       SELECT 1
+       FROM (
+         SELECT
+           source_receipt.*,
+           source_receipt.xmin AS row_xmin,
+           pg_catalog.row_number() OVER (
+             PARTITION BY source_receipt.source
+             ORDER BY source_receipt.batch_index
+           )::bigint AS touch_ordinal
+         FROM ONLY arena.leaderboard_rank_generation_source_fence_receipts
+           AS source_receipt
+         WHERE source_receipt.season_id = v_meta.season_id
+           AND source_receipt.generation_seq = v_meta.generation_seq
+       ) AS touched
+       JOIN arena.fixture_rank_generation_64k_batches AS batch
+         ON batch.batch_index = touched.batch_index
+       WHERE touched.row_xmin::text IS DISTINCT FROM batch.call_xid::text
+          OR touched.mutation_seq_before IS DISTINCT FROM
+               v_base_fence + touched.touch_ordinal - 1
+          OR touched.mutation_seq_after IS DISTINCT FROM
+               v_base_fence + touched.touch_ordinal
+          OR touched.mutation_seq_after - touched.mutation_seq_before <> 1
+     )
+     OR EXISTS (
+       SELECT 1
+       FROM (
+         SELECT
+           source_receipt.source,
+           pg_catalog.count(*)::bigint AS touch_count,
+           pg_catalog.sum(source_receipt.source_row_count)::bigint
+             AS source_row_count
+         FROM ONLY arena.leaderboard_rank_generation_source_fence_receipts
+           AS source_receipt
+         WHERE source_receipt.season_id = v_meta.season_id
+           AND source_receipt.generation_seq = v_meta.generation_seq
+         GROUP BY source_receipt.source
+       ) AS touched
+       JOIN ONLY arena.leaderboard_rank_mutation_fences AS fence
+         ON fence.season_id = v_meta.season_id
+        AND fence.source = touched.source
+       WHERE touched.source_row_count <> 640
+          OR fence.mutation_seq IS DISTINCT FROM
+               v_base_fence + touched.touch_count
+     )
+     OR (SELECT pg_catalog.count(*)
+         FROM (
+           SELECT source_receipt.source
+           FROM ONLY arena.leaderboard_rank_generation_source_fence_receipts
+             AS source_receipt
+           WHERE source_receipt.season_id = v_meta.season_id
+             AND source_receipt.generation_seq = v_meta.generation_seq
+           GROUP BY source_receipt.source
+           HAVING pg_catalog.count(*) = 2
+         ) AS twice_touched) <> 60
+     OR (SELECT pg_catalog.count(*)
+         FROM (
+           SELECT source_receipt.source
+           FROM ONLY arena.leaderboard_rank_generation_source_fence_receipts
+             AS source_receipt
+           WHERE source_receipt.season_id = v_meta.season_id
+             AND source_receipt.generation_seq = v_meta.generation_seq
+           GROUP BY source_receipt.source
+           HAVING pg_catalog.count(*) = 1
+         ) AS once_touched) <> 40 THEN
+    RAISE EXCEPTION '160-receipt source topology or fence continuity drifted';
+  END IF;
+
+  IF (SELECT pg_catalog.count(*)
+      FROM public.leaderboard_ranks AS rank_row
+      WHERE rank_row.season_id = v_meta.season_id) <> 64000
+     OR (SELECT pg_catalog.count(*)
+         FROM public.leaderboard_ranks AS rank_row
+         WHERE rank_row.season_id = v_meta.season_id
+           AND rank_row.rank_publication_id = v_meta.score_cohort_id) <> 64000
+     OR (SELECT pg_catalog.count(DISTINCT rank_row.rank)
+         FROM public.leaderboard_ranks AS rank_row
+         WHERE rank_row.season_id = v_meta.season_id
+           AND rank_row.rank_publication_id = v_meta.score_cohort_id) <> 64000
+     OR EXISTS (
+       SELECT 1
+       FROM arena.fixture_rank_generation_64k_identities AS identity
+       JOIN arena.fixture_rank_generation_64k_batches AS batch
+         ON batch.batch_index = identity.batch_index
+       LEFT JOIN public.leaderboard_ranks AS rank_row
+         ON rank_row.season_id = v_meta.season_id
+        AND rank_row.source = identity.source
+        AND rank_row.source_trader_id = identity.source_trader_id
+       WHERE rank_row.id IS NULL
+          OR rank_row.rank_publication_id IS DISTINCT FROM
+               v_meta.score_cohort_id
+          OR rank_row.xmin::text IS DISTINCT FROM batch.call_xid::text
+          OR (
+            v_meta.scenario = 'update'
+            AND rank_row.id IS DISTINCT FROM identity.legacy_rank_id
+          )
+          OR (
+            v_meta.scenario = 'insert'
+            AND identity.legacy_rank_id IS NOT NULL
+          )
+     ) THEN
+    RAISE EXCEPTION 'exact 64000-row cohort or rank tuple XID binding drifted';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM ONLY arena.leaderboard_score_input_manifests AS stored
+    CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(
+      stored.manifest->'inputs'
+    ) WITH ORDINALITY AS input_row(value, ordinality)
+    JOIN LATERAL pg_catalog.jsonb_array_elements(
+      stored.manifest->'outputs'
+    ) WITH ORDINALITY AS output_row(value, ordinality)
+      ON output_row.ordinality = input_row.ordinality
+    JOIN LATERAL pg_catalog.jsonb_array_elements_text(
+      stored.manifest->'eligibility'->'evidence'->'included'
+    ) WITH ORDINALITY AS included(value, ordinality)
+      ON included.ordinality = input_row.ordinality
+    FULL JOIN arena.fixture_rank_generation_64k_identities AS identity
+      ON identity.ordinal_position = input_row.ordinality
+    WHERE stored.manifest_id = v_meta.score_input_manifest_id
+      AND (
+        identity.ordinal_position IS NULL
+        OR input_row.value->>'source' IS DISTINCT FROM identity.source
+        OR input_row.value->>'source_trader_id' IS DISTINCT FROM
+             identity.source_trader_id
+        OR output_row.value->>'source' IS DISTINCT FROM identity.source
+        OR output_row.value->>'sourceTraderId' IS DISTINCT FROM
+             identity.source_trader_id
+        OR (output_row.value->>'totalScore')::double precision <= 0
+        OR included.value IS DISTINCT FROM
+             identity.source || ':' || identity.source_trader_id
+      )
+  ) THEN
+    RAISE EXCEPTION 'manifest input/output/eligibility identity order drifted';
+  END IF;
+
+  IF (SELECT pg_catalog.count(*)
+      FROM ONLY arena.leaderboard_rank_generation_heads AS head
+      WHERE head.season_id = v_meta.season_id
+        AND head.generation_seq = v_meta.generation_seq
+        AND head.score_cohort_id = v_meta.score_cohort_id
+        AND head.phase = 'writing'
+        AND head.lease_expires_at = v_meta.lease_expires_at) <> 1 THEN
+    RAISE EXCEPTION 'capacity generation head is not the exact writing head';
+  END IF;
+
+  -- Capacity is evaluated only after all transactional, XID, topology, and
+  -- identity assertions pass, so a slow run remains useful correctness proof.
+  IF v_elapsed_ms > 120000
+     OR v_remaining_ms < 180000
+     OR v_wal_bytes < 1048576
+     OR v_meta.input_bytes < 10485760
+     OR v_meta.manifest_bytes < 20971520
+     OR v_meta.manifest_value_bytes < 4194304
+     OR v_meta.manifest_relation_bytes < 4194304
+     OR v_meta.rank_relation_bytes < 16777216 THEN
+    RAISE EXCEPTION
+      'capacity envelope failed: elapsed_ms=%, p50_ms=%, p95_ms=%, max_ms=%, remaining_ms=%, wal_bytes=%, input_bytes=%, manifest_bytes=%, manifest_value_bytes=%, manifest_relation_bytes=%, rank_relation_bytes=%',
+      v_elapsed_ms,
+      v_p50_ms,
+      v_p95_ms,
+      v_max_ms,
+      v_remaining_ms,
+      v_wal_bytes,
+      v_meta.input_bytes,
+      v_meta.manifest_bytes,
+      v_meta.manifest_value_bytes,
+      v_meta.manifest_relation_bytes,
+      v_meta.rank_relation_bytes;
+  END IF;
+END
+$capacity_assertions$;
+
+SELECT pg_catalog.format(
+  'capacity|scenario=%s|elapsed_ms=%s|p50_ms=%s|p95_ms=%s|max_ms=%s|remaining_ms=%s|wal_bytes=%s|input_bytes=%s|manifest_bytes=%s|manifest_value_bytes=%s|manifest_relation_bytes=%s|rank_relation_bytes=%s',
+  meta.scenario,
+  pg_catalog.round(
+    EXTRACT(epoch FROM meta.finished_at - meta.claimed_at)
+      * 1000::numeric,
+    3
+  ),
+  pg_catalog.round(
+    pg_catalog.percentile_cont(0.50) WITHIN GROUP (
+      ORDER BY batch.elapsed_ms
+    )::numeric,
+    3
+  ),
+  pg_catalog.round(
+    pg_catalog.percentile_cont(0.95) WITHIN GROUP (
+      ORDER BY batch.elapsed_ms
+    )::numeric,
+    3
+  ),
+  pg_catalog.round(pg_catalog.max(batch.elapsed_ms), 3),
+  pg_catalog.round(
+    EXTRACT(epoch FROM meta.lease_expires_at - meta.finished_at)
+      * 1000::numeric,
+    3
+  ),
+  pg_catalog.pg_wal_lsn_diff(meta.wal_end_lsn, meta.wal_start_lsn),
+  meta.input_bytes,
+  meta.manifest_bytes,
+  meta.manifest_value_bytes,
+  meta.manifest_relation_bytes,
+  meta.rank_relation_bytes
+)
+FROM arena.fixture_rank_generation_64k_meta AS meta
+CROSS JOIN arena.fixture_rank_generation_64k_batches AS batch
+GROUP BY
+  meta.scenario,
+  meta.finished_at,
+  meta.claimed_at,
+  meta.lease_expires_at,
+  meta.wal_end_lsn,
+  meta.wal_start_lsn,
+  meta.input_bytes,
+  meta.manifest_bytes,
+  meta.manifest_value_bytes,
+  meta.manifest_relation_bytes,
+  meta.rank_relation_bytes;
