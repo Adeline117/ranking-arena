@@ -9,4 +9,5 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 ARENA_ATOMIC_WRITER_STAGING_ONLY=1 \
+ARENA_ATOMIC_WRITER_STAGING_XID_REPAIR_TIMING=after-batch-zero \
   bash "$ROOT_DIR/supabase/migrations/__tests__/leaderboard-rank-generation-atomic-writer.pg17.sh"
