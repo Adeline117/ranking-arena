@@ -1,6 +1,6 @@
 /**
- * linked-traders — 多账号关联 + 跨账号聚合统计。
- * 双表回退(user_linked_traders→trader_links)、|pnl| 加权分、Redis 缓存命中。
+ * linked-traders — 多账号关联 + 跨账号可信统计。
+ * 标准关联表、退役表兼容边界、聚合失效关闭与缓存失效。
  */
 
 const mockCacheStore = new Map<string, unknown>()
@@ -52,16 +52,28 @@ function ultRow(traderId: string, isPrimary = false) {
   }
 }
 
-function rankRow(traderId: string, roi: number, pnl: number, score: number) {
+function rankRow(
+  traderId: string,
+  roi: unknown,
+  pnl: unknown,
+  score: unknown,
+  overrides: Record<string, unknown> = {}
+) {
   return {
     source: 'bybit',
     source_trader_id: traderId,
+    season_id: '90D',
     roi,
     pnl,
     arena_score: score,
     win_rate: 60,
     max_drawdown: 20,
     rank: 5,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    is_outlier: false,
+    computed_at: new Date().toISOString(),
+    ...overrides,
   }
 }
 
@@ -80,13 +92,129 @@ describe('getLinkedTraders', () => {
       traderKey: 't1',
       isPrimary: true,
       roi: 50,
-      pnl: 1000,
+      pnl: null,
+      arenaScore: null,
+      rank: null,
     })
   })
 
-  it('主表空 → 回退 trader_links,首个为 primary', async () => {
+  it('keeps profile metrics visible but excludes scores without public-ranking proof', async () => {
     const { client } = queueClient({
+      user_linked_traders: [{ data: [ultRow('t1', true)] }],
+      leaderboard_ranks: [
+        {
+          data: [rankRow('t1', 50, 1000, 80, { metrics_estimated: true })],
+        },
+      ],
+    })
+
+    const [link] = await getLinkedTraders(client, 'u1')
+    expect(link).toMatchObject({
+      roi: 50,
+      pnl: null,
+      winRate: 60,
+      maxDrawdown: 20,
+      arenaScore: null,
+      rank: null,
+    })
+  })
+
+  it('fails closed for non-finite and physically invalid snapshot metrics', async () => {
+    const { client } = queueClient({
+      user_linked_traders: [{ data: [ultRow('t1', true)] }],
+      leaderboard_ranks: [
+        {
+          data: [
+            rankRow('t1', Number.NaN, Number.POSITIVE_INFINITY, 101, {
+              win_rate: -1,
+              max_drawdown: -100.001,
+              rank: 0,
+            }),
+          ],
+        },
+      ],
+    })
+
+    const [link] = await getLinkedTraders(client, 'u1')
+    expect(link).toMatchObject({
+      roi: null,
+      pnl: null,
+      arenaScore: null,
+      winRate: null,
+      maxDrawdown: null,
+      rank: null,
+    })
+  })
+
+  it('accepts the persisted ROI bounds and rejects values beyond them', async () => {
+    const { client } = queueClient({
+      user_linked_traders: [
+        { data: [ultRow('positive-cap'), ultRow('negative-cap'), ultRow('beyond-cap')] },
+      ],
+      leaderboard_ranks: [
+        {
+          data: [
+            rankRow('positive-cap', 10_000, 0, 80),
+            rankRow('negative-cap', -10_000, 0, 80),
+            rankRow('beyond-cap', 10_000.01, 0, 80),
+          ],
+        },
+      ],
+    })
+
+    const links = await getLinkedTraders(client, 'u1')
+    expect(links.map((link) => link.roi)).toEqual([10_000, -10_000, null])
+  })
+
+  it('does not treat an arbitrary primary membership query error as legacy fallback', async () => {
+    const { client, from } = queueClient({
+      user_linked_traders: [{ error: { code: '57014', message: 'query canceled' } }],
+      trader_links: [{ data: [] }],
+    })
+
+    await expect(getLinkedTraders(client, 'u1')).rejects.toThrow('linked trader lookup failed')
+    expect(from).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not cache a successful-looking result when a snapshot query fails', async () => {
+    const { client } = queueClient({
+      user_linked_traders: [{ data: [ultRow('t1', true)] }],
+      leaderboard_ranks: [{ error: { message: 'database unavailable' } }],
+    })
+
+    await expect(getLinkedTraders(client, 'u1')).rejects.toThrow(
+      'linked trader snapshot lookup failed for bybit'
+    )
+    expect(mockCacheStore.has('linked-traders:v2:u1')).toBe(false)
+  })
+
+  it('标准表空结果为权威结果，不会复活退役表账号', async () => {
+    const { client, from } = queueClient({
       user_linked_traders: [{ data: [] }],
+      trader_links: [
+        {
+          data: [
+            {
+              id: 'stale',
+              user_id: 'u1',
+              trader_id: 'retired-link',
+              source: 'okx',
+              handle: 'stale',
+              verified_at: null,
+              created_at: '2026-06-01',
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(await getLinkedTraders(client, 'u1')).toEqual([])
+    expect(from).toHaveBeenCalledTimes(1)
+  })
+
+  it('标准关系缺失时才回退 trader_links，并把首个设为 primary', async () => {
+    const { client } = queueClient({
+      user_linked_traders: [{ error: { code: '42P01', message: 'relation missing' } }],
       trader_links: [
         {
           data: [
@@ -120,15 +248,15 @@ describe('getLinkedTraders', () => {
     expect(links[0].linkedAt).toBe('2026-06-01') // verified_at null → created_at
   })
 
-  it('两表都空 → []', async () => {
+  it('标准关系缺失且退役表空 → []', async () => {
     const { client } = queueClient({
-      user_linked_traders: [{ data: [] }],
+      user_linked_traders: [{ error: { code: 'PGRST205', message: 'relation missing' } }],
       trader_links: [{ data: [] }],
     })
     expect(await getLinkedTraders(client, 'u1')).toEqual([])
   })
 
-  it('二次调用命中缓存,不再查 DB', async () => {
+  it('re-reads membership so an unlink cannot survive in process cache', async () => {
     const { client, from } = queueClient({
       user_linked_traders: [{ data: [ultRow('t1')] }],
       leaderboard_ranks: [{ data: [] }],
@@ -136,7 +264,7 @@ describe('getLinkedTraders', () => {
     await getLinkedTraders(client, 'u1')
     const callsAfterFirst = from.mock.calls.length
     await getLinkedTraders(client, 'u1')
-    expect(from.mock.calls.length).toBe(callsAfterFirst) // 缓存命中
+    expect(from.mock.calls.length).toBeGreaterThan(callsAfterFirst)
   })
 })
 
@@ -148,52 +276,118 @@ describe('getAggregatedStats', () => {
     })
   }
 
-  it('combinedPnl 求和 + bestRoi 取最大(带来源)', async () => {
+  it('withholds aggregate numerics until a complete publication contract is bound', async () => {
     const { client } = twoAccountClient()
     const agg = (await getAggregatedStats(client, 'u1'))!
-    expect(agg.combinedPnl).toBe(500) // 1000 + (-500)
-    expect(agg.bestRoi).toMatchObject({ value: 100, traderKey: 't2' })
+    expect(agg.combinedPnl).toBeNull()
+    expect(agg.bestRoi).toBeNull()
+    expect(agg.weightedScore).toBeNull()
     expect(agg.totalAccounts).toBe(2)
   })
 
-  it('weightedScore 按 |pnl|+1 加权', async () => {
+  it('does not derive a weighted score from unbound PnL currencies', async () => {
     const { client } = twoAccountClient()
     const agg = (await getAggregatedStats(client, 'u1'))!
-    // (80×1001 + 60×501) / (1001+501) = (80080+30060)/1502 ≈ 73.33
-    expect(agg.weightedScore).toBeCloseTo(73.33, 1)
+    expect(agg.weightedScore).toBeNull()
   })
 
-  it('单账号 → null(无聚合意义)', async () => {
+  it('does not publish a best ROI from a partial account set', async () => {
+    const { client } = queueClient({
+      user_linked_traders: [{ data: [ultRow('t1', true), ultRow('t2')] }],
+      leaderboard_ranks: [
+        {
+          data: [rankRow('t1', 0, 0, 80), rankRow('t2', null, 100, 60)],
+        },
+      ],
+    })
+
+    const agg = (await getAggregatedStats(client, 'u1'))!
+    expect(agg.bestRoi).toBeNull()
+    expect(agg.combinedPnl).toBeNull()
+    expect(agg.weightedScore).toBeNull()
+  })
+
+  it('preserves measured zero as profile evidence without promoting it to an aggregate', async () => {
+    const { client } = queueClient({
+      user_linked_traders: [{ data: [ultRow('t1', true), ultRow('t2')] }],
+      leaderboard_ranks: [
+        {
+          data: [rankRow('t1', 0, 0, 80), rankRow('t2', 0, 0, 60)],
+        },
+      ],
+    })
+
+    const agg = (await getAggregatedStats(client, 'u1'))!
+    expect(agg.accounts.map((account) => account.roi)).toEqual([0, 0])
+    expect(agg.bestRoi).toBeNull()
+  })
+
+  it('单账号保留真实 membership count，但不会产生聚合值', async () => {
     const { client } = queueClient({
       user_linked_traders: [{ data: [ultRow('only')] }],
       leaderboard_ranks: [{ data: [] }],
     })
+    expect(await getAggregatedStats(client, 'u1')).toMatchObject({
+      combinedPnl: null,
+      bestRoi: null,
+      weightedScore: null,
+      totalAccounts: 1,
+      accounts: [expect.objectContaining({ traderKey: 'only' })],
+    })
+  })
+
+  it('零账号 → null', async () => {
+    const { client } = queueClient({ user_linked_traders: [{ data: [] }] })
     expect(await getAggregatedStats(client, 'u1')).toBeNull()
   })
 })
 
 describe('findUserByTrader + 缓存失效', () => {
-  it('主表命中 → user_id;主表无 → 回退 trader_links;都无 → null', async () => {
+  it('标准表命中 → user_id；标准表无记录 → 权威 null', async () => {
     const hit = queueClient({ user_linked_traders: [{ data: { user_id: 'u9' } }] })
     expect(await findUserByTrader(hit.client, 'bybit', 't1')).toBe('u9')
 
-    const fallback = queueClient({
+    const canonicalMiss = queueClient({
       user_linked_traders: [{ data: null }],
+      trader_links: [{ data: { user_id: 'stale-user' } }],
+    })
+    expect(await findUserByTrader(canonicalMiss.client, 'bybit', 't1')).toBeNull()
+    expect(canonicalMiss.from).toHaveBeenCalledTimes(1)
+  })
+
+  it('仅在标准关系缺失时回退退役表', async () => {
+    const fallback = queueClient({
+      user_linked_traders: [{ error: { code: '42P01', message: 'relation missing' } }],
       trader_links: [{ data: { user_id: 'u8' } }],
     })
     expect(await findUserByTrader(fallback.client, 'bybit', 't1')).toBe('u8')
 
     const none = queueClient({
-      user_linked_traders: [{ data: null }],
+      user_linked_traders: [{ error: { code: 'PGRST205', message: 'relation missing' } }],
       trader_links: [{ data: null }],
     })
     expect(await findUserByTrader(none.client, 'bybit', 't1')).toBeNull()
   })
 
+  it('fails closed when the primary owner lookup errors unexpectedly', async () => {
+    const failed = queueClient({
+      user_linked_traders: [{ error: { code: '57014', message: 'query canceled' } }],
+      trader_links: [{ data: { user_id: 'stale-user' } }],
+    })
+
+    await expect(findUserByTrader(failed.client, 'bybit', 't1')).rejects.toThrow(
+      'linked trader owner lookup failed'
+    )
+    expect(failed.from).toHaveBeenCalledTimes(1)
+  })
+
   it('invalidateLinkedTraderCache 清理账号、聚合与路由三层 key', async () => {
-    mockCacheStore.set('linked-traders:u1', ['x'])
-    mockCacheStore.set('linked-traders-agg:u1', { y: 1 })
-    mockCacheStore.set('aggregate:user:u1', { z: 1 })
+    mockCacheStore.set('linked-traders:u1', ['legacy'])
+    mockCacheStore.set('linked-traders:v2:u1', ['x'])
+    mockCacheStore.set('linked-traders-agg:u1', { legacy: true })
+    mockCacheStore.set('linked-traders-agg:v2:u1', { y: 1 })
+    mockCacheStore.set('aggregate:user:u1', { legacy: true })
+    mockCacheStore.set('aggregate:v2:user:u1', { z: 1 })
     await invalidateLinkedTraderCache('u1')
     expect(mockCacheStore.size).toBe(0)
   })
