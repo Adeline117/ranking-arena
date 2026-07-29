@@ -16,4 +16,9 @@ describe('public user profile ranking metadata contract', () => {
     expect(page).toContain('throw new Error(`profile ranking metadata query failed:')
     expect(page.match(/\.from\('leaderboard_ranks'\)/g)).toHaveLength(1)
   })
+
+  it('does not persist the canonical trader response across publication changes', () => {
+    expect(page).toContain("cache: 'no-store'")
+    expect(page).not.toContain('next: { revalidate: 60 }')
+  })
 })
