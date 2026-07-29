@@ -11,6 +11,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { SearchResult, isSolanaDex, walletMatchesTrader } from './types'
 import { trackEvent } from '@/lib/analytics/track'
 import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
+import { buildTraderClaimWalletMessage } from '@/lib/auth/trader-claim-wallet-message'
 
 declare global {
   interface Window {
@@ -64,7 +65,12 @@ export function DexVerifyForm({
       let walletAddress: string
       let signature: string
       const timestamp = Date.now()
-      const message = `I am claiming trader profile ${trader.source_trader_id} on Arena. Timestamp: ${timestamp}`
+      const message = buildTraderClaimWalletMessage({
+        userId: session.user.id,
+        source: trader.source,
+        traderKey: trader.source_trader_id,
+        timestamp,
+      })
 
       if (isSolana) {
         // Solana wallet signing (Phantom, Solflare, etc.)

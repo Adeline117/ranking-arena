@@ -18,12 +18,11 @@ import { logger } from '@/lib/logger'
 import { resolveTrader } from '@/lib/data/unified'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { canonicalizeWalletIdentity, walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
+import { parseTraderClaimWalletMessage } from '@/lib/auth/trader-claim-wallet-message'
+import { createHash } from 'node:crypto'
 
 /** Maximum age of a signature message (5 minutes) */
 const MAX_MESSAGE_AGE_MS = 5 * 60 * 1000
-
-/** Expected message format prefix */
-const MESSAGE_PREFIX = 'I am claiming trader profile'
 
 export interface WalletVerificationInput {
   wallet_address: string
@@ -52,19 +51,9 @@ function requireInputString(value: unknown, field: string, maxLength: number): s
 
 /**
  * Parse and validate the claim message.
- * Expected format: "I am claiming trader profile {trader_key} on Arena. Timestamp: {unix}"
+ * Re-exported for callers that still import it from this service.
  */
-export function parseClaimMessage(
-  message: string
-): { traderKey: string; timestamp: number } | null {
-  const match = message.match(/^I am claiming trader profile (.+) on Arena\. Timestamp: (\d+)$/)
-  if (!match) return null
-
-  return {
-    traderKey: match[1],
-    timestamp: parseInt(match[2], 10),
-  }
-}
+export const parseClaimMessage = parseTraderClaimWalletMessage
 
 /**
  * Verify EVM wallet signature using viem.
@@ -140,9 +129,13 @@ export async function verifyWalletOwnership(
   // Parse and validate the message
   const parsed = parseClaimMessage(message)
   if (!parsed) {
-    throw new Error(
-      `Invalid message format. Expected: "${MESSAGE_PREFIX} {trader_key} on Arena. Timestamp: {unix}"`
-    )
+    throw new Error('Invalid Arena trader claim message')
+  }
+  if (parsed.userId !== userId.toLowerCase()) {
+    throw new Error('Signature was issued for a different Arena user')
+  }
+  if (parsed.source !== platform) {
+    throw new Error('Signature was issued for a different trader source')
   }
 
   // Check message freshness (prevent replay attacks)
@@ -151,23 +144,28 @@ export async function verifyWalletOwnership(
     throw new Error('Signature message has expired. Please sign a new message.')
   }
 
-  // Replay prevention: check if this exact signature was already used (Redis dedup, 10min TTL)
+  // Replay prevention is atomic. The signed message is already bound to the
+  // authenticated user, source, and trader identity, so Redis failure cannot
+  // transfer ownership to a different account.
   try {
     const redis = await getSharedRedis()
     if (redis) {
-      const sigKey = `wallet-sig:${signature.slice(0, 32)}`
-      const existing = await redis.get(sigKey)
-      if (existing) {
+      const signatureDigest = createHash('sha256').update(signature).digest('hex')
+      const sigKey = `wallet-sig:v2:${signatureDigest}`
+      const acquired = await redis.set(sigKey, userId, { nx: true, ex: 600 })
+      if (acquired !== 'OK') {
         throw new Error('This signature has already been used. Please sign a new message.')
       }
-      await redis.set(sigKey, '1', { ex: 600 }) // 10min TTL (covers the 5min message age window + buffer)
     }
   } catch (err) {
     // Re-throw our own errors (signature already used)
     if (err instanceof Error && err.message.includes('already been used')) {
       throw err
     }
-    logger.warn('[verify-wallet] Redis nonce check failed, continuing without dedup:', err)
+    logger.warn(
+      '[verify-wallet] Redis replay check failed; signed identity binding remains active:',
+      err
+    )
   }
 
   // If trader_key is provided, validate it matches the message

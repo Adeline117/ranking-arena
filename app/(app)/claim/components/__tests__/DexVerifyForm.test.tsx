@@ -43,12 +43,13 @@ import { DexVerifyForm } from '../DexVerifyForm'
 
 const originalFetch = global.fetch
 const checksumWallet = '0xAbCdEf0123456789aBCdEf0123456789AbCdEf01'
+const userId = '11111111-1111-4111-8111-111111111111'
 
 describe('DexVerifyForm proof submission', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockGetSession.mockResolvedValue({
-      data: { session: { access_token: 'access-token' } },
+      data: { session: { access_token: 'access-token', user: { id: userId } } },
     })
     Object.defineProperty(window, 'ethereum', {
       configurable: true,
@@ -114,6 +115,7 @@ describe('DexVerifyForm proof submission', () => {
       verification_data: {
         wallet_address: checksumWallet,
         signature: '0xsigned-proof',
+        message: expect.stringContaining(`User ID: ${userId}`),
       },
     })
     expect(mockShowToast).toHaveBeenCalledWith('claimSubmitted', 'success')
