@@ -22,7 +22,10 @@ jest.mock('../metric-trust-publish', () => ({
   writeLeaderboardMetricTrust: (...args: unknown[]) => mockWriteTrust(...args),
 }))
 
-import { publishTrustedLeaderboardSnapshot } from '../publish'
+import {
+  publishTrustedLeaderboardSnapshot,
+  publishTrustedLeaderboardSnapshotInTransaction,
+} from '../publish'
 
 const src = {
   id: 1,
@@ -97,7 +100,6 @@ async function emulateAttemptBoundCommitFence(
   client: PoolClient,
   attemptBoundPrepared: { src: SourceRow; timeframe: number }
 ): Promise<void> {
-  await client.query(`SET LOCAL lock_timeout = '5s'`)
   await client.query(
     `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
     [
@@ -129,6 +131,12 @@ function clientHarness(options: HarnessOptions = {}) {
       sql.includes('arena.latest_terminal_leaderboard_acquisitions')
     ) {
       return { rows: [], rowCount: 0 }
+    }
+    if (sql.includes('FROM arena.sources')) {
+      return {
+        rows: [{ fetch_region: 'local', id: src.id, slug: src.slug, status: 'active' }],
+        rowCount: 1,
+      }
     }
     if (sql.includes('statement_timestamp()::text AS database_now')) {
       return {
@@ -265,11 +273,62 @@ describe('atomic trusted leaderboard publication', () => {
     const fenceOrder = mockFenceCommit.mock.invocationCallOrder[0]
     expect(mockFenceCommit).toHaveBeenCalledWith(harness.client, preparedV3)
     expect(mockWriteTrust.mock.invocationCallOrder[0]).toBeLessThan(fenceOrder)
-    expect(fenceOrder).toBeLessThan(harness.query.mock.invocationCallOrder[setTimeoutIndex])
+    expect(harness.query.mock.invocationCallOrder[setTimeoutIndex]).toBeLessThan(fenceOrder)
+    expect(setTimeoutIndex).toBeGreaterThan(
+      statements.findIndex((sql) => sql.includes('INSERT INTO arena.leaderboard_snapshots'))
+    )
     expect(setTimeoutIndex).toBeLessThan(acquisitionLockIndex)
     expect(acquisitionLockIndex).toBeLessThan(terminalCheckIndex)
     expect(commitIndex).toBe(terminalCheckIndex + 1)
     expect(harness.query.mock.invocationCallOrder[terminalCheckIndex]).toBeLessThan(commitOrder)
+  })
+
+  it('keeps the fenced v3 body query-only with source authority between its two locks', async () => {
+    const harness = clientHarness()
+    mockPrepareTrust.mockReturnValue(preparedV3)
+    const sourceAuthorityGuard = jest.fn(async (transaction: PoolClient) => {
+      await transaction.query(
+        'SELECT source.id FROM arena.sources AS source WHERE source.id = $1::smallint FOR SHARE OF source',
+        [src.id]
+      )
+    })
+
+    await expect(
+      publishTrustedLeaderboardSnapshotInTransaction(
+        harness.client,
+        trustedInput(),
+        sourceAuthorityGuard
+      )
+    ).resolves.toEqual(
+      expect.objectContaining({
+        published: true,
+        trust: expect.objectContaining({ replayed: false }),
+      })
+    )
+
+    const statements = harness.query.mock.calls.map(([sql]) => String(sql))
+    const publicationLockIndex = harness.query.mock.calls.findIndex(
+      ([, params]) => (params as string[] | undefined)?.[0] === 'arena.publish-board-series:1'
+    )
+    const sourceAuthorityIndex = statements.findIndex((sql) => sql.includes('FROM arena.sources'))
+    const baselineIndex = statements.findIndex((sql) => sql.includes('WITH observations AS'))
+    const acquisitionLockIndex = harness.query.mock.calls.findIndex(
+      ([, params]) =>
+        (params as string[] | undefined)?.[0] === 'arena.leaderboard-acquisition-source:1:30'
+    )
+    const terminalCheckIndex = statements.findIndex((sql) =>
+      sql.includes('arena.latest_terminal_leaderboard_acquisitions AS terminal')
+    )
+    expect(sourceAuthorityGuard).toHaveBeenCalledWith(harness.client)
+    expect(publicationLockIndex).toBe(0)
+    expect(sourceAuthorityIndex).toBe(publicationLockIndex + 1)
+    expect(baselineIndex).toBeGreaterThan(sourceAuthorityIndex)
+    expect(acquisitionLockIndex).toBeGreaterThan(baselineIndex)
+    expect(terminalCheckIndex).toBe(acquisitionLockIndex + 1)
+    expect(terminalCheckIndex).toBe(statements.length - 1)
+    expect(statements.some((sql) => /^(?:BEGIN|COMMIT|ROLLBACK|SET)\b/i.test(sql.trim()))).toBe(
+      false
+    )
   })
 
   it('runs the v3 final fence after exact existing replay reconciliation and before COMMIT', async () => {
@@ -298,7 +357,12 @@ describe('atomic trusted leaderboard publication', () => {
     const fenceOrder = mockFenceCommit.mock.invocationCallOrder[0]
     expect(mockWriteTrust).not.toHaveBeenCalled()
     expect(mockReconcileTrust.mock.invocationCallOrder[0]).toBeLessThan(fenceOrder)
-    expect(fenceOrder).toBeLessThan(harness.query.mock.invocationCallOrder[setTimeoutIndex])
+    expect(harness.query.mock.invocationCallOrder[setTimeoutIndex]).toBeLessThan(fenceOrder)
+    expect(setTimeoutIndex).toBeGreaterThan(
+      harness.query.mock.calls.findIndex(
+        ([, params]) => (params as string[] | undefined)?.[0] === 'arena.publish-board-series:1'
+      )
+    )
     expect(setTimeoutIndex).toBeLessThan(acquisitionLockIndex)
     expect(acquisitionLockIndex).toBeLessThan(terminalCheckIndex)
     expect(statements.indexOf('COMMIT')).toBe(terminalCheckIndex + 1)

@@ -9,6 +9,7 @@ import {
 } from '../../acquisition-manifest'
 import type { ParsedLeaderboardRow, RawPage, SourceRow } from '../../core/types'
 import { binanceLeaderboardListRequestSha256 } from '../../leaderboard-request-evidence'
+import { validateWorkerDbFencedWriteStatement } from '@/worker/src/ingest/worker-db-fence'
 import {
   fenceAttemptBoundLeaderboardPublicationCommit,
   hasRegisteredLeaderboardMetricTrust,
@@ -619,7 +620,6 @@ describe('Tier-A metric trust transaction writer', () => {
     })
     const query = jest.fn(async (sqlInput: unknown) => {
       const sql = String(sqlInput)
-      if (sql === `SET LOCAL lock_timeout = '5s'`) return { rows: [], rowCount: 0 }
       if (sql.includes('pg_catalog.pg_advisory_xact_lock')) {
         return { rows: [], rowCount: 1 }
       }
@@ -633,14 +633,13 @@ describe('Tier-A metric trust transaction writer', () => {
       fenceAttemptBoundLeaderboardPublicationCommit(queryClient(query), prepared)
     ).resolves.toBeUndefined()
 
-    expect(query).toHaveBeenCalledTimes(3)
-    expect(query.mock.calls[0]).toEqual([`SET LOCAL lock_timeout = '5s'`])
-    expect(query.mock.calls[1][1]).toEqual(['arena.leaderboard-acquisition-source:1:30'])
-    expect(String(query.mock.calls[1][0])).toContain('pg_catalog.pg_advisory_xact_lock')
-    expect(String(query.mock.calls[2][0])).toContain(
+    expect(query).toHaveBeenCalledTimes(2)
+    expect(query.mock.calls[0][1]).toEqual(['arena.leaderboard-acquisition-source:1:30'])
+    expect(String(query.mock.calls[0][0])).toContain('pg_catalog.pg_advisory_xact_lock')
+    expect(String(query.mock.calls[1][0])).toContain(
       'arena.latest_terminal_leaderboard_acquisitions AS terminal'
     )
-    expect(String(query.mock.calls[2][0])).not.toContain('FOR UPDATE')
+    expect(String(query.mock.calls[1][0])).not.toContain('FOR UPDATE')
   })
 
   it('rejects the final v3 commit fence when the locked latest terminal changed', async () => {
@@ -653,7 +652,6 @@ describe('Tier-A metric trust transaction writer', () => {
     })
     const query = jest.fn(async (sqlInput: unknown) => {
       const sql = String(sqlInput)
-      if (sql === `SET LOCAL lock_timeout = '5s'`) return { rows: [], rowCount: 0 }
       if (sql.includes('pg_catalog.pg_advisory_xact_lock')) {
         return { rows: [], rowCount: 1 }
       }
@@ -666,7 +664,7 @@ describe('Tier-A metric trust transaction writer', () => {
     await expect(
       fenceAttemptBoundLeaderboardPublicationCommit(queryClient(query), prepared)
     ).rejects.toThrow('requires one exact complete acquisition outcome')
-    expect(query).toHaveBeenCalledTimes(3)
+    expect(query).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the v2 final commit fence query-free', async () => {
@@ -1769,7 +1767,12 @@ describe('Tier-A metric trust transaction writer', () => {
 })
 
 function queryClient(query: jest.Mock): PoolClient {
-  return { query } as unknown as PoolClient
+  return {
+    query: (text: string, values?: readonly unknown[]) => {
+      validateWorkerDbFencedWriteStatement(text)
+      return query(text, values)
+    },
+  } as unknown as PoolClient
 }
 
 function reconciliationQuery(

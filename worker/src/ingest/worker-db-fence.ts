@@ -546,7 +546,12 @@ function containsSelectInto(statement: string): boolean {
   return false
 }
 
-function validateWriteStatement(text: string): string {
+/**
+ * The exact SQL surface accepted by a fenced business transaction. Exported
+ * so publisher contract tests exercise the production validator instead of a
+ * second, drift-prone approximation.
+ */
+export function validateWorkerDbFencedWriteStatement(text: string): string {
   const statement = text.trim()
   if (
     statement.length === 0 ||
@@ -1407,7 +1412,7 @@ export async function acquireWorkerDbFenceAuthority({
           if (typeof text !== 'string' || (values !== undefined && !Array.isArray(values))) {
             throw dbFenceError('invalid_input', 'write')
           }
-          statement = validateWriteStatement(text)
+          statement = validateWorkerDbFencedWriteStatement(text)
           valuesSnapshot = snapshotWriteValues(values ?? [])
           queryTimeoutMs = availableQueryTimeoutMs()
         } catch (error) {

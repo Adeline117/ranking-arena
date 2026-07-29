@@ -11,7 +11,19 @@
  * the Supabase client; ESLint guard enforces the boundary).
  */
 
-import { Pool, types, type PoolClient } from 'pg'
+import { Pool, types, type PoolClient, type QueryResult, type QueryResultRow } from 'pg'
+
+/**
+ * Smallest database capability shared by pool clients and authority-fenced
+ * transactions. Keeping publishers on this surface prevents transaction
+ * bodies from reaching client lifecycle or transaction-control methods.
+ */
+export interface IngestQueryExecutor {
+  query<R extends QueryResultRow = QueryResultRow>(
+    text: string,
+    values?: readonly unknown[]
+  ): Promise<QueryResult<R>>
+}
 
 // node-pg returns NUMERIC/BIGINT as strings by default — the source of a
 // whole class of `.toFixed is not a function` / string-math bugs (freshness
