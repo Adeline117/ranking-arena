@@ -11,8 +11,14 @@ export const LEADERBOARD_ACQUISITION_MANIFEST_V2_CONTRACT =
   'arena.ingest.leaderboard-acquisition-manifest@2' as const
 export const LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT =
   'arena.ingest.leaderboard-acquisition-manifest@3' as const
+export const LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT =
+  'arena.ingest.leaderboard-acquisition-manifest@4' as const
 export const LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT =
   'arena.ingest.leaderboard-acquisition-attempt-binding@1' as const
+export const LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT =
+  'arena.ingest.partitioned-numeric-report-sum@1' as const
+export const LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT =
+  'arena.ingest.partitioned-numeric-parser-page@1' as const
 
 /** Legacy builder/parser alias retained until the Tier-A @3 cutover. */
 export const LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT =
@@ -39,6 +45,17 @@ const terminationReasons = [
 const acquisitionStates = ['complete', 'partial', 'unknown'] as const
 const populationStates = ['verified', 'partial', 'unknown'] as const
 const aggregateReportStates = ['consistent', 'conflicting', 'unknown'] as const
+const numericPartitionTerminationReasons = [
+  'reported_population_reached',
+  'reported_page_count_reached',
+  'short_page',
+  'empty_page',
+  'degenerate_page',
+  'caller_limit',
+  'safety_limit',
+  'upstream_error',
+  'unknown',
+] as const
 
 type CaptureEvidenceState = (typeof captureEvidenceStates)[number]
 type TerminationReason = (typeof terminationReasons)[number]
@@ -103,6 +120,9 @@ const nonEmptyCanonicalStringSchema = z
   .string()
   .min(1)
   .refine((value) => value.trim() === value, 'must not have surrounding whitespace')
+const partitionIdSchema = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9_-]{0,63}$/, 'must be a canonical partition id')
 const canonicalHttpUrlSchema = z
   .string()
   .refine(
@@ -162,6 +182,15 @@ const paginationPositionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('single_snapshot') }).strict(),
 ])
 
+const partitionedNumericPaginationPositionSchema = z
+  .object({
+    kind: z.literal('partitioned_page_index'),
+    partition_ordinal: safePositiveIntegerSchema,
+    partition_id: partitionIdSchema,
+    request_page_index: safePositiveIntegerSchema,
+  })
+  .strict()
+
 const captureConfigSchema = z
   .object({
     caller_page_cap: safePositiveIntegerSchema.nullable(),
@@ -187,6 +216,25 @@ const parserTransformationSchema = z.discriminatedUnion('kind', [
     .strict(),
 ])
 
+const partitionedNumericParserTransformationSchema = z
+  .object({
+    kind: z.literal('partitioned_numeric_projection'),
+    source_page_ordinals: z.array(safePositiveIntegerSchema),
+    algorithm_contract: z.literal(LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT),
+    page_bindings: z.array(
+      z
+        .object({
+          source_page_ordinal: safePositiveIntegerSchema,
+          partition_ordinal: safePositiveIntegerSchema,
+          partition_id: partitionIdSchema,
+          request_page_index: safePositiveIntegerSchema,
+          request_page_size: safePositiveIntegerSchema,
+        })
+        .strict()
+    ),
+  })
+  .strict()
+
 const sourcePageInputSchema = z
   .object({
     raw_page: rawPageSchema,
@@ -200,6 +248,11 @@ const sourcePageInputSchema = z
   })
   .strict()
 
+const partitionedNumericSourcePageInputSchema = sourcePageInputSchema
+  .omit({ pagination_position: true })
+  .extend({ pagination_position: partitionedNumericPaginationPositionSchema.nullable() })
+  .strict()
+
 const sourceInputSchema = z
   .object({
     id: safePositiveIntegerSchema,
@@ -208,6 +261,10 @@ const sourceInputSchema = z
     configured_page_size: safePositiveIntegerSchema.nullable(),
     configured_pagination_kind: configuredPaginationKindSchema.nullable(),
   })
+  .strict()
+
+const partitionedNumericSourceInputSchema = sourceInputSchema
+  .extend({ configured_partition_ids: z.array(partitionIdSchema).min(2) })
   .strict()
 
 const buildInputSchema = z
@@ -250,6 +307,11 @@ const durableSourcePageSchema = z
     pagination_position: paginationPositionSchema.nullable(),
     source_reports: sourceReportsSchema.nullable(),
   })
+  .strict()
+
+const durablePartitionedNumericSourcePageSchema = durableSourcePageSchema
+  .omit({ pagination_position: true })
+  .extend({ pagination_position: partitionedNumericPaginationPositionSchema.nullable() })
   .strict()
 
 const aggregateReportSchema = z
@@ -326,9 +388,97 @@ const buildV3InputSchema = buildInputSchema
   .extend({ acquisition_attempt: acquisitionAttemptBindingSchema })
   .strict()
 
+const partitionedNumericBuildPartitionSchema = z
+  .object({
+    partition_id: partitionIdSchema,
+    source_page_ordinals: z.array(safePositiveIntegerSchema),
+    parser_page_ordinals: z.array(safePositiveIntegerSchema),
+    termination_reason: z.enum(numericPartitionTerminationReasons),
+    capture_config: captureConfigSchema,
+  })
+  .strict()
+
+const partitionedNumericDurablePartitionSchema = partitionedNumericBuildPartitionSchema
+  .extend({
+    observed_row_count: safeNonNegativeIntegerSchema,
+    accepted_population: safeNonNegativeIntegerSchema,
+    rejected_row_count: safeNonNegativeIntegerSchema,
+    deduplicated_row_count: safeNonNegativeIntegerSchema,
+    reports: z
+      .object({
+        population: aggregateReportSchema,
+        page_count: aggregateReportSchema,
+      })
+      .strict(),
+    caller_limited: z.boolean(),
+    safety_limited: z.boolean(),
+    assessment: z
+      .object({
+        acquisition_state: z.enum(acquisitionStates),
+        population_state: z.enum(populationStates),
+      })
+      .strict(),
+  })
+  .strict()
+
+const partitionedNumericBuildTopologySchema = z
+  .object({
+    kind: z.literal('partitioned_numeric'),
+    aggregation_contract: z.literal(LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT),
+    rank_scope: z.literal('partition_local_concatenated_for_storage'),
+    partitions: z.array(partitionedNumericBuildPartitionSchema),
+  })
+  .strict()
+
+const partitionedNumericDurableTopologySchema = partitionedNumericBuildTopologySchema
+  .omit({ partitions: true })
+  .extend({
+    expected_partition_ids: z.array(partitionIdSchema).min(2),
+    partitions: z.array(partitionedNumericDurablePartitionSchema),
+  })
+  .strict()
+
+const durableManifestV4StructuralSchema = durableManifestStructuralSchema
+  .omit({ data_contract: true, source: true, source_pages: true, parser_input: true })
+  .extend({
+    data_contract: z.literal(LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT),
+    source: partitionedNumericSourceInputSchema,
+    source_pages: z.array(durablePartitionedNumericSourcePageSchema),
+    parser_input: z
+      .object({
+        serialization_contract: z.literal(STRICT_CANONICAL_JSON_CONTRACT),
+        sha256: sha256Schema,
+        page_count: safeNonNegativeIntegerSchema,
+        transformation: partitionedNumericParserTransformationSchema,
+      })
+      .strict(),
+    acquisition_attempt: acquisitionAttemptBindingSchema,
+    pagination_topology: partitionedNumericDurableTopologySchema,
+  })
+  .strict()
+
+const buildV4InputSchema = buildInputSchema
+  .omit({ source: true, source_pages: true, parser_transformation: true })
+  .extend({
+    source: partitionedNumericSourceInputSchema,
+    source_pages: z.array(partitionedNumericSourcePageInputSchema),
+    parser_transformation: partitionedNumericParserTransformationSchema,
+    acquisition_attempt: acquisitionAttemptBindingSchema,
+    pagination_topology: partitionedNumericBuildTopologySchema,
+  })
+  .strict()
+
 export type LeaderboardAcquisitionPaginationPosition = z.infer<typeof paginationPositionSchema>
+export type LeaderboardPartitionedNumericPaginationPosition = z.infer<
+  typeof partitionedNumericPaginationPositionSchema
+>
 export type LeaderboardAcquisitionReportEvidence = z.infer<typeof reportEvidenceSchema>
 export type LeaderboardAcquisitionParserTransformation = z.infer<typeof parserTransformationSchema>
+export type LeaderboardPartitionedNumericParserTransformation = z.infer<
+  typeof partitionedNumericParserTransformationSchema
+>
+export type LeaderboardPartitionedNumericParserPageBinding =
+  LeaderboardPartitionedNumericParserTransformation['page_bindings'][number]
 export type LeaderboardAcquisitionSourcePageInput = z.input<typeof sourcePageInputSchema>
 
 export interface BuildLeaderboardAcquisitionManifestInput {
@@ -381,11 +531,45 @@ export interface BuildLeaderboardAcquisitionManifestV3Input extends BuildLeaderb
   }
 }
 
+export type BuildLeaderboardAcquisitionManifestV4Input = Omit<
+  BuildLeaderboardAcquisitionManifestInput,
+  'source' | 'source_pages' | 'parser_transformation'
+> & {
+  source: BuildLeaderboardAcquisitionManifestInput['source'] & {
+    configured_partition_ids: string[]
+  }
+  source_pages: Array<
+    Omit<
+      BuildLeaderboardAcquisitionManifestInput['source_pages'][number],
+      'pagination_position'
+    > & {
+      pagination_position: LeaderboardPartitionedNumericPaginationPosition | null
+    }
+  >
+  parser_transformation: LeaderboardPartitionedNumericParserTransformation
+  acquisition_attempt: BuildLeaderboardAcquisitionManifestV3Input['acquisition_attempt']
+  pagination_topology: {
+    kind: 'partitioned_numeric'
+    aggregation_contract: typeof LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT
+    rank_scope: 'partition_local_concatenated_for_storage'
+    partitions: Array<{
+      partition_id: string
+      source_page_ordinals: number[]
+      parser_page_ordinals: number[]
+      termination_reason: (typeof numericPartitionTerminationReasons)[number]
+      capture_config: BuildLeaderboardAcquisitionManifestInput['capture_config']
+    }>
+  }
+}
+
 export type LeaderboardAcquisitionManifest = z.infer<typeof durableManifestStructuralSchema>
 export type LeaderboardAcquisitionManifestV3 = z.infer<typeof durableManifestV3StructuralSchema>
+export type LeaderboardAcquisitionManifestV4 = z.infer<typeof durableManifestV4StructuralSchema>
 type LeaderboardAcquisitionManifestLike =
   | LeaderboardAcquisitionManifest
   | LeaderboardAcquisitionManifestV3
+  | LeaderboardAcquisitionManifestV4
+type DurableLeaderboardSourcePage = LeaderboardAcquisitionManifestLike['source_pages'][number]
 
 export interface BuiltLeaderboardAcquisitionManifest {
   manifest: LeaderboardAcquisitionManifest
@@ -395,6 +579,12 @@ export interface BuiltLeaderboardAcquisitionManifest {
 
 export interface BuiltLeaderboardAcquisitionManifestV3 {
   manifest: LeaderboardAcquisitionManifestV3
+  canonicalJson: string
+  sourceRunId: string
+}
+
+export interface BuiltLeaderboardAcquisitionManifestV4 {
+  manifest: LeaderboardAcquisitionManifestV4
   canonicalJson: string
   sourceRunId: string
 }
@@ -420,8 +610,26 @@ function safeIntegerSum(values: readonly number[], label: string): number {
   return sum
 }
 
+export function projectPartitionedNumericParserPage(
+  sourcePage: RawPage,
+  binding: LeaderboardPartitionedNumericParserPageBinding
+): RawPage {
+  return {
+    pageIndex: sourcePage.pageIndex,
+    payload: {
+      data_contract: LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+      partition_id: binding.partition_id,
+      request_page_index: binding.request_page_index,
+      request_page_size: binding.request_page_size,
+      payload: sourcePage.payload,
+    },
+    url: sourcePage.url,
+    fetchedAt: sourcePage.fetchedAt,
+  }
+}
+
 function deriveAggregateReport(
-  pages: readonly LeaderboardAcquisitionManifest['source_pages'][number][],
+  pages: readonly DurableLeaderboardSourcePage[],
   field: 'population' | 'page_count'
 ): AggregateReport {
   const reports = pages.flatMap((page) => {
@@ -437,7 +645,7 @@ function deriveAggregateReport(
 
 function pageResponseMetadataMatches(
   manifest: LeaderboardAcquisitionManifestLike,
-  page: LeaderboardAcquisitionManifest['source_pages'][number]
+  page: DurableLeaderboardSourcePage
 ): boolean {
   const reports = page.source_reports
   const position = page.pagination_position
@@ -445,7 +653,7 @@ function pageResponseMetadataMatches(
 
   if (reports.current_page.state === 'reported') {
     if (
-      position.kind !== 'page_index' ||
+      (position.kind !== 'page_index' && position.kind !== 'partitioned_page_index') ||
       reports.current_page.value !== position.request_page_index
     ) {
       return false
@@ -500,7 +708,7 @@ function isNaturalTermination(
   const pageCountMatchesTerminal =
     pageCountReport.state === 'unknown' ||
     (pageCountReport.state === 'consistent' &&
-      (position.kind === 'page_index'
+      (position.kind === 'page_index' || position.kind === 'partitioned_page_index'
         ? position.request_page_index === pageCountReport.value ||
           (terminationReason === 'empty_page' &&
             position.request_page_index === pageCountReport.value! + 1)
@@ -524,13 +732,13 @@ function isNaturalTermination(
     case 'reported_page_count_reached':
       return (
         pageCountReport.state === 'consistent' &&
-        position.kind === 'page_index' &&
+        (position.kind === 'page_index' || position.kind === 'partitioned_page_index') &&
         position.request_page_index === pageCountReport.value &&
         populationMatchesTerminal
       )
     case 'short_page':
       return (
-        position.kind === 'page_index' &&
+        (position.kind === 'page_index' || position.kind === 'partitioned_page_index') &&
         manifest.source.configured_page_size !== null &&
         lastPage.source_row_count > 0 &&
         lastPage.source_row_count < manifest.source.configured_page_size &&
@@ -606,14 +814,442 @@ function deriveAssessment(
   }
 }
 
+type PartitionEvidence =
+  LeaderboardAcquisitionManifestV4['pagination_topology']['partitions'][number]
+
+function isPartitionedNumericManifest(
+  manifest: LeaderboardAcquisitionManifestLike
+): manifest is LeaderboardAcquisitionManifestV4 {
+  return manifest.data_contract === LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT
+}
+
+function partitionPages(
+  manifest: LeaderboardAcquisitionManifestV4,
+  partition: Pick<PartitionEvidence, 'source_page_ordinals'>
+): LeaderboardAcquisitionManifestV4['source_pages'] {
+  return partition.source_page_ordinals.flatMap((ordinal) => {
+    const page = manifest.source_pages[ordinal - 1]
+    return page ? [page] : []
+  })
+}
+
+function partitionManifestView(
+  manifest: LeaderboardAcquisitionManifestV4,
+  partition: PartitionEvidence
+): LeaderboardAcquisitionManifestV4 {
+  return {
+    ...manifest,
+    source_pages: partitionPages(manifest, partition),
+    termination_reason: partition.termination_reason,
+    capture_config: partition.capture_config,
+    population: {
+      observed_row_count: partition.observed_row_count,
+      accepted_population: partition.accepted_population,
+      rejected_row_count: partition.rejected_row_count,
+      deduplicated_row_count: partition.deduplicated_row_count,
+      reports: partition.reports,
+    },
+    caller_limited: partition.caller_limited,
+    safety_limited: partition.safety_limited,
+    assessment: partition.assessment,
+  }
+}
+
+function derivePartitionedAggregateReport(
+  manifest: LeaderboardAcquisitionManifestV4,
+  field: 'population' | 'page_count'
+): AggregateReport {
+  const topology = manifest.pagination_topology
+  if (
+    topology.partitions.length !== topology.expected_partition_ids.length ||
+    topology.partitions.some(
+      (partition, index) => partition.partition_id !== topology.expected_partition_ids[index]
+    )
+  ) {
+    return { state: 'unknown', value: null }
+  }
+  const reports = topology.partitions.map((partition) => partition.reports[field])
+  if (reports.some((report) => report.state === 'conflicting')) {
+    return { state: 'conflicting', value: null }
+  }
+  if (reports.some((report) => report.state !== 'consistent' || report.value === null)) {
+    return { state: 'unknown', value: null }
+  }
+  return {
+    state: 'consistent',
+    value: safeIntegerSum(
+      reports.map((report) => report.value!),
+      `partitioned ${field} report sum`
+    ),
+  }
+}
+
+function derivePartitionedAssessment(
+  manifest: LeaderboardAcquisitionManifestV4,
+  populationReport: AggregateReport
+): DerivedAssessment {
+  if (!hasVerifiedCaptureFoundation(manifest)) {
+    return { acquisition_state: 'unknown', population_state: 'unknown' }
+  }
+
+  const partitions = manifest.pagination_topology.partitions
+  const exactPartitionSet =
+    partitions.length === manifest.pagination_topology.expected_partition_ids.length &&
+    partitions.every(
+      (partition, index) =>
+        partition.partition_id === manifest.pagination_topology.expected_partition_ids[index]
+    )
+  if (!exactPartitionSet) {
+    return { acquisition_state: 'unknown', population_state: 'unknown' }
+  }
+
+  const acquisitionStatesForPartitions = partitions.map(
+    (partition) => partition.assessment.acquisition_state
+  )
+  if (acquisitionStatesForPartitions.some((state) => state === 'unknown')) {
+    return { acquisition_state: 'unknown', population_state: 'unknown' }
+  }
+  if (acquisitionStatesForPartitions.some((state) => state === 'partial')) {
+    return { acquisition_state: 'partial', population_state: 'partial' }
+  }
+
+  const partitionPopulationStates = partitions.map(
+    (partition) => partition.assessment.population_state
+  )
+  if (partitionPopulationStates.some((state) => state === 'unknown')) {
+    return { acquisition_state: 'complete', population_state: 'unknown' }
+  }
+
+  const populationVerified =
+    partitionPopulationStates.every((state) => state === 'verified') &&
+    populationReport.state === 'consistent' &&
+    populationReport.value === manifest.population.accepted_population &&
+    manifest.population.rejected_row_count === 0 &&
+    manifest.population.deduplicated_row_count === 0
+
+  return {
+    acquisition_state: 'complete',
+    population_state: populationVerified ? 'verified' : 'partial',
+  }
+}
+
+function derivePartitionedTerminationReason(
+  manifest: LeaderboardAcquisitionManifestV4,
+  populationReport: AggregateReport
+): TerminationReason {
+  if (manifest.capture_evidence_state === 'unavailable') return 'unknown'
+  const partitions = manifest.pagination_topology.partitions
+  const reasons = partitions.map((partition) => partition.termination_reason)
+  if (reasons.includes('upstream_error')) return 'upstream_error'
+  if (reasons.includes('safety_limit')) return 'safety_limit'
+  if (reasons.includes('caller_limit')) return 'caller_limit'
+  if (reasons.includes('degenerate_page')) return 'degenerate_page'
+  if (
+    partitions.length === manifest.pagination_topology.expected_partition_ids.length &&
+    partitions.every((partition) => partition.assessment.acquisition_state === 'complete') &&
+    populationReport.state === 'consistent'
+  ) {
+    // This means the sum of every explicitly named partition report was
+    // reached. It never claims that the provider exposed one global total.
+    return 'reported_population_reached'
+  }
+  const first = reasons[0]
+  return first && reasons.every((reason) => reason === first) ? first : 'unknown'
+}
+
 function addIssue(ctx: z.RefinementCtx, path: PropertyKey[], message: string): void {
   ctx.addIssue({ code: z.ZodIssueCode.custom, path, message })
+}
+
+function validatePartitionedNumericTopology(
+  manifest: LeaderboardAcquisitionManifestV4,
+  ctx: z.RefinementCtx
+): void {
+  const topology = manifest.pagination_topology
+  const expected = topology.expected_partition_ids
+  const configured = manifest.source.configured_partition_ids
+  if (new Set(configured).size !== configured.length) {
+    addIssue(ctx, ['source', 'configured_partition_ids'], 'configured partition ids must be unique')
+  }
+  if (new Set(expected).size !== expected.length) {
+    addIssue(
+      ctx,
+      ['pagination_topology', 'expected_partition_ids'],
+      'expected partition ids must be unique'
+    )
+  }
+  if (
+    expected.length !== configured.length ||
+    expected.some((partitionId, index) => partitionId !== configured[index])
+  ) {
+    addIssue(
+      ctx,
+      ['pagination_topology', 'expected_partition_ids'],
+      'expected partition ids must exactly match the source configuration'
+    )
+  }
+  if (
+    topology.partitions.length !== expected.length ||
+    topology.partitions.some((partition, index) => partition.partition_id !== expected[index])
+  ) {
+    addIssue(
+      ctx,
+      ['pagination_topology', 'partitions'],
+      'partitions must exactly match the configured partition ids and order'
+    )
+  }
+  if (manifest.source.configured_pagination_kind !== 'numeric') {
+    addIssue(
+      ctx,
+      ['source', 'configured_pagination_kind'],
+      'partitioned numeric capture requires numeric source pagination'
+    )
+  }
+  if (manifest.parser_input.transformation.kind !== 'partitioned_numeric_projection') {
+    addIssue(
+      ctx,
+      ['parser_input', 'transformation', 'kind'],
+      'manifest v4 requires a partitioned numeric parser projection'
+    )
+  }
+
+  const citedSourceOrdinals: number[] = []
+  const citedParserOrdinals: number[] = []
+  for (const [partitionIndex, partition] of topology.partitions.entries()) {
+    const path = ['pagination_topology', 'partitions', partitionIndex] as const
+    let previousSourceOrdinal = 0
+    for (const [index, ordinal] of partition.source_page_ordinals.entries()) {
+      if (ordinal <= previousSourceOrdinal || ordinal > manifest.source_pages.length) {
+        addIssue(
+          ctx,
+          [...path, 'source_page_ordinals', index],
+          'partition source-page ordinals must be unique, increasing, and in range'
+        )
+      }
+      previousSourceOrdinal = ordinal
+      citedSourceOrdinals.push(ordinal)
+    }
+    let previousParserOrdinal = 0
+    for (const [index, ordinal] of partition.parser_page_ordinals.entries()) {
+      if (ordinal <= previousParserOrdinal || ordinal > manifest.parser_input.page_count) {
+        addIssue(
+          ctx,
+          [...path, 'parser_page_ordinals', index],
+          'partition parser-page ordinals must be unique, increasing, and in range'
+        )
+      }
+      previousParserOrdinal = ordinal
+      citedParserOrdinals.push(ordinal)
+      const transformation = manifest.parser_input.transformation
+      const binding =
+        transformation.kind === 'partitioned_numeric_projection'
+          ? transformation.page_bindings[ordinal - 1]
+          : undefined
+      if (
+        !binding ||
+        binding.partition_ordinal !== partitionIndex + 1 ||
+        binding.partition_id !== partition.partition_id
+      ) {
+        addIssue(
+          ctx,
+          [...path, 'parser_page_ordinals', index],
+          'partition parser-page ordinal must bind the same partition'
+        )
+      }
+    }
+
+    const pages = partitionPages(manifest, partition)
+    for (const [localIndex, page] of pages.entries()) {
+      const position = page.pagination_position
+      if (
+        !position ||
+        position.kind !== 'partitioned_page_index' ||
+        position.partition_ordinal !== partitionIndex + 1 ||
+        position.partition_id !== partition.partition_id ||
+        position.request_page_index !== localIndex + 1
+      ) {
+        addIssue(
+          ctx,
+          [...path, 'source_page_ordinals', localIndex],
+          'partition request page indexes must be contiguous from one and bind the partition'
+        )
+      }
+    }
+
+    let observed = 0
+    try {
+      observed = safeIntegerSum(
+        pages.map((page) => page.source_row_count),
+        `partition ${partition.partition_id} observed row count`
+      )
+    } catch (error) {
+      addIssue(ctx, [...path, 'observed_row_count'], (error as Error).message)
+    }
+    if (partition.observed_row_count !== observed) {
+      addIssue(
+        ctx,
+        [...path, 'observed_row_count'],
+        'partition observed_row_count must equal its source-page row sum'
+      )
+    }
+    const accounted = partition.accepted_population + partition.rejected_row_count
+    if (
+      !isSafeNonNegativeInteger(accounted) ||
+      accounted > observed ||
+      partition.deduplicated_row_count !== observed - accounted
+    ) {
+      addIssue(
+        ctx,
+        [...path, 'deduplicated_row_count'],
+        'partition accepted, rejected, and deduplicated counts must account for every row'
+      )
+    }
+
+    const populationReport = deriveAggregateReport(pages, 'population')
+    const pageCountReport = deriveAggregateReport(pages, 'page_count')
+    if (
+      partition.reports.population.state !== populationReport.state ||
+      partition.reports.population.value !== populationReport.value
+    ) {
+      addIssue(
+        ctx,
+        [...path, 'reports', 'population'],
+        'partition population report is not centrally derived'
+      )
+    }
+    if (
+      partition.reports.page_count.state !== pageCountReport.state ||
+      partition.reports.page_count.value !== pageCountReport.value
+    ) {
+      addIssue(
+        ctx,
+        [...path, 'reports', 'page_count'],
+        'partition page-count report is not centrally derived'
+      )
+    }
+
+    const pageCount = pages.length
+    const callerCap = partition.capture_config.caller_page_cap
+    const safetyCap = partition.capture_config.safety_page_cap
+    if (
+      pageCount > safetyCap ||
+      (callerCap !== null && callerCap <= safetyCap && pageCount > callerCap)
+    ) {
+      addIssue(ctx, [...path, 'capture_config'], 'partition pages exceed their effective cap')
+    }
+    if (
+      partition.termination_reason === 'caller_limit' &&
+      (callerCap === null || callerCap > safetyCap || pageCount !== callerCap)
+    ) {
+      addIssue(ctx, [...path, 'termination_reason'], 'partition caller limit was not reached')
+    }
+    if (
+      partition.termination_reason === 'safety_limit' &&
+      (pageCount !== safetyCap || (callerCap !== null && callerCap <= safetyCap))
+    ) {
+      addIssue(ctx, [...path, 'termination_reason'], 'partition safety limit was not reached first')
+    }
+
+    const view = partitionManifestView(manifest, partition)
+    validateLimitTerminationPriority(view, populationReport, pageCountReport, ctx)
+    const assessment = deriveAssessment(view, populationReport, pageCountReport)
+    if (
+      partition.assessment.acquisition_state !== assessment.acquisition_state ||
+      partition.assessment.population_state !== assessment.population_state
+    ) {
+      addIssue(ctx, [...path, 'assessment'], 'partition assessment is not centrally derived')
+    }
+    if (partition.caller_limited !== (partition.termination_reason === 'caller_limit')) {
+      addIssue(ctx, [...path, 'caller_limited'], 'partition caller_limited is not derived')
+    }
+    if (partition.safety_limited !== (partition.termination_reason === 'safety_limit')) {
+      addIssue(ctx, [...path, 'safety_limited'], 'partition safety_limited is not derived')
+    }
+  }
+
+  const expectedSourceOrdinals = manifest.source_pages.map((_, index) => index + 1)
+  if (
+    citedSourceOrdinals.length !== expectedSourceOrdinals.length ||
+    citedSourceOrdinals.some((ordinal, index) => ordinal !== expectedSourceOrdinals[index])
+  ) {
+    addIssue(
+      ctx,
+      ['pagination_topology', 'partitions'],
+      'every source page must belong to exactly one partition'
+    )
+  }
+  const expectedParserOrdinals = Array.from(
+    { length: manifest.parser_input.page_count },
+    (_, index) => index + 1
+  )
+  if (
+    citedParserOrdinals.length !== expectedParserOrdinals.length ||
+    citedParserOrdinals.some((ordinal, index) => ordinal !== expectedParserOrdinals[index])
+  ) {
+    addIssue(
+      ctx,
+      ['pagination_topology', 'partitions'],
+      'every parser page must belong to exactly one partition'
+    )
+  }
+
+  for (const field of [
+    'observed_row_count',
+    'accepted_population',
+    'rejected_row_count',
+    'deduplicated_row_count',
+  ] as const) {
+    try {
+      const partitionSum = safeIntegerSum(
+        topology.partitions.map((partition) => partition[field]),
+        `partitioned ${field}`
+      )
+      if (partitionSum !== manifest.population[field]) {
+        addIssue(
+          ctx,
+          ['pagination_topology', 'partitions'],
+          `partition ${field} values must sum to the top-level population`
+        )
+      }
+    } catch (error) {
+      addIssue(ctx, ['pagination_topology', 'partitions'], (error as Error).message)
+    }
+  }
+
+  try {
+    const expectedSafetyCap = safeIntegerSum(
+      topology.partitions.map((partition) => partition.capture_config.safety_page_cap),
+      'partitioned safety page cap'
+    )
+    const callerCaps = topology.partitions.map(
+      (partition) => partition.capture_config.caller_page_cap
+    )
+    const expectedCallerCap = callerCaps.every((cap) => cap !== null)
+      ? safeIntegerSum(callerCaps as number[], 'partitioned caller page cap')
+      : null
+    if (
+      manifest.capture_config.safety_page_cap !== expectedSafetyCap ||
+      manifest.capture_config.caller_page_cap !== expectedCallerCap
+    ) {
+      addIssue(
+        ctx,
+        ['capture_config'],
+        'top-level page caps must be the explicit sum of partition caps'
+      )
+    }
+  } catch (error) {
+    addIssue(ctx, ['capture_config'], (error as Error).message)
+  }
 }
 
 function validatePaginationPositions(
   manifest: LeaderboardAcquisitionManifestLike,
   ctx: z.RefinementCtx
 ): void {
+  if (isPartitionedNumericManifest(manifest)) {
+    validatePartitionedNumericTopology(manifest, ctx)
+    return
+  }
   if (manifest.capture_evidence_state !== 'verified' || manifest.source_pages.length === 0) {
     return
   }
@@ -806,6 +1442,59 @@ function validateParserTransformation(
     return
   }
 
+  if (transformation.kind === 'partitioned_numeric_projection') {
+    if (!isPartitionedNumericManifest(manifest)) {
+      addIssue(
+        ctx,
+        ['parser_input', 'transformation', 'kind'],
+        'partitioned parser projection requires acquisition manifest v4'
+      )
+      return
+    }
+    if (
+      transformation.page_bindings.length !== manifest.parser_input.page_count ||
+      transformation.source_page_ordinals.length !== manifest.parser_input.page_count
+    ) {
+      addIssue(
+        ctx,
+        ['parser_input', 'transformation', 'page_bindings'],
+        'partitioned projection requires one exact binding per parser page'
+      )
+      return
+    }
+    for (const [index, binding] of transformation.page_bindings.entries()) {
+      const sourceOrdinal = transformation.source_page_ordinals[index]
+      const page = manifest.source_pages[sourceOrdinal - 1]
+      const position = page?.pagination_position
+      if (
+        binding.source_page_ordinal !== sourceOrdinal ||
+        !position ||
+        position.kind !== 'partitioned_page_index' ||
+        binding.partition_ordinal !== position.partition_ordinal ||
+        binding.partition_id !== position.partition_id ||
+        binding.request_page_index !== position.request_page_index ||
+        manifest.source.configured_page_size !== binding.request_page_size
+      ) {
+        addIssue(
+          ctx,
+          ['parser_input', 'transformation', 'page_bindings', index],
+          'partitioned parser binding conflicts with its exact source page'
+        )
+      }
+    }
+    const citedSourceOrdinals = new Set(transformation.source_page_ordinals)
+    for (const [index, page] of manifest.source_pages.entries()) {
+      if (page.source_row_count > 0 && !citedSourceOrdinals.has(index + 1)) {
+        addIssue(
+          ctx,
+          ['parser_input', 'transformation', 'source_page_ordinals'],
+          'partitioned projection must include every source page that contains rows'
+        )
+      }
+    }
+    return
+  }
+
   if (manifest.parser_input.page_count > 0 && ordinals.length === 0) {
     addIssue(
       ctx,
@@ -949,12 +1638,33 @@ function validateManifestInvariants(
   }
 
   validatePaginationPositions(manifest, ctx)
-  validateCaptureLimits(manifest, ctx)
+  if (!isPartitionedNumericManifest(manifest)) validateCaptureLimits(manifest, ctx)
   validateParserTransformation(manifest, ctx)
 
-  const populationReport = deriveAggregateReport(manifest.source_pages, 'population')
-  const pageCountReport = deriveAggregateReport(manifest.source_pages, 'page_count')
-  validateLimitTerminationPriority(manifest, populationReport, pageCountReport, ctx)
+  let populationReport: AggregateReport = { state: 'unknown', value: null }
+  let pageCountReport: AggregateReport = { state: 'unknown', value: null }
+  try {
+    populationReport = isPartitionedNumericManifest(manifest)
+      ? derivePartitionedAggregateReport(manifest, 'population')
+      : deriveAggregateReport(manifest.source_pages, 'population')
+    pageCountReport = isPartitionedNumericManifest(manifest)
+      ? derivePartitionedAggregateReport(manifest, 'page_count')
+      : deriveAggregateReport(manifest.source_pages, 'page_count')
+  } catch (error) {
+    addIssue(ctx, ['population', 'reports'], (error as Error).message)
+  }
+  if (!isPartitionedNumericManifest(manifest)) {
+    validateLimitTerminationPriority(manifest, populationReport, pageCountReport, ctx)
+  } else {
+    const terminationReason = derivePartitionedTerminationReason(manifest, populationReport)
+    if (manifest.termination_reason !== terminationReason) {
+      addIssue(
+        ctx,
+        ['termination_reason'],
+        'partitioned termination reason is not centrally derived'
+      )
+    }
+  }
   if (
     manifest.population.reports.population.state !== populationReport.state ||
     manifest.population.reports.population.value !== populationReport.value
@@ -985,7 +1695,9 @@ function validateManifestInvariants(
     addIssue(ctx, ['safety_limited'], 'safety_limited is not centrally derived')
   }
 
-  const assessment = deriveAssessment(manifest, populationReport, pageCountReport)
+  const assessment = isPartitionedNumericManifest(manifest)
+    ? derivePartitionedAssessment(manifest, populationReport)
+    : deriveAssessment(manifest, populationReport, pageCountReport)
   if (
     manifest.assessment.acquisition_state !== assessment.acquisition_state ||
     manifest.assessment.population_state !== assessment.population_state
@@ -1000,6 +1712,9 @@ export const leaderboardAcquisitionManifestSchema = durableManifestStructuralSch
 export const leaderboardAcquisitionManifestV3Schema = durableManifestV3StructuralSchema.superRefine(
   validateManifestInvariants
 )
+export const leaderboardAcquisitionManifestV4Schema = durableManifestV4StructuralSchema.superRefine(
+  validateManifestInvariants
+)
 
 export function parseLeaderboardAcquisitionManifest(raw: unknown): LeaderboardAcquisitionManifest {
   return leaderboardAcquisitionManifestSchema.parse(raw)
@@ -1011,15 +1726,23 @@ export function parseLeaderboardAcquisitionManifestV3(
   return leaderboardAcquisitionManifestV3Schema.parse(raw)
 }
 
-export function buildLeaderboardAcquisitionManifest(
-  rawInput: BuildLeaderboardAcquisitionManifestInput
-): BuiltLeaderboardAcquisitionManifest {
-  const input = buildInputSchema.parse(rawInput)
-  if (input.parser_transformation.kind === 'identity_projection') {
-    if (input.parser_transformation.source_page_ordinals.length !== input.parse_pages.length) {
+export function parseLeaderboardAcquisitionManifestV4(
+  raw: unknown
+): LeaderboardAcquisitionManifestV4 {
+  return leaderboardAcquisitionManifestV4Schema.parse(raw)
+}
+
+type ParsedBuildInput = z.infer<typeof buildInputSchema>
+type ParsedV4BuildInput = z.infer<typeof buildV4InputSchema>
+type ParsedBuildInputLike = ParsedBuildInput | ParsedV4BuildInput
+
+function assertParserProjection(input: ParsedBuildInputLike): void {
+  const transformation = input.parser_transformation
+  if (transformation.kind === 'identity_projection') {
+    if (transformation.source_page_ordinals.length !== input.parse_pages.length) {
       throw new TypeError('identity projection must bind every parser page to one source page')
     }
-    for (const [index, ordinal] of input.parser_transformation.source_page_ordinals.entries()) {
+    for (const [index, ordinal] of transformation.source_page_ordinals.entries()) {
       const sourcePage = input.source_pages[ordinal - 1]?.raw_page
       if (
         sourcePage === undefined ||
@@ -1030,7 +1753,75 @@ export function buildLeaderboardAcquisitionManifest(
         )
       }
     }
+    return
   }
+  if (transformation.kind !== 'partitioned_numeric_projection') return
+  if (
+    transformation.source_page_ordinals.length !== input.parse_pages.length ||
+    transformation.page_bindings.length !== input.parse_pages.length
+  ) {
+    throw new TypeError('partitioned projection must bind every parser page exactly once')
+  }
+  for (const [index, binding] of transformation.page_bindings.entries()) {
+    const sourceOrdinal = transformation.source_page_ordinals[index]
+    const sourcePage = input.source_pages[sourceOrdinal - 1]?.raw_page
+    if (
+      binding.source_page_ordinal !== sourceOrdinal ||
+      sourcePage === undefined ||
+      strictCanonicalJson(projectPartitionedNumericParserPage(sourcePage, binding)) !==
+        strictCanonicalJson(input.parse_pages[index])
+    ) {
+      throw new TypeError(
+        'partitioned projection parser page does not match its exact source-page binding'
+      )
+    }
+  }
+}
+
+function buildDurableSourcePages(
+  input: ParsedBuildInput
+): LeaderboardAcquisitionManifest['source_pages'] {
+  return input.source_pages.map((page, index) => ({
+    ordinal: index + 1,
+    stored_page_index: page.raw_page.pageIndex,
+    url: page.raw_page.url,
+    fetched_at: page.raw_page.fetchedAt,
+    payload: {
+      serialization_contract: STRICT_CANONICAL_JSON_CONTRACT,
+      sha256: strictCanonicalSha256(page.raw_page.payload),
+    },
+    source_row_count: page.source_row_count,
+    request_sha256: page.request_sha256,
+    http_status: page.http_status,
+    pagination_position: page.pagination_position,
+    source_reports: page.source_reports,
+  }))
+}
+
+function buildDurablePartitionedSourcePages(
+  input: ParsedV4BuildInput
+): LeaderboardAcquisitionManifestV4['source_pages'] {
+  return input.source_pages.map((page, index) => ({
+    ordinal: index + 1,
+    stored_page_index: page.raw_page.pageIndex,
+    url: page.raw_page.url,
+    fetched_at: page.raw_page.fetchedAt,
+    payload: {
+      serialization_contract: STRICT_CANONICAL_JSON_CONTRACT,
+      sha256: strictCanonicalSha256(page.raw_page.payload),
+    },
+    source_row_count: page.source_row_count,
+    request_sha256: page.request_sha256,
+    http_status: page.http_status,
+    pagination_position: page.pagination_position,
+    source_reports: page.source_reports,
+  }))
+}
+
+function populationAccounting(input: ParsedBuildInputLike): {
+  observedRowCount: number
+  accounted: number
+} {
   const observedRowCount = safeIntegerSum(
     input.source_pages.map((page) => page.source_row_count),
     'observed row count'
@@ -1039,24 +1830,16 @@ export function buildLeaderboardAcquisitionManifest(
   if (!isSafeNonNegativeInteger(accounted) || accounted > observedRowCount) {
     throw new TypeError('accepted and rejected counts cannot exceed observed_row_count')
   }
+  return { observedRowCount, accounted }
+}
 
-  const sourcePages: LeaderboardAcquisitionManifest['source_pages'] = input.source_pages.map(
-    (page, index) => ({
-      ordinal: index + 1,
-      stored_page_index: page.raw_page.pageIndex,
-      url: page.raw_page.url,
-      fetched_at: page.raw_page.fetchedAt,
-      payload: {
-        serialization_contract: STRICT_CANONICAL_JSON_CONTRACT,
-        sha256: strictCanonicalSha256(page.raw_page.payload),
-      },
-      source_row_count: page.source_row_count,
-      request_sha256: page.request_sha256,
-      http_status: page.http_status,
-      pagination_position: page.pagination_position,
-      source_reports: page.source_reports,
-    })
-  )
+export function buildLeaderboardAcquisitionManifest(
+  rawInput: BuildLeaderboardAcquisitionManifestInput
+): BuiltLeaderboardAcquisitionManifest {
+  const input = buildInputSchema.parse(rawInput)
+  assertParserProjection(input)
+  const { observedRowCount, accounted } = populationAccounting(input)
+  const sourcePages = buildDurableSourcePages(input)
   const populationReport = deriveAggregateReport(sourcePages, 'population')
   const pageCountReport = deriveAggregateReport(sourcePages, 'page_count')
 
@@ -1129,6 +1912,143 @@ export function buildLeaderboardAcquisitionManifestV3(
     data_contract: LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
     acquisition_attempt: acquisitionAttempt,
   })
+  const canonicalJson = strictCanonicalJson(manifest)
+  return {
+    manifest,
+    canonicalJson,
+    sourceRunId: strictCanonicalSha256(manifest),
+  }
+}
+
+/**
+ * Build attempt-bound evidence for a source composed of independent numeric
+ * pagination partitions. Top-level report values are explicitly the safe sum
+ * of per-partition reports under `pagination_topology.aggregation_contract`;
+ * they are never represented as one upstream-reported global population.
+ */
+export function buildLeaderboardAcquisitionManifestV4(
+  rawInput: BuildLeaderboardAcquisitionManifestV4Input
+): BuiltLeaderboardAcquisitionManifestV4 {
+  const input = buildV4InputSchema.parse(rawInput)
+  if (input.parser_transformation.kind !== 'partitioned_numeric_projection') {
+    throw new TypeError('acquisition manifest v4 requires a partitioned parser projection')
+  }
+  assertParserProjection(input)
+  const { observedRowCount, accounted } = populationAccounting(input)
+  if (input.rejected_row_count !== 0 || accounted !== observedRowCount) {
+    throw new TypeError(
+      'partitioned numeric manifest requires zero rejected and deduplicated source rows'
+    )
+  }
+  const sourcePages = buildDurablePartitionedSourcePages(input)
+
+  const partitions: PartitionEvidence[] = input.pagination_topology.partitions.map((partition) => {
+    const pages = partition.source_page_ordinals.flatMap((ordinal) => {
+      const page = sourcePages[ordinal - 1]
+      return page ? [page] : []
+    })
+    const observed = safeIntegerSum(
+      pages.map((page) => page.source_row_count),
+      `partition ${partition.partition_id} observed row count`
+    )
+    const accepted = safeIntegerSum(
+      partition.parser_page_ordinals.flatMap((parserOrdinal) => {
+        const sourceOrdinal = input.parser_transformation.source_page_ordinals[parserOrdinal - 1]
+        const page = sourceOrdinal === undefined ? undefined : sourcePages[sourceOrdinal - 1]
+        return page ? [page.source_row_count] : []
+      }),
+      `partition ${partition.partition_id} accepted population`
+    )
+    return {
+      ...partition,
+      observed_row_count: observed,
+      accepted_population: accepted,
+      rejected_row_count: 0,
+      deduplicated_row_count: observed - accepted,
+      reports: {
+        population: deriveAggregateReport(pages, 'population'),
+        page_count: deriveAggregateReport(pages, 'page_count'),
+      },
+      caller_limited: partition.termination_reason === 'caller_limit',
+      safety_limited: partition.termination_reason === 'safety_limit',
+      assessment: {
+        acquisition_state: 'unknown',
+        population_state: 'unknown',
+      },
+    }
+  })
+
+  const structuralManifest: LeaderboardAcquisitionManifestV4 = {
+    data_contract: LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
+    source: input.source,
+    surface: input.surface,
+    timeframe: input.timeframe,
+    started_at: input.started_at,
+    completed_at: input.completed_at,
+    runner_git_sha: input.runner_git_sha,
+    observation_cycle_id: input.observation_cycle_id,
+    capture_evidence_state: input.capture_evidence_state,
+    termination_reason: 'unknown',
+    capture_config: input.capture_config,
+    source_pages: sourcePages,
+    parser_input: {
+      serialization_contract: STRICT_CANONICAL_JSON_CONTRACT,
+      sha256: strictCanonicalSha256(input.parse_pages),
+      page_count: input.parse_pages.length,
+      transformation: input.parser_transformation,
+    },
+    population: {
+      observed_row_count: observedRowCount,
+      accepted_population: input.accepted_population,
+      rejected_row_count: input.rejected_row_count,
+      deduplicated_row_count: observedRowCount - accounted,
+      reports: {
+        population: { state: 'unknown', value: null },
+        page_count: { state: 'unknown', value: null },
+      },
+    },
+    caller_limited: false,
+    safety_limited: false,
+    assessment: {
+      acquisition_state: 'unknown',
+      population_state: 'unknown',
+    },
+    acquisition_attempt: input.acquisition_attempt,
+    pagination_topology: {
+      kind: input.pagination_topology.kind,
+      aggregation_contract: input.pagination_topology.aggregation_contract,
+      rank_scope: input.pagination_topology.rank_scope,
+      expected_partition_ids: input.source.configured_partition_ids,
+      partitions,
+    },
+  }
+
+  for (const partition of structuralManifest.pagination_topology.partitions) {
+    const view = partitionManifestView(structuralManifest, partition)
+    partition.assessment = deriveAssessment(
+      view,
+      partition.reports.population,
+      partition.reports.page_count
+    )
+  }
+  const populationReport = derivePartitionedAggregateReport(structuralManifest, 'population')
+  const pageCountReport = derivePartitionedAggregateReport(structuralManifest, 'page_count')
+  structuralManifest.population.reports = {
+    population: populationReport,
+    page_count: pageCountReport,
+  }
+  structuralManifest.termination_reason = derivePartitionedTerminationReason(
+    structuralManifest,
+    populationReport
+  )
+  if (input.termination_reason !== structuralManifest.termination_reason) {
+    throw new TypeError('partitioned termination reason conflicts with its partition evidence')
+  }
+  structuralManifest.caller_limited = structuralManifest.termination_reason === 'caller_limit'
+  structuralManifest.safety_limited = structuralManifest.termination_reason === 'safety_limit'
+  structuralManifest.assessment = derivePartitionedAssessment(structuralManifest, populationReport)
+
+  const manifest = parseLeaderboardAcquisitionManifestV4(structuralManifest)
   const canonicalJson = strictCanonicalJson(manifest)
   return {
     manifest,
