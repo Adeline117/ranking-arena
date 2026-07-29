@@ -30,6 +30,7 @@ import type { SealedLeaderboardPublicationProofSet } from '@/lib/rankings/read-p
 import {
   readSealedRankingAuthorityGeneration,
   readSealedRankingGeneration,
+  type SealedRankingGenerationRead,
 } from '@/lib/rankings/read-sealed-ranking-generation'
 import { readSealedRankIdentities } from '@/lib/rankings/read-sealed-rank-identities'
 
@@ -100,12 +101,18 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 const TRADER_DETAIL_SEASONS: readonly TradingPeriod[] = ['90D', '30D', '7D']
 
+export type TraderDetailRankingPublicationRead = Pick<
+  SealedRankingGenerationRead<unknown>,
+  'publication' | 'publicationIdentity'
+>
+
 async function readSealedTraderRankRows(
   supabase: SupabaseClient,
   params: {
     platform: string
     traderKey: string
     signal: AbortSignal
+    onRankingPublications?: (reads: readonly TraderDetailRankingPublicationRead[]) => void
   }
 ): Promise<{ data: Record<string, unknown>[]; error: null }> {
   const proofSources = filterPublicRankingSources([params.platform])
@@ -143,6 +150,8 @@ async function readSealedTraderRankRows(
       )
     )
   )
+
+  params.onRankingPublications?.(reads)
 
   return { data: reads.flatMap((read) => read.value), error: null }
 }
@@ -376,6 +385,7 @@ export async function getTraderDetail(
   params: {
     platform: string
     traderKey: string
+    onRankingPublications?: (reads: readonly TraderDetailRankingPublicationRead[]) => void
   }
 ): Promise<TraderDetail | null> {
   const { platform, traderKey } = params
@@ -398,6 +408,7 @@ export async function getTraderDetail(
           platform,
           traderKey,
           signal: phase1Signal,
+          onRankingPublications: params.onRankingPublications,
         })
       ),
       // Profile from trader_sources table

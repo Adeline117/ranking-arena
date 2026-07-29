@@ -16,10 +16,16 @@
  */
 
 import { NextRequest } from 'next/server'
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
-import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
+import {
+  resolveTrader,
+  getTraderDetail,
+  toTraderPageData,
+  type TraderDetailRankingPublicationRead,
+} from '@/lib/data/unified'
 import { ApiError } from '@/lib/api/errors'
 import {
   success as apiSuccess,
@@ -27,9 +33,15 @@ import {
   withCache,
 } from '@/lib/api/response'
 import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { tieredDel, tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+  type SealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
 const handleSchema = z.string().min(1).max(255)
@@ -40,7 +52,38 @@ const logger = createLogger('trader-api')
 export const revalidate = 300 // 5分钟，与 Cache-Control s-maxage 一致
 
 // 缓存键前缀
-const CACHE_PREFIX = publicRankingCacheKey('trader:')
+const CACHE_PREFIX = publicRankingCacheKey('trader:sealed-v2:')
+const TRADER_PAGE_SEASONS = ['7D', '30D', '90D'] as const
+const SEALED_TRADER_PAGE_CACHE_CONTRACT = 'sealed-trader-page-cache@1'
+const SEALED_TRADER_PAGE_BINDING_CONTRACT = 'sealed-trader-page-binding@1'
+
+type TraderPageSeason = (typeof TRADER_PAGE_SEASONS)[number]
+
+interface TraderPageValue {
+  readonly pageData: unknown
+  readonly resolved: {
+    readonly platform: string
+    readonly traderKey: string
+  }
+}
+
+interface SealedTraderPageBinding {
+  readonly contract: typeof SEALED_TRADER_PAGE_BINDING_CONTRACT
+  readonly platform: string
+  readonly traderKey: string
+  readonly valueSha256: string
+}
+
+interface SealedTraderPageCache {
+  readonly contract: typeof SEALED_TRADER_PAGE_CACHE_CONTRACT
+  readonly value: TraderPageValue
+  readonly windows: Record<TraderPageSeason, SealedRankingCacheEntry<SealedTraderPageBinding>>
+}
+
+interface ParsedSealedTraderPageCache {
+  readonly value: TraderPageValue
+  readonly publicationIdentities: Readonly<Record<TraderPageSeason, string>>
+}
 
 /**
  * E2E test fixture mode — returns deterministic mock data when the
@@ -155,7 +198,6 @@ export async function GET(
 
       // Accept optional ?source= param to disambiguate traders with same handle across exchanges
       const sourceParam = req.nextUrl.searchParams.get('source') || ''
-      const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}${sourceParam ? `:${sourceParam}` : ''}`
       const consistencyProbeRequested = req.nextUrl.searchParams.get('consistency_probe') === '1'
       const consistencyProbe = consistencyProbeRequested && verifyCronSecret(req)
       if (consistencyProbeRequested && !consistencyProbe) {
@@ -166,52 +208,120 @@ export async function GET(
         return response
       }
 
-      const fetchTraderData = async () => {
-        // 3s timeout for the entire resolve+detail chain.
-        // Non-existent traders were taking 31s as resolveTrader searches multiple sources.
-        const result = await Promise.race([
-          (async () => {
-            const resolved = await resolveTrader(supabase, {
-              handle: decodedHandle,
-              platform: sourceParam || undefined,
-            })
+      // Resolve on every request before consulting the detail cache. A handle can
+      // be reassigned or its source can leave dynamic publication authority; a
+      // handle-keyed cache must not keep routing traffic to the former identity.
+      const resolvedTrader = await Promise.race([
+        resolveTrader(supabase, {
+          handle: decodedHandle,
+          platform: sourceParam || undefined,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(ApiError.notFound('Trader lookup timed out')), 3_000)
+        ),
+      ])
+      if (!resolvedTrader) {
+        throw ApiError.notFound('Trader not found')
+      }
+      const resolvedIdentity = {
+        platform: resolvedTrader.platform,
+        traderKey: resolvedTrader.traderKey,
+      }
+      const cacheKey = `${CACHE_PREFIX}${resolvedTrader.platform}:${encodeURIComponent(resolvedTrader.traderKey)}`
 
-            if (!resolved) {
-              throw ApiError.notFound('Trader not found')
-            }
-
-            const detail = await getTraderDetail(supabase, {
-              platform: resolved.platform,
-              traderKey: resolved.traderKey,
-            })
-
-            if (!detail) {
-              throw ApiError.notFound('No data for trader')
-            }
-
-            return {
-              pageData: toTraderPageData(detail),
-              resolved: { platform: resolved.platform, traderKey: resolved.traderKey },
-            }
-          })(),
+      const fetchTraderData = async (requirePublicationProofs: boolean) => {
+        let rankingPublications: readonly TraderDetailRankingPublicationRead[] | null = null
+        const detail = await Promise.race([
+          getTraderDetail(supabase, {
+            platform: resolvedTrader.platform,
+            traderKey: resolvedTrader.traderKey,
+            onRankingPublications: (reads) => {
+              rankingPublications = reads
+            },
+          }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(ApiError.notFound('Trader lookup timed out')), 3_000)
           ),
         ])
-        return result
+
+        if (!detail) {
+          throw ApiError.notFound('No data for trader')
+        }
+        const capturedPublications = rankingPublications as
+          | readonly TraderDetailRankingPublicationRead[]
+          | null
+        if (
+          requirePublicationProofs &&
+          capturedPublications?.length !== TRADER_PAGE_SEASONS.length
+        ) {
+          throw new Error('trader detail did not expose all sealed ranking publications')
+        }
+
+        return {
+          value: {
+            pageData: toTraderPageData(detail),
+            resolved: resolvedIdentity,
+          },
+          rankingPublications: capturedPublications ?? [],
+        }
       }
 
       // The CI consistency probe compares the API with a just-read authoritative
       // leaderboard row. Its CRON_SECRET-authenticated path must bypass the warm
       // 2m memory / 15m Redis tier; otherwise expected cache age looks like drift.
-      const data = consistencyProbe
-        ? await fetchTraderData()
-        : await tieredGetOrSet(
+      let data: TraderPageValue
+      if (consistencyProbe) {
+        data = (await fetchTraderData(false)).value
+      } else {
+        const fetchSealedTraderData = async () => {
+          const fresh = await fetchTraderData(true)
+          return createSealedTraderPageCache(fresh.value, fresh.rankingPublications)
+        }
+        const readAuthorizedCache = async () => {
+          const cached = await tieredGetOrSet(
             cacheKey,
-            fetchTraderData,
-            'warm', // warm tier: 2 min memory, 15 min Redis
+            fetchSealedTraderData,
+            'warm', // warm tier: 2 min memory, 15m Redis
             ['trader']
           )
+          const sealedCache = parseSealedTraderPageCache(cached)
+          if (
+            !sealedCache ||
+            sealedCache.value.resolved.platform !== resolvedTrader.platform ||
+            sealedCache.value.resolved.traderKey !== resolvedTrader.traderKey
+          ) {
+            return null
+          }
+
+          const currentReads = await Promise.all(
+            TRADER_PAGE_SEASONS.map((season) =>
+              readSealedRankingGeneration(
+                supabase,
+                { season, sources: [resolvedTrader.platform] },
+                async () => null,
+                { timeoutMs: 10_000 }
+              )
+            )
+          )
+          return currentReads.every(
+            (read) =>
+              sealedCache.publicationIdentities[read.publication.season] ===
+              read.publicationIdentity
+          )
+            ? sealedCache.value
+            : null
+        }
+
+        let cachedData = await readAuthorizedCache()
+        if (!cachedData) {
+          await tieredDel(cacheKey)
+          cachedData = await readAuthorizedCache()
+        }
+        if (!cachedData) {
+          throw new Error('trader detail cache did not satisfy the sealed publication contract')
+        }
+        data = cachedData
+      }
 
       const { pageData, resolved } = data
 
@@ -415,4 +525,112 @@ export async function GET(
   )
 
   return handler(request)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const keys = Object.keys(value).sort()
+  const expectedKeys = [...expected].sort()
+  return (
+    keys.length === expectedKeys.length && keys.every((key, index) => key === expectedKeys[index])
+  )
+}
+
+function traderPageValueSha256(value: TraderPageValue): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex')
+}
+
+function createSealedTraderPageCache(
+  value: TraderPageValue,
+  rankingPublications: readonly TraderDetailRankingPublicationRead[]
+): SealedTraderPageCache {
+  const publications = new Map(
+    rankingPublications.map((read) => [read.publication.season, read] as const)
+  )
+  if (
+    publications.size !== TRADER_PAGE_SEASONS.length ||
+    TRADER_PAGE_SEASONS.some((season) => !publications.has(season))
+  ) {
+    throw new Error('trader detail publication set is incomplete')
+  }
+
+  const binding: SealedTraderPageBinding = {
+    contract: SEALED_TRADER_PAGE_BINDING_CONTRACT,
+    platform: value.resolved.platform,
+    traderKey: value.resolved.traderKey,
+    valueSha256: traderPageValueSha256(value),
+  }
+  const windows = {} as SealedTraderPageCache['windows']
+  for (const season of TRADER_PAGE_SEASONS) {
+    const read = publications.get(season)!
+    const proofSources = read.publication.proofs.map((proof) => proof.source)
+    if (proofSources.length !== 1 || proofSources[0] !== value.resolved.platform) {
+      throw new Error(`trader detail ${season} publication escaped its source scope`)
+    }
+    windows[season] = createSealedRankingCacheEntry({ ...read, value: binding })
+  }
+
+  return {
+    contract: SEALED_TRADER_PAGE_CACHE_CONTRACT,
+    value,
+    windows,
+  }
+}
+
+function parseSealedTraderPageCache(input: unknown): ParsedSealedTraderPageCache | null {
+  try {
+    if (
+      !isRecord(input) ||
+      !hasExactKeys(input, ['contract', 'value', 'windows']) ||
+      input.contract !== SEALED_TRADER_PAGE_CACHE_CONTRACT ||
+      !isRecord(input.value) ||
+      !hasExactKeys(input.value, ['pageData', 'resolved']) ||
+      !isRecord(input.value.resolved) ||
+      !hasExactKeys(input.value.resolved, ['platform', 'traderKey']) ||
+      typeof input.value.resolved.platform !== 'string' ||
+      typeof input.value.resolved.traderKey !== 'string' ||
+      !Object.prototype.hasOwnProperty.call(input.value, 'pageData') ||
+      input.value.pageData === undefined ||
+      !isRecord(input.windows) ||
+      !hasExactKeys(input.windows, TRADER_PAGE_SEASONS)
+    ) {
+      return null
+    }
+
+    const value: TraderPageValue = {
+      pageData: input.value.pageData,
+      resolved: {
+        platform: input.value.resolved.platform,
+        traderKey: input.value.resolved.traderKey,
+      },
+    }
+    const valueSha256 = traderPageValueSha256(value)
+    const publicationIdentities = {} as Record<TraderPageSeason, string>
+    for (const season of TRADER_PAGE_SEASONS) {
+      const entry = parseSealedRankingCacheEntry<SealedTraderPageBinding>(
+        input.windows[season],
+        season,
+        [value.resolved.platform]
+      )
+      if (
+        !entry ||
+        !isRecord(entry.value) ||
+        !hasExactKeys(entry.value, ['contract', 'platform', 'traderKey', 'valueSha256']) ||
+        entry.value.contract !== SEALED_TRADER_PAGE_BINDING_CONTRACT ||
+        entry.value.platform !== value.resolved.platform ||
+        entry.value.traderKey !== value.resolved.traderKey ||
+        entry.value.valueSha256 !== valueSha256
+      ) {
+        return null
+      }
+      publicationIdentities[season] = entry.publicationIdentity
+    }
+
+    return { value, publicationIdentities }
+  } catch {
+    return null
+  }
 }

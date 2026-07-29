@@ -160,11 +160,92 @@ jest.mock('@/lib/auth/verify-service-auth', () => ({
 }))
 
 const mockTieredGetOrSet = jest.fn(async (_key: string, fetcher: () => unknown) => fetcher())
+const mockTieredDel = jest.fn()
 jest.mock('@/lib/cache/redis-layer', () => ({
   tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
+  tieredDel: (...args: unknown[]) => mockTieredDel(...args),
+}))
+
+const mockReadSealedRankingGeneration = jest.fn()
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  sealedRankingPublicationIdentity: (publication: unknown) => JSON.stringify(publication),
 }))
 
 import { GET } from '../route'
+import { createHash } from 'node:crypto'
+
+const TRADER_PAGE_SEASONS = ['7D', '30D', '90D'] as const
+const CURRENT_COHORTS = {
+  '7D': '11111111-1111-4111-8111-111111111111',
+  '30D': '22222222-2222-4222-8222-222222222222',
+  '90D': '33333333-3333-4333-8333-333333333333',
+} as const
+
+function publicationFor(
+  season: (typeof TRADER_PAGE_SEASONS)[number],
+  scoreCohortId = CURRENT_COHORTS[season]
+) {
+  return {
+    state: 'sealed' as const,
+    season,
+    scoreCohortId,
+    proofs: [
+      {
+        season_id: season,
+        source: 'binance_futures',
+        source_as_of: '2026-07-29T09:00:00.000000Z',
+        recorded_at: '2026-07-29T09:01:00.000000Z',
+        score_cohort_id: scoreCohortId,
+        rank_mutation_seq: 9,
+        current_mutation_seq: 9,
+        published_rank_count: 1,
+        published_identity_sha256: 'a'.repeat(64),
+        is_sealed: true as const,
+      },
+    ],
+  }
+}
+
+function rankingPublicationReads() {
+  return TRADER_PAGE_SEASONS.map((season) => {
+    const publication = publicationFor(season)
+    return { publication, publicationIdentity: JSON.stringify(publication) }
+  })
+}
+
+function sealedTraderPageCache(
+  value: { pageData: unknown; resolved: { platform: string; traderKey: string } },
+  cohortOverrides: Partial<Record<(typeof TRADER_PAGE_SEASONS)[number], string>> = {}
+) {
+  const valueSha256 = createHash('sha256').update(JSON.stringify(value)).digest('hex')
+  const binding = {
+    contract: 'sealed-trader-page-binding@1',
+    platform: value.resolved.platform,
+    traderKey: value.resolved.traderKey,
+    valueSha256,
+  }
+  return {
+    contract: 'sealed-trader-page-cache@1',
+    value,
+    windows: Object.fromEntries(
+      TRADER_PAGE_SEASONS.map((season) => {
+        const publication = publicationFor(season, cohortOverrides[season])
+        return [
+          season,
+          {
+            contract: 'sealed-ranking-cache@1',
+            season,
+            publicationIdentity: JSON.stringify(publication),
+            publication,
+            cachedAt: '2026-07-29T09:02:00.000Z',
+            value: binding,
+          },
+        ]
+      })
+    ),
+  }
+}
 
 /** Build a minimal mock request with headers needed by withApiMiddleware. */
 function mockReq(url: string, authorization?: string) {
@@ -185,6 +266,22 @@ function mockReq(url: string, authorization?: string) {
 describe('GET /api/traders/[handle]', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockTieredDel.mockResolvedValue(undefined)
+    mockTieredGetOrSet.mockImplementation(async (_key: string, fetcher: () => unknown) => fetcher())
+    mockReadSealedRankingGeneration.mockImplementation(
+      async (
+        _supabase: unknown,
+        input: { season: (typeof TRADER_PAGE_SEASONS)[number] },
+        reader: (publication: ReturnType<typeof publicationFor>) => Promise<unknown>
+      ) => {
+        const publication = publicationFor(input.season)
+        return {
+          value: await reader(publication),
+          publication,
+          publicationIdentity: JSON.stringify(publication),
+        }
+      }
+    )
     mockGetServerCache.mockReturnValue(null)
     mockResolveTrader.mockResolvedValue(null)
     mockGetTraderDetail.mockResolvedValue(null)
@@ -277,10 +374,16 @@ describe('GET /api/traders/[handle]', () => {
       performance: { roi: 42.5 },
       profile: { handle: 'CachedTrader' },
     }
-    mockTieredGetOrSet.mockResolvedValueOnce({
-      pageData,
-      resolved: { platform: 'binance_futures', traderKey: 'trader123' },
+    mockResolveTrader.mockResolvedValueOnce({
+      platform: 'binance_futures',
+      traderKey: 'trader123',
     })
+    mockTieredGetOrSet.mockResolvedValueOnce(
+      sealedTraderPageCache({
+        pageData,
+        resolved: { platform: 'binance_futures', traderKey: 'trader123' },
+      })
+    )
 
     const request = mockReq('http://localhost/api/traders/CachedTrader')
     const params = Promise.resolve({ handle: 'CachedTrader' })
@@ -292,6 +395,78 @@ describe('GET /api/traders/[handle]', () => {
       'public, max-age=300, s-maxage=300, stale-while-revalidate=600'
     )
     expect(res.headers.get('X-Arena-Consistency-Proof')).toBeNull()
+    expect(mockResolveTrader).toHaveBeenCalledTimes(1)
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(3)
+    expect(mockGetTraderDetail).not.toHaveBeenCalled()
+  })
+
+  it('evicts a cached trader page after any ranking window advances cohort', async () => {
+    const oldValue = {
+      pageData: { performance: { roi: -999 }, profile: { handle: 'Old Cache' } },
+      resolved: { platform: 'binance_futures', traderKey: 'trader123' },
+    }
+    mockResolveTrader.mockResolvedValueOnce(oldValue.resolved)
+    mockTieredGetOrSet
+      .mockResolvedValueOnce(
+        sealedTraderPageCache(oldValue, {
+          '90D': '44444444-4444-4444-8444-444444444444',
+        })
+      )
+      .mockImplementation(async (_key: string, fetcher: () => unknown) => fetcher())
+    mockGetTraderDetail.mockImplementationOnce(async (_supabase: unknown, params: any) => {
+      params.onRankingPublications(rankingPublicationReads())
+      return { trader: {} }
+    })
+    mockToTraderPageData.mockReturnValueOnce({
+      performance: { roi: 42.5 },
+      profile: { handle: 'Current Trader' },
+    })
+
+    const request = mockReq('http://localhost/api/traders/CurrentTrader')
+    const res = await GET(request as any, {
+      params: Promise.resolve({ handle: 'CurrentTrader' }),
+    })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.data.profile.handle).toBe('Current Trader')
+    expect(JSON.stringify(body)).not.toContain('Old Cache')
+    expect(mockTieredDel).toHaveBeenCalledWith(
+      expect.stringContaining('trader:sealed-v2:binance_futures:trader123')
+    )
+    expect(mockTieredGetOrSet).toHaveBeenCalledTimes(2)
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(6)
+  })
+
+  it('rejects a cache value when the requested handle now resolves to another trader', async () => {
+    const currentIdentity = { platform: 'binance_futures', traderKey: 'trader-new' }
+    mockResolveTrader.mockResolvedValueOnce(currentIdentity)
+    mockTieredGetOrSet
+      .mockResolvedValueOnce(
+        sealedTraderPageCache({
+          pageData: { profile: { handle: 'Former Owner' } },
+          resolved: { platform: 'binance_futures', traderKey: 'trader-old' },
+        })
+      )
+      .mockImplementation(async (_key: string, fetcher: () => unknown) => fetcher())
+    mockGetTraderDetail.mockImplementationOnce(async (_supabase: unknown, params: any) => {
+      params.onRankingPublications(rankingPublicationReads())
+      return { trader: {} }
+    })
+    mockToTraderPageData.mockReturnValueOnce({ profile: { handle: 'Current Owner' } })
+
+    const res = await GET(mockReq('http://localhost/api/traders/shared-handle') as any, {
+      params: Promise.resolve({ handle: 'shared-handle' }),
+    })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.data.profile.handle).toBe('Current Owner')
+    expect(JSON.stringify(body)).not.toContain('Former Owner')
+    expect(mockTieredDel).toHaveBeenCalledWith(
+      expect.stringContaining('trader:sealed-v2:binance_futures:trader-new')
+    )
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(3)
   })
 
   it('bypasses both cache tiers only for an authenticated consistency probe', async () => {

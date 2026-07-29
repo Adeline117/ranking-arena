@@ -14,6 +14,7 @@ describe('getTraderDetail ranking generation contract', () => {
     expect(helper).toContain('.eq(LR.season_id, season)')
     expect(helper).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
     expect(helper).toContain('{ timeoutMs: SSR_HEAVY_QUERY_TIMEOUT_MS, signal: params.signal }')
+    expect(helper).toContain('params.onRankingPublications?.(reads)')
   })
 })
 
