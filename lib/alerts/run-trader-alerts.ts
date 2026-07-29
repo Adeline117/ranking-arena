@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
 import { buildTraderAlertDelivery } from './trader-alert-delivery'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import {
   evaluateTraderAlert,
   type TraderAlertMetric,
@@ -11,6 +17,9 @@ import {
 
 const MAX_ALERTS_PER_RUN = 1_000
 const MAX_PENDING_PER_RUN = 5_000
+const ALERT_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 type AlertRow = Pick<
   Database['public']['Tables']['trader_alerts']['Row'],
@@ -250,15 +259,31 @@ export async function runTraderAlerts(
   if (alerts.length === 0) return emptyResult
 
   const traderIds = [...new Set(alerts.map((alert) => alert.trader_id))]
-  const { data: leaderboardRows, error: leaderboardError } = await supabase
-    .from('leaderboard_ranks')
-    .select('source_trader_id, source, roi, pnl, max_drawdown, arena_score, rank')
-    .in('source_trader_id', traderIds)
-    .eq('season_id', '90D')
+  const sealedObservations = await readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: ALERT_RANKING_SOURCES },
+    async (publication) => {
+      const { data, error } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id, source, roi, pnl, max_drawdown, arena_score, rank')
+        .in('source', ALERT_RANKING_SOURCES)
+        .in('source_trader_id', traderIds)
+        .eq('season_id', '90D')
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
 
-  if (leaderboardError) {
-    throw new Error(`Failed to load trader observations: ${leaderboardError.message}`)
-  }
+      if (error || data === null) {
+        throw new Error(
+          `Failed to load sealed trader observations: ${error?.message ?? 'null payload'}`
+        )
+      }
+      if (data.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+        throw new Error('trader alert observation crossed the public source boundary')
+      }
+      return data
+    },
+    { timeoutMs: 15_000 }
+  )
+  const leaderboardRows = sealedObservations.value
 
   const observations = new Map<string, TraderObservation>()
   const observationsByTrader = new Map<string, TraderObservation[]>()

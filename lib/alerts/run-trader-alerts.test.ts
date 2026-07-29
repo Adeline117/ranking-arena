@@ -1,5 +1,19 @@
 import { runTraderAlerts } from './run-trader-alerts'
 
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  readSealedRankingGeneration: jest.fn(
+    async (
+      _client: unknown,
+      _input: unknown,
+      reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+    ) => ({
+      value: await reader({ scoreCohortId: 'sealed-cohort' }),
+      publication: {},
+      publicationIdentity: 'sealed-publication',
+    })
+  ),
+}))
+
 interface Call {
   table: string
   method: string
@@ -182,7 +196,7 @@ describe('runTraderAlerts', () => {
     const binanceAlert = {
       ...alert,
       id: 'alert-binance',
-      source: 'binance',
+      source: 'binance_futures',
     }
     const legacyAlert = {
       ...alert,
@@ -197,7 +211,7 @@ describe('runTraderAlerts', () => {
         {
           data: [
             { ...observation, source: 'bybit', roi: 11 },
-            { ...observation, source: 'binance', roi: 22 },
+            { ...observation, source: 'binance_futures', roi: 22 },
           ],
           error: null,
         },
