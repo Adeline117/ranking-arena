@@ -34,6 +34,11 @@ import {
   type ExactLoginIdentity,
 } from '@/lib/auth/login-identity'
 import { safeInternalReturnPath } from '@/lib/auth/safe-return-path'
+import {
+  clearAccountRecoveryToken,
+  consumeAccountRecoveryToken,
+  retainAccountRecoveryTokenLease,
+} from '@/lib/auth/account-recovery-token'
 import { StaleVerifiedSessionError } from '@/lib/auth/verified-session'
 import { getViewerScope, isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
 import {
@@ -463,6 +468,7 @@ export default function LoginPageClient() {
   )
 
   useEffect(() => {
+    const releaseRecoveryLease = retainAccountRecoveryTokenLease()
     mountedRef.current = true
     injectStyles()
     setMounted(true)
@@ -472,6 +478,7 @@ export default function LoginPageClient() {
       submittingRef.current = false
       verifyingOtpRef.current = false
       cancelAttempt()
+      releaseRecoveryLease()
     }
   }, [cancelAttempt])
 
@@ -486,11 +493,25 @@ export default function LoginPageClient() {
       // Generic error from OAuth callback or other redirects (e.g. provider cancelled)
       setError(decodeURIComponent(errorParam))
     }
-    const storedRecoveryToken = safeLocalStorageGet('arena_account_recovery_token')
-    if (searchParams.get('recover') === '1' && storedRecoveryToken) {
-      setAccountRecoveryToken(storedRecoveryToken)
-      setError(t('loginAccountPendingDeletion'))
-      setShowRecoveryPrompt(true)
+    if (
+      searchParams.get('account_deleted') === '1' ||
+      // Backward compatibility for links created before the clean handoff.
+      searchParams.get('recover') === '1'
+    ) {
+      const handoff = consumeAccountRecoveryToken()
+      if (handoff.status === 'valid') {
+        // The helper synchronously removes the fragment/storage before
+        // returning. Plaintext remains only in component state and the
+        // route-scoped module lease needed for a production remount.
+        setAccountRecoveryToken(handoff.token)
+        setError(t('loginAccountPendingDeletion'))
+        setShowRecoveryPrompt(true)
+      } else if (handoff.status === 'invalid') {
+        // An explicit malformed fragment is authoritative. Never retain a
+        // prior/stale credential from storage or an earlier render.
+        setAccountRecoveryToken(null)
+        setShowRecoveryPrompt(false)
+      }
     }
   }, [searchParams, t])
 
@@ -1095,14 +1116,19 @@ export default function LoginPageClient() {
     otpAttemptsRef.current = 0
     setOtpLocked(false)
     setShowRecoveryPrompt(false)
+    clearAccountRecoveryToken()
+    setAccountRecoveryToken(null)
     setTouchedFields({ email: false, password: false, handle: false })
   }
 
   const handleRecoverAccount = async () => {
     if (recovering || (!accountRecoveryToken && (!email || !password))) return
+    const recoveryToken = accountRecoveryToken
     const attempt = beginAttempt()
     let establishedSession: Session | null = null
     let completionCommitted = false
+    // Raw URL/storage lanes were already removed. Keep the module remount lease
+    // until this attempt reaches success, failure, cancellation or reset.
     setRecovering(true)
     setError(null)
     try {
@@ -1110,7 +1136,7 @@ export default function LoginPageClient() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
-          accountRecoveryToken ? { recovery_token: accountRecoveryToken } : { email, password }
+          recoveryToken ? { recovery_token: recoveryToken } : { email, password }
         ),
         signal: attempt.controller.signal,
       })
@@ -1120,8 +1146,7 @@ export default function LoginPageClient() {
       if (res.ok && data.success) {
         setShowRecoveryPrompt(false)
         showToast(t('loginAccountRecovered'), 'success')
-        if (accountRecoveryToken) {
-          safeLocalStorageRemove('arena_account_recovery_token')
+        if (recoveryToken) {
           setAccountRecoveryToken(null)
           setError(null)
           return
@@ -1156,6 +1181,7 @@ export default function LoginPageClient() {
         setError(t('networkErrorRetry'))
       }
     } finally {
+      clearAccountRecoveryToken()
       if (isAttemptCurrent(attempt)) {
         setRecovering(false)
         submittingRef.current = false

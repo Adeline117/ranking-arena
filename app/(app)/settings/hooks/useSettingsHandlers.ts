@@ -9,6 +9,11 @@ import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
 import { validateHandle } from '../validation'
 import { isHapticsEnabled } from '@/lib/utils/haptics'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import {
+  buildAccountRecoveryLoginPath,
+  persistAccountRecoveryToken,
+  replaceDocumentForAccountRecovery,
+} from '@/lib/auth/account-recovery-token'
 import type { AuthSessionReturn } from '@/lib/hooks/useAuthSession'
 import {
   EMAIL_DIGEST_VALUES,
@@ -1705,16 +1710,33 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         setDeleteError(data.error || t('operationFailed'))
         return
       }
+      const recoveryLoginPath = buildAccountRecoveryLoginPath()
+      let fullDocumentRecoveryToken: string | null = null
       if (typeof data.recovery_token === 'string' && data.recovery_token) {
         // One-time credential for OAuth/wallet recovery. The server stores only
-        // its SHA-256 hash; retain the plaintext only on this device.
-        localStorage.setItem('arena_account_recovery_token', data.recovery_token)
+        // its SHA-256 hash. Normal SPA navigation is always credential-free.
+        // When neither storage lane is durable, use only the parser-first
+        // full-document fallback; never expose the credential to client history.
+        const persistence = persistAccountRecoveryToken(data.recovery_token)
+        if (persistence.status === 'memory' || persistence.status === 'unavailable') {
+          fullDocumentRecoveryToken = data.recovery_token
+        }
       }
       showToast(t('accountMarkedDeleted'), 'success')
       setShowDeleteAccountModal(false)
       setDeletingAccount(false)
-      await auth.signOut()
-      router.push('/login?recover=1')
+      // The server has already globally invalidated the account. Local sign-out
+      // is best-effort and must never block the recovery credential handoff.
+      void Promise.resolve()
+        .then(() => auth.signOut())
+        .catch((error) => logger.warn('[Settings] Local sign-out after deletion failed:', error))
+      if (
+        fullDocumentRecoveryToken &&
+        replaceDocumentForAccountRecovery(fullDocumentRecoveryToken)
+      ) {
+        return
+      }
+      router.push(recoveryLoginPath)
     } catch {
       if (viewerIsCurrent(scope)) setDeleteError(t('networkErrorRetry'))
     } finally {

@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { withPublic } from '@/lib/api/middleware'
 import { badRequest } from '@/lib/api/response'
+import { isAccountRecoveryToken } from '@/lib/auth/account-recovery-token'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
@@ -65,8 +66,16 @@ export const POST = withPublic(
       return badRequest('Invalid JSON body')
     }
 
+    const hasRecoveryToken = Object.prototype.hasOwnProperty.call(body, 'recovery_token')
+    let recoveryToken: string | null = null
+    if (hasRecoveryToken) {
+      if (!isAccountRecoveryToken(body.recovery_token)) {
+        return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
+      }
+      recoveryToken = body.recovery_token
+    }
+
     const admin = getSupabaseAdmin()
-    const recoveryToken = body.recovery_token?.trim()
     let userId: string | null = null
     let recoveryTokenHash: string | undefined
 

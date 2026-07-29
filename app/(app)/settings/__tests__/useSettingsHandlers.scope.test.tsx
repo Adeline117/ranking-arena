@@ -7,8 +7,10 @@ import {
   synchronizeViewerScope,
 } from '@/lib/auth/viewer-scope'
 
+const mockRouterPush = jest.fn()
+
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }),
+  useRouter: () => ({ push: mockRouterPush, refresh: jest.fn() }),
 }))
 
 jest.mock('@/lib/supabase/client', () => {
@@ -51,8 +53,22 @@ jest.mock('@/lib/auth/token-refresh', () => ({
     updateUser: jest.fn(),
   },
 }))
+jest.mock('@/lib/auth/account-recovery-token', () => {
+  const actual = jest.requireActual('@/lib/auth/account-recovery-token')
+  const replaceDocument = jest.fn(() => true)
+  return {
+    ...actual,
+    replaceDocumentForAccountRecovery: replaceDocument,
+    __settingsMocks: { replaceDocument },
+  }
+})
 
 import { useSettingsHandlers } from '../hooks/useSettingsHandlers'
+import {
+  ACCOUNT_RECOVERY_SESSION_TOKEN_KEY,
+  ACCOUNT_RECOVERY_TOKEN_KEY,
+  clearAccountRecoveryToken,
+} from '@/lib/auth/account-recovery-token'
 
 const {
   publicMaybeSingle: mockPublicMaybeSingle,
@@ -65,6 +81,15 @@ const {
 }
 const { authedFetch: mockAuthedFetch } = jest.requireMock('@/lib/api/client').__settingsMocks as {
   authedFetch: jest.Mock
+}
+const { forceRefresh: mockForceRefresh } = jest.requireMock('@/lib/auth/token-refresh')
+  .tokenRefreshCoordinator as {
+  forceRefresh: jest.Mock
+}
+const { replaceDocument: mockReplaceDocument } = jest.requireMock(
+  '@/lib/auth/account-recovery-token'
+).__settingsMocks as {
+  replaceDocument: jest.Mock
 }
 
 function deferred<T>() {
@@ -145,11 +170,17 @@ describe('useSettingsHandlers viewer ownership', () => {
   const originalFetch = global.fetch
 
   beforeEach(() => {
+    jest.restoreAllMocks()
     jest.clearAllMocks()
+    clearAccountRecoveryToken()
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+    window.history.replaceState(null, '', '/settings')
     mockPublicMaybeSingle.mockReset()
     mockSensitiveMaybeSingle.mockReset()
     __resetViewerScopeForTests()
     mockAuthedFetch.mockResolvedValue({ ok: true, status: 200, data: { success: true } })
+    mockForceRefresh.mockResolvedValue(jwt('user-a'))
     global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch
   })
 
@@ -402,5 +433,99 @@ describe('useSettingsHandlers viewer ownership', () => {
     })
 
     expect(showToast).toHaveBeenCalledWith('validationHandleInvalidChars', 'error')
+  })
+
+  it('keeps an already-running Replay clean when localStorage and local sign-out fail', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    const replayContext = { urls: [] as string[] }
+    const navigationPush = { op: 'navigation.push', name: '' }
+    const rrwebMeta = { type: 4, data: { href: '' } }
+    mockRouterPush.mockImplementation((target: string) => {
+      navigationPush.name = target
+      replayContext.urls.push(target)
+      window.history.pushState(null, '', target)
+      rrwebMeta.data.href = window.location.href
+    })
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, recovery_token: recoveryToken }),
+    }) as unknown as typeof fetch
+
+    const originalSetItem = Storage.prototype.setItem
+    const storageSet = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string
+    ) {
+      if (this === window.localStorage) {
+        throw new DOMException('localStorage blocked', 'SecurityError')
+      }
+      return originalSetItem.call(this, key, value)
+    })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const signOut = auth.signOut as jest.Mock
+    signOut.mockRejectedValue(new Error('local sign-out failed'))
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    act(() => {
+      hook.result.current.setShowDeleteAccountModal(true)
+      hook.result.current.setDeleteConfirm('DELETE')
+    })
+    await waitFor(() => expect(hook.result.current.deleteHasPassword).toBe(false))
+
+    await act(async () => {
+      await hook.result.current.handleDeleteAccount()
+    })
+
+    expect(signOut).toHaveBeenCalledTimes(1)
+    expect(mockRouterPush).toHaveBeenCalledWith('/login?account_deleted=1')
+    expect(mockReplaceDocument).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull()
+    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBe(recoveryToken)
+    expect(JSON.stringify({ replayContext, navigationPush, rrwebMeta })).not.toContain(
+      recoveryToken
+    )
+    expect(hook.result.current.deleteError).toBeNull()
+    expect(showToast).toHaveBeenCalledWith('accountMarkedDeleted', 'success')
+    storageSet.mockRestore()
+  })
+
+  it('uses full-document replacement, never client history, when all storage is blocked', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, recovery_token: recoveryToken }),
+    }) as unknown as typeof fetch
+
+    const storageSet = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage blocked', 'SecurityError')
+    })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    act(() => {
+      hook.result.current.setShowDeleteAccountModal(true)
+      hook.result.current.setDeleteConfirm('DELETE')
+    })
+    await waitFor(() => expect(hook.result.current.deleteHasPassword).toBe(false))
+
+    await act(async () => {
+      await hook.result.current.handleDeleteAccount()
+    })
+
+    expect(mockRouterPush).not.toHaveBeenCalled()
+    expect(mockReplaceDocument).toHaveBeenCalledTimes(1)
+    expect(mockReplaceDocument).toHaveBeenCalledWith(recoveryToken)
+    expect(hook.result.current.deleteError).toBeNull()
+    expect(showToast).toHaveBeenCalledWith('accountMarkedDeleted', 'success')
+    storageSet.mockRestore()
   })
 })

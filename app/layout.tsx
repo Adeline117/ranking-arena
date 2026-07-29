@@ -7,6 +7,7 @@ import { getCriticalCss, getResourceHints } from '@/lib/performance/critical-css
 import BetaBanner from './components/layout/BetaBanner'
 import ProPromoBanner from './components/layout/ProPromoBanner'
 import { Analytics } from '@vercel/analytics/next'
+import { getAccountRecoveryBootstrapScript } from '@/lib/auth/account-recovery-bootstrap'
 // Mounted in the ROOT layout (not just (app)/) so the homepage — the #1 airdrop
 // landing page — is no longer a client-error monitoring blind spot. Safe for LCP:
 // lib/sentry-init defers the Sentry chunk to requestIdleCallback (after `load`),
@@ -139,6 +140,15 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        {/* Security boundary: this must remain the first author-owned script.
+            Next may prepend async module registrations, but monitoring/Replay
+            initialize during hydration, after this synchronously strips the
+            legacy full-document recovery credential. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: getAccountRecoveryBootstrapScript(),
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `try{var l=localStorage.getItem('language');if(!l){var n=(navigator.language||'').toLowerCase();l=n.indexOf('zh')===0?'zh':n.indexOf('ja')===0?'ja':n.indexOf('ko')===0?'ko':'en';localStorage.setItem('language',l)}document.documentElement.lang=l==='en'?'en':l==='ja'?'ja':l==='ko'?'ko':'zh-CN';document.cookie='language='+l+';path=/;max-age=31536000;SameSite=Lax'}catch(e){}`,

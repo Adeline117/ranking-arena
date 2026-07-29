@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { Session, User } from '@supabase/supabase-js'
 import {
@@ -7,6 +8,12 @@ import {
   completeAuthIdentityOperation,
 } from '@/lib/auth/session-operation'
 import { __resetViewerScopeForTests, synchronizeViewerScope } from '@/lib/auth/viewer-scope'
+import {
+  ACCOUNT_RECOVERY_SESSION_TOKEN_KEY,
+  ACCOUNT_RECOVERY_TOKEN_KEY,
+  clearAccountRecoveryToken,
+  persistAccountRecoveryToken,
+} from '@/lib/auth/account-recovery-token'
 
 const mockPush = jest.fn()
 const mockReplace = jest.fn()
@@ -227,8 +234,10 @@ describe('LoginPageClient exact identity boundary', () => {
     mockLoginFormProps = null
     mockRegisterFormProps = null
     mockAccounts = []
+    clearAccountRecoveryToken()
     window.localStorage.clear()
     window.sessionStorage.clear()
+    window.history.replaceState(null, '', '/login')
     document.cookie = 'csrf-token=csrf-login; path=/'
     __resetAuthOperationsForTests()
     __resetViewerScopeForTests()
@@ -263,6 +272,125 @@ describe('LoginPageClient exact identity boundary', () => {
     expect(screen.getByRole('link', { name: 'privacyPolicy' })).toHaveStyle({
       textDecoration: 'underline',
     })
+  })
+
+  it('keeps a clean-URL handoff in component memory through StrictMode replay', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    mockSearchParams = new URLSearchParams('account_deleted=1')
+    persistAccountRecoveryToken(recoveryToken)
+    window.history.replaceState(null, '', '/login?account_deleted=1')
+
+    render(
+      <StrictMode>
+        <LoginPageClient />
+      </StrictMode>
+    )
+
+    expect(window.location.href).not.toContain(recoveryToken)
+    expect(window.location.hash).toBe('')
+    expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull()
+    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/account/recover',
+        expect.objectContaining({
+          body: JSON.stringify({ recovery_token: recoveryToken }),
+        })
+      )
+    )
+    expect(window.location.hash).toBe('')
+    expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull()
+    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBeNull()
+  })
+
+  it('reclaims the in-memory handoff after a real same-URL subtree remount', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    mockSearchParams = new URLSearchParams('account_deleted=1')
+    persistAccountRecoveryToken(recoveryToken)
+    window.history.replaceState(null, '', '/login?account_deleted=1')
+
+    const firstMount = await renderLogin()
+    expect(await screen.findByRole('button', { name: 'loginRecoverMyAccount' })).toBeInTheDocument()
+    firstMount.unmount()
+
+    // Model the production Suspense gap where no LoginPageClient owns state.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+
+    const replacementMount = await renderLogin()
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/account/recover',
+        expect.objectContaining({
+          body: JSON.stringify({ recovery_token: recoveryToken }),
+        })
+      )
+    )
+
+    replacementMount.unmount()
+    clearAccountRecoveryToken()
+  })
+
+  it('rejects an invalid fragment instead of reviving a valid stale stored credential', async () => {
+    mockSearchParams = new URLSearchParams('recover=1')
+    window.localStorage.setItem(ACCOUNT_RECOVERY_TOKEN_KEY, 'Q'.repeat(43))
+    window.history.replaceState(null, '', '/login?recover=1#recovery_token=invalid&source=deletion')
+
+    await renderLogin()
+
+    expect(screen.queryByRole('button', { name: 'loginRecoverMyAccount' })).not.toBeInTheDocument()
+    expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull()
+    expect(window.location.hash).toBe('#source=deletion')
+  })
+
+  it('leaves no storage or fragment credential after a failed recovery attempt', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    mockSearchParams = new URLSearchParams('recover=1')
+    window.localStorage.setItem(ACCOUNT_RECOVERY_TOKEN_KEY, recoveryToken)
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: false, error: 'recovery failed' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      })
+    )
+
+    await renderLogin()
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+    await screen.findByText('recovery failed')
+
+    expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull()
+    expect(window.location.hash).toBe('')
+  })
+
+  it('leaves no credential behind when an in-flight recovery is cancelled by unmount', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    const recovery = deferred<Response>()
+    mockSearchParams = new URLSearchParams('recover=1')
+    window.history.replaceState(null, '', `/login?recover=1#recovery_token=${recoveryToken}`)
+    global.fetch = jest.fn().mockReturnValue(recovery.promise)
+
+    const view = await renderLogin()
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith('/api/account/recover', expect.anything())
+    )
+
+    view.unmount()
+    await act(async () => {
+      recovery.resolve(
+        new Response(JSON.stringify({ success: false }), {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        })
+      )
+    })
+
+    expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull()
+    expect(window.location.hash).toBe('')
   })
 
   it('drops a delayed A profile after B wins', async () => {
