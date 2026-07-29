@@ -14,10 +14,11 @@ describe('trader page direct ranking generation contract', () => {
   })
 
   it('keeps cached ranking values in source-scoped sealed envelopes', () => {
-    expect(page).toContain("['trader-serving-scores-sealed-v2']")
-    expect(page).toContain("['trader-lb-meta-sealed-v2']")
+    expect(page).toContain("['trader-serving-scores-sealed-v3']")
+    expect(page).toContain("['trader-lb-meta-sealed-v3']")
     expect(page.match(/createSealedRankingCacheEntry\(sealedRead\)/g)).toHaveLength(2)
     expect(page.match(/parseSealedRankingCacheEntry</g)).toHaveLength(2)
-    expect(page.match(/TRADER_PAGE_PROOF_SOURCES/g)?.length ?? 0).toBeGreaterThanOrEqual(5)
+    expect(page.match(/sources: \[publicPlatform\]/g)).toHaveLength(2)
+    expect(page.match(/\[platform\]/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
   })
 })

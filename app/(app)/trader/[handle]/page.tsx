@@ -4,7 +4,7 @@ import { unstable_cache } from 'next/cache'
 import { notFound } from 'next/navigation'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
-import { EXCHANGE_CONFIG, PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, {
   type ServingScoreRow,
   type UnregisteredTraderData,
@@ -43,7 +43,6 @@ import {
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
   Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.name])
 )
-const TRADER_PAGE_PROOF_SOURCES = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
 const TRADER_SCORE_SEASONS = ['7D', '30D', '90D'] as const
 
 // ---------------------------------------------------------------------------
@@ -282,7 +281,7 @@ const cachedServingScoreEntries = unstable_cache(
         const supabase = getReadReplica()
         const sealedRead = await readSealedRankingGeneration(
           supabase,
-          { season, sources: TRADER_PAGE_PROOF_SOURCES },
+          { season, sources: [publicPlatform] },
           async (publication) => {
             const result = await supabase
               .from('leaderboard_ranks')
@@ -304,7 +303,7 @@ const cachedServingScoreEntries = unstable_cache(
       })
     )
   },
-  ['trader-serving-scores-sealed-v2'],
+  ['trader-serving-scores-sealed-v3'],
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
@@ -321,7 +320,7 @@ const cachedServingScores = async (
     const entry = parseSealedRankingCacheEntry<ServingScoreRow[]>(
       input,
       TRADER_SCORE_SEASONS[index],
-      TRADER_PAGE_PROOF_SOURCES
+      [platform]
     )
     if (!entry) throw new Error('trader score cache returned an invalid sealed entry')
     return entry.value
@@ -344,7 +343,7 @@ const cachedLeaderboardMetaEntry = unstable_cache(
     const supabase = getReadReplica()
     const sealedRead = await readSealedRankingGeneration(
       supabase,
-      { season: '90D', sources: TRADER_PAGE_PROOF_SOURCES },
+      { season: '90D', sources: [publicPlatform] },
       async (publication) => {
         const result = await supabase
           .from('leaderboard_ranks')
@@ -363,7 +362,7 @@ const cachedLeaderboardMetaEntry = unstable_cache(
     )
     return createSealedRankingCacheEntry(sealedRead)
   },
-  ['trader-lb-meta-sealed-v2'],
+  ['trader-lb-meta-sealed-v3'],
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
@@ -374,7 +373,7 @@ const cachedLeaderboardMeta = async (
   const entry = parseSealedRankingCacheEntry<LeaderboardMetaRow | null>(
     await cachedLeaderboardMetaEntry(platform, traderKey),
     '90D',
-    TRADER_PAGE_PROOF_SOURCES
+    [platform]
   )
   if (!entry) throw new Error('trader metadata cache returned an invalid sealed entry')
   return entry.value
