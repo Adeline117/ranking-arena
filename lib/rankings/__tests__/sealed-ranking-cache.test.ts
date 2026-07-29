@@ -73,6 +73,45 @@ describe('sealed ranking cache', () => {
         legacy: true,
       },
     ],
+    [
+      'empty proofs',
+      (() => {
+        const changed = { ...publication, proofs: [] }
+        return {
+          ...createSealedRankingCacheEntry(read),
+          publication: changed,
+          publicationIdentity: JSON.stringify(changed),
+        }
+      })(),
+    ],
+    [
+      'malformed proof row',
+      (() => {
+        const changed = {
+          ...publication,
+          proofs: [{ ...publication.proofs[0], rank_mutation_seq: -1 }],
+        }
+        return {
+          ...createSealedRankingCacheEntry(read),
+          publication: changed,
+          publicationIdentity: JSON.stringify(changed),
+        }
+      })(),
+    ],
+    [
+      'unsealed proof row',
+      (() => {
+        const changed = {
+          ...publication,
+          proofs: [{ ...publication.proofs[0], is_sealed: false }],
+        }
+        return {
+          ...createSealedRankingCacheEntry(read),
+          publication: changed,
+          publicationIdentity: JSON.stringify(changed),
+        }
+      })(),
+    ],
   ])('rejects %s', (_label, input) => {
     expect(parseSealedRankingCacheEntry(input, '90D')).toBeNull()
   })

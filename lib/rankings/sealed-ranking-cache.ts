@@ -1,4 +1,7 @@
-import type { LeaderboardPublicationSeason } from '@/lib/rankings/read-publication-proofs'
+import type {
+  LeaderboardPublicationSeason,
+  SealedLeaderboardPublicationProofSet,
+} from '@/lib/rankings/read-publication-proofs'
 import {
   sealedRankingPublicationIdentity,
   type SealedRankingGenerationRead,
@@ -15,8 +18,93 @@ export interface SealedRankingCacheEntry<T> {
   readonly value: T
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const SHA256_PATTERN = /^[0-9a-f]{64}$/
+const SOURCE_PATTERN = /^[a-z0-9]+(?:_[a-z0-9]+)*$/
+const CANONICAL_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/
+const PUBLICATION_KEYS = ['proofs', 'scoreCohortId', 'season', 'state'] as const
+const PROOF_KEYS = [
+  'season_id',
+  'source',
+  'source_as_of',
+  'recorded_at',
+  'score_cohort_id',
+  'rank_mutation_seq',
+  'current_mutation_seq',
+  'published_rank_count',
+  'published_identity_sha256',
+  'is_sealed',
+] as const
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const canonicalExpected = [...expected].sort()
+  return (
+    actual.length === canonicalExpected.length &&
+    actual.every((key, index) => key === canonicalExpected[index])
+  )
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0
+}
+
+function isCanonicalTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    CANONICAL_TIMESTAMP_PATTERN.test(value) &&
+    Number.isFinite(Date.parse(value))
+  )
+}
+
+function isSealedPublicationProofSet(
+  value: unknown,
+  season: LeaderboardPublicationSeason
+): value is SealedLeaderboardPublicationProofSet {
+  if (!isRecord(value) || !hasExactKeys(value, PUBLICATION_KEYS)) return false
+  if (
+    value.state !== 'sealed' ||
+    value.season !== season ||
+    typeof value.scoreCohortId !== 'string' ||
+    !UUID_PATTERN.test(value.scoreCohortId) ||
+    !Array.isArray(value.proofs) ||
+    value.proofs.length === 0 ||
+    value.proofs.length > 256
+  ) {
+    return false
+  }
+
+  let priorSource: string | undefined
+  let recordedAt: string | undefined
+  for (const proof of value.proofs) {
+    if (!isRecord(proof) || !hasExactKeys(proof, PROOF_KEYS)) return false
+    if (
+      proof.season_id !== season ||
+      typeof proof.source !== 'string' ||
+      !SOURCE_PATTERN.test(proof.source) ||
+      (priorSource !== undefined && proof.source <= priorSource) ||
+      proof.score_cohort_id !== value.scoreCohortId ||
+      proof.is_sealed !== true ||
+      !isCanonicalTimestamp(proof.source_as_of) ||
+      !isCanonicalTimestamp(proof.recorded_at) ||
+      (recordedAt !== undefined && proof.recorded_at !== recordedAt) ||
+      !isNonNegativeSafeInteger(proof.rank_mutation_seq) ||
+      !isNonNegativeSafeInteger(proof.current_mutation_seq) ||
+      proof.rank_mutation_seq !== proof.current_mutation_seq ||
+      !isNonNegativeSafeInteger(proof.published_rank_count) ||
+      typeof proof.published_identity_sha256 !== 'string' ||
+      !SHA256_PATTERN.test(proof.published_identity_sha256)
+    ) {
+      return false
+    }
+    priorSource = proof.source
+    recordedAt ??= proof.recorded_at
+  }
+  return true
 }
 
 /** Wrap a value that has completed the proof-A/read/proof-B authorization. */
@@ -67,18 +155,13 @@ export function parseSealedRankingCacheEntry<T>(
       return null
     }
     if (input.contract !== SEALED_RANKING_CACHE_CONTRACT || input.season !== season) return null
-    if (typeof input.publicationIdentity !== 'string' || !isRecord(input.publication)) return null
     if (
-      input.publication.state !== 'sealed' ||
-      input.publication.season !== season ||
-      typeof input.publication.scoreCohortId !== 'string' ||
-      !Array.isArray(input.publication.proofs)
+      typeof input.publicationIdentity !== 'string' ||
+      !isSealedPublicationProofSet(input.publication, season)
     ) {
       return null
     }
-    if (
-      sealedRankingPublicationIdentity(input.publication as never) !== input.publicationIdentity
-    ) {
+    if (sealedRankingPublicationIdentity(input.publication) !== input.publicationIdentity) {
       return null
     }
     if (typeof input.cachedAt !== 'string' || !Number.isFinite(Date.parse(input.cachedAt))) {
@@ -91,7 +174,7 @@ export function parseSealedRankingCacheEntry<T>(
       contract: SEALED_RANKING_CACHE_CONTRACT,
       season,
       publicationIdentity: input.publicationIdentity,
-      publication: input.publication as unknown as SealedRankingCacheEntry<T>['publication'],
+      publication: input.publication,
       cachedAt: input.cachedAt,
       value: input.value as T,
     }
