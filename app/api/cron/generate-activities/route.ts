@@ -41,6 +41,7 @@ function exchangeName(source: string): string {
 
 export const GET = withCron('generate-activities', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin()
+  const workSignal = AbortSignal.timeout(45_000)
   const today = new Date().toISOString().split('T')[0]
   const now = new Date().toISOString()
 
@@ -75,6 +76,7 @@ export const GET = withCron('generate-activities', async (_request: NextRequest)
         .order('source', { ascending: true })
         .order('source_trader_id', { ascending: true })
         .limit(200)
+        .abortSignal(workSignal)
 
       if (error || data === null) {
         throw new Error(`activity ranking query failed: ${error?.message ?? 'null payload'}`)
@@ -150,6 +152,7 @@ export const GET = withCron('generate-activities', async (_request: NextRequest)
     const { error } = await supabase
       .from('trader_activities')
       .upsert(activities, { onConflict: 'dedup_key', ignoreDuplicates: true })
+      .abortSignal(workSignal)
 
     if (error) {
       log.error('Failed to upsert activities', { error: error.message })
@@ -158,11 +161,15 @@ export const GET = withCron('generate-activities', async (_request: NextRequest)
   }
 
   // Cleanup: remove activities older than 30 days
-  await supabase
+  const { error: cleanupError } = await supabase
     .from('trader_activities')
     .delete()
     .lt('occurred_at', new Date(Date.now() - 30 * 86400000).toISOString())
+    .abortSignal(workSignal)
+  if (cleanupError) {
+    throw new Error(`Failed to clean up expired activities: ${cleanupError.message}`)
+  }
 
   log.info(`Generated ${activities.length} activities`)
   return { count: activities.length }
-})
+}, { safetyTimeoutMs: 55_000 })

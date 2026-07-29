@@ -23,6 +23,7 @@ const CORE_CRON_ROUTES = [
   'app/api/cron/expire-mutes/route.ts',
   'app/api/cron/auto-post-twitter/route.ts',
   'app/api/cron/weekly-report/route.ts',
+  'app/api/cron/generate-activities/route.ts',
 ] as const
 
 describe('core cron safety budgets', () => {

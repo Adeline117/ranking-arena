@@ -26,4 +26,11 @@ describe('generated activity ranking authority', () => {
     expect(route).toContain('ranked #${t.rank} across Arena')
     expect(route).not.toContain('ranked #${t.rank} on ${ex}')
   })
+
+  it('bounds every database phase and fails when retention cleanup fails', () => {
+    expect(route).toContain('const workSignal = AbortSignal.timeout(45_000)')
+    expect(route.match(/\.abortSignal\(workSignal\)/g)).toHaveLength(3)
+    expect(route).toContain('if (cleanupError)')
+    expect(route).toContain('{ safetyTimeoutMs: 55_000 }')
+  })
 })
