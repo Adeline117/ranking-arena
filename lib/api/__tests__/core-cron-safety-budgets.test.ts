@@ -15,6 +15,10 @@ const CORE_CRON_ROUTES = [
   'app/api/cron/score-backtest/route.ts',
   'app/api/cron/sync-authorized-traders/route.ts',
   'app/api/cron/warm-cache/route.ts',
+  'app/api/cron/api-tier-payment-reconciliation/route.ts',
+  'app/api/cron/cleanup-deleted-accounts/route.ts',
+  'app/api/cron/reconcile-subscriptions/route.ts',
+  'app/api/cron/subscription-expiry/route.ts',
 ] as const
 
 describe('core cron safety budgets', () => {

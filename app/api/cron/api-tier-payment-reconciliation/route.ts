@@ -20,5 +20,6 @@ export const GET = withCron(
       reversals,
       backfill,
     }
-  }
+  },
+  { safetyTimeoutMs: 55_000 }
 )

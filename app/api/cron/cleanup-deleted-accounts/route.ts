@@ -318,4 +318,4 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
     count: deleted,
     total: expiredAccounts.length,
   }
-})
+}, { safetyTimeoutMs: 55_000 })

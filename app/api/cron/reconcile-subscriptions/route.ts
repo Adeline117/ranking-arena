@@ -29,5 +29,6 @@ export const GET = withCron(
       pages: result.pages,
       errors: [],
     }
-  }
+  },
+  { safetyTimeoutMs: 55_000 }
 )

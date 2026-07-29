@@ -180,4 +180,4 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
   logger.info('Subscription expiry check completed', results)
   const processed = results.expiringReminders + results.projectionReconciled
   return { count: processed, ...results }
-})
+}, { safetyTimeoutMs: 55_000 })
