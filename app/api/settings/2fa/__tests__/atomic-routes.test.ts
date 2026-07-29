@@ -118,7 +118,10 @@ describe('atomic 2FA runtime routes', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockVerifyTotpCode.mockReturnValue(true)
-    mockSignInWithPassword.mockResolvedValue({ error: null })
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: mockUser, session: { user: mockUser } },
+      error: null,
+    })
   })
 
   it('rotates backup codes through one exact atomic RPC', async () => {
@@ -267,11 +270,35 @@ describe('atomic 2FA runtime routes', () => {
   })
 
   it('never reaches disablement authority when password proof fails', async () => {
-    mockSignInWithPassword.mockResolvedValue({ error: { message: 'invalid password' } })
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: 'invalid password' },
+    })
 
     const response = await disableTwoFactor(request({ password: 'wrong' }))
 
     expect(response.status).toBe(403)
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['user', { user: { ...mockUser, id: 'other-user' }, session: { user: mockUser } }],
+    ['session', { user: mockUser, session: { user: { ...mockUser, id: 'other-user' } } }],
+    ['missing session', { user: mockUser, session: null }],
+  ])('never disables 2FA when the password proof belongs to another %s', async (_label, data) => {
+    mockSignInWithPassword.mockResolvedValue({ data, error: null })
+
+    const response = await disableTwoFactor(request({ password: 'correct horse' }))
+
+    expect(response.status).toBe(403)
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('rejects oversized password input before invoking authentication', async () => {
+    const response = await disableTwoFactor(request({ password: 'x'.repeat(4097) }))
+
+    expect(response.status).toBe(400)
+    expect(mockSignInWithPassword).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
   })
 

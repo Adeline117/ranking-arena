@@ -25,7 +25,7 @@ export const POST = withAuth(
 
     const { password } = body
 
-    if (!password || typeof password !== 'string') {
+    if (typeof password !== 'string' || password.length === 0 || password.length > 4096) {
       return badRequest('Password is required')
     }
 
@@ -38,15 +38,15 @@ export const POST = withAuth(
     const verifyClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL || '',
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-      { auth: { persistSession: false } }
+      { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
     )
 
-    const { error: signInError } = await verifyClient.auth.signInWithPassword({
+    const { data: signInData, error: signInError } = await verifyClient.auth.signInWithPassword({
       email: userEmail,
       password,
     })
 
-    if (signInError) {
+    if (signInError || signInData.user?.id !== user.id || signInData.session?.user.id !== user.id) {
       return NextResponse.json({ error: 'Invalid password' }, { status: 403 })
     }
 
