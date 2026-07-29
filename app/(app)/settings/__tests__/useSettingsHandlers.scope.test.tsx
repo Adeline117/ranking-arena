@@ -16,21 +16,32 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/lib/supabase/client', () => {
   const publicMaybeSingle = jest.fn()
   const sensitiveMaybeSingle = jest.fn()
+  const profileSaveMaybeSingle = jest.fn()
   const publicQuery: Record<string, jest.Mock> = {}
   publicQuery.select = jest.fn(() => publicQuery)
   publicQuery.eq = jest.fn(() => publicQuery)
   publicQuery.update = jest.fn(() => publicQuery)
   publicQuery.maybeSingle = publicMaybeSingle
+  const rpc = jest.fn((name: string) => ({
+    maybeSingle:
+      name === 'update_own_profile_settings' ? profileSaveMaybeSingle : sensitiveMaybeSingle,
+  }))
   return {
     supabase: {
       from: jest.fn(() => publicQuery),
-      rpc: jest.fn(() => ({ maybeSingle: sensitiveMaybeSingle })),
+      rpc,
       auth: {
         resetPasswordForEmail: jest.fn(),
         signOut: jest.fn(),
       },
     },
-    __settingsMocks: { publicMaybeSingle, sensitiveMaybeSingle, publicQuery },
+    __settingsMocks: {
+      publicMaybeSingle,
+      sensitiveMaybeSingle,
+      profileSaveMaybeSingle,
+      publicQuery,
+      rpc,
+    },
   }
 })
 
@@ -73,11 +84,15 @@ import {
 const {
   publicMaybeSingle: mockPublicMaybeSingle,
   sensitiveMaybeSingle: mockSensitiveMaybeSingle,
+  profileSaveMaybeSingle: mockProfileSaveMaybeSingle,
   publicQuery: mockPublicQuery,
+  rpc: mockRpc,
 } = jest.requireMock('@/lib/supabase/client').__settingsMocks as {
   publicMaybeSingle: jest.Mock
   sensitiveMaybeSingle: jest.Mock
+  profileSaveMaybeSingle: jest.Mock
   publicQuery: Record<string, jest.Mock>
+  rpc: jest.Mock
 }
 const { authedFetch: mockAuthedFetch } = jest.requireMock('@/lib/api/client').__settingsMocks as {
   authedFetch: jest.Mock
@@ -147,7 +162,7 @@ function publicProfile(handle: string) {
   }
 }
 
-function sensitiveProfile() {
+function sensitiveProfile(settingsVersion = 0) {
   return {
     data: {
       notify_follow: true,
@@ -158,6 +173,7 @@ function sensitiveProfile() {
       notify_trader_events: true,
       totp_enabled: false,
       email_digest: 'none',
+      settings_version: settingsVersion,
     },
     error: null,
   }
@@ -178,6 +194,11 @@ describe('useSettingsHandlers viewer ownership', () => {
     window.history.replaceState(null, '', '/settings')
     mockPublicMaybeSingle.mockReset()
     mockSensitiveMaybeSingle.mockReset()
+    mockProfileSaveMaybeSingle.mockReset()
+    mockProfileSaveMaybeSingle.mockResolvedValue({
+      data: { profile_id: 'user-a', settings_version: 1 },
+      error: null,
+    })
     __resetViewerScopeForTests()
     mockAuthedFetch.mockResolvedValue({ ok: true, status: 200, data: { success: true } })
     mockForceRefresh.mockResolvedValue(jwt('user-a'))
@@ -351,7 +372,7 @@ describe('useSettingsHandlers viewer ownership', () => {
     })
 
     expect(mockPublicMaybeSingle).toHaveBeenCalledTimes(1)
-    expect(mockPublicQuery.update).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalledWith('update_own_profile_settings', expect.anything())
     expect(showToast).toHaveBeenCalledWith('validationHandleMinLength', 'error')
   })
 
@@ -377,8 +398,9 @@ describe('useSettingsHandlers viewer ownership', () => {
       await hook.result.current.handleSaveProfile()
     })
 
-    expect(mockPublicQuery.update).toHaveBeenCalledWith(
-      expect.not.objectContaining({ handle: expect.anything() })
+    expect(mockRpc).toHaveBeenCalledWith(
+      'update_own_profile_settings',
+      expect.objectContaining({ p_expected_version: 0, p_handle: null, p_bio: 'updated bio' })
     )
     expect(showToast).toHaveBeenCalledWith('settingsSaved', 'success')
   })
@@ -420,8 +442,9 @@ describe('useSettingsHandlers viewer ownership', () => {
       await hook.result.current.handleSaveProfile()
     })
 
-    expect(mockPublicQuery.update).toHaveBeenCalledWith(
-      expect.objectContaining({ cover_url: null })
+    expect(mockRpc).toHaveBeenCalledWith(
+      'update_own_profile_settings',
+      expect.objectContaining({ p_cover_url: null, p_expected_version: 0 })
     )
     expect(hook.result.current.hasUnsavedChanges()).toBe(false)
   })
@@ -448,8 +471,9 @@ describe('useSettingsHandlers viewer ownership', () => {
       await hook.result.current.handleSaveProfile()
     })
 
-    expect(mockPublicQuery.update).toHaveBeenCalledWith(
-      expect.objectContaining({ handle: '交易员甲' })
+    expect(mockRpc).toHaveBeenCalledWith(
+      'update_own_profile_settings',
+      expect.objectContaining({ p_handle: '交易员甲', p_expected_version: 0 })
     )
   })
 
@@ -457,7 +481,10 @@ describe('useSettingsHandlers viewer ownership', () => {
     mockPublicMaybeSingle
       .mockResolvedValueOnce(publicProfile('alpha'))
       .mockResolvedValueOnce({ data: { avatar_url: null, cover_url: null }, error: null })
-      .mockResolvedValueOnce({ data: null, error: { code: '23514', message: 'check violation' } })
+    mockProfileSaveMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { code: '23514', message: 'check violation' },
+    })
     mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
     const scope = synchronizeViewerScope(true, 'user-a')
     const hook = renderHook(() =>
@@ -476,6 +503,81 @@ describe('useSettingsHandlers viewer ownership', () => {
     })
 
     expect(showToast).toHaveBeenCalledWith('validationHandleInvalidChars', 'error')
+  })
+
+  it('rejects a stale profile save without discarding the local edit', async () => {
+    mockPublicMaybeSingle
+      .mockResolvedValueOnce(publicProfile('alpha'))
+      .mockResolvedValueOnce({ data: { avatar_url: null, cover_url: null }, error: null })
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile(7))
+    mockProfileSaveMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { code: '40001', message: 'profile settings changed since they were loaded' },
+    })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.handle).toBe('alpha'))
+
+    act(() => hook.result.current.setBio('local unsaved edit'))
+    await act(async () => {
+      await hook.result.current.handleSaveProfile()
+    })
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'update_own_profile_settings',
+      expect.objectContaining({ p_expected_version: 7, p_bio: 'local unsaved edit' })
+    )
+    expect(showToast).toHaveBeenCalledWith('profileSaveConflict', 'error')
+    expect(hook.result.current.bio).toBe('local unsaved edit')
+    expect(hook.result.current.hasUnsavedChanges()).toBe(true)
+  })
+
+  it('uses each committed revision as the next save precondition', async () => {
+    mockPublicMaybeSingle
+      .mockResolvedValueOnce(publicProfile('alpha'))
+      .mockResolvedValueOnce({ data: { avatar_url: null, cover_url: null }, error: null })
+      .mockResolvedValueOnce({ data: { avatar_url: null, cover_url: null }, error: null })
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockProfileSaveMaybeSingle
+      .mockResolvedValueOnce({
+        data: { profile_id: 'user-a', settings_version: 1 },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { profile_id: 'user-a', settings_version: 2 },
+        error: null,
+      })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.handle).toBe('alpha'))
+
+    act(() => hook.result.current.setBio('first edit'))
+    await act(async () => {
+      await hook.result.current.handleSaveProfile()
+    })
+    act(() => hook.result.current.setBio('second edit'))
+    await act(async () => {
+      await hook.result.current.handleSaveProfile()
+    })
+
+    const saveCalls = mockRpc.mock.calls.filter((call) => call[0] === 'update_own_profile_settings')
+    expect(saveCalls).toHaveLength(2)
+    expect(saveCalls[0][1]).toEqual(expect.objectContaining({ p_expected_version: 0 }))
+    expect(saveCalls[1][1]).toEqual(expect.objectContaining({ p_expected_version: 1 }))
   })
 
   it('keeps an already-running Replay clean when localStorage and local sign-out fail', async () => {

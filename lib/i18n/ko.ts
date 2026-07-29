@@ -881,6 +881,7 @@ const ko = {
   settingsSaved: '모든 설정이 저장되었습니다',
   settingsPartialSaved: '설정은 저장되었지만 이미지 업로드가 실패했습니다',
   saveFailedRetry: '저장 실패, 다시 시도해 주세요',
+  profileSaveConflict: '다른 탭에서 프로필이 변경되었습니다. 새로고침한 후 다시 저장해 주세요.',
   pleaseLoginFirst: '먼저 로그인해 주세요',
   loginRequired: '로그인 필요',
   loginRequiredDesc: '설정에 접근하려면 로그인이 필요합니다',

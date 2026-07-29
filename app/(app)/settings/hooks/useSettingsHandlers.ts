@@ -78,6 +78,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   )
   const settingsStateOwnerRef = useRef<SettingsStateOwner | null>(null)
   const profileLoadOutcomeRef = useRef<ProfileLoadOutcome | null>(null)
+  const profileSettingsVersionRef = useRef<number | null>(null)
   const stateBelongsToViewer = useCallback(
     (snapshot: SettingsViewerSnapshot, expectedProfileGeneration?: number) => {
       const owner = settingsStateOwnerRef.current
@@ -462,6 +463,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     emailDigestQueueRef.current?.invalidate()
     settingsStateOwnerRef.current = null
     profileLoadOutcomeRef.current = null
+    profileSettingsVersionRef.current = null
 
     setHandle('')
     setBio('')
@@ -544,6 +546,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
 
     try {
       settingsStateOwnerRef.current = null
+      profileSettingsVersionRef.current = null
       profileLoadOutcomeRef.current = { ...scope, status: 'loading' }
       notificationQueueRef.current?.invalidate()
       emailDigestQueueRef.current?.invalidate()
@@ -586,6 +589,8 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         typeof sensitive.notify_message !== 'boolean' ||
         typeof sensitive.notify_trader_events !== 'boolean' ||
         typeof sensitive.totp_enabled !== 'boolean' ||
+        !Number.isInteger(sensitive.settings_version) ||
+        sensitive.settings_version < 0 ||
         !EMAIL_DIGEST_VALUES.includes(digest as EmailDigestValue)
       ) {
         throw new Error('Sensitive profile contract is incomplete')
@@ -633,6 +638,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       setDmPermission(p.dmPermission)
       setShowProBadge(p.showProBadge)
       initialValuesRef.current = p
+      profileSettingsVersionRef.current = sensitive.settings_version
       settingsStateOwnerRef.current = { ...scope, profileGeneration: loadGeneration }
       profileLoadOutcomeRef.current = { ...scope, status: 'ready' }
       setProfileReady(true)
@@ -807,6 +813,15 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       showToast(t('saveFailedRetry'), 'error')
       return
     }
+    const expectedSettingsVersion = profileSettingsVersionRef.current
+    if (
+      typeof expectedSettingsVersion !== 'number' ||
+      !Number.isInteger(expectedSettingsVersion) ||
+      expectedSettingsVersion < 0
+    ) {
+      showToast(t('saveFailedRetry'), 'error')
+      return
+    }
     if (!handleValidation.valid) {
       showToast(handleValidation.message, 'error')
       return
@@ -888,27 +903,36 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         }
       }
 
-      const profileUpdates: Record<string, unknown> = {
-        bio: bio || null,
-        avatar_url: finalAvatarUrl || null,
-        cover_url: finalCoverUrl || null,
-        show_followers: showFollowers,
-        show_following: showFollowing,
-        dm_permission: dmPermission,
-        show_pro_badge: showProBadge,
-      }
-      if (handle !== initialValuesRef.current?.handle) profileUpdates.handle = handle
-
       const { data: savedProfile, error: saveError } = await supabase
-        .from('user_profiles')
-        .update(profileUpdates)
-        .eq('id', scope.userId)
-        .select('id')
+        .rpc('update_own_profile_settings', {
+          p_expected_version: expectedSettingsVersion,
+          p_handle: handle !== initialValuesRef.current?.handle ? handle : null,
+          p_bio: bio || null,
+          p_avatar_url: finalAvatarUrl || null,
+          p_cover_url: finalCoverUrl || null,
+          p_show_followers: showFollowers,
+          p_show_following: showFollowing,
+          p_dm_permission: dmPermission,
+          p_show_pro_badge: showProBadge,
+        })
         .maybeSingle()
       if (!stateBelongsToViewer(scope, profileGeneration)) return
 
-      if (saveError || !savedProfile) {
+      const savedSettingsVersion = savedProfile?.settings_version
+      if (
+        saveError ||
+        !savedProfile ||
+        savedProfile.profile_id !== scope.userId ||
+        typeof savedSettingsVersion !== 'number' ||
+        !Number.isInteger(savedSettingsVersion) ||
+        (savedSettingsVersion !== expectedSettingsVersion &&
+          savedSettingsVersion !== expectedSettingsVersion + 1)
+      ) {
         uiLogger.error('Error saving profile:', JSON.stringify(saveError, null, 2))
+        if (saveError?.code === '40001') {
+          showToast(t('profileSaveConflict'), 'error')
+          return
+        }
         // Revert avatar/cover preview on DB save failure
         setPreviewUrl(previousAvatarUrl)
         setAvatarFile(null)
@@ -934,6 +958,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         return
       }
 
+      profileSettingsVersionRef.current = savedSettingsVersion
       const persistedNotificationValues = initialValuesRef.current
       initialValuesRef.current = {
         handle,

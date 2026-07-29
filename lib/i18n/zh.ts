@@ -930,6 +930,7 @@ const zh = {
   settingsSaved: '所有设置已保存',
   settingsPartialSaved: '其他设置已保存，但图片上传失败',
   saveFailedRetry: '保存失败，请重试',
+  profileSaveConflict: '个人资料已在其他页面更新，请刷新后再保存。',
   pleaseLoginFirst: '请先登录',
   loginRequired: '请先登录',
   loginRequiredDesc: '您需要登录才能访问设置页面',

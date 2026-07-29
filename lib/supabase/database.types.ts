@@ -12695,6 +12695,23 @@ export type Database = {
           removed_trader_id: string
         }[]
       }
+      update_own_profile_settings: {
+        Args: {
+          p_avatar_url: string | null
+          p_bio: string | null
+          p_cover_url: string | null
+          p_dm_permission: string
+          p_expected_version: number
+          p_handle: string | null
+          p_show_followers: boolean
+          p_show_following: boolean
+          p_show_pro_badge: boolean
+        }
+        Returns: {
+          profile_id: string
+          settings_version: number
+        }[]
+      }
       update_own_comment: {
         Args: {
           p_comment_id: string

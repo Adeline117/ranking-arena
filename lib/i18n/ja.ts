@@ -842,6 +842,8 @@ const ja = {
   settingsSaved: 'すべての設定が保存されました',
   settingsPartialSaved: '設定は保存されましたが、画像のアップロードに失敗しました',
   saveFailedRetry: '保存に失敗しました。もう一度お試しください',
+  profileSaveConflict:
+    'プロフィールが別のタブで更新されました。再読み込みしてから保存してください。',
   pleaseLoginFirst: '最初にログインしてください',
   loginRequired: 'ログインが必要です',
   loginRequiredDesc: '設定にアクセスするにはログインが必要です',

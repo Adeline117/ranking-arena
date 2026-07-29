@@ -945,6 +945,7 @@ const en = {
   settingsSaved: 'All settings saved',
   settingsPartialSaved: 'Settings saved but image upload failed',
   saveFailedRetry: 'Save failed, please try again',
+  profileSaveConflict: 'Your profile changed in another tab. Refresh before saving again.',
   pleaseLoginFirst: 'Please login first',
   loginRequired: 'Login Required',
   loginRequiredDesc: 'You need to login to access settings',
