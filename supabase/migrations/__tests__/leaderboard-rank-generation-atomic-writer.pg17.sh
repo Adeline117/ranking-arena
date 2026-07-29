@@ -24,6 +24,7 @@ CODEC_MIGRATION="$ROOT_DIR/supabase/migrations/20260725016500_leaderboard_rank_p
 TYPED_MIGRATION="$ROOT_DIR/supabase/migrations/20260725017000_leaderboard_rank_typed_batch_contract.sql"
 MDD_MIGRATION="$ROOT_DIR/supabase/migrations/20260725017250_normalize_leaderboard_rank_max_drawdown.sql"
 WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql"
+ATTESTATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260729011000_leaderboard_rank_manifest_attestation_substrate.sql"
 CAPACITY_BENCHMARK="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-64k-benchmark.pg17.psql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 BENCHMARK_64K="${ARENA_ATOMIC_WRITER_BENCHMARK_64K:-0}"
@@ -61,6 +62,7 @@ for required_file in \
   "$TYPED_MIGRATION" \
   "$MDD_MIGRATION" \
   "$WRITER_MIGRATION" \
+  "$ATTESTATION_MIGRATION" \
   "$CAPACITY_BENCHMARK"; do
   if [[ ! -f "$required_file" ]]; then
     echo "required atomic-writer proof input is missing: $required_file" >&2
@@ -336,6 +338,97 @@ LEFT JOIN pg_catalog.pg_proc AS function_row
   ON function_row.oid = pg_catalog.to_regprocedure(expected.signature)
 ORDER BY expected.signature COLLATE pg_catalog."C";
 SQL
+  exit 1
+fi
+psql_cmd -q -f "$ATTESTATION_MIGRATION"
+psql_cmd -q <<'SQL'
+DO $attestation_encoder_proof$
+DECLARE
+  v_commitment text;
+  v_factor_commitment_a text;
+  v_factor_commitment_b text;
+  v_rejected boolean := false;
+BEGIN
+  v_commitment := arena.build_leaderboard_rank_manifest_field_commitment_v1(
+    'fixture',
+    'trader-1',
+    12.3456,
+    1234.56,
+    55.50,
+    12.25,
+    1.2500,
+    1.5000,
+    30,
+    75.25,
+    '{"roi":0.6,"pnl":0.7,"drawdown":0.8,"sharpe":0.9,"consistency":null}'::jsonb,
+    66,
+    85,
+    NULL
+  );
+  IF v_commitment !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'manifest field commitment shape drifted';
+  END IF;
+
+  v_factor_commitment_a :=
+    arena.build_leaderboard_rank_manifest_field_commitment_v1(
+      'fixture', 'factor-a', 1, 1, 50, 10, NULL, NULL, NULL, 50,
+      '{"roi":0.1,"pnl":0.2,"drawdown":null,"sharpe":null,"consistency":null}'::jsonb,
+      16, 0, NULL
+    );
+  v_factor_commitment_b :=
+    arena.build_leaderboard_rank_manifest_field_commitment_v1(
+      'fixture', 'factor-a', 1, 1, 50, 10, NULL, NULL, NULL, 50,
+      '{"roi":0.1000000000000000000000000001,"pnl":0.2,"drawdown":null,"sharpe":null,"consistency":null}'::jsonb,
+      16, 0, NULL
+    );
+  IF v_factor_commitment_a = v_factor_commitment_b THEN
+    RAISE EXCEPTION 'manifest factor precision collapsed before commitment';
+  END IF;
+
+  BEGIN
+    PERFORM arena.build_leaderboard_rank_manifest_field_commitment_v1(
+      'fixture', 'rounding-bypass', 1, 1, 50, 10, NULL, NULL, NULL,
+      100.004,
+      '{"roi":0.1,"pnl":0.2,"drawdown":null,"sharpe":null,"consistency":null}'::jsonb,
+      16, 0, NULL
+    );
+  EXCEPTION
+    WHEN SQLSTATE '22023' THEN
+      v_rejected := true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'manifest raw numeric rounding bypass was accepted';
+  END IF;
+END
+$attestation_encoder_proof$;
+SQL
+ATTESTATION_FUNCTION_STATE="$(psql_cmd -Atq <<'SQL'
+SELECT
+  function_row.proname || '|' ||
+  pg_catalog.encode(
+    pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc, 'UTF8')),
+    'hex'
+  )
+FROM pg_catalog.pg_proc AS function_row
+JOIN pg_catalog.pg_namespace AS namespace_row
+  ON namespace_row.oid = function_row.pronamespace
+WHERE namespace_row.nspname = 'arena'
+  AND function_row.proname IN (
+    'encode_leaderboard_rank_manifest_fields_v1',
+    'build_leaderboard_rank_manifest_field_commitment_v1',
+    'build_leaderboard_rank_manifest_chunk_sha256_v1',
+    'leaderboard_rank_manifest_attestation_chunk_is_valid_v1',
+    'build_leaderboard_rank_manifest_chunks_sha256_v1',
+    'guard_leaderboard_rank_manifest_attestation_chunk_insert_v1',
+    'validate_leaderboard_rank_manifest_attestation_complete_v1'
+  )
+ORDER BY function_row.proname COLLATE pg_catalog."C";
+SQL
+)"
+EXPECTED_ATTESTATION_FUNCTION_STATE=$'build_leaderboard_rank_manifest_chunk_sha256_v1|0dddcffebb56d9a51e0869e29cc16ac18f78251d58907764fb02101fa8dad322\nbuild_leaderboard_rank_manifest_chunks_sha256_v1|a663274e1a45e06c90f17fecdb646854be6112cb6e22d2af343afd9737d365dd\nbuild_leaderboard_rank_manifest_field_commitment_v1|72c4e558313daec92785722c35788e6490a4d9a2144261d0afe9d96666ea04f6\nencode_leaderboard_rank_manifest_fields_v1|504e8b8fc47f023bb9e821b7b6212f4df773cb94e63cfd5613fb2fff01964b16\nguard_leaderboard_rank_manifest_attestation_chunk_insert_v1|21cbd784ed8016f1a3acbe96ff82885d5679dce10697ddb658cb660ef449caa9\nleaderboard_rank_manifest_attestation_chunk_is_valid_v1|eaead90785261fd8400748497005d34013d468b5a836a0dbce0be38eaf843d07\nvalidate_leaderboard_rank_manifest_attestation_complete_v1|a67d03810591c130b7b6e7dbd63becc9b4d08eb4580fd314a223032e1f187e6b'
+if [[ "$ATTESTATION_FUNCTION_STATE" != "$EXPECTED_ATTESTATION_FUNCTION_STATE" ]]; then
+  echo 'manifest attestation helper body catalog drifted' >&2
+  printf '%s\n' "$ATTESTATION_FUNCTION_STATE" >&2
   exit 1
 fi
 

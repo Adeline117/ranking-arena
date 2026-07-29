@@ -122,6 +122,7 @@ PREDEPLOY_MIGRATIONS=(
   20260728123000_arena_bot_header_canonical_snapshot.sql
   20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql
   20260729010000_api_keys_server_authority.sql
+  20260729011000_leaderboard_rank_manifest_attestation_substrate.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
