@@ -2,6 +2,8 @@
 
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
+const mockHardDeleteAdmission = jest.fn()
+const mockGroupPurge = jest.fn()
 const mockDeleteUser = jest.fn()
 const mockStopStripeSubscriptionRenewals = jest.fn()
 const mockExpireOpenSubscriptionCheckouts = jest.fn()
@@ -95,6 +97,17 @@ function purgedResult(overrides: Record<string, unknown> = {}) {
 describe('GET /api/cron/cleanup-deleted-accounts', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockHardDeleteAdmission.mockImplementation(({ p_user_id }: { p_user_id: string }) =>
+      Promise.resolve({ data: { status: 'ready', user_id: p_user_id }, error: null })
+    )
+    mockGroupPurge.mockResolvedValue({ data: purgedResult(), error: null })
+    mockRpc.mockImplementation((name: string, args: Record<string, unknown>) => {
+      if (name === 'admit_expired_account_hard_delete_atomic') {
+        return mockHardDeleteAdmission(args)
+      }
+      if (name === 'purge_deleted_account_group_edges') return mockGroupPurge(args)
+      throw new Error(`Unexpected RPC: ${name}`)
+    })
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
       observedSubscriptionIds: ['sub_api', 'sub_recurring'],
@@ -123,6 +136,92 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       pendingTips: 0,
     })
     mockDeleteUser.mockResolvedValue({ error: null })
+  })
+
+  it.each([
+    'recovery_in_progress',
+    'account_active',
+    'grace_period_active',
+    'not_scheduled',
+    'not_found',
+  ])('defers %s before any billing, edge, Auth, or profile mutation', async (status) => {
+    queueDatabaseResults({
+      data: [
+        {
+          id: 'user-recovery-race',
+          original_email: null,
+          stripe_customer_id: 'cus_owner',
+          api_stripe_subscription_id: 'sub_api',
+        },
+      ],
+      error: null,
+    })
+    mockHardDeleteAdmission.mockResolvedValueOnce({
+      data: { status, user_id: 'user-recovery-race' },
+      error: null,
+    })
+
+    await expect(GET({} as never)).resolves.toEqual({ count: 0, total: 1 })
+
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+    expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
+    expect(mockPersistOneTimeSettlementScan).not.toHaveBeenCalled()
+    expect(mockGroupPurge).not.toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    null,
+    { status: 'ready', user_id: 'wrong-user' },
+    { status: 'unknown', user_id: 'user-expired' },
+    { status: 'ready', user_id: 'user-expired', extra: true },
+  ])('fails closed on malformed hard-delete admission %p', async (data) => {
+    queueDatabaseResults({
+      data: [
+        {
+          id: 'user-expired',
+          original_email: null,
+          stripe_customer_id: 'cus_owner',
+          api_stripe_subscription_id: 'sub_api',
+        },
+      ],
+      error: null,
+    })
+    mockHardDeleteAdmission.mockResolvedValueOnce({ data, error: null })
+
+    await expect(GET({} as never)).rejects.toThrow(
+      'Hard-delete admission returned an invalid acknowledgement'
+    )
+
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+    expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
+    expect(mockGroupPurge).not.toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the hard-delete admission RPC errors', async () => {
+    queueDatabaseResults({
+      data: [
+        {
+          id: 'user-expired',
+          original_email: null,
+          stripe_customer_id: null,
+          api_stripe_subscription_id: null,
+        },
+      ],
+      error: null,
+    })
+    mockHardDeleteAdmission.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'lock timeout' },
+    })
+
+    await expect(GET({} as never)).rejects.toThrow('Hard-delete admission failed: lock timeout')
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+    expect(mockGroupPurge).not.toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
   })
 
   it('closes consumer, API, and open Checkout billing then defers hard deletion', async () => {
@@ -162,7 +261,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       expectedCustomerId: 'cus_owner',
       deletionMode: 'permanent',
     })
-    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockGroupPurge).not.toHaveBeenCalled()
     expect(mockDeleteUser).not.toHaveBeenCalled()
     expect(mockExpireOpenSubscriptionCheckouts.mock.invocationCallOrder[0]).toBeLessThan(
       mockStopStripeSubscriptionRenewals.mock.invocationCallOrder[0]
@@ -192,7 +291,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       },
       { data: null, error: null }
     )
-    mockRpc.mockResolvedValue({
+    mockGroupPurge.mockResolvedValue({
       data: purgedResult({
         memberships_removed: 0,
         bans_removed: 0,
@@ -205,7 +304,8 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
 
     expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
     expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
-    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockHardDeleteAdmission).toHaveBeenCalledTimes(1)
+    expect(mockGroupPurge).toHaveBeenCalledTimes(1)
     expect(mockDeleteUser).toHaveBeenCalledTimes(1)
   })
 
@@ -270,7 +370,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
     expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
     expect(mockPersistOneTimeSettlementScan).not.toHaveBeenCalled()
-    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockGroupPurge).not.toHaveBeenCalled()
     expect(mockDeleteUser).not.toHaveBeenCalled()
   })
 
@@ -301,7 +401,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       observedSubscriptionIds: [],
       changedSubscriptionIds: [],
     })
-    mockRpc.mockResolvedValue({ data: purgedResult(), error: null })
+    mockGroupPurge.mockResolvedValue({ data: purgedResult(), error: null })
 
     await expect(GET({} as never)).resolves.toEqual({ count: 1, total: 1 })
 
@@ -310,9 +410,9 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     })
     expect(mockDeleteUser).toHaveBeenCalledWith('user-converged')
     expect(mockStopStripeSubscriptionRenewals.mock.invocationCallOrder[0]).toBeLessThan(
-      mockRpc.mock.invocationCallOrder[0]
+      mockGroupPurge.mock.invocationCallOrder[0]
     )
-    expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockGroupPurge.mock.invocationCallOrder[0]).toBeLessThan(
       mockDeleteUser.mock.invocationCallOrder[0]
     )
   })
@@ -373,7 +473,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     expect(mockCheckOneTimeSettlementsReady).toHaveBeenCalledWith(
       expect.objectContaining({ scanToken: 'scan-pending' })
     )
-    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockGroupPurge).not.toHaveBeenCalled()
     expect(mockDeleteUser).not.toHaveBeenCalled()
   })
 
@@ -397,7 +497,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     await expect(GET({} as never)).rejects.toThrow('Checkout remains payable')
 
     expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
-    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockGroupPurge).not.toHaveBeenCalled()
     expect(mockDeleteUser).not.toHaveBeenCalled()
   })
 
@@ -478,7 +578,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
 
     await expect(GET({} as never)).resolves.toEqual({ count: 0, total: 1 })
 
-    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockGroupPurge).not.toHaveBeenCalled()
     expect(mockDeleteUser).not.toHaveBeenCalled()
   })
 
@@ -493,7 +593,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     mockStopStripeSubscriptionRenewals.mockRejectedValueOnce(new Error('Stripe unavailable'))
 
     await expect(GET({} as never)).rejects.toThrow('Stripe unavailable')
-    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockGroupPurge).not.toHaveBeenCalled()
     expect(mockDeleteUser).not.toHaveBeenCalled()
 
     queueDatabaseResults(
@@ -520,7 +620,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       racedOneTimeSessionIds: [],
       oneTimeSettlements: [],
     })
-    mockRpc.mockResolvedValueOnce({ data: purgedResult(), error: null })
+    mockGroupPurge.mockResolvedValueOnce({ data: purgedResult(), error: null })
 
     await expect(GET({} as never)).resolves.toEqual({ count: 1, total: 1 })
     expect(mockDeleteUser).toHaveBeenCalledWith('user-retry')
@@ -541,7 +641,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       },
       { data: null, error: null }
     )
-    mockRpc.mockResolvedValue({ data: null, error: { message: 'lock timeout' } })
+    mockGroupPurge.mockResolvedValue({ data: null, error: { message: 'lock timeout' } })
 
     await expect(GET({} as never)).rejects.toThrow('Group edge purge failed: lock timeout')
 
@@ -570,7 +670,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       },
       { data: null, error: null }
     )
-    mockRpc.mockResolvedValue({ data, error: null })
+    mockGroupPurge.mockResolvedValue({ data, error: null })
 
     await expect(GET({} as never)).rejects.toThrow(
       'Group edge purge returned an invalid or incomplete result'

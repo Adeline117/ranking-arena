@@ -33,6 +33,37 @@ interface GroupEdgePurgeResult {
   owner_memberships_removed: number
 }
 
+type HardDeleteAdmissionStatus =
+  | 'ready'
+  | 'not_found'
+  | 'account_active'
+  | 'not_scheduled'
+  | 'grace_period_active'
+  | 'recovery_in_progress'
+
+interface HardDeleteAdmissionResult {
+  status: HardDeleteAdmissionStatus
+  user_id: string
+}
+
+function isExactHardDeleteAdmissionResult(
+  value: unknown,
+  expectedUserId: string
+): value is HardDeleteAdmissionResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const result = value as Record<string, unknown>
+  return (
+    Object.keys(result).length === 2 &&
+    result.user_id === expectedUserId &&
+    (result.status === 'ready' ||
+      result.status === 'not_found' ||
+      result.status === 'account_active' ||
+      result.status === 'not_scheduled' ||
+      result.status === 'grace_period_active' ||
+      result.status === 'recovery_in_progress')
+  )
+}
+
 function isGroupEdgePurgeResult(value: unknown): value is GroupEdgePurgeResult {
   if (!value || typeof value !== 'object') return false
 
@@ -80,6 +111,28 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
 
     const results = await Promise.allSettled(
       batch.map(async (account) => {
+        // A recovery may have been admitted just before the grace deadline and
+        // still be crossing Auth/Stripe after it. Serialize with that admission
+        // before the first billing, edge, Auth, or profile mutation. Once this
+        // exact expired subject is ready, no later recovery claim can win.
+        const { data: admission, error: admissionError } = (await Reflect.apply(
+          supabase.rpc,
+          supabase,
+          ['admit_expired_account_hard_delete_atomic', { p_user_id: account.id }]
+        )) as { data: unknown; error: { message: string } | null }
+        if (admissionError) {
+          throw new Error(`Hard-delete admission failed: ${admissionError.message}`)
+        }
+        if (!isExactHardDeleteAdmissionResult(admission, account.id)) {
+          throw new Error('Hard-delete admission returned an invalid acknowledgement')
+        }
+        if (admission.status !== 'ready') {
+          logger.info(
+            `[cleanup-deleted-accounts] Hard deletion deferred for user ${account.id}: ${admission.status}`
+          )
+          return { id: account.id, deleted: false }
+        }
+
         // Never erase the user while a recurring charge may still exist. A
         // failed Stripe cancellation leaves the account pending for retry.
         const { data: subscription, error: subscriptionError } = await supabase
