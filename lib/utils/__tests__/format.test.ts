@@ -8,6 +8,7 @@ import {
   formatCurrency,
   formatCompact,
   formatDrawdown,
+  normalizeDrawdownMagnitude,
   truncate,
   capitalize,
 } from '../format'
@@ -126,6 +127,16 @@ describe('format utilities', () => {
   })
 
   describe('formatDrawdown', () => {
+    it('normalizes upstream signs into a bounded comparison magnitude', () => {
+      expect(normalizeDrawdownMagnitude(0)).toBe(0)
+      expect(normalizeDrawdownMagnitude(-12.34)).toBe(12.34)
+      expect(normalizeDrawdownMagnitude(100)).toBe(100)
+      expect(normalizeDrawdownMagnitude(null)).toBeNull()
+      expect(normalizeDrawdownMagnitude(Number.NaN)).toBeNull()
+      expect(normalizeDrawdownMagnitude(Number.POSITIVE_INFINITY)).toBeNull()
+      expect(normalizeDrawdownMagnitude(-100.001)).toBeNull()
+    })
+
     it('distinguishes measured zero, tiny non-zero risk, and unknown values', () => {
       expect(formatDrawdown(0)).toBe('0.0%')
       expect(formatDrawdown(-0)).toBe('0.0%')
