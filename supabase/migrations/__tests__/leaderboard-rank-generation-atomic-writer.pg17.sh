@@ -25,6 +25,8 @@ TYPED_MIGRATION="$ROOT_DIR/supabase/migrations/20260725017000_leaderboard_rank_t
 MDD_MIGRATION="$ROOT_DIR/supabase/migrations/20260725017250_normalize_leaderboard_rank_max_drawdown.sql"
 WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql"
 ATTESTATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260729011000_leaderboard_rank_manifest_attestation_substrate.sql"
+CANONICAL_BATCH_MIGRATION="$ROOT_DIR/supabase/migrations/20260729014500_leaderboard_rank_generation_canonical_batches.sql"
+ATTESTED_WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729015000_leaderboard_rank_generation_attested_batch_writer.sql"
 CAPACITY_BENCHMARK="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-64k-benchmark.pg17.psql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 BENCHMARK_64K="${ARENA_ATOMIC_WRITER_BENCHMARK_64K:-0}"
@@ -63,6 +65,8 @@ for required_file in \
   "$MDD_MIGRATION" \
   "$WRITER_MIGRATION" \
   "$ATTESTATION_MIGRATION" \
+  "$CANONICAL_BATCH_MIGRATION" \
+  "$ATTESTED_WRITER_MIGRATION" \
   "$CAPACITY_BENCHMARK"; do
   if [[ ! -f "$required_file" ]]; then
     echo "required atomic-writer proof input is missing: $required_file" >&2
@@ -109,6 +113,20 @@ expect_failure() {
     sed -n '1,240p' "$ERROR_FILE" >&2
     exit 1
   fi
+}
+
+wait_for_sql_true() {
+  local label="$1"
+  local sql="$2"
+  local attempt
+  for ((attempt = 0; attempt < 200; attempt += 1)); do
+    if [[ "$(psql_cmd -Atqc "$sql")" == 't' ]]; then
+      return 0
+    fi
+    sleep 0.05
+  done
+  echo "$label did not reach the required lock state" >&2
+  return 1
 }
 
 capture_atomic_state() {
@@ -160,6 +178,30 @@ SELECT pg_catalog.encode(
             )
             FROM ONLY arena.leaderboard_rank_generation_manifest_bindings
               AS binding
+          ),
+          '[]'::jsonb
+        ),
+        'manifestAttestations', COALESCE(
+          (
+            SELECT pg_catalog.jsonb_agg(
+              pg_catalog.to_jsonb(header)
+              ORDER BY header.season_id COLLATE pg_catalog."C",
+                       header.generation_seq
+            )
+            FROM ONLY arena.leaderboard_rank_manifest_attestations AS header
+          ),
+          '[]'::jsonb
+        ),
+        'manifestAttestationChunks', COALESCE(
+          (
+            SELECT pg_catalog.jsonb_agg(
+              pg_catalog.to_jsonb(chunk)
+              ORDER BY chunk.season_id COLLATE pg_catalog."C",
+                       chunk.generation_seq,
+                       chunk.chunk_index
+            )
+            FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks
+              AS chunk
           ),
           '[]'::jsonb
         ),
@@ -341,6 +383,417 @@ SQL
   exit 1
 fi
 psql_cmd -q -f "$ATTESTATION_MIGRATION"
+
+# Canonical claim migration is fail-closed over historical rows. Seed a claim
+# that the old 4096-batch envelope accepts, prove the upgrade is fully atomic,
+# then remove only this deliberate fixture and install the real migration.
+psql_cmd -q <<'SQL'
+DO $seed_noncanonical_claim$
+DECLARE
+  v_claimed_at timestamptz := pg_catalog.clock_timestamp();
+BEGIN
+  INSERT INTO arena.leaderboard_rank_generation_claims (
+    contract,
+    season_id,
+    generation_seq,
+    score_cohort_id,
+    write_set_sha256,
+    expected_rank_count,
+    expected_batch_count,
+    computed_at,
+    lease_seconds,
+    claimed_at,
+    lease_expires_at
+  ) VALUES (
+    'leaderboard-rank-generation-claim@1',
+    '7D',
+    1,
+    '11500000-0000-4150-8150-000000000003'::uuid,
+    pg_catalog.repeat('3', 64),
+    1001,
+    3,
+    v_claimed_at,
+    300,
+    v_claimed_at,
+    v_claimed_at + interval '300 seconds'
+  );
+END
+$seed_noncanonical_claim$;
+SQL
+
+CANONICAL_FAILURE_STATE_BEFORE="$(psql_cmd -Atqc "
+SELECT pg_catalog.concat_ws(
+  '|',
+  (SELECT pg_catalog.encode(
+     pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc,'UTF8')),
+     'hex'
+   ) FROM pg_catalog.pg_proc AS function_row
+   WHERE function_row.oid =
+     'public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)'::regprocedure),
+  (SELECT pg_catalog.pg_get_expr(
+     constraint_row.conbin,
+     constraint_row.conrelid,
+     false
+   ) FROM pg_catalog.pg_constraint AS constraint_row
+   WHERE constraint_row.conrelid =
+     'arena.leaderboard_rank_generation_claims'::regclass
+     AND constraint_row.conname =
+       'leaderboard_rank_generation_claims_batch_capacity_check'),
+  (SELECT pg_catalog.count(*)
+   FROM ONLY arena.leaderboard_rank_generation_claims AS claim
+   WHERE claim.score_cohort_id =
+     '11500000-0000-4150-8150-000000000003'::uuid)
+);")"
+CANONICAL_OLD_FIRST_BLOCKER_LOG="$TMP_ROOT/canonical-old-first-blocker.log"
+CANONICAL_OLD_FIRST_CLAIM_LOG="$TMP_ROOT/canonical-old-first-claim.log"
+CANONICAL_FAILURE_LOG="$TMP_ROOT/canonical-history-failure.log"
+(
+  psql_cmd -q >"$CANONICAL_OLD_FIRST_BLOCKER_LOG" 2>&1 <<'SQL' || true
+SET application_name = 'canonical-old-first-advisory-blocker';
+SELECT pg_catalog.pg_advisory_lock(91337, 11499);
+SELECT pg_catalog.pg_sleep(30);
+SQL
+) &
+CANONICAL_OLD_FIRST_BLOCKER_PID=$!
+
+wait_for_sql_true \
+  'old-first advisory blocker' \
+  "SELECT EXISTS (
+     SELECT 1 FROM pg_catalog.pg_stat_activity AS activity
+     WHERE activity.application_name='canonical-old-first-advisory-blocker'
+       AND activity.wait_event='PgSleep'
+   );"
+
+(
+  psql_cmd -q >"$CANONICAL_OLD_FIRST_CLAIM_LOG" 2>&1 <<'SQL'
+BEGIN;
+SET LOCAL application_name = 'canonical-old-first-claim-race';
+SET LOCAL ROLE service_role;
+SELECT public.claim_leaderboard_rank_generation(
+  '30D',
+  '11500000-0000-4150-8150-000000000014'::uuid,
+  pg_catalog.repeat('e',64),
+  1001,
+  3,
+  pg_catalog.clock_timestamp(),
+  300
+);
+RESET ROLE;
+SELECT pg_catalog.pg_advisory_lock(91337, 11499);
+ROLLBACK;
+SQL
+) &
+CANONICAL_OLD_FIRST_CLAIM_PID=$!
+
+wait_for_sql_true \
+  'old claim transaction before canonical migration' \
+  "SELECT EXISTS (
+     SELECT 1
+     FROM pg_catalog.pg_stat_activity AS activity
+     WHERE activity.application_name='canonical-old-first-claim-race'
+       AND activity.wait_event_type='Lock'
+       AND activity.wait_event='advisory'
+       AND EXISTS (
+         SELECT 1 FROM pg_catalog.pg_locks AS claims_lock
+         WHERE claims_lock.pid=activity.pid
+           AND claims_lock.relation=
+                 'arena.leaderboard_rank_generation_claims'::regclass
+           AND claims_lock.mode='RowExclusiveLock'
+           AND claims_lock.granted
+       )
+       AND EXISTS (
+         SELECT 1 FROM pg_catalog.pg_locks AS head_lock
+         WHERE head_lock.pid=activity.pid
+           AND head_lock.relation=
+                 'arena.leaderboard_rank_generation_heads'::regclass
+           AND head_lock.mode='RowExclusiveLock'
+           AND head_lock.granted
+       )
+   );"
+
+(
+  psql_cmd -q \
+    -c "SET application_name = 'canonical-old-first-migration-race'" \
+    -f "$CANONICAL_BATCH_MIGRATION"
+) >"$CANONICAL_FAILURE_LOG" 2>&1 &
+CANONICAL_OLD_FIRST_MIGRATION_PID=$!
+
+wait_for_sql_true \
+  'canonical migration behind old claim transaction' \
+  "SELECT EXISTS (
+     SELECT 1
+     FROM pg_catalog.pg_stat_activity AS activity
+     WHERE activity.application_name='canonical-old-first-migration-race'
+       AND EXISTS (
+         SELECT 1 FROM pg_catalog.pg_locks AS claims_lock
+         WHERE claims_lock.pid=activity.pid
+           AND claims_lock.relation=
+                 'arena.leaderboard_rank_generation_claims'::regclass
+           AND claims_lock.mode='AccessExclusiveLock'
+           AND NOT claims_lock.granted
+       )
+   );"
+
+psql_cmd -q -c "
+  SELECT pg_catalog.pg_terminate_backend(activity.pid)
+  FROM pg_catalog.pg_stat_activity AS activity
+  WHERE activity.application_name='canonical-old-first-advisory-blocker';
+" >/dev/null
+wait "$CANONICAL_OLD_FIRST_BLOCKER_PID"
+if ! wait "$CANONICAL_OLD_FIRST_CLAIM_PID"; then
+  echo 'old claim transaction failed before the canonical migration drained it' >&2
+  sed -n '1,240p' "$CANONICAL_OLD_FIRST_CLAIM_LOG" >&2
+  exit 1
+fi
+if wait "$CANONICAL_OLD_FIRST_MIGRATION_PID"; then
+  echo 'canonical batch migration accepted a historical noncanonical claim' >&2
+  exit 1
+fi
+if ! rg -q 'historical generation claim.*incompatible|canonical 1000-row chunks' \
+  "$CANONICAL_FAILURE_LOG"; then
+  echo 'canonical batch migration rejected history for an unexpected reason' >&2
+  sed -n '1,240p' "$CANONICAL_FAILURE_LOG" >&2
+  exit 1
+fi
+CANONICAL_FAILURE_STATE_AFTER="$(psql_cmd -Atqc "
+SELECT pg_catalog.concat_ws(
+  '|',
+  (SELECT pg_catalog.encode(
+     pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc,'UTF8')),
+     'hex'
+   ) FROM pg_catalog.pg_proc AS function_row
+   WHERE function_row.oid =
+     'public.claim_leaderboard_rank_generation(text,uuid,text,integer,integer,timestamptz,integer)'::regprocedure),
+  (SELECT pg_catalog.pg_get_expr(
+     constraint_row.conbin,
+     constraint_row.conrelid,
+     false
+   ) FROM pg_catalog.pg_constraint AS constraint_row
+   WHERE constraint_row.conrelid =
+     'arena.leaderboard_rank_generation_claims'::regclass
+     AND constraint_row.conname =
+       'leaderboard_rank_generation_claims_batch_capacity_check'),
+  (SELECT pg_catalog.count(*)
+   FROM ONLY arena.leaderboard_rank_generation_claims AS claim
+   WHERE claim.score_cohort_id =
+     '11500000-0000-4150-8150-000000000003'::uuid)
+);")"
+if [[ "$CANONICAL_FAILURE_STATE_AFTER" != "$CANONICAL_FAILURE_STATE_BEFORE" ]]; then
+  echo 'failed canonical batch migration changed RPC, constraint, or history' >&2
+  exit 1
+fi
+
+psql_cmd -q <<'SQL'
+ALTER TABLE arena.leaderboard_rank_generation_claims
+  DISABLE TRIGGER leaderboard_rank_generation_claim_immutable;
+DELETE FROM ONLY arena.leaderboard_rank_generation_claims
+WHERE score_cohort_id = '11500000-0000-4150-8150-000000000003'::uuid;
+ALTER TABLE arena.leaderboard_rank_generation_claims
+  ENABLE TRIGGER leaderboard_rank_generation_claim_immutable;
+SQL
+
+# Exercise the migration-first side of the upgrade race with the real old RPC.
+# A test-only event trigger pauses the first ALTER TABLE only after the
+# migration owns its claims ACCESS EXCLUSIVE barrier. It observes the legacy
+# RPC's one-way head-to-claims wait edge, then releases the migration. The
+# migration must finish before the old in-flight insert is rejected by the new
+# CHECK. If the migration also waited on heads, the observer detects the cycle.
+psql_cmd -q <<'SQL'
+CREATE FUNCTION arena.fixture_pause_canonical_batch_upgrade()
+RETURNS event_trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $body$
+DECLARE
+  v_attempt integer;
+  v_seen boolean := false;
+BEGIN
+  IF TG_TAG IS DISTINCT FROM 'ALTER TABLE'
+     OR pg_catalog.current_setting('application_name') IS DISTINCT FROM
+          'canonical-batch-migration-race'
+     OR pg_catalog.current_setting(
+          'arena.fixture_canonical_race',
+          true
+        ) IS DISTINCT FROM 'on' THEN
+    RETURN;
+  END IF;
+
+  PERFORM pg_catalog.set_config(
+    'arena.fixture_canonical_race',
+    'off',
+    true
+  );
+  FOR v_attempt IN 1..500 LOOP
+    PERFORM pg_catalog.pg_stat_clear_snapshot();
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_stat_activity AS rpc
+      WHERE rpc.datname = pg_catalog.current_database()
+        AND rpc.application_name = 'canonical-batch-legacy-claim-race'
+        AND rpc.wait_event_type = 'Lock'
+        AND pg_catalog.pg_backend_pid() = ANY(
+              pg_catalog.pg_blocking_pids(rpc.pid)
+            )
+        AND pg_catalog.cardinality(
+              pg_catalog.pg_blocking_pids(pg_catalog.pg_backend_pid())
+            ) = 0
+        AND EXISTS (
+          SELECT 1
+          FROM pg_catalog.pg_locks AS claims_lock
+          WHERE claims_lock.pid = rpc.pid
+            AND claims_lock.relation =
+                  'arena.leaderboard_rank_generation_claims'::regclass
+            AND claims_lock.mode = 'AccessShareLock'
+            AND NOT claims_lock.granted
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM pg_catalog.pg_locks AS head_lock
+          WHERE head_lock.pid = rpc.pid
+            AND head_lock.relation =
+                  'arena.leaderboard_rank_generation_heads'::regclass
+            AND head_lock.mode = 'RowShareLock'
+            AND head_lock.granted
+        )
+    ) INTO v_seen;
+    EXIT WHEN v_seen;
+    PERFORM pg_catalog.pg_sleep(0.01);
+  END LOOP;
+
+  IF NOT v_seen THEN
+    RAISE EXCEPTION
+      'canonical migration did not observe the one-way head-to-claims waiter'
+      USING ERRCODE = '55000';
+  END IF;
+END
+$body$;
+CREATE EVENT TRIGGER fixture_pause_canonical_batch_upgrade
+  ON ddl_command_start
+  WHEN TAG IN ('ALTER TABLE')
+  EXECUTE FUNCTION arena.fixture_pause_canonical_batch_upgrade();
+SQL
+
+CANONICAL_MIGRATION_LOG="$TMP_ROOT/canonical-migration-race.log"
+CANONICAL_CLAIM_LOG="$TMP_ROOT/canonical-claim-race.log"
+(
+  psql_cmd -v VERBOSITY=verbose -q \
+    -c "SET application_name = 'canonical-batch-migration-race'; SET arena.fixture_canonical_race = 'on'" \
+    -f "$CANONICAL_BATCH_MIGRATION"
+) >"$CANONICAL_MIGRATION_LOG" 2>&1 &
+CANONICAL_MIGRATION_PID=$!
+
+wait_for_sql_true \
+  'canonical migration claims barrier' \
+  "SELECT EXISTS (
+     SELECT 1
+     FROM pg_catalog.pg_stat_activity AS activity
+     WHERE activity.application_name='canonical-batch-migration-race'
+       AND pg_catalog.cardinality(
+             pg_catalog.pg_blocking_pids(activity.pid)
+           ) = 0
+       AND EXISTS (
+         SELECT 1 FROM pg_catalog.pg_locks AS relation_lock
+         WHERE relation_lock.pid=activity.pid
+           AND relation_lock.relation=
+                 'arena.leaderboard_rank_generation_claims'::regclass
+           AND relation_lock.mode='AccessExclusiveLock'
+           AND relation_lock.granted
+       )
+   );"
+
+(
+  psql_cmd -v VERBOSITY=verbose -q >"$CANONICAL_CLAIM_LOG" 2>&1 <<'SQL'
+BEGIN;
+SET LOCAL application_name = 'canonical-batch-legacy-claim-race';
+SELECT head.season_id
+FROM ONLY arena.leaderboard_rank_generation_heads AS head
+WHERE head.season_id = '7D'
+FOR UPDATE;
+SET LOCAL ROLE service_role;
+SELECT public.claim_leaderboard_rank_generation(
+  '7D',
+  '11500000-0000-4150-8150-000000000013'::uuid,
+  pg_catalog.repeat('d',64),
+  1001,
+  3,
+  pg_catalog.clock_timestamp(),
+  300
+);
+COMMIT;
+SQL
+) &
+CANONICAL_CLAIM_PID=$!
+
+if ! wait "$CANONICAL_MIGRATION_PID"; then
+  echo 'canonical migration deadlocked or failed in migration-first race' >&2
+  sed -n '1,240p' "$CANONICAL_MIGRATION_LOG" >&2
+  exit 1
+fi
+if wait "$CANONICAL_CLAIM_PID"; then
+  echo 'legacy loose claim committed behind the canonical migration barrier' >&2
+  exit 1
+fi
+if ! rg -q \
+  'canonical 1000-row batches|batch_capacity_check|violates check constraint' \
+  "$CANONICAL_CLAIM_LOG"; then
+  echo 'legacy loose claim failed for an unexpected race outcome' >&2
+  sed -n '1,240p' "$CANONICAL_CLAIM_LOG" >&2
+  exit 1
+fi
+if [[ "$(psql_cmd -Atqc "
+  SELECT pg_catalog.count(*)
+  FROM ONLY arena.leaderboard_rank_generation_claims
+  WHERE score_cohort_id='11500000-0000-4150-8150-000000000013'::uuid;
+")" != '0' ]]; then
+  echo 'legacy loose claim left history after the canonical migration race' >&2
+  exit 1
+fi
+
+psql_cmd -q <<'SQL'
+DROP EVENT TRIGGER fixture_pause_canonical_batch_upgrade;
+DROP FUNCTION arena.fixture_pause_canonical_batch_upgrade();
+SQL
+
+# Exact 1/1000/1001/64000 boundaries are admitted under service_role and each
+# transaction rolls back; loose 0/0, 1001/3, and 1/64 plans fail before state.
+for boundary in '1 1 1' '1000 1 2' '1001 2 3' '64000 64 4'; do
+  read -r rank_count batch_count suffix <<<"$boundary"
+  psql_cmd -q -v rank_count="$rank_count" -v batch_count="$batch_count" \
+    -v suffix="$suffix" >/dev/null <<'SQL'
+BEGIN;
+SET LOCAL ROLE service_role;
+SELECT public.claim_leaderboard_rank_generation(
+  '7D',
+  ('11500000-0000-4150-8150-' || pg_catalog.lpad(:'suffix', 12, '0'))::uuid,
+  pg_catalog.repeat(:'suffix', 64),
+  :'rank_count'::integer,
+  :'batch_count'::integer,
+  pg_catalog.clock_timestamp(),
+  300
+);
+ROLLBACK;
+SQL
+done
+
+expect_failure \
+  'canonical claim accepted empty 0/0 plan' \
+  'canonical 1000-row batches' \
+  "SET ROLE service_role; SELECT public.claim_leaderboard_rank_generation('7D','11500000-0000-4150-8150-000000000010',repeat('a',64),0,0,clock_timestamp(),300);"
+expect_failure \
+  'canonical claim accepted loose 1001/3 plan' \
+  'canonical 1000-row batches' \
+  "SET ROLE service_role; SELECT public.claim_leaderboard_rank_generation('7D','11500000-0000-4150-8150-000000000011',repeat('b',64),1001,3,clock_timestamp(),300);"
+expect_failure \
+  'canonical claim accepted one row split into 64 batches' \
+  'canonical 1000-row batches' \
+  "SET ROLE service_role; SELECT public.claim_leaderboard_rank_generation('7D','11500000-0000-4150-8150-000000000012',repeat('c',64),1,64,clock_timestamp(),300);"
+
+if ! psql_cmd -q -f "$ATTESTED_WRITER_MIGRATION" >"$ERROR_FILE" 2>&1; then
+  echo 'attested atomic writer migration failed after the real dependency chain' >&2
+  sed -n '1,280p' "$ERROR_FILE" >&2
+  exit 1
+fi
 psql_cmd -q <<'SQL'
 DO $attestation_encoder_proof$
 DECLARE
@@ -442,9 +895,9 @@ if [[ "$BENCHMARK_64K" == '1' ]]; then
 fi
 
 # Build the exact typed payload from the same sealed manifest input/output
-# arrays that the writer must attest. Batch zero owns both alpha identities;
-# batch one owns beta. That split is globally C-ordered and lets the proof make
-# batch one fail after physical DML without disturbing the durable first batch.
+# arrays that the writer must attest. Batch zero owns exactly 1,000 alpha
+# identities and batch one owns one beta identity. This is the smallest real
+# fixed-chunk topology and is globally C-ordered across the chunk boundary.
 psql_cmd -q <<'SQL'
 CREATE TABLE arena.fixture_atomic_writer_case (
   season_id text NOT NULL,
@@ -470,12 +923,44 @@ DECLARE
   v_computed_at timestamptz := pg_catalog.clock_timestamp();
   v_batch_0 arena.leaderboard_rank_batch_row_v1[];
   v_batch_1 arena.leaderboard_rank_batch_row_v1[];
+  v_inputs jsonb;
+  v_included jsonb;
   v_evidence_0 jsonb;
   v_evidence_1 jsonb;
   v_plan text[];
   v_write_set text;
   v_claim jsonb;
 BEGIN
+  SELECT
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'source', generated.source,
+        'source_trader_id', generated.source_trader_id,
+        'roi', 30,
+        'pnl', 12000,
+        'max_drawdown', 8,
+        'win_rate', 66,
+        'sharpe_ratio', 2.2,
+        'profit_factor', 2.1,
+        'trades_count', 140
+      )
+      ORDER BY generated.ordinal_position
+    ),
+    pg_catalog.jsonb_agg(
+      generated.source || ':' || generated.source_trader_id
+      ORDER BY generated.ordinal_position
+    )
+  INTO STRICT v_inputs, v_included
+  FROM (
+    SELECT
+      ordinal_position,
+      CASE WHEN ordinal_position <= 1000 THEN 'alpha' ELSE 'beta' END
+        AS source,
+      'trader-' || pg_catalog.lpad(ordinal_position::text, 6, '0')
+        AS source_trader_id
+    FROM pg_catalog.generate_series(1, 1001) AS rows(ordinal_position)
+  ) AS generated;
+
   v_seal := arena.seal_leaderboard_score_input_manifest_v1(
     '90D',
     pg_catalog.repeat('a', 64),
@@ -489,53 +974,15 @@ BEGIN
     'leaderboard-enrichment-evidence@1',
     pg_catalog.jsonb_build_object(
       'contract', 'leaderboard-enrichment-evidence@1',
-      'rows', 3
+      'rows', 1001
     ),
     'leaderboard-eligibility-evidence@1',
     pg_catalog.jsonb_build_object(
       'contract', 'leaderboard-eligibility-evidence@1',
       'canonicalIdentityCollisionCount', 0,
-      'included', pg_catalog.jsonb_build_array(
-        'alpha:trader-a',
-        'alpha:trader-b',
-        'beta:trader-c'
-      )
+      'included', v_included
     ),
-    pg_catalog.jsonb_build_array(
-      pg_catalog.jsonb_build_object(
-        'source', 'alpha',
-        'source_trader_id', 'trader-a',
-        'roi', 30,
-        'pnl', 12000,
-        'max_drawdown', 8,
-        'win_rate', 66,
-        'sharpe_ratio', 2.2,
-        'profit_factor', 2.1,
-        'trades_count', 140
-      ),
-      pg_catalog.jsonb_build_object(
-        'source', 'alpha',
-        'source_trader_id', 'trader-b',
-        'roi', 18,
-        'pnl', 8000,
-        'max_drawdown', 14,
-        'win_rate', 58,
-        'sharpe_ratio', 1.5,
-        'profit_factor', 1.6,
-        'trades_count', 90
-      ),
-      pg_catalog.jsonb_build_object(
-        'source', 'beta',
-        'source_trader_id', 'trader-c',
-        'roi', 9,
-        'pnl', 3500,
-        'max_drawdown', 22,
-        'win_rate', 52,
-        'sharpe_ratio', 0.9,
-        'profit_factor', 1.2,
-        'trades_count', 55
-      )
-    ),
+    v_inputs,
     pg_catalog.clock_timestamp() + interval '1 hour'
   );
 
@@ -584,11 +1031,11 @@ BEGIN
         (joined.input_value->>'pnl')::numeric,
         (joined.input_value->>'win_rate')::numeric,
         (joined.input_value->>'max_drawdown')::numeric,
-        (1000 - joined.public_rank)::integer,
+        (1001 - joined.public_rank)::integer,
         (joined.input_value->>'trades_count')::integer,
         'fixture-' || (joined.input_value->>'source_trader_id'),
         CASE
-          WHEN joined.input_value->>'source_trader_id' = 'trader-a'
+          WHEN joined.input_value->>'source_trader_id' = 'trader-000001'
             THEN NULL::text
           ELSE 'https://example.invalid/' ||
             (joined.input_value->>'source_trader_id') || '.png'
@@ -620,14 +1067,14 @@ BEGIN
         'full'::text,
         'swing'::text,
         CASE
-          WHEN joined.input_value->>'source_trader_id' = 'trader-a'
+          WHEN joined.input_value->>'source_trader_id' = 'trader-000001'
             THEN NULL::numeric
           ELSE 12.5::numeric
         END,
         0.8::numeric,
         (joined.input_value->>'sharpe_ratio')::numeric,
         CASE
-          WHEN joined.input_value->>'source_trader_id' = 'trader-a'
+          WHEN joined.input_value->>'source_trader_id' = 'trader-000001'
             THEN NULL::numeric
           ELSE 2.5::numeric
         END,
@@ -659,7 +1106,7 @@ BEGIN
   INTO STRICT v_batch_0, v_batch_1
   FROM typed;
 
-  IF pg_catalog.cardinality(v_batch_0) <> 2
+  IF pg_catalog.cardinality(v_batch_0) <> 1000
      OR pg_catalog.cardinality(v_batch_1) <> 1 THEN
     RAISE EXCEPTION 'atomic writer fixture did not build the expected slices';
   END IF;
@@ -680,7 +1127,7 @@ BEGIN
       v_cohort,
       v_manifest_digest,
       v_computed_at,
-      3,
+      1001,
       v_plan
     );
 
@@ -688,7 +1135,7 @@ BEGIN
     '90D',
     v_cohort,
     v_write_set,
-    3,
+    1001,
     2,
     v_computed_at,
     300
@@ -731,7 +1178,7 @@ expect_failure \
   "SET ROLE service_role; SELECT arena.write_leaderboard_rank_generation_batch_v1(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL::arena.leaderboard_rank_batch_row_v1[]);"
 
 # Seed one pre-generation legacy tuple. Its INSERT establishes alpha fence 1;
-# batch zero must then update this identity and insert trader-b in one UPSERT.
+# batch zero must then update this identity and insert 999 peers in one UPSERT.
 # PostgreSQL fires both transition-table mutation triggers, so the exact mixed
 # source window is 1 -> 3. Nullable values and caller-like authority below are
 # intentionally stale and must be overwritten, including explicit NULLs.
@@ -777,7 +1224,7 @@ INSERT INTO public.leaderboard_ranks (
   '90D',
   'alpha',
   'legacy',
-  'trader-a',
+  'trader-000001',
   999,
   1,
   -99,
@@ -826,7 +1273,39 @@ END
 $seed_assertion$;
 SQL
 
+# Attestation tuples created below must carry the top-level writer XID. A
+# SAVEPOINT/subtransaction has a different tuple xmin and therefore must roll
+# every attempted rank, fence, binding, receipt, header, and chunk write back.
+SUBXID_STATE_BEFORE="$(capture_atomic_state false)"
+expect_failure \
+  'batch zero created attestation authority under a savepoint subxid' \
+  'current-transaction|current transaction|subtransaction|subxid|attestation' \
+  "BEGIN;
+   SAVEPOINT nested_batch_zero;
+   SELECT arena.write_leaderboard_rank_generation_batch_v1(
+     case_row.season_id,
+     case_row.generation_seq,
+     case_row.score_cohort_id,
+     0,
+     case_row.score_input_manifest_id,
+     case_row.score_input_manifest_digest,
+     case_row.batch_sha256_plan,
+     case_row.batch_0_rows
+   )
+   FROM arena.fixture_atomic_writer_case AS case_row;
+   RELEASE SAVEPOINT nested_batch_zero;
+   COMMIT;"
+SUBXID_STATE_AFTER="$(capture_atomic_state false)"
+if [[ "$SUBXID_STATE_AFTER" != "$SUBXID_STATE_BEFORE" ]]; then
+  echo 'savepoint batch zero left partial rank or attestation authority' >&2
+  exit 1
+fi
+
+# The writer restores its two exact batch-zero constraints to DEFERRED even if
+# the caller made every deferrable constraint immediate before entry.
 FIRST_RESULT="$(psql_cmd -Atq <<'SQL'
+BEGIN;
+SET CONSTRAINTS ALL IMMEDIATE;
 SELECT arena.write_leaderboard_rank_generation_batch_v1(
   case_row.season_id,
   case_row.generation_seq,
@@ -838,13 +1317,175 @@ SELECT arena.write_leaderboard_rank_generation_batch_v1(
   case_row.batch_0_rows
 )::text
 FROM arena.fixture_atomic_writer_case AS case_row;
+COMMIT;
 SQL
 )"
 if [[ "$FIRST_RESULT" != *'"batch_index": 0'* \
-   || "$FIRST_RESULT" != *'"row_count": 2'* ]]; then
+   || "$FIRST_RESULT" != *'"row_count": 1000'* ]]; then
   echo "first atomic batch returned an unexpected receipt: $FIRST_RESULT" >&2
   exit 1
 fi
+
+psql_cmd -q <<'SQL'
+DO $batch_zero_attestation$
+DECLARE
+  v_case arena.fixture_atomic_writer_case%ROWTYPE;
+  v_authority_xid text;
+  v_state text;
+  v_chunks_valid boolean;
+BEGIN
+  SELECT fixture.* INTO STRICT v_case
+  FROM arena.fixture_atomic_writer_case AS fixture;
+
+  SELECT receipt.xmin::text
+  INTO STRICT v_authority_xid
+  FROM ONLY arena.leaderboard_rank_generation_batch_receipts AS receipt
+  WHERE receipt.season_id = v_case.season_id
+    AND receipt.generation_seq = v_case.generation_seq
+    AND receipt.batch_index = 0;
+
+  SELECT pg_catalog.concat_ws(
+    '|',
+    (SELECT binding.xmin::text
+     FROM ONLY arena.leaderboard_rank_generation_manifest_bindings AS binding
+     WHERE binding.season_id = v_case.season_id
+       AND binding.generation_seq = v_case.generation_seq),
+    (SELECT header.xmin::text
+     FROM ONLY arena.leaderboard_rank_manifest_attestations AS header
+     WHERE header.season_id = v_case.season_id
+       AND header.generation_seq = v_case.generation_seq),
+    (SELECT pg_catalog.count(DISTINCT chunk.xmin::text)
+     FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+     WHERE chunk.season_id = v_case.season_id
+       AND chunk.generation_seq = v_case.generation_seq),
+    (SELECT pg_catalog.min(chunk.xmin::text)
+     FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+     WHERE chunk.season_id = v_case.season_id
+       AND chunk.generation_seq = v_case.generation_seq),
+    (SELECT header.positive_count
+     FROM ONLY arena.leaderboard_rank_manifest_attestations AS header
+     WHERE header.season_id = v_case.season_id
+       AND header.generation_seq = v_case.generation_seq),
+    (SELECT header.chunk_count
+     FROM ONLY arena.leaderboard_rank_manifest_attestations AS header
+     WHERE header.season_id = v_case.season_id
+       AND header.generation_seq = v_case.generation_seq),
+    (SELECT pg_catalog.count(*)
+     FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+     WHERE chunk.season_id = v_case.season_id
+       AND chunk.generation_seq = v_case.generation_seq),
+    (SELECT pg_catalog.sum(chunk.row_count)
+     FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+     WHERE chunk.season_id = v_case.season_id
+       AND chunk.generation_seq = v_case.generation_seq),
+    (SELECT pg_catalog.string_agg(
+       chunk.chunk_index::text || ':' ||
+       chunk.first_position::text || ':' || chunk.row_count::text,
+       ',' ORDER BY chunk.chunk_index
+     )
+     FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+     WHERE chunk.season_id = v_case.season_id
+       AND chunk.generation_seq = v_case.generation_seq)
+  ) INTO STRICT v_state;
+  IF v_state IS DISTINCT FROM pg_catalog.concat_ws(
+       '|',
+       v_authority_xid,
+       v_authority_xid,
+       1,
+       v_authority_xid,
+       1001,
+       2,
+       2,
+       1001,
+       '0:1:1000,1:1001:1'
+     ) THEN
+    RAISE EXCEPTION 'batch-zero attestation XID/topology drifted: %', v_state;
+  END IF;
+
+  SELECT pg_catalog.bool_and(
+    arena.leaderboard_rank_manifest_attestation_chunk_is_valid_v1(
+      chunk.season_id,
+      chunk.generation_seq,
+      chunk.score_cohort_id,
+      chunk.score_input_manifest_id,
+      chunk.score_input_manifest_digest,
+      chunk.chunk_index,
+      chunk.first_position,
+      chunk.row_count,
+      chunk.identities,
+      chunk.field_commitments,
+      chunk.chunk_sha256
+    )
+  )
+  INTO STRICT v_chunks_valid
+  FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+  WHERE chunk.season_id = v_case.season_id
+    AND chunk.generation_seq = v_case.generation_seq;
+  IF v_chunks_valid IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'batch-zero attestation chunk hash drifted';
+  END IF;
+
+  IF EXISTS (
+    WITH batches(batch_index, rows) AS (
+      VALUES (0, v_case.batch_0_rows), (1, v_case.batch_1_rows)
+    ), typed_rows AS MATERIALIZED (
+      SELECT
+        batches.batch_index,
+        position.ordinality,
+        batches.rows[position.ordinality] AS rank_row
+      FROM batches
+      CROSS JOIN LATERAL pg_catalog.generate_subscripts(batches.rows, 1)
+        AS position(ordinality)
+    ), attested_rows AS MATERIALIZED (
+      SELECT
+        chunk.chunk_index AS batch_index,
+        identity.ordinality,
+        identity.value AS identity,
+        commitment.value AS field_commitment
+      FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+      CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(chunk.identities)
+        WITH ORDINALITY AS identity(value, ordinality)
+      JOIN LATERAL pg_catalog.jsonb_array_elements_text(
+        chunk.field_commitments
+      ) WITH ORDINALITY AS commitment(value, ordinality)
+        USING (ordinality)
+      WHERE chunk.season_id = v_case.season_id
+        AND chunk.generation_seq = v_case.generation_seq
+    )
+    SELECT 1
+    FROM typed_rows
+    FULL JOIN attested_rows
+      ON attested_rows.batch_index = typed_rows.batch_index
+     AND attested_rows.ordinality = typed_rows.ordinality
+    WHERE typed_rows.rank_row IS NULL
+       OR attested_rows.identity IS NULL
+       OR attested_rows.identity->>0 IS DISTINCT FROM
+            (typed_rows.rank_row).source
+       OR attested_rows.identity->>1 IS DISTINCT FROM
+            (typed_rows.rank_row).source_trader_id
+       OR attested_rows.field_commitment IS DISTINCT FROM
+            arena.build_leaderboard_rank_typed_field_commitment_v1(
+              (typed_rows.rank_row).source,
+              (typed_rows.rank_row).source_trader_id,
+              (typed_rows.rank_row).roi,
+              (typed_rows.rank_row).pnl,
+              (typed_rows.rank_row).win_rate,
+              (typed_rows.rank_row).max_drawdown,
+              (typed_rows.rank_row).sharpe_ratio,
+              (typed_rows.rank_row).profit_factor,
+              (typed_rows.rank_row).trades_count,
+              (typed_rows.rank_row).arena_score,
+              (typed_rows.rank_row).score_factors,
+              (typed_rows.rank_row).profitability_score,
+              (typed_rows.rank_row).risk_control_score,
+              (typed_rows.rank_row).execution_score
+            )
+  ) THEN
+    RAISE EXCEPTION 'batch-zero attestation fields drifted from typed chunks';
+  END IF;
+END
+$batch_zero_attestation$;
+SQL
 
 AFTER_BATCH_ZERO="$(psql_cmd -Atqc "
 SELECT pg_catalog.concat_ws(
@@ -856,11 +1497,11 @@ SELECT pg_catalog.concat_ws(
   (SELECT mutation_seq FROM arena.leaderboard_rank_mutation_fences WHERE season_id='90D' AND source='alpha'),
   (SELECT mutation_seq_before::text || ':' || mutation_seq_after::text FROM arena.leaderboard_rank_generation_source_fence_receipts WHERE season_id='90D' AND generation_seq=1 AND batch_index=0 AND source='alpha'),
   (SELECT phase FROM arena.leaderboard_rank_generation_heads WHERE season_id='90D'),
-  (SELECT CASE WHEN avatar_url IS NULL AND avg_holding_hours IS NULL AND sortino_ratio IS NULL THEN 'nullable-cleared' ELSE 'nullable-stale' END FROM public.leaderboard_ranks WHERE season_id='90D' AND source='alpha' AND source_trader_id='trader-a'),
-  (SELECT CASE WHEN rank_row.computed_at = case_row.computed_at AND rank_row.rank_publication_id = case_row.score_cohort_id THEN 'authority-injected' ELSE 'authority-stale' END FROM public.leaderboard_ranks AS rank_row CROSS JOIN arena.fixture_atomic_writer_case AS case_row WHERE rank_row.season_id='90D' AND rank_row.source='alpha' AND rank_row.source_trader_id='trader-a'),
+  (SELECT CASE WHEN avatar_url IS NULL AND avg_holding_hours IS NULL AND sortino_ratio IS NULL THEN 'nullable-cleared' ELSE 'nullable-stale' END FROM public.leaderboard_ranks WHERE season_id='90D' AND source='alpha' AND source_trader_id='trader-000001'),
+  (SELECT CASE WHEN rank_row.computed_at = case_row.computed_at AND rank_row.rank_publication_id = case_row.score_cohort_id THEN 'authority-injected' ELSE 'authority-stale' END FROM public.leaderboard_ranks AS rank_row CROSS JOIN arena.fixture_atomic_writer_case AS case_row WHERE rank_row.season_id='90D' AND rank_row.source='alpha' AND rank_row.source_trader_id='trader-000001'),
   (SELECT updated_at::text FROM arena.leaderboard_rank_generation_heads WHERE season_id='90D')
 );")"
-if [[ "$AFTER_BATCH_ZERO" != 2\|1\|1\|1\|3\|1:3\|writing\|nullable-cleared\|authority-injected\|* ]]; then
+if [[ "$AFTER_BATCH_ZERO" != 1000\|1\|1\|1\|3\|1:3\|writing\|nullable-cleared\|authority-injected\|* ]]; then
   echo "mixed insert-update batch recorded the wrong per-source fence delta: $AFTER_BATCH_ZERO" >&2
   if [[ "$AFTER_BATCH_ZERO" == *'nullable-stale'* ]]; then
     echo 'atomic upsert retained stale nullable rank fields' >&2
@@ -868,6 +1509,274 @@ if [[ "$AFTER_BATCH_ZERO" != 2\|1\|1\|1\|3\|1:3\|writing\|nullable-cleared\|auth
   if [[ "$AFTER_BATCH_ZERO" == *'authority-stale'* ]]; then
     echo 'atomic upsert trusted caller-owned generation authority' >&2
   fi
+  exit 1
+fi
+
+# Batch zero has frozen the complete manifest into immutable chunks. Prove the
+# next batch cannot depend on the raw scorer manifest by pruning it now, before
+# every later-batch rejection and the eventual successful write.
+psql_cmd -q <<'SQL'
+DELETE FROM ONLY arena.leaderboard_score_input_manifests AS manifest
+USING arena.fixture_atomic_writer_case AS case_row
+WHERE manifest.manifest_id = case_row.score_input_manifest_id;
+SQL
+
+if [[ "$(psql_cmd -Atqc 'SELECT pg_catalog.count(*) FROM ONLY arena.leaderboard_score_input_manifests;')" != '0' ]]; then
+  echo 'raw manifest was not pruned immediately after batch-zero attestation' >&2
+  exit 1
+fi
+
+# A mutation to a source already covered by batch zero invalidates its durable
+# fence before batch one can append. Put the mutation and writer call in one
+# transaction so rejection must restore the exact prior state.
+PRIOR_SOURCE_STATE_BEFORE="$(capture_atomic_state false)"
+expect_failure \
+  'later batch ignored a mutation to a prior-batch source' \
+  'prior.*source.*fence|source.*fence.*continue|mutation' \
+  "BEGIN;
+   UPDATE public.leaderboard_ranks
+   SET handle='mutated-between-attested-batches'
+   WHERE season_id='90D'
+     AND source='alpha'
+     AND source_trader_id='trader-000001';
+   SELECT arena.write_leaderboard_rank_generation_batch_v1(
+     case_row.season_id,
+     case_row.generation_seq,
+     case_row.score_cohort_id,
+     1,
+     case_row.score_input_manifest_id,
+     case_row.score_input_manifest_digest,
+     case_row.batch_sha256_plan,
+     case_row.batch_1_rows
+   )
+   FROM arena.fixture_atomic_writer_case AS case_row;
+   COMMIT;"
+PRIOR_SOURCE_STATE_AFTER="$(capture_atomic_state false)"
+if [[ "$PRIOR_SOURCE_STATE_AFTER" != "$PRIOR_SOURCE_STATE_BEFORE" ]]; then
+  echo 'prior-source mutation rejection left partial durable state' >&2
+  exit 1
+fi
+
+# Caller row order is not an alternative encoding. Even though the typed batch
+# digest itself sorts identities, the attested writer accepts only the exact
+# canonical chunk sequence supplied by batch zero.
+NONCANONICAL_STATE_BEFORE="$(capture_atomic_state false)"
+expect_failure \
+  'writer accepted a noncanonical row array order' \
+  'canonical|order|attested.*chunk|chunk.*identity|manifest attestation replay' \
+  "SELECT arena.write_leaderboard_rank_generation_batch_v1(
+     case_row.season_id,
+     case_row.generation_seq,
+     case_row.score_cohort_id,
+     0,
+     case_row.score_input_manifest_id,
+     case_row.score_input_manifest_digest,
+     case_row.batch_sha256_plan,
+     (SELECT pg_catalog.array_agg(
+        input ORDER BY
+          input.source COLLATE pg_catalog.\"C\" DESC,
+          input.source_trader_id COLLATE pg_catalog.\"C\" DESC
+      )
+      FROM pg_catalog.unnest(case_row.batch_0_rows) AS input)
+   )
+   FROM arena.fixture_atomic_writer_case AS case_row;"
+NONCANONICAL_STATE_AFTER="$(capture_atomic_state false)"
+if [[ "$NONCANONICAL_STATE_AFTER" != "$NONCANONICAL_STATE_BEFORE" ]]; then
+  echo 'noncanonical batch rejection changed durable state' >&2
+  exit 1
+fi
+
+# Batch index selects one and only one fixed chunk. A full batch-zero payload
+# cannot be relabelled as the one-row second chunk.
+WRONG_CHUNK_STATE_BEFORE="$(capture_atomic_state false)"
+expect_failure \
+  'later writer accepted rows from the wrong attestation chunk' \
+  'immutable generation plan|fixed chunk|attested.*chunk|chunk.*row' \
+  "SELECT arena.write_leaderboard_rank_generation_batch_v1(
+     case_row.season_id,
+     case_row.generation_seq,
+     case_row.score_cohort_id,
+     1,
+     case_row.score_input_manifest_id,
+     case_row.score_input_manifest_digest,
+     case_row.batch_sha256_plan,
+     case_row.batch_0_rows
+   )
+   FROM arena.fixture_atomic_writer_case AS case_row;"
+WRONG_CHUNK_STATE_AFTER="$(capture_atomic_state false)"
+if [[ "$WRONG_CHUNK_STATE_AFTER" != "$WRONG_CHUNK_STATE_BEFORE" ]]; then
+  echo 'wrong-chunk rejection changed durable state' >&2
+  exit 1
+fi
+
+DUPLICATE_STATE_BEFORE="$(capture_atomic_state false)"
+expect_failure \
+  'later writer accepted a duplicate identity inside one chunk' \
+  'duplicate identity|immutable generation plan|attested.*chunk' \
+  "SELECT arena.write_leaderboard_rank_generation_batch_v1(
+     case_row.season_id,
+     case_row.generation_seq,
+     case_row.score_cohort_id,
+     1,
+     case_row.score_input_manifest_id,
+     case_row.score_input_manifest_digest,
+     case_row.batch_sha256_plan,
+     pg_catalog.array_append(case_row.batch_1_rows, case_row.batch_1_rows[1])
+   )
+   FROM arena.fixture_atomic_writer_case AS case_row;"
+DUPLICATE_STATE_AFTER="$(capture_atomic_state false)"
+if [[ "$DUPLICATE_STATE_AFTER" != "$DUPLICATE_STATE_BEFORE" ]]; then
+  echo 'duplicate-identity rejection changed durable state' >&2
+  exit 1
+fi
+
+# Make the immutable chunk/header hashes internally self-consistent around one
+# forged field commitment. The exact batch remains unchanged, so only the
+# typed-to-attested commitment comparison can authorize or reject this call.
+COMMITMENT_STATE_BEFORE="$(capture_atomic_state false)"
+expect_failure \
+  'later writer accepted a forged attested field commitment' \
+  'field.*commitment|commitment.*attest|attested.*field|fields.*manifest attestation' \
+  "BEGIN;
+   ALTER TABLE arena.leaderboard_rank_manifest_attestation_chunks
+     DISABLE TRIGGER leaderboard_rank_manifest_attestation_chunks_immutable;
+   ALTER TABLE arena.leaderboard_rank_manifest_attestations
+     DISABLE TRIGGER leaderboard_rank_manifest_attestations_immutable;
+   WITH forged AS MATERIALIZED (
+     SELECT
+       chunk.season_id,
+       chunk.generation_seq,
+       chunk.chunk_index,
+       pg_catalog.jsonb_set(
+         chunk.field_commitments,
+         ARRAY['0'],
+         pg_catalog.to_jsonb(pg_catalog.repeat('f', 64)),
+         false
+       ) AS field_commitments
+     FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+     WHERE chunk.season_id='90D'
+       AND chunk.generation_seq=1
+       AND chunk.chunk_index=1
+   )
+   UPDATE ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+   SET
+     field_commitments = forged.field_commitments,
+     chunk_sha256 =
+       arena.build_leaderboard_rank_manifest_chunk_sha256_v1(
+         chunk.season_id,
+         chunk.generation_seq,
+         chunk.score_cohort_id,
+         chunk.score_input_manifest_id,
+         chunk.score_input_manifest_digest,
+         chunk.chunk_index,
+         chunk.first_position,
+         chunk.row_count,
+         chunk.identities,
+         forged.field_commitments
+       )
+   FROM forged
+   WHERE chunk.season_id=forged.season_id
+     AND chunk.generation_seq=forged.generation_seq
+     AND chunk.chunk_index=forged.chunk_index;
+   UPDATE ONLY arena.leaderboard_rank_manifest_attestations AS header
+   SET chunks_sha256 = arena.build_leaderboard_rank_manifest_chunks_sha256_v1(
+     header.season_id,
+     header.generation_seq,
+     header.score_cohort_id,
+     header.score_input_manifest_id,
+     header.score_input_manifest_digest,
+     header.positive_count,
+     header.chunk_count,
+     (SELECT pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_array(
+          chunk.chunk_index,
+          chunk.first_position,
+          chunk.row_count,
+          chunk.chunk_sha256
+        ) ORDER BY chunk.chunk_index)
+      FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+      WHERE chunk.season_id=header.season_id
+        AND chunk.generation_seq=header.generation_seq)
+   )
+   WHERE header.season_id='90D' AND header.generation_seq=1;
+   ALTER TABLE arena.leaderboard_rank_manifest_attestation_chunks
+     ENABLE TRIGGER leaderboard_rank_manifest_attestation_chunks_immutable;
+   ALTER TABLE arena.leaderboard_rank_manifest_attestations
+     ENABLE TRIGGER leaderboard_rank_manifest_attestations_immutable;
+   SELECT arena.write_leaderboard_rank_generation_batch_v1(
+     case_row.season_id,
+     case_row.generation_seq,
+     case_row.score_cohort_id,
+     1,
+     case_row.score_input_manifest_id,
+     case_row.score_input_manifest_digest,
+     case_row.batch_sha256_plan,
+     case_row.batch_1_rows
+   )
+   FROM arena.fixture_atomic_writer_case AS case_row;
+   COMMIT;"
+COMMITMENT_STATE_AFTER="$(capture_atomic_state false)"
+if [[ "$COMMITMENT_STATE_AFTER" != "$COMMITMENT_STATE_BEFORE" ]]; then
+  echo 'field-commitment rejection left forged or partial durable state' >&2
+  exit 1
+fi
+
+# Cross one internally consistent claim/head/attestation validity boundary
+# inside the same transaction. The failed writer must roll the temporary owner
+# mutations and every attempted batch effect back together.
+ATTESTATION_EXPIRY_STATE_BEFORE="$(capture_atomic_state false)"
+expect_failure \
+  'later writer accepted an expired manifest attestation' \
+  'attestation.*expired|expired.*attestation|valid.*until|validity|generation lease expired' \
+  "BEGIN;
+   ALTER TABLE arena.leaderboard_rank_generation_claims
+     DISABLE TRIGGER leaderboard_rank_generation_claim_immutable;
+   ALTER TABLE arena.leaderboard_rank_manifest_attestations
+     DISABLE TRIGGER leaderboard_rank_manifest_attestations_immutable;
+   WITH deadline AS MATERIALIZED (
+     SELECT pg_catalog.clock_timestamp()+interval '300 milliseconds' AS value
+   )
+   UPDATE ONLY arena.leaderboard_rank_generation_claims AS claim
+   SET
+     lease_seconds=15,
+     claimed_at=deadline.value-interval '15 seconds',
+     lease_expires_at=deadline.value
+   FROM deadline
+   WHERE claim.season_id='90D' AND claim.generation_seq=1;
+   UPDATE ONLY arena.leaderboard_rank_generation_heads AS head
+   SET lease_expires_at=claim.lease_expires_at
+   FROM ONLY arena.leaderboard_rank_generation_claims AS claim
+   WHERE head.season_id=claim.season_id
+     AND head.generation_seq=claim.generation_seq
+     AND head.score_cohort_id=claim.score_cohort_id
+     AND head.season_id='90D' AND head.generation_seq=1;
+   UPDATE ONLY arena.leaderboard_rank_manifest_attestations AS header
+   SET manifest_valid_until=claim.lease_expires_at
+   FROM ONLY arena.leaderboard_rank_generation_claims AS claim
+   WHERE header.season_id=claim.season_id
+     AND header.generation_seq=claim.generation_seq
+     AND header.score_cohort_id=claim.score_cohort_id
+     AND header.season_id='90D' AND header.generation_seq=1;
+   ALTER TABLE arena.leaderboard_rank_generation_claims
+     ENABLE TRIGGER leaderboard_rank_generation_claim_immutable;
+   ALTER TABLE arena.leaderboard_rank_manifest_attestations
+     ENABLE TRIGGER leaderboard_rank_manifest_attestations_immutable;
+   SELECT pg_catalog.pg_sleep(0.4);
+   SELECT arena.write_leaderboard_rank_generation_batch_v1(
+     case_row.season_id,
+     case_row.generation_seq,
+     case_row.score_cohort_id,
+     1,
+     case_row.score_input_manifest_id,
+     case_row.score_input_manifest_digest,
+     case_row.batch_sha256_plan,
+     case_row.batch_1_rows
+   )
+   FROM arena.fixture_atomic_writer_case AS case_row;
+   COMMIT;"
+ATTESTATION_EXPIRY_STATE_AFTER="$(capture_atomic_state false)"
+if [[ "$ATTESTATION_EXPIRY_STATE_AFTER" != "$ATTESTATION_EXPIRY_STATE_BEFORE" ]]; then
+  echo 'expired-attestation rejection changed durable state' >&2
   exit 1
 fi
 
@@ -932,7 +1841,7 @@ DECLARE
 BEGIN
   IF NEW.season_id = '90D'
      AND NEW.source = 'beta'
-     AND NEW.source_trader_id = 'trader-c' THEN
+     AND NEW.source_trader_id = 'trader-001001' THEN
     PERFORM pg_catalog.nextval(
       'arena.fixture_atomic_rank_sleep_calls'::pg_catalog.regclass
     );
@@ -1008,7 +1917,7 @@ fi
 SLEEP_TRIGGER_PROOF="$(psql_cmd -Atqc "
 SELECT pg_catalog.concat_ws(
   '|',
-  (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks WHERE season_id='90D' AND source='beta' AND source_trader_id='trader-c'),
+  (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks WHERE season_id='90D' AND source='beta' AND source_trader_id='trader-001001'),
   (SELECT last_value FROM arena.fixture_atomic_rank_sleep_calls),
   (SELECT is_called FROM arena.fixture_atomic_rank_sleep_calls)
 );")"
@@ -1078,7 +1987,7 @@ SELECT pg_catalog.concat_ws(
   (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_manifest_bindings),
   (SELECT phase FROM arena.leaderboard_rank_generation_heads WHERE season_id='90D')
 );")"
-if [[ "$COMPLETE_STATE" != '3|2|3|2|alpha:1:3,beta:0:1|1|writing' ]]; then
+if [[ "$COMPLETE_STATE" != '1001|2|1001|2|alpha:1:3,beta:0:1|1|writing' ]]; then
   echo "successful atomic batch did not commit ranks and receipts together: $COMPLETE_STATE" >&2
   exit 1
 fi
@@ -1195,7 +2104,7 @@ UPDATE public.leaderboard_ranks AS rank_row
 SET handle = 'legacy-after-seal'
 WHERE rank_row.season_id = '90D'
   AND rank_row.source = 'alpha'
-  AND rank_row.source_trader_id = 'trader-a';
+  AND rank_row.source_trader_id = 'trader-000001';
 SQL
 
 TERMINAL_REPLAY_STATE_BEFORE="$(capture_atomic_state)"
@@ -1220,7 +2129,7 @@ ALTERED_REPLAY_STATE_BEFORE="$(capture_atomic_state)"
 expect_failure \
   'replay accepted a different immutable batch payload' \
   'atomic rank batch does not match immutable generation plan' \
-  "SELECT arena.write_leaderboard_rank_generation_batch_v1(case_row.season_id,case_row.generation_seq,case_row.score_cohort_id,0,case_row.score_input_manifest_id,case_row.score_input_manifest_digest,case_row.batch_sha256_plan,(SELECT pg_catalog.array_agg(pg_catalog.jsonb_populate_record(NULL::arena.leaderboard_rank_batch_row_v1,pg_catalog.to_jsonb(input) || CASE WHEN input.source_trader_id='trader-a' THEN pg_catalog.jsonb_build_object('handle','altered-replay') ELSE '{}'::jsonb END) ORDER BY input.source COLLATE pg_catalog.\"C\",input.source_trader_id COLLATE pg_catalog.\"C\") FROM pg_catalog.unnest(case_row.batch_0_rows) AS input)) FROM arena.fixture_atomic_writer_case AS case_row;"
+  "SELECT arena.write_leaderboard_rank_generation_batch_v1(case_row.season_id,case_row.generation_seq,case_row.score_cohort_id,0,case_row.score_input_manifest_id,case_row.score_input_manifest_digest,case_row.batch_sha256_plan,(SELECT pg_catalog.array_agg(pg_catalog.jsonb_populate_record(NULL::arena.leaderboard_rank_batch_row_v1,pg_catalog.to_jsonb(input) || CASE WHEN input.source_trader_id='trader-000001' THEN pg_catalog.jsonb_build_object('handle','altered-replay') ELSE '{}'::jsonb END) ORDER BY input.source COLLATE pg_catalog.\"C\",input.source_trader_id COLLATE pg_catalog.\"C\") FROM pg_catalog.unnest(case_row.batch_0_rows) AS input)) FROM arena.fixture_atomic_writer_case AS case_row;"
 ALTERED_REPLAY_STATE_AFTER="$(capture_atomic_state)"
 if [[ "$ALTERED_REPLAY_STATE_AFTER" != "$ALTERED_REPLAY_STATE_BEFORE" ]]; then
   echo 'altered immutable replay payload changed durable state' >&2
@@ -1295,6 +2204,64 @@ SQL
 TOPOLOGY_RESTORED_STATE="$(capture_atomic_state)"
 if [[ "$TOPOLOGY_RESTORED_STATE" != "$TOPOLOGY_FULL_STATE" ]]; then
   echo 'temporary source-receipt topology was not fully restored' >&2
+  exit 1
+fi
+
+# A pre-attestation deployment may already contain batch-zero receipts. Never
+# infer or backfill manifest commitments from that old authority. Remove only
+# the attestation graph at the end of the proof, then require exact replay to
+# fail without changing any remaining rank/receipt/fence state.
+psql_cmd -q <<'SQL'
+ALTER TABLE arena.leaderboard_rank_manifest_attestation_chunks
+  DISABLE TRIGGER leaderboard_rank_manifest_attestation_chunks_immutable;
+ALTER TABLE arena.leaderboard_rank_manifest_attestations
+  DISABLE TRIGGER leaderboard_rank_manifest_attestations_immutable;
+DELETE FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks
+WHERE season_id='90D' AND generation_seq=1;
+DELETE FROM ONLY arena.leaderboard_rank_manifest_attestations
+WHERE season_id='90D' AND generation_seq=1;
+ALTER TABLE arena.leaderboard_rank_manifest_attestation_chunks
+  ENABLE TRIGGER leaderboard_rank_manifest_attestation_chunks_immutable;
+ALTER TABLE arena.leaderboard_rank_manifest_attestations
+  ENABLE TRIGGER leaderboard_rank_manifest_attestations_immutable;
+
+DO $legacy_receipt_shape$
+BEGIN
+  IF (SELECT pg_catalog.count(*)
+      FROM ONLY arena.leaderboard_rank_generation_batch_receipts
+      WHERE season_id='90D' AND generation_seq=1) <> 2
+     OR EXISTS (
+       SELECT 1 FROM ONLY arena.leaderboard_rank_manifest_attestations
+       WHERE season_id='90D' AND generation_seq=1
+     )
+     OR EXISTS (
+       SELECT 1 FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks
+       WHERE season_id='90D' AND generation_seq=1
+     ) THEN
+    RAISE EXCEPTION 'legacy receipt without attestation fixture drifted';
+  END IF;
+END
+$legacy_receipt_shape$;
+SQL
+
+UNATTESTED_REPLAY_STATE_BEFORE="$(capture_atomic_state false)"
+expect_failure \
+  'old batch-zero receipt replayed without an attestation' \
+  'unattested|attestation|manifest.*commitment' \
+  "SELECT arena.write_leaderboard_rank_generation_batch_v1(
+     case_row.season_id,
+     case_row.generation_seq,
+     case_row.score_cohort_id,
+     0,
+     case_row.score_input_manifest_id,
+     case_row.score_input_manifest_digest,
+     case_row.batch_sha256_plan,
+     case_row.batch_0_rows
+   )
+   FROM arena.fixture_atomic_writer_case AS case_row;"
+UNATTESTED_REPLAY_STATE_AFTER="$(capture_atomic_state false)"
+if [[ "$UNATTESTED_REPLAY_STATE_AFTER" != "$UNATTESTED_REPLAY_STATE_BEFORE" ]]; then
+  echo 'unattested legacy replay changed durable state' >&2
   exit 1
 fi
 
@@ -1433,7 +2400,7 @@ ORDER BY 1;
 COMMIT;
 SQL
 )"
-EXPECTED_DEPENDENCY_DIGESTS=$'acl|13|e8d93b0faac5f16601a1b7a3e750fe46345ec2465e67297bb52fefdf005cdd74\ncatalog|12|84c34d0b190ae745a2516a4e8b63111ba8f82dd2adc586e3836ea086e9d962a7'
+EXPECTED_DEPENDENCY_DIGESTS=$'acl|13|e8d93b0faac5f16601a1b7a3e750fe46345ec2465e67297bb52fefdf005cdd74\ncatalog|12|cbd7e49f7890141ba10d9f8c90d382ebbfa62e007b073ec5f540a5ed4ef16d89'
 if [[ "$DEPENDENCY_DIGESTS" != "$EXPECTED_DEPENDENCY_DIGESTS" ]]; then
   echo "atomic writer dependency catalog/ACL population drifted: $DEPENDENCY_DIGESTS" >&2
   exit 1
