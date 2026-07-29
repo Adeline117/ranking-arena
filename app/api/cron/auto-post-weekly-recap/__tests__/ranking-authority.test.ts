@@ -30,4 +30,11 @@ describe('weekly recap ranking authority', () => {
     expect(route).toContain(".order('source_trader_id', { ascending: true })")
     expect(route).toContain('.limit(40)')
   })
+
+  it('bounds every database phase inside an explicit serverless budget', () => {
+    expect(route).toContain('export const maxDuration = 60')
+    expect(route).toContain('const workSignal = AbortSignal.timeout(45_000)')
+    expect(route.match(/\.abortSignal\(workSignal\)/g)).toHaveLength(3)
+    expect(route).toContain('{ safetyTimeoutMs: 55_000 }')
+  })
 })

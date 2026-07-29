@@ -18,6 +18,8 @@ import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
 const SYSTEM_HANDLE = 'arena_bot'
 
+export const maxDuration = 60
+
 // 数据源 = public.leaderboard_ranks(7D season,serving 表)直查。
 // 曾用 arena_weekly_leaders RPC:形状真点纠偏后又实测 p_limit 15 要 49s
 // (statement timeout),且榜首全是 ROI clamp 垃圾——直查 lr 快、可过滤、可信。
@@ -39,6 +41,7 @@ function fmtRoi(v: number | null | undefined): string {
 
 const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin()
+  const workSignal = AbortSignal.timeout(45_000)
 
   // 防重:本周(周一起算)已发过即跳过
   const now = new Date()
@@ -52,6 +55,7 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
     .ilike('title', 'Weekly Top 5%')
     .gte('created_at', `${mondayIso}T00:00:00Z`)
     .limit(1)
+    .abortSignal(workSignal)
     .maybeSingle()
   if (existingError) {
     throw new Error(`weekly recap deduplication query failed: ${existingError.message}`)
@@ -77,6 +81,7 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
         .order('source', { ascending: true })
         .order('source_trader_id', { ascending: true })
         .limit(40)
+        .abortSignal(workSignal)
 
       if (error || data === null) {
         throw new Error(`weekly ranking query failed: ${error?.message ?? 'null payload'}`)
@@ -143,10 +148,11 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
       hot_score: 50,
     })
     .select('id')
+    .abortSignal(workSignal)
     .single()
   if (insertError) throw new Error(`Failed to insert post: ${insertError.message}`)
 
   return { count: 1, postId: post.id }
-})
+}, { safetyTimeoutMs: 55_000 })
 
 export const GET = handler
