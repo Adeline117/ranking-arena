@@ -11,7 +11,6 @@ import ChatSettingsDrawer from '@/app/components/features/ChatSettingsDrawer'
 import ChatSearchOverlay from '@/app/components/features/ChatSearchOverlay'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { useToast } from '@/app/components/ui/Toast'
 
 import type { Message } from './components/types'
 import ConversationHeader from './components/ConversationHeader'
@@ -23,6 +22,7 @@ import { useConversationAuth } from './hooks/useConversationAuth'
 import { useConversationMessages } from './hooks/useConversationMessages'
 import { useFileUpload } from './hooks/useFileUpload'
 import { buildConversationLoginHref } from './login-intent'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 export default function ConversationPage({
   params,
@@ -30,9 +30,13 @@ export default function ConversationPage({
   params: Promise<{ conversationId: string }>
 }) {
   if (!features.social) redirect('/')
+  const auth = useAuthSession()
+  const viewerScopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  return <ViewerScopedConversationPage key={viewerScopeKey} params={params} />
+}
 
+function ViewerScopedConversationPage({ params }: { params: Promise<{ conversationId: string }> }) {
   const { t, language } = useLanguage()
-  const { showToast } = useToast()
   const [conversationId, setConversationId] = useState<string>('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -57,7 +61,7 @@ export default function ConversationPage({
   const msgHook = useConversationMessages({ conversationId, userId, accessToken })
 
   // File upload hook
-  const fileHook = useFileUpload({ userId, conversationId })
+  const fileHook = useFileUpload({ userId, accessToken, conversationId })
 
   // Online presence
   const watchIds = msgHook.otherUser ? [msgHook.otherUser.id] : []
@@ -218,7 +222,7 @@ export default function ConversationPage({
                 style={{
                   width: `${30 + Math.random() * 40}%`,
                   height: 40,
-                  borderRadius: 16,
+                  borderRadius: tokens.radius.xl,
                   background: tokens.colors.bg.tertiary,
                   animation: 'shimmer 1.5s ease-in-out infinite',
                   backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
@@ -311,7 +315,7 @@ export default function ConversationPage({
                 color: tokens.colors.white,
                 borderRadius: tokens.radius.lg,
                 textDecoration: 'none',
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
                 fontSize: '14px',
               }}
             >
@@ -355,7 +359,7 @@ export default function ConversationPage({
                 style={{
                   width: `${25 + ((i * 7) % 35)}%`,
                   height: 36 + (i % 3) * 8,
-                  borderRadius: 16,
+                  borderRadius: tokens.radius.xl,
                   background: tokens.colors.bg.tertiary,
                   animation: 'shimmer 1.5s ease-in-out infinite',
                   backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
@@ -442,7 +446,7 @@ export default function ConversationPage({
                 border: `1px solid ${tokens.colors.border.primary}`,
                 borderRadius: tokens.radius.xl,
                 color: tokens.colors.text.secondary,
-                fontSize: 13,
+                fontSize: tokens.typography.fontSize.sm,
                 cursor: msgHook.loadingMore ? 'not-allowed' : 'pointer',
                 opacity: msgHook.loadingMore ? 0.6 : 1,
                 transition: 'opacity 0.2s',
@@ -477,7 +481,11 @@ export default function ConversationPage({
               <Text
                 size="xs"
                 color="tertiary"
-                style={{ fontSize: 11, letterSpacing: '0.5px', fontWeight: 600 }}
+                style={{
+                  fontSize: tokens.typography.fontSize.xs,
+                  letterSpacing: '0.5px',
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                }}
               >
                 {msgHook.formatDate(group.date)}
               </Text>
@@ -685,15 +693,12 @@ export default function ConversationPage({
         setPendingAttachment={fileHook.setPendingAttachment}
         sending={sending}
         uploading={fileHook.uploading}
-        setUploading={fileHook.setUploading}
-        userId={userId}
-        conversationId={conversationId}
+        onFileUpload={fileHook.uploadFile}
         showStickerPicker={showStickerPicker}
         setShowStickerPicker={setShowStickerPicker}
         onSend={handleSend}
         onVoiceSent={msgHook.handleVoiceSent}
         onPreviewOpen={setPreviewOpen}
-        showToast={showToast}
         t={t}
         language={language}
         inputRef={inputRef}

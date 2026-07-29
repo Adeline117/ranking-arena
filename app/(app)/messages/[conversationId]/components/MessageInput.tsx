@@ -6,8 +6,6 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import VoiceRecorder from '@/app/components/chat/VoiceRecorder'
 import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
-import { getCsrfHeaders } from '@/lib/api/client'
-import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { getMediaTypeLabel } from './types'
 import type { MediaAttachment, Message } from './types'
 import type { Sticker } from '@/lib/stickers'
@@ -19,9 +17,7 @@ interface MessageInputProps {
   setPendingAttachment: (a: MediaAttachment | null) => void
   sending: boolean
   uploading: boolean
-  setUploading: (v: boolean) => void
-  userId: string | null
-  conversationId: string
+  onFileUpload: (file: File) => Promise<void>
   showStickerPicker: boolean
   setShowStickerPicker: (v: boolean) => void
   onSend: () => void
@@ -31,7 +27,6 @@ interface MessageInputProps {
     url: string
     fileName?: string
   }) => void
-  showToast: (msg: string, type: 'error' | 'success' | 'warning' | 'info') => void
   t: (key: string) => string
   language: string
   inputRef: React.RefObject<HTMLTextAreaElement | null>
@@ -60,15 +55,12 @@ export default function MessageInput({
   setPendingAttachment,
   sending,
   uploading,
-  setUploading,
-  userId,
-  conversationId,
+  onFileUpload,
   showStickerPicker,
   setShowStickerPicker,
   onSend,
   onVoiceSent,
   onPreviewOpen,
-  showToast,
   t,
   language: _language,
   inputRef,
@@ -82,83 +74,20 @@ export default function MessageInput({
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !userId || !conversationId) return
+    if (!file) return
     if (fileInputRef.current) fileInputRef.current.value = ''
-    setUploading(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('userId', userId)
-      formData.append('conversationId', conversationId)
-      // /api/chat/upload is withAuth (Bearer header only) — 401'd without the token
-      const accessToken = await tokenRefreshCoordinator.getValidToken()
-      const res = await fetch('/api/chat/upload', {
-        method: 'POST',
-        headers: {
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          ...getCsrfHeaders(),
-        },
-        body: formData,
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        showToast(data.error || t('uploadFailed'), 'error')
-        return
-      }
-      setPendingAttachment({
-        url: data.url,
-        type: data.category,
-        fileName: data.fileName,
-        originalName: data.originalName,
-        fileSize: data.fileSize,
-      })
-    } catch {
-      showToast(t('uploadFailedRetry'), 'error')
-    } finally {
-      setUploading(false)
-    }
+    await onFileUpload(file)
   }
 
   const handlePaste = async (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items
-    if (!items || !userId || !conversationId) return
+    if (!items) return
     for (const item of Array.from(items)) {
       if (item.type.startsWith('image/')) {
         e.preventDefault()
         const file = item.getAsFile()
         if (!file) return
-        setUploading(true)
-        try {
-          const formData = new FormData()
-          formData.append('file', file)
-          formData.append('userId', userId)
-          formData.append('conversationId', conversationId)
-          const accessToken = await tokenRefreshCoordinator.getValidToken()
-          const res = await globalThis.fetch('/api/chat/upload', {
-            method: 'POST',
-            headers: {
-              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-              ...getCsrfHeaders(),
-            },
-            body: formData,
-          })
-          const data = await res.json()
-          if (res.ok) {
-            setPendingAttachment({
-              url: data.url,
-              type: data.category,
-              fileName: data.fileName,
-              originalName: data.originalName || 'pasted-image.png',
-              fileSize: data.fileSize,
-            })
-          } else {
-            showToast(data.error || t('uploadFailed'), 'error')
-          }
-        } catch {
-          showToast(t('uploadFailedRetry'), 'error')
-        } finally {
-          setUploading(false)
-        }
+        await onFileUpload(file)
         break
       }
     }
@@ -211,7 +140,13 @@ export default function MessageInput({
             <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
           </svg>
           <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text size="xs" style={{ fontWeight: 700, color: tokens.colors.accent.brand }}>
+            <Text
+              size="xs"
+              style={{
+                fontWeight: tokens.typography.fontWeight.bold,
+                color: tokens.colors.accent.brand,
+              }}
+            >
               {t('replyingTo')}
               {replyAuthorLabel ? ` ${replyAuthorLabel}` : ''}
             </Text>
@@ -343,7 +278,7 @@ export default function MessageInput({
             <Text
               size="sm"
               style={{
-                fontWeight: 600,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
@@ -407,8 +342,11 @@ export default function MessageInput({
                   : newMessage.length > 1900
                     ? tokens.colors.accent.warning
                     : tokens.colors.text.tertiary,
-              fontSize: 11,
-              fontWeight: newMessage.length > 2000 ? 700 : 400,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight:
+                newMessage.length > 2000
+                  ? tokens.typography.fontWeight.bold
+                  : tokens.typography.fontWeight.normal,
             }}
           >
             {newMessage.length}/2000
