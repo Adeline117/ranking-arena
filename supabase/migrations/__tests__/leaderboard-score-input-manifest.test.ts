@@ -7,7 +7,11 @@ const migrationName = '20260722051000_leaderboard_score_input_manifest_contract.
 const migration = readFileSync(resolve(root, 'supabase/migrations', migrationName), 'utf8')
 const pnlMigrationName = '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql'
 const pnlMigration = readFileSync(resolve(root, 'supabase/migrations', pnlMigrationName), 'utf8')
+const v2MigrationName = '20260729070500_leaderboard_score_input_manifest_v2.sql'
+const v2Migration = readFileSync(resolve(root, 'supabase/migrations', v2MigrationName), 'utf8')
 const runner = readFileSync(resolve(root, 'scripts/maintenance/apply-launch-migrations.sh'), 'utf8')
+const packageJson = readFileSync(resolve(root, 'package.json'), 'utf8')
+const ci = readFileSync(resolve(root, '.github/workflows/ci.yml'), 'utf8')
 const pg17 = readFileSync(
   resolve(root, 'supabase/migrations/__tests__/leaderboard-score-input-manifest.pg17.sh'),
   'utf8'
@@ -187,5 +191,108 @@ describe('private leaderboard score-input manifest contract', () => {
     )
     expect(runner.match(new RegExp(migrationName.replace('.', '\\.'), 'g'))).toHaveLength(1)
     expect(runner).toContain('prepare_ordered_predeploy_target')
+  })
+})
+
+describe('versioned Arena Score v5 input manifest contract', () => {
+  it('adds an inert v2 codec without changing v1 or a ranking writer', () => {
+    expect(v2Migration).toContain('leaderboard-score-input-manifest@2')
+    expect(v2Migration).toContain('arena.compute_arena_scores_v5_json(text,jsonb)')
+    expect(v2Migration).toContain('pg_catalog.pg_get_functiondef')
+    expect(v2Migration).toContain('Historical v1 rows and functions remain byte-for-byte')
+    expect(v2Migration).toContain('It does not change public rankings')
+    expect(v2Migration).not.toMatch(
+      /CREATE OR REPLACE FUNCTION\s+arena\.(?:encode|seal|verify)_leaderboard_score_input_manifest_v1/i
+    )
+    expect(v2Migration).not.toMatch(/CREATE(?: OR REPLACE)? FUNCTION\s+public\./i)
+    expect(v2Migration).not.toMatch(
+      /(?:INSERT|UPDATE|DELETE)\s+(?:INTO|FROM)?\s*public\.leaderboard_ranks/i
+    )
+  })
+
+  it('hash-fences v1, the frozen rounder and the v5 scorer definition', () => {
+    for (const digest of [
+      '947062aaac0da5bbe9fa62d5194c9f5f3a2e4d6bec55e158ea87ce70a38074cb',
+      '50f06dfb9f552ac48e244270fc52568f21f9f144f9e5c6b7b1e6a4967fb44218',
+      '7b678b4d1c9a6835567040e1240d09b15ce38357e3f40251c8b3786ec65f45fc',
+      '2e6c0515597bb448e9841ba351c6c3539a27e65a5753f214f1c164b433f81ae3',
+      '7b2bf9eedf06c25d1b2a42259f31fa80ecb7b6cdf99952ee5c7e80efde166f42',
+      '22b1a5ab4db7a0141f661cdeb5b45a97bf9153beab6f05cc1a5483359fbf671e',
+      '166acfea2dc336a160c465d456ac4c93d9ca977fe1a5bac33fc7c0f8a19494ae',
+      '412f6e18ad5f311baae7420a3e0298cd2bfd7490533c282d8d46f7d2aa1c40d3',
+      'a77fc9863c8e349aaea062c69ed5057167c5800383c6d9830d8214251cea6b18',
+    ]) {
+      expect(v2Migration).toContain(digest)
+    }
+    expect(v2Migration).toContain("pg_catalog.replace(v_definition, 'v4', 'v5')")
+    expect(v2Migration).toContain("'arena.arena_score_v5_round2'")
+    expect(v2Migration).toContain("'arena.arena_score_v4_round2'")
+    expect(v2Migration).toContain('arena-score-v5-pg17-definition@1')
+  })
+
+  it('accepts concrete zeros but rejects unknown risk, unknown PnL and the MDD cap', () => {
+    expect(v2Migration).toContain('leaderboard_score_input_manifest_v2_required_metrics')
+    expect(v2Migration).toContain('@.win_rate.type() == "number"')
+    expect(v2Migration).toContain('@.max_drawdown.type() == "number"')
+    expect(v2Migration).toContain('@.win_rate >= 0')
+    expect(v2Migration).toContain('@.win_rate <= 100')
+    expect(v2Migration).toContain('@.max_drawdown >= 0')
+    expect(v2Migration).toContain('@.max_drawdown < 100')
+    expect(v2Migration).toContain("manifest->>'contract' <> 'leaderboard-score-input-manifest@2'")
+    expect(v2Migration).toContain('trusted zero is valid')
+    expect(v2Migration).toContain(
+      'f6c94c39b1b299130644e7d8cb349bc72a8b98907a744f476aa94caf46930caf'
+    )
+    expect(pg17).toContain('v2 unknown PnL unexpectedly sealed')
+    expect(pg17).toContain('v2 table CHECK accepted a null win rate')
+    expect(pg17).toContain('v2 table CHECK accepted a 100 percent drawdown')
+    expect(pg17).toContain('manifest table accepted an unknown outer contract')
+  })
+
+  it('keeps version verification isolated and replay-safe', () => {
+    expect(v2Migration).toContain('v2 verifier requires a v2 score-input manifest')
+    expect(v2Migration).toContain('leaderboard-score-input-manifest-verification@2')
+    expect(v2Migration).toContain('IN ACCESS EXCLUSIVE MODE')
+    expect(v2Migration).toContain('existing manifest v2 function contract drifted')
+    expect(v2Migration).toContain('noncanonical manifest v2 function overload detected')
+    expect(pg17).toContain('v1 verifier accepted a v2 manifest')
+    expect(pg17).toContain('v2 verifier accepted a v1 manifest')
+    expect(pg17).toContain('historical v1 manifest stopped verifying after v2')
+    expect(pg17).toContain('manifest v2 replay changed function or CHECK identity')
+    expect(pg17).toContain('manifest v2 migration accepted catalog drift')
+  })
+
+  it('fails closed on authority drift and repairs hostile v2 default grants', () => {
+    expect(v2Migration).toContain('manifest v2 prerequisite authority boundary drifted')
+    expect(v2Migration).toContain('v_table_row.relowner <> v_v1_encoder_row.proowner')
+    expect(v2Migration).toContain('OR NOT v_table_row.relrowsecurity')
+    expect(v2Migration).toContain('pg_catalog.has_function_privilege')
+    expect(v2Migration).toContain('pg_catalog.has_table_privilege')
+    expect(v2Migration).toContain('privilege_row.grantee <> function_row.proowner')
+    expect(pg17).toContain('a leaked v5 scorer grant')
+    expect(pg17).toContain('a leaked manifest-table grant')
+    expect(pg17).toContain('a noncanonical same-name overload')
+    expect(pg17).toContain('TO leaked_default_role')
+    expect(pg17).toContain('failed manifest v2 preflight left partial state')
+  })
+
+  it('is ordered after v5, CI-proven and excluded from frozen recovery', () => {
+    const predeploy = runner.slice(
+      runner.indexOf('PREDEPLOY_MIGRATIONS=('),
+      runner.indexOf('QUARANTINED_PREDEPLOY_MIGRATIONS=(')
+    )
+    const recovery = runner.slice(
+      runner.indexOf('RECOVERY_PREREQUISITE_MIGRATIONS=('),
+      runner.indexOf('CONCURRENT_RECOVERY_MIGRATIONS=(')
+    )
+    expect(predeploy).toContain(v2MigrationName)
+    expect(
+      predeploy.indexOf('20260729070000_pure_arena_score_v5_zero_metric_scorer.sql')
+    ).toBeLessThan(predeploy.indexOf(v2MigrationName))
+    expect(runner.match(new RegExp(v2MigrationName.replace('.', '\\.'), 'g'))).toHaveLength(1)
+    expect(recovery).not.toContain(v2MigrationName)
+    expect(packageJson).toContain('"qa:score-manifest-v2-pg17"')
+    expect(ci).toContain('name: Prove Arena Score v5 manifest isolation')
+    expect(ci).toContain('run: npm run qa:score-manifest-v2-pg17')
   })
 })
