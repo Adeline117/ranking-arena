@@ -10,7 +10,7 @@
  * last 24h as "上游新字段" Telegram digests.
  */
 
-import { getIngestPool } from './db'
+import { getIngestPool, type IngestQueryExecutor } from './db'
 
 /** Path count cap per payload — malformed/huge payloads can't flood the table. */
 const MAX_PATHS = 300
@@ -46,7 +46,8 @@ export function collectFieldPaths(payload: unknown, depth = MAX_DEPTH): string[]
  * design: callers must NOT await-and-fail a crawl on inventory errors —
  * observation must never break ingestion.
  */
-export async function recordFieldInventory(
+export async function recordFieldInventoryWithExecutor(
+  executor: IngestQueryExecutor,
   sourceId: number,
   jobType: string,
   payload: unknown
@@ -60,11 +61,20 @@ export async function recordFieldInventory(
     values.push(`($${i++}, $${i++}, $${i++})`)
     params.push(sourceId, jobType, p)
   }
-  await getIngestPool().query(
+  await executor.query(
     `INSERT INTO arena.upstream_field_inventory (source_id, job_type, field_path)
      VALUES ${values.join(',')}
      ON CONFLICT (source_id, job_type, field_path)
      DO UPDATE SET last_seen = now()`,
     params
   )
+}
+
+/** Compatibility wrapper for non-authoritative callers without a transaction. */
+export async function recordFieldInventory(
+  sourceId: number,
+  jobType: string,
+  payload: unknown
+): Promise<void> {
+  return recordFieldInventoryWithExecutor(getIngestPool(), sourceId, jobType, payload)
 }
