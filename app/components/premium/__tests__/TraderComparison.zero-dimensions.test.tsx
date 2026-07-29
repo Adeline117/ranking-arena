@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import { tokens } from '@/lib/design-tokens'
 
 jest.mock('next/dynamic', () => () => () => null)
 jest.mock('next/link', () => ({
@@ -132,5 +133,74 @@ describe('TraderComparison score bars', () => {
       expect(bar).toHaveAttribute('aria-valuetext', 'notAvailable')
       expect(within(bar.parentElement!).getByText('—')).toBeInTheDocument()
     }
+  })
+})
+
+describe('TraderComparison maximum drawdown', () => {
+  it('distinguishes measured zero and tiny risk from invalid values', () => {
+    render(
+      <TraderComparison
+        traders={[
+          { id: 'zero', handle: 'Zero MDD', source: 'bybit', roi: 0, max_drawdown: -0 },
+          { id: 'tiny', handle: 'Tiny MDD', source: 'bybit', roi: 0, max_drawdown: 0.01 },
+          {
+            id: 'invalid',
+            handle: 'Invalid MDD',
+            source: 'bybit',
+            roi: 0,
+            max_drawdown: -100.01,
+          },
+          {
+            id: 'non-finite',
+            handle: 'Non-finite MDD',
+            source: 'bybit',
+            roi: 0,
+            max_drawdown: Number.NaN,
+          },
+        ]}
+        showRemoveButton={false}
+      />
+    )
+
+    const rowHeader = screen.getByRole('rowheader', { name: 'compareMDD' })
+    const cells = within(rowHeader.closest('tr')!).getAllByRole('cell')
+
+    expect(cells).toHaveLength(4)
+    expect(cells[0]).toHaveTextContent('0.0%')
+    expect(cells[0].firstElementChild).toHaveStyle({ color: tokens.colors.text.tertiary })
+    expect(within(cells[0]).getByText('compareBestValue')).toBeInTheDocument()
+
+    expect(cells[1]).toHaveTextContent('< 0.1%')
+    expect(cells[1].firstElementChild).toHaveStyle({ color: tokens.colors.accent.error })
+    expect(within(cells[1]).queryByText('compareBestValue')).not.toBeInTheDocument()
+
+    for (const cell of cells.slice(2)) {
+      expect(cell).toHaveTextContent('—')
+      expect(cell.firstElementChild).toHaveStyle({ color: tokens.colors.text.tertiary })
+      expect(within(cell).queryByText('compareBestValue')).not.toBeInTheDocument()
+    }
+  })
+
+  it('compares normalized magnitudes when upstream signs differ', () => {
+    render(
+      <TraderComparison
+        traders={[
+          { id: 'negative-12', handle: 'Negative 12', source: 'bybit', roi: 0, max_drawdown: -12 },
+          { id: 'negative-8', handle: 'Negative 8', source: 'bybit', roi: 0, max_drawdown: -8 },
+          { id: 'positive-12', handle: 'Positive 12', source: 'bybit', roi: 0, max_drawdown: 12 },
+        ]}
+        showRemoveButton={false}
+      />
+    )
+
+    const rowHeader = screen.getByRole('rowheader', { name: 'compareMDD' })
+    const cells = within(rowHeader.closest('tr')!).getAllByRole('cell')
+
+    expect(cells[0]).toHaveTextContent('-12.0%')
+    expect(cells[1]).toHaveTextContent('-8.0%')
+    expect(cells[2]).toHaveTextContent('-12.0%')
+    expect(within(cells[0]).queryByText('compareBestValue')).not.toBeInTheDocument()
+    expect(within(cells[1]).getByText('compareBestValue')).toBeInTheDocument()
+    expect(within(cells[2]).queryByText('compareBestValue')).not.toBeInTheDocument()
   })
 })

@@ -15,7 +15,7 @@ import {
 import { useLanguage } from '../Providers/LanguageProvider'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import ShareCompareButton from './ShareCompareButton'
-import { formatPnL, formatRatio } from '@/lib/utils/format'
+import { formatDrawdown, formatPnL, formatRatio } from '@/lib/utils/format'
 import { compareAccountKey, type CompareAccountRef } from '@/lib/compare/identity'
 
 // Lazy load chart components — only rendered when user switches to the equity tab
@@ -88,7 +88,6 @@ type ComparisonMetric = {
   format: (value: number) => string
   higherBetter: boolean
   isPercent?: boolean
-  isNegative?: boolean
 }
 
 const BOUNDED_SCORE_METRICS = new Set<ComparisonMetricKey>([
@@ -116,6 +115,10 @@ function normalizedDimension(value: number | undefined | null): number | null {
 function comparisonMetricValue(trader: TraderCompareData, key: ComparisonMetricKey): number | null {
   const value = trader[key]
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  if (key === 'max_drawdown') {
+    const magnitude = Math.abs(value)
+    return magnitude <= 100 ? magnitude : null
+  }
   return BOUNDED_SCORE_METRICS.has(key) ? normalizedDimension(value) : value
 }
 
@@ -249,9 +252,8 @@ export default function TraderComparison({
     {
       key: 'max_drawdown',
       label: t('compareMDD'),
-      format: (v: number) => `-${formatRatio(Math.abs(v))}%`,
+      format: formatDrawdown,
       higherBetter: false,
-      isNegative: true,
     },
     {
       key: 'trades_count',
@@ -658,11 +660,15 @@ export default function TraderComparison({
                       const hasValue = value != null
                       const isBest = traderIdx === bestIdx && hasValue
                       const color =
-                        metric.isPercent || metric.isNegative
-                          ? getValueColor(value, metric.higherBetter)
-                          : isBest
-                            ? tokens.colors.accent.success
-                            : tokens.colors.text.primary
+                        metric.key === 'max_drawdown'
+                          ? value == null || value === 0
+                            ? tokens.colors.text.tertiary
+                            : tokens.colors.accent.error
+                          : metric.isPercent
+                            ? getValueColor(value, metric.higherBetter)
+                            : isBest
+                              ? tokens.colors.accent.success
+                              : tokens.colors.text.primary
 
                       return (
                         <td
