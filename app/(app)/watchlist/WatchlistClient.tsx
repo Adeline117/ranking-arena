@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
@@ -8,12 +8,17 @@ import EmptyState from '@/app/components/ui/EmptyState'
 import ErrorState from '@/app/components/ui/ErrorState'
 import PageHeader from '@/app/components/ui/PageHeader'
 import { tokens, alpha } from '@/lib/design-tokens'
-import { supabase } from '@/lib/supabase/client'
 import { formatPnL } from '@/lib/utils/format'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useToast } from '@/app/components/ui/Toast'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
 interface WatchlistItem {
   source: string
@@ -26,6 +31,78 @@ interface WatchlistItem {
   arena_score?: number | null
   win_rate?: number | null
   avatar_url?: string | null
+}
+
+type WatchlistPayload = {
+  watchlist?: unknown
+}
+
+type RemoveOperation = {
+  controller: AbortController
+  id: number
+  source: string
+  sourceTraderId: string
+  viewer: SettingsViewerSnapshot
+}
+
+function isOptionalFiniteNumber(value: unknown): boolean {
+  return (
+    value === undefined || value === null || (typeof value === 'number' && Number.isFinite(value))
+  )
+}
+
+function optionalFiniteNumber(value: unknown): number | null | undefined {
+  return value === null
+    ? null
+    : typeof value === 'number' && Number.isFinite(value)
+      ? value
+      : undefined
+}
+
+function readWatchlist(value: WatchlistPayload | null): WatchlistItem[] | null {
+  if (!Array.isArray(value?.watchlist)) return null
+  const rows: WatchlistItem[] = []
+  for (const candidate of value.watchlist) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null
+    const row = candidate as Record<string, unknown>
+    if (
+      typeof row.source !== 'string' ||
+      !row.source ||
+      typeof row.source_trader_id !== 'string' ||
+      !row.source_trader_id ||
+      (row.handle !== null && typeof row.handle !== 'string') ||
+      typeof row.created_at !== 'string' ||
+      !row.created_at ||
+      !isOptionalFiniteNumber(row.roi) ||
+      !isOptionalFiniteNumber(row.pnl) ||
+      !isOptionalFiniteNumber(row.rank) ||
+      !isOptionalFiniteNumber(row.arena_score) ||
+      !isOptionalFiniteNumber(row.win_rate) ||
+      (row.avatar_url !== undefined &&
+        row.avatar_url !== null &&
+        typeof row.avatar_url !== 'string')
+    ) {
+      return null
+    }
+    rows.push({
+      source: row.source,
+      source_trader_id: row.source_trader_id,
+      handle: row.handle,
+      created_at: row.created_at,
+      roi: optionalFiniteNumber(row.roi),
+      pnl: optionalFiniteNumber(row.pnl),
+      rank: optionalFiniteNumber(row.rank),
+      arena_score: optionalFiniteNumber(row.arena_score),
+      win_rate: optionalFiniteNumber(row.win_rate),
+      avatar_url:
+        row.avatar_url === null
+          ? null
+          : typeof row.avatar_url === 'string'
+            ? row.avatar_url
+            : undefined,
+    })
+  }
+  return rows
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -67,11 +144,34 @@ function traderHref(item: WatchlistItem): string {
 }
 
 export default function WatchlistClient({ embedded = false }: { embedded?: boolean } = {}) {
+  const auth = useAuthSession()
+  const viewer = captureSettingsViewer(auth)
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  return (
+    <ViewerScopedWatchlistClient
+      key={scopeKey}
+      authResolved={auth.authChecked && !auth.loading}
+      embedded={embedded}
+      viewer={viewer}
+    />
+  )
+}
+
+function ViewerScopedWatchlistClient({
+  authResolved,
+  embedded,
+  viewer,
+}: {
+  authResolved: boolean
+  embedded: boolean
+  viewer: SettingsViewerSnapshot | null
+}) {
   const { t } = useLanguage()
   const { showToast } = useToast()
   const router = useRouter()
-  const [, setEmail] = useState<string | null>(null)
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -81,6 +181,10 @@ export default function WatchlistClient({ embedded = false }: { embedded?: boole
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [platformFilter, setPlatformFilter] = useState<string>('all')
   const [isMobile, setIsMobile] = useState(false)
+  const mountedRef = useRef(false)
+  const nextOperationIdRef = useRef(0)
+  const removeOperationRef = useRef<RemoveOperation | null>(null)
+  const isAuthenticated = viewer ? true : authResolved ? false : null
 
   // Responsive: below 640px render cards instead of a wide table. Starts false on
   // server + first client render (no hydration mismatch), then syncs.
@@ -92,95 +196,154 @@ export default function WatchlistClient({ embedded = false }: { embedded?: boole
     return () => mq.removeEventListener('change', sync)
   }, [])
 
-  // Retryable loader — distinguishes a real fetch/auth failure (ERROR) from a
-  // genuinely empty watchlist (EMPTY). Previously a fetch error was swallowed
-  // into console.error and looked identical to an empty list.
-  const loadWatchlist = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const {
-        data: { user },
-        error: userErr,
-      } = await supabase.auth.getUser()
-      if (userErr) throw new Error(userErr.message)
-      if (!user) {
-        setIsAuthenticated(false)
-        setLoading(false)
-        return
-      }
-      setIsAuthenticated(true)
-      setEmail(user.email ?? null)
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) {
-        // Authenticated but no usable session token → treat as a real error, not empty.
-        throw new Error('Session expired — please sign in again')
-      }
-      const res = await fetch('/api/watchlist', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      if (!res.ok) {
-        throw new Error(`Watchlist request failed (${res.status})`)
-      }
-      const json = await res.json()
-      setWatchlist(json.watchlist || [])
-    } catch (err) {
-      // Logged out: supabase.auth.getUser() THROWS AuthSessionMissingError
-      // (it does not resolve to {user:null}). That's not a failure — render the
-      // sign-in gate instead of logging an error + leaving the tab blank (the
-      // login-gate and error branches are both gated on isAuthenticated, so a
-      // null state renders nothing). Fixes /saved?tab=traders + /watchlist when
-      // signed out.
-      const msg = err instanceof Error ? err.message : ''
-      if (/Auth session missing/i.test(msg)) {
-        setIsAuthenticated(false)
-        setLoading(false)
-        return
-      }
-      console.error('[watchlist] fetch failed:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load watchlist')
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      removeOperationRef.current?.controller.abort()
+      removeOperationRef.current = null
     }
   }, [])
 
+  // Retryable loader — distinguishes a real fetch/auth failure (ERROR) from a
+  // genuinely empty watchlist (EMPTY). Previously a fetch error was swallowed
+  // into console.error and looked identical to an empty list.
+  const loadWatchlist = useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true)
+      setError(null)
+      if (!viewer) {
+        setWatchlist([])
+        setLoading(false)
+        return
+      }
+      try {
+        const result = await authedFetch<WatchlistPayload>(
+          '/api/watchlist',
+          'GET',
+          viewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: viewer.userId,
+            expectedSessionGeneration: viewer.sessionGeneration,
+            signal,
+          }
+        )
+        if (
+          result.stale ||
+          signal?.aborted ||
+          !mountedRef.current ||
+          !isSettingsViewerCurrent(viewer, authRef.current)
+        ) {
+          return
+        }
+        if (!result.ok) throw new Error(`Watchlist request failed (${result.status})`)
+        const list = readWatchlist(result.data)
+        if (!list) throw new Error('Watchlist returned an invalid snapshot')
+        setWatchlist(list)
+      } catch (err) {
+        if (
+          signal?.aborted ||
+          !mountedRef.current ||
+          !isSettingsViewerCurrent(viewer, authRef.current)
+        )
+          return
+        console.error('[watchlist] fetch failed:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load watchlist')
+      } finally {
+        if (
+          !signal?.aborted &&
+          mountedRef.current &&
+          isSettingsViewerCurrent(viewer, authRef.current)
+        ) {
+          setLoading(false)
+        }
+      }
+    },
+    [viewer]
+  )
+
   useEffect(() => {
-    loadWatchlist()
+    const controller = new AbortController()
+    void loadWatchlist(controller.signal)
+    return () => controller.abort()
   }, [loadWatchlist])
 
   const handleRemove = useCallback(
     async (source: string, id: string) => {
+      if (!viewer || removeOperationRef.current) return
+      const operation: RemoveOperation = {
+        controller: new AbortController(),
+        id: ++nextOperationIdRef.current,
+        source,
+        sourceTraderId: id,
+        viewer,
+      }
+      removeOperationRef.current = operation
       setRemoving(`${source}:${id}`)
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        if (!session) throw new Error('Watchlist session is unavailable')
-
-        const res = await fetch('/api/watchlist', {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-            ...getCsrfHeaders(),
+        const result = await authedFetch<WatchlistPayload>(
+          '/api/watchlist',
+          'DELETE',
+          operation.viewer.accessToken,
+          {
+            source: operation.source,
+            source_trader_id: operation.sourceTraderId,
           },
-          body: JSON.stringify({ source, source_trader_id: id }),
-        })
-        if (!res.ok) throw new Error(`Watchlist remove failed (${res.status})`)
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: operation.controller.signal,
+          }
+        )
+        const operationIsCurrent =
+          mountedRef.current &&
+          removeOperationRef.current?.id === operation.id &&
+          isSettingsViewerCurrent(operation.viewer, authRef.current)
+        if (result.stale || !operationIsCurrent) return
+        if (!result.ok) throw new Error(`Watchlist remove failed (${result.status})`)
+        const updated = readWatchlist(result.data)
+        if (
+          !updated ||
+          updated.some(
+            (item) =>
+              item.source === operation.source && item.source_trader_id === operation.sourceTraderId
+          )
+        ) {
+          throw new Error('Watchlist remove returned an invalid snapshot')
+        }
 
         setWatchlist((prev) =>
-          prev.filter((w) => !(w.source === source && w.source_trader_id === id))
+          prev.filter(
+            (item) =>
+              !(
+                item.source === operation.source &&
+                item.source_trader_id === operation.sourceTraderId
+              )
+          )
         )
       } catch (err) {
+        if (
+          !mountedRef.current ||
+          removeOperationRef.current?.id !== operation.id ||
+          !isSettingsViewerCurrent(operation.viewer, authRef.current)
+        ) {
+          return
+        }
         console.error('[watchlist] remove failed:', err)
         showToast(t('watchlistError'), 'error')
       } finally {
-        setRemoving(null)
+        if (removeOperationRef.current?.id === operation.id) {
+          removeOperationRef.current = null
+          if (mountedRef.current && isSettingsViewerCurrent(operation.viewer, authRef.current)) {
+            setRemoving(null)
+          }
+        }
       }
     },
-    [showToast, t]
+    [showToast, t, viewer]
   )
 
   const platforms = useMemo(
