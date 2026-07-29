@@ -1,5 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankIdentities } from '@/lib/rankings/read-sealed-rank-identities'
+import type { LeaderboardPublicationSeason } from '@/lib/rankings/read-publication-proofs'
 
 const PERIOD_DAYS: Record<string, number> = {
   '7D': 7,
@@ -11,7 +14,7 @@ const PERIOD_DAYS: Record<string, number> = {
 // results produced by its retired raw-history query. Reusing that namespace
 // after switching to the aggregate RPC can keep a repaired token board empty
 // until the old Redis entry expires.
-export const TOKEN_TRADER_RANKING_CACHE_VERSION = 'v2'
+export const TOKEN_TRADER_RANKING_CACHE_VERSION = 'v3'
 
 export function getTokenTraderRankingCacheKey(
   token: string,
@@ -65,6 +68,90 @@ function nullableNumber(value: number | string | null | undefined): number | nul
   return value == null ? null : Number(value)
 }
 
+function finiteNumber(value: unknown, label: string): number {
+  if (
+    (typeof value !== 'number' && typeof value !== 'string') ||
+    (typeof value === 'string' && value.trim().length === 0)
+  ) {
+    throw new Error(`${label} must be numeric`)
+  }
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) throw new Error(`${label} must be finite`)
+  return parsed
+}
+
+function nullableFiniteNumber(value: unknown, label: string): number | null {
+  return value === null ? null : finiteNumber(value, label)
+}
+
+function parseAggregatedRows(input: unknown, offset: number): AggregatedTokenTrader[] {
+  if (!Array.isArray(input)) {
+    throw new Error('token trader ranking RPC returned no row array')
+  }
+
+  const rows: AggregatedTokenTrader[] = []
+  const seen = new Set<string>()
+  let expectedTotal: number | undefined
+
+  for (const [index, value] of input.entries()) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new Error(`token trader ranking row ${index} is malformed`)
+    }
+    const row = value as Record<string, unknown>
+    if (
+      !isPublicRankingSourceAllowed(row.source) ||
+      typeof row.source_trader_id !== 'string' ||
+      row.source_trader_id.length === 0 ||
+      row.source_trader_id.length > 500
+    ) {
+      throw new Error(`token trader ranking row ${index} has an invalid public identity`)
+    }
+
+    const tokenPnl = finiteNumber(row.token_pnl, `row ${index} token_pnl`)
+    const tokenTradeCount = finiteNumber(row.token_trade_count, `row ${index} token_trade_count`)
+    const tokenWinRate = nullableFiniteNumber(row.token_win_rate, `row ${index} token_win_rate`)
+    const tokenAvgPnlPct = nullableFiniteNumber(
+      row.token_avg_pnl_pct,
+      `row ${index} token_avg_pnl_pct`
+    )
+    const totalCount = finiteNumber(row.total_count, `row ${index} total_count`)
+
+    if (!Number.isSafeInteger(tokenTradeCount) || tokenTradeCount <= 0) {
+      throw new Error(`row ${index} token_trade_count must be a positive safe integer`)
+    }
+    if (tokenWinRate !== null && (tokenWinRate < 0 || tokenWinRate > 100)) {
+      throw new Error(`row ${index} token_win_rate must be between 0 and 100`)
+    }
+    if (!Number.isSafeInteger(totalCount) || totalCount < 0) {
+      throw new Error(`row ${index} total_count must be a non-negative safe integer`)
+    }
+    if (expectedTotal !== undefined && totalCount !== expectedTotal) {
+      throw new Error('token trader ranking rows disagree on total_count')
+    }
+    expectedTotal ??= totalCount
+
+    const identity = `${row.source}\u0000${row.source_trader_id}`
+    if (seen.has(identity)) {
+      throw new Error('token trader ranking RPC returned a duplicate identity')
+    }
+    seen.add(identity)
+    rows.push({
+      source: row.source as string,
+      source_trader_id: row.source_trader_id,
+      token_pnl: tokenPnl,
+      token_trade_count: tokenTradeCount,
+      token_win_rate: tokenWinRate,
+      token_avg_pnl_pct: tokenAvgPnlPct,
+      total_count: totalCount,
+    })
+  }
+
+  if (rows.length > 0 && (expectedTotal ?? 0) < offset + rows.length) {
+    throw new Error('token trader ranking total_count is smaller than the returned page')
+  }
+  return rows
+}
+
 export function mergeTokenRankingsWithProfiles(
   rows: AggregatedTokenTrader[],
   profiles: LeaderboardProfile[]
@@ -110,15 +197,20 @@ export async function getTokenTraderRankings(
 
   if (error) throw new Error(error.message)
 
-  const rows = (data || []) as AggregatedTokenTrader[]
+  const rows = parseAggregatedRows(data, offset)
   if (rows.length === 0) return { traders: [], total: 0 }
 
-  const traderIds = rows.map((row) => row.source_trader_id)
-  const { data: profileData } = await supabase
-    .from('leaderboard_ranks')
-    .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl')
-    .eq('season_id', period)
-    .in('source_trader_id', traderIds)
+  const sealedProfiles = await readSealedRankIdentities(
+    supabase,
+    period as LeaderboardPublicationSeason,
+    rows.map((row) => ({
+      source: row.source,
+      sourceTraderId: row.source_trader_id,
+    }))
+  )
+  if (!sealedProfiles) {
+    throw new Error('token trader profiles had no public ranking authority')
+  }
 
-  return mergeTokenRankingsWithProfiles(rows, (profileData || []) as LeaderboardProfile[])
+  return mergeTokenRankingsWithProfiles(rows, sealedProfiles.value)
 }
