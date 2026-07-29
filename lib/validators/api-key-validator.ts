@@ -5,6 +5,7 @@
  */
 
 import { logger } from '@/lib/logger'
+import { READ_ONLY_ACCESS_PLATFORMS } from '@/lib/exchange/read-only-platforms'
 import {
   resolveExchangeReadOnlyAccess,
   resolveExchangeUid,
@@ -26,8 +27,7 @@ export interface ExchangeCredentials {
   passphrase?: string // For OKX, Bitget
 }
 
-/** API-key platforms whose own permission endpoint can prove the key is read-only. */
-export const READ_ONLY_ACCESS_PLATFORMS = ['binance', 'bybit', 'okx', 'bitget'] as const
+export { READ_ONLY_ACCESS_PLATFORMS } from '@/lib/exchange/read-only-platforms'
 
 export function supportsReadOnlyAccessVerification(platform: string): boolean {
   return READ_ONLY_ACCESS_PLATFORMS.includes(

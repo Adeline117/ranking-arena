@@ -5,25 +5,12 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import PasswordInput from '@/app/components/ui/PasswordInput'
-const SUPPORTED_EXCHANGES = [
-  'binance',
-  'bybit',
-  'okx',
-  'bitget',
-  'mexc',
-  'kucoin',
-  'gateio',
-  'htx',
-  'phemex',
-  'dydx',
-  'hyperliquid',
-  'blofin',
-  'coinex',
-  'bitmart',
-]
+import { READ_ONLY_ACCESS_PLATFORMS } from '@/lib/exchange/read-only-platforms'
+
+const SUPPORTED_EXCHANGES = READ_ONLY_ACCESS_PLATFORMS
 
 // Exchanges whose API keys require an additional passphrase.
-const PASSPHRASE_EXCHANGES = new Set(['bitget', 'kucoin', 'coinex', 'okx', 'blofin'])
+const PASSPHRASE_EXCHANGES = new Set<string>(['bitget', 'okx'])
 
 interface AddExchangeModalProps {
   open: boolean
@@ -39,7 +26,7 @@ interface AddExchangeModalProps {
 
 export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchangeModalProps) {
   const { t } = useLanguage()
-  const [exchange, setExchange] = useState(SUPPORTED_EXCHANGES[0])
+  const [exchange, setExchange] = useState<string>(SUPPORTED_EXCHANGES[0])
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
   const [apiPassphrase, setApiPassphrase] = useState('')

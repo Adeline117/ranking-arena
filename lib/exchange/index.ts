@@ -59,6 +59,7 @@ export interface AccountInfo {
 }
 
 import { validateExchangeReadOnlyAccess } from '@/lib/validators/api-key-validator'
+import { API_KEY_CONNECTION_PLATFORMS } from './read-only-platforms'
 
 /**
  * 统一验证交易所凭证
@@ -96,4 +97,4 @@ export function getExchangeName(exchange: Exchange): string {
 // API-key connections are accepted only where the exchange exposes a permission
 // endpoint and the existing sync adapter can consume the credential. Expanding
 // this list requires both capabilities; format-only validation is unsafe.
-export const SUPPORTED_EXCHANGES: Exchange[] = ['binance', 'bybit', 'bitget']
+export const SUPPORTED_EXCHANGES: Exchange[] = [...API_KEY_CONNECTION_PLATFORMS]

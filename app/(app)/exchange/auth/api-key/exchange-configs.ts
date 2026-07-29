@@ -1,3 +1,5 @@
+import { API_KEY_CONNECTION_PLATFORMS } from '@/lib/exchange/read-only-platforms'
+
 // 交易所配置
 export const EXCHANGE_CONFIGS = {
   binance: {
@@ -373,10 +375,10 @@ export interface ExchangeBindOption {
 }
 
 // Ordered list for rendering exchange pickers / connection managers.
-export const EXCHANGE_BIND_LIST: readonly ExchangeBindOption[] = (
-  Object.keys(EXCHANGE_CONFIGS) as ExchangeId[]
-).map((id) => ({
-  id,
-  name: EXCHANGE_CONFIGS[id].name,
-  oauthSupported: OAUTH_SUPPORTED_EXCHANGES.has(id),
-}))
+export const EXCHANGE_BIND_LIST: readonly ExchangeBindOption[] = API_KEY_CONNECTION_PLATFORMS.map(
+  (id) => ({
+    id,
+    name: EXCHANGE_CONFIGS[id].name,
+    oauthSupported: OAUTH_SUPPORTED_EXCHANGES.has(id),
+  })
+)
