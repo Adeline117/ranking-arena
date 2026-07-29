@@ -17,7 +17,9 @@ jest.mock('next/server', () => {
       this.status = init.status || 200
       this.headers = new Map()
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -29,14 +31,19 @@ jest.mock('next/server', () => {
     headers: Map<string, string>
     method: string
     _body: unknown
-    constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
+    constructor(
+      url: string,
+      opts?: { headers?: Record<string, string>; method?: string; body?: unknown }
+    ) {
       this.url = url
       this.nextUrl = new URL(url)
       this.headers = new Map(Object.entries({ 'user-agent': 'Jest Test Runner', ...opts?.headers }))
       this.method = opts?.method || 'POST'
       this._body = opts?.body
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
@@ -60,7 +67,12 @@ jest.mock('@/lib/api/middleware', () => ({
         return NR.json({ success: false, error: 'Unauthorized' }, { status: 401 })
       }
       const { getSupabaseAdmin } = require('@/lib/supabase/server')
-      return handler({ user, supabase: getSupabaseAdmin(), request: req, version: { current: 'v1' } })
+      return await handler({
+        user,
+        supabase: getSupabaseAdmin(),
+        request: req,
+        version: { current: 'v1' },
+      })
     } catch {
       const { NextResponse: NR } = require('next/server')
       return NR.json({ success: false, error: 'Unauthorized' }, { status: 401 })
@@ -103,13 +115,14 @@ import { POST } from '../route'
 describe('POST /api/exchange/connect', () => {
   const mockUser = { id: 'user-1', email: 'test@test.com' }
 
-  function createMockSupabase(existingConnection: unknown = null) {
+  function createMockSupabase(
+    savedConnection: unknown = { user_id: mockUser.id, exchange: 'binance' },
+    saveError: unknown = null
+  ) {
     const chain: Record<string, jest.Mock> = {}
     chain.select = jest.fn(() => chain)
-    chain.eq = jest.fn(() => chain)
-    chain.maybeSingle = jest.fn().mockResolvedValue({ data: existingConnection, error: null })
-    chain.insert = jest.fn(() => Promise.resolve({ data: null, error: null }))
-    chain.update = jest.fn(() => chain)
+    chain.upsert = jest.fn(() => chain)
+    chain.single = jest.fn().mockResolvedValue({ data: savedConnection, error: saveError })
     return chain
   }
 
@@ -123,9 +136,7 @@ describe('POST /api/exchange/connect', () => {
   // --- Authentication ---
 
   it('returns error when not authenticated', async () => {
-    mockRequireAuth.mockRejectedValue(
-      Object.assign(new Error('Unauthorized'), { statusCode: 401 })
-    )
+    mockRequireAuth.mockRejectedValue(Object.assign(new Error('Unauthorized'), { statusCode: 401 }))
 
     const req = new NextRequest('http://localhost/api/exchange/connect', {
       method: 'POST',
@@ -155,7 +166,11 @@ describe('POST /api/exchange/connect', () => {
   it('returns 400 for unsupported exchange', async () => {
     const req = new NextRequest('http://localhost/api/exchange/connect', {
       method: 'POST',
-      body: { exchange: 'unknown_exchange', apiKey: 'test-key-12345', apiSecret: 'test-secret-12345' },
+      body: {
+        exchange: 'unknown_exchange',
+        apiKey: 'test-key-12345',
+        apiSecret: 'test-secret-12345',
+      },
     })
     const res = await POST(req)
     const body = await res.json()
@@ -220,7 +235,7 @@ describe('POST /api/exchange/connect', () => {
 
   it('connects exchange successfully with valid credentials', async () => {
     mockValidateCredentials.mockResolvedValue(true)
-    mockSupabaseFrom.mockReturnValue(createMockSupabase(null))
+    mockSupabaseFrom.mockReturnValue(createMockSupabase())
 
     const req = new NextRequest('http://localhost/api/exchange/connect', {
       method: 'POST',
@@ -231,11 +246,23 @@ describe('POST /api/exchange/connect', () => {
 
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
+    expect(body.data).toEqual(
+      expect.objectContaining({ viewerId: mockUser.id, exchange: 'binance' })
+    )
+    expect(mockSupabaseFrom.mock.results[0]?.value.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_id: mockUser.id,
+        exchange: 'binance',
+        api_key_encrypted: 'encrypted_valid-api-key-12345',
+        api_secret_encrypted: 'encrypted_valid-secret-12345',
+      }),
+      { onConflict: 'user_id,exchange' }
+    )
   })
 
-  it('updates existing connection', async () => {
+  it('uses the same atomic authority for reconnecting an existing exchange', async () => {
     mockValidateCredentials.mockResolvedValue(true)
-    const existingChain = createMockSupabase({ id: 'conn-1' })
+    const existingChain = createMockSupabase({ user_id: mockUser.id, exchange: 'binance' })
     mockSupabaseFrom.mockReturnValue(existingChain)
 
     const req = new NextRequest('http://localhost/api/exchange/connect', {
@@ -247,6 +274,24 @@ describe('POST /api/exchange/connect', () => {
 
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
+    expect(existingChain.upsert).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails instead of acknowledging a missing or mismatched persisted row', async () => {
+    mockValidateCredentials.mockResolvedValue(true)
+    mockSupabaseFrom.mockReturnValue(
+      createMockSupabase({ user_id: 'other-user', exchange: 'binance' })
+    )
+
+    const req = new NextRequest('http://localhost/api/exchange/connect', {
+      method: 'POST',
+      body: { exchange: 'binance', apiKey: 'valid-api-key-12345', apiSecret: 'valid-secret-12345' },
+    })
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(body.success).not.toBe(true)
   })
 
   // --- Bitget Passphrase ---

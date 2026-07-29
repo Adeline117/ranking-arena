@@ -72,15 +72,9 @@ export const POST = withAuth(
     const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
     const adminSupabase = getSupabaseAdmin()
 
-    // 保存或更新连接
-    const { data: existing } = await adminSupabase
-      .from('user_exchange_connections')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('exchange', exchange)
-      .maybeSingle()
-
     const connectionData = {
+      user_id: user.id,
+      exchange,
       api_key_encrypted: encryptedApiKey,
       api_secret_encrypted: encryptedSecret,
       is_active: true,
@@ -89,31 +83,28 @@ export const POST = withAuth(
       ...(encryptedPassphrase ? { passphrase_encrypted: encryptedPassphrase } : {}),
     }
 
-    if (existing) {
-      const { error: updateError } = await adminSupabase
-        .from('user_exchange_connections')
-        .update(connectionData)
-        .eq('id', existing.id)
-        .eq('user_id', user.id)
+    // One statement is the persistence authority. A read-then-update/insert
+    // sequence races concurrent reconnects, and an update that matched zero
+    // rows could previously still return a false success to the client.
+    const { data: savedConnection, error: saveError } = await adminSupabase
+      .from('user_exchange_connections')
+      .upsert(connectionData, { onConflict: 'user_id,exchange' })
+      .select('user_id, exchange')
+      .single()
 
-      if (updateError) {
-        throw new Error('Failed to update connection')
-      }
-    } else {
-      const { error: insertError } = await adminSupabase.from('user_exchange_connections').insert({
-        user_id: user.id,
-        exchange,
-        ...connectionData,
-      })
-
-      if (insertError) {
-        throw new Error('Failed to create connection')
-      }
+    if (
+      saveError ||
+      savedConnection?.user_id !== user.id ||
+      savedConnection.exchange !== exchange
+    ) {
+      throw new Error('Failed to persist connection')
     }
 
     return NextResponse.json({
       success: true,
       data: {
+        viewerId: savedConnection.user_id,
+        exchange: savedConnection.exchange,
         message: `Successfully connected to ${exchange}. Syncing data...`,
       },
     })
