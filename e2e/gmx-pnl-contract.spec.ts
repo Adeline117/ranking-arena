@@ -65,16 +65,21 @@ async function installDeterministicGmxResponses(page: Page) {
 
   await page.route('**/api/traders/**/first-screen?*', async (route) => {
     const url = new URL(route.request().url())
-    if (url.searchParams.get('source') !== 'gmx') {
+    const requestedPlatform = url.searchParams.get('source')
+    if (requestedPlatform !== 'gmx') {
       await route.continue()
       return
     }
+    const requestedHandle = decodeURIComponent(url.pathname.split('/').at(-2) ?? '')
+    expect(requestedHandle).toBe(GMX_TRADER)
 
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
         success: true,
         data: {
+          request: { platform: requestedPlatform, handle: requestedHandle },
+          subject: { platform: 'gmx', traderKey: GMX_TRADER },
           firstScreen: {
             source: 'gmx',
             exchangeTraderId: GMX_TRADER,
