@@ -7,41 +7,37 @@ import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
 import { del, getOrSetWithLock } from '@/lib/cache'
 import {
-  filterPublicRankingSources,
   isPublicRankingSourceAllowed,
   publicRankingCacheKey,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import { getReadReplica } from '@/lib/supabase/read-replica'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import {
   createSealedRankingCacheEntry,
   parseSealedRankingCacheEntry,
 } from '@/lib/rankings/sealed-ranking-cache'
 
 export const runtime = 'edge'
-const SIDEBAR_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 const SIDEBAR_SEASON = '90D' as const
 
 export const GET = withPublic(
   async () => {
-    const cacheKey = publicRankingCacheKey('sidebar:top-traders-sealed-v2:90D')
+    const cacheKey = publicRankingCacheKey('sidebar:top-traders-sealed-v3:90D')
     const fetchSealedEntry = async () => {
       const supabase = getReadReplica()
-      const sealedRead = await readSealedRankingGeneration(
+      const sealedRead = await readSealedRankingAuthorityGeneration(
         supabase,
-        { season: SIDEBAR_SEASON, sources: SIDEBAR_RANKING_SOURCES },
+        SIDEBAR_SEASON,
         async (publication) => {
+          const authoritySources = publication.proofs.map((proof) => proof.source)
           // Fetch top 50 to diversify across exchanges (avoid showing only 1-2 exchanges)
           const { data: snapData, error: snapErr } = await supabase
             .from('leaderboard_ranks')
             .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score')
             .eq('season_id', SIDEBAR_SEASON)
             .filter('rank_publication_id', 'eq', publication.scoreCohortId)
-            .in('source', SIDEBAR_RANKING_SOURCES)
+            .in('source', authoritySources)
             .not('arena_score', 'is', null)
             .gt('arena_score', 50)
             .or('is_outlier.is.null,is_outlier.eq.false')
@@ -96,22 +92,14 @@ export const GET = withPublic(
       ttl: 300,
       lockTtl: 10,
     })
-    let sealedCache = parseSealedRankingCacheEntry<{ traders: unknown[] }>(
-      cached,
-      SIDEBAR_SEASON,
-      SIDEBAR_RANKING_SOURCES
-    )
+    let sealedCache = parseSealedRankingCacheEntry<{ traders: unknown[] }>(cached, SIDEBAR_SEASON)
     if (!sealedCache) {
       await del(cacheKey)
       cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, {
         ttl: 300,
         lockTtl: 10,
       })
-      sealedCache = parseSealedRankingCacheEntry<{ traders: unknown[] }>(
-        cached,
-        SIDEBAR_SEASON,
-        SIDEBAR_RANKING_SOURCES
-      )
+      sealedCache = parseSealedRankingCacheEntry<{ traders: unknown[] }>(cached, SIDEBAR_SEASON)
     }
     if (!sealedCache || !Array.isArray(sealedCache.value.traders)) {
       throw new Error('sidebar cache did not satisfy the sealed publication contract')

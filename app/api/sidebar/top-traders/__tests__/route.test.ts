@@ -39,13 +39,15 @@ jest.mock('@/lib/supabase/read-replica', () => ({
   getReadReplica: () => ({ from: mockFrom }),
 }))
 
-const mockReadSealedRankingGeneration = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
-  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
   sealedRankingPublicationIdentity: (publication: unknown) => JSON.stringify(publication),
 }))
 
 const COHORT_ID = '11111111-1111-4111-8111-111111111111'
+const TEST_AUTHORITY_SOURCES = ['binance_futures', 'hyperliquid']
 
 function makeQuery(result: { data: unknown[] | null; error: unknown }) {
   const proxy = new Proxy<Record<string, unknown>>(
@@ -74,10 +76,10 @@ describe('GET /api/sidebar/top-traders', () => {
     mockGetOrSetWithLock.mockImplementation(async (_key: string, loader: () => Promise<unknown>) =>
       loader()
     )
-    mockReadSealedRankingGeneration.mockImplementation(
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(
       async (
         _client: unknown,
-        input: { season: '90D'; sources: string[] },
+        season: '90D',
         reader: (publication: {
           state: 'sealed'
           season: '90D'
@@ -87,10 +89,10 @@ describe('GET /api/sidebar/top-traders', () => {
       ) => {
         const publication = {
           state: 'sealed' as const,
-          season: input.season,
+          season,
           scoreCohortId: COHORT_ID,
-          proofs: input.sources.map((source) => ({
-            season_id: input.season,
+          proofs: TEST_AUTHORITY_SOURCES.map((source) => ({
+            season_id: season,
             source,
             source_as_of: '2026-07-29T09:00:00.000000Z',
             recorded_at: '2026-07-29T09:05:00.000000Z',
@@ -125,7 +127,7 @@ describe('GET /api/sidebar/top-traders', () => {
 
     await expect(GET()).rejects.toThrow('sidebar cohort query failed: leaderboard unavailable')
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      'public-rank-policy-v4:sidebar:top-traders-sealed-v2:90D',
+      'public-rank-policy-v4:sidebar:top-traders-sealed-v3:90D',
       expect.any(Function),
       expect.objectContaining({ ttl: 300 })
     )

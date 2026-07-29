@@ -5,10 +5,10 @@ const route = readFileSync(join(process.cwd(), 'app/api/sidebar/top-traders/rout
 
 describe('sidebar top-trader generation contract', () => {
   it('binds source membership, rows, and cache to one sealed 90D generation', () => {
-    expect(route).toContain('readSealedRankingGeneration(')
-    expect(route).toContain('{ season: SIDEBAR_SEASON, sources: SIDEBAR_RANKING_SOURCES }')
+    expect(route).toContain('readSealedRankingAuthorityGeneration(')
+    expect(route).toContain('const authoritySources = publication.proofs.map')
     expect(route).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
-    expect(route).toContain(".in('source', SIDEBAR_RANKING_SOURCES)")
+    expect(route).toContain(".in('source', authoritySources)")
     expect(route).toContain('createSealedRankingCacheEntry(sealedRead)')
     expect(route).toContain('parseSealedRankingCacheEntry')
   })

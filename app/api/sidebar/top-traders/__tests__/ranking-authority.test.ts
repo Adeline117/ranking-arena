@@ -5,11 +5,10 @@ const route = readFileSync(join(process.cwd(), 'app/api/sidebar/top-traders/rout
 
 describe('sidebar top trader ranking authority', () => {
   it('uses a new cache namespace populated only from a sealed public generation', () => {
-    expect(route).toContain("publicRankingCacheKey('sidebar:top-traders-sealed-v2:90D')")
-    expect(route).toContain('filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)')
-    expect(route).toContain('readSealedRankingGeneration(')
-    expect(route).toContain('{ season: SIDEBAR_SEASON, sources: SIDEBAR_RANKING_SOURCES }')
-    expect(route).toContain(".in('source', SIDEBAR_RANKING_SOURCES)")
+    expect(route).toContain("publicRankingCacheKey('sidebar:top-traders-sealed-v3:90D')")
+    expect(route).toContain('readSealedRankingAuthorityGeneration(')
+    expect(route).toContain('const authoritySources = publication.proofs.map')
+    expect(route).toContain(".in('source', authoritySources)")
     expect(route).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
     expect(route).toContain('createSealedRankingCacheEntry(sealedRead)')
     expect(route).toContain('parseSealedRankingCacheEntry<{ traders: unknown[] }>')
