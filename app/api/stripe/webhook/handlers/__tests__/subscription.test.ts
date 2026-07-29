@@ -5,6 +5,7 @@ const mockRpc = jest.fn()
 const mockLeaveProOfficialGroup = jest.fn()
 const mockListCheckoutSessions = jest.fn()
 const mockRecordStripeCheckoutManualReview = jest.fn()
+const mockRetrieveCustomer = jest.fn()
 
 jest.mock('../shared', () => ({
   getSupabase: () => ({ from: mockFrom, rpc: mockRpc }),
@@ -23,6 +24,11 @@ jest.mock('@/lib/stripe', () => ({
       },
     },
   },
+  getStripe: () => ({
+    customers: {
+      retrieve: (...args: unknown[]) => mockRetrieveCustomer(...args),
+    },
+  }),
   STRIPE_PRICE_IDS: {
     monthly: 'price_pro_monthly',
     yearly: 'price_pro_yearly',
@@ -76,22 +82,6 @@ function lookupQuery(data: unknown, error: DbError | null = null) {
     maybeSingle: jest.fn(async () => ({ data, error })),
   }
   query.select.mockReturnValue(query)
-  query.eq.mockReturnValue(query)
-  return query
-}
-
-function mutationQuery(error: DbError | null = null) {
-  const result = { error }
-  const query: {
-    update: jest.Mock
-    eq: jest.Mock
-    then: Promise<typeof result>['then']
-  } = {
-    update: jest.fn(),
-    eq: jest.fn(),
-    then: Promise.resolve(result).then.bind(Promise.resolve(result)),
-  }
-  query.update.mockReturnValue(query)
   query.eq.mockReturnValue(query)
   return query
 }
@@ -153,6 +143,8 @@ function recurringSubscription(
           id: 'si_recurring_exact',
           quantity: 1,
           subscription: 'sub_recurring_exact',
+          current_period_start: 1_799_500_000,
+          current_period_end: 1_800_104_800,
           discounts: [],
           tax_rates: [],
           price: {
@@ -267,27 +259,6 @@ function exactApiCheckoutList(
   }
 }
 
-function arrangeRegularCancellation(
-  options: {
-    subscriptionUpdateError?: DbError
-    currentSubscriptionError?: DbError
-    currentProfileError?: DbError
-    profileDowngradeError?: DbError
-  } = {}
-) {
-  mockFrom
-    .mockImplementationOnce(() => lookupQuery({ id: proUserId }))
-    .mockImplementationOnce(() => mutationQuery(options.subscriptionUpdateError))
-    .mockImplementationOnce(() =>
-      lookupQuery(
-        { stripe_subscription_id: 'sub_current', status: 'canceled' },
-        options.currentSubscriptionError
-      )
-    )
-    .mockImplementationOnce(() => lookupQuery({ pro_plan: 'monthly' }, options.currentProfileError))
-    .mockImplementationOnce(() => mutationQuery(options.profileDowngradeError))
-}
-
 describe('subscription webhook persistence', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -308,6 +279,9 @@ describe('subscription webhook persistence', () => {
       if (name === 'assert_recurring_pro_checkout_completed_atomic') {
         return Promise.resolve({ data: 'completed', error: null, status: 200 })
       }
+      if (name === 'reconcile_recurring_subscription_state_atomic') {
+        return Promise.resolve({ data: { status: 'revoked' }, error: null })
+      }
       throw new Error(`Unexpected RPC: ${name}`)
     })
     mockListCheckoutSessions.mockImplementation(
@@ -319,6 +293,12 @@ describe('subscription webhook persistence', () => {
     )
     mockLeaveProOfficialGroup.mockResolvedValue(true)
     mockRecordStripeCheckoutManualReview.mockResolvedValue(undefined)
+    mockRetrieveCustomer.mockResolvedValue({
+      id: 'cus_recurring_exact',
+      object: 'customer',
+      livemode: true,
+      metadata: { userId: recurringUserId },
+    })
   })
 
   it.each([
@@ -407,8 +387,8 @@ describe('subscription webhook persistence', () => {
 
     expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
       expect.objectContaining({
-        objectType: 'subscription',
-        sessionId: 'sub_recurring_exact',
+        objectType: 'subscription_event',
+        sessionId: 'evt_current',
         reasonKey: 'recurring_subscription_metadata_invalid',
       })
     )
@@ -426,61 +406,68 @@ describe('subscription webhook persistence', () => {
 
     expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
       expect.objectContaining({
-        objectType: 'subscription',
-        sessionId: 'sub_recurring_exact',
+        objectType: 'subscription_event',
+        sessionId: 'evt_current',
         userId: recurringUserId,
-        reasonKey: 'recurring_subscription_verification_failed',
+        reasonKey: 'recurring_subscription_state_authority_failed',
       })
     )
     expect(mockRpc).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('throws when the subscription owner lookup fails', async () => {
-    mockFrom.mockReturnValue(
-      lookupQuery(null, { message: 'user_profiles temporarily unavailable' })
-    )
+  it('routes an exact past-due subscription snapshot through the atomic state ledger', async () => {
+    const snapshot = recurringSubscription(false, {
+      status: 'past_due',
+      latest_invoice: 'in_failed',
+    })
 
-    await expect(handleSubscriptionUpdate(subscription(), stripeEvent)).rejects.toThrow(
-      'Failed to find subscription owner: user_profiles temporarily unavailable'
-    )
-    expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
-      'apply_user_api_tier_persisted_non_grant_event',
-    ])
-  })
+    await expect(handleSubscriptionUpdate(snapshot, stripeEvent)).resolves.toBeUndefined()
 
-  it('keeps the successful subscription update path intact', async () => {
-    mockFrom.mockReturnValueOnce(lookupQuery({ id: proUserId }))
-
-    await expect(handleSubscriptionUpdate(subscription(), stripeEvent)).resolves.toBeUndefined()
     expect(mockRpc).toHaveBeenCalledWith(
-      'sync_recurring_pro_subscription_projection_atomic',
+      'reconcile_recurring_subscription_state_atomic',
       expect.objectContaining({
-        p_user_id: proUserId,
-        p_stripe_subscription_id: 'sub_current',
+        p_user_id: recurringUserId,
+        p_stripe_customer_id: 'cus_recurring_exact',
+        p_stripe_subscription_id: 'sub_recurring_exact',
+        p_current_invoice_id: 'in_failed',
+        p_plan: 'monthly',
+        p_stripe_status: 'past_due',
+        p_event_id: 'evt_current',
+        p_event_created_at: new Date(stripeEvent.created * 1000).toISOString(),
+        p_grace_expires_at: new Date((stripeEvent.created + 7 * 24 * 60 * 60) * 1000).toISOString(),
       })
     )
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockLeaveProOfficialGroup).not.toHaveBeenCalled()
   })
 
-  it('ACKs a sticky full-refund block without reviving the Stripe-active subscription', async () => {
+  it('keeps an unsafe atomic state outcome retryable after durable review', async () => {
     mockRpc.mockImplementation((name: string) => {
-      if (name === 'apply_user_api_tier_persisted_non_grant_event') {
-        return Promise.resolve(mockPersistedRpcResult)
+      if (name === 'assert_recurring_pro_checkout_completed_atomic') {
+        return Promise.resolve({ data: 'completed', error: null, status: 200 })
       }
-      if (name === 'sync_recurring_pro_subscription_projection_atomic') {
-        return Promise.resolve({ data: 'blocked_full_refund', error: null })
+      if (name === 'reconcile_recurring_subscription_state_atomic') {
+        return Promise.resolve({ data: { status: 'manual_review' }, error: null })
       }
       throw new Error(`Unexpected RPC: ${name}`)
     })
-    mockFrom.mockReturnValueOnce(lookupQuery({ id: proUserId }))
 
-    await expect(handleSubscriptionUpdate(subscription(), stripeEvent)).resolves.toBeUndefined()
-
-    expect(mockFrom).toHaveBeenCalledTimes(1)
-    expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
-      'apply_user_api_tier_persisted_non_grant_event',
-      'sync_recurring_pro_subscription_projection_atomic',
-    ])
+    await expect(
+      handleSubscriptionUpdate(
+        recurringSubscription(false, { status: 'past_due', latest_invoice: 'in_failed' }),
+        stripeEvent
+      )
+    ).rejects.toThrow(
+      'reconcile_recurring_subscription_state_atomic returned unsafe status manual_review'
+    )
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        objectType: 'subscription_event',
+        sessionId: 'evt_current',
+        reasonKey: 'recurring_subscription_state_manual_review',
+      })
+    )
   })
 
   it('keeps a projection RPC failure retryable and has no direct-table fallback', async () => {
@@ -495,9 +482,7 @@ describe('subscription webhook persistence', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('keeps an unknown paid price retryable without granting Pro', async () => {
-    mockFrom.mockReturnValueOnce(lookupQuery({ id: proUserId }))
-
+  it('keeps an unknown paid price retryable after durable review', async () => {
     await expect(
       handleSubscriptionUpdate(
         subscription({
@@ -507,13 +492,16 @@ describe('subscription webhook persistence', () => {
         }),
         stripeEvent
       )
-    ).rejects.toThrow('Cannot map Stripe price price_unconfigured to a Pro plan')
-    expect(mockRpc).not.toHaveBeenCalled()
+    ).rejects.toThrow('requires durable manual review')
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonKey: 'unclassified_recurring_subscription_state',
+      })
+    )
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('does not classify a missing price as a configured yearly plan', async () => {
-    mockFrom.mockReturnValueOnce(lookupQuery({ id: proUserId }))
-
+  it('does not classify a missing price or mutate a projection', async () => {
     await expect(
       handleSubscriptionUpdate(
         subscription({
@@ -521,47 +509,36 @@ describe('subscription webhook persistence', () => {
         }),
         stripeEvent
       )
-    ).rejects.toThrow('Cannot map Stripe price missing to a Pro plan')
-    expect(mockRpc).not.toHaveBeenCalled()
+    ).rejects.toThrow('requires durable manual review')
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it.each([
-    [
-      'subscription cancellation record',
-      { subscriptionUpdateError: { message: 'subscriptions update failed' } },
-      'Failed to cancel subscription record: subscriptions update failed',
-    ],
-    [
-      'current-subscription safety lookup',
-      { currentSubscriptionError: { message: 'current subscription lookup failed' } },
-      'Failed to verify current subscription before downgrade: current subscription lookup failed',
-    ],
-    [
-      'lifetime entitlement safety lookup',
-      { currentProfileError: { message: 'lifetime lookup failed' } },
-      'Failed to verify lifetime entitlement: lifetime lookup failed',
-    ],
-    [
-      'profile downgrade',
-      { profileDowngradeError: { message: 'profile downgrade failed' } },
-      'Failed to downgrade user tier: profile downgrade failed',
-    ],
-  ])('throws when the %s fails', async (_stage, options, expectedMessage) => {
-    arrangeRegularCancellation(options)
+  it('routes an exact deleted subscription through the atomic state ledger', async () => {
+    await expect(
+      handleSubscriptionCanceled(
+        recurringSubscription(false, {
+          status: 'canceled',
+          latest_invoice: 'in_paid',
+          canceled_at: stripeEvent.created - 10,
+        }),
+        stripeEvent
+      )
+    ).resolves.toBeUndefined()
 
-    await expect(handleSubscriptionCanceled(subscription(), stripeEvent)).rejects.toThrow(
-      expectedMessage
+    expect(mockRpc).toHaveBeenCalledWith(
+      'reconcile_recurring_subscription_state_atomic',
+      expect.objectContaining({
+        p_user_id: recurringUserId,
+        p_stripe_subscription_id: 'sub_recurring_exact',
+        p_current_invoice_id: 'in_paid',
+        p_stripe_status: 'canceled',
+        p_grace_expires_at: null,
+        p_event_id: 'evt_current',
+      })
     )
-  })
-
-  it('throws when the canceled-subscription owner lookup fails', async () => {
-    mockFrom.mockReturnValue(
-      lookupQuery(null, { message: 'canceled owner lookup temporarily failed' })
-    )
-
-    await expect(handleSubscriptionCanceled(subscription(), stripeEvent)).rejects.toThrow(
-      'Failed to find canceled subscription owner: canceled owner lookup temporarily failed'
-    )
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockLeaveProOfficialGroup).not.toHaveBeenCalled()
   })
 
   it('projects an active API subscription through the ordered Stripe-event RPC', async () => {
@@ -1105,22 +1082,25 @@ describe('subscription webhook persistence', () => {
     )
   })
 
-  it('continues the ordinary subscription path after persisted identity says not_api', async () => {
-    mockFrom.mockReturnValueOnce(lookupQuery({ id: proUserId }))
-
-    await handleSubscriptionUpdate(
-      subscription({
-        items: {
-          data: [{ quantity: 1, price: { id: 'price_pro_monthly' } }],
-        } as Stripe.ApiList<Stripe.SubscriptionItem>,
-      }),
-      stripeEvent
-    )
+  it('routes a legacy ordinary subscription to durable review after API authority says not_api', async () => {
+    await expect(
+      handleSubscriptionUpdate(
+        subscription({
+          items: {
+            data: [{ quantity: 1, price: { id: 'price_pro_monthly' } }],
+          } as Stripe.ApiList<Stripe.SubscriptionItem>,
+        }),
+        stripeEvent
+      )
+    ).rejects.toThrow('requires durable manual review')
 
     expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
       'apply_user_api_tier_persisted_non_grant_event',
-      'sync_recurring_pro_subscription_projection_atomic',
     ])
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({ reasonKey: 'legacy_recurring_subscription_identity' })
+    )
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('keeps persisted non-grant failures retryable', async () => {
@@ -1418,24 +1398,26 @@ describe('subscription webhook persistence', () => {
     )
   })
 
-  it('continues ordinary cancellation after persisted identity returns not_api', async () => {
-    arrangeRegularCancellation()
+  it('routes legacy cancellation to durable review instead of direct projection writes', async () => {
+    await expect(
+      handleSubscriptionCanceled(
+        subscription({
+          status: 'canceled',
+          items: {
+            data: [{ quantity: 1, price: { id: 'price_pro_monthly' } }],
+          } as Stripe.ApiList<Stripe.SubscriptionItem>,
+        }),
+        stripeEvent
+      )
+    ).rejects.toThrow('requires durable manual review')
 
-    await handleSubscriptionCanceled(
-      subscription({
-        status: 'canceled',
-        items: {
-          data: [{ quantity: 1, price: { id: 'price_pro_monthly' } }],
-        } as Stripe.ApiList<Stripe.SubscriptionItem>,
-      }),
-      stripeEvent
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonKey: 'legacy_recurring_subscription_identity',
+      })
     )
-
-    expect(mockRpc).toHaveBeenCalledWith(
-      'apply_user_api_tier_persisted_non_grant_event',
-      expect.any(Object)
-    )
-    expect(mockLeaveProOfficialGroup).toHaveBeenCalledWith(proUserId)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockLeaveProOfficialGroup).not.toHaveBeenCalled()
   })
 
   it('preserves a replacement API subscription when an older cancellation arrives late', async () => {
@@ -1469,16 +1451,7 @@ describe('subscription webhook persistence', () => {
     )
   })
 
-  it('fails closed when a legacy cancellation has no current API price or exact metadata', async () => {
-    mockFrom.mockReturnValueOnce(
-      lookupQuery({
-        id: apiUserId,
-        api_stripe_subscription_id: 'sub_current',
-        api_tier: 'starter',
-        stripe_customer_id: 'cus_owner',
-      })
-    )
-
+  it('fails closed when a legacy cancellation has no exact metadata', async () => {
     await expect(
       handleSubscriptionCanceled(
         subscription({
@@ -1487,8 +1460,9 @@ describe('subscription webhook persistence', () => {
         }),
         stripeEvent
       )
-    ).rejects.toThrow('Cannot classify canceled Stripe subscription sub_current with price missing')
-    expect(mockRpc).not.toHaveBeenCalled()
+    ).rejects.toThrow('requires durable manual review')
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('keeps an API cancellation retryable when the atomic downgrade fails', async () => {
@@ -1511,14 +1485,6 @@ describe('subscription webhook persistence', () => {
   })
 
   it('fails closed instead of routing an unclassified cancellation into Pro mutation', async () => {
-    mockFrom.mockReturnValueOnce(
-      lookupQuery({
-        id: proUserId,
-        api_stripe_subscription_id: 'sub_other',
-        api_tier: 'starter',
-      })
-    )
-
     await expect(
       handleSubscriptionCanceled(
         subscription({
@@ -1529,50 +1495,8 @@ describe('subscription webhook persistence', () => {
         }),
         stripeEvent
       )
-    ).rejects.toThrow(
-      'Cannot classify canceled Stripe subscription sub_current with price price_unknown'
-    )
-    expect(mockRpc).not.toHaveBeenCalled()
-  })
-
-  it('propagates official-group persistence failure so cancellation is retried', async () => {
-    arrangeRegularCancellation()
-    mockLeaveProOfficialGroup.mockRejectedValue(new Error('atomic_leave_failed'))
-
-    await expect(handleSubscriptionCanceled(subscription(), stripeEvent)).rejects.toThrow(
-      'atomic_leave_failed'
-    )
-  })
-
-  it('does not remove official-group access for a late cancellation of an older subscription', async () => {
-    mockFrom
-      .mockImplementationOnce(() => lookupQuery({ id: proUserId }))
-      .mockImplementationOnce(() => mutationQuery())
-      .mockImplementationOnce(() =>
-        lookupQuery({ stripe_subscription_id: 'sub_newer', status: 'active' })
-      )
-
-    await expect(handleSubscriptionCanceled(subscription(), stripeEvent)).resolves.toBeUndefined()
+    ).rejects.toThrow('requires durable manual review')
+    expect(mockFrom).not.toHaveBeenCalled()
     expect(mockLeaveProOfficialGroup).not.toHaveBeenCalled()
-  })
-
-  it('does not remove lifetime official-group access when a subscription is canceled', async () => {
-    mockFrom
-      .mockImplementationOnce(() => lookupQuery({ id: proUserId }))
-      .mockImplementationOnce(() => mutationQuery())
-      .mockImplementationOnce(() =>
-        lookupQuery({ stripe_subscription_id: 'sub_current', status: 'canceled' })
-      )
-      .mockImplementationOnce(() => lookupQuery({ pro_plan: 'lifetime' }))
-
-    await expect(handleSubscriptionCanceled(subscription(), stripeEvent)).resolves.toBeUndefined()
-    expect(mockLeaveProOfficialGroup).not.toHaveBeenCalled()
-  })
-
-  it('keeps the successful cancellation path intact', async () => {
-    arrangeRegularCancellation()
-
-    await expect(handleSubscriptionCanceled(subscription(), stripeEvent)).resolves.toBeUndefined()
-    expect(mockLeaveProOfficialGroup).toHaveBeenCalledWith(proUserId)
   })
 })

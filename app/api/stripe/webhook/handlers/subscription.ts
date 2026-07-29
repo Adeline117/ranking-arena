@@ -1,6 +1,5 @@
 import Stripe from 'stripe'
-import { SUBSCRIPTION_STATUS_MAP, API_TIER_LIMITS, stripe } from '@/lib/stripe'
-import { leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
+import { SUBSCRIPTION_STATUS_MAP, API_TIER_LIMITS, getStripe, stripe } from '@/lib/stripe'
 import { getSupabase, withRetry, logger, type StripeWebhookEventContext } from './shared'
 import { sendNotification } from '@/lib/data/notifications'
 import {
@@ -18,6 +17,12 @@ import {
 } from '@/lib/stripe/recurring-pro-checkout'
 import { recordStripeCheckoutManualReview } from '@/lib/stripe/lifetime-entitlement'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import {
+  resolveSubscriptionEventStateAuthority,
+  StripeAuthorityError,
+} from '@/lib/stripe/entitlement-authority'
+import { stripeEntitlementAuthorityOptions } from '@/lib/stripe/entitlement-runtime'
+import type { Json } from '@/lib/supabase/database.types'
 
 export { carriesApiTierSubscriptionIdentity } from './api-tier-identity'
 export { getProPlanFromPriceId } from './stripe-price-identity'
@@ -60,6 +65,15 @@ const API_TERMINAL_STATUSES = new Set<Stripe.Subscription.Status>([
   'canceled',
   'incomplete_expired',
 ])
+const RECURRING_PRO_STATE_SUCCESS = new Set([
+  'grace_applied',
+  'grace_expired',
+  'grant_protected',
+  'reconciled',
+  'revoked',
+  'stale_event',
+])
+const RECURRING_PRO_RETRY_GRACE_SECONDS = 7 * 24 * 60 * 60
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const STRIPE_CUSTOMER_ID_PATTERN = /^cus_[A-Za-z0-9_]+$/
 const STRIPE_CHECKOUT_SESSION_ID_PATTERN = /^cs_[A-Za-z0-9_]+$/
@@ -79,6 +93,245 @@ function exactCanonicalUuid(value: string | null | undefined): string | null {
     UUID_PATTERN.test(value)
     ? value
     : null
+}
+
+function jsonContext(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json
+}
+
+function candidateRecurringProUserId(subscription: Stripe.Subscription): string | null {
+  const userId = exactCanonicalUuid(subscription.metadata?.userId)
+  const supabaseUserId = exactCanonicalUuid(subscription.metadata?.supabase_user_id)
+  return userId && userId === supabaseUserId ? userId : null
+}
+
+async function recordRecurringProStateReview(params: {
+  subscription: Stripe.Subscription
+  event: StripeWebhookEventContext
+  reasonKey: string
+  reason: string
+  userId?: string | null
+  context?: Record<string, unknown>
+}) {
+  await recordStripeCheckoutManualReview({
+    supabase: getSupabaseAdmin(),
+    objectType: 'subscription_event',
+    sessionId: params.event.id,
+    userId: params.userId ?? candidateRecurringProUserId(params.subscription),
+    reasonKey: params.reasonKey,
+    reason: params.reason,
+    context: jsonContext({
+      event_id: params.event.id,
+      event_created: params.event.created,
+      event_livemode: params.event.livemode,
+      subscription_id: params.subscription.id,
+      subscription_status: params.subscription.status,
+      subscription_created: params.subscription.created,
+      subscription_livemode: params.subscription.livemode,
+      customer_id:
+        typeof params.subscription.customer === 'string'
+          ? params.subscription.customer
+          : (params.subscription.customer?.id ?? null),
+      latest_invoice:
+        typeof params.subscription.latest_invoice === 'string'
+          ? params.subscription.latest_invoice
+          : (params.subscription.latest_invoice?.id ?? null),
+      ...(params.context ?? {}),
+    }),
+  })
+}
+
+function assertRecurringProStateEventContext(
+  subscription: Stripe.Subscription,
+  event: StripeWebhookEventContext
+) {
+  if (
+    !/^evt_[A-Za-z0-9_]+$/.test(event.id) ||
+    event.id.length > 255 ||
+    !Number.isSafeInteger(event.created) ||
+    event.created <= 0 ||
+    event.created > MAX_STRIPE_UNIX_SECONDS ||
+    !Number.isSafeInteger(subscription.created) ||
+    subscription.created <= 0 ||
+    subscription.created > event.created ||
+    typeof subscription.livemode !== 'boolean' ||
+    subscription.livemode !== event.livemode
+  ) {
+    throw new Error(`Recurring Pro subscription ${subscription.id} has invalid event identity`)
+  }
+}
+
+async function reconcileRecurringProSubscriptionState(
+  subscription: Stripe.Subscription,
+  event: StripeWebhookEventContext
+): Promise<void> {
+  const identity = parseRecurringProCheckoutMetadata(subscription.metadata)
+  if (!identity) {
+    await recordRecurringProStateReview({
+      subscription,
+      event,
+      reasonKey: 'recurring_subscription_metadata_invalid',
+      reason:
+        'A recurring Pro subscription event carried malformed or conflicting Checkout identity.',
+    })
+    throw new Error(`Recurring Pro subscription ${subscription.id} has invalid metadata`)
+  }
+
+  try {
+    assertRecurringProStateEventContext(subscription, event)
+
+    if (subscription.status === 'active' || subscription.status === 'trialing') {
+      verifyRecurringProSubscription({
+        subscription,
+        subscriptionId: subscription.id,
+        identity,
+        livemode: event.livemode,
+        eventCreated: event.created,
+        phase: 'subscription_lifecycle',
+      })
+      await assertRecurringProCheckoutCompleted({
+        supabase: getSupabaseAdmin(),
+        identity,
+        livemode: event.livemode,
+        subscriptionId: subscription.id,
+      })
+      // State-only events are never payment or trial grant authority.
+      logger.info('Exact recurring Pro subscription left to Checkout/invoice authority', {
+        userId: identity.userId,
+        subscriptionId: subscription.id,
+        status: subscription.status,
+        reservationId: identity.reservationId,
+      })
+      return
+    }
+
+    const authority = await resolveSubscriptionEventStateAuthority(getStripe(), subscription, {
+      ...stripeEntitlementAuthorityOptions(identity.userId),
+      expectedLivemode: event.livemode,
+    })
+    if (
+      authority.userId !== identity.userId ||
+      authority.customerId !== identity.customerId ||
+      authority.priceId !== identity.priceId ||
+      authority.plan !== identity.plan
+    ) {
+      throw new Error(
+        `Recurring Pro subscription ${subscription.id} state authority conflicts with Checkout`
+      )
+    }
+    await assertRecurringProCheckoutCompleted({
+      supabase: getSupabaseAdmin(),
+      identity,
+      livemode: event.livemode,
+      subscriptionId: subscription.id,
+    })
+
+    const { data, error } = await getSupabase().rpc(
+      'reconcile_recurring_subscription_state_atomic',
+      {
+        p_user_id: authority.userId,
+        p_stripe_customer_id: authority.customerId,
+        p_stripe_subscription_id: authority.subscriptionId,
+        p_current_invoice_id: authority.currentInvoiceId,
+        p_plan: authority.plan,
+        p_period_start: new Date(authority.periodStart * 1000).toISOString(),
+        p_period_end: new Date(authority.periodEnd * 1000).toISOString(),
+        p_stripe_status: authority.subscriptionStatus,
+        p_cancel_at_period_end: authority.cancelAtPeriodEnd,
+        p_canceled_at: authority.canceledAt
+          ? new Date(authority.canceledAt * 1000).toISOString()
+          : null,
+        p_grace_expires_at:
+          authority.subscriptionStatus === 'past_due'
+            ? new Date((event.created + RECURRING_PRO_RETRY_GRACE_SECONDS) * 1000).toISOString()
+            : null,
+        p_event_id: event.id,
+        p_event_created_at: new Date(event.created * 1000).toISOString(),
+      }
+    )
+    if (error) {
+      throw new Error(`Failed to reconcile recurring Pro subscription state: ${error.message}`)
+    }
+    const result =
+      data && !Array.isArray(data) && typeof data === 'object'
+        ? (data as Record<string, unknown>)
+        : null
+    const status = typeof result?.status === 'string' ? result.status : null
+    const replayOutcome = typeof result?.outcome === 'string' ? result.outcome : null
+    const safeReplay =
+      status === 'already_reconciled' && (replayOutcome === 'applied' || replayOutcome === 'stale')
+    if (!status || (!RECURRING_PRO_STATE_SUCCESS.has(status) && !safeReplay)) {
+      await recordRecurringProStateReview({
+        subscription,
+        event,
+        reasonKey: `recurring_subscription_state_${status || 'invalid_result'}`,
+        reason: 'The atomic recurring Pro state ledger could not safely reconcile this event.',
+        userId: authority.userId,
+        context: { rpc_result: result },
+      })
+      throw new Error(
+        `reconcile_recurring_subscription_state_atomic returned unsafe status ${
+          status || 'missing'
+        }`
+      )
+    }
+
+    logger.info('Recurring Pro subscription state reached atomic authority', {
+      userId: authority.userId,
+      subscriptionId: authority.subscriptionId,
+      eventId: event.id,
+      status,
+      replayOutcome,
+    })
+  } catch (error) {
+    if (
+      !(
+        error instanceof Error &&
+        error.message.startsWith('reconcile_recurring_subscription_state_atomic returned unsafe')
+      )
+    ) {
+      await recordRecurringProStateReview({
+        subscription,
+        event,
+        reasonKey:
+          error instanceof StripeAuthorityError
+            ? `recurring_subscription_state_authority_${error.code}`
+            : 'recurring_subscription_state_authority_failed',
+        reason:
+          error instanceof Error
+            ? error.message
+            : 'Recurring Pro subscription state authority failed.',
+        userId: identity.userId,
+        context:
+          error instanceof StripeAuthorityError
+            ? { authority_error: error.toReviewPayload() }
+            : { error: error instanceof Error ? error.message : String(error) },
+      })
+    }
+    throw error
+  }
+}
+
+async function rejectLegacyRecurringProState(
+  subscription: Stripe.Subscription,
+  event: StripeWebhookEventContext
+): Promise<never> {
+  const priceId = subscription.items.data[0]?.price.id
+  await recordRecurringProStateReview({
+    subscription,
+    event,
+    reasonKey: getProPlanFromPriceId(priceId)
+      ? 'legacy_recurring_subscription_identity'
+      : 'unclassified_recurring_subscription_state',
+    reason: getProPlanFromPriceId(priceId)
+      ? 'A legacy recurring Pro subscription has no exact completed-Checkout identity.'
+      : 'A non-API subscription state event could not be classified safely.',
+    context: {
+      price_id: priceId ?? null,
+      metadata_keys: Object.keys(subscription.metadata ?? {}).sort(),
+    },
+  })
+  throw new Error(`Recurring Pro subscription ${subscription.id} requires durable manual review`)
 }
 
 export function parseApiTierSubscriptionAuthority(
@@ -581,84 +834,8 @@ export async function handleSubscriptionUpdate(
   }
 
   if (carriesRecurringProCheckoutMarker(subscription.metadata)) {
-    const identity = parseRecurringProCheckoutMetadata(subscription.metadata)
-    if (!identity) {
-      await recordStripeCheckoutManualReview({
-        supabase: getSupabaseAdmin(),
-        objectType: 'subscription',
-        sessionId: subscription.id,
-        userId: null,
-        reasonKey: 'recurring_subscription_metadata_invalid',
-        reason:
-          'A recurring Pro subscription event carried malformed or conflicting Checkout identity.',
-        context: {
-          event_id: event.id,
-          event_created: event.created,
-          subscription_id: subscription.id,
-          subscription_status: subscription.status,
-          customer_id:
-            typeof subscription.customer === 'string'
-              ? subscription.customer
-              : subscription.customer?.id || null,
-          metadata_type: subscription.metadata?.type || null,
-        },
-      })
-      throw new Error(`Recurring Pro subscription ${subscription.id} has invalid metadata`)
-    }
-
-    if (subscription.status === 'active' || subscription.status === 'trialing') {
-      try {
-        verifyRecurringProSubscription({
-          subscription,
-          subscriptionId: subscription.id,
-          identity,
-          livemode: event.livemode,
-          eventCreated: event.created,
-          phase: 'subscription_lifecycle',
-        })
-      } catch (verificationError) {
-        await recordStripeCheckoutManualReview({
-          supabase: getSupabaseAdmin(),
-          objectType: 'subscription',
-          sessionId: subscription.id,
-          userId: identity.userId,
-          reasonKey: 'recurring_subscription_verification_failed',
-          reason:
-            'A recurring Pro subscription event failed exact Stripe identity and price verification.',
-          context: {
-            event_id: event.id,
-            event_created: event.created,
-            subscription_id: subscription.id,
-            subscription_status: subscription.status,
-            reservation_id: identity.reservationId,
-            error:
-              verificationError instanceof Error
-                ? verificationError.message
-                : String(verificationError),
-          },
-        })
-        throw verificationError
-      }
-    }
-    await assertRecurringProCheckoutCompleted({
-      supabase: getSupabaseAdmin(),
-      identity,
-      livemode: event.livemode,
-      subscriptionId: subscription.id,
-    })
-
-    if (subscription.status === 'active' || subscription.status === 'trialing') {
-      // Paid authority belongs to invoice.paid; trial authority belongs to the
-      // exact checkout.session.completed handler. Subscription event ordering
-      // can no longer grant either entitlement ahead of Checkout completion.
-      logger.info('Exact recurring Pro subscription left to Checkout/invoice authority', {
-        userId: identity.userId,
-        subscriptionId: subscription.id,
-        status: subscription.status,
-        reservationId: identity.reservationId,
-      })
-      return
-    }
+    await reconcileRecurringProSubscriptionState(subscription, event)
+    return
   }
 
   if (
@@ -681,52 +858,7 @@ export async function handleSubscriptionUpdate(
     }
   }
 
-  const customerId = subscription.customer as string
-
-  const { data: profile, error: profileError } = await getSupabase()
-    .from('user_profiles')
-    .select('id, api_stripe_subscription_id, api_tier')
-    .eq('stripe_customer_id', customerId)
-    .maybeSingle()
-
-  if (profileError) {
-    throw new Error(`Failed to find subscription owner: ${profileError.message}`)
-  }
-  if (!profile) {
-    logger.warn('Subscription update: no user found for stripe_customer_id', { customerId })
-    return
-  }
-
-  const priceId = subscription.items.data[0]?.price.id
-
-  // Regular Pro membership subscription — 显式白名单匹配,不再"未知 price 默认
-  // monthly"(2026-07-11 审计:此前任何未知/误建/测试 price 都静默授 Pro monthly)。
-  const plan = getProPlanFromPriceId(priceId)
-
-  if (!plan) {
-    // 未命中任何已知 price → 不授权,critical 告警人工核查(先 observe;确认 env
-    // 无遗漏后可改为硬拒)。防误建/测试 price 静默铸造 Pro。
-    logger.error('Subscription with UNKNOWN price — not granting Pro', {
-      priceId,
-      userId: profile.id,
-      subscriptionId: subscription.id,
-    })
-    try {
-      const { sendAlert } = await import('@/lib/alerts/send-alert')
-      await sendAlert({
-        level: 'critical',
-        source: 'stripe',
-        title: 'Unknown Stripe price — Pro NOT granted',
-        message: `订阅 price ${priceId} 不在已知白名单(monthly/yearly/lifetime/api)。已跳过授权,请核查是否漏配 env price ID 或误建 product。`,
-        details: { priceId, userId: profile.id, subscriptionId: subscription.id },
-      })
-    } catch {
-      /* alert failure non-fatal */
-    }
-    throw new Error(`Cannot map Stripe price ${priceId || 'missing'} to a Pro plan`)
-  }
-
-  await updateUserSubscription(profile.id, subscription, plan)
+  await rejectLegacyRecurringProState(subscription, event)
 }
 
 export async function handleSubscriptionCanceled(
@@ -784,121 +916,12 @@ export async function handleSubscriptionCanceled(
     return
   }
 
-  const customerId = subscription.customer as string
-
-  const { data: profile, error: profileLookupError } = await getSupabase()
-    .from('user_profiles')
-    .select('id, api_stripe_subscription_id, api_tier')
-    .eq('stripe_customer_id', customerId)
-    .maybeSingle()
-
-  if (profileLookupError) {
-    throw new Error(`Failed to find canceled subscription owner: ${profileLookupError.message}`)
-  }
-  if (!profile) {
-    logger.warn('Subscription canceled: no user found for stripe_customer_id', { customerId })
+  if (carriesRecurringProCheckoutMarker(subscription.metadata)) {
+    await reconcileRecurringProSubscriptionState(subscription, event)
     return
   }
 
-  const priceId = subscription.items.data[0]?.price.id
-  const regularPlan = getProPlanFromPriceId(priceId)
-  const metadataPlan = subscription.metadata?.plan
-  const carriesRegularPlanMetadata = metadataPlan === 'monthly' || metadataPlan === 'yearly'
-  if (!regularPlan && !carriesRegularPlanMetadata) {
-    throw new Error(
-      `Cannot classify canceled Stripe subscription ${subscription.id} with price ${
-        priceId || 'missing'
-      }`
-    )
-  }
-
-  // Regular Pro membership cancellation.
-  const { error: subError } = await getSupabase()
-    .from('subscriptions')
-    .update({
-      status: 'canceled',
-      canceled_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('user_id', profile.id)
-    .eq('stripe_subscription_id', subscription.id)
-
-  if (subError) {
-    logger.error('Failed to update subscription status to canceled', {
-      userId: profile.id,
-      error: subError.message,
-    })
-    throw new Error(`Failed to cancel subscription record: ${subError.message}`)
-  }
-
-  // P-1 FIX: Only downgrade if the canceled subscription is still the user's
-  // current one. If the user re-subscribed (new stripe_subscription_id replaced
-  // the old one via upsert), a late-delivered `customer.subscription.deleted`
-  // for the old sub must NOT downgrade them.
-  const { data: currentSub, error: currentSubError } = await getSupabase()
-    .from('subscriptions')
-    .select('stripe_subscription_id, status')
-    .eq('user_id', profile.id)
-    .maybeSingle()
-
-  if (currentSubError) {
-    throw new Error(
-      `Failed to verify current subscription before downgrade: ${currentSubError.message}`
-    )
-  }
-  let downgradedToFree = false
-  if (currentSub && currentSub.stripe_subscription_id !== subscription.id) {
-    logger.info('Skipping profile downgrade — user has a newer subscription', {
-      userId: profile.id,
-      canceledSubId: subscription.id,
-      currentSubId: currentSub.stripe_subscription_id,
-    })
-  } else {
-    // Check lifetime plan holder
-    const { data: currentProfile, error: currentProfileError } = await getSupabase()
-      .from('user_profiles')
-      .select('pro_plan')
-      .eq('id', profile.id)
-      .maybeSingle()
-    if (currentProfileError) {
-      throw new Error(`Failed to verify lifetime entitlement: ${currentProfileError.message}`)
-    }
-    if (currentProfile?.pro_plan === 'lifetime') {
-      logger.info('Skipping downgrade for lifetime user on subscription cancel', {
-        userId: profile.id,
-      })
-    } else {
-      const { error: profileError } = await getSupabase()
-        .from('user_profiles')
-        .update({
-          subscription_tier: 'free',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', profile.id)
-      if (profileError) {
-        logger.error('Failed to downgrade user tier to free', {
-          userId: profile.id,
-          error: profileError.message,
-        })
-        throw new Error(`Failed to downgrade user tier: ${profileError.message}`)
-      }
-      downgradedToFree = true
-    }
-  }
-
-  if (downgradedToFree) {
-    try {
-      const leftGroup = await leaveProOfficialGroup(profile.id)
-      if (leftGroup) {
-        logger.info(`User ${profile.id} left Pro official group`)
-      }
-    } catch (leaveError) {
-      logger.error('Error leaving Pro official group', { error: leaveError })
-      throw leaveError
-    }
-  }
-
-  logger.info(`Subscription canceled for user ${profile.id}`)
+  await rejectLegacyRecurringProState(subscription, event)
 }
 
 export async function handleTrialWillEnd(subscription: Stripe.Subscription) {
