@@ -48,6 +48,13 @@ export interface TieredCacheConfig {
   tags?: string[]
 }
 
+export interface TieredSetOptions {
+  /** Override the tier's Redis TTL for precomputed jobs with a slower cadence. */
+  redisTtlSeconds?: number
+  /** Override the tier's stale-while-revalidate metadata window. */
+  staleWhileRevalidateSeconds?: number
+}
+
 export interface CacheEntry<T> {
   data: T
   tier: CacheTier
@@ -260,18 +267,30 @@ export async function tieredSet<T>(
   key: string,
   data: T,
   tier: CacheTier = 'warm',
-  tags?: string[]
+  tags?: string[],
+  options: TieredSetOptions = {}
 ): Promise<boolean> {
   const memoryCache = getMemoryCache()
   const config = CACHE_TIERS[tier]
+  const redisTtlSeconds = options.redisTtlSeconds ?? config.redisTtlSeconds
+  const staleWhileRevalidateSeconds =
+    options.staleWhileRevalidateSeconds ?? config.staleWhileRevalidate
+  if (
+    !Number.isSafeInteger(redisTtlSeconds) ||
+    redisTtlSeconds <= 0 ||
+    !Number.isSafeInteger(staleWhileRevalidateSeconds) ||
+    staleWhileRevalidateSeconds < 0
+  ) {
+    throw new TypeError('tiered cache TTL overrides must be safe non-negative seconds')
+  }
   const now = Date.now()
 
   const entry: CacheEntry<T> = {
     data,
     tier,
     cachedAt: now,
-    expiresAt: now + (config.redisTtlSeconds + config.staleWhileRevalidate) * 1000,
-    softExpiresAt: now + config.redisTtlSeconds * 1000,
+    expiresAt: now + (redisTtlSeconds + staleWhileRevalidateSeconds) * 1000,
+    softExpiresAt: now + redisTtlSeconds * 1000,
   }
 
   // L2: 写入 Redis (single pipeline when tags present)
@@ -281,23 +300,21 @@ export async function tieredSet<T>(
   // When Redis is unavailable, extend memory TTL to redisTtlSeconds so memory
   // serves as the sole cache layer and data doesn't expire every 60-90s,
   // which would cause every request to hit the DB (thundering herd).
-  const memoryTtl = redis
-    ? config.memoryTtlSeconds + config.staleWhileRevalidate
-    : config.redisTtlSeconds
+  const memoryTtl = redis ? config.memoryTtlSeconds + staleWhileRevalidateSeconds : redisTtlSeconds
   memoryCache.set(key, entry, memoryTtl)
 
   if (redis) {
     try {
       if (tags && tags.length > 0) {
         const pipeline = redis.pipeline()
-        pipeline.set(key, entry, { ex: config.redisTtlSeconds })
+        pipeline.set(key, entry, { ex: redisTtlSeconds })
         for (const tag of tags) {
           pipeline.sadd(`tag:${tag}`, key)
-          pipeline.expire(`tag:${tag}`, config.redisTtlSeconds * 2)
+          pipeline.expire(`tag:${tag}`, redisTtlSeconds * 2)
         }
         await pipeline.exec()
       } else {
-        await redis.set(key, entry, { ex: config.redisTtlSeconds })
+        await redis.set(key, entry, { ex: redisTtlSeconds })
       }
 
       return true

@@ -188,6 +188,25 @@ describe('redis-layer', () => {
           (CACHE_TIERS.cold.redisTtlSeconds + CACHE_TIERS.cold.staleWhileRevalidate) * 1000
       )
     })
+
+    it('supports an explicit TTL for slower precompute jobs', async () => {
+      await tieredSet('precomputed', 'data', 'hot', ['rankings'], {
+        redisTtlSeconds: 10_800,
+        staleWhileRevalidateSeconds: 300,
+      })
+
+      const [, entry, memoryTtl] = mockMemoryCache.set.mock.calls[0]
+      expect(entry.softExpiresAt).toBe(entry.cachedAt + 10_800 * 1000)
+      expect(entry.expiresAt).toBe(entry.cachedAt + 11_100 * 1000)
+      expect(memoryTtl).toBe(10_800)
+    })
+
+    it('rejects invalid TTL overrides', async () => {
+      await expect(tieredSet('invalid', 'data', 'hot', [], { redisTtlSeconds: 0 })).rejects.toThrow(
+        'TTL overrides'
+      )
+      expect(mockMemoryCache.set).not.toHaveBeenCalled()
+    })
   })
 
   describe('tieredDel', () => {
