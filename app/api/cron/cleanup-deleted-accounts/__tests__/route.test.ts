@@ -157,6 +157,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     })
     expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledWith({
       stripeClient: mockStripeClient,
+      expectedUserId: 'user-expired',
       subscriptionIds: ['sub_recurring', 'sub_api'],
       expectedCustomerId: 'cus_owner',
       deletionMode: 'permanent',

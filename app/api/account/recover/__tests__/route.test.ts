@@ -213,6 +213,7 @@ describe('account recovery', () => {
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: 'none' })
     expect(mockResumeStripeSubscriptionRenewals).toHaveBeenCalledWith({
       stripeClient: mockStripeClient,
+      expectedUserId: 'user-1',
       subscriptionIds: ['sub_123', 'sub_api'],
       expectedCustomerId: 'cus_owner',
       includeCustomerSubscriptions: true,

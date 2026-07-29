@@ -234,6 +234,7 @@ export const POST = withAuth(
           const stopped = await stopStripeSubscriptionRenewals({
             stripeClient,
             subscriptionIds,
+            expectedUserId: user.id,
             expectedCustomerId: stripeCustomerId,
             deletionMode: 'recoverable',
             pauseMarker: user.id,

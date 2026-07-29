@@ -236,6 +236,7 @@ async function resumeSubscription(userId: string): Promise<BillingRecoveryState>
   const resumed = await resumeStripeSubscriptionRenewals({
     stripeClient,
     subscriptionIds,
+    expectedUserId: userId,
     expectedCustomerId: stripeCustomerId,
     includeCustomerSubscriptions: true,
     pauseMarker: userId,
@@ -269,6 +270,7 @@ async function stopUncommittedBillingRecovery(
   await stopStripeSubscriptionRenewals({
     stripeClient: getStripe(),
     subscriptionIds: recovery.resumedSubscriptionIds,
+    expectedUserId: userId,
     expectedCustomerId: recovery.customerId,
     deletionMode: 'permanent',
     includeCustomerSubscriptions: true,
