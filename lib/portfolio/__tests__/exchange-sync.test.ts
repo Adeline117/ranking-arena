@@ -1,7 +1,10 @@
 const mockExchangeState = {
   positionsCapability: true as boolean | string,
   positions: [] as Array<Record<string, unknown>>,
-  balance: { total: { USDT: 0 } } as { total?: Record<string, number> },
+  balance: {
+    total: { USDT: 0 },
+    info: { result: { list: [{ totalEquity: '0' }] } },
+  } as { total?: Record<string, number>; info?: unknown },
   positionsError: null as Error | null,
   balanceError: null as Error | null,
   positionsCalls: 0,
@@ -30,7 +33,7 @@ jest.mock('ccxt', () => ({
   },
 }))
 
-import { syncExchangePortfolio } from '../exchange-sync'
+import { resolvePortfolioEquityEvidence, syncExchangePortfolio } from '../exchange-sync'
 
 const base = {
   portfolioId: 'portfolio-1',
@@ -43,7 +46,10 @@ describe('syncExchangePortfolio guardrails', () => {
   beforeEach(() => {
     mockExchangeState.positionsCapability = true
     mockExchangeState.positions = []
-    mockExchangeState.balance = { total: { USDT: 0 } }
+    mockExchangeState.balance = {
+      total: { USDT: 0 },
+      info: { result: { list: [{ totalEquity: '0' }] } },
+    }
     mockExchangeState.positionsError = null
     mockExchangeState.balanceError = null
     mockExchangeState.positionsCalls = 0
@@ -126,8 +132,8 @@ describe('syncExchangePortfolio guardrails', () => {
     expect(mockExchangeState.balanceCalls).toBe(1)
   })
 
-  it('rejects a balance response that cannot attest USD or USDT equity', async () => {
-    mockExchangeState.balance = { total: {} }
+  it('rejects a balance response without the exchange account-equity evidence', async () => {
+    mockExchangeState.balance = { total: { USDT: 1_000 } }
 
     await expect(syncExchangePortfolio({ ...base, exchange: 'bybit' })).resolves.toEqual({
       ok: false,
@@ -154,7 +160,10 @@ describe('syncExchangePortfolio guardrails', () => {
         ...override,
       },
     ]
-    mockExchangeState.balance = { total: { USDT: 1000 } }
+    mockExchangeState.balance = {
+      total: { USDT: 1000 },
+      info: { result: { list: [{ totalEquity: '1000' }] } },
+    }
 
     await expect(syncExchangePortfolio({ ...base, exchange: 'bybit' })).resolves.toEqual({
       ok: false,
@@ -190,7 +199,10 @@ describe('syncExchangePortfolio guardrails', () => {
         contracts: 0,
       },
     ]
-    mockExchangeState.balance = { total: { USDT: 500 } }
+    mockExchangeState.balance = {
+      total: { USDT: 500 },
+      info: { result: { list: [{ totalEquity: '500' }] } },
+    }
 
     await expect(syncExchangePortfolio({ ...base, exchange: 'bybit' })).resolves.toMatchObject({
       ok: true,
@@ -211,5 +223,32 @@ describe('syncExchangePortfolio guardrails', () => {
         },
       ],
     })
+  })
+
+  it('uses the exchange account total instead of one CCXT currency bucket', async () => {
+    mockExchangeState.balance = {
+      total: { USDT: 1 },
+      info: { result: { list: [{ totalEquity: '2500.75' }] } },
+    }
+
+    await expect(syncExchangePortfolio({ ...base, exchange: 'bybit' })).resolves.toMatchObject({
+      ok: true,
+      equity: 2500.75,
+    })
+  })
+})
+
+describe('resolvePortfolioEquityEvidence', () => {
+  it.each([
+    ['binance', { info: { totalMarginBalance: '131.72' } }, 131.72],
+    ['bybit', { info: { result: { list: [{ totalEquity: '12920.95' }] } } }, 12920.95],
+    ['okx', { info: { data: [{ totalEq: '1918.55' }] } }, 1918.55],
+    ['bitget', { info: [{ usdtEquity: '11.13' }, { usdtEquity: '2.5' }] }, 13.63],
+  ])('reads %s account-total evidence', (exchange, balance, expected) => {
+    expect(resolvePortfolioEquityEvidence(exchange, balance)).toBeCloseTo(expected)
+  })
+
+  it('does not fall back to a partial currency bucket for a governed exchange', () => {
+    expect(resolvePortfolioEquityEvidence('bybit', { total: { USDT: 999 } })).toBeNull()
   })
 })

@@ -20,6 +20,7 @@
  */
 
 import { decryptApiKey } from '@/lib/exchange/secure-encryption'
+import { balanceEvidence, type FirstPartyBalanceSource } from '@/lib/ingest/first-party/fetch'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('portfolio-sync')
@@ -159,9 +160,33 @@ interface CcxtPosition {
 interface CcxtClient {
   has: Record<string, boolean | string>
   fetchPositions(symbols?: string[]): Promise<CcxtPosition[]>
-  fetchBalance(): Promise<{ total?: Record<string, number> }>
+  fetchBalance(): Promise<CcxtBalance>
 }
 type CcxtRegistry = Record<string, new (cfg: Record<string, unknown>) => CcxtClient>
+
+interface CcxtBalance {
+  total?: Record<string, number>
+  info?: unknown
+}
+
+const PORTFOLIO_EQUITY_SOURCE: Readonly<Partial<Record<string, FirstPartyBalanceSource>>> = {
+  binance: 'binance_margin_balance',
+  bitget: 'bitget_usdt_equity',
+  bybit: 'bybit_total_equity',
+  okx: 'okx_total_equity',
+}
+
+/**
+ * Resolve account equity from the exchange's explicit account-total field.
+ * `balance.total.USDT` is only one currency bucket and can understate a unified
+ * margin account that also holds USDC, other collateral, or cross-margin PnL.
+ */
+export function resolvePortfolioEquityEvidence(
+  exchange: string,
+  balance: CcxtBalance
+): number | null {
+  return balanceEvidence(balance, PORTFOLIO_EQUITY_SOURCE[exchange] ?? 'stable_totals')
+}
 
 function finiteNumber(value: unknown): number | null {
   if (typeof value !== 'number' && typeof value !== 'string') return null
@@ -244,10 +269,7 @@ export async function syncExchangePortfolio(params: {
       throw new Error('Exchange returned an invalid positions snapshot')
     }
 
-    const total = balance?.total
-    const usdtEquity = finiteNumber(total?.USDT)
-    const usdEquity = finiteNumber(total?.USD)
-    const equity = usdtEquity ?? usdEquity
+    const equity = resolvePortfolioEquityEvidence(ex, balance)
     if (equity === null || equity < 0) {
       throw new Error('Exchange returned an invalid equity snapshot')
     }

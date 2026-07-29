@@ -117,7 +117,7 @@ function positionSettlementCurrency(row: CcxtPositionHistoryRow): string | null 
   return null
 }
 
-function balanceEvidence(
+export function balanceEvidence(
   balance: Awaited<ReturnType<CcxtLike['fetchBalance']>>,
   source: FirstPartyBalanceSource
 ): number | null {
