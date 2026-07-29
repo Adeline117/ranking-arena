@@ -25,6 +25,7 @@ import {
   fetchFirstPartyAccount,
   type CcxtLike,
   type FirstPartyBalanceSemantics,
+  type FirstPartyBalanceSource,
   type FirstPartyRealizedPnlSource,
   type FirstPartyTransferLedgerContract,
 } from '@/lib/ingest/first-party/fetch'
@@ -63,6 +64,7 @@ const DEFAULT_FUTURES_SOURCE_BY_EXCHANGE = new Set(['binance', 'okx', 'bitget'])
 
 interface FirstPartyExchangeContract {
   balanceSemantics: FirstPartyBalanceSemantics
+  balanceSource?: FirstPartyBalanceSource
   realizedPnlSource: FirstPartyRealizedPnlSource
   positionHistoryMaxRangeDays?: number
   transferLedgerContract?: FirstPartyTransferLedgerContract
@@ -87,7 +89,8 @@ const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchange
     positionHistoryMaxRangeDays: 90,
   },
   bybit: {
-    balanceSemantics: 'wallet_excludes_unrealized',
+    balanceSource: 'bybit_total_equity',
+    balanceSemantics: 'total_includes_unrealized',
     realizedPnlSource: 'positions_history',
     positionHistoryMaxRangeDays: 7,
     transferLedgerContract: {

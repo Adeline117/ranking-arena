@@ -41,6 +41,44 @@ describe('first-party account equity evidence', () => {
     })
   })
 
+  it('uses Bybit account-wide USD equity instead of omitting non-stable collateral', async () => {
+    const result = await fetchFirstPartyAccount(
+      client({
+        fetchBalance: jest.fn().mockResolvedValue({
+          total: { USDT: 100 },
+          info: {
+            result: {
+              list: [{ totalEquity: '12920.95352538' }],
+            },
+          },
+        }),
+      }),
+      {
+        nowMs: NOW,
+        balanceSource: 'bybit_total_equity',
+        balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
+      }
+    )
+
+    expect(result).toMatchObject({
+      balanceNow: 12920.95352538,
+      unrealizedNow: 20,
+      equityNow: 12920.95352538,
+    })
+  })
+
+  it('rejects missing contracted Bybit total-equity evidence instead of falling back to stables', async () => {
+    await expect(
+      fetchFirstPartyAccount(client(), {
+        nowMs: NOW,
+        balanceSource: 'bybit_total_equity',
+        balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
+      })
+    ).rejects.toThrow('account equity evidence is unavailable')
+  })
+
   it('rejects a response with no finite stablecoin balance evidence', async () => {
     const missingBalance = client({
       fetchBalance: jest.fn().mockResolvedValue({ total: {} }),

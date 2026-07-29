@@ -166,7 +166,8 @@ describe('first-party sync processor', () => {
     expect(mockFetchAccount).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        balanceSemantics: 'wallet_excludes_unrealized',
+        balanceSource: 'bybit_total_equity',
+        balanceSemantics: 'total_includes_unrealized',
         realizedPnlSource: 'positions_history',
         positionHistoryMaxRangeDays: 7,
         transferLedgerContract: expect.objectContaining({

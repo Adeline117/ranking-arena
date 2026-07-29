@@ -54,6 +54,7 @@ export interface CcxtLike {
 }
 
 export type FirstPartyBalanceSemantics = 'total_includes_unrealized' | 'wallet_excludes_unrealized'
+export type FirstPartyBalanceSource = 'stable_totals' | 'bybit_total_equity'
 export type FirstPartyRealizedPnlSource = 'positions_history' | 'income_ledger'
 export interface FirstPartyTransferLedgerContract {
   maxRangeDays: number
@@ -74,6 +75,25 @@ function num(v: unknown): number | null {
   if (typeof v === 'string' && v.trim() === '') return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
+}
+
+function balanceEvidence(
+  balance: Awaited<ReturnType<CcxtLike['fetchBalance']>>,
+  source: FirstPartyBalanceSource
+): number | null {
+  if (source === 'bybit_total_equity') {
+    const info = balance.info as {
+      result?: { list?: Array<{ totalEquity?: unknown }> }
+    }
+    return num(info?.result?.list?.[0]?.totalEquity)
+  }
+
+  let total: number | null = null
+  for (const currency of STABLES) {
+    const value = num(balance.total?.[currency])
+    if (value !== null) total = (total ?? 0) + value
+  }
+  return total
 }
 
 function positionCloseTimestamp(row: CcxtPositionHistoryRow): number | null {
@@ -250,6 +270,7 @@ export async function fetchFirstPartyAccount(
   opts: {
     nowMs: number
     balanceSemantics: FirstPartyBalanceSemantics
+    balanceSource?: FirstPartyBalanceSource
     realizedPnlSource: FirstPartyRealizedPnlSource
     positionHistoryMaxRangeDays?: number
     transferLedgerContract?: FirstPartyTransferLedgerContract
@@ -262,15 +283,11 @@ export async function fetchFirstPartyAccount(
 
   // Balance + unrealized (read-only, same calls as the portfolio sync).
   const bal = await client.fetchBalance()
-  let balanceNow: number | null = null
-  for (const c of STABLES) {
-    const v = num(bal.total?.[c])
-    if (v !== null) {
-      balanceNow = (balanceNow ?? 0) + v
-    }
-  }
+  const balanceSource = opts.balanceSource ?? 'stable_totals'
+  const balanceNow = balanceEvidence(bal, balanceSource)
   if (balanceNow === null) {
-    throw new Error('[first-party] stablecoin balance evidence is unavailable')
+    const evidence = balanceSource === 'stable_totals' ? 'stablecoin balance' : 'account equity'
+    throw new Error(`[first-party] ${evidence} evidence is unavailable`)
   }
 
   let unrealizedNow: number | null = null
