@@ -690,8 +690,8 @@ export function calculateArenaScoreV3Legacy(
 export interface TraderScoreInputV4 {
   roi: number // ROI %（如 25 = 25%）
   pnl: number | null // 已实现 PnL（USD）
-  maxDrawdown: number | null // 最大回撤 %（如 22 = 22%），0/null 视为缺失
-  winRate: number | null // 胜率 %，0/null 视为缺失
+  maxDrawdown: number | null // 最大回撤 %（如 22 = 22%）；V4 将 0/null 视为缺失
+  winRate: number | null // 胜率 %；V4 将 0/null 视为缺失
   sharpeRatio: number | null
   profitFactor: number | null
   tradesCount: number | null // 样本量(置信度)
@@ -753,28 +753,27 @@ export function percentRanks(values: Array<number | null>): Array<number | null>
   return values.map((v) => (v == null ? null : countLess(v) / (n - 1)))
 }
 
-/**
- * 批量计算 Arena Score v4。百分位需要看【整个队列】,故批量而非逐个。
- * 每个时间段(7D/30D/90D)各自作为一个队列传入(compute-leaderboard 已按 season 分组)。
- * 返回与输入等长、同序的结果数组。设计见 [[arena-score-v4]]:
- *   composite = [ PnL(对数量级) + ROI/回撤/Sharpe/一致性(队内百分位) 加权 ] × 置信度
- *   显示分   = composite 的队内百分位("你超过了 X% 的交易员")+ 少量相对值展开顶端
- */
-export function computeArenaScoresV4(
+function computeArenaScoresV4OrV5(
   inputs: TraderScoreInputV4[],
-  _period?: Period
+  _period: Period | undefined,
+  zeroRiskMetricsAreKnown: boolean
 ): ArenaScoreV4Result[] {
   const V = ARENA_V4_CONFIG
   const n = inputs.length
   if (n === 0) return []
 
-  // 抽取各维度(0/null 一律视为"缺失"——交易所无数据时常报 0)
+  // V4 kept the historical exchange-sentinel behavior. V5 is evidence-aware:
+  // once upstream trust marks a value known, only null means missing.
   const roiArr = inputs.map((t) => (t.roi != null ? Number(t.roi) : null))
   const mddArr = inputs.map((t) =>
-    t.maxDrawdown != null && t.maxDrawdown !== 0 ? Math.abs(t.maxDrawdown) : null
+    t.maxDrawdown != null && (zeroRiskMetricsAreKnown || t.maxDrawdown !== 0)
+      ? Math.abs(t.maxDrawdown)
+      : null
   )
   const shArr = inputs.map((t) => t.sharpeRatio ?? null)
-  const winArr = inputs.map((t) => (t.winRate != null && t.winRate !== 0 ? t.winRate : null))
+  const winArr = inputs.map((t) =>
+    t.winRate != null && (zeroRiskMetricsAreKnown || t.winRate !== 0) ? t.winRate : null
+  )
   const pfArr = inputs.map((t) => t.profitFactor ?? null)
 
   // 队内百分位(回撤:越小越好 → 对 −|MDD| 排名)
@@ -866,4 +865,28 @@ export function computeArenaScoresV4(
       },
     }
   })
+}
+
+/**
+ * Historical Arena Score v4 contract. Zero win rate and zero maximum drawdown
+ * retain their legacy missing-value semantics so old score manifests remain
+ * reproducible.
+ */
+export function computeArenaScoresV4(
+  inputs: TraderScoreInputV4[],
+  period?: Period
+): ArenaScoreV4Result[] {
+  return computeArenaScoresV4OrV5(inputs, period, false)
+}
+
+/**
+ * Shadow Arena Score v5 contract. Trusted zero win rate and zero maximum
+ * drawdown are real observations; only null is missing. Do not use this for
+ * publication until the v2 manifest/projection pipeline has passed its canary.
+ */
+export function computeArenaScoresV5(
+  inputs: TraderScoreInputV4[],
+  period?: Period
+): ArenaScoreV4Result[] {
+  return computeArenaScoresV4OrV5(inputs, period, true)
 }

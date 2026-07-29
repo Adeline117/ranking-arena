@@ -1,0 +1,91 @@
+{
+  "contract": "arena-score-v5-zero-metrics-golden@1",
+  "period": "30D",
+  "inputs": [
+    {
+      "source": "proof",
+      "source_trader_id": "zero",
+      "roi": 20,
+      "pnl": 20000,
+      "max_drawdown": 0,
+      "win_rate": 0,
+      "sharpe_ratio": null,
+      "profit_factor": null,
+      "trades_count": 100
+    },
+    {
+      "source": "proof",
+      "source_trader_id": "positive",
+      "roi": 20,
+      "pnl": 20000,
+      "max_drawdown": 10,
+      "win_rate": 50,
+      "sharpe_ratio": null,
+      "profit_factor": null,
+      "trades_count": 100
+    },
+    {
+      "source": "proof",
+      "source_trader_id": "unknown",
+      "roi": 20,
+      "pnl": 20000,
+      "max_drawdown": null,
+      "win_rate": null,
+      "sharpe_ratio": null,
+      "profit_factor": null,
+      "trades_count": 100
+    }
+  ],
+  "expectedEnvelope": {
+    "period": "30D",
+    "outputs": [
+      {
+        "source": "proof",
+        "factors": {
+          "pnl": 0.33,
+          "roi": 0,
+          "sharpe": null,
+          "drawdown": 0,
+          "consistency": 1
+        },
+        "quality": 0.25,
+        "confidence": 0.8,
+        "totalScore": 54.92,
+        "sourceTraderId": "positive"
+      },
+      {
+        "source": "proof",
+        "factors": {
+          "pnl": 0.33,
+          "roi": 0,
+          "sharpe": null,
+          "drawdown": null,
+          "consistency": null
+        },
+        "quality": 0.2,
+        "confidence": 0.71,
+        "totalScore": 13.91,
+        "sourceTraderId": "unknown"
+      },
+      {
+        "source": "proof",
+        "factors": {
+          "pnl": 0.33,
+          "roi": 0,
+          "sharpe": null,
+          "drawdown": 1,
+          "consistency": 0
+        },
+        "quality": 0.37,
+        "confidence": 0.8,
+        "totalScore": 100,
+        "sourceTraderId": "zero"
+      }
+    ],
+    "contract": "arena-score-v5-pg17@1",
+    "inputCount": 3,
+    "inputDigest": "ddba4e8033581f56a09cf29478bbe76bbeb94090db653e42f9f671eabe8fa851",
+    "outputDigest": "4143a122ea8788f78c68568ef19b4ae6cba2359afb50d64db5ca8329d3fadbbd",
+    "digestAlgorithm": "pg17-jsonb-utf8-sha256@1"
+  }
+}
