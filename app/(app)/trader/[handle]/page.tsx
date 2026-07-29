@@ -4,8 +4,11 @@ import { unstable_cache } from 'next/cache'
 import { notFound } from 'next/navigation'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
-import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
-import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
+import { EXCHANGE_CONFIG, PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import TraderProfileClient, {
+  type ServingScoreRow,
+  type UnregisteredTraderData,
+} from './TraderProfileClient'
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { isDeadPlatform } from '@/lib/constants/exchanges'
@@ -28,11 +31,20 @@ import { SSR_QUERY_TIMEOUT_MS, SERVING_RESOLVE_TIMEOUT_MS } from '@/lib/constant
 import { logger } from '@/lib/logger'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import { findClaimedUserHandleByIdentity } from '@/lib/identity/claimed-trader'
+import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+  type SealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
   Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.name])
 )
+const TRADER_PAGE_PROOF_SOURCES = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+const TRADER_SCORE_SEASONS = ['7D', '30D', '90D'] as const
 
 // ---------------------------------------------------------------------------
 // unstable_cache wrappers — use Next.js data cache instead of Redis.
@@ -257,38 +269,116 @@ const cachedCapabilities = async () => {
 // The serving three-tab data (arena_core_modules) carries raw stats only —
 // ScoreBreakdownSection and the header style tag were EMPTY in serving mode
 // (2026-07-09 audit) even though leaderboard_ranks has all these columns.
-const cachedServingScores = unstable_cache(
-  async (platform: string, traderKey: string) => {
-    const { data } = await getReadReplica()
-      .from('leaderboard_ranks')
-      .select(
-        'season_id, arena_score, arena_score_v3, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, style_confidence, avg_holding_hours'
-      )
-      .eq(LR.source, platform)
-      .eq(LR.source_trader_id, traderKey)
-      .in(LR.season_id, ['7D', '30D', '90D'])
-    return data ?? []
+const cachedServingScoreEntries = unstable_cache(
+  async (
+    platform: string,
+    traderKey: string
+  ): Promise<SealedRankingCacheEntry<ServingScoreRow[]>[]> => {
+    const [publicPlatform] = filterPublicRankingSources([platform])
+    if (!publicPlatform) throw new Error('trader score source is not public')
+
+    return Promise.all(
+      TRADER_SCORE_SEASONS.map(async (season) => {
+        const supabase = getReadReplica()
+        const sealedRead = await readSealedRankingGeneration(
+          supabase,
+          { season, sources: TRADER_PAGE_PROOF_SOURCES },
+          async (publication) => {
+            const result = await supabase
+              .from('leaderboard_ranks')
+              .select(
+                'season_id, arena_score, arena_score_v3, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, style_confidence, avg_holding_hours'
+              )
+              .eq(LR.source, publicPlatform)
+              .eq(LR.source_trader_id, traderKey)
+              .eq(LR.season_id, season)
+              .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+            if (result.error) {
+              throw new Error(`trader score query failed: ${result.error.message}`)
+            }
+            return (result.data ?? []) as ServingScoreRow[]
+          },
+          { timeoutMs: SSR_QUERY_TIMEOUT_MS }
+        )
+        return createSealedRankingCacheEntry(sealedRead)
+      })
+    )
   },
-  ['trader-serving-scores'],
+  ['trader-serving-scores-sealed-v2'],
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
+const cachedServingScores = async (
+  platform: string,
+  traderKey: string
+): Promise<ServingScoreRow[]> => {
+  const entries = await cachedServingScoreEntries(platform, traderKey)
+  if (!Array.isArray(entries) || entries.length !== TRADER_SCORE_SEASONS.length) {
+    throw new Error('trader score cache returned an incomplete sealed set')
+  }
+
+  return entries.flatMap((input, index) => {
+    const entry = parseSealedRankingCacheEntry<ServingScoreRow[]>(
+      input,
+      TRADER_SCORE_SEASONS[index],
+      TRADER_PAGE_PROOF_SOURCES
+    )
+    if (!entry) throw new Error('trader score cache returned an invalid sealed entry')
+    return entry.value
+  })
+}
+
 // Cached leaderboard query for OG metadata.
 // Avoids a duplicate DB query between generateMetadata and the page render.
-const cachedLeaderboardMeta = unstable_cache(
+interface LeaderboardMetaRow {
+  rank: number | null
+  arena_score: number | null
+  roi: number | null
+  pnl: number | null
+}
+
+const cachedLeaderboardMetaEntry = unstable_cache(
   async (platform: string, traderKey: string) => {
-    const { data } = await getReadReplica()
-      .from('leaderboard_ranks')
-      .select('rank, arena_score, roi, pnl')
-      .eq(LR.source, platform)
-      .eq(LR.source_trader_id, traderKey)
-      .eq(LR.season_id, '90D')
-      .maybeSingle()
-    return data
+    const [publicPlatform] = filterPublicRankingSources([platform])
+    if (!publicPlatform) throw new Error('trader metadata source is not public')
+    const supabase = getReadReplica()
+    const sealedRead = await readSealedRankingGeneration(
+      supabase,
+      { season: '90D', sources: TRADER_PAGE_PROOF_SOURCES },
+      async (publication) => {
+        const result = await supabase
+          .from('leaderboard_ranks')
+          .select('rank, arena_score, roi, pnl')
+          .eq(LR.source, publicPlatform)
+          .eq(LR.source_trader_id, traderKey)
+          .eq(LR.season_id, '90D')
+          .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+          .maybeSingle()
+        if (result.error) {
+          throw new Error(`trader metadata query failed: ${result.error.message}`)
+        }
+        return result.data as LeaderboardMetaRow | null
+      },
+      { timeoutMs: SSR_QUERY_TIMEOUT_MS }
+    )
+    return createSealedRankingCacheEntry(sealedRead)
   },
-  ['trader-lb-meta'],
+  ['trader-lb-meta-sealed-v2'],
   { revalidate: 300, tags: ['trader-profile'] }
 )
+
+const cachedLeaderboardMeta = async (
+  platform: string,
+  traderKey: string
+): Promise<LeaderboardMetaRow | null> => {
+  const entry = parseSealedRankingCacheEntry<LeaderboardMetaRow | null>(
+    await cachedLeaderboardMetaEntry(platform, traderKey),
+    '90D',
+    TRADER_PAGE_PROOF_SOURCES
+  )
+  if (!entry) throw new Error('trader metadata cache returned an invalid sealed entry')
+  return entry.value
+}
 
 // Cached user handle lookup for one exact claimed exchange account. Raw trader
 // IDs and handles collide across sources, so this function must never start
