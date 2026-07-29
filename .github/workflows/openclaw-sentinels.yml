@@ -205,8 +205,8 @@ jobs:
         run: node scripts/openclaw/sentry-convergence.mjs
 
   payment-path-canary:
-    # 支付路径金丝雀（差距 #2）：真跑被 PRO_FREE_PROMO 掩盖的订阅写路径 + 对账列，
-    # 坏了告警。防"Stripe webhook 静默崩、promo 掩盖、关 promo 才发现"重演。
+    # 支付路径金丝雀：READ ONLY 验证 exact authority/readiness、webhook backlog
+    # 与 entitlement worker 心跳。禁止用生产 QA 账号执行任何写入式冒烟。
     if: github.event.schedule == '15 7 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 6

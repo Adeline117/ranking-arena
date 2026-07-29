@@ -1,19 +1,17 @@
 #!/usr/bin/env node
 /**
- * 支付路径金丝雀 — 揪出被 PRO_FREE_PROMO 掩盖的静默失败（差距 #2 / 2026-07）。
+ * 支付路径金丝雀 — 只读验证 exact entitlement authority 与异步 worker。
  *
- * 血泪背景：整个 Stripe 订阅 webhook 同步曾长期静默崩溃——RPC
- * `update_subscription_and_profile` 写 `subscriptions.plan`/`cancel_at_period_end`
- * 这些生产不存在的列 → RPC 500、fallback 500 → 每个 subscription 事件都无法对账。
- * **没人发现，因为 PRO_FREE_PROMO 让所有人都是 Pro，掩盖了同步失效。** 一旦 promo 关，
- * 付费用户的 Pro 状态就同步不了。
+ * 历史版本每天调用 legacy projection writer，再删除测试 subscription 并把
+ * QA profile 无条件改成 free。那不是金丝雀，而是生产权益写入器：它既能
+ * 制造 authority drift，也可能覆盖账号的真实付款或独立 grant。
  *
- * 对策：一个掩盖性开关（PRO_FREE_PROMO）必须配一个金丝雀，定期**真跑一遍被掩盖的
- * 底层路径**，坏了立刻告警——这样"关掉 promo 会不会爆"永远是已知的。
+ * 当前金丝雀在 PostgreSQL READ ONLY 事务里验证：
+ *   1. exact payment/trial/grant schema 与 readiness function 已部署；
+ *   2. stripe_paid_launch_readiness_v2 返回精确十键契约且状态为 ready；
+ *   3. webhook 没有 failed/stale 事件；
+ *   4. entitlement effect worker 在 20 分钟内有成功心跳。
  *
- * 本金丝雀（只读+自清理，用 QA 账号）验证：
- *   1. 支付对账列存在：user_profiles.stripe_customer_id（webhook .eq 查用户靠它）。
- *   2. 订阅写路径通：调 update_subscription_and_profile RPC（QA 用户）→ 校验落库 → 清理。
  * 任一失败 → Telegram 告警。exit 0 健康 / 1 失败 / 2 金丝雀自身跑不起来（盲了≠正常）。
  *
  * 调度：openclaw-sentinels.yml 每日。需 DATABASE_URL + TELEGRAM_*。
@@ -26,7 +24,35 @@ config({ path: new URL('../../.env.local', import.meta.url).pathname })
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID || process.env.TELEGRAM_CHAT_ID
 const DATABASE_URL = process.env.DATABASE_URL
-const QA_USER_ID = '1c533890-01e8-4c34-a895-657f389ab4b2' // qa.button.test@arenafi.org
+const READINESS_KEYS = [
+  'status',
+  'open_manual_reviews',
+  'unfinished_effects',
+  'completed_effects_without_external_ref',
+  'paid_unbound_payments',
+  'unresolved_refund_tombstones',
+  'reservation_anomalies',
+  'projection_drift',
+  'notification_delivery_anomalies',
+  'authority_drift',
+].sort()
+
+function parseReadiness(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const keys = Object.keys(value).sort()
+  if (
+    keys.length !== READINESS_KEYS.length ||
+    keys.some((key, index) => key !== READINESS_KEYS[index])
+  ) {
+    return null
+  }
+  if (value.status !== 'ready' && value.status !== 'blocked') return null
+  for (const key of READINESS_KEYS) {
+    if (key === 'status') continue
+    if (!Number.isSafeInteger(value[key]) || value[key] < 0) return null
+  }
+  return value
+}
 
 async function sendTelegram(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
@@ -57,41 +83,90 @@ async function main() {
   await client.connect()
   const failures = []
   try {
-    // 1) 对账列存在（webhook invoice/refund .eq('stripe_customer_id') 靠它找用户）
-    const { rows: col } = await client.query(
-      `SELECT 1 FROM information_schema.columns
-       WHERE table_schema='public' AND table_name='user_profiles' AND column_name='stripe_customer_id'`
-    )
-    if (!col.length)
-      failures.push('user_profiles.stripe_customer_id 缺失 → 所有 Stripe webhook 对账 500')
+    await client.query('BEGIN TRANSACTION READ ONLY')
 
-    // 2) 订阅写路径 RPC 冒烟（自清理）
-    try {
-      await client.query(
-        `SELECT update_subscription_and_profile($1,'pro','active','sub_canary','cus_canary','monthly',now(),now()+interval '30 days',false)`,
-        [QA_USER_ID]
+    const { rows: schemaRows } = await client.query(`
+      SELECT
+        pg_catalog.to_regclass('public.stripe_entitlement_payments') IS NOT NULL
+          AS has_payments,
+        pg_catalog.to_regclass('public.stripe_trial_entitlements') IS NOT NULL
+          AS has_trials,
+        pg_catalog.to_regclass('public.pro_entitlement_grants') IS NOT NULL
+          AS has_grants,
+        pg_catalog.to_regclass('public.stripe_entitlement_effects') IS NOT NULL
+          AS has_effects,
+        pg_catalog.to_regprocedure('public.stripe_paid_launch_readiness_v2()') IS NOT NULL
+          AS has_readiness,
+        EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'subscriptions'
+            AND column_name = 'entitlement_payment_id'
+        ) AS has_payment_binding,
+        EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'subscriptions'
+            AND column_name = 'entitlement_trial_id'
+        ) AS has_trial_binding
+    `)
+    const schema = schemaRows[0]
+    const missingContracts = Object.entries(schema || {})
+      .filter(([, present]) => present !== true)
+      .map(([name]) => name)
+    if (missingContracts.length > 0) {
+      failures.push(`exact entitlement schema 缺失: ${missingContracts.join(', ')}`)
+    } else {
+      const { rows: readinessRows } = await client.query(
+        'SELECT public.stripe_paid_launch_readiness_v2() AS readiness'
       )
-      const { rows: sub } = await client.query(
-        `SELECT tier, status, plan FROM subscriptions WHERE user_id=$1 AND stripe_subscription_id='sub_canary'`,
-        [QA_USER_ID]
-      )
-      if (!sub.length || sub[0].tier !== 'pro' || sub[0].plan !== 'monthly') {
-        failures.push(`订阅 RPC 落库异常: ${JSON.stringify(sub[0] || null)}`)
+      const readiness = parseReadiness(readinessRows[0]?.readiness)
+      if (!readiness) {
+        failures.push('stripe_paid_launch_readiness_v2 返回契约异常')
+      } else if (readiness.status !== 'ready') {
+        const blockers = READINESS_KEYS.filter(
+          (key) => key !== 'status' && readiness[key] !== 0
+        ).map((key) => `${key}=${readiness[key]}`)
+        failures.push(`exact entitlement authority blocked: ${blockers.join(', ') || 'unknown'}`)
       }
-    } catch (e) {
-      failures.push(`订阅写路径 RPC 失败(修前的故障态): ${String(e.message).slice(0, 160)}`)
-    } finally {
-      // 自清理：删测试订阅行 + 复位 profile
-      await client
-        .query(
-          `DELETE FROM subscriptions WHERE user_id=$1 AND stripe_subscription_id='sub_canary'`,
-          [QA_USER_ID]
-        )
-        .catch(() => {})
-      await client
-        .query(`UPDATE user_profiles SET subscription_tier='free' WHERE id=$1`, [QA_USER_ID])
-        .catch(() => {})
     }
+
+    const { rows: eventRows } = await client.query(`
+      SELECT
+        pg_catalog.count(*) FILTER (WHERE status = 'failed')::integer AS failed,
+        pg_catalog.count(*) FILTER (
+          WHERE status = 'processing'
+            AND started_at < pg_catalog.clock_timestamp() - interval '10 minutes'
+        )::integer AS stale
+      FROM public.stripe_events
+    `)
+    const eventHealth = eventRows[0]
+    if (!eventHealth || eventHealth.failed !== 0 || eventHealth.stale !== 0) {
+      failures.push(
+        `Stripe webhook backlog: failed=${eventHealth?.failed ?? 'unknown'}, stale=${
+          eventHealth?.stale ?? 'unknown'
+        }`
+      )
+    }
+
+    const { rows: heartbeatRows } = await client.query(`
+      SELECT EXISTS (
+        SELECT 1
+        FROM public.pipeline_logs
+        WHERE job_name = 'stripe-entitlement-effects'
+          AND status = 'success'
+          AND started_at >= pg_catalog.clock_timestamp() - interval '20 minutes'
+      ) AS recent
+    `)
+    if (heartbeatRows[0]?.recent !== true) {
+      failures.push('stripe-entitlement-effects 20 分钟内无成功心跳')
+    }
+    await client.query('ROLLBACK')
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
   } finally {
     await client.end().catch(() => {})
   }
@@ -105,7 +180,7 @@ async function main() {
     await sendTelegram(msg)
     process.exit(1)
   }
-  console.log('✅ payment-path-canary: 对账列存在 + 订阅写路径 RPC 通（已自清理）')
+  console.log('✅ payment-path-canary: exact authority/readiness/worker 全部健康（纯只读）')
   process.exit(0)
 }
 
