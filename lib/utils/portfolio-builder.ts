@@ -26,8 +26,8 @@ export interface PortfolioTrader {
   trader_id: string
   source: string
   handle: string
-  allocation_pct: number      // 建议分配比例 (0-100)
-  reason: string              // 推荐理由
+  allocation_pct: number // 建议分配比例 (0-100)
+  reason: string // 推荐理由
   risk_level: 'low' | 'medium' | 'high'
   expected_contribution: {
     roi: number
@@ -46,7 +46,7 @@ export interface PortfolioSuggestion {
     max_drawdown: number
     sharpe_ratio: number
   }
-  diversification_score: number  // 0-100，越高越分散
+  diversification_score: number // 0-100，越高越分散
   created_at: string
 }
 
@@ -59,27 +59,55 @@ export type RiskPreference = 'conservative' | 'balanced' | 'aggressive'
 const PORTFOLIO_CONFIG = {
   // 不同风险偏好的参数（Phase 3 spec thresholds）
   conservative: {
-    maxDrawdownThreshold: 10,     // MDD < 10%
-    minWinRate: 60,               // WR > 60%
-    minArenaScore: 70,            // Score > 70
-    traderCount: 5,               // 推荐交易员数量
-    maxAllocation: 30,            // 单个交易员最大配比
+    maxDrawdownThreshold: 10, // MDD < 10%
+    minWinRate: 60, // WR > 60%
+    minArenaScore: 70, // Score > 70
+    traderCount: 5, // 推荐交易员数量
+    maxAllocation: 30, // 单个交易员最大配比
   },
   balanced: {
-    maxDrawdownThreshold: 25,     // MDD < 25%
-    minWinRate: 50,               // WR > 50%
-    minArenaScore: 50,            // Score > 50
+    maxDrawdownThreshold: 25, // MDD < 25%
+    minWinRate: 50, // WR > 50%
+    minArenaScore: 50, // Score > 50
     traderCount: 5,
     maxAllocation: 35,
   },
   aggressive: {
-    maxDrawdownThreshold: 100,    // 不限 MDD
-    minWinRate: 0,                // 不限 WR，按 ROI 排序
-    minArenaScore: 0,             // 不限 Score
+    maxDrawdownThreshold: 100, // 不限 MDD
+    minWinRate: 0, // 不限 WR，按 ROI 排序
+    minArenaScore: 0, // 不限 Score
     traderCount: 4,
     maxAllocation: 40,
-    sortByRoi: true,              // 高风险按 ROI 最高排序
+    sortByRoi: true, // 高风险按 ROI 最高排序
   },
+}
+
+type CompletePortfolioTrader = TraderForPortfolio & {
+  max_drawdown: number
+  win_rate: number
+}
+
+/**
+ * Portfolio recommendations must not turn unknown or invalid measurements into
+ * apparent zero risk. Exact measured zero remains valid, but a non-positive
+ * Arena Score has no usable allocation weight.
+ */
+function hasCompletePortfolioMetrics(
+  trader: TraderForPortfolio
+): trader is CompletePortfolioTrader {
+  return (
+    Number.isFinite(trader.roi) &&
+    typeof trader.max_drawdown === 'number' &&
+    Number.isFinite(trader.max_drawdown) &&
+    Math.abs(trader.max_drawdown) < 100 &&
+    typeof trader.win_rate === 'number' &&
+    Number.isFinite(trader.win_rate) &&
+    trader.win_rate >= 0 &&
+    trader.win_rate <= 100 &&
+    Number.isFinite(trader.arena_score) &&
+    trader.arena_score > 0 &&
+    trader.arena_score <= 100
+  )
 }
 
 // ============================================
@@ -150,7 +178,7 @@ function calculateDiversificationScore(traders: TraderForPortfolio[]): number {
  */
 function getTraderRiskLevel(trader: TraderForPortfolio): 'low' | 'medium' | 'high' {
   const drawdown = Math.abs(trader.max_drawdown || 0)
-  
+
   if (drawdown < 10 && (trader.win_rate || 0) >= 55) {
     return 'low'
   } else if (drawdown < 25 && (trader.win_rate || 0) >= 45) {
@@ -163,34 +191,37 @@ function getTraderRiskLevel(trader: TraderForPortfolio): 'low' | 'medium' | 'hig
 /**
  * 生成推荐理由
  */
-function generateReason(trader: TraderForPortfolio, config: typeof PORTFOLIO_CONFIG.balanced): string {
+function generateReason(
+  trader: TraderForPortfolio,
+  config: typeof PORTFOLIO_CONFIG.balanced
+): string {
   const reasons: string[] = []
-  
+
   if (trader.arena_score >= 60) {
     reasons.push('Arena Score 优秀')
   }
-  
+
   const drawdown = Math.abs(trader.max_drawdown || 0)
   if (drawdown < 10) {
     reasons.push('回撤控制出色')
   } else if (drawdown < config.maxDrawdownThreshold * 0.6) {
     reasons.push('风险控制良好')
   }
-  
+
   if ((trader.win_rate || 0) >= 60) {
     reasons.push('高胜率')
   }
-  
+
   if (trader.followers >= 1000) {
     reasons.push('受欢迎度高')
   }
-  
+
   if (trader.source_type === 'spot') {
     reasons.push('现货交易风险较低')
   } else if (trader.source_type === 'web3') {
     reasons.push('链上交易透明')
   }
-  
+
   return reasons.length > 0 ? reasons.join('、') : '综合表现稳定'
 }
 
@@ -206,11 +237,13 @@ function filterCandidates(
   preference: RiskPreference
 ): TraderForPortfolio[] {
   const config = PORTFOLIO_CONFIG[preference]
-  
-  return traders.filter(trader => {
-    const drawdown = Math.abs(trader.max_drawdown || 100)
-    const winRate = trader.win_rate || 0
-    
+
+  return traders.filter((trader) => {
+    if (!hasCompletePortfolioMetrics(trader)) return false
+
+    const drawdown = Math.abs(trader.max_drawdown)
+    const winRate = trader.win_rate
+
     return (
       drawdown <= config.maxDrawdownThreshold &&
       winRate >= config.minWinRate &&
@@ -250,7 +283,7 @@ function selectOptimalTraders(
     if (selected.length < 3 && selected.length > 0 && usedSourceTypes.has(trader.source_type)) {
       // 如果没有其他选择，也可以接受
       const remainingDifferentType = sorted.find(
-        t => !usedSourceTypes.has(t.source_type) && t.trader_id !== trader.trader_id
+        (t) => !usedSourceTypes.has(t.source_type) && t.trader_id !== trader.trader_id
       )
       if (remainingDifferentType) {
         continue
@@ -266,7 +299,7 @@ function selectOptimalTraders(
   if (selected.length < config.traderCount) {
     for (const trader of sorted) {
       if (selected.length >= config.traderCount) break
-      if (selected.some(s => s.trader_id === trader.trader_id)) continue
+      if (selected.some((s) => s.trader_id === trader.trader_id)) continue
       selected.push(trader)
     }
   }
@@ -332,10 +365,8 @@ function calculateExpectedMetrics(
 
   // 简化的夏普率计算（假设无风险利率为 2%）
   const riskFreeRate = 2
-  const volatility = weightedDrawdown * 0.5  // 简化估算
-  const sharpeRatio = volatility > 0 
-    ? (weightedRoi - riskFreeRate) / volatility 
-    : 0
+  const volatility = weightedDrawdown * 0.5 // 简化估算
+  const sharpeRatio = volatility > 0 ? (weightedRoi - riskFreeRate) / volatility : 0
 
   return {
     roi: round1(weightedRoi),
@@ -357,14 +388,14 @@ export function generatePortfolioSuggestion(
 ): PortfolioSuggestion | null {
   // 1. 筛选候选人
   const candidates = filterCandidates(allTraders, preference)
-  
+
   if (candidates.length < 3) {
-    return null  // 候选人不足
+    return null // 候选人不足
   }
 
   // 2. 选择最优组合
   const selectedTraders = selectOptimalTraders(candidates, preference)
-  
+
   if (selectedTraders.length < 3) {
     return null
   }
@@ -374,7 +405,7 @@ export function generatePortfolioSuggestion(
 
   // 4. 构建结果
   const config = PORTFOLIO_CONFIG[preference]
-  const portfolioTraders: PortfolioTrader[] = selectedTraders.map(trader => ({
+  const portfolioTraders: PortfolioTrader[] = selectedTraders.map((trader) => ({
     trader_id: trader.trader_id,
     source: trader.source,
     handle: trader.handle,
@@ -383,7 +414,9 @@ export function generatePortfolioSuggestion(
     risk_level: getTraderRiskLevel(trader),
     expected_contribution: {
       roi: round1(moneyMul(trader.roi, (allocations.get(trader.trader_id) || 0) / 100)),
-      drawdown: round1(moneyMul(Math.abs(trader.max_drawdown || 0), (allocations.get(trader.trader_id) || 0) / 100)),
+      drawdown: round1(
+        moneyMul(Math.abs(trader.max_drawdown || 0), (allocations.get(trader.trader_id) || 0) / 100)
+      ),
     },
   }))
 
