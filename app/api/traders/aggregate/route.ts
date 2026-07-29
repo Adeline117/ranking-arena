@@ -13,6 +13,10 @@ import {
   linkedTraderRouteAggregateCacheKey,
 } from '@/lib/data/linked-traders'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import {
+  readPublicProfileAudienceByHandle,
+  readPublicProfileAudienceById,
+} from '@/lib/profile/public-audience'
 
 // Shape is inferred from buildResponse so we don't duplicate getAggregatedStats's types.
 type AggregatedResponse = Awaited<ReturnType<typeof buildResponse>>
@@ -43,10 +47,13 @@ const EMPTY_RESPONSE: AggregatedResponse = {
   totalAccounts: 0,
 }
 
-// Cache headers: edge CDN 5min + SWR 10min. Data only changes when a user
-// links/unlinks a trader account (rare) or trader snapshots refresh (~5min).
+// The payload is owned by a mutable public-account audience decision. A shared
+// edge cache could keep linked accounts visible after deletion or suspension;
+// only the server-side candidate cache below is permitted.
 const CACHE_HEADERS = {
-  'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
 }
 
 export async function GET(request: NextRequest) {
@@ -64,14 +71,9 @@ export async function GET(request: NextRequest) {
 
     // Resolve user_id from handle if not provided directly
     if (!userId && handle) {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('handle', handle)
-        .maybeSingle()
-
-      if (profile?.id) {
-        userId = String(profile.id)
+      const audience = await readPublicProfileAudienceByHandle(supabase, handle)
+      if (audience.status === 'active') {
+        userId = audience.profile.id
       }
     }
 
@@ -81,6 +83,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (!userId) {
+      return NextResponse.json({ success: true, data: EMPTY_RESPONSE }, { headers: CACHE_HEADERS })
+    }
+
+    // Recheck by immutable owner id on every request, including server-cache
+    // hits and identities resolved through a linked trader.
+    const audience = await readPublicProfileAudienceById(supabase, userId)
+    if (audience.status !== 'active') {
       return NextResponse.json({ success: true, data: EMPTY_RESPONSE }, { headers: CACHE_HEADERS })
     }
 

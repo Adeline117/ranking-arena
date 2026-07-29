@@ -16,6 +16,7 @@ import {
   createSealedRankingCacheEntry,
   parseSealedRankingCacheEntry,
 } from '@/lib/rankings/sealed-ranking-cache'
+import { readPublicProfileAudienceById } from '@/lib/profile/public-audience'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -230,6 +231,12 @@ export async function getAggregatedStats(
   supabase: SupabaseClient,
   userId: string
 ): Promise<AggregatedStats | null> {
+  // This aggregate is exposed by public trader routes. Re-authorize the owner
+  // before consulting any linked-account cache so deletion or suspension takes
+  // effect on the next request.
+  const audience = await readPublicProfileAudienceById(supabase, userId)
+  if (audience.status !== 'active') return null
+
   const accounts = await getLinkedTraders(supabase, userId)
   if (accounts.length < 2) return null // No aggregation for single accounts
 

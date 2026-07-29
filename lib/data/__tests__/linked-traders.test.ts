@@ -23,6 +23,11 @@ jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
   readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
 }))
 
+const mockReadPublicProfileAudienceById = jest.fn()
+jest.mock('@/lib/profile/public-audience', () => ({
+  readPublicProfileAudienceById: (...args: unknown[]) => mockReadPublicProfileAudienceById(...args),
+}))
+
 import {
   getLinkedTraders,
   getAggregatedStats,
@@ -73,6 +78,17 @@ function rankRow(traderId: string, roi: number, pnl: number, score: number) {
 
 beforeEach(() => {
   mockCacheStore.clear()
+  mockReadPublicProfileAudienceById.mockResolvedValue({
+    status: 'active',
+    profile: {
+      id: '00000000-0000-4000-8000-000000000001',
+      handle: 'active-user',
+      deleted_at: null,
+      banned_at: null,
+      is_banned: false,
+      ban_expires_at: null,
+    },
+  })
   mockReadSealedRankingGeneration.mockImplementation(
     async (
       _supabase: unknown,
@@ -234,6 +250,24 @@ describe('getAggregatedStats', () => {
       leaderboard_ranks: [{ data: [] }],
     })
     expect(await getAggregatedStats(client, 'u1')).toBeNull()
+  })
+
+  it('账号已删除或停用时不读取关联账户缓存/数据库', async () => {
+    mockReadPublicProfileAudienceById.mockResolvedValueOnce({
+      status: 'inactive',
+      profile: {
+        id: '00000000-0000-4000-8000-000000000001',
+        handle: 'gone',
+        deleted_at: '2026-07-29T00:00:00.000Z',
+        banned_at: null,
+        is_banned: false,
+        ban_expires_at: null,
+      },
+    })
+    const { client, from } = twoAccountClient()
+
+    expect(await getAggregatedStats(client, 'u1')).toBeNull()
+    expect(from).not.toHaveBeenCalled()
   })
 })
 

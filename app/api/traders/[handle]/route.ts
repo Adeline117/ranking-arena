@@ -402,6 +402,12 @@ export async function GET(
         response.headers.set('X-Arena-Consistency-Proof', 'live-loader-v1')
         return response
       }
+      if (includes.includes('aggregate')) {
+        response.headers.set('Cache-Control', 'private, no-store, max-age=0')
+        response.headers.set('CDN-Cache-Control', 'no-store')
+        response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
+        return response
+      }
       return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
     },
     { name: 'trader-detail', rateLimit: 'public' }
