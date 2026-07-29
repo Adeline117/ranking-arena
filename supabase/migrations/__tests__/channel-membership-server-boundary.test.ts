@@ -229,7 +229,6 @@ describe('channel membership server boundary migration', () => {
 
     expect(baseTableSources).toEqual(
       [
-        'app/api/channels/[channelId]/members/route.ts',
         'app/api/channels/[channelId]/messages/[messageId]/react/route.ts',
         'app/api/channels/[channelId]/messages/route.ts',
         'app/api/channels/[channelId]/read/route.ts',
@@ -267,7 +266,7 @@ describe('channel membership server boundary migration', () => {
     }
   })
 
-  it('proves both current DM callers receive the admin client from withAuth', () => {
+  it('proves both current DM callers receive the admin client and use atomic authorities', () => {
     const middleware = readFileSync(join(process.cwd(), 'lib/api/middleware.ts'), 'utf8')
     expect(middleware).toMatch(
       /const supabase = getSupabaseAdmin\(\)[\s\S]*handler\(\{ user, supabase, request, version: versionContext \}\)/
@@ -276,9 +275,15 @@ describe('channel membership server boundary migration', () => {
     for (const route of ['app/api/messages/route.ts', 'app/api/messages/start/route.ts']) {
       const source = readFileSync(join(process.cwd(), route), 'utf8')
       expect(source).toContain('withAuth(')
-      expect(source).toContain("'check_dm_permission'")
       expect(source).toContain('p_sender_id: senderId')
       expect(source).toContain('p_receiver_id: receiverId')
     }
+
+    expect(readFileSync(join(process.cwd(), 'app/api/messages/route.ts'), 'utf8')).toContain(
+      "'send_direct_message_atomic'"
+    )
+    expect(readFileSync(join(process.cwd(), 'app/api/messages/start/route.ts'), 'utf8')).toContain(
+      "'check_dm_permission'"
+    )
   })
 })
