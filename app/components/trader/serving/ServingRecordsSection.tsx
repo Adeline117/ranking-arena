@@ -192,9 +192,19 @@ export default function ServingRecordsSection({
         (k) => capability.surfaces[k] && !exclude.has(k)
       )
     : []
-  const [activeKind, setActiveKind] = useState<RecordKind | null>(null)
+  const selectionScope = JSON.stringify([source, exchangeTraderId, kinds])
+  const [activeSelection, setActiveSelection] = useState<{
+    scope: string
+    kind: RecordKind
+  } | null>(null)
   const defaultKind = AUTO_SELECT_ORDER.find((k) => kinds.includes(k)) ?? kinds[0] ?? null
-  const effectiveKind: RecordKind | null = activeKind ?? defaultKind
+  // A selection belongs to one exact trader + capability surface. Subject
+  // switches and capability shrinkage must use the new subject's default in
+  // the same render; an old, still-mounted tab may never drive its query.
+  const effectiveKind: RecordKind | null =
+    activeSelection?.scope === selectionScope && kinds.includes(activeSelection.kind)
+      ? activeSelection.kind
+      : defaultKind
 
   if (kinds.length === 0) return null
 
@@ -214,7 +224,7 @@ export default function ServingRecordsSection({
           <button
             key={kind}
             type="button"
-            onClick={() => setActiveKind(kind)}
+            onClick={() => setActiveSelection({ scope: selectionScope, kind })}
             aria-pressed={effectiveKind === kind}
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
@@ -239,13 +249,14 @@ export default function ServingRecordsSection({
 
       {effectiveKind === 'copiers' ? (
         <CopiersPanel
+          key={`${source}:${exchangeTraderId}:copiers`}
           source={source}
           exchangeTraderId={exchangeTraderId}
           exchangeName={exchangeName}
         />
       ) : effectiveKind ? (
         <RecordKindPanel
-          key={effectiveKind}
+          key={`${source}:${exchangeTraderId}:${effectiveKind}`}
           source={source}
           exchangeTraderId={exchangeTraderId}
           kind={effectiveKind}
