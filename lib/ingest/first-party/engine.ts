@@ -95,29 +95,50 @@ export function computeFirstParty(input: FirstPartyComputeInput): FirstPartyResu
     const positionLevel = inWindow.length > 0 && inWindow.every((e) => e.positionLevel)
     const wins = inWindow.filter((e) => e.pnl > 0).length
     const total = inWindow.length
-    const netIn = input.netTransfersIn[tf] ?? 0
+    const netIn = input.netTransfersIn[tf]
 
     // ROI denominator: earliest snapshot INSIDE the window if snapshot history
     // reaches back to (or beyond) the window start; else reconstruct.
     const windowSnaps = snapshots.filter((s) => Date.parse(s.ts) >= startMs)
     const coversWindow = snapshots.length > 0 && Date.parse(snapshots[0].ts) <= startMs + DAY_MS // 1d slack
     let startEquity: number | null = null
-    let roiMethod: 'snapshot' | 'reconstructed' = 'reconstructed'
+    let roiMethod: 'snapshot' | 'reconstructed' | 'unavailable' = 'unavailable'
     if (coversWindow && windowSnaps.length > 0) {
       startEquity = windowSnaps[0].equity
       roiMethod = 'snapshot'
-    } else {
+    } else if (netIn !== undefined) {
       const recon = equityNow - pnl - netIn
       startEquity = recon > 0 ? recon : null
+      roiMethod = 'reconstructed'
     }
     const roi =
       startEquity !== null && startEquity > 0
         ? Number(((pnl / startEquity) * 100).toFixed(4))
         : null
 
-    // MDD strictly from our snapshot equity path (never faked before coverage).
-    const mdd = coversWindow
-      ? maxDrawdownPct([...windowSnaps.map((s) => s.equity), equityNow])
+    // Remove deposits/withdrawals from the equity path before measuring MDD.
+    // One unknown cumulative-transfer interval invalidates the whole window.
+    const baseTransferCum = windowSnaps[0]?.net_transfer_cum
+    const priorTransferCum = snapshots[snapshots.length - 1]?.net_transfer_cum
+    const currentTransferCum =
+      priorTransferCum !== null &&
+      priorTransferCum !== undefined &&
+      input.netTransfersSinceLast !== null
+        ? priorTransferCum + input.netTransfersSinceLast
+        : null
+    const transferPathComplete =
+      coversWindow &&
+      baseTransferCum !== null &&
+      baseTransferCum !== undefined &&
+      currentTransferCum !== null &&
+      windowSnaps.every((snapshot) => snapshot.net_transfer_cum !== null)
+    const mdd = transferPathComplete
+      ? maxDrawdownPct([
+          ...windowSnaps.map(
+            (snapshot) => snapshot.equity - (snapshot.net_transfer_cum! - baseTransferCum)
+          ),
+          equityNow - (currentTransferCum - baseTransferCum),
+        ])
       : null
 
     stats.push({
@@ -143,7 +164,7 @@ export function computeFirstParty(input: FirstPartyComputeInput): FirstPartyResu
         ...(mdd !== null ? { mdd_basis: 'snapshots' } : {}),
         ...(unrealizedNow !== null ? { unrealized_pnl: Number(unrealizedNow.toFixed(4)) } : {}),
         ...(total > 0 && !positionLevel ? { win_rate_basis: 'income_events' } : {}),
-        net_transfers_in_window: netIn,
+        ...(netIn !== undefined ? { net_transfers_in_window: netIn } : {}),
       },
     })
 
@@ -167,7 +188,15 @@ export function computeFirstParty(input: FirstPartyComputeInput): FirstPartyResu
     }
   }
 
-  const lastCum = snapshots.length > 0 ? (snapshots[snapshots.length - 1].net_transfer_cum ?? 0) : 0
+  const lastCum = snapshots[snapshots.length - 1]?.net_transfer_cum
+  const netTransferCum =
+    snapshots.length === 0
+      ? input.netTransfersSinceLast === null
+        ? null
+        : input.netTransfersSinceLast
+      : lastCum === null || lastCum === undefined || input.netTransfersSinceLast === null
+        ? null
+        : lastCum + input.netTransfersSinceLast
   return {
     stats,
     series,
@@ -178,7 +207,7 @@ export function computeFirstParty(input: FirstPartyComputeInput): FirstPartyResu
       // Cumulative net transfers: prior cum + since-last-sync delta only —
       // window buckets are NOT reused here (a 15min cadence would re-add the
       // same 7d window every run).
-      netTransferCum: lastCum + (input.netTransfersSinceLast ?? 0),
+      netTransferCum,
       currency,
     },
   }

@@ -191,4 +191,16 @@ describe('first-party account equity evidence', () => {
       })
     ).rejects.toThrow('position history evidence is unavailable')
   })
+
+  it('preserves unavailable transfer evidence instead of inventing zero transfers', async () => {
+    const result = await fetchFirstPartyAccount(client({ fetchLedger: undefined }), {
+      nowMs: NOW,
+      balanceSemantics: 'total_includes_unrealized',
+      realizedPnlSource: 'positions_history',
+      lastSyncMs: NOW - DAY,
+    })
+
+    expect(result.netTransfersIn).toEqual({})
+    expect(result.netTransfersSinceLast).toBeNull()
+  })
 })

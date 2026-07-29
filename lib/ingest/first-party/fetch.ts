@@ -177,8 +177,8 @@ async function eventsFromLedger(client: CcxtLike, sinceMs: number): Promise<Real
 async function netTransfers(
   client: CcxtLike,
   sinceMs: number
-): Promise<Array<{ ts: number; amount: number }>> {
-  if (!client.fetchLedger) return []
+): Promise<Array<{ ts: number; amount: number }> | null> {
+  if (!client.fetchLedger) return null
   const out: Array<{ ts: number; amount: number }> = []
   try {
     const rows = await client.fetchLedger(undefined, sinceMs, 500)
@@ -195,8 +195,9 @@ async function netTransfers(
       }
     }
   } catch {
-    // transfers are a refinement, not a requirement — ROI falls back to
-    // reconstruction without them (extras.roi_method already labels it).
+    // Missing transfer evidence is unknown, never zero. The compute layer
+    // keeps reconstructed ROI/MDD null until evidence is available.
+    return null
   }
   return out
 }
@@ -257,15 +258,19 @@ export async function fetchFirstPartyAccount(
   // Transfers → per-window net-in + since-last-sync delta.
   const transfers = await netTransfers(client, sinceMs)
   const netTransfersIn: FirstPartyComputeInput['netTransfersIn'] = {}
-  for (const tf of [7, 30, 90] as const) {
-    const start = nowMs - tf * DAY_MS
-    netTransfersIn[tf] = transfers.filter((t) => t.ts >= start).reduce((s, t) => s + t.amount, 0)
+  if (transfers !== null) {
+    for (const tf of [7, 30, 90] as const) {
+      const start = nowMs - tf * DAY_MS
+      netTransfersIn[tf] = transfers.filter((t) => t.ts >= start).reduce((s, t) => s + t.amount, 0)
+    }
   }
   const lastSyncMs = opts.lastSyncMs ?? null
   const netTransfersSinceLast =
-    lastSyncMs === null
-      ? 0
-      : transfers.filter((t) => t.ts > lastSyncMs).reduce((s, t) => s + t.amount, 0)
+    transfers === null
+      ? null
+      : lastSyncMs === null
+        ? 0
+        : transfers.filter((t) => t.ts > lastSyncMs).reduce((s, t) => s + t.amount, 0)
 
   return {
     nowMs,

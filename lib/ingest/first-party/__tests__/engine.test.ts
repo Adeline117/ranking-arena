@@ -115,4 +115,46 @@ describe('computeFirstParty', () => {
     const s7 = r.stats.find((s) => s.timeframe === 7)!
     expect(s7.extras.win_rate_basis).toBe('income_events')
   })
+
+  it('keeps reconstructed ROI and cumulative transfers null when transfer evidence is unknown', () => {
+    const r = computeFirstParty({
+      nowMs: NOW,
+      currency: 'USDT',
+      equityNow: 1100,
+      balanceNow: null,
+      unrealizedNow: null,
+      events: [ev(2, +100)],
+      netTransfersIn: {},
+      netTransfersSinceLast: null,
+      snapshots: [],
+    })
+
+    const s7 = r.stats.find((s) => s.timeframe === 7)!
+    expect(s7.roi).toBeNull()
+    expect(s7.extras.roi_method).toBe('unavailable')
+    expect(s7.extras).not.toHaveProperty('net_transfers_in_window')
+    expect(r.snapshot.netTransferCum).toBeNull()
+  })
+
+  it('removes withdrawals from the equity path before calculating drawdown', () => {
+    const r = computeFirstParty({
+      nowMs: NOW,
+      currency: 'USDT',
+      equityNow: 60,
+      balanceNow: null,
+      unrealizedNow: null,
+      events: [],
+      netTransfersIn: { 7: -60 },
+      netTransfersSinceLast: 0,
+      snapshots: [
+        { ts: new Date(NOW - 8 * DAY).toISOString(), equity: 100, net_transfer_cum: 0 },
+        { ts: new Date(NOW - 4 * DAY).toISOString(), equity: 120, net_transfer_cum: 0 },
+        { ts: new Date(NOW - 1 * DAY).toISOString(), equity: 60, net_transfer_cum: -60 },
+      ],
+    })
+
+    const s7 = r.stats.find((s) => s.timeframe === 7)!
+    expect(s7.mdd).toBe(0)
+    expect(s7.extras.mdd_basis).toBe('snapshots')
+  })
 })
