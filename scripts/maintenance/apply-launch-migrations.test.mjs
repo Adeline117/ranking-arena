@@ -144,10 +144,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 103)
+  assert.equal(predeploy.length, 104)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
+    '20260729061000_tier_a_execution_claim_enforcement.sql',
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   assert.deepEqual(recoveryPrerequisites, [
@@ -215,6 +216,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260729015000_leaderboard_rank_generation_attested_batch_writer.sql',
           '20260729015500_tier_a_execution_claim_fence.sql',
           '20260729054400_leaderboard_rank_generation_private_staging.sql',
+          '20260729060000_stale_leaderboard_attempt_report.sql',
           '20260729061533_leaderboard_rank_generation_staging_only_writer.sql',
           '20260729063000_leaderboard_rank_staging_full_xid_guard.sql',
         ].includes(migration)
@@ -235,9 +237,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 115)
+  assert.equal(new Set(all).size, 117)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-62), [
+  assert.deepEqual(predeploy.slice(-63), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -298,6 +300,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729015000_leaderboard_rank_generation_attested_batch_writer.sql',
     '20260729015500_tier_a_execution_claim_fence.sql',
     '20260729054400_leaderboard_rank_generation_private_staging.sql',
+    '20260729060000_stale_leaderboard_attempt_report.sql',
     '20260729061533_leaderboard_rank_generation_staging_only_writer.sql',
     '20260729063000_leaderboard_rank_staging_full_xid_guard.sql',
   ])
@@ -363,6 +366,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   )
   assert.ok(predeploy.includes('20260729015500_tier_a_execution_claim_fence.sql'))
   assert.ok(predeploy.includes('20260729054400_leaderboard_rank_generation_private_staging.sql'))
+  assert.ok(predeploy.includes('20260729060000_stale_leaderboard_attempt_report.sql'))
+  assert.ok(!predeploy.includes('20260729061000_tier_a_execution_claim_enforcement.sql'))
+  assert.ok(postdeploy.includes('20260729061000_tier_a_execution_claim_enforcement.sql'))
   assert.ok(
     predeploy.includes('20260729061533_leaderboard_rank_generation_staging_only_writer.sql')
   )
@@ -455,6 +461,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     )
   )
   assert.ok(!recoveryPrerequisites.includes('20260729015500_tier_a_execution_claim_fence.sql'))
+  assert.ok(!recoveryPrerequisites.includes('20260729060000_stale_leaderboard_attempt_report.sql'))
+  assert.ok(
+    !recoveryPrerequisites.includes('20260729061000_tier_a_execution_claim_enforcement.sql')
+  )
   assert.ok(
     !recoveryPrerequisites.includes(
       '20260729061533_leaderboard_rank_generation_staging_only_writer.sql'
