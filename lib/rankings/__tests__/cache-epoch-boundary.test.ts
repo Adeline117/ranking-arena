@@ -14,12 +14,21 @@ describe('public ranking cache epoch boundary', () => {
     'app/api/sidebar/top-traders/route.ts',
     'app/api/trader/[platform]/[trader_key]/route.ts',
     'app/api/traders/[handle]/badges/route.ts',
-    'app/api/traders/[handle]/full/route.ts',
     'app/api/traders/[handle]/route.ts',
     'lib/data/trader/similar.ts',
     'lib/realtime/ranking-store.ts',
   ])('%s cannot read a pre-authority ranking cache key', (path) => {
     expect(source(path)).toContain('publicRankingCacheKey')
+  })
+
+  it('does not put the sealed full trader detail behind a generic response cache', () => {
+    const route = source('app/api/traders/[handle]/full/route.ts')
+
+    expect(route).not.toContain('getOrSetWithLock')
+    expect(route).not.toContain('withCache')
+    expect(route).toContain("'Cache-Control': 'private, no-store, max-age=0'")
+    expect(route).toContain("'CDN-Cache-Control': 'no-store'")
+    expect(route).toContain("'Vercel-CDN-Cache-Control': 'no-store'")
   })
 
   it('epochs both the live sorted set and its detail hash', () => {

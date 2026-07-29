@@ -18,12 +18,17 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import logger from '@/lib/logger'
-import { getOrSetWithLock } from '@/lib/cache'
 import { ApiError } from '@/lib/api/errors'
-import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
-import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
+import { success as apiSuccess, handleError } from '@/lib/api/response'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 export async function GET(
   request: NextRequest,
@@ -39,21 +44,16 @@ export async function GET(
       throw ApiError.validation('Missing handle parameter')
     }
 
-    const cacheKey = publicRankingCacheKey(`trader:full:${handle}`)
-    const data = await getOrSetWithLock(
-      cacheKey,
-      async () => {
-        return await fetchTraderFull(handle)
-      },
-      { ttl: 60, lockTtl: 10 }
-    )
+    // getTraderDetail seals all three ranking windows. Do not wrap it in a
+    // generic cross-request cache: that cache cannot prove its generations are
+    // still current after any 7D/30D/90D publication advances.
+    const data = await fetchTraderFull(handle)
 
     if (!data) {
       throw ApiError.notFound('Trader not found')
     }
 
-    const response = apiSuccess(data)
-    return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 })
+    return apiSuccess(data, 200, NO_STORE_HEADERS)
   } catch (error: unknown) {
     logger.error('[API] 交易员聚合数据获取Failed:', error)
     return handleError(error, 'trader-full')
