@@ -623,7 +623,12 @@ export async function POST(request: NextRequest) {
         url: exactSession.url,
         sessionId: exactSession.id,
       },
-      { headers: { 'Cache-Control': 'no-store' } }
+      {
+        headers: {
+          'Cache-Control': 'no-store',
+          'X-Arena-API-Checkout-Writer': 'sealed',
+        },
+      }
     )
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)

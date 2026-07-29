@@ -2,10 +2,12 @@ jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
+    headers: Headers
 
     constructor(body?: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this._body = body
       this.status = init.status || 200
+      this.headers = new Headers(init.headers)
     }
 
     async json() {
@@ -253,6 +255,7 @@ describe('POST /api/stripe/create-api-checkout', () => {
       error: 'API checkout is temporarily paused for a billing upgrade. Please retry shortly.',
       code: 'API_CHECKOUT_WRITER_CLOSED',
     })
+    expect(res.headers.get('X-Arena-API-Checkout-Writer')).toBe('closed')
     expect(mockCheckRateLimit).not.toHaveBeenCalled()
     expect(mockExtractUser).not.toHaveBeenCalled()
     expect(mockProfileMaybeSingle).not.toHaveBeenCalled()
@@ -285,6 +288,7 @@ describe('POST /api/stripe/create-api-checkout', () => {
     const res = await POST(request())
 
     expect(res.status).toBe(200)
+    expect(res.headers.get('X-Arena-API-Checkout-Writer')).toBe('sealed')
     expect(mockCreateCheckoutSession).toHaveBeenCalledTimes(1)
   })
 
