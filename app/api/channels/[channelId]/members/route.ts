@@ -27,8 +27,32 @@ const addMemberFailureReasons = new Set([
   'PRIVACY_DENIED',
 ])
 
+const memberMutationFailureReasons = new Set([
+  'ACTOR_UNAVAILABLE',
+  'CHANNEL_NOT_FOUND',
+  'CHANNEL_NOT_GROUP',
+  'MEMBERSHIP_NOT_FOUND',
+  'OWNER_FORBIDDEN',
+  'PEER_ADMIN_FORBIDDEN',
+  'PERMISSION_DENIED',
+])
+
+type MemberMutationAction = 'leave' | 'remove' | 'set_role'
+
 type AddMembersAcknowledgement =
   | { success: true; channelId: string; added: number }
+  | { success: false; reason: string }
+
+type MemberMutationAcknowledgement =
+  | {
+      success: true
+      channelId: string
+      actorId: string
+      targetId: string
+      action: MemberMutationAction
+      changed: boolean
+      role: 'admin' | 'member' | null
+    }
   | { success: false; reason: string }
 
 function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
@@ -66,6 +90,61 @@ function readAddMembersAcknowledgement(value: unknown): AddMembersAcknowledgemen
   }
 
   return null
+}
+
+function readMemberMutationAcknowledgement(value: unknown): MemberMutationAcknowledgement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const result = value as Record<string, unknown>
+  if (result.success === false) {
+    if (!hasExactKeys(result, ['reason', 'success'])) return null
+    if (typeof result.reason !== 'string' || !memberMutationFailureReasons.has(result.reason)) {
+      return null
+    }
+    return { success: false, reason: result.reason }
+  }
+
+  if (
+    result.success !== true ||
+    !hasExactKeys(result, [
+      'action',
+      'actor_id',
+      'changed',
+      'channel_id',
+      'role',
+      'success',
+      'target_id',
+    ]) ||
+    !['leave', 'remove', 'set_role'].includes(result.action as string) ||
+    typeof result.changed !== 'boolean'
+  ) {
+    return null
+  }
+
+  const parsedChannelId = channelIdSchema.safeParse(result.channel_id)
+  const parsedActorId = channelIdSchema.safeParse(result.actor_id)
+  const parsedTargetId = channelIdSchema.safeParse(result.target_id)
+  if (!parsedChannelId.success || !parsedActorId.success || !parsedTargetId.success) {
+    return null
+  }
+
+  const action = result.action as MemberMutationAction
+  if (
+    (action === 'set_role' && result.role !== 'admin' && result.role !== 'member') ||
+    (action !== 'set_role' && (result.role !== null || result.changed !== true))
+  ) {
+    return null
+  }
+
+  return {
+    success: true,
+    channelId: parsedChannelId.data,
+    actorId: parsedActorId.data,
+    targetId: parsedTargetId.data,
+    action,
+    changed: result.changed,
+    role: result.role as 'admin' | 'member' | null,
+  }
 }
 
 export const dynamic = 'force-dynamic'
@@ -188,105 +267,80 @@ export async function DELETE(
     const channelId = parsedChannelId.data
     const targetUserId = parsedBody.data.userId
     const actorId = user.id.toLowerCase()
-    const supabase = getSupabaseAdmin()
-    const { data: channel, error: channelError } = await supabase
-      .from('chat_channels')
-      .select('type')
-      .eq('id', channelId)
-      .maybeSingle()
-    if (channelError) {
-      return NextResponse.json({ error: 'Failed to verify channel' }, { status: 500 })
-    }
-    if (!channel) return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
-    if (channel.type !== 'group') {
+    const action: MemberMutationAction = targetUserId === actorId ? 'leave' : 'remove'
+    const { data, error } = await getSupabaseAdmin().rpc('mutate_channel_member_atomic', {
+      p_channel_id: channelId,
+      p_actor_id: actorId,
+      p_target_id: targetUserId,
+      p_action: action,
+      p_role: null,
+    })
+
+    if (error) {
+      logger.error('Atomic channel member removal failed', { error: error.message })
       return NextResponse.json(
-        { error: 'Channel does not support member management' },
-        { status: 400 }
+        { error: action === 'leave' ? 'Failed to leave channel' : 'Failed to remove member' },
+        { status: 500 }
       )
     }
 
-    // If removing self = leaving
-    if (targetUserId === actorId) {
-      // Owner can't leave, must transfer or dissolve
-      const { data: mem, error: membershipError } = await supabase
-        .from('channel_members')
-        .select('role')
-        .eq('channel_id', channelId)
-        .eq('user_id', actorId)
-        .maybeSingle()
+    const acknowledgement = readMemberMutationAcknowledgement(data)
+    if (!acknowledgement) {
+      logger.error('Atomic channel member removal returned an invalid acknowledgement')
+      return NextResponse.json(
+        { error: action === 'leave' ? 'Failed to leave channel' : 'Failed to remove member' },
+        { status: 500 }
+      )
+    }
 
-      if (membershipError) {
-        return NextResponse.json({ error: 'Failed to verify membership' }, { status: 500 })
+    if (!acknowledgement.success) {
+      switch (acknowledgement.reason) {
+        case 'CHANNEL_NOT_FOUND':
+          return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
+        case 'CHANNEL_NOT_GROUP':
+          return NextResponse.json(
+            { error: 'Channel does not support member management' },
+            { status: 400 }
+          )
+        case 'MEMBERSHIP_NOT_FOUND':
+          return NextResponse.json({ error: 'Membership not found' }, { status: 404 })
+        case 'OWNER_FORBIDDEN':
+          return NextResponse.json(
+            {
+              error:
+                action === 'leave'
+                  ? 'Owner cannot leave. Please transfer ownership or disband the group first.'
+                  : 'Cannot remove the group owner',
+            },
+            { status: 400 }
+          )
+        case 'PEER_ADMIN_FORBIDDEN':
+          return NextResponse.json({ error: 'Admins cannot remove other admins' }, { status: 403 })
+        case 'ACTOR_UNAVAILABLE':
+        case 'PERMISSION_DENIED':
+          return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+        default:
+          logger.error('Atomic channel member removal returned an unknown denial')
+          return NextResponse.json({ error: 'Failed to remove member' }, { status: 500 })
       }
-      if (!mem) return NextResponse.json({ error: 'Membership not found' }, { status: 404 })
-      if (mem?.role === 'owner') {
-        return NextResponse.json(
-          { error: 'Owner cannot leave. Please transfer ownership or disband the group first.' },
-          { status: 400 }
-        )
-      }
-
-      const { error: leaveError } = await supabase
-        .from('channel_members')
-        .delete()
-        .eq('channel_id', channelId)
-        .eq('user_id', actorId)
-
-      if (leaveError) {
-        return NextResponse.json({ error: 'Failed to leave channel' }, { status: 500 })
-      }
-
-      return NextResponse.json({ ok: true, action: 'left' })
     }
 
-    // Removing another user - need admin/owner
-    const [myMembershipResult, targetMembershipResult] = await Promise.all([
-      supabase
-        .from('channel_members')
-        .select('role')
-        .eq('channel_id', channelId)
-        .eq('user_id', actorId)
-        .maybeSingle(),
-      supabase
-        .from('channel_members')
-        .select('role')
-        .eq('channel_id', channelId)
-        .eq('user_id', targetUserId)
-        .maybeSingle(),
-    ])
-
-    if (myMembershipResult.error || targetMembershipResult.error) {
-      return NextResponse.json({ error: 'Failed to verify membership' }, { status: 500 })
-    }
-    const myMembership = myMembershipResult.data
-    if (!myMembership || !['owner', 'admin'].includes(myMembership.role)) {
-      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+    if (
+      acknowledgement.channelId !== channelId ||
+      acknowledgement.actorId !== actorId ||
+      acknowledgement.targetId !== targetUserId ||
+      acknowledgement.action !== action ||
+      acknowledgement.role !== null ||
+      !acknowledgement.changed
+    ) {
+      logger.error('Atomic channel member removal acknowledgement did not match its request')
+      return NextResponse.json(
+        { error: action === 'leave' ? 'Failed to leave channel' : 'Failed to remove member' },
+        { status: 500 }
+      )
     }
 
-    const targetMem = targetMembershipResult.data
-    if (!targetMem) return NextResponse.json({ error: 'Membership not found' }, { status: 404 })
-
-    // Can't remove owner
-    if (targetMem?.role === 'owner') {
-      return NextResponse.json({ error: 'Cannot remove the group owner' }, { status: 400 })
-    }
-
-    // Admin can only remove members, not other admins (unless owner)
-    if (myMembership.role === 'admin' && targetMem?.role === 'admin') {
-      return NextResponse.json({ error: 'Admins cannot remove other admins' }, { status: 403 })
-    }
-
-    const { error: removeError } = await supabase
-      .from('channel_members')
-      .delete()
-      .eq('channel_id', channelId)
-      .eq('user_id', targetUserId)
-
-    if (removeError) {
-      return NextResponse.json({ error: 'Failed to remove member' }, { status: 500 })
-    }
-
-    return NextResponse.json({ ok: true, action: 'removed' })
+    return NextResponse.json({ ok: true, action: action === 'leave' ? 'left' : 'removed' })
   } catch (error) {
     logger.error('REMOVE_MEMBER failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -323,66 +377,63 @@ export async function PATCH(
     const channelId = parsedChannelId.data
     const { userId: targetUserId, role } = parsedBody.data
     const actorId = user.id.toLowerCase()
-    const supabase = getSupabaseAdmin()
-
-    // Owner only can change roles, and only on an existing group member.
-    const [channelResult, myMembershipResult, targetMembershipResult] = await Promise.all([
-      supabase.from('chat_channels').select('type').eq('id', channelId).maybeSingle(),
-      supabase
-        .from('channel_members')
-        .select('role')
-        .eq('channel_id', channelId)
-        .eq('user_id', actorId)
-        .maybeSingle(),
-      supabase
-        .from('channel_members')
-        .select('role')
-        .eq('channel_id', channelId)
-        .eq('user_id', targetUserId)
-        .maybeSingle(),
-    ])
-
-    if (channelResult.error || myMembershipResult.error || targetMembershipResult.error) {
-      return NextResponse.json({ error: 'Failed to verify membership' }, { status: 500 })
-    }
-    if (!channelResult.data) {
-      return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
-    }
-    if (channelResult.data.type !== 'group') {
-      return NextResponse.json(
-        { error: 'Channel does not support member management' },
-        { status: 400 }
-      )
-    }
-    const myMem = myMembershipResult.data
-    if (!myMem || myMem.role !== 'owner') {
-      return NextResponse.json({ error: 'Only owner can change roles' }, { status: 403 })
-    }
-    const targetMem = targetMembershipResult.data
-    if (!targetMem) {
-      return NextResponse.json({ error: 'Membership not found' }, { status: 404 })
-    }
-
-    // Ownership transfer is a separate operation. Never let this generic role
-    // endpoint demote any owner, including a self-targeted request.
-    if (targetUserId === actorId || targetMem.role === 'owner') {
+    // Self-targeting would be a disguised owner demotion. Reject it before the
+    // database boundary so the action contract stays unambiguous.
+    if (targetUserId === actorId) {
       return NextResponse.json({ error: 'Owner role cannot be changed here' }, { status: 400 })
     }
 
-    const { data: updatedMember, error: updateError } = await supabase
-      .from('channel_members')
-      .update({ role })
-      .eq('channel_id', channelId)
-      .eq('user_id', targetUserId)
-      .eq('role', targetMem.role)
-      .select('user_id')
-      .maybeSingle()
+    const { data, error } = await getSupabaseAdmin().rpc('mutate_channel_member_atomic', {
+      p_channel_id: channelId,
+      p_actor_id: actorId,
+      p_target_id: targetUserId,
+      p_action: 'set_role',
+      p_role: role,
+    })
 
-    if (updateError) {
+    if (error) {
+      logger.error('Atomic channel member role change failed', { error: error.message })
       return NextResponse.json({ error: 'Failed to update member role' }, { status: 500 })
     }
-    if (!updatedMember) {
-      return NextResponse.json({ error: 'Membership changed during request' }, { status: 409 })
+
+    const acknowledgement = readMemberMutationAcknowledgement(data)
+    if (!acknowledgement) {
+      logger.error('Atomic channel member role change returned an invalid acknowledgement')
+      return NextResponse.json({ error: 'Failed to update member role' }, { status: 500 })
+    }
+
+    if (!acknowledgement.success) {
+      switch (acknowledgement.reason) {
+        case 'CHANNEL_NOT_FOUND':
+          return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
+        case 'CHANNEL_NOT_GROUP':
+          return NextResponse.json(
+            { error: 'Channel does not support member management' },
+            { status: 400 }
+          )
+        case 'MEMBERSHIP_NOT_FOUND':
+          return NextResponse.json({ error: 'Membership not found' }, { status: 404 })
+        case 'OWNER_FORBIDDEN':
+          return NextResponse.json({ error: 'Owner role cannot be changed here' }, { status: 400 })
+        case 'ACTOR_UNAVAILABLE':
+        case 'PEER_ADMIN_FORBIDDEN':
+        case 'PERMISSION_DENIED':
+          return NextResponse.json({ error: 'Only owner can change roles' }, { status: 403 })
+        default:
+          logger.error('Atomic channel member role change returned an unknown denial')
+          return NextResponse.json({ error: 'Failed to update member role' }, { status: 500 })
+      }
+    }
+
+    if (
+      acknowledgement.channelId !== channelId ||
+      acknowledgement.actorId !== actorId ||
+      acknowledgement.targetId !== targetUserId ||
+      acknowledgement.action !== 'set_role' ||
+      acknowledgement.role !== role
+    ) {
+      logger.error('Atomic channel member role acknowledgement did not match its request')
+      return NextResponse.json({ error: 'Failed to update member role' }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true })
