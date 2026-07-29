@@ -134,11 +134,14 @@ export function withCron(jobName: string, handler: CronHandler, options: CronOpt
 
       if (safetyFired) {
         // Safety already logged timeout — don't overwrite
-        const timeoutRes = NextResponse.json({
-          ok: false,
-          error: 'safety_timeout',
-          partial: result,
-        })
+        const timeoutRes = NextResponse.json(
+          {
+            ok: false,
+            error: 'safety_timeout',
+            partial: result,
+          },
+          { status: 504 }
+        )
         timeoutRes.headers.set('X-Correlation-ID', correlationId)
         return timeoutRes
       }

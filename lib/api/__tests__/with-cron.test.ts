@@ -366,6 +366,7 @@ describe('withCron safety timeout', () => {
     const res = await pendingInvocation
     // When safety fired, response body indicates failure (not success)
     const body = await res.json()
+    expect(res.status).toBe(504)
     expect(body.ok).toBe(false)
     expect(body.error).toBe('safety_timeout')
 
