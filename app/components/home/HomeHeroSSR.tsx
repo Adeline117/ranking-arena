@@ -24,9 +24,9 @@ interface HomeHeroSSRProps {
 export default async function HomeHeroSSR({
   sourceBoardCount = PRODUCT_FACTS.fallbackSourceBoardCount,
 }: HomeHeroSSRProps) {
-  // 2026-07-12 ISR 根因修复:getServerTranslation 的 cookies() 把 `/` 判为动态
-  // (revalidate=300 失效,宣传第一落点零边缘缓存)。静态壳固定英文,客户端
-  // Phase 2 水合后换语言 —— 与本页"SSR 恒默认视图"决策一致。
+  // Keep the first-paint shell language-neutral and hydration-stable. The
+  // client switches locale in Phase 2; ranking authority independently keeps
+  // the containing page request-rendered.
   const { t } = getStaticTranslation()
   const sourceBoardCountStr = `${sourceBoardCount}+`
 

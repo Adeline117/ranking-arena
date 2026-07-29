@@ -95,4 +95,12 @@ describe('public ranking freshness route contracts', () => {
     expect(client).toContain('initialIsStale,')
     expect(client).toContain('isStale={isStale}')
   })
+
+  it('homepage HTML cannot outlive the publication proof used for its SSR ranking', () => {
+    const page = source('app/page.tsx')
+
+    expect(page).toContain("export const dynamic = 'force-dynamic'")
+    expect(page).toContain('export const revalidate = 0')
+    expect(page).toContain('getInitialTraders(timeRange, PER_PAGE, page)')
+  })
 })

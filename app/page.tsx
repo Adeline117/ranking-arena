@@ -49,8 +49,10 @@ export const metadata: Metadata = {
   },
 }
 
-// ISR: Revalidate every 5 minutes (300s)
-export const revalidate = 300
+// The SSR ranking is authorized by live publication proofs inside
+// getInitialTraders. Persisted HTML would bypass that check after a cutover.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 // Site-level JSON-LD structured data. The hero RPC currently reports a
 // deduplicated source-family count, not a canonical arena.exchanges count, so
@@ -81,11 +83,11 @@ const _VALID_RANGES = new Set(['7D', '30D', '90D'])
  *   (discussions, watchlist, flash news) until user interaction or idle callback.
  *   When Phase 2 mounts, it replaces the SSR ranking table with the interactive version.
  */
-// SSR always renders default view (90D, page 0) for edge cacheability.
+// SSR always renders the default view (90D, page 0) for a stable first paint.
 // Client-side HomePageLoader reads searchParams via useSearchParams() and
 // switches to the requested range/page after hydration.
-// ROOT CAUSE FIX: reading searchParams server-side made Next.js mark the page
-// as dynamic → no edge cache → every request hit Tokyo origin.
+// Keeping URL state client-side also prevents SSR/client hydration drift; the
+// route itself remains dynamic so every request re-establishes ranking authority.
 export default async function Page() {
   const timeRange: Period = '90D'
   const page = 0
