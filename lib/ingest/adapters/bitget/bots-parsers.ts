@@ -184,6 +184,18 @@ function canonicalNonNegativeInteger(value: unknown, label: string): number {
   return numeric
 }
 
+function canonicalPositiveSafeNumber(value: unknown, label: string): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    Object.is(value, -0)
+  ) {
+    return publicationContractError(`${label} must be a positive safe-integer number`)
+  }
+  return value
+}
+
 export function assertCanonicalBitgetBotsSource(
   src: SourceRow,
   timeframe: RankingTimeframe
@@ -404,11 +416,11 @@ function decodeBitgetBotsBoardPage(raw: unknown): DecodedBitgetBotsBoardPage {
       publicationContractError('partitioned board page data contract is unsupported')
     }
     board = canonicalRequiredString(wrapper.partition_id, 'board page wrapper.partition_id')
-    requestPageIndex = canonicalNonNegativeInteger(
+    requestPageIndex = canonicalPositiveSafeNumber(
       wrapper.request_page_index,
       'board page request_page_index'
     )
-    requestPageSize = canonicalNonNegativeInteger(
+    requestPageSize = canonicalPositiveSafeNumber(
       wrapper.request_page_size,
       'board page request_page_size'
     )

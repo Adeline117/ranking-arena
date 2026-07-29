@@ -164,6 +164,17 @@ describe('parseBitgetBotsBoardPage (live-captured fixtures, 2026-06-11)', () => 
         ctx
       )
     ).toThrow('data contract is unsupported')
+
+    for (const request_page_index of ['1', 0, -1, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => parseBitgetBotsBoardPage({ ...envelope, request_page_index }, ctx)).toThrow(
+        'request_page_index must be a positive safe-integer number'
+      )
+    }
+    for (const request_page_size of ['20', 0, -1, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => parseBitgetBotsBoardPage({ ...envelope, request_page_size }, ctx)).toThrow(
+        'request_page_size must be a positive safe-integer number'
+      )
+    }
   })
 
   it('fails closed instead of silently swallowing cards without exact board identity', () => {
