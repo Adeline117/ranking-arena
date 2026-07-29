@@ -42,6 +42,8 @@ describe('runtime Pro projection authority boundary', () => {
     expect(subscription).toContain("'reconcile_recurring_subscription_state_atomic'")
     expect(invoice).not.toContain('reconcile_recurring_subscription_state_atomic')
     expect(invoice).toMatch(/\.from\(\s*['"]payment_history['"]\s*\)\s*\.insert\(/s)
+    expect(invoice).toContain("'record_recurring_payment_history_success_atomic'")
+    expect(invoice).not.toMatch(/\.from\(\s*['"]payment_history['"]\s*\)\s*\.upsert\(/s)
     expect(invoice).not.toMatch(
       /\.from\(\s*['"]payment_history['"]\s*\)\s*\.upsert\([\s\S]{0,240}?status:\s*['"]failed['"]/s
     )

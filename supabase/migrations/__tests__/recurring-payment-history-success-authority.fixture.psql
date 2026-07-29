@@ -1,0 +1,507 @@
+\set ON_ERROR_STOP on
+
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+SELECT pg_catalog.set_config(
+  'arena.stripe_livemode',
+  'true',
+  false
+);
+
+-- The shared authority harness keeps payment_history intentionally minimal;
+-- restore the production FK so its ON DELETE SET NULL path is proven too.
+ALTER TABLE public.payment_history
+  ADD CONSTRAINT payment_history_user_id_fkey
+  FOREIGN KEY (user_id)
+  REFERENCES auth.users(id)
+  ON DELETE SET NULL;
+
+INSERT INTO auth.users(id) VALUES
+  ('e7400000-0000-4000-8000-000000000001'),
+  ('e7400000-0000-4000-8000-000000000002'),
+  ('e7400000-0000-4000-8000-000000000003');
+
+INSERT INTO public.user_profiles(
+  id,
+  handle,
+  stripe_customer_id
+) VALUES
+  (
+    'e7400000-0000-4000-8000-000000000001',
+    'history_authority_owner',
+    'cus_history_authority_owner'
+  ),
+  (
+    'e7400000-0000-4000-8000-000000000002',
+    'history_authority_other',
+    'cus_history_authority_other'
+  );
+
+-- A failed observation legitimately predates its later successful payment.
+INSERT INTO public.payment_history(
+  user_id,
+  stripe_invoice_id,
+  stripe_payment_intent_id,
+  amount,
+  currency,
+  status,
+  created_at
+) VALUES (
+  'e7400000-0000-4000-8000-000000000001',
+  'in_history_promote',
+  NULL,
+  999,
+  'usd',
+  'failed',
+  '2029-01-01 00:00:00+00'
+);
+
+-- This unrelated audit identity proves a PaymentIntent collision cannot be
+-- attached to a second Invoice.
+INSERT INTO public.payment_history(
+  user_id,
+  stripe_payment_intent_id,
+  amount,
+  currency,
+  status,
+  created_at
+) VALUES (
+  'e7400000-0000-4000-8000-000000000001',
+  'pi_history_collision',
+  799,
+  'usd',
+  'abandoned',
+  '2029-01-02 00:00:00+00'
+);
+
+-- Account deletion must redact the subject pointer without deleting or
+-- otherwise mutating its audit row.
+INSERT INTO public.payment_history(
+  user_id,
+  amount,
+  currency,
+  status,
+  created_at
+) VALUES (
+  'e7400000-0000-4000-8000-000000000003',
+  123,
+  'usd',
+  'abandoned',
+  '2029-01-03 00:00:00+00'
+);
+
+INSERT INTO public.stripe_entitlement_payments (
+  user_id,
+  stripe_customer_id,
+  payment_kind,
+  plan,
+  stripe_subscription_id,
+  stripe_invoice_id,
+  stripe_payment_intent_id,
+  stripe_charge_id,
+  amount_paid,
+  currency,
+  period_start,
+  period_end,
+  payment_status,
+  livemode
+) VALUES
+  (
+    'e7400000-0000-4000-8000-000000000001',
+    'cus_history_authority_owner',
+    'recurring',
+    'monthly',
+    'sub_history_authority',
+    'in_history_new',
+    'pi_history_new',
+    'ch_history_new',
+    499,
+    'usd',
+    '2030-03-17 00:00:00+00',
+    '2030-04-17 00:00:00+00',
+    'paid',
+    true
+  ),
+  (
+    'e7400000-0000-4000-8000-000000000001',
+    'cus_history_authority_owner',
+    'recurring',
+    'monthly',
+    'sub_history_authority',
+    'in_history_promote',
+    'pi_history_promote',
+    'ch_history_promote',
+    999,
+    'usd',
+    '2030-04-17 00:00:00+00',
+    '2030-05-17 00:00:00+00',
+    'paid',
+    true
+  ),
+  (
+    'e7400000-0000-4000-8000-000000000001',
+    'cus_history_authority_owner',
+    'recurring',
+    'monthly',
+    'sub_history_authority',
+    'in_history_pi_collision',
+    'pi_history_collision',
+    'ch_history_pi_collision',
+    799,
+    'usd',
+    '2030-05-17 00:00:00+00',
+    '2030-06-17 00:00:00+00',
+    'paid',
+    true
+  );
+
+DO $record_new_success$
+DECLARE
+  v_result jsonb;
+  v_row public.payment_history%ROWTYPE;
+BEGIN
+  v_result := public.record_recurring_payment_history_success_atomic(
+    'e7400000-0000-4000-8000-000000000001',
+    true,
+    'evt_history_new',
+    1900000000,
+    'in_history_new',
+    'pi_history_new',
+    499,
+    'usd'
+  );
+  IF v_result <> '{"status":"recorded"}'::jsonb THEN
+    RAISE EXCEPTION 'new successful history was not recorded exactly: %',
+      v_result;
+  END IF;
+
+  SELECT history.*
+  INTO STRICT v_row
+  FROM public.payment_history AS history
+  WHERE history.stripe_invoice_id = 'in_history_new';
+
+  IF v_row.user_id IS DISTINCT FROM
+      'e7400000-0000-4000-8000-000000000001'::uuid
+    OR v_row.stripe_payment_intent_id IS DISTINCT FROM 'pi_history_new'
+    OR v_row.amount IS DISTINCT FROM 499
+    OR v_row.currency IS DISTINCT FROM 'usd'
+    OR v_row.status IS DISTINCT FROM 'succeeded'
+    OR v_row.created_at IS DISTINCT FROM pg_catalog.to_timestamp(1900000000)
+  THEN
+    RAISE EXCEPTION 'new successful history identity was not exact';
+  END IF;
+END
+$record_new_success$;
+
+DO $replay_new_success$
+DECLARE
+  v_result jsonb;
+  v_count bigint;
+  v_created_at timestamptz;
+BEGIN
+  v_result := public.record_recurring_payment_history_success_atomic(
+    'e7400000-0000-4000-8000-000000000001',
+    true,
+    'evt_history_new_replay',
+    1900000010,
+    'in_history_new',
+    'pi_history_new',
+    499,
+    'usd'
+  );
+  IF v_result <> '{"status":"already_recorded"}'::jsonb THEN
+    RAISE EXCEPTION 'exact successful replay was not idempotent: %',
+      v_result;
+  END IF;
+
+  SELECT pg_catalog.count(*), pg_catalog.min(history.created_at)
+  INTO v_count, v_created_at
+  FROM public.payment_history AS history
+  WHERE history.stripe_invoice_id = 'in_history_new';
+
+  IF v_count <> 1
+    OR v_created_at IS DISTINCT FROM pg_catalog.to_timestamp(1900000000)
+  THEN
+    RAISE EXCEPTION 'exact successful replay changed the audit row';
+  END IF;
+END
+$replay_new_success$;
+
+DO $promote_failed_success$
+DECLARE
+  v_result jsonb;
+  v_row public.payment_history%ROWTYPE;
+BEGIN
+  v_result := public.record_recurring_payment_history_success_atomic(
+    'e7400000-0000-4000-8000-000000000001',
+    true,
+    'evt_history_promote',
+    1900000100,
+    'in_history_promote',
+    'pi_history_promote',
+    999,
+    'usd'
+  );
+  IF v_result <> '{"status":"promoted_from_failed"}'::jsonb THEN
+    RAISE EXCEPTION 'failed history was not promoted exactly: %',
+      v_result;
+  END IF;
+
+  SELECT history.*
+  INTO STRICT v_row
+  FROM public.payment_history AS history
+  WHERE history.stripe_invoice_id = 'in_history_promote';
+
+  IF v_row.user_id IS DISTINCT FROM
+      'e7400000-0000-4000-8000-000000000001'::uuid
+    OR v_row.stripe_payment_intent_id
+      IS DISTINCT FROM 'pi_history_promote'
+    OR v_row.amount IS DISTINCT FROM 999
+    OR v_row.currency IS DISTINCT FROM 'usd'
+    OR v_row.status IS DISTINCT FROM 'succeeded'
+    OR v_row.created_at IS DISTINCT FROM
+      '2029-01-01 00:00:00+00'::timestamptz
+  THEN
+    RAISE EXCEPTION
+      'failed-to-succeeded promotion changed the original audit timestamp';
+  END IF;
+END
+$promote_failed_success$;
+
+DO $reject_cross_identity$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.record_recurring_payment_history_success_atomic(
+    'e7400000-0000-4000-8000-000000000002',
+    true,
+    'evt_history_cross_user',
+    1900000200,
+    'in_history_new',
+    'pi_history_new',
+    499,
+    'usd'
+  );
+  IF v_result <> '{"status":"identity_conflict"}'::jsonb THEN
+    RAISE EXCEPTION 'cross-user success identity was accepted: %', v_result;
+  END IF;
+
+  v_result := public.record_recurring_payment_history_success_atomic(
+    'e7400000-0000-4000-8000-000000000001',
+    true,
+    'evt_history_cross_amount',
+    1900000201,
+    'in_history_new',
+    'pi_history_new',
+    500,
+    'usd'
+  );
+  IF v_result <> '{"status":"identity_conflict"}'::jsonb THEN
+    RAISE EXCEPTION 'cross-amount success identity was accepted: %', v_result;
+  END IF;
+
+  v_result := public.record_recurring_payment_history_success_atomic(
+    'e7400000-0000-4000-8000-000000000001',
+    true,
+    'evt_history_cross_currency',
+    1900000202,
+    'in_history_new',
+    'pi_history_new',
+    499,
+    'eur'
+  );
+  IF v_result <> '{"status":"identity_conflict"}'::jsonb THEN
+    RAISE EXCEPTION 'cross-currency success identity was accepted: %',
+      v_result;
+  END IF;
+
+  v_result := public.record_recurring_payment_history_success_atomic(
+    'e7400000-0000-4000-8000-000000000001',
+    true,
+    'evt_history_cross_pi',
+    1900000203,
+    'in_history_new',
+    'pi_history_other',
+    499,
+    'usd'
+  );
+  IF v_result <> '{"status":"identity_conflict"}'::jsonb THEN
+    RAISE EXCEPTION 'cross-PaymentIntent success identity was accepted: %',
+      v_result;
+  END IF;
+END
+$reject_cross_identity$;
+
+DO $reject_payment_intent_collision$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.record_recurring_payment_history_success_atomic(
+    'e7400000-0000-4000-8000-000000000001',
+    true,
+    'evt_history_pi_collision',
+    1900000300,
+    'in_history_pi_collision',
+    'pi_history_collision',
+    799,
+    'usd'
+  );
+  IF v_result <> '{"status":"identity_conflict"}'::jsonb THEN
+    RAISE EXCEPTION
+      'cross-row PaymentIntent history collision was accepted: %',
+      v_result;
+  END IF;
+END
+$reject_payment_intent_collision$;
+
+DO $reject_direct_mutations$
+BEGIN
+  BEGIN
+    UPDATE public.payment_history
+    SET amount = 1
+    WHERE stripe_invoice_id = 'in_history_new';
+    RAISE EXCEPTION 'successful audit row was directly mutated';
+  EXCEPTION
+    WHEN SQLSTATE '23514' THEN
+      NULL;
+  END;
+
+  BEGIN
+    INSERT INTO public.payment_history(
+      user_id,
+      stripe_invoice_id,
+      stripe_payment_intent_id,
+      amount,
+      currency,
+      status
+    ) VALUES (
+      'e7400000-0000-4000-8000-000000000001',
+      'in_history_new',
+      'pi_history_new',
+      499,
+      'usd',
+      'succeeded'
+    )
+    ON CONFLICT (stripe_invoice_id) DO UPDATE
+    SET amount = EXCLUDED.amount;
+    RAISE EXCEPTION 'successful audit upsert bypassed canonical authority';
+  EXCEPTION
+    WHEN SQLSTATE '23514' THEN
+      NULL;
+  END;
+
+  BEGIN
+    INSERT INTO public.payment_history(
+      user_id,
+      stripe_invoice_id,
+      amount,
+      currency,
+      status
+    ) VALUES (
+      'e7400000-0000-4000-8000-000000000001',
+      'in_history_new',
+      499,
+      'usd',
+      'failed'
+    );
+    RAISE EXCEPTION
+      'failed audit row contradicted a canonical successful payment';
+  EXCEPTION
+    WHEN SQLSTATE '23514' THEN
+      NULL;
+  END;
+
+  BEGIN
+    DELETE FROM public.payment_history
+    WHERE stripe_invoice_id = 'in_history_new';
+    RAISE EXCEPTION 'payment history audit row was directly deleted';
+  EXCEPTION
+    WHEN SQLSTATE '23514' THEN
+      NULL;
+  END;
+
+  BEGIN
+    EXECUTE 'TRUNCATE TABLE public.payment_history';
+    RAISE EXCEPTION 'payment history audit table was truncated';
+  EXCEPTION
+    WHEN SQLSTATE '23514' THEN
+      NULL;
+  END;
+END
+$reject_direct_mutations$;
+
+DELETE FROM auth.users
+WHERE id = 'e7400000-0000-4000-8000-000000000003';
+
+DO $account_deletion_retains_audit$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.payment_history AS history
+    WHERE history.amount = 123
+      AND history.status = 'abandoned'
+      AND history.created_at = '2029-01-03 00:00:00+00'::timestamptz
+      AND history.user_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'account deletion did not preserve the audit row';
+  END IF;
+END
+$account_deletion_retains_audit$;
+
+DO $acl_and_review_proof$
+DECLARE
+  v_signature text :=
+    'public.record_recurring_payment_history_success_atomic(uuid,boolean,text,bigint,text,text,bigint,text)';
+BEGIN
+  IF NOT pg_catalog.has_function_privilege(
+      'service_role',
+      v_signature,
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege('anon', v_signature, 'EXECUTE')
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      v_signature,
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticator',
+      v_signature,
+      'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION 'recurring payment-history RPC ACL drifted';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_manual_reviews AS review
+    WHERE review.object_type = 'invoice'
+      AND review.object_id = 'in_history_new'
+      AND review.reason_key =
+        'recurring_payment_history_success_identity_conflict'
+      AND review.user_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'successful history identity conflict lacked durable review';
+  END IF;
+
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'public.payment_history'::pg_catalog.regclass
+      AND trigger_row.tgname IN (
+        'trg_payment_history_recurring_audit_row',
+        'trg_payment_history_recurring_audit_truncate'
+      )
+      AND trigger_row.tgenabled = 'O'
+  ) <> 2
+  THEN
+    RAISE EXCEPTION 'payment-history audit guards are not both enabled';
+  END IF;
+END
+$acl_and_review_proof$;
+
+\echo 'Recurring payment-history success authority fixture passed'
