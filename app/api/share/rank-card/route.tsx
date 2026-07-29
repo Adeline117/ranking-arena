@@ -1,7 +1,10 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
+import { resolveTrader } from '@/lib/data/unified'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import type { LeaderboardPublicationSeason } from '@/lib/rankings/read-publication-proofs'
 import {
   publicRankingResponseCacheHeaders,
   publicRankingResponseRejectionHeaders,
@@ -72,16 +75,20 @@ function topPct(r: number, t: number) {
 export async function GET(request: NextRequest) {
   const { searchParams: sp } = new URL(request.url)
   const handle = sp.get('handle'),
-    platform = sp.get('platform') || '',
+    requestedPlatform = sp.get('platform') || '',
     windowParam = sp.get('window') || '7d',
     ref = sp.get('ref') || ''
   if (!handle) return NextResponse.json({ error: 'handle required' }, { status: 400 })
-  if (platform && !isPublicRankingSourceAllowed(platform)) {
+  const parsedPlatform = requestedPlatform
+    ? parsePublicActiveRankingSource(requestedPlatform)
+    : undefined
+  if (requestedPlatform && !parsedPlatform) {
     return NextResponse.json(
       { error: 'Unknown or unavailable ranking source' },
       { status: 404, headers: publicRankingResponseRejectionHeaders() }
     )
   }
+  const platform = parsedPlatform || undefined
   const epochRedirect = redirectToPublicRankingResponseCacheEpoch(request)
   if (epochRedirect) return epochRedirect
   const sb = getSupabaseAdmin()
@@ -94,39 +101,40 @@ export async function GET(request: NextRequest) {
     '90D': '90D',
   }
   const sId = sMap[windowParam] ?? '7D'
-  const safeHandle = handle.replace(/[,.()\[\]\\%_]/g, '')
-  let q = sb
-    .from('trader_sources')
-    .select('handle, source, source_trader_id')
-    .or(`handle.eq.${safeHandle},source_trader_id.eq.${safeHandle}`)
-    .limit(1)
-  if (platform) q = q.eq('source', platform)
-  const { data: tr } = await q.maybeSingle()
-  if (!tr) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (!isPublicRankingSourceAllowed(tr.source)) {
+  const resolved = await resolveTrader(sb, { handle, platform })
+  if (!resolved) {
     return NextResponse.json(
       { error: 'Not found' },
       { status: 404, headers: publicRankingResponseRejectionHeaders() }
     )
   }
-  const { data: lr } = await sb
-    .from('leaderboard_ranks')
-    .select('rank, roi, win_rate, arena_score')
-    .eq('source', tr.source)
-    .eq('source_trader_id', tr.source_trader_id)
-    .eq('season_id', sId)
-    .maybeSingle()
-  // PERF FIX: was count:exact (25s+). Read from pre-computed cache instead.
-  const { data: countCache } = await sb
-    .from('leaderboard_count_cache')
-    .select('total_count')
-    .eq('source', tr.source)
-    .eq('season_id', sId)
-    .maybeSingle()
-  const count = countCache?.total_count ?? null
-  const name = tr.handle || handle,
+  const sealedRead = await readSealedRankingGeneration(
+    sb,
+    {
+      season: sId as LeaderboardPublicationSeason,
+      sources: [resolved.platform],
+    },
+    async (publication) => {
+      const result = await sb
+        .from('leaderboard_ranks')
+        .select('rank, roi, win_rate, arena_score')
+        .eq('source', resolved.platform)
+        .eq('source_trader_id', resolved.traderKey)
+        .eq('season_id', sId)
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .maybeSingle()
+      if (result.error) {
+        throw new Error(`rank card cohort query failed: ${result.error.message}`)
+      }
+      return result.data
+    },
+    { timeoutMs: 10_000 }
+  )
+  const lr = sealedRead.value
+  const count = sealedRead.publication.proofs[0].published_rank_count
+  const name = resolved.handle || handle,
     rank = lr?.rank ?? 0,
-    total = count ?? 0,
+    total = count,
     roi = lr?.roi,
     score = lr?.arena_score,
     winRate = lr?.win_rate
@@ -137,9 +145,9 @@ export async function GET(request: NextRequest) {
     rs = rv ? fmtRoi(roi) : '--',
     tp = rank > 0 && total > 0 ? topPct(rank, total) : ''
   const pl =
-    PLAT_L[tr.source] ||
-    tr.source.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
-  const pc = PLAT_C[tr.source] || C.purpleLight
+    PLAT_L[resolved.platform] ||
+    resolved.platform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+  const pc = PLAT_C[resolved.platform] || C.purpleLight
   const rd = rank > 0 ? (rank <= 9999 ? String(rank) : (rank / 1000).toFixed(0) + 'K') : '--',
     td: string | null = total > 0 ? total.toLocaleString('en-US') + '+' : null
   const cta = ref ? `arenafi.org/?ref=${ref}` : 'arenafi.org'
