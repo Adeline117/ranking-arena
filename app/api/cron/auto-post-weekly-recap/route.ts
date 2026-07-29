@@ -12,9 +12,18 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
 import { withCron } from '@/lib/api/with-cron'
 import { platformLabel } from '@/lib/constants/platform-labels'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
 const SYSTEM_HANDLE = 'arena_bot'
+const WEEKLY_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 // 数据源 = public.leaderboard_ranks(7D season,serving 表)直查。
 // 曾用 arena_weekly_leaders RPC:形状真点纠偏后又实测 p_limit 15 要 49s
@@ -43,7 +52,7 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
   const monday = new Date(now)
   monday.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7))
   const mondayIso = monday.toISOString().split('T')[0]
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('posts')
     .select('id')
     .eq('author_id', SYSTEM_USER_ID)
@@ -51,19 +60,41 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
     .gte('created_at', `${mondayIso}T00:00:00Z`)
     .limit(1)
     .maybeSingle()
+  if (existingError) {
+    throw new Error(`weekly recap deduplication query failed: ${existingError.message}`)
+  }
   if (existing) return { count: 0, skipped: true, reason: 'already posted this week' }
 
-  const { data, error } = await supabase
-    .from('leaderboard_ranks')
-    .select('handle, source, source_trader_id, roi, pnl, trader_type, is_outlier')
-    .eq('season_id', '7D')
-    .gte('pnl', 500)
-    .gt('roi', 0)
-    .lt('roi', 9999) // ROI clamp 哨兵饱和值(±10000)以下才可信
-    .order('roi', { ascending: false })
-    .limit(40)
-  if (error) throw new Error(`leaderboard_ranks query failed: ${error.message}`)
-  const raw = (data ?? []) as WeeklyLeader[]
+  const sealedRead = await readSealedRankingGeneration(
+    supabase,
+    { season: '7D', sources: WEEKLY_RANKING_SOURCES },
+    async (publication) => {
+      const { data, error } = await supabase
+        .from('leaderboard_ranks')
+        .select('handle, source, source_trader_id, roi, pnl, trader_type, is_outlier')
+        .in('source', WEEKLY_RANKING_SOURCES)
+        .eq('season_id', '7D')
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .gte('pnl', 500)
+        .gt('roi', 0)
+        .lt('roi', 9999) // ROI clamp 哨兵饱和值(±10000)以下才可信
+        .or('is_outlier.is.null,is_outlier.eq.false')
+        .order('roi', { ascending: false })
+        .order('source', { ascending: true })
+        .order('source_trader_id', { ascending: true })
+        .limit(40)
+
+      if (error || data === null) {
+        throw new Error(`weekly ranking query failed: ${error?.message ?? 'null payload'}`)
+      }
+      if (data.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+        throw new Error('weekly ranking query crossed the public source boundary')
+      }
+      return data as WeeklyLeader[]
+    },
+    { timeoutMs: 10_000 }
+  )
+  const raw = sealedRead.value
 
   // 可信度过滤(首次真点 2026-07-10 打脸:榜首全 +10000% clamp + PnL $11 灰尘):
   // 剔除 bot/离群标记、roi==pnl(validate-before-write 的已知垃圾模式);
