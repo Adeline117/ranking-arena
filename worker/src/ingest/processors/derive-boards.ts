@@ -22,7 +22,7 @@ import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug } from '@/lib/ingest/sources'
 import { getLatestPassedNativeCohort } from '@/lib/ingest/native-cohort'
 import type { ParsedLeaderboardRow, TraderKind, BotStrategy } from '@/lib/ingest/core/types'
-import { publishLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
+import { publishDerivedLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
 import type { TierJobData } from '../queues'
 import { observationCycleId } from '../observation-cycle'
 import {
@@ -169,13 +169,11 @@ export async function processDeriveBoards(
       raw: { derived: true, derived_sort: sortColumn, stats_as_of: row.as_of },
     }))
 
-    const published = await publishLeaderboardSnapshot({
+    const published = await publishDerivedLeaderboardSnapshot({
       src,
       timeframe,
       rows: parsedRows,
       rejects: [],
-      rawObjectId: null, // no upstream payload — the substrate is our own DB
-      isDerived: true,
       expectedCountOverride: eligibleTraderIds.length,
       countBaselineGeneration: DERIVED_COUNT_BASELINE_GENERATION,
       observationCycleId: cycleId ?? undefined,

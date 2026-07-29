@@ -18,15 +18,12 @@ import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V3_CONTRACT,
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
   findRegisteredAttemptBoundLeaderboardAcquisitionContract,
-  finishLeaderboardAcquisitionAttempt,
   finishLeaderboardAcquisitionAttemptInTransaction,
   hasRegisteredAttemptBoundLeaderboardAcquisitionContract,
   LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
-  LEGACY_LEADERBOARD_ACQUISITION_CONTRACT,
   projectLeaderboardManifestOutcome,
   projectLeaderboardManifestV3Outcome,
   projectLeaderboardManifestV4Outcome,
-  startLeaderboardAcquisitionAttempt,
   startLeaderboardAcquisitionAttemptInTransaction,
   VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT,
   type ClaimedLeaderboardAcquisitionAttempt,
@@ -102,7 +99,6 @@ function attempt(
     sourceCurrency: 'USDT',
     sourceFetchRegion: 'vps_sg',
     recordedStartedAt: startedAt,
-    replayed: false,
     ...overrides,
   }
 }
@@ -553,30 +549,6 @@ describe('leaderboard acquisition attempt client', () => {
     expect(mockConnect).not.toHaveBeenCalled()
   })
 
-  it('starts with named, explicitly cast arguments and preserves the DB millisecond clock', async () => {
-    const client = enqueueQuery({ rows: [attemptRow()] })
-
-    await expect(startLeaderboardAcquisitionAttempt(startInput())).resolves.toEqual(attempt())
-
-    expect(mockConnect).toHaveBeenCalledTimes(1)
-    expect(client.release).toHaveBeenCalledWith()
-    const [sql, params] = client.query.mock.calls[0]
-    expect(String(sql)).toContain('p_attempt_id => $1::uuid')
-    expect(String(sql)).toContain('p_worker_region => $9::text')
-    expect(Object.isFrozen(params)).toBe(true)
-    expect(params).toEqual([
-      attemptId,
-      1,
-      30,
-      'tier-a:binance_futures:job-1:1000',
-      'job-1',
-      2,
-      VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT,
-      'a'.repeat(40),
-      'vps_sg',
-    ])
-  })
-
   it('starts a claimed attempt once on the caller-owned transaction', async () => {
     const query = jest.fn(async () => ({
       rows: [
@@ -650,125 +622,6 @@ describe('leaderboard acquisition attempt client', () => {
 
     expect(query).toHaveBeenCalledTimes(1)
     expect(mockConnect).not.toHaveBeenCalled()
-  })
-
-  it('starts an attempt-bound v3 acquisition without weakening the v2 contract', async () => {
-    enqueueQuery({
-      rows: [attemptRow({ capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT })],
-    })
-
-    await expect(
-      startLeaderboardAcquisitionAttempt({
-        ...startInput(),
-        captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
-      })
-    ).resolves.toEqual(attempt({ captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT }))
-  })
-
-  it('starts an exact attempt-bound v4 acquisition', async () => {
-    enqueueQuery({
-      rows: [attemptRow({ capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT })],
-    })
-
-    await expect(
-      startLeaderboardAcquisitionAttempt({
-        ...startInput(),
-        captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
-      })
-    ).resolves.toEqual(
-      attempt({ captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT })
-    )
-  })
-
-  it.each([
-    ['non-canonical UUID', { attemptId: 'ABCDEFAB-0000-4000-8000-000000000001' }],
-    ['invalid timeframe', { timeframe: 14 }],
-    ['unsafe queue attempt', { queueAttempt: Number.MAX_SAFE_INTEGER + 1 }],
-    ['padded cycle', { observationCycleId: ' cycle ' }],
-    ['zero runner SHA', { runnerGitSha: '0'.repeat(40) }],
-    ['missing verified runner SHA', { runnerGitSha: null }],
-    [
-      'missing attempt-bound runner SHA',
-      {
-        captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
-        runnerGitSha: null,
-      },
-    ],
-    ['invalid worker region', { workerRegion: 'bad region' }],
-  ])('rejects %s before database I/O', async (_label, override) => {
-    await expect(
-      startLeaderboardAcquisitionAttempt({
-        ...startInput(),
-        ...(override as Partial<StartLeaderboardAcquisitionAttemptInput>),
-      })
-    ).rejects.toThrow(/leaderboard acquisition/)
-    expect(mockConnect).not.toHaveBeenCalled()
-  })
-
-  it.each([[0], [2]])('rejects a %i-row begin response', async (rowCount) => {
-    enqueueQuery({ rows: Array.from({ length: rowCount }, () => attemptRow()) })
-    await expect(startLeaderboardAcquisitionAttempt(startInput())).rejects.toThrow(
-      `returned ${rowCount} rows instead of one`
-    )
-  })
-
-  it.each([
-    ['identity drift', { queue_attempt: 3 }, /conflicting identity/],
-    ['unsafe sequence', { attempt_seq: '9007199254740992' }, /attempt sequence is invalid/],
-    [
-      'sub-millisecond start',
-      { recorded_started_at_is_millisecond: false },
-      /sub-millisecond start/,
-    ],
-  ])('rejects %s in a begin response', async (_label, override, error) => {
-    enqueueQuery({ rows: [attemptRow(override as Record<string, unknown>)] })
-    await expect(startLeaderboardAcquisitionAttempt(startInput())).rejects.toThrow(error as RegExp)
-  })
-
-  it('replays an uncertain begin on a fresh client with identical frozen arguments', async () => {
-    const uncertain = Object.assign(new Error('connection terminated unexpectedly'), {
-      code: '08006',
-    })
-    const first = enqueueQuery(uncertain)
-    const second = enqueueQuery({ rows: [attemptRow()] })
-
-    await expect(startLeaderboardAcquisitionAttempt(startInput())).resolves.toEqual({
-      ...attempt(),
-      replayed: true,
-    })
-
-    expect(mockConnect).toHaveBeenCalledTimes(2)
-    expect(first.release).toHaveBeenCalledWith(true)
-    expect(second.release).toHaveBeenCalledWith()
-    expect(first.query.mock.calls[0][0]).toBe(second.query.mock.calls[0][0])
-    expect(first.query.mock.calls[0][1]).toBe(second.query.mock.calls[0][1])
-  })
-
-  it('does not replay a deterministic database rejection', async () => {
-    const rejection = Object.assign(new Error('source is not active'), { code: '22023' })
-    const client = enqueueQuery(rejection)
-
-    await expect(startLeaderboardAcquisitionAttempt(startInput())).rejects.toBe(rejection)
-    expect(mockConnect).toHaveBeenCalledTimes(1)
-    expect(client.release).toHaveBeenCalledWith(false)
-  })
-
-  it('retains both causes when exact replay is still unresolved', async () => {
-    const firstCause = Object.assign(new Error('query read timeout'), { code: 'ETIMEDOUT' })
-    const secondCause = Object.assign(new Error('deadlock after uncertain first result'), {
-      code: '40P01',
-    })
-    enqueueQuery(firstCause)
-    enqueueQuery(secondCause)
-
-    let thrown: unknown
-    try {
-      await startLeaderboardAcquisitionAttempt(startInput())
-    } catch (cause) {
-      thrown = cause
-    }
-    expect(thrown).toBeInstanceOf(AggregateError)
-    expect((thrown as AggregateError).errors).toEqual([firstCause, secondCause])
   })
 
   it.each([
@@ -955,102 +808,6 @@ describe('leaderboard acquisition attempt client', () => {
     ).toThrow('digest does not match its canonical body')
   })
 
-  it('finishes an attempt-bound v3 projection through the same exact terminal contract', async () => {
-    const boundAttempt = attempt({
-      captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
-    })
-    const projection = projectLeaderboardManifestV3Outcome(
-      boundAttempt,
-      builtManifestV3('complete')
-    )
-    const client = enqueueQuery({
-      rows: [
-        {
-          attempt_seq: '41',
-          terminal_state: 'complete',
-          recorded_completed_at: '2026-07-22 03:00:03.789+00',
-        },
-      ],
-    })
-
-    await expect(
-      finishLeaderboardAcquisitionAttempt({
-        kind: 'manifest',
-        attempt: boundAttempt,
-        projection,
-        sourcePayloadRawObjectId: 301,
-        manifestRawObjectId: 302,
-      })
-    ).resolves.toMatchObject({ attemptSeq: 41, terminalState: 'complete' })
-    expect(client.query.mock.calls[0][1]).toHaveLength(25)
-    expect(client.query.mock.calls[0][1].slice(8, 12)).toEqual([
-      projection.sourceRunId,
-      301,
-      302,
-      null,
-    ])
-  })
-
-  it('finishes a manifest through the exact named 25-argument projection', async () => {
-    const projection = projectLeaderboardManifestOutcome(attempt(), builtManifest('complete'))
-    const client = enqueueQuery({
-      rows: [
-        {
-          attempt_seq: '41',
-          terminal_state: 'complete',
-          recorded_completed_at: '2026-07-22 03:00:03.789123+00',
-        },
-      ],
-    })
-
-    await expect(
-      finishLeaderboardAcquisitionAttempt({
-        kind: 'manifest',
-        attempt: attempt(),
-        projection,
-        sourcePayloadRawObjectId: 101,
-        manifestRawObjectId: 102,
-      })
-    ).resolves.toEqual({
-      attemptSeq: 41,
-      terminalState: 'complete',
-      recordedCompletedAt: '2026-07-22T03:00:03.789Z',
-      replayed: false,
-    })
-
-    const [sql, params] = client.query.mock.calls[0]
-    expect(String(sql)).toContain('p_attempt_id => $1::uuid')
-    expect(String(sql)).toContain('p_reason_code => $25::text')
-    expect(params).toHaveLength(25)
-    expect(params).toEqual([
-      attemptId,
-      'complete',
-      'complete',
-      'verified',
-      'verified',
-      'reported_population_reached',
-      startedAt,
-      completedAt,
-      projection.sourceRunId,
-      101,
-      102,
-      null,
-      1,
-      'consistent',
-      1,
-      null,
-      'unknown',
-      1,
-      1,
-      0,
-      0,
-      false,
-      false,
-      null,
-      null,
-    ])
-  })
-
   it('finishes a claimed attempt once on the caller-owned transaction', async () => {
     const boundAttempt = claimedAttempt()
     const projection = projectLeaderboardManifestOutcome(boundAttempt, builtManifest('complete'))
@@ -1077,7 +834,6 @@ describe('leaderboard acquisition attempt client', () => {
       attemptSeq: 41,
       terminalState: 'complete',
       recordedCompletedAt: '2026-07-22T03:00:03.789Z',
-      replayed: false,
     })
 
     expect(query).toHaveBeenCalledTimes(1)
@@ -1131,132 +887,10 @@ describe('leaderboard acquisition attempt client', () => {
     expect(mockConnect).not.toHaveBeenCalled()
   })
 
-  it('replays an uncertain finish on a fresh client without recomputing arguments', async () => {
-    const projection = projectLeaderboardManifestOutcome(attempt(), builtManifest('partial'))
-    const uncertain = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
-    const first = enqueueQuery(uncertain)
-    const second = enqueueQuery({
-      rows: [
-        {
-          attempt_seq: '41',
-          terminal_state: 'partial',
-          recorded_completed_at: '2026-07-22 03:00:03.000+00',
-        },
-      ],
-    })
-
-    await expect(
-      finishLeaderboardAcquisitionAttempt({
-        kind: 'manifest',
-        attempt: attempt(),
-        projection,
-        sourcePayloadRawObjectId: 101,
-        manifestRawObjectId: 102,
-      })
-    ).resolves.toMatchObject({ terminalState: 'partial', replayed: true })
-
-    expect(first.release).toHaveBeenCalledWith(true)
-    expect(first.query.mock.calls[0][1]).toBe(second.query.mock.calls[0][1])
-  })
-
-  it('projects legacy and processing failures into closed terminal shapes', async () => {
-    const legacyAttempt = attempt({
-      captureContract: LEGACY_LEADERBOARD_ACQUISITION_CONTRACT,
-      runnerGitSha: null,
-    })
-    const legacyClient = enqueueQuery({
-      rows: [
-        {
-          attempt_seq: '41',
-          terminal_state: 'unknown',
-          recorded_completed_at: '2026-07-22 03:00:03+00',
-        },
-      ],
-    })
-    await finishLeaderboardAcquisitionAttempt({
-      kind: 'legacy_unknown',
-      attempt: legacyAttempt,
-      captureCompletedAt: completedAt,
-      diagnosticRawObjectId: 201,
-      acceptedPopulation: 7,
-      rejectedRowCount: 2,
-    })
-    expect(legacyClient.query.mock.calls[0][1]).toEqual([
-      attemptId,
-      'unknown',
-      'unknown',
-      'unknown',
-      'legacy_unverified',
-      null,
-      startedAt,
-      completedAt,
-      null,
-      null,
-      null,
-      201,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      7,
-      2,
-      null,
-      false,
-      false,
-      null,
-      'legacy_unverified',
-    ])
-
-    const failedClient = enqueueQuery({
-      rows: [
-        {
-          attempt_seq: '41',
-          terminal_state: 'processing_failed',
-          recorded_completed_at: '2026-07-22 03:00:04+00',
-        },
-      ],
-    })
-    await finishLeaderboardAcquisitionAttempt({
-      kind: 'processing_failed',
-      attempt: attempt(),
-      captureCompletedAt: null,
-      failureStage: 'session_open',
-      reasonCode: 'upstream_unavailable',
-    })
-    expect(failedClient.query.mock.calls[0][1]).toEqual([
-      attemptId,
-      'processing_failed',
-      'unknown',
-      'unknown',
-      'unassessed',
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      false,
-      false,
-      'session_open',
-      'upstream_unavailable',
-    ])
-  })
-
   it('rejects a conflicting finish response', async () => {
-    const projection = projectLeaderboardManifestOutcome(attempt(), builtManifest('complete'))
-    enqueueQuery({
+    const boundAttempt = claimedAttempt()
+    const projection = projectLeaderboardManifestOutcome(boundAttempt, builtManifest('complete'))
+    const query = jest.fn(async () => ({
       rows: [
         {
           attempt_seq: '42',
@@ -1264,15 +898,20 @@ describe('leaderboard acquisition attempt client', () => {
           recorded_completed_at: '2026-07-22 03:00:03+00',
         },
       ],
-    })
+    }))
     await expect(
-      finishLeaderboardAcquisitionAttempt({
-        kind: 'manifest',
-        attempt: attempt(),
-        projection,
-        sourcePayloadRawObjectId: 101,
-        manifestRawObjectId: 102,
-      })
+      finishLeaderboardAcquisitionAttemptInTransaction(
+        { query } as unknown as IngestQueryExecutor,
+        executionBinding(),
+        {
+          kind: 'manifest',
+          attempt: boundAttempt,
+          projection,
+          sourcePayloadRawObjectId: 101,
+          manifestRawObjectId: 102,
+        }
+      )
     ).rejects.toThrow('conflicting outcome')
+    expect(mockConnect).not.toHaveBeenCalled()
   })
 })

@@ -115,10 +115,20 @@ function getStorageClient(): SupabaseClient {
   return storageClient
 }
 
-export interface WriteRawInput {
+export type TierARawJobType = 'tier_a' | 'tier_a_manifest' | 'tier_a_failure'
+export type NonTierARawJobType =
+  | 'tier_b'
+  | 'tier_b_series'
+  | 'tier_c'
+  | 'tier_d'
+  | 'bots'
+  | `history:${string}`
+export type RawJobType = TierARawJobType | NonTierARawJobType
+
+export interface WriteRawInput<JobType extends RawJobType = RawJobType> {
   sourceId: number
   sourceSlug: string
-  jobType: string // tier_a | tier_b | tier_c | tier_d | history:<kind> | bots
+  jobType: JobType
   traderId?: number | null
   timeframe?: number | null
   payload: unknown
@@ -141,6 +151,20 @@ export interface RawObjectReceipt {
 export type IngestTransactionRunner = <T>(
   operation: (transaction: IngestQueryExecutor) => Promise<T>
 ) => Promise<T>
+
+const TIER_A_RAW_JOB_TYPES: ReadonlySet<string> = new Set<TierARawJobType>([
+  'tier_a',
+  'tier_a_manifest',
+  'tier_a_failure',
+])
+
+function assertTierARawTransactionRunner(
+  runTransaction: IngestTransactionRunner | undefined
+): asserts runTransaction is IngestTransactionRunner {
+  if (typeof runTransaction !== 'function') {
+    throw artifactSetError('Tier-A RAW persistence requires a claimed transaction runner')
+  }
+}
 
 export interface WriteLeaderboardRawArtifactSetInput {
   sourceId: number
@@ -737,99 +761,15 @@ async function bindUnboundLeaderboardTrustPointers(
   }
 }
 
-async function reconcileLeaderboardTrustCommit(
-  input: NormalizedLeaderboardRawArtifactSetInput,
-  artifacts: readonly PreparedLeaderboardTrustArtifact[],
-  commitError: unknown
-): Promise<LeaderboardRawArtifactSetReceipt> {
-  let client: PoolClient
-  try {
-    client = await ingestClientConnect()
-  } catch (cause) {
-    throw new AggregateError(
-      [asError(commitError), asError(cause)],
-      '[ingest] leaderboard RAW commit outcome and reconciliation both failed'
-    )
-  }
-  try {
-    const rows = await loadLeaderboardTrustPointers(client, artifacts, input.sourceRunId, false)
-    return validateLeaderboardTrustPointers(rows, artifacts, input, false).receipts
-  } catch (cause) {
-    throw new AggregateError(
-      [asError(commitError), asError(cause)],
-      '[ingest] leaderboard RAW commit outcome is unresolved'
-    )
-  } finally {
-    client.release()
-  }
-}
-
-async function persistLeaderboardTrustPointers(
-  input: NormalizedLeaderboardRawArtifactSetInput,
-  artifacts: readonly PreparedLeaderboardTrustArtifact[]
-): Promise<LeaderboardRawArtifactSetReceipt> {
-  const client = await ingestClientConnect()
-  let inTransaction = false
-  let commitAttempted = false
-  let destroyClient = false
-  let failure: unknown = null
-  let receipts: LeaderboardRawArtifactSetReceipt | null = null
-
-  try {
-    await client.query('BEGIN')
-    inTransaction = true
-    await client.query(`SET LOCAL lock_timeout = '5s'`)
-    await client.query(
-      `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
-      [`arena.leaderboard-raw-artifact-set:${input.sourceRunId}`]
-    )
-    receipts = await persistLeaderboardTrustPointersInTransaction(client, input, artifacts, true)
-
-    commitAttempted = true
-    await client.query('COMMIT')
-    inTransaction = false
-  } catch (cause) {
-    failure = cause
-    if (commitAttempted) {
-      destroyClient = true
-    } else if (inTransaction) {
-      try {
-        await client.query('ROLLBACK')
-        inTransaction = false
-      } catch (rollbackCause) {
-        destroyClient = true
-        failure = new AggregateError(
-          [asError(cause), asError(rollbackCause)],
-          '[ingest] leaderboard RAW transaction and rollback both failed'
-        )
-      }
-    }
-  } finally {
-    client.release(destroyClient)
-  }
-
-  if (failure !== null) {
-    if (commitAttempted) {
-      return reconcileLeaderboardTrustCommit(input, artifacts, failure)
-    }
-    throw failure
-  }
-  if (receipts === null) throw artifactSetError('transaction committed without RAW receipts')
-  return receipts
-}
-
 async function persistLeaderboardTrustPointersInTransaction(
   transaction: IngestQueryExecutor,
   input: NormalizedLeaderboardRawArtifactSetInput,
-  artifacts: readonly PreparedLeaderboardTrustArtifact[],
-  lockAlreadyHeld = false
+  artifacts: readonly PreparedLeaderboardTrustArtifact[]
 ): Promise<LeaderboardRawArtifactSetReceipt> {
-  if (!lockAlreadyHeld) {
-    await transaction.query(
-      `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
-      [`arena.leaderboard-raw-artifact-set:${input.sourceRunId}`]
-    )
-  }
+  await transaction.query(
+    `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
+    [`arena.leaderboard-raw-artifact-set:${input.sourceRunId}`]
+  )
 
   const existing = await loadLeaderboardTrustPointers(
     transaction,
@@ -873,8 +813,9 @@ async function persistLeaderboardTrustPointersInTransaction(
  */
 export async function writeLeaderboardRawArtifactSet(
   input: WriteLeaderboardRawArtifactSetInput,
-  runTransaction?: IngestTransactionRunner
+  runTransaction: IngestTransactionRunner
 ): Promise<LeaderboardRawArtifactSetReceipt> {
+  assertTierARawTransactionRunner(runTransaction)
   const manifest = validateLeaderboardRawArtifactSetInput(input)
   // Snapshot every later-read binding before the first Storage await. Callers
   // cannot race a mutable input object against the database transaction.
@@ -921,12 +862,9 @@ export async function writeLeaderboardRawArtifactSet(
   for (const artifact of artifacts) {
     artifact.durableCompressedBytes = await uploadDeterministicRaw(artifact)
   }
-  if (runTransaction) {
-    return runTransaction((transaction) =>
-      persistLeaderboardTrustPointersInTransaction(transaction, normalizedInput, artifacts)
-    )
-  }
-  return persistLeaderboardTrustPointers(normalizedInput, artifacts)
+  return runTransaction((transaction) =>
+    persistLeaderboardTrustPointersInTransaction(transaction, normalizedInput, artifacts)
+  )
 }
 
 interface PreparedAttemptBoundLeaderboardManifest {
@@ -974,8 +912,9 @@ function prepareAttemptBoundLeaderboardManifest(
  */
 export async function writeAttemptBoundLeaderboardRawArtifactSet(
   input: WriteAttemptBoundLeaderboardRawArtifactSetInput,
-  runTransaction?: IngestTransactionRunner
+  runTransaction: IngestTransactionRunner
 ): Promise<AttemptBoundLeaderboardRawArtifactSetReceipt> {
+  assertTierARawTransactionRunner(runTransaction)
   // Snapshot all caller-owned identity and evidence before the first await.
   const attempt: LeaderboardAcquisitionAttempt = Object.freeze({ ...input.attempt })
   const { manifest, projection } = prepareAttemptBoundLeaderboardManifest(input, attempt)
@@ -1050,11 +989,9 @@ export async function writeAttemptBoundLeaderboardRawArtifactSet(
   for (const artifact of artifacts) {
     artifact.durableCompressedBytes = await uploadDeterministicRaw(artifact)
   }
-  const receipts = runTransaction
-    ? await runTransaction((transaction) =>
-        persistLeaderboardTrustPointersInTransaction(transaction, normalizedInput, artifacts)
-      )
-    : await persistLeaderboardTrustPointers(normalizedInput, artifacts)
+  const receipts = await runTransaction((transaction) =>
+    persistLeaderboardTrustPointersInTransaction(transaction, normalizedInput, artifacts)
+  )
   return { ...receipts, projection }
 }
 
@@ -1082,11 +1019,25 @@ async function persistRawObjectPointer(
   }
 }
 
-/** Write one raw payload; returns its durable pointer and computed content identity. */
+/**
+ * Write one raw payload. Tier-A job types require the execution claim's
+ * transaction runner; lower tiers retain their direct-pointer compatibility.
+ */
+export function writeRawObject(
+  input: WriteRawInput<TierARawJobType>,
+  runTransaction: IngestTransactionRunner
+): Promise<RawObjectReceipt>
+export function writeRawObject(
+  input: WriteRawInput<NonTierARawJobType>,
+  runTransaction?: IngestTransactionRunner
+): Promise<RawObjectReceipt>
 export async function writeRawObject(
   input: WriteRawInput,
   runTransaction?: IngestTransactionRunner
 ): Promise<RawObjectReceipt> {
+  if (TIER_A_RAW_JOB_TYPES.has(input.jobType)) {
+    assertTierARawTransactionRunner(runTransaction)
+  }
   const { json, serializationContract } = serializeRawPayload(input.payload, input.serialization)
   const jsonBytes = Buffer.from(json, 'utf8')
   const gz = gzipSync(jsonBytes)

@@ -537,7 +537,6 @@ function attemptFromStart(
     sourceCurrency: 'USDT',
     sourceFetchRegion: source.fetch_region,
     recordedStartedAt: new Date().toISOString(),
-    replayed: false,
   })
 }
 
@@ -654,7 +653,6 @@ describe('Tier-A board-series publication guard', () => {
         terminalState:
           input.kind === 'manifest' ? input.projection!.terminalState : 'processing_failed',
         recordedCompletedAt: new Date().toISOString(),
-        replayed: false,
       })
     )
     mockGetSourceBySlug.mockResolvedValue(src)
@@ -2740,7 +2738,6 @@ describe('Tier-A board-series publication guard', () => {
           attemptSeq: input.attempt.attemptSeq,
           terminalState: input.projection.terminalState,
           recordedCompletedAt: new Date().toISOString(),
-          replayed: false,
         }
       }
     )
@@ -2874,7 +2871,6 @@ describe('Tier-A board-series publication guard', () => {
               attemptSeq: input.attempt.attemptSeq,
               terminalState: input.projection.terminalState,
               recordedCompletedAt: new Date().toISOString(),
-              replayed: false,
             })
         })
       }
@@ -3434,7 +3430,6 @@ describe('Tier-A board-series publication guard', () => {
           attemptSeq: input.attempt.attemptSeq,
           terminalState: 'processing_failed',
           recordedCompletedAt: new Date().toISOString(),
-          replayed: false,
         }
         if (input.attempt.timeframe !== 30) return Promise.resolve(result)
         signalFirstFinishCalled()

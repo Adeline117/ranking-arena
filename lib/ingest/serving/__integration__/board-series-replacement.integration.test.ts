@@ -3,16 +3,46 @@
 jest.mock('@/lib/ingest/db', () => require('./test-db').mockDbModule())
 
 import type { BoardSeriesBlock, SourceRow } from '@/lib/ingest/core/types'
-import { publishBoardSeries } from '@/lib/ingest/serving/publish'
+import {
+  prepareBoardSeriesPublication,
+  publishBoardSeriesInTransaction,
+  type PublishBoardSeriesOptions,
+} from '@/lib/ingest/serving/publish'
 import {
   TEST_SCHEMA,
   createTestSchema,
   dropTestSchema,
   getRawPool,
+  getWrappedPool,
   insertSourceRow,
   makeSource,
   resetTables,
 } from './test-db'
+
+async function publishBoardSeriesForTest(
+  src: SourceRow,
+  seriesByTrader: Map<string, BoardSeriesBlock[]>,
+  traderIds: Map<string, number>,
+  options: PublishBoardSeriesOptions
+) {
+  const prepared = prepareBoardSeriesPublication(src, seriesByTrader, traderIds, options)
+  const transaction = await getWrappedPool().connect()
+  try {
+    await transaction.query('BEGIN')
+    const result = await publishBoardSeriesInTransaction(
+      transaction,
+      prepared,
+      async () => undefined
+    )
+    await transaction.query('COMMIT')
+    return result
+  } catch (error) {
+    await transaction.query('ROLLBACK')
+    throw error
+  } finally {
+    transaction.release()
+  }
+}
 
 const OLD_DAILY = '2026-05-01T00:00:00.000Z'
 const RECENT_DAILY = '2026-07-15T00:00:00.000Z'
@@ -112,7 +142,7 @@ describe('publishBoardSeries — atomic complete snapshot replacement', () => {
     const seed = await seedReplacement()
 
     await expect(
-      publishBoardSeries(
+      publishBoardSeriesForTest(
         seed.src,
         replacementSeries(),
         new Map([['xt-1', seed.traderId]]),
@@ -144,7 +174,7 @@ describe('publishBoardSeries — atomic complete snapshot replacement', () => {
     const invalidCurrency = { ...seed.src, currency: null } as unknown as SourceRow
 
     await expect(
-      publishBoardSeries(
+      publishBoardSeriesForTest(
         invalidCurrency,
         replacementSeries(),
         new Map([['xt-1', seed.traderId]]),

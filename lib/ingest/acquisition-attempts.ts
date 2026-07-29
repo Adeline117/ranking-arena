@@ -130,7 +130,6 @@ export interface LeaderboardAcquisitionAttempt {
   sourceCurrency: 'USDT' | 'USDx' | 'USDC' | 'USD'
   sourceFetchRegion: string
   recordedStartedAt: string
-  replayed: boolean
 }
 
 /** Minimal database execution identity shared with the worker authority layer. */
@@ -228,7 +227,6 @@ export interface LeaderboardAcquisitionOutcome {
   attemptSeq: number
   terminalState: LeaderboardAcquisitionTerminalState
   recordedCompletedAt: string
-  replayed: boolean
 }
 
 interface AttemptRow {
@@ -295,40 +293,6 @@ interface TerminalProjection {
   reasonCode: LeaderboardAcquisitionReasonCode | null
 }
 
-const START_SQL = `SELECT
-    attempt_seq::text AS attempt_seq,
-    attempt_id::text AS attempt_id,
-    source_id,
-    source_slug,
-    adapter_slug,
-    timeframe,
-    observation_cycle_id,
-    queue_job_id,
-    queue_attempt,
-    capture_contract,
-    attempt_binding_contract,
-    runner_git_sha,
-    worker_region,
-    source_status,
-    source_serving_mode,
-    source_currency,
-    source_fetch_region,
-    recorded_started_at::text AS recorded_started_at,
-    recorded_started_at = pg_catalog.date_trunc(
-      'milliseconds', recorded_started_at
-    ) AS recorded_started_at_is_millisecond
-  FROM arena.start_leaderboard_acquisition_attempt(
-    p_attempt_id => $1::uuid,
-    p_source_id => $2::integer,
-    p_timeframe => $3::integer,
-    p_observation_cycle_id => $4::text,
-    p_queue_job_id => $5::text,
-    p_queue_attempt => $6::integer,
-    p_capture_contract => $7::text,
-    p_runner_git_sha => $8::text,
-    p_worker_region => $9::text
-  )`
-
 const CLAIMED_START_SQL = `SELECT
     attempt_seq::text AS attempt_seq,
     attempt_id::text AS attempt_id,
@@ -365,38 +329,6 @@ const CLAIMED_START_SQL = `SELECT
     p_worker_region => $9::text,
     p_execution_claim_id => $10::uuid,
     p_execution_generation_seq => $11::bigint
-  )`
-
-const FINISH_SQL = `SELECT
-    attempt_seq::text AS attempt_seq,
-    terminal_state,
-    recorded_completed_at::text AS recorded_completed_at
-  FROM arena.finish_leaderboard_acquisition_attempt(
-    p_attempt_id => $1::uuid,
-    p_terminal_state => $2::text,
-    p_acquisition_state => $3::text,
-    p_population_state => $4::text,
-    p_capture_evidence_state => $5::text,
-    p_termination_reason => $6::text,
-    p_capture_started_at => $7::timestamptz,
-    p_capture_completed_at => $8::timestamptz,
-    p_source_run_id => $9::text,
-    p_source_payload_raw_object_id => $10::bigint,
-    p_manifest_raw_object_id => $11::bigint,
-    p_diagnostic_raw_object_id => $12::bigint,
-    p_reported_population => $13::integer,
-    p_population_report_state => $14::text,
-    p_source_page_count => $15::integer,
-    p_reported_page_count => $16::integer,
-    p_page_count_report_state => $17::text,
-    p_observed_population => $18::integer,
-    p_accepted_population => $19::integer,
-    p_rejected_row_count => $20::integer,
-    p_deduplicated_row_count => $21::integer,
-    p_caller_limited => $22::boolean,
-    p_safety_limited => $23::boolean,
-    p_failure_stage => $24::text,
-    p_reason_code => $25::text
   )`
 
 const CLAIMED_FINISH_SQL = `SELECT
@@ -442,10 +374,6 @@ const ATTEMPT_BOUND_CAPTURE_CONTRACT_SQL = `SELECT
   WHERE source_id = $1::smallint
     AND capture_contract = $2::text`
 
-function asError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value))
-}
-
 function databaseErrorCode(value: unknown): string {
   if (typeof value !== 'object' || value === null || !('code' in value)) return ''
   return String(value.code)
@@ -478,26 +406,6 @@ async function queryOnce<Row>(sql: string, params: readonly unknown[]): Promise<
   } catch (cause) {
     if (!released) client.release(shouldDestroyClient(cause))
     throw cause
-  }
-}
-
-async function exactReplayQuery<Row>(
-  operation: 'start' | 'finish',
-  sql: string,
-  params: readonly unknown[]
-): Promise<{ rows: Row[]; replayed: boolean }> {
-  try {
-    return { rows: await queryOnce<Row>(sql, params), replayed: false }
-  } catch (firstCause) {
-    if (!isUncertainDatabaseOutcome(firstCause)) throw firstCause
-    try {
-      return { rows: await queryOnce<Row>(sql, params), replayed: true }
-    } catch (replayCause) {
-      throw new AggregateError(
-        [asError(firstCause), asError(replayCause)],
-        `[ingest] leaderboard acquisition ${operation} outcome is unresolved after exact replay`
-      )
-    }
   }
 }
 
@@ -623,7 +531,7 @@ function parseExactStartRow(
   row: AttemptRow,
   input: Required<Pick<StartLeaderboardAcquisitionAttemptInput, 'attemptId'>> &
     Omit<StartLeaderboardAcquisitionAttemptInput, 'attemptId'>
-): Omit<LeaderboardAcquisitionAttempt, 'replayed'> {
+): LeaderboardAcquisitionAttempt {
   const attemptSeq = parsePositiveSafeInteger(row.attempt_seq, 'attempt sequence')
   if (
     row.attempt_id !== input.attemptId ||
@@ -684,7 +592,7 @@ function parseClaimedStartRow(
   input: Required<Pick<StartLeaderboardAcquisitionAttemptInput, 'attemptId'>> &
     Omit<StartLeaderboardAcquisitionAttemptInput, 'attemptId'>,
   execution: LeaderboardAcquisitionExecutionBinding
-): Omit<ClaimedLeaderboardAcquisitionAttempt, 'replayed'> {
+): ClaimedLeaderboardAcquisitionAttempt {
   const parsed = parseExactStartRow(row, input)
   const executionGenerationSeq = parsePositiveSafeInteger(
     row.execution_generation_seq,
@@ -1090,37 +998,6 @@ function projectTerminalInput(input: FinishLeaderboardAcquisitionAttemptInput): 
   return common
 }
 
-export async function startLeaderboardAcquisitionAttempt(
-  input: StartLeaderboardAcquisitionAttemptInput
-): Promise<LeaderboardAcquisitionAttempt> {
-  const normalized = {
-    attemptId: input.attemptId ?? randomUUID(),
-    sourceId: input.sourceId,
-    timeframe: input.timeframe,
-    observationCycleId: input.observationCycleId,
-    queueJobId: input.queueJobId,
-    queueAttempt: input.queueAttempt,
-    captureContract: input.captureContract,
-    runnerGitSha: input.runnerGitSha,
-    workerRegion: input.workerRegion,
-  }
-  assertStartInput(normalized)
-  const params = freezeParams([
-    normalized.attemptId,
-    normalized.sourceId,
-    normalized.timeframe,
-    normalized.observationCycleId,
-    normalized.queueJobId,
-    normalized.queueAttempt,
-    normalized.captureContract,
-    normalized.runnerGitSha,
-    normalized.workerRegion,
-  ])
-  const result = await exactReplayQuery<AttemptRow>('start', START_SQL, params)
-  const row = singleRow(result.rows, 'start')
-  return Object.freeze({ ...parseExactStartRow(row, normalized), replayed: result.replayed })
-}
-
 /**
  * Start a claim-bound attempt on the caller's already-fenced transaction.
  * This path deliberately performs one query and never opens or replays on a
@@ -1161,52 +1038,6 @@ export async function startLeaderboardAcquisitionAttemptInTransaction(
   const row = singleRow(result.rows as AttemptRow[], 'start')
   return Object.freeze({
     ...parseClaimedStartRow(row, normalized, execution),
-    replayed: false,
-  })
-}
-
-export async function finishLeaderboardAcquisitionAttempt(
-  input: FinishLeaderboardAcquisitionAttemptInput
-): Promise<LeaderboardAcquisitionOutcome> {
-  const projected = projectTerminalInput(input)
-  const params = freezeParams([
-    input.attempt.attemptId,
-    projected.terminalState,
-    projected.acquisitionState,
-    projected.populationState,
-    projected.captureEvidenceState,
-    projected.terminationReason,
-    projected.captureStartedAt,
-    projected.captureCompletedAt,
-    projected.sourceRunId,
-    projected.sourcePayloadRawObjectId,
-    projected.manifestRawObjectId,
-    projected.diagnosticRawObjectId,
-    projected.reportedPopulation,
-    projected.populationReportState,
-    projected.sourcePageCount,
-    projected.reportedPageCount,
-    projected.pageCountReportState,
-    projected.observedPopulation,
-    projected.acceptedPopulation,
-    projected.rejectedRowCount,
-    projected.deduplicatedRowCount,
-    projected.callerLimited,
-    projected.safetyLimited,
-    projected.failureStage,
-    projected.reasonCode,
-  ])
-  const result = await exactReplayQuery<OutcomeRow>('finish', FINISH_SQL, params)
-  const row = singleRow(result.rows, 'finish')
-  const attemptSeq = parsePositiveSafeInteger(row.attempt_seq, 'terminal attempt sequence')
-  if (attemptSeq !== input.attempt.attemptSeq || row.terminal_state !== projected.terminalState) {
-    throw new Error('[ingest] leaderboard acquisition finish returned a conflicting outcome')
-  }
-  return Object.freeze({
-    attemptSeq,
-    terminalState: row.terminal_state as LeaderboardAcquisitionTerminalState,
-    recordedCompletedAt: canonicalTimestamp(row.recorded_completed_at, 'recorded completion'),
-    replayed: result.replayed,
   })
 }
 
@@ -1265,6 +1096,5 @@ export async function finishLeaderboardAcquisitionAttemptInTransaction(
     attemptSeq,
     terminalState: row.terminal_state as LeaderboardAcquisitionTerminalState,
     recordedCompletedAt: canonicalTimestamp(row.recorded_completed_at, 'recorded completion'),
-    replayed: false,
   })
 }

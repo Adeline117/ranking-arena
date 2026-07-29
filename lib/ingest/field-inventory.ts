@@ -70,11 +70,17 @@ export async function recordFieldInventoryWithExecutor(
   )
 }
 
-/** Compatibility wrapper for non-authoritative callers without a transaction. */
-export async function recordFieldInventory(
+/**
+ * Compatibility wrapper for non-authoritative callers without a transaction.
+ * Tier-A inventory is execution-authoritative and must use the executor API.
+ */
+export async function recordFieldInventory<JobType extends string>(
   sourceId: number,
-  jobType: string,
+  jobType: JobType extends 'tier_a' ? never : JobType,
   payload: unknown
 ): Promise<void> {
+  if (jobType === 'tier_a') {
+    throw new TypeError('[ingest] Tier-A field inventory requires a claimed executor')
+  }
   return recordFieldInventoryWithExecutor(getIngestPool(), sourceId, jobType, payload)
 }

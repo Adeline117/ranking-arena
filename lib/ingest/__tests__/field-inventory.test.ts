@@ -1,4 +1,8 @@
-import { collectFieldPaths, recordFieldInventoryWithExecutor } from '../field-inventory'
+import {
+  collectFieldPaths,
+  recordFieldInventory,
+  recordFieldInventoryWithExecutor,
+} from '../field-inventory'
 
 describe('collectFieldPaths (upstream field radar, P1)', () => {
   it('walks objects with [] array descent, capped at object depth 3', () => {
@@ -65,5 +69,17 @@ describe('recordFieldInventoryWithExecutor', () => {
     await recordFieldInventoryWithExecutor({ query }, 42, 'tier_a', null)
 
     expect(query).not.toHaveBeenCalled()
+  })
+
+  it('rejects Tier-A on the direct pool API before attempting a write', async () => {
+    const unsafeRecordFieldInventory = recordFieldInventory as unknown as (
+      sourceId: number,
+      jobType: string,
+      payload: unknown
+    ) => Promise<void>
+
+    await expect(
+      unsafeRecordFieldInventory(42, 'tier_a', { data: [{ roi: '12.5' }] })
+    ).rejects.toThrow('requires a claimed executor')
   })
 })

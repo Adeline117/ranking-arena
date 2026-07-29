@@ -36,12 +36,33 @@ import {
 } from '@/lib/ingest/acquisition-attempts'
 import {
   type IngestTransactionRunner,
-  writeAttemptBoundLeaderboardRawArtifactSet,
-  writeLeaderboardRawArtifactSet,
+  writeAttemptBoundLeaderboardRawArtifactSet as writeAttemptBoundLeaderboardRawArtifactSetClaimed,
+  writeLeaderboardRawArtifactSet as writeLeaderboardRawArtifactSetClaimed,
+  type WriteAttemptBoundLeaderboardRawArtifactSetInput,
+  type WriteLeaderboardRawArtifactSetInput,
 } from '@/lib/ingest/raw'
 import type { RawPage } from '@/lib/ingest/core/types'
 import type { IngestQueryExecutor } from '@/lib/ingest/db'
 import { strictCanonicalJson, strictCanonicalSha256 } from '@/lib/ingest/strict-canonical-json'
+
+const runClaimedTransaction: IngestTransactionRunner = async (operation) => {
+  const transaction = (await mockConnect()) as IngestQueryExecutor
+  return operation(transaction)
+}
+
+function writeLeaderboardRawArtifactSet(
+  input: WriteLeaderboardRawArtifactSetInput,
+  runTransaction: IngestTransactionRunner = runClaimedTransaction
+) {
+  return writeLeaderboardRawArtifactSetClaimed(input, runTransaction)
+}
+
+function writeAttemptBoundLeaderboardRawArtifactSet(
+  input: WriteAttemptBoundLeaderboardRawArtifactSetInput,
+  runTransaction: IngestTransactionRunner = runClaimedTransaction
+) {
+  return writeAttemptBoundLeaderboardRawArtifactSetClaimed(input, runTransaction)
+}
 
 interface PointerRow {
   id: number
@@ -170,7 +191,6 @@ function acquisitionAttempt(
     sourceCurrency: 'USDT',
     sourceFetchRegion: 'vps_sg',
     recordedStartedAt: captureStartedAt,
-    replayed: false,
     ...overrides,
   }
 }
@@ -511,6 +531,32 @@ describe('writeLeaderboardRawArtifactSet', () => {
     })
   })
 
+  it.each([
+    [
+      'canonical artifact set',
+      () =>
+        (
+          writeLeaderboardRawArtifactSetClaimed as unknown as (
+            input: WriteLeaderboardRawArtifactSetInput
+          ) => Promise<unknown>
+        )(artifactInput()),
+    ],
+    [
+      'attempt-bound artifact set',
+      () =>
+        (
+          writeAttemptBoundLeaderboardRawArtifactSetClaimed as unknown as (
+            input: WriteAttemptBoundLeaderboardRawArtifactSetInput
+          ) => Promise<unknown>
+        )(attemptBoundArtifactInput()),
+    ],
+  ])('rejects a %s without a claimed transaction runner before I/O', async (_label, write) => {
+    await expect(write()).rejects.toThrow('requires a claimed transaction runner')
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockDownload).not.toHaveBeenCalled()
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
   it('writes one deterministic pair and returns the same pointers on an exact retry', async () => {
     const database = makeDatabaseHarness()
     mockConnect.mockResolvedValue(database.client)
@@ -555,8 +601,9 @@ describe('writeLeaderboardRawArtifactSet', () => {
     expect(insertSql[0]).toContain('trader_id IS NULL')
     expect(insertSql[1]).toContain("trust_artifact_role = 'population_manifest'")
     expect(mockConnect).toHaveBeenCalledTimes(2)
-    expect(database.query.mock.calls.filter(([sql]) => sql === 'BEGIN')).toHaveLength(2)
-    expect(database.query.mock.calls.filter(([sql]) => sql === 'COMMIT')).toHaveLength(2)
+    expect(
+      database.query.mock.calls.some(([sql]) => /^(?:BEGIN|COMMIT|ROLLBACK)\b/.test(String(sql)))
+    ).toBe(false)
   })
 
   it('runs the pointer pair on one caller transaction only after both Storage uploads', async () => {
@@ -905,7 +952,9 @@ describe('writeLeaderboardRawArtifactSet', () => {
       await expect(writeAttemptBoundLeaderboardRawArtifactSet(input)).rejects.toThrow(
         new RegExp(`database pointer \\d+ does not match ${role}`)
       )
-      expect(database.query).toHaveBeenCalledWith('ROLLBACK')
+      expect(
+        database.query.mock.calls.some(([sql]) => /^(?:BEGIN|COMMIT|ROLLBACK)\b/.test(String(sql)))
+      ).toBe(false)
     }
   )
 
@@ -1005,7 +1054,7 @@ describe('writeLeaderboardRawArtifactSet', () => {
     expect(mockDownload).not.toHaveBeenCalled()
   })
 
-  it('rolls back instead of repairing a partial database pointer pair', async () => {
+  it('rejects instead of repairing a partial database pointer pair', async () => {
     const database = makeDatabaseHarness({
       initialRows: [
         {
@@ -1030,11 +1079,11 @@ describe('writeLeaderboardRawArtifactSet', () => {
     await expect(writeLeaderboardRawArtifactSet(artifactInput())).rejects.toThrow(
       'only part of the expected RAW pointer pair'
     )
-    expect(database.query).toHaveBeenCalledWith('ROLLBACK')
     expect(database.query.mock.calls.some(([sql]) => String(sql).startsWith('INSERT'))).toBe(false)
+    expect(database.query.mock.calls.some(([sql]) => sql === 'ROLLBACK')).toBe(false)
   })
 
-  it('rolls back the first pointer when the second database insert fails', async () => {
+  it('propagates a second pointer insert failure to the transaction owner', async () => {
     const database = makeDatabaseHarness({ insertErrorRole: 'population_manifest' })
     mockConnect.mockResolvedValue(database.client)
 
@@ -1042,8 +1091,7 @@ describe('writeLeaderboardRawArtifactSet', () => {
       'insert population_manifest failed'
     )
 
-    expect(database.query).toHaveBeenCalledWith('ROLLBACK')
-    expect(database.pointers).toHaveLength(0)
+    expect(database.query.mock.calls.some(([sql]) => sql === 'ROLLBACK')).toBe(false)
     expect(storage).toHaveProperty('size', 2)
   })
 
@@ -1088,68 +1136,9 @@ describe('writeLeaderboardRawArtifactSet', () => {
         String(sql).startsWith('UPDATE arena.raw_objects')
       )
     ).toHaveLength(updateCountBeforeRetry)
-    expect(database.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(database.query.mock.calls.some(([sql]) => sql === 'ROLLBACK')).toBe(false)
     expect(database.pointers[0].source_run_id).toBeNull()
     expect(database.pointers[1].source_run_id).toBe(input.sourceRunId)
-  })
-
-  it('preserves both the transaction and ROLLBACK failures and destroys the connection', async () => {
-    const rollbackError = new Error('connection lost during ROLLBACK')
-    const database = makeDatabaseHarness({
-      insertErrorRole: 'population_manifest',
-      rollbackError,
-    })
-    mockConnect.mockResolvedValue(database.client)
-
-    let failure: unknown
-    try {
-      await writeLeaderboardRawArtifactSet(artifactInput())
-    } catch (error) {
-      failure = error
-    }
-
-    expect(failure).toBeInstanceOf(AggregateError)
-    expect((failure as AggregateError).errors[0].message).toBe('insert population_manifest failed')
-    expect((failure as AggregateError).errors[1]).toBe(rollbackError)
-    expect(database.release).toHaveBeenCalledWith(true)
-  })
-
-  it('reconciles an exact pair after an uncertain COMMIT without deleting Storage', async () => {
-    const commitError = new Error('connection lost during COMMIT')
-    const database = makeDatabaseHarness({ commitError })
-    mockConnect
-      .mockResolvedValueOnce(database.client)
-      .mockResolvedValueOnce(database.reconcileClient)
-
-    await expect(writeLeaderboardRawArtifactSet(artifactInput())).resolves.toEqual({
-      sourcePayload: expect.objectContaining({ id: 101 }),
-      populationManifest: expect.objectContaining({ id: 102 }),
-    })
-
-    expect(database.release).toHaveBeenCalledWith(true)
-    expect(database.reconcileQuery).toHaveBeenCalledTimes(1)
-    expect(database.reconcileRelease).toHaveBeenCalledTimes(1)
-  })
-
-  it('keeps both COMMIT and reconciliation failures in the final error', async () => {
-    const commitError = new Error('connection lost during COMMIT')
-    const database = makeDatabaseHarness({ commitError, reconcileRows: [] })
-    mockConnect
-      .mockResolvedValueOnce(database.client)
-      .mockResolvedValueOnce(database.reconcileClient)
-
-    let failure: unknown
-    try {
-      await writeLeaderboardRawArtifactSet(artifactInput())
-    } catch (error) {
-      failure = error
-    }
-
-    expect(failure).toBeInstanceOf(AggregateError)
-    expect((failure as AggregateError).errors[0]).toBe(commitError)
-    expect((failure as AggregateError).errors[1].message).toContain('expected 2 database pointers')
-    expect(database.release).toHaveBeenCalledWith(true)
-    expect(database.reconcileRelease).toHaveBeenCalledTimes(1)
   })
 
   it('rejects a source payload that does not match its canonical manifest before I/O', async () => {
