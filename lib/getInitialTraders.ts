@@ -24,7 +24,7 @@ import {
   type SourceFreshnessRow,
   type SourceFreshnessSummary,
 } from '@/lib/rankings/source-freshness'
-import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { PUBLIC_ACTIVE_RANKING_SOURCES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
   PUBLIC_RANKING_QUARANTINED_SOURCES,
@@ -266,9 +266,9 @@ export async function getInitialTraders(
  * Exported so the cron refresh route can call it without triggering cache reads.
  *
  * Strategy:
- * 1. With an active source quarantine, query through getLeaderboard so SQL
- *    excludes the source before LIMIT.
- * 2. Otherwise use the diverse RPC for page zero; deeper pages use direct SQL.
+ * 1. Page zero queries through getLeaderboard with the exact public active
+ *    source allowlist applied in SQL before LIMIT.
+ * 2. Deeper pages apply the same allowlist before OFFSET/RANGE.
  */
 export async function fetchLeaderboardFromDB(
   timeRange: Period = '90D',
@@ -287,12 +287,11 @@ export async function fetchLeaderboardFromDB(
     let tradersPromise: Promise<{ traders: InitialTrader[]; lastUpdated: string | null }>
     if (page > 0) {
       tradersPromise = fetchPaginatedFromDB(supabase, timeRange, limit, page, signal)
-    } else if (PUBLIC_RANKING_QUARANTINED_SOURCES.length > 0) {
-      // The diverse RPC applies LIMIT internally. While a quarantine is active,
-      // use the direct reader so source exclusion happens in SQL before LIMIT.
-      tradersPromise = fetchLeaderboardLegacy(supabase, timeRange, limit, signal)
     } else {
-      tradersPromise = fetchViaDiverseRPC(supabase, timeRange, limit, signal)
+      // The diverse RPC applies LIMIT internally and cannot receive the exact
+      // active-source contract. Use the direct reader so both the active
+      // allowlist and publication quarantine execute before LIMIT.
+      tradersPromise = fetchLeaderboardLegacy(supabase, timeRange, limit, signal)
     }
 
     // Fetch traders + category counts in parallel. Every top-level PostgREST
@@ -357,6 +356,7 @@ async function fetchInitialFreshnessRows(
     .from('leaderboard_source_freshness')
     .select('source,source_as_of')
     .eq('season_id', timeRange)
+    .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
   if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
     watermarkQuery = watermarkQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
   }
@@ -390,9 +390,10 @@ export function summarizeInitialTraderFreshness(params: {
   nowMs?: number
 }): SourceFreshnessSummary {
   const liveSources = filterPublicRankingSources(currentScoredSources(params.countRows))
+  const observedSources = filterPublicRankingSources(params.observedSources)
   const nowMs = params.nowMs ?? Date.now()
-  if (liveSources.length === 0 && params.observedSources.length > 0) {
-    const observed = summarizeSourceFreshness(params.watermarkRows, params.observedSources, nowMs)
+  if (liveSources.length === 0 && observedSources.length > 0) {
+    const observed = summarizeSourceFreshness(params.watermarkRows, observedSources, nowMs)
     return { ...observed, isStale: true }
   }
   return summarizeSourceFreshness(params.watermarkRows, liveSources, nowMs)
@@ -470,121 +471,8 @@ async function fetchCategoryCounts(
 }
 
 /**
- * Primary path: use the SQL RPC that handles diversity at the DB level.
- * Falls back to the legacy 2000-row JS-side filter if the RPC doesn't exist.
- */
-async function fetchViaDiverseRPC(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  timeRange: Period,
-  limit: number,
-  signal: AbortSignal
-): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
-  // Fetch more rows with per-platform cap, then enforce JS-side category diversity.
-  // Without this, DEX platforms (high ROI → high score) dominate all 50 slots.
-  // Aligned with API route (0.4) — SSR uses slightly tighter 0.3 to keep diversity
-  // but avoids the jarring composition shift when the first API refresh arrives.
-  const MAX_PER_PLATFORM = Math.max(5, Math.ceil(limit * 0.3))
-
-  // Try the SQL RPC first — fetch 2x limit to have room for diversity enforcement.
-  // 2s timeout: the RPC uses a non-covering index (idx_leaderboard_ranks_diverse)
-  // which requires 70K+ heap fetches on bloated tables. If slow, fall back to
-  // fetchLeaderboardLegacy which uses the covering index (28ms).
-  let data: Record<string, unknown>[] | null = null
-  let error: { message: string } | null = null
-  const rpcController = new AbortController()
-  const abortFromParent = () => rpcController.abort(signal.reason)
-  if (signal.aborted) abortFromParent()
-  else signal.addEventListener('abort', abortFromParent, { once: true })
-  const rpcTimer = setTimeout(
-    () => rpcController.abort(new DOMException('Diverse RPC timeout (2s)', 'TimeoutError')),
-    2_000
-  )
-  try {
-    const rpcResult = await supabase
-      .rpc('get_diverse_leaderboard', {
-        p_season_id: timeRange,
-        p_per_platform: MAX_PER_PLATFORM,
-        p_total_limit: limit * 2,
-      })
-      .abortSignal(rpcController.signal)
-    data = filterPublicRankingRows(
-      (rpcResult.data || []) as Record<string, unknown>[],
-      (row) => row.source
-    )
-    error = rpcResult.error
-  } catch (_err) {
-    if (signal.aborted) throw signal.reason
-    logger.warn('[getInitialTraders] Diverse RPC slow (>2s), falling back to covering-index query')
-    return fetchLeaderboardLegacy(supabase, timeRange, limit, signal)
-  } finally {
-    clearTimeout(rpcTimer)
-    signal.removeEventListener('abort', abortFromParent)
-  }
-
-  if (!error && data && Array.isArray(data) && data.length > 0) {
-    const unifiedTraders = data.map((row: Record<string, unknown>) => mapLeaderboardRow(row))
-
-    // Enforce category diversity: CEX futures, DEX, and spot/web3 should each have representation.
-    // Without this, DEX traders with 10,000%+ ROI crowd out all CEX traders.
-    const CEX_PLATFORMS = new Set([
-      'binance_futures',
-      'bybit',
-      'okx_futures',
-      'bitget_futures',
-      'mexc',
-      'htx_futures',
-      'gateio',
-      'bingx',
-      'coinex',
-      'xt',
-      'blofin',
-      'bitfinex',
-      'toobit',
-      'bitunix',
-      'btcc',
-      'etoro',
-    ])
-    const cexTraders = unifiedTraders.filter((t) => CEX_PLATFORMS.has(t.platform))
-    const dexTraders = unifiedTraders.filter((t) => !CEX_PLATFORMS.has(t.platform))
-
-    // Guarantee at least 30% CEX and 30% DEX in the final list
-    const minCex = Math.floor(limit * 0.3) // ~15 CEX traders
-    const minDex = Math.floor(limit * 0.3) // ~15 DEX traders
-    const remaining = limit - minCex - minDex // ~20 slots by score
-
-    const diverseList: typeof unifiedTraders = []
-    // Add guaranteed CEX slots (top by score)
-    diverseList.push(...cexTraders.slice(0, minCex))
-    // Add guaranteed DEX slots (top by score)
-    diverseList.push(...dexTraders.slice(0, minDex))
-    // Fill remaining slots from ALL traders by score (skip already-added)
-    const addedKeys = new Set(diverseList.map((t) => `${t.platform}:${t.traderKey}`))
-    const rest = unifiedTraders.filter((t) => !addedKeys.has(`${t.platform}:${t.traderKey}`))
-    diverseList.push(...rest.slice(0, remaining))
-
-    // Sort final list by arena score descending
-    diverseList.sort((a, b) => (b.arenaScore ?? 0) - (a.arenaScore ?? 0))
-    const finalTraders = diverseList.slice(0, limit)
-
-    const initialTraders = finalTraders.map(mapUnifiedToInitial)
-    const lastUpdated = initialTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
-    return { traders: initialTraders, lastUpdated }
-  }
-
-  // Fallback: RPC doesn't exist yet or returned empty — use legacy approach
-  if (error) {
-    logger.warn(
-      '[getInitialTraders] RPC fallback — get_diverse_leaderboard unavailable:',
-      error.message
-    )
-  }
-
-  return fetchLeaderboardLegacy(supabase, timeRange, limit, signal)
-}
-
-/**
  * Paginated fetch: simple offset-based pagination for page > 0.
- * Page 0 uses the diverse RPC for better quality. Pages 1+ use straight DB query.
+ * Page 0 uses the direct getLeaderboard reader with the same source allowlist.
  */
 async function fetchPaginatedFromDB(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -604,6 +492,7 @@ async function fetchPaginatedFromDB(
     .from('leaderboard_ranks')
     .select(SSR_COLS)
     .eq('season_id', timeRange)
+    .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
     .gt('arena_score', 0)
     .or('is_outlier.is.null,is_outlier.eq.false')
 
@@ -621,7 +510,12 @@ async function fetchPaginatedFromDB(
     return { traders: [], lastUpdated: null }
   }
 
-  const unifiedTraders = data.map((row: Record<string, unknown>) => mapLeaderboardRow(row))
+  // Filter on the raw DB source before mapUnifiedToInitial can rewrite legacy
+  // copin keys such as "hyperliquid:0x..." into an apparently active source.
+  const unifiedTraders = filterPublicRankingRows(
+    data as Record<string, unknown>[],
+    (row) => row.source
+  ).map((row) => mapLeaderboardRow(row))
   const initialTraders = unifiedTraders.map(mapUnifiedToInitial)
   const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
 
@@ -644,6 +538,7 @@ async function fetchLeaderboardLegacy(
     minScore: 10,
     excludeOutliers: true,
     sortBy: 'arena_score',
+    allowedSources: PUBLIC_ACTIVE_RANKING_SOURCES,
     excludeSources: PUBLIC_RANKING_QUARANTINED_SOURCES,
     signal,
   })

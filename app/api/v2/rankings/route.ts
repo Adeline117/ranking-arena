@@ -38,8 +38,12 @@ import {
   TRADING_STYLE_LEGACY_MAP,
   type TradingStyle,
 } from '@/lib/utils/trading-style'
-import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
-import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { WINDOWS } from '@/lib/types/leaderboard'
+import {
+  SOURCE_TYPE_MAP,
+  parsePublicActiveRankingSource,
+  type TraderSource,
+} from '@/lib/constants/exchanges'
 import { withPublic } from '@/lib/api/middleware'
 import { getOrSetWithLock } from '@/lib/cache'
 import { summarizeSourceFreshness, type SourceFreshnessRow } from '@/lib/rankings/source-freshness'
@@ -57,7 +61,10 @@ export const revalidate = 600 // ISR: revalidate every 10 minutes (data refreshe
 // ── Input validation schema ──────────────────────────────────────────────────
 const v2RankingsSchema = z.object({
   window: z.enum(WINDOWS),
-  platform: z.union([z.enum(LEADERBOARD_PLATFORMS), z.literal('okx_web3_solana')]),
+  platform: z.custom<TraderSource>(
+    (value) => parsePublicActiveRankingSource(value) !== null,
+    'Invalid platform'
+  ),
   market_type: z.string().default('futures'),
   limit: z.coerce.number().int().min(1).max(500).catch(100),
   offset: z.coerce.number().int().min(0).catch(0),

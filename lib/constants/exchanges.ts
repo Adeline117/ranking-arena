@@ -108,7 +108,7 @@ export type TraderSource =
 // removed from this allowlist: aevo, bybit_spot, copin, dydx, etoro, gains,
 // jupiter_perps, okx_web3, polymarket, toobit, weex, woox. They remain in the
 // TraderSource union + EXCHANGE_DISPLAY so archived rows still type/render.
-export const ALL_SOURCES: TraderSource[] = [
+export const ALL_SOURCES: readonly TraderSource[] = Object.freeze([
   // CEX futures
   'binance_futures',
   'bybit',
@@ -151,7 +151,36 @@ export const ALL_SOURCES: TraderSource[] = [
   'bitunix',
   'btcc',
   'bitfinex',
-]
+])
+
+/**
+ * Canonical source identifiers accepted by the public ranking routes.
+ *
+ * Membership means that a source is active and is a valid public API input;
+ * it does not by itself authorize score publication. Sources covered by the
+ * ranking quarantine still parse successfully and return an explicit empty
+ * response before any cache or database access.
+ *
+ * Keep aliases and retired identifiers out of this set. URL aliases belong to
+ * resolveExchangeSlug(), while ranking APIs intentionally require canonical
+ * database source identifiers.
+ */
+export const PUBLIC_ACTIVE_RANKING_SOURCES = ALL_SOURCES
+
+const _publicActiveRankingSourceSet = new Set<string>(PUBLIC_ACTIVE_RANKING_SOURCES)
+
+/**
+ * Parse an exact canonical source identifier accepted by public ranking APIs.
+ *
+ * This deliberately does not trim, lowercase, or resolve aliases: silently
+ * rewriting an API filter can query a different leaderboard than the caller
+ * requested. All public ranking versions share this parser.
+ */
+export function parsePublicActiveRankingSource(source: unknown): TraderSource | null {
+  return typeof source === 'string' && _publicActiveRankingSourceSet.has(source)
+    ? (source as TraderSource)
+    : null
+}
 
 // ---------------------------------------------------------------------------
 // DEAD_BLOCKED_PLATFORMS – excluded from health alerts & freshness checks
