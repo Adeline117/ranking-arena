@@ -56,15 +56,10 @@ jest.mock('@/lib/stripe/lifetime-entitlement', () => ({
     mockRecordStripeCheckoutManualReview(...args),
 }))
 
-import {
-  handleSubscriptionCanceled,
-  handleSubscriptionUpdate,
-  updateUserSubscription,
-} from '../subscription'
+import { handleSubscriptionCanceled, handleSubscriptionUpdate } from '../subscription'
 
 type DbError = { message: string }
 const stripeEvent = { id: 'evt_current', created: 1_800_000_000, livemode: true }
-const proUserId = '10e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const apiUserId = '11e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const apiReservationId = '91e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const recurringUserId = '21e34ce2-43c1-4bcc-8f19-79b36d56605c'
@@ -273,9 +268,6 @@ describe('subscription webhook persistence', () => {
       if (name === 'apply_user_api_tier_persisted_non_grant_event') {
         return Promise.resolve(mockPersistedRpcResult)
       }
-      if (name === 'sync_recurring_pro_subscription_projection_atomic') {
-        return Promise.resolve({ data: 'updated', error: null })
-      }
       if (name === 'assert_recurring_pro_checkout_completed_atomic') {
         return Promise.resolve({ data: 'completed', error: null, status: 200 })
       }
@@ -460,18 +452,6 @@ describe('subscription webhook persistence', () => {
       )
     ).resolves.toBeUndefined()
     expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
-    expect(mockFrom).not.toHaveBeenCalled()
-  })
-
-  it('keeps a projection RPC failure retryable and has no direct-table fallback', async () => {
-    mockRpc.mockResolvedValueOnce({
-      data: null,
-      error: { message: 'projection unavailable' },
-    })
-
-    await expect(updateUserSubscription(proUserId, subscription(), 'monthly')).rejects.toThrow(
-      'Failed to sync recurring Pro subscription projection: projection unavailable'
-    )
     expect(mockFrom).not.toHaveBeenCalled()
   })
 

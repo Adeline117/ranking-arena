@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import { SUBSCRIPTION_STATUS_MAP, API_TIER_LIMITS, getStripe, stripe } from '@/lib/stripe'
+import { API_TIER_LIMITS, getStripe, stripe } from '@/lib/stripe'
 import { getSupabase, withRetry, logger, type StripeWebhookEventContext } from './shared'
 import { sendNotification } from '@/lib/data/notifications'
 import {
@@ -956,78 +956,4 @@ export async function handleTrialWillEnd(subscription: Stripe.Subscription) {
   )
 
   logger.info(`Trial ending notification sent to user ${profile.id}`)
-}
-
-export async function updateUserSubscription(
-  userId: string,
-  subscription: Stripe.Subscription,
-  plan: string
-) {
-  const customerId =
-    typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id
-  const item = subscription.items?.data?.length === 1 ? subscription.items.data[0] : null
-  const authoritativePlan = getProPlanFromPriceId(item?.price.id)
-  if (
-    !UUID_PATTERN.test(userId) ||
-    !customerId ||
-    !STRIPE_CUSTOMER_ID_PATTERN.test(customerId) ||
-    !subscription.id.startsWith('sub_') ||
-    !item ||
-    item.quantity !== 1 ||
-    (plan !== 'monthly' && plan !== 'yearly') ||
-    authoritativePlan !== plan
-  ) {
-    throw new Error(`Subscription ${subscription.id} has invalid recurring Pro projection identity`)
-  }
-  const status = SUBSCRIPTION_STATUS_MAP[subscription.status] || subscription.status
-  const sub = subscription as unknown as Record<string, unknown>
-  const itemPeriod = subscription.items?.data?.[0] as unknown as Record<string, unknown> | undefined
-  const pStart = (sub.current_period_start ?? itemPeriod?.current_period_start) as
-    | number
-    | undefined
-  const pEnd = (sub.current_period_end ?? itemPeriod?.current_period_end) as number | undefined
-  const periodStart = pStart
-    ? new Date(pStart * 1000).toISOString()
-    : new Date(subscription.start_date * 1000).toISOString()
-  const periodEnd = pEnd ? new Date(pEnd * 1000).toISOString() : null
-
-  logger.info(`updateUserSubscription`, { userId, status, plan, periodStart, periodEnd })
-
-  return withRetry(async () => {
-    const { data, error: rpcError } = await getSupabase().rpc(
-      'sync_recurring_pro_subscription_projection_atomic',
-      {
-        p_user_id: userId,
-        p_status: status,
-        p_stripe_subscription_id: subscription.id,
-        p_stripe_customer_id: customerId,
-        p_plan: plan,
-        p_period_start: periodStart,
-        p_period_end: periodEnd,
-        p_cancel_at_period_end: subscription.cancel_at_period_end,
-      }
-    )
-
-    if (rpcError) {
-      throw new Error(`Failed to sync recurring Pro subscription projection: ${rpcError.message}`)
-    }
-
-    if (
-      data !== 'updated' &&
-      data !== 'blocked_full_refund' &&
-      data !== 'stale_current_subscription' &&
-      data !== 'subject_deleted'
-    ) {
-      throw new Error(
-        `sync_recurring_pro_subscription_projection_atomic returned ${String(data ?? 'missing')}`
-      )
-    }
-    const details = { status, plan, projectionStatus: data }
-    if (data === 'blocked_full_refund' || data === 'stale_current_subscription') {
-      logger.warn(`Subscription projection did not grant Pro for user ${userId}`, details)
-    } else {
-      logger.info(`Subscription updated for user ${userId}`, details)
-    }
-    return data
-  })
 }
