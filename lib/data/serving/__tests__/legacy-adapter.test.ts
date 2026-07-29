@@ -228,7 +228,7 @@ describe('serving → legacy adapter', () => {
 
   it('NULL-collapses win_rate / max_drawdown when the source omits them (no misleading 0.0%)', () => {
     // hyperliquid's stats payload carries no win_rate key — it must render '—',
-    // not 'Win 0.0%'. Same for mdd. (roi/pnl keep num() — a genuine 0 is plausible.)
+    // not 'Win 0.0%'. Same for mdd.
     const perf = servingStatsToPerformance({
       tf7: { roi: 5, pnl: 50 },
       tf30: { roi: 12, pnl: 120 },
@@ -245,6 +245,34 @@ describe('serving → legacy adapter', () => {
     expect(perf.pnl).toBe(300)
   })
 
+  it('keeps missing ROI/PnL unknown while preserving measured zero', () => {
+    const missing = servingStatsToPerformance({
+      tf7: { roi: null, pnl: null },
+      tf30: { roi: '   ', pnl: 'not-a-number' },
+      tf90: { roi: null, pnl: Number.POSITIVE_INFINITY },
+    })
+    expect(missing.roi_7d).toBeUndefined()
+    expect(missing.pnl_7d).toBeUndefined()
+    expect(missing.roi_30d).toBeUndefined()
+    expect(missing.pnl_30d).toBeUndefined()
+    expect(missing.roi_90d).toBeUndefined()
+    expect(missing.pnl).toBeUndefined()
+
+    const measuredZero = servingStatsToPerformance({
+      tf7: { roi: 0, pnl: 0 },
+      tf30: { roi: '0', pnl: '0' },
+      tf90: { roi: 0, pnl: 0 },
+    })
+    expect(measuredZero).toMatchObject({
+      roi_7d: 0,
+      pnl_7d: 0,
+      roi_30d: 0,
+      pnl_30d: 0,
+      roi_90d: 0,
+      pnl: 0,
+    })
+  })
+
   it('NULL-collapses missing timeframes (only 90d present)', () => {
     const perf = servingStatsToPerformance({ tf90: { roi: 30, pnl: 300, win_rate: 70, mdd: 15 } })
     expect(perf.roi_90d).toBe(30)
@@ -252,7 +280,7 @@ describe('serving → legacy adapter', () => {
     expect(perf.roi_30d).toBeUndefined()
   })
 
-  it('merges roi+pnl series into per-TF EquityCurveData by day', () => {
+  it('merges only same-day complete roi+pnl observations into EquityCurveData', () => {
     const ec = servingSeriesToEquityCurve({
       tf90: {
         roi: [
@@ -262,11 +290,54 @@ describe('serving → legacy adapter', () => {
         pnl: [{ ts: '2026-06-02T00:00:00Z', value: 120 }],
       },
     })
-    expect(ec['90D']).toEqual([
-      { date: '2026-06-01', roi: 5, pnl: 0 },
-      { date: '2026-06-02', roi: 8, pnl: 120 },
-    ])
+    expect(ec['90D']).toEqual([{ date: '2026-06-02', roi: 8, pnl: 120 }])
     expect(ec['7D']).toEqual([]) // missing TF collapses to empty
+  })
+
+  it('does not turn an unmatched or invalid curve field into zero', () => {
+    const ec = servingSeriesToEquityCurve({
+      tf90: {
+        roi: [
+          { ts: '2026-06-01T00:00:00Z', value: 5 },
+          { ts: '2026-06-02T00:00:00Z', value: Number.NaN },
+        ],
+        pnl: [
+          { ts: '2026-06-02T00:00:00Z', value: 120 },
+          { ts: '2026-06-03T00:00:00Z', value: 180 },
+        ],
+      },
+    })
+
+    expect(ec['90D']).toEqual([])
+  })
+
+  it('preserves measured zero curve points', () => {
+    const ec = servingSeriesToEquityCurve({
+      tf90: {
+        roi: [{ ts: '2026-06-01T00:00:00Z', value: 0 }],
+        pnl: [{ ts: '2026-06-01T00:00:00Z', value: 0 }],
+      },
+    })
+
+    expect(ec['90D']).toEqual([{ date: '2026-06-01', roi: 0, pnl: 0 }])
+  })
+
+  it('derives a missing ROI only from same-day PnL and account value with a valid basis', () => {
+    const ec = servingSeriesToEquityCurve({
+      tf90: {
+        pnl: [
+          { ts: '2026-06-01T00:00:00Z', value: 100 },
+          { ts: '2026-06-02T00:00:00Z', value: 100 },
+        ],
+        account_value: [
+          { ts: '2026-06-01T00:00:00Z', value: 1100 },
+          // base = account value - pnl = 0, so the second point is unknown.
+          { ts: '2026-06-02T00:00:00Z', value: 100 },
+        ],
+      },
+    })
+
+    expect(ec['90D']).toEqual([{ date: '2026-06-01', roi: 10, pnl: 100 }])
   })
 
   it('maps trading_preferences → per-TF AssetBreakdownData', () => {

@@ -191,7 +191,7 @@ describe('avgHoldingTime 格式化(m/h/d/w)', () => {
 })
 
 describe('集合映射', () => {
-  it('equityCurve 缺 roi/pnl → 0 兜底', () => {
+  it('equityCurve 缺 roi/pnl → 不向只接受完整数值的旧消费者发送该点', () => {
     const d = detail({
       equityCurve: {
         '90D': [{ date: '2026-07-01', roi: null, pnl: null }],
@@ -200,7 +200,40 @@ describe('集合映射', () => {
       },
     })
     const ec = toTraderPageData(d).equityCurve as { '90D': Array<{ roi: number; pnl: number }> }
-    expect(ec['90D'][0]).toEqual({ date: '2026-07-01', roi: 0, pnl: 0 })
+    expect(ec['90D']).toEqual([])
+  })
+
+  it('equityCurve 不用已知 ROI 或 PnL 伪造缺失的另一列', () => {
+    const d = detail({
+      equityCurve: {
+        '90D': [
+          { date: '2026-07-01', roi: 4.5, pnl: null },
+          { date: '2026-07-02', roi: null, pnl: 120 },
+        ],
+        '30D': [],
+        '7D': [],
+      },
+    })
+    const ec = toTraderPageData(d).equityCurve as { '90D': Array<{ roi: number; pnl: number }> }
+    expect(ec['90D']).toEqual([])
+  })
+
+  it('equityCurve 保留实测 0 和完整数值点', () => {
+    const d = detail({
+      equityCurve: {
+        '90D': [
+          { date: '2026-07-01', roi: 0, pnl: 0 },
+          { date: '2026-07-02', roi: 4.5, pnl: 120 },
+        ],
+        '30D': [],
+        '7D': [],
+      },
+    })
+    const ec = toTraderPageData(d).equityCurve as { '90D': Array<{ roi: number; pnl: number }> }
+    expect(ec['90D']).toEqual([
+      { date: '2026-07-01', roi: 0, pnl: 0 },
+      { date: '2026-07-02', roi: 4.5, pnl: 120 },
+    ])
   })
 
   it('portfolio/positionHistory 方向缺失 → long 兜底', () => {
