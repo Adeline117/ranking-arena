@@ -16,11 +16,15 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getLeaderboard, searchTraders } from '@/lib/data/unified'
-import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
+import { EXCHANGE_CONFIG, PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
 import { botMessages, type BotLang } from '@/lib/i18n/bot'
 import { BASE_URL } from '@/lib/constants/urls'
-import { summarizePublicVisibleLeaderboardSources } from '@/lib/data/visible-leaderboard-sources'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 // ============================================
 // Types
@@ -52,6 +56,9 @@ interface TelegramSendMessageParams {
 // ============================================
 
 const TELEGRAM_API = 'https://api.telegram.org/bot'
+const TELEGRAM_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 function getBotToken(): string {
   const token = process.env.TELEGRAM_BOT_TOKEN
@@ -105,7 +112,9 @@ async function handleRank(chatId: number, args: string, lang: BotLang): Promise<
   }
 
   const supabase = getSupabaseAdmin()
-  const traders = await searchTraders(supabase, { query, limit: 3 })
+  const traders = (await searchTraders(supabase, { query, limit: 3 })).filter((trader) =>
+    isPublicRankingSourceAllowed(trader.platform)
+  )
 
   if (!traders || traders.length === 0) {
     await sendMessage({ chat_id: chatId, text: botMessages(lang, 'traderNotFound', { query }) })
@@ -114,7 +123,8 @@ async function handleRank(chatId: number, args: string, lang: BotLang): Promise<
 
   const lines: string[] = []
   for (const t of traders) {
-    const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
+    const exchangeName =
+      EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
     const score = t.arenaScore != null ? t.arenaScore.toFixed(1) : 'N/A'
     const rank = t.rank != null ? `#${t.rank}` : 'N/A'
     const roi = t.roi != null ? `${t.roi >= 0 ? '+' : ''}${t.roi.toFixed(2)}%` : 'N/A'
@@ -126,7 +136,7 @@ async function handleRank(chatId: number, args: string, lang: BotLang): Promise<
       `  ${botMessages(lang, 'rank')}: ${rank} | ${botMessages(lang, 'score')}: ${score}`,
       `  ROI: ${roi} | PnL: ${pnl}`,
       `  ${botMessages(lang, 'period')}: ${period}`,
-      `  ${botMessages(lang, 'viewProfile')}: ${BASE_URL}/trader/${t.platform}/${t.traderKey}`,
+      `  ${botMessages(lang, 'viewProfile')}: ${BASE_URL}/trader/${encodeURIComponent(t.handle || t.traderKey)}?platform=${encodeURIComponent(t.platform)}`,
       ''
     )
   }
@@ -141,22 +151,30 @@ async function handleTop(chatId: number, args: string, lang: BotLang): Promise<v
   let platform: string | undefined
   if (exchangeArg) {
     // Try exact match first
-    if (EXCHANGE_CONFIG[exchangeArg as keyof typeof EXCHANGE_CONFIG]) {
+    if (
+      EXCHANGE_CONFIG[exchangeArg as keyof typeof EXCHANGE_CONFIG] &&
+      isPublicRankingSourceAllowed(exchangeArg)
+    ) {
       platform = exchangeArg
     } else {
       // Fuzzy match by display name
-      const entry = Object.entries(EXCHANGE_CONFIG).find(
+      const entry = TELEGRAM_RANKING_SOURCES.map(
+        (source) => [source, EXCHANGE_CONFIG[source as keyof typeof EXCHANGE_CONFIG]] as const
+      ).find(
         ([key, config]) =>
-          config.name.toLowerCase() === exchangeArg ||
+          (config && config.name.toLowerCase() === exchangeArg) ||
           key.replace(/_/g, '').includes(exchangeArg.replace(/[_\s.-]/g, ''))
       )
       if (entry) platform = entry[0]
     }
 
-    if (!platform) {
-      const exchanges = Object.entries(EXCHANGE_CONFIG)
-        .filter(([, c]) => c.reliability >= 60)
-        .map(([k, c]) => `  <code>${k}</code> — ${c.name}`)
+    if (!platform || !isPublicRankingSourceAllowed(platform)) {
+      const exchanges = TELEGRAM_RANKING_SOURCES.map(
+        (source) => [source, EXCHANGE_CONFIG[source as keyof typeof EXCHANGE_CONFIG]] as const
+      )
+        .flatMap(([source, config]) =>
+          config && config.reliability >= 60 ? [`  <code>${source}</code> — ${config.name}`] : []
+        )
         .slice(0, 20)
         .join('\n')
       await sendMessage({
@@ -168,12 +186,30 @@ async function handleTop(chatId: number, args: string, lang: BotLang): Promise<v
   }
 
   const supabase = getSupabaseAdmin()
-  const { traders } = await getLeaderboard(supabase, {
-    platform,
-    period: '90D',
-    limit: 10,
-    sortBy: 'rank',
-  })
+  const proofSources = platform ? [platform] : TELEGRAM_RANKING_SOURCES
+  const sealedLeaderboard = await readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: proofSources },
+    async (publication) => {
+      const result = await getLeaderboard(supabase, {
+        platform,
+        period: '90D',
+        limit: 10,
+        sortBy: 'rank',
+        scoreCohortId: publication.scoreCohortId,
+        allowedSources: proofSources,
+      })
+      if (result.error) {
+        throw new Error(`Telegram leaderboard query failed: ${result.error}`)
+      }
+      if (result.traders.some((trader) => !isPublicRankingSourceAllowed(trader.platform))) {
+        throw new Error('Telegram leaderboard crossed the public source boundary')
+      }
+      return result.traders
+    },
+    { timeoutMs: 10_000 }
+  )
+  const traders = sealedLeaderboard.value
 
   if (!traders || traders.length === 0) {
     await sendMessage({ chat_id: chatId, text: botMessages(lang, 'noTradersFound') })
@@ -198,12 +234,19 @@ async function handleTop(chatId: number, args: string, lang: BotLang): Promise<v
     )
   }
 
-  lines.push(`\n${botMessages(lang, 'viewMore')}: ${BASE_URL}/rankings${platform ? `/${platform}` : ''}`)
+  lines.push(
+    `\n${botMessages(lang, 'viewMore')}: ${BASE_URL}/${platform ? `?ex=${encodeURIComponent(platform)}` : ''}`
+  )
 
   await sendMessage({ chat_id: chatId, text: lines.join('\n') })
 }
 
-async function handleFollow(chatId: number, args: string, userId: number, lang: BotLang): Promise<void> {
+async function handleFollow(
+  chatId: number,
+  args: string,
+  userId: number,
+  lang: BotLang
+): Promise<void> {
   const query = args.trim()
   if (!query) {
     await sendMessage({ chat_id: chatId, text: botMessages(lang, 'followUsage') })
@@ -211,7 +254,9 @@ async function handleFollow(chatId: number, args: string, userId: number, lang: 
   }
 
   const supabase = getSupabaseAdmin()
-  const traders = await searchTraders(supabase, { query, limit: 1 })
+  const traders = (await searchTraders(supabase, { query, limit: 1 })).filter((trader) =>
+    isPublicRankingSourceAllowed(trader.platform)
+  )
 
   if (!traders || traders.length === 0) {
     await sendMessage({ chat_id: chatId, text: botMessages(lang, 'traderNotFound', { query }) })
@@ -222,21 +267,19 @@ async function handleFollow(chatId: number, args: string, userId: number, lang: 
   const traderId = `${trader.platform}:${trader.traderKey}`
 
   // Store follow subscription in Supabase
-  const { error } = await supabase
-    .from('bot_subscriptions')
-    .upsert(
-      {
-        platform_type: 'telegram',
-        platform_user_id: String(userId),
-        chat_id: String(chatId),
-        trader_id: traderId,
-        trader_handle: trader.handle || trader.traderKey,
-        trader_platform: trader.platform,
-        enabled: true,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'platform_type,platform_user_id,trader_id' }
-    )
+  const { error } = await supabase.from('bot_subscriptions').upsert(
+    {
+      platform_type: 'telegram',
+      platform_user_id: String(userId),
+      chat_id: String(chatId),
+      trader_id: traderId,
+      trader_handle: trader.handle || trader.traderKey,
+      trader_platform: trader.platform,
+      enabled: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'platform_type,platform_user_id,trader_id' }
+  )
 
   if (error) {
     logger.error('[TelegramBot] Follow upsert error:', error)
@@ -248,12 +291,18 @@ async function handleFollow(chatId: number, args: string, userId: number, lang: 
     chat_id: chatId,
     text: botMessages(lang, 'followSuccess', {
       handle: trader.handle || trader.traderKey,
-      platform: EXCHANGE_CONFIG[trader.platform as keyof typeof EXCHANGE_CONFIG]?.name || trader.platform,
+      platform:
+        EXCHANGE_CONFIG[trader.platform as keyof typeof EXCHANGE_CONFIG]?.name || trader.platform,
     }),
   })
 }
 
-async function handleUnfollow(chatId: number, args: string, userId: number, lang: BotLang): Promise<void> {
+async function handleUnfollow(
+  chatId: number,
+  args: string,
+  userId: number,
+  lang: BotLang
+): Promise<void> {
   const query = args.trim()
   if (!query) {
     await sendMessage({ chat_id: chatId, text: botMessages(lang, 'unfollowUsage') })
@@ -283,7 +332,10 @@ async function handleUnfollow(chatId: number, args: string, userId: number, lang
   )
 
   if (!match) {
-    await sendMessage({ chat_id: chatId, text: botMessages(lang, 'subscriptionNotFound', { query }) })
+    await sendMessage({
+      chat_id: chatId,
+      text: botMessages(lang, 'subscriptionNotFound', { query }),
+    })
     return
   }
 
@@ -337,7 +389,8 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
     const volume = priceData.usd_24h_vol
     const marketCap = priceData.usd_market_cap
 
-    const changeStr = change24h != null ? `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%` : 'N/A'
+    const changeStr =
+      change24h != null ? `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%` : 'N/A'
     const changeIcon = change24h != null ? (change24h >= 0 ? '\u{1F7E2}' : '\u{1F534}') : ''
 
     const lines = [
@@ -347,7 +400,8 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
     ]
 
     if (volume != null) lines.push(`${botMessages(lang, 'volumeLabel')}: $${formatNumber(volume)}`)
-    if (marketCap != null) lines.push(`${botMessages(lang, 'marketCapLabel')}: $${formatNumber(marketCap)}`)
+    if (marketCap != null)
+      lines.push(`${botMessages(lang, 'marketCapLabel')}: $${formatNumber(marketCap)}`)
 
     await sendMessage({ chat_id: chatId, text: lines.join('\n') })
   } catch (err) {
@@ -359,24 +413,28 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
 async function handleStats(chatId: number, lang: BotLang): Promise<void> {
   const supabase = getSupabaseAdmin()
 
-  // Use the same atomic positive-score generation as the public source picker.
-  // Pulling leaderboard_ranks rows directly is both paginated and can include
-  // quarantined boards.
-  const { data, error } = await supabase.rpc('arena_visible_sources', {
-    p_season_id: '90D',
-  })
-  if (error) {
-    throw new Error(`arena_visible_sources failed: ${error.message}`)
-  }
-  const { sourceBoards, sourceBoardCount, rankedTraderCount } =
-    summarizePublicVisibleLeaderboardSources(data)
-
-  // Active source-board list
+  // Publication proofs carry exact per-source row counts. Reading the proof
+  // set twice prevents /stats from mixing generations or counting quarantined
+  // and draft rows from the mutable leaderboard table. These are source boards,
+  // not a count of distinct exchange companies.
+  const sealedStats = await readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: TELEGRAM_RANKING_SOURCES },
+    async (publication) => ({
+      rankedTraderCount: publication.proofs.reduce(
+        (total, proof) => total + proof.published_rank_count,
+        0
+      ),
+      sourceBoards: publication.proofs
+        .filter((proof) => proof.published_rank_count > 0)
+        .map((proof) => proof.source),
+    }),
+    { timeoutMs: 10_000 }
+  )
+  const { rankedTraderCount, sourceBoards } = sealedStats.value
+  const sourceBoardCount = sourceBoards.length
   const activeSourceBoards = sourceBoards
-    .map(
-      ({ filterSource }) =>
-        EXCHANGE_CONFIG[filterSource as keyof typeof EXCHANGE_CONFIG]?.name || filterSource
-    )
+    .map((s) => EXCHANGE_CONFIG[s as keyof typeof EXCHANGE_CONFIG]?.name || s)
     .sort()
 
   const lines = [
@@ -479,7 +537,8 @@ function formatNumber(n: number): string {
 }
 
 function formatPrice(n: number): string {
-  if (n >= 1) return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (n >= 1)
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   if (n >= 0.01) return n.toFixed(4)
   return n.toFixed(8)
 }
