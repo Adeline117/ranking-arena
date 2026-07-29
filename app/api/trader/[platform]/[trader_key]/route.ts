@@ -38,6 +38,7 @@ import {
 import { createLogger } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 const log = createLogger('api:trader-detail')
 const SEALED_TRADER_DETAIL_CACHE_CONTRACT = 'sealed-trader-detail-cache@1'
@@ -56,6 +57,17 @@ interface SealedTraderDetailCache {
   readonly response: TraderDetailResponse
   readonly windows: Record<SnapshotWindow, SealedRankingCacheEntry<SealedTraderDetailBinding>>
 }
+
+interface ParsedSealedTraderDetailCache {
+  readonly response: TraderDetailResponse
+  readonly publicationIdentities: Readonly<Record<SnapshotWindow, string>>
+}
+
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 export async function GET(
   request: NextRequest,
@@ -76,25 +88,35 @@ export async function GET(
         return NextResponse.json({ error: 'trader_key is required' }, { status: 400 })
       }
 
-      // Unified Cache-Control for HIT + MISS paths. Previously the MISS path
-      // used s-maxage=30, swr=120 while HIT used s-maxage=60, swr=300 — that
-      // asymmetry halved the Vercel edge cache lifetime for cache misses,
-      // causing 2x edge re-validation traffic on endpoints that were missing
-      // the Redis cache. Align both paths: 60s fresh + 300s SWR.
-      const CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300'
       const cacheKey = publicRankingCacheKey(
         `trader:sealed-v1:${platform}:${encodeURIComponent(trader_key)}`
       )
       const cached = await tieredGet<unknown>(cacheKey)
-      const cachedResponse = parseSealedTraderDetailCache(cached.data, platform, trader_key)
-      if (cachedResponse) {
-        return NextResponse.json(withCurrentStaleness(cachedResponse), {
-          headers: {
-            'X-Cache': 'HIT',
-            'X-Cache-Layer': cached.layer || 'unknown',
-            'Cache-Control': CACHE_CONTROL,
-          },
-        })
+      const parsedCache = parseSealedTraderDetailCache(cached.data, platform, trader_key)
+      if (parsedCache) {
+        const currentReads = await Promise.all(
+          SNAPSHOT_WINDOWS.map((season) =>
+            readSealedRankingGeneration(
+              supabase,
+              { season, sources: [platform] },
+              async () => null,
+              { timeoutMs: 15_000 }
+            )
+          )
+        )
+        const isCurrent = currentReads.every(
+          (read) =>
+            parsedCache.publicationIdentities[read.publication.season] === read.publicationIdentity
+        )
+        if (isCurrent) {
+          return NextResponse.json(withCurrentStaleness(parsedCache.response), {
+            headers: {
+              'X-Cache': 'HIT',
+              'X-Cache-Layer': cached.layer || 'unknown',
+              ...NO_STORE_HEADERS,
+            },
+          })
+        }
       }
 
       // Legacy source aliases for fallback queries to old tables
@@ -417,10 +439,9 @@ export async function GET(
         }
       })
 
-      const res = NextResponse.json(response)
-      res.headers.set('Cache-Control', CACHE_CONTROL)
-      res.headers.set('X-Cache', 'MISS')
-      return res
+      return NextResponse.json(response, {
+        headers: { 'X-Cache': 'MISS', ...NO_STORE_HEADERS },
+      })
     },
     { name: 'trader-detail' }
   )
@@ -483,7 +504,7 @@ function parseSealedTraderDetailCache(
   input: unknown,
   platform: string,
   traderKey: string
-): TraderDetailResponse | null {
+): ParsedSealedTraderDetailCache | null {
   try {
     if (!isRecord(input)) return null
     const keys = Object.keys(input).sort()
@@ -500,6 +521,7 @@ function parseSealedTraderDetailCache(
     }
     const response = input.response
     const responseSha256 = traderDetailResponseSha256(response)
+    const publicationIdentities = {} as Record<SnapshotWindow, string>
 
     const windowKeys = Object.keys(input.windows).sort()
     if (
@@ -532,12 +554,13 @@ function parseSealedTraderDetailCache(
         return null
       }
 
+      publicationIdentities[window] = entry.publicationIdentity
       sourceDates.push(...entry.publication.proofs.map((proof) => proof.source_as_of))
     }
 
     const updatedAt = getOldestPublicationUpdate(sourceDates)
     if (response.updated_at !== updatedAt) return null
-    return response
+    return { response, publicationIdentities }
   } catch {
     return null
   }

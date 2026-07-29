@@ -125,6 +125,95 @@ function installSuccessfulQueries() {
   return leaderboardQueries
 }
 
+const CACHE_SEASONS = ['7D', '30D', '90D'] as const
+
+function sealedDetailCache(displayName = 'Verified cache') {
+  const sourceAsOf = '2026-07-29T09:00:00.000000Z'
+  const response = {
+    profile: {
+      platform: 'binance_futures',
+      trader_key: 'trader-1',
+      display_name: displayName,
+    },
+    snapshots: { '7D': null, '30D': null, '90D': null },
+    timeseries: { equity_curve: null, daily_pnl: null, asset_breakdown: null },
+    updated_at: '2026-07-29T09:00:00.000Z',
+    is_stale: false,
+    staleness_seconds: 0,
+    refresh_job: null,
+  }
+  const binding = {
+    contract: 'sealed-trader-detail-binding@1',
+    platform: 'binance_futures',
+    traderKey: 'trader-1',
+    responseSha256: createHash('sha256').update(JSON.stringify(response)).digest('hex'),
+  }
+  const windows = Object.fromEntries(
+    CACHE_SEASONS.map((season, index) => {
+      const scoreCohortId = `11111111-1111-4111-8111-11111111111${index}`
+      const publication = {
+        state: 'sealed',
+        season,
+        scoreCohortId,
+        proofs: [
+          {
+            season_id: season,
+            source: 'binance_futures',
+            source_as_of: sourceAsOf,
+            recorded_at: '2026-07-29T09:01:00.000000Z',
+            score_cohort_id: scoreCohortId,
+            rank_mutation_seq: 1,
+            current_mutation_seq: 1,
+            published_rank_count: 1,
+            published_identity_sha256: 'a'.repeat(64),
+            is_sealed: true,
+          },
+        ],
+      }
+      return [
+        season,
+        {
+          contract: 'sealed-ranking-cache@1',
+          season,
+          publicationIdentity: JSON.stringify(publication),
+          publication,
+          cachedAt: '2026-07-29T09:02:00.000Z',
+          value: binding,
+        },
+      ]
+    })
+  ) as Record<(typeof CACHE_SEASONS)[number], { publication: Record<string, unknown> }>
+  return {
+    response,
+    windows,
+    payload: {
+      contract: 'sealed-trader-detail-cache@1',
+      response,
+      windows,
+    },
+  }
+}
+
+function installCurrentPublicationReads(
+  windows: ReturnType<typeof sealedDetailCache>['windows'],
+  overrides: Partial<Record<(typeof CACHE_SEASONS)[number], Record<string, unknown>>> = {}
+) {
+  mockReadSealedRankingGeneration.mockImplementation(
+    async (
+      _supabase: unknown,
+      input: { season: (typeof CACHE_SEASONS)[number] },
+      reader: (publication: Record<string, unknown>) => Promise<unknown>
+    ) => {
+      const publication = overrides[input.season] ?? windows[input.season].publication
+      return {
+        value: await reader(publication),
+        publication,
+        publicationIdentity: JSON.stringify(publication),
+      }
+    }
+  )
+}
+
 import { GET } from '../route'
 
 describe('GET /api/trader/:platform/:trader_key publication boundary', () => {
@@ -231,67 +320,10 @@ describe('GET /api/trader/:platform/:trader_key publication boundary', () => {
   })
 
   it('serves a response only when all three cached windows carry the same sealed binding', async () => {
-    const sourceAsOf = '2026-07-29T09:00:00.000000Z'
-    const cachedResponse = {
-      profile: {
-        platform: 'binance_futures',
-        trader_key: 'trader-1',
-        display_name: 'Verified cache',
-      },
-      snapshots: { '7D': null, '30D': null, '90D': null },
-      timeseries: { equity_curve: null, daily_pnl: null, asset_breakdown: null },
-      updated_at: '2026-07-29T09:00:00.000Z',
-      is_stale: false,
-      staleness_seconds: 0,
-      refresh_job: null,
-    }
-    const binding = {
-      contract: 'sealed-trader-detail-binding@1',
-      platform: 'binance_futures',
-      traderKey: 'trader-1',
-      responseSha256: createHash('sha256').update(JSON.stringify(cachedResponse)).digest('hex'),
-    }
-    const windows = Object.fromEntries(
-      (['7D', '30D', '90D'] as const).map((season, index) => {
-        const scoreCohortId = `11111111-1111-4111-8111-11111111111${index}`
-        const publication = {
-          state: 'sealed',
-          season,
-          scoreCohortId,
-          proofs: [
-            {
-              season_id: season,
-              source: 'binance_futures',
-              source_as_of: sourceAsOf,
-              recorded_at: '2026-07-29T09:01:00.000000Z',
-              score_cohort_id: scoreCohortId,
-              rank_mutation_seq: 1,
-              current_mutation_seq: 1,
-              published_rank_count: 1,
-              published_identity_sha256: 'a'.repeat(64),
-              is_sealed: true,
-            },
-          ],
-        }
-        return [
-          season,
-          {
-            contract: 'sealed-ranking-cache@1',
-            season,
-            publicationIdentity: JSON.stringify(publication),
-            publication,
-            cachedAt: '2026-07-29T09:02:00.000Z',
-            value: binding,
-          },
-        ]
-      })
-    )
+    const cache = sealedDetailCache()
+    installCurrentPublicationReads(cache.windows)
     mockTieredGet.mockResolvedValue({
-      data: {
-        contract: 'sealed-trader-detail-cache@1',
-        response: cachedResponse,
-        windows,
-      },
+      data: cache.payload,
       layer: 'memory',
     })
 
@@ -302,9 +334,43 @@ describe('GET /api/trader/:platform/:trader_key publication boundary', () => {
 
     expect(response.headers.get('X-Cache')).toBe('HIT')
     expect(response.headers.get('X-Cache-Layer')).toBe('memory')
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
     expect(body.profile.display_name).toBe('Verified cache')
     expect(mockFrom).not.toHaveBeenCalled()
-    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(3)
+  })
+
+  it('rejects a well-formed cache after any ranking window advances', async () => {
+    const cache = sealedDetailCache('Outdated cache')
+    const old90D = cache.windows['90D'].publication
+    const nextCohortId = '99999999-9999-4999-8999-999999999999'
+    const next90D = {
+      ...old90D,
+      scoreCohortId: nextCohortId,
+      proofs: (old90D.proofs as Array<Record<string, unknown>>).map((proof) => ({
+        ...proof,
+        score_cohort_id: nextCohortId,
+        rank_mutation_seq: 2,
+        current_mutation_seq: 2,
+        published_identity_sha256: 'b'.repeat(64),
+      })),
+    }
+    installCurrentPublicationReads(cache.windows, { '90D': next90D })
+    mockTieredGet.mockResolvedValue({ data: cache.payload, layer: 'memory' })
+    installSuccessfulQueries()
+
+    const response = await GET({} as never, {
+      params: Promise.resolve({ platform: 'binance_futures', trader_key: 'trader-1' }),
+    })
+    const body = await response.json()
+
+    expect(response.headers.get('X-Cache')).toBe('MISS')
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(body.profile.display_name).toBe('Sealed Trader')
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(6)
+    expect(mockTieredSet).toHaveBeenCalled()
   })
 
   it('fails closed when a phase-one enrichment query errors', async () => {
