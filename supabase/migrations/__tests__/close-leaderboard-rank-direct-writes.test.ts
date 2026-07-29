@@ -35,7 +35,7 @@ describe('leaderboard rank direct-write postdeploy closure', () => {
 
     expect(postdeploy.indexOf(migrationName)).toBeGreaterThanOrEqual(0)
     expect(postdeploy[postdeploy.indexOf(migrationName) + 1]).toBe(
-      '20260729153000_close_legacy_leaderboard_rank_writer_rpcs.sql'
+      '20260729153500_close_legacy_leaderboard_rank_writer_rpcs.sql'
     )
     expect(postdeploy.filter((name) => name === migrationName)).toHaveLength(1)
     for (const phase of [predeploy, recoveryPrerequisites, recovery, quarantined, superseded]) {

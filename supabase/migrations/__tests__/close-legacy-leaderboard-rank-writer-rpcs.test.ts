@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
-const migrationName = '20260729153000_close_legacy_leaderboard_rank_writer_rpcs.sql'
+const migrationName = '20260729153500_close_legacy_leaderboard_rank_writer_rpcs.sql'
 const migration = readFileSync(join(root, 'supabase/migrations', migrationName), 'utf8')
 const pg17 = readFileSync(
   join(root, 'supabase/migrations/__tests__/close-legacy-leaderboard-rank-writer-rpcs.pg17.sh'),

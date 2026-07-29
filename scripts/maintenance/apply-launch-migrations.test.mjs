@@ -166,7 +166,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const leaderboardRankDirectWriteClosureMigration =
     '20260729152000_close_leaderboard_rank_direct_writes.sql'
   const legacyLeaderboardRankWriterClosureMigration =
-    '20260729153000_close_legacy_leaderboard_rank_writer_rpcs.sql'
+    '20260729153500_close_legacy_leaderboard_rank_writer_rpcs.sql'
   const accountHardDeleteRecoveryBarrierMigration =
     '20260729075300_account_hard_delete_recovery_barrier.sql'
   const verifiedAuthProfileEmailMigration = '20260729075400_verified_auth_profile_email.sql'

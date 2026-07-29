@@ -8,7 +8,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 TABLE_CUTOVER="$ROOT_DIR/supabase/migrations/20260729152000_close_leaderboard_rank_direct_writes.sql"
-RPC_CUTOVER="$ROOT_DIR/supabase/migrations/20260729153000_close_legacy_leaderboard_rank_writer_rpcs.sql"
+RPC_CUTOVER="$ROOT_DIR/supabase/migrations/20260729153500_close_legacy_leaderboard_rank_writer_rpcs.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
