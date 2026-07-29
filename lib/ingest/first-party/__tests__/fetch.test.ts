@@ -111,6 +111,9 @@ describe('first-party account equity evidence', () => {
     )
 
     expect(result.events).toEqual([{ ts: NOW - 1_000, pnl: -25, positionLevel: false }])
+    expect(fetchLedger).toHaveBeenCalledWith(undefined, NOW - 90 * DAY, 1000, {
+      incomeType: 'REALIZED_PNL',
+    })
   })
 
   it('windows realized PnL by position close time instead of open time', async () => {

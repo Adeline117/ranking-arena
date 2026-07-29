@@ -65,7 +65,7 @@ export interface FirstPartyTransferLedgerContract {
 const DAY_MS = 86_400_000
 const STABLES = ['USDT', 'USD', 'USDC']
 const POSITION_HISTORY_LIMIT = 100
-const LEDGER_LIMIT = 500
+const LEDGER_LIMIT = 1000
 const LEDGER_MAX_PAGES = 5
 
 function num(v: unknown): number | null {
@@ -139,7 +139,9 @@ async function eventsFromLedger(client: CcxtLike, sinceMs: number): Promise<Real
   const out: RealizedEvent[] = []
   let since = sinceMs
   for (let page = 0; page < LEDGER_MAX_PAGES; page++) {
-    const rows = await client.fetchLedger(undefined, since, LEDGER_LIMIT)
+    const rows = await client.fetchLedger(undefined, since, LEDGER_LIMIT, {
+      incomeType: 'REALIZED_PNL',
+    })
     if (!rows?.length) break
     for (const r of rows) {
       const ts = num(r.timestamp)
