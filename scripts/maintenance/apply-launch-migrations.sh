@@ -172,6 +172,8 @@ PREDEPLOY_MIGRATIONS=(
   20260729153000_atomic_group_audit_log_page.sql
   20260729154500_inactive_auth_subject_mutation_barrier.sql
   20260729155000_atomic_group_edit_application_page.sql
+  20260729156000_atomic_group_notification_broadcast.sql
+  20260729156500_inactive_auth_subject_request_admission.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
