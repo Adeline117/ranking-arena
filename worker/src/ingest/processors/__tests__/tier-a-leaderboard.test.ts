@@ -46,7 +46,21 @@ const mockPublishAttemptBoundLeaderboardSnapshot = jest.fn()
 const mockHasRegisteredLeaderboardMetricTrust = jest.fn()
 const mockPublishFencedBoardSeries = jest.fn()
 const mockJobUpdateData = jest.fn()
+const mockDirectJobUpdateData = jest.fn()
 const mockResolveDeployedSha = jest.fn()
+const mockClaimSourceJobExecutionAuthority = jest.fn()
+const mockExecutionAssertActive = jest.fn()
+const mockExecutionClose = jest.fn()
+const mockExecutionWithClaimedWrite = jest.fn()
+const mockBullReplaceDataIfOwned = jest.fn()
+const mockClaimedWriteClient = Object.freeze({ query: jest.fn() })
+const mockAttemptTransaction = jest.fn()
+const mockRawPointerTransaction = jest.fn()
+const mockFieldInventoryTransaction = jest.fn()
+const mockPublicationExecution = jest.fn()
+const mockGetExecutionWindowReceipt = jest.fn()
+const mockRecordExecutionWindowReceipt = jest.fn()
+const mockReceiptWriterTransaction = jest.fn()
 
 jest.mock('@/lib/ingest/sources', () => ({
   getSourceBySlug: (...args: unknown[]) => mockGetSourceBySlug(...args),
@@ -59,11 +73,42 @@ jest.mock('@/lib/ingest/fetch/fetcher', () => ({
   openSession: (...args: unknown[]) => mockOpenSession(...args),
 }))
 jest.mock('@/lib/ingest/raw', () => ({
-  writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
-  writeLeaderboardRawArtifactSet: (...args: unknown[]) =>
-    mockWriteLeaderboardRawArtifactSet(...args),
-  writeAttemptBoundLeaderboardRawArtifactSet: (...args: unknown[]) =>
-    mockWriteAttemptBoundLeaderboardRawArtifactSet(...args),
+  writeRawObject: async (
+    input: unknown,
+    runTransaction?: (operation: (transaction: unknown) => Promise<unknown>) => Promise<unknown>
+  ) => {
+    const result = await mockWriteRawObject(input)
+    if (runTransaction) {
+      await runTransaction(async (transaction: unknown) => {
+        mockRawPointerTransaction('raw', transaction)
+      })
+    }
+    return result
+  },
+  writeLeaderboardRawArtifactSet: async (
+    input: unknown,
+    runTransaction?: (operation: (transaction: unknown) => Promise<unknown>) => Promise<unknown>
+  ) => {
+    const result = await mockWriteLeaderboardRawArtifactSet(input)
+    if (runTransaction) {
+      await runTransaction(async (transaction: unknown) => {
+        mockRawPointerTransaction('artifact', transaction)
+      })
+    }
+    return result
+  },
+  writeAttemptBoundLeaderboardRawArtifactSet: async (
+    input: unknown,
+    runTransaction?: (operation: (transaction: unknown) => Promise<unknown>) => Promise<unknown>
+  ) => {
+    const result = await mockWriteAttemptBoundLeaderboardRawArtifactSet(input)
+    if (runTransaction) {
+      await runTransaction(async (transaction: unknown) => {
+        mockRawPointerTransaction('attempt-artifact', transaction)
+      })
+    }
+    return result
+  },
 }))
 jest.mock('@/lib/ingest/acquisition-attempts', () => {
   const actual = jest.requireActual('@/lib/ingest/acquisition-attempts')
@@ -71,25 +116,73 @@ jest.mock('@/lib/ingest/acquisition-attempts', () => {
     ...actual,
     findRegisteredAttemptBoundLeaderboardAcquisitionContract: (...args: unknown[]) =>
       mockFindRegisteredAttemptBoundContract(...args),
-    startLeaderboardAcquisitionAttempt: (...args: unknown[]) =>
-      mockStartLeaderboardAcquisitionAttempt(...args),
-    finishLeaderboardAcquisitionAttempt: (...args: unknown[]) =>
-      mockFinishLeaderboardAcquisitionAttempt(...args),
+    startLeaderboardAcquisitionAttemptInTransaction: (
+      transaction: unknown,
+      execution: unknown,
+      input: unknown
+    ) => {
+      mockAttemptTransaction('start', transaction, execution)
+      return mockStartLeaderboardAcquisitionAttempt(input)
+    },
+    finishLeaderboardAcquisitionAttemptInTransaction: (
+      transaction: unknown,
+      execution: unknown,
+      input: unknown
+    ) => {
+      mockAttemptTransaction('finish', transaction, execution)
+      return mockFinishLeaderboardAcquisitionAttempt(input)
+    },
   }
 })
 jest.mock('@/lib/ingest/field-inventory', () => ({
-  recordFieldInventory: (...args: unknown[]) => mockRecordFieldInventory(...args),
+  recordFieldInventoryWithExecutor: (transaction: unknown, ...args: unknown[]) => {
+    mockFieldInventoryTransaction(transaction)
+    return mockRecordFieldInventory(...args)
+  },
 }))
 jest.mock('@/lib/ingest/staging/validate', () => ({
   validateLeaderboardRows: (...args: unknown[]) => mockValidateLeaderboardRows(...args),
 }))
 jest.mock('@/worker/src/ingest/fenced-tier-a-publication', () => ({
-  publishFencedBoardSeries: (...args: unknown[]) => mockPublishFencedBoardSeries(...args),
-  publishFencedLeaderboardSnapshot: (...args: unknown[]) => mockPublishLeaderboardSnapshot(...args),
-  publishFencedTrustedLeaderboardSnapshot: (...args: unknown[]) =>
-    mockPublishTrustedLeaderboardSnapshot(...args),
-  publishFencedAttemptBoundLeaderboardSnapshot: (...args: unknown[]) =>
-    mockPublishAttemptBoundLeaderboardSnapshot(...args),
+  publishClaimedBoardSeries: (
+    src: unknown,
+    series: unknown,
+    traderIds: unknown,
+    context: unknown,
+    execution: unknown,
+    options: unknown,
+    _signal?: unknown
+  ) => {
+    mockPublicationExecution('series', execution)
+    return mockPublishFencedBoardSeries(src, series, traderIds, context, options)
+  },
+  publishClaimedLeaderboardSnapshot: (
+    input: unknown,
+    context: unknown,
+    execution: unknown,
+    _signal?: unknown
+  ) => {
+    mockPublicationExecution('snapshot', execution)
+    return mockPublishLeaderboardSnapshot(input, context)
+  },
+  publishClaimedTrustedLeaderboardSnapshot: (
+    input: unknown,
+    context: unknown,
+    execution: unknown,
+    _signal?: unknown
+  ) => {
+    mockPublicationExecution('trusted-snapshot', execution)
+    return mockPublishTrustedLeaderboardSnapshot(input, context)
+  },
+  publishClaimedAttemptBoundLeaderboardSnapshot: (
+    input: unknown,
+    context: unknown,
+    execution: unknown,
+    _signal?: unknown
+  ) => {
+    mockPublicationExecution('attempt-snapshot', execution)
+    return mockPublishAttemptBoundLeaderboardSnapshot(input, context)
+  },
 }))
 jest.mock('@/lib/ingest/serving/metric-trust-publish', () => ({
   hasRegisteredLeaderboardMetricTrust: (...args: unknown[]) =>
@@ -98,12 +191,34 @@ jest.mock('@/lib/ingest/serving/metric-trust-publish', () => ({
 jest.mock('@/worker/src/ingest/heartbeat', () => ({
   resolveDeployedSha: () => mockResolveDeployedSha(),
 }))
+jest.mock('@/worker/src/ingest/source-job-execution-authority', () => ({
+  claimSourceJobExecutionAuthority: (...args: unknown[]) =>
+    mockClaimSourceJobExecutionAuthority(...args),
+}))
+jest.mock('@/worker/src/ingest/tier-a-execution-window-receipt', () => {
+  class MockTierAExecutionWindowReceiptError extends Error {}
+  return {
+    TierAExecutionWindowReceiptError: MockTierAExecutionWindowReceiptError,
+    getTierAExecutionWindowReceipt: (...args: unknown[]) => mockGetExecutionWindowReceipt(...args),
+    withTierAExecutionReceiptWriter: async (
+      transaction: unknown,
+      binding: unknown,
+      callback: (writer: unknown) => Promise<unknown>
+    ) => {
+      mockReceiptWriterTransaction(transaction, binding)
+      return callback(Object.freeze({ transaction, binding }))
+    },
+    recordTierAExecutionWindowReceipt: (...args: unknown[]) =>
+      mockRecordExecutionWindowReceipt(...args),
+  }
+})
 
-import { processTierA as processTierAInRegion } from '../tier-a-leaderboard'
+import { processTierA as processTierAWithAuthority } from '../tier-a-leaderboard'
 import {
   createConsumedRegionContext,
   type AuthorizedConsumedRegionContext,
 } from '../../consumed-region-context'
+import type { SourceJobRunProvenance } from '../../source-job-routing'
 
 function createAuthorizedTestContext(
   consumedRegion: 'local' | 'vps_sg',
@@ -116,7 +231,36 @@ function createAuthorizedTestContext(
   }
 }
 
-const processTierA = (job: Parameters<typeof processTierAInRegion>[0]) => {
+function testProvenance(job: Job<TierJobData>): SourceJobRunProvenance {
+  return Object.freeze({
+    bullJob: Object.freeze({
+      proof: Object.freeze({
+        contract: 'arena.ingest.bull-job-provenance@1' as const,
+        queueName: 'arena-ingest',
+        jobId: String(job.id),
+        jobName: 'tiera:leaderboard',
+        attemptsMade: job.attemptsMade,
+        attemptsStarted: job.attemptsMade + 1,
+        processorTokenSha256: 'a'.repeat(64),
+      }),
+      assertActive: jest.fn(),
+      extendLock: jest.fn(async () => undefined),
+      replaceDataIfOwned: async (nextData: unknown) => {
+        await mockBullReplaceDataIfOwned(nextData)
+        job.data = nextData as TierJobData
+      },
+    }),
+    sourceLease: {} as SourceJobRunProvenance['sourceLease'],
+  })
+}
+
+const processTierAInRegion = (
+  job: Job<TierJobData>,
+  context: AuthorizedConsumedRegionContext,
+  signal?: AbortSignal
+) => processTierAWithAuthority(job, context, testProvenance(job), signal)
+
+const processTierA = (job: Job<TierJobData>) => {
   const region = job.data.sourceSlug.startsWith('binance_') ? 'vps_sg' : 'local'
   return processTierAInRegion(job, createAuthorizedTestContext(region, region))
 }
@@ -363,7 +507,7 @@ function makeJob(data: TierJobData = { sourceSlug: src.slug }): Job<TierJobData>
       // BullMQ mutates the in-memory Job before awaiting its Redis command.
       // Keep the mock faithful so fail-closed restoration is regression-tested.
       testJob.data = nextData
-      return mockJobUpdateData(nextData)
+      return mockDirectJobUpdateData(nextData)
     },
   }
   return testJob as unknown as Job<TierJobData>
@@ -436,6 +580,55 @@ describe('Tier-A board-series publication guard', () => {
     process.env.INGEST_LOCAL_REGION = 'local'
     process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = 'true'
     mockJobUpdateData.mockResolvedValue(undefined)
+    mockDirectJobUpdateData.mockResolvedValue(undefined)
+    mockBullReplaceDataIfOwned.mockImplementation((nextData: unknown) =>
+      mockJobUpdateData(nextData)
+    )
+    mockExecutionAssertActive.mockReturnValue(undefined)
+    mockExecutionWithClaimedWrite.mockImplementation(
+      (callback: (transaction: unknown) => Promise<unknown>) => callback(mockClaimedWriteClient)
+    )
+    mockExecutionClose.mockImplementation(async (phase: 'completed' | 'failed' | 'revoked') => ({
+      phase,
+    }))
+    mockClaimSourceJobExecutionAuthority.mockImplementation(
+      async (options: {
+        provenance: SourceJobRunProvenance
+        signal?: AbortSignal
+        sourceId: number
+      }) => {
+        const controller = new AbortController()
+        const abort = () => controller.abort(options.signal?.reason)
+        if (options.signal?.aborted) abort()
+        else options.signal?.addEventListener('abort', abort, { once: true })
+        const execution = {
+          proof: Object.freeze({
+            claimId: '10000000-0000-4000-8000-000000000001',
+            generationSeq: 17,
+            gitSha: 'c'.repeat(40),
+            queueAttempt: options.provenance.bullJob.proof.attemptsMade!,
+            queueJobId: options.provenance.bullJob.proof.jobId!,
+            queueName: options.provenance.bullJob.proof.queueName!,
+            sourceId: options.sourceId,
+          }),
+          signal: controller.signal,
+          assertActive: () => {
+            try {
+              mockExecutionAssertActive()
+            } catch (cause) {
+              if (!controller.signal.aborted) controller.abort(cause)
+              throw cause
+            }
+          },
+          close: (phase: 'completed' | 'failed' | 'revoked') => mockExecutionClose(phase),
+          withClaimedWrite: (callback: (transaction: unknown) => Promise<unknown>) =>
+            mockExecutionWithClaimedWrite(callback),
+        }
+        return Object.freeze(execution)
+      }
+    )
+    mockGetExecutionWindowReceipt.mockResolvedValue(null)
+    mockRecordExecutionWindowReceipt.mockResolvedValue(Object.freeze({ recorded: true }))
     job = makeJob()
     expectedCycleId = `tier-a:${src.slug}:${job.id}:${job.timestamp}`
     mockResolveDeployedSha.mockReturnValue('c'.repeat(40))
@@ -644,12 +837,24 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
+  it('claims execution before opening a session and a claim failure opens nothing', async () => {
+    const claimFailure = new Error('claim unavailable')
+    mockClaimSourceJobExecutionAuthority.mockRejectedValueOnce(claimFailure)
+
+    await expect(processTierA(job)).rejects.toBe(claimFailure)
+
+    expect(mockClaimSourceJobExecutionAuthority).toHaveBeenCalledTimes(1)
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockExecutionClose).not.toHaveBeenCalled()
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+  })
+
   it('drains best-effort field inventory before the processor can return', async () => {
     const inventory = deferred()
-    const checkpoint = deferred()
-    mockRecordFieldInventory.mockReturnValueOnce(inventory.promise)
-    mockJobUpdateData.mockImplementationOnce(async () => {
-      checkpoint.resolve()
+    const inventoryStarted = deferred()
+    mockRecordFieldInventory.mockImplementationOnce(async () => {
+      inventoryStarted.resolve()
+      return inventory.promise
     })
 
     let settled = false
@@ -662,7 +867,7 @@ describe('Tier-A board-series publication guard', () => {
         settled = true
       }
     )
-    await checkpoint.promise
+    await inventoryStarted.promise
     await Promise.resolve()
 
     expect(settled).toBe(false)
@@ -671,6 +876,16 @@ describe('Tier-A board-series publication guard', () => {
     inventory.resolve()
     await expect(run).resolves.toHaveLength(1)
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('swallows only an inventory query failure after reasserting execution authority', async () => {
+    mockRecordFieldInventory.mockRejectedValueOnce(new Error('inventory unavailable'))
+
+    await expect(processTierA(job)).resolves.toHaveLength(1)
+
+    expect(mockExecutionAssertActive).toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockExecutionClose).toHaveBeenCalledWith('completed')
   })
 
   it('keeps a registered v3 contract inert without explicit rollout approval', async () => {
@@ -809,7 +1024,9 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockPublishAttemptBoundLeaderboardSnapshot).toHaveBeenCalledTimes(1)
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockRecordExecutionWindowReceipt).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(mockExecutionClose).toHaveBeenCalledWith('failed')
   })
 
   it('terminally records a v4/identity capture mismatch without publishing or downgrading', async () => {
@@ -1044,13 +1261,8 @@ describe('Tier-A board-series publication guard', () => {
       }),
       expect.objectContaining({ consumedRegion: 'local' })
     )
-    expect(mockJobUpdateData).toHaveBeenCalledWith({
-      sourceSlug: src.slug,
-      completedTimeframes: [30],
-    })
-    expect(mockPublishFencedBoardSeries.mock.invocationCallOrder[0]).toBeLessThan(
-      mockJobUpdateData.mock.invocationCallOrder[0]
-    )
+    expect(mockRecordExecutionWindowReceipt).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
 
@@ -1697,12 +1909,11 @@ describe('Tier-A board-series publication guard', () => {
 
     expect(failure).toBeInstanceOf(AggregateError)
     expect((failure as AggregateError).errors).toHaveLength(2)
-    const wrapped = (failure as AggregateError).errors[0] as Error & { cause?: unknown }
+    const processingFailure = (failure as AggregateError).errors[0] as AggregateError
+    const wrapped = processingFailure.errors[0] as Error & { cause?: unknown }
     expect(wrapped.cause).toBe(upstream)
     expect((wrapped.cause as LeaderboardCaptureUpstreamError).capture).toBe(failedCapture)
-    expect((failure as AggregateError).errors[1].message).toContain(
-      'session close failed: browser close failed'
-    )
+    expect((failure as AggregateError).errors[1].message).toBe('browser close failed')
     expect(mockWriteRawObject).not.toHaveBeenCalled()
     expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2089,34 +2300,35 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockResolveDeployedSha).not.toHaveBeenCalled()
   })
 
-  it('resumes a retried job at the first unfinished native window', async () => {
+  it('uses exact-cycle database receipts to resume and repairs an absent Redis hint', async () => {
     const attempted: number[] = []
-    job = makeJob({ sourceSlug: src.slug, completedTimeframes: [7, 30] })
-    mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
-    mockGetAdapter.mockReturnValue({
-      listLeaderboard: async function* (_session: unknown, _src: SourceRow, timeframe: number) {
+    configureAttemptBoundSource(
+      [7, 30, 90],
+      jest.fn(async (_session: unknown, _src: SourceRow, timeframe: number) => {
         attempted.push(timeframe)
-        yield page
-      },
-      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
-      parseLeaderboardSeries: () => new Map(),
-    })
+        return capturedLeaderboard()
+      })
+    )
+    mockGetExecutionWindowReceipt.mockImplementation(
+      async (_transaction: unknown, input: { timeframe: number }) =>
+        input.timeframe === 7 || input.timeframe === 30 ? { timeframe: input.timeframe } : null
+    )
 
     await expect(processTierA(job)).resolves.toEqual([
       expect.objectContaining({ timeframe: 90, snapshotId: 777, passed: true }),
     ])
 
     expect(attempted).toEqual([90])
-    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
-    expect(mockWriteRawObject).toHaveBeenCalledWith(expect.objectContaining({ timeframe: 90 }))
-    expect(mockJobUpdateData).toHaveBeenCalledWith({
-      sourceSlug: src.slug,
-      completedTimeframes: [7, 30, 90],
-    })
+    expect(mockStartLeaderboardAcquisitionAttempt).toHaveBeenCalledTimes(1)
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).toHaveBeenCalledTimes(1)
+    expect(mockJobUpdateData.mock.calls.map(([data]) => data.completedTimeframes)).toEqual([
+      [7, 30],
+      [7, 30, 90],
+    ])
     expect(job.data.completedTimeframes).toEqual([7, 30, 90])
   })
 
-  it('normalizes duplicate and invalid checkpoints before deciding what to skip', async () => {
+  it('ignores legacy hints, clears them by CAS, and refetches every native window', async () => {
     const attempted: number[] = []
     job = makeJob({
       sourceSlug: src.slug,
@@ -2132,27 +2344,94 @@ describe('Tier-A board-series publication guard', () => {
       parseLeaderboardSeries: () => new Map(),
     })
 
-    await expect(processTierA(job)).resolves.toHaveLength(2)
+    await expect(processTierA(job)).resolves.toHaveLength(3)
 
-    // Only the numeric native 30d value is trusted; duplicates, unknown
-    // numbers, strings, and null cannot suppress a crawl.
-    expect(attempted).toEqual([7, 90])
-    expect(mockJobUpdateData.mock.calls.map(([data]) => data.completedTimeframes)).toEqual([
-      [7, 30],
-      [7, 30, 90],
-    ])
-    expect(job.data.completedTimeframes).toEqual([7, 30, 90])
+    expect(attempted).toEqual([7, 30, 90])
+    expect(mockJobUpdateData.mock.calls.map(([data]) => data.completedTimeframes)).toEqual([[]])
+    expect(job.data.completedTimeframes).toEqual([])
+    expect(mockRecordExecutionWindowReceipt).not.toHaveBeenCalled()
   })
 
-  it('returns before opening a browser when every native window is checkpointed', async () => {
-    job = makeJob({ sourceSlug: src.slug, completedTimeframes: [7, 30, 90] })
-    mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
+  it('closes completed without opening a browser when every native receipt exists', async () => {
+    const captureLeaderboard = configureAttemptBoundSource([7, 30, 90])
+    job = makeJob({ sourceSlug: binanceSrc.slug, completedTimeframes: [7, 30, 90] })
+    mockGetExecutionWindowReceipt.mockImplementation(
+      async (_transaction: unknown, input: { timeframe: number }) => ({
+        timeframe: input.timeframe,
+      })
+    )
 
     await expect(processTierA(job)).resolves.toEqual([])
 
-    expect(mockGetAdapter).not.toHaveBeenCalled()
+    expect(mockClaimSourceJobExecutionAuthority).toHaveBeenCalledTimes(1)
+    expect(mockGetExecutionWindowReceipt).toHaveBeenCalledTimes(3)
     expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(captureLeaderboard).not.toHaveBeenCalled()
+    expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(mockExecutionClose).toHaveBeenCalledWith('completed')
+  })
+
+  it('does not let a Redis hint or a foreign-cycle receipt suppress current-cycle work', async () => {
+    const captureLeaderboard = configureAttemptBoundSource([30])
+    job = makeJob({ sourceSlug: binanceSrc.slug, completedTimeframes: [30] })
+    expectedCycleId = `tier-a:${binanceSrc.slug}:${job.id}:${job.timestamp}`
+    const receiptsByCycle = new Map([['foreign-cycle', { timeframe: 30 }]])
+    mockGetExecutionWindowReceipt.mockImplementation(
+      async (_transaction: unknown, input: { observationCycleId: string }) =>
+        receiptsByCycle.get(input.observationCycleId) ?? null
+    )
+
+    await expect(processTierA(job)).resolves.toHaveLength(1)
+
+    expect(mockGetExecutionWindowReceipt).toHaveBeenCalledWith(
+      mockClaimedWriteClient,
+      expect.objectContaining({
+        observationCycleId: expectedCycleId,
+        queueJobId: job.id,
+        queueName: 'arena-ingest',
+        timeframe: 30,
+      })
+    )
+    expect(captureLeaderboard).toHaveBeenCalledTimes(1)
+    expect(mockJobUpdateData.mock.calls.map(([data]) => data.completedTimeframes)).toEqual([
+      [],
+      [30],
+    ])
+  })
+
+  it('treats receipt lookup failure as terminal before browser acquisition', async () => {
+    const captureLeaderboard = configureAttemptBoundSource([30])
+    const receiptFailure = new Error('receipt database unavailable')
+    mockGetExecutionWindowReceipt.mockRejectedValueOnce(receiptFailure)
+
+    await expect(processTierA(job)).rejects.toBe(receiptFailure)
+
+    expect(captureLeaderboard).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(mockExecutionClose).toHaveBeenCalledWith('failed')
+  })
+
+  it('stops after a receipt record failure without CAS or a later timeframe', async () => {
+    const attempted: number[] = []
+    configureAttemptBoundSource(
+      [7, 30],
+      jest.fn(async (_session: unknown, _src: SourceRow, timeframe: number) => {
+        attempted.push(timeframe)
+        return capturedLeaderboard()
+      })
+    )
+    const receiptFailure = new Error('receipt insert unavailable')
+    mockRecordExecutionWindowReceipt.mockRejectedValueOnce(receiptFailure)
+
+    await expect(processTierA(job)).rejects.toBe(receiptFailure)
+
+    expect(attempted).toEqual([7])
+    expect(mockRecordExecutionWindowReceipt).toHaveBeenCalledTimes(1)
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(mockExecutionClose).toHaveBeenCalledWith('failed')
   })
 
   it('does not checkpoint a window until board-series publication succeeds', async () => {
@@ -2171,67 +2450,146 @@ describe('Tier-A board-series publication guard', () => {
     expect(job.data).toEqual({ sourceSlug: src.slug })
   })
 
-  it('checkpoints a bot window after its metadata commits in the fenced snapshot', async () => {
-    mockGetSourceBySlug.mockResolvedValue({ ...src, trader_kind_scope: 'bot' })
+  it('continues after a registered series failure but receipts only the successful window', async () => {
+    const captureLeaderboard = jest.fn(async () => capturedLeaderboard())
+    configureAttemptBoundSource([7, 30], captureLeaderboard)
+    mockGetAdapter.mockReturnValue({
+      captureLeaderboard,
+      listLeaderboard: async function* () {
+        throw new Error('registered source must not use the legacy stream')
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: (_raw: unknown, _ctx: unknown, timeframe: RankingTimeframe) =>
+        new Map([
+          [
+            row.exchangeTraderId,
+            [
+              {
+                timeframe,
+                metric: 'pnl',
+                replaceSeries: true,
+                points: [{ ts: '2026-07-16T00:00:00.000Z', value: 20 }],
+              },
+            ],
+          ],
+        ]),
+    })
+    mockPublishFencedBoardSeries.mockRejectedValueOnce(new Error('series write failed'))
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toThrow('1/2 native windows failed (7d)')
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(captureLeaderboard).toHaveBeenCalledTimes(2)
+    expect(mockRecordExecutionWindowReceipt).toHaveBeenCalledTimes(1)
+    expect(mockRecordExecutionWindowReceipt.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ timeframe: 30 })
+    )
+    expect(mockJobUpdateData).toHaveBeenCalledWith({
+      sourceSlug: binanceSrc.slug,
+      completedTimeframes: [30],
+    })
+    expect(mockExecutionClose).toHaveBeenCalledWith('failed')
+  })
+
+  it('records a durable receipt after snapshot metadata and only then repairs Redis', async () => {
+    configureAttemptBoundSource()
+    mockGetSourceBySlug.mockResolvedValue({ ...binanceSrc, trader_kind_scope: 'bot' })
 
     await expect(processTierA(job)).resolves.toHaveLength(1)
 
-    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledTimes(1)
-    expect(mockPublishLeaderboardSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockPublishTrustedLeaderboardSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRecordExecutionWindowReceipt.mock.invocationCallOrder[0]
+    )
+    expect(mockRecordExecutionWindowReceipt.mock.invocationCallOrder[0]).toBeLessThan(
       mockJobUpdateData.mock.invocationCallOrder[0]
     )
+    expect(mockRecordExecutionWindowReceipt.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        attemptId: expect.any(String),
+        observationCycleId: expectedCycleId,
+        rawObjectId: expect.any(Number),
+        snapshotId: 777,
+        sourceRunId: expect.stringMatching(/^[0-9a-f]{64}$/),
+        timeframe: 30,
+      })
+    )
     expect(mockJobUpdateData).toHaveBeenCalledWith({
-      sourceSlug: src.slug,
+      sourceSlug: binanceSrc.slug,
       completedTimeframes: [30],
     })
   })
 
-  it('fails closed, restores acknowledged data, and stops after an updateData failure', async () => {
+  it('keeps the durable receipt and stops before the next window when CAS fails', async () => {
     const attempted: number[] = []
-    job = makeJob({ sourceSlug: src.slug, completedTimeframes: [7] })
-    mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
-    mockGetAdapter.mockReturnValue({
-      listLeaderboard: async function* (_session: unknown, _src: SourceRow, timeframe: number) {
+    configureAttemptBoundSource(
+      [7, 30, 90],
+      jest.fn(async (_session: unknown, _src: SourceRow, timeframe: number) => {
         attempted.push(timeframe)
-        yield page
-      },
-      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
-      parseLeaderboardSeries: () => new Map(),
+        return capturedLeaderboard()
+      })
+    )
+    job = makeJob({ sourceSlug: binanceSrc.slug, completedTimeframes: [7] })
+    expectedCycleId = `tier-a:${binanceSrc.slug}:${job.id}:${job.timestamp}`
+    mockGetExecutionWindowReceipt.mockImplementation(
+      async (_transaction: unknown, input: { timeframe: number }) =>
+        input.timeframe === 7 ? { timeframe: 7 } : null
+    )
+    const redisFailure = new Error('redis unavailable')
+    const ownershipLoss = new Error('Bull lock lost')
+    mockJobUpdateData.mockRejectedValueOnce(redisFailure)
+    mockExecutionAssertActive.mockImplementation(() => {
+      if (mockJobUpdateData.mock.calls.length > 0) throw ownershipLoss
     })
-    mockJobUpdateData.mockRejectedValueOnce(new Error('redis unavailable'))
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
     try {
       await expect(processTierA(job)).rejects.toThrow(
-        'checkpoint persistence failed for xt_futures 30d: redis unavailable'
+        'checkpoint persistence failed for binance_futures 30d: redis unavailable; Bull lock lost'
       )
     } finally {
       errorSpy.mockRestore()
     }
 
     expect(attempted).toEqual([30])
-    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockRecordExecutionWindowReceipt).toHaveBeenCalledTimes(1)
     expect(mockJobUpdateData).toHaveBeenCalledWith({
-      sourceSlug: src.slug,
+      sourceSlug: binanceSrc.slug,
       completedTimeframes: [7, 30],
     })
-    expect(job.data).toEqual({ sourceSlug: src.slug, completedTimeframes: [7] })
+    expect(job.data).toEqual({ sourceSlug: binanceSrc.slug, completedTimeframes: [7] })
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+    expect(mockExecutionClose).toHaveBeenCalledWith('revoked')
+    expect(mockDirectJobUpdateData).not.toHaveBeenCalled()
   })
 
   it('checkpoints successes around a normal failure and retries only the missing window', async () => {
     const attempted: number[] = []
+    const durableReceipts = new Set<number>()
     let run = 1
-    mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
-    mockGetAdapter.mockReturnValue({
-      listLeaderboard: async function* (_session: unknown, _src: SourceRow, timeframe: number) {
+    configureAttemptBoundSource(
+      [7, 30, 90],
+      jest.fn(async (_session: unknown, _src: SourceRow, timeframe: number) => {
         attempted.push(timeframe)
         if (run === 1 && timeframe === 30) throw new Error('transient upstream failure')
-        yield page
-      },
-      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
-      parseLeaderboardSeries: () => new Map(),
-    })
+        return capturedLeaderboard()
+      })
+    )
+    mockGetExecutionWindowReceipt.mockImplementation(
+      async (_transaction: unknown, input: { timeframe: number }) =>
+        durableReceipts.has(input.timeframe) ? { timeframe: input.timeframe } : null
+    )
+    mockRecordExecutionWindowReceipt.mockImplementation(
+      async (_writer: unknown, input: { timeframe: number }) => {
+        durableReceipts.add(input.timeframe)
+        return { timeframe: input.timeframe }
+      }
+    )
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
     try {
@@ -2254,7 +2612,7 @@ describe('Tier-A board-series publication guard', () => {
 
       expect(attempted).toEqual([30])
       expect(mockJobUpdateData).toHaveBeenCalledWith({
-        sourceSlug: src.slug,
+        sourceSlug: binanceSrc.slug,
         completedTimeframes: [7, 30, 90],
       })
       expect(job.data.completedTimeframes).toEqual([7, 30, 90])
@@ -2318,12 +2676,11 @@ describe('Tier-A board-series publication guard', () => {
     expect((failure as AggregateError).errors).toHaveLength(2)
     expect((failure as Error).message).toContain('2/3 native windows failed (7d, 30d)')
     expect((failure as Error).message).toContain('1 succeeded')
-    expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
-    expect(mockJobUpdateData).toHaveBeenCalledWith({
-      sourceSlug: src.slug,
-      completedTimeframes: [90],
-    })
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(mockRecordExecutionWindowReceipt).not.toHaveBeenCalled()
+    expect(job.data).toEqual({ sourceSlug: src.slug })
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+    expect(mockExecutionClose).toHaveBeenCalledWith('failed')
 
     for (const [input] of mockWriteRawObject.mock.calls) {
       expect(input.meta.observation_cycle_id).toBe(expectedCycleId)
@@ -2343,6 +2700,11 @@ describe('Tier-A board-series publication guard', () => {
       }
     )
     configureAttemptBoundSource([7, 30], captureLeaderboard)
+    const claimImplementation = mockClaimSourceJobExecutionAuthority.getMockImplementation()!
+    mockClaimSourceJobExecutionAuthority.mockImplementation(async (...args: unknown[]) => {
+      events.push('claim')
+      return claimImplementation(...args)
+    })
     let sequence = 41
     mockStartLeaderboardAcquisitionAttempt.mockImplementation(
       async (input: StartLeaderboardAcquisitionAttemptInput) => {
@@ -2382,6 +2744,9 @@ describe('Tier-A board-series publication guard', () => {
         }
       }
     )
+    mockRecordFieldInventory.mockImplementation(async () => {
+      events.push('field')
+    })
     mockPublishTrustedLeaderboardSnapshot.mockImplementation(
       async (input: { timeframe: RankingTimeframe }) => {
         events.push(`publish:${input.timeframe}`)
@@ -2403,24 +2768,40 @@ describe('Tier-A board-series publication guard', () => {
     mockJobUpdateData.mockImplementation(async (data: TierJobData) => {
       events.push(`checkpoint:${data.completedTimeframes?.at(-1)}`)
     })
+    mockRecordExecutionWindowReceipt.mockImplementation(
+      async (_writer: unknown, input: { timeframe: RankingTimeframe }) => {
+        events.push(`receipt:${input.timeframe}`)
+        return { timeframe: input.timeframe }
+      }
+    )
+    mockExecutionClose.mockImplementation(async (phase: 'completed' | 'failed' | 'revoked') => {
+      events.push(`execution:close:${phase}`)
+      return { phase }
+    })
 
     await expect(processTierA(job)).resolves.toHaveLength(2)
 
     expect(events).toEqual([
+      'claim',
       'begin:7',
       'session:open',
       'capture:7',
       'raw:7',
+      'field',
       'finish:7',
       'publish:7',
+      'receipt:7',
       'checkpoint:7',
       'begin:30',
       'capture:30',
       'raw:30',
+      'field',
       'finish:30',
       'publish:30',
+      'receipt:30',
       'checkpoint:30',
       'session:close',
+      'execution:close:completed',
     ])
     expect(mockOpenSession).toHaveBeenCalledTimes(1)
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
@@ -2455,6 +2836,23 @@ describe('Tier-A board-series publication guard', () => {
       })
       expect(finishInput.projection).toBe(rawReceipts[index].projection)
     }
+    for (const [, transaction] of mockAttemptTransaction.mock.calls) {
+      expect(transaction).toBe(mockClaimedWriteClient)
+    }
+    for (const [, transaction] of mockRawPointerTransaction.mock.calls) {
+      expect(transaction).toBe(mockClaimedWriteClient)
+    }
+    for (const [transaction] of mockFieldInventoryTransaction.mock.calls) {
+      expect(transaction).toBe(mockClaimedWriteClient)
+    }
+    for (const [transaction] of mockReceiptWriterTransaction.mock.calls) {
+      expect(transaction).toBe(mockClaimedWriteClient)
+    }
+    const claimedExecution = await mockClaimSourceJobExecutionAuthority.mock.results[0].value
+    for (const [, publicationExecution] of mockPublicationExecution.mock.calls) {
+      expect(publicationExecution).toBe(claimedExecution)
+    }
+    expect(mockDirectJobUpdateData).not.toHaveBeenCalled()
   })
 
   it('awaits manifest finalization before any registered-window publication or checkpoint', async () => {
@@ -2495,15 +2893,15 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
   })
 
-  it('fails before upstream I/O when a registered source cannot prove its runner SHA', async () => {
+  it('binds a registered attempt to the database-attested execution SHA', async () => {
     configureAttemptBoundSource()
     mockResolveDeployedSha.mockReturnValue('unknown-deployment')
 
-    await expect(processTierA(job)).rejects.toThrow('requires an exact deployed runner SHA')
-    expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
-    expect(mockOpenSession).not.toHaveBeenCalled()
-    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
-    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    await expect(processTierA(job)).resolves.toHaveLength(1)
+    expect(mockStartLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ runnerGitSha: 'c'.repeat(40) })
+    )
+    expect(mockResolveDeployedSha).not.toHaveBeenCalled()
   })
 
   it('records execution provenance separately from the consumed queue authority', async () => {
@@ -2556,11 +2954,53 @@ describe('Tier-A board-series publication guard', () => {
 
     expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ src, timeframe: 30 }),
-      expect.objectContaining({ consumedRegion: 'local' }),
-      controller.signal
+      expect.objectContaining({ consumedRegion: 'local' })
     )
-    expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
+    expect(mockPublicationExecution).toHaveBeenCalledWith('snapshot', expect.any(Object))
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails a completed close that is downgraded to another phase', async () => {
+    mockExecutionClose.mockResolvedValueOnce({ phase: 'revoked' })
+
+    await expect(processTierA(job)).rejects.toThrow(
+      'execution close phase mismatch: requested=completed, returned=revoked'
+    )
+
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+    expect(mockExecutionClose).toHaveBeenCalledWith('completed')
+  })
+
+  it('aggregates processing, session-close, and execution-close failures', async () => {
+    const processingFailure = new Error('upstream failed')
+    const sessionFailure = new Error('session close failed')
+    const executionCloseFailure = new Error('execution close failed')
+    mockGetAdapter.mockReturnValue({
+      listLeaderboard: async function* () {
+        throw processingFailure
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+    mockSessionClose.mockRejectedValueOnce(sessionFailure)
+    mockExecutionClose.mockRejectedValueOnce(executionCloseFailure)
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    let failure: unknown
+    try {
+      await processTierA(job)
+    } catch (cause) {
+      failure = cause
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors).toHaveLength(3)
+    expect((failure as AggregateError).errors[1]).toBe(sessionFailure)
+    expect((failure as AggregateError).errors[2]).toBe(executionCloseFailure)
+    expect(mockExecutionClose).toHaveBeenCalledWith('failed')
   })
 
   it('leaves an open attempt and closes its session when authority is lost during capture', async () => {
@@ -2593,6 +3033,36 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(mockExecutionClose).toHaveBeenCalledWith('revoked')
+  })
+
+  it('preserves a concurrent business error and abort reason without finalizing the open attempt', async () => {
+    const controller = new AbortController()
+    const businessFailure = new Error('capture business failure')
+    const cancellation = new Error('authority revoked concurrently')
+    configureAttemptBoundSource(
+      [30],
+      jest.fn(async () => {
+        controller.abort(cancellation)
+        throw businessFailure
+      })
+    )
+
+    let failure: unknown
+    try {
+      await processTierAInRegion(
+        job,
+        createAuthorizedTestContext('vps_sg', 'vps_sg'),
+        controller.signal
+      )
+    } catch (cause) {
+      failure = cause
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors).toEqual([businessFailure, cancellation])
+    expect(mockFinishLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockExecutionClose).toHaveBeenCalledWith('revoked')
   })
 
   it('terminally records first-session failure without beginning a later window', async () => {
@@ -2894,6 +3364,10 @@ describe('Tier-A board-series publication guard', () => {
     configureAttemptBoundSource([7, 30, 90])
     job = makeJob({ sourceSlug: binanceSrc.slug, completedTimeframes: [7] })
     expectedCycleId = `tier-a:${binanceSrc.slug}:${job.id}:${job.timestamp}`
+    mockGetExecutionWindowReceipt.mockImplementation(
+      async (_transaction: unknown, input: { timeframe: number }) =>
+        input.timeframe === 7 ? { timeframe: 7 } : null
+    )
 
     await expect(processTierA(job)).resolves.toHaveLength(2)
 

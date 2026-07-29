@@ -42,10 +42,11 @@ import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
   findRegisteredAttemptBoundLeaderboardAcquisitionContract,
-  finishLeaderboardAcquisitionAttempt,
-  startLeaderboardAcquisitionAttempt,
+  finishLeaderboardAcquisitionAttemptInTransaction,
+  startLeaderboardAcquisitionAttemptInTransaction,
   type AttemptBoundLeaderboardAcquisitionContract,
-  type LeaderboardAcquisitionAttempt,
+  type ClaimedLeaderboardAcquisitionAttempt,
+  type LeaderboardAcquisitionExecutionBinding,
   type LeaderboardAcquisitionFailureStage,
   type LeaderboardAcquisitionReasonCode,
 } from '@/lib/ingest/acquisition-attempts'
@@ -53,6 +54,7 @@ import {
   writeAttemptBoundLeaderboardRawArtifactSet,
   writeLeaderboardRawArtifactSet,
   writeRawObject,
+  type IngestTransactionRunner,
   type RawObjectReceipt,
 } from '@/lib/ingest/raw'
 import {
@@ -60,7 +62,7 @@ import {
   strictCanonicalJson,
   strictCanonicalSha256,
 } from '@/lib/ingest/strict-canonical-json'
-import { recordFieldInventory } from '@/lib/ingest/field-inventory'
+import { recordFieldInventoryWithExecutor } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
 import {
   hasRegisteredLeaderboardMetricTrust,
@@ -75,11 +77,22 @@ import {
   type AuthorizedConsumedRegionContext,
 } from '../consumed-region-context'
 import {
-  publishFencedAttemptBoundLeaderboardSnapshot,
-  publishFencedBoardSeries,
-  publishFencedLeaderboardSnapshot,
-  publishFencedTrustedLeaderboardSnapshot,
+  publishClaimedAttemptBoundLeaderboardSnapshot,
+  publishClaimedBoardSeries,
+  publishClaimedLeaderboardSnapshot,
+  publishClaimedTrustedLeaderboardSnapshot,
 } from '../fenced-tier-a-publication'
+import {
+  claimSourceJobExecutionAuthority,
+  type SourceJobExecutionAuthority,
+} from '../source-job-execution-authority'
+import type { SourceJobRunProvenance } from '../source-job-routing'
+import {
+  getTierAExecutionWindowReceipt,
+  recordTierAExecutionWindowReceipt,
+  TierAExecutionWindowReceiptError,
+  withTierAExecutionReceiptWriter,
+} from '../tier-a-execution-window-receipt'
 
 export interface TierAResult {
   timeframe: number
@@ -167,10 +180,19 @@ function completedTimeframesFrom(value: unknown): RankingTimeframe[] {
   return RANKING_TIMEFRAMES.filter((timeframe) => completed.has(timeframe))
 }
 
-class TierACheckpointPersistenceError extends Error {
-  constructor(sourceSlug: string, timeframe: RankingTimeframe, options: { cause: unknown }) {
-    const detail = options.cause instanceof Error ? options.cause.message : String(options.cause)
-    super(`checkpoint persistence failed for ${sourceSlug} ${timeframe}d: ${detail}`, options)
+class TierACheckpointPersistenceError extends AggregateError {
+  constructor(
+    sourceSlug: string,
+    timeframe: RankingTimeframe | null,
+    failures: readonly unknown[]
+  ) {
+    const errors = failures.map(asError)
+    const detail = errors.map((error) => error.message).join('; ')
+    super(
+      errors,
+      `checkpoint persistence failed for ${sourceSlug}` +
+        `${timeframe === null ? '' : ` ${timeframe}d`}: ${detail}`
+    )
     this.name = 'TierACheckpointPersistenceError'
   }
 }
@@ -223,6 +245,93 @@ function throwIfTierACancelled(signal?: AbortSignal): void {
   if (!signal?.aborted) return
   const reason = signal.reason
   throw reason instanceof Error ? reason : new Error('[tier-a] execution cancelled')
+}
+
+function canonicalAttemptObservationCycleId(value: string | null, sourceSlug: string): string {
+  if (
+    value === null ||
+    value.length === 0 ||
+    value.length > 512 ||
+    value.trim() !== value ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) {
+    throw new TypeError(
+      `[tier-a] ${sourceSlug} attempt-bound capture requires a canonical observation cycle`
+    )
+  }
+  return value
+}
+
+function exactCompletedTimeframeCache(
+  value: unknown,
+  expected: readonly RankingTimeframe[]
+): boolean {
+  if (value === undefined && expected.length === 0) return true
+  return (
+    Array.isArray(value) &&
+    value.length === expected.length &&
+    value.every((timeframe, index) => timeframe === expected[index])
+  )
+}
+
+async function replaceCompletedTimeframeCache(input: {
+  provenance: SourceJobRunProvenance
+  execution: SourceJobExecutionAuthority
+  persistedJobData: TierJobData
+  completedTimeframes: ReadonlySet<RankingTimeframe>
+  nativeTimeframes: readonly RankingTimeframe[]
+  sourceSlug: string
+  timeframe: RankingTimeframe | null
+}): Promise<TierJobData> {
+  const completed = completedTimeframesFrom([...input.completedTimeframes]).filter((timeframe) =>
+    input.nativeTimeframes.includes(timeframe)
+  )
+  if (exactCompletedTimeframeCache(input.persistedJobData.completedTimeframes, completed)) {
+    return input.persistedJobData
+  }
+  const nextData: TierJobData = {
+    ...input.persistedJobData,
+    completedTimeframes: completed,
+  }
+
+  try {
+    await input.provenance.bullJob.replaceDataIfOwned(nextData)
+    return nextData
+  } catch (checkpointCause) {
+    try {
+      // replaceDataIfOwned failures are sticky. Assert immediately so Bull
+      // ownership loss revokes the execution before any later timeframe can run.
+      input.execution.assertActive()
+    } catch (authorityCause) {
+      throw new TierACheckpointPersistenceError(input.sourceSlug, input.timeframe, [
+        checkpointCause,
+        authorityCause,
+      ])
+    }
+    throw new TierACheckpointPersistenceError(input.sourceSlug, input.timeframe, [checkpointCause])
+  }
+}
+
+async function recordFieldInventoryBestEffort(input: {
+  execution: SourceJobExecutionAuthority
+  sourceId: number
+  payload: unknown
+}): Promise<void> {
+  try {
+    await input.execution.withClaimedWrite((transaction) =>
+      recordFieldInventoryWithExecutor(transaction, input.sourceId, 'tier_a', input.payload)
+    )
+  } catch {
+    // Inventory is observational only. A business/query failure may be
+    // swallowed, but an authority failure must remain terminal and sticky.
+    input.execution.assertActive()
+  }
+}
+
+function lifecycleAggregate(sourceSlug: string, errors: readonly Error[]): Error | null {
+  if (errors.length === 0) return null
+  if (errors.length === 1) return errors[0]
+  return new AggregateError(errors, `[tier-a] ${sourceSlug}: lifecycle failures`)
 }
 
 type AttemptLifecycle = 'not_started' | 'open' | 'finalizing' | 'terminal'
@@ -306,7 +415,7 @@ function buildCaptureManifest(input: CaptureManifestInput) {
 
 function buildAttemptBoundCaptureManifest(
   input: CaptureManifestInput & {
-    attempt: LeaderboardAcquisitionAttempt
+    attempt: ClaimedLeaderboardAcquisitionAttempt
     configuredPartitionIds: readonly string[] | null
   }
 ) {
@@ -723,7 +832,8 @@ async function persistUnprocessedCaptureRaw(input: {
   completedAt: string
   capture: AnyLeaderboardCapture
   priorFailures: readonly unknown[]
-  attempt?: LeaderboardAcquisitionAttempt | null
+  attempt?: ClaimedLeaderboardAcquisitionAttempt | null
+  runTransaction: IngestTransactionRunner
 }): Promise<RawObjectReceipt> {
   const captureEvidence = {
     mode: isPartitionedNumericLeaderboardCapture(input.capture)
@@ -748,40 +858,43 @@ async function persistUnprocessedCaptureRaw(input: {
       : {}),
   }
   try {
-    return await writeRawObject({
-      sourceId: input.src.id,
-      sourceSlug: input.src.slug,
-      jobType: 'tier_a_failure',
-      timeframe: input.timeframe,
-      payload: input.capture.sourcePages.map((sourcePage) => sourcePage.rawPage),
-      serialization: STRICT_CANONICAL_JSON_CONTRACT,
-      meta: {
-        pageCount: input.capture.sourcePages.length,
-        ...(input.cycleId ? { observation_cycle_id: input.cycleId } : {}),
-        ...(input.attempt
-          ? {
-              acquisition_attempt: {
-                binding_contract: input.attempt.attemptBindingContract,
-                attempt_id: input.attempt.attemptId,
-                attempt_seq: input.attempt.attemptSeq,
-                capture_contract: input.attempt.captureContract,
-                runner_git_sha: input.attempt.runnerGitSha,
-                capture_started_at: input.attempt.recordedStartedAt,
-                capture_completed_at: input.completedAt,
-              },
-            }
-          : {}),
-        trust_evidence: {
-          state: 'unknown',
-          rank_eligible: false,
-          failure_stage: 'parse_validate_or_manifest',
-          termination_reason: input.capture.terminationReason,
-          capture_started_at: input.startedAt,
-          capture_completed_at: input.completedAt,
+    return await writeRawObject(
+      {
+        sourceId: input.src.id,
+        sourceSlug: input.src.slug,
+        jobType: 'tier_a_failure',
+        timeframe: input.timeframe,
+        payload: input.capture.sourcePages.map((sourcePage) => sourcePage.rawPage),
+        serialization: STRICT_CANONICAL_JSON_CONTRACT,
+        meta: {
+          pageCount: input.capture.sourcePages.length,
+          ...(input.cycleId ? { observation_cycle_id: input.cycleId } : {}),
+          ...(input.attempt
+            ? {
+                acquisition_attempt: {
+                  binding_contract: input.attempt.attemptBindingContract,
+                  attempt_id: input.attempt.attemptId,
+                  attempt_seq: input.attempt.attemptSeq,
+                  capture_contract: input.attempt.captureContract,
+                  runner_git_sha: input.attempt.runnerGitSha,
+                  capture_started_at: input.attempt.recordedStartedAt,
+                  capture_completed_at: input.completedAt,
+                },
+              }
+            : {}),
+          trust_evidence: {
+            state: 'unknown',
+            rank_eligible: false,
+            failure_stage: 'parse_validate_or_manifest',
+            termination_reason: input.capture.terminationReason,
+            capture_started_at: input.startedAt,
+            capture_completed_at: input.completedAt,
+          },
+          capture_evidence: captureEvidence,
         },
-        capture_evidence: captureEvidence,
       },
-    })
+      input.runTransaction
+    )
   } catch (persistenceCause) {
     throw new TierAEvidencePersistenceError(
       input.src.slug,
@@ -792,35 +905,10 @@ async function persistUnprocessedCaptureRaw(input: {
   }
 }
 
-async function persistCompletedTimeframe(
-  job: Job<TierJobData>,
-  persistedJobData: TierJobData,
-  completedTimeframes: ReadonlySet<RankingTimeframe>,
-  timeframe: RankingTimeframe,
-  sourceSlug: string
-): Promise<TierJobData> {
-  const nextCompleted = completedTimeframesFrom([...completedTimeframes, timeframe])
-  const nextData: TierJobData = {
-    ...persistedJobData,
-    completedTimeframes: nextCompleted,
-  }
-
-  try {
-    await job.updateData(nextData)
-    return nextData
-  } catch (cause) {
-    // BullMQ mutates job.data before its Redis command resolves. Restore the
-    // last acknowledged value so a later checkpoint can never accidentally
-    // persist this unconfirmed window. The caller treats this as fatal rather
-    // than continuing to another timeframe.
-    job.data = persistedJobData
-    throw new TierACheckpointPersistenceError(sourceSlug, timeframe, { cause })
-  }
-}
-
 export async function processTierA(
   job: Job<TierJobData>,
   context: AuthorizedConsumedRegionContext,
+  provenance: SourceJobRunProvenance,
   signal?: AbortSignal
 ): Promise<TierAResult[]> {
   throwIfTierACancelled(signal)
@@ -833,20 +921,6 @@ export async function processTierA(
   }
 
   const timeframes = nativeRankingTimeframes(src)
-  const completedTimeframes = new Set(
-    completedTimeframesFrom(job.data.completedTimeframes).filter((timeframe) =>
-      timeframes.includes(timeframe)
-    )
-  )
-  const pendingTimeframes = timeframes.filter((timeframe) => !completedTimeframes.has(timeframe))
-  if (completedTimeframes.size > 0) {
-    console.log(
-      `[tier-a] ${src.slug}: resuming job; skipping completed windows ` +
-        [...completedTimeframes].map((timeframe) => `${timeframe}d`).join(', ')
-    )
-  }
-  if (pendingTimeframes.length === 0) return []
-
   const adapter = getAdapter(src.adapter_slug)
   const cycleId = observationCycleId(job, 'tier-a', src.slug)
   const desiredCaptureContract: AttemptBoundLeaderboardAcquisitionContract =
@@ -878,77 +952,146 @@ export async function processTierA(
     throw new Error(`[tier-a] ${src.slug} v4 capture contract is not exactly registered`)
   }
   const attemptBoundCapture = registeredCaptureContract !== null
+  const attemptBoundCycleId = attemptBoundCapture
+    ? canonicalAttemptObservationCycleId(cycleId, src.slug)
+    : null
   const workerRegion = context.executionRegion
-  // Freeze provenance before the first upstream request. A long-running crawl
-  // must not bind later timeframes to a different checkout/deployment SHA.
-  const runnerGitSha = adapter.captureLeaderboard ? verifiedRunnerGitSha() : null
-  if (attemptBoundCapture && !adapter.captureLeaderboard) {
-    throw new Error(
-      `[tier-a] ${src.slug} is registered for attempt-bound capture but its adapter has no capture implementation`
-    )
-  }
-  if (attemptBoundCapture && runnerGitSha === null) {
-    throw new Error(
-      `[tier-a] ${src.slug} attempt-bound capture requires an exact deployed runner SHA`
-    )
-  }
   const partitionIdsByTimeframe = new Map<RankingTimeframe, readonly string[]>()
-  if (desiredCaptureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT) {
-    for (const timeframe of pendingTimeframes) {
-      partitionIdsByTimeframe.set(timeframe, authoritativePartitionIds(adapter, src, timeframe))
-    }
-  }
+  let runnerGitSha: string | null = null
+
+  throwIfTierACancelled(signal)
+  const execution = await claimSourceJobExecutionAuthority({
+    context,
+    provenance,
+    sourceId: src.id,
+    ...(signal ? { signal } : {}),
+  })
+  const executionSignal = execution.signal
+  const executionBinding: LeaderboardAcquisitionExecutionBinding = Object.freeze({
+    claimId: execution.proof.claimId,
+    generationSeq: execution.proof.generationSeq,
+    sourceId: src.id,
+  })
+  const runClaimedTransaction: IngestTransactionRunner = (operation) =>
+    execution.withClaimedWrite((transaction) => operation(transaction))
+
   const results: TierAResult[] = []
   const failures: Array<{ timeframe: number; error: Error }> = []
-  const pendingFieldInventory: Promise<void>[] = []
+  const completedTimeframes = new Set<RankingTimeframe>()
   let terminalFailure: { error: unknown } | null = null
   let sessionCloseFailure: Error | null = null
   let persistedJobData: TierJobData = { ...job.data }
-  const publicationSignalArgs: [] | [AbortSignal] = signal ? [signal] : []
+  let pendingTimeframes: RankingTimeframe[] = []
   // Unregistered sources retain their existing session/capture path. A
   // registered source opens lazily only after the first pending window has a
   // durable attempt, so session-open failure is itself terminal evidence.
   let session: Awaited<ReturnType<typeof openSession>> | null = null
-  const closeSessionOnAbort = () => {
-    if (session !== null) void session.close().catch(() => undefined)
+  let sessionClosePromise: Promise<void> | null = null
+  const closeSession = (): Promise<void> => {
+    if (session === null) return Promise.resolve()
+    sessionClosePromise ??= Promise.resolve().then(() => session!.close())
+    return sessionClosePromise
   }
-  signal?.addEventListener('abort', closeSessionOnAbort, { once: true })
+  const closeSessionOnAbort = () => {
+    void closeSession().catch(() => undefined)
+  }
+  executionSignal.addEventListener('abort', closeSessionOnAbort, { once: true })
 
   try {
-    if (!attemptBoundCapture) {
-      throwIfTierACancelled(signal)
+    if (attemptBoundCapture) {
+      await execution.withClaimedWrite(async (transaction) => {
+        for (const timeframe of timeframes) {
+          const receipt = await getTierAExecutionWindowReceipt(transaction, {
+            sourceId: src.id,
+            queueName: execution.proof.queueName,
+            queueJobId: execution.proof.queueJobId,
+            observationCycleId: attemptBoundCycleId!,
+            timeframe,
+          })
+          if (receipt !== null) completedTimeframes.add(timeframe)
+        }
+      })
+    }
+    throwIfTierACancelled(executionSignal)
+
+    // Redis is only a repairable cache of the database receipt set. Legacy
+    // paths have no receipt authority and therefore clear every stale hint.
+    persistedJobData = await replaceCompletedTimeframeCache({
+      provenance,
+      execution,
+      persistedJobData,
+      completedTimeframes,
+      nativeTimeframes: timeframes,
+      sourceSlug: src.slug,
+      timeframe: null,
+    })
+    throwIfTierACancelled(executionSignal)
+    pendingTimeframes = timeframes.filter((timeframe) => !completedTimeframes.has(timeframe))
+    if (completedTimeframes.size > 0) {
+      console.log(
+        `[tier-a] ${src.slug}: durable receipts skip completed windows ` +
+          [...completedTimeframes].map((timeframe) => `${timeframe}d`).join(', ')
+      )
+    }
+
+    // A completed durable receipt needs no browser or adapter preparation.
+    // For pending claimed captures, the DB-attested execution SHA is the
+    // manifest/attempt runner identity; it cannot drift from the claim.
+    if (pendingTimeframes.length > 0) {
+      if (attemptBoundCapture && !adapter.captureLeaderboard) {
+        throw new Error(
+          `[tier-a] ${src.slug} is registered for attempt-bound capture but its adapter has no capture implementation`
+        )
+      }
+      runnerGitSha = attemptBoundCapture
+        ? execution.proof.gitSha
+        : adapter.captureLeaderboard
+          ? verifiedRunnerGitSha()
+          : null
+      if (desiredCaptureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT) {
+        for (const timeframe of pendingTimeframes) {
+          partitionIdsByTimeframe.set(timeframe, authoritativePartitionIds(adapter, src, timeframe))
+        }
+      }
+    }
+
+    if (pendingTimeframes.length > 0 && !attemptBoundCapture) {
+      throwIfTierACancelled(executionSignal)
       session = await openSession(src)
-      throwIfTierACancelled(signal)
+      throwIfTierACancelled(executionSignal)
     }
     for (const timeframe of pendingTimeframes) {
-      throwIfTierACancelled(signal)
-      let acquisitionAttempt: LeaderboardAcquisitionAttempt | null = null
+      throwIfTierACancelled(executionSignal)
+      let acquisitionAttempt: ClaimedLeaderboardAcquisitionAttempt | null = null
       let attemptLifecycle: AttemptLifecycle = 'not_started'
       let failureStage: LeaderboardAcquisitionFailureStage = 'upstream_fetch'
       let failureReason: ProcessingFailureReason = 'unknown_failure'
       let captureCompletedAt: string | null = null
       let diagnosticRawObjectId: number | null = null
       let finalizationPriorFailures: readonly unknown[] = []
+      let terminalWindowSideEffect: 'receipt' | null = null
       try {
         if (attemptBoundCapture) {
-          throwIfTierACancelled(signal)
-          acquisitionAttempt = await startLeaderboardAcquisitionAttempt({
-            sourceId: src.id,
-            timeframe,
-            observationCycleId: cycleId,
-            queueJobId: job.id === undefined ? null : String(job.id),
-            queueAttempt: job.attemptsMade,
-            captureContract: registeredCaptureContract!,
-            runnerGitSha,
-            workerRegion,
-          })
-          throwIfTierACancelled(signal)
+          throwIfTierACancelled(executionSignal)
+          acquisitionAttempt = await execution.withClaimedWrite((transaction) =>
+            startLeaderboardAcquisitionAttemptInTransaction(transaction, executionBinding, {
+              sourceId: src.id,
+              timeframe,
+              observationCycleId: attemptBoundCycleId,
+              queueJobId: execution.proof.queueJobId,
+              queueAttempt: execution.proof.queueAttempt,
+              captureContract: registeredCaptureContract!,
+              runnerGitSha,
+              workerRegion,
+            })
+          )
+          throwIfTierACancelled(executionSignal)
           attemptLifecycle = 'open'
           failureStage = 'session_open'
           failureReason = 'upstream_unavailable'
           if (session === null) {
             session = await openSession(src)
-            throwIfTierACancelled(signal)
+            throwIfTierACancelled(executionSignal)
           }
         }
         if (session === null) {
@@ -958,8 +1101,14 @@ export async function processTierA(
         const scrapedAt = acquisitionAttempt?.recordedStartedAt ?? new Date().toISOString()
         failureStage = 'upstream_fetch'
         failureReason = 'unknown_failure'
-        const acquisition = await acquireLeaderboard(adapter, session, src, timeframe, signal)
-        throwIfTierACancelled(signal)
+        const acquisition = await acquireLeaderboard(
+          adapter,
+          session,
+          src,
+          timeframe,
+          executionSignal
+        )
+        throwIfTierACancelled(executionSignal)
         const capture = acquisition.kind === 'legacy' ? null : acquisition.capture
         // This is the acquisition boundary, not a parser/runtime duration.
         captureCompletedAt = capture ? new Date().toISOString() : null
@@ -973,36 +1122,41 @@ export async function processTierA(
         let rawObjectId: number | null = null
         let metricTrust: LeaderboardMetricTrustBundle | null = null
         let attemptBoundV4: LeaderboardAttemptBoundV4Bundle | null = null
+        let fieldInventoryRecorded = false
+        const recordInventory = async () => {
+          if (fieldInventoryRecorded || pages.length === 0) return
+          fieldInventoryRecorded = true
+          throwIfTierACancelled(executionSignal)
+          await recordFieldInventoryBestEffort({
+            execution,
+            sourceId: src.id,
+            payload: pages[0].payload,
+          })
+          throwIfTierACancelled(executionSignal)
+        }
 
         // Legacy adapters retain the existing RAW-first path. Capture-aware
         // adapters atomically persist source payload + manifest after the
         // parser has produced honest accepted/rejected counts below.
         if (acquisition.kind === 'legacy') {
-          throwIfTierACancelled(signal)
-          const rawReceipt = await writeRawObject({
-            sourceId: src.id,
-            sourceSlug: src.slug,
-            jobType: 'tier_a',
-            timeframe,
-            payload: rawPages,
-            meta: {
-              pageCount: rawPages.length,
-              ...(cycleId ? { observation_cycle_id: cycleId } : {}),
+          throwIfTierACancelled(executionSignal)
+          const rawReceipt = await writeRawObject(
+            {
+              sourceId: src.id,
+              sourceSlug: src.slug,
+              jobType: 'tier_a',
+              timeframe,
+              payload: rawPages,
+              meta: {
+                pageCount: rawPages.length,
+                ...(cycleId ? { observation_cycle_id: cycleId } : {}),
+              },
             },
-          })
-          throwIfTierACancelled(signal)
-          rawObjectId = rawReceipt.id
-        }
-
-        // Upstream field radar (P1): sample the first page's shape while it's
-        // still in memory (RAW blobs aren't SQL-queryable). Inventory remains
-        // best-effort, but track it through processor drain so regional
-        // authority cannot be released while its database write is detached.
-        if (pages.length > 0) {
-          throwIfTierACancelled(signal)
-          pendingFieldInventory.push(
-            recordFieldInventory(src.id, 'tier_a', pages[0].payload).catch(() => undefined)
+            runClaimedTransaction
           )
+          throwIfTierACancelled(executionSignal)
+          rawObjectId = rawReceipt.id
+          await recordInventory()
         }
 
         const ctx: ParseCtx = {
@@ -1078,7 +1232,7 @@ export async function processTierA(
               : [processingCause]
             failureStage = 'raw_persistence'
             failureReason = 'raw_persistence_failed'
-            throwIfTierACancelled(signal)
+            throwIfTierACancelled(executionSignal)
             const diagnostic = await persistUnprocessedCaptureRaw({
               src,
               timeframe,
@@ -1088,9 +1242,11 @@ export async function processTierA(
               capture,
               priorFailures,
               attempt: acquisitionAttempt,
+              runTransaction: runClaimedTransaction,
             })
-            throwIfTierACancelled(signal)
+            throwIfTierACancelled(executionSignal)
             diagnosticRawObjectId = diagnostic.id
+            await recordInventory()
             failureStage = 'parse_validate_manifest'
             failureReason = processingReason
             throw new TierACaptureProcessingError(src.slug, timeframe, priorFailures)
@@ -1105,20 +1261,26 @@ export async function processTierA(
           failureStage = 'raw_persistence'
           failureReason = 'raw_persistence_failed'
           try {
-            throwIfTierACancelled(signal)
+            throwIfTierACancelled(executionSignal)
             artifactSet =
               attemptBoundBuilt.kind === 'v3'
-                ? await writeAttemptBoundLeaderboardRawArtifactSet({
-                    attempt: acquisitionAttempt,
-                    built: attemptBoundBuilt.built,
-                    sourcePages: rawPages,
-                  })
-                : await writeAttemptBoundLeaderboardRawArtifactSet({
-                    attempt: acquisitionAttempt,
-                    built: attemptBoundBuilt.built,
-                    sourcePages: rawPages,
-                  })
-            throwIfTierACancelled(signal)
+                ? await writeAttemptBoundLeaderboardRawArtifactSet(
+                    {
+                      attempt: acquisitionAttempt,
+                      built: attemptBoundBuilt.built,
+                      sourcePages: rawPages,
+                    },
+                    runClaimedTransaction
+                  )
+                : await writeAttemptBoundLeaderboardRawArtifactSet(
+                    {
+                      attempt: acquisitionAttempt,
+                      built: attemptBoundBuilt.built,
+                      sourcePages: rawPages,
+                    },
+                    runClaimedTransaction
+                  )
+            throwIfTierACancelled(executionSignal)
           } catch (persistenceCause) {
             throw new TierAEvidencePersistenceError(
               src.slug,
@@ -1141,20 +1303,23 @@ export async function processTierA(
               artifacts: artifactSet,
             }
           }
+          await recordInventory()
 
           attemptLifecycle = 'finalizing'
           finalizationPriorFailures = capturedError ? [capturedError] : []
           failureStage = 'attempt_finalize'
           failureReason = 'attempt_finalize_failed'
-          throwIfTierACancelled(signal)
-          await finishLeaderboardAcquisitionAttempt({
-            kind: 'manifest',
-            attempt: acquisitionAttempt,
-            projection: artifactSet.projection,
-            sourcePayloadRawObjectId: artifactSet.sourcePayload.id,
-            manifestRawObjectId: artifactSet.populationManifest.id,
-          })
-          throwIfTierACancelled(signal)
+          throwIfTierACancelled(executionSignal)
+          await execution.withClaimedWrite((transaction) =>
+            finishLeaderboardAcquisitionAttemptInTransaction(transaction, executionBinding, {
+              kind: 'manifest',
+              attempt: acquisitionAttempt!,
+              projection: artifactSet.projection,
+              sourcePayloadRawObjectId: artifactSet.sourcePayload.id,
+              manifestRawObjectId: artifactSet.populationManifest.id,
+            })
+          )
+          throwIfTierACancelled(executionSignal)
           attemptLifecycle = 'terminal'
 
           // The failed/partial response is now durable and terminal. Preserve
@@ -1171,17 +1336,20 @@ export async function processTierA(
         } else if (capture && built) {
           let artifactSet
           try {
-            throwIfTierACancelled(signal)
-            artifactSet = await writeLeaderboardRawArtifactSet({
-              sourceId: src.id,
-              sourceSlug: src.slug,
-              timeframe,
-              sourceRunId: built.sourceRunId,
-              sourcePages: rawPages,
-              manifest: built.manifest,
-              observationCycleId: cycleId,
-            })
-            throwIfTierACancelled(signal)
+            throwIfTierACancelled(executionSignal)
+            artifactSet = await writeLeaderboardRawArtifactSet(
+              {
+                sourceId: src.id,
+                sourceSlug: src.slug,
+                timeframe,
+                sourceRunId: built.sourceRunId,
+                sourcePages: rawPages,
+                manifest: built.manifest,
+                observationCycleId: cycleId,
+              },
+              runClaimedTransaction
+            )
+            throwIfTierACancelled(executionSignal)
           } catch (persistenceCause) {
             throw new TierAEvidencePersistenceError(
               src.slug,
@@ -1196,6 +1364,7 @@ export async function processTierA(
             manifest: built.manifest,
             artifacts: artifactSet,
           }
+          await recordInventory()
 
           // The failed response is now durable. Preserve the exact upstream
           // error object so BullMQ retry classification and operator evidence
@@ -1243,21 +1412,28 @@ export async function processTierA(
           )
         }
         const trustedBundle = registeredMetricTrust ? metricTrust : null
+        const receiptSourceRunId = attemptBoundV4?.sourceRunId ?? metricTrust?.sourceRunId ?? null
+        if (attemptBoundCapture && receiptSourceRunId === null) {
+          throw new Error(
+            `[tier-a] ${src.slug} ${timeframe}d attempt-bound capture has no receipt source run`
+          )
+        }
         const result = attemptBoundV4
-          ? await publishFencedAttemptBoundLeaderboardSnapshot(
+          ? await publishClaimedAttemptBoundLeaderboardSnapshot(
               {
                 src,
                 timeframe,
                 rows: valid,
                 rejects,
-                observationCycleId: cycleId ?? undefined,
+                observationCycleId: attemptBoundCycleId ?? undefined,
                 attemptEvidence: attemptBoundV4,
               },
               context,
-              ...publicationSignalArgs
+              execution,
+              executionSignal
             )
           : trustedBundle
-            ? await publishFencedTrustedLeaderboardSnapshot(
+            ? await publishClaimedTrustedLeaderboardSnapshot(
                 {
                   src,
                   timeframe,
@@ -1267,9 +1443,10 @@ export async function processTierA(
                   trust: trustedBundle,
                 },
                 context,
-                ...publicationSignalArgs
+                execution,
+                executionSignal
               )
-            : await publishFencedLeaderboardSnapshot(
+            : await publishClaimedLeaderboardSnapshot(
                 {
                   src,
                   timeframe,
@@ -1279,9 +1456,10 @@ export async function processTierA(
                   observationCycleId: cycleId ?? undefined,
                 },
                 context,
-                ...publicationSignalArgs
+                execution,
+                executionSignal
               )
-        throwIfTierACancelled(signal)
+        throwIfTierACancelled(executionSignal)
 
         const status = result.published ? 'PUBLISHED' : 'GATED'
         console.log(
@@ -1304,11 +1482,12 @@ export async function processTierA(
         // chart with no extra fetch — closes the long-tail series gap that
         // otherwise waits on Tier-B topN / on-demand Tier-C.
         if (boardSeries.size > 0) {
-          const seriesOut = await publishFencedBoardSeries(
+          const seriesOut = await publishClaimedBoardSeries(
             src,
             boardSeries,
             result.traderIds,
             context,
+            execution,
             {
               expectedLatestSnapshots: new Map([
                 [
@@ -1321,9 +1500,9 @@ export async function processTierA(
                 ],
               ]),
             },
-            ...publicationSignalArgs
+            executionSignal
           )
-          throwIfTierACancelled(signal)
+          throwIfTierACancelled(executionSignal)
           console.log(
             `[tier-a] ${src.slug} ${timeframe}d board series: ` +
               `${seriesOut.points} pts for ${seriesOut.traders} traders`
@@ -1335,22 +1514,46 @@ export async function processTierA(
         // trader_latest), so the compat bridge is orphaned and trader_latest is
         // being dropped. publish() above already wrote arena.* — the canonical source.
 
-        // This is deliberately the LAST awaited side effect in one window.
-        // A retry may skip the window only after RAW + snapshot + optional
-        // board-series publication have all completed. Bot metadata is already
-        // part of the fenced traders upsert above; no second serving projection
-        // is allowed after that commit. Persist after every window so a worker
-        // restart loses at most the in-flight TF.
-        throwIfTierACancelled(signal)
-        persistedJobData = await persistCompletedTimeframe(
-          job,
-          persistedJobData,
-          completedTimeframes,
-          timeframe,
-          src.slug
-        )
-        throwIfTierACancelled(signal)
-        completedTimeframes.add(timeframe)
+        // The database receipt, not Redis job.data, is the sole retry skip
+        // authority. It is committed only after snapshot and optional series.
+        if (attemptBoundCapture) {
+          terminalWindowSideEffect = 'receipt'
+          await execution.withClaimedWrite((transaction) =>
+            withTierAExecutionReceiptWriter(
+              transaction,
+              {
+                claimId: execution.proof.claimId,
+                generationSeq: execution.proof.generationSeq,
+                queueJobId: execution.proof.queueJobId,
+                queueName: execution.proof.queueName,
+                sourceId: src.id,
+              },
+              (writer) =>
+                recordTierAExecutionWindowReceipt(writer, {
+                  attemptId: acquisitionAttempt!.attemptId,
+                  observationCycleId: attemptBoundCycleId!,
+                  rawObjectId,
+                  snapshotId: result.snapshotId,
+                  sourceRunId: receiptSourceRunId!,
+                  timeframe,
+                })
+            )
+          )
+          throwIfTierACancelled(executionSignal)
+          terminalWindowSideEffect = null
+
+          completedTimeframes.add(timeframe)
+          persistedJobData = await replaceCompletedTimeframeCache({
+            provenance,
+            execution,
+            persistedJobData,
+            completedTimeframes,
+            nativeTimeframes: timeframes,
+            sourceSlug: src.slug,
+            timeframe,
+          })
+          throwIfTierACancelled(executionSignal)
+        }
 
         results.push({
           timeframe,
@@ -1361,7 +1564,19 @@ export async function processTierA(
           snapshotId: result.snapshotId,
         })
       } catch (cause) {
-        if (signal?.aborted) throwIfTierACancelled(signal)
+        // A failed CAS has already durably committed the receipt and then
+        // asserted the now-sticky Bull authority. Preserve both failures;
+        // replacing them with only the abort reason would hide the checkpoint
+        // ambiguity that operators need to diagnose.
+        if (cause instanceof TierACheckpointPersistenceError) throw cause
+        if (executionSignal.aborted) {
+          const abortReason = executionSignal.reason
+          if (cause === abortReason) throw cause
+          throw new AggregateError(
+            [asError(cause), asError(abortReason)],
+            `[tier-a] ${src.slug} ${timeframe}d failed while execution authority was revoked`
+          )
+        }
         if (attemptBoundCapture) {
           if (acquisitionAttempt === null || attemptLifecycle === 'not_started') {
             const detail = cause instanceof Error ? cause.message : String(cause)
@@ -1378,18 +1593,20 @@ export async function processTierA(
             )
           }
           if (attemptLifecycle === 'open') {
-            throwIfTierACancelled(signal)
+            throwIfTierACancelled(executionSignal)
             attemptLifecycle = 'finalizing'
             try {
-              await finishLeaderboardAcquisitionAttempt({
-                kind: 'processing_failed',
-                attempt: acquisitionAttempt,
-                captureCompletedAt,
-                diagnosticRawObjectId,
-                failureStage,
-                reasonCode: failureReason,
-              })
-              throwIfTierACancelled(signal)
+              await execution.withClaimedWrite((transaction) =>
+                finishLeaderboardAcquisitionAttemptInTransaction(transaction, executionBinding, {
+                  kind: 'processing_failed',
+                  attempt: acquisitionAttempt!,
+                  captureCompletedAt,
+                  diagnosticRawObjectId,
+                  failureStage,
+                  reasonCode: failureReason,
+                })
+              )
+              throwIfTierACancelled(executionSignal)
               attemptLifecycle = 'terminal'
             } catch (finalizationCause) {
               throw new TierAAttemptFinalizationError(
@@ -1413,61 +1630,74 @@ export async function processTierA(
         if (
           cause instanceof TierAEvidencePersistenceError ||
           cause instanceof TierACaptureProcessingError ||
-          cause instanceof TierAAttemptFinalizationError
+          cause instanceof TierAAttemptFinalizationError ||
+          cause instanceof TierAExecutionWindowReceiptError ||
+          terminalWindowSideEffect !== null
         ) {
           throw cause
         }
         // A checkpoint failure is also infrastructure-level and must fail
         // closed. Continuing could persist a later checkpoint after Redis lost
         // acknowledgement for this window.
-        if (cause instanceof TierACheckpointPersistenceError) throw error
         failures.push({ timeframe, error })
       }
     }
+    execution.assertActive()
   } catch (error) {
     terminalFailure = { error }
   } finally {
-    await Promise.all(pendingFieldInventory)
     if (session !== null) {
       try {
-        await session.close()
+        await closeSession()
       } catch (cause) {
-        const detail = cause instanceof Error ? cause.message : String(cause)
-        sessionCloseFailure = new Error(`[tier-a] ${src.slug} session close failed: ${detail}`, {
-          cause,
-        })
+        sessionCloseFailure = asError(cause)
       }
     }
-    signal?.removeEventListener('abort', closeSessionOnAbort)
+    executionSignal.removeEventListener('abort', closeSessionOnAbort)
   }
 
-  if (terminalFailure !== null) {
-    if (sessionCloseFailure !== null) {
-      const processingError =
-        terminalFailure.error instanceof Error
-          ? terminalFailure.error
-          : new Error(String(terminalFailure.error))
-      throw new AggregateError(
-        [processingError, sessionCloseFailure],
-        `[tier-a] ${src.slug}: processing and session close both failed`
-      )
-    }
-    throw terminalFailure.error
-  }
-
+  const processingErrors: Error[] = []
   if (failures.length > 0) {
-    const errors = failures.map((failure) => failure.error)
-    if (sessionCloseFailure !== null) errors.push(sessionCloseFailure)
-    throw new AggregateError(
-      errors,
-      `[tier-a] ${src.slug}: ${failures.length}/${timeframes.length} native windows failed ` +
-        `(${failures.map((failure) => `${failure.timeframe}d`).join(', ')}); ` +
-        `${results.length} succeeded${sessionCloseFailure ? '; session close failed' : ''}`
+    processingErrors.push(
+      new AggregateError(
+        failures.map((failure) => failure.error),
+        `[tier-a] ${src.slug}: ${failures.length}/${timeframes.length} native windows failed ` +
+          `(${failures.map((failure) => `${failure.timeframe}d`).join(', ')}); ` +
+          `${results.length} succeeded`
+      )
     )
   }
+  if (terminalFailure !== null) processingErrors.push(asError(terminalFailure.error))
 
-  if (sessionCloseFailure !== null) throw sessionCloseFailure
+  if (processingErrors.length === 0 && sessionCloseFailure === null) {
+    try {
+      execution.assertActive()
+    } catch (cause) {
+      processingErrors.push(asError(cause))
+    }
+  }
 
-  throwIfTierACancelled(signal)
+  const lifecycleErrors = [...processingErrors]
+  if (sessionCloseFailure !== null) lifecycleErrors.push(sessionCloseFailure)
+  const closePhase = executionSignal.aborted
+    ? 'revoked'
+    : lifecycleErrors.length > 0
+      ? 'failed'
+      : 'completed'
+  try {
+    const closeProof = await execution.close(closePhase)
+    if (closeProof.phase !== closePhase) {
+      throw new Error(
+        `[tier-a] ${src.slug} execution close phase mismatch: ` +
+          `requested=${closePhase}, returned=${closeProof.phase}`
+      )
+    }
+  } catch (cause) {
+    lifecycleErrors.push(asError(cause))
+  }
+
+  const lifecycleFailure = lifecycleAggregate(src.slug, lifecycleErrors)
+  if (lifecycleFailure !== null) throw lifecycleFailure
+
   return results
 }

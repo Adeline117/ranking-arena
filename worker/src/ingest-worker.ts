@@ -97,7 +97,7 @@ async function runJob(
   switch (job.name) {
     case INGEST_JOB.TIER_A: {
       const { processTierA } = await import('./ingest/processors/tier-a-leaderboard')
-      return processTierA(job, context, signal)
+      return processTierA(job, context, provenance, signal)
     }
     case INGEST_JOB.TIER_B: {
       const { processTierB } = await import('./ingest/processors/tier-b-profiles')
