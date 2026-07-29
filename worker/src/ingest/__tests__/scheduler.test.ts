@@ -28,6 +28,18 @@ const mockFastQueue = {
   getJobs: jest.fn().mockResolvedValue([]),
   add: jest.fn().mockResolvedValue(undefined),
 }
+const mockSgQueue = {
+  upsertJobScheduler: jest.fn().mockResolvedValue(undefined),
+  removeJobScheduler: jest.fn().mockResolvedValue(undefined),
+  getJobSchedulers: jest.fn().mockResolvedValue([]),
+  getJob: jest.fn().mockResolvedValue(null),
+  getJobs: jest.fn().mockResolvedValue([]),
+  add: jest.fn().mockResolvedValue(undefined),
+}
+const mockGetRegionQueue = jest.fn((region: string) =>
+  region === 'vps_sg' ? mockSgQueue : mockQueue
+)
+const mockGetFastQueue = jest.fn(() => mockFastQueue)
 const mockDbQuery = jest.fn().mockResolvedValue({ rows: [] })
 
 jest.mock('../queues', () => ({
@@ -45,8 +57,8 @@ jest.mock('../queues', () => ({
   },
   INGEST_REGIONS: ['local'],
   getIngestQueue: () => mockQueue,
-  getRegionQueue: () => mockQueue,
-  getFastQueue: () => mockFastQueue,
+  getRegionQueue: (region: string) => mockGetRegionQueue(region),
+  getFastQueue: (region: string) => mockGetFastQueue(region),
   regionQueueName: (r: string) => (r === 'local' ? 'arena-ingest' : `arena-ingest-${r}`),
   regionFastQueueName: (r: string) =>
     r === 'local' ? 'arena-ingest-fast' : `arena-ingest-fast-${r}`,
@@ -329,6 +341,34 @@ describe('reconcileSchedulers cleanup/revival', () => {
       expect.anything(),
       expect.objectContaining({ name: 'tierb:profiles' })
     )
+  })
+
+  it('routes every active source through its fetch_region queue', async () => {
+    ;(getActiveSources as jest.Mock).mockResolvedValueOnce([
+      { ...baseSource, slug: 'localsrc', expected_count: null },
+      { ...baseSource, slug: 'sgsrc', fetch_region: 'vps_sg', expected_count: null },
+    ])
+
+    await reconcileSchedulers()
+
+    expect(mockGetRegionQueue).toHaveBeenCalledWith('local')
+    expect(mockGetRegionQueue).toHaveBeenCalledWith('vps_sg')
+    expect(mockQueue.upsertJobScheduler).toHaveBeenCalledWith(
+      'tiera:localsrc',
+      expect.anything(),
+      expect.objectContaining({ name: 'tiera:leaderboard' })
+    )
+    for (const [key, name] of [
+      ['tiera:sgsrc', 'tiera:leaderboard'],
+      ['tierb:sgsrc', 'tierb:profiles'],
+      ['tierd:sgsrc', 'tierd:positions'],
+    ]) {
+      expect(mockSgQueue.upsertJobScheduler).toHaveBeenCalledWith(
+        key,
+        expect.anything(),
+        expect.objectContaining({ name })
+      )
+    }
   })
 
   it('keeps a giant board Tier-A on the bulk queue (heavy, > threshold)', async () => {

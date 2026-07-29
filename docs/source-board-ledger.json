@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "auditedAt": "2026-07-29",
   "countUnit": "source_board",
   "counts": {
@@ -8,7 +8,9 @@
     "companyOrProtocolFamilies": 23,
     "configuredSourcesWithData": 34,
     "arenaSeedSourceRows": 36,
-    "registeredIngestAdapters": 26
+    "registeredIngestAdapters": 26,
+    "replayableLocalSourceRows": 30,
+    "replayableVpsSgSourceRows": 6
   },
   "arenaSeedRegistry": {
     "migration": "supabase/migrations/20260610223356_arena_schema_and_dimensions.sql",
@@ -223,6 +225,69 @@
     "toobit",
     "xt"
   ],
+  "regionRouting": {
+    "requiredReleaseRegions": ["local", "vps_sg"],
+    "repairMigration": "supabase/migrations/20260729058000_source_registry_runtime_contract.sql",
+    "reassignments": [
+      {
+        "registrySlug": "bitmart_futures",
+        "from": "local",
+        "to": "vps_sg"
+      }
+    ],
+    "finalReplayableSourcesByRegion": {
+      "local": [
+        "binance_web3_bsc",
+        "bingx_futures",
+        "bingx_spot",
+        "bitfinex",
+        "bitget_bots_futures",
+        "bitget_bots_spot",
+        "bitget_cfd",
+        "bitget_futures",
+        "bitget_spot",
+        "bitunix_futures",
+        "blofin_futures",
+        "blofin_spot",
+        "btcc_futures",
+        "bybit_copytrade",
+        "bybit_mt5",
+        "coinex_futures",
+        "gate_cfd",
+        "gate_futures",
+        "gmx",
+        "gtrade",
+        "htx_futures",
+        "htx_spot",
+        "hyperliquid",
+        "kucoin_futures",
+        "lbank_futures",
+        "mexc_futures",
+        "okx_web3_solana",
+        "phemex_futures",
+        "xt_futures",
+        "xt_spot"
+      ],
+      "vps_sg": [
+        "binance_futures",
+        "binance_spot",
+        "bitmart_futures",
+        "okx_futures",
+        "okx_spot",
+        "toobit_futures"
+      ]
+    },
+    "schedulerContract": {
+      "sourceAuthority": "active arena.sources rows",
+      "queueRoutingField": "fetch_region",
+      "test": "worker/src/ingest/__tests__/scheduler.test.ts",
+      "status": "code_verified"
+    },
+    "currentFleetOwnership": {
+      "status": "unverified",
+      "reason": "Current Redis worker heartbeats were unavailable during this audit; code and replayable topology do not prove live ownership."
+    }
+  },
   "families": [
     {
       "id": "binance",
