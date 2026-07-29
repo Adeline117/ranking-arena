@@ -24,8 +24,8 @@ const SIDEBAR_SEASON = '90D' as const
 export const GET = withPublic(
   async () => {
     const cacheKey = publicRankingCacheKey('sidebar:top-traders-sealed-v3:90D')
+    const supabase = getReadReplica()
     const fetchSealedEntry = async () => {
-      const supabase = getReadReplica()
       const sealedRead = await readSealedRankingAuthorityGeneration(
         supabase,
         SIDEBAR_SEASON,
@@ -88,18 +88,32 @@ export const GET = withPublic(
       return createSealedRankingCacheEntry(sealedRead)
     }
 
-    let cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, {
-      ttl: 300,
-      lockTtl: 10,
-    })
-    let sealedCache = parseSealedRankingCacheEntry<{ traders: unknown[] }>(cached, SIDEBAR_SEASON)
-    if (!sealedCache) {
-      await del(cacheKey)
-      cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, {
+    const readAuthorizedCache = async () => {
+      const cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, {
         ttl: 300,
         lockTtl: 10,
       })
-      sealedCache = parseSealedRankingCacheEntry<{ traders: unknown[] }>(cached, SIDEBAR_SEASON)
+      const sealedCache = parseSealedRankingCacheEntry<{ traders: unknown[] }>(
+        cached,
+        SIDEBAR_SEASON
+      )
+      if (!sealedCache) return null
+
+      const currentGeneration = await readSealedRankingAuthorityGeneration(
+        supabase,
+        SIDEBAR_SEASON,
+        async () => null,
+        { timeoutMs: 10_000 }
+      )
+      return currentGeneration.publicationIdentity === sealedCache.publicationIdentity
+        ? sealedCache
+        : null
+    }
+
+    let sealedCache = await readAuthorizedCache()
+    if (!sealedCache) {
+      await del(cacheKey)
+      sealedCache = await readAuthorizedCache()
     }
     if (!sealedCache || !Array.isArray(sealedCache.value.traders)) {
       throw new Error('sidebar cache did not satisfy the sealed publication contract')
