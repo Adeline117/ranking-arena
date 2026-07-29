@@ -7,15 +7,28 @@ import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { UserSubscription } from '@/lib/premium'
+import type { Database } from '@/lib/supabase/database.types'
 import { createLogger } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
 
 const logger = createLogger('subscription-api')
 
+function unavailableResponse() {
+  const response = NextResponse.json(
+    {
+      error: 'Subscription status is temporarily unavailable. Please retry.',
+      code: 'SUBSCRIPTION_STATUS_UNAVAILABLE',
+    },
+    { status: 503 }
+  )
+  response.headers.set('Cache-Control', 'private, no-store')
+  return response
+}
+
 export const GET = withAuth(
   async ({ user, supabase: sb }) => {
-    const supabase = sb as SupabaseClient
+    const supabase: SupabaseClient<Database> = sb
 
     // 查询订阅信息 + 关注数并行
     const [subResult, followsResult] = await Promise.all([
@@ -37,22 +50,46 @@ export const GET = withAuth(
         .eq('user_id', user.id),
     ])
 
-    const subscription = subResult.data
     if (subResult.error) {
-      logger.warn('Query error', { error: subResult.error, userId: user.id })
+      logger.error('Subscription query failed', {
+        error: subResult.error,
+        userId: user.id,
+      })
+      return unavailableResponse()
+    }
+    if (
+      followsResult.error ||
+      typeof followsResult.count !== 'number' ||
+      !Number.isSafeInteger(followsResult.count) ||
+      followsResult.count < 0
+    ) {
+      logger.error('Follow usage query failed', {
+        error: followsResult.error,
+        count: followsResult.count,
+        userId: user.id,
+      })
+      return unavailableResponse()
     }
 
-    const currentFollows = followsResult.count || 0
+    const subscription = subResult.data
+    const currentFollows = followsResult.count
     const currentCustomRankings = 0
 
     // 确定 tier
     let tier: 'free' | 'pro' = 'free'
     if (!subscription) {
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('subscription_tier')
         .eq('id', user.id)
         .maybeSingle()
+      if (profileError) {
+        logger.error('Subscription profile fallback failed', {
+          error: profileError,
+          userId: user.id,
+        })
+        return unavailableResponse()
+      }
 
       if (profile?.subscription_tier === 'pro') {
         tier = 'pro'
@@ -61,7 +98,25 @@ export const GET = withAuth(
         })
       }
     } else {
-      tier = subscription.tier as 'free' | 'pro'
+      if (
+        subscription.tier !== 'free' &&
+        subscription.tier !== 'pro' &&
+        subscription.tier !== 'elite'
+      ) {
+        logger.error('Subscription query returned an unsupported tier', {
+          tier: subscription.tier,
+          userId: user.id,
+        })
+        return unavailableResponse()
+      }
+      if (subscription.status !== 'active' && subscription.status !== 'trialing') {
+        logger.error('Subscription query returned an unsupported active status', {
+          status: subscription.status,
+          userId: user.id,
+        })
+        return unavailableResponse()
+      }
+      tier = subscription.tier === 'free' ? 'free' : 'pro'
     }
 
     // Set tier hint cookie so PremiumProvider can skip the idle-callback delay.
@@ -75,7 +130,7 @@ export const GET = withAuth(
     if (!subscription) {
       const defaultSubscription: UserSubscription = {
         userId: user.id,
-        tier: 'free',
+        tier,
         status: 'active',
         startDate: new Date().toISOString(),
         endDate: null,
@@ -96,14 +151,15 @@ export const GET = withAuth(
     }
 
     const sub = subscription!
+    const status = sub.status === 'active' ? 'active' : 'trialing'
     const userSubscription: UserSubscription = {
       userId: sub.user_id,
-      tier: sub.tier || tier,
-      status: sub.status,
+      tier,
+      status,
       startDate: sub.created_at || sub.current_period_start || new Date().toISOString(),
       endDate: sub.current_period_end,
       trialEndDate: null,
-      autoRenew: sub.status === 'active' && !sub.cancel_at_period_end,
+      autoRenew: status === 'active' && !sub.cancel_at_period_end,
       paymentMethod: sub.stripe_subscription_id ? 'stripe' : undefined,
       usage: {
         apiCallsToday: sub.api_calls_today || 0,
