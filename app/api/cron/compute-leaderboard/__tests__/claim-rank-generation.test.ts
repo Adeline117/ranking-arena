@@ -109,25 +109,21 @@ describe('claimLeaderboardRankGeneration', () => {
     expect(Object.isFrozen(result)).toBe(true)
   })
 
-  it('accepts the only valid empty generation count pair', async () => {
-    const supabase = supabaseReturning(
-      envelope(successfulResponse({ expected_rank_count: 0, expected_batch_count: 0 }))
-    )
-
-    await expect(
-      claimLeaderboardRankGeneration(
-        supabase as never,
-        input({ expectedRankCount: 0, expectedBatchCount: 0 })
-      )
-    ).resolves.toMatchObject({ expected_rank_count: 0, expected_batch_count: 0 })
-  })
-
-  it('accepts the exact globally comparable scorer and batch-capacity boundary', async () => {
+  it.each([
+    ['one-row lower bound', 1, 1],
+    ['one full fixed chunk', 1_000, 1],
+    ['first row in the second fixed chunk', 1_001, 2],
+    [
+      'globally comparable scorer and fixed-chunk upper bound',
+      LEADERBOARD_RANK_GENERATION_MAX_ROWS,
+      LEADERBOARD_RANK_GENERATION_MAX_BATCHES,
+    ],
+  ])('accepts %s as exactly %i ranks in %i batches', async (_label, rankCount, batchCount) => {
     const supabase = supabaseReturning(
       envelope(
         successfulResponse({
-          expected_rank_count: LEADERBOARD_RANK_GENERATION_MAX_ROWS,
-          expected_batch_count: 64,
+          expected_rank_count: rankCount,
+          expected_batch_count: batchCount,
         })
       )
     )
@@ -136,11 +132,14 @@ describe('claimLeaderboardRankGeneration', () => {
       claimLeaderboardRankGeneration(
         supabase as never,
         input({
-          expectedRankCount: LEADERBOARD_RANK_GENERATION_MAX_ROWS,
-          expectedBatchCount: 64,
+          expectedRankCount: rankCount,
+          expectedBatchCount: batchCount,
         })
       )
-    ).resolves.toMatchObject({ expected_rank_count: 64_000, expected_batch_count: 64 })
+    ).resolves.toMatchObject({
+      expected_rank_count: rankCount,
+      expected_batch_count: batchCount,
+    })
   })
 
   it('reads then once when AbortSignal binding returns the same mutable query', async () => {
@@ -250,9 +249,14 @@ describe('claimLeaderboardRankGeneration', () => {
       'batch count above bound',
       { expectedBatchCount: LEADERBOARD_RANK_GENERATION_MAX_BATCHES + 1 },
     ],
+    ['empty generation', { expectedRankCount: 0, expectedBatchCount: 0 }],
     ['empty ranks with a batch', { expectedRankCount: 0, expectedBatchCount: 1 }],
     ['nonempty ranks without a batch', { expectedRankCount: 1, expectedBatchCount: 0 }],
     ['more batches than rows', { expectedRankCount: 2, expectedBatchCount: 3 }],
+    [
+      'noncanonical three-way split for 1001 rows',
+      { expectedRankCount: 1_001, expectedBatchCount: 3 },
+    ],
     [
       'more rows than batch capacity',
       {

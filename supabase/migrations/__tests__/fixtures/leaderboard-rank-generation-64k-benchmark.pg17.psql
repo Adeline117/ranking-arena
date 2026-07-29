@@ -881,6 +881,148 @@ BEGIN
   END IF;
 
   IF (SELECT pg_catalog.count(*)
+      FROM ONLY arena.leaderboard_rank_manifest_attestations AS header
+      JOIN arena.fixture_rank_generation_64k_batches AS batch
+        ON batch.batch_index = 0
+      WHERE header.season_id = v_meta.season_id
+        AND header.generation_seq = v_meta.generation_seq
+        AND header.score_cohort_id = v_meta.score_cohort_id
+        AND header.score_input_manifest_id = v_meta.score_input_manifest_id
+        AND header.score_input_manifest_digest =
+              v_meta.score_input_manifest_digest
+        AND header.positive_count = 64000
+        AND header.chunk_count = 64
+        AND header.attested_at = batch.writer_completed_at
+        AND header.xmin::text = batch.call_xid::text) <> 1
+     OR (SELECT pg_catalog.count(*)
+         FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+         WHERE chunk.season_id = v_meta.season_id
+           AND chunk.generation_seq = v_meta.generation_seq) <> 64
+     OR (SELECT COALESCE(pg_catalog.sum(chunk.row_count), 0)
+         FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+         WHERE chunk.season_id = v_meta.season_id
+           AND chunk.generation_seq = v_meta.generation_seq) <> 64000
+     OR EXISTS (
+       SELECT 1
+       FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+       JOIN arena.fixture_rank_generation_64k_batches AS batch
+         ON batch.batch_index = 0
+       WHERE chunk.season_id = v_meta.season_id
+         AND chunk.generation_seq = v_meta.generation_seq
+         AND (
+           chunk.xmin::text IS DISTINCT FROM batch.call_xid::text
+           OR chunk.chunk_index NOT BETWEEN 0 AND 63
+           OR chunk.first_position <> chunk.chunk_index * 1000 + 1
+           OR chunk.row_count <> 1000
+           OR NOT arena.leaderboard_rank_manifest_attestation_chunk_is_valid_v1(
+             chunk.season_id,
+             chunk.generation_seq,
+             chunk.score_cohort_id,
+             chunk.score_input_manifest_id,
+             chunk.score_input_manifest_digest,
+             chunk.chunk_index,
+             chunk.first_position,
+             chunk.row_count,
+             chunk.identities,
+             chunk.field_commitments,
+             chunk.chunk_sha256
+           )
+         )
+     )
+     OR EXISTS (
+       SELECT 1
+       FROM ONLY arena.leaderboard_rank_manifest_attestations AS header
+       CROSS JOIN LATERAL (
+         SELECT pg_catalog.jsonb_agg(
+           pg_catalog.jsonb_build_array(
+             chunk.chunk_index,
+             chunk.first_position,
+             chunk.row_count,
+             chunk.chunk_sha256
+           )
+           ORDER BY chunk.chunk_index
+         ) AS chunk_plan
+         FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+         WHERE chunk.season_id = header.season_id
+           AND chunk.generation_seq = header.generation_seq
+       ) AS plan
+       WHERE header.season_id = v_meta.season_id
+         AND header.generation_seq = v_meta.generation_seq
+         AND header.chunks_sha256 IS DISTINCT FROM
+           arena.build_leaderboard_rank_manifest_chunks_sha256_v1(
+             header.season_id,
+             header.generation_seq,
+             header.score_cohort_id,
+             header.score_input_manifest_id,
+             header.score_input_manifest_digest,
+             header.positive_count,
+             header.chunk_count,
+             plan.chunk_plan
+           )
+     ) THEN
+    RAISE EXCEPTION
+      'batch zero did not atomically commit the exact 64-chunk attestation';
+  END IF;
+
+  IF EXISTS (
+    WITH typed_rows AS MATERIALIZED (
+      SELECT
+        batch.batch_index,
+        position.ordinality,
+        batch.rows[position.ordinality] AS rank_row
+      FROM arena.fixture_rank_generation_64k_batches AS batch
+      CROSS JOIN LATERAL pg_catalog.generate_subscripts(batch.rows, 1)
+        AS position(ordinality)
+    ), attested_rows AS MATERIALIZED (
+      SELECT
+        chunk.chunk_index AS batch_index,
+        identity.ordinality,
+        identity.value AS identity,
+        commitment.value AS field_commitment
+      FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+      CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(chunk.identities)
+        WITH ORDINALITY AS identity(value, ordinality)
+      JOIN LATERAL pg_catalog.jsonb_array_elements_text(
+        chunk.field_commitments
+      ) WITH ORDINALITY AS commitment(value, ordinality)
+        USING (ordinality)
+      WHERE chunk.season_id = v_meta.season_id
+        AND chunk.generation_seq = v_meta.generation_seq
+    )
+    SELECT 1
+    FROM typed_rows
+    FULL JOIN attested_rows
+      ON attested_rows.batch_index = typed_rows.batch_index
+     AND attested_rows.ordinality = typed_rows.ordinality
+    WHERE typed_rows.rank_row IS NULL
+       OR attested_rows.identity IS NULL
+       OR attested_rows.identity->>0 IS DISTINCT FROM
+            (typed_rows.rank_row).source
+       OR attested_rows.identity->>1 IS DISTINCT FROM
+            (typed_rows.rank_row).source_trader_id
+       OR attested_rows.field_commitment IS DISTINCT FROM
+            arena.build_leaderboard_rank_typed_field_commitment_v1(
+              (typed_rows.rank_row).source,
+              (typed_rows.rank_row).source_trader_id,
+              (typed_rows.rank_row).roi,
+              (typed_rows.rank_row).pnl,
+              (typed_rows.rank_row).win_rate,
+              (typed_rows.rank_row).max_drawdown,
+              (typed_rows.rank_row).sharpe_ratio,
+              (typed_rows.rank_row).profit_factor,
+              (typed_rows.rank_row).trades_count,
+              (typed_rows.rank_row).arena_score,
+              (typed_rows.rank_row).score_factors,
+              (typed_rows.rank_row).profitability_score,
+              (typed_rows.rank_row).risk_control_score,
+              (typed_rows.rank_row).execution_score
+            )
+  ) THEN
+    RAISE EXCEPTION
+      '64k attestation identities or field commitments drifted from typed rows';
+  END IF;
+
+  IF (SELECT pg_catalog.count(*)
       FROM ONLY arena.leaderboard_rank_generation_source_fence_receipts
         AS source_receipt
       WHERE source_receipt.season_id = v_meta.season_id

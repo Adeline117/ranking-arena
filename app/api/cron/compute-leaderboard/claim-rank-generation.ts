@@ -6,11 +6,12 @@ export const LEADERBOARD_RANK_GENERATION_CLAIM_RPC_TIMEOUT_MS = 30_000
 export const LEADERBOARD_RANK_GENERATION_CLAIM_MAX_TIMEOUT_MS = 60_000
 export const LEADERBOARD_RANK_GENERATION_CLAIM_LEASE_TIMEOUT_DIVISOR = 3
 // The authoritative PG17 scorer/manifest accepts one globally comparable
-// cohort of at most 64,000 inputs. Raising this requires a scorer upgrade, not
-// independent chunk scoring whose percentiles would no longer be comparable.
+// non-empty cohort of at most 64,000 inputs. The writer freezes exactly 1,000
+// rows per immutable batch except for the final tail. Raising either bound
+// requires a scorer/writer upgrade, not an alternative caller-side split.
 export const LEADERBOARD_RANK_GENERATION_MAX_ROWS = 64_000
-export const LEADERBOARD_RANK_GENERATION_MAX_BATCHES = 4_096
 export const LEADERBOARD_RANK_GENERATION_MAX_ROWS_PER_BATCH = 1_000
+export const LEADERBOARD_RANK_GENERATION_MAX_BATCHES = 64
 export const LEADERBOARD_RANK_GENERATION_MAX_SEQUENCE = 9_007_199_254_740_000
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -285,21 +286,18 @@ function canonicalizeInputUnsafe(input: unknown): ClaimRpcArgs {
   }
   if (
     !Number.isSafeInteger(expectedRankCount) ||
-    (expectedRankCount as number) < 0 ||
+    (expectedRankCount as number) < 1 ||
     (expectedRankCount as number) > LEADERBOARD_RANK_GENERATION_MAX_ROWS ||
     !Number.isSafeInteger(expectedBatchCount) ||
-    (expectedBatchCount as number) < 0 ||
+    (expectedBatchCount as number) < 1 ||
     (expectedBatchCount as number) > LEADERBOARD_RANK_GENERATION_MAX_BATCHES ||
-    !(
-      (expectedRankCount === 0 && expectedBatchCount === 0) ||
-      ((expectedRankCount as number) > 0 &&
-        (expectedBatchCount as number) > 0 &&
-        (expectedBatchCount as number) <= (expectedRankCount as number) &&
-        (expectedRankCount as number) <=
-          (expectedBatchCount as number) * LEADERBOARD_RANK_GENERATION_MAX_ROWS_PER_BATCH)
-    )
+    (expectedBatchCount as number) !==
+      Math.ceil((expectedRankCount as number) / LEADERBOARD_RANK_GENERATION_MAX_ROWS_PER_BATCH)
   ) {
-    fail('invalid_input', 'expected rank and batch counts are inconsistent')
+    fail(
+      'invalid_input',
+      'expectedRankCount must be between 1 and 64000 and expectedBatchCount must equal ceil(expectedRankCount / 1000)'
+    )
   }
   if (
     !Number.isSafeInteger(leaseSeconds) ||
