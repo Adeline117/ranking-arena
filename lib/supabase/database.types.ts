@@ -11518,6 +11518,21 @@ export type Database = {
           trader_count: number
         }[]
       }
+      get_public_platform_stats: {
+        Args: {
+          p_allowed_sources: string[]
+          p_score_cohort_id: string
+          p_season_id: string
+        }
+        Returns: {
+          avg_roi: number
+          avg_score: number
+          avg_win_rate: number
+          median_score: number
+          platform: string
+          trader_count: number
+        }[]
+      }
       get_popular_tokens: {
         Args: { lookback_days?: number; max_tokens?: number }
         Returns: {
