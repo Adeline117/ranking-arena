@@ -218,6 +218,15 @@ describe('GET /api/cron/weekly-report', () => {
     expect(mockSendAlert).not.toHaveBeenCalled()
   })
 
+  it('returns 500 instead of mapping null required counts to zero', async () => {
+    mockFrom.mockImplementation(() => chainable({ data: [], error: null, count: null }))
+
+    const res = await GET(createCronRequest(CRON_SECRET))
+
+    expect(res.status).toBe(500)
+    expect(mockSendAlert).not.toHaveBeenCalled()
+  })
+
   it('returns 500 when an error occurs', async () => {
     mockFrom.mockImplementation(() => {
       throw new Error('DB crash')

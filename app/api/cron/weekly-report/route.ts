@@ -57,9 +57,14 @@ export const GET = withCron('weekly-report', async (_request: NextRequest) => {
   const { count: newUsers, error: newUsersError } = newUserResult
   const reportInputError =
     newTradersError ?? totalTradersError ?? staleSourcesError ?? newUsersError
-  if (reportInputError || staleSources === null) {
+  const requiredCounts = [newTraders, totalTraders, newUsers]
+  if (
+    reportInputError ||
+    !Array.isArray(staleSources) ||
+    requiredCounts.some((count) => !Number.isSafeInteger(count) || Number(count) < 0)
+  ) {
     throw new Error(
-      `Weekly report input unavailable: ${reportInputError?.message ?? 'null stale-source payload'}`
+      `Weekly report input unavailable: ${reportInputError?.message ?? 'invalid required payload'}`
     )
   }
 

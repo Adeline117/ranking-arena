@@ -575,6 +575,13 @@ export class PipelineLogger {
       }
       return []
     }
+    if (!Array.isArray(data)) {
+      logger.warn('[PipelineLogger] Job stats returned an invalid payload')
+      if (failOnError) {
+        throw new Error('Pipeline job-stats authority returned an invalid payload')
+      }
+      return []
+    }
     return (
       (data as Array<{
         job_name: string
@@ -629,7 +636,14 @@ export class PipelineLogger {
       }
       return []
     }
-    return data || []
+    if (!Array.isArray(data)) {
+      logger.warn('[PipelineLogger] Recent failures returned an invalid payload')
+      if (failOnError) {
+        throw new Error('Pipeline recent-failures authority returned an invalid payload')
+      }
+      return []
+    }
+    return data
   }
 
   /**

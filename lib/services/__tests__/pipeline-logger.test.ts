@@ -342,6 +342,14 @@ describe('PipelineLogger', () => {
       )
     })
 
+    it('rejects a null job-stats payload when no database error is returned', async () => {
+      mockSupabaseRpc.mockResolvedValue({ data: null, error: null })
+
+      await expect(PipelineLogger.getJobStats(undefined, true)).rejects.toThrow(
+        'Pipeline job-stats authority returned an invalid payload'
+      )
+    })
+
     it('passes an abort signal to the recent failures query', async () => {
       const abortSignal = jest.fn().mockResolvedValue({ data: [], error: null })
       const chain = {
@@ -375,6 +383,21 @@ describe('PipelineLogger', () => {
 
       await expect(PipelineLogger.getRecentFailures(10, 120, undefined, true)).rejects.toThrow(
         'Pipeline recent-failures authority is unavailable'
+      )
+    })
+
+    it('rejects a null recent-failures payload when it is required', async () => {
+      const chain = {
+        select: jest.fn().mockReturnThis(),
+        in: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({ data: null, error: null }),
+      }
+      mockSupabaseFrom.mockReturnValueOnce(chain)
+
+      await expect(PipelineLogger.getRecentFailures(10, 120, undefined, true)).rejects.toThrow(
+        'Pipeline recent-failures authority returned an invalid payload'
       )
     })
   })
