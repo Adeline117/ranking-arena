@@ -10,7 +10,7 @@ import { createBullBoard } from '@bull-board/api'
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter'
 import { ExpressAdapter } from '@bull-board/express'
 import { getQueue } from './queues'
-import { INGEST_REGIONS, getRegionQueue, getTierCQueue } from './ingest/queues'
+import { INGEST_REGIONS, getFastQueue, getRegionQueue, getTierCQueue } from './ingest/queues'
 
 const DASHBOARD_PORT = Number(process.env.DASHBOARD_PORT || 4000)
 
@@ -22,12 +22,13 @@ export function startDashboard(): void {
     queues: [
       // Legacy pipeline queue.
       new BullMQAdapter(getQueue()),
-      // New ingest pipeline: region-affine bulk queues (arena-ingest,
-      // arena-ingest-vps_sg, arena-ingest-vps_jp) + the region-affine Tier-C
-      // on-demand queues. Queue instances here are lightweight Redis
-      // clients for observability only — the consumers live in the
-      // separate arena-ingest-worker PM2 app.
+      // New ingest pipeline: every region-affine bulk, fast-lane, and Tier-C
+      // queue. Omitting the fast lane makes small user-facing boards invisible
+      // exactly when that lane is enabled. Queue instances here are lightweight
+      // Redis clients for observability only — consumers live in the separate
+      // arena-ingest-worker PM2 app.
       ...INGEST_REGIONS.map((region) => new BullMQAdapter(getRegionQueue(region))),
+      ...INGEST_REGIONS.map((region) => new BullMQAdapter(getFastQueue(region))),
       ...INGEST_REGIONS.map((region) => new BullMQAdapter(getTierCQueue(region))),
     ],
     serverAdapter,
