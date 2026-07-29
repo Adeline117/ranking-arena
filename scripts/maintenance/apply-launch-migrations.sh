@@ -145,6 +145,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729060000_retryable_referral_qualification.sql
   20260729061000_source_legacy_platform_alias_contract.sql
   20260729062000_atomic_trader_follow_limit.sql
+  20260729072000_stripe_refund_retry_authority.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055

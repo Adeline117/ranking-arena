@@ -1,6 +1,7 @@
 /** @jest-environment node */
 
 import type Stripe from 'stripe'
+import { createHash } from 'node:crypto'
 import type { Database } from '@/lib/supabase/database.types'
 import {
   createStripeEntitlementEffectStore,
@@ -142,6 +143,22 @@ function dependencies(
     },
     ...params.refund,
   })
+  const refundRetrieve = jest.fn().mockResolvedValue({
+    id: 're_refund1',
+    object: 'refund',
+    charge: CHARGE_ID,
+    payment_intent: PAYMENT_INTENT_ID,
+    amount: 5000,
+    currency: 'usd',
+    status: 'succeeded',
+    reason: 'requested_by_customer',
+    metadata: {
+      arena_entitlement_effect_id: EFFECT_ID,
+      arena_entitlement_payment_id: PAYMENT_ID,
+      arena_reason_key: 'paid_recurring_subject_deleted',
+    },
+    ...params.refund,
+  })
   const subscriptionRetrieve = jest.fn().mockResolvedValue(params.subscription ?? subscription())
   const subscriptionCancel = jest.fn().mockResolvedValue(
     subscription({
@@ -153,7 +170,7 @@ function dependencies(
     store: params.store ?? store(),
     stripe: {
       charges: { retrieve: chargeRetrieve },
-      refunds: { create: refundCreate },
+      refunds: { create: refundCreate, retrieve: refundRetrieve },
       subscriptions: {
         retrieve: subscriptionRetrieve,
         cancel: subscriptionCancel,
@@ -175,6 +192,7 @@ function dependencies(
     deps,
     chargeRetrieve,
     refundCreate,
+    refundRetrieve,
     subscriptionRetrieve,
     subscriptionCancel,
   }
@@ -364,7 +382,183 @@ describe('Stripe entitlement effect worker', () => {
     expect(effectStore.finish).toHaveBeenCalledWith(
       expect.objectContaining({
         succeeded: false,
+        externalRef: 'refund:re_refund1',
         retryAfterSeconds: 30,
+      })
+    )
+  })
+
+  it('retrieves a persisted pending Refund instead of replaying its create request', async () => {
+    const refundEffect = effect({
+      effect_type: 'payment_auto_refund',
+      operation_key: 'refund:subject_deleted',
+      external_ref: 'refund:re_refund1',
+      payload: {
+        reason_key: 'paid_recurring_subject_deleted',
+        invoice_id: 'in_invoice1',
+      },
+    })
+    const effectStore = store({ lease: jest.fn().mockResolvedValue([refundEffect]) })
+    effectStore.finish.mockResolvedValue({ status: 'retry_scheduled' })
+    const { deps, refundCreate, refundRetrieve } = dependencies({
+      store: effectStore,
+      refund: { status: 'pending' },
+    })
+
+    await expect(drainStripeEntitlementEffects(deps)).rejects.toThrow('require retry')
+    expect(refundRetrieve).toHaveBeenCalledWith('re_refund1')
+    expect(refundCreate).not.toHaveBeenCalled()
+    expect(effectStore.finish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        succeeded: false,
+        externalRef: 'refund:re_refund1',
+      })
+    )
+  })
+
+  it('completes from the fresh terminal state of a persisted Refund', async () => {
+    const refundEffect = effect({
+      effect_type: 'payment_auto_refund',
+      operation_key: 'refund:subject_deleted',
+      external_ref: 'refund:re_refund1',
+      payload: {
+        reason_key: 'paid_recurring_subject_deleted',
+        invoice_id: 'in_invoice1',
+      },
+    })
+    const effectStore = store({ lease: jest.fn().mockResolvedValue([refundEffect]) })
+    const { deps, refundCreate, refundRetrieve } = dependencies({ store: effectStore })
+
+    await expect(drainStripeEntitlementEffects(deps)).resolves.toMatchObject({
+      count: 1,
+      completed: 1,
+    })
+    expect(refundRetrieve).toHaveBeenCalledWith('re_refund1')
+    expect(refundCreate).not.toHaveBeenCalled()
+    expect(effectStore.finish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        succeeded: true,
+        externalRef: 'refund:re_refund1',
+      })
+    )
+  })
+
+  it.each(['failed', 'canceled'] as const)(
+    'uses a stable successor key after a persisted Refund becomes %s',
+    async (status) => {
+      const refundEffect = effect({
+        effect_type: 'payment_auto_refund',
+        operation_key: 'refund:subject_deleted',
+        external_ref: 'refund:re_refund1',
+        payload: {
+          reason_key: 'paid_recurring_subject_deleted',
+          invoice_id: 'in_invoice1',
+        },
+      })
+      const effectStore = store({ lease: jest.fn().mockResolvedValue([refundEffect]) })
+      const { deps, refundCreate, refundRetrieve } = dependencies({
+        store: effectStore,
+        refund: { id: 're_refund2', status: 'succeeded' },
+      })
+      refundRetrieve.mockResolvedValueOnce({
+        id: 're_refund1',
+        object: 'refund',
+        charge: CHARGE_ID,
+        payment_intent: PAYMENT_INTENT_ID,
+        amount: 5000,
+        currency: 'usd',
+        status,
+        reason: 'requested_by_customer',
+        metadata: {
+          arena_entitlement_effect_id: EFFECT_ID,
+          arena_entitlement_payment_id: PAYMENT_ID,
+          arena_reason_key: 'paid_recurring_subject_deleted',
+        },
+      })
+
+      await expect(drainStripeEntitlementEffects(deps)).resolves.toMatchObject({
+        count: 1,
+        completed: 1,
+      })
+      expect(refundCreate).toHaveBeenCalledWith(expect.any(Object), {
+        idempotencyKey: `arena_entitlement_refund_${EFFECT_ID}_${createHash('sha256')
+          .update('re_refund1', 'utf8')
+          .digest('hex')}`,
+      })
+      expect(effectStore.finish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          succeeded: true,
+          externalRef: 'refund:re_refund2',
+        })
+      )
+    }
+  )
+
+  it('persists the successor identity before retrying another pending Refund', async () => {
+    const refundEffect = effect({
+      effect_type: 'payment_auto_refund',
+      operation_key: 'refund:subject_deleted',
+      external_ref: 'refund:re_refund1',
+      payload: {
+        reason_key: 'paid_recurring_subject_deleted',
+        invoice_id: 'in_invoice1',
+      },
+    })
+    const effectStore = store({ lease: jest.fn().mockResolvedValue([refundEffect]) })
+    effectStore.finish.mockResolvedValue({ status: 'retry_scheduled' })
+    const { deps, refundRetrieve } = dependencies({
+      store: effectStore,
+      refund: { id: 're_refund2', status: 'pending' },
+    })
+    refundRetrieve.mockResolvedValueOnce({
+      id: 're_refund1',
+      object: 'refund',
+      charge: CHARGE_ID,
+      payment_intent: PAYMENT_INTENT_ID,
+      amount: 5000,
+      currency: 'usd',
+      status: 'failed',
+      reason: 'requested_by_customer',
+      metadata: {
+        arena_entitlement_effect_id: EFFECT_ID,
+        arena_entitlement_payment_id: PAYMENT_ID,
+        arena_reason_key: 'paid_recurring_subject_deleted',
+      },
+    })
+
+    await expect(drainStripeEntitlementEffects(deps)).rejects.toThrow('require retry')
+    expect(effectStore.finish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        succeeded: false,
+        externalRef: 'refund:re_refund2',
+      })
+    )
+  })
+
+  it('rejects a malformed persisted Refund reference before touching Stripe', async () => {
+    const refundEffect = effect({
+      effect_type: 'payment_auto_refund',
+      operation_key: 'refund:subject_deleted',
+      external_ref: 'refund:../../wrong',
+      payload: {
+        reason_key: 'paid_recurring_subject_deleted',
+        invoice_id: 'in_invoice1',
+      },
+    })
+    const effectStore = store({ lease: jest.fn().mockResolvedValue([refundEffect]) })
+    effectStore.finish.mockResolvedValue({ status: 'retry_scheduled' })
+    const { deps, chargeRetrieve, refundCreate, refundRetrieve } = dependencies({
+      store: effectStore,
+    })
+
+    await expect(drainStripeEntitlementEffects(deps)).rejects.toThrow('require retry')
+    expect(chargeRetrieve).not.toHaveBeenCalled()
+    expect(refundRetrieve).not.toHaveBeenCalled()
+    expect(refundCreate).not.toHaveBeenCalled()
+    expect(effectStore.recordDispatchReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effect: refundEffect,
+        error: 'leased entitlement effect is malformed',
       })
     )
   })

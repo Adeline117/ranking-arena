@@ -59,6 +59,7 @@ const readyEntitlementAuthority = {
   completed_effects_without_external_ref: 0,
   paid_unbound_payments: 0,
   unresolved_refund_tombstones: 0,
+  refund_effect_reference_anomalies: 0,
   reservation_anomalies: 0,
   projection_drift: 0,
   notification_delivery_anomalies: 0,
@@ -240,6 +241,38 @@ describe('GET /api/cron/stripe-readiness', () => {
 
   it('rejects a readiness payload that omits the tombstone authority key', async () => {
     const { unresolved_refund_tombstones: _omitted, ...incompleteReadiness } =
+      readyEntitlementAuthority
+    mockRpc.mockResolvedValue({ data: incompleteReadiness, error: null })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Stripe entitlement authority readiness contract is invalid')
+  })
+
+  it('fails closed when an automatic Refund provider reference is anomalous', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        ...readyEntitlementAuthority,
+        status: 'blocked',
+        refund_effect_reference_anomalies: 1,
+      },
+      error: null,
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.paidLaunchReady).toBe(false)
+    expect(body.failures).toContain(
+      'Stripe entitlement authority is blocked: refund_effect_reference_anomalies=1'
+    )
+  })
+
+  it('rejects a readiness payload that omits Refund provider-reference authority', async () => {
+    const { refund_effect_reference_anomalies: _omitted, ...incompleteReadiness } =
       readyEntitlementAuthority
     mockRpc.mockResolvedValue({ data: incompleteReadiness, error: null })
 

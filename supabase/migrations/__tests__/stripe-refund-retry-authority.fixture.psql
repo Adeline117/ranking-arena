@@ -1,0 +1,382 @@
+\set ON_ERROR_STOP on
+
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+SELECT pg_catalog.set_config(
+  'arena.stripe_livemode',
+  'true',
+  false
+);
+
+INSERT INTO auth.users(id)
+VALUES ('e7200000-0000-4000-8000-000000000001');
+
+INSERT INTO public.user_profiles(
+  id,
+  handle,
+  stripe_customer_id
+) VALUES (
+  'e7200000-0000-4000-8000-000000000001',
+  'refund_retry_authority',
+  'cus_refundretry1'
+);
+
+INSERT INTO public.stripe_entitlement_payments(
+  id,
+  user_id,
+  stripe_customer_id,
+  payment_kind,
+  plan,
+  stripe_subscription_id,
+  stripe_invoice_id,
+  stripe_payment_intent_id,
+  stripe_charge_id,
+  amount_paid,
+  currency,
+  period_start,
+  period_end,
+  payment_status,
+  livemode
+) VALUES (
+  'e7200000-0000-4000-8000-000000000010',
+  'e7200000-0000-4000-8000-000000000001',
+  'cus_refundretry1',
+  'recurring',
+  'monthly',
+  'sub_refundretry1',
+  'in_refundretry1',
+  'pi_refundretry1',
+  'ch_refundretry1',
+  5000,
+  'usd',
+  '2030-01-01Z',
+  '2030-02-01Z',
+  'succeeded',
+  true
+);
+
+INSERT INTO public.stripe_entitlement_effects(
+  id,
+  entitlement_payment_id,
+  user_id,
+  source_kind,
+  source_key,
+  operation_key,
+  effect_type,
+  status,
+  attempt_count,
+  lease_token,
+  lease_expires_at,
+  payload
+) VALUES
+  (
+    'e7200000-0000-4000-8000-000000000020',
+    'e7200000-0000-4000-8000-000000000010',
+    'e7200000-0000-4000-8000-000000000001',
+    'payment',
+    'e7200000-0000-4000-8000-000000000010',
+    'refund:retry_authority_pending',
+    'payment_auto_refund',
+    'processing',
+    1,
+    'e7210000-0000-4000-8000-000000000001',
+    pg_catalog.statement_timestamp() + INTERVAL '5 minutes',
+    '{"reason_key":"paid_recurring_subject_deleted","invoice_id":"in_refundretry1"}'::jsonb
+  ),
+  (
+    'e7200000-0000-4000-8000-000000000021',
+    'e7200000-0000-4000-8000-000000000010',
+    'e7200000-0000-4000-8000-000000000001',
+    'payment',
+    'e7200000-0000-4000-8000-000000000010',
+    'refund:retry_authority_successor',
+    'payment_auto_refund',
+    'processing',
+    1,
+    'e7210000-0000-4000-8000-000000000011',
+    pg_catalog.statement_timestamp() + INTERVAL '5 minutes',
+    '{"reason_key":"paid_recurring_subject_deleted","invoice_id":"in_refundretry1"}'::jsonb
+  );
+
+DO $persist_pending_refund_identity$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.finish_stripe_entitlement_effect_atomic(
+    'e7200000-0000-4000-8000-000000000020',
+    'e7210000-0000-4000-8000-000000000001',
+    false,
+    'refund:re_pending1',
+    'Stripe Refund re_pending1 is pending',
+    30
+  );
+  IF v_result IS DISTINCT FROM
+      '{"status":"retry_scheduled"}'::jsonb
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.id =
+          'e7200000-0000-4000-8000-000000000020'
+        AND effect.status = 'failed'
+        AND effect.external_ref = 'refund:re_pending1'
+        AND effect.lease_token IS NULL
+        AND effect.lease_expires_at IS NULL
+    )
+  THEN
+    RAISE EXCEPTION
+      'pending automatic Refund identity was not persisted: %',
+      v_result;
+  END IF;
+END
+$persist_pending_refund_identity$;
+
+UPDATE public.stripe_entitlement_effects
+SET status = 'processing',
+    attempt_count = attempt_count + 1,
+    lease_token = 'e7210000-0000-4000-8000-000000000002',
+    lease_expires_at =
+      pg_catalog.statement_timestamp() + INTERVAL '5 minutes'
+WHERE id = 'e7200000-0000-4000-8000-000000000020';
+
+DO $preserve_reference_across_transport_retry$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.finish_stripe_entitlement_effect_atomic(
+    'e7200000-0000-4000-8000-000000000020',
+    'e7210000-0000-4000-8000-000000000002',
+    false,
+    NULL,
+    'temporary Stripe retrieval failure',
+    60
+  );
+  IF v_result IS DISTINCT FROM
+      '{"status":"retry_scheduled"}'::jsonb
+    OR (
+      SELECT effect.external_ref
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.id =
+          'e7200000-0000-4000-8000-000000000020'
+    ) IS DISTINCT FROM 'refund:re_pending1'
+  THEN
+    RAISE EXCEPTION
+      'generic retry erased the durable automatic Refund identity';
+  END IF;
+END
+$preserve_reference_across_transport_retry$;
+
+UPDATE public.stripe_entitlement_effects
+SET status = 'processing',
+    attempt_count = attempt_count + 1,
+    lease_token = 'e7210000-0000-4000-8000-000000000003',
+    lease_expires_at =
+      pg_catalog.statement_timestamp() + INTERVAL '5 minutes'
+WHERE id = 'e7200000-0000-4000-8000-000000000020';
+
+DO $complete_persisted_refund$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.finish_stripe_entitlement_effect_atomic(
+    'e7200000-0000-4000-8000-000000000020',
+    'e7210000-0000-4000-8000-000000000003',
+    true,
+    'refund:re_pending1',
+    NULL,
+    NULL
+  );
+  IF v_result IS DISTINCT FROM '{"status":"completed"}'::jsonb
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.id =
+          'e7200000-0000-4000-8000-000000000020'
+        AND effect.status = 'completed'
+        AND effect.external_ref = 'refund:re_pending1'
+        AND effect.completed_at IS NOT NULL
+    )
+  THEN
+    RAISE EXCEPTION
+      'persisted automatic Refund did not complete exactly: %',
+      v_result;
+  END IF;
+END
+$complete_persisted_refund$;
+
+DO $persist_failed_refund_predecessor$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.finish_stripe_entitlement_effect_atomic(
+    'e7200000-0000-4000-8000-000000000021',
+    'e7210000-0000-4000-8000-000000000011',
+    false,
+    'refund:re_failed1',
+    'Stripe Refund re_failed1 failed',
+    30
+  );
+  IF v_result IS DISTINCT FROM
+      '{"status":"retry_scheduled"}'::jsonb
+  THEN
+    RAISE EXCEPTION
+      'terminal failed Refund predecessor was not persisted: %',
+      v_result;
+  END IF;
+END
+$persist_failed_refund_predecessor$;
+
+UPDATE public.stripe_entitlement_effects
+SET status = 'processing',
+    attempt_count = attempt_count + 1,
+    lease_token = 'e7210000-0000-4000-8000-000000000012',
+    lease_expires_at =
+      pg_catalog.statement_timestamp() + INTERVAL '5 minutes'
+WHERE id = 'e7200000-0000-4000-8000-000000000021';
+
+DO $advance_to_exact_successor_refund$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.finish_stripe_entitlement_effect_atomic(
+    'e7200000-0000-4000-8000-000000000021',
+    'e7210000-0000-4000-8000-000000000012',
+    false,
+    'refund:re_successor2',
+    'Stripe Refund re_successor2 is pending',
+    30
+  );
+  IF v_result IS DISTINCT FROM
+      '{"status":"retry_scheduled"}'::jsonb
+    OR (
+      SELECT effect.external_ref
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.id =
+          'e7200000-0000-4000-8000-000000000021'
+    ) IS DISTINCT FROM 'refund:re_successor2'
+  THEN
+    RAISE EXCEPTION
+      'failed/canceled Refund did not advance to one exact successor';
+  END IF;
+END
+$advance_to_exact_successor_refund$;
+
+UPDATE public.stripe_entitlement_effects
+SET status = 'processing',
+    attempt_count = attempt_count + 1,
+    lease_token = 'e7210000-0000-4000-8000-000000000013',
+    lease_expires_at =
+      pg_catalog.statement_timestamp() + INTERVAL '5 minutes'
+WHERE id = 'e7200000-0000-4000-8000-000000000021';
+
+SELECT public.finish_stripe_entitlement_effect_atomic(
+  'e7200000-0000-4000-8000-000000000021',
+  'e7210000-0000-4000-8000-000000000013',
+  true,
+  'refund:re_successor2',
+  NULL,
+  NULL
+);
+
+DO $reject_non_refund_failure_reference$
+BEGIN
+  UPDATE public.stripe_entitlement_effects
+  SET status = 'processing',
+      lease_token = 'e7210000-0000-4000-8000-000000000014',
+      lease_expires_at =
+        pg_catalog.statement_timestamp() + INTERVAL '5 minutes',
+      completed_at = NULL
+  WHERE id = 'e7200000-0000-4000-8000-000000000021';
+
+  BEGIN
+    PERFORM public.finish_stripe_entitlement_effect_atomic(
+      'e7200000-0000-4000-8000-000000000021',
+      'e7210000-0000-4000-8000-000000000014',
+      false,
+      'group:not-a-refund',
+      'malformed provider reference',
+      30
+    );
+    RAISE EXCEPTION
+      'automatic refund accepted a non-Refund provider reference';
+  EXCEPTION
+    WHEN invalid_parameter_value THEN
+      NULL;
+  END;
+
+  UPDATE public.stripe_entitlement_effects
+  SET status = 'completed',
+      lease_token = NULL,
+      lease_expires_at = NULL,
+      completed_at = pg_catalog.clock_timestamp()
+  WHERE id = 'e7200000-0000-4000-8000-000000000021';
+END
+$reject_non_refund_failure_reference$;
+
+BEGIN;
+ALTER TABLE public.stripe_entitlement_effects
+  DROP CONSTRAINT
+    stripe_entitlement_effects_external_ref_state_check;
+UPDATE public.stripe_entitlement_effects
+SET external_ref = 'malformed-refund-reference'
+WHERE id = 'e7200000-0000-4000-8000-000000000020';
+
+DO $readiness_blocks_reference_drift$
+DECLARE
+  v_readiness jsonb;
+BEGIN
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  IF COALESCE(
+      (
+        v_readiness
+          ->> 'refund_effect_reference_anomalies'
+      )::integer,
+      -1
+    ) < 2
+    OR v_readiness ->> 'status' IS DISTINCT FROM 'blocked'
+  THEN
+    RAISE EXCEPTION
+      'Stripe readiness did not block malformed/missing Refund reference authority: %',
+      v_readiness;
+  END IF;
+END
+$readiness_blocks_reference_drift$;
+ROLLBACK;
+
+DO $prove_refund_retry_authority_converged$
+DECLARE
+  v_readiness jsonb;
+BEGIN
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  IF COALESCE(
+      (
+        v_readiness
+          ->> 'refund_effect_reference_anomalies'
+      )::integer,
+      -1
+    ) <> 0
+    OR NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_constraint AS constraint_row
+      WHERE constraint_row.conrelid =
+          'public.stripe_entitlement_effects'::pg_catalog.regclass
+        AND constraint_row.conname =
+          'stripe_entitlement_effects_external_ref_state_check'
+        AND constraint_row.convalidated
+    )
+    OR pg_catalog.has_function_privilege(
+      'service_role',
+      'public.stripe_paid_launch_readiness_pre_refund_retry_v2()',
+      'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION
+      'Stripe automatic Refund retry authority did not converge: %',
+      v_readiness;
+  END IF;
+END
+$prove_refund_retry_authority_converged$;
+
+\echo 'Stripe automatic Refund retry authority fixture passed'

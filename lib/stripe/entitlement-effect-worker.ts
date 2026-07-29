@@ -1,5 +1,6 @@
 import type Stripe from 'stripe'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { createHash } from 'node:crypto'
 import type { Database, Json } from '@/lib/supabase/database.types'
 import { stripeMetadataUserId, stripeObjectId } from '@/lib/stripe/identity'
 
@@ -81,6 +82,16 @@ class PermanentEffectError extends Error {
   readonly permanent = true
 }
 
+class RetryableEffectError extends Error {
+  readonly externalRef: string | null
+
+  constructor(message: string, externalRef: string | null = null) {
+    super(message)
+    this.name = 'RetryableEffectError'
+    this.externalRef = externalRef
+  }
+}
+
 function plainRecord(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new PermanentEffectError(`${label} must be an object`)
@@ -148,7 +159,10 @@ function validateLeasedEffect(effect: EntitlementEffect): void {
     effect.attempt_count > 10 ||
     !EFFECT_TYPES.has(effect.effect_type) ||
     !effect.operation_key ||
-    effect.operation_key.length > 255
+    effect.operation_key.length > 255 ||
+    (effect.external_ref !== null &&
+      (effect.effect_type !== 'payment_auto_refund' ||
+        !/^refund:re_[A-Za-z0-9]+$/.test(effect.external_ref)))
   ) {
     throw new PermanentEffectError('leased entitlement effect is malformed')
   }
@@ -207,6 +221,69 @@ function assertChargeIdentity(params: {
   }
 }
 
+function assertRefundIdentity(params: {
+  refund: Stripe.Refund
+  effect: EntitlementEffect
+  payment: EntitlementPayment
+  charge: Stripe.Charge
+  reasonKey: string
+  refundReason: Stripe.RefundCreateParams.Reason
+  expectedRefundId?: string
+  expectedAmount?: number
+}): void {
+  const {
+    refund,
+    effect,
+    payment,
+    charge,
+    reasonKey,
+    refundReason,
+    expectedRefundId,
+    expectedAmount,
+  } = params
+  if (
+    !/^re_[A-Za-z0-9]+$/.test(refund.id) ||
+    refund.id.length > 255 ||
+    (expectedRefundId !== undefined && refund.id !== expectedRefundId) ||
+    refund.object !== 'refund' ||
+    stripeObjectId(refund.charge) !== charge.id ||
+    stripeObjectId(refund.payment_intent) !== payment.stripe_payment_intent_id ||
+    !Number.isSafeInteger(refund.amount) ||
+    refund.amount <= 0 ||
+    refund.amount > charge.amount ||
+    (expectedAmount !== undefined && refund.amount !== expectedAmount) ||
+    refund.currency !== payment.currency ||
+    refund.reason !== refundReason ||
+    refund.metadata?.arena_entitlement_effect_id !== effect.id ||
+    refund.metadata?.arena_entitlement_payment_id !== payment.id ||
+    refund.metadata?.arena_reason_key !== reasonKey ||
+    !['pending', 'requires_action', 'succeeded', 'failed', 'canceled'].includes(refund.status ?? '')
+  ) {
+    throw new PermanentEffectError('Stripe Refund identity conflicted with the requested refund')
+  }
+}
+
+function refundIdFromExternalRef(effect: EntitlementEffect): string | null {
+  if (effect.external_ref === null) return null
+  const match = /^refund:(re_[A-Za-z0-9]+)$/.exec(effect.external_ref)
+  if (!match) {
+    throw new PermanentEffectError('automatic refund provider reference is invalid')
+  }
+  return match[1]
+}
+
+function retryableRefundStatus(refund: Stripe.Refund): never {
+  throw new RetryableEffectError(
+    `Stripe Refund ${refund.id} is not terminally succeeded (${refund.status ?? 'unknown'})`,
+    `refund:${refund.id}`
+  )
+}
+
+function successorRefundIdempotencyKey(effectId: string, predecessorRefundId: string): string {
+  const predecessorDigest = createHash('sha256').update(predecessorRefundId, 'utf8').digest('hex')
+  return `arena_entitlement_refund_${effectId}_${predecessorDigest}`
+}
+
 async function dispatchAutomaticRefund(
   effect: EntitlementEffect,
   dependencies: StripeEntitlementEffectDependencies
@@ -242,6 +319,31 @@ async function dispatchAutomaticRefund(
   })
   assertChargeIdentity({ charge, payment, expectedLivemode: dependencies.expectedLivemode })
 
+  const refundReason: Stripe.RefundCreateParams.Reason =
+    reasonKey === 'duplicate_lifetime_purchase' ? 'duplicate' : 'requested_by_customer'
+  const persistedRefundId = refundIdFromExternalRef(effect)
+  if (persistedRefundId) {
+    const persistedRefund = await dependencies.stripe.refunds.retrieve(persistedRefundId)
+    assertRefundIdentity({
+      refund: persistedRefund,
+      effect,
+      payment,
+      charge,
+      reasonKey,
+      refundReason,
+      expectedRefundId: persistedRefundId,
+    })
+    if (persistedRefund.status === 'succeeded') {
+      return `refund:${persistedRefund.id}`
+    }
+    if (persistedRefund.status === 'pending' || persistedRefund.status === 'requires_action') {
+      if (charge.refunded === true && charge.amount_refunded === charge.amount) {
+        return `charge:${charge.id}:fully_refunded`
+      }
+      retryableRefundStatus(persistedRefund)
+    }
+  }
+
   if (charge.refunded === true && charge.amount_refunded === charge.amount) {
     return `charge:${charge.id}:fully_refunded`
   }
@@ -253,8 +355,6 @@ async function dispatchAutomaticRefund(
   if (!Number.isSafeInteger(amount) || amount <= 0) {
     throw new PermanentEffectError('Stripe Charge has no exact refundable remainder')
   }
-  const refundReason =
-    reasonKey === 'duplicate_lifetime_purchase' ? 'duplicate' : 'requested_by_customer'
   const refund = await dependencies.stripe.refunds.create(
     {
       charge: charge.id,
@@ -266,25 +366,22 @@ async function dispatchAutomaticRefund(
         arena_reason_key: reasonKey,
       },
     },
-    { idempotencyKey: `arena_entitlement_refund_${effect.id}` }
+    {
+      idempotencyKey: persistedRefundId
+        ? successorRefundIdempotencyKey(effect.id, persistedRefundId)
+        : `arena_entitlement_refund_${effect.id}`,
+    }
   )
-  if (
-    !/^re_[A-Za-z0-9]+$/.test(refund.id) ||
-    refund.object !== 'refund' ||
-    stripeObjectId(refund.charge) !== charge.id ||
-    stripeObjectId(refund.payment_intent) !== payment.stripe_payment_intent_id ||
-    refund.amount !== amount ||
-    refund.currency !== payment.currency ||
-    refund.reason !== refundReason ||
-    refund.metadata?.arena_entitlement_effect_id !== effect.id ||
-    refund.metadata?.arena_entitlement_payment_id !== payment.id ||
-    refund.metadata?.arena_reason_key !== reasonKey
-  ) {
-    throw new PermanentEffectError('Stripe Refund identity conflicted with the requested refund')
-  }
-  if (refund.status !== 'succeeded') {
-    throw new Error(`Stripe Refund is not terminally succeeded (${refund.status ?? 'unknown'})`)
-  }
+  assertRefundIdentity({
+    refund,
+    effect,
+    payment,
+    charge,
+    reasonKey,
+    refundReason,
+    expectedAmount: amount,
+  })
+  if (refund.status !== 'succeeded') retryableRefundStatus(refund)
   return `refund:${refund.id}`
 }
 
@@ -584,6 +681,7 @@ export async function drainStripeEntitlementEffects(
     } catch (error) {
       const message = compactError(error)
       const permanent = error instanceof PermanentEffectError
+      const externalRef = error instanceof RetryableEffectError ? error.externalRef : null
       try {
         if (permanent || effect.attempt_count >= 10) {
           await dependencies.store.recordDispatchReview({ effect, error: message })
@@ -596,7 +694,7 @@ export async function drainStripeEntitlementEffects(
             effectId: effect.id,
             leaseToken: effect.lease_token,
             succeeded: false,
-            externalRef: null,
+            externalRef,
             error: message,
             retryAfterSeconds: permanent ? 3600 : retryDelaySeconds(effect.attempt_count),
           })
