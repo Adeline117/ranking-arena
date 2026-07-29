@@ -129,6 +129,16 @@ describe('parseBtccPositions', () => {
       unrealizedPnl: null,
     })
   })
+
+  it('allows only an explicit successful empty snapshot', () => {
+    expect(parseBtccPositions({ code: 200, rows: [] }, ctx)).toEqual([])
+    expect(() => parseBtccPositions({ code: 401, rows: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseBtccPositions({ code: 200, rows: null }, ctx)).toThrow(
+      'malformed position response rows'
+    )
+  })
 })
 
 describe('parseBtccHistory', () => {

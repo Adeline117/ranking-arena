@@ -261,8 +261,19 @@ export function parseBtccProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
  * NULL-collapse (spec §6). closeVolume is the contract qty.
  */
 export function parseBtccPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[btcc] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== 200) {
+    throw new TypeError(`[btcc] position response failed with code ${String(envelope.code)}`)
+  }
+  if (!Array.isArray(envelope.rows)) {
+    throw new TypeError('[btcc] malformed position response rows')
+  }
+
   const out: ParsedPosition[] = []
-  for (const item of rows(raw)) {
+  for (const item of envelope.rows as Dict[]) {
     if (!item.tradePair) continue
     out.push({
       symbol: String(item.tradePair),

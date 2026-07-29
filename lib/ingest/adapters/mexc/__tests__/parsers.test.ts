@@ -200,6 +200,16 @@ describe('parseMexcPositions', () => {
       unrealizedPnl: null,
     })
   })
+
+  it('allows only an explicit successful empty snapshot', () => {
+    expect(parseMexcPositions({ code: 0, success: true, data: { content: [] } }, ctx)).toEqual([])
+    expect(() => parseMexcPositions({ code: 403, success: false, data: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseMexcPositions({ code: 0, success: true, data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
 })
 
 describe('parseMexcHistory', () => {
