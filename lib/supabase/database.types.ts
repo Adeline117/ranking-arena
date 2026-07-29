@@ -12888,6 +12888,15 @@ export type Database = {
         Returns: string
       }
       text_to_bytea: { Args: { data: string }; Returns: string }
+      toggle_channel_message_reaction_atomic: {
+        Args: {
+          p_actor_id: string
+          p_channel_id: string
+          p_emoji: string
+          p_message_id: string
+        }
+        Returns: Json
+      }
       toggle_comment_reaction: {
         Args: {
           p_comment_id: string
