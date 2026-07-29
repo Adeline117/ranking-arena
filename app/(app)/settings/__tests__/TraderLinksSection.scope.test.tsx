@@ -151,7 +151,7 @@ function linkedTrader(userId: string, label: string, isPrimary = true) {
 }
 
 function listResult(rows: unknown[]): FetchResult {
-  return { ok: true, status: 200, data: { data: { linked_traders: rows } } }
+  return { ok: true, status: 200, data: { data: { linked_traders: rows, count: rows.length } } }
 }
 
 function switchToUserB(rerender: () => void): number {
@@ -186,7 +186,7 @@ describe('TraderLinksSection viewer ownership', () => {
 
     const view = render(<TraderLinksSection userId="user-a" />)
     await screen.findByText('Alpha')
-    const detachedUnlink = screen.getByRole('button', { name: 'unlinkAccount' })
+    const detachedUnlink = screen.getByRole('button', { name: /^unlinkAccount:/ })
 
     let generationB = 0
     act(() => {
@@ -228,7 +228,7 @@ describe('TraderLinksSection viewer ownership', () => {
 
     const view = render(<TraderLinksSection userId="user-a" />)
     await screen.findByText('Alpha')
-    fireEvent.click(screen.getByRole('button', { name: 'unlinkAccount' }))
+    fireEvent.click(screen.getByRole('button', { name: /^unlinkAccount:/ }))
     expect(mockShowConfirm).toHaveBeenCalledTimes(1)
 
     act(() => {
@@ -258,7 +258,7 @@ describe('TraderLinksSection viewer ownership', () => {
 
     render(<TraderLinksSection userId="user-a" />)
     await screen.findByText('Alpha')
-    fireEvent.click(screen.getByRole('button', { name: 'unlinkAccount' }))
+    fireEvent.click(screen.getByRole('button', { name: /^unlinkAccount:/ }))
 
     await waitFor(() =>
       expect(mockAuthedFetch.mock.calls.some((call) => call[1] === 'DELETE')).toBe(true)
@@ -278,11 +278,13 @@ describe('TraderLinksSection viewer ownership', () => {
     const firstRemaining = {
       ...linkedTrader('user-a', 'Beta', false),
       id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      trader_id: 'user-a-beta',
       display_order: 0,
     }
     const promoted = {
       ...linkedTrader('user-a', 'Gamma', false),
       id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      trader_id: 'user-a-gamma',
       display_order: 0,
       created_at: '2026-07-14T00:00:00.000Z',
     }
@@ -304,7 +306,7 @@ describe('TraderLinksSection viewer ownership', () => {
 
     render(<TraderLinksSection userId="user-a" />)
     await screen.findByText('Primary')
-    fireEvent.click(screen.getAllByRole('button', { name: 'unlinkAccount' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /^unlinkAccount:/ })[0])
 
     await waitFor(() => expect(screen.queryByText('Primary')).not.toBeInTheDocument())
     expect(screen.getByText('Gamma').parentElement).toHaveTextContent('primaryAccount')
@@ -316,6 +318,7 @@ describe('TraderLinksSection viewer ownership', () => {
     const remaining = {
       ...linkedTrader('user-a', 'Local stale', false),
       id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      trader_id: 'user-a-remaining',
     }
     const authoritative = { ...remaining, label: 'Authoritative', is_primary: true }
     let getCount = 0
@@ -336,7 +339,7 @@ describe('TraderLinksSection viewer ownership', () => {
 
     render(<TraderLinksSection userId="user-a" />)
     await screen.findByText('Primary')
-    fireEvent.click(screen.getAllByRole('button', { name: 'unlinkAccount' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /^unlinkAccount:/ })[0])
 
     await screen.findByText('Authoritative')
     expect(getCount).toBe(2)
@@ -357,13 +360,13 @@ describe('TraderLinksSection viewer ownership', () => {
     expect(screen.queryByRole('button', { name: 'linkNewAccount' })).not.toBeInTheDocument()
   })
 
-  it('rejects malformed nested stats before numeric rendering', async () => {
+  it('rejects unbound nested stats before numeric rendering', async () => {
     mockAuthedFetch.mockResolvedValue(
       listResult([
         {
           ...linkedTrader('user-a', 'Malformed stats'),
           stats: {
-            arena_score: '99.5',
+            arena_score: 99.5,
             roi: 12,
             pnl: 50,
             rank: 1,
@@ -382,6 +385,41 @@ describe('TraderLinksSection viewer ownership', () => {
     expect(screen.queryByText('Malformed stats')).not.toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('loadLinkedTradersFailed')
     expect(screen.queryByText('noLinkedAccounts')).not.toBeInTheDocument()
+  })
+
+  it('does not publish unproven metrics and links to each exact account identity', async () => {
+    const primary = linkedTrader('user-a', 'Same label')
+    const secondary = {
+      ...linkedTrader('user-a', 'Same label', false),
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      trader_id: 'wallet/account',
+      source: 'gmx',
+      stats: null,
+    }
+    mockAuthedFetch.mockResolvedValue(listResult([primary, secondary]))
+
+    render(<TraderLinksSection userId="user-a" />)
+
+    expect((await screen.findAllByText('Same label')).length).toBe(2)
+    expect(screen.queryByText('combinedPnl')).not.toBeInTheDocument()
+    expect(screen.queryByText('bestRoi')).not.toBeInTheDocument()
+    expect(screen.queryByText('weightedScore')).not.toBeInTheDocument()
+    expect(screen.queryByText('ROI')).not.toBeInTheDocument()
+    expect(screen.queryByText('PnL')).not.toBeInTheDocument()
+    expect(screen.queryByText('Score')).not.toBeInTheDocument()
+    expect(screen.queryByText('Rank')).not.toBeInTheDocument()
+
+    const profileLinks = screen.getAllByRole('link', { name: /^viewProfile:/ })
+    expect(profileLinks[0]).toHaveAttribute(
+      'href',
+      '/trader/user-a-trader?platform=binance_futures'
+    )
+    expect(profileLinks[1]).toHaveAttribute('href', '/trader/wallet%2Faccount?platform=gmx')
+    expect(screen.getByText('binance_futures:user-a-trader')).toBeInTheDocument()
+    expect(screen.getByText('gmx:wallet/account')).toBeInTheDocument()
+    expect(profileLinks[0]).toHaveAccessibleName(/user-a-trader/)
+    expect(profileLinks[1]).toHaveAccessibleName(/wallet\/account/)
+    expect(screen.getByRole('button', { name: 'linkNewAccount' }).tagName).toBe('BUTTON')
   })
 
   it('shows an honest load error and recovers through the visible retry action', async () => {
