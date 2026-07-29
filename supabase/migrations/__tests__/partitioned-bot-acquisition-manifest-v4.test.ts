@@ -4,7 +4,7 @@ import { join } from 'node:path'
 const migration = readFileSync(
   join(
     process.cwd(),
-    'supabase/migrations/20260729011000_partitioned_bot_acquisition_manifest_v4.sql'
+    'supabase/migrations/20260729012000_partitioned_bot_acquisition_manifest_v4.sql'
   ),
   'utf8'
 )
