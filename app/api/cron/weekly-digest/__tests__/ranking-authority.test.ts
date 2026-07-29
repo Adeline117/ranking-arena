@@ -5,10 +5,9 @@ const route = readFileSync(join(process.cwd(), 'app/api/cron/weekly-digest/route
 
 describe('weekly email digest ranking authority', () => {
   it('builds top movers from one sealed public generation', () => {
-    expect(route).toContain('filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)')
-    expect(route).toContain('readSealedRankingGeneration(')
-    expect(route).toContain("{ season: '7D', sources: WEEKLY_DIGEST_RANKING_SOURCES }")
-    expect(route).toContain(".in('source', WEEKLY_DIGEST_RANKING_SOURCES)")
+    expect(route).toContain('readSealedRankingAuthorityGeneration(')
+    expect(route).toContain('const authoritySources = publication.proofs.map')
+    expect(route).toContain(".in('source', authoritySources)")
     expect(route).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
   })
 

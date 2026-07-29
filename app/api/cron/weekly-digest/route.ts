@@ -14,12 +14,8 @@ import { generateUnsubscribeToken } from '@/lib/utils/unsubscribe-token'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
 import { withCron } from '@/lib/api/with-cron'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import {
   buildFollowedDigestActivity,
   indexDigestActivities,
@@ -30,9 +26,6 @@ import {
 } from './personalization'
 
 const logger = createLogger('weekly-digest')
-const WEEKLY_DIGEST_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -67,14 +60,15 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
 
   // 2. Top movers (biggest 7D ROI this week). Migrated off retiring trader_latest
   // → leaderboard_ranks (source↔platform, handle↔display_name, roi↔roi_pct).
-  const sealedMovers = await readSealedRankingGeneration(
+  const sealedMovers = await readSealedRankingAuthorityGeneration(
     supabase,
-    { season: '7D', sources: WEEKLY_DIGEST_RANKING_SOURCES },
+    '7D',
     async (publication) => {
+      const authoritySources = publication.proofs.map((proof) => proof.source)
       const { data, error } = await supabase
         .from('leaderboard_ranks')
         .select('source_trader_id, source, handle, roi')
-        .in('source', WEEKLY_DIGEST_RANKING_SOURCES)
+        .in('source', authoritySources)
         .eq('season_id', '7D')
         .filter('rank_publication_id', 'eq', publication.scoreCohortId)
         .gte('computed_at', weekAgoIso)

@@ -5,10 +5,9 @@ const route = readFileSync(join(process.cwd(), 'app/api/cron/auto-post-twitter/r
 
 describe('Twitter ranking publication authority', () => {
   it('builds the external post from one sealed public generation', () => {
-    expect(route).toContain('filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)')
-    expect(route).toContain('readSealedRankingGeneration(')
-    expect(route).toContain("{ season: '7D', sources: TWITTER_RANKING_SOURCES }")
-    expect(route).toContain(".in('source', TWITTER_RANKING_SOURCES)")
+    expect(route).toContain('readSealedRankingAuthorityGeneration(')
+    expect(route).toContain('const authoritySources = publication.proofs.map')
+    expect(route).toContain(".in('source', authoritySources)")
     expect(route).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
   })
 

@@ -12,18 +12,11 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
 import { withCron } from '@/lib/api/with-cron'
 import { platformLabel } from '@/lib/constants/platform-labels'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
 const SYSTEM_HANDLE = 'arena_bot'
-const WEEKLY_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 // 数据源 = public.leaderboard_ranks(7D season,serving 表)直查。
 // 曾用 arena_weekly_leaders RPC:形状真点纠偏后又实测 p_limit 15 要 49s
@@ -65,14 +58,15 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
   }
   if (existing) return { count: 0, skipped: true, reason: 'already posted this week' }
 
-  const sealedRead = await readSealedRankingGeneration(
+  const sealedRead = await readSealedRankingAuthorityGeneration(
     supabase,
-    { season: '7D', sources: WEEKLY_RANKING_SOURCES },
+    '7D',
     async (publication) => {
+      const authoritySources = publication.proofs.map((proof) => proof.source)
       const { data, error } = await supabase
         .from('leaderboard_ranks')
         .select('handle, source, source_trader_id, roi, pnl, trader_type, is_outlier')
-        .in('source', WEEKLY_RANKING_SOURCES)
+        .in('source', authoritySources)
         .eq('season_id', '7D')
         .filter('rank_publication_id', 'eq', publication.scoreCohortId)
         .gte('pnl', 500)

@@ -16,12 +16,8 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
 import { withCron } from '@/lib/api/with-cron'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const log = createLogger('cron:auto-post-market-summary')
 
@@ -35,9 +31,6 @@ export const maxDuration = 60
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
 const SYSTEM_HANDLE = 'arena_bot'
 const SYSTEM_DISPLAY_NAME = 'Arena Bot'
-const MARKET_POST_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 interface MarketPrice {
   symbol: string
@@ -195,14 +188,15 @@ async function fetchSealedRankedTraders(
   season: '7D' | '30D',
   offset: number
 ): Promise<TopTrader[]> {
-  const sealedRead = await readSealedRankingGeneration(
+  const sealedRead = await readSealedRankingAuthorityGeneration(
     supabase,
-    { season, sources: MARKET_POST_RANKING_SOURCES },
+    season,
     async (publication) => {
+      const authoritySources = publication.proofs.map((proof) => proof.source)
       const { data, error } = await supabase
         .from('leaderboard_ranks')
         .select('handle, source, source_trader_id, arena_score, roi')
-        .in('source', MARKET_POST_RANKING_SOURCES)
+        .in('source', authoritySources)
         .eq('season_id', season)
         .filter('rank_publication_id', 'eq', publication.scoreCohortId)
         .gt('arena_score', 0)

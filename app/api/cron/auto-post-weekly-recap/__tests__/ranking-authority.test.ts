@@ -8,10 +8,9 @@ const route = readFileSync(
 
 describe('weekly recap ranking authority', () => {
   it('materializes the public post from one sealed public generation', () => {
-    expect(route).toContain('filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)')
-    expect(route).toContain('readSealedRankingGeneration(')
-    expect(route).toContain("{ season: '7D', sources: WEEKLY_RANKING_SOURCES }")
-    expect(route).toContain(".in('source', WEEKLY_RANKING_SOURCES)")
+    expect(route).toContain('readSealedRankingAuthorityGeneration(')
+    expect(route).toContain('const authoritySources = publication.proofs.map')
+    expect(route).toContain(".in('source', authoritySources)")
     expect(route).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
   })
 
