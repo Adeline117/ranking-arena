@@ -1,9 +1,10 @@
 import {
   linkedAccountDisplayLabel,
+  isExactSourceNotServingError,
+  parseExactTraderFirstScreenResponse,
   resolveLinkedAccountViewScope,
   parseExactRankHistory,
   resolveTraderHeaderAccountMetrics,
-  servingFirstScreenMatchesLinkedAccount,
   traderDetailMatchesLinkedAccount,
   traderDetailMatchesRequestedRoute,
 } from '../linked-account-view'
@@ -167,6 +168,24 @@ describe('resolveLinkedAccountViewScope', () => {
     })
   })
 
+  it('preserves an explicit All intent while membership revalidates', () => {
+    expect(
+      resolveLinkedAccountViewScope({
+        selectionEnabled: true,
+        requestedAccount: null,
+        malformedSelection: false,
+        authoritativeReady: false,
+        accounts: [],
+        preserveAggregateIntent: true,
+      })
+    ).toEqual({
+      mode: 'aggregate',
+      selectedAccount: null,
+      suppressAccountMetrics: true,
+      shouldResetSelection: false,
+    })
+  })
+
   it('invalidates malformed selections and selections after the relation shrinks', () => {
     expect(
       resolveLinkedAccountViewScope({
@@ -209,6 +228,23 @@ describe('traderDetailMatchesLinkedAccount', () => {
     ).toBe(false)
     expect(traderDetailMatchesLinkedAccount({ performance: { roi_90d: 99 } }, selected)).toBe(false)
   })
+
+  it('accepts only resolver-equivalent casing for a complete EVM account key', () => {
+    const lowerWallet = `0x${'ab'.repeat(20)}`
+    const mixedCaseWallet = `0x${'Ab'.repeat(20)}`
+    expect(
+      traderDetailMatchesLinkedAccount(
+        { profile: { id: lowerWallet, source: 'gmx' } },
+        { platform: 'gmx', traderKey: mixedCaseWallet }
+      )
+    ).toBe(true)
+    expect(
+      traderDetailMatchesLinkedAccount(
+        { profile: { id: 'TraderABC', source: 'legacy_exchange' } },
+        { platform: 'legacy_exchange', traderKey: 'traderabc' }
+      )
+    ).toBe(false)
+  })
 })
 
 describe('traderDetailMatchesRequestedRoute', () => {
@@ -235,44 +271,309 @@ describe('traderDetailMatchesRequestedRoute', () => {
       )
     ).toBe(false)
   })
+
+  it('normalizes only complete EVM wallet identities like the resolver', () => {
+    const lowerWallet = `0x${'ab'.repeat(20)}`
+    const mixedCaseWallet = `0x${'Ab'.repeat(20)}`
+    expect(
+      traderDetailMatchesRequestedRoute(
+        { profile: { id: mixedCaseWallet, handle: 'wallet-owner', source: 'hyperliquid' } },
+        'hyperliquid',
+        lowerWallet
+      )
+    ).toBe(true)
+
+    expect(
+      traderDetailMatchesRequestedRoute(
+        { profile: { id: 'TraderABC', handle: 'TraderABC', source: 'legacy_exchange' } },
+        'legacy_exchange',
+        'traderabc'
+      )
+    ).toBe(false)
+    expect(
+      traderDetailMatchesRequestedRoute(
+        { profile: { id: '0xAbCd', handle: '0xAbCd', source: 'legacy_exchange' } },
+        'legacy_exchange',
+        '0xabcd'
+      )
+    ).toBe(false)
+  })
 })
 
-describe('servingFirstScreenMatchesLinkedAccount', () => {
-  const selected = { platform: 'bitunix', traderKey: 'secondary' }
-  const response = {
-    subject: selected,
-    firstScreen: { source: 'bitunix_futures', exchangeTraderId: 'secondary' },
-  }
-
-  it('accepts a canonical source only when the response echoes the exact requested subject', () => {
-    expect(servingFirstScreenMatchesLinkedAccount(response, selected)).toBe(true)
+describe('parseExactTraderFirstScreenResponse', () => {
+  const expected = { kind: 'route', platform: 'bitunix', handle: 'public-handle' } as const
+  const response = () => ({
+    request: { platform: 'bitunix', handle: 'public-handle' },
+    subject: { platform: 'bitunix_futures', traderKey: 'canonical-id' },
+    firstScreen: {
+      source: 'bitunix_futures',
+      exchangeTraderId: 'canonical-id',
+      nickname: 'Desk One',
+      avatarMirrorUrl: null,
+      avatarOriginUrl: null,
+      avatarSrc: null,
+      walletAddress: null,
+      traderKind: 'human',
+      botStrategy: null,
+      entries: [
+        {
+          timeframe: 90,
+          rank: 7,
+          headlineRoi: 0,
+          headlinePnl: { value: 0, currency: 'USDT' },
+          headlineWinRate: 0,
+          extras: { win_rate: 0, mdd: 0, sparkline: [0, 1] },
+          provenance: {
+            source: 'bitunix_futures',
+            asOf: '2026-07-29T00:00:00.000Z',
+          },
+        },
+      ],
+    },
+    capability: null,
+    is_verified_data: true,
   })
 
-  it('rejects mismatched platform, trader key, first-screen identity, and malformed source', () => {
+  it('returns a rebuilt typed response only for exact request echo and canonical subject', () => {
+    const raw = response()
+    const parsed = parseExactTraderFirstScreenResponse(raw, expected)
+    expect(parsed).not.toBeNull()
+    expect(parsed).not.toBe(raw)
+    expect(parsed).toMatchObject({
+      request: { platform: 'bitunix', handle: 'public-handle' },
+      subject: { platform: 'bitunix_futures', traderKey: 'canonical-id' },
+      firstScreen: {
+        source: 'bitunix_futures',
+        exchangeTraderId: 'canonical-id',
+        entries: [
+          {
+            rank: 7,
+            headlineRoi: 0,
+            headlinePnl: { value: 0, currency: 'USDT' },
+            headlineWinRate: 0,
+            extras: { win_rate: 0, mdd: 0, sparkline: [0, 1] },
+          },
+        ],
+      },
+    })
+    const linkedRaw = {
+      ...raw,
+      request: { ...raw.request, handle: 'canonical-id' },
+    }
     expect(
-      servingFirstScreenMatchesLinkedAccount(
-        { ...response, subject: { ...selected, platform: 'bybit' } },
-        selected
+      parseExactTraderFirstScreenResponse(linkedRaw, {
+        kind: 'linked',
+        platform: 'bitunix',
+        traderKey: 'canonical-id',
+      })
+    ).not.toBeNull()
+    expect(
+      parseExactTraderFirstScreenResponse(raw, {
+        kind: 'linked',
+        platform: 'bitunix',
+        traderKey: 'public-handle',
+      })
+    ).toBeNull()
+  })
+
+  it('binds linked requests to the exact trader key with EVM address canonicalization', () => {
+    const raw = response()
+    const lowerWallet = `0x${'ab'.repeat(20)}`
+    const mixedCaseWallet = `0x${'Ab'.repeat(20)}`
+    const walletResponse = {
+      ...raw,
+      request: { ...raw.request, handle: mixedCaseWallet },
+      subject: { ...raw.subject, traderKey: mixedCaseWallet },
+      firstScreen: { ...raw.firstScreen, exchangeTraderId: lowerWallet },
+    }
+    const parsed = parseExactTraderFirstScreenResponse(walletResponse, {
+      kind: 'linked',
+      platform: 'bitunix',
+      traderKey: lowerWallet,
+    })
+
+    expect(parsed?.request.handle).toBe(lowerWallet)
+    expect(parsed?.subject.traderKey).toBe(lowerWallet)
+    expect(parsed?.firstScreen.exchangeTraderId).toBe(lowerWallet)
+    expect(
+      parseExactTraderFirstScreenResponse(walletResponse, {
+        kind: 'linked',
+        platform: 'bitunix',
+        traderKey: `0x${'cd'.repeat(20)}`,
+      })
+    ).toBeNull()
+  })
+
+  it('rejects a missing or mismatched request echo instead of trusting response-owned identity', () => {
+    const raw = response()
+    expect(parseExactTraderFirstScreenResponse({ ...raw, request: null }, expected)).toBeNull()
+    expect(
+      parseExactTraderFirstScreenResponse(
+        { ...raw, request: { ...raw.request, platform: 'bybit' } },
+        expected
+      )
+    ).toBeNull()
+    expect(
+      parseExactTraderFirstScreenResponse(
+        { ...raw, request: { ...raw.request, handle: 'another-handle' } },
+        expected
+      )
+    ).toBeNull()
+  })
+
+  it('rejects malformed or non-canonical subject and first-screen identity', () => {
+    const raw = response()
+    for (const malformed of [
+      { ...raw, subject: null },
+      { ...raw, subject: {} },
+      { ...raw, subject: { ...raw.subject, platform: 'bitunix' } },
+      {
+        ...raw,
+        firstScreen: { ...raw.firstScreen, exchangeTraderId: 'another-id' },
+      },
+    ]) {
+      expect(parseExactTraderFirstScreenResponse(malformed, expected)).toBeNull()
+    }
+  })
+
+  it('requires entries to be an array of complete objects', () => {
+    const raw = response()
+    for (const entries of [null, {}, [null], [{}]]) {
+      expect(
+        parseExactTraderFirstScreenResponse(
+          { ...raw, firstScreen: { ...raw.firstScreen, entries } },
+          expected
+        )
+      ).toBeNull()
+    }
+  })
+
+  it('validates capability before exposing it to serving consumers', () => {
+    const raw = response()
+    const capability = {
+      timeframes: { '7': 'native', '30': 'derived', '90': 'absent' },
+      inceptionTf: false,
+      metrics: ['roi', 'pnl'],
+      surfaces: {
+        positions: true,
+        position_history: true,
+        orders: false,
+        transfers: false,
+        copiers: false,
+      },
+      copierDepth: 'none',
+      currency: 'USDT',
+      isOnchain: false,
+      derivedBoardNote: true,
+      exchangeName: 'Bitunix Futures',
+    }
+
+    expect(
+      parseExactTraderFirstScreenResponse({ ...raw, capability }, expected)?.capability
+    ).toEqual(capability)
+    expect(parseExactTraderFirstScreenResponse({ ...raw, capability: {} }, expected)).toBeNull()
+  })
+
+  it('rejects non-finite entry metrics and never sanitizes them to zero', () => {
+    const raw = response()
+    const entry = raw.firstScreen.entries[0]
+    const invalidEntries = [
+      { ...entry, rank: Number.POSITIVE_INFINITY },
+      { ...entry, headlineRoi: Number.NaN },
+      { ...entry, headlinePnl: { value: Number.NEGATIVE_INFINITY, currency: 'USDT' } },
+      { ...entry, headlineWinRate: Number.POSITIVE_INFINITY },
+      { ...entry, extras: { ...entry.extras, mdd: Number.NaN } },
+    ]
+    for (const invalidEntry of invalidEntries) {
+      expect(
+        parseExactTraderFirstScreenResponse(
+          { ...raw, firstScreen: { ...raw.firstScreen, entries: [invalidEntry] } },
+          expected
+        )
+      ).toBeNull()
+    }
+  })
+})
+
+describe('isExactSourceNotServingError', () => {
+  const expected = {
+    kind: 'route',
+    platform: 'legacy_exchange',
+    handle: 'public-handle',
+  } as const
+  const error = (overrides: Record<string, unknown> = {}) => ({
+    status: 404,
+    info: {
+      success: false,
+      error: {
+        details: {
+          reason: 'source_not_serving',
+          request: { platform: 'legacy_exchange', handle: 'public-handle' },
+        },
+      },
+    },
+    ...overrides,
+  })
+
+  it('allows fallback only for an exact request-bound source_not_serving 404', () => {
+    expect(isExactSourceNotServingError(error(), expected)).toBe(true)
+    expect(
+      isExactSourceNotServingError(error(), {
+        kind: 'linked',
+        platform: 'legacy_exchange',
+        traderKey: 'public-handle',
+      })
+    ).toBe(true)
+  })
+
+  it('rejects generic trader 404s, wrong status and malformed envelopes', () => {
+    const generic404 = error({
+      info: {
+        success: false,
+        error: {
+          details: {
+            reason: 'trader_not_found',
+            request: { platform: 'legacy_exchange', handle: 'public-handle' },
+          },
+        },
+      },
+    })
+    expect(isExactSourceNotServingError(generic404, expected)).toBe(false)
+    expect(isExactSourceNotServingError(error({ status: 500 }), expected)).toBe(false)
+    expect(isExactSourceNotServingError({ status: 404, info: null }, expected)).toBe(false)
+    expect(
+      isExactSourceNotServingError(
+        { status: 404, info: { success: false, error: { details: null } } },
+        expected
       )
     ).toBe(false)
-    expect(
-      servingFirstScreenMatchesLinkedAccount(
-        { ...response, subject: { ...selected, traderKey: 'primary' } },
-        selected
-      )
-    ).toBe(false)
-    expect(
-      servingFirstScreenMatchesLinkedAccount(
-        { ...response, firstScreen: { ...response.firstScreen, exchangeTraderId: 'primary' } },
-        selected
-      )
-    ).toBe(false)
-    expect(
-      servingFirstScreenMatchesLinkedAccount(
-        { ...response, firstScreen: { ...response.firstScreen, source: ' bitunix_futures' } },
-        selected
-      )
-    ).toBe(false)
+  })
+
+  it('rejects a source_not_serving proof echoed for another request', () => {
+    const wrongPlatform = error({
+      info: {
+        success: false,
+        error: {
+          details: {
+            reason: 'source_not_serving',
+            request: { platform: 'other_exchange', handle: 'public-handle' },
+          },
+        },
+      },
+    })
+    const wrongHandle = error({
+      info: {
+        success: false,
+        error: {
+          details: {
+            reason: 'source_not_serving',
+            request: { platform: 'legacy_exchange', handle: 'another-handle' },
+          },
+        },
+      },
+    })
+    expect(isExactSourceNotServingError(wrongPlatform, expected)).toBe(false)
+    expect(isExactSourceNotServingError(wrongHandle, expected)).toBe(false)
   })
 })
 
