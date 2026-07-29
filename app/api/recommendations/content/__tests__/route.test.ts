@@ -89,7 +89,8 @@ jest.mock('@/lib/data/service-post-audience', () => ({
 }))
 
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
-  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingGeneration(...args),
 }))
 
 import { NextRequest } from 'next/server'
@@ -104,9 +105,15 @@ describe('GET /api/recommendations/content group discovery boundary', () => {
       async (
         _client,
         _input,
-        reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+        reader: (publication: {
+          scoreCohortId: string
+          proofs: Array<{ source: string }>
+        }) => Promise<unknown>
       ) => ({
-        value: await reader({ scoreCohortId: 'cohort-1' }),
+        value: await reader({
+          scoreCohortId: 'cohort-1',
+          proofs: [{ source: 'binance_futures' }],
+        }),
         publication: { state: 'sealed' },
         publicationIdentity: 'proof',
       })
@@ -229,9 +236,15 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
       async (
         _client,
         _input,
-        reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+        reader: (publication: {
+          scoreCohortId: string
+          proofs: Array<{ source: string }>
+        }) => Promise<unknown>
       ) => ({
-        value: await reader({ scoreCohortId: 'cohort-1' }),
+        value: await reader({
+          scoreCohortId: 'cohort-1',
+          proofs: [{ source: 'binance_futures' }],
+        }),
         publication: { state: 'sealed' },
         publicationIdentity: 'proof',
       })

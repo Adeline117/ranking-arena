@@ -20,12 +20,8 @@ import {
 } from '@/lib/api'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 // Candidate rows may be cached server-side, but the final audience decision is
 // evaluated on every request. A CDN-cached payload could outlive a group being
@@ -41,9 +37,6 @@ const GROUP_DISCOVERY_SELECT =
   'id, name, name_en, description, description_en, avatar_url, member_count'
 const TRADER_RECOMMENDATION_SELECT =
   'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
-const PUBLIC_TRADER_RECOMMENDATION_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 /**
  * Merge author profiles into post rows. posts.author_id has no FK in prod, so
@@ -217,14 +210,20 @@ async function getCurrentTraderRecommendations(
   }
 
   return (
-    await readSealedRankingGeneration(
+    await readSealedRankingAuthorityGeneration(
       supabase,
-      { season: '90D', sources: PUBLIC_TRADER_RECOMMENDATION_SOURCES },
+      '90D',
       async (publication) => {
+        const authoritySources = publication.proofs.map((proof) => proof.source)
+        const authoritySourceSet = new Set(authoritySources)
         const recommendations: Record<string, unknown>[] = []
         const traderKeys = [...new Set(rankedCandidates.map((candidate) => candidate.traderKey))]
         const candidateSources = [
-          ...new Set(rankedCandidates.map((candidate) => candidate.source)),
+          ...new Set(
+            rankedCandidates
+              .map((candidate) => candidate.source)
+              .filter((source) => authoritySourceSet.has(source))
+          ),
         ].sort()
 
         if (traderKeys.length > 0 && candidateSources.length > 0) {
@@ -268,7 +267,7 @@ async function getCurrentTraderRecommendations(
           const { data: topTraders, error: topTradersError } = await supabase
             .from('leaderboard_ranks')
             .select(TRADER_RECOMMENDATION_SELECT)
-            .in('source', PUBLIC_TRADER_RECOMMENDATION_SOURCES)
+            .in('source', authoritySources)
             .eq('season_id', '90D')
             .filter('rank_publication_id', 'eq', publication.scoreCohortId)
             .gt('arena_score', 0)
