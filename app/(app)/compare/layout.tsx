@@ -7,6 +7,9 @@ import {
   parseCompareAccounts,
   type CompareAccountRef,
 } from '@/lib/compare/identity'
+import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { logger } from '@/lib/logger'
 
 /**
  * The og/compare route renders from name/roi/score query params (edge, no DB).
@@ -21,31 +24,48 @@ async function buildCompareOgUrl(accounts: CompareAccountRef[]): Promise<string>
   if (accounts.length === 0) return staticFallback
   try {
     const supabase = getSupabaseAdmin()
-    const rows = (
+    const resolvedAccounts = (
       await Promise.all(
-        accounts.map(async (account) => {
-          const resolved = await resolveTrader(supabase, {
+        accounts.map((account) =>
+          resolveTrader(supabase, {
             handle: account.id,
             platform: account.source,
           })
-          if (!resolved) return null
-          const { data } = await supabase
-            .from('leaderboard_ranks')
-            .select('handle, source, roi, arena_score, pnl')
-            .eq('source', resolved.platform)
-            .eq('source_trader_id', resolved.traderKey)
-            .eq('season_id', '90D')
-            .maybeSingle()
-          return data as {
-            handle: string | null
-            source: string | null
-            roi: number | null
-            arena_score: number | null
-            pnl: number | null
-          } | null
-        })
+        )
       )
-    ).filter(Boolean) as Array<{
+    ).filter((resolved): resolved is NonNullable<typeof resolved> => Boolean(resolved))
+    const proofSources = filterPublicRankingSources(
+      resolvedAccounts.map((resolved) => resolved.platform)
+    )
+    const proofSourceSet = new Set(proofSources)
+    const publicAccounts = resolvedAccounts.filter((resolved) =>
+      proofSourceSet.has(resolved.platform)
+    )
+    if (publicAccounts.length === 0) return staticFallback
+
+    const sealedRead = await readSealedRankingGeneration(
+      supabase,
+      { season: '90D', sources: proofSources },
+      async (publication) =>
+        Promise.all(
+          publicAccounts.map(async (resolved) => {
+            const result = await supabase
+              .from('leaderboard_ranks')
+              .select('handle, source, roi, arena_score, pnl')
+              .eq('source', resolved.platform)
+              .eq('source_trader_id', resolved.traderKey)
+              .eq('season_id', '90D')
+              .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+              .maybeSingle()
+            if (result.error) {
+              throw new Error(`compare metadata query failed: ${result.error.message}`)
+            }
+            return result.data
+          })
+        ),
+      { timeoutMs: 10_000 }
+    )
+    const rows = sealedRead.value.filter(Boolean) as Array<{
       handle: string | null
       source: string | null
       roi: number | null
@@ -62,7 +82,11 @@ async function buildCompareOgUrl(accounts: CompareAccountRef[]): Promise<string>
       `${BASE_URL}/api/og/compare?names=${encodeURIComponent(names)}` +
       `&platforms=${encodeURIComponent(platforms)}&rois=${rois}&scores=${scores}&pnls=${pnls}`
     )
-  } catch {
+  } catch (error) {
+    logger.warn(
+      '[compare/layout] ranking metadata unavailable:',
+      error instanceof Error ? error.message : String(error)
+    )
     return staticFallback
   }
 }

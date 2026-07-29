@@ -1,5 +1,7 @@
 const mockResolveTrader = jest.fn()
 const mockFrom = jest.fn()
+const mockPublicationFilter = jest.fn()
+const mockReadSealedRankingGeneration = jest.fn()
 
 jest.mock('@/lib/constants/urls', () => ({
   BASE_URL: 'https://arena.test',
@@ -11,6 +13,14 @@ jest.mock('@/lib/supabase/server', () => ({
 
 jest.mock('@/lib/data/unified', () => ({
   resolveTrader: (...args: unknown[]) => mockResolveTrader(...args),
+}))
+
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+}))
+
+jest.mock('@/lib/logger', () => ({
+  logger: { warn: jest.fn() },
 }))
 
 import { generateMetadata } from '../layout'
@@ -25,6 +35,25 @@ describe('compare metadata composite identity', () => {
         handle: account.handle,
       })
     )
+    mockReadSealedRankingGeneration.mockImplementation(
+      async (
+        _supabase: unknown,
+        input: { season: '90D'; sources: string[] },
+        reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+      ) => {
+        const publication = {
+          state: 'sealed' as const,
+          season: input.season,
+          scoreCohortId: '11111111-1111-4111-8111-111111111111',
+          proofs: [],
+        }
+        return {
+          value: await reader(publication),
+          publication,
+          publicationIdentity: JSON.stringify(publication),
+        }
+      }
+    )
     mockFrom.mockImplementation(() => {
       let source = ''
       let traderId = ''
@@ -35,6 +64,7 @@ describe('compare metadata composite identity', () => {
           if (field === 'source_trader_id') traderId = value
           return query
         }),
+        filter: mockPublicationFilter.mockImplementation(() => query),
         maybeSingle: jest.fn(async () => ({
           data: {
             handle: `${source}-${traderId}`,
@@ -65,6 +95,18 @@ describe('compare metadata composite identity', () => {
       handle: 'shared',
       platform: 'binance_futures',
     })
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      { season: '90D', sources: ['binance_futures', 'bybit'] },
+      expect.any(Function),
+      { timeoutMs: 10_000 }
+    )
+    expect(mockPublicationFilter).toHaveBeenCalledTimes(2)
+    expect(mockPublicationFilter).toHaveBeenCalledWith(
+      'rank_publication_id',
+      'eq',
+      '11111111-1111-4111-8111-111111111111'
+    )
 
     const openGraph = metadata.openGraph as {
       url: string
