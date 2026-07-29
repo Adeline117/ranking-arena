@@ -141,6 +141,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729056000_atomic_two_factor_credentials.sql
   20260729057000_atomic_portfolio_sync_publication.sql
   20260729058000_source_registry_runtime_contract.sql
+  20260729061000_source_legacy_platform_alias_contract.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
