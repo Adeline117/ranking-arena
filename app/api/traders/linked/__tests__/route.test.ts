@@ -49,7 +49,14 @@ describe('/api/traders/linked atomic mutations', () => {
   })
 
   it('selects a primary through the ownership-validating RPC without table prewrites', async () => {
-    const linkedTrader = { id: LINK_ID, user_id: USER_ID, is_primary: true }
+    const linkedTrader = {
+      id: LINK_ID,
+      user_id: USER_ID,
+      trader_id: 'trader-a',
+      source: 'binance_futures',
+      is_primary: true,
+      updated_at: '2026-07-29T10:00:00.001Z',
+    }
     mockRpc.mockResolvedValue({ data: linkedTrader, error: null })
 
     const response = await PATCH(request({ id: LINK_ID, is_primary: true }))
@@ -64,6 +71,29 @@ describe('/api/traders/linked atomic mutations', () => {
     await expect(response.json()).resolves.toMatchObject({
       success: true,
       data: { linked_trader: linkedTrader },
+    })
+  })
+
+  it('fails closed on a mismatched primary RPC acknowledgement', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        id: LINK_ID,
+        user_id: '22222222-2222-4222-8222-222222222222',
+        trader_id: 'trader-a',
+        source: 'binance_futures',
+        is_primary: true,
+        updated_at: '2026-07-29T10:00:00.001Z',
+      },
+      error: null,
+    })
+
+    const response = await PATCH(request({ id: LINK_ID, is_primary: true }))
+
+    expect(response.status).toBe(500)
+    expect(mockInvalidateLinkedTraderCache).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Invalid primary linked trader acknowledgement',
     })
   })
 

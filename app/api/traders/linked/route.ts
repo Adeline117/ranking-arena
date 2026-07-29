@@ -56,6 +56,32 @@ function throwRpcError(error: { code?: string; message?: string }): never {
   throw error
 }
 
+function isPrimaryLinkedTraderAcknowledgement(
+  value: unknown,
+  expectedLinkId: string,
+  expectedUserId: string
+): value is {
+  id: string
+  user_id: string
+  trader_id: string
+  source: string
+  is_primary: true
+  updated_at: string
+} {
+  if (!isRecord(value)) return false
+  return (
+    value.id === expectedLinkId &&
+    value.user_id === expectedUserId &&
+    typeof value.trader_id === 'string' &&
+    value.trader_id.length > 0 &&
+    typeof value.source === 'string' &&
+    value.source.length > 0 &&
+    value.is_primary === true &&
+    typeof value.updated_at === 'string' &&
+    Number.isFinite(Date.parse(value.updated_at))
+  )
+}
+
 function requireExpectedUpdatedAt(body: Record<string, unknown>): {
   expectedUpdatedAt: string
   expectedUpdatedAtMs: number
@@ -205,6 +231,9 @@ export async function PATCH(request: NextRequest) {
       })
       if (error) throwRpcError(error)
       if (!data) throw ApiError.notFound('Linked trader not found')
+      if (!isPrimaryLinkedTraderAcknowledgement(data, id, user.id)) {
+        throw ApiError.database('Invalid primary linked trader acknowledgement')
+      }
       await invalidateLinkedTraderCache(user.id)
       return success({ linked_trader: data })
     }

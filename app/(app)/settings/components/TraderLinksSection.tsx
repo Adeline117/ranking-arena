@@ -127,6 +127,27 @@ function isLinkedTraderLabelAcknowledgement(
   )
 }
 
+function isLinkedTraderPrimaryAcknowledgement(
+  value: unknown,
+  expected: LinkedTrader
+): value is Pick<
+  LinkedTrader,
+  'id' | 'user_id' | 'trader_id' | 'source' | 'is_primary' | 'updated_at'
+> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const acknowledgement = value as Record<string, unknown>
+  return (
+    acknowledgement.id === expected.id &&
+    acknowledgement.user_id === expected.user_id &&
+    acknowledgement.trader_id === expected.trader_id &&
+    acknowledgement.source === expected.source &&
+    acknowledgement.is_primary === true &&
+    typeof acknowledgement.updated_at === 'string' &&
+    Number.isFinite(Date.parse(acknowledgement.updated_at)) &&
+    acknowledgement.updated_at !== expected.updated_at
+  )
+}
+
 function getPlatformName(source: string): string {
   const map: Record<string, string> = {
     binance_futures: 'Binance Futures',
@@ -253,9 +274,10 @@ export function TraderLinksSection({ userId }: { userId: string }) {
   )
 
   const loadLinkedTraders = useCallback(
-    async (expectedScope?: SettingsViewerSnapshot) => {
+    async (expectedScope?: SettingsViewerSnapshot, options?: { preserveReadyState?: boolean }) => {
       const scope = expectedScope ?? captureViewer()
       if (!scope || !isSettingsViewerCurrent(scope, authRef.current)) return
+      const preserveReadyState = options?.preserveReadyState === true && stateBelongsToViewer(scope)
       const loadGeneration = ++loadGenerationRef.current
       const owner: TraderStateOwner = { ...scope, loadGeneration }
       const loadIsCurrent = () =>
@@ -264,11 +286,13 @@ export function TraderLinksSection({ userId }: { userId: string }) {
         isSettingsViewerCurrent(scope, authRef.current)
 
       ownerRef.current = owner
-      loadOutcomeRef.current = 'loading'
       setStateOwner(owner)
-      setLoadOutcome('loading')
-      setTraders([])
-      setLoading(true)
+      if (!preserveReadyState) {
+        loadOutcomeRef.current = 'loading'
+        setLoadOutcome('loading')
+        setTraders([])
+        setLoading(true)
+      }
       try {
         const result = await authedFetch<{ data?: { linked_traders?: unknown } }>(
           '/api/traders/linked',
@@ -306,7 +330,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
         if (loadIsCurrent()) setLoading(false)
       }
     },
-    [captureViewer]
+    [captureViewer, stateBelongsToViewer]
   )
 
   useEffect(() => {
@@ -443,13 +467,16 @@ export function TraderLinksSection({ userId }: { userId: string }) {
 
   const handleSetPrimary = async (id: string) => {
     const operation = beginMutation()
-    if (!operation || !traders.some((trader) => trader.id === id && !trader.is_primary)) {
+    const ownedTrader = traders.find((trader) => trader.id === id && !trader.is_primary)
+    if (!operation || !ownedTrader) {
       if (operation) finishMutation(operation)
       return
     }
     setUpdatingId(id)
     try {
-      const result = await authedFetch(
+      const result = await authedFetch<{
+        data?: { linked_trader?: unknown }
+      }>(
         '/api/traders/linked',
         'PATCH',
         operation.scope.accessToken,
@@ -462,13 +489,12 @@ export function TraderLinksSection({ userId }: { userId: string }) {
       )
       if (!mutationIsCurrent(operation) || result.stale) return
       if (result.ok) {
-        setTraders((prev) =>
-          prev.map((trader) => ({
-            ...trader,
-            is_primary: trader.id === id,
-          }))
-        )
+        const acknowledgement = result.data?.data?.linked_trader
+        if (!isLinkedTraderPrimaryAcknowledgement(acknowledgement, ownedTrader)) {
+          throw new Error('Invalid linked trader primary acknowledgement')
+        }
         feedbackRef.current.showToast(feedbackRef.current.t('primarySet'), 'success')
+        await loadLinkedTraders(operation.scope, { preserveReadyState: true })
       } else {
         feedbackRef.current.showToast(feedbackRef.current.t('operationFailed'), 'error')
       }

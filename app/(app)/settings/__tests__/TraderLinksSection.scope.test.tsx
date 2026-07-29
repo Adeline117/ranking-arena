@@ -382,6 +382,141 @@ describe('TraderLinksSection viewer ownership', () => {
     expect(mockShowToast).toHaveBeenCalledWith('labelSaved', 'success')
   })
 
+  it('adopts the authoritative primary list and its new row revisions', async () => {
+    const loadedPrimary = linkedTrader('user-a', 'Primary')
+    const loadedSecondary = {
+      ...linkedTrader('user-a', 'Secondary', false),
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      trader_id: 'user-a-secondary',
+      source: 'bybit',
+      display_order: 1,
+    }
+    const authoritativePrimary = {
+      ...loadedPrimary,
+      is_primary: false,
+      updated_at: '2026-07-15T00:00:00.100Z',
+    }
+    const authoritativeSecondary = {
+      ...loadedSecondary,
+      is_primary: true,
+      updated_at: '2026-07-15T00:00:00.100Z',
+    }
+    const labelAcknowledgement = {
+      ...authoritativePrimary,
+      label: 'Updated after switch',
+      updated_at: '2026-07-15T00:00:00.101Z',
+    }
+    let getCount = 0
+    mockAuthedFetch.mockImplementation(
+      (
+        url: string,
+        method: string,
+        _accessToken: string | null,
+        body?: Record<string, unknown>
+      ) => {
+        if (url === '/api/traders/linked' && method === 'GET') {
+          getCount += 1
+          return Promise.resolve(
+            listResult(
+              getCount === 1
+                ? [loadedPrimary, loadedSecondary]
+                : [authoritativePrimary, authoritativeSecondary]
+            )
+          )
+        }
+        if (url === '/api/traders/linked' && method === 'PATCH' && body?.is_primary === true) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            data: { data: { linked_trader: authoritativeSecondary } },
+          })
+        }
+        if (url === '/api/traders/linked' && method === 'PATCH' && 'label' in (body ?? {})) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            data: { data: { linked_trader: labelAcknowledgement } },
+          })
+        }
+        return Promise.resolve({ ok: false, status: 500, data: {} })
+      }
+    )
+
+    render(<TraderLinksSection userId="user-a" />)
+    await screen.findByText('Secondary')
+    fireEvent.click(screen.getByRole('button', { name: 'setAsPrimary' }))
+
+    await waitFor(() => {
+      expect(getCount).toBe(2)
+      expect(screen.getByText('Secondary').parentElement).toHaveTextContent('primaryAccount')
+    })
+    const primaryPatch = mockAuthedFetch.mock.calls.find(
+      (call) => call[1] === 'PATCH' && call[3]?.is_primary === true
+    )
+    expect(primaryPatch?.[3]).toEqual({ id: loadedSecondary.id, is_primary: true })
+    expect(mockShowToast).toHaveBeenCalledWith('primarySet', 'success')
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'editLabel' })[0])
+    fireEvent.change(screen.getByPlaceholderText('labelPlaceholder'), {
+      target: { value: 'Updated after switch' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'save' }))
+
+    expect(await screen.findByText('Updated after switch')).toBeInTheDocument()
+    const labelPatch = mockAuthedFetch.mock.calls.find(
+      (call) => call[1] === 'PATCH' && call[3]?.label === 'Updated after switch'
+    )
+    expect(labelPatch?.[3]).toMatchObject({
+      id: loadedPrimary.id,
+      expected_updated_at: authoritativePrimary.updated_at,
+    })
+  })
+
+  it('keeps the loaded primary when the switch acknowledgement is mismatched', async () => {
+    const loadedPrimary = linkedTrader('user-a', 'Primary')
+    const loadedSecondary = {
+      ...linkedTrader('user-a', 'Secondary', false),
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      trader_id: 'user-a-secondary',
+      source: 'bybit',
+      display_order: 1,
+    }
+    let getCount = 0
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url === '/api/traders/linked' && method === 'GET') {
+        getCount += 1
+        return Promise.resolve(listResult([loadedPrimary, loadedSecondary]))
+      }
+      if (url === '/api/traders/linked' && method === 'PATCH') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: {
+            data: {
+              linked_trader: {
+                ...loadedSecondary,
+                id: loadedPrimary.id,
+                is_primary: true,
+                updated_at: '2026-07-15T00:00:00.100Z',
+              },
+            },
+          },
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<TraderLinksSection userId="user-a" />)
+    await screen.findByText('Secondary')
+    fireEvent.click(screen.getByRole('button', { name: 'setAsPrimary' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error'))
+    expect(getCount).toBe(1)
+    expect(screen.getByText('Primary').parentElement).toHaveTextContent('primaryAccount')
+    expect(screen.getByText('Secondary').parentElement).not.toHaveTextContent('primaryAccount')
+    expect(mockShowToast).not.toHaveBeenCalledWith('primarySet', 'success')
+  })
+
   it('keeps the label draft open when another tab wins the row revision', async () => {
     const loaded = linkedTrader('user-a', 'Alpha')
     mockAuthedFetch.mockImplementation((url: string, method: string) => {
