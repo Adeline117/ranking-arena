@@ -216,6 +216,12 @@ export const env = {
     process.env.NODE_ENV === 'production' ? 'closed' : 'sealed'
   ),
   API_TIER_CHECKOUT_WRITER_SHA: getEnv('API_TIER_CHECKOUT_WRITER_SHA', false),
+  PRO_CHECKOUT_WRITER_MODE: getEnv(
+    'PRO_CHECKOUT_WRITER_MODE',
+    false,
+    process.env.NODE_ENV === 'production' ? 'closed' : 'sealed'
+  ),
+  PRO_CHECKOUT_WRITER_SHA: getEnv('PRO_CHECKOUT_WRITER_SHA', false),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: getEnv('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', false),
   STRIPE_PRO_MONTHLY_PRICE_ID: getEnv('STRIPE_PRO_MONTHLY_PRICE_ID', false),
   STRIPE_PRO_YEARLY_PRICE_ID: getEnv('STRIPE_PRO_YEARLY_PRICE_ID', false),

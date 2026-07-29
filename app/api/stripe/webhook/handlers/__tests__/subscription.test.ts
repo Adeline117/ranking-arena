@@ -4,6 +4,7 @@ const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 const mockLeaveProOfficialGroup = jest.fn()
 const mockListCheckoutSessions = jest.fn()
+const mockRecordStripeCheckoutManualReview = jest.fn()
 
 jest.mock('../shared', () => ({
   getSupabase: () => ({ from: mockFrom, rpc: mockRpc }),
@@ -41,6 +42,13 @@ jest.mock('@/lib/data/notifications', () => ({ sendNotification: jest.fn() }))
 jest.mock('@/lib/notifications/telegram', () => ({
   sendTelegramAlert: jest.fn().mockResolvedValue(undefined),
 }))
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: () => ({ rpc: mockRpc }),
+}))
+jest.mock('@/lib/stripe/lifetime-entitlement', () => ({
+  recordStripeCheckoutManualReview: (...args: unknown[]) =>
+    mockRecordStripeCheckoutManualReview(...args),
+}))
 
 import {
   handleSubscriptionCanceled,
@@ -53,6 +61,10 @@ const stripeEvent = { id: 'evt_current', created: 1_800_000_000, livemode: true 
 const proUserId = '10e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const apiUserId = '11e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const apiReservationId = '91e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const recurringUserId = '21e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const recurringReservationId = '31e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const recurringOperationId = '41e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const recurringNonce = '51e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const apiSubscriptions = new Map<string, Stripe.Subscription>()
 let mockApplyRpcResult: { data: unknown; error: unknown }
 let mockPersistedRpcResult: { data: unknown; error: unknown }
@@ -99,6 +111,63 @@ function subscription(overrides: Partial<Stripe.Subscription> = {}): Stripe.Subs
     },
     ...overrides,
   } as Stripe.Subscription
+}
+
+function recurringSubscription(
+  trialRequested = false,
+  overrides: Partial<Stripe.Subscription> = {}
+): Stripe.Subscription {
+  return subscription({
+    id: 'sub_recurring_exact',
+    customer: 'cus_recurring_exact',
+    status: trialRequested ? 'trialing' : 'active',
+    collection_method: 'charge_automatically',
+    currency: 'usd',
+    automatic_tax: { enabled: false },
+    default_tax_rates: [],
+    pause_collection: null,
+    schedule: null,
+    metadata: {
+      plan: 'monthly',
+      pro_checkout_nonce: recurringNonce,
+      pro_checkout_operation_id: recurringOperationId,
+      pro_checkout_reservation_id: recurringReservationId,
+      stripe_customer_id: 'cus_recurring_exact',
+      stripe_price_id: 'price_pro_monthly',
+      supabase_user_id: recurringUserId,
+      trial_requested: trialRequested ? 'true' : 'false',
+      type: 'pro_subscription',
+      userId: recurringUserId,
+    },
+    cancel_at_period_end: false,
+    canceled_at: null,
+    pending_update: null,
+    discounts: [],
+    trial_start: trialRequested ? 1_799_500_000 : null,
+    trial_end: trialRequested ? 1_800_104_800 : null,
+    current_period_start: 1_799_500_000,
+    current_period_end: 1_800_104_800,
+    items: {
+      data: [
+        {
+          id: 'si_recurring_exact',
+          quantity: 1,
+          subscription: 'sub_recurring_exact',
+          discounts: [],
+          tax_rates: [],
+          price: {
+            id: 'price_pro_monthly',
+            type: 'recurring',
+            currency: 'usd',
+            unit_amount: 499,
+            recurring: { interval: 'month', interval_count: 1 },
+          },
+        },
+      ],
+      has_more: false,
+    } as Stripe.ApiList<Stripe.SubscriptionItem>,
+    ...overrides,
+  })
 }
 
 function apiSubscription(
@@ -236,6 +305,9 @@ describe('subscription webhook persistence', () => {
       if (name === 'sync_recurring_pro_subscription_projection_atomic') {
         return Promise.resolve({ data: 'updated', error: null })
       }
+      if (name === 'assert_recurring_pro_checkout_completed_atomic') {
+        return Promise.resolve({ data: 'completed', error: null, status: 200 })
+      }
       throw new Error(`Unexpected RPC: ${name}`)
     })
     mockListCheckoutSessions.mockImplementation(
@@ -246,6 +318,122 @@ describe('subscription webhook persistence', () => {
       }
     )
     mockLeaveProOfficialGroup.mockResolvedValue(true)
+    mockRecordStripeCheckoutManualReview.mockResolvedValue(undefined)
+  })
+
+  it.each([
+    ['paid', recurringSubscription(false)],
+    ['trial', recurringSubscription(true)],
+  ])(
+    'leaves an exact active %s subscription to Checkout/invoice authority after completion assertion',
+    async (_label, snapshot) => {
+      await expect(handleSubscriptionUpdate(snapshot, stripeEvent)).resolves.toBeUndefined()
+
+      expect(mockRpc).toHaveBeenCalledWith('assert_recurring_pro_checkout_completed_atomic', {
+        p_user_id: recurringUserId,
+        p_livemode: true,
+        p_stripe_customer_id: 'cus_recurring_exact',
+        p_stripe_subscription_id: 'sub_recurring_exact',
+        p_reservation_id: recurringReservationId,
+        p_operation_id: recurringOperationId,
+        p_reservation_nonce: recurringNonce,
+        p_plan: 'monthly',
+        p_stripe_price_id: 'price_pro_monthly',
+        p_trial_requested: _label === 'trial',
+      })
+      expect(mockFrom).not.toHaveBeenCalled()
+      expect(mockRpc.mock.calls.some(([name]) => name === 'update_subscription_and_profile')).toBe(
+        false
+      )
+      expect(mockLeaveProOfficialGroup).not.toHaveBeenCalled()
+    }
+  )
+
+  it('accepts the active lifecycle event after an exact Checkout-created trial ends', async () => {
+    const trialStart = 1_799_000_000
+    const trialEnd = trialStart + 7 * 24 * 60 * 60
+    const snapshot = recurringSubscription(true, {
+      status: 'active',
+      trial_start: trialStart,
+      trial_end: trialEnd,
+      current_period_start: trialEnd,
+      current_period_end: trialEnd + 30 * 24 * 60 * 60,
+    })
+
+    await expect(handleSubscriptionUpdate(snapshot, stripeEvent)).resolves.toBeUndefined()
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'assert_recurring_pro_checkout_completed_atomic',
+      expect.objectContaining({
+        p_stripe_subscription_id: 'sub_recurring_exact',
+        p_trial_requested: true,
+      })
+    )
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it('retries an active subscription event that arrives before durable Checkout completion', async () => {
+    mockRpc.mockImplementation((name: string) => {
+      if (name === 'assert_recurring_pro_checkout_completed_atomic') {
+        return Promise.resolve({
+          data: null,
+          error: { code: '40001', message: 'completion is not durable yet' },
+          status: 409,
+        })
+      }
+      throw new Error(`Unexpected RPC: ${name}`)
+    })
+
+    await expect(handleSubscriptionUpdate(recurringSubscription(), stripeEvent)).rejects.toThrow(
+      'completion assertion failed: completion is not durable yet'
+    )
+
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockLeaveProOfficialGroup).not.toHaveBeenCalled()
+  })
+
+  it('durably reviews malformed recurring metadata and performs no entitlement mutation', async () => {
+    const snapshot = recurringSubscription(false, {
+      metadata: {
+        ...recurringSubscription().metadata,
+        supabase_user_id: apiUserId,
+      },
+    })
+
+    await expect(handleSubscriptionUpdate(snapshot, stripeEvent)).rejects.toThrow(
+      'has invalid metadata'
+    )
+
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        objectType: 'subscription',
+        sessionId: 'sub_recurring_exact',
+        reasonKey: 'recurring_subscription_metadata_invalid',
+      })
+    )
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('durably reviews exact-envelope Stripe identity drift before assertion', async () => {
+    await expect(
+      handleSubscriptionUpdate(
+        recurringSubscription(false, { customer: 'cus_wrong_owner' }),
+        stripeEvent
+      )
+    ).rejects.toThrow('failed exact verification')
+
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        objectType: 'subscription',
+        sessionId: 'sub_recurring_exact',
+        userId: recurringUserId,
+        reasonKey: 'recurring_subscription_verification_failed',
+      })
+    )
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('throws when the subscription owner lookup fails', async () => {

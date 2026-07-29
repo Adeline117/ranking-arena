@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type Stripe from 'stripe'
+import { randomUUID } from 'node:crypto'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   STRIPE_PRICE_IDS,
@@ -20,9 +21,19 @@ import {
   recordStripeCheckoutManualReview,
 } from '@/lib/stripe/lifetime-entitlement'
 import type { Json } from '@/lib/supabase/database.types'
+import {
+  buildRecurringProCheckoutMetadata,
+  callRecurringProRpc,
+  exactCanonicalUuid,
+  parseRecurringProReservation,
+  recurringProRpcStatus,
+  verifyRecurringProCheckoutSession,
+  type RecurringProPlan,
+} from '@/lib/stripe/recurring-pro-checkout'
 
 const LIFETIME_RESERVATION_TTL_SECONDS = 60 * 60
 const LIFETIME_PRICE_CENTS = Math.round(PRICING.lifetime.price * 100)
+const FULL_GIT_SHA_PATTERN = /^[0-9a-f]{40}$/
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const reservationNoncePattern = /^[A-Za-z0-9_.:-]{8,128}$/
 const blockingProSubscriptionStatuses = new Set<Stripe.Subscription.Status>([
@@ -37,6 +48,72 @@ const terminalProSubscriptionStatuses = new Set<Stripe.Subscription.Status>([
   'canceled',
   'incomplete_expired',
 ])
+
+function recurringProCheckoutWriterIsOpen(): boolean {
+  if (env.PRO_CHECKOUT_WRITER_MODE !== 'sealed') return false
+  const productionRuntime =
+    process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production'
+  if (!productionRuntime) return true
+
+  const expectedSha = env.PRO_CHECKOUT_WRITER_SHA?.trim().toLowerCase() ?? ''
+  const runtimeSha = (process.env.VERCEL_GIT_COMMIT_SHA ?? '').trim().toLowerCase()
+  return (
+    FULL_GIT_SHA_PATTERN.test(expectedSha) &&
+    FULL_GIT_SHA_PATTERN.test(runtimeSha) &&
+    expectedSha === runtimeSha
+  )
+}
+
+function recurringProCheckoutWriterClosed() {
+  return NextResponse.json(
+    {
+      error: 'Pro checkout is temporarily paused for a billing upgrade. Please retry shortly.',
+      code: 'PRO_CHECKOUT_WRITER_CLOSED',
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': '60',
+        'X-Arena-Pro-Checkout-Writer': 'closed',
+      },
+    }
+  )
+}
+
+function stripeSecretLivemode(secret: string): boolean | null {
+  const canonical = secret.trim()
+  if (canonical.startsWith('sk_live_')) return true
+  if (canonical.startsWith('sk_test_')) return false
+  return null
+}
+
+function recurringCheckoutConflict(code = 'PRO_CHECKOUT_CONFLICT') {
+  return NextResponse.json(
+    {
+      error:
+        'Another Pro checkout or subscription is already in progress. Finish it or retry after it expires.',
+      code,
+    },
+    {
+      status: 409,
+      headers: { 'Cache-Control': 'no-store' },
+    }
+  )
+}
+
+function recurringCheckoutUnavailable() {
+  return NextResponse.json(
+    { error: 'Unable to prepare Pro checkout. Please retry.' },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': '30',
+      },
+    }
+  )
+}
 
 function rpcRecord(value: unknown): Record<string, unknown> | null {
   return value && !Array.isArray(value) && typeof value === 'object'
@@ -345,7 +422,35 @@ async function listCompleteCustomerProSubscriptions(params: {
 }
 
 export async function POST(request: NextRequest) {
-  // 敏感操作限流
+  let plan: string,
+    successUrl: string | undefined,
+    cancelUrl: string | undefined,
+    promotionCode: string | undefined,
+    trial: boolean | undefined,
+    requestedOperationId: unknown
+  try {
+    const body = await request.json()
+    plan = body.plan
+    successUrl = body.successUrl
+    cancelUrl = body.cancelUrl
+    promotionCode = body.promotionCode
+    trial = body.trial === true
+    requestedOperationId = body.operationId
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid JSON in request body', code: 'INVALID_JSON' },
+      { status: 400 }
+    )
+  }
+
+  // Parsing the product is side-effect free. The production writer gate then
+  // runs before rate limiting, auth, database access, Customer lookup, or any
+  // Stripe call, and is sealed to one exact full deployment SHA.
+  const recurringPlanRequested = plan === 'monthly' || plan === 'yearly'
+  if (recurringPlanRequested && !recurringProCheckoutWriterIsOpen()) {
+    return recurringProCheckoutWriterClosed()
+  }
+
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
   if (rateLimitResponse) {
     return rateLimitResponse
@@ -357,25 +462,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Payment system not configured. Please contact support.' },
         { status: 503 }
-      )
-    }
-
-    let plan: string,
-      successUrl: string | undefined,
-      cancelUrl: string | undefined,
-      promotionCode: string | undefined,
-      trial: boolean | undefined
-    try {
-      const body = await request.json()
-      plan = body.plan
-      successUrl = body.successUrl
-      cancelUrl = body.cancelUrl
-      promotionCode = body.promotionCode
-      trial = body.trial === true
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid JSON in request body', code: 'INVALID_JSON' },
-        { status: 400 }
       )
     }
 
@@ -417,6 +503,20 @@ export async function POST(request: NextRequest) {
 
     const typedPlan = plan as 'monthly' | 'yearly' | 'lifetime'
     const recurringCheckout = typedPlan === 'monthly' || typedPlan === 'yearly'
+    const operationId = recurringCheckout
+      ? requestedOperationId === undefined
+        ? randomUUID()
+        : exactCanonicalUuid(requestedOperationId)
+      : null
+    if (recurringCheckout && !operationId) {
+      return NextResponse.json(
+        {
+          error: 'Invalid Pro checkout operation identity.',
+          code: 'INVALID_CHECKOUT_OPERATION',
+        },
+        { status: 400 }
+      )
+    }
 
     // Keep the local projection as an early safety signal for recurring Pro
     // checkout. Stripe is queried after exact Customer binding below because
@@ -1017,41 +1117,289 @@ export async function POST(request: NextRequest) {
         )
       }
     } else {
-      // 月付 / 年付订阅
+      const recurringPlan = typedPlan as RecurringProPlan
+      if (!operationId) {
+        throw new Error('Recurring Pro checkout operation identity unexpectedly became incomplete')
+      }
+      const livemode = stripeSecretLivemode(env.STRIPE_SECRET_KEY)
+      if (livemode === null) return recurringCheckoutUnavailable()
+
+      let trialRequested = false
+      if (trial) {
+        const alreadyTrialed = stripeProSubscriptions.some(
+          ({ subscription }) => subscription.trial_start != null || subscription.trial_end != null
+        )
+        trialRequested = !alreadyTrialed
+      }
+
+      let reservationResult
+      try {
+        reservationResult = await callRecurringProRpc(
+          supabaseAdmin,
+          'reserve_recurring_pro_checkout_atomic',
+          {
+            p_user_id: user.id,
+            p_livemode: livemode,
+            p_stripe_customer_id: customerId,
+            p_plan: recurringPlan,
+            p_stripe_price_id: priceId,
+            p_operation_id: operationId,
+            p_trial_requested: trialRequested,
+          }
+        )
+      } catch (reservationError) {
+        logger.error('Recurring Pro Checkout admission was unavailable', {
+          userId: user.id,
+          operationId,
+          error:
+            reservationError instanceof Error ? reservationError.message : String(reservationError),
+        })
+        return recurringCheckoutUnavailable()
+      }
+      if (reservationResult.error) {
+        logger.error('Recurring Pro Checkout admission failed', {
+          userId: user.id,
+          operationId,
+          error: reservationResult.error.message,
+        })
+        return recurringCheckoutUnavailable()
+      }
+      const reservationStatus = recurringProRpcStatus(reservationResult.data)
+      if (reservationStatus === 'already_subscribed') {
+        return recurringCheckoutConflict('ALREADY_SUBSCRIBED')
+      }
+      if (reservationStatus === 'conflict') return recurringCheckoutConflict()
+
+      const reservation = parseRecurringProReservation(reservationResult.data)
+      if (
+        !reservation ||
+        reservation.userId !== user.id ||
+        reservation.livemode !== livemode ||
+        reservation.customerId !== customerId ||
+        reservation.plan !== recurringPlan ||
+        reservation.priceId !== priceId ||
+        reservation.operationId !== operationId ||
+        reservation.trialRequested !== trialRequested
+      ) {
+        logger.error('Recurring Pro Checkout admission returned uncertain identity', {
+          userId: user.id,
+          operationId,
+          status: reservationStatus,
+        })
+        return recurringCheckoutUnavailable()
+      }
+
+      const recurringIdentity = {
+        userId: reservation.userId,
+        customerId: reservation.customerId,
+        plan: reservation.plan,
+        priceId: reservation.priceId,
+        reservationId: reservation.reservationId,
+        operationId: reservation.operationId,
+        nonce: reservation.nonce,
+        trialRequested: reservation.trialRequested,
+      }
+      const recurringMetadata = buildRecurringProCheckoutMetadata(recurringIdentity)
+      const stripeClient = getStripe()
+
+      if (reservation.checkoutSessionId) {
+        try {
+          checkoutSession = await verifyRecurringProCheckoutSession({
+            stripe: stripeClient,
+            sessionId: reservation.checkoutSessionId,
+            identity: recurringIdentity,
+            livemode,
+            checkoutExpiresAtSeconds: reservation.checkoutExpiresAtSeconds,
+            phase: 'open',
+          })
+        } catch (recoveryError) {
+          try {
+            await stripeClient.checkout.sessions.expire(reservation.checkoutSessionId)
+          } catch (expireError) {
+            logger.error('Failed to expire unsafe recovered Pro Checkout Session', {
+              sessionId: reservation.checkoutSessionId,
+              error: expireError instanceof Error ? expireError.message : String(expireError),
+            })
+          }
+          await recordStripeCheckoutManualReview({
+            supabase: supabaseAdmin,
+            sessionId: reservation.checkoutSessionId,
+            userId: user.id,
+            reasonKey: 'recurring_checkout_recovery_identity_conflict',
+            reason: 'A bound recurring Pro Checkout Session failed exact open-state recovery.',
+            context: {
+              reservation_id: reservation.reservationId,
+              operation_id: reservation.operationId,
+              error: recoveryError instanceof Error ? recoveryError.message : String(recoveryError),
+            },
+          })
+          return recurringCheckoutUnavailable()
+        }
+
+        return NextResponse.json(
+          { url: checkoutSession.url, sessionId: checkoutSession.id },
+          {
+            headers: {
+              'Cache-Control': 'no-store',
+              'X-Arena-Pro-Checkout-Writer': 'sealed',
+            },
+          }
+        )
+      }
+
       const checkoutOptions: Parameters<typeof createCheckoutSession>[0] = {
         customerId,
         priceId,
         successUrl: sUrl,
         cancelUrl: cUrl,
-        metadata: meta,
+        metadata: recurringMetadata,
         allowPromotionCodes: false,
+        idempotencyKey: `recurring_pro_checkout_${livemode ? 'live' : 'test'}_${reservation.reservationId}`,
+        expiresAt: reservation.checkoutExpiresAtSeconds,
+        clientReferenceId: reservation.reservationId,
       }
 
-      // Add 7-day free trial if requested (only for new subscribers, not lifetime).
-      // 2026-07-11:trial 由客户端 body 传,此前无"已试用过"校验 → 取消后重订可
-      // 无限薅 7 天。这里只用完整 Stripe 历史中的精确 Pro price 判断既往 trial。
-      if (trial) {
-        // The exact, fully-paginated Stripe snapshot above contains only Pro
-        // monthly/yearly prices. API-tier and unrelated subscriptions cannot
-        // consume the B2C Pro trial.
-        const alreadyTrialed = stripeProSubscriptions.some(
-          ({ subscription }) => subscription.trial_start != null || subscription.trial_end != null
+      if (trialRequested) checkoutOptions.trialDays = 7
+
+      try {
+        checkoutSession = await createCheckoutSession(checkoutOptions)
+      } catch (createError) {
+        // Stripe can commit before its response is lost. Preserve the durable
+        // reservation and recover this exact idempotency key on the same
+        // operation; never create a second Session or unsigned release.
+        logger.warn('Recurring Pro Checkout create outcome was ambiguous', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+          error: createError instanceof Error ? createError.message : String(createError),
+        })
+        return recurringCheckoutUnavailable()
+      }
+
+      const createdSessionId =
+        checkoutSession &&
+        typeof checkoutSession === 'object' &&
+        typeof checkoutSession.id === 'string'
+          ? checkoutSession.id
+          : null
+      if (!createdSessionId) return recurringCheckoutUnavailable()
+
+      // Bind the returned Session identity before fresh verification. If
+      // verification later discovers a Stripe-side contradiction, this row
+      // remains bound and therefore cannot be retired by unsigned DB time.
+      // Only the exact signed expired event (or exact completion) can release
+      // the financial barrier.
+      let bindResult
+      try {
+        bindResult = await callRecurringProRpc(
+          supabaseAdmin,
+          'bind_recurring_pro_checkout_session_atomic',
+          {
+            p_user_id: recurringIdentity.userId,
+            p_livemode: livemode,
+            p_stripe_customer_id: recurringIdentity.customerId,
+            p_plan: recurringIdentity.plan,
+            p_stripe_price_id: recurringIdentity.priceId,
+            p_operation_id: recurringIdentity.operationId,
+            p_reservation_id: recurringIdentity.reservationId,
+            p_reservation_nonce: recurringIdentity.nonce,
+            p_trial_requested: recurringIdentity.trialRequested,
+            p_checkout_session_id: createdSessionId,
+            p_checkout_expires_at: reservation.checkoutExpiresAtSeconds,
+          }
         )
-        if (!alreadyTrialed) {
-          checkoutOptions.trialDays = 7
+      } catch (bindError) {
+        logger.error('Recurring Pro Checkout bind outcome was uncertain', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+          sessionId: createdSessionId,
+          error: bindError instanceof Error ? bindError.message : String(bindError),
+        })
+        try {
+          await stripeClient.checkout.sessions.expire(createdSessionId)
+        } catch (expireError) {
+          logger.error('Failed to expire Pro Checkout after uncertain bind', {
+            sessionId: createdSessionId,
+            error: expireError instanceof Error ? expireError.message : String(expireError),
+          })
         }
+        return recurringCheckoutUnavailable()
+      }
+      const bindStatus = recurringProRpcStatus(bindResult.data)
+      if (
+        bindResult.error ||
+        (bindStatus !== 'bound' &&
+          bindStatus !== 'already_bound' &&
+          bindStatus !== 'already_completed')
+      ) {
+        try {
+          await stripeClient.checkout.sessions.expire(createdSessionId)
+        } catch (expireError) {
+          logger.error('Failed to expire rejected Pro Checkout Session', {
+            sessionId: createdSessionId,
+            error: expireError instanceof Error ? expireError.message : String(expireError),
+          })
+        }
+        logger.error('Recurring Pro Checkout bind was not durably acknowledged', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+          sessionId: createdSessionId,
+          status: bindStatus,
+          error: bindResult.error?.message,
+        })
+        return recurringCheckoutUnavailable()
       }
 
-      // A Customer subscription scan cannot serialize concurrent open Checkout
-      // Sessions. The durable recurring-checkout admission RPC remains required
-      // before this path can be treated as launch-safe against TOCTOU.
-      checkoutSession = await createCheckoutSession(checkoutOptions)
+      try {
+        checkoutSession = await verifyRecurringProCheckoutSession({
+          stripe: stripeClient,
+          sessionId: createdSessionId,
+          identity: recurringIdentity,
+          livemode,
+          checkoutExpiresAtSeconds: reservation.checkoutExpiresAtSeconds,
+          phase: 'open',
+        })
+      } catch (verificationError) {
+        try {
+          await stripeClient.checkout.sessions.expire(createdSessionId)
+        } catch (expireError) {
+          logger.error('Failed to expire unsafe fresh Pro Checkout Session', {
+            sessionId: createdSessionId,
+            error: expireError instanceof Error ? expireError.message : String(expireError),
+          })
+        }
+        await recordStripeCheckoutManualReview({
+          supabase: supabaseAdmin,
+          sessionId: createdSessionId,
+          userId: user.id,
+          reasonKey: 'recurring_checkout_fresh_identity_conflict',
+          reason: 'A fresh recurring Pro Checkout Session failed exact verification.',
+          context: {
+            reservation_id: reservation.reservationId,
+            operation_id: reservation.operationId,
+            error:
+              verificationError instanceof Error
+                ? verificationError.message
+                : String(verificationError),
+          },
+        })
+        return recurringCheckoutUnavailable()
+      }
     }
 
-    return NextResponse.json({
-      url: checkoutSession.url,
-      sessionId: checkoutSession.id,
-    })
+    return NextResponse.json(
+      {
+        url: checkoutSession.url,
+        sessionId: checkoutSession.id,
+      },
+      recurringCheckout
+        ? {
+            headers: {
+              'Cache-Control': 'no-store',
+              'X-Arena-Pro-Checkout-Writer': 'sealed',
+            },
+          }
+        : undefined
+    )
   } catch (error: unknown) {
     const logger = createLogger('stripe-create-checkout')
     const errorMessage = error instanceof Error ? error.message : String(error)

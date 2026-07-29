@@ -11,14 +11,22 @@ jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
-    constructor(body?: unknown, init: { status?: number } = {}) {
+    _headers: Map<string, string>
+    constructor(body?: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this._body = body
       this.status = init.status || 200
+      this._headers = new Map(
+        Object.entries(init.headers || {}).map(([key, value]) => [key.toLowerCase(), value])
+      )
     }
     async json() {
       return this._body
     }
-    static json(data: unknown, init?: { status?: number }) {
+    get headers() {
+      const headers = this._headers
+      return { get: (key: string) => headers.get(key.toLowerCase()) || null }
+    }
+    static json(data: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(data, init)
     }
   }
@@ -61,6 +69,8 @@ const mockEnv: Record<string, string | undefined> = {
   NEXT_PUBLIC_APP_URL: 'https://app.test.com',
   NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co',
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
+  PRO_CHECKOUT_WRITER_MODE: 'sealed',
+  PRO_CHECKOUT_WRITER_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
 }
 jest.mock('@/lib/env', () => ({
   env: new Proxy(
@@ -109,6 +119,12 @@ const mockListCheckoutLineItems = jest.fn()
 const mockExpireOneTimeCheckoutSession = jest.fn()
 const mockRetrieveOneTimeCheckoutSession = jest.fn()
 const lifetimeCheckoutExpiresAt = Math.floor(Date.parse('2099-01-01T00:00:00.000Z') / 1000)
+const recurringCheckoutExpiresAt = lifetimeCheckoutExpiresAt
+const recurringReservationId = '55f31170-3e0a-49fc-bf54-42d060fe47e9'
+const recurringNonce = '875c5c76-a067-41f7-8964-0e6c8b2e3538'
+const recurringOperationId = '9e457600-e138-4d2a-9738-cbbc94e8aeb4'
+const validUserId = '11111111-1111-4111-8111-111111111111'
+let lastRecurringCheckoutOptions: Record<string, unknown> | null = null
 const lifetimeCheckoutLine = {
   id: 'li_lifetime123',
   object: 'item',
@@ -126,11 +142,11 @@ const recoveredLifetimeCheckoutSession = {
   id: 'cs_lifetime123',
   customer: 'cus_test123',
   metadata: {
-    supabase_user_id: 'user-123',
-    userId: 'user-123',
+    supabase_user_id: validUserId,
+    userId: validUserId,
     plan: 'lifetime',
     lifetime_reservation_id: '9a8df3e8-e908-4f27-9cb4-8b892d748cc7',
-    lifetime_reservation_nonce: 'lifetime:user-123:original',
+    lifetime_reservation_nonce: 'lifetime:11111111-1111-4111-8111-111111111111:original',
   },
   expires_at: lifetimeCheckoutExpiresAt,
   mode: 'payment',
@@ -173,6 +189,69 @@ function createdLifetimeCheckoutSession(
     automatic_tax: params.automatic_tax,
     adaptive_pricing: params.adaptive_pricing,
     ...overrides,
+  }
+}
+
+function createdRecurringCheckoutSession(
+  options: Record<string, unknown>,
+  overrides: Record<string, unknown> = {}
+) {
+  const metadata = options.metadata as Record<string, string>
+  const trialRequested = options.trialDays === 7
+  const amount = trialRequested ? 0 : metadata.plan === 'yearly' ? 2999 : 499
+  return {
+    id: 'cs_test123',
+    object: 'checkout.session',
+    customer: options.customerId,
+    metadata,
+    client_reference_id: options.clientReferenceId,
+    expires_at: options.expiresAt,
+    mode: 'subscription',
+    status: 'open',
+    payment_status: 'unpaid',
+    subscription: null,
+    after_expiration: null,
+    recovered_from: null,
+    url: 'https://checkout.stripe.com/session',
+    livemode: false,
+    currency: 'usd',
+    amount_subtotal: amount,
+    amount_total: amount,
+    total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 0 },
+    discounts: [],
+    allow_promotion_codes: false,
+    automatic_tax: { enabled: false },
+    adaptive_pricing: { enabled: false },
+    ...overrides,
+  }
+}
+
+function recurringCheckoutLine(options: Record<string, unknown>) {
+  const metadata = options.metadata as Record<string, string>
+  const trialRequested = options.trialDays === 7
+  const unitAmount = metadata.plan === 'yearly' ? 2999 : 499
+  const amount = trialRequested ? 0 : unitAmount
+  return {
+    id: 'li_recurring123',
+    object: 'item',
+    quantity: 1,
+    currency: 'usd',
+    amount_subtotal: amount,
+    amount_total: amount,
+    amount_discount: 0,
+    amount_tax: 0,
+    discounts: [],
+    taxes: [],
+    price: {
+      id: options.priceId,
+      type: 'recurring',
+      currency: 'usd',
+      unit_amount: unitAmount,
+      recurring: {
+        interval: metadata.plan === 'yearly' ? 'year' : 'month',
+        interval_count: 1,
+      },
+    },
   }
 }
 
@@ -296,10 +375,11 @@ import { NextRequest } from 'next/server'
 import { POST } from '../route'
 
 const originalVercelEnv = process.env.VERCEL_ENV
+const originalVercelGitCommitSha = process.env.VERCEL_GIT_COMMIT_SHA
 const originalLifetimeCheckoutEnabled = process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED
 
 describe('POST /api/stripe/create-checkout', () => {
-  const validUser = { id: 'user-123', email: 'user@test.com' }
+  const validUser = { id: validUserId, email: 'user@test.com' }
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -311,9 +391,32 @@ describe('POST /api/stripe/create-checkout', () => {
       data: { stripe_customer_id: null },
       error: null,
     })
-    mockRpc.mockImplementation((name: string) => {
+    mockRpc.mockImplementation((name: string, args: Record<string, unknown>) => {
       if (name === 'bind_stripe_customer_owner_atomic') {
         return Promise.resolve({ data: { status: 'bound' }, error: null })
+      }
+      if (name === 'reserve_recurring_pro_checkout_atomic') {
+        return Promise.resolve({
+          data: {
+            status: 'reserved',
+            reservation_id: recurringReservationId,
+            operation_id: args.p_operation_id,
+            nonce: recurringNonce,
+            user_id: validUserId,
+            livemode: false,
+            stripe_customer_id: 'cus_test123',
+            plan: args.p_plan,
+            stripe_price_id: args.p_stripe_price_id,
+            trial_requested: args.p_trial_requested,
+            checkout_expires_at: recurringCheckoutExpiresAt,
+            checkout_session_id: null,
+          },
+          error: null,
+          status: 200,
+        })
+      }
+      if (name === 'bind_recurring_pro_checkout_session_atomic') {
+        return Promise.resolve({ data: 'bound', error: null, status: 200 })
       }
       if (name === 'reserve_lifetime_membership_spot_atomic') {
         return Promise.resolve({
@@ -335,21 +438,36 @@ describe('POST /api/stripe/create-checkout', () => {
     })
     mockAssertProPriceReady.mockResolvedValue(undefined)
     mockAssertStripePaymentRuntimeReady.mockReturnValue(undefined)
-    mockCreateCheckoutSession.mockResolvedValue({
-      url: 'https://checkout.stripe.com/session',
-      id: 'cs_test123',
+    lastRecurringCheckoutOptions = null
+    mockCreateCheckoutSession.mockImplementation((options: Record<string, unknown>) => {
+      lastRecurringCheckoutOptions = options
+      return Promise.resolve({
+        url: 'https://checkout.stripe.com/session',
+        id: 'cs_test123',
+      })
     })
     lastCreatedLifetimeCheckoutSession = null
     mockCreateOneTimeCheckoutSession.mockImplementation((params: Record<string, unknown>) => {
       lastCreatedLifetimeCheckoutSession = createdLifetimeCheckoutSession(params)
       return Promise.resolve(lastCreatedLifetimeCheckoutSession)
     })
-    mockRetrieveOneTimeCheckoutSession.mockImplementation(() =>
-      Promise.resolve(lastCreatedLifetimeCheckoutSession || recoveredLifetimeCheckoutSession)
-    )
-    mockListCheckoutLineItems.mockResolvedValue({
-      data: [lifetimeCheckoutLine],
-      has_more: false,
+    mockRetrieveOneTimeCheckoutSession.mockImplementation((sessionId: string) => {
+      if (sessionId === 'cs_test123' && lastRecurringCheckoutOptions) {
+        return Promise.resolve(createdRecurringCheckoutSession(lastRecurringCheckoutOptions))
+      }
+      return Promise.resolve(lastCreatedLifetimeCheckoutSession || recoveredLifetimeCheckoutSession)
+    })
+    mockListCheckoutLineItems.mockImplementation((sessionId: string) => {
+      if (sessionId === 'cs_test123' && lastRecurringCheckoutOptions) {
+        return Promise.resolve({
+          data: [recurringCheckoutLine(lastRecurringCheckoutOptions)],
+          has_more: false,
+        })
+      }
+      return Promise.resolve({
+        data: [lifetimeCheckoutLine],
+        has_more: false,
+      })
     })
     mockListSubscriptionItems.mockResolvedValue({ data: [], has_more: false })
     mockRecordStripeCheckoutManualReview.mockResolvedValue(undefined)
@@ -361,11 +479,14 @@ describe('POST /api/stripe/create-checkout', () => {
     mockEnv.NEXT_PUBLIC_APP_URL = 'https://app.test.com'
     mockEnv.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     mockEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key'
+    mockEnv.PRO_CHECKOUT_WRITER_MODE = 'sealed'
+    mockEnv.PRO_CHECKOUT_WRITER_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key'
     process.env.NEXT_PUBLIC_APP_URL = 'https://app.test.com'
     delete process.env.VERCEL_ENV
+    process.env.VERCEL_GIT_COMMIT_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
     delete process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED
   })
 
@@ -380,6 +501,70 @@ describe('POST /api/stripe/create-checkout', () => {
     } else {
       process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED = originalLifetimeCheckoutEnabled
     }
+    if (originalVercelGitCommitSha === undefined) {
+      delete process.env.VERCEL_GIT_COMMIT_SHA
+    } else {
+      process.env.VERCEL_GIT_COMMIT_SHA = originalVercelGitCommitSha
+    }
+  })
+
+  // --- Recurring writer gate ---
+
+  it('keeps the recurring writer closed by default before rate, auth, DB, or Stripe', async () => {
+    mockEnv.PRO_CHECKOUT_WRITER_MODE = undefined
+
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly' }),
+    })
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(503)
+    expect(body.code).toBe('PRO_CHECKOUT_WRITER_CLOSED')
+    expect(res.headers.get('X-Arena-Pro-Checkout-Writer')).toBe('closed')
+    expect(res.headers.get('Retry-After')).toBe('60')
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockExtractUser).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('keeps Production closed when the configured SHA differs from the complete runtime SHA', async () => {
+    process.env.VERCEL_ENV = 'production'
+    process.env.VERCEL_GIT_COMMIT_SHA = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'yearly' }),
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(res.headers.get('X-Arena-Pro-Checkout-Writer')).toBe('closed')
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockExtractUser).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('opens Production only for the exact sealed full deployment SHA', async () => {
+    process.env.VERCEL_ENV = 'production'
+
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', operationId: recurringOperationId }),
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('X-Arena-Pro-Checkout-Writer')).toBe('sealed')
+    expect(mockCheckRateLimit).toHaveBeenCalledTimes(1)
+    expect(mockCreateCheckoutSession).toHaveBeenCalledTimes(1)
   })
 
   // --- Rate Limiting ---
@@ -597,7 +782,7 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(body.url).toBeDefined()
     expect(body.sessionId).toBeDefined()
     expect(mockGetOrCreateStripeCustomer).toHaveBeenCalledWith(
-      'user-123',
+      '11111111-1111-4111-8111-111111111111',
       'user@test.com',
       expect.objectContaining({ plan: 'monthly' }),
       null
@@ -612,7 +797,7 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(mockAssertProPriceReady).toHaveBeenCalledWith('monthly', 'price_monthly123')
     expect(mockAssertProPriceReady).toHaveBeenCalledWith('yearly', 'price_yearly123')
     expect(mockRpc).toHaveBeenCalledWith('bind_stripe_customer_owner_atomic', {
-      p_user_id: 'user-123',
+      p_user_id: '11111111-1111-4111-8111-111111111111',
       p_new_stripe_customer_id: 'cus_test123',
       p_expected_previous_stripe_customer_id: null,
     })
@@ -633,6 +818,159 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
       expect.objectContaining({ allowPromotionCodes: false })
     )
+  })
+
+  it('uses one durable operation for reservation, metadata, client reference, and idempotency', async () => {
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', operationId: recurringOperationId }),
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('X-Arena-Pro-Checkout-Writer')).toBe('sealed')
+    expect(mockRpc).toHaveBeenCalledWith('reserve_recurring_pro_checkout_atomic', {
+      p_user_id: validUserId,
+      p_livemode: false,
+      p_stripe_customer_id: 'cus_test123',
+      p_plan: 'monthly',
+      p_stripe_price_id: 'price_monthly123',
+      p_operation_id: recurringOperationId,
+      p_trial_requested: false,
+    })
+    expect(mockCreateCheckoutSession).toHaveBeenCalledWith({
+      customerId: 'cus_test123',
+      priceId: 'price_monthly123',
+      successUrl: 'https://app.test.com/pricing/success?session_id={CHECKOUT_SESSION_ID}',
+      cancelUrl: 'https://app.test.com/pricing',
+      metadata: {
+        plan: 'monthly',
+        pro_checkout_nonce: recurringNonce,
+        pro_checkout_operation_id: recurringOperationId,
+        pro_checkout_reservation_id: recurringReservationId,
+        stripe_customer_id: 'cus_test123',
+        stripe_price_id: 'price_monthly123',
+        supabase_user_id: validUserId,
+        trial_requested: 'false',
+        type: 'pro_subscription',
+        userId: validUserId,
+      },
+      allowPromotionCodes: false,
+      idempotencyKey: `recurring_pro_checkout_test_${recurringReservationId}`,
+      expiresAt: recurringCheckoutExpiresAt,
+      clientReferenceId: recurringReservationId,
+    })
+    expect(mockRpc).toHaveBeenCalledWith(
+      'bind_recurring_pro_checkout_session_atomic',
+      expect.objectContaining({
+        p_operation_id: recurringOperationId,
+        p_reservation_id: recurringReservationId,
+        p_reservation_nonce: recurringNonce,
+        p_checkout_session_id: 'cs_test123',
+        p_checkout_expires_at: recurringCheckoutExpiresAt,
+      })
+    )
+  })
+
+  it('rejects a malformed client operation before DB or Stripe work', async () => {
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', operationId: 'not-a-uuid' }),
+    })
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(body.code).toBe('INVALID_CHECKOUT_OPERATION')
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('does not create Stripe state when durable admission reports an active conflict', async () => {
+    mockRpc
+      .mockResolvedValueOnce({ data: { status: 'bound' }, error: null })
+      .mockResolvedValueOnce({ data: { status: 'conflict' }, error: null, status: 200 })
+
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', operationId: recurringOperationId }),
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(409)
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    expect(mockExpireOneTimeCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('expires and withholds a fresh Session whose exact Stripe identity drifts', async () => {
+    mockRetrieveOneTimeCheckoutSession.mockImplementation((sessionId: string) => {
+      if (sessionId === 'cs_test123' && lastRecurringCheckoutOptions) {
+        return Promise.resolve(
+          createdRecurringCheckoutSession(lastRecurringCheckoutOptions, {
+            recovered_from: 'cs_unsafe_recovery',
+          })
+        )
+      }
+      return Promise.resolve(recoveredLifetimeCheckoutSession)
+    })
+
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', operationId: recurringOperationId }),
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockExpireOneTimeCheckoutSession).toHaveBeenCalledWith('cs_test123')
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'cs_test123',
+        userId: validUserId,
+        reasonKey: 'recurring_checkout_fresh_identity_conflict',
+      })
+    )
+    expect(
+      mockRpc.mock.calls.filter(([name]) => name === 'bind_recurring_pro_checkout_session_atomic')
+    ).toHaveLength(1)
+  })
+
+  it('expires and withholds a verified Session when its durable bind is rejected', async () => {
+    mockRpc
+      .mockResolvedValueOnce({ data: { status: 'bound' }, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          status: 'reserved',
+          reservation_id: recurringReservationId,
+          operation_id: recurringOperationId,
+          nonce: recurringNonce,
+          user_id: validUserId,
+          livemode: false,
+          stripe_customer_id: 'cus_test123',
+          plan: 'monthly',
+          stripe_price_id: 'price_monthly123',
+          trial_requested: false,
+          checkout_expires_at: recurringCheckoutExpiresAt,
+          checkout_session_id: null,
+        },
+        error: null,
+        status: 200,
+      })
+      .mockResolvedValueOnce({ data: 'identity_conflict', error: null, status: 200 })
+
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', operationId: recurringOperationId }),
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockExpireOneTimeCheckoutSession).toHaveBeenCalledWith('cs_test123')
   })
 
   it.each(['active', 'trialing', 'past_due', 'incomplete', 'unpaid', 'paused'])(
@@ -983,7 +1321,9 @@ describe('POST /api/stripe/create-checkout', () => {
         expires_at: lifetimeCheckoutExpiresAt,
         metadata: expect.objectContaining({
           lifetime_reservation_id: '9a8df3e8-e908-4f27-9cb4-8b892d748cc7',
-          lifetime_reservation_nonce: expect.stringMatching(/^lifetime:user-123:/),
+          lifetime_reservation_nonce: expect.stringMatching(
+            /^lifetime:11111111-1111-4111-8111-111111111111:/
+          ),
         }),
         payment_intent_data: {
           metadata: expect.objectContaining({
@@ -998,7 +1338,7 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(mockRpc).toHaveBeenCalledWith(
       'bind_lifetime_membership_reservation_session_atomic',
       expect.objectContaining({
-        p_user_id: 'user-123',
+        p_user_id: '11111111-1111-4111-8111-111111111111',
         p_reservation_id: '9a8df3e8-e908-4f27-9cb4-8b892d748cc7',
         p_checkout_session_id: 'cs_lifetime123',
         p_session_expires_at: '2099-01-01T00:00:00.000Z',
@@ -1280,7 +1620,7 @@ describe('POST /api/stripe/create-checkout', () => {
             status: 'reservation_exists',
             reservation_status: 'bound',
             reservation_id: '9a8df3e8-e908-4f27-9cb4-8b892d748cc7',
-            request_nonce: 'lifetime:user-123:original',
+            request_nonce: 'lifetime:11111111-1111-4111-8111-111111111111:original',
             checkout_expires_at: '2099-01-01T00:00:00.000Z',
             checkout_session_id: 'cs_lifetime123',
           },
@@ -1326,7 +1666,7 @@ describe('POST /api/stripe/create-checkout', () => {
             status: 'reservation_exists',
             reservation_status: 'bound',
             reservation_id: '9a8df3e8-e908-4f27-9cb4-8b892d748cc7',
-            request_nonce: 'lifetime:user-123:original',
+            request_nonce: 'lifetime:11111111-1111-4111-8111-111111111111:original',
             checkout_expires_at: '2099-01-01T00:00:00.000Z',
             checkout_session_id: 'cs_lifetime123',
           },
@@ -1370,7 +1710,7 @@ describe('POST /api/stripe/create-checkout', () => {
             status: 'reservation_exists',
             reservation_status: 'bound',
             reservation_id: '9a8df3e8-e908-4f27-9cb4-8b892d748cc7',
-            request_nonce: 'lifetime:user-123:original',
+            request_nonce: 'lifetime:11111111-1111-4111-8111-111111111111:original',
             checkout_expires_at: '2099-01-01T00:00:00.000Z',
             checkout_session_id: 'cs_lifetime123',
           },
@@ -1474,7 +1814,7 @@ describe('POST /api/stripe/create-checkout', () => {
       )
 
       expect(second.status).toBe(200)
-      expect(originalRequestNonce).toBe('lifetime:user-123:31557600')
+      expect(originalRequestNonce).toBe('lifetime:11111111-1111-4111-8111-111111111111:31557600')
       expect(mockCreateOneTimeCheckoutSession).toHaveBeenCalledTimes(2)
       expect(mockCreateOneTimeCheckoutSession.mock.calls[0][1]).toEqual({
         idempotencyKey: 'checkout_lifetime_9a8df3e8-e908-4f27-9cb4-8b892d748cc7',
@@ -1514,7 +1854,7 @@ describe('POST /api/stripe/create-checkout', () => {
             status: 'reservation_exists',
             reservation_status: 'reserved',
             reservation_id: '9a8df3e8-e908-4f27-9cb4-8b892d748cc7',
-            request_nonce: 'lifetime:user-123:original',
+            request_nonce: 'lifetime:11111111-1111-4111-8111-111111111111:original',
             checkout_expires_at: '2099-01-01T00:00:00.000Z',
             checkout_session_id: null,
           },

@@ -1,6 +1,15 @@
 const mockRetrieveSubscription = jest.fn()
 const mockCancelSubscription = jest.fn()
-const mockGetStripeClient = {}
+const mockRetrieveCheckoutSession = jest.fn()
+const mockListCheckoutLineItems = jest.fn()
+const mockGetStripeClient = {
+  checkout: {
+    sessions: {
+      retrieve: (...args: unknown[]) => mockRetrieveCheckoutSession(...args),
+      listLineItems: (...args: unknown[]) => mockListCheckoutLineItems(...args),
+    },
+  },
+}
 jest.mock('@/lib/stripe', () => ({
   stripe: {
     subscriptions: {
@@ -108,10 +117,158 @@ const lifetimeRequestNonce = `lifetime:${lifetimeUserId}:123`
 const expiredEvent = { id: 'evt_expired_123', created: 1_800_000_000, livemode: true }
 const tipEvent = { id: 'evt_tip_123', created: 1_800_000_000, livemode: true }
 const checkoutEvent = { id: 'evt_checkout_123', created: 1_800_000_000, livemode: true }
+const recurringProUserId = '61e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const recurringProReservationId = '71e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const recurringProOperationId = '91e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const recurringProNonce = 'a1e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const recurringProCheckoutExpiresAt = 1_900_000_000
 const tipCheckoutId = '31e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const tipPostId = '41e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const tipRecipientId = '51e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const tipCheckoutExpiresAt = 1_900_000_000
+
+function recurringProMetadata(
+  trialRequested = false,
+  overrides: Record<string, string> = {}
+): Stripe.Metadata {
+  return {
+    plan: 'monthly',
+    pro_checkout_nonce: recurringProNonce,
+    pro_checkout_operation_id: recurringProOperationId,
+    pro_checkout_reservation_id: recurringProReservationId,
+    stripe_customer_id: 'cus_test_123',
+    stripe_price_id: 'price_pro_monthly',
+    supabase_user_id: recurringProUserId,
+    trial_requested: trialRequested ? 'true' : 'false',
+    type: 'pro_subscription',
+    userId: recurringProUserId,
+    ...overrides,
+  }
+}
+
+function recurringProCheckoutSession(
+  trialRequested = false,
+  overrides: Partial<Stripe.Checkout.Session> = {}
+): Stripe.Checkout.Session {
+  const amount = trialRequested ? 0 : 499
+  return checkoutSession({
+    object: 'checkout.session',
+    mode: 'subscription',
+    status: 'complete',
+    payment_status: trialRequested ? 'no_payment_required' : 'paid',
+    livemode: true,
+    customer: 'cus_test_123',
+    subscription: 'sub_test_123',
+    metadata: recurringProMetadata(trialRequested),
+    client_reference_id: recurringProReservationId,
+    expires_at: recurringProCheckoutExpiresAt,
+    currency: 'usd',
+    amount_subtotal: amount,
+    amount_total: amount,
+    total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 0 },
+    discounts: [],
+    allow_promotion_codes: false,
+    automatic_tax: { enabled: false },
+    adaptive_pricing: { enabled: false },
+    after_expiration: null,
+    recovered_from: null,
+    url: null,
+    ...overrides,
+  })
+}
+
+function expiredRecurringProCheckoutSession(
+  overrides: Partial<Stripe.Checkout.Session> = {}
+): Stripe.Checkout.Session {
+  return checkoutSession({
+    object: 'checkout.session',
+    mode: 'subscription',
+    status: 'expired',
+    payment_status: 'unpaid',
+    livemode: true,
+    customer: 'cus_test_123',
+    subscription: null,
+    metadata: recurringProMetadata(false),
+    client_reference_id: recurringProReservationId,
+    expires_at: recurringProCheckoutExpiresAt,
+    ...overrides,
+  })
+}
+
+function recurringProLine(trialRequested = false): Stripe.LineItem {
+  const amount = trialRequested ? 0 : 499
+  return {
+    id: 'li_recurring_123',
+    object: 'item',
+    quantity: 1,
+    currency: 'usd',
+    amount_subtotal: amount,
+    amount_total: amount,
+    amount_discount: 0,
+    amount_tax: 0,
+    discounts: [],
+    taxes: [],
+    price: {
+      id: 'price_pro_monthly',
+      type: 'recurring',
+      currency: 'usd',
+      unit_amount: 499,
+      recurring: { interval: 'month', interval_count: 1 },
+    },
+  } as Stripe.LineItem
+}
+
+function recurringProSubscription(
+  trialRequested = false,
+  overrides: Partial<Stripe.Subscription> = {}
+): Stripe.Subscription {
+  return {
+    id: 'sub_test_123',
+    object: 'subscription',
+    status: trialRequested ? 'trialing' : 'active',
+    created: 1_700_000_000,
+    livemode: true,
+    customer: 'cus_test_123',
+    metadata: recurringProMetadata(trialRequested),
+    collection_method: 'charge_automatically',
+    currency: 'usd',
+    automatic_tax: { enabled: false },
+    default_tax_rates: [],
+    pause_collection: null,
+    schedule: null,
+    cancel_at_period_end: false,
+    canceled_at: null,
+    pending_update: null,
+    discounts: [],
+    trial_start: trialRequested ? 1_800_000_000 : null,
+    trial_end: trialRequested ? 1_800_604_800 : null,
+    current_period_start: 1_800_000_000,
+    current_period_end: 1_800_604_800,
+    items: {
+      data: [
+        {
+          id: 'si_recurring_123',
+          object: 'subscription_item',
+          quantity: 1,
+          subscription: 'sub_test_123',
+          current_period_start: 1_800_000_000,
+          current_period_end: 1_800_604_800,
+          discounts: [],
+          tax_rates: [],
+          price: {
+            id: 'price_pro_monthly',
+            type: 'recurring',
+            currency: 'usd',
+            unit_amount: 499,
+            recurring: { interval: 'month', interval_count: 1 },
+          },
+        },
+      ],
+      has_more: false,
+    },
+    ...overrides,
+  } as Stripe.Subscription
+}
 
 function expiredTipSession(
   metadataOverrides: Record<string, string> = {},
@@ -284,10 +441,11 @@ describe('handleCheckoutComplete entitlement safety', () => {
     jest.clearAllMocks()
     mockFrom.mockReset()
     mockFrom.mockReturnValue(noExistingSubscriptionQuery())
-    mockRetrieveSubscription.mockResolvedValue({
-      id: 'sub_test_123',
-      status: 'active',
-      items: { data: [{ price: { id: 'price_pro_monthly' } }] },
+    mockRetrieveSubscription.mockResolvedValue(recurringProSubscription())
+    mockRetrieveCheckoutSession.mockResolvedValue(recurringProCheckoutSession())
+    mockListCheckoutLineItems.mockResolvedValue({
+      data: [recurringProLine()],
+      has_more: false,
     })
     mockUpdateUserSubscription.mockResolvedValue(undefined)
     mockApplyApiTierStripeEvent.mockResolvedValue(undefined)
@@ -297,21 +455,170 @@ describe('handleCheckoutComplete entitlement safety', () => {
     mockSendAlert.mockResolvedValue(undefined)
     mockActivateLifetimeCheckoutEntitlement.mockResolvedValue({ status: 'activated' })
     mockRecordStripeCheckoutManualReview.mockResolvedValue(undefined)
-    mockRpc.mockResolvedValue({ error: null })
+    mockRpc.mockImplementation((name: string) => {
+      if (name === 'complete_recurring_pro_checkout_atomic') {
+        return Promise.resolve({ data: 'completed', error: null, status: 200 })
+      }
+      if (name === 'activate_recurring_trial_entitlement_atomic') {
+        return Promise.resolve({ data: 'activated', error: null, status: 200 })
+      }
+      return Promise.resolve({ data: null, error: null, status: 200 })
+    })
   })
 
-  it('keeps a paid checkout retryable when user metadata is missing', async () => {
+  it('rejects legacy paid Pro metadata, records review, and performs no external mutation', async () => {
     await expect(
-      handleCheckoutComplete(checkoutSession({ metadata: { plan: 'monthly' } }))
-    ).rejects.toThrow('Checkout cs_test_123 cannot be mapped to a user')
+      handleCheckoutComplete(
+        checkoutSession({ metadata: { userId: 'user-123', plan: 'monthly' } }),
+        checkoutEvent
+      )
+    ).rejects.toThrow('failed exact signed identity')
+
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonKey: 'recurring_checkout_completion_identity_invalid',
+      })
+    )
+    expect(mockRetrieveCheckoutSession).not.toHaveBeenCalled()
+    expect(mockRetrieveSubscription).not.toHaveBeenCalled()
+    expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
+    expect(mockJoinProOfficialGroup).not.toHaveBeenCalled()
+    expect(mockMintNFTForUser).not.toHaveBeenCalled()
+  })
+
+  it('requires the signed event before reading Stripe or mutating durable state', async () => {
+    await expect(handleCheckoutComplete(recurringProCheckoutSession())).rejects.toThrow(
+      'missing signed event identity'
+    )
+    expect(mockRetrieveCheckoutSession).not.toHaveBeenCalled()
+    expect(mockRetrieveSubscription).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
     expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
   })
 
-  it('keeps a subscription checkout retryable when its subscription id is missing', async () => {
-    await expect(handleCheckoutComplete(checkoutSession({ subscription: null }))).rejects.toThrow(
-      'Checkout cs_test_123 is missing its subscription ID'
-    )
+  it('completes an exact paid reservation without directly activating or canceling anything', async () => {
+    await expect(
+      handleCheckoutComplete(recurringProCheckoutSession(), checkoutEvent)
+    ).resolves.toBeUndefined()
+
+    expect(mockRetrieveCheckoutSession).toHaveBeenCalledWith('cs_test_123', {
+      expand: ['line_items.data.price'],
+    })
+    expect(mockListCheckoutLineItems).toHaveBeenCalledWith('cs_test_123', { limit: 100 })
+    expect(mockRetrieveSubscription).toHaveBeenCalledWith('sub_test_123')
+    expect(mockRpc).toHaveBeenCalledWith('complete_recurring_pro_checkout_atomic', {
+      p_user_id: recurringProUserId,
+      p_livemode: true,
+      p_stripe_customer_id: 'cus_test_123',
+      p_stripe_subscription_id: 'sub_test_123',
+      p_reservation_id: recurringProReservationId,
+      p_operation_id: recurringProOperationId,
+      p_reservation_nonce: recurringProNonce,
+      p_plan: 'monthly',
+      p_stripe_price_id: 'price_pro_monthly',
+      p_trial_requested: false,
+      p_checkout_session_id: 'cs_test_123',
+      p_stripe_event_id: checkoutEvent.id,
+      p_stripe_event_created: checkoutEvent.created,
+    })
     expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
+    expect(mockJoinProOfficialGroup).not.toHaveBeenCalled()
+    expect(mockMintNFTForUser).not.toHaveBeenCalled()
+    expect(mockSendAlert).not.toHaveBeenCalled()
+  })
+
+  it('keeps identity conflicts retryable and never cancels the payable subscription', async () => {
+    mockRpc.mockResolvedValue({
+      data: 'identity_conflict',
+      error: null,
+      status: 200,
+    })
+
+    await expect(
+      handleCheckoutComplete(recurringProCheckoutSession(), checkoutEvent)
+    ).rejects.toThrow('completion returned identity_conflict')
+
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
+    expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
+    expect(mockJoinProOfficialGroup).not.toHaveBeenCalled()
+  })
+
+  it('activates only the exact completed no-payment trial through the atomic trial authority', async () => {
+    mockRetrieveCheckoutSession.mockResolvedValue(recurringProCheckoutSession(true))
+    mockListCheckoutLineItems.mockResolvedValue({
+      data: [recurringProLine(true)],
+      has_more: false,
+    })
+    mockRetrieveSubscription.mockResolvedValue(recurringProSubscription(true))
+
+    await expect(
+      handleCheckoutComplete(recurringProCheckoutSession(true), checkoutEvent)
+    ).resolves.toBeUndefined()
+
+    expect(mockRpc).toHaveBeenNthCalledWith(
+      1,
+      'complete_recurring_pro_checkout_atomic',
+      expect.objectContaining({
+        p_reservation_id: recurringProReservationId,
+        p_trial_requested: true,
+      })
+    )
+    expect(mockRpc).toHaveBeenNthCalledWith(2, 'activate_recurring_trial_entitlement_atomic', {
+      p_user_id: recurringProUserId,
+      p_stripe_customer_id: 'cus_test_123',
+      p_stripe_subscription_id: 'sub_test_123',
+      p_plan: 'monthly',
+      p_period_start: '2027-01-15T08:00:00.000Z',
+      p_period_end: '2027-01-22T08:00:00.000Z',
+      p_stripe_subscription_status: 'trialing',
+    })
+    expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
+    expect(mockJoinProOfficialGroup).not.toHaveBeenCalled()
+  })
+
+  it('records fresh Stripe verification drift and performs no reservation transition', async () => {
+    mockRetrieveCheckoutSession.mockResolvedValue(
+      recurringProCheckoutSession(false, {
+        total_details: { amount_discount: 1, amount_shipping: 0, amount_tax: 0 },
+      })
+    )
+
+    await expect(
+      handleCheckoutComplete(recurringProCheckoutSession(), checkoutEvent)
+    ).rejects.toThrow('failed exact verification')
+
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonKey: 'recurring_checkout_completion_verification_failed',
+      })
+    )
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
+  })
+
+  it('rethrows fresh Stripe lookup failures so the signed event remains retryable', async () => {
+    mockRetrieveSubscription.mockRejectedValue(new Error('temporary Stripe outage'))
+
+    await expect(
+      handleCheckoutComplete(recurringProCheckoutSession(), checkoutEvent)
+    ).rejects.toThrow('temporary Stripe outage')
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
+  })
+
+  it('rejects an exact metadata envelope when the subscription identity is absent', async () => {
+    await expect(
+      handleCheckoutComplete(
+        recurringProCheckoutSession(false, { subscription: null }),
+        checkoutEvent
+      )
+    ).rejects.toThrow('failed exact signed identity')
+
+    expect(mockRetrieveSubscription).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
   })
 
   it('rejects invalid API entitlement metadata instead of acknowledging it', async () => {
@@ -332,77 +639,24 @@ describe('handleCheckoutComplete entitlement safety', () => {
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  it('rethrows a Stripe lookup failure so the webhook remains retryable', async () => {
-    mockRetrieveSubscription.mockRejectedValue(new Error('temporary Stripe outage'))
-
-    await expect(handleCheckoutComplete(checkoutSession())).rejects.toThrow(
-      'temporary Stripe outage'
-    )
-    expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
-  })
-
-  it('rethrows an existing-subscription lookup failure before provisioning', async () => {
-    mockFrom.mockReturnValue({
-      select: () => ({
-        eq: () => ({
-          in: () => ({
-            maybeSingle: async () => ({
-              data: null,
-              error: { message: 'temporary subscriptions read failure' },
-            }),
-          }),
-        }),
-      }),
+  it('keeps completion DB failures retryable after exact Stripe verification', async () => {
+    mockRpc.mockImplementation((name: string) => {
+      if (name === 'complete_recurring_pro_checkout_atomic') {
+        return Promise.resolve({
+          data: null,
+          error: { message: 'temporary completion database failure' },
+          status: 503,
+        })
+      }
+      return Promise.resolve({ data: null, error: null, status: 200 })
     })
 
-    await expect(handleCheckoutComplete(checkoutSession())).rejects.toThrow(
-      'Failed to check existing subscription: temporary subscriptions read failure'
+    await expect(
+      handleCheckoutComplete(recurringProCheckoutSession(), checkoutEvent)
+    ).rejects.toThrow(
+      'Failed to complete recurring Pro Checkout: temporary completion database failure'
     )
-    expect(mockRetrieveSubscription).not.toHaveBeenCalled()
-    expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
-  })
-
-  it('provisions a no-payment-required trial only after Stripe confirms trialing', async () => {
-    const trial = {
-      id: 'sub_test_123',
-      status: 'trialing',
-      items: { data: [{ price: { id: 'price_pro_monthly' } }] },
-    }
-    mockRetrieveSubscription.mockResolvedValue(trial)
-
-    await handleCheckoutComplete(checkoutSession({ payment_status: 'no_payment_required' }))
-
-    expect(mockUpdateUserSubscription).toHaveBeenCalledWith('user-123', trial, 'monthly')
-  })
-
-  it('does not grant Pro for an unrecognized subscription price', async () => {
-    mockGetProPlanFromPriceId.mockReturnValue(null)
-
-    await expect(handleCheckoutComplete(checkoutSession())).rejects.toThrow(
-      'Cannot map Stripe price price_pro_monthly to a subscription plan'
-    )
-    expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
-  })
-
-  it('does not trust plan metadata that disagrees with the Stripe price', async () => {
-    mockGetProPlanFromPriceId.mockReturnValue('yearly')
-
-    await expect(handleCheckoutComplete(checkoutSession())).rejects.toThrow(
-      'Checkout plan metadata monthly does not match Stripe price plan yearly'
-    )
-    expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
-  })
-
-  it('retries a paid subscription when official-group entitlement persistence fails', async () => {
-    mockJoinProOfficialGroup.mockResolvedValue({
-      success: false,
-      message: 'group write unavailable',
-    })
-
-    await expect(handleCheckoutComplete(checkoutSession())).rejects.toThrow(
-      'Failed to join Pro official group: group write unavailable'
-    )
-    expect(mockUpdateUserSubscription).toHaveBeenCalledTimes(1)
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
   })
 
   it('does not activate an unpaid API subscription', async () => {
@@ -714,6 +968,90 @@ describe('handleCheckoutComplete entitlement safety', () => {
       expect(mockActivateLifetimeCheckoutEntitlement).not.toHaveBeenCalled()
     }
   )
+})
+
+describe('handleCheckoutExpired recurring Pro reservation release', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockFrom.mockReset()
+    mockRecordStripeCheckoutManualReview.mockResolvedValue(undefined)
+    mockRpc.mockResolvedValue({ data: 'released', error: null, status: 200 })
+  })
+
+  it('releases only the exact bound reservation from the signed expired event', async () => {
+    await expect(
+      handleCheckoutExpired(expiredRecurringProCheckoutSession(), expiredEvent)
+    ).resolves.toBeUndefined()
+
+    expect(mockRpc).toHaveBeenCalledWith('release_recurring_pro_checkout_atomic', {
+      p_user_id: recurringProUserId,
+      p_livemode: true,
+      p_stripe_customer_id: 'cus_test_123',
+      p_reservation_id: recurringProReservationId,
+      p_operation_id: recurringProOperationId,
+      p_reservation_nonce: recurringProNonce,
+      p_plan: 'monthly',
+      p_stripe_price_id: 'price_pro_monthly',
+      p_trial_requested: false,
+      p_checkout_session_id: 'cs_test_123',
+      p_stripe_event_id: expiredEvent.id,
+      p_stripe_event_created: expiredEvent.created,
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it.each(['already_released', 'already_completed'])(
+    'acknowledges the exact idempotent %s terminal state',
+    async (status) => {
+      mockRpc.mockResolvedValue({ data: status, error: null, status: 200 })
+
+      await expect(
+        handleCheckoutExpired(expiredRecurringProCheckoutSession(), expiredEvent)
+      ).resolves.toBeUndefined()
+    }
+  )
+
+  it('durably reviews signed expiry identity drift and throws for Stripe retry', async () => {
+    await expect(
+      handleCheckoutExpired(
+        expiredRecurringProCheckoutSession({ customer: 'cus_wrong' }),
+        expiredEvent
+      )
+    ).rejects.toThrow('expiry identity is invalid')
+
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: recurringProUserId,
+        reasonKey: 'recurring_checkout_expiry_identity_invalid',
+      })
+    )
+  })
+
+  it('throws on a durable identity conflict and never reports generic abandonment', async () => {
+    mockRpc.mockResolvedValue({ data: 'identity_conflict', error: null, status: 200 })
+
+    await expect(
+      handleCheckoutExpired(expiredRecurringProCheckoutSession(), expiredEvent)
+    ).rejects.toThrow('release returned identity_conflict')
+
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
+  })
+
+  it('keeps release database failures retryable', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'release database unavailable' },
+      status: 503,
+    })
+
+    await expect(
+      handleCheckoutExpired(expiredRecurringProCheckoutSession(), expiredEvent)
+    ).rejects.toThrow('Failed to release recurring Pro Checkout: release database unavailable')
+  })
 })
 
 describe('handleCheckoutExpired API tier reservation release', () => {

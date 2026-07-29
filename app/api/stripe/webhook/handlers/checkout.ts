@@ -1,15 +1,11 @@
 import Stripe from 'stripe'
 import { stripe, API_TIER_LIMITS, getStripe } from '@/lib/stripe'
-import { joinProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, logger, type StripeWebhookEventContext } from './shared'
 import {
   applyApiTierStripeEvent,
-  getProPlanFromPriceId,
   resolveApiTierSubscriptionOwner,
   type ApiTierStripeAuthority,
-  updateUserSubscription,
 } from './subscription'
-import { mintNFTForUser } from './nft'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { fireAndForget } from '@/lib/utils/logger'
 import {
@@ -22,6 +18,15 @@ import {
 import { completeTipCheckout } from '@/lib/stripe/tip-completion'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { Json } from '@/lib/supabase/database.types'
+import {
+  callRecurringProRpc,
+  carriesRecurringProCheckoutMarker,
+  parseRecurringProCheckoutMetadata,
+  RECURRING_PRO_RESERVATION_METADATA_KEY,
+  recurringProRpcStatus,
+  verifyRecurringProCheckoutSession,
+  verifyRecurringProSubscription,
+} from '@/lib/stripe/recurring-pro-checkout'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const reservationNoncePattern = /^[A-Za-z0-9_.:-]{8,128}$/
@@ -300,109 +305,203 @@ export async function handleCheckoutComplete(
     return
   }
 
+  const recurringProIntent =
+    carriesRecurringProCheckoutMarker(session.metadata) || plan === 'monthly' || plan === 'yearly'
+  if (recurringProIntent) {
+    if (!event) {
+      throw new Error(`Recurring Pro checkout ${session.id} is missing signed event identity`)
+    }
+    const identity = parseRecurringProCheckoutMetadata(session.metadata)
+    const customerId = typeof session.customer === 'string' ? session.customer : null
+    const subscriptionId = typeof session.subscription === 'string' ? session.subscription : null
+    const signedIdentityIsExact =
+      !!identity &&
+      session.object === 'checkout.session' &&
+      stripeCheckoutIdPattern.test(session.id) &&
+      session.mode === 'subscription' &&
+      session.status === 'complete' &&
+      session.livemode === event.livemode &&
+      stripeEventIdPattern.test(event.id) &&
+      Number.isSafeInteger(event.created) &&
+      event.created > 0 &&
+      event.created <= maxStripeUnixSeconds &&
+      customerId === identity.customerId &&
+      !!subscriptionId &&
+      stripeSubscriptionIdPattern.test(subscriptionId) &&
+      session.client_reference_id === identity.reservationId &&
+      (identity.trialRequested
+        ? session.payment_status === 'no_payment_required'
+        : session.payment_status === 'paid')
+
+    if (!signedIdentityIsExact || !identity || !customerId || !subscriptionId) {
+      await recordCompletedCheckoutReview({
+        reasonKey: 'recurring_checkout_completion_identity_invalid',
+        reason:
+          'A recurring Pro Checkout completion had missing, legacy, or conflicting exact identity.',
+        context: {
+          event_id: event.id,
+          event_created: event.created,
+          session_id: session.id,
+          session_mode: session.mode,
+          session_status: session.status,
+          payment_status: session.payment_status,
+          customer_id: customerId,
+          subscription_id: subscriptionId,
+          client_reference_id: session.client_reference_id,
+          metadata_type: session.metadata?.type || null,
+          metadata_plan: plan || null,
+          reservation_id: session.metadata?.pro_checkout_reservation_id || null,
+        },
+      })
+      throw new Error(`Recurring Pro checkout ${session.id} failed exact signed identity`)
+    }
+
+    const supabase = getSupabaseAdmin()
+    const checkoutExpiresAt = session.expires_at
+    if (
+      !Number.isSafeInteger(checkoutExpiresAt) ||
+      !checkoutExpiresAt ||
+      checkoutExpiresAt <= 0 ||
+      checkoutExpiresAt > maxStripeUnixSeconds
+    ) {
+      await recordCompletedCheckoutReview({
+        reasonKey: 'recurring_checkout_completion_expiry_invalid',
+        reason: 'A recurring Pro Checkout completion omitted its exact expiry.',
+        context: {
+          event_id: event.id,
+          session_id: session.id,
+          reservation_id: identity.reservationId,
+          checkout_expires_at: checkoutExpiresAt || null,
+        },
+      })
+      throw new Error(`Recurring Pro checkout ${session.id} has invalid expiry`)
+    }
+
+    let exactSession: Stripe.Checkout.Session
+    let exactSubscription: ReturnType<typeof verifyRecurringProSubscription>
+    try {
+      exactSession = await verifyRecurringProCheckoutSession({
+        stripe: getStripe(),
+        sessionId: session.id,
+        identity,
+        livemode: event.livemode,
+        checkoutExpiresAtSeconds: checkoutExpiresAt,
+        phase: 'complete',
+        subscriptionId,
+      })
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+      exactSubscription = verifyRecurringProSubscription({
+        subscription,
+        subscriptionId,
+        identity,
+        livemode: event.livemode,
+        eventCreated: event.created,
+        phase: 'checkout_completion',
+      })
+      if (
+        exactSession.id !== session.id ||
+        exactSession.client_reference_id !== session.client_reference_id
+      ) {
+        throw new Error('Fresh Checkout Session does not match the signed completion snapshot')
+      }
+    } catch (verificationError) {
+      await recordCompletedCheckoutReview({
+        reasonKey: 'recurring_checkout_completion_verification_failed',
+        reason: 'A recurring Pro Checkout or Subscription failed fresh exact Stripe verification.',
+        context: {
+          event_id: event.id,
+          session_id: session.id,
+          reservation_id: identity.reservationId,
+          subscription_id: subscriptionId,
+          error:
+            verificationError instanceof Error
+              ? verificationError.message
+              : String(verificationError),
+        },
+      })
+      throw verificationError
+    }
+
+    const completion = await callRecurringProRpc(
+      supabase,
+      'complete_recurring_pro_checkout_atomic',
+      {
+        p_user_id: identity.userId,
+        p_livemode: event.livemode,
+        p_stripe_customer_id: identity.customerId,
+        p_stripe_subscription_id: subscriptionId,
+        p_reservation_id: identity.reservationId,
+        p_operation_id: identity.operationId,
+        p_reservation_nonce: identity.nonce,
+        p_plan: identity.plan,
+        p_stripe_price_id: identity.priceId,
+        p_trial_requested: identity.trialRequested,
+        p_checkout_session_id: session.id,
+        p_stripe_event_id: event.id,
+        p_stripe_event_created: event.created,
+      }
+    )
+    if (completion.error) {
+      throw new Error(`Failed to complete recurring Pro Checkout: ${completion.error.message}`)
+    }
+    const completionStatus = recurringProRpcStatus(completion.data)
+    if (completionStatus !== 'completed' && completionStatus !== 'already_completed') {
+      throw new Error(`Recurring Pro Checkout completion returned ${completionStatus || 'missing'}`)
+    }
+
+    if (identity.trialRequested) {
+      const trialActivation = await callRecurringProRpc(
+        supabase,
+        'activate_recurring_trial_entitlement_atomic',
+        {
+          p_user_id: identity.userId,
+          p_stripe_customer_id: identity.customerId,
+          p_stripe_subscription_id: subscriptionId,
+          p_plan: identity.plan,
+          p_period_start: exactSubscription.periodStart,
+          p_period_end: exactSubscription.periodEnd,
+          p_stripe_subscription_status: exactSubscription.subscription.status,
+        }
+      )
+      if (trialActivation.error) {
+        throw new Error(
+          `Failed to activate exact recurring Pro trial: ${trialActivation.error.message}`
+        )
+      }
+      const trialStatus = recurringProRpcStatus(trialActivation.data)
+      if (trialStatus !== 'activated' && trialStatus !== 'already_activated') {
+        throw new Error(`Recurring Pro trial activation returned ${trialStatus || 'missing'}`)
+      }
+    }
+
+    logger.info('Recurring Pro Checkout reached exact durable completion', {
+      userId: identity.userId,
+      sessionId: session.id,
+      subscriptionId,
+      reservationId: identity.reservationId,
+      trialRequested: identity.trialRequested,
+      completionStatus,
+    })
+    return
+  }
+
   if (!userId) {
     logger.error('No userId in session metadata', { metadata: session.metadata })
     throw new Error(`Checkout ${session.id} cannot be mapped to a user`)
   }
 
-  if (session.mode !== 'subscription') {
-    logger.warn(`Session ${session.id} is not a subscription`, { mode: session.mode })
-    return
-  }
-
-  const subscriptionId = session.subscription as string
-  if (!subscriptionId) {
-    logger.error('No subscription ID in checkout session')
-    throw new Error(`Checkout ${session.id} is missing its subscription ID`)
-  }
-
-  // If user already has an active subscription with a DIFFERENT stripe_subscription_id,
-  // cancel the new one automatically to prevent double billing
-  const { data: existingSub, error: existingSubError } = await getSupabase()
-    .from('subscriptions')
-    .select('stripe_subscription_id, status')
-    .eq('user_id', userId)
-    .in('status', ['active', 'trialing'])
-    .maybeSingle()
-
-  if (existingSubError) {
-    throw new Error(`Failed to check existing subscription: ${existingSubError.message}`)
-  }
-
-  if (
-    existingSub?.stripe_subscription_id &&
-    existingSub.stripe_subscription_id !== subscriptionId
-  ) {
-    // Cancel the NEW subscription to keep the existing one
-    await stripe.subscriptions.cancel(subscriptionId)
-    logger.warn('Duplicate subscription detected and cancelled', {
-      userId,
-      existing: existingSub.stripe_subscription_id,
-      cancelled: subscriptionId,
+  if (session.mode === 'subscription' && session.payment_status === 'paid') {
+    await recordCompletedCheckoutReview({
+      reasonKey: 'paid_subscription_checkout_product_unsupported',
+      reason: 'A paid subscription Checkout had no exact supported reservation authority.',
+      context: {
+        event_id: event?.id || null,
+        session_id: session.id,
+        plan: plan || null,
+        customer_id: customerId || null,
+      },
     })
-    return // Don't update DB with the cancelled subscription
-  }
-
-  try {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-
-    if (subscription.status !== 'active' && subscription.status !== 'trialing') {
-      logger.warn(`Subscription ${subscriptionId} is not active`, { status: subscription.status })
-      return
-    }
-
-    const priceId = subscription.items.data[0]?.price.id
-    const authoritativePlan = getProPlanFromPriceId(priceId)
-    if (!authoritativePlan || authoritativePlan === 'lifetime') {
-      throw new Error(`Cannot map Stripe price ${priceId || 'missing'} to a subscription plan`)
-    }
-    if (plan && plan !== authoritativePlan) {
-      throw new Error(
-        `Checkout plan metadata ${plan} does not match Stripe price plan ${authoritativePlan}`
-      )
-    }
-
-    await updateUserSubscription(userId, subscription, authoritativePlan)
-
-    try {
-      const joinResult = await joinProOfficialGroup(userId)
-      if (joinResult.success) {
-        logger.info(`User ${userId} joined Pro official group`, { groupId: joinResult.groupId })
-      } else {
-        throw new Error(`Failed to join Pro official group: ${joinResult.message}`)
-      }
-    } catch (joinError) {
-      logger.error('Error joining Pro official group', { error: joinError })
-      throw joinError
-    }
-
-    await mintNFTForUser(userId, plan || 'monthly')
-
-    logger.info(`Checkout completed for user ${userId}`, { plan, subscriptionId })
-
-    // Celebrate every new paying subscriber on Telegram. Fire-and-forget so
-    // this can never break the checkout flow. Retro 2026-04-09: CEO review
-    // flagged that the first paying signal was invisible — this is the fix.
-    fireAndForget(
-      sendAlert({
-        title: '🎉 New paying subscriber',
-        message: `Plan: ${plan || 'monthly'} · Subscription: ${subscriptionId}`,
-        level: 'info',
-        details: {
-          userId,
-          plan: plan || 'monthly',
-          subscriptionId,
-          status: subscription.status,
-        },
-      }),
-      'stripe-new-subscriber-alert'
-    )
-  } catch (err: unknown) {
-    logger.error('Failed to process checkout completion', { error: err })
-    // Never convert a technical failure into Pro access. Re-throw so the
-    // route marks this event failed and Stripe can retry the authoritative
-    // subscription lookup and atomic DB update.
-    throw err
+    throw new Error(`Paid subscription Checkout ${session.id} has no exact authority`)
   }
 }
 
@@ -538,6 +637,96 @@ export async function handleCheckoutExpired(
       eventId: event.id,
       tipId,
       status,
+    })
+    return
+  }
+
+  if (carriesRecurringProCheckoutMarker(sessionMetadata)) {
+    const identity = parseRecurringProCheckoutMetadata(sessionMetadata)
+    const customerId = typeof session.customer === 'string' ? session.customer : null
+    const metadataIsExact =
+      !!identity &&
+      session.object === 'checkout.session' &&
+      stripeCheckoutIdPattern.test(session.id) &&
+      stripeEventIdPattern.test(event.id) &&
+      Number.isSafeInteger(event.created) &&
+      event.created > 0 &&
+      event.created <= maxStripeUnixSeconds &&
+      session.mode === 'subscription' &&
+      session.status === 'expired' &&
+      session.payment_status === 'unpaid' &&
+      session.subscription === null &&
+      typeof session.livemode === 'boolean' &&
+      session.livemode === event.livemode &&
+      customerId === identity.customerId &&
+      session.client_reference_id === identity.reservationId &&
+      Number.isSafeInteger(session.expires_at) &&
+      !!session.expires_at &&
+      session.expires_at > 0 &&
+      session.expires_at <= maxStripeUnixSeconds
+
+    if (!metadataIsExact || !identity || !customerId) {
+      await recordStripeCheckoutManualReview({
+        supabase: getSupabaseAdmin(),
+        sessionId: session.id || 'unknown_checkout_session',
+        userId: identity?.userId || null,
+        reasonKey: 'recurring_checkout_expiry_identity_invalid',
+        reason:
+          'A signed recurring Pro Checkout expiration had malformed or conflicting exact identity.',
+        context: {
+          event_id: event.id,
+          event_created: event.created,
+          event_livemode: event.livemode,
+          session_id: session.id,
+          session_livemode: session.livemode ?? null,
+          session_mode: session.mode,
+          session_status: session.status,
+          payment_status: session.payment_status,
+          customer_id: customerId,
+          subscription_present: session.subscription !== null,
+          client_reference_id: session.client_reference_id,
+          metadata_type: sessionMetadata.type || null,
+          reservation_id: sessionMetadata[RECURRING_PRO_RESERVATION_METADATA_KEY] || null,
+        },
+      })
+      throw new Error(`Recurring Pro checkout ${session.id} expiry identity is invalid`)
+    }
+
+    const release = await callRecurringProRpc(
+      getSupabaseAdmin(),
+      'release_recurring_pro_checkout_atomic',
+      {
+        p_user_id: identity.userId,
+        p_livemode: event.livemode,
+        p_stripe_customer_id: identity.customerId,
+        p_reservation_id: identity.reservationId,
+        p_operation_id: identity.operationId,
+        p_reservation_nonce: identity.nonce,
+        p_plan: identity.plan,
+        p_stripe_price_id: identity.priceId,
+        p_trial_requested: identity.trialRequested,
+        p_checkout_session_id: session.id,
+        p_stripe_event_id: event.id,
+        p_stripe_event_created: event.created,
+      }
+    )
+    if (release.error) {
+      throw new Error(`Failed to release recurring Pro Checkout: ${release.error.message}`)
+    }
+    const releaseStatus = recurringProRpcStatus(release.data)
+    if (
+      releaseStatus !== 'released' &&
+      releaseStatus !== 'already_released' &&
+      releaseStatus !== 'already_completed'
+    ) {
+      throw new Error(`Recurring Pro Checkout release returned ${releaseStatus || 'missing'}`)
+    }
+    logger.info('Recurring Pro Checkout reservation reached signed expiry terminal state', {
+      userId: identity.userId,
+      reservationId: identity.reservationId,
+      sessionId: session.id,
+      eventId: event.id,
+      releaseStatus,
     })
     return
   }

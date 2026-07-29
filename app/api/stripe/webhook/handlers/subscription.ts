@@ -10,6 +10,14 @@ import {
 } from './api-tier-identity'
 import { getApiPlanFromPriceId, getProPlanFromPriceId } from './stripe-price-identity'
 import { API_PRICING } from '@/app/(app)/user-center/membership-config'
+import {
+  assertRecurringProCheckoutCompleted,
+  carriesRecurringProCheckoutMarker,
+  parseRecurringProCheckoutMetadata,
+  verifyRecurringProSubscription,
+} from '@/lib/stripe/recurring-pro-checkout'
+import { recordStripeCheckoutManualReview } from '@/lib/stripe/lifetime-entitlement'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 export { carriesApiTierSubscriptionIdentity } from './api-tier-identity'
 export { getProPlanFromPriceId } from './stripe-price-identity'
@@ -570,6 +578,87 @@ export async function handleSubscriptionUpdate(
     throw new Error(
       `API subscription ${subscription.id} has unsupported status ${subscription.status}`
     )
+  }
+
+  if (carriesRecurringProCheckoutMarker(subscription.metadata)) {
+    const identity = parseRecurringProCheckoutMetadata(subscription.metadata)
+    if (!identity) {
+      await recordStripeCheckoutManualReview({
+        supabase: getSupabaseAdmin(),
+        objectType: 'subscription',
+        sessionId: subscription.id,
+        userId: null,
+        reasonKey: 'recurring_subscription_metadata_invalid',
+        reason:
+          'A recurring Pro subscription event carried malformed or conflicting Checkout identity.',
+        context: {
+          event_id: event.id,
+          event_created: event.created,
+          subscription_id: subscription.id,
+          subscription_status: subscription.status,
+          customer_id:
+            typeof subscription.customer === 'string'
+              ? subscription.customer
+              : subscription.customer?.id || null,
+          metadata_type: subscription.metadata?.type || null,
+        },
+      })
+      throw new Error(`Recurring Pro subscription ${subscription.id} has invalid metadata`)
+    }
+
+    if (subscription.status === 'active' || subscription.status === 'trialing') {
+      try {
+        verifyRecurringProSubscription({
+          subscription,
+          subscriptionId: subscription.id,
+          identity,
+          livemode: event.livemode,
+          eventCreated: event.created,
+          phase: 'subscription_lifecycle',
+        })
+      } catch (verificationError) {
+        await recordStripeCheckoutManualReview({
+          supabase: getSupabaseAdmin(),
+          objectType: 'subscription',
+          sessionId: subscription.id,
+          userId: identity.userId,
+          reasonKey: 'recurring_subscription_verification_failed',
+          reason:
+            'A recurring Pro subscription event failed exact Stripe identity and price verification.',
+          context: {
+            event_id: event.id,
+            event_created: event.created,
+            subscription_id: subscription.id,
+            subscription_status: subscription.status,
+            reservation_id: identity.reservationId,
+            error:
+              verificationError instanceof Error
+                ? verificationError.message
+                : String(verificationError),
+          },
+        })
+        throw verificationError
+      }
+    }
+    await assertRecurringProCheckoutCompleted({
+      supabase: getSupabaseAdmin(),
+      identity,
+      livemode: event.livemode,
+      subscriptionId: subscription.id,
+    })
+
+    if (subscription.status === 'active' || subscription.status === 'trialing') {
+      // Paid authority belongs to invoice.paid; trial authority belongs to the
+      // exact checkout.session.completed handler. Subscription event ordering
+      // can no longer grant either entitlement ahead of Checkout completion.
+      logger.info('Exact recurring Pro subscription left to Checkout/invoice authority', {
+        userId: identity.userId,
+        subscriptionId: subscription.id,
+        status: subscription.status,
+        reservationId: identity.reservationId,
+      })
+      return
+    }
   }
 
   if (
