@@ -101,9 +101,11 @@ export const ScoreRadar = memo(function ScoreRadar({
   // no deprecated Exec axis.
   const ariaProfit = pFinite ? Math.round(pVal) : '—'
   const ariaRisk = rFinite ? Math.round(rVal) : '—'
-  const ariaLabel =
-    `Score radar: ${t('scoreRadarProfit')} ${ariaProfit}/100, ` +
-    `${t('scoreRadarRisk')} ${ariaRisk}/100`
+  const ariaLabel = t('scoreRadarAria')
+    .replace('{profitLabel}', t('scoreRadarProfit'))
+    .replace('{profit}', String(ariaProfit))
+    .replace('{riskLabel}', t('scoreRadarRisk'))
+    .replace('{risk}', String(ariaRisk))
 
   return (
     <svg

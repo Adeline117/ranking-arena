@@ -2267,8 +2267,16 @@ const en = {
   scoreGuide: 'Score Guide',
   scoreGuideDetail:
     'Profit (PnL 30% + ROI 20%): real earnings magnitude + compressed return | Drawdown (20%): smaller = higher | Sharpe (20%): risk-adjusted return | Consistency (10%): win rate + profit factor | Risk dimensions are percentiles vs all traders, × sample-size confidence',
-  confidenceMinimal: 'Incomplete data \u2014 drawdown & win rate are defaults',
-  confidencePartial: 'Partial data \u2014 defaults used for some metrics',
+  confidenceMinimal:
+    'Limited verified inputs \u2014 unavailable metrics remain unknown and are excluded from ranking',
+  confidencePartial:
+    'Partial verified inputs \u2014 unavailable metrics remain unknown and are excluded from ranking',
+  confidenceInsufficient: 'Insufficient verified inputs \u2014 this score is excluded from ranking',
+  confidenceUnknown: 'Score provenance is unknown \u2014 excluded from ranking',
+  confidenceBadgePartial: 'Partial',
+  confidenceBadgeMinimal: 'Low data',
+  confidenceBadgeInsufficient: 'Insufficient',
+  confidenceBadgeUnknown: 'Unknown',
   weexDataNote: 'Weex Data Note',
   weexPeriod30d: '3 weeks',
   weexPeriod90d: 'All time',
@@ -4437,6 +4445,7 @@ const en = {
   scoreRadarProfit: 'Profit',
   scoreRadarRisk: 'Risk',
   scoreRadarExec: 'Exec',
+  scoreRadarAria: 'Score radar: {profitLabel} {profit}/100, {riskLabel} {risk}/100',
   scoreRoiScore: 'ROI Score',
   scorePnlScore: 'PnL Score',
   scoreTotal: 'Total',

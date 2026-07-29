@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
+import { useLanguage } from '../../Providers/LanguageProvider'
 
 /**
  * 分数配色
@@ -39,6 +40,7 @@ export interface ScoreBarProps {
  * 分数进度条
  */
 export function ScoreBar({ label, score, maxScore, delay = 0 }: ScoreBarProps) {
+  const { t } = useLanguage()
   const hasScore = isValidScore(score, maxScore)
   const color = getScoreColor(score, maxScore)
   const width = hasScore ? (score / maxScore) * 100 : 0
@@ -86,7 +88,7 @@ export function ScoreBar({ label, score, maxScore, delay = 0 }: ScoreBarProps) {
         aria-valuemin={0}
         aria-valuemax={Number.isFinite(maxScore) && maxScore > 0 ? maxScore : undefined}
         aria-valuenow={hasScore ? score : undefined}
-        aria-valuetext={hasScore ? `${score.toFixed(1)} / ${maxScore}` : '—'}
+        aria-valuetext={hasScore ? `${score.toFixed(1)} / ${maxScore}` : t('notAvailable')}
         style={{
           height: 6,
           background: 'var(--color-bg-hover, var(--color-bg-tertiary))',

@@ -80,6 +80,46 @@ describe('overall_score 70/25/5 综合', () => {
   })
 })
 
+describe('score confidence provenance', () => {
+  it('keeps missing confidence unknown instead of inventing full', () => {
+    expect(perf(detail({ trader: { scoreConfidence: null } })).score_confidence).toBeNull()
+  })
+
+  it('keeps confidence attached to its own timeframe', () => {
+    const output = perf(
+      detail({
+        trader: { scoreConfidence: 'full' },
+        periods: {
+          '7D': { scoreConfidence: 'partial' },
+          '30D': { scoreConfidence: 'insufficient' },
+          '90D': { scoreConfidence: 'full' },
+        },
+      })
+    )
+
+    expect(output.score_confidence).toBe('full')
+    expect(output.score_confidence_7d).toBe('partial')
+    expect(output.score_confidence_30d).toBe('insufficient')
+  })
+
+  it('does not relabel a shorter primary period as 90D confidence', () => {
+    const output = perf(
+      detail({
+        trader: { scoreConfidence: 'full' },
+        periods: {
+          '7D': { scoreConfidence: 'minimal' },
+          '30D': { scoreConfidence: 'full' },
+          '90D': null,
+        },
+      })
+    )
+
+    expect(output.score_confidence).toBeNull()
+    expect(output.score_confidence_30d).toBe('full')
+    expect(output.score_confidence_7d).toBe('minimal')
+  })
+})
+
 describe('持仓数交叉校验', () => {
   it('enrichment winning > 周期 trades(终身数据混入)→ 用 winRate×trades 重算', () => {
     const d = detail({

@@ -5,6 +5,7 @@ jest.mock('@/lib/constants/exchanges', () => ({
 import {
   normalizePeriod,
   normalizeWinRate,
+  normalizeScoreConfidence,
   getSourceAliases,
   mapLeaderboardRow,
   mapV1Snapshot,
@@ -39,6 +40,40 @@ describe('normalizeWinRate（ratio↔percentage 单位）', () => {
   it('null → null', () => {
     expect(normalizeWinRate(null)).toBeNull()
     expect(normalizeWinRate(undefined)).toBeNull()
+  })
+})
+
+describe('normalizeScoreConfidence', () => {
+  it('preserves current confidence labels including insufficient', () => {
+    expect(normalizeScoreConfidence('full')).toBe('full')
+    expect(normalizeScoreConfidence('partial')).toBe('partial')
+    expect(normalizeScoreConfidence('minimal')).toBe('minimal')
+    expect(normalizeScoreConfidence('insufficient')).toBe('insufficient')
+  })
+
+  it('normalizes bounded legacy numeric values', () => {
+    expect(normalizeScoreConfidence(80)).toBe('full')
+    expect(normalizeScoreConfidence('50')).toBe('partial')
+    expect(normalizeScoreConfidence(0)).toBe('minimal')
+  })
+
+  it.each([
+    null,
+    undefined,
+    '',
+    '  ',
+    ' 50',
+    '0x50',
+    '1e2',
+    '+80',
+    'unknown',
+    false,
+    {},
+    Number.NaN,
+    -1,
+    101,
+  ])('keeps invalid confidence %p unknown', (value) => {
+    expect(normalizeScoreConfidence(value)).toBeNull()
   })
 })
 
@@ -97,8 +132,12 @@ describe('mapLeaderboardRow — 列名兼容 + 字段映射', () => {
     expect(mapLeaderboardRow({ score_completeness: 30 }).scoreConfidence).toBe('minimal')
   })
 
-  it('字符串型 score_completeness → 原样', () => {
+  it('字符串型 score_completeness → 已知标签保留', () => {
     expect(mapLeaderboardRow({ score_completeness: 'full' }).scoreConfidence).toBe('full')
+    expect(mapLeaderboardRow({ score_completeness: 'insufficient' }).scoreConfidence).toBe(
+      'insufficient'
+    )
+    expect(mapLeaderboardRow({ score_completeness: 'corrupt' }).scoreConfidence).toBeNull()
   })
 
   it('null 字段 → null（不崩、不 NaN）', () => {

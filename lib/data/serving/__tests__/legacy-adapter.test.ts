@@ -6,6 +6,7 @@ import {
   servingSeriesToEquityCurve,
   servingToAssetBreakdown,
   servingToStats,
+  applyServingScoresToPerformance,
 } from '../legacy-adapter'
 
 describe('serving → legacy adapter', () => {
@@ -116,6 +117,95 @@ describe('serving → legacy adapter', () => {
     expect(perf.pnl).toBe(300) // 90d → primary
     expect(perf.win_rate).toBe(70)
     expect(perf.max_drawdown).toBe(15)
+  })
+
+  it('attaches serving score confidence to the exact timeframe', () => {
+    const perf = applyServingScoresToPerformance({}, [
+      {
+        season_id: '7D',
+        arena_score: 10,
+        arena_score_v3: null,
+        profitability_score: 0,
+        risk_control_score: 20,
+        execution_score: null,
+        score_completeness: 'partial',
+        trading_style: null,
+        style_confidence: null,
+        avg_holding_hours: null,
+      },
+      {
+        season_id: '30D',
+        arena_score: 30,
+        arena_score_v3: null,
+        profitability_score: 40,
+        risk_control_score: 50,
+        execution_score: null,
+        score_completeness: 'insufficient',
+        trading_style: null,
+        style_confidence: null,
+        avg_holding_hours: null,
+      },
+      {
+        season_id: '90D',
+        arena_score: 60,
+        arena_score_v3: null,
+        profitability_score: 70,
+        risk_control_score: 80,
+        execution_score: 90,
+        score_completeness: 'full',
+        trading_style: 'swing_trader',
+        style_confidence: 0.9,
+        avg_holding_hours: 12,
+      },
+    ])
+
+    expect(perf).toMatchObject({
+      return_score_7d: 0,
+      score_confidence_7d: 'partial',
+      score_confidence_30d: 'insufficient',
+      score_confidence: 'full',
+      profitability_score: 70,
+      risk_control_score: 80,
+      execution_score: 90,
+    })
+  })
+
+  it('does not promote invalid serving confidence to a timeframe', () => {
+    const perf = applyServingScoresToPerformance({}, [
+      {
+        season_id: '7D',
+        arena_score: null,
+        arena_score_v3: null,
+        profitability_score: null,
+        risk_control_score: null,
+        execution_score: null,
+        score_completeness: 'corrupt',
+        trading_style: null,
+        style_confidence: null,
+        avg_holding_hours: null,
+      },
+    ])
+
+    expect(perf.score_confidence_7d).toBeUndefined()
+  })
+
+  it('ignores unknown serving score timeframes instead of treating them as 90D', () => {
+    const perf = applyServingScoresToPerformance({}, [
+      {
+        season_id: 'ALL',
+        arena_score: 99,
+        arena_score_v3: 99,
+        profitability_score: 99,
+        risk_control_score: 99,
+        execution_score: 99,
+        score_completeness: 'full',
+        trading_style: null,
+        style_confidence: null,
+        avg_holding_hours: null,
+      },
+    ])
+
+    expect(perf).toEqual({})
   })
 
   it('surfaces advanced metrics when present, NULL-collapses when absent', () => {

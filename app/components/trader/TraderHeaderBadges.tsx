@@ -13,12 +13,13 @@
  */
 
 import dynamic from 'next/dynamic'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import { Badge, getSourceCategory } from './TraderHeaderHelpers'
 import { getScoreColor } from '@/lib/utils/score-colors'
+import { isValidScore } from './performance/ScoreBar'
 
 const Web3VerifiedBadge = dynamic(
   () => import('./Web3VerifiedBadge').then((m) => ({ default: m.Web3VerifiedBadge })),
@@ -68,7 +69,6 @@ export function TraderHeaderBadges({
   isBot = false,
   arenaScore,
   scoreConfidence,
-  tradesCount,
   rank,
   tradingStyle,
   isAuthorized = false,
@@ -81,6 +81,37 @@ export function TraderHeaderBadges({
 }: TraderHeaderBadgesProps): React.ReactElement {
   const tradingStyleCfg =
     tradingStyle && tradingStyle !== 'unknown' ? TRADING_STYLE_CONFIG[tradingStyle] : undefined
+  const hasArenaScore = isValidScore(arenaScore, 100)
+  const confidenceState =
+    scoreConfidence === 'full' ||
+    scoreConfidence === 'partial' ||
+    scoreConfidence === 'minimal' ||
+    scoreConfidence === 'insufficient'
+      ? scoreConfidence
+      : 'unknown'
+  const confidenceIsSevere =
+    confidenceState === 'minimal' ||
+    confidenceState === 'insufficient' ||
+    confidenceState === 'unknown'
+  const confidenceColor = confidenceIsSevere
+    ? tokens.colors.accent.error
+    : tokens.colors.accent.warning
+  const confidenceTitle =
+    confidenceState === 'minimal'
+      ? t('confidenceMinimal')
+      : confidenceState === 'partial'
+        ? t('confidencePartial')
+        : confidenceState === 'insufficient'
+          ? t('confidenceInsufficient')
+          : t('confidenceUnknown')
+  const confidenceBadgeLabel =
+    confidenceState === 'minimal'
+      ? t('confidenceBadgeMinimal')
+      : confidenceState === 'partial'
+        ? t('confidenceBadgePartial')
+        : confidenceState === 'insufficient'
+          ? t('confidenceBadgeInsufficient')
+          : t('confidenceBadgeUnknown')
 
   return (
     <>
@@ -133,7 +164,7 @@ export function TraderHeaderBadges({
       )}
 
       {/* Arena score */}
-      {arenaScore != null && arenaScore > 0 && (
+      {hasArenaScore && (
         <Badge
           key="score"
           color={getScoreColor(arenaScore)}
@@ -168,34 +199,22 @@ export function TraderHeaderBadges({
       )}
 
       {/* Low confidence warning */}
-      {scoreConfidence && scoreConfidence !== 'full' && (
+      {hasArenaScore && confidenceState !== 'full' && (
         <Badge
           key="confidence"
-          color={
-            scoreConfidence === 'minimal'
-              ? tokens.colors.accent.error
-              : tokens.colors.accent.warning
-          }
+          color={confidenceColor}
           style={{
             padding: '2px 8px',
             flexShrink: 0,
           }}
-          title={
-            scoreConfidence === 'minimal'
-              ? `Low confidence: only ${tradesCount ?? '?'} trades`
-              : `Partial confidence: limited trade history`
-          }
+          title={confidenceTitle}
         >
           <svg
             width="10"
             height="10"
             viewBox="0 0 24 24"
             fill="none"
-            stroke={
-              scoreConfidence === 'minimal'
-                ? tokens.colors.accent.error
-                : tokens.colors.accent.warning
-            }
+            stroke={confidenceColor}
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -209,17 +228,10 @@ export function TraderHeaderBadges({
             size="xs"
             weight="bold"
             style={{
-              color:
-                scoreConfidence === 'minimal'
-                  ? tokens.colors.accent.error
-                  : tokens.colors.accent.warning,
+              color: confidenceColor,
             }}
           >
-            {tradesCount != null && tradesCount < 10
-              ? `${tradesCount} trades`
-              : scoreConfidence === 'minimal'
-                ? 'Low data'
-                : 'Partial'}
+            {confidenceBadgeLabel}
           </Text>
         </Badge>
       )}

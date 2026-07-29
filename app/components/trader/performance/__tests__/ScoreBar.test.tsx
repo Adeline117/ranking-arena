@@ -1,6 +1,10 @@
 import { act, render, screen } from '@testing-library/react'
 import { getScoreColor, ScoreBar } from '../ScoreBar'
 
+jest.mock('@/app/components/Providers/LanguageProvider', () => ({
+  useLanguage: () => ({ t: (key: string) => key }),
+}))
+
 describe('ScoreBar trusted score states', () => {
   beforeEach(() => {
     jest.useFakeTimers()
@@ -37,7 +41,7 @@ describe('ScoreBar trusted score states', () => {
       const progress = screen.getByRole('progressbar', { name: 'Risk' })
       expect(screen.getByText('—')).toHaveStyle({ color: 'var(--color-text-tertiary)' })
       expect(progress).not.toHaveAttribute('aria-valuenow')
-      expect(progress).toHaveAttribute('aria-valuetext', '—')
+      expect(progress).toHaveAttribute('aria-valuetext', 'notAvailable')
       expect(progress.firstElementChild).toHaveStyle({ width: '0%' })
     }
   )

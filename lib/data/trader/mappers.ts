@@ -41,6 +41,27 @@ export function normalizeWinRate(wr: number | null | undefined): number | null {
   return Math.max(0, Math.min(100, pct))
 }
 
+export type NormalizedScoreConfidence = 'full' | 'partial' | 'minimal' | 'insufficient'
+
+/** Normalize legacy numeric completeness and current labels without inventing confidence. */
+export function normalizeScoreConfidence(value: unknown): NormalizedScoreConfidence | null {
+  if (value === 'full' || value === 'partial' || value === 'minimal' || value === 'insufficient') {
+    return value
+  }
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  if (
+    typeof value === 'string' &&
+    (value !== value.trim() || !/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value))
+  ) {
+    return null
+  }
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 100) return null
+  if (numeric >= 80) return 'full'
+  if (numeric >= 50) return 'partial'
+  return 'minimal'
+}
+
 // ============================================================
 // Source alias mapping for enrichment tables
 // ============================================================
@@ -142,16 +163,7 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     profitabilityScore: row.profitability_score != null ? Number(row.profitability_score) : null,
     riskControlScore: row.risk_control_score != null ? Number(row.risk_control_score) : null,
     executionScore: row.execution_score != null ? Number(row.execution_score) : null,
-    scoreConfidence:
-      typeof row.score_completeness === 'string'
-        ? (row.score_completeness as 'full' | 'partial' | 'minimal')
-        : row.score_completeness != null
-          ? Number(row.score_completeness) >= 80
-            ? 'full'
-            : Number(row.score_completeness) >= 50
-              ? 'partial'
-              : 'minimal'
-          : null,
+    scoreConfidence: normalizeScoreConfidence(row.score_completeness),
 
     // Rankings
     rank: row.rank != null ? Number(row.rank) : null,

@@ -48,9 +48,11 @@ jest.mock('../performance/ScoreBreakdownSection', () => ({
   ScoreBreakdownSection: ({
     periodProfitabilityScore,
     periodRiskControlScore,
+    scoreConfidence,
   }: {
     periodProfitabilityScore?: number
     periodRiskControlScore?: number
+    scoreConfidence?: string | null
   }) => (
     <output
       data-testid="period-scores"
@@ -58,6 +60,7 @@ jest.mock('../performance/ScoreBreakdownSection', () => ({
         periodProfitabilityScore == null ? 'unknown' : String(periodProfitabilityScore)
       }
       data-risk={periodRiskControlScore == null ? 'unknown' : String(periodRiskControlScore)}
+      data-confidence={scoreConfidence ?? 'unknown'}
     />
   ),
 }))
@@ -153,17 +156,21 @@ describe('OverviewPerformanceCard period switching', () => {
           risk_control_score: 77,
           return_score_30d: 0,
           pnl_score_30d: 12,
+          score_confidence: 'full',
+          score_confidence_30d: 'partial',
         }}
       />
     )
 
     expect(screen.getByTestId('period-scores')).toHaveAttribute('data-profitability', '88')
     expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', '77')
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-confidence', 'full')
 
     fireEvent.click(screen.getByRole('button', { name: '30D period' }))
 
     expect(screen.getByTestId('period-scores')).toHaveAttribute('data-profitability', '0')
     expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', '12')
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-confidence', 'partial')
   })
 
   it('does not mask an invalid canonical 90D dimension with a legacy score', () => {

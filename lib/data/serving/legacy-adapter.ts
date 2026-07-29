@@ -27,6 +27,7 @@
 import type { PortfolioItem, TraderProfile, TraderStats } from '@/lib/data/trader-types'
 import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
 import type { ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
+import { normalizeScoreConfidence } from '@/lib/data/trader/mappers'
 
 type Row = Record<string, unknown>
 type SeriesPoint = { ts: string; value: number }
@@ -53,6 +54,19 @@ export interface AssetBreakdownByTf {
   '7D': AssetWeight[]
   '30D': AssetWeight[]
   '90D': AssetWeight[]
+}
+
+export interface ServingScoreRowLike {
+  season_id: string
+  arena_score: number | null
+  arena_score_v3: number | null
+  profitability_score: number | null
+  risk_control_score: number | null
+  execution_score: number | null
+  score_completeness: string | number | null
+  trading_style: string | null
+  style_confidence: number | null
+  avg_holding_hours: number | null
 }
 
 const num = (v: unknown): number => {
@@ -253,6 +267,38 @@ export function servingStatsToPerformance(byTf: {
     perf.total_positions = set(s90.total_positions)
   }
   return perf
+}
+
+/** Attach each leaderboard score row to its matching timeframe without 90D leakage. */
+export function applyServingScoresToPerformance(
+  performance: ExtendedPerformance,
+  scores: ServingScoreRowLike[] | undefined
+): ExtendedPerformance {
+  const p = performance as Record<string, unknown>
+  for (const row of scores ?? []) {
+    if (row.season_id !== '7D' && row.season_id !== '30D' && row.season_id !== '90D') continue
+    const suffix = row.season_id === '7D' ? '_7d' : row.season_id === '30D' ? '_30d' : ''
+    if (row.arena_score != null) p[`arena_score${suffix || '_90d'}`] = Number(row.arena_score)
+    if (row.arena_score_v3 != null)
+      p[`arena_score_v3${suffix || '_90d'}`] = Number(row.arena_score_v3)
+    if (row.profitability_score != null)
+      p[`return_score${suffix}`] = Number(row.profitability_score)
+    if (row.risk_control_score != null) p[`pnl_score${suffix}`] = Number(row.risk_control_score)
+
+    const confidence = normalizeScoreConfidence(row.score_completeness)
+    if (confidence != null) p[`score_confidence${suffix}`] = confidence
+
+    if (row.season_id === '90D') {
+      if (row.arena_score != null) p.arena_score = Number(row.arena_score)
+      if (row.profitability_score != null) p.profitability_score = Number(row.profitability_score)
+      if (row.risk_control_score != null) p.risk_control_score = Number(row.risk_control_score)
+      if (row.execution_score != null) p.execution_score = Number(row.execution_score)
+      if (row.trading_style != null) p.trading_style = row.trading_style
+      if (row.style_confidence != null) p.style_confidence = Number(row.style_confidence)
+      if (row.avg_holding_hours != null) p.avg_holding_hours = Number(row.avg_holding_hours)
+    }
+  }
+  return performance
 }
 
 /** Merge a serving module's roi + pnl series into [{date, roi, pnl}] (legacy

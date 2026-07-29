@@ -1,5 +1,7 @@
 'use client'
 
+import { useId } from 'react'
+
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
@@ -7,16 +9,16 @@ import { ScoreRadar } from '@/app/components/ranking/ScoreRadar'
 import { CompactErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { getScoreColor as getArenaScoreColor } from '@/lib/utils/score-colors'
 import { isValidScore, ScoreBar } from './ScoreBar'
-import type { ExtendedPerformance } from '../OverviewPerformanceCard'
+import type { NormalizedScoreConfidence } from '@/lib/data/trader/mappers'
 
 const arenaScoreColor = (score: number) => getArenaScoreColor(score)
 
 export interface ScoreBreakdownSectionProps {
-  performance: ExtendedPerformance
   periodArenaScore: number | undefined
   periodProfitabilityScore: number | undefined
   periodRiskControlScore: number | undefined
   arenaScoreV3: number | undefined
+  scoreConfidence: NormalizedScoreConfidence | null | undefined
   isVisible: boolean
   rank?: number
   totalTraders?: number
@@ -24,17 +26,18 @@ export interface ScoreBreakdownSectionProps {
 }
 
 export function ScoreBreakdownSection({
-  performance,
   periodArenaScore,
   periodProfitabilityScore,
   periodRiskControlScore,
   arenaScoreV3,
+  scoreConfidence,
   isVisible,
   rank,
   totalTraders,
   platformName,
 }: ScoreBreakdownSectionProps) {
   const { t } = useLanguage()
+  const tooltipId = useId()
   const profitabilityScore = isValidScore(periodProfitabilityScore, 100)
     ? periodProfitabilityScore
     : null
@@ -50,6 +53,23 @@ export function ScoreBreakdownSection({
 
   const hasScores =
     canonicalArenaScore != null || profitabilityScore != null || riskControlScore != null
+  const confidenceState = scoreConfidence ?? 'unknown'
+  const showConfidenceWarning = confidenceState !== 'full'
+  const severeConfidence =
+    confidenceState === 'minimal' ||
+    confidenceState === 'insufficient' ||
+    confidenceState === 'unknown'
+  const confidenceColor = severeConfidence
+    ? tokens.colors.accent.error
+    : tokens.colors.accent.warning
+  const confidenceMessage =
+    confidenceState === 'minimal'
+      ? t('confidenceMinimal')
+      : confidenceState === 'partial'
+        ? t('confidencePartial')
+        : confidenceState === 'insufficient'
+          ? t('confidenceInsufficient')
+          : t('confidenceUnknown')
 
   if (!hasScores) return null
 
@@ -85,6 +105,8 @@ export function ScoreBreakdownSection({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
+          aria-hidden="true"
+          focusable="false"
         >
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
         </svg>
@@ -97,29 +119,36 @@ export function ScoreBreakdownSection({
             position: 'relative',
             display: 'inline-flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            width: 18,
-            height: 18,
-            borderRadius: '50%',
-            background: tokens.colors.bg.tertiary,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            cursor: 'help',
             flexShrink: 0,
           }}
-          className="score-tooltip-trigger"
         >
-          <Text
-            size="xs"
+          <button
+            type="button"
+            className="score-tooltip-trigger"
+            aria-label={t('scoreGuide')}
+            aria-describedby={tooltipId}
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 18,
+              height: 18,
+              padding: 0,
+              borderRadius: '50%',
+              background: tokens.colors.bg.tertiary,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              cursor: 'help',
               color: tokens.colors.text.tertiary,
-              fontSize: 11,
-              fontWeight: 700,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.bold,
               lineHeight: 1,
             }}
           >
-            ?
-          </Text>
+            <span aria-hidden="true">?</span>
+          </button>
           <Box
+            id={tooltipId}
+            role="tooltip"
             className="score-tooltip-content"
             style={{
               position: 'absolute',
@@ -134,8 +163,11 @@ export function ScoreBreakdownSection({
               boxShadow: '0 8px 24px var(--color-overlay-medium)',
               width: 280,
               zIndex: 50,
-              display: 'none',
+              display: 'block',
+              visibility: 'hidden',
+              opacity: 0,
               pointerEvents: 'none',
+              transition: 'opacity 0.15s ease',
             }}
           >
             <Text
@@ -150,8 +182,10 @@ export function ScoreBreakdownSection({
             </Text>
           </Box>
           <style>{`
-            .score-tooltip-trigger:hover .score-tooltip-content {
-              display: block !important;
+            .score-tooltip-trigger:hover + .score-tooltip-content,
+            .score-tooltip-trigger:focus-visible + .score-tooltip-content {
+              visibility: visible !important;
+              opacity: 1 !important;
             }
             .score-label-short { display: none; }
             @media (max-width: 480px) {
@@ -281,21 +315,19 @@ export function ScoreBreakdownSection({
         </Box>
       </Box>
 
-      {/* 数据置信度提示 — only show for 'minimal' (no PnL data), not 'partial' which is misleading in V3 */}
-      {performance.score_confidence === 'minimal' && (
+      {/* Confidence is period-specific; unknown inputs never masquerade as ranked data. */}
+      {showConfidenceWarning && (
         <Box
+          role="status"
           style={{
             marginTop: tokens.spacing[3],
             display: 'flex',
             alignItems: 'center',
             gap: tokens.spacing[2],
             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-            background:
-              performance.score_confidence === 'minimal'
-                ? `${alpha(tokens.colors.accent.error, 6)}`
-                : `${alpha(tokens.colors.accent.warning, 6)}`,
+            background: `${alpha(confidenceColor, 6)}`,
             borderRadius: tokens.radius.md,
-            border: `1px solid ${alpha(performance.score_confidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning, 15)}`,
+            border: `1px solid ${alpha(confidenceColor, 15)}`,
             maxWidth: '100%',
             boxSizing: 'border-box',
           }}
@@ -305,13 +337,11 @@ export function ScoreBreakdownSection({
             height="14"
             viewBox="0 0 24 24"
             fill="none"
-            stroke={
-              performance.score_confidence === 'minimal'
-                ? tokens.colors.accent.error
-                : tokens.colors.accent.warning
-            }
+            stroke={confidenceColor}
             strokeWidth="2"
             strokeLinecap="round"
+            aria-hidden="true"
+            focusable="false"
           >
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
@@ -320,16 +350,11 @@ export function ScoreBreakdownSection({
           <Text
             size="xs"
             style={{
-              color:
-                performance.score_confidence === 'minimal'
-                  ? tokens.colors.accent.error
-                  : tokens.colors.accent.warning,
-              fontWeight: 500,
+              color: confidenceColor,
+              fontWeight: tokens.typography.fontWeight.medium,
             }}
           >
-            {performance.score_confidence === 'minimal'
-              ? t('confidenceMinimal')
-              : t('confidencePartial')}
+            {confidenceMessage}
           </Text>
         </Box>
       )}
