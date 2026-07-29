@@ -89,6 +89,7 @@
     "qa:migrations": "node scripts/qa/check-migration-ledger.mjs",
     "qa:migration-history-shape": "node scripts/qa/migration-history-shape.mjs",
     "qa:launch-migration-runner": "node --test scripts/maintenance/apply-launch-migrations.test.mjs",
+    "qa:api-tier-cutover": "node --test scripts/maintenance/api-tier-cutover.test.mjs",
     "qa:api-tier-cutover-report": "node --test scripts/maintenance/validate-api-tier-cutover-report.test.mjs",
     "qa:buttons": "node scripts/qa/button-sweep.mjs",
     "qa:auth-e2e": "playwright test --config=playwright.authenticated.config.ts",
