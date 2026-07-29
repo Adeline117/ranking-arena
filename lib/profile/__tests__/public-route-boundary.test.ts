@@ -32,19 +32,21 @@ describe('public profile service-route audience boundary', () => {
     expect(source).toContain("'Cache-Control': 'private, no-store, max-age=0'")
   })
 
-  it('re-authorizes the aggregate route before touching its candidate cache', () => {
+  it('re-authorizes the aggregate route before reading sealed trader detail', () => {
     const source = read('app/api/users/[handle]/full/route.ts')
     const audienceRead = source.indexOf('readPublicProfileAudienceByHandle(')
     const inactiveCheck = source.indexOf("audience.status === 'inactive'")
-    const candidateCache = source.indexOf('getOrSetWithLock(')
+    const detailRead = source.indexOf('getTraderDetail(supabase,')
 
     expect(audienceRead).toBeGreaterThan(-1)
     expect(inactiveCheck).toBeGreaterThan(audienceRead)
-    expect(candidateCache).toBeGreaterThan(inactiveCheck)
-    expect(source).toContain('users-full:v4:')
-    expect(source).toContain('`user:${audience.profile.id}`')
-    expect(source).toContain("`${profile.source || 'unknown'}:${profile.id}`")
+    expect(detailRead).toBeGreaterThan(inactiveCheck)
+    expect(source).not.toContain('getOrSetWithLock(')
+    expect(source).not.toContain('getTraderPerformance(')
+    expect(source).not.toContain('getTraderStats(')
     expect(source).toContain("'Cache-Control': 'private, no-store, max-age=0'")
+    expect(source).toContain("'CDN-Cache-Control': 'no-store'")
+    expect(source).toContain("'Vercel-CDN-Cache-Control': 'no-store'")
     expect(source).not.toContain('detail: profileError')
     expect(source).not.toMatch(/s-maxage|stale-while-revalidate/)
   })

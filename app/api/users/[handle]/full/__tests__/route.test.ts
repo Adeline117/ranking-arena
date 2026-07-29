@@ -23,12 +23,10 @@ jest.mock('next/server', () => {
 })
 
 const mockFrom = jest.fn()
-const mockGetTraderByHandle = jest.fn()
-const mockGetTraderPerformance = jest.fn()
-const mockGetTraderStats = jest.fn()
-const mockGetTraderPortfolio = jest.fn()
+const mockResolveTrader = jest.fn()
+const mockGetTraderDetail = jest.fn()
+const mockToTraderPageData = jest.fn()
 const mockCheckRateLimit = jest.fn()
-const mockGetOrSetWithLock = jest.fn()
 const mockReadPublicProfileAudienceByHandle = jest.fn()
 const mockReadSealedRankingGeneration = jest.fn()
 const mockLoggerError = jest.fn()
@@ -37,20 +35,15 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: () => ({ from: mockFrom }),
 }))
 
-jest.mock('@/lib/data/trader', () => ({
-  getTraderByHandle: (...args: unknown[]) => mockGetTraderByHandle(...args),
-  getTraderPerformance: (...args: unknown[]) => mockGetTraderPerformance(...args),
-  getTraderStats: (...args: unknown[]) => mockGetTraderStats(...args),
-  getTraderPortfolio: (...args: unknown[]) => mockGetTraderPortfolio(...args),
+jest.mock('@/lib/data/unified', () => ({
+  resolveTrader: (...args: unknown[]) => mockResolveTrader(...args),
+  getTraderDetail: (...args: unknown[]) => mockGetTraderDetail(...args),
+  toTraderPageData: (...args: unknown[]) => mockToTraderPageData(...args),
 }))
 
 jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   RateLimitPresets: { read: {} },
-}))
-
-jest.mock('@/lib/cache', () => ({
-  getOrSetWithLock: (...args: unknown[]) => mockGetOrSetWithLock(...args),
 }))
 
 jest.mock('@/lib/profile/public-audience', () => ({
@@ -101,25 +94,22 @@ describe('GET /api/users/:handle/full authority boundaries', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCheckRateLimit.mockResolvedValue(null)
-    mockGetTraderByHandle.mockResolvedValue({
-      ok: true,
-      data: {
-        handle: 'Trader One',
-        id: 'trader-1',
-        source: 'binance_futures',
-        followers: 4,
-      },
+    mockResolveTrader.mockResolvedValue({
+      handle: 'Trader One',
+      traderKey: 'trader-1',
+      platform: 'binance_futures',
+      avatarUrl: null,
     })
     mockReadPublicProfileAudienceByHandle.mockResolvedValue({
       status: 'active',
       profile: { id: 'user-1' },
     })
-    mockGetTraderPerformance.mockResolvedValue({ ok: true, data: { roi_90d: 12 } })
-    mockGetTraderStats.mockResolvedValue({ ok: true, data: { additionalStats: {} } })
-    mockGetTraderPortfolio.mockResolvedValue({ ok: true, data: [] })
-    mockGetOrSetWithLock.mockImplementation(async (_key: string, fetcher: () => Promise<unknown>) =>
-      fetcher()
-    )
+    mockGetTraderDetail.mockResolvedValue({ trader: { source_trader_id: 'trader-1' } })
+    mockToTraderPageData.mockReturnValue({
+      performance: { roi_90d: 12 },
+      stats: { additionalStats: {} },
+      portfolio: [],
+    })
     mockReadSealedRankingGeneration.mockImplementation(
       async (
         _supabase: unknown,
@@ -184,6 +174,8 @@ describe('GET /api/users/:handle/full authority boundaries', () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
     expect(body.profile).toEqual(
       expect.objectContaining({
         followers: 12,
@@ -195,11 +187,10 @@ describe('GET /api/users/:handle/full authority boundaries', () => {
     expect(
       body.similarTraders.map((row: { source_trader_id: string }) => row.source_trader_id)
     ).toEqual(['trader-2'])
-    expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringContaining('users-full:v4:trader one:user:user-1:binance_futures:trader-1'),
-      expect.any(Function),
-      { ttl: 120 }
-    )
+    expect(mockGetTraderDetail).toHaveBeenCalledWith(expect.anything(), {
+      platform: 'binance_futures',
+      traderKey: 'trader-1',
+    })
     expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
       expect.anything(),
       { season: '90D', sources: ['binance_futures'] },
@@ -266,14 +257,11 @@ describe('GET /api/users/:handle/full authority boundaries', () => {
   })
 
   it('never touches ranking storage for a quarantined source', async () => {
-    mockGetTraderByHandle.mockResolvedValue({
-      ok: true,
-      data: {
-        handle: 'Quarantined',
-        id: 'trader-q',
-        source: 'okx_web3_solana',
-        followers: 1,
-      },
+    mockResolveTrader.mockResolvedValue({
+      handle: 'Quarantined',
+      traderKey: 'trader-q',
+      platform: 'okx_web3_solana',
+      avatarUrl: null,
     })
     mockFrom.mockImplementation((table: string) => {
       if (table === 'user_profiles') {
@@ -294,6 +282,9 @@ describe('GET /api/users/:handle/full authority boundaries', () => {
 
     expect(response.status).toBe(200)
     expect(body.similarTraders).toEqual([])
+    expect(body.performance).toBeNull()
+    expect(body.stats).toBeNull()
+    expect(mockGetTraderDetail).not.toHaveBeenCalled()
     expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
   })
