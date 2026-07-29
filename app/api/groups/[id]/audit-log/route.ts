@@ -25,9 +25,13 @@ const EncodedCursorSchema = z
   .min(1)
   .max(256)
   .regex(/^[A-Za-z0-9_-]+$/)
+const TimestampSchema = z
+  .string()
+  .datetime({ offset: true })
+  .refine((value) => (value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1].length ?? 0) <= 6)
 const CursorSchema = z
   .object({
-    created_at: z.string().datetime({ offset: true }),
+    created_at: TimestampSchema,
     id: UuidSchema,
   })
   .strict()
@@ -41,25 +45,34 @@ const AuditLogRowSchema = z
       .regex(/^[a-z][a-z0-9_]*$/),
     actor_id: UuidSchema.nullable(),
     target_id: UuidSchema.nullable(),
-    created_at: z.string().datetime({ offset: true }),
+    created_at: TimestampSchema,
   })
   .strict()
-const ViewerProfileSchema = z
+const AuditLogSuccessSchema = z
   .object({
-    id: UuidSchema,
-    deleted_at: z.string().datetime({ offset: true }).nullable(),
-    banned_at: z.string().datetime({ offset: true }).nullable(),
-    is_banned: z.boolean().nullable(),
-    ban_expires_at: z.string().datetime({ offset: true }).nullable(),
+    success: z.literal(true),
+    actor_id: UuidSchema,
+    group_id: UuidSchema,
+    logs: z.array(AuditLogRowSchema).max(100),
+    has_more: z.boolean(),
   })
   .strict()
-const GroupSchema = z
+const AuditLogFailureSchema = z
   .object({
-    id: UuidSchema,
-    dissolved_at: z.string().datetime({ offset: true }).nullable(),
+    success: z.literal(false),
+    reason: z.enum([
+      'INVALID',
+      'ACTOR_UNAVAILABLE',
+      'GROUP_NOT_FOUND',
+      'GROUP_DISSOLVED',
+      'PERMISSION_DENIED',
+    ]),
   })
   .strict()
-const MembershipSchema = z.object({ role: z.enum(['owner', 'admin', 'member']) }).strict()
+const AuditLogResultSchema = z.discriminatedUnion('success', [
+  AuditLogSuccessSchema,
+  AuditLogFailureSchema,
+])
 
 type AuditCursor = z.infer<typeof CursorSchema>
 
@@ -109,6 +122,71 @@ function readListInput(url: URL): { limit: number; cursor: AuditCursor | null } 
   return { limit: parsedLimit?.data ?? DEFAULT_LIMIT, cursor }
 }
 
+function timestampParts(value: string): readonly [milliseconds: number, submillisecond: number] {
+  const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? ''
+  const nanoseconds = Number(`${fraction}000000000`.slice(0, 9))
+  return [Date.parse(value), nanoseconds % 1_000_000]
+}
+
+function compareTimestamp(left: string, right: string): number {
+  const [leftMilliseconds, leftSubmillisecond] = timestampParts(left)
+  const [rightMilliseconds, rightSubmillisecond] = timestampParts(right)
+  if (leftMilliseconds !== rightMilliseconds) return leftMilliseconds - rightMilliseconds
+  return leftSubmillisecond - rightSubmillisecond
+}
+
+function isBeforeCursor(row: z.infer<typeof AuditLogRowSchema>, cursor: AuditCursor): boolean {
+  const timestampOrder = compareTimestamp(row.created_at, cursor.created_at)
+  return timestampOrder < 0 || (timestampOrder === 0 && row.id < cursor.id)
+}
+
+function isStrictlyDescending(
+  previous: z.infer<typeof AuditLogRowSchema>,
+  current: z.infer<typeof AuditLogRowSchema>
+): boolean {
+  const timestampOrder = compareTimestamp(previous.created_at, current.created_at)
+  return timestampOrder > 0 || (timestampOrder === 0 && previous.id > current.id)
+}
+
+function matchesRequestedPage(
+  result: z.infer<typeof AuditLogSuccessSchema>,
+  actorId: string,
+  groupId: string,
+  input: { limit: number; cursor: AuditCursor | null }
+): boolean {
+  if (
+    result.actor_id !== actorId ||
+    result.group_id !== groupId ||
+    result.logs.length > input.limit ||
+    (result.has_more && result.logs.length !== input.limit)
+  ) {
+    return false
+  }
+
+  const ids = new Set<string>()
+  for (let index = 0; index < result.logs.length; index += 1) {
+    const row = result.logs[index]
+    if (ids.has(row.id) || (input.cursor && !isBeforeCursor(row, input.cursor))) return false
+    ids.add(row.id)
+    if (index > 0 && !isStrictlyDescending(result.logs[index - 1], row)) return false
+  }
+  return true
+}
+
+function failureResponse(reason: z.infer<typeof AuditLogFailureSchema>['reason']) {
+  switch (reason) {
+    case 'INVALID':
+      return json({ error: 'Invalid audit log request' }, 400)
+    case 'ACTOR_UNAVAILABLE':
+    case 'PERMISSION_DENIED':
+      return json({ error: 'Permission denied' }, 403)
+    case 'GROUP_NOT_FOUND':
+      return json({ error: 'Group not found' }, 404)
+    case 'GROUP_DISSOLVED':
+      return json({ error: 'This group has been dissolved' }, 409)
+  }
+}
+
 export const GET = withAuth(
   async ({ user, request, supabase }) => {
     const guard = socialFeatureGuard()
@@ -130,134 +208,51 @@ export const GET = withAuth(
     const actorId = UuidSchema.safeParse(user.id)
     if (!actorId.success) return json({ error: 'Permission denied' }, 403)
 
-    // Re-check the application account at this service-role boundary instead
-    // of relying only on authentication middleware state. This mirrors group
-    // mutation semantics, including active temporary bans.
-    const { data: rawProfile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('id, deleted_at, banned_at, is_banned, ban_expires_at')
-      .eq('id', actorId.data)
-      .maybeSingle()
-
-    if (profileError) {
-      log.error('Group audit-log viewer lookup failed', {
-        actorId: actorId.data,
-        code: profileError.code,
-      })
-      return json({ error: 'Failed to load group audit log' }, 500)
-    }
-
-    if (!rawProfile) {
-      return json({ error: 'Permission denied' }, 403)
-    }
-    const profile = ViewerProfileSchema.safeParse(rawProfile)
-    if (!profile.success || profile.data.id !== actorId.data) {
-      log.error('Group audit-log viewer response was invalid', { actorId: actorId.data })
-      return json({ error: 'Failed to load group audit log' }, 500)
-    }
-    const activelyBanned =
-      profile.data.is_banned === true &&
-      (profile.data.ban_expires_at === null || Date.parse(profile.data.ban_expires_at) > Date.now())
-    if (profile.data.deleted_at || profile.data.banned_at || activelyBanned) {
-      return json({ error: 'Permission denied' }, 403)
-    }
-
-    const { data: rawGroup, error: groupError } = await supabase
-      .from('groups')
-      .select('id, dissolved_at')
-      .eq('id', groupId)
-      .maybeSingle()
-
-    if (groupError) {
-      log.error('Group audit-log group lookup failed', { groupId, code: groupError.code })
-      return json({ error: 'Failed to load group audit log' }, 500)
-    }
-    if (!rawGroup) return json({ error: 'Group not found' }, 404)
-    const group = GroupSchema.safeParse(rawGroup)
-    if (!group.success || group.data.id !== groupId) {
-      log.error('Group audit-log group response was invalid', { groupId })
-      return json({ error: 'Failed to load group audit log' }, 500)
-    }
-    if (group.data.dissolved_at) {
-      return json({ error: 'This group has been dissolved' }, 409)
-    }
-
-    const { data: rawMembership, error: membershipError } = await supabase
-      .from('group_members')
-      .select('role')
-      .eq('group_id', groupId)
-      .eq('user_id', actorId.data)
-      .maybeSingle()
-
-    if (membershipError) {
-      log.error('Group audit-log membership lookup failed', {
-        groupId,
-        actorId: actorId.data,
-        code: membershipError.code,
-      })
-      return json({ error: 'Failed to load group audit log' }, 500)
-    }
-    if (!rawMembership) {
-      return json({ error: 'Permission denied' }, 403)
-    }
-    const membership = MembershipSchema.safeParse(rawMembership)
-    if (!membership.success) {
-      log.error('Group audit-log membership response was invalid', {
-        groupId,
-        actorId: actorId.data,
-      })
-      return json({ error: 'Failed to load group audit log' }, 500)
-    }
-    if (membership.data.role !== 'owner' && membership.data.role !== 'admin') {
-      return json({ error: 'Permission denied' }, 403)
-    }
-
-    let query = supabase
-      .from('group_audit_log')
-      .select('id, action, actor_id, target_id, created_at')
-      .eq('group_id', groupId)
-      .not('created_at', 'is', null)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-
-    if (input.cursor) {
-      const { created_at: createdAt, id } = input.cursor
-      query = query.or(`created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.lt.${id})`)
-    }
-
-    const { data, error } = await query.limit(input.limit + 1)
+    const { data, error } = await supabase.rpc('get_group_audit_log_page_atomic', {
+      p_actor_id: actorId.data,
+      p_group_id: groupId,
+      p_before_created_at: input.cursor?.created_at ?? null,
+      p_before_id: input.cursor?.id ?? null,
+      p_limit: input.limit,
+    })
     if (error) {
-      log.error('Group audit-log page query failed', { groupId, code: error.code })
+      log.error('Atomic group audit-log page query failed', {
+        groupId,
+        actorId: actorId.data,
+        code: error.code,
+      })
       return json({ error: 'Failed to load group audit log' }, 500)
     }
 
-    const parsedRows = z
-      .array(AuditLogRowSchema)
-      .max(input.limit + 1)
-      .safeParse(data)
-    if (!parsedRows.success) {
-      log.error('Group audit-log page returned an invalid response', { groupId })
+    const parsedResult = AuditLogResultSchema.safeParse(data)
+    if (!parsedResult.success) {
+      log.error('Atomic group audit-log page returned an invalid response', {
+        groupId,
+        actorId: actorId.data,
+      })
       return json({ error: 'Failed to load group audit log' }, 500)
     }
 
-    const hasMore = parsedRows.data.length > input.limit
-    const logs = parsedRows.data.slice(0, input.limit).map((row) => ({
-      id: row.id,
-      action: row.action,
-      actor_id: row.actor_id,
-      target_id: row.target_id,
-      created_at: row.created_at,
-    }))
-    const last = logs.at(-1)
+    const result = parsedResult.data
+    if (!result.success) return failureResponse(result.reason)
+    if (!matchesRequestedPage(result, actorId.data, groupId, input)) {
+      log.error('Atomic group audit-log page returned mismatched evidence', {
+        groupId,
+        actorId: actorId.data,
+      })
+      return json({ error: 'Failed to load group audit log' }, 500)
+    }
+
+    const last = result.logs.at(-1)
     const nextCursor =
-      hasMore && last ? encodeCursor({ created_at: last.created_at, id: last.id }) : null
+      result.has_more && last ? encodeCursor({ created_at: last.created_at, id: last.id }) : null
 
     return json({
       success: true,
-      logs,
+      logs: result.logs,
       pagination: {
         limit: input.limit,
-        has_more: hasMore,
+        has_more: result.has_more,
         next_cursor: nextCursor,
       },
     })
