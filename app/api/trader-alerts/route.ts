@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
+import { hasCurrentGlobalProEntitlement } from '@/lib/premium/server-entitlement'
 
 export const runtime = 'nodejs'
 
@@ -35,20 +36,7 @@ const TraderAlertSchema = z.object({
  */
 export const GET = withAuth(
   async ({ user, supabase, request }) => {
-    // Access must reflect a currently active paid entitlement. Reading only
-    // `tier` left canceled/expired subscriptions able to configure a feature
-    // the scheduler correctly refuses to execute.
-    const { data: subscription, error: subscriptionError } = await supabase
-      .from('subscriptions')
-      .select('tier, status')
-      .eq('user_id', user.id)
-      .in('status', ['active', 'trialing'])
-      .in('tier', ['pro', 'lifetime'])
-      .limit(1)
-      .maybeSingle()
-
-    if (subscriptionError) throw new Error('Failed to verify Pro membership')
-    if (!subscription) {
+    if (!(await hasCurrentGlobalProEntitlement(supabase, user.id))) {
       return NextResponse.json(
         { success: false, error: 'Pro membership required' },
         { status: 403 }
@@ -90,17 +78,7 @@ export const GET = withAuth(
  */
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
-    const { data: subscription, error: subscriptionError } = await supabase
-      .from('subscriptions')
-      .select('tier, status')
-      .eq('user_id', user.id)
-      .in('status', ['active', 'trialing'])
-      .in('tier', ['pro', 'lifetime'])
-      .limit(1)
-      .maybeSingle()
-
-    if (subscriptionError) throw new Error('Failed to verify Pro membership')
-    if (!subscription) {
+    if (!(await hasCurrentGlobalProEntitlement(supabase, user.id))) {
       return NextResponse.json(
         { success: false, error: 'Pro membership required' },
         { status: 403 }
