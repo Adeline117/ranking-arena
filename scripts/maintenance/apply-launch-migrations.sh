@@ -141,6 +141,8 @@ PREDEPLOY_MIGRATIONS=(
   20260729056000_atomic_two_factor_credentials.sql
   20260729057000_atomic_portfolio_sync_publication.sql
   20260729058000_source_registry_runtime_contract.sql
+  20260729059000_atomic_referral_attribution.sql
+  20260729060000_retryable_referral_qualification.sql
   20260729061000_source_legacy_platform_alias_contract.sql
 )
 
