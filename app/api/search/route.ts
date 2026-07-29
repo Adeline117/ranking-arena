@@ -26,10 +26,15 @@ const logger = createLogger('search-api')
 import { features } from '@/lib/features'
 import { searchTraders as unifiedSearchTraders, getSearchSuggestions } from '@/lib/data/unified'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
-import { searchTradersMeili, isMeilisearchAvailable } from '@/lib/search/meilisearch'
 import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
 import { escapeLikePattern } from '@/lib/sanitize'
 import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
+import {
+  readSealedRankIdentities,
+  type RankingIdentity,
+  type SealedRankIdentityRow,
+} from '@/lib/rankings/read-sealed-rank-identities'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 // Redis stores only server-side candidates. Any payload derived from posts is
 // re-authorized for the current anonymous audience and is never CDN-cached.
@@ -95,6 +100,76 @@ interface CurrentSearchGroup {
   name: string
   description: string | null
   member_count: number | null
+}
+
+function rankingIdentityKey(source: string, sourceTraderId: string): string {
+  return `${source}\u0000${sourceTraderId}`
+}
+
+function candidateTraderIdentity(result: UnifiedSearchResult): RankingIdentity | null {
+  const source = result.meta?.platform
+  if (typeof source !== 'string' || !source) return null
+  const prefix = `${source}:`
+  if (!result.id.startsWith(prefix)) return null
+  const sourceTraderId = result.id.slice(prefix.length)
+  if (!sourceTraderId) return null
+  return { source, sourceTraderId }
+}
+
+function materializeSealedTrader(row: SealedRankIdentityRow): UnifiedSearchResult {
+  const exchangeName =
+    EXCHANGE_CONFIG[row.source as keyof typeof EXCHANGE_CONFIG]?.name || row.source
+  const roiStr =
+    row.roi != null
+      ? `${row.roi >= 0 ? '+' : ''}${row.roi >= 1000 ? `${(row.roi / 1000).toFixed(1)}K` : row.roi.toFixed(1)}%`
+      : null
+  const subtitle = [
+    exchangeName,
+    row.rank != null ? `#${row.rank}` : null,
+    roiStr,
+    row.arena_score != null ? `Score ${Math.round(row.arena_score)}` : null,
+  ]
+    .filter(Boolean)
+    .join(' \u00B7 ')
+
+  return {
+    id: `${row.source}:${row.source_trader_id}`,
+    type: 'trader',
+    title: `@${row.handle || row.source_trader_id}`,
+    subtitle,
+    href: `/trader/${encodeURIComponent(row.source_trader_id)}?platform=${row.source}`,
+    avatar: row.avatar_url,
+    meta: {
+      ...(row.source === 'web3_bot' ? { is_bot: true } : {}),
+      ...(row.roi != null ? { roi: row.roi } : {}),
+      ...(row.arena_score != null ? { arena_score: row.arena_score } : {}),
+      ...(row.rank != null ? { rank: row.rank } : {}),
+      platform: row.source,
+    },
+  }
+}
+
+async function readCurrentSearchTraders(
+  supabase: PublicSearchSupabase,
+  candidates: UnifiedSearchResult[]
+): Promise<Map<string, UnifiedSearchResult>> {
+  const identities = candidates
+    .map(candidateTraderIdentity)
+    .filter((identity): identity is RankingIdentity => identity !== null)
+  if (identities.length === 0) return new Map()
+
+  try {
+    const sealedRead = await readSealedRankIdentities(supabase, '90D', identities)
+    if (!sealedRead) return new Map()
+    return new Map(
+      sealedRead.value.map((row) => [
+        rankingIdentityKey(row.source, row.source_trader_id),
+        materializeSealedTrader(row),
+      ])
+    )
+  } catch {
+    return new Map()
+  }
 }
 
 async function readCurrentSearchGroups(
@@ -175,15 +250,18 @@ async function materializeUnifiedSearchCandidate(
     ),
   ]
   const userIds = [...new Set(candidate.result.results.users.map((user) => user.id))]
-  const [readablePostCandidates, currentGroups, currentUserIds] = await Promise.all([
-    filterServiceReadablePostRows(
-      supabase,
-      [...resultPostCandidates, ...suggestionPostCandidates],
-      null
-    ),
-    readCurrentSearchGroups(supabase, groupIds, candidate.groupQuery),
-    readCurrentSearchUserIds(supabase, userIds),
-  ])
+  const [readablePostCandidates, currentTraders, currentGroups, currentUserIds] = await Promise.all(
+    [
+      filterServiceReadablePostRows(
+        supabase,
+        [...resultPostCandidates, ...suggestionPostCandidates],
+        null
+      ),
+      readCurrentSearchTraders(supabase, candidate.result.results.traders),
+      readCurrentSearchGroups(supabase, groupIds, candidate.groupQuery),
+      readCurrentSearchUserIds(supabase, userIds),
+    ]
+  )
   const posts = readablePostCandidates
     .filter(
       (post): post is Extract<SearchPostAudienceCandidate, { source: 'result' }> =>
@@ -214,6 +292,14 @@ async function materializeUnifiedSearchCandidate(
     })
     .filter((group): group is UnifiedSearchResult => group !== null)
   const users = candidate.result.results.users.filter((user) => currentUserIds.has(user.id))
+  const traders = candidate.result.results.traders
+    .map((candidateTrader) => {
+      const identity = candidateTraderIdentity(candidateTrader)
+      return identity
+        ? (currentTraders.get(rankingIdentityKey(identity.source, identity.sourceTraderId)) ?? null)
+        : null
+    })
+    .filter((trader): trader is UnifiedSearchResult => trader !== null)
   const groupSuggestions =
     candidate.suggestionCandidates?.groups
       .map((group) => currentGroups.get(group.id)?.name)
@@ -227,7 +313,7 @@ async function materializeUnifiedSearchCandidate(
         ]),
       ].slice(0, 5)
     : []
-  const results = { ...candidate.result.results, posts, users, groups }
+  const results = { traders, posts, users, groups }
 
   return {
     ...candidate.result,
@@ -576,7 +662,7 @@ export const GET = withPublic(
     }
 
     // Cache check
-    const cacheKey = `search:unified:v4:candidates:${query.toLowerCase().slice(0, 50)}:${limitPerCategory}:${platformFilter || ''}`
+    const cacheKey = `search:unified:v5:candidates:${query.toLowerCase().slice(0, 50)}:${limitPerCategory}:${platformFilter || ''}`
     try {
       const cached = await cacheGet<UnifiedSearchCacheCandidate>(cacheKey)
       if (cached) {
@@ -659,101 +745,60 @@ export const GET = withPublic(
       description: string | null
     }
 
-    // Try Meilisearch first (1-6ms), fall back to Supabase (100-300ms)
-    let meliFacetDistribution: Record<string, Record<string, number>> | undefined
-    let meiliDegraded = false
-    const meiliTraderSearch =
-      isMeilisearchAvailable() && sanitizedQuery.length >= 2
-        ? searchTradersMeili(sanitizedQuery, {
-            limit: effectiveLimit,
-            platform: effectivePlatform || undefined,
-            season: '90D',
-          })
-            .then((result) => {
-              if (!result) return null
-              // Capture facet distribution for response
-              if (result.facetDistribution) meliFacetDistribution = result.facetDistribution
-              return result.hits.map((h) => ({
-                handle: h.handle,
-                traderKey:
-                  h.id.split('--').slice(1, -1).join('--') || h.id.split('--')[1] || h.handle,
-                platform: h.platform,
-                roi: h.roi,
-                pnl: h.pnl,
-                arenaScore: h.arena_score,
-                rank: h.rank,
-                avatarUrl: h.avatar_url,
-                traderType: h.trader_type,
-              }))
-            })
-            .catch((err) => {
-              logger.warn('Meilisearch trader search failed, falling back to Supabase', {
-                error: err instanceof Error ? err.message : String(err),
-                query: sanitizedQuery,
-              })
-              meiliDegraded = true
-              return null
-            })
-        : Promise.resolve(null)
+    // Meilisearch's legacy incremental index has no publication proof and can
+    // retain deleted/quarantined documents indefinitely. Keep public reads on
+    // the proof-sealed database path until the blue/green rebuild runner
+    // reconciles an exact identity set and atomically swaps the index.
+    const [supabaseTraders, postsData, usersData, groupsData] = await Promise.all([
+      unifiedSearchTraders(supabase, {
+        query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
+        limit: effectiveLimit,
+        platform: effectivePlatform,
+      }).catch((err) => {
+        logger.warn('Sealed trader search failed', {
+          error: err instanceof Error ? err.message : String(err),
+          query: sanitizedQuery,
+        })
+        return []
+      }),
 
-    const [meiliResults, initialSupabaseTraders, postsData, usersData, groupsData] =
-      await Promise.all([
-        meiliTraderSearch,
-        // Supabase trader search: only run when Meilisearch is NOT configured.
-        // Previously ran both in parallel and discarded Supabase results ~90% of the time,
-        // wasting a DB connection pool slot per search request.
-        isMeilisearchAvailable()
-          ? Promise.resolve([])
-          : unifiedSearchTraders(supabase, {
-              query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
-              limit: effectiveLimit,
-              platform: effectivePlatform,
-            }).catch((err) => {
-              logger.warn('Supabase trader search failed', {
-                error: err instanceof Error ? err.message : String(err),
-                query: sanitizedQuery,
-              })
-              return []
-            }),
+      // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
+      features.social
+        ? safeQuery(
+            supabase
+              .from('posts')
+              .select('id, title, author_handle, created_at, view_count')
+              .or(`title.ilike.%${sanitizedQuery}%`)
+              .eq('visibility', 'public')
+              .order('view_count', { ascending: false, nullsFirst: false })
+              .limit(limitPerCategory)
+          )
+        : Promise.resolve([]),
 
-        // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
-        features.social
-          ? safeQuery(
-              supabase
-                .from('posts')
-                .select('id, title, author_handle, created_at, view_count')
-                .or(`title.ilike.%${sanitizedQuery}%`)
-                .eq('visibility', 'public')
-                .order('view_count', { ascending: false, nullsFirst: false })
-                .limit(limitPerCategory)
-            )
-          : Promise.resolve([]),
+      features.social
+        ? safeQuery(
+            supabase
+              .from('public_user_profiles')
+              // The public projection excludes account-private columns and
+              // deleted profiles before the service client can see them.
+              .select('id, handle, avatar_url, bio')
+              .ilike('handle', `%${sanitizedQuery}%`)
+              .limit(limitPerCategory)
+          )
+        : Promise.resolve([]),
 
-        features.social
-          ? safeQuery(
-              supabase
-                .from('public_user_profiles')
-                // The public projection excludes account-private columns and
-                // deleted profiles before the service client can see them.
-                .select('id, handle, avatar_url, bio')
-                .ilike('handle', `%${sanitizedQuery}%`)
-                .limit(limitPerCategory)
-            )
-          : Promise.resolve([]),
-
-        features.social
-          ? safeQuery(
-              supabase
-                .from('groups')
-                .select('id, name, member_count, description')
-                .ilike('name', `%${sanitizedQuery}%`)
-                .is('dissolved_at', null)
-                .in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])
-                .limit(limitPerCategory)
-            )
-          : Promise.resolve([]),
-      ])
-    let supabaseTraders = initialSupabaseTraders
+      features.social
+        ? safeQuery(
+            supabase
+              .from('groups')
+              .select('id, name, member_count, description')
+              .ilike('name', `%${sanitizedQuery}%`)
+              .is('dissolved_at', null)
+              .in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])
+              .limit(limitPerCategory)
+          )
+        : Promise.resolve([]),
+    ])
 
     // The public search route uses a service client. Visibility='public' is
     // not sufficient for group-paid posts, repost roots, account state, or
@@ -764,33 +809,29 @@ export const GET = withPublic(
       null
     )
 
-    // If Meilisearch was configured but failed at runtime, run Supabase fallback now
-    if (meiliDegraded && supabaseTraders.length === 0) {
-      try {
-        const fallback = await unifiedSearchTraders(supabase, {
-          query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
-          limit: effectiveLimit,
-          platform: effectivePlatform,
-        })
-        supabaseTraders = fallback
-      } catch {
-        /* already logged above */
-      }
-    }
-
     // For exchange name search, fetch top traders from leaderboard if direct search returned nothing
-    // Use Meilisearch results if available (1-6ms), otherwise Supabase (100-300ms)
-    let exchangeTopTraders =
-      meiliResults && meiliResults.length > 0 ? meiliResults : supabaseTraders
+    let exchangeTopTraders = supabaseTraders
     if (matchedExchange && !platformFilter && exchangeTopTraders.length === 0) {
       try {
         const { getLeaderboard } = await import('@/lib/data/unified')
-        const { traders: topTraders } = await getLeaderboard(supabase, {
-          platform: matchedExchange,
-          limit: effectiveLimit,
-          period: '90D',
-        })
-        exchangeTopTraders = topTraders
+        const sealedTopTraders = await readSealedRankingGeneration(
+          supabase,
+          { season: '90D', sources: [matchedExchange] },
+          async (publication) => {
+            const result = await getLeaderboard(supabase, {
+              platform: matchedExchange,
+              limit: effectiveLimit,
+              period: '90D',
+              scoreCohortId: publication.scoreCohortId,
+              allowedSources: [matchedExchange],
+            })
+            if (result.error) {
+              throw new Error(`sealed exchange search failed: ${result.error}`)
+            }
+            return result.traders
+          }
+        )
+        exchangeTopTraders = sealedTopTraders.value
       } catch {
         // Leaderboard fetch failed
       }
@@ -949,8 +990,6 @@ export const GET = withPublic(
         results: { traders, posts, users, groups },
         total: totalResults,
         ...(matchedExchange && !platformFilter ? { matchedExchange } : {}),
-        ...(meliFacetDistribution ? { facetDistribution: meliFacetDistribution } : {}),
-        ...(meiliDegraded ? { degraded: true } : {}),
       },
       ...(suggestionCandidates ? { suggestionCandidates } : {}),
     }

@@ -25,7 +25,7 @@ describe('search service audience boundary', () => {
   })
 
   it('re-authorizes unified post results and post-title suggestions on cache hits', () => {
-    expect(route).toContain('search:unified:v4:candidates:')
+    expect(route).toContain('search:unified:v5:candidates:')
     expect(route).toMatch(/const cached = await cacheGet<UnifiedSearchCacheCandidate>\(cacheKey\)/)
     expect(route).toMatch(
       /const result = await materializeUnifiedSearchCandidate\(supabase, cached\)/
@@ -34,7 +34,7 @@ describe('search service audience boundary', () => {
     expect(route).toMatch(
       /const readablePostSuggestions = await filterServiceReadablePostRows\(\s*supabase,\s*hotPostSuggestions,\s*null\s*\)/
     )
-    expect(route).not.toContain('search:unified:v3:')
+    expect(route).not.toContain('search:unified:v4:')
   })
 
   it('rematerializes current discoverable groups and rechecks public profiles after cache hits', () => {
@@ -51,5 +51,16 @@ describe('search service audience boundary', () => {
     expect(route).toContain('meta: { member_count: group.member_count }')
     expect(route).toContain('.map((group) => currentGroups.get(group.id)?.name)')
     expect(route).toContain('readCurrentSearchUserIds(supabase, userIds)')
+  })
+
+  it('keeps public trader search on sealed database authority and rechecks cached identities', () => {
+    expect(route).toContain(
+      "import {\n  readSealedRankIdentities,\n  type RankingIdentity,\n  type SealedRankIdentityRow,\n} from '@/lib/rankings/read-sealed-rank-identities'"
+    )
+    expect(route).toContain('readCurrentSearchTraders(supabase, candidate.result.results.traders)')
+    expect(route).toContain("const sealedRead = await readSealedRankIdentities(supabase, '90D'")
+    expect(route).toContain('const sealedTopTraders = await readSealedRankingGeneration(')
+    expect(route).toContain('scoreCohortId: publication.scoreCohortId')
+    expect(route).not.toContain('@/lib/search/meilisearch')
   })
 })

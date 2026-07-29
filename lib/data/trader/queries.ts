@@ -30,6 +30,7 @@ import {
   isPublicRankingSourceAllowed,
 } from '@/lib/rankings/publication-policy'
 import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { readSealedRankIdentities } from '@/lib/rankings/read-sealed-rank-identities'
 
 // ============================================================
 // INTERNAL: Safe query helper
@@ -901,52 +902,36 @@ async function searchTradersInner(
     )
   }
 
-  // Filter out DEAD/blocked platforms
+  // Candidate search is not ranking authority. Fuzzy RPCs and trader_sources
+  // may retain retired or quarantined identities, so only public source
+  // candidates are eligible for the sealed rank lookup below.
   const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-  const filteredSources = sourcesData.filter((t) => !deadSet.has(t.source))
+  const filteredSources = sourcesData.filter(
+    (t) =>
+      typeof t.source === 'string' &&
+      typeof t.source_trader_id === 'string' &&
+      !deadSet.has(t.source) &&
+      isPublicRankingSourceAllowed(t.source)
+  )
   if (filteredSources.length === 0) return []
 
-  // When fuzzy RPC was used, scores are already included — skip second query.
-  // Only fetch from leaderboard_ranks when using ILIKE fallback.
-  const scoreMap = new Map<string, Record<string, unknown>>()
-  if (!usedFuzzy) {
-    const traderIds = filteredSources.map((t) => t.source_trader_id)
-    const { data: scoreRows, error: scoreError } = await supabase
-      .from('leaderboard_ranks')
-      .select(
-        `${LR.source}, ${LR.source_trader_id}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, ${LR.rank}, ${LR.season_id}, trader_type`
-      )
-      .in(LR.source_trader_id, traderIds.slice(0, 200))
-      .eq(LR.season_id, '90D')
-      .not(LR.arena_score, 'is', null)
-      .order(LR.arena_score, { ascending: false })
-    if (scoreError) {
-      // A swallowed error here leaves scoreMap empty → the downstream hasScore
-      // gate filters out ALL results, surfacing as a misleading "no results".
-      logger.warn('[searchTradersInner] score lookup failed', {
-        query: sanitizedQuery,
-        error: scoreError.message,
-      })
-    }
+  // Never trust rank fields returned by the candidate RPC: it reads a mutable
+  // live table and can straddle a publication cutover. Re-read every exact
+  // composite identity from one sealed 90D public generation.
+  const sealedRanks = await readSealedRankIdentities(
+    supabase,
+    '90D',
+    filteredSources.map((candidate) => ({
+      source: candidate.source,
+      sourceTraderId: candidate.source_trader_id,
+    }))
+  )
+  if (!sealedRanks) return []
 
-    for (const row of scoreRows || []) {
-      const key = `${row.source}:${row.source_trader_id}`
-      if (!scoreMap.has(key)) scoreMap.set(key, row)
-    }
-  } else {
-    // Build scoreMap from fuzzy results (already has LR data)
-    for (const t of filteredSources) {
-      const key = `${t.source}:${t.source_trader_id}`
-      scoreMap.set(key, {
-        source: t.source,
-        source_trader_id: t.source_trader_id,
-        arena_score: t.arena_score ?? null,
-        roi: t.roi ?? null,
-        pnl: t.pnl ?? null,
-        rank: t.rank ?? null,
-        trader_type: t.trader_type ?? null,
-      })
-    }
+  const scoreMap = new Map<string, (typeof sealedRanks.value)[number]>()
+  for (const row of sealedRanks.value) {
+    const key = `${row.source}:${row.source_trader_id}`
+    scoreMap.set(key, row)
   }
 
   // Rank by relevance: exact match > prefix match > contains > fuzzy + arena_score
@@ -1030,7 +1015,7 @@ async function searchTradersInner(
       calmarRatio: null,
       tradingStyle: null,
       avgHoldingHours: null,
-      traderType: (scoreRow?.trader_type as string) || (plat === 'web3_bot' ? 'bot' : null),
+      traderType: plat === 'web3_bot' ? 'bot' : null,
       isOutlier: false,
       lastUpdated: null,
     }
