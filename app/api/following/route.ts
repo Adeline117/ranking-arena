@@ -41,17 +41,17 @@ type FollowItem = {
   type: 'trader' | 'user'
   avatar_url?: string
   bio?: string
-  roi?: number
-  roi_7d?: number
-  roi_30d?: number
-  pnl?: number
-  win_rate?: number
-  followers?: number
+  roi?: number | null
+  roi_7d?: number | null
+  roi_30d?: number | null
+  pnl?: number | null
+  win_rate?: number | null
+  followers?: number | null
   /** Stored follow source. Null is reserved for a pre-composite legacy edge. */
   source?: string | null
   /** Resolved profile platform used for navigation; absent for unresolved legacy edges. */
   platform?: string
-  arena_score?: number
+  arena_score?: number | null
   followed_at?: string
 }
 
@@ -108,11 +108,17 @@ type TraderMaterializedData = {
   handle: string
   source: string
   avatar_url?: string
-  roi: number
-  pnl?: number
-  win_rate: number
-  followers: number
-  arena_score?: number
+  roi: number | null
+  pnl: number | null
+  win_rate: number | null
+  followers: number | null
+  arena_score: number | null
+}
+
+function finiteNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 async function fetchAllPages<Row>(
@@ -320,11 +326,11 @@ async function materializeFollowingItems(
           handle: row.handle || row.source_trader_id,
           source: row.source,
           avatar_url: row.avatar_url || undefined,
-          roi: row.roi ?? 0,
-          pnl: row.pnl ?? undefined,
-          win_rate: row.win_rate ?? 0,
-          followers: row.followers ?? 0,
-          arena_score: row.arena_score ?? undefined,
+          roi: finiteNumberOrNull(row.roi),
+          pnl: finiteNumberOrNull(row.pnl),
+          win_rate: finiteNumberOrNull(row.win_rate),
+          followers: finiteNumberOrNull(row.followers),
+          arena_score: finiteNumberOrNull(row.arena_score),
         }
         traderDataMap.set(identity, materialized)
         const rows = traderRowsByRawId.get(row.source_trader_id) || []

@@ -73,19 +73,39 @@ type FollowItem = {
   type: 'trader' | 'user'
   avatar_url?: string
   bio?: string
-  roi?: number
-  roi_7d?: number
-  roi_30d?: number
-  pnl?: number
-  win_rate?: number
-  followers?: number
+  roi?: number | null
+  roi_7d?: number | null
+  roi_30d?: number | null
+  pnl?: number | null
+  win_rate?: number | null
+  followers?: number | null
   source?: string | null
   platform?: string
-  arena_score?: number
+  arena_score?: number | null
   followed_at?: string
 }
 
 type SortMode = 'recent' | 'roi' | 'score'
+
+function isFiniteMetric(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function compareMetricDesc(
+  left: number | null | undefined,
+  right: number | null | undefined
+): number {
+  const leftKnown = isFiniteMetric(left)
+  const rightKnown = isFiniteMetric(right)
+  if (leftKnown && rightKnown) return right - left
+  if (leftKnown) return -1
+  if (rightKnown) return 1
+  return 0
+}
+
+function formatSignedPercent(value: number | null | undefined): string {
+  return isFiniteMetric(value) ? `${value >= 0 ? '+' : ''}${value.toFixed(2)}%` : '—'
+}
 
 // ============================================
 // 统计卡片组件
@@ -164,8 +184,8 @@ function SortButton({
 // ROI 显示组件（带变化趋势）
 // ============================================
 
-function RoiDisplay({ value, label }: { value?: number; label?: string }) {
-  if (value === undefined || value === null) return null
+function RoiDisplay({ value, label }: { value?: number | null; label?: string }) {
+  if (!isFiniteMetric(value)) return null
   const isPositive = value >= 0
   return (
     <Box style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -371,10 +391,10 @@ export default function FollowingPageClient() {
     const sorted = filtered
     switch (sortMode) {
       case 'roi':
-        sorted.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+        sorted.sort((a, b) => compareMetricDesc(a.roi, b.roi))
         break
       case 'score':
-        sorted.sort((a, b) => (b.arena_score || 0) - (a.arena_score || 0))
+        sorted.sort((a, b) => compareMetricDesc(a.arena_score, b.arena_score))
         break
       case 'recent':
       default:
@@ -397,18 +417,23 @@ export default function FollowingPageClient() {
       return {
         traderCount: 0,
         userCount: users.length,
-        avgRoi: 0,
+        avgRoi: null as number | null,
         bestPerformer: null as FollowItem | null,
         worstPerformer: null as FollowItem | null,
       }
     }
 
-    const rois = traders.map((t) => t.roi || 0)
-    const avgRoi = rois.reduce((sum, r) => sum + r, 0) / rois.length
+    const tradersWithRoi = traders.filter((trader): trader is FollowItem & { roi: number } =>
+      isFiniteMetric(trader.roi)
+    )
+    const avgRoi =
+      tradersWithRoi.length > 0
+        ? tradersWithRoi.reduce((sum, trader) => sum + trader.roi, 0) / tradersWithRoi.length
+        : null
 
-    const sortedByRoi = [...traders].sort((a, b) => (b.roi || 0) - (a.roi || 0))
-    const bestPerformer = sortedByRoi[0]
-    const worstPerformer = sortedByRoi[sortedByRoi.length - 1]
+    const sortedByRoi = [...tradersWithRoi].sort((a, b) => b.roi - a.roi)
+    const bestPerformer = sortedByRoi[0] ?? null
+    const worstPerformer = sortedByRoi[sortedByRoi.length - 1] ?? null
 
     return {
       traderCount: traders.length,
@@ -592,33 +617,25 @@ export default function FollowingPageClient() {
                 />
                 <StatCard
                   label={t('avgRoi')}
-                  value={
-                    stats.traderCount > 0
-                      ? `${stats.avgRoi >= 0 ? '+' : ''}${stats.avgRoi.toFixed(2)}%`
-                      : '—'
-                  }
+                  value={formatSignedPercent(stats.avgRoi)}
                   color={
-                    stats.avgRoi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+                    stats.avgRoi == null
+                      ? undefined
+                      : stats.avgRoi >= 0
+                        ? tokens.colors.accent.success
+                        : tokens.colors.accent.error
                   }
                 />
                 <StatCard
                   label={t('bestPerformer')}
-                  value={
-                    stats.bestPerformer
-                      ? `${(stats.bestPerformer.roi || 0) >= 0 ? '+' : ''}${(stats.bestPerformer.roi || 0).toFixed(2)}%`
-                      : '—'
-                  }
-                  color={tokens.colors.accent.success}
+                  value={formatSignedPercent(stats.bestPerformer?.roi)}
+                  color={stats.bestPerformer ? tokens.colors.accent.success : undefined}
                   subText={stats.bestPerformer?.handle}
                 />
                 <StatCard
                   label={t('worstPerformer')}
-                  value={
-                    stats.worstPerformer
-                      ? `${(stats.worstPerformer.roi || 0) >= 0 ? '+' : ''}${(stats.worstPerformer.roi || 0).toFixed(2)}%`
-                      : '—'
-                  }
-                  color={tokens.colors.accent.error}
+                  value={formatSignedPercent(stats.worstPerformer?.roi)}
+                  color={stats.worstPerformer ? tokens.colors.accent.error : undefined}
                   subText={stats.worstPerformer?.handle}
                 />
               </Box>
@@ -793,10 +810,8 @@ export default function FollowingPageClient() {
                           }}
                         >
                           <RoiDisplay value={item.roi} label="ROI" />
-                          {item.roi_7d !== undefined && (
-                            <RoiDisplay value={item.roi_7d} label="7D" />
-                          )}
-                          {item.arena_score !== undefined && item.arena_score > 0 && (
+                          {item.roi_7d != null && <RoiDisplay value={item.roi_7d} label="7D" />}
+                          {isFiniteMetric(item.arena_score) && (
                             <Text size="xs" color="tertiary">
                               Score:{' '}
                               <span style={{ color: tokens.colors.accent.brand, fontWeight: 500 }}>
@@ -804,12 +819,12 @@ export default function FollowingPageClient() {
                               </span>
                             </Text>
                           )}
-                          {item.win_rate !== undefined && item.win_rate > 0 && (
+                          {isFiniteMetric(item.win_rate) && (
                             <Text size="xs" color="tertiary">
                               {t('winRate')}: {item.win_rate.toFixed(1)}%
                             </Text>
                           )}
-                          {item.followers !== undefined && item.followers > 0 && (
+                          {isFiniteMetric(item.followers) && (
                             <Text size="xs" color="tertiary">
                               {t('copiers')}: {item.followers.toLocaleString('en-US')}
                             </Text>
@@ -840,36 +855,30 @@ export default function FollowingPageClient() {
                         flexShrink: 0,
                       }}
                     >
-                      {item.type === 'trader' &&
-                        item.arena_score !== undefined &&
-                        item.arena_score > 0 && (
-                          <Box
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                              background: alpha(tokens.colors.accent.brand, 6),
-                              borderRadius: tokens.radius.md,
-                              minWidth: 50,
-                            }}
+                      {item.type === 'trader' && isFiniteMetric(item.arena_score) && (
+                        <Box
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                            background: alpha(tokens.colors.accent.brand, 6),
+                            borderRadius: tokens.radius.md,
+                            minWidth: 50,
+                          }}
+                        >
+                          <Text size="xs" color="tertiary" style={{ fontSize: 10, lineHeight: 1 }}>
+                            Score
+                          </Text>
+                          <Text
+                            size="sm"
+                            weight="bold"
+                            style={{ color: tokens.colors.accent.brand }}
                           >
-                            <Text
-                              size="xs"
-                              color="tertiary"
-                              style={{ fontSize: 10, lineHeight: 1 }}
-                            >
-                              Score
-                            </Text>
-                            <Text
-                              size="sm"
-                              weight="bold"
-                              style={{ color: tokens.colors.accent.brand }}
-                            >
-                              {item.arena_score.toFixed(0)}
-                            </Text>
-                          </Box>
-                        )}
+                            {item.arena_score.toFixed(0)}
+                          </Text>
+                        </Box>
+                      )}
                       <button
                         onClick={(e) => handleUnfollow(item, e)}
                         disabled={unfollowingId === followItemIdentity(item)}
