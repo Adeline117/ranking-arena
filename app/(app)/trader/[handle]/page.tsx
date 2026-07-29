@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { createHash } from 'node:crypto'
 import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
 import { notFound } from 'next/navigation'
@@ -10,7 +11,12 @@ import TraderProfileClient, {
   type UnregisteredTraderData,
 } from './TraderProfileClient'
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
-import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
+import {
+  resolveTrader,
+  getTraderDetail,
+  toTraderPageData,
+  type TraderDetailRankingPublicationRead,
+} from '@/lib/data/unified'
 import { isDeadPlatform } from '@/lib/constants/exchanges'
 import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { getDataMode } from '@/lib/constants/serving-cutover'
@@ -45,29 +51,50 @@ const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
 )
 const TRADER_SCORE_SEASONS = ['7D', '30D', '90D'] as const
 
+function traderPublicationFingerprint(
+  reads: readonly TraderDetailRankingPublicationRead[]
+): string {
+  const identities = new Map(
+    reads.map((read) => [read.publication.season, read.publicationIdentity] as const)
+  )
+  if (
+    identities.size !== TRADER_SCORE_SEASONS.length ||
+    TRADER_SCORE_SEASONS.some((season) => !identities.has(season))
+  ) {
+    throw new Error('trader SSR publication set is incomplete')
+  }
+  return createHash('sha256')
+    .update(JSON.stringify(TRADER_SCORE_SEASONS.map((season) => [season, identities.get(season)!])))
+    .digest('hex')
+}
+
+const currentTraderPublicationFingerprint = cache(async (platform: string): Promise<string> => {
+  const [publicPlatform] = filterPublicRankingSources([platform])
+  if (!publicPlatform) throw new Error('trader SSR source is not public')
+  const supabase = getReadReplica()
+  const reads = await Promise.all(
+    TRADER_SCORE_SEASONS.map((season) =>
+      readSealedRankingGeneration(
+        supabase,
+        { season, sources: [publicPlatform] },
+        async () => null,
+        { timeoutMs: SSR_QUERY_TIMEOUT_MS }
+      )
+    )
+  )
+  return traderPublicationFingerprint(reads)
+})
+
 // ---------------------------------------------------------------------------
 // unstable_cache wrappers — use Next.js data cache instead of Redis.
 // Upstash SDK uses cache: 'no-store' internally which breaks ISR entirely.
 // These functions populate the Next.js data cache (revalidated every 5 min).
 // ---------------------------------------------------------------------------
 
-const cachedResolveTraderISR = unstable_cache(
-  async (handle: string, platform: string | undefined) => {
-    const result = await resolveTrader(getReadReplica(), { handle, platform })
-    if (!result) {
-      // Throw so unstable_cache does NOT cache null results.
-      // A transient DB timeout should not cause 5 minutes of 404s.
-      throw new Error('TRADER_RESOLVE_NULL')
-    }
-    return result
-  },
-  ['trader-resolve'],
-  { revalidate: 300, tags: ['trader-profile'] }
-)
-
-// React cache() deduplicates the ISR-cached call within a single request.
-// Both generateMetadata and the page component call this — one DB round-trip.
-// Catches the TRADER_RESOLVE_NULL sentinel so callers get null (not an exception).
+// React cache() deduplicates the live authority-bound resolution shared by
+// generateMetadata and the page component within one request. Resolution is
+// deliberately not persisted across requests: handle mappings can change
+// independently of leaderboard cohort publication.
 //
 // Timeout (3s): during compute-leaderboard cron contention, resolveTrader
 // can take 30+ seconds (the underlying queries against `traders` and
@@ -75,8 +102,6 @@ const cachedResolveTraderISR = unstable_cache(
 // Without a timeout, the ENTIRE page.tsx await chain stalls at the resolve
 // step and the user sees an indefinite hang. With a 3s timeout, slow paths
 // resolve to null → page.tsx calls notFound() → user sees a fast 404 instead.
-// Stale cached resolves still hit the unstable_cache layer immediately.
-//
 // AbortSignal.timeout actually cancels the underlying HTTP request to
 // PostgREST, freeing the connection. Promise.race just abandons it.
 // Sentinel to distinguish "not found" from "timed out / error".
@@ -84,27 +109,19 @@ const cachedResolveTraderISR = unstable_cache(
 // Now timeout/error returns RESOLVE_UNAVAILABLE → generateMetadata skips notFound()
 // and lets the page render with client-side retry (TraderProfileClient).
 const RESOLVE_UNAVAILABLE = Symbol('unavailable')
-type ResolveResult =
-  | Awaited<ReturnType<typeof cachedResolveTraderISR>>
-  | null
-  | typeof RESOLVE_UNAVAILABLE
+type ResolveResult = Awaited<ReturnType<typeof resolveTrader>> | null | typeof RESOLVE_UNAVAILABLE
 
 const cachedResolveTrader = cache(
   async (handle: string, platform?: string): Promise<ResolveResult> => {
     try {
       const result = await Promise.race([
-        cachedResolveTraderISR(handle, platform),
+        resolveTrader(getReadReplica(), { handle, platform }),
         new Promise<typeof RESOLVE_UNAVAILABLE>((resolve) =>
           setTimeout(() => resolve(RESOLVE_UNAVAILABLE), SSR_QUERY_TIMEOUT_MS)
         ),
       ])
       return result
     } catch (err) {
-      // TRADER_RESOLVE_NULL = trader genuinely not found (thrown to prevent unstable_cache
-      // from caching null). Convert to null so callers can check normally.
-      if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') {
-        return null
-      }
       // Real DB failures — return unavailable so page doesn't 404 valid traders
       logger.error('[trader/page] resolveTrader failed:', err instanceof Error ? err.message : err)
       return RESOLVE_UNAVAILABLE
@@ -116,12 +133,28 @@ const cachedResolveTrader = cache(
 // TTFB contribution on repeat requests (expected: 973ms -> <200ms on cache hit).
 // Null results throw to prevent unstable_cache from persisting "no data" for 5min.
 const cachedGetTraderDetailISR = unstable_cache(
-  async (platform: string, traderKey: string) => {
-    const result = await getTraderDetail(getReadReplica(), { platform, traderKey })
+  async (platform: string, traderKey: string, expectedPublicationFingerprint: string) => {
+    let rankingPublications: readonly TraderDetailRankingPublicationRead[] | null = null
+    const result = await getTraderDetail(getReadReplica(), {
+      platform,
+      traderKey,
+      onRankingPublications: (reads) => {
+        rankingPublications = reads
+      },
+    })
     if (!result) throw new Error('TRADER_DETAIL_NULL')
+    const capturedPublications = rankingPublications as
+      | readonly TraderDetailRankingPublicationRead[]
+      | null
+    if (
+      !capturedPublications ||
+      traderPublicationFingerprint(capturedPublications) !== expectedPublicationFingerprint
+    ) {
+      throw new Error('trader detail generation changed before ISR cache publication')
+    }
     return result
   },
-  ['trader-detail'],
+  ['trader-detail-sealed-v2'],
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
@@ -140,8 +173,9 @@ const cachedGetTraderDetailISR = unstable_cache(
 const SSR_DETAIL_TIMEOUT_MS = SSR_QUERY_TIMEOUT_MS + 1000 // 4s: 1s headroom over inner AbortSignal
 const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
   try {
+    const publicationFingerprint = await currentTraderPublicationFingerprint(platform)
     return await Promise.race([
-      cachedGetTraderDetailISR(platform, traderKey),
+      cachedGetTraderDetailISR(platform, traderKey, publicationFingerprint),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)),
     ])
   } catch (err) {
@@ -579,8 +613,11 @@ export async function generateMetadata({
   }
 }
 
-// ISR: regenerate trader pages every 5 minutes
-export const revalidate = 300
+// The HTML itself cannot verify ranking proof authority while sitting at the
+// edge. Keep the route dynamic and let the proof-keyed data caches above absorb
+// repeat work without serving a prior cohort as the current profile.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export default async function TraderPage({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params
