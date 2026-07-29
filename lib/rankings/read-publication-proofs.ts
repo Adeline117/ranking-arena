@@ -98,6 +98,11 @@ interface PublicationProofRpcArgs {
   readonly p_sources: readonly string[]
 }
 
+export interface CanonicalPublicationProofInput {
+  readonly season: LeaderboardPublicationSeason
+  readonly sources: readonly string[]
+}
+
 interface RpcEnvelope {
   data?: unknown
   error?: unknown
@@ -255,7 +260,9 @@ function requireNonNegativeSafeInteger(value: unknown, label: string): number {
   return value as number
 }
 
-function canonicalizeInput(input: ReadPublicationProofsInput): PublicationProofRpcArgs {
+export function canonicalizePublicationProofInput(
+  input: ReadPublicationProofsInput
+): CanonicalPublicationProofInput {
   try {
     if (!isRecord(input) || !hasExactKeys(input, INPUT_KEYS)) {
       fail('invalid_input', 'publication proof input must contain exactly season and sources')
@@ -295,21 +302,32 @@ function canonicalizeInput(input: ReadPublicationProofsInput): PublicationProofR
     }
 
     const sources = Object.freeze([...seen].sort(compareText))
-    const args = Object.freeze({
-      p_season_id: season,
-      p_sources: sources,
+    const canonical = Object.freeze({
+      season,
+      sources,
     })
     if (
-      UTF8_ENCODER.encode(JSON.stringify(args)).byteLength >
-      LEADERBOARD_PUBLICATION_PROOFS_MAX_REQUEST_BYTES
+      UTF8_ENCODER.encode(
+        JSON.stringify({
+          p_season_id: canonical.season,
+          p_sources: canonical.sources,
+        })
+      ).byteLength > LEADERBOARD_PUBLICATION_PROOFS_MAX_REQUEST_BYTES
     ) {
       fail('invalid_input', 'publication proof request exceeds 64 KiB')
     }
-    return args
+    return canonical
   } catch (error) {
     if (error instanceof ReadPublicationProofsError) throw error
     fail('invalid_input', 'publication proof input could not be inspected safely', { cause: error })
   }
+}
+
+function publicationProofRpcArgs(input: CanonicalPublicationProofInput): PublicationProofRpcArgs {
+  return Object.freeze({
+    p_season_id: input.season,
+    p_sources: input.sources,
+  })
 }
 
 function requireOptions(
@@ -765,7 +783,7 @@ export async function readLeaderboardPublicationProofs(
   options: ReadPublicationProofsOptions = {}
 ): Promise<SealedLeaderboardPublicationProofSet> {
   const callStartedAt = new Date(Date.now())
-  const args = canonicalizeInput(input)
+  const args = publicationProofRpcArgs(canonicalizePublicationProofInput(input))
   const { timeoutMs, signal, nowEpochMicros } = requireOptions(options, callStartedAt)
   let lastAmbiguousError: AmbiguousRpcAttemptError | undefined
 

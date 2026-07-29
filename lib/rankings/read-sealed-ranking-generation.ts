@@ -1,6 +1,9 @@
 import type { getSupabaseAdmin } from '@/lib/api'
+import { readLeaderboardPublicationAuthority } from '@/lib/rankings/read-publication-authority'
 import {
+  canonicalizePublicationProofInput,
   readLeaderboardPublicationProofs,
+  type LeaderboardPublicationSeason,
   type ReadPublicationProofsInput,
   type ReadPublicationProofsOptions,
   type SealedLeaderboardPublicationProofSet,
@@ -15,10 +18,24 @@ export class SealedRankingGenerationChangedError extends Error {
   }
 }
 
+export class SealedRankingSourceOutsideAuthorityError extends Error {
+  constructor(public readonly source: string) {
+    super(`requested ranking source is outside the season authority: ${source}`)
+    this.name = 'SealedRankingSourceOutsideAuthorityError'
+  }
+}
+
 export interface SealedRankingGenerationRead<T> {
   readonly value: T
   readonly publication: SealedLeaderboardPublicationProofSet
   readonly publicationIdentity: string
+}
+
+export interface SealedRankingAuthorityRead<T> extends SealedRankingGenerationRead<T> {
+  /** Complete dynamic season proof set used for both generation fences. */
+  readonly authorityPublication: SealedLeaderboardPublicationProofSet
+  readonly authorityPublicationIdentity: string
+  readonly authoritySources: readonly string[]
 }
 
 /**
@@ -35,26 +52,77 @@ export function sealedRankingPublicationIdentity(
   return JSON.stringify(publication)
 }
 
-/**
- * Authorize one ranking read against a stable sealed generation.
- *
- * The reader must bind its leaderboard_ranks query to
- * `publication.scoreCohortId`. The second proof read closes the race with an
- * atomic generation cutover: a result is returned only when the complete proof
- * set is byte-for-byte identical before and after the data query.
- */
-export async function readSealedRankingGeneration<T>(
+function scopePublication(
+  authorityPublication: SealedLeaderboardPublicationProofSet,
+  requestedSources: readonly string[] | undefined
+): SealedLeaderboardPublicationProofSet {
+  if (requestedSources === undefined) return authorityPublication
+
+  const proofsBySource = new Map(
+    authorityPublication.proofs.map((proof) => [proof.source, proof] as const)
+  )
+  const proofs = requestedSources.map((source) => {
+    const proof = proofsBySource.get(source)
+    if (!proof) throw new SealedRankingSourceOutsideAuthorityError(source)
+    return proof
+  })
+
+  if (proofs.length === authorityPublication.proofs.length) {
+    return authorityPublication
+  }
+  return Object.freeze({
+    state: 'sealed',
+    season: authorityPublication.season,
+    scoreCohortId: authorityPublication.scoreCohortId,
+    proofs: Object.freeze(proofs),
+  })
+}
+
+async function readStableAuthorityGeneration<T>(
   supabase: PublicationProofClient,
-  input: ReadPublicationProofsInput,
+  season: LeaderboardPublicationSeason,
+  requestedSources: readonly string[] | undefined,
   reader: (publication: SealedLeaderboardPublicationProofSet) => Promise<T>,
-  options: ReadPublicationProofsOptions = {}
-): Promise<SealedRankingGenerationRead<T>> {
+  options: ReadPublicationProofsOptions
+): Promise<SealedRankingAuthorityRead<T>> {
   const authorizationClock = options.now ?? new Date(Date.now())
   const proofOptions = { ...options, now: authorizationClock }
-  const before = await readLeaderboardPublicationProofs(supabase, input, proofOptions)
+
+  const beforeAuthoritySources = await readLeaderboardPublicationAuthority(
+    supabase,
+    season,
+    proofOptions
+  )
+  // Reject an unknown requested source before asking the proof RPC to seal the
+  // complete authority. The data reader must never receive an invented scope.
+  const requestedPublicationSources =
+    requestedSources === undefined
+      ? undefined
+      : requestedSources.map((source) => {
+          if (!beforeAuthoritySources.includes(source)) {
+            throw new SealedRankingSourceOutsideAuthorityError(source)
+          }
+          return source
+        })
+  const before = await readLeaderboardPublicationProofs(
+    supabase,
+    { season, sources: beforeAuthoritySources },
+    proofOptions
+  )
   const beforeIdentity = sealedRankingPublicationIdentity(before)
-  const value = await reader(before)
-  const after = await readLeaderboardPublicationProofs(supabase, input, proofOptions)
+  const publication = scopePublication(before, requestedPublicationSources)
+  const value = await reader(publication)
+
+  const afterAuthoritySources = await readLeaderboardPublicationAuthority(
+    supabase,
+    season,
+    proofOptions
+  )
+  const after = await readLeaderboardPublicationProofs(
+    supabase,
+    { season, sources: afterAuthoritySources },
+    proofOptions
+  )
 
   if (sealedRankingPublicationIdentity(after) !== beforeIdentity) {
     throw new SealedRankingGenerationChangedError()
@@ -62,7 +130,56 @@ export async function readSealedRankingGeneration<T>(
 
   return Object.freeze({
     value,
-    publication: before,
+    publication,
+    // Ranking positions are season-global, so cache and caller identities must
+    // cover every authority source even when the data query requests one.
     publicationIdentity: beforeIdentity,
+    authorityPublication: before,
+    authorityPublicationIdentity: beforeIdentity,
+    authoritySources: beforeAuthoritySources,
   })
+}
+
+/**
+ * Authorize one ranking read against a stable sealed generation.
+ *
+ * The reader must bind its leaderboard_ranks query to
+ * `publication.scoreCohortId`. The second proof read closes the race with an
+ * atomic generation cutover. The SQL proof RPC always receives the complete
+ * dynamic season authority; `input.sources` only scopes the immutable proof set
+ * given to the data reader.
+ */
+export async function readSealedRankingGeneration<T>(
+  supabase: PublicationProofClient,
+  input: ReadPublicationProofsInput,
+  reader: (publication: SealedLeaderboardPublicationProofSet) => Promise<T>,
+  options: ReadPublicationProofsOptions = {}
+): Promise<SealedRankingAuthorityRead<T>> {
+  const canonicalInput = canonicalizePublicationProofInput(input)
+  return readStableAuthorityGeneration(
+    supabase,
+    canonicalInput.season,
+    canonicalInput.sources,
+    reader,
+    options
+  )
+}
+
+/**
+ * Authorize a read over every source in the dynamic authority for one season.
+ *
+ * Use this instead of a TypeScript source registry for global leaderboards,
+ * exports, and multi-season generation fences.
+ */
+export async function readSealedRankingAuthorityGeneration<T>(
+  supabase: PublicationProofClient,
+  season: LeaderboardPublicationSeason,
+  reader: (publication: SealedLeaderboardPublicationProofSet) => Promise<T>,
+  options: ReadPublicationProofsOptions = {}
+): Promise<SealedRankingAuthorityRead<T>> {
+  const canonicalSeason = canonicalizePublicationProofInput({
+    season,
+    sources: ['authority'],
+  }).season
+  return readStableAuthorityGeneration(supabase, canonicalSeason, undefined, reader, options)
 }

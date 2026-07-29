@@ -1,53 +1,66 @@
+import { readLeaderboardPublicationAuthority } from '@/lib/rankings/read-publication-authority'
 import {
   readLeaderboardPublicationProofs,
   type SealedLeaderboardPublicationProofSet,
 } from '@/lib/rankings/read-publication-proofs'
 import {
+  readSealedRankingAuthorityGeneration,
   readSealedRankingGeneration,
   sealedRankingPublicationIdentity,
   SealedRankingGenerationChangedError,
+  SealedRankingSourceOutsideAuthorityError,
 } from '@/lib/rankings/read-sealed-ranking-generation'
 
+jest.mock('@/lib/rankings/read-publication-authority', () => ({
+  readLeaderboardPublicationAuthority: jest.fn(),
+}))
 jest.mock('@/lib/rankings/read-publication-proofs', () => ({
   ...jest.requireActual('@/lib/rankings/read-publication-proofs'),
   readLeaderboardPublicationProofs: jest.fn(),
 }))
 
+const mockReadAuthority = jest.mocked(readLeaderboardPublicationAuthority)
 const mockReadProofs = jest.mocked(readLeaderboardPublicationProofs)
 const COHORT = '11111111-1111-4111-8111-111111111111'
+const AUTHORITY_SOURCES = Object.freeze(['binance_futures', 'bybit'])
 
 function publication(
-  overrides: Partial<SealedLeaderboardPublicationProofSet['proofs'][number]> = {}
+  overrides: Partial<SealedLeaderboardPublicationProofSet['proofs'][number]> = {},
+  sources: readonly string[] = AUTHORITY_SOURCES
 ): SealedLeaderboardPublicationProofSet {
-  const proof = {
-    season_id: '90D' as const,
-    source: 'binance_futures',
-    source_as_of: '2026-07-29T10:00:00.000000Z',
-    recorded_at: '2026-07-29T10:01:00.000000Z',
-    score_cohort_id: COHORT,
-    rank_mutation_seq: 9,
-    current_mutation_seq: 9,
-    published_rank_count: 2,
-    published_identity_sha256: 'a'.repeat(64),
-    is_sealed: true as const,
-    ...overrides,
-  }
+  const proofs = sources.map((source, index) =>
+    Object.freeze({
+      season_id: '90D' as const,
+      source,
+      source_as_of: '2026-07-29T10:00:00.000000Z',
+      recorded_at: '2026-07-29T10:01:00.000000Z',
+      score_cohort_id: COHORT,
+      rank_mutation_seq: 9,
+      current_mutation_seq: 9,
+      published_rank_count: 2,
+      published_identity_sha256: (index === 0 ? 'a' : 'b').repeat(64),
+      is_sealed: true as const,
+      ...(index === 0 ? overrides : {}),
+    })
+  )
   return Object.freeze({
     state: 'sealed' as const,
     season: '90D' as const,
-    scoreCohortId: proof.score_cohort_id,
-    proofs: Object.freeze([Object.freeze(proof)]),
+    scoreCohortId: COHORT,
+    proofs: Object.freeze(proofs),
   })
 }
 
 describe('readSealedRankingGeneration', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockReadAuthority.mockResolvedValue(AUTHORITY_SOURCES)
   })
 
-  test('returns data only after the complete proof identity is stable', async () => {
-    const sealed = publication()
-    mockReadProofs.mockResolvedValue(sealed)
+  test('uses the complete dynamic authority while exposing only the requested scope', async () => {
+    const authorityPublication = publication()
+    const scopedPublication = publication({}, ['binance_futures'])
+    mockReadProofs.mockResolvedValue(authorityPublication)
     const reader = jest.fn().mockResolvedValue([{ rank: 1 }])
 
     await expect(
@@ -59,13 +72,22 @@ describe('readSealedRankingGeneration', () => {
       )
     ).resolves.toEqual({
       value: [{ rank: 1 }],
-      publication: sealed,
-      publicationIdentity: sealedRankingPublicationIdentity(sealed),
+      publication: scopedPublication,
+      publicationIdentity: sealedRankingPublicationIdentity(authorityPublication),
+      authorityPublication,
+      authorityPublicationIdentity: sealedRankingPublicationIdentity(authorityPublication),
+      authoritySources: AUTHORITY_SOURCES,
     })
 
-    expect(reader).toHaveBeenCalledWith(sealed)
+    expect(reader).toHaveBeenCalledWith(scopedPublication)
+    expect(mockReadAuthority).toHaveBeenCalledTimes(2)
     expect(mockReadProofs).toHaveBeenCalledTimes(2)
+    expect(mockReadProofs.mock.calls.map((call) => call[1])).toEqual([
+      { season: '90D', sources: AUTHORITY_SOURCES },
+      { season: '90D', sources: AUTHORITY_SOURCES },
+    ])
     expect(mockReadProofs.mock.calls[0][2]?.now).toBe(mockReadProofs.mock.calls[1][2]?.now)
+    expect(mockReadAuthority.mock.calls[0][2]?.now).toBe(mockReadAuthority.mock.calls[1][2]?.now)
   })
 
   test.each([
@@ -114,5 +136,37 @@ describe('readSealedRankingGeneration', () => {
         async () => [{ rank: 1 }]
       )
     ).rejects.toBe(proofFailure)
+  })
+
+  test('rejects a requested source outside the dynamic authority before proof dispatch', async () => {
+    const reader = jest.fn()
+
+    await expect(
+      readSealedRankingGeneration(
+        { rpc: jest.fn() } as never,
+        { season: '90D', sources: ['drift'] },
+        reader
+      )
+    ).rejects.toBeInstanceOf(SealedRankingSourceOutsideAuthorityError)
+
+    expect(mockReadProofs).not.toHaveBeenCalled()
+    expect(reader).not.toHaveBeenCalled()
+  })
+
+  test('supports a full dynamic-authority read without a static source registry', async () => {
+    const sealed = publication()
+    mockReadProofs.mockResolvedValue(sealed)
+    const reader = jest.fn().mockResolvedValue([{ rank: 1 }, { rank: 2 }])
+
+    const result = await readSealedRankingAuthorityGeneration(
+      { rpc: jest.fn() } as never,
+      '90D',
+      reader
+    )
+
+    expect(reader).toHaveBeenCalledWith(sealed)
+    expect(result.publication).toBe(sealed)
+    expect(result.authorityPublication).toBe(sealed)
+    expect(result.authoritySources).toBe(AUTHORITY_SOURCES)
   })
 })
