@@ -6747,6 +6747,81 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_recurring_pro_checkout_reservations: {
+        Row: {
+          checkout_expires_at: number
+          checkout_session_id: string | null
+          completed_at: string | null
+          completion_event_created: number | null
+          completion_event_id: string | null
+          created_at: string
+          id: string
+          livemode: boolean
+          operation_id: string
+          plan: string
+          release_event_created: number | null
+          release_event_id: string | null
+          release_reason: string | null
+          released_at: string | null
+          reservation_nonce: string
+          status: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string | null
+          trial_requested: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          checkout_expires_at: number
+          checkout_session_id?: string | null
+          completed_at?: string | null
+          completion_event_created?: number | null
+          completion_event_id?: string | null
+          created_at?: string
+          id?: string
+          livemode: boolean
+          operation_id: string
+          plan: string
+          release_event_created?: number | null
+          release_event_id?: string | null
+          release_reason?: string | null
+          released_at?: string | null
+          reservation_nonce?: string
+          status?: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id?: string | null
+          trial_requested: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          checkout_expires_at?: number
+          checkout_session_id?: string | null
+          completed_at?: string | null
+          completion_event_created?: number | null
+          completion_event_id?: string | null
+          created_at?: string
+          id?: string
+          livemode?: boolean
+          operation_id?: string
+          plan?: string
+          release_event_created?: number | null
+          release_event_id?: string | null
+          release_reason?: string | null
+          released_at?: string | null
+          reservation_nonce?: string
+          status?: string
+          stripe_customer_id?: string
+          stripe_price_id?: string
+          stripe_subscription_id?: string | null
+          trial_requested?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       stripe_subscription_state_events: {
         Row: {
           cancel_at_period_end: boolean
@@ -10393,6 +10468,22 @@ export type Database = {
         }
         Returns: Json
       }
+      bind_recurring_pro_checkout_session_atomic: {
+        Args: {
+          p_checkout_expires_at: number
+          p_checkout_session_id: string
+          p_livemode: boolean
+          p_operation_id: string
+          p_plan: string
+          p_reservation_id: string
+          p_reservation_nonce: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_trial_requested: boolean
+          p_user_id: string
+        }
+        Returns: string
+      }
       bind_stripe_customer_owner_atomic: {
         Args: {
           p_expected_previous_stripe_customer_id: string | null
@@ -10662,6 +10753,24 @@ export type Database = {
             }
             Returns: Json
           }
+      complete_recurring_pro_checkout_atomic: {
+        Args: {
+          p_checkout_session_id: string
+          p_livemode: boolean
+          p_operation_id: string
+          p_plan: string
+          p_reservation_id: string
+          p_reservation_nonce: string
+          p_stripe_customer_id: string
+          p_stripe_event_created: number
+          p_stripe_event_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_trial_requested: boolean
+          p_user_id: string
+        }
+        Returns: string
+      }
       complete_tip_with_stripe_ownership_financial_legacy_v2: {
         Args: {
           p_amount_paid: number
@@ -11913,6 +12022,23 @@ export type Database = {
         }
         Returns: Json
       }
+      release_recurring_pro_checkout_atomic: {
+        Args: {
+          p_checkout_session_id: string
+          p_livemode: boolean
+          p_operation_id: string
+          p_plan: string
+          p_reservation_id: string
+          p_reservation_nonce: string
+          p_stripe_customer_id: string
+          p_stripe_event_created: number
+          p_stripe_event_id: string
+          p_stripe_price_id: string
+          p_trial_requested: boolean
+          p_user_id: string
+        }
+        Returns: string
+      }
       release_report_evidence_cleanup: {
         Args: {
           p_evidence_ref: string
@@ -11927,6 +12053,18 @@ export type Database = {
         Args: {
           p_request_nonce: string
           p_ttl_seconds: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      reserve_recurring_pro_checkout_atomic: {
+        Args: {
+          p_livemode: boolean
+          p_operation_id: string
+          p_plan: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_trial_requested: boolean
           p_user_id: string
         }
         Returns: Json

@@ -133,6 +133,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729022500_account_recovery_admission_state_machine.sql
   20260729023000_preserve_financial_owner_after_account_deletion.sql
   20260729024000_api_tier_payment_reversals.sql
+  20260729025000_recurring_pro_checkout_admission.sql
   20260729054400_leaderboard_rank_generation_private_staging.sql
 )
 
