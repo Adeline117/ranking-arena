@@ -137,16 +137,24 @@ export const POST = withAuth(
     const hasPassword = !isWalletEmail && providers.includes('email')
 
     if (hasPassword) {
-      if (!password) return badRequest('Password required')
+      if (typeof password !== 'string' || password.length === 0 || password.length > 4096) {
+        return badRequest('Password required')
+      }
+      if (typeof user.email !== 'string' || user.email.length === 0) {
+        return forbidden('Unable to verify account password')
+      }
       const anonClient = createClient(
         env.NEXT_PUBLIC_SUPABASE_URL,
-        env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
       )
-      const { error } = await anonClient.auth.signInWithPassword({
-        email: user.email!,
+      const { data: signInData, error } = await anonClient.auth.signInWithPassword({
+        email: user.email,
         password,
       })
-      if (error) return forbidden('Invalid password')
+      if (error || signInData.user?.id !== user.id || signInData.session?.user.id !== user.id) {
+        return forbidden('Invalid password')
+      }
     } else if ((confirm ?? '').trim().toUpperCase() !== 'DELETE') {
       return badRequest('Type DELETE to confirm account deletion')
     }

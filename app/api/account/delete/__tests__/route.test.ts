@@ -137,7 +137,13 @@ describe('account deletion scheduling', () => {
       },
       error: null,
     }
-    mockPasswordSignIn.mockResolvedValue({ error: null })
+    mockPasswordSignIn.mockResolvedValue({
+      data: {
+        user: { id: 'user-1' },
+        session: { user: { id: 'user-1' } },
+      },
+      error: null,
+    })
     mockRpc.mockImplementation(async (functionName: string, args: Record<string, unknown>) => {
       if (functionName === 'bind_stripe_customer_owner_atomic') {
         return { data: { status: 'bound' }, error: null }
@@ -276,6 +282,43 @@ describe('account deletion scheduling', () => {
     expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
   })
+
+  it('rejects credentials that authenticate a different Auth subject before every mutation', async () => {
+    mockPasswordSignIn.mockResolvedValue({
+      data: {
+        user: { id: 'user-2' },
+        session: { user: { id: 'user-2' } },
+      },
+      error: null,
+    })
+
+    const response = await POST(request({ password: 'user-2-password' }))
+
+    expect(response.status).toBe(403)
+    expect(mockPasswordSignIn).toHaveBeenCalledWith({
+      email: 'user@example.com',
+      password: 'user-2-password',
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
+    expect(mockPersistOneTimeSettlementScan).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockAdminSignOut).not.toHaveBeenCalled()
+  })
+
+  it.each([{}, '', 'x'.repeat(4097)])(
+    'rejects a malformed password proof before every mutation',
+    async (password) => {
+      const response = await POST(request({ password }))
+
+      expect(response.status).toBe(400)
+      expect(mockPasswordSignIn).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+      expect(mockRpc).not.toHaveBeenCalled()
+    }
+  )
 
   it('never revives canceled billing when database scheduling fails', async () => {
     mockRpc.mockResolvedValue({ data: null, error: { message: 'database unavailable' } })
