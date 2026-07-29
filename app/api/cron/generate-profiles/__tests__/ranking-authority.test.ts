@@ -10,6 +10,15 @@ describe('generated profile ranking authority', () => {
     expect(route).toContain('!isPublicRankingSourceAllowed(profile.platform)')
   })
 
+  it('propagates one work deadline to every authority and database operation', () => {
+    expect(route).toContain('const workSignal = AbortSignal.timeout(WORK_TIMEOUT_MS)')
+    expect(route).toContain('signal: workSignal')
+    expect(route.match(/\.abortSignal\(workSignal\)/g)).toHaveLength(3)
+    expect(route).toContain('workSignal.throwIfAborted()')
+    expect(route).toContain('STOP_STARTING_BATCHES_AFTER_MS')
+    expect(route).toContain('{ safetyTimeoutMs: 115_000 }')
+  })
+
   it('reads every period from its own sealed generation', () => {
     expect(route).toContain('PROFILE_PERIODS.map((period)')
     expect(route).toContain('readSealedRankingAuthorityGeneration(')
@@ -35,6 +44,7 @@ describe('generated profile ranking authority', () => {
     expect(route).toContain("updateQuery.is('bio_source', null)")
     expect(route).not.toContain('bio.is.null')
     expect(route).toContain("select('trader_key')")
+    expect(route).toContain('parseProfileUpdateAcknowledgement(data, update.trader_key)')
     expect(route).toContain('Profile conditional update failed')
   })
 })

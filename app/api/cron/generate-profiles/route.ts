@@ -10,7 +10,6 @@
  */
 
 import { NextRequest } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { generateAutoBio, generateAutoTags, type AutoProfileInput } from '@/lib/utils/auto-profile'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { logger } from '@/lib/logger'
@@ -18,24 +17,32 @@ import { withCron } from '@/lib/api/with-cron'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import { readLeaderboardPublicationAuthority } from '@/lib/rankings/read-publication-authority'
 import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { parseProfileUpdateAcknowledgement } from './update-acknowledgement'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
 const PROFILE_PERIODS = ['90D', '30D', '7D'] as const
+const WORK_TIMEOUT_MS = 100_000
+// A sealed-generation read can perform four sequential 10s authority/proof
+// calls before the bounded rank read and conditional writes. Do not start a
+// new 50-profile batch unless the run still has enough room to finish it.
+const STOP_STARTING_BATCHES_AFTER_MS = 35_000
 
 function rankIdentity(source: string, traderKey: string): string {
   return `${source}\u0000${traderKey}`
 }
 
-const handler = withCron('generate-profiles', async (request: NextRequest) => {
+const runGenerateProfiles: Parameters<typeof withCron>[1] = async (request, { supabase }) => {
+  const startedAt = Date.now()
+  const workSignal = AbortSignal.timeout(WORK_TIMEOUT_MS)
   const url = new URL(request.url)
   const limit = Math.min(Math.max(safeParseInt(url.searchParams.get('limit'), 500), 1), 2000)
   const force = url.searchParams.get('force') === 'true'
 
-  const supabase = getSupabaseAdmin()
   const profileRankingSources = await readLeaderboardPublicationAuthority(supabase, '90D', {
     timeoutMs: 10_000,
+    signal: workSignal,
   })
 
   // Step 1: Find traders that need auto-generated profiles
@@ -54,13 +61,13 @@ const handler = withCron('generate-profiles', async (request: NextRequest) => {
     query = query.is('bio_source', null)
   }
 
-  const { data: profiles, error: fetchErr } = await query
+  const { data: profiles, error: fetchErr } = await query.abortSignal(workSignal)
 
-  if (fetchErr) {
-    throw new Error(`Failed to fetch profiles: ${fetchErr.message}`)
+  if (fetchErr || !Array.isArray(profiles)) {
+    throw new Error(`Failed to fetch profiles: ${fetchErr?.message ?? 'invalid payload'}`)
   }
 
-  if (!profiles || profiles.length === 0) {
+  if (profiles.length === 0) {
     return { count: 0, message: 'No profiles need generation' }
   }
 
@@ -72,9 +79,16 @@ const handler = withCron('generate-profiles', async (request: NextRequest) => {
   let generated = 0
   let skipped = 0
   let errors = 0
+  let deferred = 0
 
   const BATCH_SIZE = 50
   for (let i = 0; i < profiles.length; i += BATCH_SIZE) {
+    workSignal.throwIfAborted()
+    if (Date.now() - startedAt >= STOP_STARTING_BATCHES_AFTER_MS) {
+      deferred = profiles.length - i
+      logger.warn(`[generate-profiles] Deferring ${deferred} profiles before the work deadline`)
+      break
+    }
     const batch = profiles.slice(i, i + BATCH_SIZE)
 
     const idsBySource = new Map<string, Set<string>>()
@@ -109,10 +123,11 @@ const handler = withCron('generate-profiles', async (request: NextRequest) => {
                     .eq('season_id', period)
                     .filter('rank_publication_id', 'eq', publication.scoreCohortId)
                     .order('source_trader_id', { ascending: true })
+                    .abortSignal(workSignal)
 
-                  if (error || data === null) {
+                  if (error || !Array.isArray(data)) {
                     throw new Error(
-                      `Profile rank query failed for ${source}/${period}: ${error?.message ?? 'null payload'}`
+                      `Profile rank query failed for ${source}/${period}: ${error?.message ?? 'invalid payload'}`
                     )
                   }
                   if (
@@ -130,7 +145,7 @@ const handler = withCron('generate-profiles', async (request: NextRequest) => {
             )
             return rows.flat()
           },
-          { timeoutMs: 10_000 }
+          { timeoutMs: 10_000, signal: workSignal }
         )
       )
     )
@@ -249,13 +264,13 @@ const handler = withCron('generate-profiles', async (request: NextRequest) => {
             ? updateQuery.or('bio_source.is.null,bio_source.eq.auto')
             : updateQuery.is('bio_source', null)
 
-          const { data, error } = await updateQuery.select('trader_key')
+          const { data, error } = await updateQuery.select('trader_key').abortSignal(workSignal)
           if (error || data === null) {
             throw new Error(
               `Profile conditional update failed for ${update.platform}:${update.trader_key}: ${error?.message ?? 'null payload'}`
             )
           }
-          return data.length
+          return parseProfileUpdateAcknowledgement(data, update.trader_key)
         })
       )
       const updatedCount = writeResults.reduce((total, count) => total + count, 0)
@@ -271,10 +286,12 @@ const handler = withCron('generate-profiles', async (request: NextRequest) => {
   }
 
   logger.warn(
-    `[generate-profiles] Done: ${generated} generated, ${skipped} skipped, ${errors} errors`
+    `[generate-profiles] Done: ${generated} generated, ${skipped} skipped, ${deferred} deferred, ${errors} errors`
   )
-  return { count: generated, skipped, errors, platforms: uniquePlatforms.length }
-})
+  return { count: generated, skipped, errors, deferred, platforms: uniquePlatforms.length }
+}
+
+const handler = withCron('generate-profiles', runGenerateProfiles, { safetyTimeoutMs: 115_000 })
 
 // Vercel cron sends GET — alias to POST handler
 export const GET = handler
