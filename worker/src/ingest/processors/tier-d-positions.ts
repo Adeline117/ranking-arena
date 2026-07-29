@@ -116,7 +116,10 @@ export async function processTierD(
           payload: bundle.pages,
         })
 
-        assertPositionSnapshotEvidence(bundle, `${src.slug}/${trader.exchange_trader_id}`)
+        const positionEvidence = assertPositionSnapshotEvidence(
+          bundle,
+          `${src.slug}/${trader.exchange_trader_id}`
+        )
 
         const ctx: ParseCtx = {
           sourceSlug: src.slug,
@@ -129,7 +132,7 @@ export async function processTierD(
 
         // Source-disclosed staleness (spec §5.7): Bitget −1h.
         const asOf = new Date(scrapedAt.getTime() - delayHours * 3_600_000).toISOString()
-        await publishPositions(src, trader.id, positions, asOf)
+        await publishPositions(src, trader.id, positions, asOf, positionEvidence)
 
         result.tradersCrawled += 1
         result.positionsWritten += positions.length

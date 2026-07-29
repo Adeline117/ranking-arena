@@ -281,7 +281,10 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         meta: { surface },
       })
       rawPersisted = true
-      assertPositionSnapshotEvidence(bundle, `${src.slug}/${exchangeTraderId}`)
+      const positionEvidence = assertPositionSnapshotEvidence(
+        bundle,
+        `${src.slug}/${exchangeTraderId}`
+      )
       const positions = bundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctx))
       rows = positions.map((p) => ({ ...p, currency: src.currency }))
 
@@ -293,7 +296,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
       )
       const delayHours = Number(src.meta.positions_delay_hours ?? 0)
       const asOf = new Date(Date.parse(scrapedAt) - delayHours * 3600_000).toISOString()
-      await publishPositions(src, traderId, positions, asOf)
+      await publishPositions(src, traderId, positions, asOf, positionEvidence)
     } else {
       const kind = surface as import('@/lib/ingest/core/types').HistoryKind
 

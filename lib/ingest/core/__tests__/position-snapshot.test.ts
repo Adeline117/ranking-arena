@@ -1,4 +1,8 @@
-import { assertPositionSnapshotEvidence } from '../position-snapshot'
+import {
+  assertPositionPublicationEvidence,
+  assertPositionSnapshotEvidence,
+  type PositionSnapshotEvidence,
+} from '../position-snapshot'
 import type { RawBundle } from '../types'
 
 function bundle(payload: unknown, pageIndex = 1): RawBundle {
@@ -50,5 +54,19 @@ describe('position snapshot evidence', () => {
     expect(() => assertPositionSnapshotEvidence(repeated, 'source/trader')).toThrow(
       'invalid source page identity'
     )
+  })
+
+  it('issues an unforgeable publication capability only after validation', () => {
+    const evidence = assertPositionSnapshotEvidence(
+      bundle({ code: 200, data: [] }),
+      'source/trader'
+    )
+    expect(() => assertPositionPublicationEvidence(evidence)).not.toThrow()
+    expect(() =>
+      assertPositionPublicationEvidence({
+        context: 'source/trader',
+        pageCount: 1,
+      } as PositionSnapshotEvidence)
+    ).toThrow('lacks validated source evidence')
   })
 })

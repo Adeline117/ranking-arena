@@ -17,6 +17,7 @@ async function main() {
 
   await import('@/lib/ingest/adapters/register')
   const { getAdapter } = await import('@/lib/ingest/core/adapter')
+  const { assertPositionSnapshotEvidence } = await import('@/lib/ingest/core/position-snapshot')
   const { getSourceBySlug, nativeRankingTimeframes } = await import('@/lib/ingest/sources')
   const { openSession } = await import('@/lib/ingest/fetch/fetcher')
   const { writeRawObject } = await import('@/lib/ingest/raw')
@@ -141,13 +142,18 @@ async function main() {
           trader.exchange_trader_id,
           trader.meta
         )
+        const positionEvidence = assertPositionSnapshotEvidence(
+          posBundle,
+          `${src.slug}/${trader.exchange_trader_id}`
+        )
         const positions = posBundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctxOf()))
         const delayH = Number(src.meta.positions_delay_hours ?? 0) || 0
         await publishPositions(
           src,
           trader.id,
           positions,
-          new Date(Date.now() - delayH * 3_600_000).toISOString()
+          new Date(Date.now() - delayH * 3_600_000).toISOString(),
+          positionEvidence
         )
         console.log(`[positions] ${trader.exchange_trader_id}: ${positions.length} open`)
       }

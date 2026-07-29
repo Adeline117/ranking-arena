@@ -137,7 +137,13 @@ describe('Tier-D source-specific capabilities', () => {
     })
 
     expect(parsePositions).toHaveBeenCalledTimes(1)
-    expect(mockPublishPositions).toHaveBeenCalledWith(spotSource, 42, [], expect.any(String))
+    expect(mockPublishPositions).toHaveBeenCalledWith(
+      spotSource,
+      42,
+      [],
+      expect.any(String),
+      expect.objectContaining({ pageCount: 1 })
+    )
     expect(close).toHaveBeenCalledTimes(1)
   })
 })

@@ -24,6 +24,10 @@ import type { RejectedRow } from '../staging/validate'
 import { deriveMissingRatios, deriveRiskFromBlocks } from '../core/series-risk'
 import { ensureHistoryPartitions } from './history-partitions'
 import { LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT } from '../acquisition-manifest'
+import {
+  assertPositionPublicationEvidence,
+  type PositionSnapshotEvidence,
+} from '../core/position-snapshot'
 
 /** PURE-DEX sources the spec authorizes to self-compute risk from chain data
  *  (§31/32/34: "所有数据要靠我们链上算"). CEX gives real Sharpe on its page —
@@ -1661,8 +1665,10 @@ export async function publishPositions(
   src: SourceRow,
   traderId: number,
   rawPositions: ParsedPosition[],
-  asOf: string
+  asOf: string,
+  evidence: PositionSnapshotEvidence
 ): Promise<void> {
+  assertPositionPublicationEvidence(evidence)
   const positions = netPositions(rawPositions)
   const client = await ingestClientConnect()
   try {
