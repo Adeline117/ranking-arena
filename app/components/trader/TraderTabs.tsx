@@ -44,12 +44,13 @@ export default function TraderTabs({
   }, [])
 
   const hideSet = hideTabs ? new Set(hideTabs) : null
-  const tabs: Array<{ key: TabKey; label: string }> = [
+  const allTabs: Array<{ key: TabKey; label: string }> = [
     { key: 'overview', label: t('overview') },
     { key: 'stats', label: t('stats') },
-    ...(!hideSet?.has('portfolio') ? [{ key: 'portfolio' as TabKey, label: t('portfolio') }] : []),
-    ...(extraTabs?.includes('posts') ? [{ key: 'posts' as TabKey, label: t('posts') }] : []),
+    { key: 'portfolio', label: t('portfolio') },
   ]
+  if (extraTabs?.includes('posts')) allTabs.push({ key: 'posts', label: t('posts') })
+  const tabs = allTabs.filter((tab) => !hideSet?.has(tab.key))
 
   const updateIndicator = useCallback(() => {
     const el = tabRefs.current.get(activeTab)
