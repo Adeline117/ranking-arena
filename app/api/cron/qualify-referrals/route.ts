@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     // Pending (unqualified) attributions, oldest first.
     const { data: pending, error } = await supabase
       .from('referral_attributions')
-      .select('id, referred_id, referrer_id, signup_ip_hash, friend_granted')
+      .select('id, referred_id, referrer_id, signup_ip_hash, friend_granted, created_at')
       .is('qualified_at', null)
       .order('created_at', { ascending: true })
       .limit(500)
@@ -132,10 +132,25 @@ export async function GET(request: NextRequest) {
               flagErr.message
             )
           } else {
-            const ok = await grantProDays(supabase, attr.referred_id, REFERRED_FRIEND_TRIAL_DAYS, {
-              title: 'Welcome — Pro trial unlocked!',
-              message: `You joined via a referral and earned ${REFERRED_FRIEND_TRIAL_DAYS} days of Arena Pro. Enjoy!`,
-            })
+            const ok = await grantProDays(
+              supabase,
+              attr.referred_id,
+              REFERRED_FRIEND_TRIAL_DAYS,
+              {
+                sourceKey: `friend:${attr.id}`,
+                grantedAt: attr.created_at,
+                metadata: {
+                  kind: 'friend_trial',
+                  attribution_id: attr.id,
+                  referred_id: attr.referred_id,
+                  referrer_id: attr.referrer_id,
+                },
+              },
+              {
+                title: 'Welcome — Pro trial unlocked!',
+                message: `You joined via a referral and earned ${REFERRED_FRIEND_TRIAL_DAYS} days of Arena Pro. Enjoy!`,
+              }
+            )
             if (ok) {
               friendGrants++
             } else {
@@ -177,19 +192,38 @@ export async function GET(request: NextRequest) {
             )
           }
         }
-        const { error: markerError } = await supabase.from('referral_rewards').insert({
-          referrer_id: attr.referrer_id,
-          reward_type: 'advocate_milestone',
-          granted_days: REFERRAL_ADVOCATE_PRO_DAYS,
-        })
+        const { data: rewardMarker, error: markerError } = await supabase
+          .from('referral_rewards')
+          .insert({
+            referrer_id: attr.referrer_id,
+            reward_type: 'advocate_milestone',
+            granted_days: REFERRAL_ADVOCATE_PRO_DAYS,
+          })
+          .select('id, created_at')
+          .single()
         if (!markerError) {
           // Marker created by us → grant. If the grant fails, DELETE the marker so
           // the referrer isn't permanently marked "rewarded" without receiving Pro
           // (next run retries). Marker-first still prevents concurrent double-grant.
-          const ok = await grantProDays(supabase, attr.referrer_id, REFERRAL_ADVOCATE_PRO_DAYS, {
-            title: 'Referral reward earned!',
-            message: `You referred ${REFERRAL_REWARD_THRESHOLD} friends and earned ${REFERRAL_ADVOCATE_PRO_DAYS} days of Pro! Thank you for spreading the word.`,
-          })
+          const ok = await grantProDays(
+            supabase,
+            attr.referrer_id,
+            REFERRAL_ADVOCATE_PRO_DAYS,
+            {
+              sourceKey: `advocate:${rewardMarker.id}`,
+              grantedAt: rewardMarker.created_at,
+              metadata: {
+                kind: 'advocate_milestone',
+                referral_reward_id: rewardMarker.id,
+                referrer_id: attr.referrer_id,
+                threshold: REFERRAL_REWARD_THRESHOLD,
+              },
+            },
+            {
+              title: 'Referral reward earned!',
+              message: `You referred ${REFERRAL_REWARD_THRESHOLD} friends and earned ${REFERRAL_ADVOCATE_PRO_DAYS} days of Pro! Thank you for spreading the word.`,
+            }
+          )
           if (ok) {
             advocateGrants++
           } else {
