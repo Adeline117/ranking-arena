@@ -13,12 +13,8 @@
 import type { MetadataRoute } from 'next'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { BASE_URL } from '@/lib/constants/urls'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 // Single source of truth for /learn slugs — same list drives generateStaticParams
 // on the article route. Importing here prevents this sitemap from drifting from
 // the actual published articles. articles.ts is pure data (no client-only imports).
@@ -34,9 +30,6 @@ export const maxDuration = 60
 
 const TRADERS_PER_SITEMAP = 5000
 const MAX_OTHER_URLS = 500
-const SITEMAP_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 // Sitemap index IDs:
 // 0 = static + exchange pages
@@ -90,14 +83,15 @@ interface SitemapTrader {
 async function getTraderShard(shardIndex: number): Promise<SitemapTrader[]> {
   const supabase = getSitemapSupabase()
   const start = shardIndex * TRADERS_PER_SITEMAP
-  const sealedRead = await readSealedRankingGeneration(
+  const sealedRead = await readSealedRankingAuthorityGeneration(
     supabase,
-    { season: '90D', sources: SITEMAP_RANKING_SOURCES },
+    '90D',
     async (publication) => {
+      const authoritySources = publication.proofs.map((proof) => proof.source)
       const { data, error } = await supabase
         .from('leaderboard_ranks')
         .select('handle, source_trader_id, source, computed_at')
-        .in('source', SITEMAP_RANKING_SOURCES)
+        .in('source', authoritySources)
         .eq('season_id', '90D')
         .filter('rank_publication_id', 'eq', publication.scoreCohortId)
         .order('source', { ascending: true })

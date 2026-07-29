@@ -8,20 +8,13 @@
 import type { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import { PERSONALITY_TYPE_MAP, PERSONALITY_TYPES } from '../components/quiz-data'
 import type { PersonalityTypeId, RecommendedTrader } from '../components/types'
 import ResultPageClient from './ResultPageClient'
 
 export const revalidate = 3600
-const QUIZ_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 interface Props {
   searchParams: Promise<{
@@ -73,16 +66,17 @@ async function getRecommendedTraders(typeId: PersonalityTypeId): Promise<Recomme
     const supabase = getSupabaseAdmin()
     const query = TRADER_QUERIES[typeId] || { orderBy: 'arena_score', ascending: false }
 
-    const sealedRead = await readSealedRankingGeneration(
+    const sealedRead = await readSealedRankingAuthorityGeneration(
       supabase,
-      { season: '90D', sources: QUIZ_RANKING_SOURCES },
+      '90D',
       async (publication) => {
+        const authoritySources = publication.proofs.map((proof) => proof.source)
         const { data, error } = await supabase
           .from('leaderboard_ranks')
           .select(
             'source, source_trader_id, handle, avatar_url, roi, arena_score, win_rate, pnl, rank'
           )
-          .in('source', QUIZ_RANKING_SOURCES)
+          .in('source', authoritySources)
           .eq('season_id', '90D')
           .filter('rank_publication_id', 'eq', publication.scoreCohortId)
           .not(query.orderBy, 'is', null)

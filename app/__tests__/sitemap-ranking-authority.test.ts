@@ -5,10 +5,9 @@ const sitemap = readFileSync(join(process.cwd(), 'app/sitemap.ts'), 'utf8')
 
 describe('Next sitemap ranking authority', () => {
   it('reads each trader shard from one sealed public generation', () => {
-    expect(sitemap).toContain('filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)')
-    expect(sitemap).toContain('readSealedRankingGeneration(')
-    expect(sitemap).toContain("{ season: '90D', sources: SITEMAP_RANKING_SOURCES }")
-    expect(sitemap).toContain(".in('source', SITEMAP_RANKING_SOURCES)")
+    expect(sitemap).toContain('readSealedRankingAuthorityGeneration(')
+    expect(sitemap).toContain('const authoritySources = publication.proofs.map')
+    expect(sitemap).toContain(".in('source', authoritySources)")
     expect(sitemap).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
   })
 
