@@ -624,7 +624,7 @@ async function computeSeason(
   const handleMap = await fetchHandleAvatarMap(supabase, uniqueTraders)
 
   // Calculate arena scores, mark outliers, apply followers, filter nulls
-  const { scored } = await scoreTraders(
+  const { scored, scoredFiltered } = await scoreTraders(
     uniqueTraders,
     handleMap,
     contractAddresses,
@@ -636,7 +636,7 @@ async function computeSeason(
   const degradation = await checkDegradationGuard({
     supabase: supabase as SupabaseClient,
     season,
-    scoredCount: scored.length,
+    scoredCount: scoredFiltered.length,
     freshPlatforms,
     forceWrite: forceWrite || false,
     previousCount,
@@ -661,14 +661,14 @@ async function computeSeason(
     supabase: supabase as never,
     season,
     sourceEvidence: sourcePublication.evidence,
-    scoredTraders: scored,
+    scoredTraders: scoredFiltered,
   })
   logger.info(
     `[${season}] atomically sealed generation ${publication.generationSeq} / ${publication.scoreCohortId} (${publication.publishedCount} ranks, ${publication.sourceCount} sources)`
   )
 
-  // Save scored count for future degradation checks
-  await saveScoredCount(season, scored.length)
+  // Save the sealed public count for future degradation checks.
+  await saveScoredCount(season, publication.publishedCount)
 
   // Write per-season checkpoint so retries within the same hour skip this season.
   // TTL = warm (900s) — survives the cron interval but doesn't linger.

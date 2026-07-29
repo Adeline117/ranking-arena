@@ -200,4 +200,22 @@ describe('degradation route contract', () => {
     expect(guard.match(/return \{ action: 'force' \}/g)).toHaveLength(1)
     expect(guard).toContain('if (forceWrite)')
   })
+
+  test('guards and publishes the same trust-filtered cohort', () => {
+    const scoreIndex = route.indexOf('const { scored, scoredFiltered } = await scoreTraders(')
+    const guardIndex = route.indexOf('await checkDegradationGuard({', scoreIndex)
+    const skipIndex = route.indexOf("if (degradation.action === 'skip') return -1", guardIndex)
+    const publishIndex = route.indexOf('await publishAtomicRankGeneration({', skipIndex)
+    const saveIndex = route.indexOf(
+      'await saveScoredCount(season, publication.publishedCount)',
+      publishIndex
+    )
+
+    expect(scoreIndex).toBeGreaterThan(-1)
+    expect(route.slice(guardIndex, skipIndex)).toContain('scoredCount: scoredFiltered.length')
+    expect(route.slice(publishIndex, saveIndex)).toContain('scoredTraders: scoredFiltered')
+    expect(saveIndex).toBeGreaterThan(publishIndex)
+    expect(route).not.toContain('scoredCount: scored.length')
+    expect(route).not.toContain('saveScoredCount(season, scored.length)')
+  })
 })
