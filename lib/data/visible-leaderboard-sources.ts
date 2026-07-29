@@ -1,3 +1,5 @@
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+
 export type LeaderboardTimeRange = '7D' | '30D' | '90D'
 
 export interface VisibleLeaderboardSource {
@@ -8,6 +10,12 @@ export interface VisibleLeaderboardSource {
   productType: string
   traderCount: number
   cacheUpdatedAt: string
+}
+
+export interface PublicVisibleLeaderboardSourceSummary {
+  sourceBoards: VisibleLeaderboardSource[]
+  sourceBoardCount: number
+  rankedTraderCount: number
 }
 
 function requiredString(row: Record<string, unknown>, key: string, index: number): string {
@@ -42,4 +50,34 @@ export function parseVisibleLeaderboardSources(data: unknown): VisibleLeaderboar
       cacheUpdatedAt: requiredString(row, 'cache_updated_at', index),
     }
   })
+}
+
+/**
+ * Reduce one current-generation visibility payload to the boards that may be
+ * published. Duplicate filter identities are ambiguous and fail closed.
+ */
+export function summarizePublicVisibleLeaderboardSources(
+  data: unknown
+): PublicVisibleLeaderboardSourceSummary {
+  const sourceBoards = parseVisibleLeaderboardSources(data).filter(({ filterSource }) =>
+    isPublicRankingSourceAllowed(filterSource)
+  )
+  const seen = new Set<string>()
+
+  for (const sourceBoard of sourceBoards) {
+    if (seen.has(sourceBoard.filterSource)) {
+      throw new Error(
+        `visible leaderboard sources RPC returned duplicate filter_source ${sourceBoard.filterSource}`
+      )
+    }
+    seen.add(sourceBoard.filterSource)
+  }
+
+  sourceBoards.sort((left, right) => left.filterSource.localeCompare(right.filterSource))
+
+  return {
+    sourceBoards,
+    sourceBoardCount: sourceBoards.length,
+    rankedTraderCount: sourceBoards.reduce((sum, sourceBoard) => sum + sourceBoard.traderCount, 0),
+  }
 }

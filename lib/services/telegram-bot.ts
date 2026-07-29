@@ -20,6 +20,7 @@ import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
 import { botMessages, type BotLang } from '@/lib/i18n/bot'
 import { BASE_URL } from '@/lib/constants/urls'
+import { summarizePublicVisibleLeaderboardSources } from '@/lib/data/visible-leaderboard-sources'
 
 // ============================================
 // Types
@@ -358,36 +359,29 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
 async function handleStats(chatId: number, lang: BotLang): Promise<void> {
   const supabase = getSupabaseAdmin()
 
-  // Get trader count and source-board count from leaderboard_ranks
-  // Estimated — this is a /stats Telegram bot command showing a rough
-  // headline number. Exact scan of leaderboard_ranks (~300k) is overkill.
-  const [traderResult, exchangeResult] = await Promise.all([
-    supabase
-      .from('leaderboard_ranks')
-      .select('source_trader_id', { count: 'estimated', head: true })
-      .eq('season_id', '90D'),
-    supabase
-      .from('leaderboard_ranks')
-      .select('source')
-      .eq('season_id', '90D'),
-  ])
-
-  const traderCount = traderResult.count ?? 0
-
-  // A source is a rankable market/product board, not an exchange company.
-  const sourceBoards = new Set(
-    (exchangeResult.data || []).map((r: { source: string }) => r.source)
-  )
-  const sourceBoardCount = sourceBoards.size
+  // Use the same atomic positive-score generation as the public source picker.
+  // Pulling leaderboard_ranks rows directly is both paginated and can include
+  // quarantined boards.
+  const { data, error } = await supabase.rpc('arena_visible_sources', {
+    p_season_id: '90D',
+  })
+  if (error) {
+    throw new Error(`arena_visible_sources failed: ${error.message}`)
+  }
+  const { sourceBoards, sourceBoardCount, rankedTraderCount } =
+    summarizePublicVisibleLeaderboardSources(data)
 
   // Active source-board list
-  const activeSourceBoards = Array.from(sourceBoards)
-    .map((s) => EXCHANGE_CONFIG[s as keyof typeof EXCHANGE_CONFIG]?.name || s)
+  const activeSourceBoards = sourceBoards
+    .map(
+      ({ filterSource }) =>
+        EXCHANGE_CONFIG[filterSource as keyof typeof EXCHANGE_CONFIG]?.name || filterSource
+    )
     .sort()
 
   const lines = [
     `<b>${botMessages(lang, 'statsTitle')}</b>\n`,
-    `${botMessages(lang, 'totalTraders')}: ${traderCount.toLocaleString()}`,
+    `${botMessages(lang, 'totalTraders')}: ${rankedTraderCount.toLocaleString()}`,
     `${botMessages(lang, 'activeSourceBoards')}: ${sourceBoardCount}`,
     `${botMessages(lang, 'scoringPeriods')}: 7D / 30D / 90D`,
     `\n${botMessages(lang, 'sourceBoardList')}:`,
