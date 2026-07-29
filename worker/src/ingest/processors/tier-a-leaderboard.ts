@@ -58,6 +58,7 @@ import {
 import {
   STRICT_CANONICAL_JSON_CONTRACT,
   strictCanonicalJson,
+  strictCanonicalSha256,
 } from '@/lib/ingest/strict-canonical-json'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
@@ -714,6 +715,28 @@ async function persistUnprocessedCaptureRaw(input: {
   priorFailures: readonly unknown[]
   attempt?: LeaderboardAcquisitionAttempt | null
 }): Promise<RawObjectReceipt> {
+  const captureEvidence = {
+    mode: isPartitionedNumericLeaderboardCapture(input.capture)
+      ? ('partitioned_numeric' as const)
+      : ('identity' as const),
+    capture_config: input.capture.captureConfig,
+    parser_transformation: input.capture.parserTransformation,
+    source_pages: input.capture.sourcePages.map((sourcePage, index) => ({
+      ordinal: index + 1,
+      stored_page_index: sourcePage.rawPage.pageIndex,
+      url: sourcePage.rawPage.url,
+      fetched_at: sourcePage.rawPage.fetchedAt,
+      payload_sha256: strictCanonicalSha256(sourcePage.rawPage.payload),
+      source_row_count: sourcePage.sourceRowCount,
+      request_sha256: sourcePage.requestSha256,
+      http_status: sourcePage.httpStatus,
+      pagination_position: sourcePage.paginationPosition,
+      source_reports: sourcePage.sourceReports,
+    })),
+    ...(isPartitionedNumericLeaderboardCapture(input.capture)
+      ? { pagination_topology: input.capture.paginationTopology }
+      : {}),
+  }
   try {
     return await writeRawObject({
       sourceId: input.src.id,
@@ -731,6 +754,7 @@ async function persistUnprocessedCaptureRaw(input: {
                 binding_contract: input.attempt.attemptBindingContract,
                 attempt_id: input.attempt.attemptId,
                 attempt_seq: input.attempt.attemptSeq,
+                capture_contract: input.attempt.captureContract,
                 runner_git_sha: input.attempt.runnerGitSha,
                 capture_started_at: input.attempt.recordedStartedAt,
                 capture_completed_at: input.completedAt,
@@ -745,6 +769,7 @@ async function persistUnprocessedCaptureRaw(input: {
           capture_started_at: input.startedAt,
           capture_completed_at: input.completedAt,
         },
+        capture_evidence: captureEvidence,
       },
     })
   } catch (persistenceCause) {
