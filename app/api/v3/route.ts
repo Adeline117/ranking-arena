@@ -19,18 +19,13 @@ import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getTraderDetail, searchTraders } from '@/lib/data/unified'
-import {
-  EXCHANGE_CONFIG,
-  PUBLIC_ACTIVE_RANKING_SOURCES,
-  SOURCE_TYPE_MAP,
-  parsePublicActiveRankingSource,
-} from '@/lib/constants/exchanges'
+import { SOURCE_TYPE_MAP, parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 import type { TradingPeriod } from '@/lib/data/unified'
 import { checkRateLimitFull } from '@/lib/utils/rate-limit'
 import { apiSuccess, apiError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 import { readV3Leaderboard } from '@/lib/rankings/read-v3-leaderboard'
-import { readV3PlatformCounts } from '@/lib/rankings/read-v3-platform-counts'
+import { summarizePublicVisibleLeaderboardSources } from '@/lib/data/visible-leaderboard-sources'
 
 export const runtime = 'edge'
 
@@ -325,22 +320,32 @@ async function handleSearch(params: URLSearchParams) {
 }
 
 async function handlePlatforms() {
-  const activeSources = [...PUBLIC_ACTIVE_RANKING_SOURCES]
-  const countMap = await readV3PlatformCounts(getSupabaseAdmin())
+  const supabase = getSupabaseAdmin() as SupabaseClient
+  const { data, error } = await supabase.rpc('arena_visible_sources', {
+    p_season_id: '90D',
+  })
+  if (error) throw new Error(`arena_visible_sources failed: ${error.message}`)
 
-  const platforms = activeSources
-    .map((source) => {
-      const config = EXCHANGE_CONFIG[source]
-      return {
-        key: source,
-        name: config?.name ?? source,
-        type: config?.sourceType ?? 'unknown',
-        traderCount: countMap[source] ?? 0,
-      }
-    })
-    .filter((p) => p.traderCount > 0)
+  // The visibility RPC is the publication authority: current generation,
+  // active + serving registry rows, fresh rankable data, and public-policy
+  // quarantine filtering. Historical leaderboard rows are not proof that a
+  // source board is currently public.
+  const { sourceBoards } = summarizePublicVisibleLeaderboardSources(data)
+  const platforms = sourceBoards.map((sourceBoard) => ({
+    key: sourceBoard.filterSource,
+    name: sourceBoard.exchangeName,
+    type: sourceBoard.productType,
+    traderCount: sourceBoard.traderCount,
+  }))
 
-  return { data: platforms, total: platforms.length }
+  return {
+    data: platforms,
+    total: platforms.length,
+    meta: {
+      countUnit: 'source_board',
+      scope: 'current_public_90d_ranking_source_boards',
+    },
+  }
 }
 
 async function handleHistory(params: URLSearchParams) {
@@ -485,7 +490,13 @@ export async function GET(request: NextRequest) {
 
   // --- Route to handler ---
   try {
-    let result: { data?: unknown; total?: number; error?: string; status?: number }
+    let result: {
+      data?: unknown
+      total?: number
+      error?: string
+      status?: number
+      meta?: Record<string, unknown>
+    }
 
     switch (endpoint) {
       case 'rankings':
@@ -535,6 +546,7 @@ export async function GET(request: NextRequest) {
     return jsonResponse(result.data, {
       ...rateLimitMeta,
       ...(result.total != null ? { total: result.total } : {}),
+      ...result.meta,
       endpoint,
       version: 'v3',
     })

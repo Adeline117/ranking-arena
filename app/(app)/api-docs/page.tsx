@@ -37,7 +37,7 @@ const ENDPOINTS = [
       {
         name: 'platform',
         required: false,
-        description: 'Exchange key (e.g. binance_futures, bybit, hyperliquid)',
+        description: 'Source-board filter key (e.g. binance_futures, bybit, hyperliquid)',
       },
       { name: 'period', required: false, description: '7D, 30D, or 90D (default: 90D)' },
       { name: 'limit', required: false, description: '1-200 (default: 50)' },
@@ -76,7 +76,7 @@ const ENDPOINTS = [
     description:
       'Get full details for a specific trader including performance across periods, equity curve, and positions.',
     params: [
-      { name: 'platform', required: true, description: 'Exchange platform key' },
+      { name: 'platform', required: true, description: 'Source-board filter key' },
       { name: 'trader_key', required: true, description: 'Trader identifier on the platform' },
     ],
     example: {
@@ -134,7 +134,7 @@ const ENDPOINTS = [
     name: 'Platforms',
     method: 'GET',
     path: '/api/v3?endpoint=platforms',
-    description: 'List all active exchanges with metadata including trader count.',
+    description: 'List current public 90-day ranking source boards with their ranked-trader count.',
     params: [],
     example: {
       curl: `curl "https://www.arenafi.org/api/v3?endpoint=platforms"`,
@@ -154,7 +154,13 @@ const ENDPOINTS = [
       "traderCount": 3100
     }
   ],
-  "meta": { "total": 28, "endpoint": "platforms", "version": "v3" }
+  "meta": {
+    "total": 2,
+    "countUnit": "source_board",
+    "scope": "current_public_90d_ranking_source_boards",
+    "endpoint": "platforms",
+    "version": "v3"
+  }
 }`,
     },
   },
@@ -165,7 +171,7 @@ const ENDPOINTS = [
     description:
       'Get daily performance time series for a specific trader. Returns ROI, PnL, win rate, and more.',
     params: [
-      { name: 'platform', required: true, description: 'Exchange platform key' },
+      { name: 'platform', required: true, description: 'Source-board filter key' },
       { name: 'trader_key', required: true, description: 'Trader identifier on the platform' },
       { name: 'days', required: false, description: '1-90 (default: 30)' },
     ],
