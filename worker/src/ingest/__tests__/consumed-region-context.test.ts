@@ -15,7 +15,29 @@ import {
   acquireRegionAuthorityLifecycle,
   type RegionAuthorityLifecycle,
 } from '../region-authority-lifecycle'
-import { BULL_JOB_PROVENANCE_CONTRACT, type BullJobAuthority } from '../job-provenance'
+import {
+  BULL_JOB_DATA_CHECKPOINT_SCRIPT,
+  BULL_JOB_PROVENANCE_CONTRACT,
+  type BullCheckpointEvaluator,
+  type BullJobAuthority,
+} from '../job-provenance'
+
+function checkpointEvaluator(result: unknown = 1): BullCheckpointEvaluator {
+  return { eval: jest.fn(async () => result) }
+}
+
+function runnableBullJob(overrides: Record<string, unknown> = {}) {
+  return {
+    attemptsMade: 0,
+    attemptsStarted: 1,
+    data: { sourceSlug: 'binance_futures' },
+    id: 'job-1',
+    name: 'tiera:leaderboard',
+    queueName: 'arena-ingest',
+    queueQualifiedName: 'bull:arena-ingest',
+    ...overrides,
+  }
+}
 
 function authorityHarness(region: 'local' | 'vps_sg' = 'local') {
   const controller = new AbortController()
@@ -171,16 +193,16 @@ describe('consumed queue region context', () => {
     const { lifecycle } = await lifecycleHarness()
     const admission = createConsumedRegionAdmission(lifecycle, 'vps_sg')
     const route = jest.fn(
-      async (_job: string, context: typeof admission.context) =>
+      async (_job: unknown, context: typeof admission.context) =>
         `${context.consumedRegion}/${context.executionRegion}`
     )
-    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const consume = bindAuthorizedConsumedRegion(admission.context, route, checkpointEvaluator())
     expect(consume).toHaveLength(3)
 
     await expect(consume('before-open')).rejects.toThrow('consumer admission is closed')
     expect(route).not.toHaveBeenCalled()
     admission.open()
-    await expect(consume('after-open')).resolves.toBe('local/vps_sg')
+    await expect(consume(runnableBullJob())).resolves.toBe('local/vps_sg')
     expect(admission.isOpen()).toBe(true)
 
     admission.close()
@@ -193,7 +215,7 @@ describe('consumed queue region context', () => {
     const { lifecycle } = await lifecycleHarness()
     const admission = createConsumedRegionAdmission(lifecycle, 'local')
     const route = jest.fn(async () => 'ran')
-    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const consume = bindAuthorizedConsumedRegion(admission.context, route, checkpointEvaluator())
     const controller = new AbortController()
     admission.open()
     controller.abort(new Error('cancelled'))
@@ -216,13 +238,15 @@ describe('consumed queue region context', () => {
         return 'ran'
       }
     )
-    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const consume = bindAuthorizedConsumedRegion(admission.context, route, checkpointEvaluator())
     const job = {
       attemptsMade: 2,
       attemptsStarted: 3,
       id: 'repeat:tiera:binance_futures',
       name: 'tiera:leaderboard',
       queueName: 'arena:ingest:local',
+      queueQualifiedName: 'bull:arena:ingest:local',
+      data: { sourceSlug: 'binance_futures' },
     }
     admission.open()
 
@@ -243,12 +267,104 @@ describe('consumed queue region context', () => {
     await lifecycle.stopAfterDrain(async () => undefined)
   })
 
+  it('injects the Redis evaluator and derives checkpoint keys from public Bull identity', async () => {
+    const { lifecycle } = await lifecycleHarness()
+    const admission = createConsumedRegionAdmission(lifecycle, 'local')
+    const processorToken = 'binding-private-token'
+    const evaluate = jest.fn(async () => 1)
+    const evaluator: BullCheckpointEvaluator = { eval: evaluate }
+    const route = jest.fn(
+      async (_job: unknown, _context: typeof admission.context, bullJob: BullJobAuthority) => {
+        await bullJob.replaceDataIfOwned({
+          sourceSlug: 'binance_futures',
+          completedTimeframes: [7, 30],
+        })
+        return 'checkpointed'
+      }
+    )
+    const consume = bindAuthorizedConsumedRegion(admission.context, route, evaluator)
+    const job = runnableBullJob({
+      id: 'repeat:tiera:binance_futures',
+      data: { sourceSlug: 'binance_futures', completedTimeframes: [7] },
+    })
+    admission.open()
+
+    await expect(consume(job, processorToken)).resolves.toBe('checkpointed')
+
+    expect(evaluate).toHaveBeenCalledWith(
+      BULL_JOB_DATA_CHECKPOINT_SCRIPT,
+      2,
+      'bull:arena-ingest:repeat:tiera:binance_futures',
+      'bull:arena-ingest:repeat:tiera:binance_futures:lock',
+      processorToken,
+      '{"sourceSlug":"binance_futures","completedTimeframes":[7]}',
+      '{"sourceSlug":"binance_futures","completedTimeframes":[7,30]}'
+    )
+    expect(job.data).toEqual({
+      sourceSlug: 'binance_futures',
+      completedTimeframes: [7, 30],
+    })
+    expect(JSON.stringify(route.mock.calls[0]?.[2])).not.toContain(processorToken)
+    await lifecycle.stopAfterDrain(async () => undefined)
+  })
+
+  it.each([
+    ['bull:other-queue', 'does not identify the provenance queue'],
+    [' bull:arena-ingest', 'queue qualified name is not canonical'],
+    ['binding-private-token', 'does not identify the provenance queue'],
+  ])('rejects forged public queue identity %p before routing', async (qualifiedName, message) => {
+    const { lifecycle } = await lifecycleHarness()
+    const admission = createConsumedRegionAdmission(lifecycle, 'local')
+    const processorToken = 'binding-private-token'
+    const evaluate = jest.fn(async () => 1)
+    const route = jest.fn(async () => 'ran')
+    const consume = bindAuthorizedConsumedRegion(admission.context, route, { eval: evaluate })
+    admission.open()
+
+    const failure = await consume(
+      runnableBullJob({ queueQualifiedName: qualifiedName }),
+      processorToken
+    ).catch((error: unknown) => error)
+
+    expect(failure).toMatchObject({ message: expect.stringContaining(message) })
+    expect(String((failure as Error).stack)).not.toContain(processorToken)
+    expect(route).not.toHaveBeenCalled()
+    expect(evaluate).not.toHaveBeenCalled()
+    await lifecycle.stopAfterDrain(async () => undefined)
+  })
+
+  it('sanitizes a forged queue identity accessor before routing', async () => {
+    const { lifecycle } = await lifecycleHarness()
+    const admission = createConsumedRegionAdmission(lifecycle, 'local')
+    const processorToken = 'queue-accessor-secret-token'
+    const evaluate = jest.fn(async () => 1)
+    const route = jest.fn(async () => 'ran')
+    const consume = bindAuthorizedConsumedRegion(admission.context, route, { eval: evaluate })
+    const job = runnableBullJob()
+    Object.defineProperty(job, 'queueQualifiedName', {
+      get: () => {
+        throw new Error(`forged accessor leaked ${processorToken}`)
+      },
+    })
+    admission.open()
+
+    const failure = await consume(job, processorToken).catch((error: unknown) => error)
+
+    expect(failure).toMatchObject({
+      message: '[ingest-worker] Bull queue qualified name is not canonical',
+    })
+    expect(String((failure as Error).stack)).not.toContain(processorToken)
+    expect(route).not.toHaveBeenCalled()
+    expect(evaluate).not.toHaveBeenCalled()
+    await lifecycle.stopAfterDrain(async () => undefined)
+  })
+
   it('returns a prefetched BullMQ job to wait when admission has closed', async () => {
     const { lifecycle } = await lifecycleHarness()
     const admission = createConsumedRegionAdmission(lifecycle, 'local')
     const job = { moveToWait: jest.fn(async () => 1) }
     const route = jest.fn(async () => 'ran')
-    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const consume = bindAuthorizedConsumedRegion(admission.context, route, checkpointEvaluator())
 
     await expect(consume(job, 'bullmq-token')).rejects.toMatchObject({ name: 'WaitingError' })
     expect(job.moveToWait).toHaveBeenCalledWith('bullmq-token')
@@ -259,7 +375,7 @@ describe('consumed queue region context', () => {
   it('returns a job to wait when cancellation arrives during its route', async () => {
     const { lifecycle } = await lifecycleHarness()
     const admission = createConsumedRegionAdmission(lifecycle, 'local')
-    const job = { moveToWait: jest.fn(async () => 1) }
+    const job = runnableBullJob({ moveToWait: jest.fn(async () => 1) })
     let finishRoute!: () => void
     let markStarted!: () => void
     const routeGate = new Promise<void>((resolve) => {
@@ -273,7 +389,7 @@ describe('consumed queue region context', () => {
       await routeGate
       return 'ran'
     })
-    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const consume = bindAuthorizedConsumedRegion(admission.context, route, checkpointEvaluator())
     const controller = new AbortController()
     admission.open()
 
@@ -293,7 +409,7 @@ describe('consumed queue region context', () => {
     let routedSignal: AbortSignal | undefined
     const route = jest.fn(
       async (
-        _job: string,
+        _job: unknown,
         _context: typeof admission.context,
         _bullJob: unknown,
         signal?: AbortSignal
@@ -302,11 +418,11 @@ describe('consumed queue region context', () => {
         return 'ran'
       }
     )
-    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const consume = bindAuthorizedConsumedRegion(admission.context, route, checkpointEvaluator())
     const jobController = new AbortController()
     admission.open()
 
-    await expect(consume('job', 'token', jobController.signal)).resolves.toBe('ran')
+    await expect(consume(runnableBullJob(), 'token', jobController.signal)).resolves.toBe('ran')
     expect(routedSignal?.aborted).toBe(false)
 
     authority.controller.abort(new Error('authority lost'))
@@ -320,7 +436,7 @@ describe('consumed queue region context', () => {
     const route = jest.fn(async () => 'ran')
     const forged = { ...admission.context }
 
-    expect(() => bindAuthorizedConsumedRegion(forged, route)).toThrow(
+    expect(() => bindAuthorizedConsumedRegion(forged, route, checkpointEvaluator())).toThrow(
       'authorized consumer binding requires managed admission'
     )
     expect(() => bindConsumedRegion(admission.context, route)).toThrow(
@@ -359,7 +475,7 @@ describe('consumed queue region context', () => {
     const { lifecycle } = await lifecycleHarness()
     const admission = createConsumedRegionAdmission(lifecycle, 'local')
     const route = jest.fn(async () => 'ran')
-    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const consume = bindAuthorizedConsumedRegion(admission.context, route, checkpointEvaluator())
     let finishDrain!: () => void
     const draining = new Promise<void>((resolve) => {
       finishDrain = resolve
@@ -386,8 +502,12 @@ describe('consumed queue region context', () => {
       'utf8'
     )
 
-    expect(entrypoint.match(/bindAuthorizedConsumedRegion\(context, route\)/g)).toHaveLength(2)
-    expect(entrypoint.match(/bindAuthorizedConsumedRegion\(context, routeTierC\)/g)).toHaveLength(1)
+    expect(entrypoint.match(/bindAuthorizedConsumedRegion\(context, route, redis\)/g)).toHaveLength(
+      2
+    )
+    expect(
+      entrypoint.match(/bindAuthorizedConsumedRegion\(context, routeTierC, redis\)/g)
+    ).toHaveLength(1)
     expect(entrypoint.match(/\bnew Worker(?:<[^>]+>)?\s*\(/g)).toHaveLength(3)
     expect(entrypoint.match(/register\(\s*new Worker(?:<[^>]+>)?\s*\(/g)).toHaveLength(3)
     expect(entrypoint.match(/\bautorun:\s*false\b/g)).toHaveLength(3)

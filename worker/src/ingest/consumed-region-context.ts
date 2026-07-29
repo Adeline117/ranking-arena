@@ -3,7 +3,14 @@ import type { Job } from 'bullmq'
 import { isIngestRegion, type IngestRegion } from '@/lib/ingest/core/regions'
 
 import { SOURCE_JOB_LEASE_LANES } from './source-job-routing'
-import { createManagedBullJobAuthority, type BullJobAuthority } from './job-provenance'
+import {
+  createBullJobCheckpointTarget,
+  createBullJobProvenance,
+  createManagedBullJobAuthority,
+  type BullCheckpointEvaluator,
+  type BullJobAuthority,
+  type BullJobProvenanceInput,
+} from './job-provenance'
 import type { RegionAuthorityFence, RegionAuthorityLifecycle } from './region-authority-lifecycle'
 import { isManagedRegionAuthorityLifecycle } from './region-authority-lifecycle'
 
@@ -157,7 +164,8 @@ export function bindAuthorizedConsumedRegion<TJob, TResult>(
     context: AuthorizedConsumedRegionContext,
     bullJob: BullJobAuthority,
     signal?: AbortSignal
-  ) => Promise<TResult>
+  ) => Promise<TResult>,
+  checkpointEvaluator: BullCheckpointEvaluator
 ): (job: TJob, token?: string, signal?: AbortSignal) => Promise<TResult> {
   if (!isAuthorizedConsumedRegionContext(context)) {
     throw new Error('[ingest-worker] authorized consumer binding requires managed admission')
@@ -185,7 +193,25 @@ export function bindAuthorizedConsumedRegion<TJob, TResult>(
         `[ingest-worker] ${context.consumedRegion} consumer job was cancelled`
       )
     }
-    const managedBullJob = createManagedBullJobAuthority(job as object, processorToken, jobSignal)
+    const bullJobInput = job as BullJobProvenanceInput
+    const proof = createBullJobProvenance(bullJobInput, processorToken)
+    let queueQualifiedName: unknown
+    try {
+      queueQualifiedName = bullJobInput.queueQualifiedName
+    } catch {
+      throw new TypeError('[ingest-worker] Bull queue qualified name is not canonical')
+    }
+    const checkpointTarget = createBullJobCheckpointTarget(
+      proof,
+      queueQualifiedName,
+      checkpointEvaluator
+    )
+    const managedBullJob = createManagedBullJobAuthority(
+      bullJobInput,
+      processorToken,
+      jobSignal,
+      checkpointTarget
+    )
     try {
       const result = await route(job, context, managedBullJob.authority, jobSignal)
       if (jobSignal.aborted) {
