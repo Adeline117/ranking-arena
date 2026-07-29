@@ -26,7 +26,6 @@ import { computeLastResortCalmar, classifyTradingStyle } from './scoring-helpers
 import { fetchHandleAvatarMap } from './fetch-handles'
 import { enrichFromStatsDetail } from './enrich-stats-detail'
 import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enrich-equity-curve'
-import { deriveAdvancedFromDailySnapshots } from './enrich-daily-snapshots'
 import { runPhase1, getPhase1ReadSource } from './phase1-select'
 import { scoreTraders } from './score-traders'
 import { checkDegradationGuard, saveScoredCount } from './degradation-guard'
@@ -497,30 +496,13 @@ async function computeSeason(
     }
   }
 
-  // Phase 4b2: Fallback — compute advanced metrics from trader_daily_snapshots
-  // for traders still missing them after Phase 4b. Catches traders below the
-  // top-N enrichment cut-off whose equity_curve is empty. Logic in
-  // enrich-daily-snapshots.ts.
-  if (isOutOfTime(50_000)) {
-    logger.warn(
-      `[${season}] SKIPPING Phase 4b2 (advanced metrics from daily_snapshots) — only ${Math.round(timeLeftMs() / 1000)}s left`
-    )
-  } else {
-    const dailyDerived = await deriveAdvancedFromDailySnapshots(
-      supabase,
-      traderMap,
-      season,
-      isOutOfTime
-    )
-    if (dailyDerived > 0) {
-      logger.info(
-        `[${season}] Derived ${dailyDerived} sharpe/sortino/calmar/PF values from daily_snapshots (fallback)`
-      )
-    }
-  }
+  // trader_daily_snapshots is deliberately excluded from ranking enrichment:
+  // that table is generated only from the sealed 90D board and has no season
+  // identity, so its ROI deltas cannot prove 7D/30D/90D Sharpe or profit factor.
+  // Missing advanced dimensions remain null and receive the v4 quality penalty.
 
-  // Phase 4b3: Last resort — compute calmar from ROI + MDD for any trader
-  // still missing it after Phases 4 / 4b / 4b2. Pure mutation in scoring-helpers.
+  // Phase 4b2: Last resort — compute calmar from ROI + MDD for any trader
+  // still missing it after Phases 4 / 4b. Pure mutation in scoring-helpers.
   {
     const calmarOnly = computeLastResortCalmar(traderMap, season)
     if (calmarOnly > 0) {

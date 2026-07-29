@@ -5,10 +5,9 @@
  * `trader_snapshots_v2`. That table was physically removed in June 2026, so
  * the route could only swallow an RPC error and report a false success.
  *
- * Derived metrics now belong to the atomic leaderboard build:
- * `compute-leaderboard/enrich-daily-snapshots.ts` computes them before the
- * immutable ranking generation is published. Mutating a published generation
- * afterward would invalidate its cohort authority.
+ * Proven, period-scoped derived metrics now belong to the atomic leaderboard
+ * build before the immutable ranking generation is published. Mutating a
+ * published generation afterward would invalidate its cohort authority.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
