@@ -211,40 +211,30 @@ const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
 // fetch. Same caching + timeout scaffolding as the legacy path.
 // ---------------------------------------------------------------------------
 
-const cachedServingResolveISR = unstable_cache(
-  async (handle: string, source: string | undefined) => {
-    const result = await resolveServingTrader(getReadReplica(), { handle, source })
-    if (!result) throw new Error('TRADER_RESOLVE_NULL') // never cache null
-    return result
-  },
-  ['trader-serving-resolve'],
-  { revalidate: 300, tags: ['trader-profile'] }
-)
-
 // Sentinel for "the cached/replica path TIMED OUT" — distinct from a genuine
 // null (trader not found). ROOT-CAUSE FIX (2026-06-15): a timeout here used to
 // collapse to null → the body fell into legacy mode → notFound() → a VALID
-// serving trader got a route-cached "Trader Not Found" for 5 min. Observed on
+// serving trader got "Trader Not Found". Observed on
 // okx: curl (single request) resolved 10/10, but a real browser failed ~every
 // time — the page render competes with its OWN concurrent asset/prefetch
 // requests for a pooled connection, and acquisition (not the ~0.1s RPC) blew
 // the tight 3s budget. Two defenses: (1) a generous SERVING_RESOLVE_TIMEOUT_MS
-// ceiling so slow connection-acquisition still completes (a genuine not-found
-// returns fast — the ISR wrapper throws immediately on null), and (2) one
-// direct retry on timeout, bypassing the contended unstable_cache layer.
+// ceiling so slow connection-acquisition still completes, and (2) one direct
+// retry on timeout. Resolution is intentionally never persisted across requests:
+// nickname mappings and the preferred source can change independently of a
+// ranking publication, so an old identity must not keep owning the URL.
 const SERVING_RESOLVE_TIMEOUT = Symbol('serving-resolve-timeout')
 
 const cachedServingResolve = cache(async (handle: string, source?: string) => {
   try {
     const raced = await Promise.race([
-      cachedServingResolveISR(handle, source),
+      resolveServingTrader(getReadReplica(), { handle, source }),
       new Promise<typeof SERVING_RESOLVE_TIMEOUT>((resolve) =>
         setTimeout(() => resolve(SERVING_RESOLVE_TIMEOUT), SERVING_RESOLVE_TIMEOUT_MS)
       ),
     ])
     if (raced !== SERVING_RESOLVE_TIMEOUT) return raced
   } catch (err) {
-    if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') return null
     logger.error(
       '[trader/page] resolveServingTrader failed:',
       err instanceof Error ? err.message : err
@@ -252,7 +242,7 @@ const cachedServingResolve = cache(async (handle: string, source?: string) => {
     return null
   }
 
-  // Timed out: one direct retry, bypassing the (contended) unstable_cache layer.
+  // Timed out: one direct retry after the contended request has been abandoned.
   try {
     return await Promise.race([
       resolveServingTrader(getReadReplica(), { handle, source }),

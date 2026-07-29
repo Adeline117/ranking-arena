@@ -25,6 +25,12 @@ describe('trader page direct ranking generation contract', () => {
     expect(page).toContain('export const revalidate = 0')
   })
 
+  it('resolves serving handles against live identity authority on every request', () => {
+    expect(page).not.toContain("['trader-serving-resolve']")
+    expect(page).not.toContain('cachedServingResolveISR')
+    expect(page).toContain('resolveServingTrader(getReadReplica(), { handle, source })')
+  })
+
   it('keys serving score and metadata caches by current publication identity', () => {
     expect(page).toContain("['trader-serving-scores-sealed-v4']")
     expect(page).toContain("['trader-lb-meta-sealed-v4']")
