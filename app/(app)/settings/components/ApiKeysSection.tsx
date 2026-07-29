@@ -32,6 +32,11 @@ interface ApiKey {
 type ApiKeyStateOwner = Pick<SettingsViewerSnapshot, 'viewerKey' | 'sessionGeneration' | 'userId'>
 
 type ApiKeyLoadOutcome = 'idle' | 'loading' | 'ready' | 'failed'
+type ApiTier = 'free' | 'starter' | 'pro'
+type ApiEntitlement = {
+  tier: ApiTier
+  hasStripeSubscription: boolean
+}
 
 function apiKeyStateOwnerFor(viewer: SettingsViewerSnapshot): ApiKeyStateOwner {
   return {
@@ -83,6 +88,10 @@ export function ApiKeysSection() {
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [newKeyName, setNewKeyName] = useState('')
   const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null)
+  const [entitlement, setEntitlement] = useState<ApiEntitlement | null>(null)
+  const [portalFlow, setPortalFlow] = useState<
+    'payment_method_update' | 'subscription_cancel' | null
+  >(null)
   const [stateOwner, setStateOwner] = useState<ApiKeyStateOwner | null>(null)
   const [loadOutcome, setLoadOutcome] = useState<ApiKeyLoadOutcome>('idle')
   const stateOwnerRef = useRef<ApiKeyStateOwner | null>(null)
@@ -110,30 +119,48 @@ export function ApiKeysSection() {
     setLoading(true)
 
     try {
-      const res = await authedFetch<{ data?: ApiKey[] }>(
-        '/api/user/api-keys',
-        'GET',
-        scope.accessToken,
-        undefined,
-        15_000,
-        {
-          expectedUserId: scope.userId,
-          expectedSessionGeneration: scope.sessionGeneration,
+      const res = await authedFetch<{
+        data?: ApiKey[]
+        entitlement?: {
+          tier?: unknown
+          hasStripeSubscription?: unknown
         }
-      )
+      }>('/api/user/api-keys', 'GET', scope.accessToken, undefined, 15_000, {
+        expectedUserId: scope.userId,
+        expectedSessionGeneration: scope.sessionGeneration,
+      })
       if (!loadIsCurrent() || res.stale) return
       if (!res.ok) {
         setKeys([])
+        setEntitlement(null)
         loadOutcomeRef.current = 'failed'
         setLoadOutcome('failed')
         return
       }
-      setKeys(res.data?.data ?? [])
+      const loadedKeys = res.data?.data ?? []
+      const rawTier = res.data?.entitlement?.tier
+      const tier: ApiTier =
+        rawTier === 'starter' || rawTier === 'pro'
+          ? rawTier
+          : rawTier === 'free'
+            ? 'free'
+            : loadedKeys.find((key) => key.active)?.tier === 'starter'
+              ? 'starter'
+              : loadedKeys.find((key) => key.active)?.tier === 'pro'
+                ? 'pro'
+                : 'free'
+      setKeys(loadedKeys)
+      setEntitlement({
+        tier,
+        hasStripeSubscription:
+          tier !== 'free' && res.data?.entitlement?.hasStripeSubscription === true,
+      })
       loadOutcomeRef.current = 'ready'
       setLoadOutcome('ready')
     } catch {
       if (!loadIsCurrent()) return
       setKeys([])
+      setEntitlement(null)
       loadOutcomeRef.current = 'failed'
       setLoadOutcome('failed')
     } finally {
@@ -148,11 +175,13 @@ export function ApiKeysSection() {
     setStateOwner(null)
     setLoadOutcome('idle')
     setKeys([])
+    setEntitlement(null)
     setLoading(auth.loading || !auth.authChecked || Boolean(auth.userId))
     setCreating(false)
     setRevokingId(null)
     setNewKeyName('')
     setJustCreatedKey(null)
+    setPortalFlow(null)
     if (auth.authChecked && !auth.loading && auth.userId) void fetchKeys()
   }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId, fetchKeys])
 
@@ -264,6 +293,8 @@ export function ApiKeysSection() {
   const visibleJustCreatedKey = stateReady ? justCreatedKey : null
   const visibleCreating = stateReady && creating
   const visibleRevokingId = stateReady ? revokingId : null
+  const visibleEntitlement = stateReady ? entitlement : null
+  const visiblePortalFlow = stateReady ? portalFlow : null
   const activeKeys = visibleKeys.filter((k) => k.active)
   const revokedKeys = visibleKeys.filter((k) => !k.active)
   const displayLoading =
@@ -276,6 +307,47 @@ export function ApiKeysSection() {
     const scope = captureSettingsViewer(authRef.current)
     if (!scope || !stateBelongsToViewer(scope)) return
     void apiCheckout(plan)
+  }
+
+  const openApiPortal = async (flow: 'payment_method_update' | 'subscription_cancel') => {
+    const scope = captureSettingsViewer(authRef.current)
+    if (
+      !scope ||
+      !stateBelongsToViewer(scope) ||
+      portalFlow !== null ||
+      !visibleEntitlement?.hasStripeSubscription
+    ) {
+      return
+    }
+
+    setPortalFlow(flow)
+    let navigating = false
+    try {
+      const res = await authedFetch<{ url?: unknown; error?: unknown }>(
+        '/api/stripe/portal',
+        'POST',
+        scope.accessToken,
+        { flow, scope: 'api' },
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
+      )
+      if (!stateBelongsToViewer(scope) || res.stale) return
+      if (res.ok && typeof res.data?.url === 'string' && res.data.url.startsWith('https://')) {
+        navigating = true
+        window.location.href = res.data.url
+        return
+      }
+      showToast(t('paymentSystemComingSoon'), 'error')
+    } catch {
+      if (stateBelongsToViewer(scope)) {
+        showToast(t('operationFailedTryAgain'), 'error')
+      }
+    } finally {
+      if (!navigating && isSettingsViewerCurrent(scope, authRef.current)) setPortalFlow(null)
+    }
   }
 
   const dismissCreatedKey = () => {
@@ -379,9 +451,11 @@ export function ApiKeysSection() {
 
       {/* Current tier + upgrade */}
       <ApiTierBanner
-        currentTier={activeKeys[0]?.tier || 'free'}
+        currentTier={visibleEntitlement?.tier || activeKeys[0]?.tier || 'free'}
+        hasStripeSubscription={visibleEntitlement?.hasStripeSubscription === true}
         onUpgrade={handleUpgrade}
-        isLoading={checkoutLoading || !stateReady}
+        onOpenPortal={(flow) => void openApiPortal(flow)}
+        isLoading={checkoutLoading || visiblePortalFlow !== null || !stateReady}
         error={checkoutError}
       />
 
@@ -659,12 +733,16 @@ function UsageChart() {
 
 function ApiTierBanner({
   currentTier,
+  hasStripeSubscription,
   onUpgrade,
+  onOpenPortal,
   isLoading,
   error,
 }: {
   currentTier: string
+  hasStripeSubscription: boolean
   onUpgrade: (plan: 'starter' | 'pro') => void
+  onOpenPortal: (flow: 'payment_method_update' | 'subscription_cancel') => void
   isLoading: boolean
   error: string | null
 }) {
@@ -712,25 +790,38 @@ function ApiTierBanner({
           </Text>
         )}
       </div>
-      {currentTier !== 'pro' && (
+      {currentTier === 'free' && (
         <div className="api-tier-banner-actions">
-          {currentTier === 'free' && (
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => onUpgrade('starter')}
-              disabled={isLoading}
-            >
-              {isLoading ? t('loading') : t('apiUpgradeStarter')}
-            </Button>
-          )}
           <Button
             size="sm"
-            variant={currentTier === 'free' ? 'ghost' : 'primary'}
-            onClick={() => onUpgrade('pro')}
+            variant="primary"
+            onClick={() => onUpgrade('starter')}
             disabled={isLoading}
           >
+            {isLoading ? t('loading') : t('apiUpgradeStarter')}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => onUpgrade('pro')} disabled={isLoading}>
             {isLoading ? t('loading') : t('upgradeToPro')}
+          </Button>
+        </div>
+      )}
+      {currentTier !== 'free' && hasStripeSubscription && (
+        <div className="api-tier-banner-actions">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => onOpenPortal('payment_method_update')}
+            disabled={isLoading}
+          >
+            {t('paymentMethods')}
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => onOpenPortal('subscription_cancel')}
+            disabled={isLoading}
+          >
+            {t('cancelSubscription')}
           </Button>
         </div>
       )}

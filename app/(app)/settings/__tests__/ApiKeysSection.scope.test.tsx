@@ -418,4 +418,71 @@ describe('ApiKeysSection viewer ownership', () => {
     expect(screen.getByRole('button', { name: 'revoke' })).toBeEnabled()
     expect(screen.queryByText('apiKeyRevokedSection')).not.toBeInTheDocument()
   })
+
+  it('uses explicit API portal scopes and never offers paid plan changes through Portal', async () => {
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url.includes('/usage')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { keys: [], daily: [], totals: {} } },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'GET') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: {
+            data: [apiKey('user-a')],
+            entitlement: { tier: 'starter', hasStripeSubscription: true },
+          },
+        })
+      }
+      if (url === '/api/stripe/portal' && method === 'POST') {
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          data: { error: 'unavailable' },
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<ApiKeysSection />)
+
+    const paymentButton = await screen.findByRole('button', { name: 'paymentMethods' })
+    expect(screen.getByRole('button', { name: 'cancelSubscription' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'upgradeToPro' })).not.toBeInTheDocument()
+
+    fireEvent.click(paymentButton)
+    await waitFor(() =>
+      expect(mockAuthedFetch).toHaveBeenCalledWith(
+        '/api/stripe/portal',
+        'POST',
+        jwt('user-a'),
+        { flow: 'payment_method_update', scope: 'api' },
+        15_000,
+        expect.objectContaining({
+          expectedUserId: 'user-a',
+          expectedSessionGeneration: expect.any(Number),
+        })
+      )
+    )
+    await waitFor(() => expect(paymentButton).toBeEnabled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'cancelSubscription' }))
+    await waitFor(() =>
+      expect(mockAuthedFetch).toHaveBeenCalledWith(
+        '/api/stripe/portal',
+        'POST',
+        jwt('user-a'),
+        { flow: 'subscription_cancel', scope: 'api' },
+        15_000,
+        expect.objectContaining({
+          expectedUserId: 'user-a',
+          expectedSessionGeneration: expect.any(Number),
+        })
+      )
+    )
+  })
 })

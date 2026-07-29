@@ -21,27 +21,30 @@ export default function SubscriptionManagement({
 }: SubscriptionManagementProps) {
   const { showToast } = useToast()
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [portalFlow, setPortalFlow] = useState<
+    'payment_method_update' | 'subscription_cancel' | null
+  >(null)
 
-  const openPortal = async (flow?: 'subscription_update' | 'payment_method_update') => {
+  const openPortal = async (flow: 'payment_method_update' | 'subscription_cancel') => {
+    if (portalFlow !== null) return
+    setPortalFlow(flow)
+    let navigating = false
     try {
       const headers = await getAuthHeadersAsync()
       const res = await fetch('/api/stripe/portal', {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({
-          returnUrl: `${window.location.origin}/user-center?tab=membership`,
-          ...(flow ? { flow_data: { type: flow } } : {}),
+          flow,
+          scope: 'membership',
         }),
       })
       if (res.ok) {
-        const data = await res.json()
-        // Handle redirect response (e.g., no stripe_customer_id)
-        if (data.redirect) {
-          window.location.href = data.redirect
-          return
-        }
-        if (data.url) {
+        const data = (await res.json()) as { url?: unknown }
+        if (typeof data.url === 'string' && data.url.startsWith('https://')) {
+          navigating = true
           window.location.href = data.url
+          return
         } else {
           showToast(t('paymentSystemComingSoon'), 'error')
         }
@@ -50,6 +53,8 @@ export default function SubscriptionManagement({
       }
     } catch {
       showToast(t('operationFailedTryAgain'), 'error')
+    } finally {
+      if (!navigating) setPortalFlow(null)
     }
   }
 
@@ -67,7 +72,8 @@ export default function SubscriptionManagement({
       </h3>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
         <button
-          onClick={() => openPortal('subscription_update')}
+          onClick={() => void openPortal('payment_method_update')}
+          disabled={portalFlow !== null}
           style={{
             padding: '10px 20px',
             background: tokens.colors.accent.brand,
@@ -75,30 +81,17 @@ export default function SubscriptionManagement({
             borderRadius: tokens.radius.lg,
             color: tokens.colors.white,
             fontWeight: 600,
-            cursor: 'pointer',
+            cursor: portalFlow === null ? 'pointer' : 'wait',
             fontSize: 14,
+            opacity: portalFlow === null ? 1 : 0.65,
           }}
         >
-          {t('changePlan')}
-        </button>
-        <button
-          onClick={() => openPortal()}
-          style={{
-            padding: '10px 20px',
-            background: 'transparent',
-            border: `1px solid ${tokens.colors.border.primary}`,
-            borderRadius: tokens.radius.lg,
-            color: tokens.colors.text.secondary,
-            fontWeight: 600,
-            cursor: 'pointer',
-            fontSize: 14,
-          }}
-        >
-          {t('billingHistory')}
+          {t('paymentMethods')}
         </button>
         {info?.subscription && !info.subscription.cancelAtPeriodEnd && !showCancelConfirm && (
           <button
             onClick={() => setShowCancelConfirm(true)}
+            disabled={portalFlow !== null}
             style={{
               padding: '10px 20px',
               background: 'transparent',
@@ -141,28 +134,10 @@ export default function SubscriptionManagement({
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={async () => {
+                disabled={portalFlow !== null}
+                onClick={() => {
                   setShowCancelConfirm(false)
-                  const headers = await getAuthHeadersAsync()
-                  const res = await fetch('/api/stripe/portal', {
-                    method: 'POST',
-                    headers: {
-                      ...headers,
-                      'Content-Type': 'application/json',
-                      ...getCsrfHeaders(),
-                    },
-                    body: JSON.stringify({
-                      returnUrl: `${window.location.origin}/user-center?tab=membership`,
-                    }),
-                  })
-                  if (res.ok) {
-                    const data = await res.json()
-                    if (data.redirect) {
-                      window.location.href = data.redirect
-                    } else if (data.url) {
-                      window.location.href = data.url
-                    }
-                  }
+                  void openPortal('subscription_cancel')
                 }}
                 style={{
                   padding: '8px 16px',

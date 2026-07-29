@@ -10,25 +10,48 @@ const MAX_KEYS_PER_USER = 5
  */
 export const GET = withAuth(
   async ({ user, supabase }) => {
-    const { data, error } = await supabase
-      .from('api_keys')
-      .select(
-        'id, name, key, tier, daily_limit, request_count_today, active, last_used_at, created_at, revoked_at'
-      )
-      .eq('user_id', user!.id)
-      .order('created_at', { ascending: false })
+    const [keysResult, profileResult] = await Promise.all([
+      supabase
+        .from('api_keys')
+        .select(
+          'id, name, key, tier, daily_limit, request_count_today, active, last_used_at, created_at, revoked_at'
+        )
+        .eq('user_id', user!.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('user_profiles')
+        .select('api_tier, api_stripe_subscription_id')
+        .eq('id', user!.id)
+        .maybeSingle(),
+    ])
 
-    if (error) {
+    if (keysResult.error || profileResult.error || !profileResult.data) {
       return NextResponse.json({ error: 'Failed to fetch API keys' }, { status: 500 })
     }
 
     // Mask keys in list view — only show prefix + last 4
-    const masked = (data ?? []).map((k) => ({
+    const masked = (keysResult.data ?? []).map((k) => ({
       ...k,
       key: k.key.slice(0, 7) + '...' + k.key.slice(-4),
     }))
 
-    const res = NextResponse.json({ data: masked })
+    const apiTier =
+      profileResult.data.api_tier === 'starter' || profileResult.data.api_tier === 'pro'
+        ? profileResult.data.api_tier
+        : 'free'
+    const hasStripeSubscription =
+      apiTier !== 'free' &&
+      typeof profileResult.data.api_stripe_subscription_id === 'string' &&
+      profileResult.data.api_stripe_subscription_id.startsWith('sub_') &&
+      profileResult.data.api_stripe_subscription_id.length > 'sub_'.length
+
+    const res = NextResponse.json({
+      data: masked,
+      entitlement: {
+        tier: apiTier,
+        hasStripeSubscription,
+      },
+    })
     res.headers.set('Cache-Control', 'private, no-store')
     return res
   },
