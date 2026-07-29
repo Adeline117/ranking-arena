@@ -6,6 +6,7 @@ import {
   buildMeilisearchCompoundId,
   buildMeilisearchReconciliationEvidence,
   leaderboardRowToMeilisearchIdentity,
+  meilisearchTaskUid,
   sortUniqueMeilisearchDocuments,
   type FrozenLeaderboardIdentityRow,
   type MeilisearchReconciliationEvidence,
@@ -207,6 +208,16 @@ describe('Meilisearch authoritative rebuild contract', () => {
       task_uid: 43,
       status: 'succeeded',
     })
+  })
+
+  it('extracts only one valid, consistent task identifier from enqueue responses', () => {
+    expect(meilisearchTaskUid({ taskUid: 42, status: 'enqueued' })).toBe(42)
+    expect(meilisearchTaskUid({ uid: 43, taskUid: 43 })).toBe(43)
+    expect(() => meilisearchTaskUid(null)).toThrow('must be an object')
+    expect(() => meilisearchTaskUid({ taskUid: -1 })).toThrow('missing a valid task identifier')
+    expect(() => meilisearchTaskUid({ uid: 42, taskUid: 43 })).toThrow(
+      'conflicting task identifiers'
+    )
   })
 
   it.each(['enqueued', 'processing', 'failed', 'canceled'])(

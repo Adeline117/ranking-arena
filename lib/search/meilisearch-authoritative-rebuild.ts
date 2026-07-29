@@ -159,6 +159,14 @@ function taskUidFromResponse(task: Record<string, unknown>): number {
   return Number(resolved)
 }
 
+/** Extract only a non-negative, internally consistent Meilisearch task UID. */
+export function meilisearchTaskUid(task: unknown): number {
+  if (!isRecord(task)) {
+    throw new Error('Meilisearch task response must be an object')
+  }
+  return taskUidFromResponse(task)
+}
+
 /**
  * Preserve the compound primary-key format already used by the live traders
  * index. Sanitization collisions are intentionally handled by the collection
@@ -288,7 +296,7 @@ export function assertMeilisearchTaskSucceeded(
     throw new Error('Meilisearch task response must be an object')
   }
 
-  const taskUid = taskUidFromResponse(task)
+  const taskUid = meilisearchTaskUid(task)
   if (
     expectedTaskUid !== undefined &&
     (!Number.isSafeInteger(expectedTaskUid) || expectedTaskUid < 0)
