@@ -1,8 +1,12 @@
 import Stripe from 'stripe'
 import { stripe, API_TIER_LIMITS, getStripe } from '@/lib/stripe'
 import { joinProOfficialGroup } from '@/app/api/pro-official-group/route'
-import { getSupabase, withRetry, logger, type StripeWebhookEventContext } from './shared'
-import { getProPlanFromPriceId, updateUserSubscription } from './subscription'
+import { getSupabase, logger, type StripeWebhookEventContext } from './shared'
+import {
+  applyApiTierStripeEvent,
+  getProPlanFromPriceId,
+  updateUserSubscription,
+} from './subscription'
 import { mintNFTForUser } from './nft'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { fireAndForget } from '@/lib/utils/logger'
@@ -59,7 +63,10 @@ export function carriesTipCheckoutIdentity(metadata: Stripe.Metadata | null | un
   )
 }
 
-export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
+export async function handleCheckoutComplete(
+  session: Stripe.Checkout.Session,
+  event?: StripeWebhookEventContext
+) {
   const rawUserId = session.metadata?.userId
   const rawSupabaseUserId = session.metadata?.supabase_user_id
   const metadataUserId = canonicalUuid(rawUserId)
@@ -181,12 +188,18 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
   // API tier subscription checkout
   if (session.metadata?.type === 'api_tier') {
+    if (!event || session.livemode !== event.livemode) {
+      throw new Error(`API checkout ${session.id} has invalid Stripe event identity`)
+    }
+    if (!canonicalPaymentUserId) {
+      throw new Error(`API checkout ${session.id} has invalid user identity metadata`)
+    }
     const apiPlan = session.metadata.api_plan
-    if (!apiPlan || !['starter', 'pro'].includes(apiPlan)) {
+    if (apiPlan !== 'starter' && apiPlan !== 'pro') {
       logger.error('Invalid api_plan in metadata', { metadata: session.metadata })
       throw new Error(`Checkout ${session.id} has invalid API plan metadata`)
     }
-    const subscriptionId = session.subscription as string
+    const subscriptionId = typeof session.subscription === 'string' ? session.subscription : null
     if (!subscriptionId || session.payment_status !== 'paid') {
       logger.warn('API checkout completed without a paid subscription', {
         sessionId: session.id,
@@ -203,7 +216,19 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       })
       return
     }
-    await handleApiTierActivation(userId, apiPlan, subscriptionId)
+    const subscriptionUserId = canonicalUuid(subscription.metadata?.userId)
+    const subscriptionSupabaseUserId = canonicalUuid(subscription.metadata?.supabase_user_id)
+    if (
+      subscription.id !== subscriptionId ||
+      subscription.customer !== customerId ||
+      subscription.metadata?.type !== 'api_tier' ||
+      subscription.metadata.api_plan !== apiPlan ||
+      subscriptionUserId !== canonicalPaymentUserId ||
+      subscriptionSupabaseUserId !== canonicalPaymentUserId
+    ) {
+      throw new Error(`API subscription ${subscription.id} metadata does not match its checkout`)
+    }
+    await handleApiTierActivation(canonicalPaymentUserId, apiPlan, subscription, event)
     return
   }
 
@@ -646,24 +671,24 @@ async function handleLifetimePayment(session: Stripe.Checkout.Session, userId: s
 
 export async function handleApiTierActivation(
   userId: string,
-  apiPlan: string,
-  stripeSubscriptionId: string
+  apiPlan: 'starter' | 'pro',
+  subscription: Stripe.Subscription,
+  event: StripeWebhookEventContext
 ) {
-  const dailyLimit = API_TIER_LIMITS[apiPlan] ?? 100
+  logger.info('Activating API tier from Checkout', {
+    userId,
+    apiPlan,
+    stripeSubscriptionId: subscription.id,
+  })
 
-  logger.info('Activating API tier', { userId, apiPlan, dailyLimit, stripeSubscriptionId })
-
-  await withRetry(async () => {
-    const { error } = await getSupabase().rpc('update_user_api_tier', {
-      p_user_id: userId,
-      p_api_tier: apiPlan,
-      p_stripe_subscription_id: stripeSubscriptionId,
-      p_daily_limit: dailyLimit,
-    })
-
-    if (error) {
-      throw new Error(`Failed to update API tier: ${error.message}`)
-    }
+  await applyApiTierStripeEvent({
+    userId,
+    plan: apiPlan,
+    dailyLimit: API_TIER_LIMITS[apiPlan] ?? API_TIER_LIMITS.free,
+    subscription,
+    event,
+    isActive: true,
+    isTerminal: false,
   })
 
   logger.info(`API tier activated for user ${userId}`, { apiPlan })
@@ -673,7 +698,7 @@ export async function handleApiTierActivation(
       title: '🎉 New API subscriber',
       message: `Plan: ${apiPlan} · User: ${userId}`,
       level: 'info',
-      details: { userId, apiPlan, stripeSubscriptionId },
+      details: { userId, apiPlan, stripeSubscriptionId: subscription.id },
     }),
     'stripe-new-api-subscriber-alert'
   )

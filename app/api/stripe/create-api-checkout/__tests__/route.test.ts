@@ -202,6 +202,37 @@ describe('POST /api/stripe/create-api-checkout', () => {
     expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
 
+  it.each([
+    [
+      'a different paid API tier',
+      { api_tier: 'starter', api_stripe_subscription_id: 'sub_existing' },
+    ],
+    [
+      'a persisted subscription identity',
+      { api_tier: 'free', api_stripe_subscription_id: 'sub_stale' },
+    ],
+  ])('blocks a second checkout when the profile has %s', async (_reason, entitlement) => {
+    mockProfileMaybeSingle.mockResolvedValue({
+      data: {
+        ...entitlement,
+        stripe_customer_id: 'cus_existing',
+      },
+      error: null,
+    })
+
+    const res = await POST(request('pro'))
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual(
+      expect.objectContaining({
+        code: 'ALREADY_SUBSCRIBED',
+      })
+    )
+    expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+    expect(mockProfileUpdate).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
   it('blocks checkout when updating the existing customer link fails', async () => {
     mockProfileUpdateMaybeSingle.mockResolvedValue({
       data: null,

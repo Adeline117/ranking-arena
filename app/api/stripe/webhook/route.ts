@@ -110,7 +110,11 @@ export async function POST(request: NextRequest) {
                 livemode: event.livemode,
               })
             } else {
-              await handleCheckoutComplete(session)
+              await handleCheckoutComplete(session, {
+                id: event.id,
+                created: event.created,
+                livemode: event.livemode,
+              })
             }
             break
           }
@@ -125,11 +129,19 @@ export async function POST(request: NextRequest) {
 
           case 'customer.subscription.created':
           case 'customer.subscription.updated':
-            await handleSubscriptionUpdate(event.data.object as Stripe.Subscription)
+            await handleSubscriptionUpdate(event.data.object as Stripe.Subscription, {
+              id: event.id,
+              created: event.created,
+              livemode: event.livemode,
+            })
             break
 
           case 'customer.subscription.deleted':
-            await handleSubscriptionCanceled(event.data.object as Stripe.Subscription)
+            await handleSubscriptionCanceled(event.data.object as Stripe.Subscription, {
+              id: event.id,
+              created: event.created,
+              livemode: event.livemode,
+            })
             break
 
           case 'invoice.paid':

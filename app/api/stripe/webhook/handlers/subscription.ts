@@ -7,15 +7,148 @@ import {
 } from '@/lib/stripe'
 import { env } from '@/lib/env'
 import { leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
-import { getSupabase, withRetry, logger } from './shared'
+import { getSupabase, withRetry, logger, type StripeWebhookEventContext } from './shared'
 import { sendNotification } from '@/lib/data/notifications'
 
-export async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
+type ApiTierPlan = 'starter' | 'pro'
+
+type ApiTierProfile = {
+  id: string
+  api_stripe_subscription_id: string | null
+  api_tier: string
+}
+
+const API_TIER_RPC_SUCCESS = new Set(['applied', 'stale', 'idempotent', 'not_current'])
+const MAX_STRIPE_UNIX_SECONDS = 253_402_300_799
+const API_ACTIVE_STATUSES = new Set<Stripe.Subscription.Status>(['active', 'trialing'])
+const API_GRACE_STATUSES = new Set<Stripe.Subscription.Status>(['past_due'])
+const API_SUSPENDED_STATUSES = new Set<Stripe.Subscription.Status>(['incomplete', 'paused'])
+const API_TERMINAL_STATUSES = new Set<Stripe.Subscription.Status>([
+  'canceled',
+  'incomplete_expired',
+  'unpaid',
+])
+
+function hasOwnMetadataKey(metadata: Stripe.Metadata, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(metadata, key)
+}
+
+function classifyApiSubscription(
+  subscription: Stripe.Subscription,
+  profile: ApiTierProfile
+): { isApiTier: boolean; plan: ApiTierPlan | null } {
+  const metadata = subscription.metadata || {}
+  const pricePlan = getApiPlanFromPriceId(subscription.items.data[0]?.price.id)
+  const carriesApiMetadata = metadata.type === 'api_tier' || hasOwnMetadataKey(metadata, 'api_plan')
+
+  let metadataPlan: ApiTierPlan | null = null
+  if (
+    carriesApiMetadata &&
+    (metadata.type === 'api_tier' || hasOwnMetadataKey(metadata, 'api_plan'))
+  ) {
+    if (
+      metadata.type !== 'api_tier' ||
+      (metadata.api_plan !== 'starter' && metadata.api_plan !== 'pro')
+    ) {
+      throw new Error(`API subscription ${subscription.id} has invalid entitlement metadata`)
+    }
+    metadataPlan = metadata.api_plan
+  }
+
+  if (metadataPlan && pricePlan && metadataPlan !== pricePlan) {
+    throw new Error(`API subscription ${subscription.id} has conflicting price and metadata plans`)
+  }
+
+  if (metadataPlan || pricePlan) {
+    return { isApiTier: true, plan: metadataPlan || pricePlan }
+  }
+
+  if (profile.api_stripe_subscription_id === subscription.id) {
+    const currentPlan =
+      profile.api_tier === 'starter' || profile.api_tier === 'pro'
+        ? (profile.api_tier as ApiTierPlan)
+        : null
+    return { isApiTier: true, plan: currentPlan }
+  }
+
+  return { isApiTier: false, plan: null }
+}
+
+function assertStripeApiEventIdentity(
+  subscription: Stripe.Subscription,
+  event: StripeWebhookEventContext
+) {
+  if (
+    !Number.isSafeInteger(subscription.created) ||
+    subscription.created <= 0 ||
+    subscription.created > MAX_STRIPE_UNIX_SECONDS ||
+    !Number.isSafeInteger(event.created) ||
+    event.created <= 0 ||
+    event.created > MAX_STRIPE_UNIX_SECONDS ||
+    subscription.created > event.created ||
+    !/^sub_[A-Za-z0-9_]+$/.test(subscription.id) ||
+    subscription.id.length > 255 ||
+    !/^evt_[A-Za-z0-9_]+$/.test(event.id) ||
+    event.id.length > 255 ||
+    typeof subscription.livemode !== 'boolean' ||
+    subscription.livemode !== event.livemode
+  ) {
+    throw new Error(`API subscription ${subscription.id} has invalid Stripe event identity`)
+  }
+}
+
+export async function applyApiTierStripeEvent(params: {
+  userId: string
+  plan: ApiTierPlan | 'free'
+  dailyLimit: number
+  subscription: Stripe.Subscription
+  event: StripeWebhookEventContext
+  isActive: boolean
+  isTerminal: boolean
+}) {
+  assertStripeApiEventIdentity(params.subscription, params.event)
+
+  await withRetry(async () => {
+    const { data: status, error } = await getSupabase().rpc('apply_user_api_tier_stripe_event', {
+      p_user_id: params.userId,
+      p_api_tier: params.plan,
+      p_daily_limit: params.dailyLimit,
+      p_stripe_subscription_id: params.subscription.id,
+      p_subscription_created: params.subscription.created,
+      p_stripe_event_id: params.event.id,
+      p_event_created: params.event.created,
+      p_is_active: params.isActive,
+      p_is_terminal: params.isTerminal,
+      p_livemode: params.event.livemode,
+    })
+    if (error) {
+      throw new Error(`Failed to apply API tier Stripe event: ${error.message}`)
+    }
+    if (typeof status !== 'string' || !API_TIER_RPC_SUCCESS.has(status)) {
+      throw new Error(
+        `API tier Stripe event returned unexpected status ${String(status || 'missing')}`
+      )
+    }
+    logger.info('API tier Stripe event reached a durable state', {
+      userId: params.userId,
+      subscriptionId: params.subscription.id,
+      eventId: params.event.id,
+      status,
+      isActive: params.isActive,
+      isTerminal: params.isTerminal,
+    })
+  })
+}
+
+export async function handleSubscriptionUpdate(
+  subscription: Stripe.Subscription,
+  event: StripeWebhookEventContext
+) {
   const customerId = subscription.customer as string
 
   const { data: profile, error: profileError } = await getSupabase()
     .from('user_profiles')
-    .select('id')
+    .select('id, api_stripe_subscription_id, api_tier')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
@@ -29,26 +162,64 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
 
   const priceId = subscription.items.data[0]?.price.id
 
-  // Check if this is an API tier subscription
-  const apiPlan = getApiPlanFromPriceId(priceId)
-  if (apiPlan) {
-    if (subscription.status === 'active' || subscription.status === 'trialing') {
-      const dailyLimit = API_TIER_LIMITS[apiPlan] ?? 100
-      await withRetry(async () => {
-        const { error } = await getSupabase().rpc('update_user_api_tier', {
-          p_user_id: profile.id,
-          p_api_tier: apiPlan,
-          p_stripe_subscription_id: subscription.id,
-          p_daily_limit: dailyLimit,
-        })
-        if (error) throw new Error(`Failed to update API tier: ${error.message}`)
+  const apiClassification = classifyApiSubscription(subscription, profile)
+  if (apiClassification.isApiTier) {
+    if (API_ACTIVE_STATUSES.has(subscription.status)) {
+      if (!apiClassification.plan) {
+        throw new Error(`Cannot determine API plan for active subscription ${subscription.id}`)
+      }
+      const dailyLimit = API_TIER_LIMITS[apiClassification.plan] ?? API_TIER_LIMITS.free
+      await applyApiTierStripeEvent({
+        userId: profile.id,
+        plan: apiClassification.plan,
+        dailyLimit,
+        subscription,
+        event,
+        isActive: true,
+        isTerminal: false,
       })
       logger.info(`API tier updated for user ${profile.id}`, {
-        apiPlan,
+        apiPlan: apiClassification.plan,
         status: subscription.status,
       })
+      return
     }
-    return
+
+    // Keep the explicit payment-retry grace policy. Stripe will subsequently
+    // recover the subscription or move it to an unpaid/canceled terminal state.
+    if (API_GRACE_STATUSES.has(subscription.status)) {
+      logger.info(`API tier kept during payment-retry grace for user ${profile.id}`, {
+        status: subscription.status,
+        subscriptionId: subscription.id,
+      })
+      return
+    }
+
+    if (
+      API_SUSPENDED_STATUSES.has(subscription.status) ||
+      API_TERMINAL_STATUSES.has(subscription.status)
+    ) {
+      const isTerminal = API_TERMINAL_STATUSES.has(subscription.status)
+      await applyApiTierStripeEvent({
+        userId: profile.id,
+        plan: 'free',
+        dailyLimit: API_TIER_LIMITS.free,
+        subscription,
+        event,
+        isActive: false,
+        isTerminal,
+      })
+      logger.info(`API tier inactive state recorded for user ${profile.id}`, {
+        status: subscription.status,
+        subscriptionId: subscription.id,
+        isTerminal,
+      })
+      return
+    }
+
+    throw new Error(
+      `API subscription ${subscription.id} has unsupported status ${subscription.status}`
+    )
   }
 
   // Regular Pro membership subscription — 显式白名单匹配,不再"未知 price 默认
@@ -81,12 +252,15 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
   await updateUserSubscription(profile.id, subscription, plan)
 }
 
-export async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
+export async function handleSubscriptionCanceled(
+  subscription: Stripe.Subscription,
+  event: StripeWebhookEventContext
+) {
   const customerId = subscription.customer as string
 
   const { data: profile, error: profileLookupError } = await getSupabase()
     .from('user_profiles')
-    .select('id')
+    .select('id, api_stripe_subscription_id, api_tier')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
@@ -98,25 +272,37 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
     return
   }
 
-  // Check if this is an API tier subscription cancellation
   const priceId = subscription.items.data[0]?.price.id
-  const apiPlan = getApiPlanFromPriceId(priceId)
-  if (apiPlan) {
-    // Downgrade API tier back to free
-    await withRetry(async () => {
-      const { error } = await getSupabase().rpc('update_user_api_tier', {
-        p_user_id: profile.id,
-        p_api_tier: 'free',
-        p_stripe_subscription_id: null,
-        p_daily_limit: API_TIER_LIMITS.free,
-      })
-      if (error) throw new Error(`Failed to downgrade API tier: ${error.message}`)
+  const apiClassification = classifyApiSubscription(subscription, profile)
+  if (apiClassification.isApiTier) {
+    await applyApiTierStripeEvent({
+      userId: profile.id,
+      plan: 'free',
+      dailyLimit: API_TIER_LIMITS.free,
+      subscription,
+      event,
+      isActive: false,
+      isTerminal: true,
     })
-    logger.info(`API tier canceled for user ${profile.id}`, { previousPlan: apiPlan })
+    logger.info(`API tier cancellation recorded for user ${profile.id}`, {
+      previousPlan: apiClassification.plan,
+      canceledSubId: subscription.id,
+    })
     return
   }
 
-  // Regular Pro membership cancellation
+  const regularPlan = getProPlanFromPriceId(priceId)
+  const metadataPlan = subscription.metadata?.plan
+  const carriesRegularPlanMetadata = metadataPlan === 'monthly' || metadataPlan === 'yearly'
+  if (!regularPlan && !carriesRegularPlanMetadata) {
+    throw new Error(
+      `Cannot classify canceled Stripe subscription ${subscription.id} with price ${
+        priceId || 'missing'
+      }`
+    )
+  }
+
+  // Regular Pro membership cancellation.
   const { error: subError } = await getSupabase()
     .from('subscriptions')
     .update({
@@ -322,7 +508,7 @@ export async function updateUserSubscription(
  * Check if a Stripe price ID belongs to an API tier subscription.
  * Returns the plan name ('starter' | 'pro') or null if not an API tier.
  */
-function getApiPlanFromPriceId(priceId: string | undefined): string | null {
+function getApiPlanFromPriceId(priceId: string | undefined): ApiTierPlan | null {
   if (!priceId) return null
   if (STRIPE_API_PRICE_IDS.starter && priceId === STRIPE_API_PRICE_IDS.starter) return 'starter'
   if (STRIPE_API_PRICE_IDS.pro && priceId === STRIPE_API_PRICE_IDS.pro) return 'pro'

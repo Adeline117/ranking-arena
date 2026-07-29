@@ -399,6 +399,56 @@ export type Database = {
         }
         Relationships: []
       }
+      api_tier_stripe_event_ledger: {
+        Row: {
+          api_tier: string
+          daily_limit: number
+          is_active: boolean
+          is_terminal: boolean
+          livemode: boolean
+          recorded_at: string
+          stripe_event_created: number
+          stripe_event_id: string
+          stripe_subscription_id: string
+          subscription_created: number
+          user_id: string
+        }
+        Insert: {
+          api_tier: string
+          daily_limit: number
+          is_active: boolean
+          is_terminal: boolean
+          livemode: boolean
+          recorded_at?: string
+          stripe_event_created: number
+          stripe_event_id: string
+          stripe_subscription_id: string
+          subscription_created: number
+          user_id: string
+        }
+        Update: {
+          api_tier?: string
+          daily_limit?: number
+          is_active?: boolean
+          is_terminal?: boolean
+          livemode?: boolean
+          recorded_at?: string
+          stripe_event_created?: number
+          stripe_event_id?: string
+          stripe_subscription_id?: string
+          subscription_created?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'api_tier_stripe_event_ledger_user_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       authorization_sync_logs: {
         Row: {
           authorization_id: string
@@ -9472,6 +9522,21 @@ export type Database = {
           p_tier: string
         }
         Returns: Json
+      }
+      apply_user_api_tier_stripe_event: {
+        Args: {
+          p_api_tier: string
+          p_daily_limit: number
+          p_event_created: number
+          p_is_active: boolean
+          p_is_terminal: boolean
+          p_livemode: boolean
+          p_stripe_event_id: string
+          p_stripe_subscription_id: string
+          p_subscription_created: number
+          p_user_id: string
+        }
+        Returns: string
       }
       activate_group_subscription_with_stripe_ownership_atomic: {
         Args: {

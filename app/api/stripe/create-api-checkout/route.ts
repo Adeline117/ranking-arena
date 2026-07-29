@@ -70,10 +70,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (profile?.api_tier === plan) {
+    if (profile.api_tier !== 'free' || profile.api_stripe_subscription_id) {
       return NextResponse.json(
         {
-          error: `You already have an active ${plan} API plan. Manage it from your account settings.`,
+          error:
+            'You already have an API subscription. Change or cancel it from your account settings before starting another checkout.',
           code: 'ALREADY_SUBSCRIBED',
         },
         { status: 409 }

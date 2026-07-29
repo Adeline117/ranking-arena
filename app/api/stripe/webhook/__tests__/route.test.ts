@@ -147,6 +147,11 @@ describe('POST /api/stripe/webhook', () => {
 
     expect(response.status).toBe(200)
     expect(mockHandleCheckoutComplete).toHaveBeenCalledTimes(1)
+    expect(mockHandleCheckoutComplete).toHaveBeenCalledWith(expect.anything(), {
+      id: 'evt_test_retryable',
+      created: 1_800_000_000,
+      livemode: true,
+    })
     expect(mockRpc.mock.calls).toEqual([
       [
         'claim_stripe_event',
@@ -275,6 +280,7 @@ describe('POST /api/stripe/webhook', () => {
   )
 
   it.each([
+    ['customer.subscription.created', mockHandleSubscriptionUpdate],
     ['customer.subscription.updated', mockHandleSubscriptionUpdate],
     ['customer.subscription.deleted', mockHandleSubscriptionCanceled],
     ['invoice.payment_succeeded', mockHandlePaymentSucceeded],
@@ -292,7 +298,12 @@ describe('POST /api/stripe/webhook', () => {
 
     expect(response.status).toBe(200)
     expect(handler).toHaveBeenCalledTimes(1)
-    if (type === 'checkout.session.expired') {
+    if (
+      type === 'checkout.session.expired' ||
+      type === 'customer.subscription.created' ||
+      type === 'customer.subscription.updated' ||
+      type === 'customer.subscription.deleted'
+    ) {
       expect(handler).toHaveBeenCalledWith(expect.anything(), {
         id: 'evt_test_retryable',
         created: 1_800_000_000,

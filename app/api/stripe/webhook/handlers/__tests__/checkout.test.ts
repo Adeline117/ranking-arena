@@ -32,7 +32,9 @@ jest.mock('@/lib/stripe/tip-completion', () => ({
 
 const mockUpdateUserSubscription = jest.fn()
 const mockGetProPlanFromPriceId = jest.fn()
+const mockApplyApiTierStripeEvent = jest.fn()
 jest.mock('../subscription', () => ({
+  applyApiTierStripeEvent: (...args: unknown[]) => mockApplyApiTierStripeEvent(...args),
   updateUserSubscription: (...args: unknown[]) => mockUpdateUserSubscription(...args),
   getProPlanFromPriceId: (...args: unknown[]) => mockGetProPlanFromPriceId(...args),
 }))
@@ -85,10 +87,12 @@ function checkoutSession(
 }
 
 const lifetimeUserId = '21e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const apiUserId = '11e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const lifetimeReservationId = '9a8df3e8-e908-4f27-9cb4-8b892d748cc7'
 const lifetimeRequestNonce = `lifetime:${lifetimeUserId}:123`
 const expiredEvent = { id: 'evt_expired_123', created: 1_800_000_000, livemode: true }
 const tipEvent = { id: 'evt_tip_123', created: 1_800_000_000, livemode: true }
+const checkoutEvent = { id: 'evt_checkout_123', created: 1_800_000_000, livemode: true }
 const tipCheckoutId = '31e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const tipPostId = '41e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const tipRecipientId = '51e34ce2-43c1-4bcc-8f19-79b36d56605c'
@@ -181,6 +185,7 @@ describe('handleCheckoutComplete entitlement safety', () => {
       items: { data: [{ price: { id: 'price_pro_monthly' } }] },
     })
     mockUpdateUserSubscription.mockResolvedValue(undefined)
+    mockApplyApiTierStripeEvent.mockResolvedValue(undefined)
     mockGetProPlanFromPriceId.mockReturnValue('monthly')
     mockJoinProOfficialGroup.mockResolvedValue({ success: true, groupId: 'pro-group' })
     mockMintNFTForUser.mockResolvedValue(undefined)
@@ -208,8 +213,14 @@ describe('handleCheckoutComplete entitlement safety', () => {
     await expect(
       handleCheckoutComplete(
         checkoutSession({
-          metadata: { userId: 'user-123', type: 'api_tier', api_plan: 'enterprise' },
-        })
+          metadata: {
+            userId: apiUserId,
+            supabase_user_id: apiUserId,
+            type: 'api_tier',
+            api_plan: 'enterprise',
+          },
+        }),
+        checkoutEvent
       )
     ).rejects.toThrow('Checkout cs_test_123 has invalid API plan metadata')
     expect(mockRpc).not.toHaveBeenCalled()
@@ -292,12 +303,110 @@ describe('handleCheckoutComplete entitlement safety', () => {
     await handleCheckoutComplete(
       checkoutSession({
         payment_status: 'unpaid',
-        metadata: { userId: 'user-123', type: 'api_tier', api_plan: 'pro' },
-      })
+        metadata: {
+          userId: apiUserId,
+          supabase_user_id: apiUserId,
+          type: 'api_tier',
+          api_plan: 'pro',
+        },
+      }),
+      checkoutEvent
     )
 
     expect(mockRetrieveSubscription).not.toHaveBeenCalled()
-    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockApplyApiTierStripeEvent).not.toHaveBeenCalled()
+  })
+
+  it('activates a paid API subscription with exact Checkout and event identity', async () => {
+    const apiSubscription = {
+      id: 'sub_test_123',
+      status: 'active',
+      created: 1_700_000_000,
+      livemode: true,
+      customer: 'cus_test_123',
+      metadata: {
+        userId: apiUserId,
+        supabase_user_id: apiUserId,
+        type: 'api_tier',
+        api_plan: 'pro',
+      },
+      items: { data: [{ price: { id: 'price_api_pro' } }] },
+    }
+    mockRetrieveSubscription.mockResolvedValue(apiSubscription)
+
+    await handleCheckoutComplete(
+      checkoutSession({
+        metadata: {
+          userId: apiUserId,
+          supabase_user_id: apiUserId,
+          type: 'api_tier',
+          api_plan: 'pro',
+        },
+      }),
+      checkoutEvent
+    )
+
+    expect(mockApplyApiTierStripeEvent).toHaveBeenCalledWith({
+      userId: apiUserId,
+      plan: 'pro',
+      dailyLimit: 0,
+      subscription: apiSubscription,
+      event: checkoutEvent,
+      isActive: true,
+      isTerminal: false,
+    })
+  })
+
+  it('rejects an API Checkout whose signed mode disagrees with its snapshot', async () => {
+    await expect(
+      handleCheckoutComplete(
+        checkoutSession({
+          livemode: false,
+          metadata: {
+            userId: apiUserId,
+            supabase_user_id: apiUserId,
+            type: 'api_tier',
+            api_plan: 'starter',
+          },
+        }),
+        checkoutEvent
+      )
+    ).rejects.toThrow('API checkout cs_test_123 has invalid Stripe event identity')
+
+    expect(mockRetrieveSubscription).not.toHaveBeenCalled()
+    expect(mockApplyApiTierStripeEvent).not.toHaveBeenCalled()
+  })
+
+  it('rejects an API subscription whose metadata disagrees with its Checkout', async () => {
+    mockRetrieveSubscription.mockResolvedValue({
+      id: 'sub_test_123',
+      status: 'active',
+      created: 1_700_000_000,
+      livemode: true,
+      customer: 'cus_test_123',
+      metadata: {
+        userId: apiUserId,
+        supabase_user_id: apiUserId,
+        type: 'api_tier',
+        api_plan: 'starter',
+      },
+      items: { data: [{ price: { id: 'price_api_starter' } }] },
+    })
+
+    await expect(
+      handleCheckoutComplete(
+        checkoutSession({
+          metadata: {
+            userId: apiUserId,
+            supabase_user_id: apiUserId,
+            type: 'api_tier',
+            api_plan: 'pro',
+          },
+        }),
+        checkoutEvent
+      )
+    ).rejects.toThrow('API subscription sub_test_123 metadata does not match its checkout')
+    expect(mockApplyApiTierStripeEvent).not.toHaveBeenCalled()
   })
 
   it('does not grant lifetime access before the one-time payment is paid', async () => {
