@@ -1,13 +1,15 @@
 const mockReadSealedRankingGeneration = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
   readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
 }))
 
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
 import { readRankingExportRows } from '@/lib/rankings/read-ranking-export'
 
 const COHORT_ID = '11111111-1111-4111-8111-111111111111'
+const DYNAMIC_AUTHORITY_SOURCES = ['binance_futures', 'gtrade']
 
 function queryResult(data: unknown[] | null, error: { message: string } | null = null) {
   const result = { data, error }
@@ -38,33 +40,54 @@ describe('readRankingExportRows', () => {
       async (
         _client: unknown,
         input: { season: string; sources: string[] },
-        reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+        reader: (publication: {
+          scoreCohortId: string
+          proofs: Array<{ source: string }>
+        }) => Promise<unknown>
       ) => ({
-        value: await reader({ scoreCohortId: COHORT_ID }),
+        value: await reader({
+          scoreCohortId: COHORT_ID,
+          proofs: input.sources.map((source) => ({ source })),
+        }),
         input,
+      })
+    )
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(
+      async (
+        _client: unknown,
+        season: string,
+        reader: (publication: {
+          scoreCohortId: string
+          proofs: Array<{ source: string }>
+        }) => Promise<unknown>
+      ) => ({
+        value: await reader({
+          scoreCohortId: COHORT_ID,
+          proofs: DYNAMIC_AUTHORITY_SOURCES.map((source) => ({ source })),
+        }),
+        season,
       })
     )
   })
 
-  it('binds the requested window, public sources, and deterministic order to one cohort', async () => {
+  it('binds the requested window, dynamic authority, and deterministic order to one cohort', async () => {
     const query = queryResult([{ source: 'binance_futures', trader_id: 'trader-1' }])
     const supabase = { from: jest.fn(() => query) } as never
-    const expectedSources = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
 
     const rows = await readRankingExportRows(supabase, {
       season: '30D',
       limit: 500,
     })
 
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledWith(
       supabase,
-      { season: '30D', sources: expectedSources },
+      '30D',
       expect.any(Function),
       { timeoutMs: 10_000 }
     )
     expect(query.eq).toHaveBeenCalledWith('season_id', '30D')
     expect(query.filter).toHaveBeenCalledWith('rank_publication_id', 'eq', COHORT_ID)
-    expect(query.in).toHaveBeenCalledWith('source', expectedSources)
+    expect(query.in).toHaveBeenCalledWith('source', DYNAMIC_AUTHORITY_SOURCES)
     expect(query.order.mock.calls).toEqual([
       ['rank', { ascending: true }],
       ['source', { ascending: true }],

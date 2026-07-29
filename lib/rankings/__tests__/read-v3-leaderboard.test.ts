@@ -4,15 +4,34 @@ jest.mock('@/lib/data/unified', () => ({
 }))
 
 const mockReadSealedRankingGeneration = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
   readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
 }))
 
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
 import { readV3Leaderboard } from '@/lib/rankings/read-v3-leaderboard'
 
 const COHORT_ID = '11111111-1111-4111-8111-111111111111'
+const DYNAMIC_AUTHORITY_SOURCES = ['binance_futures', 'gtrade']
+
+async function readWithSources(
+  sources: readonly string[],
+  reader: (publication: {
+    scoreCohortId: string
+    proofs: Array<{ source: string; published_rank_count: number }>
+  }) => Promise<unknown>
+) {
+  const publication = {
+    scoreCohortId: COHORT_ID,
+    proofs: sources.map((source, index) => ({
+      source,
+      published_rank_count: index + 1,
+    })),
+  }
+  return { value: await reader(publication) }
+}
 
 describe('readV3Leaderboard', () => {
   beforeEach(() => {
@@ -29,31 +48,25 @@ describe('readV3Leaderboard', () => {
           scoreCohortId: string
           proofs: Array<{ source: string; published_rank_count: number }>
         }) => Promise<unknown>
-      ) => {
-        const publication = {
-          scoreCohortId: COHORT_ID,
-          proofs: input.sources.map((source, index) => ({
-            source,
-            published_rank_count: index + 1,
-          })),
-        }
-        return { value: await reader(publication) }
-      }
+      ) => readWithSources(input.sources, reader)
+    )
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(
+      async (_client: unknown, _season: string, reader: Parameters<typeof readWithSources>[1]) =>
+        readWithSources(DYNAMIC_AUTHORITY_SOURCES, reader)
     )
   })
 
-  it('binds the all-source API read and total to one sealed proof set', async () => {
+  it('binds the all-source API read and total to the dynamic authority proof set', async () => {
     const supabase = {} as never
     const result = await readV3Leaderboard(supabase, {
       period: '90D',
       limit: 50,
       offset: 25,
     })
-    const expectedSources = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
 
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledWith(
       supabase,
-      { season: '90D', sources: expectedSources },
+      '90D',
       expect.any(Function),
       { timeoutMs: 10_000 }
     )
@@ -64,11 +77,11 @@ describe('readV3Leaderboard', () => {
         limit: 50,
         offset: 25,
         scoreCohortId: COHORT_ID,
-        allowedSources: expectedSources,
+        allowedSources: DYNAMIC_AUTHORITY_SOURCES,
       })
     )
     expect(result.traders).toEqual([{ traderKey: 'trader-1' }])
-    expect(result.total).toBe((expectedSources.length * (expectedSources.length + 1)) / 2)
+    expect(result.total).toBe(3)
   })
 
   it('uses the exact canonical platform as the proof and SQL source scope', async () => {
