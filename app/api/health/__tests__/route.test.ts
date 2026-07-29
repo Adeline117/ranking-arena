@@ -398,6 +398,42 @@ describe('GET /api/health', () => {
     })
   })
 
+  it.each([
+    [
+      'client initialization',
+      () => mockGetSharedRedis.mockReturnValueOnce(new Promise(() => undefined)),
+    ],
+    [
+      'ping',
+      () =>
+        mockGetSharedRedis.mockResolvedValueOnce({
+          ping: jest.fn().mockReturnValue(new Promise(() => undefined)),
+        }),
+    ],
+  ])('bounds Redis %s even when it never settles', async (_stage, arrange) => {
+    jest.useFakeTimers()
+    arrange()
+
+    try {
+      const { GET } = await import('../route')
+      const responsePromise = GET()
+      await jest.advanceTimersByTimeAsync(8_000)
+      const response = await responsePromise
+      const body = await response.json()
+
+      expect(response.status).toBe(202)
+      expect(body.status).toBe('degraded')
+      expect(body.responseTimeMs).toBeLessThanOrEqual(8_000)
+      expect(body.checks.redis).toMatchObject({
+        status: 'fail',
+        message: 'Redis check timed out (8s)',
+      })
+      expect(jest.getTimerCount()).toBe(0)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('bounds the VPS database heartbeat fallback', async () => {
     jest.useFakeTimers()
     process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
@@ -543,6 +579,66 @@ describe('GET /api/health', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
       expect(observedFetchSignals).toHaveLength(1)
       expect(observedFetchSignals[0].aborted).toBe(true)
+      expect(jest.getTimerCount()).toBe(0)
+    } finally {
+      restore()
+      jest.useRealTimers()
+    }
+  })
+
+  it('bounds every VPS fallback when transports ignore abort and never settle', async () => {
+    jest.useFakeTimers()
+    process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
+    process.env.VPS_PROXY_KEY = 'vps-key'
+    const observedFetchSignals: AbortSignal[] = []
+    const fetchMock = jest.fn((_url: string, init?: RequestInit) => {
+      observedFetchSignals.push(init?.signal as AbortSignal)
+      return new Promise<Response>(() => undefined)
+    })
+    const { restore } = installFetchMock(fetchMock)
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'trader_sources') {
+        return {
+          select: () => ({
+            limit: () => abortableResult(Promise.resolve({ data: [{ id: 1 }], error: null })),
+          }),
+        }
+      }
+      if (table === 'pipeline_logs') {
+        const chain = {
+          eq: () => chain,
+          or: () => chain,
+          gte: () => chain,
+          limit: () => chain,
+          abortSignal: (signal: AbortSignal) => {
+            observedSupabaseSignals.push(signal)
+            return chain
+          },
+          maybeSingle: () => new Promise(() => undefined),
+        }
+        return { select: () => chain }
+      }
+      throw new Error(`unexpected table: ${table}`)
+    })
+
+    try {
+      const { GET } = await import('../route')
+      const startedAt = Date.now()
+      const responsePromise = GET()
+      await jest.advanceTimersByTimeAsync(4_000)
+      const response = await responsePromise
+      const body = await response.json()
+
+      expect(Date.now() - startedAt).toBeLessThanOrEqual(4_000)
+      expect(response.status).toBe(200)
+      expect(body.checks.vps).toMatchObject({
+        status: 'skip',
+        message: expect.stringContaining('no recent heartbeat'),
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(observedFetchSignals).toHaveLength(2)
+      expect(observedFetchSignals.every((signal) => signal.aborted)).toBe(true)
+      expect(observedSupabaseSignals.some((signal) => signal.aborted)).toBe(true)
       expect(jest.getTimerCount()).toBe(0)
     } finally {
       restore()
