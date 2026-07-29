@@ -10,6 +10,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SCORER_MIGRATION="$ROOT_DIR/supabase/migrations/20260722041000_pure_arena_score_v4_scorer.sql"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260722051000_leaderboard_score_input_manifest_contract.sql"
 PNL_MIGRATION="$ROOT_DIR/supabase/migrations/20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql"
+V5_SCORER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729070000_pure_arena_score_v5_zero_metric_scorer.sql"
+V2_MIGRATION="$ROOT_DIR/supabase/migrations/20260729070500_leaderboard_score_input_manifest_v2.sql"
 FIXTURE="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-score-input-manifest-v1.json"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
@@ -1017,6 +1019,583 @@ if [[ "$postwork_expiry_output" != *"validity fell below 1 second"* ]]; then
   echo "$postwork_expiry_output" >&2
   exit 1
 fi
+
+psql_cmd -q <<'SQL'
+CREATE TABLE public.manifest_v1_catalog_snapshot AS
+SELECT
+  function_row.proname,
+  function_row.oid,
+  pg_catalog.to_jsonb(function_row) AS catalog
+FROM pg_catalog.pg_proc AS function_row
+WHERE function_row.oid IN (
+  'arena.encode_leaderboard_score_input_manifest_v1(text,text,text,text,jsonb,text,jsonb,text,jsonb,jsonb,timestamp with time zone)'::regprocedure::oid,
+  'arena.seal_leaderboard_score_input_manifest_v1(text,text,text,text,jsonb,text,jsonb,text,jsonb,jsonb,timestamp with time zone)'::regprocedure::oid,
+  'arena.verify_leaderboard_score_input_manifest_v1(uuid)'::regprocedure::oid
+);
+SQL
+
+psql_cmd -q -f "$V5_SCORER_MIGRATION"
+
+expect_v2_preflight_failure() {
+  local expected_message="$1"
+  local label="$2"
+  local output
+  local status
+  set +e
+  output="$(psql_cmd -q -f "$V2_MIGRATION" 2>&1)"
+  status=$?
+  set -e
+  if ((status == 0)); then
+    echo "manifest v2 accepted $label" >&2
+    exit 1
+  fi
+  if [[ "$output" != *"$expected_message"* ]]; then
+    echo "manifest v2 rejected $label for the wrong reason" >&2
+    echo "$output" >&2
+    exit 1
+  fi
+  local rollback_state
+  rollback_state="$(psql_cmd -Atqc "
+    SELECT
+      (pg_catalog.to_regprocedure(
+        'arena.encode_leaderboard_score_input_manifest_v2(text,text,text,text,jsonb,text,jsonb,text,jsonb,jsonb,timestamp with time zone)'
+      ) IS NULL)::text || '|' ||
+      (pg_catalog.to_regprocedure(
+        'arena.seal_leaderboard_score_input_manifest_v2(text,text,text,text,jsonb,text,jsonb,text,jsonb,jsonb,timestamp with time zone)'
+      ) IS NULL)::text || '|' ||
+      (pg_catalog.to_regprocedure(
+        'arena.verify_leaderboard_score_input_manifest_v2(uuid)'
+      ) IS NULL)::text || '|' ||
+      (SELECT pg_catalog.count(*)
+       FROM pg_catalog.pg_constraint
+       WHERE conrelid = 'arena.leaderboard_score_input_manifests'::regclass
+         AND conname =
+           'leaderboard_score_input_manifest_v2_required_metrics')::text || '|' ||
+      (SELECT pg_catalog.strpos(
+         pg_catalog.pg_get_expr(conbin, conrelid, true),
+         'leaderboard-score-input-manifest@2'
+       ) = 0
+       FROM pg_catalog.pg_constraint
+       WHERE conrelid = 'arena.leaderboard_score_input_manifests'::regclass
+         AND conname =
+           'leaderboard_score_input_manifest_scalar_binding')::text;
+  ")"
+  if [[ "$rollback_state" != 'true|true|true|0|true' ]]; then
+    echo "failed manifest v2 preflight left partial state: $rollback_state" >&2
+    exit 1
+  fi
+}
+
+psql_cmd -q <<'SQL'
+GRANT EXECUTE ON FUNCTION arena.compute_arena_scores_v5_json(text, jsonb)
+  TO PUBLIC;
+SQL
+expect_v2_preflight_failure \
+  'manifest v2 prerequisite authority boundary drifted' \
+  'a leaked v5 scorer grant'
+psql_cmd -q <<'SQL'
+REVOKE ALL ON FUNCTION arena.compute_arena_scores_v5_json(text, jsonb)
+  FROM PUBLIC;
+GRANT SELECT ON TABLE arena.leaderboard_score_input_manifests TO service_role;
+SQL
+expect_v2_preflight_failure \
+  'manifest v2 prerequisite authority boundary drifted' \
+  'a leaked manifest-table grant'
+psql_cmd -q <<'SQL'
+REVOKE ALL ON TABLE arena.leaderboard_score_input_manifests FROM service_role;
+CREATE FUNCTION arena.verify_leaderboard_score_input_manifest_v2(text)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+AS 'SELECT pg_catalog.jsonb_build_object(''accepted'', true)';
+SQL
+expect_v2_preflight_failure \
+  'noncanonical manifest v2 function overload detected' \
+  'a noncanonical same-name overload'
+psql_cmd -q <<'SQL'
+DROP FUNCTION arena.verify_leaderboard_score_input_manifest_v2(text);
+SQL
+
+psql_cmd -q -f "$V2_MIGRATION"
+
+psql_cmd -q <<'SQL'
+DO $manifest_v2_semantics_proof$
+DECLARE
+  v_fixture jsonb := (SELECT payload FROM public.manifest_fixture);
+  v_zero_inputs jsonb;
+  v_sealed jsonb;
+  v_verified jsonb;
+  v_manifest jsonb;
+  v_zero_output jsonb;
+  v_v1_id uuid;
+  v_bad_inputs jsonb;
+  v_bad_value jsonb;
+  v_bad_kind text;
+  v_metric text;
+  v_constraint_name text;
+  v_direct_manifest jsonb;
+  v_direct_digest text;
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.manifest_v1_catalog_snapshot AS snapshot
+    JOIN pg_catalog.pg_proc AS function_row
+      ON function_row.proname = snapshot.proname
+    WHERE function_row.oid <> snapshot.oid
+       OR pg_catalog.to_jsonb(function_row) IS DISTINCT FROM snapshot.catalog
+  ) OR (
+    SELECT pg_catalog.count(*)
+    FROM public.manifest_v1_catalog_snapshot
+  ) <> 3 THEN
+    RAISE EXCEPTION 'manifest v2 changed a historical v1 function';
+  END IF;
+
+  v_zero_inputs := pg_catalog.jsonb_set(
+    pg_catalog.jsonb_set(
+      pg_catalog.jsonb_set(
+        pg_catalog.jsonb_set(
+          v_fixture->'inputs',
+          '{0,win_rate}',
+          '0'::jsonb
+        ),
+        '{0,max_drawdown}',
+        '0'::jsonb
+      ),
+      '{0,profit_factor}',
+      'null'::jsonb
+    ),
+    '{1,profit_factor}',
+    'null'::jsonb
+  );
+  v_sealed := arena.seal_leaderboard_score_input_manifest_v2(
+    v_fixture->>'period',
+    v_fixture->>'sourceBundleDigest',
+    v_fixture->>'scoreRowsDigest',
+    v_fixture->>'physicalBoardsDigest',
+    v_fixture->'sourceEvidence',
+    v_fixture->>'enrichmentContract',
+    v_fixture->'enrichmentEvidence',
+    v_fixture->>'eligibilityContract',
+    v_fixture->'eligibilityEvidence',
+    v_zero_inputs,
+    pg_catalog.statement_timestamp() + interval '1 hour'
+  );
+  SELECT stored.manifest
+  INTO STRICT v_manifest
+  FROM arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest_id = (v_sealed->>'manifestId')::uuid;
+  SELECT output_row.value
+  INTO STRICT v_zero_output
+  FROM pg_catalog.jsonb_array_elements(v_manifest->'outputs') AS output_row(value)
+  WHERE output_row.value->>'source' = 'bybit'
+    AND output_row.value->>'sourceTraderId' = 'bob';
+
+  IF v_sealed->>'contract'
+       IS DISTINCT FROM 'leaderboard-score-input-manifest-seal@2'
+     OR v_manifest->>'contract'
+       IS DISTINCT FROM 'leaderboard-score-input-manifest@2'
+     OR v_manifest->'scorer'->>'contract'
+       IS DISTINCT FROM 'arena-score-v5-pg17@1'
+     OR v_manifest->'scorer'->>'definitionContract'
+       IS DISTINCT FROM 'arena-score-v5-pg17-definition@1'
+     OR v_manifest->'scorer'->>'definitionDigest' IS DISTINCT FROM
+       'a77fc9863c8e349aaea062c69ed5057167c5800383c6d9830d8214251cea6b18'
+     OR v_zero_output->'factors'->'drawdown' IS DISTINCT FROM '1'::jsonb
+     OR v_zero_output->'factors'->'consistency' IS DISTINCT FROM '0'::jsonb
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_catalog.jsonb_array_elements(v_manifest->'inputs') AS input_row(value)
+       WHERE input_row.value->>'source' = 'bybit'
+         AND input_row.value->>'source_trader_id' = 'bob'
+         AND input_row.value->'win_rate' = '0'::jsonb
+         AND input_row.value->'max_drawdown' = '0'::jsonb
+     ) THEN
+    RAISE EXCEPTION 'trusted-zero manifest v2 semantics drifted: %, %',
+      v_manifest, v_zero_output;
+  END IF;
+
+  v_verified := arena.verify_leaderboard_score_input_manifest_v2(
+    (v_sealed->>'manifestId')::uuid
+  );
+  IF v_verified->>'contract' IS DISTINCT FROM
+       'leaderboard-score-input-manifest-verification@2'
+     OR (v_verified->>'contentValid')::boolean IS DISTINCT FROM true
+     OR (v_verified->>'valid')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'fresh manifest v2 verification failed: %', v_verified;
+  END IF;
+
+  SELECT stored.manifest_id
+  INTO STRICT v_v1_id
+  FROM arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest->>'contract' = 'leaderboard-score-input-manifest@1'
+    AND stored.valid_until > pg_catalog.statement_timestamp()
+  ORDER BY stored.manifest_id
+  LIMIT 1;
+  v_verified := arena.verify_leaderboard_score_input_manifest_v1(v_v1_id);
+  IF (v_verified->>'contentValid')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'historical v1 manifest stopped verifying after v2';
+  END IF;
+  BEGIN
+    PERFORM arena.verify_leaderboard_score_input_manifest_v1(
+      (v_sealed->>'manifestId')::uuid
+    );
+    RAISE EXCEPTION 'v1 verifier accepted a v2 manifest';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN NULL;
+  END;
+  BEGIN
+    PERFORM arena.verify_leaderboard_score_input_manifest_v2(v_v1_id);
+    RAISE EXCEPTION 'v2 verifier accepted a v1 manifest';
+  EXCEPTION
+    WHEN SQLSTATE '22023' THEN NULL;
+  END;
+
+  FOREACH v_metric IN ARRAY ARRAY['win_rate', 'max_drawdown']::text[]
+  LOOP
+    FOREACH v_bad_kind IN ARRAY ARRAY[
+      'missing', 'null', 'string', 'object', 'array', 'boolean'
+    ]::text[]
+    LOOP
+      v_bad_inputs := v_fixture->'inputs';
+      IF v_bad_kind = 'missing' THEN
+        v_bad_inputs := pg_catalog.jsonb_set(
+          v_bad_inputs,
+          '{0}',
+          (v_bad_inputs->0) - v_metric
+        );
+      ELSE
+        v_bad_value := CASE v_bad_kind
+          WHEN 'null' THEN 'null'::jsonb
+          WHEN 'string' THEN '"0"'::jsonb
+          WHEN 'object' THEN '{}'::jsonb
+          WHEN 'array' THEN '[]'::jsonb
+          WHEN 'boolean' THEN 'true'::jsonb
+        END;
+        v_bad_inputs := pg_catalog.jsonb_set(
+          v_bad_inputs,
+          ARRAY['0', v_metric],
+          v_bad_value
+        );
+      END IF;
+      BEGIN
+        PERFORM arena.seal_leaderboard_score_input_manifest_v2(
+          v_fixture->>'period',
+          v_fixture->>'sourceBundleDigest',
+          v_fixture->>'scoreRowsDigest',
+          v_fixture->>'physicalBoardsDigest',
+          v_fixture->'sourceEvidence',
+          v_fixture->>'enrichmentContract',
+          v_fixture->'enrichmentEvidence',
+          v_fixture->>'eligibilityContract',
+          v_fixture->'eligibilityEvidence',
+          v_bad_inputs,
+          pg_catalog.statement_timestamp() + interval '1 hour'
+        );
+        RAISE EXCEPTION 'v2 % % unexpectedly sealed', v_metric, v_bad_kind;
+      EXCEPTION
+        WHEN SQLSTATE '22023' THEN NULL;
+      END;
+    END LOOP;
+  END LOOP;
+
+  v_bad_inputs := pg_catalog.jsonb_set(
+    v_fixture->'inputs',
+    '{0,pnl}',
+    'null'::jsonb
+  );
+  BEGIN
+    PERFORM arena.seal_leaderboard_score_input_manifest_v2(
+      v_fixture->>'period',
+      v_fixture->>'sourceBundleDigest',
+      v_fixture->>'scoreRowsDigest',
+      v_fixture->>'physicalBoardsDigest',
+      v_fixture->'sourceEvidence',
+      v_fixture->>'enrichmentContract',
+      v_fixture->'enrichmentEvidence',
+      v_fixture->>'eligibilityContract',
+      v_fixture->'eligibilityEvidence',
+      v_bad_inputs,
+      pg_catalog.statement_timestamp() + interval '1 hour'
+    );
+    RAISE EXCEPTION 'v2 unknown PnL unexpectedly sealed';
+  EXCEPTION
+    WHEN SQLSTATE '22023' THEN NULL;
+  END;
+
+  FOR v_metric, v_bad_value IN
+    SELECT boundary.metric, boundary.value
+    FROM (VALUES
+      ('win_rate', '-0.1'::jsonb),
+      ('win_rate', '100.1'::jsonb),
+      ('max_drawdown', '-0.1'::jsonb),
+      ('max_drawdown', '100'::jsonb)
+    ) AS boundary(metric, value)
+  LOOP
+    v_bad_inputs := pg_catalog.jsonb_set(
+      v_fixture->'inputs',
+      ARRAY['0', v_metric],
+      v_bad_value
+    );
+    BEGIN
+      PERFORM arena.seal_leaderboard_score_input_manifest_v2(
+        v_fixture->>'period',
+        v_fixture->>'sourceBundleDigest',
+        v_fixture->>'scoreRowsDigest',
+        v_fixture->>'physicalBoardsDigest',
+        v_fixture->'sourceEvidence',
+        v_fixture->>'enrichmentContract',
+        v_fixture->'enrichmentEvidence',
+        v_fixture->>'eligibilityContract',
+        v_fixture->'eligibilityEvidence',
+        v_bad_inputs,
+        pg_catalog.statement_timestamp() + interval '1 hour'
+      );
+      RAISE EXCEPTION 'v2 % boundary % unexpectedly sealed',
+        v_metric, v_bad_value;
+    EXCEPTION
+      WHEN SQLSTATE '22023' THEN NULL;
+    END;
+  END LOOP;
+
+  v_direct_digest := pg_catalog.repeat('7', 64);
+  v_direct_manifest := pg_catalog.jsonb_set(
+    pg_catalog.jsonb_set(
+      v_manifest,
+      '{inputs,0,win_rate}',
+      'null'::jsonb
+    ),
+    '{manifestDigest}',
+    pg_catalog.to_jsonb(v_direct_digest)
+  );
+  BEGIN
+    INSERT INTO arena.leaderboard_score_input_manifests (
+      manifest_digest, period, manifest, valid_until
+    ) VALUES (
+      v_direct_digest,
+      v_direct_manifest->>'period',
+      v_direct_manifest,
+      (v_direct_manifest->>'validUntil')::timestamp with time zone
+    );
+    RAISE EXCEPTION 'v2 table CHECK accepted a null win rate';
+  EXCEPTION
+    WHEN check_violation THEN
+      GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;
+      IF v_constraint_name IS DISTINCT FROM
+           'leaderboard_score_input_manifest_v2_required_metrics' THEN
+        RAISE EXCEPTION 'unexpected v2 direct-write constraint: %',
+          v_constraint_name;
+      END IF;
+  END;
+
+  v_direct_digest := pg_catalog.repeat('6', 64);
+  v_direct_manifest := pg_catalog.jsonb_set(
+    pg_catalog.jsonb_set(
+      v_manifest,
+      '{inputs,0,max_drawdown}',
+      '100'::jsonb
+    ),
+    '{manifestDigest}',
+    pg_catalog.to_jsonb(v_direct_digest)
+  );
+  BEGIN
+    INSERT INTO arena.leaderboard_score_input_manifests (
+      manifest_digest, period, manifest, valid_until
+    ) VALUES (
+      v_direct_digest,
+      v_direct_manifest->>'period',
+      v_direct_manifest,
+      (v_direct_manifest->>'validUntil')::timestamp with time zone
+    );
+    RAISE EXCEPTION 'v2 table CHECK accepted a 100 percent drawdown';
+  EXCEPTION
+    WHEN check_violation THEN
+      GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;
+      IF v_constraint_name IS DISTINCT FROM
+           'leaderboard_score_input_manifest_v2_required_metrics' THEN
+        RAISE EXCEPTION 'unexpected v2 MDD-cap constraint: %',
+          v_constraint_name;
+      END IF;
+  END;
+
+  v_direct_digest := pg_catalog.repeat('9', 64);
+  v_direct_manifest := pg_catalog.jsonb_set(
+    pg_catalog.jsonb_set(
+      v_manifest,
+      '{contract}',
+      '"leaderboard-score-input-manifest@3"'::jsonb
+    ),
+    '{manifestDigest}',
+    pg_catalog.to_jsonb(v_direct_digest)
+  );
+  BEGIN
+    INSERT INTO arena.leaderboard_score_input_manifests (
+      manifest_digest, period, manifest, valid_until
+    ) VALUES (
+      v_direct_digest,
+      v_direct_manifest->>'period',
+      v_direct_manifest,
+      (v_direct_manifest->>'validUntil')::timestamp with time zone
+    );
+    RAISE EXCEPTION 'manifest table accepted an unknown outer contract';
+  EXCEPTION
+    WHEN check_violation THEN
+      GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;
+      IF v_constraint_name IS DISTINCT FROM
+           'leaderboard_score_input_manifest_scalar_binding' THEN
+        RAISE EXCEPTION 'unexpected unknown-contract constraint: %',
+          v_constraint_name;
+      END IF;
+  END;
+
+  SELECT stored.manifest
+  INTO STRICT v_direct_manifest
+  FROM arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest_id = v_v1_id;
+  v_direct_digest := pg_catalog.repeat('8', 64);
+  v_direct_manifest := pg_catalog.jsonb_set(
+    pg_catalog.jsonb_set(
+      v_direct_manifest,
+      '{inputs,0}',
+      (v_direct_manifest->'inputs'->0) - 'win_rate' - 'max_drawdown'
+    ),
+    '{manifestDigest}',
+    pg_catalog.to_jsonb(v_direct_digest)
+  );
+  INSERT INTO arena.leaderboard_score_input_manifests (
+    manifest_digest, period, manifest, valid_until
+  ) VALUES (
+    v_direct_digest,
+    v_direct_manifest->>'period',
+    v_direct_manifest,
+    (v_direct_manifest->>'validUntil')::timestamp with time zone
+  );
+  DELETE FROM arena.leaderboard_score_input_manifests
+  WHERE manifest_digest = v_direct_digest;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'v2 risk CHECK unexpectedly applied to a v1 row';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.unnest(
+      ARRAY['anon', 'authenticated', 'service_role', 'leaked_default_role']::text[]
+    ) AS checked_role(role_name)
+    CROSS JOIN pg_catalog.unnest(ARRAY[
+      'arena.encode_leaderboard_score_input_manifest_v2(text,text,text,text,jsonb,text,jsonb,text,jsonb,jsonb,timestamp with time zone)',
+      'arena.seal_leaderboard_score_input_manifest_v2(text,text,text,text,jsonb,text,jsonb,text,jsonb,jsonb,timestamp with time zone)',
+      'arena.verify_leaderboard_score_input_manifest_v2(uuid)'
+    ]::text[]) AS checked_function(signature)
+    WHERE pg_catalog.has_function_privilege(
+      checked_role.role_name,
+      checked_function.signature,
+      'EXECUTE'
+    )
+  ) THEN
+    RAISE EXCEPTION 'manifest v2 leaked a non-owner EXECUTE privilege';
+  END IF;
+END
+$manifest_v2_semantics_proof$;
+
+CREATE TABLE public.manifest_v2_catalog_snapshot AS
+SELECT
+  'function'::text AS kind,
+  function_row.oid,
+  function_row.proname AS name,
+  pg_catalog.to_jsonb(function_row) AS catalog
+FROM pg_catalog.pg_proc AS function_row
+WHERE function_row.oid IN (
+  'arena.encode_leaderboard_score_input_manifest_v2(text,text,text,text,jsonb,text,jsonb,text,jsonb,jsonb,timestamp with time zone)'::regprocedure::oid,
+  'arena.seal_leaderboard_score_input_manifest_v2(text,text,text,text,jsonb,text,jsonb,text,jsonb,jsonb,timestamp with time zone)'::regprocedure::oid,
+  'arena.verify_leaderboard_score_input_manifest_v2(uuid)'::regprocedure::oid
+)
+UNION ALL
+SELECT
+  'constraint'::text,
+  constraint_row.oid,
+  constraint_row.conname,
+  pg_catalog.to_jsonb(constraint_row)
+FROM pg_catalog.pg_constraint AS constraint_row
+WHERE constraint_row.conrelid =
+      'arena.leaderboard_score_input_manifests'::regclass
+  AND constraint_row.conname IN (
+    'leaderboard_score_input_manifest_scalar_binding',
+    'leaderboard_score_input_manifest_v2_required_metrics'
+  );
+SQL
+
+psql_cmd -q <<'SQL'
+GRANT EXECUTE ON FUNCTION arena.encode_leaderboard_score_input_manifest_v2(
+  text, text, text, text, jsonb, text, jsonb, text, jsonb, jsonb,
+  timestamp with time zone
+) TO leaked_default_role;
+GRANT EXECUTE ON FUNCTION arena.seal_leaderboard_score_input_manifest_v2(
+  text, text, text, text, jsonb, text, jsonb, text, jsonb, jsonb,
+  timestamp with time zone
+) TO leaked_default_role;
+GRANT EXECUTE ON FUNCTION arena.verify_leaderboard_score_input_manifest_v2(uuid)
+  TO leaked_default_role;
+SQL
+psql_cmd -q -f "$V2_MIGRATION"
+psql_cmd -q <<'SQL'
+DO $manifest_v2_replay_proof$
+BEGIN
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM public.manifest_v2_catalog_snapshot
+  ) <> 5 OR EXISTS (
+    SELECT 1
+    FROM public.manifest_v2_catalog_snapshot AS snapshot
+    LEFT JOIN LATERAL (
+      SELECT
+        function_row.oid,
+        function_row.proname AS name,
+        pg_catalog.to_jsonb(function_row) AS catalog
+      FROM pg_catalog.pg_proc AS function_row
+      WHERE snapshot.kind = 'function'
+        AND function_row.proname = snapshot.name
+      UNION ALL
+      SELECT
+        constraint_row.oid,
+        constraint_row.conname,
+        pg_catalog.to_jsonb(constraint_row)
+      FROM pg_catalog.pg_constraint AS constraint_row
+      WHERE snapshot.kind = 'constraint'
+        AND constraint_row.conrelid =
+          'arena.leaderboard_score_input_manifests'::regclass
+        AND constraint_row.conname = snapshot.name
+    ) AS current_object ON true
+    WHERE current_object.oid IS NULL
+       OR current_object.oid <> snapshot.oid
+       OR current_object.catalog IS DISTINCT FROM snapshot.catalog
+  ) THEN
+    RAISE EXCEPTION 'manifest v2 replay changed function or CHECK identity';
+  END IF;
+END
+$manifest_v2_replay_proof$;
+SQL
+
+psql_cmd -q <<'SQL'
+ALTER FUNCTION arena.verify_leaderboard_score_input_manifest_v2(uuid)
+  RETURNS NULL ON NULL INPUT;
+SQL
+set +e
+v2_drift_output="$(psql_cmd -q -f "$V2_MIGRATION" 2>&1)"
+v2_drift_status=$?
+set -e
+if ((v2_drift_status == 0)); then
+  echo "manifest v2 migration accepted catalog drift" >&2
+  exit 1
+fi
+if [[ "$v2_drift_output" != *"existing manifest v2 function contract drifted"* ]]; then
+  echo "manifest v2 catalog drift failed for the wrong reason" >&2
+  echo "$v2_drift_output" >&2
+  exit 1
+fi
+psql_cmd -q <<'SQL'
+ALTER FUNCTION arena.verify_leaderboard_score_input_manifest_v2(uuid)
+  CALLED ON NULL INPUT;
+SQL
+psql_cmd -q -f "$V2_MIGRATION"
 
 set +e
 reapply_output="$(psql_cmd -q -f "$MIGRATION" 2>&1)"
