@@ -72,7 +72,7 @@ const DAY_MS = 86_400_000
 const STABLES = ['USDT', 'USD', 'USDC']
 const POSITION_HISTORY_LIMIT = 100
 const LEDGER_LIMIT = 1000
-const LEDGER_MAX_PAGES = 5
+const MAX_EVIDENCE_REQUESTS = 128
 
 function num(v: unknown): number | null {
   if (v === null || v === undefined) return null
@@ -181,17 +181,36 @@ async function eventsFromPositionsHistory(
 }
 
 /** Realized events via income/ledger records (binanceusdm REALIZED_PNL). */
-async function eventsFromLedger(client: CcxtLike, sinceMs: number): Promise<RealizedEvent[]> {
+async function eventsFromLedger(
+  client: CcxtLike,
+  sinceMs: number,
+  untilMs: number
+): Promise<RealizedEvent[]> {
   if (!client.fetchLedger) {
     throw new Error('[first-party] realized PnL ledger evidence is unavailable')
   }
+  const fetchLedger = client.fetchLedger.bind(client)
   const out: RealizedEvent[] = []
-  let since = sinceMs
-  for (let page = 0; page < LEDGER_MAX_PAGES; page++) {
-    const rows = await client.fetchLedger(undefined, since, LEDGER_LIMIT, {
+  let requests = 0
+
+  const fetchRange = async (rangeStart: number, rangeEnd: number): Promise<void> => {
+    requests += 1
+    if (requests > MAX_EVIDENCE_REQUESTS) {
+      throw new Error('[first-party] realized PnL ledger evidence is truncated')
+    }
+    const rows = await fetchLedger(undefined, rangeStart, LEDGER_LIMIT, {
       incomeType: 'REALIZED_PNL',
+      until: rangeEnd,
     })
-    if (!rows?.length) break
+    if (rows.length >= LEDGER_LIMIT) {
+      if (rangeStart >= rangeEnd) {
+        throw new Error('[first-party] realized PnL ledger evidence is truncated')
+      }
+      const midpoint = Math.floor((rangeStart + rangeEnd) / 2)
+      await fetchRange(rangeStart, midpoint)
+      await fetchRange(midpoint + 1, rangeEnd)
+      return
+    }
     for (const r of rows) {
       const ts = num(r.timestamp)
       const incomeType = String(
@@ -211,23 +230,16 @@ async function eventsFromLedger(client: CcxtLike, sinceMs: number): Promise<Real
               : r.direction === 'in'
                 ? Math.abs(normalizedAmount)
                 : normalizedAmount)
-        if (ts === null || amt === null) {
+        if (ts === null || amt === null || ts < rangeStart || ts > rangeEnd) {
           throw new Error('[first-party] realized PnL ledger evidence is invalid')
         }
         out.push({ ts, pnl: amt, positionLevel: false })
       }
     }
-    const maxTs = Math.max(...rows.map((r) => num(r.timestamp) ?? 0))
-    if (rows.length < LEDGER_LIMIT) break
-    if (!Number.isFinite(maxTs) || maxTs <= since) {
-      throw new Error('[first-party] realized PnL ledger evidence is invalid')
-    }
-    if (page === LEDGER_MAX_PAGES - 1) {
-      throw new Error('[first-party] realized PnL ledger evidence is truncated')
-    }
-    since = maxTs + 1
   }
-  return out
+
+  await fetchRange(sinceMs, untilMs)
+  return out.sort((a, b) => a.ts - b.ts)
 }
 
 /** Net transfers IN (deposits/transfer-in − withdrawals/transfer-out). */
@@ -353,7 +365,7 @@ export async function fetchFirstPartyAccount(
   const events =
     opts.realizedPnlSource === 'positions_history'
       ? await eventsFromPositionsHistory(client, sinceMs, nowMs, opts.positionHistoryMaxRangeDays)
-      : await eventsFromLedger(client, sinceMs)
+      : await eventsFromLedger(client, sinceMs, nowMs)
 
   // Transfers → per-window net-in + since-last-sync delta.
   const transfers = await netTransfers(client, sinceMs, nowMs, opts.transferLedgerContract)

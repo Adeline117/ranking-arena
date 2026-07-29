@@ -273,6 +273,57 @@ describe('first-party account equity evidence', () => {
     expect(result.events).toEqual([{ ts: NOW - 1_000, pnl: -25, positionLevel: false }])
     expect(fetchLedger).toHaveBeenCalledWith(undefined, NOW - 90 * DAY, 1000, {
       incomeType: 'REALIZED_PNL',
+      until: NOW,
+    })
+  })
+
+  it('time-partitions a saturated realized-PnL ledger instead of publishing a partial page', async () => {
+    const since = NOW - 2 * DAY
+    const midpoint = Math.floor((since + NOW) / 2)
+    const saturated = Array.from({ length: 1000 }, () => ({
+      timestamp: midpoint,
+      amount: 1,
+      direction: 'in',
+      info: { incomeType: 'REALIZED_PNL', income: '1' },
+    }))
+    const fetchLedger = jest
+      .fn()
+      .mockResolvedValueOnce(saturated)
+      .mockResolvedValueOnce([
+        {
+          timestamp: since + 1,
+          amount: 2,
+          direction: 'in',
+          info: { incomeType: 'REALIZED_PNL', income: '2' },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          timestamp: midpoint + 1,
+          amount: 3,
+          direction: 'in',
+          info: { incomeType: 'REALIZED_PNL', income: '3' },
+        },
+      ])
+
+    const result = await fetchFirstPartyAccount(client({ fetchLedger }), {
+      nowMs: NOW,
+      lookbackDays: 2,
+      balanceSemantics: 'total_includes_unrealized',
+      realizedPnlSource: 'income_ledger',
+    })
+
+    expect(result.events).toEqual([
+      { ts: since + 1, pnl: 2, positionLevel: false },
+      { ts: midpoint + 1, pnl: 3, positionLevel: false },
+    ])
+    expect(fetchLedger).toHaveBeenNthCalledWith(2, undefined, since, 1000, {
+      incomeType: 'REALIZED_PNL',
+      until: midpoint,
+    })
+    expect(fetchLedger).toHaveBeenNthCalledWith(3, undefined, midpoint + 1, 1000, {
+      incomeType: 'REALIZED_PNL',
+      until: NOW,
     })
   })
 
