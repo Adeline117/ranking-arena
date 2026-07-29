@@ -12688,6 +12688,18 @@ export type Database = {
           trader_type: string
         }[]
       }
+      send_channel_message_atomic: {
+        Args: {
+          p_channel_id: string
+          p_content: string
+          p_media_name?: string | null
+          p_media_type?: string | null
+          p_media_url?: string | null
+          p_reply_to_id?: string | null
+          p_sender_id: string
+        }
+        Returns: Json
+      }
       send_direct_message_atomic: {
         Args: {
           p_content: string
