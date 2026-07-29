@@ -159,6 +159,12 @@ INSERT INTO public.user_profiles (
     'cus_expired',
     pg_catalog.clock_timestamp() - interval '31 days',
     pg_catalog.clock_timestamp() - interval '1 day'
+  ),
+  (
+    '44444444-4444-4444-8444-444444444444',
+    'cus_missing_ledger',
+    pg_catalog.clock_timestamp() - interval '31 days',
+    pg_catalog.clock_timestamp() - interval '1 day'
   );
 
 SET ROLE service_role;
@@ -309,6 +315,71 @@ BEGIN
 END
 $unknown_product_review_row_is_retained$;
 
+INSERT INTO public.stripe_payment_ownerships (
+  product_kind,
+  ledger_id,
+  owner_user_id,
+  stripe_customer_id,
+  checkout_session_id
+) VALUES
+  (
+    'tip',
+    '44444444-4444-4444-8444-444444444441',
+    '44444444-4444-4444-8444-444444444444',
+    'cus_missing_ledger',
+    'cs_tip_missing_child'
+  ),
+  (
+    'group_pass',
+    '44444444-4444-4444-8444-444444444442',
+    '44444444-4444-4444-8444-444444444444',
+    'cus_missing_ledger',
+    'cs_group_missing_child'
+  );
+SET ROLE service_role;
+
+DO $missing_child_ledgers_are_not_fulfilled$
+DECLARE
+  v_sync jsonb;
+BEGIN
+  v_sync := public.sync_account_deletion_one_time_settlements(
+    '44444444-4444-4444-8444-444444444444',
+    'cus_missing_ledger',
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    '[{
+      "checkout_session_id":"cs_group_missing_child",
+      "livemode":true,
+      "stripe_customer_id":"cus_missing_ledger",
+      "product_kind":"group_pass",
+      "stripe_status":"complete",
+      "payment_status":"paid",
+      "ownership_status":"exact"
+    },{
+      "checkout_session_id":"cs_tip_missing_child",
+      "livemode":true,
+      "stripe_customer_id":"cus_missing_ledger",
+      "product_kind":"tip",
+      "stripe_status":"complete",
+      "payment_status":"paid",
+      "ownership_status":"exact"
+    }]'::jsonb
+  );
+
+  IF v_sync -> 'terminal_session_ids'
+    IS DISTINCT FROM '["cs_group_missing_child", "cs_tip_missing_child"]'::jsonb
+    OR EXISTS (
+      SELECT 1
+      FROM public.account_deletion_one_time_settlements AS settlement
+      WHERE settlement.user_id = '44444444-4444-4444-8444-444444444444'
+        AND settlement.settlement_status IS DISTINCT FROM 'terminal_manual_review'
+    )
+  THEN
+    RAISE EXCEPTION 'missing child ledger was falsely accepted as fulfilled: %', v_sync;
+  END IF;
+END
+$missing_child_ledgers_are_not_fulfilled$;
+
+RESET ROLE;
 INSERT INTO public.stripe_lifetime_seat_reservations (user_id, status)
 VALUES ('33333333-3333-4333-8333-333333333333', 'bound');
 SET ROLE service_role;

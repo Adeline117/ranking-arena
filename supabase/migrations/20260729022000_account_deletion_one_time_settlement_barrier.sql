@@ -409,6 +409,7 @@ BEGIN
             OR v_ownership.owner_user_id IS DISTINCT FROM p_user_id
             OR v_ownership.stripe_customer_id
               IS DISTINCT FROM v_customer_id
+            OR v_tip_status IS NULL
             OR v_tip_status NOT IN ('completed', 'refunded')
           THEN
             v_settlement_status := 'terminal_manual_review';
@@ -442,6 +443,7 @@ BEGIN
             OR v_ownership.owner_user_id IS DISTINCT FROM p_user_id
             OR v_ownership.stripe_customer_id
               IS DISTINCT FROM v_customer_id
+            OR v_group_outcome IS NULL
             OR v_group_outcome NOT IN (
               'activated',
               'renewed',

@@ -129,6 +129,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729014500_leaderboard_rank_generation_canonical_batches.sql
   20260729015000_leaderboard_rank_generation_attested_batch_writer.sql
   20260729020000_api_tier_cancellation_identity.sql
+  20260729022000_account_deletion_one_time_settlement_barrier.sql
   20260729023000_preserve_financial_owner_after_account_deletion.sql
   20260729054400_leaderboard_rank_generation_private_staging.sql
 )
