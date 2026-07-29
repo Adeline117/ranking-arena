@@ -150,6 +150,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729067000_atomic_trader_claim_revocation.sql
   20260729068000_atomic_profile_settings_revision.sql
   20260729070000_atomic_verified_trader_profile_revision.sql
+  20260729071000_atomic_primary_trader_projection.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
