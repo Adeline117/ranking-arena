@@ -33,27 +33,18 @@ import type {
 } from '@/lib/types/leaderboard'
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { TradingPeriod } from '@/lib/types/unified-trader'
-import { tieredGetOrSet, tieredGet, tieredSet } from '@/lib/cache/redis-layer'
+import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { withPublic } from '@/lib/api/middleware'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
-import {
-  currentScoredSources,
-  type LeaderboardCountCacheRow,
-} from '@/lib/data/leaderboard-count-cache'
-import {
-  sourceFreshnessStatusMap,
-  summarizeSourceFreshness,
-  type SourceFreshnessRow,
-} from '@/lib/rankings/source-freshness'
+import { sourceFreshnessStatusMap } from '@/lib/rankings/source-freshness'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
   filterPublicRankingSources,
   isPublicRankingSourceQuarantined,
   publicRankingCacheKey,
-  publicRankingCountFromCache,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
 import {
@@ -61,6 +52,7 @@ import {
   parsePublicActiveRankingSource,
 } from '@/lib/constants/exchanges'
 import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import type { SealedLeaderboardPublicationProofSet } from '@/lib/rankings/read-publication-proofs'
 import {
   createSealedRankingCacheEntry,
   parseSealedRankingCacheEntry,
@@ -68,38 +60,16 @@ import {
 
 const logger = createLogger('rankings-api')
 
-// availableSources cache via Redis (tieredGetOrSet, warm tier).
-//
-// IMPORTANT: reads from leaderboard_count_cache (one row per source) instead
-// of doing `SELECT source FROM leaderboard_ranks LIMIT 200`. The old query
-// returned physically-ordered rows, which on a (season_id, source) composite
-// index meant all 200 matching rows came from the FIRST source lexicographically
-// (e.g. just ['aevo']) — the bug was hidden by per-instance in-memory caching
-// (different instances had different partial orderings) until we moved to
-// shared Redis in task 17 and everyone saw the same broken cache entry.
-//
-// leaderboard_count_cache is maintained by refresh_leaderboard_count_cache()
-// at the end of compute-leaderboard cron, so it's always fresh.
-async function getAvailableSources(
-  supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
-  seasonId: string
-): Promise<string[]> {
-  const sources = await tieredGetOrSet<string[]>(
-    publicRankingCacheKey(`rankings:available-sources:v2:${seasonId}`),
-    async (): Promise<string[]> => {
-      const { data: sourceRows } = await supabase
-        .from('leaderboard_count_cache')
-        .select('source,total_count,updated_at')
-        .eq('season_id', seasonId)
-        .like('source', '%_gt0')
-      return filterPublicRankingSources(
-        currentScoredSources((sourceRows || []) as LeaderboardCountCacheRow[])
-      )
-    },
-    'warm', // 2min memory / 15min Redis — shared across instances
-    ['rankings', 'available-sources']
+function rankingProofSources(rankingsQuery: RankingsQuery): string[] {
+  if (rankingsQuery.platform) return [rankingsQuery.platform]
+
+  return filterPublicRankingSources(
+    rankingsQuery.category
+      ? PUBLIC_ACTIVE_RANKING_SOURCES.filter(
+          (source) => PLATFORM_CATEGORY[source] === rankingsQuery.category
+        )
+      : PUBLIC_ACTIVE_RANKING_SOURCES
   )
-  return filterPublicRankingSources(Array.isArray(sources) ? sources : [])
 }
 
 const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite']
@@ -197,26 +167,28 @@ export const GET = withPublic(
         )
       : null // skip cache for filtered queries
 
+    const query: RankingsQuery = {
+      window: normalizedWindow === 'composite' ? '90d' : normalizedWindow,
+      category: category || undefined,
+      platform: (platform || undefined) as Platform | undefined,
+      limit,
+      offset,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+      min_pnl: minPnl,
+      min_trades: minTrades,
+      trader_type: traderType || undefined,
+    }
+    const cacheSeason = query.window.toUpperCase() as TradingPeriod
+    const expectedCacheSources = rankingProofSources(query)
     let result: unknown
 
     try {
-      const query: RankingsQuery = {
-        window: normalizedWindow === 'composite' ? '90d' : normalizedWindow,
-        category: category || undefined,
-        platform: (platform || undefined) as Platform | undefined,
-        limit,
-        offset,
-        sort_by: sortBy,
-        sort_dir: sortDir,
-        min_pnl: minPnl,
-        min_trades: minTrades,
-        trader_type: traderType || undefined,
-      }
-      const cacheSeason = query.window.toUpperCase() as TradingPeriod
       const cachedEntry = cacheKey
         ? parseSealedRankingCacheEntry<unknown>(
             (await tieredGet<unknown>(cacheKey, 'hot')).data,
-            cacheSeason
+            cacheSeason,
+            expectedCacheSources
           )
         : null
 
@@ -239,13 +211,10 @@ export const GET = withPublic(
       // DB query failed — try to serve last-known-good cached data instead of returning 500.
       // Only attempt fallback for default (cacheable) queries; filtered queries have no cache.
       if (cacheKey) {
-        const cacheSeason =
-          normalizedWindow === 'composite'
-            ? '90D'
-            : (normalizedWindow.toUpperCase() as TradingPeriod)
         const staleEntry = parseSealedRankingCacheEntry<Record<string, unknown>>(
           (await tieredGet<unknown>(cacheKey, 'hot')).data,
-          cacheSeason
+          cacheSeason,
+          expectedCacheSources
         )
         if (staleEntry) {
           logger.warn(
@@ -281,21 +250,12 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
   const { getReadReplica } = await import('@/lib/supabase/read-replica')
   const supabase = getReadReplica()
   const season = rankingsQuery.window.toUpperCase() as TradingPeriod
-  const proofSources = rankingsQuery.platform
-    ? [rankingsQuery.platform]
-    : filterPublicRankingSources(
-        rankingsQuery.category
-          ? PUBLIC_ACTIVE_RANKING_SOURCES.filter(
-              (source) => PLATFORM_CATEGORY[source] === rankingsQuery.category
-            )
-          : PUBLIC_ACTIVE_RANKING_SOURCES
-      )
+  const proofSources = rankingProofSources(rankingsQuery)
 
   return readSealedRankingGeneration(
     supabase,
     { season, sources: proofSources },
-    (publication) =>
-      getRankingsFallbackForCohort(rankingsQuery, cursor, supabase, publication.scoreCohortId),
+    (publication) => getRankingsFallbackForCohort(rankingsQuery, cursor, supabase, publication),
     { timeoutMs: 10_000 }
   )
 }
@@ -304,7 +264,7 @@ async function getRankingsFallbackForCohort(
   rankingsQuery: RankingsQuery,
   _cursor: string | undefined,
   supabase: ReturnType<typeof import('@/lib/supabase/read-replica').getReadReplica>,
-  scoreCohortId: string
+  publication: SealedLeaderboardPublicationProofSet
 ) {
   const {
     window,
@@ -365,7 +325,7 @@ async function getRankingsFallbackForCohort(
       .from('leaderboard_ranks')
       .select(SELECT_COLS, opts ? { count: opts.count } : undefined)
       .eq('season_id', seasonId)
-      .filter('rank_publication_id', 'eq', scoreCohortId)
+      .filter('rank_publication_id', 'eq', publication.scoreCohortId)
       // >0 (not just non-null): excluded/zeroed traders are set to arena_score=0
       // by zeroOutExcluded; live board + Redis sync already use >0, so align the
       // main board's tail & counts with them (was .not(null) → leaked 0-score rows).
@@ -417,35 +377,11 @@ async function getRankingsFallbackForCohort(
   let error: { message: string } | null = null
 
   if (safeLimit <= CHUNK_SIZE) {
-    // Single request — NO count (exact count takes 25s+ on 314k rows with OR filters)
-    // Total count is read from leaderboard_count_cache (maintained by cron)
-    // in parallel with the main query to avoid sequential round-trips.
-    // MUST match the serving query's `.gt('arena_score', 0)` filter → read the
-    // `_gt0` count variant, not the plain key. The plain `_all` counts ALL rows
-    // incl. arena_score<=0, so it UNDER-counts the served set (90D: 8811 vs the
-    // real 9587) → the "N traders" figure was low AND `hasMore` truncated the
-    // board ~776 rows early, hiding the lowest-ranked traders from themselves.
-    const [result, countResult] = await Promise.all([
-      buildBaseQuery().range(offset, offset + safeLimit - 1),
-      supabase
-        .from('leaderboard_count_cache')
-        .select('source,total_count,updated_at')
-        .eq('season_id', seasonId)
-        .like('source', '%_gt0'),
-    ])
+    // A generic count cache can be from a different publication generation.
+    // The sealed proof set below is the only generation-bound count authority.
+    const result = await buildBaseQuery().range(offset, offset + safeLimit - 1)
     rows = (result.data || []) as Record<string, unknown>[]
     error = result.error
-    // A retired source's old key must never claim rows. If the current cache
-    // generation is unavailable, fall back to the rows we actually observed.
-    totalCount =
-      publicRankingCountFromCache(
-        (countResult.data || []) as LeaderboardCountCacheRow[],
-        platformFilter
-          ? { source: platformFilter }
-          : platformsInCategory
-            ? { sources: platformsInCategory }
-            : {}
-      ) ?? offset + rows.length
   } else {
     // Chunked fetch: first chunk, no count
     const firstResult = await buildBaseQuery().range(offset, offset + CHUNK_SIZE - 1)
@@ -480,6 +416,11 @@ async function getRankingsFallbackForCohort(
     throw new Error(`Leaderboard query failed: ${error.message}`)
   }
 
+  const hasResultFilters = min_pnl != null || min_trades != null || trader_type != null
+  totalCount = hasResultFilters
+    ? offset + rows.length + (rows.length === safeLimit ? 1 : 0)
+    : publication.proofs.reduce((sum, proof) => sum + proof.published_rank_count, 0)
+
   // Deduplicate by source:source_trader_id (case-insensitive for 0x addresses)
   const seenRowKeys = new Set<string>()
   const paginatedRows = (rows || []).filter((r: Record<string, unknown>) => {
@@ -491,38 +432,40 @@ async function getRankingsFallbackForCohort(
     return true
   })
 
-  // Fetch available sources + true source-data watermarks in parallel. Never
-  // substitute pipeline_logs or leaderboard_ranks.computed_at: both describe
-  // Arena compute activity, not the age of exchange/protocol data.
-  const seasonIdUpper = seasonId
-  let freshnessQuery = supabase
-    .from('leaderboard_source_freshness')
-    .select('source,source_as_of')
-    .eq('season_id', seasonIdUpper)
-    .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
-  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-    freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+  // Source membership and watermarks must come from the exact proof generation
+  // that authorized these rows. Generic freshness/count tables can cross a
+  // publication cutover and describe a different leaderboard.
+  const availableSources = publication.proofs
+    .filter((proof) => proof.published_rank_count > 0)
+    .map((proof) => proof.source)
+  const nowMs = Date.now()
+  const sourceFreshness = publication.proofs
+    .filter((proof) => proof.published_rank_count > 0)
+    .map((proof) => {
+      const ageSeconds = Math.max(0, Math.floor((nowMs - Date.parse(proof.source_as_of)) / 1000))
+      return {
+        source: proof.source,
+        updated_at: proof.source_as_of,
+        is_stale: false,
+        age_seconds: ageSeconds,
+      }
+    })
+  const asOf =
+    sourceFreshness.length > 0
+      ? sourceFreshness.reduce(
+          (oldest, status) => (status.updated_at < oldest ? status.updated_at : oldest),
+          sourceFreshness[0].updated_at
+        )
+      : null
+  const freshnessSummary = {
+    asOf,
+    isStale: false,
+    ageSeconds:
+      sourceFreshness.length > 0
+        ? Math.max(...sourceFreshness.map((status) => status.age_seconds))
+        : null,
+    sources: sourceFreshness,
   }
-  const [availableSources, freshnessResult] = await Promise.all([
-    getAvailableSources(supabase, seasonIdUpper),
-    freshnessQuery,
-  ])
-
-  const observedSources = [
-    ...new Set(paginatedRows.map((row) => String(row.source || '')).filter(Boolean)),
-  ]
-  const liveSources = availableSources.length > 0 ? availableSources : observedSources
-  const relevantSources = platformFilter
-    ? [platformFilter]
-    : platformsInCategory
-      ? liveSources.filter((source) => platformsInCategory.includes(source))
-      : liveSources
-  // A failed/missing table read yields no watermarks and therefore a
-  // fail-closed stale summary for every relevant source.
-  const freshnessSummary = summarizeSourceFreshness(
-    (freshnessResult.data || []) as SourceFreshnessRow[],
-    relevantSources
-  )
   const freshnessBySource = sourceFreshnessStatusMap(freshnessSummary)
 
   // Transform to response format

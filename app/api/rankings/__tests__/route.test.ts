@@ -113,6 +113,10 @@ import { RETIRED_SOURCES } from '@/lib/constants/retired-sources'
 import { PUBLIC_RANKING_QUARANTINED_SOURCES } from '@/lib/rankings/publication-policy'
 
 const TEST_COHORT_ID = '11111111-1111-4111-8111-111111111111'
+const mockPublicationProofOverrides = new Map<
+  string,
+  { sourceAsOf?: string; publishedRankCount?: number }
+>()
 
 async function readThroughSealedGeneration(
   _supabase: unknown,
@@ -131,12 +135,13 @@ async function readThroughSealedGeneration(
     proofs: [...input.sources].sort().map((source) => ({
       season_id: input.season,
       source,
-      source_as_of: '2026-07-29T10:00:00.000000Z',
+      source_as_of:
+        mockPublicationProofOverrides.get(source)?.sourceAsOf ?? '2026-07-29T10:00:00.000000Z',
       recorded_at: '2026-07-29T10:01:00.000000Z',
       score_cohort_id: TEST_COHORT_ID,
       rank_mutation_seq: 9,
       current_mutation_seq: 9,
-      published_rank_count: 1,
+      published_rank_count: mockPublicationProofOverrides.get(source)?.publishedRankCount ?? 0,
       published_identity_sha256: 'a'.repeat(64),
       is_sealed: true,
     })),
@@ -172,6 +177,7 @@ function makeChainableQuery(result = { data: [], error: null, count: 0 }) {
 describe('GET /api/rankings', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockPublicationProofOverrides.clear()
     mockTieredGetOrSet.mockImplementation(async (_key: string, fn: () => Promise<unknown>) => fn())
     mockTieredGet.mockResolvedValue({ data: null })
     mockTieredSet.mockResolvedValue(true)
@@ -365,10 +371,17 @@ describe('GET /api/rankings', () => {
     expect(res.status).toBe(200)
   })
 
-  it('returns honest per-source watermarks and marks a mixed-source board stale', async () => {
+  it('derives counts, source membership, and watermarks from the sealed proof set', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-07-18T12:00:00.000Z'))
     try {
-      const generation = '2026-07-18T11:55:00.000Z'
+      mockPublicationProofOverrides.set('binance_futures', {
+        sourceAsOf: '2026-07-18T11:00:00.000000Z',
+        publishedRankCount: 1,
+      })
+      mockPublicationProofOverrides.set('hyperliquid', {
+        sourceAsOf: '2026-07-16T13:00:00.000000Z',
+        publishedRankCount: 1,
+      })
       const rankingRows = [
         {
           source: 'binance_futures',
@@ -391,42 +404,14 @@ describe('GET /api/rankings', () => {
           is_outlier: false,
         },
       ]
-      const countRows = [
-        { source: '_all_gt0', total_count: 3, updated_at: generation },
-        { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
-        { source: 'okx_web3_solana_gt0', total_count: 1, updated_at: generation },
-        { source: 'hyperliquid_gt0', total_count: 1, updated_at: generation },
-      ]
       let rankingQuery: ReturnType<typeof makeChainableQuery> | undefined
-      let freshnessQuery: ReturnType<typeof makeChainableQuery> | undefined
       mockSupabaseQuery.mockImplementation((table: string) => {
         if (table === 'leaderboard_ranks') {
           rankingQuery = makeChainableQuery({ data: rankingRows, error: null, count: 2 })
           return rankingQuery
         }
-        if (table === 'leaderboard_count_cache') {
-          return makeChainableQuery({ data: countRows, error: null, count: 4 })
-        }
-        if (table === 'leaderboard_source_freshness') {
-          freshnessQuery = makeChainableQuery({
-            data: [
-              {
-                source: 'binance_futures',
-                source_as_of: '2026-07-18T11:00:00.000Z',
-              },
-              {
-                source: 'okx_web3_solana',
-                source_as_of: '2026-07-01T00:00:00.000Z',
-              },
-              {
-                source: 'hyperliquid',
-                source_as_of: '2026-07-16T09:00:00.000Z',
-              },
-            ],
-            error: null,
-            count: 3,
-          })
-          return freshnessQuery
+        if (table === 'leaderboard_count_cache' || table === 'leaderboard_source_freshness') {
+          throw new Error(`generic metadata read is forbidden: ${table}`)
         }
         return makeChainableQuery()
       })
@@ -439,26 +424,26 @@ describe('GET /api/rankings', () => {
       expect(res.status).toBe(200)
       expect(data.totalCount).toBe(2)
       expect(data.availableSources).toEqual(['binance_futures', 'hyperliquid'])
-      expect(data.as_of).toBe('2026-07-16T09:00:00.000Z')
-      expect(data.is_stale).toBe(true)
+      expect(data.as_of).toBe('2026-07-16T13:00:00.000000Z')
+      expect(data.is_stale).toBe(false)
       expect(data.source_freshness).toEqual([
         {
           source: 'binance_futures',
-          updated_at: '2026-07-18T11:00:00.000Z',
+          updated_at: '2026-07-18T11:00:00.000000Z',
           is_stale: false,
           age_seconds: 3600,
         },
         {
           source: 'hyperliquid',
-          updated_at: '2026-07-16T09:00:00.000Z',
-          is_stale: true,
-          age_seconds: 51 * 3600,
+          updated_at: '2026-07-16T13:00:00.000000Z',
+          is_stale: false,
+          age_seconds: 47 * 3600,
         },
       ])
       expect(data.traders[0]).toEqual(
         expect.objectContaining({
           platform: 'binance_futures',
-          updated_at: '2026-07-18T11:00:00.000Z',
+          updated_at: '2026-07-18T11:00:00.000000Z',
           is_stale: false,
           computed_at: '2026-07-18T11:59:00.000Z',
         })
@@ -466,8 +451,8 @@ describe('GET /api/rankings', () => {
       expect(data.traders[1]).toEqual(
         expect.objectContaining({
           platform: 'hyperliquid',
-          updated_at: '2026-07-16T09:00:00.000Z',
-          is_stale: true,
+          updated_at: '2026-07-16T13:00:00.000000Z',
+          is_stale: false,
         })
       )
       expect(rankingQuery?.not).toHaveBeenCalledWith(
@@ -476,13 +461,9 @@ describe('GET /api/rankings', () => {
         '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
       )
       expect(rankingQuery?.filter).toHaveBeenCalledWith('rank_publication_id', 'eq', TEST_COHORT_ID)
-      expect(freshnessQuery?.not).toHaveBeenCalledWith(
-        'source',
-        'in',
-        '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
-      )
       expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
-      expect(freshnessQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+      expect(mockSupabaseQuery).not.toHaveBeenCalledWith('leaderboard_count_cache')
+      expect(mockSupabaseQuery).not.toHaveBeenCalledWith('leaderboard_source_freshness')
     } finally {
       jest.useRealTimers()
     }
@@ -491,7 +472,10 @@ describe('GET /api/rankings', () => {
   it('scopes page-level freshness to the requested platform filter', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-07-18T12:00:00.000Z'))
     try {
-      const generation = '2026-07-18T11:55:00.000Z'
+      mockPublicationProofOverrides.set('binance_futures', {
+        sourceAsOf: '2026-07-18T11:00:00.000000Z',
+        publishedRankCount: 1,
+      })
       mockSupabaseQuery.mockImplementation((table: string) => {
         if (table === 'leaderboard_ranks') {
           return makeChainableQuery({
@@ -509,32 +493,8 @@ describe('GET /api/rankings', () => {
             count: 1,
           })
         }
-        if (table === 'leaderboard_count_cache') {
-          return makeChainableQuery({
-            data: [
-              { source: '_all_gt0', total_count: 2, updated_at: generation },
-              { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
-              { source: 'hyperliquid_gt0', total_count: 1, updated_at: generation },
-            ],
-            error: null,
-            count: 3,
-          })
-        }
-        if (table === 'leaderboard_source_freshness') {
-          return makeChainableQuery({
-            data: [
-              {
-                source: 'binance_futures',
-                source_as_of: '2026-07-18T11:00:00.000Z',
-              },
-              {
-                source: 'hyperliquid',
-                source_as_of: '2026-07-16T09:00:00.000Z',
-              },
-            ],
-            error: null,
-            count: 2,
-          })
+        if (table === 'leaderboard_count_cache' || table === 'leaderboard_source_freshness') {
+          throw new Error(`generic metadata read is forbidden: ${table}`)
         }
         return makeChainableQuery()
       })
@@ -547,7 +507,7 @@ describe('GET /api/rankings', () => {
       const data = body.data ?? body
 
       expect(data.is_stale).toBe(false)
-      expect(data.as_of).toBe('2026-07-18T11:00:00.000Z')
+      expect(data.as_of).toBe('2026-07-18T11:00:00.000000Z')
       expect(data.source_freshness.map((source: { source: string }) => source.source)).toEqual([
         'binance_futures',
       ])
@@ -658,6 +618,48 @@ describe('GET /api/rankings', () => {
     expect(data.traders).not.toContainEqual(last)
   })
 
+  it('rejects a sealed cache entry whose proof sources do not match the request scope', async () => {
+    const publication = {
+      state: 'sealed' as const,
+      season: '90D' as const,
+      scoreCohortId: TEST_COHORT_ID,
+      proofs: [
+        {
+          season_id: '90D' as const,
+          source: 'binance_futures',
+          source_as_of: '2026-07-29T10:00:00.000000Z',
+          recorded_at: '2026-07-29T10:01:00.000000Z',
+          score_cohort_id: TEST_COHORT_ID,
+          rank_mutation_seq: 9,
+          current_mutation_seq: 9,
+          published_rank_count: 1,
+          published_identity_sha256: 'a'.repeat(64),
+          is_sealed: true as const,
+        },
+      ],
+    }
+    const pollutedTrader = { platform: 'binance_futures', trader_key: 'wrong-scope-cache' }
+    mockTieredGet.mockResolvedValue({
+      data: {
+        contract: 'sealed-ranking-cache@1',
+        season: '90D',
+        publicationIdentity: JSON.stringify(publication),
+        publication,
+        cachedAt: '2026-07-29T10:02:00.000Z',
+        value: { traders: [pollutedTrader] },
+      },
+    })
+
+    const req = new NextRequest('http://localhost/api/rankings?window=90d')
+    const res = await GET(req)
+    const body = await res.json()
+    const data = body.data ?? body
+
+    expect(res.status).toBe(200)
+    expect(data.traders).not.toContainEqual(pollutedTrader)
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(1)
+  })
+
   it.each(PUBLIC_RANKING_QUARANTINED_SOURCES)(
     'returns 200 empty for quarantined platform %s without cache or DB access',
     async (platform) => {
@@ -679,7 +681,7 @@ describe('GET /api/rankings', () => {
   // --- Error Handling ---
 
   it('returns 500 when an internal error occurs', async () => {
-    mockTieredGetOrSet.mockRejectedValue(new Error('DB connection failed'))
+    mockReadSealedRankingGeneration.mockRejectedValue(new Error('DB connection failed'))
     mockTieredGet.mockResolvedValue({ data: null })
 
     const req = new NextRequest('http://localhost/api/rankings?window=90d')
