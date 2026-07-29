@@ -127,6 +127,7 @@ function harness(
     proof: bullProof,
     assertActive: bullAssertActive,
     extendLock: bullExtendLock,
+    replaceDataIfOwned: jest.fn(async () => undefined),
   })
 
   const sourceProof: SourceJobLeaseProof = Object.freeze({

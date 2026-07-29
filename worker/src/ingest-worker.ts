@@ -278,7 +278,7 @@ async function main(): Promise<void> {
     const runtime = await prepareRegionConsumerRuntime({
       createConsumers: (context, register) => {
         const bulkWorker = register(
-          new Worker(regionQueueName(region), bindAuthorizedConsumedRegion(context, route), {
+          new Worker(regionQueueName(region), bindAuthorizedConsumedRegion(context, route, redis), {
             autorun: false,
             connection: ingestConnection(),
             concurrency: INGEST_CONCURRENCY,
@@ -298,14 +298,18 @@ async function main(): Promise<void> {
 
         if (fastLane) {
           const fastWorker = register(
-            new Worker(regionFastQueueName(region), bindAuthorizedConsumedRegion(context, route), {
-              autorun: false,
-              connection: ingestConnection(),
-              concurrency: FAST_CONCURRENCY,
-              lockDuration: 180_000,
-              stalledInterval: 300_000,
-              maxStalledCount: 2,
-            })
+            new Worker(
+              regionFastQueueName(region),
+              bindAuthorizedConsumedRegion(context, route, redis),
+              {
+                autorun: false,
+                connection: ingestConnection(),
+                concurrency: FAST_CONCURRENCY,
+                lockDuration: 180_000,
+                stalledInterval: 300_000,
+                maxStalledCount: 2,
+              }
+            )
           )
           fastWorker.on('completed', (job) => {
             console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}/fast]`)
@@ -321,7 +325,7 @@ async function main(): Promise<void> {
         const tierCWorker = register(
           new Worker<TierCJobData>(
             tierCQueueName(region),
-            bindAuthorizedConsumedRegion(context, routeTierC),
+            bindAuthorizedConsumedRegion(context, routeTierC, redis),
             {
               autorun: false,
               connection: ingestConnection(),
