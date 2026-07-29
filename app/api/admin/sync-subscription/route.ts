@@ -1,25 +1,23 @@
 /**
  * POST /api/admin/sync-subscription?userId=xxx
  *
- * Admin endpoint to force-sync a user's subscription state from Stripe.
- * Looks up the user's stripe_customer_id, lists their Stripe subscriptions,
- * and reconciles the local `subscriptions` table accordingly.
- *
- * Auth: Admin role required (via verifyAdminAuth)
+ * Recomputes Pro projections from the durable entitlement ledger. The
+ * service-role reconciliation RPC is the only writer and includes official
+ * group convergence in its transactional authority boundary.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
-import { getStripe, STRIPE_PRICE_IDS, SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { logger } from '@/lib/logger'
-import { updateUserSubscription } from '@/app/api/stripe/webhook/handlers/subscription'
+import { reconcileAllDueProEntitlementProjections } from '@/lib/stripe/projection-reconciliation'
 
 export const dynamic = 'force-dynamic'
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
 export async function POST(request: NextRequest) {
-  // Admin sensitive write — failClose rate limiting
   const rateLimitResponse = await checkRateLimit(request, {
     ...RateLimitPresets.sensitive,
     prefix: 'admin-sync-subscription',
@@ -27,159 +25,56 @@ export async function POST(request: NextRequest) {
   })
   if (rateLimitResponse) return rateLimitResponse
 
-  // Auth check
   if (!(await verifyAdminAuth(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { searchParams } = new URL(request.url)
-  const userId = searchParams.get('userId')
-
-  if (!userId) {
-    return NextResponse.json({ error: 'Missing required query param: userId' }, { status: 400 })
+  const userId = new URL(request.url).searchParams.get('userId')
+  if (!userId || userId !== userId.toLowerCase() || !UUID_PATTERN.test(userId)) {
+    return NextResponse.json({ error: 'Invalid required query param: userId' }, { status: 400 })
   }
 
   const supabase = getSupabaseAdmin()
 
   try {
-    // 1. Look up user's stripe_customer_id from user_profiles
-    const { data: profile, error: profileError } = await supabase
+    const { data: before, error: beforeError } = await supabase
       .from('user_profiles')
-      .select('id, stripe_customer_id, subscription_tier, pro_plan')
+      .select('id')
       .eq('id', userId)
-      .single()
-
-    if (profileError || !profile) {
-      logger.warn('sync-subscription: user not found', { userId })
+      .maybeSingle()
+    if (beforeError) {
+      throw new Error(`Failed to verify projection subject: ${beforeError.message}`)
+    }
+    if (!before) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const stripeCustomerId = profile.stripe_customer_id
+    const reconciliation = await reconcileAllDueProEntitlementProjections(supabase)
 
-    if (!stripeCustomerId) {
-      logger.warn('sync-subscription: user has no stripe_customer_id', { userId })
-      return NextResponse.json(
-        { error: 'User has no Stripe customer ID. Nothing to sync.' },
-        { status: 400 }
+    const { data: projection, error: projectionError } = await supabase
+      .from('user_profiles')
+      .select(
+        'id, is_pro, subscription_tier, pro_plan, pro_expires_at, stripe_customer_id, stripe_subscription_id'
+      )
+      .eq('id', userId)
+      .maybeSingle()
+    if (projectionError || !projection) {
+      throw new Error(
+        `Failed to read reconciled projection: ${projectionError?.message || 'subject disappeared'}`
       )
     }
 
-    const customerId = stripeCustomerId
-
-    // 2. List subscriptions from Stripe
-    const stripe = getStripe()
-    const stripeSubscriptions = await stripe.subscriptions.list({
-      customer: customerId,
-      status: 'all',
-      limit: 10,
+    logger.info('Admin reconciled Pro projection through entitlement authority', {
+      userId,
+      reconciliation,
+      isPro: projection.is_pro,
     })
-
-    // 3. Find the active subscription (active or trialing)
-    const activeSub = stripeSubscriptions.data.find(
-      (s) => s.status === 'active' || s.status === 'trialing'
-    )
-
-    if (activeSub) {
-      // Determine plan from price ID
-      const priceId = activeSub.items.data[0]?.price.id
-      const plan =
-        priceId === STRIPE_PRICE_IDS.monthly
-          ? 'monthly'
-          : priceId === STRIPE_PRICE_IDS.yearly
-            ? 'yearly'
-            : null
-      if (!plan) {
-        logger.error('sync-subscription: active subscription has unknown price; access unchanged', {
-          userId,
-          stripeSubscriptionId: activeSub.id,
-          priceId,
-        })
-        return NextResponse.json(
-          { error: 'Active Stripe subscription has an unknown price; no entitlement changed.' },
-          { status: 409 }
-        )
-      }
-
-      const status = SUBSCRIPTION_STATUS_MAP[activeSub.status] || activeSub.status
-      const itemPeriod = activeSub.items.data[0]
-      const pStart = itemPeriod?.current_period_start
-      const pEnd = itemPeriod?.current_period_end
-      const periodStart = pStart
-        ? new Date(pStart * 1000).toISOString()
-        : new Date(activeSub.start_date * 1000).toISOString()
-      const periodEnd = pEnd ? new Date(pEnd * 1000).toISOString() : null
-
-      const projectionStatus = await updateUserSubscription(userId, activeSub, plan)
-
-      logger.info('sync-subscription: converged active subscription through financial authority', {
-        userId,
-        stripeSubscriptionId: activeSub.id,
-        status,
-        plan,
-        projectionStatus,
-      })
-
-      return NextResponse.json({
-        success: true,
-        action: projectionStatus === 'updated' ? 'synced_active' : projectionStatus,
-        subscription: {
-          stripeSubscriptionId: activeSub.id,
-          status,
-          plan,
-          periodStart,
-          periodEnd,
-          cancelAtPeriodEnd: activeSub.cancel_at_period_end,
-        },
-      })
-    } else {
-      // 4. No active subscription — downgrade to free
-      // Lifetime is a one-time payment and has no active Stripe Subscription
-      // object. Refund/dispute webhooks are authoritative for its revocation.
-      if (profile.pro_plan === 'lifetime') {
-        logger.info('sync-subscription: preserved lifetime membership', { userId })
-        return NextResponse.json({ success: true, action: 'preserved_lifetime' })
-      }
-      const { error: subError } = await supabase
-        .from('subscriptions')
-        .update({
-          status: 'canceled',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId)
-
-      if (subError) {
-        logger.warn('sync-subscription: failed to update subscription to canceled', {
-          userId,
-          error: subError.message,
-        })
-      }
-
-      const { error: tierError } = await supabase
-        .from('user_profiles')
-        .update({
-          subscription_tier: 'free',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId)
-
-      if (tierError) {
-        logger.error('sync-subscription: failed to downgrade user tier', {
-          userId,
-          error: tierError.message,
-        })
-      }
-
-      logger.info('sync-subscription: no active subscription, downgraded to free', {
-        userId,
-        totalStripeSubscriptions: stripeSubscriptions.data.length,
-      })
-
-      return NextResponse.json({
-        success: true,
-        action: 'downgraded_to_free',
-        totalStripeSubscriptions: stripeSubscriptions.data.length,
-      })
-    }
+    return NextResponse.json({
+      success: true,
+      action: 'reconciled_authority',
+      projection,
+      reconciliation,
+    })
   } catch (error) {
     logger.apiError('/api/admin/sync-subscription', error, { userId })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
