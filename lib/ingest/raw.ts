@@ -15,14 +15,21 @@ import type { PoolClient } from 'pg'
 import { getIngestPool, ingestClientConnect } from './db'
 import type { RankingTimeframe, RawPage } from './core/types'
 import {
+  LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
+  LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
   parseLeaderboardAcquisitionManifest,
   parseLeaderboardAcquisitionManifestV3,
+  parseLeaderboardAcquisitionManifestV4,
+  projectPartitionedNumericParserPage,
   type BuiltLeaderboardAcquisitionManifestV3,
+  type BuiltLeaderboardAcquisitionManifestV4,
   type LeaderboardAcquisitionManifest,
   type LeaderboardAcquisitionManifestV3,
+  type LeaderboardAcquisitionManifestV4,
 } from './acquisition-manifest'
 import {
   projectLeaderboardManifestV3Outcome,
+  projectLeaderboardManifestV4Outcome,
   type LeaderboardAcquisitionAttempt,
   type LeaderboardManifestOutcomeProjection,
 } from './acquisition-attempts'
@@ -140,11 +147,22 @@ export interface LeaderboardRawArtifactSetReceipt {
   populationManifest: RawObjectReceipt
 }
 
-export interface WriteAttemptBoundLeaderboardRawArtifactSetInput {
+interface WriteAttemptBoundLeaderboardRawArtifactSetInputBase {
   attempt: LeaderboardAcquisitionAttempt
-  built: BuiltLeaderboardAcquisitionManifestV3
   sourcePages: RawPage[]
 }
+
+export interface WriteAttemptBoundLeaderboardRawArtifactSetV3Input extends WriteAttemptBoundLeaderboardRawArtifactSetInputBase {
+  built: BuiltLeaderboardAcquisitionManifestV3
+}
+
+export interface WriteAttemptBoundLeaderboardRawArtifactSetV4Input extends WriteAttemptBoundLeaderboardRawArtifactSetInputBase {
+  built: BuiltLeaderboardAcquisitionManifestV4
+}
+
+export type WriteAttemptBoundLeaderboardRawArtifactSetInput =
+  | WriteAttemptBoundLeaderboardRawArtifactSetV3Input
+  | WriteAttemptBoundLeaderboardRawArtifactSetV4Input
 
 export interface AttemptBoundLeaderboardRawArtifactSetReceipt extends LeaderboardRawArtifactSetReceipt {
   projection: LeaderboardManifestOutcomeProjection
@@ -153,6 +171,7 @@ export interface AttemptBoundLeaderboardRawArtifactSetReceipt extends Leaderboar
 type LeaderboardAcquisitionManifestLike =
   | LeaderboardAcquisitionManifest
   | LeaderboardAcquisitionManifestV3
+  | LeaderboardAcquisitionManifestV4
 
 interface NormalizedLeaderboardRawArtifactSetInput {
   sourceId: number
@@ -366,14 +385,25 @@ function validateLeaderboardManifestPages(
     }
   }
   const transformation = manifest.parser_input.transformation
-  if (transformation.kind !== 'identity_projection') {
+  if (transformation.kind === 'dedupe_rechunk') {
     throw artifactSetError(
       'dedupe/rechunk parser evidence requires a separately persisted parser payload'
     )
   }
-  const reconstructedParserPages = transformation.source_page_ordinals.map(
-    (ordinal) => input.sourcePages[ordinal - 1]
-  )
+  const reconstructedParserPages =
+    transformation.kind === 'identity_projection'
+      ? transformation.source_page_ordinals.map((ordinal) => input.sourcePages[ordinal - 1])
+      : transformation.page_bindings.map((binding, index) => {
+          if (binding.source_page_ordinal !== transformation.source_page_ordinals[index]) {
+            throw artifactSetError(
+              `parser input page ${index + 1} does not match its source-page ordinal binding`
+            )
+          }
+          const sourcePage = input.sourcePages[binding.source_page_ordinal - 1]
+          return sourcePage === undefined
+            ? undefined
+            : projectPartitionedNumericParserPage(sourcePage, binding)
+        })
   if (
     reconstructedParserPages.some((page) => page === undefined) ||
     manifest.parser_input.page_count !== reconstructedParserPages.length ||
@@ -863,24 +893,56 @@ export async function writeLeaderboardRawArtifactSet(
   return persistLeaderboardTrustPointers(normalizedInput, artifacts)
 }
 
+interface PreparedAttemptBoundLeaderboardManifest {
+  manifest: LeaderboardAcquisitionManifestV3 | LeaderboardAcquisitionManifestV4
+  projection: LeaderboardManifestOutcomeProjection
+}
+
+function prepareAttemptBoundLeaderboardManifest(
+  input: WriteAttemptBoundLeaderboardRawArtifactSetInput,
+  attempt: LeaderboardAcquisitionAttempt
+): PreparedAttemptBoundLeaderboardManifest {
+  const built = input.built
+  switch (built.manifest.data_contract) {
+    case LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT: {
+      const manifest = parseLeaderboardAcquisitionManifestV3(built.manifest)
+      const normalizedBuilt: BuiltLeaderboardAcquisitionManifestV3 = Object.freeze({
+        manifest,
+        canonicalJson: built.canonicalJson,
+        sourceRunId: built.sourceRunId,
+      })
+      return {
+        manifest,
+        projection: projectLeaderboardManifestV3Outcome(attempt, normalizedBuilt),
+      }
+    }
+    case LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT: {
+      const manifest = parseLeaderboardAcquisitionManifestV4(built.manifest)
+      const normalizedBuilt: BuiltLeaderboardAcquisitionManifestV4 = Object.freeze({
+        manifest,
+        canonicalJson: built.canonicalJson,
+        sourceRunId: built.sourceRunId,
+      })
+      return {
+        manifest,
+        projection: projectLeaderboardManifestV4Outcome(attempt, normalizedBuilt),
+      }
+    }
+  }
+}
+
 /**
- * Persist an attempt-bound v3 capture. The returned projection is the exact
- * validated terminal projection that the worker must pass to the acquisition
- * ledger after both RAW pointers are durable.
+ * Persist an attempt-bound v3 or v4 capture. The returned projection is the
+ * exact validated terminal projection that the worker must pass to the
+ * acquisition ledger after both RAW pointers are durable.
  */
 export async function writeAttemptBoundLeaderboardRawArtifactSet(
   input: WriteAttemptBoundLeaderboardRawArtifactSetInput
 ): Promise<AttemptBoundLeaderboardRawArtifactSetReceipt> {
   // Snapshot all caller-owned identity and evidence before the first await.
   const attempt: LeaderboardAcquisitionAttempt = Object.freeze({ ...input.attempt })
-  const manifest = parseLeaderboardAcquisitionManifestV3(input.built.manifest)
-  const built: BuiltLeaderboardAcquisitionManifestV3 = Object.freeze({
-    manifest,
-    canonicalJson: input.built.canonicalJson,
-    sourceRunId: input.built.sourceRunId,
-  })
+  const { manifest, projection } = prepareAttemptBoundLeaderboardManifest(input, attempt)
   const sourcePages = input.sourcePages.map((page) => ({ ...page }))
-  const projection = projectLeaderboardManifestV3Outcome(attempt, built)
   const normalizedInput: NormalizedLeaderboardRawArtifactSetInput = {
     sourceId: attempt.sourceId,
     sourceSlug: attempt.sourceSlug,
