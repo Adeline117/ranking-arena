@@ -1457,6 +1457,33 @@ export type Database = {
         }
         Relationships: []
       }
+      direct_message_reaction_operations: {
+        Row: {
+          actor_id: string
+          created_at: string
+          intent_fingerprint: string
+          message_id: string
+          operation_id: string
+          result: Json
+        }
+        Insert: {
+          actor_id: string
+          created_at?: string
+          intent_fingerprint: string
+          message_id: string
+          operation_id: string
+          result: Json
+        }
+        Update: {
+          actor_id?: string
+          created_at?: string
+          intent_fingerprint?: string
+          message_id?: string
+          operation_id?: string
+          result?: Json
+        }
+        Relationships: []
+      }
       direct_messages: {
         Row: {
           content: string
@@ -13003,6 +13030,15 @@ export type Database = {
           p_channel_id: string
           p_emoji: string
           p_message_id: string
+        }
+        Returns: Json
+      }
+      toggle_direct_message_reaction_atomic: {
+        Args: {
+          p_actor_id: string
+          p_emoji: string
+          p_message_id: string
+          p_operation_id: string
         }
         Returns: Json
       }
