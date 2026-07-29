@@ -12,11 +12,7 @@ import type {
   AssetWeight,
   TraderPosition,
 } from './types'
-import {
-  SOURCE_TYPE_MAP,
-  DEAD_BLOCKED_PLATFORMS,
-  PUBLIC_ACTIVE_RANKING_SOURCES,
-} from '@/lib/constants/exchanges'
+import { SOURCE_TYPE_MAP, DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
 import { mapLeaderboardRow, normalizePeriod, getSourceAliases } from './mappers'
 import { fetchSimilarTraders } from './similar'
@@ -29,7 +25,12 @@ import {
   filterPublicRankingRows,
   isPublicRankingSourceAllowed,
 } from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { readLeaderboardPublicationAuthority } from '@/lib/rankings/read-publication-authority'
+import type { SealedLeaderboardPublicationProofSet } from '@/lib/rankings/read-publication-proofs'
+import {
+  readSealedRankingAuthorityGeneration,
+  readSealedRankingGeneration,
+} from '@/lib/rankings/read-sealed-ranking-generation'
 import { readSealedRankIdentities } from '@/lib/rankings/read-sealed-rank-identities'
 
 // ============================================================
@@ -98,7 +99,6 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // ============================================================
 
 const TRADER_DETAIL_SEASONS: readonly TradingPeriod[] = ['90D', '30D', '7D']
-const PUBLIC_RESOLVER_SOURCES = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
 
 async function readSealedTraderRankRows(
   supabase: SupabaseClient,
@@ -1090,6 +1090,11 @@ export async function resolveTrader(
 
   const platformFilter = params.platform
   if (platformFilter && !isPublicRankingSourceAllowed(platformFilter)) return null
+  const resolverSources = await readLeaderboardPublicationAuthority(supabase, '90D', {
+    timeoutMs: SSR_HEAVY_QUERY_TIMEOUT_MS,
+  })
+  const resolverSourceSet = new Set(resolverSources)
+  if (platformFilter && !resolverSourceSet.has(platformFilter)) return null
 
   // Steps 1+2 combined: Try trader_sources by handle OR source_trader_id (single query)
   {
@@ -1103,7 +1108,7 @@ export async function resolveTrader(
     if (platformFilter) {
       query = query.eq('source', platformFilter)
     } else {
-      query = query.in('source', PUBLIC_RESOLVER_SOURCES)
+      query = query.in('source', resolverSources)
     }
 
     // Multiple traders may share the same handle (e.g., 鎏渊).
@@ -1129,7 +1134,10 @@ export async function resolveTrader(
     // SQL before LIMIT plus stable ordering prevents a retired collision from
     // hiding the valid serving trader (~1406 historically affected IDs).
     const candidates = (rawCandidates ?? [])
-      .filter((candidate: { source: string }) => isPublicRankingSourceAllowed(candidate.source))
+      .filter(
+        (candidate: { source: string }) =>
+          isPublicRankingSourceAllowed(candidate.source) && resolverSourceSet.has(candidate.source)
+      )
       .sort(
         (
           left: { source: string; source_trader_id: string },
@@ -1140,9 +1148,9 @@ export async function resolveTrader(
       )
     let data = candidates[0] ?? null
     if (candidates.length > 1) {
-      const proofSources = filterPublicRankingSources(
-        candidates.map((candidate: { source: string }) => candidate.source)
-      )
+      const proofSources = [
+        ...new Set(candidates.map((candidate: { source: string }) => candidate.source)),
+      ]
       const ids = [
         ...new Set(
           candidates.map((candidate: { source_trader_id: string }) => candidate.source_trader_id)
@@ -1224,7 +1232,7 @@ export async function resolveTrader(
     if (platformFilter) {
       profileQuery = profileQuery.eq('platform', platformFilter)
     } else {
-      profileQuery = profileQuery.in('platform', PUBLIC_RESOLVER_SOURCES)
+      profileQuery = profileQuery.in('platform', resolverSources)
     }
 
     const profileResult = await profileQuery
@@ -1244,7 +1252,10 @@ export async function resolveTrader(
     }
 
     if (profileResult.data) {
-      if (!isPublicRankingSourceAllowed(profileResult.data.platform)) {
+      if (
+        !isPublicRankingSourceAllowed(profileResult.data.platform) ||
+        !resolverSourceSet.has(profileResult.data.platform)
+      ) {
         throw new Error('trader profile lookup escaped the public source fence')
       }
       return {
@@ -1257,53 +1268,52 @@ export async function resolveTrader(
 
     // Step 4: legacy leaderboard-only identities. Each season has its own
     // publication, so search them in preference order with a sealed read.
-    const proofSources = platformFilter
-      ? filterPublicRankingSources([platformFilter])
-      : PUBLIC_RESOLVER_SOURCES
-    if (proofSources.length > 0) {
-      for (const season of TRADER_DETAIL_SEASONS) {
-        try {
-          const sealedRead = await readSealedRankingGeneration(
-            supabase,
-            { season, sources: proofSources },
-            async (publication) => {
-              const result = await supabase
-                .from('leaderboard_ranks')
-                .select(`${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}`)
-                .or(
-                  `${LR.source_trader_id}.eq.${sanitizedForFilter},${LR.handle}.eq.${sanitizedForFilter}`
-                )
-                .in(LR.source, proofSources)
-                .eq(LR.season_id, season)
-                .filter('rank_publication_id', 'eq', publication.scoreCohortId)
-                .order(LR.source, { ascending: true })
-                .order(LR.source_trader_id, { ascending: true })
-                .limit(1)
-                .maybeSingle()
-              if (result.error) {
-                throw new Error(`leaderboard identity lookup failed: ${result.error.message}`)
-              }
-              return result.data as Record<string, unknown> | null
-            }
-          )
-          if (sealedRead.value) {
-            return {
-              platform: sealedRead.value[LR.source] as string,
-              traderKey: sealedRead.value[LR.source_trader_id] as string,
-              handle: (sealedRead.value[LR.handle] as string) || null,
-              avatarUrl: (sealedRead.value[LR.avatar_url] as string) || null,
-            }
+    for (const season of TRADER_DETAIL_SEASONS) {
+      try {
+        const reader = async (publication: SealedLeaderboardPublicationProofSet) => {
+          const proofSources = publication.proofs.map((proof) => proof.source)
+          const result = await supabase
+            .from('leaderboard_ranks')
+            .select(`${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}`)
+            .or(
+              `${LR.source_trader_id}.eq.${sanitizedForFilter},${LR.handle}.eq.${sanitizedForFilter}`
+            )
+            .in(LR.source, proofSources)
+            .eq(LR.season_id, season)
+            .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+            .order(LR.source, { ascending: true })
+            .order(LR.source_trader_id, { ascending: true })
+            .limit(1)
+            .maybeSingle()
+          if (result.error) {
+            throw new Error(`leaderboard identity lookup failed: ${result.error.message}`)
           }
-        } catch (error) {
-          logger.error('[resolveTrader] sealed leaderboard fallback failed', {
-            handle: decodedHandle,
-            season,
-            error: error instanceof Error ? error.message : String(error),
-          })
-          throw error instanceof Error
-            ? error
-            : new Error('sealed leaderboard fallback failed with an unknown error')
+          return result.data as Record<string, unknown> | null
         }
+        const sealedRead = platformFilter
+          ? await readSealedRankingGeneration(
+              supabase,
+              { season, sources: [platformFilter] },
+              reader
+            )
+          : await readSealedRankingAuthorityGeneration(supabase, season, reader)
+        if (sealedRead.value) {
+          return {
+            platform: sealedRead.value[LR.source] as string,
+            traderKey: sealedRead.value[LR.source_trader_id] as string,
+            handle: (sealedRead.value[LR.handle] as string) || null,
+            avatarUrl: (sealedRead.value[LR.avatar_url] as string) || null,
+          }
+        }
+      } catch (error) {
+        logger.error('[resolveTrader] sealed leaderboard fallback failed', {
+          handle: decodedHandle,
+          season,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        throw error instanceof Error
+          ? error
+          : new Error('sealed leaderboard fallback failed with an unknown error')
       }
     }
   }

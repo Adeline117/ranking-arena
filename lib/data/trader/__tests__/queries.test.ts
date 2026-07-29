@@ -30,11 +30,20 @@ jest.mock('@/lib/utils/logger', () => ({
 }))
 
 const mockReadSealedRankingGeneration = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 const mockReadSealedRankIdentities = jest.fn()
+const mockReadPublicationAuthority = jest.fn()
 
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
   ...jest.requireActual('@/lib/rankings/read-sealed-ranking-generation'),
   readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
+}))
+
+jest.mock('@/lib/rankings/read-publication-authority', () => ({
+  readLeaderboardPublicationAuthority: (...args: unknown[]) =>
+    mockReadPublicationAuthority(...args),
 }))
 
 jest.mock('@/lib/rankings/read-sealed-rank-identities', () => ({
@@ -292,6 +301,7 @@ describe('getLeaderboard source exclusion', () => {
 describe('resolveTrader sealed candidate ranking', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockReadPublicationAuthority.mockResolvedValue(['binance_futures', 'hyperliquid'])
     mockReadSealedRankingGeneration.mockImplementation(
       async (
         _supabase: unknown,
@@ -303,6 +313,28 @@ describe('resolveTrader sealed candidate ranking', () => {
           season: '90D' as const,
           scoreCohortId: '11111111-1111-4111-8111-111111111111',
           proofs: [],
+        }
+        return {
+          value: await reader(publication),
+          publication,
+          publicationIdentity: JSON.stringify(publication),
+        }
+      }
+    )
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(
+      async (
+        _supabase: unknown,
+        season: '7D' | '30D' | '90D',
+        reader: (publication: {
+          scoreCohortId: string
+          proofs: Array<{ source: string }>
+        }) => Promise<unknown>
+      ) => {
+        const publication = {
+          state: 'sealed' as const,
+          season,
+          scoreCohortId: '11111111-1111-4111-8111-111111111111',
+          proofs: [{ source: 'binance_futures' }, { source: 'hyperliquid' }],
         }
         return {
           value: await reader(publication),
@@ -360,6 +392,10 @@ describe('resolveTrader sealed candidate ranking', () => {
 
     const result = await resolveTrader(supabase as never, { handle: 'shared' })
 
+    expect(mockReadPublicationAuthority).toHaveBeenCalledWith(supabase, '90D', {
+      timeoutMs: expect.any(Number),
+    })
+    expect(candidateQuery.in).toHaveBeenCalledWith('source', ['binance_futures', 'hyperliquid'])
     expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
       supabase,
       { season: '90D', sources: ['binance_futures', 'hyperliquid'] },
@@ -376,6 +412,21 @@ describe('resolveTrader sealed candidate ranking', () => {
       handle: 'shared',
       avatarUrl: null,
     })
+  })
+
+  it('rejects a code-known platform that is outside the live publication authority', async () => {
+    mockReadPublicationAuthority.mockResolvedValue(['hyperliquid'])
+    const from = jest.fn()
+    const supabase = { from }
+
+    await expect(
+      resolveTrader(supabase as never, {
+        handle: 'shared',
+        platform: 'binance_futures',
+      })
+    ).resolves.toBeNull()
+    expect(from).not.toHaveBeenCalled()
+    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -449,12 +500,12 @@ describe('resolveTrader sealed candidate ranking', () => {
       if (table === 'trader_profiles_v2') return profileQuery
       throw new Error(`unexpected table before proof authorization: ${table}`)
     })
-    mockReadSealedRankingGeneration.mockRejectedValue(new Error('sealed fallback reached'))
+    mockReadSealedRankingAuthorityGeneration.mockRejectedValue(new Error('sealed fallback reached'))
 
     await expect(resolveTrader({ from } as never, { handle: 'shared' })).rejects.toThrow(
       'sealed fallback reached'
     )
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(1)
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
   })
 
   it('does not choose an arbitrary same-handle candidate when sealed ranking proof fails', async () => {
