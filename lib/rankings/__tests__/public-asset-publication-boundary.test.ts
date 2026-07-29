@@ -52,7 +52,12 @@ describe('public ranking asset publication boundary', () => {
 
   it('delegates exchange OG metrics to the sealed generation reader', () => {
     const text = source('app/api/og/exchange/route.tsx')
-    expect(text).toContain('readOgExchangeRanking(getSupabaseAdmin(), exchange)')
+    expect(text).toContain("export const runtime = 'edge'")
+    expect(text).toContain('readOgExchangeRanking(')
+    expect(text).toContain('supabaseUrl: SUPABASE_URL')
+    expect(text).toContain('serviceRoleKey: SUPABASE_KEY')
+    expect(text).not.toContain('getSupabaseAdmin')
+    expect(text).not.toContain('Buffer.from')
     expect(text).not.toContain(".from('leaderboard_ranks')")
   })
 })

@@ -9,8 +9,6 @@
 
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import logger from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import { readOgExchangeRanking } from '@/lib/rankings/read-og-exchange'
@@ -20,7 +18,14 @@ import {
   redirectToPublicRankingResponseCacheEpoch,
 } from '@/lib/rankings/public-response-cache'
 
-export const runtime = 'nodejs' // requires Node.js for getSupabaseAdmin()
+// next/og@16 can throw after a Node handler returns while Satori consumes the
+// lazy image stream. Keep this route on Edge and use the sealed REST reader.
+export const runtime = 'edge'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+const SAFE_EMBEDDED_AVATAR_PATTERN = /^data:image\/(?:png|jpeg|jpg);base64,[A-Za-z0-9+/]+={0,2}$/
 
 const C = {
   bgTop: '#0A0A0F',
@@ -136,7 +141,13 @@ export async function GET(request: NextRequest) {
       exchange.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
     const platformColor = PLATFORM_COLORS[exchange] || C.purpleLight
 
-    const { traders, total } = await readOgExchangeRanking(getSupabaseAdmin(), exchange)
+    const { traders, total } = await readOgExchangeRanking(
+      {
+        supabaseUrl: SUPABASE_URL,
+        serviceRoleKey: SUPABASE_KEY,
+      },
+      exchange
+    )
 
     // Pre-fetch all trader avatars as base64 data URLs so Satori (next/og)
     // doesn't try to load them itself — self-referential proxy calls from Edge
@@ -145,16 +156,26 @@ export async function GET(request: NextRequest) {
     const avatarDataUrls: (string | null)[] = await Promise.all(
       traders.map(async (trader) => {
         if (!trader.avatar_url) return null
-        if (trader.avatar_url.startsWith('data:')) return trader.avatar_url
+        if (trader.avatar_url.startsWith('data:')) {
+          return SAFE_EMBEDDED_AVATAR_PATTERN.test(trader.avatar_url) ? trader.avatar_url : null
+        }
         try {
           const proxyUrl = `${BASE_URL}/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`
           const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) })
           if (!res.ok) return null
           const ct = res.headers.get('content-type') || 'image/png'
-          if (!ct.startsWith('image/')) return null
-          const buf = await res.arrayBuffer()
-          const b64 = Buffer.from(buf).toString('base64')
-          return `data:${ct};base64,${b64}`
+          // Satori supports PNG/JPEG reliably. WebP/GIF/SVG data URLs can
+          // trigger a deferred renderer failure after this handler returns.
+          if (ct !== 'image/png' && ct !== 'image/jpeg' && ct !== 'image/jpg') return null
+          const contentLength = Number(res.headers.get('content-length'))
+          if (Number.isFinite(contentLength) && contentLength > MAX_AVATAR_BYTES) return null
+          const bytes = new Uint8Array(await res.arrayBuffer())
+          if (bytes.byteLength > MAX_AVATAR_BYTES) return null
+          let binary = ''
+          for (let index = 0; index < bytes.length; index += 1) {
+            binary += String.fromCharCode(bytes[index])
+          }
+          return `data:${ct};base64,${btoa(binary)}`
         } catch {
           return null
         }
@@ -486,7 +507,7 @@ export async function GET(request: NextRequest) {
       }
     )
   } catch (e) {
-    logger.error('[OG Exchange] Error:', e)
+    console.error('[OG Exchange] Error:', e)
     // Never 500 an OG endpoint — a broken social preview (no card on Twitter/
     // Discord) is worse than a generic one. Redirect to the static site image
     // (same pattern as og/trader / og/rank fallbacks).
