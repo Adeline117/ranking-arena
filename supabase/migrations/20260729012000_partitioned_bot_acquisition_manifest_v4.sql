@@ -1,5 +1,5 @@
--- Migration: 20260729011000_partitioned_bot_acquisition_manifest_v4.sql
--- Created: 2026-07-29T01:10:00Z
+-- Migration: 20260729012000_partitioned_bot_acquisition_manifest_v4.sql
+-- Created: 2026-07-29T01:20:00Z
 -- Description: Admit the attempt-bound partitioned numeric manifest V4 only
 --   for the two canonical Bitget bot boards. V4 proves capture completeness;
 --   it does not register metric trust or restore public rank authority.
