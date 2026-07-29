@@ -9,6 +9,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql"
+ALIAS_MIGRATION="$ROOT_DIR/supabase/migrations/20260729065000_normalize_arena_score_input_platform_aliases.sql"
 SCORE_JSON_MIGRATION="$ROOT_DIR/supabase/migrations/20260724234000_optimize_arena_score_inputs_json_hot_path.sql"
 BUNDLE_MIGRATION="$ROOT_DIR/supabase/migrations/20260725012000_strengthen_arena_score_publish_evidence.sql"
 FRESHNESS_MIGRATION="$ROOT_DIR/supabase/migrations/20260718134000_freshness_expected_sources.sql"
@@ -33,6 +34,7 @@ if [[ "$("$PG_BIN/psql" --version)" != psql\ \(PostgreSQL\)\ 17.* ]]; then
 fi
 for required_file in \
   "$MIGRATION" \
+  "$ALIAS_MIGRATION" \
   "$SCORE_JSON_MIGRATION" \
   "$BUNDLE_MIGRATION" \
   "$FRESHNESS_MIGRATION" \
@@ -1320,4 +1322,104 @@ END
 $live_replay_preservation$;
 SQL
 
-echo "Bitget bot cumulative rank-authority quarantine PG17 proof passed"
+# The follow-up alias normalization must preserve the quarantine rewrite while
+# converging padded/blank/null legacy aliases on the bundle's canonical key.
+SCORE_OID_BEFORE_ALIAS="$(psql_cmd -Atqc \
+  "SELECT 'public.arena_score_inputs_json(text,integer,integer)'::regprocedure::oid")"
+psql_cmd -q -f "$ALIAS_MIGRATION"
+SCORE_OID_AFTER_ALIAS="$(psql_cmd -Atqc \
+  "SELECT 'public.arena_score_inputs_json(text,integer,integer)'::regprocedure::oid")"
+if [[ "$SCORE_OID_AFTER_ALIAS" != "$SCORE_OID_BEFORE_ALIAS" ]]; then
+  echo "alias normalization replaced the score-input callable identity" >&2
+  exit 1
+fi
+
+psql_cmd -q <<'SQL'
+DO $alias_normalization$
+DECLARE
+  v_rows jsonb;
+  v_bundle jsonb;
+  v_platforms text[];
+  v_physical_platforms text[];
+BEGIN
+  UPDATE arena.sources
+  SET meta = '{"legacy_platform":"  human_alias  "}'::jsonb
+  WHERE id = 3;
+
+  v_rows := public.arena_score_inputs_json('30D', 1000, 48);
+  v_bundle := public.arena_score_inputs_publish_bundle_json('30D', 1000, 48);
+  SELECT pg_catalog.array_agg(DISTINCT score_row->>'platform')
+  INTO v_platforms
+  FROM pg_catalog.jsonb_array_elements(v_rows) AS score_row;
+  SELECT pg_catalog.array_agg(DISTINCT board->>'filter_source')
+  INTO v_physical_platforms
+  FROM pg_catalog.jsonb_array_elements(v_bundle->'physicalBoards') AS board;
+  IF v_platforms IS DISTINCT FROM ARRAY['human_alias']::text[]
+     OR v_physical_platforms IS DISTINCT FROM ARRAY['human_alias']::text[] THEN
+    RAISE EXCEPTION
+      'padded alias did not converge across score and physical-board surfaces: %/%',
+      v_platforms,
+      v_physical_platforms;
+  END IF;
+
+  UPDATE arena.sources
+  SET meta = '{"legacy_platform":"   "}'::jsonb
+  WHERE id = 3;
+  v_rows := public.arena_score_inputs_json('30D', 1000, 48);
+  IF EXISTS (
+       SELECT 1
+       FROM pg_catalog.jsonb_array_elements(v_rows) AS score_row
+       WHERE score_row->>'platform' <> 'human_futures'
+     ) OR pg_catalog.jsonb_array_length(v_rows) = 0 THEN
+    RAISE EXCEPTION 'blank alias did not fall back to registry slug';
+  END IF;
+
+  UPDATE arena.sources
+  SET meta = '{"legacy_platform":null}'::jsonb
+  WHERE id = 3;
+  v_rows := public.arena_score_inputs_json('30D', 1000, 48);
+  IF EXISTS (
+       SELECT 1
+       FROM pg_catalog.jsonb_array_elements(v_rows) AS score_row
+       WHERE score_row->>'platform' <> 'human_futures'
+     ) OR pg_catalog.jsonb_array_length(v_rows) = 0 THEN
+    RAISE EXCEPTION 'JSON null alias did not fall back to registry slug';
+  END IF;
+
+  UPDATE arena.sources
+  SET meta = '{"legacy_platform":" null "}'::jsonb
+  WHERE id = 3;
+  v_rows := public.arena_score_inputs_json('30D', 1000, 48);
+  v_bundle := public.arena_score_inputs_publish_bundle_json('30D', 1000, 48);
+  IF pg_catalog.jsonb_array_length(v_rows) <> 0
+     OR pg_catalog.jsonb_array_length(v_bundle->'physicalBoards') <> 0 THEN
+    RAISE EXCEPTION 'padded string null alias remained publishable';
+  END IF;
+
+  UPDATE arena.sources
+  SET meta = '{}'::jsonb
+  WHERE id = 3;
+  v_rows := public.arena_score_inputs_json('30D', 1000, 48);
+  IF pg_catalog.jsonb_array_length(v_rows) = 0
+     OR EXISTS (
+       SELECT 1
+       FROM pg_catalog.jsonb_array_elements(v_rows) AS score_row
+       WHERE score_row->>'platform' LIKE 'bitget_bots_%'
+     ) THEN
+    RAISE EXCEPTION 'alias rewrite removed human rows or reopened bot ranks';
+  END IF;
+END
+$alias_normalization$;
+SQL
+
+# Replay must be a no-op over the already normalized source body and preserve
+# the same callable object identity.
+psql_cmd -q -f "$ALIAS_MIGRATION"
+SCORE_OID_AFTER_ALIAS_REPLAY="$(psql_cmd -Atqc \
+  "SELECT 'public.arena_score_inputs_json(text,integer,integer)'::regprocedure::oid")"
+if [[ "$SCORE_OID_AFTER_ALIAS_REPLAY" != "$SCORE_OID_BEFORE_ALIAS" ]]; then
+  echo "alias normalization replay replaced the score-input callable identity" >&2
+  exit 1
+fi
+
+echo "Bitget bot rank quarantine and platform-alias normalization PG17 proof passed"
