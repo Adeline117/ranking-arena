@@ -22,6 +22,15 @@ jest.mock('@/lib/env', () => ({
   ),
 }))
 
+const mockLockSet = jest.fn().mockResolvedValue('OK')
+const mockLockEval = jest.fn().mockResolvedValue(1)
+jest.mock('@/lib/cache/redis-client', () => ({
+  getSharedRedis: jest.fn(async () => ({
+    set: mockLockSet,
+    eval: mockLockEval,
+  })),
+}))
+
 // Mock pg pool (getPool) — the route now uses raw SQL for heavy snapshot queries.
 // Each test configures mockPgQueryResults to control what the pool client returns.
 let mockPgQueryResults: Record<string, unknown[]> = {}

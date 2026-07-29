@@ -22,6 +22,15 @@ jest.mock('@/lib/env', () => ({
   ),
 }))
 
+const mockLockSet = jest.fn().mockResolvedValue('OK')
+const mockLockEval = jest.fn().mockResolvedValue(1)
+jest.mock('@/lib/cache/redis-client', () => ({
+  getSharedRedis: jest.fn(async () => ({
+    set: mockLockSet,
+    eval: mockLockEval,
+  })),
+}))
+
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
 
