@@ -121,6 +121,43 @@ describe('compute leaderboard degradation guard', () => {
     expect(mockAlert).toHaveBeenCalledTimes(1)
   })
 
+  test('fails closed when every baseline is unknown even if scoring returns rows', async () => {
+    const { client } = supabaseWithExpectedCount()
+
+    await expect(
+      checkDegradationGuard({
+        supabase: client,
+        season: '30D',
+        scoredCount: 250,
+        freshPlatforms: ['binance_futures'],
+        forceWrite: false,
+      })
+    ).resolves.toEqual({ action: 'skip' })
+
+    expect(mockDel).not.toHaveBeenCalled()
+    expect(mockAlert).toHaveBeenCalledTimes(1)
+  })
+
+  test('treats a resolved expected-count RPC error as unavailable authority', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'expected-count authority unavailable' },
+    })
+    const client = { rpc } as never
+
+    await expect(
+      checkDegradationGuard({
+        supabase: client,
+        season: '7D',
+        scoredCount: 250,
+        freshPlatforms: ['binance_futures'],
+        forceWrite: false,
+      })
+    ).resolves.toEqual({ action: 'skip' })
+
+    expect(mockAlert).toHaveBeenCalledTimes(1)
+  })
+
   test('only an explicit force override may bypass known degradation', async () => {
     const { client } = supabaseWithExpectedCount(1_000)
 

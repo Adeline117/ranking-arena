@@ -39,9 +39,17 @@ export async function checkDegradationGuard(params: {
   let expectedCount = 0
   let expectedSource = 'per-platform'
   try {
-    const { data: platformCounts } = await (supabase as any).rpc('get_expected_platform_counts', {
-      p_season_id: season,
-    })
+    const { data: platformCounts, error: platformCountsError } = await (supabase as any).rpc(
+      'get_expected_platform_counts',
+      {
+        p_season_id: season,
+      }
+    )
+    if (platformCountsError) {
+      throw new Error(
+        `get_expected_platform_counts returned an error: ${platformCountsError.message ?? String(platformCountsError)}`
+      )
+    }
     if (platformCounts && Array.isArray(platformCounts)) {
       const freshSet = new Set(freshPlatforms)
       for (const row of platformCounts) {
@@ -92,9 +100,10 @@ export async function checkDegradationGuard(params: {
     return { action: 'force' }
   }
 
-  const degraded =
-    (expectedKnown && ratio !== null && ratio < DEGRADATION_THRESHOLD) ||
-    (!expectedKnown && scoredCount === 0)
+  // A positive result is not proof of completeness. If every independent
+  // baseline is unavailable, publishing would let a partially collapsed cohort
+  // become the new source of truth. Preserve the last-good generation instead.
+  const degraded = !expectedKnown || (ratio !== null && ratio < DEGRADATION_THRESHOLD)
   if (degraded) {
     let consecutiveSkips = 1
     const skipKey = `leaderboard:degradation-skips:${season}`
