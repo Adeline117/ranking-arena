@@ -66,3 +66,41 @@ export const updateGroupChannelInputSchema = z
       Object.prototype.hasOwnProperty.call(value, 'description'),
     { message: 'At least one channel metadata field is required' }
   )
+
+const channelMessageMediaUrlSchema = z
+  .string()
+  .trim()
+  .max(2_000)
+  .url()
+  .refine((value) => {
+    try {
+      return new URL(value).protocol === 'https:'
+    } catch {
+      return false
+    }
+  })
+  .transform((value) => new URL(value).toString())
+
+export const sendChannelMessageInputSchema = z
+  .object({
+    content: z.string().trim().max(2_000).optional().default(''),
+    media_url: channelMessageMediaUrlSchema.nullable().optional(),
+    media_type: z.enum(['image', 'video', 'file']).nullable().optional(),
+    media_name: z.string().trim().max(255).nullable().optional(),
+    reply_to_id: channelIdSchema.nullable().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (!value.content && !value.media_url) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Message content or media is required',
+      })
+    }
+    if (!value.media_url && (value.media_type != null || value.media_name != null)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Media metadata requires a media URL',
+      })
+    }
+  })

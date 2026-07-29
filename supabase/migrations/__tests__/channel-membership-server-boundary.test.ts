@@ -230,7 +230,6 @@ describe('channel membership server boundary migration', () => {
     expect(baseTableSources).toEqual(
       [
         'app/api/channels/[channelId]/messages/[messageId]/react/route.ts',
-        'app/api/channels/[channelId]/messages/route.ts',
         'app/api/channels/[channelId]/read/route.ts',
         'app/api/channels/[channelId]/route.ts',
         'app/api/channels/route.ts',
@@ -241,6 +240,15 @@ describe('channel membership server boundary migration', () => {
       expect(path).toMatch(/^app\/api\//)
       expect(readFileSync(join(process.cwd(), path), 'utf8')).toMatch(/getSupabaseAdmin\(\)/)
     }
+
+    const sendRoute = readFileSync(
+      join(process.cwd(), 'app/api/channels/[channelId]/messages/route.ts'),
+      'utf8'
+    )
+    expect(sendRoute).toContain("'send_channel_message_atomic'")
+    expect(sendRoute).not.toMatch(
+      /\.from\(\s*['"](?:channel_members|channel_messages|channel_message_reads)['"]\s*\)/
+    )
   })
 
   it('keeps the only browser channel-message reads on Realtime subscriptions', () => {
