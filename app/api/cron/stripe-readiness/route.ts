@@ -57,6 +57,9 @@ const ENTITLEMENT_READINESS_METRIC_KEYS = [
   'unprojected_charge_disputes',
   'charge_dispute_identity_anomalies',
   'charge_dispute_authority_drift',
+  'unprojected_dispute_reinstatements',
+  'dispute_reinstatement_identity_anomalies',
+  'dispute_reinstatement_authority_drift',
 ] as const
 
 const ENTITLEMENT_READINESS_BLOCKING_KEYS = ENTITLEMENT_READINESS_METRIC_KEYS.filter(
@@ -150,6 +153,10 @@ function parseStripePaidReadiness(value: unknown): StripePaidReadiness | null {
     unprojected_charge_disputes: record.unprojected_charge_disputes as number,
     charge_dispute_identity_anomalies: record.charge_dispute_identity_anomalies as number,
     charge_dispute_authority_drift: record.charge_dispute_authority_drift as number,
+    unprojected_dispute_reinstatements: record.unprojected_dispute_reinstatements as number,
+    dispute_reinstatement_identity_anomalies:
+      record.dispute_reinstatement_identity_anomalies as number,
+    dispute_reinstatement_authority_drift: record.dispute_reinstatement_authority_drift as number,
   }
 }
 

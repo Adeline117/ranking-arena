@@ -1,0 +1,50 @@
+-- Minimal production relations used only by the Group Pass reinstatement
+-- branch. The shared Stripe harness already owns group subscriptions,
+-- memberships, and the payment-consumption authority.
+CREATE TABLE public.groups (
+  id uuid PRIMARY KEY,
+  dissolved_at timestamptz
+);
+ALTER TABLE public.groups OWNER TO postgres;
+
+CREATE TABLE public.group_bans (
+  group_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  PRIMARY KEY (group_id, user_id)
+);
+ALTER TABLE public.group_bans OWNER TO postgres;
+
+INSERT INTO public.groups(id, dissolved_at)
+VALUES ('e6300000-0000-4000-8000-000000000001', NULL);
+
+-- The focused non-entitlement harness predates the production Group Pass
+-- result's immutable period snapshot. Add only that production field at
+-- ledger creation so the reinstatement proof never reads mutable expiry state.
+CREATE FUNCTION public.test_attach_group_pass_expiry_snapshot()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_expires_at timestamptz;
+BEGIN
+  SELECT subscription.expires_at
+  INTO STRICT v_expires_at
+  FROM public.group_subscriptions AS subscription
+  WHERE subscription.id = NEW.subscription_id;
+
+  NEW.result := NEW.result || pg_catalog.jsonb_build_object(
+    'expires_at',
+    v_expires_at
+  );
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION public.test_attach_group_pass_expiry_snapshot()
+  OWNER TO postgres;
+
+CREATE TRIGGER trg_test_attach_group_pass_expiry_snapshot
+  BEFORE INSERT ON public.group_payment_consumptions
+  FOR EACH ROW
+  EXECUTE FUNCTION public.test_attach_group_pass_expiry_snapshot();
