@@ -1,6 +1,6 @@
 /**
  * Linked Traders API
- * GET    /api/traders/linked - List all linked traders for authenticated user
+ * GET    /api/traders/linked - List exact linked identities for authenticated user
  * PATCH  /api/traders/linked - Update label, display_order, or is_primary
  * DELETE /api/traders/linked - Unlink a trader account
  */
@@ -19,6 +19,19 @@ import { logger } from '@/lib/logger'
 import { invalidateLinkedTraderCache } from '@/lib/data/linked-traders'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function withPrivateNoStore<T extends Response>(response: T): T {
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -56,11 +69,16 @@ function throwRpcError(error: { code?: string; message?: string }): never {
 
 /**
  * GET /api/traders/linked
- * Return all linked traders for the authenticated user, joined with leaderboard stats
+ * Return all linked traders for the authenticated user.
+ *
+ * This management boundary intentionally does not project leaderboard numerics.
+ * `leaderboard_ranks` rows do not carry the publication/completeness and Money
+ * provenance required to authorize a score, rank, ROI, or cross-source PnL here.
+ * Callers receive `stats: null` until a request-bound serving projection exists.
  */
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const user = await requireAuth(request)
@@ -70,7 +88,7 @@ export async function GET(request: NextRequest) {
     const { data: linked, error } = await supabase
       .from('user_linked_traders')
       .select(
-        'id, user_id, trader_id, source, label, is_primary, display_order, verified_at, verification_method, created_at, updated_at'
+        'id, user_id, trader_id, source, label, is_primary, display_order, verified_at, verification_method'
       )
       .eq('user_id', user.id)
       .order('display_order', { ascending: true })
@@ -78,34 +96,29 @@ export async function GET(request: NextRequest) {
     if (error) throw error
 
     if (!linked || linked.length === 0) {
-      return success({ linked_traders: [], count: 0 })
+      return withPrivateNoStore(success({ linked_traders: [], count: 0 }))
     }
 
-    // Batch fetch stats from leaderboard_ranks (avoids N+1 queries)
-    const traderKeys = linked.map((linkedTrader) => linkedTrader.trader_id)
-    const { data: allRanks, error: ranksError } = await supabase
-      .from('leaderboard_ranks')
-      .select('source_trader_id, source, arena_score, roi, pnl, rank, handle, avatar_url')
-      .in('source_trader_id', traderKeys)
-      .eq('season_id', '90D')
-    if (ranksError) throw ranksError
-
-    const rankMap = new Map<string, typeof allRanks extends (infer T)[] | null ? T : never>()
-    for (const r of allRanks || []) {
-      rankMap.set(`${r.source}:${r.source_trader_id}`, r)
-    }
-
-    const linkedWithStats = linked.map((linkedTrader) => ({
-      ...linkedTrader,
-      stats: rankMap.get(`${linkedTrader.source}:${linkedTrader.trader_id}`) || null,
+    const linkedWithUnknownStats = linked.map((linkedTrader) => ({
+      id: linkedTrader.id,
+      user_id: linkedTrader.user_id,
+      trader_id: linkedTrader.trader_id,
+      source: linkedTrader.source,
+      label: linkedTrader.label?.trim() || null,
+      is_primary: linkedTrader.is_primary,
+      verified_at: linkedTrader.verified_at,
+      verification_method: linkedTrader.verification_method,
+      stats: null,
     }))
 
-    return success({
-      linked_traders: linkedWithStats,
-      count: linkedWithStats.length,
-    })
+    return withPrivateNoStore(
+      success({
+        linked_traders: linkedWithUnknownStats,
+        count: linkedWithUnknownStats.length,
+      })
+    )
   } catch (error: unknown) {
-    return handleError(error, 'linked traders GET')
+    return withPrivateNoStore(handleError(error, 'linked traders GET'))
   }
 }
 
@@ -117,7 +130,7 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const user = await requireAuth(request)
@@ -148,7 +161,7 @@ export async function PATCH(request: NextRequest) {
       if (error) throwRpcError(error)
       if (!data) throw ApiError.notFound('Linked trader not found')
       await invalidateLinkedTraderCache(user.id)
-      return success({ linked_trader: data })
+      return withPrivateNoStore(success({ linked_trader: data }))
     }
 
     const updateData: { display_order?: number; label?: string | null; updated_at: string } = {
@@ -186,9 +199,9 @@ export async function PATCH(request: NextRequest) {
     if (error) throw error
     if (!data) throw ApiError.notFound('Linked trader not found')
     await invalidateLinkedTraderCache(user.id)
-    return success({ linked_trader: data })
+    return withPrivateNoStore(success({ linked_trader: data }))
   } catch (error: unknown) {
-    return handleError(error, 'linked traders PATCH')
+    return withPrivateNoStore(handleError(error, 'linked traders PATCH'))
   }
 }
 
@@ -200,7 +213,7 @@ export async function PATCH(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const user = await requireAuth(request)
@@ -224,12 +237,14 @@ export async function DELETE(request: NextRequest) {
     })
     await invalidateLinkedTraderCache(user.id)
 
-    return success({
-      message: 'Trader unlinked',
-      promoted_link_id: result.promoted_link_id,
-      remaining_count: result.remaining_count,
-    })
+    return withPrivateNoStore(
+      success({
+        message: 'Trader unlinked',
+        promoted_link_id: result.promoted_link_id,
+        remaining_count: result.remaining_count,
+      })
+    )
   } catch (error: unknown) {
-    return handleError(error, 'linked traders DELETE')
+    return withPrivateNoStore(handleError(error, 'linked traders DELETE'))
   }
 }

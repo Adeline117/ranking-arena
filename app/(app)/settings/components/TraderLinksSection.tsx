@@ -1,47 +1,25 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { NULL_DISPLAY } from '@/lib/utils/format'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { logger } from '@/lib/logger'
 import { authedFetch } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import {
   captureSettingsViewer,
   isSettingsViewerCurrent,
   type SettingsViewerSnapshot,
 } from '../hooks/settings-viewer-scope'
-
-interface LinkedTraderStats {
-  arena_score: number | null
-  roi: number | null
-  pnl: number | null
-  rank: number | null
-  handle: string | null
-  avatar_url: string | null
-}
-
-interface LinkedTrader {
-  id: string
-  user_id: string
-  trader_id: string
-  source: string
-  label: string | null
-  is_primary: boolean
-  display_order: number
-  verified_at: string
-  verification_method: string
-  created_at: string
-  updated_at: string
-  stats: LinkedTraderStats | null
-}
+import { parseLinkedTraderManagementPayload, type LinkedTrader } from './linked-trader-management'
 
 type TraderStateOwner = Pick<
   SettingsViewerSnapshot,
@@ -67,81 +45,11 @@ function traderOwnerMatches(
   )
 }
 
-function isNullableFiniteNumber(value: unknown): value is number | null {
-  return value === null || (typeof value === 'number' && Number.isFinite(value))
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return value === null || typeof value === 'string'
-}
-
-function isLinkedTraderStats(value: unknown): value is LinkedTraderStats {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const stats = value as Record<string, unknown>
-  return (
-    isNullableFiniteNumber(stats.arena_score) &&
-    isNullableFiniteNumber(stats.roi) &&
-    isNullableFiniteNumber(stats.pnl) &&
-    isNullableFiniteNumber(stats.rank) &&
-    isNullableString(stats.handle) &&
-    isNullableString(stats.avatar_url)
-  )
-}
-
-function isLinkedTraderForViewer(value: unknown, userId: string): value is LinkedTrader {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const trader = value as Record<string, unknown>
-  return (
-    typeof trader.id === 'string' &&
-    trader.user_id === userId &&
-    typeof trader.trader_id === 'string' &&
-    typeof trader.source === 'string' &&
-    typeof trader.is_primary === 'boolean' &&
-    typeof trader.display_order === 'number' &&
-    Number.isFinite(trader.display_order) &&
-    typeof trader.verified_at === 'string' &&
-    typeof trader.verification_method === 'string' &&
-    typeof trader.created_at === 'string' &&
-    typeof trader.updated_at === 'string' &&
-    (trader.label === null || typeof trader.label === 'string') &&
-    (trader.stats === null || isLinkedTraderStats(trader.stats))
-  )
-}
-
 function getPlatformName(source: string): string {
-  const map: Record<string, string> = {
-    binance_futures: 'Binance Futures',
-    binance_spot: 'Binance Spot',
-    binance_web3: 'Binance Web3',
-    bybit: 'Bybit',
-    bitget_futures: 'Bitget Futures',
-    bitget_spot: 'Bitget Spot',
-    okx_futures: 'OKX Futures',
-    okx_web3: 'OKX Web3',
-    mexc: 'MEXC',
-    htx_futures: 'HTX',
-    coinex: 'CoinEx',
-    kucoin: 'KuCoin',
-    gate: 'Gate.io',
-    gateio: 'Gate.io',
-    bingx: 'BingX',
-    phemex: 'Phemex',
-    hyperliquid: 'Hyperliquid',
-    gmx: 'GMX',
-    dydx: 'dYdX',
-    jupiter_perps: 'Jupiter Perps',
-    drift: 'Drift',
-    aevo: 'Aevo',
-    vertex: 'Vertex',
-    kwenta: 'Kwenta',
-    gains: 'Gains Network',
-    btcc: 'BTCC',
-    bitunix: 'Bitunix',
-    bitfinex: 'Bitfinex',
-    blofin: 'BloFin',
-    etoro: 'eToro',
-  }
-  return map[source] || source.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  return (
+    EXCHANGE_CONFIG[source as keyof typeof EXCHANGE_CONFIG]?.name ||
+    source.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  )
 }
 
 function getExchangeKey(source: string): string {
@@ -160,9 +68,10 @@ function formatVerificationMethod(method: string, t: (key: string) => string): s
   return map[method] || method
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, language: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString(undefined, {
+    const locale = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' }[language] ?? 'en-US'
+    return new Date(dateStr).toLocaleDateString(locale, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -172,19 +81,9 @@ function formatDate(dateStr: string): string {
   }
 }
 
-function formatPnl(pnl: number | null): string {
-  if (pnl == null) return NULL_DISPLAY
-  const abs = Math.abs(pnl)
-  const prefix = pnl >= 0 ? '+$' : '-$'
-  if (abs >= 1_000_000) return `${prefix}${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1_000) return `${prefix}${(abs / 1_000).toFixed(1)}K`
-  return `${prefix}${abs.toFixed(0)}`
-}
-
-function formatRoi(roi: number | null): string {
-  if (roi == null) return NULL_DISPLAY
-  const prefix = roi >= 0 ? '+' : ''
-  return `${prefix}${roi.toFixed(1)}%`
+function getLinkedTraderIdentityLabel(trader: LinkedTrader): string {
+  const displayName = trader.label || trader.trader_id.slice(0, 12)
+  return `${displayName} · ${getPlatformName(trader.source)} · ${trader.trader_id}`
 }
 
 export function TraderLinksSection({ userId }: { userId: string }) {
@@ -198,7 +97,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
   const router = useRouter()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const auth = useAuthSession()
   const authRef = useRef(auth)
   authRef.current = auth
@@ -251,7 +150,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
       setTraders([])
       setLoading(true)
       try {
-        const result = await authedFetch<{ data?: { linked_traders?: unknown } }>(
+        const result = await authedFetch<{ data?: unknown }>(
           '/api/traders/linked',
           'GET',
           scope.accessToken,
@@ -263,12 +162,10 @@ export function TraderLinksSection({ userId }: { userId: string }) {
           }
         )
         if (!loadIsCurrent() || result.stale) return
-        const linkedTraders = result.data?.data?.linked_traders
-        if (
-          result.ok &&
-          Array.isArray(linkedTraders) &&
-          linkedTraders.every((trader) => isLinkedTraderForViewer(trader, scope.userId))
-        ) {
+        const linkedTraders = result.ok
+          ? parseLinkedTraderManagementPayload(result.data?.data, scope.userId)
+          : null
+        if (linkedTraders) {
           setTraders(linkedTraders)
           loadOutcomeRef.current = 'ready'
           setLoadOutcome('ready')
@@ -630,71 +527,8 @@ export function TraderLinksSection({ userId }: { userId: string }) {
     )
   }
 
-  // Aggregated stats
-  const totalPnl = visibleTraders.reduce((sum, trader) => sum + (trader.stats?.pnl ?? 0), 0)
-  const bestRoi = Math.max(...visibleTraders.map((trader) => trader.stats?.roi ?? -Infinity))
-  const avgScore =
-    visibleTraders.filter((trader) => trader.stats?.arena_score != null).length > 0
-      ? visibleTraders.reduce((sum, trader) => sum + (trader.stats?.arena_score ?? 0), 0) /
-        visibleTraders.filter((trader) => trader.stats?.arena_score != null).length
-      : null
-
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-      {/* Aggregated stats bar */}
-      {visibleTraders.length > 1 && (
-        <Box
-          style={{
-            display: 'flex',
-            gap: tokens.spacing[4],
-            padding: tokens.spacing[3],
-            borderRadius: tokens.radius.lg,
-            background: `${alpha(tokens.colors.accent.primary, 3)}`,
-            border: `1px solid ${alpha(tokens.colors.accent.primary, 8)}`,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Box style={{ flex: 1, minWidth: 80 }}>
-            <Text size="xs" color="tertiary">
-              {t('combinedPnl')}
-            </Text>
-            <Text
-              size="sm"
-              weight="bold"
-              style={{
-                color: totalPnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-              }}
-            >
-              {formatPnl(totalPnl)}
-            </Text>
-          </Box>
-          <Box style={{ flex: 1, minWidth: 80 }}>
-            <Text size="xs" color="tertiary">
-              {t('bestRoi')}
-            </Text>
-            <Text
-              size="sm"
-              weight="bold"
-              style={{
-                color: bestRoi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-              }}
-            >
-              {bestRoi > -Infinity ? formatRoi(bestRoi) : '-'}
-            </Text>
-          </Box>
-          {avgScore != null && (
-            <Box style={{ flex: 1, minWidth: 80 }}>
-              <Text size="xs" color="tertiary">
-                {t('weightedScore')}
-              </Text>
-              <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-                {avgScore.toFixed(1)}
-              </Text>
-            </Box>
-          )}
-        </Box>
-      )}
-
       {/* Linked trader cards */}
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
         {visibleTraders.map((trader) => (
@@ -732,7 +566,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                     weight="bold"
                     style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                   >
-                    {trader.label || trader.stats?.handle || trader.trader_id.slice(0, 12)}
+                    {trader.label || trader.trader_id.slice(0, 12)}
                   </Text>
                   {trader.is_primary && (
                     <span
@@ -754,7 +588,14 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                 <Text size="xs" color="tertiary">
                   {getPlatformName(trader.source)} &middot;{' '}
                   {formatVerificationMethod(trader.verification_method, t)} &middot;{' '}
-                  {t('verifiedOn')} {formatDate(trader.verified_at)}
+                  {t('verifiedOn')} {formatDate(trader.verified_at, language)}
+                </Text>
+                <Text
+                  size="xs"
+                  color="tertiary"
+                  style={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}
+                >
+                  {trader.source}:{trader.trader_id}
                 </Text>
               </Box>
             </Box>
@@ -773,6 +614,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                     setEditLabelValue(e.target.value)
                   }}
                   placeholder={t('labelPlaceholder')}
+                  aria-label={`${t('labelPlaceholder')}: ${getLinkedTraderIdentityLabel(trader)}`}
                   maxLength={50}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleUpdateLabel(trader.id)
@@ -794,8 +636,10 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                   }}
                 />
                 <Button
+                  type="button"
                   variant="primary"
                   size="sm"
+                  aria-label={`${t('save')}: ${getLinkedTraderIdentityLabel(trader)}`}
                   onClick={() => handleUpdateLabel(trader.id)}
                   disabled={visibleUpdatingId === trader.id}
                   style={{ minHeight: 36 }}
@@ -803,8 +647,10 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                   {visibleUpdatingId === trader.id ? '...' : t('save')}
                 </Button>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="sm"
+                  aria-label={`${t('cancel')}: ${getLinkedTraderIdentityLabel(trader)}`}
                   onClick={() => {
                     const scope = captureViewer()
                     if (scope && stateBelongsToViewer(scope)) setEditingLabelId(null)
@@ -816,80 +662,6 @@ export function TraderLinksSection({ userId }: { userId: string }) {
               </Box>
             ) : null}
 
-            {/* Stats row */}
-            {trader.stats && (
-              <Box
-                style={{
-                  display: 'flex',
-                  gap: tokens.spacing[4],
-                  marginBottom: tokens.spacing[3],
-                  padding: tokens.spacing[2],
-                  borderRadius: tokens.radius.md,
-                  background: tokens.colors.bg.secondary,
-                  flexWrap: 'wrap',
-                }}
-              >
-                {trader.stats.roi != null && (
-                  <Box style={{ minWidth: 60 }}>
-                    <Text size="xs" color="tertiary">
-                      ROI
-                    </Text>
-                    <Text
-                      size="sm"
-                      weight="bold"
-                      style={{
-                        color:
-                          trader.stats.roi >= 0
-                            ? tokens.colors.accent.success
-                            : tokens.colors.accent.error,
-                      }}
-                    >
-                      {formatRoi(trader.stats.roi)}
-                    </Text>
-                  </Box>
-                )}
-                {trader.stats.pnl != null && (
-                  <Box style={{ minWidth: 60 }}>
-                    <Text size="xs" color="tertiary">
-                      PnL
-                    </Text>
-                    <Text
-                      size="sm"
-                      weight="bold"
-                      style={{
-                        color:
-                          trader.stats.pnl >= 0
-                            ? tokens.colors.accent.success
-                            : tokens.colors.accent.error,
-                      }}
-                    >
-                      {formatPnl(trader.stats.pnl)}
-                    </Text>
-                  </Box>
-                )}
-                {trader.stats.arena_score != null && (
-                  <Box style={{ minWidth: 60 }}>
-                    <Text size="xs" color="tertiary">
-                      Score
-                    </Text>
-                    <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-                      {trader.stats.arena_score.toFixed(1)}
-                    </Text>
-                  </Box>
-                )}
-                {trader.stats.rank != null && (
-                  <Box style={{ minWidth: 40 }}>
-                    <Text size="xs" color="tertiary">
-                      Rank
-                    </Text>
-                    <Text size="sm" weight="bold">
-                      #{trader.stats.rank}
-                    </Text>
-                  </Box>
-                )}
-              </Box>
-            )}
-
             {/* Action buttons */}
             <Box
               className="trader-link-actions"
@@ -899,8 +671,30 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                 flexWrap: 'wrap',
               }}
             >
+              <Link
+                href={`/trader/${encodeURIComponent(trader.trader_id)}?platform=${encodeURIComponent(trader.source)}`}
+                aria-label={`${t('viewProfile')}: ${getLinkedTraderIdentityLabel(trader)}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: 'transparent',
+                  color: tokens.colors.text.secondary,
+                  fontSize: tokens.typography.fontSize.xs,
+                  minHeight: 32,
+                  textDecoration: 'none',
+                  transition: `all ${tokens.transition.base}`,
+                }}
+              >
+                {t('viewProfile')}
+              </Link>
               {!trader.is_primary && (
                 <button
+                  type="button"
+                  aria-label={`${t('setAsPrimary')}: ${getLinkedTraderIdentityLabel(trader)}`}
                   onClick={() => handleSetPrimary(trader.id)}
                   disabled={!!visibleUpdatingId || !!visibleDeletingId}
                   style={{
@@ -920,6 +714,8 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                 </button>
               )}
               <button
+                type="button"
+                aria-label={`${t('editLabel')}: ${getLinkedTraderIdentityLabel(trader)}`}
                 onClick={() => {
                   const scope = captureViewer()
                   if (!scope || !stateBelongsToViewer(scope) || mutationRef.current) return
@@ -942,6 +738,8 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                 {t('editLabel')}
               </button>
               <button
+                type="button"
+                aria-label={`${t('unlinkAccount')}: ${getLinkedTraderIdentityLabel(trader)}`}
                 onClick={() => handleUnlink(trader)}
                 disabled={!!visibleDeletingId || !!visibleUpdatingId}
                 style={{
@@ -965,17 +763,10 @@ export function TraderLinksSection({ userId }: { userId: string }) {
       </Box>
 
       {/* Link new account button */}
-      <Box
-        role="button"
-        tabIndex={0}
+      <button
+        type="button"
         aria-label={t('linkNewAccount')}
         onClick={handleLinkNewAccount}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            handleLinkNewAccount()
-          }
-        }}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -984,9 +775,13 @@ export function TraderLinksSection({ userId }: { userId: string }) {
           padding: tokens.spacing[3],
           borderRadius: tokens.radius.lg,
           border: `1px dashed ${tokens.colors.border.secondary}`,
+          background: 'transparent',
+          color: 'inherit',
           cursor: 'pointer',
           transition: `all ${tokens.transition.base}`,
           minHeight: 44,
+          width: '100%',
+          font: 'inherit',
         }}
       >
         <svg
@@ -1005,7 +800,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
         <Text size="sm" color="tertiary">
           {t('linkNewAccount')}
         </Text>
-      </Box>
+      </button>
 
       {/* Mobile-responsive styles */}
       <style>{`
@@ -1013,6 +808,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
           .trader-link-actions {
             flex-direction: column;
           }
+          .trader-link-actions a,
           .trader-link-actions button {
             width: 100%;
             text-align: center;
