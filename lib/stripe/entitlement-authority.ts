@@ -14,6 +14,7 @@ export type StripeAuthorityProductConfig = {
 export type StripeAuthorityOptions = {
   products: StripeAuthorityProductConfig
   expectedUserId?: string
+  expectedLivemode?: boolean
 }
 
 export type StripeAuthorityObjectIds = {
@@ -301,6 +302,22 @@ function assertSame(
   }
 }
 
+function assertLivemode(
+  value: { livemode?: boolean },
+  expectedLivemode: boolean | undefined,
+  stage: StripeAuthorityErrorStage,
+  label: string,
+  objectIds: StripeAuthorityObjectIds
+): void {
+  if (expectedLivemode === undefined) return
+  if (typeof value.livemode !== 'boolean' || value.livemode !== expectedLivemode) {
+    authorityError('object_mismatch', stage, `${label} Stripe mode does not match`, objectIds, {
+      expectedLivemode,
+      actualLivemode: value.livemode ?? null,
+    })
+  }
+}
+
 function normalizeCurrency(value: string): string {
   return value.trim().toLowerCase()
 }
@@ -561,6 +578,7 @@ async function resolveInvoicePaymentChain(
   customerId: string,
   invoice: Stripe.Invoice,
   expectedCurrency: string | undefined,
+  expectedLivemode: boolean | undefined,
   objectIds: StripeAuthorityObjectIds
 ): Promise<PaymentChain> {
   const invoicePaymentId = nonEmptyId(
@@ -571,6 +589,7 @@ async function resolveInvoicePaymentChain(
     objectIds
   )
   objectIds.invoicePaymentId = invoicePaymentId
+  assertLivemode(payment, expectedLivemode, 'invoice_payments', 'invoice payment', objectIds)
   const paymentInvoiceId = nonEmptyId(
     payment.invoice,
     'invoice_payments',
@@ -620,6 +639,7 @@ async function resolveInvoicePaymentChain(
     const paymentIntent = await client.paymentIntents.retrieve(paymentIntentId, {
       expand: ['latest_charge'],
     })
+    assertLivemode(paymentIntent, expectedLivemode, 'payment_intent', 'PaymentIntent', objectIds)
     assertSame(paymentIntent.id, paymentIntentId, 'payment_intent', 'payment_intent.id', objectIds)
     const piCustomerId = nonEmptyId(
       paymentIntent.customer,
@@ -646,6 +666,7 @@ async function resolveInvoicePaymentChain(
       paymentIntentId,
       objectIds
     )
+    assertLivemode(charge, expectedLivemode, 'charge', 'Charge', objectIds)
     const amount = assertAmounts(
       [
         { source: 'invoice.amount_paid', value: invoice.amount_paid },
@@ -689,6 +710,7 @@ async function resolveInvoicePaymentChain(
     )
   }
   const charge = await retrieveCharge(client, payment.payment.charge, customerId, null, objectIds)
+  assertLivemode(charge, expectedLivemode, 'charge', 'Charge', objectIds)
   const amount = assertAmounts(
     [
       { source: 'invoice.amount_paid', value: invoice.amount_paid },
@@ -740,6 +762,15 @@ async function resolveInvoiceProductAndPeriod(
     'invoice_lines',
     objectIds
   )
+  if (lines.length !== 1) {
+    authorityError(
+      'ambiguous_product',
+      'invoice_lines',
+      'Invoice must contain exactly one line',
+      objectIds,
+      { lineIds: lines.map((line) => line.id) }
+    )
+  }
   const productLines = lines.filter((line) => {
     const details = line.parent?.subscription_item_details
     const lineSubscriptionId =
@@ -862,6 +893,7 @@ export async function resolveRecurringInvoiceAuthority(
 ): Promise<RecurringPaymentAuthority> {
   const objectIds: StripeAuthorityObjectIds = {}
   const invoice = await retrieveInvoice(client, invoiceValue, objectIds)
+  assertLivemode(invoice, options.expectedLivemode, 'invoice', 'Invoice', objectIds)
   if (invoice.status !== 'paid' || invoice.amount_remaining !== 0) {
     authorityError('invalid_payment_state', 'invoice', 'Invoice is not fully paid', objectIds, {
       status: invoice.status,
@@ -912,6 +944,8 @@ export async function resolveRecurringInvoiceAuthority(
     'cus_',
     objectIds
   )
+  assertLivemode(subscription, options.expectedLivemode, 'subscription', 'Subscription', objectIds)
+  assertLivemode(customer, options.expectedLivemode, 'customer', 'Customer', objectIds)
   assertSame(subscriptionCustomerId, customerId, 'subscription', 'subscription.customer', objectIds)
   if (
     payments.some(
@@ -947,6 +981,7 @@ export async function resolveRecurringInvoiceAuthority(
     customerId,
     invoice,
     options.products.expectedCurrency,
+    options.expectedLivemode,
     objectIds
   )
   const currency = assertCurrencies(

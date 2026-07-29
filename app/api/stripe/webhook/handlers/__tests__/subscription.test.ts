@@ -435,38 +435,33 @@ describe('subscription webhook persistence', () => {
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  it('passes a missing reservation as null so the atomic RPC rejects a new subscription', async () => {
+  it('rejects a new API subscription before RPC when its reservation is missing', async () => {
     mockFrom.mockReturnValueOnce(lookupQuery(apiProfile()))
-    mockApplyRpcResult = {
-      data: null,
-      error: { message: 'new API subscription is missing its checkout reservation identity' },
-    }
 
     const snapshot = apiSubscription('starter')
     delete snapshot.metadata.api_tier_reservation_id
 
     await expect(handleSubscriptionUpdate(snapshot, stripeEvent)).rejects.toThrow(
-      'Failed to apply API tier Stripe event: new API subscription is missing its checkout reservation identity'
+      'API subscription sub_current has invalid exact entitlement identity'
     )
-    expect(mockRpc).toHaveBeenCalledWith(
-      'apply_user_api_tier_stripe_event',
-      expect.objectContaining({ p_checkout_reservation_id: null })
-    )
+    expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
+      'apply_user_api_tier_persisted_non_grant_event',
+    ])
   })
 
-  it('accepts a reservation-less current legacy API subscription without inventing identity', async () => {
+  it('rejects a reservation-less current legacy API subscription', async () => {
     mockFrom.mockReturnValueOnce(
       lookupQuery(apiProfile({ api_stripe_subscription_id: 'sub_current', api_tier: 'starter' }))
     )
     const snapshot = apiSubscription('starter')
     delete snapshot.metadata.api_tier_reservation_id
 
-    await handleSubscriptionUpdate(snapshot, stripeEvent)
-
-    expect(mockRpc).toHaveBeenCalledWith(
-      'apply_user_api_tier_stripe_event',
-      expect.objectContaining({ p_checkout_reservation_id: null })
+    await expect(handleSubscriptionUpdate(snapshot, stripeEvent)).rejects.toThrow(
+      'API subscription sub_current has invalid exact entitlement identity'
     )
+    expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
+      'apply_user_api_tier_persisted_non_grant_event',
+    ])
   })
 
   it('confirms the one exact paid Checkout Session before applying paid quota', async () => {
@@ -630,7 +625,7 @@ describe('subscription webhook persistence', () => {
     )
   })
 
-  it('passes a reservation-less historical cancellation to the sealed ledger authority', async () => {
+  it('rejects a reservation-less historical cancellation before the sealed ledger', async () => {
     mockFrom.mockReturnValueOnce(
       lookupQuery(apiProfile({ api_stripe_subscription_id: 'sub_newer', api_tier: 'pro' }))
     )
@@ -638,16 +633,12 @@ describe('subscription webhook persistence', () => {
     const snapshot = apiSubscription('starter', { id: 'sub_older' })
     delete snapshot.metadata.api_tier_reservation_id
 
-    await handleSubscriptionCanceled(snapshot, stripeEvent)
-
-    expect(mockRpc).toHaveBeenCalledWith(
-      'apply_user_api_tier_stripe_event',
-      expect.objectContaining({
-        p_stripe_subscription_id: 'sub_older',
-        p_checkout_reservation_id: null,
-        p_is_terminal: true,
-      })
+    await expect(handleSubscriptionCanceled(snapshot, stripeEvent)).rejects.toThrow(
+      'API subscription sub_older has invalid exact entitlement identity'
     )
+    expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
+      'apply_user_api_tier_persisted_non_grant_event',
+    ])
   })
 
   it('lets an exact signed cancellation reach the atomic ledger after its profile was hard-deleted', async () => {

@@ -14,7 +14,7 @@ import { API_PRICING } from '@/app/(app)/user-center/membership-config'
 export { carriesApiTierSubscriptionIdentity } from './api-tier-identity'
 export { getProPlanFromPriceId } from './stripe-price-identity'
 
-type ApiTierPlan = 'starter' | 'pro'
+export type ApiTierPlan = 'starter' | 'pro'
 
 type ApiTierProfile = {
   id: string
@@ -78,6 +78,7 @@ export function parseApiTierSubscriptionAuthority(
   options: { allowHistoricalPriceForNonGrant?: boolean } = {}
 ): ApiTierStripeAuthority {
   const metadata = subscription.metadata || {}
+  const metadataKeys = Object.keys(metadata).sort()
   const metadataUserId = exactCanonicalUuid(metadata.userId)
   const metadataSupabaseUserId = exactCanonicalUuid(metadata.supabase_user_id)
   const hasReservationIdentity = hasOwnMetadataKey(metadata, API_TIER_RESERVATION_METADATA_KEY)
@@ -90,6 +91,8 @@ export function parseApiTierSubscriptionAuthority(
   const pricePlan = getApiPlanFromPriceId(priceId)
 
   if (
+    metadataKeys.length !== API_CHECKOUT_METADATA_KEYS.length ||
+    !API_CHECKOUT_METADATA_KEYS.every((key, index) => metadataKeys[index] === key) ||
     metadata.type !== 'api_tier' ||
     (metadata.api_plan !== 'starter' && metadata.api_plan !== 'pro') ||
     !metadataUserId ||
