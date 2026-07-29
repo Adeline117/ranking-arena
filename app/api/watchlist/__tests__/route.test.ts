@@ -1,4 +1,6 @@
 const mockFrom = jest.fn()
+const mockGetSupabaseAdmin = jest.fn()
+const mockReadSealedRankIdentities = jest.fn()
 
 jest.mock('next/server', () => {
   class MockNextResponse {
@@ -34,6 +36,14 @@ jest.mock('@/lib/api/middleware', () => ({
       }),
 }))
 
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: () => mockGetSupabaseAdmin(),
+}))
+
+jest.mock('@/lib/rankings/read-sealed-rank-identities', () => ({
+  readSealedRankIdentities: (...args: unknown[]) => mockReadSealedRankIdentities(...args),
+}))
+
 jest.mock('@/lib/utils/logger', () => {
   const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() }
   return { createLogger: () => logger, logger }
@@ -51,7 +61,11 @@ function watchlistQuery(result: { data: unknown[] | null; error: unknown }) {
 import { GET } from '../route'
 
 describe('GET /api/watchlist availability', () => {
-  beforeEach(() => jest.clearAllMocks())
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetSupabaseAdmin.mockReturnValue({ from: jest.fn(), rpc: jest.fn() })
+    mockReadSealedRankIdentities.mockResolvedValue(null)
+  })
 
   it('keeps a real empty watchlist as a successful empty result', async () => {
     mockFrom.mockReturnValue(watchlistQuery({ data: [], error: null }))
@@ -84,6 +98,86 @@ describe('GET /api/watchlist availability', () => {
     mockFrom.mockReturnValue(
       watchlistQuery({ data: null, error: { code: 'XX000', message: 'database unavailable' } })
     )
+
+    const response = await GET({} as never)
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: { code: 'INTERNAL_ERROR' },
+    })
+  })
+
+  it('enriches only the exact watchlist identity from one sealed generation', async () => {
+    mockFrom.mockReturnValue(
+      watchlistQuery({
+        data: [
+          {
+            source: 'binance_futures',
+            source_trader_id: 'shared-id',
+            handle: 'watchlisted',
+            created_at: '2026-07-29T00:00:00Z',
+          },
+        ],
+        error: null,
+      })
+    )
+    mockReadSealedRankIdentities.mockResolvedValue({
+      value: [
+        {
+          source: 'binance_futures',
+          source_trader_id: 'shared-id',
+          handle: 'rank-handle',
+          avatar_url: 'avatar.png',
+          roi: 10,
+          pnl: 20,
+          win_rate: 30,
+          followers: 40,
+          arena_score: 50,
+          rank: 60,
+        },
+      ],
+      publication: { state: 'sealed' },
+      publicationIdentity: 'proof',
+    })
+
+    const response = await GET({} as never)
+
+    expect(response.status).toBe(200)
+    expect(mockReadSealedRankIdentities).toHaveBeenCalledWith(mockGetSupabaseAdmin(), '90D', [
+      { source: 'binance_futures', sourceTraderId: 'shared-id' },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      watchlist: [
+        expect.objectContaining({
+          source: 'binance_futures',
+          source_trader_id: 'shared-id',
+          roi: 10,
+          pnl: 20,
+          win_rate: 30,
+          arena_score: 50,
+          rank: 60,
+          avatar_url: 'avatar.png',
+        }),
+      ],
+    })
+  })
+
+  it('fails closed instead of returning unsealed partial rank enrichment', async () => {
+    mockFrom.mockReturnValue(
+      watchlistQuery({
+        data: [
+          {
+            source: 'binance_futures',
+            source_trader_id: 'trader-1',
+            handle: 'trader',
+            created_at: '2026-07-29T00:00:00Z',
+          },
+        ],
+        error: null,
+      })
+    )
+    mockReadSealedRankIdentities.mockRejectedValue(new Error('proof unavailable'))
 
     const response = await GET({} as never)
 

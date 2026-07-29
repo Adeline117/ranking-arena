@@ -11,8 +11,14 @@ import { withAuth } from '@/lib/api/middleware'
 import { badRequest, serverError, error as errorResponse } from '@/lib/api/response'
 import { ErrorCode } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { readSealedRankIdentities } from '@/lib/rankings/read-sealed-rank-identities'
 
 const log = createLogger('api:watchlist')
+
+function rankIdentityKey(source: string, sourceTraderId: string): string {
+  return `${source}\u0000${sourceTraderId}`
+}
 
 /**
  * SCHEMA DRIFT GUARD: the `trader_watchlist` table does NOT exist in prod.
@@ -65,32 +71,26 @@ export const GET = withAuth(
 
     // Enrich watchlist items with leaderboard snapshot data (ROI, PnL, rank, arena_score)
     if (watchlist.length > 0) {
-      const { data: ranks } = await supabase
-        .from('leaderboard_ranks')
-        .select('source, source_trader_id, roi, pnl, rank, arena_score, win_rate, avatar_url')
-        .eq('season_id', '90D')
-        .in('source', [...new Set(watchlist.map((w) => w.source))])
-        .in('source_trader_id', [...new Set(watchlist.map((w) => w.source_trader_id))])
-
-      if (ranks && ranks.length > 0) {
-        type RankRow = {
-          source: string
-          source_trader_id: string
-          roi: unknown
-          pnl: unknown
-          rank: unknown
-          arena_score: unknown
-          win_rate: unknown
-          avatar_url: unknown
-        }
+      try {
+        // Publication proofs are service-role only. The private watchlist edge
+        // query above remains scoped by the authenticated client; only its
+        // exact composite identities are passed to this bounded enrichment.
+        const sealedRead = await readSealedRankIdentities(
+          getSupabaseAdmin(),
+          '90D',
+          watchlist.map((item) => ({
+            source: item.source,
+            sourceTraderId: item.source_trader_id,
+          }))
+        )
         const rankMap = new Map(
-          ranks.map((r) => [
-            `${(r as RankRow).source}:${(r as RankRow).source_trader_id}`,
-            r as RankRow,
+          (sealedRead?.value ?? []).map((rank) => [
+            rankIdentityKey(rank.source, rank.source_trader_id),
+            rank,
           ])
         )
         for (const item of watchlist) {
-          const key = `${item.source}:${item.source_trader_id}`
+          const key = rankIdentityKey(item.source, item.source_trader_id)
           const rank = rankMap.get(key)
           if (rank) {
             Object.assign(item, {
@@ -103,6 +103,11 @@ export const GET = withAuth(
             })
           }
         }
+      } catch (rankError) {
+        log.error('GET sealed rank enrichment failed', {
+          error: rankError instanceof Error ? rankError.message : String(rankError),
+        })
+        return serverError('Internal server error')
       }
     }
 
