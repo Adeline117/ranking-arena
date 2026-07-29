@@ -12,6 +12,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { badRequest } from '@/lib/api/response'
@@ -24,11 +25,7 @@ import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
-import {
-  PUBLIC_ACTIVE_RANKING_SOURCES,
-  SOURCE_TYPE_MAP,
-  parsePublicActiveRankingSource,
-} from '@/lib/constants/exchanges'
+import { SOURCE_TYPE_MAP, parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
   filterPublicRankingSources,
@@ -37,6 +34,7 @@ import {
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
 import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { readLeaderboardPublicationAuthority } from '@/lib/rankings/read-publication-authority'
 import type { SealedLeaderboardPublicationProofSet } from '@/lib/rankings/read-publication-proofs'
 import {
   createSealedRankingCacheEntry,
@@ -91,18 +89,22 @@ interface TradersQueryParams {
 }
 
 function tradersProofSources(
+  authoritySources: readonly string[],
   exchangeFilter: string | null,
   categoryFilter: string | null
 ): string[] {
-  if (exchangeFilter) return [exchangeFilter]
+  const publicAuthoritySources = filterPublicRankingSources(authoritySources)
+  if (exchangeFilter) {
+    return publicAuthoritySources.includes(exchangeFilter) ? [exchangeFilter] : []
+  }
 
   return filterPublicRankingSources(
     categoryFilter
-      ? PUBLIC_ACTIVE_RANKING_SOURCES.filter((source) => {
+      ? publicAuthoritySources.filter((source) => {
           const sourceType = SOURCE_TYPE_MAP[source] || 'futures'
           return sourceType === (categoryFilter === 'onchain' ? 'web3' : categoryFilter)
         })
-      : PUBLIC_ACTIVE_RANKING_SOURCES
+      : publicAuthoritySources
   )
 }
 
@@ -155,27 +157,67 @@ export const GET = withPublic(
       })
     }
 
+    const authoritySources = await readLeaderboardPublicationAuthority(supabase, timeRange, {
+      timeoutMs: 10_000,
+    })
+    const expectedSources = tradersProofSources(
+      authoritySources,
+      canonicalExchange,
+      categoryFilter ?? null
+    )
+    if (expectedSources.length === 0) {
+      return NextResponse.json({
+        traders: [],
+        timeRange,
+        totalCount: 0,
+        rankingMode: 'arena_score',
+        lastUpdated: null,
+        isStale: true,
+        dataAgeMinutes: null,
+        source_freshness: [],
+        nextCursor: null,
+        hasMore: false,
+        page: useLegacyPaging ? Math.max(0, page) : undefined,
+        limit,
+        availableSources: [],
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'publication_authority_filtered',
+        ranking_visibility_reasons: [
+          canonicalExchange
+            ? 'source_outside_publication_authority'
+            : 'category_outside_publication_authority',
+        ],
+      })
+    }
+
+    const authorityFingerprint = createHash('sha256')
+      .update(authoritySources.join('\u0000'))
+      .digest('hex')
+      .slice(0, 16)
     // Cache key
     const cacheKey = publicRankingCacheKey(
-      `leaderboard:sealed-v4:${timeRange}:${canonicalExchange || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
+      `leaderboard:sealed-v5:${authorityFingerprint}:${timeRange}:${canonicalExchange || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
     )
-    const expectedSources = tradersProofSources(canonicalExchange, categoryFilter ?? null)
 
     const cacheEntry = parseSealedRankingCacheEntry<TradersRankingResponse>(
       await getOrSetWithLock(
         cacheKey,
         async () => {
-          const sealedRead = await fetchFromLeaderboard(supabase, {
-            timeRange,
-            exchangeFilter: canonicalExchange,
-            categoryFilter: categoryFilter ?? null,
-            sortBy: effectiveSortBy,
-            order,
-            cursor: cursor ? safeParseInt(cursor, 0) : null,
-            limit,
-            useLegacyPaging,
-            page: useLegacyPaging ? Math.max(0, page) : 0,
-          })
+          const sealedRead = await fetchFromLeaderboard(
+            supabase,
+            {
+              timeRange,
+              exchangeFilter: canonicalExchange,
+              categoryFilter: categoryFilter ?? null,
+              sortBy: effectiveSortBy,
+              order,
+              cursor: cursor ? safeParseInt(cursor, 0) : null,
+              limit,
+              useLegacyPaging,
+              page: useLegacyPaging ? Math.max(0, page) : 0,
+            },
+            expectedSources
+          )
           const safeRead = {
             ...sealedRead,
             value: sanitizePublicRankingSourcePayload(sealedRead.value),
@@ -224,16 +266,27 @@ const SORT_COLUMN: Record<string, string> = {
 
 async function fetchFromLeaderboard(
   supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
-  params: TradersQueryParams
+  params: TradersQueryParams,
+  expectedSources: readonly string[]
 ) {
-  const proofSources = tradersProofSources(params.exchangeFilter, params.categoryFilter)
-
-  return readSealedRankingGeneration(
+  const sealedRead = await readSealedRankingGeneration(
     supabase,
-    { season: params.timeRange, sources: proofSources },
+    { season: params.timeRange, sources: expectedSources },
     (publication) => fetchFromLeaderboardCohort(supabase, params, publication),
     { timeoutMs: 10_000 }
   )
+  const currentSources = tradersProofSources(
+    sealedRead.authoritySources,
+    params.exchangeFilter,
+    params.categoryFilter
+  )
+  if (
+    currentSources.length !== expectedSources.length ||
+    currentSources.some((source, index) => source !== expectedSources[index])
+  ) {
+    throw new Error('traders ranking authority changed before the sealed read')
+  }
+  return sealedRead
 }
 
 async function fetchFromLeaderboardCohort(

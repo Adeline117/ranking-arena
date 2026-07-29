@@ -42,6 +42,12 @@ jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
   readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
 }))
 
+const mockReadPublicationAuthority = jest.fn()
+jest.mock('@/lib/rankings/read-publication-authority', () => ({
+  readLeaderboardPublicationAuthority: (...args: unknown[]) =>
+    mockReadPublicationAuthority(...args),
+}))
+
 jest.mock('@/lib/data/verified-traders', () => ({
   getVerifiedTraderKeys: jest.fn(async () => new Set()),
   verifiedTraderKey: (source: string, traderId: string) => `${source}:${traderId}`,
@@ -82,10 +88,9 @@ function queryResult(data: unknown[], error: unknown = null) {
 }
 
 import { GET } from '../route'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
 
 const TEST_COHORT_ID = '11111111-1111-4111-8111-111111111111'
+const TEST_AUTHORITY_SOURCES = ['binance_futures', 'hyperliquid']
 const proofOverrides = new Map<string, { sourceAsOf?: string; publishedRankCount?: number }>()
 
 async function readThroughSealedGeneration(
@@ -127,7 +132,12 @@ async function readThroughSealedGeneration(
     })),
   }
   const value = await reader(publication)
-  return { value, publication, publicationIdentity: JSON.stringify(publication) }
+  return {
+    value,
+    publication,
+    publicationIdentity: JSON.stringify(publication),
+    authoritySources: TEST_AUTHORITY_SOURCES,
+  }
 }
 
 describe('GET /api/traders source freshness', () => {
@@ -138,6 +148,7 @@ describe('GET /api/traders source freshness', () => {
       async (_key: string, fetcher: () => Promise<unknown>) => await fetcher()
     )
     mockReadSealedRankingGeneration.mockImplementation(readThroughSealedGeneration)
+    mockReadPublicationAuthority.mockResolvedValue(TEST_AUTHORITY_SOURCES)
     jest.useFakeTimers().setSystemTime(new Date('2026-07-18T12:00:00.000Z'))
   })
 
@@ -220,9 +231,11 @@ describe('GET /api/traders source freshness', () => {
       '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
     )
     expect(rankingQuery?.filter).toHaveBeenCalledWith('rank_publication_id', 'eq', TEST_COHORT_ID)
-    expect(rankingQuery?.in).toHaveBeenCalledWith(
-      'source',
-      filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+    expect(rankingQuery?.in).toHaveBeenCalledWith('source', TEST_AUTHORITY_SOURCES)
+    expect(mockReadPublicationAuthority).toHaveBeenCalledWith(
+      expect.objectContaining({ from: mockFrom }),
+      '90D',
+      { timeoutMs: 10_000 }
     )
     expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_count_cache')
     expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_source_freshness')
@@ -251,20 +264,18 @@ describe('GET /api/traders source freshness', () => {
       state: 'sealed' as const,
       season: '90D' as const,
       scoreCohortId: TEST_COHORT_ID,
-      proofs: filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-        .sort()
-        .map((source) => ({
-          season_id: '90D' as const,
-          source,
-          source_as_of: '2026-07-18T11:00:00.000000Z',
-          recorded_at: '2026-07-18T11:55:00.000000Z',
-          score_cohort_id: TEST_COHORT_ID,
-          rank_mutation_seq: 9,
-          current_mutation_seq: 9,
-          published_rank_count: source === 'binance_futures' || source === 'hyperliquid' ? 1 : 0,
-          published_identity_sha256: 'a'.repeat(64),
-          is_sealed: true as const,
-        })),
+      proofs: TEST_AUTHORITY_SOURCES.map((source) => ({
+        season_id: '90D' as const,
+        source,
+        source_as_of: '2026-07-18T11:00:00.000000Z',
+        recorded_at: '2026-07-18T11:55:00.000000Z',
+        score_cohort_id: TEST_COHORT_ID,
+        rank_mutation_seq: 9,
+        current_mutation_seq: 9,
+        published_rank_count: source === 'binance_futures' || source === 'hyperliquid' ? 1 : 0,
+        published_identity_sha256: 'a'.repeat(64),
+        is_sealed: true as const,
+      })),
     }
     mockGetOrSetWithLock.mockResolvedValue({
       contract: 'sealed-ranking-cache@1',
@@ -281,7 +292,7 @@ describe('GET /api/traders source freshness', () => {
     const body = await response.json()
 
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v4:leaderboard:sealed-v4:/),
+      expect.stringMatching(/^public-rank-policy-v4:leaderboard:sealed-v5:/),
       expect.any(Function),
       expect.any(Object)
     )
@@ -308,6 +319,25 @@ describe('GET /api/traders source freshness', () => {
     expect(response.status).toBe(200)
     expect(body).toEqual(
       expect.objectContaining({ traders: [], totalCount: 0, availableSources: [] })
+    )
+    expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('returns an honest empty board for a known source outside live authority', async () => {
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/traders?timeRange=90D&exchange=bybit'),
+    } as never)
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toEqual(
+      expect.objectContaining({
+        traders: [],
+        totalCount: 0,
+        availableSources: [],
+        ranking_visibility_reasons: ['source_outside_publication_authority'],
+      })
     )
     expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
