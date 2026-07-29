@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url'
 import { config } from 'dotenv'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-config({ path: resolve(__dirname, '..', '.env') })
+const workerEnvironment = config({ path: resolve(__dirname, '..', '.env') })
 
 import { Worker, type Job } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
@@ -36,6 +36,11 @@ import {
   startHeartbeat,
 } from './ingest/heartbeat'
 import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readiness'
+import {
+  assertAttemptBoundCaptureEnvironmentFile,
+  assertAttemptBoundCaptureRuntimeEnabled,
+} from './ingest/attempt-bound-capture-runtime'
+import { assertPartitionedV4WorkerReadiness } from './ingest/attempt-bound-capture-readiness'
 import { startNativeIngestServing } from './ingest/startup-gate'
 import { routeJobWithSourceLease } from './ingest/source-job-routing'
 import { routeTierCJobRegion } from './ingest/tier-c-region-router'
@@ -205,11 +210,20 @@ async function main(): Promise<void> {
   console.log('[ingest-worker] starting…')
 
   try {
+    // The box-local file is the rollout authority. Prove both its literal value
+    // and the effective process value so inherited PM2/shell state cannot mask
+    // a missing or disabled release flag.
+    assertAttemptBoundCaptureEnvironmentFile(workerEnvironment)
+    assertAttemptBoundCaptureRuntimeEnabled(process.env)
+
     // No scheduler, BullMQ consumer, heartbeat, or authority attempt may start
     // until the production database proves the exact source-lineage contract.
     await assertMetricTrustWorkerReadiness()
     processCoordinator.assertStartupOpen()
     console.log('[ingest-worker] metric-trust database release contract ready')
+    await assertPartitionedV4WorkerReadiness()
+    processCoordinator.assertStartupOpen()
+    console.log('[ingest-worker] partitioned V4 database release contract ready')
 
     // Register adapters (side-effect imports add them to the registry).
     await import('@/lib/ingest/adapters/register')
@@ -376,9 +390,14 @@ async function main(): Promise<void> {
       },
     })
     processCoordinator.assertStartupOpen()
-  } catch {
+  } catch (error) {
     if (processCoordinator.shutdownReason === undefined) {
-      console.error('[ingest-worker] startup failed')
+      const message = error instanceof Error ? error.message : ''
+      console.error(
+        message.startsWith('[ingest-worker] partitioned V4 startup gate failed closed:')
+          ? message
+          : '[ingest-worker] startup failed'
+      )
     }
     void processCoordinator.requestShutdown(processCoordinator.shutdownReason ?? 'startup_failed')
   } finally {

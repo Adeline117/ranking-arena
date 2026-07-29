@@ -1,8 +1,14 @@
 import { config } from 'dotenv'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import {
+  assertAttemptBoundCaptureEnvironmentFile,
+  assertAttemptBoundCaptureRuntimeEnabled,
+} from './src/ingest/attempt-bound-capture-runtime'
 
-export function assertSgRuntimeEnvironment(env: NodeJS.ProcessEnv): void {
+export function assertSgRuntimeEnvironment(
+  env: Readonly<Record<string, string | undefined>>
+): void {
   if (env.WORKER_NODE_ID !== 'vps_sg') {
     throw new Error('[sg-runtime-preflight] WORKER_NODE_ID must be exactly vps_sg')
   }
@@ -17,17 +23,45 @@ export function assertSgRuntimeEnvironment(env: NodeJS.ProcessEnv): void {
   }
 }
 
-function main(): void {
-  config({ path: resolve(process.cwd(), 'worker', '.env'), override: false, quiet: true })
+export function assertSgRuntimeEnvironmentFile(parsed: Record<string, string> | undefined): void {
+  if (parsed === undefined) {
+    throw new Error('[sg-runtime-preflight] worker/.env could not be parsed')
+  }
+  assertSgRuntimeEnvironment(parsed)
+}
+
+async function main(): Promise<void> {
+  const loaded = config({
+    path: resolve(process.cwd(), 'worker', '.env'),
+    override: false,
+    quiet: true,
+  })
+  assertAttemptBoundCaptureEnvironmentFile(loaded)
+  assertSgRuntimeEnvironmentFile(loaded.parsed)
+  assertAttemptBoundCaptureRuntimeEnabled(process.env)
   assertSgRuntimeEnvironment(process.env)
+
+  const [
+    { assertMetricTrustWorkerReadiness },
+    { assertPartitionedV4WorkerReadiness },
+    { closeIngestPool },
+  ] = await Promise.all([
+    import('./src/ingest/metric-trust-readiness'),
+    import('./src/ingest/attempt-bound-capture-readiness'),
+    import('@/lib/ingest/db'),
+  ])
+  try {
+    await assertMetricTrustWorkerReadiness()
+    await assertPartitionedV4WorkerReadiness()
+  } finally {
+    await closeIngestPool().catch(() => undefined)
+  }
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : undefined
 if (invokedPath === import.meta.url) {
-  try {
-    main()
-  } catch (error) {
+  void main().catch((error) => {
     console.error(error instanceof Error ? error.message : '[sg-runtime-preflight] failed')
     process.exit(1)
-  }
+  })
 }
