@@ -48,6 +48,18 @@ export function evaluateCount(
   baseline: number | null,
   maxDeviationPct = 10
 ): CountVerdict {
+  // An empty leaderboard is never publication evidence. A newly activated
+  // source may have neither historical observations nor an expected_count;
+  // passing (actual=0, baseline=null/0) would make an empty snapshot the
+  // newest PASSED board and let a later rank generation retire last-good.
+  if (actual <= 0) {
+    return {
+      passed: false,
+      baselineUsed: baseline,
+      deviationPct:
+        baseline !== null && baseline > 0 ? (Math.abs(actual - baseline) / baseline) * 100 : null,
+    }
+  }
   if (baseline === null || baseline <= 0) {
     return { passed: true, baselineUsed: baseline, deviationPct: null }
   }

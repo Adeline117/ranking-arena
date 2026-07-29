@@ -52,6 +52,13 @@ describe('evaluateCount — 发布门', () => {
     expect(evaluateCount(100, -5).passed).toBe(true)
   })
 
+  it.each([null, 0, -5, 100])('空榜 baseline=%s → fail，保留 last-good', (baseline) => {
+    const verdict = evaluateCount(0, baseline)
+    expect(verdict.passed).toBe(false)
+    expect(verdict.baselineUsed).toBe(baseline)
+    expect(verdict.deviationPct).toBe(baseline === 100 ? 100 : null)
+  })
+
   it('actual 与 baseline 一致 → pass，偏差 0', () => {
     const v = evaluateCount(1000, 1000)
     expect(v.passed).toBe(true)

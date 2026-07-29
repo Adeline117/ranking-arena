@@ -92,6 +92,14 @@ describe('count-check', () => {
     expect(v.baselineUsed).toBeNull()
   })
 
+  it('never passes an empty board without a baseline', () => {
+    expect(evaluateCount(0, null)).toEqual({
+      passed: false,
+      baselineUsed: null,
+      deviationPct: null,
+    })
+  })
+
   it('bootstrap tolerance (±30%) accepts survey-count drift, rejects garbage', () => {
     // bitget_futures 30d real case: 1536 vs stale survey 1860 = 17.4% drift
     expect(evaluateCount(1536, 1860, 30).passed).toBe(true)
