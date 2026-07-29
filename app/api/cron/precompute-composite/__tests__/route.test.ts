@@ -14,6 +14,7 @@ describe('retired composite cache writer', () => {
     expect(route).not.toContain("from('leaderboard_ranks')")
     expect(route).not.toContain('getPool')
     expect(route).not.toContain('tieredSet')
+    expect(route).toContain('export const maxDuration = 10')
     expect(route).toContain('/api/rankings?window=composite')
     expect(route).toContain('{ status: 410 }')
   })

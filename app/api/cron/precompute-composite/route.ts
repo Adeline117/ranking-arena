@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 10
 
 function retiredResponse(request: NextRequest): NextResponse {
   if (!verifyCronSecret(request)) {

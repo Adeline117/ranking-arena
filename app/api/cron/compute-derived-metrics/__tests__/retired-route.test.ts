@@ -14,6 +14,7 @@ describe('retired derived metrics writer', () => {
     expect(route).not.toContain('supabase.rpc')
     expect(route).not.toContain("from('leaderboard_ranks')")
     expect(route).not.toContain("from('trader_daily_snapshots')")
+    expect(route).toContain('export const maxDuration = 10')
     expect(route).toContain('compute-leaderboard atomic generation')
     expect(route).toContain('{ status: 410 }')
   })

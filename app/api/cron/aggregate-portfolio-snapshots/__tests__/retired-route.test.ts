@@ -13,6 +13,7 @@ describe('retired position-notional portfolio snapshot writer', () => {
     expect(route).not.toContain("from('user_positions')")
     expect(route).not.toContain("from('user_portfolio_snapshots')")
     expect(route).not.toContain('size) * (Number')
+    expect(route).toContain('export const maxDuration = 10')
     expect(route).toContain('{ status: 410 }')
     expect(route).toContain('/api/portfolio/sync atomic exchange-equity publication')
   })

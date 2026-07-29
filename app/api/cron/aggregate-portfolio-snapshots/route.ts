@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 10
 
 export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
