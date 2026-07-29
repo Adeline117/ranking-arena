@@ -89,4 +89,22 @@ describe('SSRRankingTable responsive layout', () => {
     expect(css).not.toContain('.ssr-desktop-row')
     expect(css).not.toContain('.ssr-mobile-card')
   })
+
+  it('distinguishes zero, tiny, and invalid drawdown in the server-rendered shell', async () => {
+    const drawdownCases: InitialTrader[] = [
+      { ...traders[0], id: 'zero-mdd', handle: 'Zero MDD', max_drawdown: 0 },
+      { ...traders[0], id: 'tiny-mdd', handle: 'Tiny MDD', max_drawdown: 0.01 },
+      { ...traders[0], id: 'invalid-mdd', handle: 'Invalid MDD', max_drawdown: 100.01 },
+    ]
+    const view = await SSRRankingTable({ traders: drawdownCases })
+    const { container } = render(view)
+    const mddCells = container.querySelectorAll('.ssr-mdd-cell')
+
+    expect(mddCells).toHaveLength(3)
+    expect(mddCells[0]).toHaveTextContent('0.0%')
+    expect(mddCells[0]).not.toHaveTextContent('▼')
+    expect(mddCells[1]).toHaveTextContent('< 0.1%')
+    expect(mddCells[2]).toHaveTextContent('—')
+    expect(mddCells[2]).not.toHaveTextContent('▼')
+  })
 })
