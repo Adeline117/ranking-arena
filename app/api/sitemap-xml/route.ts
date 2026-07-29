@@ -18,6 +18,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import { ARTICLES } from '@/app/(app)/learn/articles'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +32,9 @@ export const maxDuration = 60
 const BASE_URL = 'https://www.arenafi.org'
 const TRADERS_PER_SHARD = 5000
 const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply'] as const
+const SITEMAP_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 const CACHEABLE_SITEMAP_HEADERS = {
   'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
@@ -231,23 +240,43 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
   // Shard 1..N: trader pages
   const supabase = getSupabase()
   const offset = (shardId - 1) * TRADERS_PER_SHARD
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('handle, source_trader_id, source, computed_at')
-    .eq('season_id', '90D')
-    .not('handle', 'is', null)
-    .range(offset, offset + TRADERS_PER_SHARD - 1)
+  const sealedRead = await readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: SITEMAP_RANKING_SOURCES },
+    async (publication) => {
+      const { data, error } = await supabase
+        .from('leaderboard_ranks')
+        .select('handle, source_trader_id, source, computed_at')
+        .in('source', SITEMAP_RANKING_SOURCES)
+        .eq('season_id', '90D')
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .not('handle', 'is', null)
+        .order('source', { ascending: true })
+        .order('source_trader_id', { ascending: true })
+        .range(offset, offset + TRADERS_PER_SHARD - 1)
+
+      if (error || data === null) {
+        throw new Error(`trader sitemap query failed: ${error?.message ?? 'null payload'}`)
+      }
+      if (data.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+        throw new Error('trader sitemap query crossed the public source boundary')
+      }
+      return data
+    },
+    { timeoutMs: 10_000 }
+  )
 
   const seen = new Set<string>()
-  const entries = (data || [])
+  const entries = sealedRead.value
     .map((t) => ({
       h: t.handle || t.source_trader_id,
       source: t.source as string | null,
       computed_at: t.computed_at,
     }))
     .filter((r): r is { h: string; source: string | null; computed_at: string | null } => {
-      if (!r.h || seen.has(r.h)) return false
-      seen.add(r.h)
+      const identity = `${r.source ?? ''}:${r.h}`
+      if (!r.h || seen.has(identity)) return false
+      seen.add(identity)
       return true
     })
     .map((r) => ({
@@ -268,17 +297,15 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
 }
 
 async function getTraderCount(): Promise<number> {
-  try {
-    const supabase = getSupabase()
-    const { count } = await supabase
-      .from('leaderboard_ranks')
-      .select('id', { count: 'exact', head: true })
-      .eq('season_id', '90D')
-      .not('handle', 'is', null)
-    return count || 0
-  } catch {
-    return 5000
-  }
+  const supabase = getSupabase()
+  const sealedRead = await readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: SITEMAP_RANKING_SOURCES },
+    async (publication) =>
+      publication.proofs.reduce((total, proof) => total + proof.published_rank_count, 0),
+    { timeoutMs: 10_000 }
+  )
+  return sealedRead.value
 }
 
 function urlsetXml(
