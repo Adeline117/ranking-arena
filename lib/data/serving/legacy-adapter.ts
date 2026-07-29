@@ -352,17 +352,17 @@ export function servingToStats(stats: Stats | null, extras: Row | null): TraderS
       profitableTradesPct: totalPos ? (winPos / totalPos) * 100 : 0,
     }
   }
-  const tradesPerWeek = num(e.trades_per_week ?? e.weekly_trades)
-  const sharpe = num(stats?.sharpe)
-  const mdd = num(stats?.mdd)
-  const volume = num(stats?.volume)
+  const tradesPerWeek = numOrNull(e.trades_per_week ?? e.weekly_trades)
+  const sharpe = numOrNull(stats?.sharpe)
+  const mdd = numOrNull(stats?.mdd)
+  const volume = numOrNull(stats?.volume)
   out.additionalStats = {
-    tradesPerWeek: tradesPerWeek || undefined,
+    tradesPerWeek: tradesPerWeek ?? undefined,
     avgHoldingTime: typeof e.avg_holding_time === 'string' ? e.avg_holding_time : undefined,
-    riskScore: num(e.risk_rating) || undefined,
-    volume90d: volume || undefined,
-    maxDrawdown: mdd || undefined,
-    sharpeRatio: sharpe || undefined,
+    riskScore: numOrNull(e.risk_rating) ?? undefined,
+    volume90d: volume ?? undefined,
+    maxDrawdown: mdd ?? undefined,
+    sharpeRatio: sharpe ?? undefined,
   }
   return out
 }
