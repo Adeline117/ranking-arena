@@ -114,6 +114,7 @@ jobs:
           install -m 700 scripts/ci/verify-metric-trust-release-readiness.mjs "$RUNNER_TEMP/verify-metric-trust-release-readiness.mjs"
           install -m 700 scripts/ci/verify-worker-release-readiness.mjs "$RUNNER_TEMP/verify-worker-release-readiness.mjs"
           install -m 700 scripts/ci/worker-release-id.mjs "$RUNNER_TEMP/worker-release-id.mjs"
+          install -m 700 scripts/maintenance/check-ranking-primary-authority.mjs "$RUNNER_TEMP/check-ranking-primary-authority.mjs"
 
       - name: Enforce single production writer before deploy
         run: node "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
@@ -157,6 +158,20 @@ jobs:
             echo "run ${HEAD_SHA:0:8} is NOT newer than serving ${SERVING:0:8} — skip (would regress)"
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Bind ranking PostgreSQL and receipt authority before deploy
+        if: steps.fresh.outputs.deploy == 'true'
+        run: |
+          set -euo pipefail
+          ENV_FILE="$RUNNER_TEMP/ranking-production.env"
+          rm -f "$ENV_FILE"
+          cleanup_ranking_env() {
+            rm -f "$ENV_FILE"
+          }
+          trap cleanup_ranking_env EXIT
+          npx vercel@56.2.1 env pull "$ENV_FILE" \
+            --environment=production --yes --token="$VERCEL_TOKEN" >/dev/null
+          node --env-file="$ENV_FILE" "$RUNNER_TEMP/check-ranking-primary-authority.mjs"
 
       - name: Require production metric-trust schema before deploy
         if: steps.fresh.outputs.deploy == 'true'

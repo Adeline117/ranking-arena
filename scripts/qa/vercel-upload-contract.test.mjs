@@ -180,7 +180,7 @@ test('revokes production write authority when a candidate is no longer exact mai
 test('reasserts the single production writer without ever skipping promoted smoke', () => {
   assert.match(
     deployGate,
-    /- name: Pin release-control helpers for this Gate run\n        run: \|[\s\S]*install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"[\s\S]*install -m 700 scripts\/ci\/validate-release-health\.mjs "\$RUNNER_TEMP\/validate-release-health\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-metric-trust-release-readiness\.mjs "\$RUNNER_TEMP\/verify-metric-trust-release-readiness\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-worker-release-readiness\.mjs "\$RUNNER_TEMP\/verify-worker-release-readiness\.mjs"[\s\S]*install -m 700 scripts\/ci\/worker-release-id\.mjs "\$RUNNER_TEMP\/worker-release-id\.mjs"/
+    /- name: Pin release-control helpers for this Gate run\n        run: \|[\s\S]*install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"[\s\S]*install -m 700 scripts\/ci\/validate-release-health\.mjs "\$RUNNER_TEMP\/validate-release-health\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-metric-trust-release-readiness\.mjs "\$RUNNER_TEMP\/verify-metric-trust-release-readiness\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-worker-release-readiness\.mjs "\$RUNNER_TEMP\/verify-worker-release-readiness\.mjs"[\s\S]*install -m 700 scripts\/ci\/worker-release-id\.mjs "\$RUNNER_TEMP\/worker-release-id\.mjs"[\s\S]*install -m 700 scripts\/maintenance\/check-ranking-primary-authority\.mjs "\$RUNNER_TEMP\/check-ranking-primary-authority\.mjs"/
   )
   assert.equal(
     deployGate.match(/node "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"/g)?.length,
@@ -189,6 +189,16 @@ test('reasserts the single production writer without ever skipping promoted smok
   assert.ok(
     deployGate.indexOf('Pin release-control helpers for this Gate run') <
       deployGate.indexOf('git checkout --quiet "$HEAD_SHA"')
+  )
+  assert.match(
+    deployGate,
+    /- name: Bind ranking PostgreSQL and receipt authority before deploy\n        if: steps\.fresh\.outputs\.deploy == 'true'\n        run: \|[\s\S]*vercel@56\.2\.1 env pull "\$ENV_FILE"[\s\S]*--environment=production --yes --token="\$VERCEL_TOKEN" >\/dev\/null[\s\S]*node --env-file="\$ENV_FILE" "\$RUNNER_TEMP\/check-ranking-primary-authority\.mjs"/
+  )
+  assert.match(deployGate, /trap cleanup_ranking_env EXIT/)
+  assert.doesNotMatch(deployGate, /source "\$ENV_FILE"/)
+  assert.ok(
+    deployGate.indexOf('Bind ranking PostgreSQL and receipt authority before deploy') <
+      deployGate.indexOf('Deploy to Vercel (build on Vercel infra)')
   )
   assert.match(
     deployGate,
