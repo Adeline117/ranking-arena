@@ -485,4 +485,105 @@ describe('ApiKeysSection viewer ownership', () => {
       )
     )
   })
+
+  it('synchronously prevents duplicate API Portal sessions', async () => {
+    const portal = deferred<FetchResult>()
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url.includes('/usage')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { keys: [], daily: [], totals: {} } },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'GET') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: {
+            data: [apiKey('user-a')],
+            entitlement: { tier: 'starter', hasStripeSubscription: true },
+          },
+        })
+      }
+      if (url === '/api/stripe/portal' && method === 'POST') return portal.promise
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<ApiKeysSection redirectToPortal={jest.fn()} />)
+    const paymentButton = await screen.findByRole('button', { name: 'paymentMethods' })
+
+    fireEvent.click(paymentButton)
+    fireEvent.click(paymentButton)
+
+    await waitFor(() =>
+      expect(
+        mockAuthedFetch.mock.calls.filter((call) => call[0] === '/api/stripe/portal')
+      ).toHaveLength(1)
+    )
+    expect(paymentButton).toBeDisabled()
+
+    portal.resolve({ ok: false, status: 503, data: { error: 'unavailable' } })
+    await waitFor(() => expect(paymentButton).toBeEnabled())
+  })
+
+  it('aborts and drops A Portal navigation after switching to B', async () => {
+    const portalA = deferred<FetchResult>()
+    const redirect = jest.fn()
+    mockAuthedFetch.mockImplementation(
+      (url: string, method: string, accessToken: string | null) => {
+        if (url.includes('/usage')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            data: { data: { keys: [], daily: [], totals: {} } },
+          })
+        }
+        if (url === '/api/user/api-keys' && method === 'GET') {
+          const userId = accessToken === jwt('user-a') ? 'user-a' : 'user-b'
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            data: {
+              data: [apiKey(userId)],
+              entitlement: { tier: 'starter', hasStripeSubscription: true },
+            },
+          })
+        }
+        if (url === '/api/stripe/portal' && method === 'POST' && accessToken === jwt('user-a')) {
+          return portalA.promise
+        }
+        return Promise.resolve({ ok: false, status: 500, data: {} })
+      }
+    )
+
+    const view = render(<ApiKeysSection redirectToPortal={redirect} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'paymentMethods' }))
+    await waitFor(() =>
+      expect(
+        mockAuthedFetch.mock.calls.filter((call) => call[0] === '/api/stripe/portal')
+      ).toHaveLength(1)
+    )
+    const portalCall = mockAuthedFetch.mock.calls.find((call) => call[0] === '/api/stripe/portal')
+
+    act(() => {
+      switchToUserB(() => view.rerender(<ApiKeysSection redirectToPortal={redirect} />))
+    })
+
+    await screen.findByText('user-b private key')
+    expect(screen.getByRole('button', { name: 'paymentMethods' })).toBeEnabled()
+    expect((portalCall?.[5] as { signal?: AbortSignal }).signal?.aborted).toBe(true)
+
+    await act(async () => {
+      portalA.resolve({
+        ok: true,
+        status: 200,
+        data: { url: 'https://billing.stripe.com/session-for-user-a' },
+      })
+      await Promise.resolve()
+    })
+
+    expect(redirect).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
 })

@@ -38,6 +38,23 @@ type ApiEntitlement = {
   hasStripeSubscription: boolean
 }
 
+type ApiPortalFlow = 'payment_method_update' | 'subscription_cancel'
+
+type ApiPortalOperation = {
+  id: number
+  viewer: SettingsViewerSnapshot
+  controller: AbortController
+}
+
+type ApiKeysSectionProps = {
+  /** Test seam for the irreversible browser navigation to Stripe Portal. */
+  redirectToPortal?: (url: string) => void
+}
+
+function defaultPortalRedirect(url: string): void {
+  window.location.href = url
+}
+
 function apiKeyStateOwnerFor(viewer: SettingsViewerSnapshot): ApiKeyStateOwner {
   return {
     viewerKey: viewer.viewerKey,
@@ -69,7 +86,9 @@ const TIER_LABELS: Record<string, { labelKey: string; color: string; limitKey: s
   pro: { labelKey: 'pro', color: 'var(--color-accent-success)', limitKey: 'unlimitedLabel' },
 }
 
-export function ApiKeysSection() {
+export function ApiKeysSection({
+  redirectToPortal = defaultPortalRedirect,
+}: ApiKeysSectionProps = {}) {
   const { t } = useLanguage()
   const { showToast } = useToast()
   // /api/user/api-keys is wrapped in withAuth, which only reads the
@@ -89,14 +108,24 @@ export function ApiKeysSection() {
   const [newKeyName, setNewKeyName] = useState('')
   const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null)
   const [entitlement, setEntitlement] = useState<ApiEntitlement | null>(null)
-  const [portalFlow, setPortalFlow] = useState<
-    'payment_method_update' | 'subscription_cancel' | null
-  >(null)
+  const [portalFlow, setPortalFlow] = useState<ApiPortalFlow | null>(null)
   const [stateOwner, setStateOwner] = useState<ApiKeyStateOwner | null>(null)
   const [loadOutcome, setLoadOutcome] = useState<ApiKeyLoadOutcome>('idle')
   const stateOwnerRef = useRef<ApiKeyStateOwner | null>(null)
   const loadOutcomeRef = useRef<ApiKeyLoadOutcome>('idle')
   const keysLoadGenerationRef = useRef(0)
+  const mountedRef = useRef(false)
+  const portalOperationRef = useRef<ApiPortalOperation | null>(null)
+  const nextPortalOperationIdRef = useRef(0)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      portalOperationRef.current?.controller.abort()
+      portalOperationRef.current = null
+    }
+  }, [])
 
   const fetchKeys = useCallback(async (expectedScope?: SettingsViewerSnapshot) => {
     const scope = expectedScope ?? captureSettingsViewer(authRef.current)
@@ -169,6 +198,11 @@ export function ApiKeysSection() {
   }, [])
 
   useEffect(() => {
+    const portalOperation = portalOperationRef.current
+    if (portalOperation && !isSettingsViewerCurrent(portalOperation.viewer, authRef.current)) {
+      portalOperation.controller.abort()
+      portalOperationRef.current = null
+    }
     keysLoadGenerationRef.current += 1
     stateOwnerRef.current = null
     loadOutcomeRef.current = 'idle'
@@ -186,6 +220,7 @@ export function ApiKeysSection() {
   }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId, fetchKeys])
 
   const stateBelongsToViewer = (scope: SettingsViewerSnapshot): boolean =>
+    mountedRef.current &&
     loadOutcomeRef.current === 'ready' &&
     apiKeyStateOwnerMatches(stateOwnerRef.current, scope) &&
     isSettingsViewerCurrent(scope, authRef.current)
@@ -303,24 +338,34 @@ export function ApiKeysSection() {
     loading ||
     Boolean(auth.userId && (!stateOwnerIsCurrent || loadOutcome === 'loading'))
 
-  const handleUpgrade = (plan: 'starter' | 'pro') => {
-    const scope = captureSettingsViewer(authRef.current)
-    if (!scope || !stateBelongsToViewer(scope)) return
+  const handleUpgrade = (plan: 'starter' | 'pro', scope: SettingsViewerSnapshot) => {
+    if (!stateBelongsToViewer(scope)) return
     void apiCheckout(plan)
   }
 
-  const openApiPortal = async (flow: 'payment_method_update' | 'subscription_cancel') => {
-    const scope = captureSettingsViewer(authRef.current)
-    if (
-      !scope ||
-      !stateBelongsToViewer(scope) ||
-      portalFlow !== null ||
-      !visibleEntitlement?.hasStripeSubscription
-    ) {
+  const openApiPortal = async (
+    flow: ApiPortalFlow,
+    scope: SettingsViewerSnapshot,
+    hasStripeSubscription: boolean
+  ) => {
+    if (!stateBelongsToViewer(scope) || !hasStripeSubscription) {
       return
     }
 
+    const activeOperation = portalOperationRef.current
+    if (activeOperation && isSettingsViewerCurrent(activeOperation.viewer, authRef.current)) return
+    activeOperation?.controller.abort()
+
+    const operation: ApiPortalOperation = {
+      id: ++nextPortalOperationIdRef.current,
+      viewer: scope,
+      controller: new AbortController(),
+    }
+    portalOperationRef.current = operation
     setPortalFlow(flow)
+    const operationIsCurrent = () =>
+      portalOperationRef.current?.id === operation.id && stateBelongsToViewer(scope)
+
     let navigating = false
     try {
       const res = await authedFetch<{ url?: unknown; error?: unknown }>(
@@ -332,21 +377,27 @@ export function ApiKeysSection() {
         {
           expectedUserId: scope.userId,
           expectedSessionGeneration: scope.sessionGeneration,
+          signal: operation.controller.signal,
         }
       )
-      if (!stateBelongsToViewer(scope) || res.stale) return
+      if (!operationIsCurrent() || res.stale) return
       if (res.ok && typeof res.data?.url === 'string' && res.data.url.startsWith('https://')) {
+        // Last CAS immediately before the irreversible browser navigation.
+        if (!operationIsCurrent()) return
         navigating = true
-        window.location.href = res.data.url
+        redirectToPortal(res.data.url)
         return
       }
       showToast(t('paymentSystemComingSoon'), 'error')
     } catch {
-      if (stateBelongsToViewer(scope)) {
+      if (operationIsCurrent()) {
         showToast(t('operationFailedTryAgain'), 'error')
       }
     } finally {
-      if (!navigating && isSettingsViewerCurrent(scope, authRef.current)) setPortalFlow(null)
+      if (!navigating && operationIsCurrent()) {
+        setPortalFlow(null)
+        portalOperationRef.current = null
+      }
     }
   }
 
@@ -453,8 +504,18 @@ export function ApiKeysSection() {
       <ApiTierBanner
         currentTier={visibleEntitlement?.tier || activeKeys[0]?.tier || 'free'}
         hasStripeSubscription={visibleEntitlement?.hasStripeSubscription === true}
-        onUpgrade={handleUpgrade}
-        onOpenPortal={(flow) => void openApiPortal(flow)}
+        onUpgrade={(plan) => {
+          if (renderScope) handleUpgrade(plan, renderScope)
+        }}
+        onOpenPortal={(flow) => {
+          if (renderScope) {
+            void openApiPortal(
+              flow,
+              renderScope,
+              visibleEntitlement?.hasStripeSubscription === true
+            )
+          }
+        }}
         isLoading={checkoutLoading || visiblePortalFlow !== null || !stateReady}
         error={checkoutError}
       />
