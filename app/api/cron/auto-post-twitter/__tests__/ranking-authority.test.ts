@@ -28,4 +28,10 @@ describe('Twitter ranking publication authority', () => {
     expect(route).toContain(".order('source_trader_id', { ascending: true })")
     expect(route).toContain('.limit(5)')
   })
+
+  it('aborts the ranking query before the route safety deadline', () => {
+    expect(route).toContain('const rankingSignal = AbortSignal.timeout(20_000)')
+    expect(route).toContain('.abortSignal(rankingSignal)')
+    expect(route).toContain('{ safetyTimeoutMs: 25_000 }')
+  })
 })

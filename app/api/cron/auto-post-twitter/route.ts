@@ -19,6 +19,7 @@ export const maxDuration = 30
 
 export const GET = withCron('auto-post-twitter', async (_request: NextRequest, { plog: _plog }) => {
   const supabase = getSupabaseAdmin()
+  const rankingSignal = AbortSignal.timeout(20_000)
 
   // Fetch top 5 traders by arena_score in 7D window (recent top performers)
   const sealedRead = await readSealedRankingAuthorityGeneration(
@@ -38,6 +39,7 @@ export const GET = withCron('auto-post-twitter', async (_request: NextRequest, {
         .order('source', { ascending: true })
         .order('source_trader_id', { ascending: true })
         .limit(5)
+        .abortSignal(rankingSignal)
 
       if (error || data === null) {
         throw new Error(`Failed to fetch sealed top traders: ${error?.message ?? 'null payload'}`)
@@ -77,4 +79,4 @@ export const GET = withCron('auto-post-twitter', async (_request: NextRequest, {
     traders: movers.map((m) => m.handle || m.source_trader_id.slice(0, 8)),
     charCount: content.text.length,
   }
-})
+}, { safetyTimeoutMs: 25_000 })
