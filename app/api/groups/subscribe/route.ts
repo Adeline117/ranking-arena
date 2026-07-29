@@ -10,6 +10,7 @@ import { success, error, badRequest, handleError } from '@/lib/api/response'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { assertStripePaymentRuntimeReady } from '@/lib/stripe'
+import { stripeObjectId } from '@/lib/stripe/identity'
 import { STRIPE_API_VERSION } from '@/lib/stripe/version'
 
 export const runtime = 'nodejs'
@@ -17,6 +18,8 @@ export const dynamic = 'force-dynamic'
 
 const stripePaymentIntentIdPattern = /^pi_[A-Za-z0-9_]+$/
 const stripeCheckoutSessionIdPattern = /^cs_[A-Za-z0-9_]+$/
+const stripeChargeIdPattern = /^ch_[A-Za-z0-9_]+$/
+const stripeCustomerIdPattern = /^cus_[A-Za-z0-9_]+$/
 const normalizedUuidSchema = z
   .string()
   .uuid()
@@ -54,7 +57,7 @@ const monthlyActivationRequestSchema = z
     group_id: normalizedUuidSchema,
     tier: z.literal('monthly'),
     payment_intent_id: stripePaymentIntentIdSchema,
-    checkout_session_id: stripeCheckoutSessionIdSchema.nullable().optional(),
+    checkout_session_id: stripeCheckoutSessionIdSchema,
   })
   .strict()
 
@@ -63,7 +66,7 @@ const yearlyActivationRequestSchema = z
     group_id: normalizedUuidSchema,
     tier: z.literal('yearly'),
     payment_intent_id: stripePaymentIntentIdSchema,
-    checkout_session_id: stripeCheckoutSessionIdSchema.nullable().optional(),
+    checkout_session_id: stripeCheckoutSessionIdSchema,
   })
   .strict()
 
@@ -103,12 +106,30 @@ const activationSuccessSchema = z
     membership_status: z.enum(['joined', 'already_member']),
     member_count: z.number().int().nonnegative(),
     idempotent_replay: z.boolean(),
+    stripe_ownership_id: canonicalUuidSchema.optional(),
+    tombstone_status: z.enum(['no_tombstone', 'resolved', 'already_resolved']).optional(),
   })
   .strict()
 
 const activationResultSchema = z.discriminatedUnion('status', [
   activationSuccessSchema,
   ...activationFailureStatuses.map((status) => z.object({ status: z.literal(status) }).strict()),
+  z
+    .object({
+      status: z.literal('refund_observed'),
+      subscription_id: canonicalUuidSchema,
+      idempotent_replay: z.boolean(),
+      stripe_ownership_id: canonicalUuidSchema,
+      tombstone_status: z.enum(['resolved', 'already_resolved']),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('manual_review'),
+      reason_key: z.string().min(1).max(255).optional(),
+    })
+    .strict(),
+  z.object({ status: z.literal('identity_conflict') }).strict(),
 ])
 
 const groupSubscriptionSchema = z
@@ -168,10 +189,17 @@ const cancellationResultSchema = z.discriminatedUnion('status', [
 type PaidTier = 'monthly' | 'yearly'
 type ActivationRequest = z.infer<typeof activationRequestSchema>
 type ActivationSuccess = z.infer<typeof activationSuccessSchema>
+type ActivationFailureStatus =
+  | (typeof activationFailureStatuses)[number]
+  | 'refund_observed'
+  | 'identity_conflict'
+  | 'manual_review'
 
 type VerifiedStripePayment = {
   paymentIntentId: string
-  checkoutSessionId: string | null
+  checkoutSessionId: string
+  chargeId: string
+  customerId: string
   amountCents: number
   currency: 'usd'
 }
@@ -223,54 +251,53 @@ function activationSuccessMatchesRequest(
     result.status !== 'already_active' &&
     result.tier === request.tier &&
     result.subscription_status === 'active' &&
-    result.price_paid > 0
+    result.price_paid > 0 &&
+    result.stripe_ownership_id !== undefined &&
+    result.tombstone_status === 'no_tombstone'
   )
 }
 
 async function verifyStripePayment(input: {
   stripe: Stripe
-  checkoutSessionId?: string | null
+  checkoutSessionId: string
   paymentIntentId: string
   userId: string
   groupId: string
   tier: PaidTier
 }): Promise<VerifiedStripePayment | null> {
-  let checkoutSessionId: string | null = null
-  let checkoutAmountCents: number | null = null
+  const session = await input.stripe.checkout.sessions.retrieve(input.checkoutSessionId, {
+    expand: ['payment_intent'],
+  })
+  const sessionPaymentIntentId = stripeObjectId(session.payment_intent)
+  const sessionCustomerId = stripeObjectId(session.customer)
 
-  if (input.checkoutSessionId) {
-    const session = await input.stripe.checkout.sessions.retrieve(input.checkoutSessionId, {
-      expand: ['payment_intent'],
-    })
-    const sessionPaymentIntentId =
-      typeof session.payment_intent === 'string'
-        ? session.payment_intent
-        : session.payment_intent?.id
-
-    if (
-      session.id !== input.checkoutSessionId ||
-      !stripeCheckoutSessionIdPattern.test(session.id) ||
-      session.mode !== 'payment' ||
-      session.status !== 'complete' ||
-      session.payment_status !== 'paid' ||
-      session.client_reference_id !== input.userId ||
-      !metadataMatchesGroupPass(session.metadata, input.userId, input.groupId, input.tier) ||
-      typeof session.currency !== 'string' ||
-      session.currency.toLowerCase() !== 'usd' ||
-      !isPositiveSafeInteger(session.amount_total) ||
-      sessionPaymentIntentId !== input.paymentIntentId ||
-      !stripePaymentIntentIdPattern.test(sessionPaymentIntentId)
-    ) {
-      return null
-    }
-
-    checkoutSessionId = session.id
-    checkoutAmountCents = session.amount_total
+  if (
+    session.id !== input.checkoutSessionId ||
+    !stripeCheckoutSessionIdPattern.test(session.id) ||
+    session.mode !== 'payment' ||
+    session.status !== 'complete' ||
+    session.payment_status !== 'paid' ||
+    session.client_reference_id !== input.userId ||
+    !metadataMatchesGroupPass(session.metadata, input.userId, input.groupId, input.tier) ||
+    typeof session.currency !== 'string' ||
+    session.currency.toLowerCase() !== 'usd' ||
+    !isPositiveSafeInteger(session.amount_total) ||
+    sessionPaymentIntentId !== input.paymentIntentId ||
+    !stripePaymentIntentIdPattern.test(sessionPaymentIntentId) ||
+    sessionCustomerId === null ||
+    !stripeCustomerIdPattern.test(sessionCustomerId) ||
+    typeof session.livemode !== 'boolean'
+  ) {
+    return null
   }
 
   // Always retrieve the canonical PaymentIntent, even when Checkout returned
   // an expanded object, so status and received amount come from one fresh proof.
-  const paymentIntent = await input.stripe.paymentIntents.retrieve(input.paymentIntentId)
+  const paymentIntent = await input.stripe.paymentIntents.retrieve(input.paymentIntentId, {
+    expand: ['latest_charge'],
+  })
+  const paymentIntentCustomerId = stripeObjectId(paymentIntent.customer)
+  const chargeId = stripeObjectId(paymentIntent.latest_charge)
   if (
     paymentIntent.id !== input.paymentIntentId ||
     !stripePaymentIntentIdPattern.test(paymentIntent.id) ||
@@ -281,14 +308,46 @@ async function verifyStripePayment(input: {
     !isPositiveSafeInteger(paymentIntent.amount) ||
     !isPositiveSafeInteger(paymentIntent.amount_received) ||
     paymentIntent.amount_received !== paymentIntent.amount ||
-    (checkoutAmountCents !== null && paymentIntent.amount_received !== checkoutAmountCents)
+    paymentIntent.amount_received !== session.amount_total ||
+    paymentIntentCustomerId !== sessionCustomerId ||
+    chargeId === null ||
+    !stripeChargeIdPattern.test(chargeId) ||
+    typeof paymentIntent.livemode !== 'boolean' ||
+    paymentIntent.livemode !== session.livemode
+  ) {
+    return null
+  }
+
+  // The exact Charge is the global refund and cross-product ownership fence.
+  // Retrieve it freshly instead of trusting the expanded PaymentIntent object.
+  const charge = await input.stripe.charges.retrieve(chargeId)
+  if (
+    charge.id !== chargeId ||
+    !stripeChargeIdPattern.test(charge.id) ||
+    stripeObjectId(charge.payment_intent) !== paymentIntent.id ||
+    stripeObjectId(charge.customer) !== sessionCustomerId ||
+    charge.status !== 'succeeded' ||
+    charge.paid !== true ||
+    charge.captured !== true ||
+    charge.refunded !== false ||
+    charge.amount_refunded !== 0 ||
+    !isPositiveSafeInteger(charge.amount) ||
+    !isPositiveSafeInteger(charge.amount_captured) ||
+    charge.amount !== paymentIntent.amount_received ||
+    charge.amount_captured !== paymentIntent.amount_received ||
+    typeof charge.currency !== 'string' ||
+    charge.currency.toLowerCase() !== 'usd' ||
+    typeof charge.livemode !== 'boolean' ||
+    charge.livemode !== session.livemode
   ) {
     return null
   }
 
   return {
     paymentIntentId: paymentIntent.id,
-    checkoutSessionId,
+    checkoutSessionId: session.id,
+    chargeId: charge.id,
+    customerId: sessionCustomerId,
     amountCents: paymentIntent.amount_received,
     currency: 'usd',
   }
@@ -413,19 +472,28 @@ export const POST = withAuth(
         }
       }
 
-      const { data: rpcResult, error: rpcError } = await supabase.rpc(
-        'activate_group_subscription_atomic',
-        {
-          p_actor_id: user.id,
-          p_group_id: activationRequest.group_id,
-          p_tier: activationRequest.tier,
-          p_payment_provider: verifiedPayment ? 'stripe' : null,
-          p_payment_intent_id: verifiedPayment?.paymentIntentId ?? null,
-          p_checkout_session_id: verifiedPayment?.checkoutSessionId ?? null,
-          p_amount_cents: verifiedPayment?.amountCents ?? 0,
-          p_currency: verifiedPayment?.currency ?? null,
-        }
-      )
+      const { data: rpcResult, error: rpcError } = verifiedPayment
+        ? await supabase.rpc('activate_group_subscription_with_stripe_ownership_atomic', {
+            p_actor_id: user.id,
+            p_group_id: activationRequest.group_id,
+            p_tier: activationRequest.tier,
+            p_payment_intent_id: verifiedPayment.paymentIntentId,
+            p_checkout_session_id: verifiedPayment.checkoutSessionId,
+            p_amount_cents: verifiedPayment.amountCents,
+            p_currency: verifiedPayment.currency,
+            p_stripe_charge_id: verifiedPayment.chargeId,
+            p_stripe_customer_id: verifiedPayment.customerId,
+          })
+        : await supabase.rpc('activate_group_subscription_atomic', {
+            p_actor_id: user.id,
+            p_group_id: activationRequest.group_id,
+            p_tier: activationRequest.tier,
+            p_payment_provider: null,
+            p_payment_intent_id: null,
+            p_checkout_session_id: null,
+            p_amount_cents: 0,
+            p_currency: null,
+          })
       const parsedResult = activationResultSchema.safeParse(rpcResult)
       if (rpcError || !parsedResult.success) {
         logger.error('[group-subscribe] Atomic activation failed', {
@@ -473,10 +541,7 @@ export const POST = withAuth(
         )
       }
 
-      const statusMap: Record<
-        (typeof activationFailureStatuses)[number],
-        { message: string; http: number }
-      > = {
+      const statusMap: Record<ActivationFailureStatus, { message: string; http: number }> = {
         not_found: { message: 'Group not found', http: 404 },
         dissolved: { message: 'This group has been dissolved', http: 409 },
         not_premium: { message: 'This group does not require a paid pass', http: 400 },
@@ -492,6 +557,9 @@ export const POST = withAuth(
         official: { message: 'Official groups do not accept group passes', http: 403 },
         invalid: { message: 'Invalid group pass request', http: 400 },
         invalid_payment: { message: 'Invalid payment proof', http: 400 },
+        refund_observed: { message: 'This payment was already refunded', http: 409 },
+        identity_conflict: { message: 'This payment is already assigned', http: 409 },
+        manual_review: { message: 'This payment requires manual review', http: 409 },
       }
       const mapped = statusMap[result.status]
       return error(mapped.message, mapped.http)
