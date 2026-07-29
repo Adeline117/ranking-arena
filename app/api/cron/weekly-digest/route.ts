@@ -9,12 +9,17 @@
 
 import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, buildWeeklyDigestEmail } from '@/lib/services/email'
 import { generateUnsubscribeToken } from '@/lib/utils/unsubscribe-token'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
 import { withCron } from '@/lib/api/with-cron'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import {
   buildFollowedDigestActivity,
   indexDigestActivities,
@@ -25,12 +30,15 @@ import {
 } from './personalization'
 
 const logger = createLogger('weekly-digest')
+const WEEKLY_DIGEST_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
 export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   const weekAgoIso = weekAgo.toISOString()
 
@@ -59,14 +67,36 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
 
   // 2. Top movers (biggest 7D ROI this week). Migrated off retiring trader_latest
   // → leaderboard_ranks (source↔platform, handle↔display_name, roi↔roi_pct).
-  const { data: movers } = await supabase
-    .from('leaderboard_ranks')
-    .select('source_trader_id, source, handle, roi')
-    .eq('season_id', '7D')
-    .gte('computed_at', weekAgoIso)
-    .not('roi', 'is', null)
-    .order('roi', { ascending: false })
-    .limit(10)
+  const sealedMovers = await readSealedRankingGeneration(
+    supabase,
+    { season: '7D', sources: WEEKLY_DIGEST_RANKING_SOURCES },
+    async (publication) => {
+      const { data, error } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id, source, handle, roi')
+        .in('source', WEEKLY_DIGEST_RANKING_SOURCES)
+        .eq('season_id', '7D')
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .gte('computed_at', weekAgoIso)
+        .not('roi', 'is', null)
+        .gt('arena_score', 0)
+        .or('is_outlier.is.null,is_outlier.eq.false')
+        .order('roi', { ascending: false })
+        .order('source', { ascending: true })
+        .order('source_trader_id', { ascending: true })
+        .limit(10)
+
+      if (error || data === null) {
+        throw new Error(`Failed to load weekly movers: ${error?.message ?? 'null payload'}`)
+      }
+      if (data.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+        throw new Error('weekly digest ranking query crossed the public source boundary')
+      }
+      return data
+    },
+    { timeoutMs: 15_000 }
+  )
+  const movers = sealedMovers.value
 
   const topMovers = (movers || []).map((m) => ({
     name: m.handle || m.source_trader_id,
@@ -75,15 +105,21 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   }))
 
   // 3. New traders this week
-  const { count: newTraders } = await supabase
+  const { count: newTraders, error: newTradersError } = await supabase
     .from('trader_sources')
     .select('id', { count: 'estimated', head: true })
     .gte('created_at', weekAgoIso)
+  if (newTradersError) {
+    throw new Error(`Failed to load weekly new-trader count: ${newTradersError.message}`)
+  }
 
   // 4. Total tracked
-  const { count: totalTracked } = await supabase
+  const { count: totalTracked, error: totalTrackedError } = await supabase
     .from('trader_sources')
     .select('id', { count: 'estimated', head: true })
+  if (totalTrackedError) {
+    throw new Error(`Failed to load total trader count: ${totalTrackedError.message}`)
+  }
 
   // 5. Week range string
   const now = new Date()
@@ -108,10 +144,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
         .range(from, to)
     )
     if (fErr) {
-      logger.warn('Failed to fetch follows chunk (skipping personalization for chunk)', {
-        error: fErr.message,
-      })
-      continue
+      throw new Error(`Failed to load digest follows: ${fErr.message}`)
     }
     followRows.push(...follows)
   }
@@ -119,6 +152,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
 
   const activityRows: DigestActivityRow[] = []
   for (const [source, sourceTraderIds] of accountsBySource) {
+    if (!isPublicRankingSourceAllowed(source)) continue
     const followedIdList = [...sourceTraderIds]
     for (let i = 0; i < followedIdList.length; i += 300) {
       const chunk = followedIdList.slice(i, i + 300)
@@ -134,11 +168,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
           .range(from, to)
       )
       if (aErr) {
-        logger.warn('Failed to fetch activities chunk (skipping personalization for chunk)', {
-          source,
-          error: aErr.message,
-        })
-        continue
+        throw new Error(`Failed to load digest activities for ${source}: ${aErr.message}`)
       }
       activityRows.push(...acts)
     }
@@ -155,7 +185,8 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
       data: { users },
       error: listErr,
     } = await supabase.auth.admin.listUsers({ page, perPage })
-    if (listErr || !users || users.length === 0) break
+    if (listErr) throw new Error(`Failed to load digest subscriber emails: ${listErr.message}`)
+    if (!users || users.length === 0) break
     for (const u of users) {
       if (subscriberIds.has(u.id) && u.email) {
         emailMap.set(u.id, u.email)
