@@ -29,10 +29,9 @@ import type {
   RankingWindow,
   TradingCategory,
   Platform,
-  GranularPlatform,
   RankingsQuery,
 } from '@/lib/types/leaderboard'
-import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
+import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { TradingPeriod } from '@/lib/types/unified-trader'
 import { tieredGetOrSet, tieredGet } from '@/lib/cache/redis-layer'
 import { ApiError } from '@/lib/api/errors'
@@ -57,6 +56,10 @@ import {
   publicRankingCountFromCache,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
+import {
+  PUBLIC_ACTIVE_RANKING_SOURCES,
+  parsePublicActiveRankingSource,
+} from '@/lib/constants/exchanges'
 
 const logger = createLogger('rankings-api')
 
@@ -129,13 +132,10 @@ export const GET = withPublic(
       throw ApiError.validation('Invalid category. Must be one of: futures, spot, onchain')
     }
 
-    const platform = searchParams.get('platform') as GranularPlatform | null
-    if (
-      platform &&
-      !isPublicRankingSourceQuarantined(platform) &&
-      !(GRANULAR_PLATFORMS as readonly string[]).includes(platform)
-    ) {
-      throw ApiError.validation(`Invalid platform: ${platform}`)
+    const requestedPlatform = searchParams.get('platform')
+    const platform = requestedPlatform ? parsePublicActiveRankingSource(requestedPlatform) : null
+    if (requestedPlatform && !platform) {
+      throw ApiError.validation(`Invalid platform: ${requestedPlatform}`)
     }
 
     const sortBy = (searchParams.get('sort_by') || 'arena_score') as (typeof VALID_SORT_BY)[number]
@@ -394,6 +394,8 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       q = q.eq('source', platformFilter)
     } else if (platformsInCategory && platformsInCategory.length > 0) {
       q = q.in('source', platformsInCategory)
+    } else {
+      q = q.in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
     }
 
     if (min_pnl != null) {
@@ -509,6 +511,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     .from('leaderboard_source_freshness')
     .select('source,source_as_of')
     .eq('season_id', seasonIdUpper)
+    .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
   if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
     freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
   }
