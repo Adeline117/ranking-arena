@@ -106,10 +106,12 @@ async function checkDatabaseAndCron(): Promise<{
   const start = Date.now()
 
   try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    // Keep this probe on the generated client type so a nonexistent column
+    // cannot silently turn a healthy database into a permanent health alarm.
+    const supabase = getSupabaseAdmin()
 
     // 1. 测试数据库连接
-    const { error: dbError } = await supabase.from('leaderboard_ranks').select('count').limit(1)
+    const { error: dbError } = await supabase.from('leaderboard_ranks').select('id').limit(1)
 
     if (dbError) {
       return {
