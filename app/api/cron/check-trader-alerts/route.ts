@@ -64,15 +64,49 @@ async function sendAlertEmails(alerts: DeliveredTraderAlert[]): Promise<number> 
 
     const { data: profiles, error } = await supabase
       .from('user_profiles')
-      .select('id, email, email_digest')
+      .select('id, email_digest')
       .in('id', [...byUser.keys()])
     if (error) throw error
 
+    const emailableProfiles = (profiles ?? []).filter(
+      (profile) => profile.email_digest !== 'none' && byUser.has(profile.id)
+    )
+    const canonicalEmails = new Map<string, string>()
+    let nextProfileIndex = 0
+    const resolveNextAuthEmail = async () => {
+      for (;;) {
+        const profile = emailableProfiles[nextProfileIndex]
+        nextProfileIndex += 1
+        if (!profile) return
+
+        // user_profiles.email is a notification projection, not authentication
+        // authority. It can lag a confirmed email change and the old address can
+        // later belong to someone else. Resolve the current Auth identity at the
+        // last possible boundary and never fall back to the profile copy.
+        const {
+          data: { user: authUser },
+          error: authUserError,
+        } = await supabase.auth.admin.getUserById(profile.id)
+        if (authUserError || authUser?.id !== profile.id || !authUser.email) {
+          logger.warn('[TraderAlerts Cron] Auth email resolution failed', {
+            userId: profile.id,
+            error: authUserError?.message,
+          })
+          continue
+        }
+        canonicalEmails.set(profile.id, authUser.email)
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(10, emailableProfiles.length) }, resolveNextAuthEmail)
+    )
+
     let sent = 0
-    for (const profile of profiles ?? []) {
-      if (!profile.email || profile.email_digest === 'none') continue
+    for (const profile of emailableProfiles) {
       const userAlerts = byUser.get(profile.id)
       if (!userAlerts?.length) continue
+      const canonicalEmail = canonicalEmails.get(profile.id)
+      if (!canonicalEmail) continue
       const emailDeliveryKey = createHash('sha256')
         .update(
           userAlerts
@@ -83,7 +117,7 @@ async function sendAlertEmails(alerts: DeliveredTraderAlert[]): Promise<number> 
         .digest('hex')
 
       const delivered = await sendEmail({
-        to: profile.email,
+        to: canonicalEmail,
         subject: `Arena: ${userAlerts.length} trader alert${userAlerts.length === 1 ? '' : 's'} triggered`,
         html: buildTraderAlertEmail(
           userAlerts.map((alert) => ({

@@ -17,6 +17,7 @@ const mockPipelineError = jest.fn()
 const mockSendToUser = jest.fn()
 const mockSendEmail = jest.fn()
 const mockProfilesIn = jest.fn()
+const mockGetUserById = jest.fn()
 
 jest.mock('@/lib/alerts/run-trader-alerts', () => ({
   runTraderAlerts: (...args: unknown[]) => mockRunTraderAlerts(...args),
@@ -33,6 +34,7 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
+    auth: { admin: { getUserById: (...args: unknown[]) => mockGetUserById(...args) } },
     from: jest.fn(() => ({
       select: jest.fn(() => ({ in: (...args: unknown[]) => mockProfilesIn(...args) })),
     })),
@@ -82,6 +84,7 @@ describe('check-trader-alerts cron route', () => {
     jest.clearAllMocks()
     mockRunTraderAlerts.mockResolvedValue(baseResult)
     mockProfilesIn.mockResolvedValue({ data: [], error: null })
+    mockGetUserById.mockResolvedValue({ data: { user: null }, error: null })
     mockSendToUser.mockResolvedValue([])
     mockSendEmail.mockResolvedValue(true)
   })
@@ -130,7 +133,11 @@ describe('check-trader-alerts cron route', () => {
       ],
     })
     mockProfilesIn.mockResolvedValue({
-      data: [{ id: 'user-1', email: 'qa@example.com', email_digest: 'daily' }],
+      data: [{ id: 'user-1', email_digest: 'daily' }],
+      error: null,
+    })
+    mockGetUserById.mockResolvedValue({
+      data: { user: { id: 'user-1', email: 'canonical@example.com' } },
       error: null,
     })
 
@@ -146,10 +153,90 @@ describe('check-trader-alerts cron route', () => {
     )
     expect(mockSendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
+        to: 'canonical@example.com',
         idempotencyKey:
           'trader-alert/0b220df1969115139ffebb337981298d243a44f84dad5d20d7e7da5fdb34de43',
       })
     )
+  })
+
+  it('never sends a trader alert to a stale profile email', async () => {
+    mockRunTraderAlerts.mockResolvedValue({
+      ...baseResult,
+      alertsSent: 1,
+      deliveredAlerts: [
+        {
+          deliveryId: 'delivery-stale-email',
+          userId: 'user-1',
+          notificationType: 'trader_alert_roi',
+          title: 'ROI change',
+          message: 'ROI moved',
+          link: '/trader/alpha?platform=binance_futures',
+        },
+      ],
+    })
+    mockProfilesIn.mockResolvedValue({
+      data: [{ id: 'user-1', email: 'reassigned-old@example.com', email_digest: 'daily' }],
+      error: null,
+    })
+    mockGetUserById.mockResolvedValue({
+      data: { user: { id: 'user-1', email: 'confirmed-new@example.com' } },
+      error: null,
+    })
+
+    const response = await GET(request('test-secret'))
+
+    expect(response.status).toBe(200)
+    expect(mockGetUserById).toHaveBeenCalledWith('user-1')
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'confirmed-new@example.com' })
+    )
+    expect(JSON.stringify(mockSendEmail.mock.calls)).not.toContain('reassigned-old@example.com')
+  })
+
+  it.each([
+    [{ data: { user: null }, error: null }, 'missing Auth identity'],
+    [{ data: { user: { id: 'user-1', email: null } }, error: null }, 'missing canonical email'],
+    [
+      {
+        data: { user: { id: 'other-user', email: 'other@example.com' } },
+        error: null,
+      },
+      'mismatched Auth identity',
+    ],
+    [
+      {
+        data: { user: null },
+        error: { message: 'Auth unavailable' },
+      },
+      'Auth lookup error',
+    ],
+  ])('fails closed without using the profile email for %s', async (authResult) => {
+    mockRunTraderAlerts.mockResolvedValue({
+      ...baseResult,
+      alertsSent: 1,
+      deliveredAlerts: [
+        {
+          deliveryId: 'delivery-no-authority',
+          userId: 'user-1',
+          notificationType: 'trader_alert_roi',
+          title: 'ROI change',
+          message: 'ROI moved',
+          link: '/trader/alpha?platform=binance_futures',
+        },
+      ],
+    })
+    mockProfilesIn.mockResolvedValue({
+      data: [{ id: 'user-1', email: 'stale@example.com', email_digest: 'daily' }],
+      error: null,
+    })
+    mockGetUserById.mockResolvedValue(authResult)
+
+    const response = await GET(request('test-secret'))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ emailsSent: 0 })
+    expect(mockSendEmail).not.toHaveBeenCalled()
   })
 
   it('returns 500 and marks the pipeline failed when the durable run fails', async () => {
