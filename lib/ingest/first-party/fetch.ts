@@ -54,9 +54,13 @@ export interface CcxtLike {
 }
 
 export type FirstPartyBalanceSemantics = 'total_includes_unrealized' | 'wallet_excludes_unrealized'
+export type FirstPartyRealizedPnlSource = 'positions_history' | 'income_ledger'
 
 const DAY_MS = 86_400_000
 const STABLES = ['USDT', 'USD', 'USDC']
+const POSITION_HISTORY_LIMIT = 100
+const LEDGER_LIMIT = 500
+const LEDGER_MAX_PAGES = 5
 
 function num(v: unknown): number | null {
   if (v === null || v === undefined) return null
@@ -86,43 +90,56 @@ function positionCloseTimestamp(row: CcxtPositionHistoryRow): number | null {
 /** Realized events via per-position close history (bybit/okx: exact). */
 async function eventsFromPositionsHistory(
   client: CcxtLike,
-  sinceMs: number
+  sinceMs: number,
+  untilMs: number,
+  maxRangeDays?: number
 ): Promise<RealizedEvent[]> {
-  if (!client.fetchPositionsHistory) return []
+  if (!client.fetchPositionsHistory) {
+    throw new Error('[first-party] position history evidence is unavailable')
+  }
   const out: RealizedEvent[] = []
-  // Single bounded page-walk: most personal accounts fit well within 5×100.
-  let since = sinceMs
-  for (let page = 0; page < 5; page++) {
-    const rows = await client.fetchPositionsHistory(undefined, since, 100)
-    if (!rows?.length) break
+  const maxRangeMs = maxRangeDays === undefined ? null : maxRangeDays * DAY_MS
+  let rangeStart = sinceMs
+
+  while (rangeStart <= untilMs) {
+    const rangeEnd = maxRangeMs === null ? untilMs : Math.min(untilMs, rangeStart + maxRangeMs)
+    const rows = await client.fetchPositionsHistory(undefined, rangeStart, POSITION_HISTORY_LIMIT, {
+      until: rangeEnd,
+    })
+    if (rows.length >= POSITION_HISTORY_LIMIT) {
+      throw new Error('[first-party] position history evidence is truncated')
+    }
     for (const r of rows) {
       // CCXT's unified `timestamp` is commonly the position open/create time.
       // Realized PnL belongs to the close/update window.
       const ts = positionCloseTimestamp(r)
       const pnl = num(r.realizedPnl ?? (r.info as { closedPnl?: unknown })?.closedPnl)
-      if (ts !== null && pnl !== null) out.push({ ts, pnl, positionLevel: true })
+      if (ts === null || pnl === null || ts < rangeStart || ts > rangeEnd) {
+        throw new Error('[first-party] position history evidence is invalid')
+      }
+      out.push({ ts, pnl, positionLevel: true })
     }
-    const maxTs = Math.max(...rows.map((r) => positionCloseTimestamp(r) ?? 0))
-    if (!Number.isFinite(maxTs) || maxTs <= since || rows.length < 100) break
-    since = maxTs + 1
+    if (maxRangeMs === null || rangeEnd === untilMs) break
+    rangeStart = rangeEnd + 1
   }
   return out
 }
 
 /** Realized events via income/ledger records (binanceusdm REALIZED_PNL). */
 async function eventsFromLedger(client: CcxtLike, sinceMs: number): Promise<RealizedEvent[]> {
-  if (!client.fetchLedger) return []
+  if (!client.fetchLedger) {
+    throw new Error('[first-party] realized PnL ledger evidence is unavailable')
+  }
   const out: RealizedEvent[] = []
   let since = sinceMs
-  for (let page = 0; page < 5; page++) {
-    const rows = await client.fetchLedger(undefined, since, 500)
+  for (let page = 0; page < LEDGER_MAX_PAGES; page++) {
+    const rows = await client.fetchLedger(undefined, since, LEDGER_LIMIT)
     if (!rows?.length) break
     for (const r of rows) {
       const ts = num(r.timestamp)
       const incomeType = String(
         (r.info as { incomeType?: unknown })?.incomeType ?? r.type ?? ''
       ).toUpperCase()
-      if (ts === null) continue
       if (incomeType === 'REALIZED_PNL') {
         // CCXT ledger entries normalize amount to an absolute value and carry
         // the sign in `direction`; Binance's raw income remains signed.
@@ -137,11 +154,20 @@ async function eventsFromLedger(client: CcxtLike, sinceMs: number): Promise<Real
               : r.direction === 'in'
                 ? Math.abs(normalizedAmount)
                 : normalizedAmount)
-        if (amt !== null) out.push({ ts, pnl: amt, positionLevel: false })
+        if (ts === null || amt === null) {
+          throw new Error('[first-party] realized PnL ledger evidence is invalid')
+        }
+        out.push({ ts, pnl: amt, positionLevel: false })
       }
     }
     const maxTs = Math.max(...rows.map((r) => num(r.timestamp) ?? 0))
-    if (!Number.isFinite(maxTs) || maxTs <= since || rows.length < 500) break
+    if (rows.length < LEDGER_LIMIT) break
+    if (!Number.isFinite(maxTs) || maxTs <= since) {
+      throw new Error('[first-party] realized PnL ledger evidence is invalid')
+    }
+    if (page === LEDGER_MAX_PAGES - 1) {
+      throw new Error('[first-party] realized PnL ledger evidence is truncated')
+    }
     since = maxTs + 1
   }
   return out
@@ -180,6 +206,8 @@ export async function fetchFirstPartyAccount(
   opts: {
     nowMs: number
     balanceSemantics: FirstPartyBalanceSemantics
+    realizedPnlSource: FirstPartyRealizedPnlSource
+    positionHistoryMaxRangeDays?: number
     lookbackDays?: number
     lastSyncMs?: number | null
   }
@@ -220,14 +248,11 @@ export async function fetchFirstPartyAccount(
     throw new Error('[first-party] account equity evidence is invalid')
   }
 
-  // Realized events: prefer per-position history (exact), else income ledger.
-  let events: RealizedEvent[] = []
-  if (client.has?.fetchPositionsHistory && client.fetchPositionsHistory) {
-    events = await eventsFromPositionsHistory(client, sinceMs)
-  }
-  if (events.length === 0) {
-    events = await eventsFromLedger(client, sinceMs)
-  }
+  // Realized events use the exchange's explicit, pinned evidence contract.
+  const events =
+    opts.realizedPnlSource === 'positions_history'
+      ? await eventsFromPositionsHistory(client, sinceMs, nowMs, opts.positionHistoryMaxRangeDays)
+      : await eventsFromLedger(client, sinceMs)
 
   // Transfers → per-window net-in + since-last-sync delta.
   const transfers = await netTransfers(client, sinceMs)

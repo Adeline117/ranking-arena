@@ -163,6 +163,14 @@ describe('first-party sync processor', () => {
       }),
       { fullSeries: true }
     )
+    expect(mockFetchAccount).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        balanceSemantics: 'wallet_excludes_unrealized',
+        realizedPnlSource: 'positions_history',
+        positionHistoryMaxRangeDays: 7,
+      })
+    )
     expect(
       mockQuery.mock.calls.some(([sql]) => String(sql).includes('arena.first_party_snapshots'))
     ).toBe(true)
@@ -194,7 +202,10 @@ describe('first-party sync processor', () => {
       expect(mockCcxtConfigs[0]).toMatchObject({ options: { defaultType } })
       expect(mockFetchAccount).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ balanceSemantics: 'total_includes_unrealized' })
+        expect.objectContaining({
+          balanceSemantics: 'total_includes_unrealized',
+          realizedPnlSource: 'income_ledger',
+        })
       )
     }
   )
@@ -255,6 +266,37 @@ describe('first-party sync processor', () => {
 
     expect(result.ok).toBe(true)
     expect(mockCcxtConfigs).toHaveLength(1)
+    expect(mockFetchAccount).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        realizedPnlSource: 'positions_history',
+        positionHistoryMaxRangeDays: 90,
+      })
+    )
+  })
+
+  it('fails closed when the pinned adapter has no trusted first-party history contract', async () => {
+    queueQueries(
+      { ...AUTH, platform: 'htx_futures' },
+      { slug: 'htx_futures', exchange_slug: 'htx' }
+    )
+    mockGetSourceBySlug.mockResolvedValue({
+      id: 7,
+      slug: 'htx_futures',
+      product_type: 'futures',
+    })
+    mockQuery.mockResolvedValue({ rows: [] })
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    const result = await processAuthorization()
+
+    expect(result).toMatchObject({
+      ok: false,
+      detail: 'unsupported first-party exchange htx',
+    })
+    expect(mockDecrypt).not.toHaveBeenCalled()
+    expect(mockFetchAccount).not.toHaveBeenCalled()
+    expect(mockPublishProfile).not.toHaveBeenCalled()
   })
 
   it('does not mark a sync successful when any required stats window fails validation', async () => {

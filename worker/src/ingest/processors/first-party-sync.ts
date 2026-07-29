@@ -25,6 +25,7 @@ import {
   fetchFirstPartyAccount,
   type CcxtLike,
   type FirstPartyBalanceSemantics,
+  type FirstPartyRealizedPnlSource,
 } from '@/lib/ingest/first-party/fetch'
 import {
   CCXT_ID,
@@ -58,10 +59,40 @@ interface ResolvedSourceRow {
 }
 
 const DEFAULT_FUTURES_SOURCE_BY_EXCHANGE = new Set(['binance', 'okx', 'bitget'])
-// Pinned CCXT adapters expose account equity (already including unrealized
-// PnL) through balance.total for these exchanges. Bybit/Gate expose wallet
-// balance instead, so their position PnL must be added exactly once.
-const BALANCE_TOTAL_INCLUDES_UNREALIZED = new Set(['binance', 'bitget', 'htx', 'kucoin', 'okx'])
+
+interface FirstPartyExchangeContract {
+  balanceSemantics: FirstPartyBalanceSemantics
+  realizedPnlSource: FirstPartyRealizedPnlSource
+  positionHistoryMaxRangeDays?: number
+}
+
+// Explicit contracts from the pinned CCXT adapters. Unknown exchanges fail
+// closed: neither balance.total nor ledger/history semantics are portable.
+const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchangeContract>> = {
+  binance: {
+    balanceSemantics: 'total_includes_unrealized',
+    realizedPnlSource: 'income_ledger',
+  },
+  bitget: {
+    balanceSemantics: 'total_includes_unrealized',
+    realizedPnlSource: 'positions_history',
+    positionHistoryMaxRangeDays: 90,
+  },
+  bybit: {
+    balanceSemantics: 'wallet_excludes_unrealized',
+    realizedPnlSource: 'positions_history',
+    positionHistoryMaxRangeDays: 7,
+  },
+  gateio: {
+    balanceSemantics: 'wallet_excludes_unrealized',
+    realizedPnlSource: 'positions_history',
+    positionHistoryMaxRangeDays: 90,
+  },
+  okx: {
+    balanceSemantics: 'total_includes_unrealized',
+    realizedPnlSource: 'positions_history',
+  },
+}
 
 async function markSync(
   authId: string,
@@ -194,6 +225,8 @@ export async function processFirstPartySync(
     // arena.exchanges is the authority for the upstream exchange identity.
     // Source/product slugs (binance_futures, htx_spot, …) are not CCXT ids.
     const ex = srcRows[0].exchange_slug === 'gate' ? 'gateio' : srcRows[0].exchange_slug
+    const exchangeContract = FIRST_PARTY_EXCHANGE_CONTRACTS[ex]
+    if (!exchangeContract) throw new Error(`unsupported first-party exchange ${ex}`)
     const ccxtId = CCXT_ID[ex]
     if (!ccxtId) throw new Error(`unsupported exchange ${ex}`)
     const proxyFetch = GEO_BLOCKED.has(ex) ? makeProxyFetch() : null
@@ -236,9 +269,7 @@ export async function processFirstPartySync(
     const nowMs = Date.now()
     const account = await fetchFirstPartyAccount(client, {
       nowMs,
-      balanceSemantics: (BALANCE_TOTAL_INCLUDES_UNREALIZED.has(ex)
-        ? 'total_includes_unrealized'
-        : 'wallet_excludes_unrealized') satisfies FirstPartyBalanceSemantics,
+      ...exchangeContract,
       lookbackDays: 90,
       lastSyncMs: auth.last_sync_at ? Date.parse(auth.last_sync_at) : null,
     })

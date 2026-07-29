@@ -1,11 +1,13 @@
 import { fetchFirstPartyAccount, type CcxtLike } from '../fetch'
 
 const NOW = Date.parse('2026-07-29T12:00:00.000Z')
+const DAY = 86_400_000
 
 function client(overrides: Partial<CcxtLike> = {}): CcxtLike {
   return {
     fetchBalance: jest.fn().mockResolvedValue({ total: { USDT: 100 } }),
     fetchPositions: jest.fn().mockResolvedValue([{ unrealizedPnl: 20, contracts: 1 }]),
+    fetchPositionsHistory: jest.fn().mockResolvedValue([]),
     ...overrides,
   }
 }
@@ -15,6 +17,7 @@ describe('first-party account equity evidence', () => {
     const result = await fetchFirstPartyAccount(client(), {
       nowMs: NOW,
       balanceSemantics: 'total_includes_unrealized',
+      realizedPnlSource: 'positions_history',
     })
 
     expect(result).toMatchObject({
@@ -28,6 +31,7 @@ describe('first-party account equity evidence', () => {
     const result = await fetchFirstPartyAccount(client(), {
       nowMs: NOW,
       balanceSemantics: 'wallet_excludes_unrealized',
+      realizedPnlSource: 'positions_history',
     })
 
     expect(result).toMatchObject({
@@ -46,6 +50,7 @@ describe('first-party account equity evidence', () => {
       fetchFirstPartyAccount(missingBalance, {
         nowMs: NOW,
         balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
       })
     ).rejects.toThrow('stablecoin balance evidence is unavailable')
   })
@@ -59,6 +64,7 @@ describe('first-party account equity evidence', () => {
       fetchFirstPartyAccount(missingPositions, {
         nowMs: NOW,
         balanceSemantics: 'wallet_excludes_unrealized',
+        realizedPnlSource: 'positions_history',
       })
     ).rejects.toThrow('unrealized PnL evidence is unavailable')
   })
@@ -72,6 +78,7 @@ describe('first-party account equity evidence', () => {
       fetchFirstPartyAccount(missingPositions, {
         nowMs: NOW,
         balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
       })
     ).resolves.toMatchObject({
       balanceNow: 100,
@@ -99,6 +106,7 @@ describe('first-party account equity evidence', () => {
       {
         nowMs: NOW,
         balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'income_ledger',
       }
     )
 
@@ -106,7 +114,7 @@ describe('first-party account equity evidence', () => {
   })
 
   it('windows realized PnL by position close time instead of open time', async () => {
-    const openedBeforeWindow = NOW - 100 * 86_400_000
+    const openedBeforeWindow = NOW - 100 * DAY
     const closedInsideWindow = NOW - 1_000
     const result = await fetchFirstPartyAccount(
       client({
@@ -122,9 +130,65 @@ describe('first-party account equity evidence', () => {
       {
         nowMs: NOW,
         balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
       }
     )
 
     expect(result.events).toEqual([{ ts: closedInsideWindow, pnl: 12, positionLevel: true }])
+  })
+
+  it('splits position history into exchange-bounded time ranges', async () => {
+    const firstClose = NOW - 7.5 * DAY
+    const secondClose = NOW - 0.5 * DAY
+    const fetchPositionsHistory = jest
+      .fn()
+      .mockResolvedValueOnce([{ lastUpdateTimestamp: firstClose, realizedPnl: -2 }])
+      .mockResolvedValueOnce([{ lastUpdateTimestamp: secondClose, realizedPnl: 3 }])
+
+    const result = await fetchFirstPartyAccount(client({ fetchPositionsHistory }), {
+      nowMs: NOW,
+      balanceSemantics: 'total_includes_unrealized',
+      realizedPnlSource: 'positions_history',
+      positionHistoryMaxRangeDays: 7,
+      lookbackDays: 8,
+    })
+
+    expect(result.events).toEqual([
+      { ts: firstClose, pnl: -2, positionLevel: true },
+      { ts: secondClose, pnl: 3, positionLevel: true },
+    ])
+    expect(fetchPositionsHistory).toHaveBeenCalledTimes(2)
+    expect(fetchPositionsHistory.mock.calls[0]?.[1]).toBe(NOW - 8 * DAY)
+    expect(fetchPositionsHistory.mock.calls[0]?.[3]).toEqual({ until: NOW - DAY })
+    expect(fetchPositionsHistory.mock.calls[1]?.[1]).toBe(NOW - DAY + 1)
+    expect(fetchPositionsHistory.mock.calls[1]?.[3]).toEqual({ until: NOW })
+  })
+
+  it('rejects a saturated position-history page instead of publishing partial PnL', async () => {
+    const saturated = Array.from({ length: 100 }, (_, index) => ({
+      lastUpdateTimestamp: NOW - index,
+      realizedPnl: 1,
+    }))
+
+    await expect(
+      fetchFirstPartyAccount(
+        client({ fetchPositionsHistory: jest.fn().mockResolvedValue(saturated) }),
+        {
+          nowMs: NOW,
+          balanceSemantics: 'total_includes_unrealized',
+          realizedPnlSource: 'positions_history',
+        }
+      )
+    ).rejects.toThrow('position history evidence is truncated')
+  })
+
+  it('rejects an exchange without its contracted realized-PnL surface', async () => {
+    await expect(
+      fetchFirstPartyAccount(client({ fetchPositionsHistory: undefined }), {
+        nowMs: NOW,
+        balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
+      })
+    ).rejects.toThrow('position history evidence is unavailable')
   })
 })
