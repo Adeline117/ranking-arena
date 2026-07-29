@@ -827,7 +827,29 @@ describe('Tier-A board-series publication guard', () => {
     }
 
     expect(mockWriteRawObject).toHaveBeenCalledWith(
-      expect.objectContaining({ jobType: 'tier_a_failure' })
+      expect.objectContaining({
+        jobType: 'tier_a_failure',
+        meta: expect.objectContaining({
+          acquisition_attempt: expect.objectContaining({
+            capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+          }),
+          capture_evidence: expect.objectContaining({
+            mode: 'identity',
+            capture_config: expect.any(Object),
+            parser_transformation: expect.any(Object),
+            source_pages: expect.arrayContaining([
+              expect.objectContaining({
+                ordinal: 1,
+                stored_page_index: 1,
+                payload_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+                source_row_count: 1,
+                request_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+                pagination_position: expect.any(Object),
+              }),
+            ]),
+          }),
+        }),
+      })
     )
     expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -840,6 +862,70 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('preserves exact partition bindings when authoritative topology drift is rejected', async () => {
+    configureV4Source()
+    const adapter = mockGetAdapter()
+    adapter.leaderboardPartitionIds = () => ['spot_martingale', 'spot_grid']
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toThrow(
+        'capture processing failed after RAW fallback'
+      )
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'tier_a_failure',
+        meta: expect.objectContaining({
+          acquisition_attempt: expect.objectContaining({
+            capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+          }),
+          capture_evidence: expect.objectContaining({
+            mode: 'partitioned_numeric',
+            parser_transformation: expect.objectContaining({
+              kind: 'partitioned_numeric_projection',
+              source_page_ordinals: [1, 3],
+              page_bindings: expect.arrayContaining([
+                expect.objectContaining({
+                  partition_id: 'spot_grid',
+                  source_page_ordinal: 1,
+                  request_page_index: 1,
+                  request_page_size: 20,
+                }),
+              ]),
+            }),
+            pagination_topology: expect.objectContaining({
+              expected_partition_ids: ['spot_grid', 'spot_martingale'],
+            }),
+            source_pages: expect.arrayContaining([
+              expect.objectContaining({
+                ordinal: 3,
+                source_row_count: 1,
+                pagination_position: expect.objectContaining({
+                  partition_id: 'spot_martingale',
+                  request_page_index: 1,
+                }),
+              }),
+            ]),
+          }),
+        }),
+      })
+    )
+    expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'processing_failed',
+        diagnosticRawObjectId: 9001,
+        failureStage: 'parse_validate_manifest',
+        reasonCode: 'manifest_failed',
+      })
+    )
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockPublishAttemptBoundLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('terminally records a v3/partitioned capture mismatch without publishing or upgrading', async () => {
@@ -1926,7 +2012,7 @@ describe('Tier-A board-series publication guard', () => {
       timeframe: 30,
       payload: (capture as LeaderboardCapture).sourcePages.map((sourcePage) => sourcePage.rawPage),
       serialization: STRICT_CANONICAL_JSON_CONTRACT,
-      meta: {
+      meta: expect.objectContaining({
         pageCount: 2,
         observation_cycle_id: expectedCycleId,
         trust_evidence: {
@@ -1937,7 +2023,16 @@ describe('Tier-A board-series publication guard', () => {
           capture_started_at: expect.any(String),
           capture_completed_at: expect.any(String),
         },
-      },
+        capture_evidence: expect.objectContaining({
+          mode: 'identity',
+          source_pages: expect.arrayContaining([
+            expect.objectContaining({
+              payload_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+              request_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+            }),
+          ]),
+        }),
+      }),
     })
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
@@ -2675,7 +2770,7 @@ describe('Tier-A board-series publication guard', () => {
 
     const [diagnosticInput] = mockWriteRawObject.mock.calls[0]
     const [finishInput] = mockFinishLeaderboardAcquisitionAttempt.mock.calls[0]
-    expect(diagnosticInput).toStrictEqual({
+    expect(diagnosticInput).toMatchObject({
       sourceId: binanceSrc.id,
       sourceSlug: binanceSrc.slug,
       jobType: 'tier_a_failure',
@@ -2689,6 +2784,7 @@ describe('Tier-A board-series publication guard', () => {
           binding_contract: finishInput.attempt.attemptBindingContract,
           attempt_id: finishInput.attempt.attemptId,
           attempt_seq: finishInput.attempt.attemptSeq,
+          capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
           runner_git_sha: 'c'.repeat(40),
           capture_started_at: finishInput.attempt.recordedStartedAt,
           capture_completed_at: finishInput.captureCompletedAt,
@@ -2702,6 +2798,22 @@ describe('Tier-A board-series publication guard', () => {
           capture_completed_at: finishInput.captureCompletedAt,
         },
       },
+    })
+    expect(diagnosticInput.meta.capture_evidence).toMatchObject({
+      mode: 'identity',
+      capture_config: parserCapture.captureConfig,
+      parser_transformation: parserCapture.parserTransformation,
+    })
+    expect(diagnosticInput.meta.capture_evidence.source_pages).toHaveLength(
+      parserCapture.sourcePages.length
+    )
+    expect(diagnosticInput.meta.capture_evidence.source_pages[0]).toMatchObject({
+      ordinal: 1,
+      stored_page_index: parserCapture.sourcePages[0].rawPage.pageIndex,
+      payload_sha256: strictCanonicalSha256(parserCapture.sourcePages[0].rawPage.payload),
+      request_sha256: parserCapture.sourcePages[0].requestSha256,
+      pagination_position: parserCapture.sourcePages[0].paginationPosition,
+      source_reports: parserCapture.sourcePages[0].sourceReports,
     })
     expect(finishInput).toMatchObject({
       kind: 'processing_failed',
