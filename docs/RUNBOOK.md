@@ -304,14 +304,12 @@ not the flagship `arena_score`.
 To force recalculation:
 
 1. Trigger `compute-leaderboard` (see above).
-2. For composite scores, also trigger:
-   ```bash
-   curl -H "Authorization: Bearer $CRON_SECRET" \
-     "https://www.arenafi.org/api/cron/precompute-composite"
-   ```
+2. Composite responses are served by `/api/rankings?window=composite`; there is
+   no separate composite writer to trigger.
 
 Sources: `lib/utils/arena-score.ts`,
-`app/api/cron/compute-leaderboard/score-traders.ts`
+`app/api/cron/compute-leaderboard/score-traders.ts`,
+`app/api/rankings/route.ts`
 
 ---
 

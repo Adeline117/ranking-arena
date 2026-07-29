@@ -8,7 +8,6 @@ function source(path: string): string {
 describe('public ranking cache epoch boundary', () => {
   it.each([
     'app/api/rankings/live/route.ts',
-    'app/api/cron/precompute-composite/route.ts',
     'app/api/rankings/movers/route.ts',
     'app/api/rankings/platform-stats/route.ts',
     'app/api/recommendations/hot/route.ts',

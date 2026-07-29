@@ -43,18 +43,13 @@ describe('public ranking freshness route contracts', () => {
     expect(rpc).toContain('p_90d_cohort_id: publication90d.scoreCohortId')
   })
 
-  it('composite cache uses sealed publication proof watermarks', () => {
+  it('the retired composite writer cannot read or cache unsealed rank rows', () => {
     const route = source('app/api/cron/precompute-composite/route.ts')
 
-    expect(route).toContain('readSealedCompositePublicationFence')
-    expect(route).toContain('ranks.rank_publication_id = $2::uuid')
-    expect(route).toContain('ranks.source = ANY($3::text[])')
-    expect(route).toContain('as_of_ts: proof.source_as_of')
-    expect(route).toContain('await publicationFence.verifyStillCurrent()')
-    expect(route).toContain('createSealedCompositeCacheEntry')
-    expect(route).toContain("const COMPOSITE_CACHE_VERSION = 'v3'")
-    expect(route).not.toContain('leaderboard_source_freshness AS freshness')
-    expect(route).not.toContain('computed_at >= $2')
+    expect(route).not.toContain("from('leaderboard_ranks')")
+    expect(route).not.toContain('getPool')
+    expect(route).not.toContain('tieredSet')
+    expect(route).toContain('{ status: 410 }')
   })
 
   it('SSR derives its timestamp from the complete live source generation', () => {

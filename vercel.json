@@ -144,10 +144,6 @@
       "schedule": "0 9 * * 1"
     },
     {
-      "path": "/api/cron/precompute-composite",
-      "schedule": "27 */2 * * *"
-    },
-    {
       "path": "/api/cron/backfill-avatars?platform=drift,toobit,bitfinex,etoro,gains&limit=400",
       "schedule": "35 2 * * *"
     },

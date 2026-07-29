@@ -107,7 +107,6 @@ export class PipelineLogger {
     'check-data-freshness',
     'pipeline-fetch',
     'fetch-details',
-    'precompute-composite',
     'backfill-data',
 
     // Discovery & enrichment
