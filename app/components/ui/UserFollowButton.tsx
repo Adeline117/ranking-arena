@@ -11,13 +11,18 @@ import { useUserFollowSync, type UserFollowChangePayload } from '@/lib/hooks/use
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import { haptic } from '@/lib/utils/haptics'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import {
   consumeProfileActionLogin,
   profileUserTarget,
   queueProfileActionLogin,
   type ProfileActionIntent,
 } from '@/lib/auth/profile-action-login'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
 type UserFollowButtonProps = {
   targetUserId: string
@@ -29,10 +34,14 @@ type UserFollowButtonProps = {
   onFollowChange?: (following: boolean, mutual: boolean) => void
 }
 
-type FollowOperationScope = {
+type FollowIdentityScope = {
   currentUserId: string | null
   generation: number
   targetUserId: string
+}
+
+type FollowOperationScope = FollowIdentityScope & {
+  viewer: SettingsViewerSnapshot | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -90,7 +99,14 @@ export default function UserFollowButton({
   const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
-  const { getAuthHeadersAsync } = useAuthSession()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const renderViewer = captureSettingsViewer(auth)
+  const exactRenderViewer = renderViewer?.userId === currentUserId ? renderViewer : null
+  const viewerReadinessKey = exactRenderViewer
+    ? `${exactRenderViewer.viewerKey}\u0000${exactRenderViewer.sessionGeneration}\u0000ready`
+    : `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000blocked`
   const identityKey = `${currentUserId ?? 'anonymous'}\u0000${targetUserId}`
   const [following, setFollowing] = useState(initialFollowing)
   const [followedBy, setFollowedBy] = useState(false)
@@ -102,7 +118,7 @@ export default function UserFollowButton({
   const mountedRef = useRef(false)
   const statusAbortRef = useRef<AbortController | null>(null)
   const mutationAbortRef = useRef<AbortController | null>(null)
-  const identityRef = useRef<FollowOperationScope>({
+  const identityRef = useRef<FollowIdentityScope>({
     currentUserId,
     generation: 0,
     targetUserId,
@@ -119,7 +135,11 @@ export default function UserFollowButton({
   }
 
   const captureOperationScope = useCallback((): FollowOperationScope => {
-    return { ...identityRef.current }
+    const viewer = captureSettingsViewer(authRef.current)
+    return {
+      ...identityRef.current,
+      viewer: viewer?.userId === identityRef.current.currentUserId ? viewer : null,
+    }
   }, [])
   const operationIsCurrent = useCallback((scope: FollowOperationScope): boolean => {
     const current = identityRef.current
@@ -127,7 +147,9 @@ export default function UserFollowButton({
       mountedRef.current &&
       current.generation === scope.generation &&
       current.currentUserId === scope.currentUserId &&
-      current.targetUserId === scope.targetUserId
+      current.targetUserId === scope.targetUserId &&
+      scope.viewer !== null &&
+      isSettingsViewerCurrent(scope.viewer, authRef.current)
     )
   }, [])
 
@@ -177,26 +199,36 @@ export default function UserFollowButton({
       setInitialLoading(false)
       return
     }
+    if (!scope.viewer) {
+      setInitialLoading(false)
+      return
+    }
+    const operationViewer = scope.viewer
 
     const abortController = new AbortController()
     statusAbortRef.current = abortController
     setInitialLoading(true)
     ;(async () => {
       try {
-        const authHeaders = await getAuthHeadersAsync()
-        if (!operationIsCurrent(scope)) return
-        const response = await fetch(`/api/users/follow?followingId=${targetUserId}`, {
-          signal: abortController.signal,
-          headers: authHeaders,
-        })
-        if (response.ok) {
-          const data: unknown = await response.json()
-          if (!operationIsCurrent(scope)) return
-          if (!isFollowStatusAcknowledgement(data)) {
+        const result = await authedFetch<unknown>(
+          `/api/users/follow?followingId=${targetUserId}`,
+          'GET',
+          operationViewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: operationViewer.userId,
+            expectedSessionGeneration: operationViewer.sessionGeneration,
+            signal: abortController.signal,
+          }
+        )
+        if (result.stale || abortController.signal.aborted || !operationIsCurrent(scope)) return
+        if (result.ok) {
+          if (!isFollowStatusAcknowledgement(result.data)) {
             throw new Error('Invalid user follow status acknowledgement')
           }
-          setFollowing(data.following)
-          setFollowedBy(data.followedBy)
+          setFollowing(result.data.following)
+          setFollowedBy(result.data.followedBy)
         }
       } catch (error) {
         if (operationIsCurrent(scope) && (error as Error).name !== 'AbortError') {
@@ -216,11 +248,11 @@ export default function UserFollowButton({
   }, [
     captureOperationScope,
     currentUserId,
-    getAuthHeadersAsync,
     identityKey,
     initialFollowing,
     operationIsCurrent,
     targetUserId,
+    viewerReadinessKey,
   ])
 
   const redirectToLogin = useCallback(
@@ -250,6 +282,13 @@ export default function UserFollowButton({
       }
 
       const scope = captureOperationScope()
+      const operationViewer = scope.viewer
+      if (!operationViewer) {
+        if (authRef.current.authChecked && !authRef.current.loading && !authRef.current.userId) {
+          redirectToLogin(desiredFollowing ? 'follow-user' : 'unfollow-user')
+        }
+        return
+      }
       if (!operationIsCurrent(scope)) return
 
       // Prevent double-click
@@ -283,21 +322,21 @@ export default function UserFollowButton({
       }, 8000) // Unified 8s timeout (same as TraderFollowButton)
 
       try {
-        const authHeaders = await getAuthHeadersAsync()
-        if (!operationIsCurrent(scope)) return
-        const response = await fetch('/api/users/follow', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({
-            followingId: targetUserId,
+        const result = await authedFetch<unknown>(
+          '/api/users/follow',
+          'POST',
+          operationViewer.accessToken,
+          {
+            followingId: scope.targetUserId,
             action: desiredFollowing ? 'follow' : 'unfollow',
-          }),
-          signal: abortController.signal,
-        })
+          },
+          15_000,
+          {
+            expectedUserId: operationViewer.userId,
+            expectedSessionGeneration: operationViewer.sessionGeneration,
+            signal: abortController.signal,
+          }
+        )
 
         // Clear timeout on response
         if (mutationAbortRef.current === abortController && timeoutRef.current) {
@@ -305,36 +344,38 @@ export default function UserFollowButton({
           timeoutRef.current = null
         }
 
-        if (!operationIsCurrent(scope)) return
-        if (response.status === 401) {
+        if (result.stale || !operationIsCurrent(scope)) return
+        if (abortController.signal.aborted) {
+          setFollowing(previousFollowing)
+          return
+        }
+        if (result.status === 401) {
           setFollowing(previousFollowing)
           showToast(t('loginExpiredPleaseRelogin'), 'error')
           redirectToLogin(desiredFollowing ? 'follow-user' : 'unfollow-user')
           return
         }
 
-        const result: unknown = await response.json()
-        if (!operationIsCurrent(scope)) return
-
-        if (response.ok && isFollowMutationAcknowledgement(result, desiredFollowing)) {
-          setFollowing(result.following)
-          setFollowedBy(result.followedBy)
-          onFollowChange?.(result.following, result.mutual)
+        const payload = result.data
+        if (result.ok && isFollowMutationAcknowledgement(payload, desiredFollowing)) {
+          setFollowing(payload.following)
+          setFollowedBy(payload.followedBy)
+          onFollowChange?.(payload.following, payload.mutual)
           broadcast('FOLLOW_CHANGED', {
             targetUserId: scope.targetUserId,
-            following: result.following,
+            following: payload.following,
             currentUserId: scope.currentUserId!,
           })
           haptic('success')
-          showToast(result.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
-        } else if (isRecord(result) && result.tableNotFound === true) {
+          showToast(payload.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
+        } else if (isRecord(payload) && payload.tableNotFound === true) {
           setFollowing(previousFollowing) // rollback
           showToast(t('followFeatureComingSoon'), 'warning')
         } else {
           setFollowing(previousFollowing) // rollback
           const errorMsg =
-            isRecord(result) && typeof result.error === 'string'
-              ? result.error
+            isRecord(payload) && typeof payload.error === 'string'
+              ? payload.error
               : t('operationFailedRetry')
           showToast(errorMsg, 'error')
         }
@@ -376,7 +417,6 @@ export default function UserFollowButton({
       captureOperationScope,
       following,
       loading,
-      getAuthHeadersAsync,
       showToast,
       t,
       onFollowChange,
@@ -391,7 +431,7 @@ export default function UserFollowButton({
   }, [executeFollowAction, following])
 
   useEffect(() => {
-    if (!currentUserId || initialLoading) return
+    if (!exactRenderViewer || !currentUserId || initialLoading) return
     const action = consumeProfileActionLogin({
       actions: ['follow-user', 'unfollow-user'],
       target: profileUserTarget(targetUserId),
@@ -402,11 +442,13 @@ export default function UserFollowButton({
     if (currentUserId !== targetUserId) {
       void executeFollowAction(action === 'follow-user')
     }
-  }, [currentUserId, executeFollowAction, initialLoading, targetUserId])
+  }, [currentUserId, exactRenderViewer, executeFollowAction, initialLoading, targetUserId])
 
   const sizeStyles = BUTTON_SIZE_STYLES
 
   const isMutual = following && followedBy
+  const authPending =
+    !exactRenderViewer && (!auth.authChecked || auth.loading || Boolean(auth.userId))
 
   if (!currentUserId) {
     return (
@@ -462,7 +504,7 @@ export default function UserFollowButton({
   return (
     <button
       onClick={handleToggle}
-      disabled={loading}
+      disabled={loading || authPending}
       aria-label={following ? t('unfollowUser') : t('followUser')}
       aria-pressed={following}
       aria-busy={loading}
@@ -476,8 +518,8 @@ export default function UserFollowButton({
         // hard white text went invisible there. Use theme-aware text in that state.
         color: following ? 'var(--color-text-primary)' : tokens.colors.white,
         fontWeight: tokens.typography.fontWeight.bold,
-        cursor: loading ? 'not-allowed' : 'pointer',
-        opacity: loading ? 0.6 : 1,
+        cursor: loading || authPending ? 'not-allowed' : 'pointer',
+        opacity: loading || authPending ? 0.6 : 1,
         transition: 'all 200ms ease',
         display: 'flex',
         alignItems: 'center',
@@ -485,10 +527,10 @@ export default function UserFollowButton({
         gap: tokens.spacing[1.5],
       }}
       onMouseEnter={(e) => {
-        if (!loading) e.currentTarget.style.opacity = '0.85'
+        if (!loading && !authPending) e.currentTarget.style.opacity = '0.85'
       }}
       onMouseLeave={(e) => {
-        if (!loading) e.currentTarget.style.opacity = '1'
+        if (!loading && !authPending) e.currentTarget.style.opacity = '1'
       }}
     >
       {loading && <ButtonSpinner size="xs" />}
