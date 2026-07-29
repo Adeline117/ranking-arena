@@ -1,5 +1,6 @@
 import {
   buildFollowedDigestActivity,
+  buildWeeklyDigestDeliveryKey,
   indexDigestActivities,
   indexDigestFollows,
   readAllPages,
@@ -18,6 +19,18 @@ function activity(source: string, text: string, handle: string): DigestActivityR
 }
 
 describe('weekly digest trader account personalization', () => {
+  it('keeps one delivery key across retries in the same UTC week', () => {
+    expect(buildWeeklyDigestDeliveryKey('user-1', new Date('2026-07-27T09:00:00.000Z'))).toBe(
+      'weekly-digest/2026-07-27/user-1'
+    )
+    expect(buildWeeklyDigestDeliveryKey('user-1', new Date('2026-07-31T23:59:59.000Z'))).toBe(
+      'weekly-digest/2026-07-27/user-1'
+    )
+    expect(buildWeeklyDigestDeliveryKey('user-1', new Date('2026-08-02T23:59:59.000Z'))).toBe(
+      'weekly-digest/2026-07-27/user-1'
+    )
+  })
+
   it('never crosses exchanges that reuse the same raw trader id', () => {
     const { followsByUser } = indexDigestFollows([
       { user_id: 'user-bybit', trader_id: 'shared-id', source: 'bybit' },

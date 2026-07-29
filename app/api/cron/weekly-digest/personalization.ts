@@ -13,6 +13,13 @@ export interface DigestActivityRow {
   occurred_at: string
 }
 
+export function buildWeeklyDigestDeliveryKey(userId: string, at: Date): string {
+  const weekStart = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()))
+  const daysSinceMonday = (weekStart.getUTCDay() + 6) % 7
+  weekStart.setUTCDate(weekStart.getUTCDate() - daysSinceMonday)
+  return `weekly-digest/${weekStart.toISOString().slice(0, 10)}/${userId}`
+}
+
 interface PageError {
   message: string
 }

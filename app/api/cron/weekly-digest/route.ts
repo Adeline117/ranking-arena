@@ -18,6 +18,7 @@ import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import {
   buildFollowedDigestActivity,
+  buildWeeklyDigestDeliveryKey,
   indexDigestActivities,
   indexDigestFollows,
   readAllPages,
@@ -26,13 +27,37 @@ import {
 } from './personalization'
 
 const logger = createLogger('weekly-digest')
+const WORK_BUDGET_MS = 100_000
+const EMAIL_SEND_TIMEOUT_MS = 8_000
+const DELIVERY_CLEANUP_RESERVE_MS = 5_000
+
+function waitForSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    operation.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      }
+    )
+  })
+}
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
 export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin()
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const now = new Date()
+  const workDeadlineMs = now.getTime() + WORK_BUDGET_MS
+  const workSignal = AbortSignal.timeout(WORK_BUDGET_MS)
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
   const weekAgoIso = weekAgo.toISOString()
 
   // 1. Fetch users who opted in to weekly digest and have an email
@@ -46,6 +71,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
       .eq('email_digest', 'weekly')
       .order('id', { ascending: true })
       .range(from, to)
+      .abortSignal(workSignal)
   )
 
   if (subErr) {
@@ -79,6 +105,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
         .order('source', { ascending: true })
         .order('source_trader_id', { ascending: true })
         .limit(10)
+        .abortSignal(workSignal)
 
       if (error || data === null) {
         throw new Error(`Failed to load weekly movers: ${error?.message ?? 'null payload'}`)
@@ -103,6 +130,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
     .from('trader_sources')
     .select('id', { count: 'estimated', head: true })
     .gte('created_at', weekAgoIso)
+    .abortSignal(workSignal)
   if (newTradersError) {
     throw new Error(`Failed to load weekly new-trader count: ${newTradersError.message}`)
   }
@@ -111,12 +139,12 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   const { count: totalTracked, error: totalTrackedError } = await supabase
     .from('trader_sources')
     .select('id', { count: 'estimated', head: true })
+    .abortSignal(workSignal)
   if (totalTrackedError) {
     throw new Error(`Failed to load total trader count: ${totalTrackedError.message}`)
   }
 
   // 5. Week range string
-  const now = new Date()
   const weekRange = `${weekAgo.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 
   // 5b. Per-user personalization — what each subscriber's FOLLOWED traders did
@@ -136,6 +164,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
         .in('user_id', chunk)
         .order('id', { ascending: true })
         .range(from, to)
+        .abortSignal(workSignal)
     )
     if (fErr) {
       throw new Error(`Failed to load digest follows: ${fErr.message}`)
@@ -160,6 +189,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
           .order('occurred_at', { ascending: false })
           .order('id', { ascending: false })
           .range(from, to)
+          .abortSignal(workSignal)
       )
       if (aErr) {
         throw new Error(`Failed to load digest activities for ${source}: ${aErr.message}`)
@@ -178,7 +208,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
     const {
       data: { users },
       error: listErr,
-    } = await supabase.auth.admin.listUsers({ page, perPage })
+    } = await waitForSignal(supabase.auth.admin.listUsers({ page, perPage }), workSignal)
     if (listErr) throw new Error(`Failed to load digest subscriber emails: ${listErr.message}`)
     if (!users || users.length === 0) break
     for (const u of users) {
@@ -231,6 +261,8 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
         to: user.email,
         subject: `Arena Weekly Digest — ${weekRange}`,
         html,
+        idempotencyKey: buildWeeklyDigestDeliveryKey(sub.id, now),
+        timeoutMs: EMAIL_SEND_TIMEOUT_MS,
       })
 
       if (sent) {
@@ -249,6 +281,14 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
 
   // Execute sends with bounded concurrency
   for (let i = 0; i < subscribers.length; i += CONCURRENCY) {
+    if (
+      workSignal.aborted ||
+      Date.now() + EMAIL_SEND_TIMEOUT_MS + DELIVERY_CLEANUP_RESERVE_MS >= workDeadlineMs
+    ) {
+      throw new Error(
+        `Weekly digest work budget exhausted after ${i}/${subscribers.length} subscribers; delivery keys make retry safe`
+      )
+    }
     const batch = subscribers.slice(i, i + CONCURRENCY)
     await Promise.all(batch.map(sendOne))
   }
@@ -267,4 +307,4 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
     topMovers: topMovers.length,
     newTraders: newTraders ?? 0,
   }
-})
+}, { safetyTimeoutMs: 115_000 })

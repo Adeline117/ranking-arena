@@ -29,4 +29,13 @@ describe('weekly email digest ranking authority', () => {
     expect(route).toContain(".order('source_trader_id', { ascending: true })")
     expect(route).toContain('if (!isPublicRankingSourceAllowed(source)) continue')
   })
+
+  it('bounds the whole job and makes partial delivery safe to retry', () => {
+    expect(route).toContain('const workSignal = AbortSignal.timeout(WORK_BUDGET_MS)')
+    expect(route.match(/\.abortSignal\(workSignal\)/g)).toHaveLength(6)
+    expect(route).toContain('waitForSignal(supabase.auth.admin.listUsers')
+    expect(route).toContain('idempotencyKey: buildWeeklyDigestDeliveryKey(sub.id, now)')
+    expect(route).toContain('timeoutMs: EMAIL_SEND_TIMEOUT_MS')
+    expect(route).toContain('{ safetyTimeoutMs: 115_000 }')
+  })
 })
