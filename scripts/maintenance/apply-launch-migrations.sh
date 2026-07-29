@@ -160,6 +160,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729075500_account_recovery_auth_email_authority.sql
   20260729075550_preserve_stripe_event_idempotency.sql
   20260729075600_verified_auth_profile_ban_authority.sql
+  20260729075700_account_deletion_billing_intent.sql
   20260729131858_atomic_channel_member_mutation.sql
   20260729133904_atomic_channel_metadata_mutation.sql
   20260729135645_atomic_channel_message_send.sql
