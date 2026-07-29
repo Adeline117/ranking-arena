@@ -8,6 +8,8 @@ import { JsonLd } from '@/app/components/Providers/JsonLd'
 import PageHeader from '@/app/components/ui/PageHeader'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { getServerTranslation } from '@/lib/i18n/server'
+import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import {
   generateExchangeCollectionPageSchema,
   generateBreadcrumbSchema,
@@ -64,31 +66,39 @@ interface ExchangeData {
 async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null> {
   const config = EXCHANGE_CONFIG[sourceKey as keyof typeof EXCHANGE_CONFIG]
   if (!config) return null
+  const [publicSource] = filterPublicRankingSources([sourceKey])
+  if (!publicSource) return null
 
   const supabase = getExchangeSupabase()
+  const sealedRead = await readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: [publicSource] },
+    async (publication) => {
+      const topResult = await supabase
+        .from('leaderboard_ranks')
+        .select('handle, source_trader_id, arena_score, roi, pnl, rank')
+        .eq('source', publicSource)
+        .eq('season_id', '90D')
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .not('arena_score', 'is', null)
+        .gt('arena_score', 0)
+        .or('is_outlier.is.null,is_outlier.eq.false')
+        .order('arena_score', { ascending: false, nullsFirst: false })
+        .limit(10)
 
-  const [topResult, countResult] = await Promise.all([
-    supabase
-      .from('leaderboard_ranks')
-      .select('handle, source_trader_id, arena_score, roi, pnl, rank')
-      .eq('source', sourceKey)
-      .eq('season_id', '90D')
-      .not('arena_score', 'is', null)
-      .gt('arena_score', 0)
-      .or('is_outlier.is.null,is_outlier.eq.false')
-      .order('arena_score', { ascending: false, nullsFirst: false })
-      .limit(10),
-    supabase
-      .from('leaderboard_ranks')
-      .select('*', { count: 'estimated', head: true })
-      .eq('source', sourceKey)
-      .eq('season_id', '90D')
-      .not('arena_score', 'is', null)
-      .gt('arena_score', 0)
-      .or('is_outlier.is.null,is_outlier.eq.false'),
-  ])
+      if (topResult.error) {
+        throw new Error(`exchange ranking query failed: ${topResult.error.message}`)
+      }
 
-  const topTraders = (topResult.data || []).map((t, i) => {
+      return {
+        rows: topResult.data || [],
+        traderCount: publication.proofs[0].published_rank_count,
+      }
+    },
+    { timeoutMs: 10_000 }
+  )
+
+  const topTraders = sealedRead.value.rows.map((t, i) => {
     const sourceTraderId = (t.source_trader_id as string) || ''
     // Prefer the real handle; fall back to the wallet address (never a fabricated
     // "Trader N" that would link to a non-existent /trader/Trader%20N page).
@@ -106,9 +116,9 @@ async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null
 
   return {
     displayName: config.name,
-    sourceKey,
+    sourceKey: publicSource,
     sourceType: config.sourceType,
-    traderCount: countResult.count ?? 0,
+    traderCount: sealedRead.value.traderCount,
     topTraders,
   }
 }
