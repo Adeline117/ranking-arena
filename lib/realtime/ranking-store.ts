@@ -1,9 +1,9 @@
 /**
- * Redis Sorted Set for near-real-time rankings
+ * Redis Sorted Set for published rankings
  *
- * Uses Upstash Redis ZADD/ZREVRANK/ZREVRANGE to maintain a live ranking
- * that updates incrementally as new trader data arrives from batch-fetch-traders,
- * and fully syncs after compute-leaderboard runs.
+ * Uses Upstash Redis ZADD/ZREVRANK/ZREVRANGE as a read cache. The cache may
+ * only be rebuilt from one complete, stable, sealed leaderboard generation;
+ * raw incremental observations are never public ranking authority.
  *
  * Key schema: {publication-epoch}:ranking:live:{period}
  * Member format: {platform}:{traderKey}
@@ -15,21 +15,22 @@ import { getSharedRedis } from '@/lib/cache/redis-client'
 import { createLogger } from '@/lib/utils/logger'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import {
-  filterPublicRankingRows,
+  filterPublicRankingSources,
   isPublicRankingSourceAllowed,
   publicRankingCacheKey,
 } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import type { LeaderboardPublicationSeason } from '@/lib/rankings/read-publication-proofs'
 
 const logger = createLogger('ranking-store')
 
-const REDIS_KEY_PREFIX = 'ranking:live'
+const REDIS_KEY_PREFIX = 'ranking:sealed-v1'
 const TTL_SECONDS = 2 * 60 * 60 // 2 hours
-
-// Write buffer configuration
-const BUFFER_FLUSH_MS = 1000 // flush every 1s
-const BUFFER_MAX_SIZE = 100 // or when buffer hits 100 items per key
-const BUFFER_MAX_TOTAL_ITEMS = 50000 // hard cap: prevent OOM during Redis outage
+const SYNC_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 function redisKey(period: string): string {
   return publicRankingCacheKey(`${REDIS_KEY_PREFIX}:${period.toUpperCase()}`)
@@ -47,93 +48,36 @@ function parseMemberKey(member: string): { platform: string; traderKey: string }
   }
 }
 
-// ============================================
-// Write Buffer — batches individual ZADD calls into pipelined writes
-// ============================================
-
-const writeBuffer: Map<string, Array<{ member: string; score: number }>> = new Map()
-let flushTimer: ReturnType<typeof setTimeout> | null = null
-
-function scheduleFlush() {
-  if (flushTimer) return
-  flushTimer = setTimeout(() => {
-    flushTimer = null
-    flushBuffer().catch((err) => logger.warn('[ranking-store] flushBuffer failed:', err))
-  }, BUFFER_FLUSH_MS)
-}
-
 /**
- * Flush all buffered writes to Redis via pipeline (single round-trip per key).
- * Exported for testing and explicit flush (e.g., at end of cron job).
+ * @deprecated Incremental ranking writes are intentionally disabled. Retained
+ * temporarily so older jobs can call it safely during the cutover.
  */
 export async function flushBuffer(): Promise<void> {
-  if (flushTimer) {
-    clearTimeout(flushTimer)
-    flushTimer = null
-  }
-
-  if (writeBuffer.size === 0) return
-
-  const redis = await getSharedRedis()
-  if (!redis) {
-    const discarded = [...writeBuffer.values()].reduce((sum, items) => sum + items.length, 0)
-    if (discarded > 0) {
-      logger.warn(`[ranking-store] Redis unavailable, discarding ${discarded} buffered writes`)
-    }
-    writeBuffer.clear()
-    return
-  }
-
-  // Snapshot and clear buffer atomically to avoid losing items during async flush
-  const snapshot = new Map(writeBuffer)
-  writeBuffer.clear()
-
-  for (const [key, items] of snapshot) {
-    if (items.length === 0) continue
-
-    try {
-      const pipeline = redis.pipeline()
-      for (const { member, score } of items) {
-        pipeline.zadd(key, { score, member })
-      }
-      pipeline.expire(key, TTL_SECONDS)
-      await pipeline.exec()
-    } catch (error) {
-      logger.warn(`[ranking-store] flushBuffer failed for ${key} (${items.length} items):`, error)
-    }
-  }
+  return
 }
 
 /**
- * Update a trader's score in the sorted set.
- * Writes are buffered and flushed every 1s or when 100 items accumulate per key,
- * reducing Redis round-trips by ~100x during batch cron runs.
+ * @deprecated Unsealed incremental scores cannot enter the public ranking
+ * cache. A complete sealed generation is the only allowed writer.
  */
 export async function updateTraderScore(
-  period: string,
+  _period: string,
   platform: string,
-  traderKey: string,
-  arenaScore: number
+  _traderKey: string,
+  _arenaScore: number
 ): Promise<void> {
   if (!isPublicRankingSourceAllowed(platform)) return
-  const key = redisKey(period)
-  const member = memberKey(platform, traderKey)
+  // Incremental scores have no publication proof and therefore cannot enter
+  // the public store. Only syncSortedSetFromLeaderboard may rebuild it from a
+  // complete sealed generation.
+}
 
-  // Hard cap: if buffer exceeds max total items, force flush to prevent OOM
-  const totalBuffered = [...writeBuffer.values()].reduce((sum, items) => sum + items.length, 0)
-  if (totalBuffered >= BUFFER_MAX_TOTAL_ITEMS) {
-    logger.warn(`[ranking-store] Buffer hit hard cap (${totalBuffered} items), forcing flush`)
-    await flushBuffer()
+function parsePublicationSeason(period: string): LeaderboardPublicationSeason {
+  const season = period.toUpperCase()
+  if (season !== '7D' && season !== '30D' && season !== '90D') {
+    throw new Error(`Unsupported ranking publication season: ${period}`)
   }
-
-  if (!writeBuffer.has(key)) writeBuffer.set(key, [])
-  writeBuffer.get(key)!.push({ member, score: arenaScore })
-
-  if (writeBuffer.get(key)!.length >= BUFFER_MAX_SIZE) {
-    await flushBuffer()
-  } else {
-    scheduleFlush()
-  }
+  return season
 }
 
 /**
@@ -218,7 +162,7 @@ export async function getSortedSetSize(period: string): Promise<number> {
 }
 
 // Redis Hash key for trader display data (used by Redis-first leaderboard reads)
-const DETAIL_HASH_PREFIX = 'ranking:detail'
+const DETAIL_HASH_PREFIX = 'ranking:detail:sealed-v1'
 const DETAIL_HASH_TTL = 2 * 60 * 60 // 2 hours (same as sorted set)
 
 function detailHashKey(period: string): string {
@@ -274,52 +218,74 @@ export async function syncSortedSetFromLeaderboard(
 ): Promise<number> {
   const redis = await getSharedRedis()
   if (!redis) {
-    throw new Error(`[ranking-store] Redis unavailable while syncing ${period}`)
+    throw new Error('Redis unavailable while rebuilding sealed ranking cache')
   }
 
   try {
-    const key = redisKey(period)
-    const hashKey = detailHashKey(period)
+    const season = parsePublicationSeason(period)
+    const key = redisKey(season)
+    const hashKey = detailHashKey(season)
+    const sealedRead = await readSealedRankingGeneration(
+      supabase,
+      { season, sources: SYNC_RANKING_SOURCES },
+      async (publication) => {
+        const rows: Array<Record<string, unknown>> = []
+        let offset = 0
+        const PAGE_SIZE = 1000
 
-    // Fetch all ranked traders with display fields
-    let allTraders: Array<Record<string, unknown>> = []
-    let offset = 0
-    const PAGE_SIZE = 1000
+        while (true) {
+          const { data, error } = await supabase
+            .from('leaderboard_ranks')
+            .select(SYNC_SELECT_FIELDS)
+            .in('source', SYNC_RANKING_SOURCES)
+            .eq('season_id', season)
+            .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+            .gt('arena_score', 0)
+            .or('is_outlier.is.null,is_outlier.eq.false')
+            .order('arena_score', { ascending: false })
+            .order('source', { ascending: true })
+            .order('source_trader_id', { ascending: true })
+            .range(offset, offset + PAGE_SIZE - 1)
 
-    while (true) {
-      const { data, error } = await supabase
-        .from('leaderboard_ranks')
-        .select(SYNC_SELECT_FIELDS)
-        .eq('season_id', period.toUpperCase())
-        .gt('arena_score', 0)
-        .or('is_outlier.is.null,is_outlier.eq.false')
-        .order('arena_score', { ascending: false })
-        .range(offset, offset + PAGE_SIZE - 1)
+          if (error || data === null) {
+            throw new Error(
+              `Failed to read sealed ${season} ranking page at offset ${offset}: ${
+                error?.message ?? 'null response'
+              }`
+            )
+          }
+          if (data.length === 0) break
 
-      if (error) {
-        const page = offset / PAGE_SIZE + 1
-        throw new Error(
-          `[ranking-store] leaderboard_ranks query failed for ${period} page ${page}: ${error.message}`
-        )
-      }
-      if (!data) {
-        const page = offset / PAGE_SIZE + 1
-        throw new Error(
-          `[ranking-store] leaderboard_ranks returned no result for ${period} page ${page}`
-        )
-      }
-      if (data.length === 0) break
-      allTraders = allTraders.concat(data as unknown as Array<Record<string, unknown>>)
-      if (data.length < PAGE_SIZE) break
-      offset += PAGE_SIZE
-    }
+          for (const row of data) {
+            if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+              throw new Error(`Sealed ${season} ranking page returned an invalid row`)
+            }
+            rows.push(Object.fromEntries(Object.entries(row)))
+          }
+          if (data.length < PAGE_SIZE) break
+          offset += PAGE_SIZE
+        }
 
-    allTraders = filterPublicRankingRows(allTraders, (trader) => trader.source)
+        return rows
+      },
+      { timeoutMs: 10_000 }
+    )
+    const allTraders = sealedRead.value
+    const expectedRowCount = sealedRead.publication.proofs.reduce(
+      (total, proof) => total + proof.published_rank_count,
+      0
+    )
 
     if (allTraders.length === 0) {
+      throw new Error(`Sealed ${season} generation contains no cacheable ranking rows`)
+    }
+    if (allTraders.length !== expectedRowCount) {
       throw new Error(
-        `[ranking-store] No public traders found for ${period}; preserving the last-good live board`
+        `Sealed ${season} ranking cache read ${allTraders.length} of ${expectedRowCount} published rows`
       )
+    }
+    if (allTraders.some((trader) => !isPublicRankingSourceAllowed(trader.source))) {
+      throw new Error(`Sealed ${season} generation returned a non-public ranking source`)
     }
 
     // Publish both Redis readers in one transaction. A plain Upstash pipeline
