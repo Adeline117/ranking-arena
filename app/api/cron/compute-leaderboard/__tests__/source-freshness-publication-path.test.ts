@@ -28,14 +28,19 @@ function finalizerBody(): string {
 }
 
 describe('compute leaderboard source freshness publication path', () => {
-  it('activates only the staged generation publisher after the degradation gate', () => {
-    const guard = route.indexOf('await checkDegradationGuard({')
-    const skip = route.indexOf("if (degradation.action === 'skip') return -1")
+  it('activates only the staged generation publisher with an exact-output degradation gate', () => {
     const publish = route.indexOf('await publishAtomicRankGeneration({')
+    const authorization = route.indexOf(
+      'authorizePublication: async ({ publishedCount, publishedCountsBySource }) => {',
+      publish
+    )
+    const guard = route.indexOf('await checkDegradationGuard({', authorization)
+    const skip = route.indexOf('if (!publication) return -1', guard)
 
-    expect(guard).toBeGreaterThan(-1)
+    expect(publish).toBeGreaterThan(-1)
+    expect(authorization).toBeGreaterThan(publish)
+    expect(guard).toBeGreaterThan(authorization)
     expect(skip).toBeGreaterThan(guard)
-    expect(publish).toBeGreaterThan(skip)
     expect(route).not.toContain('await upsertLeaderboard({')
     expect(route).not.toContain('await zeroOutExcluded({')
     expect(route).not.toContain('await rerankAllRows(')

@@ -28,16 +28,26 @@ export async function checkDegradationGuard(params: {
   supabase: SupabaseClient
   season: Period
   scoredCount: number
+  publishedCountsBySource?: Readonly<Record<string, number>>
   freshPlatforms: string[]
   forceWrite: boolean
   previousCount?: number
 }): Promise<DegradationResult> {
-  const { supabase, season, scoredCount, freshPlatforms, forceWrite, previousCount } = params
+  const {
+    supabase,
+    season,
+    scoredCount,
+    publishedCountsBySource,
+    freshPlatforms,
+    forceWrite,
+    previousCount,
+  } = params
   const LAST_SCORED_KEY = `leaderboard:last-scored-count:${season}`
 
   // Compute expected count from per-platform known counts
   let expectedCount = 0
   let expectedSource = 'per-platform'
+  const expectedCountsBySource = new Map<string, number>()
   try {
     const { data: platformCounts, error: platformCountsError } = await (supabase as any).rpc(
       'get_expected_platform_counts',
@@ -57,6 +67,7 @@ export async function checkDegradationGuard(params: {
         const cnt = Number(row.expected_count) || 0
         if (freshSet.has(src)) {
           expectedCount += cnt
+          expectedCountsBySource.set(src, (expectedCountsBySource.get(src) ?? 0) + cnt)
         }
       }
     }
@@ -89,8 +100,24 @@ export async function checkDegradationGuard(params: {
 
   const expectedKnown = expectedCount > 0
   const ratio = expectedKnown ? scoredCount / expectedCount : null
+  const freshSet = new Set(freshPlatforms)
+  const publishedEntries = publishedCountsBySource ? Object.entries(publishedCountsBySource) : null
+  const invalidPublishedBreakdown =
+    publishedEntries !== null &&
+    (publishedEntries.some(
+      ([source, count]) => !freshSet.has(source) || !Number.isSafeInteger(count) || count < 0
+    ) ||
+      publishedEntries.reduce((total, [, count]) => total + count, 0) !== scoredCount)
+  const degradedSources = publishedEntries
+    ? [...expectedCountsBySource.entries()]
+        .map(([source, expected]) => {
+          const published = publishedCountsBySource?.[source] ?? 0
+          return { source, published, expected, ratio: published / expected }
+        })
+        .filter(({ ratio: sourceRatio }) => sourceRatio < DEGRADATION_THRESHOLD)
+    : []
   logger.info(
-    `[${season}] Degradation check: scored=${scoredCount}, expected=${expectedKnown ? expectedCount : 'unknown'} (${expectedSource}), freshPlatforms=${freshPlatforms.length}, ratio=${ratio === null ? 'unknown' : `${(ratio * 100).toFixed(1)}%`}, threshold=${DEGRADATION_THRESHOLD * 100}%`
+    `[${season}] Degradation check: scored=${scoredCount}, expected=${expectedKnown ? expectedCount : 'unknown'} (${expectedSource}), freshPlatforms=${freshPlatforms.length}, ratio=${ratio === null ? 'unknown' : `${(ratio * 100).toFixed(1)}%`}, degradedSources=${degradedSources.length}, threshold=${DEGRADATION_THRESHOLD * 100}%`
   )
 
   if (forceWrite) {
@@ -103,7 +130,11 @@ export async function checkDegradationGuard(params: {
   // A positive result is not proof of completeness. If every independent
   // baseline is unavailable, publishing would let a partially collapsed cohort
   // become the new source of truth. Preserve the last-good generation instead.
-  const degraded = !expectedKnown || (ratio !== null && ratio < DEGRADATION_THRESHOLD)
+  const degraded =
+    invalidPublishedBreakdown ||
+    degradedSources.length > 0 ||
+    !expectedKnown ||
+    (ratio !== null && ratio < DEGRADATION_THRESHOLD)
   if (degraded) {
     let consecutiveSkips = 1
     const skipKey = `leaderboard:degradation-skips:${season}`
@@ -132,6 +163,8 @@ export async function checkDegradationGuard(params: {
           scored: scoredCount,
           expected: expectedKnown ? expectedCount : null,
           ratio,
+          invalidPublishedBreakdown,
+          degradedSources,
           skip: consecutiveSkips,
         },
       },

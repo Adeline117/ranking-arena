@@ -106,6 +106,7 @@ export interface PublishAtomicRankGenerationInput {
   season: Period
   sourceEvidence: ParsedSourcePublicationEvidence
   scoredTraders: readonly ScoredTrader[]
+  authorizePublication: (preview: AtomicRankPublicationPreview) => Promise<boolean>
 }
 
 export interface PublishAtomicRankGenerationOptions {
@@ -124,6 +125,15 @@ export interface AtomicRankPublicationResult {
   manifestId: string
   manifestDigest: string
   writeSetSha256: string
+}
+
+export interface AtomicRankPublicationPreview {
+  season: Period
+  scoreCohortId: string
+  publishedCount: number
+  publishedCountsBySource: Readonly<Record<string, number>>
+  manifestId: string
+  manifestDigest: string
 }
 
 interface RpcEnvelope {
@@ -798,8 +808,8 @@ function parseFinalization(
 export async function publishAtomicRankGeneration(
   input: PublishAtomicRankGenerationInput,
   options: PublishAtomicRankGenerationOptions = {}
-): Promise<AtomicRankPublicationResult> {
-  const { supabase, season, sourceEvidence, scoredTraders } = input
+): Promise<AtomicRankPublicationResult | null> {
+  const { supabase, season, sourceEvidence, scoredTraders, authorizePublication } = input
   if (sourceEvidence.window !== season) {
     throw new Error(`[${season}] source publication evidence window disagrees`)
   }
@@ -878,7 +888,6 @@ export async function publishAtomicRankGeneration(
   if (typedRows.length === 0) {
     throw new Error(`[${season}] PG17 scorer produced no positive public ranks`)
   }
-
   const rankCounts = new Map<string, number>(
     sourceEvidence.freshAliases.map((alias) => [alias.source, 0])
   )
@@ -888,6 +897,22 @@ export async function publishAtomicRankGeneration(
     }
     rankCounts.set(row.source, (rankCounts.get(row.source) ?? 0) + 1)
   }
+  const publishedCountsBySource = Object.fromEntries(
+    [...rankCounts.entries()].sort(([left], [right]) => compareUtf8(left, right))
+  )
+  if (
+    !(await authorizePublication({
+      season,
+      scoreCohortId,
+      publishedCount: typedRows.length,
+      publishedCountsBySource,
+      manifestId: manifest.manifestId,
+      manifestDigest: manifest.manifestDigest,
+    }))
+  ) {
+    return null
+  }
+
   const sourcePublications = buildSourcePublicationRows(sourceEvidence, {
     publishId: scoreCohortId,
     finalRankCounts: rankCounts,

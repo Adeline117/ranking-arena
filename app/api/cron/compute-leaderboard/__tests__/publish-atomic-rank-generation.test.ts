@@ -259,6 +259,7 @@ describe('publishAtomicRankGeneration', () => {
         season: '30D',
         sourceEvidence: evidence(now),
         scoredTraders: [scoredTrader()],
+        authorizePublication: async () => true,
       },
       {
         scoreCohortId: COHORT,
@@ -311,9 +312,44 @@ describe('publishAtomicRankGeneration', () => {
         season: '30D',
         sourceEvidence: evidence(now, true),
         scoredTraders: [scoredTrader()],
+        authorizePublication: async () => true,
       })
     ).rejects.toThrow('exact source authority is not fully publishable')
     expect(rpc).not.toHaveBeenCalled()
+    expect(upsert).not.toHaveBeenCalled()
+  })
+
+  it('authorizes the exact PG17 positive cohort before any public mutation', async () => {
+    const now = new Date()
+    const { publicationClient, calls, upsert } = client(now)
+    const authorizePublication = jest.fn().mockResolvedValue(false)
+
+    await expect(
+      publishAtomicRankGeneration(
+        {
+          supabase: publicationClient,
+          season: '30D',
+          sourceEvidence: evidence(now),
+          scoredTraders: [scoredTrader()],
+          authorizePublication,
+        },
+        {
+          scoreCohortId: COHORT,
+          computedAt: canonical(now),
+          validUntil: canonical(new Date(now.getTime() + 20 * 60_000)),
+        }
+      )
+    ).resolves.toBeNull()
+
+    expect(authorizePublication).toHaveBeenCalledWith({
+      season: '30D',
+      scoreCohortId: COHORT,
+      publishedCount: 1,
+      publishedCountsBySource: { binance_futures: 1 },
+      manifestId: MANIFEST,
+      manifestDigest: MANIFEST_DIGEST,
+    })
+    expect(calls.map(([name]) => name)).toEqual(['prepare_leaderboard_score_input_manifest_v1'])
     expect(upsert).not.toHaveBeenCalled()
   })
 })

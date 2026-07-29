@@ -174,24 +174,59 @@ describe('compute leaderboard degradation guard', () => {
     expect(mockSet).not.toHaveBeenCalled()
     expect(mockAlert).not.toHaveBeenCalled()
   })
+
+  test('skips when one source collapses even if the aggregate count remains healthy', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: [
+        { source: 'large', expected_count: 900 },
+        { source: 'collapsed', expected_count: 100 },
+      ],
+      error: null,
+    })
+
+    await expect(
+      checkDegradationGuard({
+        supabase: { rpc } as never,
+        season: '30D',
+        scoredCount: 900,
+        publishedCountsBySource: { large: 900, collapsed: 0 },
+        freshPlatforms: ['large', 'collapsed'],
+        forceWrite: false,
+      })
+    ).resolves.toEqual({ action: 'skip' })
+
+    expect(mockAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          degradedSources: [{ source: 'collapsed', published: 0, expected: 100, ratio: 0 }],
+        }),
+      }),
+      'leaderboard-degrade:30D',
+      60 * 60 * 1000
+    )
+  })
 })
 
 describe('degradation route contract', () => {
   const route = readFileSync(join(__dirname, '..', 'route.ts'), 'utf8')
   const guard = readFileSync(join(__dirname, '..', 'degradation-guard.ts'), 'utf8')
 
-  test('authenticates before reading force=1 and returns before ranking mutation on skip', () => {
+  test('authenticates before reading force=1 and guards the exact PG cohort before mutation', () => {
     const authIndex = route.indexOf('if (!verifyCronSecret(request))')
     const forceIndex = route.indexOf("searchParams.get('force') === '1'")
-    const guardIndex = route.indexOf('await checkDegradationGuard({')
-    const skipIndex = route.indexOf("if (degradation.action === 'skip') return -1")
     const writeIndex = route.indexOf('await publishAtomicRankGeneration({')
+    const authorizationIndex = route.indexOf(
+      'authorizePublication: async ({ publishedCount, publishedCountsBySource }) => {'
+    )
+    const guardIndex = route.indexOf('await checkDegradationGuard({', authorizationIndex)
+    const skipIndex = route.indexOf('if (!publication) return -1', guardIndex)
 
     expect(authIndex).toBeGreaterThan(-1)
     expect(forceIndex).toBeGreaterThan(authIndex)
-    expect(guardIndex).toBeGreaterThan(forceIndex)
+    expect(writeIndex).toBeGreaterThan(forceIndex)
+    expect(authorizationIndex).toBeGreaterThan(writeIndex)
+    expect(guardIndex).toBeGreaterThan(authorizationIndex)
     expect(skipIndex).toBeGreaterThan(guardIndex)
-    expect(writeIndex).toBeGreaterThan(skipIndex)
   })
 
   test('contains no automatic force or cleanup path', () => {
@@ -201,21 +236,27 @@ describe('degradation route contract', () => {
     expect(guard).toContain('if (forceWrite)')
   })
 
-  test('guards and publishes the same trust-filtered cohort', () => {
+  test('guards PostgreSQL exact output while publishing only the trust-filtered input', () => {
     const scoreIndex = route.indexOf('const { scored, scoredFiltered } = await scoreTraders(')
-    const guardIndex = route.indexOf('await checkDegradationGuard({', scoreIndex)
-    const skipIndex = route.indexOf("if (degradation.action === 'skip') return -1", guardIndex)
-    const publishIndex = route.indexOf('await publishAtomicRankGeneration({', skipIndex)
+    const publishIndex = route.indexOf('await publishAtomicRankGeneration({', scoreIndex)
+    const authorizationIndex = route.indexOf(
+      'authorizePublication: async ({ publishedCount, publishedCountsBySource }) => {',
+      publishIndex
+    )
+    const guardIndex = route.indexOf('await checkDegradationGuard({', authorizationIndex)
+    const skipIndex = route.indexOf('if (!publication) return -1', guardIndex)
     const saveIndex = route.indexOf(
       'await saveScoredCount(season, publication.publishedCount)',
-      publishIndex
+      skipIndex
     )
 
     expect(scoreIndex).toBeGreaterThan(-1)
-    expect(route.slice(guardIndex, skipIndex)).toContain('scoredCount: scoredFiltered.length')
-    expect(route.slice(publishIndex, saveIndex)).toContain('scoredTraders: scoredFiltered')
-    expect(saveIndex).toBeGreaterThan(publishIndex)
+    expect(route.slice(publishIndex, authorizationIndex)).toContain('scoredTraders: scoredFiltered')
+    expect(route.slice(guardIndex, skipIndex)).toContain('scoredCount: publishedCount')
+    expect(route.slice(guardIndex, skipIndex)).toContain('publishedCountsBySource')
+    expect(saveIndex).toBeGreaterThan(skipIndex)
     expect(route).not.toContain('scoredCount: scored.length')
+    expect(route).not.toContain('scoredCount: scoredFiltered.length')
     expect(route).not.toContain('saveScoredCount(season, scored.length)')
   })
 })

@@ -186,11 +186,16 @@ describe('compute leaderboard source freshness writes', () => {
       join(process.cwd(), 'app/api/cron/compute-leaderboard/route.ts'),
       'utf8'
     )
-    const guard = route.indexOf('await checkDegradationGuard({')
-    const publish = route.indexOf('await publishAtomicRankGeneration({', guard)
+    const publish = route.indexOf('await publishAtomicRankGeneration({')
+    const authorization = route.indexOf(
+      'authorizePublication: async ({ publishedCount, publishedCountsBySource }) => {',
+      publish
+    )
+    const guard = route.indexOf('await checkDegradationGuard({', authorization)
 
-    expect(guard).toBeGreaterThan(-1)
-    expect(publish).toBeGreaterThan(guard)
+    expect(publish).toBeGreaterThan(-1)
+    expect(authorization).toBeGreaterThan(publish)
+    expect(guard).toBeGreaterThan(authorization)
     expect(route).not.toContain('await upsertSourceFreshness({')
     expect(route).not.toContain('await zeroOutExcluded({')
   })

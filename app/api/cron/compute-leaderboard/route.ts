@@ -612,17 +612,6 @@ async function computeSeason(
     supabase
   )
 
-  // Degradation guard: prevent bad data from overwriting good leaderboard data
-  const degradation = await checkDegradationGuard({
-    supabase: supabase as SupabaseClient,
-    season,
-    scoredCount: scoredFiltered.length,
-    freshPlatforms,
-    forceWrite: forceWrite || false,
-    previousCount,
-  })
-  if (degradation.action === 'skip') return -1
-
   // Concurrency is fenced by the owner-token Redis season lease acquired by GET().
   // Do not add a session-level PostgreSQL advisory lock through Supabase RPC here:
   // PostgREST may execute acquire and release on different pooled connections,
@@ -642,7 +631,23 @@ async function computeSeason(
     season,
     sourceEvidence: sourcePublication.evidence,
     scoredTraders: scoredFiltered,
+    // PostgreSQL is the authoritative scorer and may differ from the V8
+    // pre-score at floating-point boundaries. Guard its exact positive cohort
+    // before any parent upsert, generation claim, staging, or finalization.
+    authorizePublication: async ({ publishedCount, publishedCountsBySource }) => {
+      const degradation = await checkDegradationGuard({
+        supabase: supabase as SupabaseClient,
+        season,
+        scoredCount: publishedCount,
+        publishedCountsBySource,
+        freshPlatforms,
+        forceWrite: forceWrite || false,
+        previousCount,
+      })
+      return degradation.action !== 'skip'
+    },
   })
+  if (!publication) return -1
   logger.info(
     `[${season}] atomically sealed generation ${publication.generationSeq} / ${publication.scoreCohortId} (${publication.publishedCount} ranks, ${publication.sourceCount} sources)`
   )
