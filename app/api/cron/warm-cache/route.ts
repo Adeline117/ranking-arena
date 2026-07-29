@@ -21,6 +21,7 @@ const logger = createLogger('warm-cache')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 30
 
 export const GET = withCron('warm-cache', async (request: NextRequest) => {
   // Warm the SSR homepage cache — 10s timeout to prevent hang during DB spikes.
@@ -41,9 +42,16 @@ export const GET = withCron('warm-cache', async (request: NextRequest) => {
 
   // Pre-warm high-traffic API caches to prevent 3s cold starts
   const baseUrl = request.nextUrl.origin
+  const warmupSignal = AbortSignal.timeout(8_000)
   const warmResults = await Promise.allSettled([
-    fetch(`${baseUrl}/api/traders?timeRange=90D&limit=50`, { cache: 'no-store' }),
-    fetch(`${baseUrl}/api/rankings/platform-stats`, { cache: 'no-store' }),
+    fetch(`${baseUrl}/api/traders?timeRange=90D&limit=50`, {
+      cache: 'no-store',
+      signal: warmupSignal,
+    }),
+    fetch(`${baseUrl}/api/rankings/platform-stats`, {
+      cache: 'no-store',
+      signal: warmupSignal,
+    }),
   ])
   const warmedApis = warmResults.filter((r) => r.status === 'fulfilled' && r.value.ok).length
   const failedApis = warmResults.filter(
@@ -58,4 +66,4 @@ export const GET = withCron('warm-cache', async (request: NextRequest) => {
     traders_cached: tradersCached,
     apis_warmed: warmedApis,
   }
-})
+}, { safetyTimeoutMs: 25_000 })

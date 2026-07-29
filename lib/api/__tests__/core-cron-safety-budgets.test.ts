@@ -14,6 +14,7 @@ const CORE_CRON_ROUTES = [
   'app/api/cron/data-reconciliation/route.ts',
   'app/api/cron/score-backtest/route.ts',
   'app/api/cron/sync-authorized-traders/route.ts',
+  'app/api/cron/warm-cache/route.ts',
 ] as const
 
 describe('core cron safety budgets', () => {
@@ -28,5 +29,12 @@ describe('core cron safety budgets', () => {
     expect(safetyTimeoutMs).toBeGreaterThan(0)
     expect(safetyTimeoutMs).toBeLessThan(maxDurationSeconds * 1_000)
     expect(maxDurationSeconds * 1_000 - safetyTimeoutMs).toBeGreaterThanOrEqual(5_000)
+  })
+
+  it('bounds both warm-cache self-requests inside the route budget', () => {
+    const source = readFileSync(join(process.cwd(), 'app/api/cron/warm-cache/route.ts'), 'utf8')
+
+    expect(source).toContain('const warmupSignal = AbortSignal.timeout(8_000)')
+    expect(source.match(/signal: warmupSignal/g)).toHaveLength(2)
   })
 })
