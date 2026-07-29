@@ -82,6 +82,38 @@ function isPrimaryLinkedTraderAcknowledgement(
   )
 }
 
+function readUnlinkLinkedTraderAcknowledgement(value: unknown): {
+  promoted_link_id: string | null
+  remaining_count: number
+  removed_source: string
+  removed_trader_id: string
+} | null {
+  if (!Array.isArray(value) || value.length !== 1 || !isRecord(value[0])) return null
+  const acknowledgement = value[0]
+  const promotedLinkId = acknowledgement.promoted_link_id
+  const remainingCount = acknowledgement.remaining_count
+  if (
+    !Number.isInteger(remainingCount) ||
+    (remainingCount as number) < 0 ||
+    (remainingCount as number) > 2_147_483_647 ||
+    (promotedLinkId !== null &&
+      (typeof promotedLinkId !== 'string' || !UUID_PATTERN.test(promotedLinkId))) ||
+    (remainingCount === 0 && promotedLinkId !== null) ||
+    typeof acknowledgement.removed_trader_id !== 'string' ||
+    acknowledgement.removed_trader_id.length === 0 ||
+    typeof acknowledgement.removed_source !== 'string' ||
+    acknowledgement.removed_source.length === 0
+  ) {
+    return null
+  }
+  return {
+    promoted_link_id: promotedLinkId,
+    remaining_count: remainingCount as number,
+    removed_source: acknowledgement.removed_source,
+    removed_trader_id: acknowledgement.removed_trader_id,
+  }
+}
+
 function requireExpectedUpdatedAt(body: Record<string, unknown>): {
   expectedUpdatedAt: string
   expectedUpdatedAtMs: number
@@ -329,8 +361,9 @@ export async function DELETE(request: NextRequest) {
       p_user_id: user.id,
     })
     if (error) throwRpcError(error)
-    const result = data?.[0]
-    if (!result) throw ApiError.notFound('Linked trader not found')
+    if (!data) throw ApiError.notFound('Linked trader not found')
+    const result = readUnlinkLinkedTraderAcknowledgement(data)
+    if (!result) throw ApiError.database('Invalid unlink linked trader acknowledgement')
 
     logger.info('[linked-traders] Unlinked trader', {
       userId: user.id,

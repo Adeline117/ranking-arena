@@ -242,15 +242,17 @@ describe('TraderLinksSection viewer ownership', () => {
   })
 
   it('binds unlink to the loaded owner and exact captured token', async () => {
+    let getCount = 0
     mockAuthedFetch.mockImplementation((url: string, method: string) => {
       if (url === '/api/traders/linked' && method === 'GET') {
-        return Promise.resolve(listResult([linkedTrader('user-a', 'Alpha')]))
+        getCount += 1
+        return Promise.resolve(listResult(getCount === 1 ? [linkedTrader('user-a', 'Alpha')] : []))
       }
       if (url === '/api/traders/linked' && method === 'DELETE') {
         return Promise.resolve({
           ok: true,
           status: 200,
-          data: { data: { remaining_count: 0 } },
+          data: { data: { promoted_link_id: null, remaining_count: 0 } },
         })
       }
       return Promise.resolve({ ok: false, status: 500, data: {} })
@@ -270,7 +272,10 @@ describe('TraderLinksSection viewer ownership', () => {
       expectedUserId: 'user-a',
       expectedSessionGeneration: mockAuth.sessionGeneration,
     })
-    expect(mockRefresh).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(mockRefresh).toHaveBeenCalled()
+      expect(getCount).toBe(2)
+    })
   })
 
   it('uses the server-promoted link instead of guessing from array order', async () => {
@@ -286,9 +291,22 @@ describe('TraderLinksSection viewer ownership', () => {
       display_order: 0,
       created_at: '2026-07-14T00:00:00.000Z',
     }
+    const authoritativePromoted = {
+      ...promoted,
+      is_primary: true,
+      updated_at: '2026-07-15T00:00:00.100Z',
+    }
+    let getCount = 0
     mockAuthedFetch.mockImplementation((url: string, method: string) => {
       if (url === '/api/traders/linked' && method === 'GET') {
-        return Promise.resolve(listResult([primary, firstRemaining, promoted]))
+        getCount += 1
+        return Promise.resolve(
+          listResult(
+            getCount === 1
+              ? [primary, firstRemaining, promoted]
+              : [firstRemaining, authoritativePromoted]
+          )
+        )
       }
       if (url === '/api/traders/linked' && method === 'DELETE') {
         return Promise.resolve({
@@ -309,6 +327,7 @@ describe('TraderLinksSection viewer ownership', () => {
     await waitFor(() => expect(screen.queryByText('Primary')).not.toBeInTheDocument())
     expect(screen.getByText('Gamma').parentElement).toHaveTextContent('primaryAccount')
     expect(screen.getByText('Beta').parentElement).not.toHaveTextContent('primaryAccount')
+    expect(getCount).toBe(2)
   })
 
   it('reloads the authoritative list when unlink metadata contradicts local state', async () => {
@@ -328,7 +347,12 @@ describe('TraderLinksSection viewer ownership', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          data: { data: { promoted_link_id: 'unknown-link', remaining_count: 1 } },
+          data: {
+            data: {
+              promoted_link_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+              remaining_count: 1,
+            },
+          },
         })
       }
       return Promise.resolve({ ok: false, status: 500, data: {} })
@@ -341,6 +365,33 @@ describe('TraderLinksSection viewer ownership', () => {
     await screen.findByText('Authoritative')
     expect(getCount).toBe(2)
     expect(screen.getByText('Authoritative').parentElement).toHaveTextContent('primaryAccount')
+  })
+
+  it('does not hide an account for malformed unlink metadata', async () => {
+    const loaded = linkedTrader('user-a', 'Alpha')
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url === '/api/traders/linked' && method === 'GET') {
+        return Promise.resolve(listResult([loaded]))
+      }
+      if (url === '/api/traders/linked' && method === 'DELETE') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { promoted_link_id: loaded.id, remaining_count: 0 } },
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<TraderLinksSection userId="user-a" />)
+    await screen.findByText('Alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'unlinkAccount' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error'))
+    expect(screen.getByText('Alpha')).toBeInTheDocument()
+    expect(mockShowToast).not.toHaveBeenCalledWith('traderUnlinked', 'success')
+    expect(mockRefresh).not.toHaveBeenCalled()
+    expect(mockAuthedFetch.mock.calls.filter((call) => call[1] === 'GET')).toHaveLength(1)
   })
 
   it('saves a label against the exact loaded row revision and adopts its acknowledgement', async () => {

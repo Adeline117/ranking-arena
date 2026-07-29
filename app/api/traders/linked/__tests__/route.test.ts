@@ -226,4 +226,28 @@ describe('/api/traders/linked atomic mutations', () => {
       },
     })
   })
+
+  it('fails closed on malformed unlink RPC metadata', async () => {
+    mockRpc.mockResolvedValue({
+      data: [
+        {
+          promoted_link_id: LINK_ID,
+          remaining_count: 0,
+          removed_source: 'binance',
+          removed_trader_id: 'trader-a',
+        },
+      ],
+      error: null,
+    })
+
+    const response = await DELETE(request({ id: LINK_ID }))
+
+    expect(response.status).toBe(500)
+    expect(mockInvalidateLinkedTraderCache).not.toHaveBeenCalled()
+    expect(mockInfo).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Invalid unlink linked trader acknowledgement',
+    })
+  })
 })

@@ -19,6 +19,8 @@ import {
   type SettingsViewerSnapshot,
 } from '../hooks/settings-viewer-scope'
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 interface LinkedTraderStats {
   arena_score: number | null
   roi: number | null
@@ -145,6 +147,23 @@ function isLinkedTraderPrimaryAcknowledgement(
     typeof acknowledgement.updated_at === 'string' &&
     Number.isFinite(Date.parse(acknowledgement.updated_at)) &&
     acknowledgement.updated_at !== expected.updated_at
+  )
+}
+
+function isLinkedTraderUnlinkAcknowledgement(value: unknown): value is {
+  promoted_link_id: string | null
+  remaining_count: number
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const acknowledgement = value as Record<string, unknown>
+  return (
+    Number.isInteger(acknowledgement.remaining_count) &&
+    (acknowledgement.remaining_count as number) >= 0 &&
+    (acknowledgement.remaining_count as number) <= 2_147_483_647 &&
+    (acknowledgement.promoted_link_id === null ||
+      (typeof acknowledgement.promoted_link_id === 'string' &&
+        UUID_PATTERN.test(acknowledgement.promoted_link_id))) &&
+    (acknowledgement.remaining_count !== 0 || acknowledgement.promoted_link_id === null)
   )
 }
 
@@ -553,21 +572,19 @@ export function TraderLinksSection({ userId }: { userId: string }) {
       )
       if (!mutationIsCurrent(operation) || result.stale) return
       if (result.ok) {
-        const promotedLinkId = result.data?.data?.promoted_link_id
+        const acknowledgement = result.data?.data
+        if (!isLinkedTraderUnlinkAcknowledgement(acknowledgement)) {
+          feedbackRef.current.showToast(feedbackRef.current.t('operationFailed'), 'error')
+          return
+        }
+        const promotedLinkId = acknowledgement.promoted_link_id
         const remaining = traders.filter((candidate) => candidate.id !== ownedTrader.id)
-        const remainingCount = result.data?.data?.remaining_count
+        const remainingCount = acknowledgement.remaining_count
         const responseIsConsistent =
-          Number.isInteger(remainingCount) &&
           remainingCount === remaining.length &&
           (promotedLinkId == null || remaining.some((candidate) => candidate.id === promotedLinkId))
-        const unresolvedPrimary =
-          remaining.length > 0 &&
-          promotedLinkId == null &&
-          !remaining.some((candidate) => candidate.is_primary)
 
-        if (!responseIsConsistent || unresolvedPrimary) {
-          await loadLinkedTraders(operation.scope)
-        } else {
+        if (responseIsConsistent) {
           setTraders(
             remaining.map((candidate) =>
               promotedLinkId == null
@@ -578,10 +595,12 @@ export function TraderLinksSection({ userId }: { userId: string }) {
         }
         feedbackRef.current.showToast(feedbackRef.current.t('traderUnlinked'), 'success')
 
-        // If no remaining accounts, could refresh to reflect verified status change
-        if (result.data?.data?.remaining_count === 0 && mutationIsCurrent(operation)) {
+        if (remainingCount === 0) {
           router.refresh()
         }
+        // Unlink can promote a replacement and changes its row revision. Always
+        // reconcile the complete authoritative list before allowing another edit.
+        await loadLinkedTraders(operation.scope, { preserveReadyState: true })
       } else {
         feedbackRef.current.showToast(
           result.data?.error || feedbackRef.current.t('operationFailed'),
