@@ -10,7 +10,7 @@
  * are NEVER deleted — historical data is accumulated for years.
  * See CLAUDE.md: "绝对不要删除数据库历史数据"
  *
- * Schedule: Daily at 01:00 UTC (runs after aggregate + compute-derived-metrics)
+ * Schedule: Daily at 01:00 UTC (runs after daily aggregation)
  */
 
 import { NextRequest, NextResponse } from 'next/server'

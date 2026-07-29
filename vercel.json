@@ -108,10 +108,6 @@
       "schedule": "30 4 * * *"
     },
     {
-      "path": "/api/cron/compute-derived-metrics",
-      "schedule": "20 0 * * *"
-    },
-    {
       "path": "/api/cron/cleanup-data",
       "schedule": "6 1 * * *"
     },
