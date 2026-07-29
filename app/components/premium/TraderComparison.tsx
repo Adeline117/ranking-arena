@@ -15,7 +15,12 @@ import {
 import { useLanguage } from '../Providers/LanguageProvider'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import ShareCompareButton from './ShareCompareButton'
-import { formatDrawdown, formatPnL, formatRatio } from '@/lib/utils/format'
+import {
+  formatDrawdown,
+  formatPnL,
+  formatRatio,
+  normalizeDrawdownMagnitude,
+} from '@/lib/utils/format'
 import { compareAccountKey, type CompareAccountRef } from '@/lib/compare/identity'
 
 // Lazy load chart components — only rendered when user switches to the equity tab
@@ -115,25 +120,24 @@ function normalizedDimension(value: number | undefined | null): number | null {
 function comparisonMetricValue(trader: TraderCompareData, key: ComparisonMetricKey): number | null {
   const value = trader[key]
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
-  if (key === 'max_drawdown') {
-    const magnitude = Math.abs(value)
-    return magnitude <= 100 ? magnitude : null
-  }
+  if (key === 'max_drawdown') return normalizeDrawdownMagnitude(value)
   return BOUNDED_SCORE_METRICS.has(key) ? normalizedDimension(value) : value
 }
 
-function getBestIndex(values: (number | undefined | null)[], isHigherBetter = true): number {
-  let bestIdx = -1
-  let bestVal = isHigherBetter ? -Infinity : Infinity
-  values.forEach((val, idx) => {
-    if (val != null && isFinite(val)) {
-      if (isHigherBetter ? val > bestVal : val < bestVal) {
-        bestVal = val
-        bestIdx = idx
-      }
-    }
-  })
-  return bestIdx
+function getUniqueBestIndex(values: (number | undefined | null)[], isHigherBetter = true): number {
+  const validEntries = values
+    .map((value, index) => ({ value, index }))
+    .filter(
+      (entry): entry is { value: number; index: number } =>
+        typeof entry.value === 'number' && Number.isFinite(entry.value)
+    )
+  if (validEntries.length < 2) return -1
+
+  const bestValue = isHigherBetter
+    ? Math.max(...validEntries.map((entry) => entry.value))
+    : Math.min(...validEntries.map((entry) => entry.value))
+  const bestEntries = validEntries.filter((entry) => entry.value === bestValue)
+  return bestEntries.length === 1 ? bestEntries[0].index : -1
 }
 
 function _getWorstIndex(values: (number | undefined | null)[], isHigherBetter = true): number {
@@ -621,7 +625,7 @@ export default function TraderComparison({
             <tbody role="rowgroup" style={{ display: 'block' }}>
               {metrics.map((metric, metricIdx) => {
                 const values = traders.map((tr) => comparisonMetricValue(tr, metric.key))
-                const bestIdx = getBestIndex(values, metric.higherBetter)
+                const bestIdx = getUniqueBestIndex(values, metric.higherBetter)
 
                 return (
                   <tr

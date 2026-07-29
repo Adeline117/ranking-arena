@@ -193,15 +193,25 @@ export function formatRatio(value: number | null | undefined, decimals = 2): str
 }
 
 /**
- * Canonical maximum-drawdown display. Inputs are percentage points and may be
- * stored with either sign; values outside the physical 0–100% range are unknown.
- * A measured zero stays distinct from missing data, while tiny non-zero risk
- * never rounds down to a misleading 0.0%.
+ * Canonical maximum-drawdown magnitude. Inputs are percentage points and may
+ * be stored with either sign; values outside the physical 0–100% range are
+ * unknown. Consumers comparing traders should compare this magnitude instead
+ * of the raw signed upstream value.
+ */
+export function normalizeDrawdownMagnitude(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null
+  const magnitude = Math.abs(value)
+  return magnitude <= 100 ? magnitude : null
+}
+
+/**
+ * Canonical maximum-drawdown display. A measured zero stays distinct from
+ * missing data, while tiny non-zero risk never rounds down to a misleading
+ * 0.0%.
  */
 export function formatDrawdown(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return NULL_DISPLAY
-  const magnitude = Math.abs(value)
-  if (magnitude > 100) return NULL_DISPLAY
+  const magnitude = normalizeDrawdownMagnitude(value)
+  if (magnitude == null) return NULL_DISPLAY
   if (magnitude === 0) return '0.0%'
   if (magnitude < 0.1) return '< 0.1%'
   return `-${magnitude.toFixed(1)}%`

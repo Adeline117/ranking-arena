@@ -1,13 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getScoreColor } from '@/lib/utils/score-colors'
-import { formatROI, formatPnL } from '@/lib/utils/format'
+import {
+  formatDrawdown,
+  formatROI,
+  formatPnL,
+  normalizeDrawdownMagnitude,
+  NULL_DISPLAY,
+} from '@/lib/utils/format'
 
 interface AggregatedAccount {
   platform: string
@@ -23,10 +29,23 @@ interface AggregatedAccount {
 }
 
 interface AggregatedStatsProps {
-  combinedPnl: number
+  combinedPnl: number | null
   bestRoi: { value: number; platform: string; traderKey: string } | null
-  weightedScore: number
+  weightedScore: number | null
   accounts: AggregatedAccount[]
+}
+
+function finiteMetric(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function boundedPercent(value: number): number | null {
+  return value >= 0 && value <= 100 ? value : null
+}
+
+function signedMetricColor(value: number | null): string {
+  if (value == null || value === 0) return tokens.colors.text.tertiary
+  return value > 0 ? tokens.colors.accent.success : tokens.colors.accent.error
 }
 
 export default function AggregatedStats({
@@ -36,11 +55,31 @@ export default function AggregatedStats({
   accounts,
 }: AggregatedStatsProps) {
   const { t } = useLanguage()
-  const [showScoreTooltip, setShowScoreTooltip] = useState(false)
+  const scoreTooltipId = useId()
+  const comparisonTableId = useId()
+  const [scoreTooltipHovered, setScoreTooltipHovered] = useState(false)
+  const [scoreTooltipFocused, setScoreTooltipFocused] = useState(false)
+  const [scoreTooltipPinned, setScoreTooltipPinned] = useState(false)
+  const [scoreTooltipDismissed, setScoreTooltipDismissed] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
+  const showScoreTooltip =
+    scoreTooltipPinned || (!scoreTooltipDismissed && (scoreTooltipHovered || scoreTooltipFocused))
+
+  const validCombinedPnl = finiteMetric(combinedPnl)
+  const validBestRoi = bestRoi && finiteMetric(bestRoi.value) != null ? bestRoi : null
+  const finiteWeightedScore = finiteMetric(weightedScore)
+  const validWeightedScore =
+    finiteWeightedScore == null ? null : boundedPercent(finiteWeightedScore)
+  const combinedPnlColor = signedMetricColor(validCombinedPnl)
+  const bestRoiColor = signedMetricColor(validBestRoi?.value ?? null)
+  const weightedScoreColor =
+    validWeightedScore == null ? tokens.colors.text.tertiary : getScoreColor(validWeightedScore)
 
   // Find max |pnl| for bar chart scaling
-  const maxAbsPnl = Math.max(...accounts.map((a) => Math.abs(a.pnl ?? 0)), 1)
+  const maxAbsPnl = Math.max(
+    ...accounts.map((account) => Math.abs(finiteMetric(account.pnl) ?? 0)),
+    1
+  )
 
   return (
     <Box
@@ -57,6 +96,7 @@ export default function AggregatedStats({
       {/* Header */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <svg
+          aria-hidden="true"
           width="16"
           height="16"
           viewBox="0 0 24 24"
@@ -91,10 +131,10 @@ export default function AggregatedStats({
         {/* Combined PnL */}
         <Box
           style={{
-            background: `${alpha(combinedPnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error, 3)}`,
+            background: `${alpha(combinedPnlColor, 3)}`,
             borderRadius: tokens.radius.lg,
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            border: `1px solid ${alpha(combinedPnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error, 13)}`,
+            border: `1px solid ${alpha(combinedPnlColor, 13)}`,
           }}
         >
           <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
@@ -104,70 +144,58 @@ export default function AggregatedStats({
             size="lg"
             weight="black"
             style={{
-              color: combinedPnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+              color: combinedPnlColor,
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
               letterSpacing: '-0.02em',
             }}
           >
-            {formatPnL(combinedPnl)}
+            {formatPnL(validCombinedPnl)}
           </Text>
         </Box>
 
         {/* Best ROI — frame follows the value's sign (success/error) so the card
             shows one signal accent instead of a purple frame fighting a green/red
             number. */}
-        {(() => {
-          const roiColor = bestRoi
-            ? bestRoi.value >= 0
-              ? tokens.colors.accent.success
-              : tokens.colors.accent.error
-            : tokens.colors.border.primary
-          return (
-            <Box
-              style={{
-                background: `${alpha(roiColor, 3)}`,
-                borderRadius: tokens.radius.lg,
-                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                border: `1px solid ${alpha(roiColor, 13)}`,
-              }}
-            >
-              <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
-                {t('traderBestRoi')}
+        <Box
+          style={{
+            background: `${alpha(bestRoiColor, 3)}`,
+            borderRadius: tokens.radius.lg,
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            border: `1px solid ${alpha(bestRoiColor, 13)}`,
+          }}
+        >
+          <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
+            {t('traderBestRoi')}
+          </Text>
+          {validBestRoi ? (
+            <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Text
+                size="lg"
+                weight="black"
+                style={{
+                  color: bestRoiColor,
+                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                {formatROI(validBestRoi.value)}
               </Text>
-              {bestRoi ? (
-                <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Text
-                    size="lg"
-                    weight="black"
-                    style={{
-                      color:
-                        bestRoi.value >= 0
-                          ? tokens.colors.accent.success
-                          : tokens.colors.accent.error,
-                      fontFamily: tokens.typography.fontFamily.mono.join(', '),
-                      letterSpacing: '-0.02em',
-                    }}
-                  >
-                    {formatROI(bestRoi.value)}
-                  </Text>
-                  <ExchangeLogo exchange={bestRoi.platform} size={14} />
-                </Box>
-              ) : (
-                <Text size="lg" weight="black" style={{ color: tokens.colors.text.tertiary }}>
-                  --
-                </Text>
-              )}
+              <ExchangeLogo exchange={validBestRoi.platform} size={14} />
             </Box>
-          )
-        })()}
+          ) : (
+            <Text size="lg" weight="black" style={{ color: tokens.colors.text.tertiary }}>
+              {NULL_DISPLAY}
+            </Text>
+          )}
+        </Box>
 
         {/* Weighted Score with tooltip */}
         <Box
           style={{
-            background: `${alpha(getScoreColor(weightedScore), 3)}`,
+            background: `${alpha(weightedScoreColor, 3)}`,
             borderRadius: tokens.radius.lg,
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            border: `1px solid ${alpha(getScoreColor(weightedScore), 13)}`,
+            border: `1px solid ${alpha(weightedScoreColor, 13)}`,
             position: 'relative',
           }}
         >
@@ -176,9 +204,40 @@ export default function AggregatedStats({
               {t('traderWeightedScore')}
             </Text>
             <button
-              onClick={() => setShowScoreTooltip(!showScoreTooltip)}
-              onMouseEnter={() => setShowScoreTooltip(true)}
-              onMouseLeave={() => setShowScoreTooltip(false)}
+              type="button"
+              onClick={() => {
+                if (scoreTooltipPinned) {
+                  setScoreTooltipPinned(false)
+                  setScoreTooltipDismissed(true)
+                } else {
+                  setScoreTooltipPinned(true)
+                  setScoreTooltipDismissed(false)
+                }
+              }}
+              onMouseEnter={() => {
+                setScoreTooltipHovered(true)
+                setScoreTooltipDismissed(false)
+              }}
+              onMouseLeave={() => {
+                setScoreTooltipHovered(false)
+                if (!scoreTooltipFocused) setScoreTooltipDismissed(false)
+              }}
+              onFocus={() => {
+                setScoreTooltipFocused(true)
+                setScoreTooltipDismissed(false)
+              }}
+              onBlur={() => {
+                setScoreTooltipFocused(false)
+                setScoreTooltipPinned(false)
+                setScoreTooltipDismissed(scoreTooltipHovered)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setScoreTooltipPinned(false)
+                  setScoreTooltipDismissed(true)
+                  event.currentTarget.blur()
+                }
+              }}
               style={{
                 background: 'none',
                 border: 'none',
@@ -188,9 +247,12 @@ export default function AggregatedStats({
                 alignItems: 'center',
                 color: tokens.colors.text.tertiary,
               }}
-              aria-label="Score info"
+              aria-label={t('traderWeightedScore')}
+              aria-expanded={showScoreTooltip}
+              aria-describedby={showScoreTooltip ? scoreTooltipId : undefined}
             >
               <svg
+                aria-hidden="true"
                 width="12"
                 height="12"
                 viewBox="0 0 24 24"
@@ -210,16 +272,18 @@ export default function AggregatedStats({
             size="lg"
             weight="black"
             style={{
-              color: getScoreColor(weightedScore),
+              color: weightedScoreColor,
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
               letterSpacing: '-0.02em',
             }}
           >
-            {weightedScore != null ? weightedScore.toFixed(1) : '—'}
+            {validWeightedScore != null ? validWeightedScore.toFixed(1) : NULL_DISPLAY}
           </Text>
           {/* Tooltip */}
           {showScoreTooltip && (
             <Box
+              id={scoreTooltipId}
+              role="tooltip"
               style={{
                 position: 'absolute',
                 bottom: '100%',
@@ -250,9 +314,10 @@ export default function AggregatedStats({
           {t('traderPnlBreakdown')}
         </Text>
         {accounts.map((account) => {
-          const pnl = account.pnl ?? 0
-          const barWidth = Math.max((Math.abs(pnl) / maxAbsPnl) * 100, 2)
-          const isPositive = pnl >= 0
+          const pnl = finiteMetric(account.pnl)
+          const barWidth =
+            pnl == null || pnl === 0 ? 0 : Math.max((Math.abs(pnl) / maxAbsPnl) * 100, 2)
+          const pnlColor = signedMetricColor(pnl)
           const label = account.label || EXCHANGE_NAMES[account.platform] || account.platform
 
           return (
@@ -288,9 +353,10 @@ export default function AggregatedStats({
                     height: '100%',
                     width: `${barWidth}%`,
                     borderRadius: 3,
-                    background: isPositive
-                      ? `linear-gradient(90deg, ${alpha(tokens.colors.accent.success, 50)}, ${tokens.colors.accent.success})`
-                      : `linear-gradient(90deg, ${alpha(tokens.colors.accent.error, 50)}, ${tokens.colors.accent.error})`,
+                    background:
+                      pnl == null || pnl === 0
+                        ? pnlColor
+                        : `linear-gradient(90deg, ${alpha(pnlColor, 50)}, ${pnlColor})`,
                     transition: 'width 0.5s ease',
                   }}
                 />
@@ -299,7 +365,7 @@ export default function AggregatedStats({
                 size="xs"
                 weight="bold"
                 style={{
-                  color: isPositive ? tokens.colors.accent.success : tokens.colors.accent.error,
+                  color: pnlColor,
                   fontFamily: tokens.typography.fontFamily.mono.join(', '),
                   width: 65,
                   textAlign: 'right',
@@ -316,7 +382,10 @@ export default function AggregatedStats({
       {/* Compare Accounts button */}
       {accounts.length >= 2 && (
         <button
+          type="button"
           onClick={() => setShowComparison(!showComparison)}
+          aria-expanded={showComparison}
+          aria-controls={comparisonTableId}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -336,6 +405,7 @@ export default function AggregatedStats({
           }}
         >
           <svg
+            aria-hidden="true"
             width="14"
             height="14"
             viewBox="0 0 24 24"
@@ -351,6 +421,7 @@ export default function AggregatedStats({
           </svg>
           {t('traderCompareAccounts')}
           <svg
+            aria-hidden="true"
             width="12"
             height="12"
             viewBox="0 0 24 24"
@@ -372,6 +443,7 @@ export default function AggregatedStats({
       {/* Comparison table */}
       {showComparison && accounts.length >= 2 && (
         <Box
+          id={comparisonTableId}
           className="comparison-table-scroll"
           style={{
             overflowX: 'auto',
@@ -387,6 +459,7 @@ export default function AggregatedStats({
               minWidth: accounts.length > 2 ? 500 : undefined,
             }}
           >
+            <caption className="sr-only">{t('traderCompareAccounts')}</caption>
             <thead>
               <tr style={{ background: tokens.colors.bg.tertiary }}>
                 <th
@@ -433,6 +506,7 @@ export default function AggregatedStats({
                 getValue={(a) => a.roi}
                 format={(v) => formatROI(v)}
                 higherIsBetter
+                bestLabel={t('compareBestValue')}
               />
               {/* PnL */}
               <ComparisonRow
@@ -441,6 +515,7 @@ export default function AggregatedStats({
                 getValue={(a) => a.pnl}
                 format={(v) => formatPnL(v)}
                 higherIsBetter
+                bestLabel={t('compareBestValue')}
               />
               {/* Arena Score */}
               <ComparisonRow
@@ -449,6 +524,9 @@ export default function AggregatedStats({
                 getValue={(a) => a.arenaScore}
                 format={(v) => v.toFixed(0)}
                 higherIsBetter
+                normalizeValue={boundedPercent}
+                valueColor={getScoreColor}
+                bestLabel={t('compareBestValue')}
               />
               {/* Win Rate */}
               <ComparisonRow
@@ -457,14 +535,22 @@ export default function AggregatedStats({
                 getValue={(a) => a.winRate ?? null}
                 format={(v) => `${v.toFixed(1)}%`}
                 higherIsBetter
+                normalizeValue={boundedPercent}
+                valueColor={() => tokens.colors.text.primary}
+                bestLabel={t('compareBestValue')}
               />
               {/* Max Drawdown */}
               <ComparisonRow
                 label={t('maxDrawdown')}
                 accounts={accounts}
                 getValue={(a) => a.maxDrawdown ?? null}
-                format={(v) => `${v.toFixed(1)}%`}
+                format={formatDrawdown}
                 higherIsBetter={false}
+                normalizeValue={normalizeDrawdownMagnitude}
+                valueColor={(value) =>
+                  value === 0 ? tokens.colors.text.tertiary : tokens.colors.accent.error
+                }
+                bestLabel={t('compareBestValue')}
               />
             </tbody>
           </table>
@@ -490,49 +576,66 @@ function ComparisonRow({
   getValue,
   format,
   higherIsBetter,
+  normalizeValue,
+  valueColor,
+  bestLabel,
 }: {
   label: string
   accounts: AggregatedAccount[]
   getValue: (a: AggregatedAccount) => number | null | undefined
   format: (v: number) => string
   higherIsBetter: boolean
+  normalizeValue?: (v: number) => number | null
+  valueColor?: (v: number) => string
+  bestLabel: string
 }) {
-  const values = accounts.map((a) => getValue(a) ?? null)
-  const validValues = values.filter((v): v is number => v !== null)
+  const values = accounts.map((account) => {
+    const rawValue = finiteMetric(getValue(account))
+    if (rawValue == null) return null
+    return normalizeValue ? normalizeValue(rawValue) : rawValue
+  })
+  const validValues = values.filter((value): value is number => value !== null)
   const bestValue =
     validValues.length > 0
       ? higherIsBetter
         ? Math.max(...validValues)
         : Math.min(...validValues)
       : null
+  const hasUniqueBest =
+    bestValue != null && validValues.filter((value) => value === bestValue).length === 1
 
   return (
     <tr style={{ borderTop: `1px solid ${alpha(tokens.colors.border.primary, 25)}` }}>
       <td style={{ padding: '8px 12px', color: tokens.colors.text.tertiary, fontSize: 12 }}>
         {label}
       </td>
-      {values.map((v, i) => {
-        const isBest = v !== null && bestValue !== null && v === bestValue && validValues.length > 1
+      {values.map((value, index) => {
+        const account = accounts[index]
+        const isBest =
+          value !== null &&
+          bestValue !== null &&
+          value === bestValue &&
+          validValues.length > 1 &&
+          hasUniqueBest
         const color =
-          v === null
+          value === null
             ? tokens.colors.text.tertiary
-            : v >= 0
-              ? tokens.colors.accent.success
-              : tokens.colors.accent.error
+            : valueColor?.(value) || signedMetricColor(value)
         return (
           <td
-            key={i}
+            key={`${account.platform}:${account.traderKey}`}
             style={{
               padding: '8px 12px',
               textAlign: 'right',
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
               fontWeight: isBest ? 700 : 500,
-              color: isBest ? tokens.colors.accent.success : color,
+              color,
               fontSize: 13,
-              background: isBest ? `${alpha(tokens.colors.accent.success, 3)}` : undefined,
+              background: isBest ? `${alpha(tokens.colors.accent.primary, 6)}` : undefined,
             }}
           >
-            {v !== null ? format(v) : '—'}
+            {value !== null ? format(value) : NULL_DISPLAY}
+            {isBest && <span className="sr-only"> {bestLabel}</span>}
           </td>
         )
       })}

@@ -97,7 +97,7 @@ describe('TraderComparison score bars', () => {
       const cells = within(rowHeader.closest('tr')!).getAllByRole('cell')
       expect(cells).toHaveLength(3)
       expect(cells[0]).toHaveTextContent(/^0\.0%?/)
-      expect(within(cells[0]).getByText('compareBestValue')).toBeInTheDocument()
+      expect(within(cells[0]).queryByText('compareBestValue')).not.toBeInTheDocument()
       expect(cells[1]).toHaveTextContent('—')
       expect(cells[2]).toHaveTextContent('—')
       expect(within(cells[1]).queryByText('compareBestValue')).not.toBeInTheDocument()
@@ -202,5 +202,48 @@ describe('TraderComparison maximum drawdown', () => {
     expect(within(cells[0]).queryByText('compareBestValue')).not.toBeInTheDocument()
     expect(within(cells[1]).getByText('compareBestValue')).toBeInTheDocument()
     expect(within(cells[2]).queryByText('compareBestValue')).not.toBeInTheDocument()
+  })
+
+  it('does not crown tied magnitudes or a lone trusted value', () => {
+    const { rerender } = render(
+      <TraderComparison
+        traders={[
+          { id: 'positive-12', handle: 'Positive 12', source: 'bybit', roi: 0, max_drawdown: 12 },
+          { id: 'negative-12', handle: 'Negative 12', source: 'bybit', roi: 0, max_drawdown: -12 },
+          { id: 'positive-20', handle: 'Positive 20', source: 'bybit', roi: 0, max_drawdown: 20 },
+        ]}
+        showRemoveButton={false}
+      />
+    )
+
+    let rowHeader = screen.getByRole('rowheader', { name: 'compareMDD' })
+    let cells = within(rowHeader.closest('tr')!).getAllByRole('cell')
+    for (const cell of cells) {
+      expect(within(cell).queryByText('compareBestValue')).not.toBeInTheDocument()
+    }
+
+    rerender(
+      <TraderComparison
+        traders={[
+          { id: 'trusted', handle: 'Trusted', source: 'bybit', roi: 0, max_drawdown: 5 },
+          { id: 'missing', handle: 'Missing', source: 'bybit', roi: 0, max_drawdown: null },
+          {
+            id: 'invalid',
+            handle: 'Invalid',
+            source: 'bybit',
+            roi: 0,
+            max_drawdown: Number.NaN,
+          },
+        ]}
+        showRemoveButton={false}
+      />
+    )
+
+    rowHeader = screen.getByRole('rowheader', { name: 'compareMDD' })
+    cells = within(rowHeader.closest('tr')!).getAllByRole('cell')
+    expect(cells[0]).toHaveTextContent('-5.0%')
+    for (const cell of cells) {
+      expect(within(cell).queryByText('compareBestValue')).not.toBeInTheDocument()
+    }
   })
 })
