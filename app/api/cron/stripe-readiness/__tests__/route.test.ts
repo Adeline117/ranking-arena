@@ -62,6 +62,9 @@ const readyEntitlementAuthority = {
   projection_drift: 0,
   notification_delivery_anomalies: 0,
   authority_drift: 0,
+  api_tier_payment_ownership_anomalies: 0,
+  api_tier_payment_backfill_incomplete: 0,
+  api_tier_reversal_actions_incomplete: 0,
 }
 
 function chainable(result: { count: number | null; error: null | { message: string } }) {
@@ -271,6 +274,40 @@ describe('GET /api/cron/stripe-readiness', () => {
       data: { ...readyEntitlementAuthority, notification_delivery_anomalies: -1 },
       error: null,
     })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Stripe entitlement authority readiness contract is invalid')
+  })
+
+  it('fails closed while API tier ownership backfill or reversals are incomplete', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        ...readyEntitlementAuthority,
+        status: 'blocked',
+        api_tier_payment_ownership_anomalies: 1,
+        api_tier_payment_backfill_incomplete: 2,
+        api_tier_reversal_actions_incomplete: 3,
+      },
+      error: null,
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.paidLaunchReady).toBe(false)
+    expect(body.failures).toContain(
+      'Stripe entitlement authority is blocked: api_tier_payment_ownership_anomalies=1, api_tier_payment_backfill_incomplete=2, api_tier_reversal_actions_incomplete=3'
+    )
+  })
+
+  it('rejects a readiness payload that omits an API tier reversal gate', async () => {
+    const { api_tier_reversal_actions_incomplete: _omitted, ...incompleteReadiness } =
+      readyEntitlementAuthority
+    mockRpc.mockResolvedValue({ data: incompleteReadiness, error: null })
 
     const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
     const body = await response.json()

@@ -8,7 +8,7 @@
  *
  * 当前金丝雀在 PostgreSQL READ ONLY 事务里验证：
  *   1. exact payment/trial/grant schema 与 readiness function 已部署；
- *   2. stripe_paid_launch_readiness_v2 返回精确十键契约且状态为 ready；
+ *   2. stripe_paid_launch_readiness_v2 返回精确十三键契约且状态为 ready；
  *   3. webhook 没有 failed/stale 事件；
  *   4. entitlement effect worker 在 20 分钟内有成功心跳。
  *
@@ -35,6 +35,9 @@ const READINESS_KEYS = [
   'projection_drift',
   'notification_delivery_anomalies',
   'authority_drift',
+  'api_tier_payment_ownership_anomalies',
+  'api_tier_payment_backfill_incomplete',
+  'api_tier_reversal_actions_incomplete',
 ].sort()
 
 function parseReadiness(value) {

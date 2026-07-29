@@ -16,7 +16,7 @@ ArenaFi 的 B2C Pro **尚未开始真实收费，当前支付入口必须保持�
 - 测试价格已与产品唯一口径一致：月付 `$4.99`、年付 `$29.99`、终身 `$49.99`。
 - Checkout 会在创建 Customer/Session 前验证 Price、Product、币种、金额、周期和 test/live mode；未知 Price 不授予 Pro。
 - webhook 使用可重试状态机；业务处理失败不会再被误记为“已处理”。`20260718183000` entitlement authority 与 `20260718183500` NULL fail-closed 加固已经作为 PREDEPLOY 落库，但最终撤销旧 RPC、封禁 direct DML 的 Stripe POSTDEPLOY 尚未在仓库中实现或分配迁移版本，仍是付费上线硬阻断。当前 `20260718184000` 是榜单 `board_as_of` 水位迁移，与 Stripe 切换无关。
-- 每日 `stripe-readiness` 金丝雀检查三档 B2C 价格、密钥模式、webhook 事件契约、失败或卡住的 webhook 事件，以及数据库权威函数 `stripe_paid_launch_readiness_v2()` 的精确九键契约。九键必须包含 `unresolved_refund_tombstones`，任何未合并的 Charge 退款墓碑都必须阻断付费开放。
+- 每日 `stripe-readiness` 金丝雀检查三档 B2C 价格、密钥模式、webhook 事件契约、失败或卡住的 webhook 事件，以及数据库权威函数 `stripe_paid_launch_readiness_v2()` 的精确十三键契约。十三键必须同时包含 `unresolved_refund_tombstones`、API 套餐付款 ownership、backfill 和 reversal 阻断项；任何未合并的 Charge 退款墓碑、付款归属异常或未完成逆向动作都必须阻断付费开放。
 
 因此当前状态是 **paid launch blocked by design**。不能把 test Price、test Customer 或其他 Stripe account/mode 的对象直接搬到 live mode，也不能仅补一个环境变量就开始收费。
 

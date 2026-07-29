@@ -43,6 +43,9 @@ const ENTITLEMENT_READINESS_METRIC_KEYS = [
   'projection_drift',
   'notification_delivery_anomalies',
   'authority_drift',
+  'api_tier_payment_ownership_anomalies',
+  'api_tier_payment_backfill_incomplete',
+  'api_tier_reversal_actions_incomplete',
 ] as const
 
 export const STRIPE_PAID_READINESS_KEYS = ['status', ...ENTITLEMENT_READINESS_METRIC_KEYS] as const
@@ -119,6 +122,9 @@ function parseStripePaidReadiness(value: unknown): StripePaidReadiness | null {
     projection_drift: record.projection_drift as number,
     notification_delivery_anomalies: record.notification_delivery_anomalies as number,
     authority_drift: record.authority_drift as number,
+    api_tier_payment_ownership_anomalies: record.api_tier_payment_ownership_anomalies as number,
+    api_tier_payment_backfill_incomplete: record.api_tier_payment_backfill_incomplete as number,
+    api_tier_reversal_actions_incomplete: record.api_tier_reversal_actions_incomplete as number,
   }
 }
 
