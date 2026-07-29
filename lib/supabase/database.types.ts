@@ -11562,6 +11562,16 @@ export type Database = {
         }
         Returns: Json
       }
+      get_group_edit_applications_page_atomic: {
+        Args: {
+          p_actor_id: string
+          p_before_created_at: string | null
+          p_before_id: string | null
+          p_group_id: string
+          p_limit: number
+        }
+        Returns: Json
+      }
       get_hero_stats: {
         Args: never
         Returns: {
