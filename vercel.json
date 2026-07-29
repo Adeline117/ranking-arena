@@ -76,6 +76,10 @@
       "schedule": "45 7 * * *"
     },
     {
+      "path": "/api/cron/stripe-entitlement-effects",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/fetch-market-data?type=prices",
       "schedule": "14 */4 * * *"
     },
