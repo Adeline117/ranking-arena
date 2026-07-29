@@ -1,16 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
 import { getLeaderboard } from '@/lib/data/unified'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  PUBLIC_RANKING_QUARANTINED_SOURCES,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
-
-export const PORTFOLIO_SUGGESTION_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
+import { PUBLIC_RANKING_QUARANTINED_SOURCES } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 /**
  * Read the candidate pool from one immutable public 90D generation.
@@ -20,17 +12,18 @@ export const PORTFOLIO_SUGGESTION_SOURCES = Object.freeze(
  */
 export async function readSealedPortfolioSuggestionPool(supabase: SupabaseClient<Database>) {
   return (
-    await readSealedRankingGeneration(
+    await readSealedRankingAuthorityGeneration(
       supabase,
-      { season: '90D', sources: PORTFOLIO_SUGGESTION_SOURCES },
+      '90D',
       async (publication) => {
+        const authoritySources = publication.proofs.map((proof) => proof.source)
         const result = await getLeaderboard(supabase, {
           period: '90D',
           limit: 200,
           sortBy: 'roi',
           excludeOutliers: true,
           scoreCohortId: publication.scoreCohortId,
-          allowedSources: PORTFOLIO_SUGGESTION_SOURCES,
+          allowedSources: authoritySources,
           excludeSources: PUBLIC_RANKING_QUARANTINED_SOURCES,
         })
         if (result.error) {

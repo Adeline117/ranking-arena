@@ -7,26 +7,25 @@ jest.mock('@/lib/cache/redis-layer', () => ({
   tieredDel: (...args: unknown[]) => mockTieredDel(...args),
 }))
 
-const mockReadSealedRankingGeneration = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
-  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
   sealedRankingPublicationIdentity: (publication: unknown) => JSON.stringify(publication),
 }))
 
 import { createSealedRankingCacheEntry } from '@/lib/rankings/sealed-ranking-cache'
-import {
-  readV3PlatformCounts,
-  V3_PLATFORM_COUNT_SOURCES,
-} from '@/lib/rankings/read-v3-platform-counts'
+import { readV3PlatformCounts } from '@/lib/rankings/read-v3-platform-counts'
 
 const COHORT_ID = '11111111-1111-4111-8111-111111111111'
+const DYNAMIC_AUTHORITY_SOURCES = ['binance_futures', 'gtrade']
 
 function publication() {
   return {
     state: 'sealed' as const,
     season: '90D' as const,
     scoreCohortId: COHORT_ID,
-    proofs: V3_PLATFORM_COUNT_SOURCES.map((source, index) => ({
+    proofs: DYNAMIC_AUTHORITY_SOURCES.map((source, index) => ({
       season_id: '90D' as const,
       source,
       source_as_of: '2026-07-29T09:00:00.000000Z',
@@ -42,7 +41,7 @@ function publication() {
 }
 
 function countMap() {
-  return Object.fromEntries(V3_PLATFORM_COUNT_SOURCES.map((source, index) => [source, index]))
+  return Object.fromEntries(DYNAMIC_AUTHORITY_SOURCES.map((source, index) => [source, index]))
 }
 
 describe('readV3PlatformCounts', () => {
@@ -51,10 +50,10 @@ describe('readV3PlatformCounts', () => {
     mockTieredGet.mockResolvedValue({ data: null, layer: null })
     mockTieredSet.mockResolvedValue(true)
     mockTieredDel.mockResolvedValue(undefined)
-    mockReadSealedRankingGeneration.mockImplementation(
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(
       async (
         _client: unknown,
-        _input: unknown,
+        _season: unknown,
         reader: (proof: ReturnType<typeof publication>) => Promise<unknown>
       ) => {
         const proof = publication()
@@ -70,16 +69,16 @@ describe('readV3PlatformCounts', () => {
   it('derives and caches every platform count from one sealed 90D proof set', async () => {
     const counts = await readV3PlatformCounts({} as never)
 
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledWith(
       {},
-      { season: '90D', sources: V3_PLATFORM_COUNT_SOURCES },
+      '90D',
       expect.any(Function),
       { timeoutMs: 10_000 }
     )
-    expect(counts[V3_PLATFORM_COUNT_SOURCES[0]]).toBe(0)
-    expect(counts[V3_PLATFORM_COUNT_SOURCES.at(-1)!]).toBe(V3_PLATFORM_COUNT_SOURCES.length - 1)
+    expect(counts[DYNAMIC_AUTHORITY_SOURCES[0]]).toBe(0)
+    expect(counts[DYNAMIC_AUTHORITY_SOURCES.at(-1)!]).toBe(DYNAMIC_AUTHORITY_SOURCES.length - 1)
     expect(mockTieredSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v4:api-v3-platform-counts-sealed-v2:/),
+      expect.stringMatching(/^public-rank-policy-v4:api-v3-platform-counts-sealed-v3:/),
       expect.objectContaining({ contract: 'sealed-ranking-cache@1' }),
       'cold',
       ['rankings']
@@ -98,7 +97,7 @@ describe('readV3PlatformCounts', () => {
     const counts = await readV3PlatformCounts({} as never)
 
     expect(counts).toEqual(countMap())
-    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
+    expect(mockReadSealedRankingAuthorityGeneration).not.toHaveBeenCalled()
     expect(mockTieredDel).not.toHaveBeenCalled()
     expect(mockTieredSet).not.toHaveBeenCalled()
   })
@@ -112,9 +111,9 @@ describe('readV3PlatformCounts', () => {
     const counts = await readV3PlatformCounts({} as never)
 
     expect(mockTieredDel).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v4:api-v3-platform-counts-sealed-v2:/)
+      expect.stringMatching(/^public-rank-policy-v4:api-v3-platform-counts-sealed-v3:/)
     )
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(1)
-    expect(counts[V3_PLATFORM_COUNT_SOURCES[0]]).toBe(0)
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
+    expect(counts[DYNAMIC_AUTHORITY_SOURCES[0]]).toBe(0)
   })
 })

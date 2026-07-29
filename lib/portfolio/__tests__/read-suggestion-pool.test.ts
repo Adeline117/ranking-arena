@@ -3,18 +3,17 @@ jest.mock('@/lib/data/unified', () => ({
   getLeaderboard: (...args: unknown[]) => mockGetLeaderboard(...args),
 }))
 
-const mockReadSealedRankingGeneration = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
-  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
 }))
 
 import { PUBLIC_RANKING_QUARANTINED_SOURCES } from '@/lib/rankings/publication-policy'
-import {
-  PORTFOLIO_SUGGESTION_SOURCES,
-  readSealedPortfolioSuggestionPool,
-} from '@/lib/portfolio/read-suggestion-pool'
+import { readSealedPortfolioSuggestionPool } from '@/lib/portfolio/read-suggestion-pool'
 
 const COHORT_ID = '11111111-1111-4111-8111-111111111111'
+const DYNAMIC_AUTHORITY_SOURCES = ['binance_futures', 'gtrade']
 
 describe('readSealedPortfolioSuggestionPool', () => {
   beforeEach(() => {
@@ -23,13 +22,19 @@ describe('readSealedPortfolioSuggestionPool', () => {
       traders: [{ traderKey: 'trader-1' }],
       total: 1,
     })
-    mockReadSealedRankingGeneration.mockImplementation(
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(
       async (
         _client: unknown,
-        _input: unknown,
-        reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+        _season: unknown,
+        reader: (publication: {
+          scoreCohortId: string
+          proofs: Array<{ source: string }>
+        }) => Promise<unknown>
       ) => ({
-        value: await reader({ scoreCohortId: COHORT_ID }),
+        value: await reader({
+          scoreCohortId: COHORT_ID,
+          proofs: DYNAMIC_AUTHORITY_SOURCES.map((source) => ({ source })),
+        }),
       })
     )
   })
@@ -40,9 +45,9 @@ describe('readSealedPortfolioSuggestionPool', () => {
     await expect(readSealedPortfolioSuggestionPool(supabase)).resolves.toEqual([
       { traderKey: 'trader-1' },
     ])
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledWith(
       supabase,
-      { season: '90D', sources: PORTFOLIO_SUGGESTION_SOURCES },
+      '90D',
       expect.any(Function),
       { timeoutMs: 15_000 }
     )
@@ -52,7 +57,7 @@ describe('readSealedPortfolioSuggestionPool', () => {
       sortBy: 'roi',
       excludeOutliers: true,
       scoreCohortId: COHORT_ID,
-      allowedSources: PORTFOLIO_SUGGESTION_SOURCES,
+      allowedSources: DYNAMIC_AUTHORITY_SOURCES,
       excludeSources: PUBLIC_RANKING_QUARANTINED_SOURCES,
     })
   })
