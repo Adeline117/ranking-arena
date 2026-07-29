@@ -27,23 +27,28 @@ describe('public ranking freshness route contracts', () => {
     expect(v2).toContain('updated_at: freshnessSummary.asOf')
   })
 
-  it('composite cache joins source watermarks and does not discard stale last-good ranks', () => {
+  it('composite cache uses sealed publication proof watermarks', () => {
     const route = source('app/api/cron/precompute-composite/route.ts')
 
-    expect(route).toContain('LEFT JOIN leaderboard_source_freshness AS freshness')
-    expect(route).toContain('freshness.source_as_of AS as_of_ts')
+    expect(route).toContain('readSealedCompositePublicationFence')
+    expect(route).toContain('ranks.rank_publication_id = $2::uuid')
+    expect(route).toContain('ranks.source = ANY($3::text[])')
+    expect(route).toContain('as_of_ts: proof.source_as_of')
+    expect(route).toContain('await publicationFence.verifyStillCurrent()')
+    expect(route).toContain('createSealedCompositeCacheEntry')
+    expect(route).toContain("const COMPOSITE_CACHE_VERSION = 'v3'")
+    expect(route).not.toContain('leaderboard_source_freshness AS freshness')
     expect(route).not.toContain('computed_at >= $2')
-    expect(route).toContain("publicRankingCacheKey('precomputed:composite:all:v2')")
   })
 
   it('SSR derives its timestamp from the complete live source generation', () => {
     const ssr = source('lib/getInitialTraders.ts')
 
-    expect(ssr).toContain('readSealedRankingGeneration(')
+    expect(ssr).toContain('readSealedRankingAuthorityGeneration(')
     expect(ssr).toContain('publication.scoreCohortId')
     expect(ssr).toContain('publication.proofs')
     expect(ssr).toContain('categoryCountsFromPublication(publication)')
-    expect(ssr).toContain('home-initial-traders-sealed-v5')
+    expect(ssr).toContain('home-initial-traders-sealed-v6')
   })
 
   it('homepage carries the SSR stale flag into the interactive freshness state', () => {
