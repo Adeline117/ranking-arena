@@ -9256,6 +9256,9 @@ export type Database = {
           exchange: string
           id: string
           label: string | null
+          last_synced_at: string | null
+          published_sync_generation: number
+          sync_generation: number
           user_id: string
         }
         Insert: {
@@ -9266,6 +9269,9 @@ export type Database = {
           exchange: string
           id?: string
           label?: string | null
+          last_synced_at?: string | null
+          published_sync_generation?: number
+          sync_generation?: number
           user_id: string
         }
         Update: {
@@ -9276,6 +9282,9 @@ export type Database = {
           exchange?: string
           id?: string
           label?: string | null
+          last_synced_at?: string | null
+          published_sync_generation?: number
+          sync_generation?: number
           user_id?: string
         }
         Relationships: []
@@ -10001,6 +10010,10 @@ export type Database = {
         }
         Returns: Json
       }
+      claim_portfolio_sync_generation_atomic: {
+        Args: { p_actor_id: string; p_portfolio_id: string }
+        Returns: Json
+      }
       finish_api_tier_payment_backfill_target_atomic: {
         Args: {
           p_error: string | null
@@ -10025,6 +10038,19 @@ export type Database = {
       }
       project_api_tier_financial_reversal_atomic: {
         Args: { p_ownership_id: string; p_should_revoke: boolean }
+        Returns: Json
+      }
+      publish_portfolio_sync_atomic: {
+        Args: {
+          p_actor_id: string
+          p_generation: number
+          p_portfolio_id: string
+          p_positions: Json
+          p_synced_at: string
+          p_total_equity: number
+          p_total_pnl: number
+          p_total_pnl_pct: number
+        }
         Returns: Json
       }
       record_api_tier_dispute_reversal_atomic: {
