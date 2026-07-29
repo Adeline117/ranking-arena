@@ -180,9 +180,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729142149_atomic_group_member_role_change.sql',
     '20260729145000_atomic_group_comment_moderation.sql',
     '20260729150500_atomic_group_post_moderation.sql',
+    '20260729152500_atomic_group_channel_page.sql',
   ]
 
-  assert.equal(predeploy.length, 139)
+  assert.equal(predeploy.length, 140)
   assert.ok(predeploy.includes(accountHardDeleteRecoveryBarrierMigration))
   assert.ok(predeploy.includes(verifiedAuthProfileEmailMigration))
   assert.ok(predeploy.includes(accountRecoveryAuthEmailMigration))
@@ -320,7 +321,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 158)
+  assert.equal(new Set(all).size, 159)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -462,7 +463,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-98), [
+  assert.deepEqual(predeploy.slice(-99), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -654,7 +655,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     predeploy.indexOf(exchangeOAuthStateClaimMigration) >
       predeploy.indexOf(stripeWebhookLeaseMigration)
   )
-  assert.deepEqual(predeploy.slice(-27), [
+  assert.deepEqual(predeploy.slice(-28), [
     '20260729059000_atomic_referral_attribution.sql',
     '20260729060000_retryable_referral_qualification.sql',
     '20260729061000_source_legacy_platform_alias_contract.sql',
