@@ -9,6 +9,10 @@ const runner = readFileSync(
   join(process.cwd(), 'scripts/maintenance/apply-launch-migrations.sh'),
   'utf8'
 )
+const pg17Proof = readFileSync(
+  join(process.cwd(), 'supabase/migrations/__tests__/sealed-composite-rankings-rpc.pg17.sh'),
+  'utf8'
+)
 
 describe('sealed composite rankings RPC', () => {
   it('is registered as an ordered predeploy migration', () => {
@@ -74,5 +78,18 @@ describe('sealed composite rankings RPC', () => {
     expect(migration).toMatch(
       /GRANT EXECUTE ON FUNCTION public\.arena_read_composite_rankings_v1\([\s\S]*?\) TO service_role;/
     )
+  })
+
+  it('ships a reproducible PostgreSQL 17 behavioral and bounded-plan proof', () => {
+    expect(pg17Proof).toContain("EXPECTED_WEIGHTED='1:alice:90:80:70:73.5:")
+    expect(pg17Proof).toContain('wrong 7D cohort')
+    expect(pg17Proof).toContain('wrong 30D cohort')
+    expect(pg17Proof).toContain('wrong 90D cohort')
+    expect(pg17Proof).toContain('invented authority')
+    expect(pg17Proof).toContain("WHEN SQLSTATE '22000'")
+    expect(pg17Proof).toContain("SET LOCAL statement_timeout = '50ms'")
+    expect(pg17Proof).toContain('pg_catalog.generate_series(1, 2000)')
+    expect(pg17Proof).toContain('EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, FORMAT JSON)')
+    expect(pg17Proof).toContain('v_execution_ms > 5000')
   })
 })
