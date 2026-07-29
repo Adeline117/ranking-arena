@@ -14,10 +14,92 @@ import {
 } from '@/lib/api'
 import logger from '@/lib/logger'
 import { syncExchangePortfolio } from '@/lib/portfolio/exchange-sync'
+import type { Json } from '@/lib/supabase/database.types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 30
+
+type PortfolioSyncClaim = {
+  status: 'claimed'
+  portfolioId: string
+  generation: number
+}
+
+type PortfolioSyncPublication =
+  | {
+      status: 'published'
+      portfolioId: string
+      generation: number
+      positionCount: number
+      syncedAt: string
+    }
+  | {
+      status: 'superseded'
+      generation: number
+      currentGeneration: number
+    }
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && !Array.isArray(value) && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function parseSyncClaim(value: unknown): PortfolioSyncClaim | 'not_found' | null {
+  const result = record(value)
+  if (!result) return null
+  if (result.status === 'not_found') return 'not_found'
+  if (
+    result.status !== 'claimed' ||
+    typeof result.portfolio_id !== 'string' ||
+    !Number.isSafeInteger(result.generation) ||
+    Number(result.generation) <= 0
+  ) {
+    return null
+  }
+  return {
+    status: 'claimed',
+    portfolioId: result.portfolio_id,
+    generation: Number(result.generation),
+  }
+}
+
+function parseSyncPublication(value: unknown): PortfolioSyncPublication | null {
+  const result = record(value)
+  if (!result) return null
+  if (
+    result.status === 'superseded' &&
+    Number.isSafeInteger(result.generation) &&
+    Number(result.generation) > 0 &&
+    Number.isSafeInteger(result.current_generation) &&
+    Number(result.current_generation) > Number(result.generation)
+  ) {
+    return {
+      status: 'superseded',
+      generation: Number(result.generation),
+      currentGeneration: Number(result.current_generation),
+    }
+  }
+  if (
+    result.status !== 'published' ||
+    typeof result.portfolio_id !== 'string' ||
+    !Number.isSafeInteger(result.generation) ||
+    Number(result.generation) <= 0 ||
+    !Number.isSafeInteger(result.position_count) ||
+    Number(result.position_count) < 0 ||
+    typeof result.synced_at !== 'string'
+  ) {
+    return null
+  }
+  return {
+    status: 'published',
+    portfolioId: result.portfolio_id,
+    generation: Number(result.generation),
+    positionCount: Number(result.position_count),
+    syncedAt: result.synced_at,
+  }
+}
 
 export async function POST(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
@@ -49,6 +131,35 @@ export async function POST(request: NextRequest) {
     logger.info(
       `[portfolio/sync] Sync requested for portfolio ${portfolio_id}, exchange: ${portfolio.exchange}`
     )
+
+    // Claim a monotonically increasing generation before any remote fetch.
+    // If two requests overlap, only the newest claimed generation may publish,
+    // regardless of which exchange request happens to finish last.
+    const { data: rawClaim, error: claimError } = await supabase.rpc(
+      'claim_portfolio_sync_generation_atomic',
+      {
+        p_actor_id: user.id,
+        p_portfolio_id: portfolio.id,
+      }
+    )
+    const claim = parseSyncClaim(rawClaim)
+    if (claimError || !claim) {
+      logger.error('[portfolio/sync] Failed to claim publication generation', {
+        code: claimError?.code,
+        portfolioId: portfolio.id,
+      })
+      return NextResponse.json({ error: 'Failed to start portfolio sync' }, { status: 500 })
+    }
+    if (claim === 'not_found') {
+      return NextResponse.json({ error: 'Portfolio not found' }, { status: 404 })
+    }
+    if (claim.portfolioId !== portfolio.id) {
+      logger.error('[portfolio/sync] Generation claim returned the wrong portfolio', {
+        portfolioId: portfolio.id,
+        claimedPortfolioId: claim.portfolioId,
+      })
+      return NextResponse.json({ error: 'Failed to start portfolio sync' }, { status: 500 })
+    }
 
     const result = await syncExchangePortfolio({
       portfolioId: portfolio.id,
@@ -84,42 +195,62 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Full-snapshot sync WITHOUT a transient-wipe window: upsert the live
-    // positions FIRST (never blanks existing data if this write fails), then
-    // prune only rows this sync did not touch (updated_at older than syncedAt).
-    // If the exchange authoritatively returned zero open positions, nothing is
-    // upserted and the prune clears the (now-closed) rows — correct. A degraded
-    // fetch throws earlier → reason:'exchange_error' → we never reach here, so a
-    // failure can't wipe the portfolio.
-    if (result.positions.length > 0) {
-      const { error: upsertError } = await supabase
-        .from('user_positions')
-        .upsert(result.positions, { onConflict: 'portfolio_id,symbol,side' })
-      if (upsertError) {
-        logger.error('[portfolio/sync] Failed to upsert positions:', upsertError.message)
-        return NextResponse.json({ error: 'Failed to sync positions' }, { status: 500 })
+    const positions = result.positions.map((position) => ({
+      symbol: position.symbol,
+      side: position.side,
+      entry_price: position.entry_price,
+      mark_price: position.mark_price,
+      size: position.size,
+      pnl: position.pnl,
+      pnl_pct: position.pnl_pct,
+      leverage: position.leverage,
+    }))
+    const { data: rawPublication, error: publicationError } = await supabase.rpc(
+      'publish_portfolio_sync_atomic',
+      {
+        p_actor_id: user.id,
+        p_portfolio_id: portfolio.id,
+        p_generation: claim.generation,
+        p_synced_at: result.syncedAt,
+        p_positions: positions as Json,
+        p_total_equity: result.equity,
+        p_total_pnl: result.pnl,
+        p_total_pnl_pct: result.pnlPct,
       }
+    )
+    const publication = parseSyncPublication(rawPublication)
+    if (publicationError || !publication) {
+      logger.error('[portfolio/sync] Atomic publication failed', {
+        code: publicationError?.code,
+        generation: claim.generation,
+        portfolioId: portfolio.id,
+      })
+      return NextResponse.json({ error: 'Failed to publish portfolio sync' }, { status: 500 })
     }
-
-    const { error: pruneError } = await supabase
-      .from('user_positions')
-      .delete()
-      .eq('portfolio_id', portfolio.id)
-      .lt('updated_at', result.syncedAt)
-    if (pruneError) {
-      // Non-fatal: stale (closed) rows may linger until next sync, but live data is correct.
-      logger.error('[portfolio/sync] Failed to prune stale positions:', pruneError.message)
+    if (publication.status === 'superseded') {
+      return NextResponse.json(
+        {
+          data: {
+            synced: false,
+            reason: 'superseded',
+            message: 'A newer portfolio sync is already in progress.',
+            portfolio_id,
+          },
+        },
+        { status: 409 }
+      )
     }
-
-    // Best-effort snapshot — a failure here shouldn't fail the sync.
-    const { error: snapError } = await supabase.from('user_portfolio_snapshots').insert({
-      portfolio_id: portfolio.id,
-      total_equity: result.equity,
-      total_pnl: result.pnl,
-      total_pnl_pct: result.pnlPct,
-    })
-    if (snapError) {
-      logger.error('[portfolio/sync] Failed to write snapshot:', snapError.message)
+    if (
+      publication.portfolioId !== portfolio.id ||
+      publication.generation !== claim.generation ||
+      publication.positionCount !== result.positions.length ||
+      publication.syncedAt !== result.syncedAt
+    ) {
+      logger.error('[portfolio/sync] Atomic publication ACK contradicted the snapshot', {
+        generation: claim.generation,
+        portfolioId: portfolio.id,
+      })
+      return NextResponse.json({ error: 'Failed to publish portfolio sync' }, { status: 500 })
     }
 
     return success({
