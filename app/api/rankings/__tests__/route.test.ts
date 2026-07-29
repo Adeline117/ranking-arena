@@ -335,6 +335,18 @@ describe('GET /api/rankings', () => {
     expect(res.status).toBe(200)
   })
 
+  it.each(['min_pnl=0', 'min_trades=0'])(
+    'never reads or writes the shared default ranking cache for %s',
+    async (filter) => {
+      const req = new NextRequest(`http://localhost/api/rankings?window=90d&${filter}`)
+      const res = await GET(req)
+
+      expect(res.status).toBe(200)
+      expect(mockTieredGet).not.toHaveBeenCalled()
+      expect(mockTieredSet).not.toHaveBeenCalled()
+    }
+  )
+
   it('clamps limit to max 500', async () => {
     // The route clamps limit to 500 internally. We verify no error is thrown.
     mockTieredGetOrSet.mockResolvedValue({

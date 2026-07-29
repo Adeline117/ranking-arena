@@ -186,8 +186,8 @@ export const GET = withPublic(
       sortBy === 'arena_score' &&
       sortDir === 'desc' &&
       !platform &&
-      !minPnl &&
-      !minTrades &&
+      minPnl === undefined &&
+      minTrades === undefined &&
       !traderType &&
       !cursor &&
       offset === 0
