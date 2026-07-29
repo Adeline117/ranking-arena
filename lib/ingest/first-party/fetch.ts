@@ -55,6 +55,12 @@ export interface CcxtLike {
 
 export type FirstPartyBalanceSemantics = 'total_includes_unrealized' | 'wallet_excludes_unrealized'
 export type FirstPartyRealizedPnlSource = 'positions_history' | 'income_ledger'
+export interface FirstPartyTransferLedgerContract {
+  maxRangeDays: number
+  pageLimit: number
+  untilParam: 'until' | 'endTime'
+  queries: ReadonlyArray<Readonly<Record<string, unknown>>>
+}
 
 const DAY_MS = 86_400_000
 const STABLES = ['USDT', 'USD', 'USDC']
@@ -176,36 +182,54 @@ async function eventsFromLedger(client: CcxtLike, sinceMs: number): Promise<Real
 /** Net transfers IN (deposits/transfer-in − withdrawals/transfer-out). */
 async function netTransfers(
   client: CcxtLike,
-  sinceMs: number
+  sinceMs: number,
+  untilMs: number,
+  contract?: FirstPartyTransferLedgerContract
 ): Promise<Array<{ ts: number; amount: number }> | null> {
-  if (!client.fetchLedger) return null
+  if (!client.fetchLedger || !contract) return null
   const out: Array<{ ts: number; amount: number }> = []
   try {
-    const rows = await client.fetchLedger(undefined, sinceMs, 500)
-    for (const r of rows ?? []) {
-      const ts = num(r.timestamp)
-      const amt = num(r.amount)
-      const info = r.info as {
-        incomeType?: unknown
-        type?: unknown
-        businessType?: unknown
+    const rangeMs = contract.maxRangeDays * DAY_MS
+    for (const query of contract.queries) {
+      let rangeStart = sinceMs
+      while (rangeStart <= untilMs) {
+        const rangeEnd = Math.min(untilMs, rangeStart + rangeMs)
+        const rows = await client.fetchLedger(undefined, rangeStart, contract.pageLimit, {
+          ...query,
+          [contract.untilParam]: rangeEnd,
+        })
+        if (rows.length >= contract.pageLimit) return null
+        for (const r of rows) {
+          const ts = num(r.timestamp)
+          const amt = num(r.amount)
+          if (ts === null || ts < rangeStart || ts > rangeEnd) return null
+          const info = r.info as {
+            incomeType?: unknown
+            type?: unknown
+            businessType?: unknown
+          }
+          const rawType = String(
+            info?.incomeType ?? info?.type ?? info?.businessType ?? ''
+          ).toUpperCase()
+          const unifiedType = String(r.type ?? '').toUpperCase()
+          const isTransfer =
+            unifiedType === 'TRANSFER' ||
+            unifiedType === 'DEPOSIT' ||
+            unifiedType === 'WITHDRAWAL' ||
+            rawType.includes('TRANSFER') ||
+            rawType.includes('DEPOSIT') ||
+            rawType.includes('WITHDRAW')
+          if (!isTransfer) continue
+          if (amt === null) return null
+          const sign =
+            r.direction === 'out' || rawType.includes('OUT') || rawType.includes('WITHDRAW')
+              ? -1
+              : 1
+          out.push({ ts, amount: sign * Math.abs(amt) })
+        }
+        if (rangeEnd === untilMs) break
+        rangeStart = rangeEnd + 1
       }
-      const rawType = String(
-        info?.incomeType ?? info?.type ?? info?.businessType ?? ''
-      ).toUpperCase()
-      const unifiedType = String(r.type ?? '').toUpperCase()
-      const isTransfer =
-        unifiedType === 'TRANSFER' ||
-        unifiedType === 'DEPOSIT' ||
-        unifiedType === 'WITHDRAWAL' ||
-        rawType.includes('TRANSFER') ||
-        rawType.includes('DEPOSIT') ||
-        rawType.includes('WITHDRAW')
-      if (!isTransfer) continue
-      if (ts === null || amt === null) return null
-      const sign =
-        r.direction === 'out' || rawType.includes('OUT') || rawType.includes('WITHDRAW') ? -1 : 1
-      out.push({ ts, amount: sign * Math.abs(amt) })
     }
   } catch {
     // Missing transfer evidence is unknown, never zero. The compute layer
@@ -222,6 +246,7 @@ export async function fetchFirstPartyAccount(
     balanceSemantics: FirstPartyBalanceSemantics
     realizedPnlSource: FirstPartyRealizedPnlSource
     positionHistoryMaxRangeDays?: number
+    transferLedgerContract?: FirstPartyTransferLedgerContract
     lookbackDays?: number
     lastSyncMs?: number | null
   }
@@ -269,7 +294,7 @@ export async function fetchFirstPartyAccount(
       : await eventsFromLedger(client, sinceMs)
 
   // Transfers → per-window net-in + since-last-sync delta.
-  const transfers = await netTransfers(client, sinceMs)
+  const transfers = await netTransfers(client, sinceMs, nowMs, opts.transferLedgerContract)
   const netTransfersIn: FirstPartyComputeInput['netTransfersIn'] = {}
   if (transfers !== null) {
     for (const tf of [7, 30, 90] as const) {

@@ -26,6 +26,7 @@ import {
   type CcxtLike,
   type FirstPartyBalanceSemantics,
   type FirstPartyRealizedPnlSource,
+  type FirstPartyTransferLedgerContract,
 } from '@/lib/ingest/first-party/fetch'
 import {
   CCXT_ID,
@@ -64,6 +65,7 @@ interface FirstPartyExchangeContract {
   balanceSemantics: FirstPartyBalanceSemantics
   realizedPnlSource: FirstPartyRealizedPnlSource
   positionHistoryMaxRangeDays?: number
+  transferLedgerContract?: FirstPartyTransferLedgerContract
 }
 
 // Explicit contracts from the pinned CCXT adapters. Unknown exchanges fail
@@ -72,6 +74,12 @@ const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchange
   binance: {
     balanceSemantics: 'total_includes_unrealized',
     realizedPnlSource: 'income_ledger',
+    transferLedgerContract: {
+      maxRangeDays: 90,
+      pageLimit: 1000,
+      untilParam: 'until',
+      queries: [{ incomeType: 'TRANSFER' }],
+    },
   },
   bitget: {
     balanceSemantics: 'total_includes_unrealized',
@@ -82,6 +90,12 @@ const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchange
     balanceSemantics: 'wallet_excludes_unrealized',
     realizedPnlSource: 'positions_history',
     positionHistoryMaxRangeDays: 7,
+    transferLedgerContract: {
+      maxRangeDays: 7,
+      pageLimit: 50,
+      untilParam: 'endTime',
+      queries: [{ type: 'TRANSFER_IN' }, { type: 'TRANSFER_OUT' }],
+    },
   },
   gateio: {
     balanceSemantics: 'wallet_excludes_unrealized',

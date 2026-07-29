@@ -223,10 +223,51 @@ describe('first-party account equity evidence', () => {
         balanceSemantics: 'wallet_excludes_unrealized',
         realizedPnlSource: 'positions_history',
         lastSyncMs: NOW - DAY,
+        transferLedgerContract: {
+          maxRangeDays: 90,
+          pageLimit: 50,
+          untilParam: 'endTime',
+          queries: [{ type: 'TRANSFER_OUT' }],
+        },
       }
     )
 
     expect(result.netTransfersIn).toEqual({ 7: -40, 30: -40, 90: -40 })
     expect(result.netTransfersSinceLast).toBe(-40)
+  })
+
+  it('queries the complete Bybit transfer window in bounded IN/OUT ranges', async () => {
+    const fetchLedger = jest.fn().mockResolvedValue([])
+
+    await fetchFirstPartyAccount(client({ fetchLedger }), {
+      nowMs: NOW,
+      balanceSemantics: 'wallet_excludes_unrealized',
+      realizedPnlSource: 'positions_history',
+      lookbackDays: 8,
+      transferLedgerContract: {
+        maxRangeDays: 7,
+        pageLimit: 50,
+        untilParam: 'endTime',
+        queries: [{ type: 'TRANSFER_IN' }, { type: 'TRANSFER_OUT' }],
+      },
+    })
+
+    expect(fetchLedger).toHaveBeenCalledTimes(4)
+    expect(fetchLedger).toHaveBeenNthCalledWith(1, undefined, NOW - 8 * DAY, 50, {
+      type: 'TRANSFER_IN',
+      endTime: NOW - DAY,
+    })
+    expect(fetchLedger).toHaveBeenNthCalledWith(2, undefined, NOW - DAY + 1, 50, {
+      type: 'TRANSFER_IN',
+      endTime: NOW,
+    })
+    expect(fetchLedger).toHaveBeenNthCalledWith(3, undefined, NOW - 8 * DAY, 50, {
+      type: 'TRANSFER_OUT',
+      endTime: NOW - DAY,
+    })
+    expect(fetchLedger).toHaveBeenNthCalledWith(4, undefined, NOW - DAY + 1, 50, {
+      type: 'TRANSFER_OUT',
+      endTime: NOW,
+    })
   })
 })

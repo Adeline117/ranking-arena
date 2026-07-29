@@ -169,6 +169,11 @@ describe('first-party sync processor', () => {
         balanceSemantics: 'wallet_excludes_unrealized',
         realizedPnlSource: 'positions_history',
         positionHistoryMaxRangeDays: 7,
+        transferLedgerContract: expect.objectContaining({
+          maxRangeDays: 7,
+          pageLimit: 50,
+          untilParam: 'endTime',
+        }),
       })
     )
     expect(
@@ -205,6 +210,10 @@ describe('first-party sync processor', () => {
         expect.objectContaining({
           balanceSemantics: 'total_includes_unrealized',
           realizedPnlSource: 'income_ledger',
+          transferLedgerContract: expect.objectContaining({
+            pageLimit: 1000,
+            untilParam: 'until',
+          }),
         })
       )
     }
