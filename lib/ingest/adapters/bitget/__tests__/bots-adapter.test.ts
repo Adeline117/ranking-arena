@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ParseCtx, SourceRow, Timeframe } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
-import { bitgetBotsAdapter } from '../bots'
+import { bitgetBotsAdapter, captureBitgetBotsLeaderboard } from '../bots'
 
 type BotPayload = {
   code: string
@@ -179,6 +179,117 @@ describe('Bitget bot partitioned legacy capture boundary', () => {
         source(['futures_grid'])
       )
     ).rejects.toThrow('totalRecord changed within one crawl')
+  })
+})
+
+describe('Bitget bot V4 partitioned capture boundary', () => {
+  it('captures exact upstream payloads with global storage and partition-local request indexes', async () => {
+    const requests: ReplayRequestTemplate[] = []
+    const capture = await captureBitgetBotsLeaderboard(
+      session(async (request) => {
+        requests.push(request)
+        const body = request.body as { strategyType: 2 | 4; pageNo: number }
+        if (body.strategyType === 2) {
+          return {
+            status: 200,
+            json:
+              body.pageNo === 1
+                ? payload({ strategyType: 2, total: 21, rowCount: 20, nextFlag: true })
+                : payload({
+                    strategyType: 2,
+                    pageNo: 2,
+                    total: 21,
+                    rowCount: 1,
+                    nextFlag: false,
+                  }),
+          }
+        }
+        return {
+          status: 200,
+          json: payload({ strategyType: 4, total: 3, rowCount: 3, nextFlag: false }),
+        }
+      }),
+      source(),
+      30
+    )
+
+    expect(requests.map((request) => request.body)).toEqual([
+      { strategyType: 2, orderType: 3, pageNo: 1, pageSize: 20 },
+      { strategyType: 2, orderType: 3, pageNo: 2, pageSize: 20 },
+      { strategyType: 4, orderType: 3, pageNo: 1, pageSize: 20 },
+    ])
+    expect(capture.sourcePages.map((page) => page.rawPage.pageIndex)).toEqual([1, 2, 3])
+    expect(
+      capture.sourcePages.map((page) => [
+        page.paginationPosition.partition_id,
+        page.paginationPosition.request_page_index,
+      ])
+    ).toEqual([
+      ['futures_grid', 1],
+      ['futures_grid', 2],
+      ['futures_martingale', 1],
+    ])
+    expect(capture.sourcePages[0].rawPage.payload).toEqual(
+      payload({ strategyType: 2, total: 21, rowCount: 20, nextFlag: true })
+    )
+    expect(capture.sourcePages[0].rawPage.payload).not.toHaveProperty('partition_id')
+    expect(capture.parsePages[0].payload).toMatchObject({
+      data_contract: 'arena.ingest.partitioned-numeric-parser-page@1',
+      partition_id: 'futures_grid',
+      request_page_index: 1,
+      request_page_size: 20,
+      payload: capture.sourcePages[0].rawPage.payload,
+    })
+    expect(capture.paginationTopology.partitions).toMatchObject([
+      {
+        partition_id: 'futures_grid',
+        source_page_ordinals: [1, 2],
+        parser_page_ordinals: [1, 2],
+      },
+      {
+        partition_id: 'futures_martingale',
+        source_page_ordinals: [3],
+        parser_page_ordinals: [3],
+      },
+    ])
+    expect(
+      capture.parsePages.flatMap(
+        (page) => bitgetBotsAdapter.parseLeaderboard(page.payload, profileCtx).rows
+      )
+    ).toHaveLength(24)
+  })
+
+  it('rejects partition report drift and invalid source configuration before publication', async () => {
+    await expect(
+      captureBitgetBotsLeaderboard(
+        session(async (request) => {
+          const pageNo = (request.body as { pageNo: number }).pageNo
+          return {
+            status: 200,
+            json:
+              pageNo === 1
+                ? payload({ strategyType: 2, total: 21, rowCount: 20, nextFlag: true })
+                : payload({
+                    strategyType: 2,
+                    pageNo: 2,
+                    total: 22,
+                    rowCount: 2,
+                    nextFlag: false,
+                  }),
+          }
+        }),
+        source(),
+        30
+      )
+    ).rejects.toMatchObject({
+      cause: expect.objectContaining({ message: expect.stringContaining('totalRecord changed') }),
+    })
+
+    const request = jest.fn(async () => ({ status: 200, json: {} }))
+    await expect(
+      captureBitgetBotsLeaderboard(session(request), source(['futures_martingale']), 30)
+    ).rejects.toThrow('source.meta.boards')
+    expect(request).not.toHaveBeenCalled()
   })
 })
 

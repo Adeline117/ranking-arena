@@ -142,6 +142,30 @@ describe('parseBitgetBotsBoardPage (live-captured fixtures, 2026-06-11)', () => 
     )
   })
 
+  it('parses the exact V4 partition projection while rejecting envelope drift', () => {
+    const payload = fixture('bots-board-futures-grid.json')
+    const envelope = {
+      data_contract: 'arena.ingest.partitioned-numeric-parser-page@1',
+      partition_id: 'futures_grid',
+      request_page_index: 1,
+      request_page_size: 20,
+      payload,
+    }
+    expect(parseBitgetBotsBoardPage(envelope, ctx).rows).toHaveLength(20)
+    expect(() =>
+      parseBitgetBotsBoardPage({ ...envelope, partition_id: 'futures_martingale' }, ctx)
+    ).toThrow('board identity and card strategyType must match')
+    expect(() => parseBitgetBotsBoardPage({ ...envelope, unexpected: true }, ctx)).toThrow(
+      'fields must match the reviewed contract exactly'
+    )
+    expect(() =>
+      parseBitgetBotsBoardPage(
+        { ...envelope, data_contract: 'arena.ingest.partitioned-numeric-parser-page@2' },
+        ctx
+      )
+    ).toThrow('data contract is unsupported')
+  })
+
   it('fails closed instead of silently swallowing cards without exact board identity', () => {
     const missingBoard = clonedBoardFixture('bots-board-futures-grid.json')
     expect(() => parseBitgetBotsBoardPage({ payload: missingBoard }, ctx)).toThrow('wrapper.board')
