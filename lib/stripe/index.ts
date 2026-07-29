@@ -442,19 +442,6 @@ export async function createOneTimePaymentSession(params: {
   return stripe.checkout.sessions.create(sessionParams, { idempotencyKey })
 }
 
-// 创建客户门户会话 (用于管理订阅)
-export async function createPortalSession(
-  customerId: string,
-  returnUrl: string
-): Promise<Stripe.BillingPortal.Session> {
-  const session = await stripe.billingPortal.sessions.create({
-    customer: customerId,
-    return_url: returnUrl,
-  })
-
-  return session
-}
-
 // 取消订阅
 export async function cancelSubscription(
   subscriptionId: string,

@@ -13,7 +13,6 @@ import {
   getOrCreateStripeCustomer,
   createCheckoutSession,
   createOneTimePaymentSession,
-  createPortalSession,
   cancelSubscription,
   resumeSubscription,
   getSubscription,
@@ -802,24 +801,6 @@ describe('createOneTimePaymentSession', () => {
     ).rejects.toThrow('STRIPE_WEBHOOK_SECRET is not configured')
 
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
-  })
-})
-
-describe('createPortalSession', () => {
-  test('should create portal session', async () => {
-    const mockSession = {
-      id: 'bps_test123',
-      url: 'https://billing.stripe.com/...',
-    }
-    stripe.billingPortal.sessions.create = jest.fn().mockResolvedValue(mockSession)
-
-    const result = await createPortalSession('cus_123', 'https://example.com/account')
-
-    expect(result).toBe(mockSession)
-    expect(stripe.billingPortal.sessions.create).toHaveBeenCalledWith({
-      customer: 'cus_123',
-      return_url: 'https://example.com/account',
-    })
   })
 })
 
