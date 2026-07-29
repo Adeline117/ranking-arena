@@ -9,6 +9,7 @@ import {
   type AccountDeletionOneTimeSettlementObservation,
 } from '@/lib/stripe/account-deletion'
 import { persistAccountDeletionOneTimeSettlementScan } from '@/lib/stripe/account-deletion-settlement'
+import { enforceAccountDeletionAuthBan } from '@/lib/account/deletion-auth-invalidation'
 
 const PREPARED_OPERATION_COLUMNS =
   'operation_id,user_id,state,stripe_customer_id,stripe_subscription_ids,prepared_at'
@@ -189,6 +190,14 @@ async function reconcileOperation(params: {
   const { operation } = params
   const subscriptionIds = new Set(operation.stripeSubscriptionIds)
   const settlements = new Map<string, AccountDeletionOneTimeSettlementObservation>()
+  let authBanError: unknown = null
+  try {
+    await enforceAccountDeletionAuthBan(params.supabase.auth.admin, operation.userId)
+  } catch (error) {
+    // Billing still has to converge even while GoTrue is degraded. Preserve
+    // the prepared operation below so a later pass must confirm the ban.
+    authBanError = error
+  }
 
   if (operation.stripeCustomerId) {
     const checkoutResult = await expireOpenSubscriptionCheckouts({
@@ -231,6 +240,7 @@ async function reconcileOperation(params: {
     stripeCustomerId: operation.stripeCustomerId,
     observations: [...settlements.values()],
   })
+  if (authBanError) throw authBanError
   await finishOperation({
     supabase: params.supabase,
     operation,

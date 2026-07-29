@@ -9,6 +9,7 @@ const mockEq = jest.fn()
 const mockOrder = jest.fn()
 const mockLimit = jest.fn()
 const mockRpc = jest.fn()
+const mockUpdateUser = jest.fn()
 const mockStripeClient = { marker: 'stripe-client' }
 
 jest.mock('@/lib/stripe/account-deletion', () => ({
@@ -50,7 +51,11 @@ function finishAck(args: Record<string, unknown>) {
   }
 }
 
-const mockSupabase = { from: mockFrom, rpc: mockRpc }
+const mockSupabase = {
+  from: mockFrom,
+  rpc: mockRpc,
+  auth: { admin: { updateUserById: mockUpdateUser } },
+}
 
 describe('prepared account deletion billing reconciliation', () => {
   beforeEach(() => {
@@ -60,6 +65,7 @@ describe('prepared account deletion billing reconciliation', () => {
     mockEq.mockReturnValue({ order: mockOrder })
     mockOrder.mockReturnValue({ limit: mockLimit })
     mockLimit.mockResolvedValue({ data: [operation()], error: null })
+    mockUpdateUser.mockResolvedValue({ error: null })
     mockExpireOpenSubscriptionCheckouts.mockResolvedValue({
       expiredSessionIds: ['cs_open'],
       racedSubscriptionIds: ['sub_checkout_race'],
@@ -114,6 +120,7 @@ describe('prepared account deletion billing reconciliation', () => {
       customerId: 'cus_owner',
       expectedUserId: USER_ID,
     })
+    expect(mockUpdateUser).toHaveBeenCalledWith(USER_ID, { ban_duration: '720h' })
     expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledWith({
       stripeClient: mockStripeClient,
       subscriptionIds: ['sub_checkout_race', 'sub_initial'],
@@ -170,6 +177,30 @@ describe('prepared account deletion billing reconciliation', () => {
     expect(mockRpc).toHaveBeenCalledTimes(1)
   })
 
+  it('settles billing but keeps the durable operation prepared until Auth ban retry succeeds', async () => {
+    mockUpdateUser.mockResolvedValueOnce({ error: { message: 'GoTrue unavailable' } })
+
+    await expect(
+      reconcilePreparedAccountDeletionBilling({
+        supabase: mockSupabase as never,
+        stripeClient: mockStripeClient as never,
+      })
+    ).rejects.toThrow('Account deletion Auth ban failed: GoTrue unavailable')
+
+    expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledTimes(1)
+    expect(mockPersistOneTimeSettlementScan).toHaveBeenCalledTimes(1)
+    expect(mockRpc).not.toHaveBeenCalled()
+
+    await expect(
+      reconcilePreparedAccountDeletionBilling({
+        supabase: mockSupabase as never,
+        stripeClient: mockStripeClient as never,
+      })
+    ).resolves.toEqual({ count: 1, examined: 1, settled: 1 })
+    expect(mockUpdateUser).toHaveBeenCalledTimes(2)
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
   it('settles a deletion with no Stripe identity without making remote calls', async () => {
     mockLimit.mockResolvedValue({
       data: [operation({ stripe_customer_id: null, stripe_subscription_ids: [] })],
@@ -217,6 +248,7 @@ describe('prepared account deletion billing reconciliation', () => {
     expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
     expect(mockPersistOneTimeSettlementScan).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockUpdateUser).not.toHaveBeenCalled()
   })
 
   it('keeps the prepared row retryable when finish does not acknowledge the exact set', async () => {

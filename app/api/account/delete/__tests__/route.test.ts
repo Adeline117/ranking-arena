@@ -18,6 +18,7 @@ const mockDiscoverStripeSubscriptionBilling = jest.fn()
 const mockPersistOneTimeSettlementScan = jest.fn()
 const mockStripeClient = { marker: 'stripe-client' }
 const DEFAULT_RECOVERY_TOKEN = 'Q'.repeat(43)
+const CURRENT_ACCESS_TOKEN = 'header.payload.signature'
 let subscriptionResult: { data: Record<string, unknown> | null; error: unknown }
 let billingProfileResult: { data: Record<string, unknown> | null; error: unknown }
 
@@ -111,7 +112,10 @@ import { POST } from '../route'
 function request(body: Record<string, unknown>, includeRecoveryToken = true): Request {
   return new Request('https://www.arenafi.org/api/account/delete', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${CURRENT_ACCESS_TOKEN}`,
+    },
     body: JSON.stringify(
       includeRecoveryToken ? { recovery_token: DEFAULT_RECOVERY_TOKEN, ...body } : body
     ),
@@ -211,6 +215,7 @@ describe('account deletion scheduling', () => {
     expect(body.user_id).toBe('user-1')
     expect(body.recovery_token).toMatch(/^[A-Za-z0-9_-]{40,}$/)
     expect(body.billing_settlement_pending).toBe(false)
+    expect(body.auth_invalidation_pending).toBe(false)
     expect(mockRpc).toHaveBeenCalledWith(
       'prepare_account_deletion_billing_atomic',
       expect.objectContaining({
@@ -274,7 +279,7 @@ describe('account deletion scheduling', () => {
     )
     expect(mockLocalSubscriptionUpdate).not.toHaveBeenCalled()
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
-    expect(mockAdminSignOut).toHaveBeenCalledWith('user-1', 'global')
+    expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
     expect(mockFrom).toHaveBeenCalledTimes(2)
   })
 
@@ -468,7 +473,67 @@ describe('account deletion scheduling', () => {
       expect.any(Object)
     )
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
-    expect(mockAdminSignOut).toHaveBeenCalledWith('user-1', 'global')
+    expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
+  })
+
+  it('keeps the operation prepared until a failed Auth ban can be retried', async () => {
+    mockAdminUpdateUser.mockResolvedValueOnce({ error: { message: 'GoTrue unavailable' } })
+
+    const response = await POST(request({ password: 'correct' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body).toEqual(
+      expect.objectContaining({
+        success: true,
+        billing_settlement_pending: true,
+        auth_invalidation_pending: true,
+      })
+    )
+    expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledTimes(1)
+    expect(mockPersistOneTimeSettlementScan).toHaveBeenCalledTimes(1)
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'finish_account_deletion_billing_atomic',
+      expect.any(Object)
+    )
+    expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
+  })
+
+  it('does not crash after preparation when Auth APIs throw', async () => {
+    mockAdminUpdateUser.mockRejectedValueOnce(new Error('ban response lost'))
+    mockAdminSignOut.mockRejectedValueOnce(new Error('logout response lost'))
+
+    const response = await POST(request({ password: 'correct' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body.auth_invalidation_pending).toBe(true)
+    expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledTimes(1)
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'finish_account_deletion_billing_atomic',
+      expect.any(Object)
+    )
+  })
+
+  it('uses the verified JWT for global revocation and reports a lost logout response', async () => {
+    mockAdminSignOut.mockRejectedValueOnce(new Error('logout response lost'))
+
+    const response = await POST(request({ password: 'correct' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body).toEqual(
+      expect.objectContaining({
+        billing_settlement_pending: false,
+        auth_invalidation_pending: true,
+      })
+    )
+    expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
+    expect(mockAdminSignOut).not.toHaveBeenCalledWith('user-1', 'global')
+    expect(mockRpc).toHaveBeenCalledWith(
+      'finish_account_deletion_billing_atomic',
+      expect.any(Object)
+    )
   })
 
   it('feeds a just-completed Checkout subscription into immediate shutdown', async () => {
@@ -580,7 +645,7 @@ describe('account deletion scheduling', () => {
       )
     ).toBe(false)
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
-    expect(mockAdminSignOut).toHaveBeenCalledWith('user-1', 'global')
+    expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
   })
 
   it('performs zero Stripe mutations when another profile owns a derived customer', async () => {

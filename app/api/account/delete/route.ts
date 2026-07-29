@@ -20,6 +20,7 @@ import {
 } from '@/lib/stripe/account-deletion'
 import { persistAccountDeletionOneTimeSettlementScan } from '@/lib/stripe/account-deletion-settlement'
 import { isAccountRecoveryToken } from '@/lib/auth/account-recovery-token'
+import { enforceAccountDeletionAuthBan } from '@/lib/account/deletion-auth-invalidation'
 
 const logger = createLogger('account-delete')
 
@@ -158,6 +159,11 @@ export const POST = withAuth(
     }
 
     const { password, reason, confirm } = body
+    const bearerMatch = request.headers.get('authorization')?.match(/^Bearer\s+(\S+)$/i)
+    if (!bearerMatch) {
+      return forbidden('Unable to verify account session')
+    }
+    const currentAccessToken = bearerMatch[1]
     const recoveryToken = body.recovery_token
     if (!isAccountRecoveryToken(recoveryToken)) {
       return badRequest('Invalid recovery credential')
@@ -351,21 +357,45 @@ export const POST = withAuth(
 
     // The tombstone is now durable. Auth invalidation and every Stripe write
     // may fail independently without making the account active again.
-    const { error: banError } = await adminSupabase.auth.admin.updateUserById(user.id, {
-      ban_duration: '720h',
-    })
-    const { error: signOutError } = await adminSupabase.auth.admin.signOut(user.id, 'global')
-    if (banError || signOutError) {
+    let authBanReady = false
+    let authBanError: unknown = null
+    try {
+      await enforceAccountDeletionAuthBan(adminSupabase.auth.admin, user.id)
+      authBanReady = true
+    } catch (error) {
+      authBanError = error
+    }
+    let signOutError: unknown = null
+    try {
+      const result = await adminSupabase.auth.admin.signOut(currentAccessToken, 'global')
+      signOutError = result.error
+    } catch (error) {
+      signOutError = error
+    }
+    if (!authBanReady || signOutError) {
       // `deleted_at` is independently enforced by server auth, so access stays
       // blocked even if Supabase session invalidation is temporarily degraded.
       logger.error('Account scheduled but auth invalidation was incomplete', {
         userId: user.id,
-        banError: banError?.message,
-        signOutError: signOutError?.message,
+        banError:
+          authBanError instanceof Error
+            ? authBanError.message
+            : authBanError
+              ? String(authBanError)
+              : undefined,
+        signOutError:
+          signOutError instanceof Error
+            ? signOutError.message
+            : signOutError
+              ? String(signOutError)
+              : undefined,
       })
     }
 
-    const scheduledResponse = (billingSettlementPending: boolean) =>
+    const scheduledResponse = (
+      billingSettlementPending: boolean,
+      authInvalidationPending: boolean
+    ) =>
       NextResponse.json(
         {
           success: true,
@@ -373,11 +403,13 @@ export const POST = withAuth(
           deletion_scheduled_at: scheduledDeletion.toISOString(),
           recovery_token: recoveryToken,
           billing_settlement_pending: billingSettlementPending,
-          message: billingSettlementPending
-            ? 'Account marked for deletion. Subscription shutdown is still being retried.'
-            : 'Account marked for deletion, recoverable within 30 days',
+          auth_invalidation_pending: authInvalidationPending,
+          message:
+            billingSettlementPending || authInvalidationPending
+              ? 'Account marked for deletion. Secure shutdown is still being retried.'
+              : 'Account marked for deletion, recoverable within 30 days',
         },
-        { status: billingSettlementPending ? 202 : 200 }
+        { status: billingSettlementPending || authInvalidationPending ? 202 : 200 }
       )
 
     try {
@@ -416,8 +448,13 @@ export const POST = withAuth(
         operationId,
         error: error instanceof Error ? error.message : String(error),
       })
-      return scheduledResponse(true)
+      return scheduledResponse(true, !authBanReady || !!signOutError)
     }
+
+    // Keep the durable operation prepared until the authoritative Auth ban is
+    // confirmed. The reconciliation worker will repeat both this ban and the
+    // idempotent Stripe settlement before it can seal the operation.
+    if (!authBanReady) return scheduledResponse(true, true)
 
     const settledStripeSubscriptionIds = [...observedStripeSubscriptionIds].sort()
     const { data: finishAck, error: finishError } = (await Reflect.apply(
@@ -448,11 +485,11 @@ export const POST = withAuth(
         operationId,
         error: finishError?.message ?? 'database returned an invalid finish acknowledgement',
       })
-      return scheduledResponse(true)
+      return scheduledResponse(true, !!signOutError)
     }
 
     logger.info('Account deletion scheduled and billing settled', { userId: user.id, operationId })
-    return scheduledResponse(false)
+    return scheduledResponse(false, !!signOutError)
   },
   { name: 'account-delete', rateLimit: 'sensitive' }
 )
