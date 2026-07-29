@@ -76,11 +76,13 @@ describe('claimed trader routing contract', () => {
     const claimPage = source('app/(app)/claim/page.tsx')
     const botHeader = source('app/components/trader/serving/BotHeaderCard.tsx')
 
+    expect(claimPage).toContain('const trader = selectedTraderRef.current')
+    expect(claimPage).toContain('if (!viewer || !trader) return')
     expect(claimPage).toMatch(
-      /\/trader\/\$\{encodeURIComponent\(selectedTrader\.source_trader_id\)\}\?platform=\$\{encodeURIComponent\(selectedTrader\.source\)\}/
+      /\/trader\/\$\{encodeURIComponent\(trader\.source_trader_id\)\}\?platform=\$\{encodeURIComponent\(trader\.source\)\}/
     )
     expect(claimPage).not.toMatch(
-      /\/trader\/\$\{encodeURIComponent\(selectedTrader\.(?:handle|source_trader_id)\)\}\?source=/
+      /\/trader\/\$\{encodeURIComponent\((?:selectedTrader|trader)\.(?:handle|source_trader_id)\)\}\?source=/
     )
 
     expect(botHeader).toMatch(/\?platform=\$\{encodeURIComponent\(bot\.ownerPlatform\)\}/)

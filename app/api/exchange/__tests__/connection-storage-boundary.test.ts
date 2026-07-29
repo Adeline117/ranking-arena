@@ -25,7 +25,6 @@ describe('exchange connection storage boundary', () => {
 
   it('keeps every service-role read and update owner-scoped', () => {
     for (const routeFile of [
-      'connect/route.ts',
       'connections/route.ts',
       'disconnect/route.ts',
       'sync/route.ts',
@@ -33,7 +32,13 @@ describe('exchange connection storage boundary', () => {
       expect(routeSource(routeFile)).toContain(".eq('user_id', user.id)")
     }
 
-    expect(routeSource('connect/route.ts').match(/\.eq\('user_id', user\.id\)/g)).toHaveLength(2)
+    const connect = routeSource('connect/route.ts')
+    expect(connect).toContain('user_id: user.id')
+    expect(connect).toContain("onConflict: 'user_id,exchange'")
+    expect(connect).toContain(".select('user_id, exchange')")
+    expect(connect).toContain('savedConnection?.user_id !== user.id')
+    expect(connect).toContain('savedConnection.exchange !== exchange')
+    expect(connect).not.toMatch(/user_id\s*:\s*(?:body|request|input)/)
     expect(routeSource('sync/route.ts').match(/\.eq\('user_id', user\.id\)/g)).toHaveLength(3)
   })
 
