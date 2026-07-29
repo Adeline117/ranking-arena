@@ -147,7 +147,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const additiveApiTierMigration = '20260729020000_api_tier_cancellation_identity.sql'
   const legacyApiTierCleanupMigration = '20260729021000_disable_legacy_api_tier_writer.sql'
 
-  assert.equal(predeploy.length, 103)
+  assert.equal(predeploy.length, 104)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -219,6 +219,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260729015000_leaderboard_rank_generation_attested_batch_writer.sql',
           '20260729020000_api_tier_cancellation_identity.sql',
           '20260729022000_account_deletion_one_time_settlement_barrier.sql',
+          '20260729022500_account_recovery_admission_state_machine.sql',
           '20260729023000_preserve_financial_owner_after_account_deletion.sql',
           '20260729054400_leaderboard_rank_generation_private_staging.sql',
         ].includes(migration)
@@ -239,7 +240,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 116)
+  assert.equal(new Set(all).size, 117)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -253,7 +254,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-62), [
+  assert.deepEqual(predeploy.slice(-63), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -314,6 +315,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729015000_leaderboard_rank_generation_attested_batch_writer.sql',
     '20260729020000_api_tier_cancellation_identity.sql',
     '20260729022000_account_deletion_one_time_settlement_barrier.sql',
+    '20260729022500_account_recovery_admission_state_machine.sql',
     '20260729023000_preserve_financial_owner_after_account_deletion.sql',
     '20260729054400_leaderboard_rank_generation_private_staging.sql',
   ])
@@ -369,6 +371,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729010000_api_keys_server_authority.sql'))
   assert.ok(predeploy.includes('20260729020000_api_tier_cancellation_identity.sql'))
   assert.ok(predeploy.includes('20260729022000_account_deletion_one_time_settlement_barrier.sql'))
+  assert.ok(predeploy.includes('20260729022500_account_recovery_admission_state_machine.sql'))
   assert.ok(
     predeploy.includes('20260729023000_preserve_financial_owner_after_account_deletion.sql')
   )
@@ -446,6 +449,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     !recoveryPrerequisites.includes(
       '20260729022000_account_deletion_one_time_settlement_barrier.sql'
     )
+  )
+  assert.ok(
+    !recoveryPrerequisites.includes('20260729022500_account_recovery_admission_state_machine.sql')
   )
   assert.ok(
     !recoveryPrerequisites.includes(
