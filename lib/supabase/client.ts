@@ -2,7 +2,11 @@
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
-import { detectAuthSessionInUrl, guardedAuthStorage } from '@/lib/auth/session-operation'
+import {
+  detectAuthSessionInUrl,
+  guardedAuthStorage,
+  settleAuthRedirectInitialization,
+} from '@/lib/auth/session-operation'
 
 // Singleton — created once on first access to avoid multiple GoTrue instances.
 // The module is eagerly imported by Next.js so we keep createClient() cheap:
@@ -30,3 +34,10 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(url, an
     },
   },
 })
+
+// createClient starts initialize() in its constructor. Observe that same
+// promise so an invalid/reused recovery URL rolls its provisional lease back
+// to the previously stored principal instead of leaving auth pending forever.
+void supabase.auth
+  .initialize()
+  .then(settleAuthRedirectInitialization, settleAuthRedirectInitialization)

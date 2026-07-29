@@ -39,6 +39,7 @@ type PendingPasswordRecoveryRedirect = Readonly<{
   accessToken: string
   refreshToken: string
   navigationKey: string
+  operation: AuthOperationLease
 }>
 
 let memoryLease: AuthOperationLease | null = null
@@ -114,7 +115,7 @@ function navigationKeyFromUrl(url: URL): string {
  * boundary, then require the later storage write to match both tokens.
  */
 export function detectAuthSessionInUrl(url: URL, params: Record<string, string>): boolean {
-  pendingPasswordRecoveryRedirect = null
+  rollbackPendingPasswordRecoveryRedirect()
 
   if (url.pathname === '/reset-password') {
     const hash = new URLSearchParams(url.hash.startsWith('#') ? url.hash.slice(1) : url.hash)
@@ -132,6 +133,10 @@ export function detectAuthSessionInUrl(url: URL, params: Record<string, string>)
         accessToken,
         refreshToken,
         navigationKey: navigationKeyFromUrl(url),
+        // Reserve ordering before GoTrue starts its asynchronous _getUser.
+        // A later login/logout publishes a newer lease and makes this exact
+        // recovery acquisition stale before it reaches the storage boundary.
+        operation: beginAuthIdentityOperation(),
       }
     }
   }
@@ -139,6 +144,32 @@ export function detectAuthSessionInUrl(url: URL, params: Record<string, string>)
   // Preserve GoTrue's default implicit-grant detection semantics for OAuth,
   // magic links, recovery errors, and every non-recovery route.
   return Boolean(params.access_token || params.error_description)
+}
+
+function storedSessionUserId(): string | null {
+  const stored = getStoredAuthSession()
+  return typeof stored?.user?.id === 'string' ? stored.user.id : null
+}
+
+function rollbackRecoveryOperation(operation: AuthOperationLease): void {
+  if (!isAuthOperationCurrent(operation)) return
+  const rebound = rebindAuthOperationPrincipal(operation, storedSessionUserId())
+  if (rebound) completeAuthIdentityOperation(rebound, rebound.expectedUserId)
+}
+
+function rollbackPendingPasswordRecoveryRedirect(): void {
+  const pending = pendingPasswordRecoveryRedirect
+  pendingPasswordRecoveryRedirect = null
+  if (pending) rollbackRecoveryOperation(pending.operation)
+}
+
+/**
+ * Called after GoTrue initialization resolves. An invalid/reused recovery URL
+ * never reaches storage, so restore the prior stored principal instead of
+ * leaving the provisional redirect lease as a permanent pending transition.
+ */
+export function settleAuthRedirectInitialization(): void {
+  rollbackPendingPasswordRecoveryRedirect()
 }
 
 export function getAuthRedirectAcquisitionReceipt(): AuthRedirectAcquisitionReceipt | null {
@@ -304,11 +335,8 @@ function parseStoredSession(value: string): StoredSession | null {
   }
 }
 
-function getAuthRedirectPurpose(
-  session: StoredSession
-): AuthRedirectAcquisitionReceipt['purpose'] | null {
+function getPasswordRecoveryRedirectWriter(session: StoredSession): AuthOperationLease | null {
   if (typeof window === 'undefined') return null
-  if (window.location.pathname === '/auth/callback') return 'oauth-callback'
   const recovery = pendingPasswordRecoveryRedirect
   if (
     window.location.pathname === '/reset-password' &&
@@ -317,7 +345,7 @@ function getAuthRedirectPurpose(
     session.access_token === recovery.accessToken &&
     session.refresh_token === recovery.refreshToken
   ) {
-    return 'password-recovery'
+    return recovery.operation
   }
   return null
 }
@@ -352,14 +380,22 @@ export const guardedAuthStorage = {
     // operation, which also invalidates old refreshes in other tabs.
     let writer = activeWriter
     const internalRedirectWriter = !writer
-    const redirectPurpose = session ? getAuthRedirectPurpose(session) : null
+    let redirectPurpose: AuthRedirectAcquisitionReceipt['purpose'] | null = null
     if (!writer) {
-      if (!redirectPurpose) {
+      const recoveryWriter = session ? getPasswordRecoveryRedirectWriter(session) : null
+      if (recoveryWriter) {
         pendingPasswordRecoveryRedirect = null
+        if (!isAuthOperationCurrent(recoveryWriter)) return
+        writer = recoveryWriter
+        redirectPurpose = 'password-recovery'
+      } else if (window.location.pathname === '/auth/callback') {
+        rollbackPendingPasswordRecoveryRedirect()
+        writer = beginAuthIdentityOperation(userId)
+        redirectPurpose = 'oauth-callback'
+      } else {
+        rollbackPendingPasswordRecoveryRedirect()
         return
       }
-      if (redirectPurpose === 'password-recovery') pendingPasswordRecoveryRedirect = null
-      writer = beginAuthIdentityOperation(userId)
     }
 
     const bound = bindAuthOperationPrincipal(writer, userId)

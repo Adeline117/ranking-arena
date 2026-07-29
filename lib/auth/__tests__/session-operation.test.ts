@@ -4,11 +4,13 @@ import {
   beginAuthIdentityOperation,
   clearAuthRedirectAcquisitionReceipt,
   clearAuthStorage,
+  completeAuthIdentityOperation,
   detectAuthSessionInUrl,
   getAuthRedirectAcquisitionReceipt,
   getAuthRedirectNavigationKey,
   getCurrentAuthOperation,
   guardedAuthStorage,
+  settleAuthRedirectInitialization,
   withAuthSessionWriter,
 } from '../session-operation'
 
@@ -171,7 +173,11 @@ describe('guarded auth session storage', () => {
 
       expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
       expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
-      expect(getCurrentAuthOperation()).toBeNull()
+      expect(getCurrentAuthOperation()).toMatchObject({
+        expectedUserId: null,
+        targetKnown: true,
+        identityTransition: false,
+      })
 
       // A mismatched write consumes the one-shot intent; a later replay cannot
       // wait for the URL hash to disappear and then upgrade a normal session.
@@ -181,6 +187,74 @@ describe('guarded auth session storage', () => {
       window.history.pushState({}, '', '/')
     }
   )
+
+  it('keeps a newer B login authoritative over a late recovery A storage write', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/reset-password#access_token=token-a&refresh_token=refresh-user-a&type=recovery'
+    )
+    expect(detectCurrentRedirect()).toBe(true)
+    const recoveryOperationA = getCurrentAuthOperation()
+    expect(recoveryOperationA).toMatchObject({
+      expectedUserId: null,
+      targetKnown: false,
+      identityTransition: true,
+    })
+    window.history.replaceState({}, '', '/reset-password')
+
+    const operationB = beginAuthIdentityOperation('user-b')
+    await withAuthSessionWriter(operationB, async () => {
+      guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('user-b', 'token-b'))
+    })
+    const steadyB = completeAuthIdentityOperation(operationB, 'user-b')
+    expect(steadyB).not.toBeNull()
+
+    guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('user-a', 'token-a'))
+
+    expect(JSON.parse(window.localStorage.getItem(AUTH_STORAGE_KEY) ?? '{}')).toMatchObject({
+      access_token: 'token-b',
+      user: { id: 'user-b' },
+    })
+    expect(getCurrentAuthOperation()).toEqual(steadyB)
+    expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
+    window.history.pushState({}, '', '/')
+  })
+
+  it('rolls an invalid recovery initialization back to the stored B principal', async () => {
+    const operationB = beginAuthIdentityOperation('user-b')
+    await withAuthSessionWriter(operationB, async () => {
+      guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('user-b', 'token-b'))
+    })
+    completeAuthIdentityOperation(operationB, 'user-b')
+
+    window.history.pushState(
+      {},
+      '',
+      '/reset-password#access_token=invalid&refresh_token=invalid-refresh&type=recovery'
+    )
+    expect(detectCurrentRedirect()).toBe(true)
+    expect(getCurrentAuthOperation()).toMatchObject({
+      expectedUserId: null,
+      targetKnown: false,
+      identityTransition: true,
+    })
+
+    // GoTrue resolves initialization with an error and never calls setItem.
+    settleAuthRedirectInitialization()
+
+    expect(getCurrentAuthOperation()).toMatchObject({
+      expectedUserId: 'user-b',
+      targetKnown: true,
+      identityTransition: false,
+    })
+    expect(JSON.parse(window.localStorage.getItem(AUTH_STORAGE_KEY) ?? '{}')).toMatchObject({
+      access_token: 'token-b',
+      user: { id: 'user-b' },
+    })
+    expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
+    window.history.pushState({}, '', '/')
+  })
 
   it('does not issue a redirect receipt for a coordinator-owned session writer', async () => {
     window.history.pushState({}, '', '/auth/callback?code=oauth-code')
