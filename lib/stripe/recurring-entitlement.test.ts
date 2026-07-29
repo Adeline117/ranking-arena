@@ -177,6 +177,7 @@ describe('recurring Pro Invoice entitlement activation', () => {
           p_plan: 'monthly',
           p_amount_paid: 499,
           p_currency: 'usd',
+          p_livemode: true,
           p_period_start: '2027-01-15T08:00:00.000Z',
           p_period_end: '2027-02-14T08:00:00.000Z',
           p_payment_status: 'paid',

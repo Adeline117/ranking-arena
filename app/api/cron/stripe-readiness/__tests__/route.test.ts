@@ -65,6 +65,13 @@ const readyEntitlementAuthority = {
   api_tier_payment_ownership_anomalies: 0,
   api_tier_payment_backfill_incomplete: 0,
   api_tier_reversal_actions_incomplete: 0,
+  test_mode_entitlement_payments: 0,
+  test_mode_trial_entitlements: 0,
+  non_live_current_pro_authorities: 0,
+  non_live_current_group_passes: 0,
+  stripe_payment_mode_anomalies: 0,
+  refund_mode_anomalies: 0,
+  group_payment_mode_anomalies: 0,
 }
 
 function chainable(result: { count: number | null; error: null | { message: string } }) {

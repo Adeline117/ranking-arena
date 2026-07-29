@@ -73,6 +73,7 @@ const RECURRING_PRO_STATE_SUCCESS = new Set([
   'reconciled',
   'revoked',
   'stale_event',
+  'test_mode_non_entitling',
 ])
 const RECURRING_PRO_RETRY_GRACE_SECONDS = 7 * 24 * 60 * 60
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
@@ -248,6 +249,7 @@ async function reconcileRecurringProSubscriptionState(
             : null,
         p_event_id: event.id,
         p_event_created_at: new Date(event.created * 1000).toISOString(),
+        p_livemode: event.livemode,
       }
     )
     if (error) {

@@ -109,6 +109,7 @@ function baseSession(overrides: Record<string, unknown> = {}) {
     mode: 'subscription',
     status: 'complete',
     payment_status: 'paid',
+    livemode: true,
     customer: 'cus_test_123',
     subscription: 'sub_test_123',
     metadata: { userId: 'user-123', plan: 'monthly' },
@@ -122,6 +123,7 @@ function activeSubscription(priceId = 'price_monthly', status = 'active') {
     status,
     customer: 'cus_test_123',
     cancel_at_period_end: false,
+    livemode: true,
     items: {
       data: [
         {
@@ -155,6 +157,7 @@ describe('POST /api/stripe/verify-session', () => {
       user_id: 'user-123',
       payment_kind: 'recurring',
       payment_status: 'paid',
+      livemode: true,
       plan: 'monthly',
       stripe_customer_id: 'cus_test_123',
       stripe_subscription_id: 'sub_test_123',
@@ -276,6 +279,7 @@ describe('POST /api/stripe/verify-session', () => {
       period_start: PERIOD_START,
       period_end: PERIOD_END,
       revoked_at: null,
+      livemode: true,
     }
 
     const response = await POST(request())

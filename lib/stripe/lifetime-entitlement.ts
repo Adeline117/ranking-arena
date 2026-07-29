@@ -29,6 +29,7 @@ const activationStatuses = new Set([
   'reservation_review',
   'subject_deleted',
   'duplicate_refund_queued',
+  'test_mode_non_entitling',
 ] as const)
 
 export type LifetimeActivationStatus =
@@ -41,6 +42,7 @@ export type LifetimeActivationStatus =
   | 'reservation_review'
   | 'subject_deleted'
   | 'duplicate_refund_queued'
+  | 'test_mode_non_entitling'
   | 'authority_review_recorded'
 
 export type LifetimeActivationOutcome = {
@@ -127,14 +129,14 @@ export async function activateLifetimeCheckoutEntitlement(params: {
   supabase: SupabaseClient<Database>
   session: Stripe.Checkout.Session
   expectedUserId: string
+  expectedLivemode: boolean
 }): Promise<LifetimeActivationOutcome> {
   let authority: LifetimePaymentAuthority
   try {
-    const resolved = await resolveCheckoutSessionAuthority(
-      params.stripe,
-      params.session,
-      stripeEntitlementAuthorityOptions(params.expectedUserId)
-    )
+    const resolved = await resolveCheckoutSessionAuthority(params.stripe, params.session, {
+      ...stripeEntitlementAuthorityOptions(params.expectedUserId),
+      expectedLivemode: params.expectedLivemode,
+    })
     if (resolved.kind !== 'lifetime_payment') {
       throw new Error(`Checkout ${params.session.id} is not a lifetime payment`)
     }
@@ -197,6 +199,7 @@ export async function activateLifetimeCheckoutEntitlement(params: {
       p_currency: authority.currency,
       p_paid_at: new Date(authority.paidAt * 1000).toISOString(),
       p_payment_status: 'succeeded',
+      p_livemode: params.expectedLivemode,
     }
   )
   if (error) {

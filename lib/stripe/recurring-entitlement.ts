@@ -22,6 +22,7 @@ const SAFE_RECURRING_ACTIVATION_STATUSES = new Set([
   'stale_payment',
   'stripe_status_not_entitling',
   'subject_deleted',
+  'test_mode_non_entitling',
 ] as const)
 const PRO_SUBSCRIPTION_METADATA_KEYS = [
   'plan',
@@ -48,6 +49,7 @@ export type SafeRecurringActivationStatus =
   | 'stale_payment'
   | 'stripe_status_not_entitling'
   | 'subject_deleted'
+  | 'test_mode_non_entitling'
 
 export type RecurringActivationOutcome = {
   status: SafeRecurringActivationStatus
@@ -202,6 +204,7 @@ export async function activateRecurringInvoiceEntitlement(params: {
       p_period_end: new Date(authority.periodEnd * 1000).toISOString(),
       p_payment_status: 'paid',
       p_stripe_subscription_status: authority.subscriptionStatus,
+      p_livemode: params.livemode,
     }
   )
   if (error) {

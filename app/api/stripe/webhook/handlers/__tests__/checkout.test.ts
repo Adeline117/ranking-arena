@@ -570,6 +570,7 @@ describe('handleCheckoutComplete entitlement safety', () => {
       p_stripe_customer_id: 'cus_test_123',
       p_stripe_subscription_id: 'sub_test_123',
       p_plan: 'monthly',
+      p_livemode: true,
       p_period_start: '2027-01-15T08:00:00.000Z',
       p_period_end: '2027-01-22T08:00:00.000Z',
       p_stripe_subscription_status: 'trialing',
@@ -871,6 +872,7 @@ describe('handleCheckoutComplete entitlement safety', () => {
       supabase: expect.anything(),
       session,
       expectedUserId: lifetimeUserId,
+      expectedLivemode: true,
     })
     expect(mockJoinProOfficialGroup).not.toHaveBeenCalled()
     expect(mockMintNFTForUser).not.toHaveBeenCalled()

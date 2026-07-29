@@ -239,7 +239,11 @@ export async function handleCheckoutComplete(
       return
     }
 
-    const outcome = await handleLifetimePayment(session, canonicalPaymentUserId)
+    const outcome = await handleLifetimePayment(
+      session,
+      canonicalPaymentUserId,
+      event?.livemode ?? session.livemode
+    )
     if (!lifetimeActivationGranted(outcome.status)) {
       logger.warn('Lifetime checkout reached a safe non-grant terminal state', {
         userId: canonicalPaymentUserId,
@@ -461,6 +465,7 @@ export async function handleCheckoutComplete(
           p_period_start: exactSubscription.periodStart,
           p_period_end: exactSubscription.periodEnd,
           p_stripe_subscription_status: exactSubscription.subscription.status,
+          p_livemode: event.livemode,
         }
       )
       if (trialActivation.error) {
@@ -469,7 +474,11 @@ export async function handleCheckoutComplete(
         )
       }
       const trialStatus = recurringProRpcStatus(trialActivation.data)
-      if (trialStatus !== 'activated' && trialStatus !== 'already_activated') {
+      if (
+        trialStatus !== 'activated' &&
+        trialStatus !== 'already_activated' &&
+        trialStatus !== 'test_mode_non_entitling'
+      ) {
         throw new Error(`Recurring Pro trial activation returned ${trialStatus || 'missing'}`)
       }
     }
@@ -1045,7 +1054,11 @@ export async function handleCheckoutExpired(
   )
 }
 
-async function handleLifetimePayment(session: Stripe.Checkout.Session, userId: string) {
+async function handleLifetimePayment(
+  session: Stripe.Checkout.Session,
+  userId: string,
+  expectedLivemode: boolean
+) {
   logger.info('Processing exact lifetime payment authority', {
     userId,
     sessionId: session.id,
@@ -1055,6 +1068,7 @@ async function handleLifetimePayment(session: Stripe.Checkout.Session, userId: s
     supabase: getSupabaseAdmin(),
     session,
     expectedUserId: userId,
+    expectedLivemode,
   })
 }
 
