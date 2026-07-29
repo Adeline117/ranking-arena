@@ -30,6 +30,8 @@ ATTESTED_WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729015000_leaderbo
 PRIVATE_STAGING_MIGRATION="$ROOT_DIR/supabase/migrations/20260729054400_leaderboard_rank_generation_private_staging.sql"
 STAGING_ONLY_WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729061533_leaderboard_rank_generation_staging_only_writer.sql"
 STAGING_FULL_XID_MIGRATION="$ROOT_DIR/supabase/migrations/20260729063000_leaderboard_rank_staging_full_xid_guard.sql"
+PUBLICATION_PLAN_MIGRATION="$ROOT_DIR/supabase/migrations/20260729064500_leaderboard_rank_generation_publication_plan.sql"
+PUBLICATION_PLAN_PROOF="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-publication-plan.pg17.inc.sh"
 CAPACITY_BENCHMARK="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-64k-benchmark.pg17.psql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 BENCHMARK_64K="${ARENA_ATOMIC_WRITER_BENCHMARK_64K:-0}"
@@ -38,6 +40,9 @@ STAGING_ONLY_WRITER="${ARENA_ATOMIC_WRITER_STAGING_ONLY:-0}"
 LEGACY_CUTOVER_REPLAY="${ARENA_ATOMIC_WRITER_LEGACY_CUTOVER_REPLAY:-0}"
 STAGING_XID_EPOCH="${ARENA_ATOMIC_WRITER_STAGING_XID_EPOCH:-0}"
 STAGING_XID_REPAIR_TIMING="${ARENA_ATOMIC_WRITER_STAGING_XID_REPAIR_TIMING:-before-writes}"
+PUBLICATION_PLAN="${ARENA_ATOMIC_WRITER_PUBLICATION_PLAN:-0}"
+PUBLICATION_PLAN_MANIFEST_MUTATION="${ARENA_ATOMIC_WRITER_PUBLICATION_PLAN_MANIFEST_MUTATION:-none}"
+PUBLICATION_PLAN_RETAIN_MODE="${ARENA_ATOMIC_WRITER_PUBLICATION_PLAN_RETAIN_MODE:-legacy}"
 
 if [[ "$BENCHMARK_64K" != '0' && "$BENCHMARK_64K" != '1' ]]; then
   echo 'ARENA_ATOMIC_WRITER_BENCHMARK_64K must be 0 or 1' >&2
@@ -64,6 +69,33 @@ if [[ "$STAGING_XID_REPAIR_TIMING" != 'before-writes' \
   echo 'ARENA_ATOMIC_WRITER_STAGING_XID_REPAIR_TIMING must be before-writes or after-batch-zero' >&2
   exit 1
 fi
+if [[ "$PUBLICATION_PLAN" != '0' && "$PUBLICATION_PLAN" != '1' ]]; then
+  echo 'ARENA_ATOMIC_WRITER_PUBLICATION_PLAN must be 0 or 1' >&2
+  exit 1
+fi
+if [[ "$PUBLICATION_PLAN_MANIFEST_MUTATION" != 'none' \
+   && "$PUBLICATION_PLAN_MANIFEST_MUTATION" != 'omit-identity' \
+   && "$PUBLICATION_PLAN_MANIFEST_MUTATION" != 'profit-factor' ]]; then
+  echo 'ARENA_ATOMIC_WRITER_PUBLICATION_PLAN_MANIFEST_MUTATION must be none, omit-identity, or profit-factor' >&2
+  exit 1
+fi
+if [[ "$PUBLICATION_PLAN_RETAIN_MODE" != 'legacy' \
+   && "$PUBLICATION_PLAN_RETAIN_MODE" != 'trusted' \
+   && "$PUBLICATION_PLAN_RETAIN_MODE" != 'expired' ]]; then
+  echo 'ARENA_ATOMIC_WRITER_PUBLICATION_PLAN_RETAIN_MODE must be legacy, trusted, or expired' >&2
+  exit 1
+fi
+if [[ "$PUBLICATION_PLAN_MANIFEST_MUTATION" != 'none' \
+   && "$PUBLICATION_PLAN" != '1' ]]; then
+  echo 'publication-plan manifest mutations require the publication-plan proof' >&2
+  exit 1
+fi
+if [[ "$PUBLICATION_PLAN_RETAIN_MODE" != 'legacy' \
+   && ( "$PUBLICATION_PLAN" != '1' \
+        || "$PUBLICATION_PLAN_MANIFEST_MUTATION" != 'none' ) ]]; then
+  echo 'trusted retain modes require the unmutated publication-plan proof' >&2
+  exit 1
+fi
 if [[ "$BENCHMARK_64K" == '1' && "$STAGING_ONLY_WRITER" == '1' ]]; then
   echo 'staging-only proof and legacy 64k benchmark are separate scenarios' >&2
   exit 1
@@ -80,6 +112,14 @@ fi
 if [[ "$STAGING_XID_REPAIR_TIMING" == 'after-batch-zero' \
    && "$STAGING_ONLY_WRITER" != '1' ]]; then
   echo 'deferred staging XID repair requires the staging-only proof' >&2
+  exit 1
+fi
+if [[ "$PUBLICATION_PLAN" == '1' \
+   && ( "$STAGING_ONLY_WRITER" != '1' \
+        || "$STAGING_XID_REPAIR_TIMING" != 'before-writes' \
+        || "$BENCHMARK_64K" == '1' \
+        || "$LEGACY_CUTOVER_REPLAY" == '1' ) ]]; then
+  echo 'publication-plan proof requires fresh staging-only, pre-write full-XID mode' >&2
   exit 1
 fi
 
@@ -112,6 +152,8 @@ for required_file in \
   "$PRIVATE_STAGING_MIGRATION" \
   "$STAGING_ONLY_WRITER_MIGRATION" \
   "$STAGING_FULL_XID_MIGRATION" \
+  "$PUBLICATION_PLAN_MIGRATION" \
+  "$PUBLICATION_PLAN_PROOF" \
   "$CAPACITY_BENCHMARK"; do
   if [[ ! -f "$required_file" ]]; then
     echo "required atomic-writer proof input is missing: $required_file" >&2
@@ -1144,6 +1186,19 @@ SQL
       exit 1
     fi
   fi
+  if [[ "$PUBLICATION_PLAN" == '1' ]]; then
+    # Keep the large dependency bootstrap shared. This small sourced proof owns
+    # only the bundle fixture and the publication-plan-specific assertions.
+    source "$PUBLICATION_PLAN_PROOF"
+    install_publication_plan_fixture
+    prove_publication_plan_install_rejects_preexisting_stage
+    if ! psql_cmd -q -f "$PUBLICATION_PLAN_MIGRATION" >"$ERROR_FILE" 2>&1; then
+      echo 'publication-plan migration failed after the real staging dependency chain' >&2
+      sed -n '1,360p' "$ERROR_FILE" >&2
+      exit 1
+    fi
+    seed_trusted_publication_plan_fixture
+  fi
 fi
 psql_cmd -q <<'SQL'
 DO $attestation_encoder_proof$
@@ -1249,7 +1304,15 @@ fi
 # arrays that the writer must attest. Batch zero owns exactly 1,000 alpha
 # identities and batch one owns one beta identity. This is the smallest real
 # fixed-chunk topology and is globally C-ordered across the chunk boundary.
-psql_cmd -q <<'SQL'
+psql_cmd -q \
+  -v publication_plan_manifest_mutation="$PUBLICATION_PLAN_MANIFEST_MUTATION" \
+  <<'SQL'
+CREATE TEMP TABLE fixture_publication_plan_manifest_mode (
+  mutation text NOT NULL
+);
+INSERT INTO fixture_publication_plan_manifest_mode (mutation)
+VALUES (:'publication_plan_manifest_mutation');
+
 CREATE TABLE arena.fixture_atomic_writer_case (
   season_id text NOT NULL,
   generation_seq bigint NOT NULL,
@@ -1276,12 +1339,39 @@ DECLARE
   v_batch_1 arena.leaderboard_rank_batch_row_v1[];
   v_inputs jsonb;
   v_included jsonb;
+  v_source_evidence jsonb;
   v_evidence_0 jsonb;
   v_evidence_1 jsonb;
   v_plan text[];
   v_write_set text;
   v_claim jsonb;
+  v_manifest_mutation text;
+  v_publication_bundle jsonb;
+  v_metric_trust_projection jsonb;
+  v_canonical_score_rows jsonb;
+  v_score_rows_sha256 text := pg_catalog.repeat('a', 64);
+  v_physical_boards_sha256 text := pg_catalog.repeat('b', 64);
+  v_source_bundle_sha256 text := pg_catalog.repeat('c', 64);
+  v_enrichment_contract text := 'leaderboard-enrichment-evidence@1';
+  v_enrichment_evidence jsonb;
+  v_eligibility_contract text := 'leaderboard-eligibility-evidence@1';
+  v_eligibility_evidence jsonb;
+  v_manifest_valid_until timestamptz;
+  v_expected_generation_seq bigint;
 BEGIN
+  SELECT mode.mutation
+  INTO STRICT v_manifest_mutation
+  FROM fixture_publication_plan_manifest_mode AS mode;
+
+  IF pg_catalog.to_regclass(
+       'arena.fixture_publication_plan_bundle_state'
+     ) IS NOT NULL THEN
+    -- The production plan sealer canonicalizes its DB rebuild in UTC. Build
+    -- this JSON evidence under the same timezone so timestamptz JSON strings
+    -- are byte-identical rather than merely instant-equivalent.
+    PERFORM pg_catalog.set_config('TimeZone', 'UTC', true);
+  END IF;
+
   SELECT
     pg_catalog.jsonb_agg(
       pg_catalog.jsonb_build_object(
@@ -1292,7 +1382,13 @@ BEGIN
         'max_drawdown', 8,
         'win_rate', 66,
         'sharpe_ratio', 2.2,
-        'profit_factor', 2.1,
+        'profit_factor', CASE
+          WHEN pg_catalog.to_regclass(
+                 'arena.fixture_publication_plan_bundle_state'
+               ) IS NULL
+            OR v_manifest_mutation = 'profit-factor' THEN 2.1::numeric
+          ELSE NULL::numeric
+        END,
         'trades_count', 140
       )
       ORDER BY generated.ordinal_position
@@ -1312,29 +1408,148 @@ BEGIN
     FROM pg_catalog.generate_series(1, 1001) AS rows(ordinal_position)
   ) AS generated;
 
-  v_seal := arena.seal_leaderboard_score_input_manifest_v1(
-    '90D',
-    pg_catalog.repeat('a', 64),
-    pg_catalog.repeat('b', 64),
-    pg_catalog.repeat('c', 64),
-    pg_catalog.jsonb_build_object(
+  v_enrichment_evidence := pg_catalog.jsonb_build_object(
+    'contract', v_enrichment_contract,
+    'rows', 1001
+  );
+  v_eligibility_evidence := pg_catalog.jsonb_build_object(
+    'contract', v_eligibility_contract,
+    'canonicalIdentityCollisionCount', 0,
+    'included', v_included
+  );
+  v_manifest_valid_until := pg_catalog.clock_timestamp() + interval '1 hour';
+
+  IF pg_catalog.to_regclass(
+       'arena.fixture_publication_plan_bundle_state'
+     ) IS NOT NULL THEN
+    EXECUTE $publication_source_evidence$
+      SELECT public.arena_score_inputs_publish_bundle_json('90D', 1000, 48)
+    $publication_source_evidence$
+    INTO STRICT v_publication_bundle;
+
+    EXECUTE $metric_trust_projection$
+      SELECT arena.build_leaderboard_metric_trust_projection_v1(
+        $1,
+        $2,
+        $3
+      )
+    $metric_trust_projection$
+    INTO STRICT v_metric_trust_projection
+    USING
+      '90D',
+      v_publication_bundle->'scoreRows',
+      v_publication_bundle->'physicalBoards';
+
+    v_inputs := v_metric_trust_projection->'inputs';
+    IF v_manifest_mutation = 'omit-identity' THEN
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          input_row.value
+          ORDER BY
+            (input_row.value->>'source') COLLATE pg_catalog."C",
+            (input_row.value->>'source_trader_id') COLLATE pg_catalog."C"
+        ),
+        '[]'::jsonb
+      )
+      INTO STRICT v_inputs
+      FROM pg_catalog.jsonb_array_elements(v_inputs) AS input_row(value)
+      WHERE NOT (
+        input_row.value->>'source' = 'beta'
+        AND input_row.value->>'source_trader_id' = 'trader-001002'
+      );
+    ELSIF v_manifest_mutation = 'profit-factor' THEN
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.jsonb_set(
+            input_row.value,
+            '{profit_factor}',
+            pg_catalog.to_jsonb(2.1::numeric),
+            true
+          )
+          ORDER BY
+            (input_row.value->>'source') COLLATE pg_catalog."C",
+            (input_row.value->>'source_trader_id') COLLATE pg_catalog."C"
+        ),
+        '[]'::jsonb
+      )
+      INTO STRICT v_inputs
+      FROM pg_catalog.jsonb_array_elements(v_inputs) AS input_row(value);
+    END IF;
+
+    v_enrichment_contract :=
+      v_metric_trust_projection->>'enrichmentContract';
+    v_enrichment_evidence :=
+      v_metric_trust_projection->'enrichmentEvidence';
+    v_eligibility_contract :=
+      v_metric_trust_projection->>'eligibilityContract';
+    v_eligibility_evidence :=
+      v_metric_trust_projection->'eligibilityEvidence';
+    v_manifest_valid_until :=
+      (v_metric_trust_projection->>'validUntil')::timestamptz;
+
+    SELECT pg_catalog.jsonb_agg(
+      score_row.value
+      ORDER BY
+        (score_row.value->>'platform') COLLATE pg_catalog."C",
+        (score_row.value->>'trader_key') COLLATE pg_catalog."C"
+    )
+    INTO STRICT v_canonical_score_rows
+    FROM pg_catalog.jsonb_array_elements(v_publication_bundle->'scoreRows')
+      AS score_row(value);
+
+    v_source_evidence := pg_catalog.jsonb_build_object(
+      'freshAliases', pg_catalog.jsonb_build_array('alpha', 'beta'),
+      'retainedAliases', pg_catalog.jsonb_build_array('delta', 'gamma'),
+      'physicalBoards', v_publication_bundle->'physicalBoards'
+    );
+    v_score_rows_sha256 := pg_catalog.encode(
+      pg_catalog.sha256(pg_catalog.convert_to(
+        v_canonical_score_rows::text,
+        'UTF8'
+      )),
+      'hex'
+    );
+    v_physical_boards_sha256 := pg_catalog.encode(
+      pg_catalog.sha256(pg_catalog.convert_to(
+        (v_publication_bundle->'physicalBoards')::text,
+        'UTF8'
+      )),
+      'hex'
+    );
+    v_source_bundle_sha256 := pg_catalog.encode(
+      pg_catalog.sha256(pg_catalog.convert_to(
+        pg_catalog.jsonb_build_array(
+          'leaderboard-score-publish-bundle@1',
+          '90D',
+          1000,
+          48,
+          v_canonical_score_rows,
+          v_publication_bundle->'physicalBoards'
+        )::text,
+        'UTF8'
+      )),
+      'hex'
+    );
+  ELSE
+    v_source_evidence := pg_catalog.jsonb_build_object(
       'contract', 'fixture-source-evidence@1',
       'sourceCount', 2,
       'sources', pg_catalog.jsonb_build_array('alpha', 'beta')
-    ),
-    'leaderboard-enrichment-evidence@1',
-    pg_catalog.jsonb_build_object(
-      'contract', 'leaderboard-enrichment-evidence@1',
-      'rows', 1001
-    ),
-    'leaderboard-eligibility-evidence@1',
-    pg_catalog.jsonb_build_object(
-      'contract', 'leaderboard-eligibility-evidence@1',
-      'canonicalIdentityCollisionCount', 0,
-      'included', v_included
-    ),
+    );
+  END IF;
+
+  v_seal := arena.seal_leaderboard_score_input_manifest_v1(
+    '90D',
+    v_source_bundle_sha256,
+    v_score_rows_sha256,
+    v_physical_boards_sha256,
+    v_source_evidence,
+    v_enrichment_contract,
+    v_enrichment_evidence,
+    v_eligibility_contract,
+    v_eligibility_evidence,
     v_inputs,
-    pg_catalog.clock_timestamp() + interval '1 hour'
+    v_manifest_valid_until
   );
 
   v_manifest_id := (v_seal->>'manifestId')::uuid;
@@ -1491,7 +1706,14 @@ BEGIN
     v_computed_at,
     300
   );
-  IF (v_claim->>'generation_seq')::bigint <> 1
+  v_expected_generation_seq := CASE
+    WHEN pg_catalog.to_regclass(
+           'arena.fixture_trusted_prior_plan'
+         ) IS NULL THEN 1
+    ELSE 2
+  END;
+  IF (v_claim->>'generation_seq')::bigint <>
+       v_expected_generation_seq
      OR v_claim->>'score_cohort_id' IS DISTINCT FROM v_cohort::text THEN
     RAISE EXCEPTION 'atomic writer fixture claim drifted: %', v_claim;
   END IF;
@@ -1509,7 +1731,7 @@ BEGIN
     write_set_sha256
   ) VALUES (
     '90D',
-    1,
+    v_expected_generation_seq,
     v_cohort,
     v_computed_at,
     v_manifest_id,
@@ -1527,6 +1749,16 @@ expect_failure \
   'service role executed the owner-only atomic writer' \
   'permission denied for function write_leaderboard_rank_generation_batch_v1' \
   "SET ROLE service_role; SELECT arena.write_leaderboard_rank_generation_batch_v1(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL::arena.leaderboard_rank_batch_row_v1[]);"
+
+if [[ "$PUBLICATION_PLAN" == '1' ]]; then
+  if [[ "$PUBLICATION_PLAN_MANIFEST_MUTATION" != 'none' ]]; then
+    run_publication_plan_manifest_mutation_proof
+    exit 0
+  fi
+  run_publication_plan_proof
+  printf 'PostgreSQL 17 leaderboard-rank publication-plan proof passed.\n'
+  exit 0
+fi
 
 if [[ "$STAGING_ONLY_WRITER" == '1' ]]; then
   expect_failure \
