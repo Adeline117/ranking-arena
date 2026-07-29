@@ -32,6 +32,39 @@ import { env } from '@/lib/env'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+const LEASE_TOKEN_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+type StripeEventClaim =
+  | { status: 'claimed'; leaseToken: string }
+  | { status: 'processed' }
+  | { status: 'busy' | 'identity_conflict' | 'invalid' }
+
+function parseStripeEventClaim(value: unknown): StripeEventClaim {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { status: 'invalid' }
+  }
+  const candidate = value as Record<string, unknown>
+  if (candidate.status === 'processed') return { status: 'processed' }
+  if (candidate.status === 'busy' || candidate.status === 'identity_conflict') {
+    return { status: candidate.status }
+  }
+  if (
+    candidate.status === 'claimed' &&
+    typeof candidate.leaseToken === 'string' &&
+    LEASE_TOKEN_PATTERN.test(candidate.leaseToken)
+  ) {
+    return { status: 'claimed', leaseToken: candidate.leaseToken }
+  }
+  return { status: 'invalid' }
+}
+
+function stripeEventFinishStatus(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const status = (value as Record<string, unknown>).status
+  return typeof status === 'string' ? status : null
+}
+
 export async function POST(request: NextRequest) {
   const correlationId = getOrCreateCorrelationId(request)
   return runWithCorrelationId(correlationId, async () => {
@@ -65,10 +98,14 @@ export async function POST(request: NextRequest) {
 
       // Atomically claim the event without calling it processed yet. A prior
       // failed (or stale processing) delivery remains claimable on retry.
-      const { data: claimResult, error: claimError } = await supabase.rpc('claim_stripe_event', {
-        p_event_id: event.id,
-        p_event_type: event.type,
-      })
+      const { data: rawClaimResult, error: claimError } = await supabase.rpc(
+        'claim_stripe_event_v2',
+        {
+          p_event_id: event.id,
+          p_event_type: event.type,
+          p_livemode: event.livemode,
+        }
+      )
 
       if (claimError) {
         logger.error('Stripe event claim failed — returning 500 for retry', {
@@ -81,19 +118,21 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Event claim failed, please retry' }, { status: 500 })
       }
 
-      if (claimResult === 'processed') {
+      const claimResult = parseStripeEventClaim(rawClaimResult)
+
+      if (claimResult.status === 'processed') {
         logger.info(`Event ${event.id} already processed, skipping`, { type: event.type })
         return NextResponse.json({ received: true, skipped: true })
       }
 
-      if (claimResult !== 'claimed') {
+      if (claimResult.status !== 'claimed') {
         // A concurrent delivery owns this event, or the function returned an
         // unknown state. A non-2xx response asks Stripe to retry rather than
         // acknowledging work that has not completed.
         logger.warn('Stripe event is not available for processing', {
           eventId: event.id,
           eventType: event.type,
-          claimResult,
+          claimResult: claimResult.status,
         })
         return NextResponse.json({ error: 'Event is already processing' }, { status: 500 })
       }
@@ -232,26 +271,41 @@ export async function POST(request: NextRequest) {
             logger.info(`Unhandled event type: ${event.type}`)
         }
 
-        const { data: finished, error: finishError } = await supabase.rpc('finish_stripe_event', {
-          p_event_id: event.id,
-          p_succeeded: true,
-          p_error: null,
-        })
-        if (finishError || finished !== true) {
+        const { data: finished, error: finishError } = await supabase.rpc(
+          'finish_stripe_event_v2',
+          {
+            p_event_id: event.id,
+            p_event_type: event.type,
+            p_livemode: event.livemode,
+            p_lease_token: claimResult.leaseToken,
+            p_succeeded: true,
+            p_error: null,
+          }
+        )
+        if (finishError || stripeEventFinishStatus(finished) !== 'processed') {
           throw new Error(finishError?.message || 'Stripe event success state was not persisted')
         }
       } catch (handlerError) {
-        const message = handlerError instanceof Error ? handlerError.message : String(handlerError)
-        const { error: failureStateError } = await supabase.rpc('finish_stripe_event', {
-          p_event_id: event.id,
-          p_succeeded: false,
-          p_error: message,
-        })
+        const rawMessage =
+          handlerError instanceof Error ? handlerError.message : String(handlerError)
+        const message = rawMessage.trim().slice(0, 2000) || 'unknown handler failure'
+        const { data: failed, error: failureStateError } = await supabase.rpc(
+          'finish_stripe_event_v2',
+          {
+            p_event_id: event.id,
+            p_event_type: event.type,
+            p_livemode: event.livemode,
+            p_lease_token: claimResult.leaseToken,
+            p_succeeded: false,
+            p_error: message,
+          }
+        )
         logger.error('Stripe webhook handler failed; event remains retryable', {
           eventId: event.id,
           eventType: event.type,
           error: message,
           failureStateError: failureStateError?.message,
+          failureStateStatus: stripeEventFinishStatus(failed),
           correlationId,
         })
         return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 })
