@@ -4,16 +4,17 @@ import { join } from 'node:path'
 const route = readFileSync(join(process.cwd(), 'app/api/cron/generate-profiles/route.ts'), 'utf8')
 
 describe('generated profile ranking authority', () => {
-  it('selects only active, non-quarantined profile sources', () => {
-    expect(route).toContain('filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)')
-    expect(route).toContain(".in('platform', PROFILE_RANKING_SOURCES)")
+  it('selects only dynamic 90D authority profile sources', () => {
+    expect(route).toContain('readLeaderboardPublicationAuthority(supabase')
+    expect(route).toContain(".in('platform', profileRankingSources)")
     expect(route).toContain('!isPublicRankingSourceAllowed(profile.platform)')
   })
 
   it('reads every period from its own sealed generation', () => {
     expect(route).toContain('PROFILE_PERIODS.map((period)')
-    expect(route).toContain('readSealedRankingGeneration(')
-    expect(route).toContain('{ season: period, sources: batchSources }')
+    expect(route).toContain('readSealedRankingAuthorityGeneration(')
+    expect(route).toContain('const authoritySourceSet = new Set(')
+    expect(route).toContain('.filter(([source]) => authoritySourceSet.has(source))')
     expect(route).toContain(".eq('source', source)")
     expect(route).toContain(".in('source_trader_id', [...ids])")
     expect(route).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")

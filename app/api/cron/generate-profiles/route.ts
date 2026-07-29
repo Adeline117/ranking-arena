@@ -15,19 +15,13 @@ import { generateAutoBio, generateAutoTags, type AutoProfileInput } from '@/lib/
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { logger } from '@/lib/logger'
 import { withCron } from '@/lib/api/with-cron'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readLeaderboardPublicationAuthority } from '@/lib/rankings/read-publication-authority'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
-const PROFILE_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 const PROFILE_PERIODS = ['90D', '30D', '7D'] as const
 
 function rankIdentity(source: string, traderKey: string): string {
@@ -40,12 +34,15 @@ const handler = withCron('generate-profiles', async (request: NextRequest) => {
   const force = url.searchParams.get('force') === 'true'
 
   const supabase = getSupabaseAdmin()
+  const profileRankingSources = await readLeaderboardPublicationAuthority(supabase, '90D', {
+    timeoutMs: 10_000,
+  })
 
   // Step 1: Find traders that need auto-generated profiles
   let query = supabase
     .from('trader_profiles_v2')
     .select('platform, market_type, trader_key, display_name, bio, bio_source')
-    .in('platform', PROFILE_RANKING_SOURCES)
+    .in('platform', profileRankingSources)
     .order('updated_at', { ascending: false })
     .order('platform', { ascending: true })
     .order('trader_key', { ascending: true })
@@ -89,46 +86,47 @@ const handler = withCron('generate-profiles', async (request: NextRequest) => {
       ids.add(profile.trader_key)
       idsBySource.set(profile.platform, ids)
     }
-    const batchSources = [...idsBySource.keys()].sort()
-
     // Each period has its own publication. Exact per-source identity queries
     // prevent equal trader IDs on different exchanges from borrowing metrics.
     const periodReads = await Promise.all(
       PROFILE_PERIODS.map((period) =>
-        readSealedRankingGeneration(
+        readSealedRankingAuthorityGeneration(
           supabase,
-          { season: period, sources: batchSources },
+          period,
           async (publication) => {
+            const authoritySourceSet = new Set(publication.proofs.map((proof) => proof.source))
             const rows = await Promise.all(
-              [...idsBySource.entries()].map(async ([source, ids]) => {
-                const { data, error } = await supabase
-                  .from('leaderboard_ranks')
-                  .select(
-                    'source_trader_id, source, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, arena_score, rank'
-                  )
-                  .eq('source', source)
-                  .in('source_trader_id', [...ids])
-                  .eq('season_id', period)
-                  .filter('rank_publication_id', 'eq', publication.scoreCohortId)
-                  .order('source_trader_id', { ascending: true })
+              [...idsBySource.entries()]
+                .filter(([source]) => authoritySourceSet.has(source))
+                .map(async ([source, ids]) => {
+                  const { data, error } = await supabase
+                    .from('leaderboard_ranks')
+                    .select(
+                      'source_trader_id, source, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, arena_score, rank'
+                    )
+                    .eq('source', source)
+                    .in('source_trader_id', [...ids])
+                    .eq('season_id', period)
+                    .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+                    .order('source_trader_id', { ascending: true })
 
-                if (error || data === null) {
-                  throw new Error(
-                    `Profile rank query failed for ${source}/${period}: ${error?.message ?? 'null payload'}`
-                  )
-                }
-                if (
-                  data.some(
-                    (row) =>
-                      row.source !== source ||
-                      !ids.has(row.source_trader_id) ||
-                      !isPublicRankingSourceAllowed(row.source)
-                  )
-                ) {
-                  throw new Error(`Profile rank query crossed identity boundary for ${source}`)
-                }
-                return data
-              })
+                  if (error || data === null) {
+                    throw new Error(
+                      `Profile rank query failed for ${source}/${period}: ${error?.message ?? 'null payload'}`
+                    )
+                  }
+                  if (
+                    data.some(
+                      (row) =>
+                        row.source !== source ||
+                        !ids.has(row.source_trader_id) ||
+                        !isPublicRankingSourceAllowed(row.source)
+                    )
+                  ) {
+                    throw new Error(`Profile rank query crossed identity boundary for ${source}`)
+                  }
+                  return data
+                })
             )
             return rows.flat()
           },
