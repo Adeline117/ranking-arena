@@ -26,6 +26,7 @@ const CORE_CRON_ROUTES = [
   'app/api/cron/generate-activities/route.ts',
   'app/api/cron/auto-post-weekly-recap/route.ts',
   'app/api/cron/auto-post-market-summary/route.ts',
+  'app/api/cron/recount-follow-counts/route.ts',
 ] as const
 
 describe('core cron safety budgets', () => {

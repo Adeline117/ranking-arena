@@ -18,16 +18,27 @@ export const maxDuration = 60
 
 export const GET = withCron('recount-follow-counts', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin()
+  const workSignal = AbortSignal.timeout(45_000)
 
-  const { data, error } = await supabase.rpc('recount_all_follow_counts')
+  const { data, error } = await supabase
+    .rpc('recount_all_follow_counts')
+    .abortSignal(workSignal)
 
   if (error) {
     logger.error('[recount-follow-counts] RPC error:', error)
     throw error
   }
 
-  const updatedCount = data?.[0]?.updated_count ?? 0
+  const updatedCount = Number(data?.[0]?.updated_count)
+  if (
+    !Array.isArray(data) ||
+    data.length !== 1 ||
+    !Number.isSafeInteger(updatedCount) ||
+    updatedCount < 0
+  ) {
+    throw new Error('Follow-count recount returned an invalid acknowledgement')
+  }
   logger.info(`[recount-follow-counts] Fixed ${updatedCount} user profiles`)
 
-  return { count: Number(updatedCount) }
-})
+  return { count: updatedCount }
+}, { safetyTimeoutMs: 55_000 })
