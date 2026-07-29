@@ -306,7 +306,36 @@ export const GET = withPublic(
         : null
 
       if (cachedEntry) {
-        result = cachedEntry.value
+        const currentGeneration = await readSealedRankingGeneration(
+          supabase,
+          { season: cacheSeason, sources: expectedCacheSources },
+          async () => null,
+          { timeoutMs: 10_000 }
+        )
+        const currentSources = rankingProofSources(currentGeneration.authoritySources, query)
+        const authorityUnchanged =
+          currentSources.length === expectedCacheSources.length &&
+          currentSources.every((source, index) => source === expectedCacheSources[index])
+
+        if (
+          authorityUnchanged &&
+          currentGeneration.publicationIdentity === cachedEntry.publicationIdentity
+        ) {
+          result = cachedEntry.value
+        } else {
+          const sealedRead = await getRankingsFallback(
+            query,
+            cursor,
+            expectedCacheSources,
+            supabase
+          )
+          const safeValue = sanitizePublicRankingSourcePayload(sealedRead.value)
+          const safeRead = { ...sealedRead, value: safeValue }
+          if (cacheKey) {
+            await tieredSet(cacheKey, createSealedRankingCacheEntry(safeRead), 'hot', ['rankings'])
+          }
+          result = safeValue
+        }
       } else {
         const sealedRead = await getRankingsFallback(query, cursor, expectedCacheSources, supabase)
         const safeValue = sanitizePublicRankingSourcePayload(sealedRead.value)
