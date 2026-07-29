@@ -153,45 +153,6 @@ export class PipelineStorage {
   }
 
   /**
-   * 批量写入 leaderboard_ranks（用于 compute-leaderboard cron）
-   */
-  async persistLeaderboardRanks(
-    supabase: SupabaseClient,
-    traders: EnrichedTraderData[],
-    seasonId: string
-  ): Promise<{ count: number }> {
-    const ranks = traders.map((t, index) => ({
-      source: t.platform,
-      source_trader_id: t.trader_id,
-      season_id: seasonId,
-      rank: index + 1,
-      roi: t.roi_pct,
-      pnl: t.pnl_usd,
-      win_rate: t.win_rate_pct,
-      max_drawdown: t.max_drawdown_pct,
-      arena_score: t.arena_score,
-      profitability_score: t.arena_score_components.return_score,
-      score_completeness: t.confidence,
-      trader_type: t.trader_type,
-      computed_at: new Date().toISOString(),
-    }))
-
-    const { error, count } = await supabase.from('leaderboard_ranks').upsert(ranks, {
-      onConflict: 'source,source_trader_id,season_id',
-      count: 'exact',
-    })
-
-    if (error) {
-      log.error('persistLeaderboardRanks error', {
-        error: error instanceof Error ? error.message : String(error),
-      })
-      throw error
-    }
-
-    return { count: count ?? ranks.length }
-  }
-
-  /**
    * 批量写入 trader_daily_snapshots（用于 aggregate-daily-snapshots cron）
    */
   async persistDailySnapshots(

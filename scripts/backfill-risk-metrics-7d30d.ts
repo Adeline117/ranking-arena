@@ -3,7 +3,10 @@
  *
  * Targets:
  * - trader_snapshots
- * - leaderboard_ranks
+ *
+ * Public leaderboard rows are intentionally never updated here. The canonical
+ * compute-leaderboard cron derives the same metrics from trader_equity_curve
+ * and publishes a complete, proof-sealed generation.
  *
  * Usage:
  *   npx tsx scripts/backfill-risk-metrics-7d30d.ts
@@ -39,18 +42,17 @@ function computeMetrics(roiSeries: number[]): MetricTriple | null {
   const variance = returns.reduce((acc, r) => acc + (r - mean) ** 2, 0) / (returns.length - 1)
   const std = Math.sqrt(variance)
 
-  const negatives = returns.filter(r => r < 0)
-  const downsideVar = negatives.length > 0
-    ? negatives.reduce((acc, r) => acc + r * r, 0) / negatives.length
-    : 0
+  const negatives = returns.filter((r) => r < 0)
+  const downsideVar =
+    negatives.length > 0 ? negatives.reduce((acc, r) => acc + r * r, 0) / negatives.length : 0
   const downsideStd = Math.sqrt(downsideVar)
 
-  const grossProfit = returns.filter(r => r > 0).reduce((acc, r) => acc + r, 0)
-  const grossLoss = Math.abs(returns.filter(r => r < 0).reduce((acc, r) => acc + r, 0))
+  const grossProfit = returns.filter((r) => r > 0).reduce((acc, r) => acc + r, 0)
+  const grossLoss = Math.abs(returns.filter((r) => r < 0).reduce((acc, r) => acc + r, 0))
 
   const sharpe = std > 0 ? (mean / std) * Math.sqrt(365) : null
   const sortino = downsideStd > 0 ? (mean / downsideStd) * Math.sqrt(365) : null
-  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? 99.99 : null)
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99.99 : null
 
   return {
     sharpe: clamp(sharpe, -99, 99),
@@ -107,19 +109,28 @@ async function main() {
 
   const CHUNK = 500
   let totalSnapshotsUpdated = 0
-  let totalRanksUpdated = 0
 
   for (let i = 0; i < updates.length; i += CHUNK) {
     const batch = updates.slice(i, i + CHUNK)
 
-    const values = batch.map((_, idx) => {
-      const p = idx * 6
-      return `($${p + 1},$${p + 2},$${p + 3},$${p + 4}::numeric,$${p + 5}::numeric,$${p + 6}::numeric)`
-    }).join(',')
+    const values = batch
+      .map((_, idx) => {
+        const p = idx * 6
+        return `($${p + 1},$${p + 2},$${p + 3},$${p + 4}::numeric,$${p + 5}::numeric,$${p + 6}::numeric)`
+      })
+      .join(',')
 
-    const params = batch.flatMap(u => [u.source, u.sourceTraderId, u.seasonId, u.sharpe, u.sortino, u.pf])
+    const params = batch.flatMap((u) => [
+      u.source,
+      u.sourceTraderId,
+      u.seasonId,
+      u.sharpe,
+      u.sortino,
+      u.pf,
+    ])
 
-    const snapshotResult = await pool.query(`
+    const snapshotResult = await pool.query(
+      `
       UPDATE trader_snapshots ts
       SET
         sharpe_ratio = v.sharpe,
@@ -129,23 +140,11 @@ async function main() {
       WHERE ts.source = v.source
         AND ts.source_trader_id = v.source_trader_id
         AND ts.season_id = v.season_id
-    `, params)
+    `,
+      params
+    )
 
     totalSnapshotsUpdated += snapshotResult.rowCount || 0
-
-    const rankResult = await pool.query(`
-      UPDATE leaderboard_ranks lr
-      SET
-        sharpe_ratio = v.sharpe,
-        sortino_ratio = v.sortino,
-        profit_factor = v.pf
-      FROM (VALUES ${values}) AS v(source, source_trader_id, season_id, sharpe, sortino, pf)
-      WHERE lr.source = v.source
-        AND lr.source_trader_id = v.source_trader_id
-        AND lr.season_id = v.season_id
-    `, params)
-
-    totalRanksUpdated += rankResult.rowCount || 0
   }
 
   const { rows: coverage } = await pool.query(`
@@ -162,7 +161,7 @@ async function main() {
   `)
 
   console.log(`Updated trader_snapshots rows: ${totalSnapshotsUpdated}`)
-  console.log(`Updated leaderboard_ranks rows: ${totalRanksUpdated}`)
+  console.log('Public ranks will refresh through the next canonical leaderboard publication')
   console.table(coverage)
 
   await pool.end()
