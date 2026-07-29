@@ -1,6 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
 import { ScoreBreakdownSection } from '../ScoreBreakdownSection'
-import type { ExtendedPerformance } from '../../OverviewPerformanceCard'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ t: (key: string) => key }),
@@ -16,7 +15,7 @@ jest.mock('@/app/components/ranking/ScoreRadar', () => ({
     riskControl: number | null
     arenaScore: number | null
   }) => (
-    <output
+    <div
       data-testid="score-radar"
       data-profitability={profitability == null ? 'unknown' : String(profitability)}
       data-risk={riskControl == null ? 'unknown' : String(riskControl)}
@@ -25,16 +24,14 @@ jest.mock('@/app/components/ranking/ScoreRadar', () => ({
   ),
 }))
 
-const emptyPerformance = {} as ExtendedPerformance
-
 function section(overrides: Partial<React.ComponentProps<typeof ScoreBreakdownSection>> = {}) {
   return (
     <ScoreBreakdownSection
-      performance={emptyPerformance}
       periodArenaScore={undefined}
       periodProfitabilityScore={undefined}
       periodRiskControlScore={undefined}
       arenaScoreV3={undefined}
+      scoreConfidence={null}
       isVisible
       {...overrides}
     />
@@ -88,5 +85,31 @@ describe('ScoreBreakdownSection trusted score states', () => {
     const { container } = render(section({ arenaScoreV3: 55, periodArenaScore: Number.NaN }))
 
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it.each([
+    ['partial', 'confidencePartial'],
+    ['minimal', 'confidenceMinimal'],
+    ['insufficient', 'confidenceInsufficient'],
+    [null, 'confidenceUnknown'],
+  ] as const)('discloses %p confidence for the rendered period', (confidence, message) => {
+    render(section({ periodArenaScore: 50, scoreConfidence: confidence }))
+
+    expect(screen.getByRole('status')).toHaveTextContent(message)
+  })
+
+  it('does not show a confidence warning for full inputs', () => {
+    render(section({ periodArenaScore: 50, scoreConfidence: 'full' }))
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('exposes the score guide to keyboard and assistive-technology users', () => {
+    render(section({ periodArenaScore: 50, scoreConfidence: 'full' }))
+
+    const trigger = screen.getByRole('button', { name: 'scoreGuide' })
+    const tooltip = screen.getByRole('tooltip', { hidden: true })
+    expect(trigger).toHaveAttribute('aria-describedby', tooltip.id)
+    expect(tooltip).toHaveTextContent('scoreGuideDetail')
   })
 })

@@ -16,6 +16,7 @@ import type {
   GmxMaxCapitalRoiDisclosure,
   GmxRealizedNetDisclosure,
 } from '@/lib/data/serving/pnl-contract'
+import type { NormalizedScoreConfidence } from '@/lib/data/trader/mappers'
 
 export interface ExtendedPerformance extends TraderPerformance {
   /** Source-specific PnL semantics, keyed to the exact rendered period. */
@@ -45,7 +46,9 @@ export interface ExtendedPerformance extends TraderPerformance {
   drawdown_score_30d?: number
   stability_score_7d?: number
   stability_score_30d?: number
-  score_confidence?: string
+  score_confidence?: NormalizedScoreConfidence | null
+  score_confidence_7d?: NormalizedScoreConfidence | null
+  score_confidence_30d?: NormalizedScoreConfidence | null
   // V3 Advanced Metrics
   sortino_ratio?: number
   sortino_ratio_7d?: number
@@ -165,6 +168,7 @@ export default function OverviewPerformanceCard({
           totalPositions: performance.total_positions_7d ?? performance.total_positions,
           profitabilityScore: resolveValidScoreFallback(performance.return_score_7d),
           riskControlScore: resolveValidScoreFallback(performance.pnl_score_7d),
+          scoreConfidence: performance.score_confidence_7d,
           // V3 Metrics
           sortinoRatio: performance.sortino_ratio_7d,
           calmarRatio: performance.calmar_ratio_7d,
@@ -188,6 +192,7 @@ export default function OverviewPerformanceCard({
           totalPositions: performance.total_positions_30d ?? performance.total_positions,
           profitabilityScore: resolveValidScoreFallback(performance.return_score_30d),
           riskControlScore: resolveValidScoreFallback(performance.pnl_score_30d),
+          scoreConfidence: performance.score_confidence_30d,
           // V3 Metrics
           sortinoRatio: performance.sortino_ratio_30d,
           calmarRatio: performance.calmar_ratio_30d,
@@ -218,6 +223,7 @@ export default function OverviewPerformanceCard({
             performance.risk_control_score,
             performance.pnl_score
           ),
+          scoreConfidence: performance.score_confidence,
           // V3 Metrics
           sortinoRatio: performance.sortino_ratio,
           calmarRatio: performance.calmar_ratio,
@@ -243,6 +249,7 @@ export default function OverviewPerformanceCard({
     totalPositions,
     profitabilityScore: periodProfitabilityScore,
     riskControlScore: periodRiskControlScore,
+    scoreConfidence: periodScoreConfidence,
     sortinoRatio,
     calmarRatio,
     alpha,
@@ -350,11 +357,11 @@ export default function OverviewPerformanceCard({
 
             {/* 评分详情 - 免费展示 (period-specific) */}
             <ScoreBreakdownSection
-              performance={performance}
               periodArenaScore={periodArenaScore}
               periodProfitabilityScore={periodProfitabilityScore}
               periodRiskControlScore={periodRiskControlScore}
               arenaScoreV3={arenaScoreV3}
+              scoreConfidence={periodScoreConfidence}
               isVisible={isVisible}
             />
           </Box>

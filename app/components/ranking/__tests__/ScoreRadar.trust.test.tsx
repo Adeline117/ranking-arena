@@ -2,7 +2,12 @@ import { render, screen } from '@testing-library/react'
 import { ScoreRadar } from '../ScoreRadar'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
-  useLanguage: () => ({ t: (key: string) => key }),
+  useLanguage: () => ({
+    t: (key: string) =>
+      key === 'scoreRadarAria'
+        ? 'Score radar: {profitLabel} {profit}/100, {riskLabel} {risk}/100'
+        : key,
+  }),
 }))
 
 describe('ScoreRadar trusted score states', () => {

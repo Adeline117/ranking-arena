@@ -5,6 +5,7 @@
  */
 
 import type { TraderDetail, EquityPoint } from './types'
+import { normalizeScoreConfidence } from './mappers'
 
 /**
  * Convert unified TraderDetail to the legacy TraderPageData shape
@@ -27,7 +28,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     source: t.platform,
     market_type: t.marketType,
     profile_url: t.profileUrl,
-    bio: (detail.bio && detail.bio !== 'null' && detail.bio !== 'undefined') ? detail.bio : null,
+    bio: detail.bio && detail.bio !== 'null' && detail.bio !== 'undefined' ? detail.bio : null,
   }
 
   // Performance (matches TraderPerformance interface)
@@ -55,7 +56,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       const s30 = p30?.arenaScore
       const s7 = p7?.arenaScore
       if (s90 != null) {
-        return Number(((s90 * 0.70) + ((s30 ?? s90) * 0.25) + ((s7 ?? s90) * 0.05)).toFixed(2))
+        return Number((s90 * 0.7 + (s30 ?? s90) * 0.25 + (s7 ?? s90) * 0.05).toFixed(2))
       }
       return null
     })(),
@@ -69,7 +70,9 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     drawdown_score_7d: p7?.drawdownScore ?? null,
     stability_score: t.stabilityScore,
     stability_score_7d: p7?.stabilityScore ?? null,
-    score_confidence: t.scoreConfidence || 'full',
+    score_confidence: normalizeScoreConfidence(p90?.scoreConfidence),
+    score_confidence_7d: normalizeScoreConfidence(p7?.scoreConfidence),
+    score_confidence_30d: normalizeScoreConfidence(p30?.scoreConfidence),
     sharpe_ratio: t.sharpeRatio ?? null,
     sharpe_ratio_30d: p30?.sharpeRatio ?? null,
     sharpe_ratio_7d: p7?.sharpeRatio ?? null,
@@ -81,11 +84,14 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       // If enrichment winning > period trades, enrichment is lifetime data — compute from period instead
       if (enrichWin != null && periodTrades != null && enrichWin > periodTrades) {
         return t.winRate != null && periodTrades > 0
-          ? Math.round((t.winRate / 100) * periodTrades) : undefined
+          ? Math.round((t.winRate / 100) * periodTrades)
+          : undefined
       }
-      return enrichWin ?? (
-        t.winRate != null && periodTrades != null && periodTrades > 0
-          ? Math.round((t.winRate / 100) * periodTrades) : undefined
+      return (
+        enrichWin ??
+        (t.winRate != null && periodTrades != null && periodTrades > 0
+          ? Math.round((t.winRate / 100) * periodTrades)
+          : undefined)
       )
     })(),
     total_positions: (() => {
@@ -95,23 +101,29 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       if (enrichTotal != null && periodTrades != null && enrichTotal > periodTrades * 2) {
         return periodTrades > 0 ? periodTrades : undefined
       }
-      const raw = enrichTotal ?? (periodTrades != null && periodTrades > 0 ? periodTrades : undefined)
+      const raw =
+        enrichTotal ?? (periodTrades != null && periodTrades > 0 ? periodTrades : undefined)
       // Cross-validation: total can never be less than winning positions.
       // If mismatch, use period trades as the consistent source for both.
-      const winPos = detail.stats?.winningPositions ?? (
-        t.winRate != null && periodTrades != null && periodTrades > 0
-          ? Math.round((t.winRate / 100) * periodTrades) : undefined
-      )
+      const winPos =
+        detail.stats?.winningPositions ??
+        (t.winRate != null && periodTrades != null && periodTrades > 0
+          ? Math.round((t.winRate / 100) * periodTrades)
+          : undefined)
       if (raw != null && winPos != null && raw < winPos) {
         return periodTrades != null && periodTrades > 0 ? periodTrades : winPos
       }
       return raw
     })(),
     // Per-period winning positions (computed from win_rate * trades_count when not available)
-    winning_positions_7d: p7?.winRate != null && p7?.tradesCount != null && p7.tradesCount > 0
-      ? Math.round((p7.winRate / 100) * p7.tradesCount) : undefined,
-    winning_positions_30d: p30?.winRate != null && p30?.tradesCount != null && p30.tradesCount > 0
-      ? Math.round((p30.winRate / 100) * p30.tradesCount) : undefined,
+    winning_positions_7d:
+      p7?.winRate != null && p7?.tradesCount != null && p7.tradesCount > 0
+        ? Math.round((p7.winRate / 100) * p7.tradesCount)
+        : undefined,
+    winning_positions_30d:
+      p30?.winRate != null && p30?.tradesCount != null && p30.tradesCount > 0
+        ? Math.round((p30.winRate / 100) * p30.tradesCount)
+        : undefined,
     total_positions_7d: p7?.tradesCount ?? undefined,
     total_positions_30d: p30?.tradesCount ?? undefined,
     // Per-period trades count
@@ -144,7 +156,11 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       avgProfit: detail.stats?.avgProfit ?? null,
       avgLoss: detail.stats?.avgLoss ?? null,
       activeSince: detail.trackedSince
-        ? new Date(detail.trackedSince).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+        ? new Date(detail.trackedSince).toLocaleDateString('zh-CN', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+          })
         : null,
       maxDrawdown: t.maxDrawdown,
       sharpeRatio: t.sharpeRatio,
@@ -162,30 +178,33 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       avgProfit: detail.stats?.avgProfit ?? null,
       avgLoss: detail.stats?.avgLoss ?? null,
       profitableTradesPct: t.winRate,
-      winningPositions: detail.stats?.winningPositions ?? (
-        t.winRate != null && t.tradesCount != null && t.tradesCount > 0
-          ? Math.round((t.winRate / 100) * t.tradesCount) : null
-      ),
-      totalPositions: detail.stats?.totalPositions ?? (
-        t.tradesCount != null && t.tradesCount > 0 ? t.tradesCount : null
-      ),
+      winningPositions:
+        detail.stats?.winningPositions ??
+        (t.winRate != null && t.tradesCount != null && t.tradesCount > 0
+          ? Math.round((t.winRate / 100) * t.tradesCount)
+          : null),
+      totalPositions:
+        detail.stats?.totalPositions ??
+        (t.tradesCount != null && t.tradesCount > 0 ? t.tradesCount : null),
     },
-    frequentlyTraded: detail.assetBreakdown['90D']?.map(a => ({
-      symbol: a.symbol,
-      weightPct: a.weightPct,
-      count: 0,
-      avgProfit: 0,
-      avgLoss: 0,
-      profitablePct: 0,
-    })) ?? [],
+    frequentlyTraded:
+      detail.assetBreakdown['90D']?.map((a) => ({
+        symbol: a.symbol,
+        weightPct: a.weightPct,
+        count: 0,
+        avgProfit: 0,
+        avgLoss: 0,
+        profitablePct: 0,
+      })) ?? [],
   }
 
   // Equity curve
-  const mapEC = (points: EquityPoint[]) => points.map(p => ({
-    date: p.date,
-    roi: p.roi ?? 0,
-    pnl: p.pnl ?? 0,
-  }))
+  const mapEC = (points: EquityPoint[]) =>
+    points.map((p) => ({
+      date: p.date,
+      roi: p.roi ?? 0,
+      pnl: p.pnl ?? 0,
+    }))
   const equityCurve = {
     '90D': mapEC(detail.equityCurve['90D'] || []),
     '30D': mapEC(detail.equityCurve['30D'] || []),
@@ -194,13 +213,18 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
 
   // Asset breakdown
   const assetBreakdown = {
-    '90D': detail.assetBreakdown['90D']?.map(a => ({ symbol: a.symbol, weightPct: a.weightPct })) ?? [],
-    '30D': detail.assetBreakdown['30D']?.map(a => ({ symbol: a.symbol, weightPct: a.weightPct })) ?? [],
-    '7D': detail.assetBreakdown['7D']?.map(a => ({ symbol: a.symbol, weightPct: a.weightPct })) ?? [],
+    '90D':
+      detail.assetBreakdown['90D']?.map((a) => ({ symbol: a.symbol, weightPct: a.weightPct })) ??
+      [],
+    '30D':
+      detail.assetBreakdown['30D']?.map((a) => ({ symbol: a.symbol, weightPct: a.weightPct })) ??
+      [],
+    '7D':
+      detail.assetBreakdown['7D']?.map((a) => ({ symbol: a.symbol, weightPct: a.weightPct })) ?? [],
   }
 
   // Similar traders
-  const similarTraders = detail.similarTraders.map(st => ({
+  const similarTraders = detail.similarTraders.map((st) => ({
     handle: st.handle || st.traderKey,
     id: st.traderKey,
     followers: st.followers ?? 0,
@@ -211,7 +235,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
   }))
 
   // Portfolio
-  const portfolio = detail.portfolio.map(p => ({
+  const portfolio = detail.portfolio.map((p) => ({
     market: p.symbol,
     direction: p.direction || 'long',
     invested: 0,
@@ -221,7 +245,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
   }))
 
   // Position history
-  const positionHistory = detail.positionHistory.map(p => ({
+  const positionHistory = detail.positionHistory.map((p) => ({
     symbol: p.symbol,
     direction: p.direction || 'long',
     positionType: '',
