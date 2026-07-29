@@ -170,7 +170,7 @@ describe('GET /api/v2/rankings source freshness', () => {
     const body = await response.json()
 
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v3:v2-rankings:v3:/),
+      expect.stringMatching(/^public-rank-policy-v4:v2-rankings:v3:/),
       expect.any(Function),
       expect.any(Object)
     )

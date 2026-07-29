@@ -10,7 +10,7 @@
 
 import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 
-export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v3'
+export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v4'
 export const PUBLIC_RANKING_MAX_COMPUTED_AGE_MS = 48 * 60 * 60 * 1000
 export const PUBLIC_RANKING_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 

@@ -1,6 +1,7 @@
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 const mockCacheGet = jest.fn()
+const mockCacheSet = jest.fn()
 const mockAttachAvatarMirrors = jest.fn(async (_supabase: unknown, traders: unknown[]) => traders)
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -13,7 +14,7 @@ jest.mock('@/lib/data/avatar-mirrors', () => ({
 
 jest.mock('@/lib/cache', () => ({
   get: (...args: unknown[]) => mockCacheGet(...args),
-  set: jest.fn(),
+  set: (...args: unknown[]) => mockCacheSet(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -142,6 +143,7 @@ describe('SSR public ranking source quarantine', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCacheGet.mockResolvedValue(null)
+    mockCacheSet.mockResolvedValue(undefined)
     jest.useFakeTimers().setSystemTime(new Date('2026-07-24T12:00:00.000Z'))
   })
 
@@ -449,13 +451,89 @@ describe('SSR public ranking source quarantine', () => {
     const result = await getInitialTraders('90D', 3, 1)
 
     expect(mockCacheGet).toHaveBeenCalledWith(
-      'public-rank-policy-v3:home-initial-traders-v4:90D:p1'
+      'public-rank-policy-v4:home-initial-traders-v4:90D:p1'
     )
     expect(result.traders).toEqual([first, last])
     expect(result.totalCount).toBe(2)
     expect(result.categoryCounts).toEqual({ all: 2, futures: 1, spot: 0, onchain: 1 })
     expect(result.lastUpdated).toBeNull()
     expect(result.isStale).toBe(true)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('never reads transformed Copin data from v3 and uses v4 for normal cache writes and reads', async () => {
+    const oldV3Key = 'public-rank-policy-v3:home-initial-traders-v4:90D:p1'
+    const newV4Key = 'public-rank-policy-v4:home-initial-traders-v4:90D:p1'
+    const newV4FallbackKey = 'public-rank-policy-v4:home-initial-traders-fallback-v4:90D:p1'
+    const transformedCopin = {
+      traders: [
+        {
+          source: 'hyperliquid',
+          source_type: 'web3',
+          id: '0xlegacy-copin',
+          handle: 'Transformed Copin',
+        },
+      ],
+      lastUpdated: '2026-07-24T10:00:00.000Z',
+      isStale: false,
+      totalCount: 1,
+      categoryCounts: { all: 1, futures: 0, spot: 0, onchain: 1 },
+    }
+    const cacheEntries = new Map<string, unknown>([[oldV3Key, transformedCopin]])
+    mockCacheGet.mockImplementation(async (key: string) => cacheEntries.get(key) ?? null)
+    mockCacheSet.mockImplementation(async (key: string, value: unknown) => {
+      cacheEntries.set(key, value)
+    })
+
+    const generation = '2026-07-24T11:59:00.000Z'
+    const rankingQuery = queryResult([
+      {
+        source: 'binance_futures',
+        source_trader_id: 'fresh-v4',
+        source_type: 'futures',
+        handle: 'Fresh V4',
+        arena_score: 90,
+        computed_at: '2026-07-24T11:55:00.000Z',
+      },
+    ])
+    mockRpc.mockImplementation((name: string) => {
+      if (name === 'get_leaderboard_category_counts') {
+        return queryResult([{ source_type: 'futures', count: 1 }])
+      }
+      throw new Error(`unexpected RPC ${name}`)
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') return rankingQuery
+      if (table === 'leaderboard_count_cache') {
+        return queryResult([
+          { source: '_all_gt0', total_count: 1, updated_at: generation },
+          { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
+        ])
+      }
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected table ${table}`)
+    })
+
+    const first = await getInitialTraders('90D', 1, 1)
+
+    expect(first.traders.map(({ id }) => id)).toEqual(['fresh-v4'])
+    expect(mockCacheGet).not.toHaveBeenCalledWith(oldV3Key)
+    expect(mockCacheGet).toHaveBeenNthCalledWith(1, newV4Key)
+    expect(mockCacheGet).toHaveBeenNthCalledWith(2, newV4FallbackKey)
+    expect(mockCacheSet).toHaveBeenCalledWith(newV4Key, first, { ttl: 7200 })
+    expect(mockCacheSet).toHaveBeenCalledWith(newV4FallbackKey, first, { ttl: 14400 })
+    expect(cacheEntries.get(oldV3Key)).toBe(transformedCopin)
+
+    mockFrom.mockClear()
+    mockRpc.mockClear()
+    const second = await getInitialTraders('90D', 1, 1)
+
+    expect(second).toEqual(first)
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
   })
@@ -477,11 +555,11 @@ describe('SSR public ranking source quarantine', () => {
 
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       1,
-      'public-rank-policy-v3:home-initial-traders-v4:90D:p0'
+      'public-rank-policy-v4:home-initial-traders-v4:90D:p0'
     )
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       2,
-      'public-rank-policy-v3:home-initial-traders-fallback-v4:90D:p0'
+      'public-rank-policy-v4:home-initial-traders-fallback-v4:90D:p0'
     )
     expect(result).toEqual({ ...fallback, isStale: true })
     expect(mockFrom).not.toHaveBeenCalled()

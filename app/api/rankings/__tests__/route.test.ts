@@ -515,7 +515,7 @@ describe('GET /api/rankings', () => {
 
     expect(res.status).toBe(200)
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v3:precomputed:composite:all:v2',
+      'public-rank-policy-v4:precomputed:composite:all:v2',
       'hot'
     )
   })
@@ -547,7 +547,7 @@ describe('GET /api/rankings', () => {
     const data = body.data ?? body
 
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v3:precomputed:composite:all:v2',
+      'public-rank-policy-v4:precomputed:composite:all:v2',
       'hot'
     )
     expect(data.traders).toEqual([first, last])
@@ -592,7 +592,7 @@ describe('GET /api/rankings', () => {
     const data = body.data ?? body
 
     expect(mockTieredGetOrSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v3:api:rankings:v3:/),
+      expect.stringMatching(/^public-rank-policy-v4:api:rankings:v3:/),
       expect.any(Function),
       'hot',
       ['rankings']
