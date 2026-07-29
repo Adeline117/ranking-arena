@@ -125,6 +125,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729011000_leaderboard_rank_manifest_attestation_substrate.sql
   20260729012000_partitioned_bot_acquisition_manifest_v4.sql
   20260729013000_bitget_bot_attempt_health_contract.sql
+  20260729014000_bitget_bot_copier_aggregate_authority.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
