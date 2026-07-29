@@ -9,6 +9,8 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260729015500_tier_a_execution_claim_fence.sql"
+ENFORCEMENT_MIGRATION="$ROOT_DIR/supabase/migrations/20260729061000_tier_a_execution_claim_enforcement.sql"
+TSX_BIN="$ROOT_DIR/node_modules/.bin/tsx"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -17,6 +19,10 @@ for executable in initdb pg_ctl psql; do
     exit 1
   fi
 done
+if [[ ! -x "$TSX_BIN" ]]; then
+  echo "Repository tsx executable not found: $TSX_BIN" >&2
+  exit 1
+fi
 if [[ "$("$PG_BIN/psql" --version)" != psql\ \(PostgreSQL\)\ 17.* ]]; then
   echo "This integration proof requires PostgreSQL 17" >&2
   exit 1
@@ -48,11 +54,39 @@ psql_cmd() {
     -h "$SOCKET_DIR" -p "$PORT" -U postgres -d postgres "$@"
 }
 
+replace_function_from_migration() {
+  local file="$1"
+  local function_name="$2"
+  awk -v declaration="CREATE FUNCTION arena.${function_name}()" '
+    index($0, declaration) == 1 {
+      emit = 1
+      sub(/^CREATE FUNCTION/, "CREATE OR REPLACE FUNCTION")
+    }
+    emit { print }
+    emit && $0 == "$function$;" { exit }
+  ' "$file" | psql_cmd -q
+}
+
 expect_failure() {
   local label="$1"
   local pattern="$2"
   local sql="$3"
   if psql_cmd -q -c "$sql" >"$ERROR_FILE" 2>&1; then
+    echo "$label unexpectedly succeeded" >&2
+    exit 1
+  fi
+  if ! rg -q "$pattern" "$ERROR_FILE"; then
+    echo "$label failed for an unexpected reason" >&2
+    sed -n '1,180p' "$ERROR_FILE" >&2
+    exit 1
+  fi
+}
+
+expect_file_failure() {
+  local label="$1"
+  local pattern="$2"
+  local file="$3"
+  if psql_cmd -q -f "$file" >"$ERROR_FILE" 2>&1; then
     echo "$label unexpectedly succeeded" >&2
     exit 1
   fi
@@ -114,6 +148,52 @@ CREATE TABLE arena.leaderboard_snapshots (
   raw_object_id bigint
 );
 
+CREATE TABLE arena.raw_objects (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  source_id smallint NOT NULL REFERENCES arena.sources(id),
+  job_type text NOT NULL,
+  trader_id bigint,
+  timeframe smallint,
+  fetched_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  storage_path text,
+  bytes integer,
+  content_hash text,
+  quarantined boolean NOT NULL DEFAULT false,
+  source_run_id text,
+  trust_artifact_role text,
+  meta jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE arena.metric_trust_artifacts (
+  raw_object_id bigint
+);
+
+CREATE TABLE arena.metric_trust_runs (
+  population_raw_object_id bigint,
+  manifest_raw_object_id bigint
+);
+
+CREATE TABLE arena.upstream_field_inventory (
+  source_id smallint NOT NULL REFERENCES arena.sources(id),
+  job_type text NOT NULL,
+  field_path text NOT NULL,
+  first_seen timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  last_seen timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  PRIMARY KEY (source_id, job_type, field_path)
+);
+
+-- Shared profile/maintenance series are deliberately outside the enforcement
+-- migration. Minimal fixtures make accidental future trigger expansion fail.
+CREATE TABLE arena.trader_series (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  payload text NOT NULL
+);
+
+CREATE TABLE arena.trader_series_weekly (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  payload text NOT NULL
+);
+
 CREATE TABLE arena.leaderboard_acquisition_attempts (
   attempt_seq bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   attempt_id uuid NOT NULL UNIQUE,
@@ -133,7 +213,9 @@ CREATE TABLE arena.leaderboard_acquisition_outcomes (
     REFERENCES arena.leaderboard_acquisition_attempts(attempt_seq),
   terminal_state text NOT NULL,
   source_run_id text,
-  source_payload_raw_object_id bigint
+  source_payload_raw_object_id bigint,
+  manifest_raw_object_id bigint,
+  diagnostic_raw_object_id bigint
 );
 
 CREATE TABLE arena.ingest_worker_instances (
@@ -443,6 +525,101 @@ GRANT EXECUTE ON FUNCTION arena.finish_leaderboard_acquisition_attempt(
   bigint, bigint, bigint, integer, text, integer, integer, text,
   integer, integer, integer, integer, boolean, boolean, text, text
 ) TO service_role;
+
+CREATE FUNCTION arena.reject_direct_leaderboard_acquisition_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_path text := pg_catalog.current_setting(
+    'arena.leaderboard_acquisition_mutation_path', true
+  );
+BEGIN
+  IF TG_OP = 'INSERT'
+     AND (
+       (TG_TABLE_NAME = 'leaderboard_acquisition_attempts'
+        AND v_path = 'start_leaderboard_acquisition_attempt')
+       OR
+       (TG_TABLE_NAME = 'leaderboard_acquisition_outcomes'
+        AND v_path = 'finish_leaderboard_acquisition_attempt')
+     ) THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'fixture acquisition ledger mutation rejected'
+    USING ERRCODE = '42501';
+END
+$function$;
+
+CREATE FUNCTION arena.protect_metric_trust_raw_object()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE FUNCTION arena.protect_leaderboard_acquisition_raw_evidence()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE FUNCTION arena.serialize_leaderboard_terminal_publication()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  RETURN NEW;
+END
+$function$;
+
+ALTER FUNCTION arena.reject_direct_leaderboard_acquisition_mutation()
+  OWNER TO postgres;
+ALTER FUNCTION arena.protect_metric_trust_raw_object() OWNER TO postgres;
+ALTER FUNCTION arena.protect_leaderboard_acquisition_raw_evidence()
+  OWNER TO postgres;
+ALTER FUNCTION arena.serialize_leaderboard_terminal_publication()
+  OWNER TO postgres;
+
+CREATE TRIGGER leaderboard_acquisition_attempts_reject_direct_row_mutation
+  BEFORE INSERT OR UPDATE OR DELETE ON arena.leaderboard_acquisition_attempts
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.reject_direct_leaderboard_acquisition_mutation();
+CREATE TRIGGER leaderboard_acquisition_attempts_reject_truncate
+  BEFORE TRUNCATE ON arena.leaderboard_acquisition_attempts
+  FOR EACH STATEMENT
+  EXECUTE FUNCTION arena.reject_direct_leaderboard_acquisition_mutation();
+CREATE TRIGGER leaderboard_acquisition_outcomes_reject_direct_row_mutation
+  BEFORE INSERT OR UPDATE OR DELETE ON arena.leaderboard_acquisition_outcomes
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.reject_direct_leaderboard_acquisition_mutation();
+CREATE TRIGGER leaderboard_acquisition_outcomes_reject_truncate
+  BEFORE TRUNCATE ON arena.leaderboard_acquisition_outcomes
+  FOR EACH STATEMENT
+  EXECUTE FUNCTION arena.reject_direct_leaderboard_acquisition_mutation();
+CREATE TRIGGER leaderboard_acquisition_outcomes_serialize_terminal_publication
+  BEFORE INSERT ON arena.leaderboard_acquisition_outcomes
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.serialize_leaderboard_terminal_publication();
+CREATE TRIGGER protect_metric_trust_raw_object_before_write
+  BEFORE UPDATE OR DELETE ON arena.raw_objects
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.protect_metric_trust_raw_object();
+CREATE TRIGGER protect_leaderboard_acquisition_raw_evidence_before_write
+  BEFORE UPDATE OR DELETE ON arena.raw_objects
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.protect_leaderboard_acquisition_raw_evidence();
 
 CREATE TABLE public.fixture_old_callables AS
 SELECT
@@ -1004,4 +1181,917 @@ assert_sql_true \
      AND (SELECT phase FROM arena.tier_a_execution_heads WHERE source_id = 1) =
          'completed';"
 
-echo 'Tier-A execution claim fence PG17 proof passed'
+# Leave one historical unclaimed/open attempt before enforcement. NOT VALID
+# must preserve it without allowing any later unclaimed finish.
+assert_sql_true \
+  'historical unclaimed attempt fixture was not created' \
+  "SET ROLE service_role;
+   SELECT (arena.start_leaderboard_acquisition_attempt(
+     '30000000-0000-4000-8000-000000000003', 1, 90, 'historical-cycle',
+     'historical-job', 0, 'legacy_unverified', NULL, 'local'
+   )).execution_claim_id IS NULL;"
+
+# Replace the lightweight behavioral fixtures with the exact production
+# trigger bodies before the postdeploy catalog attestation.
+replace_function_from_migration \
+  "$ROOT_DIR/supabase/migrations/20260722030000_durable_leaderboard_acquisition_attempt_ledger.sql" \
+  'reject_direct_leaderboard_acquisition_mutation'
+replace_function_from_migration \
+  "$ROOT_DIR/supabase/migrations/20260721120000_metric_trust_shadow_gate.sql" \
+  'protect_metric_trust_raw_object'
+replace_function_from_migration \
+  "$ROOT_DIR/supabase/migrations/20260722030000_durable_leaderboard_acquisition_attempt_ledger.sql" \
+  'protect_leaderboard_acquisition_raw_evidence'
+replace_function_from_migration \
+  "$ROOT_DIR/supabase/migrations/20260722042000_leaderboard_terminal_publication_fence.sql" \
+  'serialize_leaderboard_terminal_publication'
+
+psql_cmd -q <<'SQL'
+UPDATE arena.leaderboard_snapshots
+   SET is_derived = false
+ WHERE is_derived IS NULL;
+ALTER TABLE arena.leaderboard_snapshots
+  ALTER COLUMN is_derived SET DEFAULT false,
+  ALTER COLUMN is_derived SET NOT NULL;
+
+CREATE TABLE public.fixture_enforcement_callables AS
+SELECT
+  function_row.oid,
+  function_row.oid::pg_catalog.regprocedure::text AS identity,
+  function_row.prosrc
+FROM pg_catalog.pg_proc AS function_row
+WHERE function_row.oid IN (
+  'arena.start_leaderboard_acquisition_attempt(uuid,integer,integer,text,text,integer,text,text,text)'::pg_catalog.regprocedure,
+  'arena.finish_leaderboard_acquisition_attempt(uuid,text,text,text,text,text,timestamp with time zone,timestamp with time zone,text,bigint,bigint,bigint,integer,text,integer,integer,text,integer,integer,integer,integer,boolean,boolean,text,text)'::pg_catalog.regprocedure,
+  'arena.start_leaderboard_acquisition_attempt(uuid,integer,integer,text,text,integer,text,text,text,uuid,bigint)'::pg_catalog.regprocedure,
+  'arena.finish_leaderboard_acquisition_attempt(uuid,text,text,text,text,text,timestamp with time zone,timestamp with time zone,text,bigint,bigint,bigint,integer,text,integer,integer,text,integer,integer,integer,integer,boolean,boolean,text,text,uuid,bigint)'::pg_catalog.regprocedure
+);
+
+GRANT ALL PRIVILEGES ON TABLE arena.leaderboard_snapshots,
+  arena.raw_objects,
+  arena.upstream_field_inventory,
+  arena.leaderboard_acquisition_attempts,
+  arena.leaderboard_acquisition_outcomes
+  TO service_role, fixture_rogue;
+GRANT INSERT (
+  source_id, timeframe, count_check_passed, is_derived, raw_object_id
+) ON TABLE arena.leaderboard_snapshots TO service_role, fixture_rogue;
+GRANT UPDATE (is_derived, source_id)
+  ON TABLE arena.leaderboard_snapshots TO service_role, fixture_rogue;
+GRANT SELECT ON TABLE arena.tier_a_execution_claims TO fixture_rogue;
+GRANT UPDATE (phase) ON TABLE arena.tier_a_execution_heads TO fixture_rogue;
+GRANT TRIGGER, REFERENCES, MAINTAIN ON TABLE arena.sources TO fixture_rogue;
+GRANT REFERENCES (id) ON TABLE arena.sources TO fixture_rogue;
+GRANT EXECUTE ON FUNCTION arena.start_leaderboard_acquisition_attempt(
+  uuid, integer, integer, text, text, integer, text, text, text
+) TO fixture_rogue;
+GRANT EXECUTE ON FUNCTION arena.claim_tier_a_execution(
+  uuid, integer, text, text, text, integer, integer, text, uuid, text,
+  text, integer
+) TO fixture_rogue;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA arena
+  GRANT EXECUTE ON FUNCTIONS TO fixture_rogue;
+
+CREATE FUNCTION arena.fixture_launder_raw_before_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  NEW.job_type := 'tier_a';
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER zz_fixture_launder_raw_before_insert
+  BEFORE INSERT ON arena.raw_objects
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.fixture_launder_raw_before_insert();
+SQL
+
+expect_file_failure \
+  'hostile pre-existing trigger was accepted by enforcement' \
+  'Tier-A execution trigger allowlist is not exact' \
+  "$ENFORCEMENT_MIGRATION"
+
+assert_sql_true \
+  'failed trigger audit partially installed enforcement' \
+  "SELECT pg_catalog.to_regprocedure(
+            'arena.tier_a_execution_claim_enforcement_state()'
+          ) IS NULL;"
+
+psql_cmd -q <<'SQL'
+DROP TRIGGER zz_fixture_launder_raw_before_insert ON arena.raw_objects;
+DROP FUNCTION arena.fixture_launder_raw_before_insert();
+
+ALTER TABLE arena.tier_a_execution_claims
+  DROP CONSTRAINT tier_a_execution_claims_claim_id_key,
+  ADD CONSTRAINT tier_a_execution_claims_claim_id_key
+    UNIQUE (queue_job_id, source_id);
+SQL
+
+expect_file_failure \
+  'weak same-name claim identity key was accepted by enforcement' \
+  'Tier-A execution constraint allowlist is not exact' \
+  "$ENFORCEMENT_MIGRATION"
+
+assert_sql_true \
+  'failed closed-set constraint audit partially installed enforcement' \
+  "SELECT pg_catalog.to_regprocedure(
+            'arena.tier_a_execution_claim_enforcement_state()'
+          ) IS NULL;"
+
+psql_cmd -q <<'SQL'
+ALTER TABLE arena.tier_a_execution_claims
+  DROP CONSTRAINT tier_a_execution_claims_claim_id_key,
+  ADD CONSTRAINT tier_a_execution_claims_claim_id_key UNIQUE (claim_id);
+
+ALTER TABLE arena.leaderboard_acquisition_attempts
+  ADD CONSTRAINT leaderboard_acquisition_attempts_execution_required
+  CHECK (
+    (
+      execution_claim_id IS NOT NULL
+      OR execution_generation_seq IS NOT NULL
+    ) OR true
+  ) NOT VALID;
+SQL
+
+expect_file_failure \
+  'weak same-name attempt constraint was accepted by enforcement' \
+  'Tier-A attempt execution requirement is already drifted' \
+  "$ENFORCEMENT_MIGRATION"
+
+assert_sql_true \
+  'failed constraint audit partially installed enforcement' \
+  "SELECT pg_catalog.to_regprocedure(
+            'arena.tier_a_execution_claim_enforcement_state()'
+          ) IS NULL;"
+
+psql_cmd -q -c \
+  'ALTER TABLE arena.leaderboard_acquisition_attempts DROP CONSTRAINT leaderboard_acquisition_attempts_execution_required;'
+
+psql_cmd -q -f "$ENFORCEMENT_MIGRATION"
+
+assert_sql_true \
+  'enforcement changed legacy or claimed callable identities' \
+  "SELECT count(*) = 4
+          AND bool_and(before.oid = after_function.oid)
+          AND bool_and(before.prosrc = after_function.prosrc)
+     FROM public.fixture_enforcement_callables AS before
+     JOIN pg_catalog.pg_proc AS after_function
+       ON after_function.oid::pg_catalog.regprocedure::text = before.identity;"
+
+assert_sql_true \
+  'historical unclaimed row was scanned, rewritten, or validated' \
+  "SELECT attempt.execution_claim_id IS NULL
+          AND attempt.execution_generation_seq IS NULL
+          AND NOT constraint_row.convalidated
+     FROM arena.leaderboard_acquisition_attempts AS attempt
+     CROSS JOIN pg_catalog.pg_constraint AS constraint_row
+    WHERE attempt.attempt_id =
+          '30000000-0000-4000-8000-000000000003'::uuid
+      AND constraint_row.conrelid =
+          'arena.leaderboard_acquisition_attempts'::pg_catalog.regclass
+      AND constraint_row.conname =
+          'leaderboard_acquisition_attempts_execution_required'
+      AND constraint_row.contype = 'c'
+      AND NOT constraint_row.connoinherit
+      AND constraint_row.conislocal
+      AND constraint_row.coninhcount = 0
+      AND constraint_row.conparentid = 0
+      AND pg_catalog.pg_get_expr(
+            constraint_row.conbin,
+            constraint_row.conrelid,
+            true
+          ) =
+          'execution_claim_id IS NOT NULL AND execution_generation_seq IS NOT NULL';"
+
+assert_sql_true \
+  'enforcement marker was not exact or service-only' \
+  "SELECT arena.tier_a_execution_claim_enforcement_state() =
+          pg_catalog.jsonb_build_object(
+            'contract', 'arena.ingest.tier-a-execution-claim-enforcement@1',
+            'state', 'enforced'
+          )
+          AND pg_catalog.has_function_privilege(
+            'service_role',
+            'arena.tier_a_execution_claim_enforcement_state()',
+            'EXECUTE'
+          )
+          AND NOT pg_catalog.has_function_privilege(
+            'fixture_rogue',
+            'arena.tier_a_execution_claim_enforcement_state()',
+            'EXECUTE'
+          );"
+
+# Execute the readiness query exported by the worker itself against this real
+# PG17 catalog. The query is intentionally imported through the repository's
+# runtime TypeScript loader so this proof cannot silently maintain a SQL copy.
+enforcement_catalog_result="$({
+  cd "$ROOT_DIR"
+  printf '%s\n' \
+    'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;' \
+    "SET LOCAL statement_timeout = '10s';" \
+    'SET LOCAL search_path = pg_catalog, pg_temp;'
+  "$TSX_BIN" -e \
+    "import { TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL as sql } from './worker/src/ingest/attempt-bound-capture-readiness.ts'; process.stdout.write(sql + ';\\n')"
+  printf '%s\n' 'ROLLBACK;'
+} | psql_cmd -Atq -F $'\t')"
+if ! printf '%s\n' "$enforcement_catalog_result" |
+  awk -F '\t' '
+    NF > 0 { row_count += 1; substrate_contract_exact = $NF }
+    END { exit !(row_count == 1 && substrate_contract_exact == "t") }
+  '; then
+  echo 'worker enforcement catalog SQL did not return one exact PG17 substrate row' >&2
+  printf '%s\n' "$enforcement_catalog_result" >&2
+  exit 1
+fi
+
+expect_failure \
+  'service role retained legacy begin execution' \
+  'permission denied for function start_leaderboard_acquisition_attempt' \
+  "SET ROLE service_role;
+   SELECT arena.start_leaderboard_acquisition_attempt(
+     '30000000-0000-4000-8000-000000000004', 1, 90, 'retired-cycle',
+     'retired-job', 0, 'legacy_unverified', NULL, 'local'
+   );"
+
+expect_failure \
+  'owner bypassed retired unclaimed begin trigger' \
+  'unclaimed acquisition begin is retired' \
+  "SELECT arena.start_leaderboard_acquisition_attempt(
+     '30000000-0000-4000-8000-000000000005', 1, 90, 'retired-cycle',
+     'retired-job', 0, 'legacy_unverified', NULL, 'local'
+   );"
+
+expect_failure \
+  'owner finished a historical unclaimed attempt' \
+  'unclaimed acquisition finish is retired' \
+  "SELECT arena.finish_leaderboard_acquisition_attempt(
+     '30000000-0000-4000-8000-000000000003',
+     'processing_failed', 'unknown', 'unknown', 'unassessed', NULL,
+     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+     NULL, NULL, NULL, NULL, false, false, 'upstream_fetch', 'fixture'
+   );"
+
+expect_failure \
+  'constraint mode was forced before the Tier-A guard insert' \
+  'Tier-A execution COMMIT fence cannot be forced early' \
+  "SET ROLE service_role;
+   BEGIN;
+   SET LOCAL search_path = arena, pg_catalog;
+   SET CONSTRAINTS tier_a_execution_fence_commit_assertion IMMEDIATE;
+   SELECT arena.fixture_begin_region_guard(3);
+   SELECT arena.assert_tier_a_execution_write(
+     'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+   );
+   COMMIT;"
+
+expect_failure \
+  'pending Tier-A guard was consumed with SET CONSTRAINTS ALL IMMEDIATE' \
+  'Tier-A execution COMMIT fence cannot be forced early' \
+  "SET ROLE service_role;
+   BEGIN;
+   SELECT arena.fixture_begin_region_guard(3);
+   SELECT arena.assert_tier_a_execution_write(
+     'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+   );
+   SET CONSTRAINTS ALL IMMEDIATE;
+   COMMIT;"
+
+assert_sql_true \
+  'forced constraint attempts left a durable execution guard' \
+  'SELECT NOT EXISTS (SELECT 1 FROM arena.tier_a_execution_write_guards);'
+
+# Reactivate source 1 with a fresh generation so one transaction can carry two
+# independent source sentinels through both deferred verification rounds.
+psql_cmd -Atq <<'SQL' >/dev/null
+SET ROLE service_role;
+BEGIN;
+SELECT arena.fixture_begin_region_guard(1);
+SELECT arena.claim_tier_a_execution(
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 1,
+  'arena:ingest:local', 'tier-a-job-3', 'tiera:leaderboard', 2, 3,
+  repeat('9', 64), 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeef',
+  repeat('f', 64), 'local', 300
+);
+COMMIT;
+SQL
+
+psql_cmd -q <<'SQL'
+BEGIN;
+SELECT arena.fixture_begin_region_guard(1);
+SELECT arena.assert_tier_a_execution_write(
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 3
+);
+SELECT arena.assert_tier_a_execution_write(
+  'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+);
+INSERT INTO arena.leaderboard_snapshots (
+  id, source_id, timeframe, count_check_passed, is_derived, raw_object_id
+) VALUES
+  (2101, 1, 30, true, false, NULL),
+  (2103, 3, 30, true, false, NULL);
+COMMIT;
+SQL
+
+assert_sql_true \
+  'multiple source guards did not complete both deferred rounds exactly' \
+  "SELECT (SELECT count(*)
+             FROM arena.leaderboard_snapshots
+            WHERE id IN (2101, 2103)) = 2
+          AND NOT EXISTS (
+            SELECT 1 FROM arena.tier_a_execution_write_guards
+          );"
+
+# Catch an attempted early force inside a savepoint. Rolling the failed force
+# back must restore the original round-zero event; after returning the trigger
+# to DEFERRED, the outer transaction must remain usable and finish both rounds.
+savepoint_force_output=''
+if ! savepoint_force_output="$(psql_cmd -Atq 2>&1 <<'SQL'
+BEGIN;
+SET LOCAL search_path = arena, pg_catalog;
+SELECT arena.fixture_begin_region_guard(3);
+SELECT arena.assert_tier_a_execution_write(
+  'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+);
+INSERT INTO arena.leaderboard_snapshots (
+  id, source_id, timeframe, count_check_passed, is_derived, raw_object_id
+) VALUES (2111, 3, 30, true, false, NULL);
+SAVEPOINT before_early_force;
+\set ON_ERROR_STOP off
+SET CONSTRAINTS tier_a_execution_fence_commit_assertion IMMEDIATE;
+\set ON_ERROR_STOP on
+ROLLBACK TO SAVEPOINT before_early_force;
+SET CONSTRAINTS tier_a_execution_fence_commit_assertion DEFERRED;
+INSERT INTO arena.leaderboard_snapshots (
+  id, source_id, timeframe, count_check_passed, is_derived, raw_object_id
+) VALUES (2112, 3, 30, true, false, NULL);
+COMMIT;
+SQL
+)"; then
+  echo 'savepoint recovery after an early Tier-A fence force failed' >&2
+  printf '%s\n' "$savepoint_force_output" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$savepoint_force_output" |
+  rg -q 'Tier-A execution COMMIT fence cannot be forced early'; then
+  echo 'savepoint did not catch the expected early Tier-A fence force' >&2
+  printf '%s\n' "$savepoint_force_output" >&2
+  exit 1
+fi
+
+assert_sql_true \
+  'savepoint recovery lost, duplicated, or prematurely consumed guarded work' \
+  "SELECT (SELECT count(*)
+             FROM arena.leaderboard_snapshots
+            WHERE id IN (2111, 2112)) = 2
+          AND NOT EXISTS (
+            SELECT 1 FROM arena.tier_a_execution_write_guards
+          );"
+
+for job_type in tier_a tier_a_manifest tier_a_failure; do
+  expect_failure \
+    "unguarded $job_type RAW insert passed" \
+    'lacks a claimed Tier-A execution guard' \
+    "INSERT INTO arena.raw_objects (source_id, job_type)
+     VALUES (3, '$job_type');"
+done
+
+psql_cmd -q <<'SQL'
+CREATE FUNCTION arena.fixture_launder_raw_before_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  NEW.job_type := 'tier_a';
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER zz_fixture_launder_raw_before_insert
+  BEFORE INSERT ON arena.raw_objects
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.fixture_launder_raw_before_insert();
+SQL
+
+expect_failure \
+  'post-cutover BEFORE trigger laundered a lower-tier RAW insert' \
+  'lacks a claimed Tier-A execution guard' \
+  "INSERT INTO arena.raw_objects (source_id, job_type)
+   VALUES (3, 'tier_b');"
+
+psql_cmd -q <<'SQL'
+DROP TRIGGER zz_fixture_launder_raw_before_insert ON arena.raw_objects;
+DROP FUNCTION arena.fixture_launder_raw_before_insert();
+SQL
+
+expect_failure \
+  'unguarded non-derived snapshot insert passed' \
+  'lacks a claimed Tier-A execution guard' \
+  "INSERT INTO arena.leaderboard_snapshots (
+     id, source_id, timeframe, count_check_passed, is_derived, raw_object_id
+   ) VALUES (2001, 3, 30, true, false, NULL);"
+
+expect_failure \
+  'unguarded Tier-A field inventory insert passed' \
+  'lacks a claimed Tier-A execution guard' \
+  "INSERT INTO arena.upstream_field_inventory (
+     source_id, job_type, field_path
+   ) VALUES (3, 'tier_a', 'fixture.unguarded');"
+
+expect_failure \
+  'wrong-source execution guard authorized a snapshot' \
+  'lacks a claimed Tier-A execution guard' \
+  "BEGIN;
+   SELECT arena.fixture_begin_region_guard(3);
+   SELECT arena.assert_tier_a_execution_write(
+     'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+   );
+   INSERT INTO arena.leaderboard_snapshots (
+     id, source_id, timeframe, count_check_passed, is_derived, raw_object_id
+   ) VALUES (2002, 1, 30, true, false, NULL);
+   COMMIT;"
+
+expect_failure \
+  'inactive source retained claimed publication authority' \
+  'guarded Tier-A source authority cannot change before COMMIT' \
+  "BEGIN;
+   SELECT arena.fixture_begin_region_guard(3);
+   SELECT arena.assert_tier_a_execution_write(
+     'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+   );
+   UPDATE arena.sources SET status = 'inactive' WHERE id = 3;
+   INSERT INTO arena.leaderboard_snapshots (
+     id, source_id, timeframe, count_check_passed, is_derived, raw_object_id
+   ) VALUES (2003, 3, 30, true, false, NULL);
+   COMMIT;"
+
+expect_failure \
+  'guarded publication committed before a same-transaction source shutdown' \
+  'guarded Tier-A source authority cannot change before COMMIT' \
+  "BEGIN;
+   SELECT arena.fixture_begin_region_guard(3);
+   SELECT arena.assert_tier_a_execution_write(
+     'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+   );
+   INSERT INTO arena.leaderboard_snapshots (
+     id, source_id, timeframe, count_check_passed, is_derived, raw_object_id
+   ) VALUES (2004, 3, 30, true, false, NULL);
+   UPDATE arena.sources SET status = 'inactive' WHERE id = 3;
+   COMMIT;"
+
+# The postgres ingest owner still cannot write Tier-A rows without the exact
+# guard, but a real asserted source-3 transaction can atomically write all
+# guarded table families and pass the deferred COMMIT recheck.
+psql_cmd -q <<'SQL'
+BEGIN;
+SELECT arena.fixture_begin_region_guard(3);
+SELECT arena.assert_tier_a_execution_write(
+  'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+);
+INSERT INTO arena.leaderboard_snapshots (
+  id, source_id, timeframe, count_check_passed, is_derived, raw_object_id
+) VALUES (3001, 3, 30, true, false, NULL);
+INSERT INTO arena.raw_objects (source_id, job_type)
+VALUES
+  (3, 'tier_a'),
+  (3, 'tier_a_manifest'),
+  (3, 'tier_a_failure');
+INSERT INTO arena.upstream_field_inventory (
+  source_id, job_type, field_path
+) VALUES (3, 'tier_a', 'fixture.claimed');
+COMMIT;
+SQL
+
+assert_sql_true \
+  'claimed table writes did not commit exactly' \
+  "SELECT
+     (SELECT count(*) FROM arena.leaderboard_snapshots WHERE id = 3001) = 1
+     AND (SELECT count(*) FROM arena.raw_objects WHERE source_id = 3) = 3
+     AND (SELECT count(*) FROM arena.upstream_field_inventory
+           WHERE source_id = 3 AND job_type = 'tier_a') = 1
+     AND (SELECT count(*) FROM arena.tier_a_execution_write_guards) = 0;"
+
+assert_sql_true \
+  'claimed begin stopped working after legacy ACL retirement' \
+  "SET ROLE service_role;
+   BEGIN;
+   SELECT arena.fixture_begin_region_guard(3);
+   SELECT (
+     arena.start_leaderboard_acquisition_attempt(
+       '40000000-0000-4000-8000-000000000004', 3, 30,
+       'replacement-cycle-2', 'replacement-job-2', 0,
+       'fixture-contract', repeat('2', 40), 'local',
+       'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+     )
+   ).execution_claim_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'::uuid;
+   COMMIT;"
+
+assert_sql_true \
+  'claimed finish stopped working after legacy ACL retirement' \
+  "SET ROLE service_role;
+   BEGIN;
+   SELECT arena.fixture_begin_region_guard(3);
+   SELECT (
+     arena.finish_leaderboard_acquisition_attempt(
+       '40000000-0000-4000-8000-000000000004',
+       'processing_failed', 'unknown', 'unknown', 'unassessed', NULL,
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+       NULL, NULL, NULL, NULL, false, false, 'upstream_fetch', 'fixture',
+       'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+     )
+   ).terminal_state = 'processing_failed';
+   COMMIT;"
+
+# Pause before the final attempt guard so a second session can deactivate the
+# source after the claimed assertion but before INSERT validation. The final
+# bind must re-read and lock source authority, then fail the whole transaction.
+psql_cmd -q <<'SQL'
+CREATE FUNCTION arena.aa_fixture_pause_attempt_source_race()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF NEW.attempt_id = '50000000-0000-4000-8000-000000000001'::uuid THEN
+    PERFORM pg_catalog.pg_sleep(1);
+  END IF;
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER aa_fixture_pause_attempt_source_race
+  BEFORE INSERT ON arena.leaderboard_acquisition_attempts
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.aa_fixture_pause_attempt_source_race();
+SQL
+
+RACE_ERROR_FILE="$TMP_ROOT/attempt-source-race.log"
+psql_cmd -q -c "
+  SET ROLE service_role;
+  BEGIN;
+  SELECT arena.fixture_begin_region_guard(3);
+  SELECT arena.start_leaderboard_acquisition_attempt(
+    '50000000-0000-4000-8000-000000000001', 3, 30,
+    'attempt-source-race', 'replacement-job-2', 0,
+    'fixture-contract', repeat('2', 40), 'local',
+    'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+  );
+  COMMIT;" >"$RACE_ERROR_FILE" 2>&1 &
+race_pid=$!
+sleep 0.2
+psql_cmd -q -c "UPDATE arena.sources SET status = 'inactive' WHERE id = 3;"
+if wait "$race_pid"; then
+  echo 'claimed attempt crossed a concurrent source shutdown' >&2
+  exit 1
+fi
+if ! rg -q 'lacks a claimed Tier-A execution guard' "$RACE_ERROR_FILE"; then
+  echo 'claimed attempt source race failed for an unexpected reason' >&2
+  sed -n '1,180p' "$RACE_ERROR_FILE" >&2
+  exit 1
+fi
+
+psql_cmd -q <<'SQL'
+UPDATE arena.sources SET status = 'active' WHERE id = 3;
+DROP TRIGGER aa_fixture_pause_attempt_source_race
+  ON arena.leaderboard_acquisition_attempts;
+DROP FUNCTION arena.aa_fixture_pause_attempt_source_race();
+SQL
+
+assert_sql_true \
+  'failed source-race attempt left a durable row or guard' \
+  "SELECT NOT EXISTS (
+            SELECT 1 FROM arena.leaderboard_acquisition_attempts
+             WHERE attempt_id =
+                   '50000000-0000-4000-8000-000000000001'::uuid
+          )
+          AND NOT EXISTS (SELECT 1 FROM arena.tier_a_execution_write_guards);"
+
+# Create a valid open claimed attempt, then repeat the same interleaving before
+# outcome validation. The terminal row must not commit on an inactive source.
+assert_sql_true \
+  'outcome source-race parent attempt was not created' \
+  "SET ROLE service_role;
+   BEGIN;
+   SELECT arena.fixture_begin_region_guard(3);
+   SELECT (
+     arena.start_leaderboard_acquisition_attempt(
+       '50000000-0000-4000-8000-000000000002', 3, 30,
+       'outcome-source-race', 'replacement-job-2', 0,
+       'fixture-contract', repeat('2', 40), 'local',
+       'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+     )
+   ).execution_claim_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'::uuid;
+   COMMIT;"
+
+psql_cmd -q <<'SQL'
+CREATE FUNCTION arena.aa_fixture_pause_outcome_source_race()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF NEW.attempt_seq = (
+    SELECT attempt.attempt_seq
+      FROM arena.leaderboard_acquisition_attempts AS attempt
+     WHERE attempt.attempt_id =
+           '50000000-0000-4000-8000-000000000002'::uuid
+  ) THEN
+    PERFORM pg_catalog.pg_sleep(1);
+  END IF;
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER aa_fixture_pause_outcome_source_race
+  BEFORE INSERT ON arena.leaderboard_acquisition_outcomes
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.aa_fixture_pause_outcome_source_race();
+SQL
+
+RACE_ERROR_FILE="$TMP_ROOT/outcome-source-race.log"
+psql_cmd -q -c "
+  SET ROLE service_role;
+  BEGIN;
+  SELECT arena.fixture_begin_region_guard(3);
+  SELECT arena.finish_leaderboard_acquisition_attempt(
+    '50000000-0000-4000-8000-000000000002',
+    'processing_failed', 'unknown', 'unknown', 'unassessed', NULL,
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL, false, false, 'upstream_fetch', 'fixture',
+    'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2
+  );
+  COMMIT;" >"$RACE_ERROR_FILE" 2>&1 &
+race_pid=$!
+sleep 0.2
+psql_cmd -q -c "UPDATE arena.sources SET status = 'inactive' WHERE id = 3;"
+if wait "$race_pid"; then
+  echo 'claimed outcome crossed a concurrent source shutdown' >&2
+  exit 1
+fi
+if ! rg -q 'lacks a claimed Tier-A execution guard' "$RACE_ERROR_FILE"; then
+  echo 'claimed outcome source race failed for an unexpected reason' >&2
+  sed -n '1,180p' "$RACE_ERROR_FILE" >&2
+  exit 1
+fi
+
+psql_cmd -q <<'SQL'
+UPDATE arena.sources SET status = 'active' WHERE id = 3;
+DROP TRIGGER aa_fixture_pause_outcome_source_race
+  ON arena.leaderboard_acquisition_outcomes;
+DROP FUNCTION arena.aa_fixture_pause_outcome_source_race();
+SQL
+
+assert_sql_true \
+  'failed source-race outcome left a durable row or guard' \
+  "SELECT NOT EXISTS (
+            SELECT 1
+              FROM arena.leaderboard_acquisition_outcomes AS outcome
+              JOIN arena.leaderboard_acquisition_attempts AS attempt
+                ON attempt.attempt_seq = outcome.attempt_seq
+             WHERE attempt.attempt_id =
+                   '50000000-0000-4000-8000-000000000002'::uuid
+          )
+          AND NOT EXISTS (SELECT 1 FROM arena.tier_a_execution_write_guards);"
+
+# Derived publication, other ingest tiers, profile series, and RAW GC retain
+# their established owner paths.
+psql_cmd -q <<'SQL'
+INSERT INTO arena.leaderboard_snapshots (
+  id, source_id, timeframe, count_check_passed, is_derived, raw_object_id
+) VALUES (3002, 1, 30, true, true, NULL);
+INSERT INTO arena.raw_objects (source_id, job_type)
+VALUES
+  (1, 'tier_b'),
+  (1, 'tier_b_series'),
+  (1, 'tier_c'),
+  (1, 'tier_d');
+INSERT INTO arena.upstream_field_inventory (source_id, job_type, field_path)
+VALUES (1, 'tier_b', 'fixture.profile');
+INSERT INTO arena.trader_series (payload) VALUES ('daily');
+INSERT INTO arena.trader_series_weekly (payload) VALUES ('weekly');
+SQL
+
+expect_failure \
+  'derived-to-direct snapshot laundering passed' \
+  'lacks a claimed Tier-A execution guard' \
+  "UPDATE arena.leaderboard_snapshots
+      SET is_derived = false
+    WHERE id = 3002;"
+
+expect_failure \
+  'direct-to-derived snapshot laundering passed' \
+  'lacks a claimed Tier-A execution guard' \
+  "UPDATE arena.leaderboard_snapshots
+      SET is_derived = true
+    WHERE id = 3001;"
+
+expect_failure \
+  'non-Tier-A RAW laundering into Tier-A passed' \
+  'lacks a claimed Tier-A execution guard' \
+  "UPDATE arena.raw_objects
+      SET job_type = 'tier_a'
+    WHERE source_id = 1 AND job_type = 'tier_b';"
+
+expect_failure \
+  'Tier-A RAW laundering out of the guard passed' \
+  'lacks a claimed Tier-A execution guard' \
+  "UPDATE arena.raw_objects
+      SET job_type = 'tier_b'
+    WHERE source_id = 3 AND job_type = 'tier_a';"
+
+expect_failure \
+  'Tier-B inventory laundering into Tier-A passed' \
+  'lacks a claimed Tier-A execution guard' \
+  "UPDATE arena.upstream_field_inventory
+      SET job_type = 'tier_a'
+    WHERE source_id = 1 AND job_type = 'tier_b';"
+
+psql_cmd -q -c "DELETE FROM arena.raw_objects WHERE source_id = 3 AND job_type = 'tier_a';"
+
+assert_sql_true \
+  'shared or cleanup paths were blocked by Tier-A enforcement' \
+  "SELECT
+     (SELECT count(*) FROM arena.leaderboard_snapshots WHERE id = 3002) = 1
+     AND (SELECT count(*) FROM arena.raw_objects
+           WHERE source_id = 1 AND job_type IN (
+             'tier_b', 'tier_b_series', 'tier_c', 'tier_d'
+           )) = 4
+     AND (SELECT count(*) FROM arena.raw_objects
+           WHERE source_id = 3 AND job_type = 'tier_a') = 0
+     AND (SELECT count(*) FROM arena.upstream_field_inventory
+           WHERE source_id = 1 AND job_type = 'tier_b') = 1
+     AND (SELECT count(*) FROM arena.trader_series) = 1
+     AND (SELECT count(*) FROM arena.trader_series_weekly) = 1;"
+
+expect_failure \
+  'service role retained direct table writes' \
+  'permission denied for table raw_objects' \
+  "SET ROLE service_role;
+   INSERT INTO arena.raw_objects (source_id, job_type) VALUES (1, 'tier_b');"
+
+assert_sql_true \
+  'hostile non-owner ACLs survived enforcement' \
+  "SELECT NOT pg_catalog.has_function_privilege(
+            'fixture_rogue',
+            'arena.start_leaderboard_acquisition_attempt(uuid,integer,integer,text,text,integer,text,text,text)',
+            'EXECUTE'
+          )
+          AND NOT pg_catalog.has_function_privilege(
+            'fixture_rogue',
+            'arena.claim_tier_a_execution(uuid,integer,text,text,text,integer,integer,text,uuid,text,text,integer)',
+            'EXECUTE'
+          )
+          AND NOT pg_catalog.has_table_privilege(
+            'fixture_rogue', 'arena.raw_objects', 'INSERT,UPDATE,DELETE'
+          )
+          AND NOT pg_catalog.has_table_privilege(
+            'fixture_rogue', 'arena.raw_objects', 'MAINTAIN'
+          )
+          AND NOT pg_catalog.has_column_privilege(
+            'service_role', 'arena.leaderboard_snapshots',
+            'is_derived', 'INSERT'
+          )
+          AND NOT pg_catalog.has_column_privilege(
+            'fixture_rogue', 'arena.leaderboard_snapshots',
+            'is_derived', 'UPDATE'
+          )
+          AND NOT pg_catalog.has_table_privilege(
+            'fixture_rogue', 'arena.tier_a_execution_claims', 'SELECT'
+          )
+          AND NOT pg_catalog.has_column_privilege(
+            'fixture_rogue', 'arena.tier_a_execution_heads',
+            'phase', 'UPDATE'
+          )
+          AND NOT pg_catalog.has_table_privilege(
+            'fixture_rogue', 'arena.sources', 'TRIGGER,REFERENCES,MAINTAIN'
+          )
+          AND NOT pg_catalog.has_column_privilege(
+            'fixture_rogue', 'arena.sources', 'id', 'REFERENCES'
+          );"
+
+psql_cmd -q -c 'ALTER TABLE arena.sources OWNER TO fixture_rogue;'
+
+expect_file_failure \
+  'drifted source owner was accepted by enforcement replay' \
+  'Tier-A source control-plane ACL is not closed' \
+  "$ENFORCEMENT_MIGRATION"
+
+psql_cmd -q -c 'ALTER TABLE arena.sources OWNER TO postgres;'
+
+psql_cmd -q -c \
+  'ALTER TABLE arena.leaderboard_snapshots ALTER COLUMN is_derived DROP NOT NULL;'
+
+expect_file_failure \
+  'nullable trigger dependency was accepted by enforcement replay' \
+  'Tier-A enforcement dependent column contract drifted' \
+  "$ENFORCEMENT_MIGRATION"
+
+psql_cmd -q -c \
+  'ALTER TABLE arena.leaderboard_snapshots ALTER COLUMN is_derived SET NOT NULL;'
+
+psql_cmd -q <<'SQL'
+DROP TRIGGER tier_a_execution_fence_commit_assertion
+  ON arena.tier_a_execution_write_guards;
+CREATE TRIGGER tier_a_execution_fence_commit_assertion
+  AFTER INSERT ON arena.tier_a_execution_write_guards
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.assert_tier_a_execution_fence_at_commit();
+SQL
+
+psql_cmd -q -f "$ENFORCEMENT_MIGRATION"
+
+assert_sql_true \
+  'enforcement replay did not repair the exact two-round constraint trigger' \
+  "SELECT trigger_row.tgconstraint <> 0
+          AND trigger_row.tgtype = 21
+          AND trigger_row.tgdeferrable
+          AND trigger_row.tginitdeferred
+     FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid =
+          'arena.tier_a_execution_write_guards'::pg_catalog.regclass
+      AND trigger_row.tgname =
+          'tier_a_execution_fence_commit_assertion';"
+
+psql_cmd -q <<'SQL'
+ALTER FUNCTION arena.start_leaderboard_acquisition_attempt(
+  uuid, integer, integer, text, text, integer, text, text, text
+) OWNER TO fixture_rogue;
+REVOKE ALL PRIVILEGES ON FUNCTION arena.start_leaderboard_acquisition_attempt(
+  uuid, integer, integer, text, text, integer, text, text, text
+) FROM PUBLIC, fixture_rogue;
+SQL
+
+expect_file_failure \
+  'empty ACL concealed a drifted trigger function owner' \
+  'Tier-A enforcement function ACL is not a closed set' \
+  "$ENFORCEMENT_MIGRATION"
+
+psql_cmd -q -c \
+  'ALTER FUNCTION arena.start_leaderboard_acquisition_attempt(uuid, integer, integer, text, text, integer, text, text, text) OWNER TO postgres;'
+
+psql_cmd -q <<'SQL'
+CREATE OR REPLACE FUNCTION arena.reject_direct_leaderboard_acquisition_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  RETURN COALESCE(NEW, OLD);
+END
+$function$;
+SQL
+
+expect_file_failure \
+  'weak same-OID ledger trigger body was accepted by enforcement replay' \
+  'Tier-A execution substrate function contract drifted' \
+  "$ENFORCEMENT_MIGRATION"
+
+replace_function_from_migration \
+  "$ROOT_DIR/supabase/migrations/20260722030000_durable_leaderboard_acquisition_attempt_ledger.sql" \
+  'reject_direct_leaderboard_acquisition_mutation'
+
+psql_cmd -q <<'SQL'
+CREATE TABLE public.fixture_enforcement_marker AS
+SELECT function_row.oid, function_row.prosrc
+FROM pg_catalog.pg_proc AS function_row
+WHERE function_row.oid =
+      'arena.tier_a_execution_claim_enforcement_state()'::pg_catalog.regprocedure;
+
+GRANT EXECUTE ON FUNCTION arena.start_leaderboard_acquisition_attempt(
+  uuid, integer, integer, text, text, integer, text, text, text
+) TO fixture_rogue;
+GRANT EXECUTE ON FUNCTION arena.claim_tier_a_execution(
+  uuid, integer, text, text, text, integer, integer, text, uuid, text,
+  text, integer
+) TO fixture_rogue;
+GRANT EXECUTE ON FUNCTION arena.tier_a_execution_claim_enforcement_state()
+  TO fixture_rogue;
+GRANT UPDATE ON TABLE arena.raw_objects TO fixture_rogue;
+SQL
+
+psql_cmd -q -f "$ENFORCEMENT_MIGRATION"
+
+assert_sql_true \
+  'enforcement replay changed marker identity or retained hostile grants' \
+  "SELECT marker_before.oid = marker_after.oid
+          AND marker_before.prosrc = marker_after.prosrc
+          AND NOT pg_catalog.has_function_privilege(
+            'fixture_rogue',
+            'arena.start_leaderboard_acquisition_attempt(uuid,integer,integer,text,text,integer,text,text,text)',
+            'EXECUTE'
+          )
+          AND NOT pg_catalog.has_function_privilege(
+            'fixture_rogue',
+            'arena.claim_tier_a_execution(uuid,integer,text,text,text,integer,integer,text,uuid,text,text,integer)',
+            'EXECUTE'
+          )
+          AND NOT pg_catalog.has_function_privilege(
+            'fixture_rogue',
+            'arena.tier_a_execution_claim_enforcement_state()',
+            'EXECUTE'
+          )
+          AND NOT pg_catalog.has_table_privilege(
+            'fixture_rogue', 'arena.raw_objects', 'UPDATE'
+          )
+     FROM public.fixture_enforcement_marker AS marker_before
+     JOIN pg_catalog.pg_proc AS marker_after
+       ON marker_after.oid =
+          'arena.tier_a_execution_claim_enforcement_state()'::pg_catalog.regprocedure;"
+
+echo 'Tier-A execution claim fence and postdeploy enforcement PG17 proof passed'
