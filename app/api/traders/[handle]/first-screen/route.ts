@@ -21,10 +21,14 @@ import { unstable_cache } from 'next/cache'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { ApiError } from '@/lib/api/errors'
-import { success as apiSuccess, withCache } from '@/lib/api/response'
+import { success as apiSuccess } from '@/lib/api/response'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getFirstScreen } from '@/lib/data/serving/first-screen'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
+import {
+  METRIC_AUTHORITY_NO_STORE_HEADERS,
+  servingMetricAuthorityCacheKey,
+} from '@/lib/data/serving/cache-policy'
 import { getDataMode } from '@/lib/constants/serving-cutover'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import { getReadReplica } from '@/lib/supabase/read-replica'
@@ -36,15 +40,14 @@ const handleSchema = z.string().min(1).max(255)
 const sourceSchema = z.string().min(1).max(64)
 
 // The capability-matrix RPC scans trader_stats for observed metric coverage —
-// ~30s cold. Near-static data (spec §6), so serve it from the SAME Next data
-// cache entry the trader page's server component keeps warm (identical key +
-// revalidate as page.tsx cachedCapabilitiesISR), and never let a cold miss
-// stall this route past the client's fetch timeout: race 2s → null capability
+// ~30s cold. Near-static data (spec §6), so serve it from an authority-versioned
+// Next data-cache entry, and never let a cold miss stall this route past the
+// client's fetch timeout: race 2s → null capability
 // (the client degrades gracefully — record surfaces gate off, core still loads).
 const cachedCapabilitiesISR = unstable_cache(
   async () => getSourceCapabilities(getReadReplica()),
-  ['arena-source-capabilities'],
-  { revalidate: 3600 }
+  [servingMetricAuthorityCacheKey('arena-source-capabilities')],
+  { revalidate: 300 }
 )
 const cachedCapabilities = async () => {
   try {
@@ -120,15 +123,16 @@ export async function GET(
         entries: [],
       }
 
-      return withCache(
-        apiSuccess<TraderFirstScreenResponse>({
+      return apiSuccess<TraderFirstScreenResponse>(
+        {
           firstScreen,
           capability: capabilities[resolved.source] ?? null,
           is_verified_data: verifiedKeys.has(
             verifiedTraderKey(resolved.source, resolved.exchangeTraderId)
           ),
-        }),
-        { maxAge: 60, staleWhileRevalidate: 300 }
+        },
+        200,
+        METRIC_AUTHORITY_NO_STORE_HEADERS
       )
     },
     { name: 'trader-first-screen', rateLimit: 'public' }

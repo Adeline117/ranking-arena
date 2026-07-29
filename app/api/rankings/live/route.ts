@@ -16,6 +16,7 @@ import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // CQRS read-through cache: avoid hitting ZREVRANGE for repeated requests within 30s
-    const cacheKey = `rankings:live:${period}:${limit}:${offset}`
+    const cacheKey = publicRankingCacheKey(`rankings:live:${period}:${limit}:${offset}`)
     const cached = await tieredGet<Record<string, unknown>>(cacheKey, 'hot')
     if (cached.data) {
       const response = NextResponse.json(cached.data)

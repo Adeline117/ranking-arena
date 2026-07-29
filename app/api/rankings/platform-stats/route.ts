@@ -15,6 +15,10 @@ import { getSupabaseAdmin } from '@/lib/api'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { logger } from '@/lib/logger'
+import {
+  isPublicRankingSourceAllowed,
+  publicRankingCacheKey,
+} from '@/lib/rankings/publication-policy'
 
 // Remove force-dynamic so Vercel CDN can cache this response.
 // The tieredGetOrSet below caches at the Redis layer (1h TTL).
@@ -34,7 +38,7 @@ export async function GET(request: NextRequest) {
     const rl = await checkRateLimit(request, RateLimitPresets.read)
     if (rl) return rl
 
-    const CACHE_KEY = 'rankings:platform-stats:90D'
+    const CACHE_KEY = publicRankingCacheKey('rankings:platform-stats:90D')
 
     const platformStats = await tieredGetOrSet<PlatformStat[]>(
       CACHE_KEY,
@@ -42,22 +46,32 @@ export async function GET(request: NextRequest) {
         const supabase = getSupabaseAdmin()
 
         // Single SQL GROUP BY via RPC — 47ms vs 4.5s (30 paginated queries)
-        const { data: rpcRows, error: rpcError } = await supabase.rpc('get_platform_stats', { p_season_id: '90D' })
+        const { data: rpcRows, error: rpcError } = await supabase.rpc('get_platform_stats', {
+          p_season_id: '90D',
+        })
 
         if (rpcError) throw new Error(`RPC get_platform_stats failed: ${rpcError.message}`)
         if (!rpcRows || rpcRows.length === 0) return []
 
-        return (rpcRows as Array<{
-          platform: string; trader_count: number; avg_score: number;
-          avg_roi: number; median_score: number; avg_win_rate: number
-        }>).map(row => ({
-          platform: row.platform,
-          traderCount: Number(row.trader_count),
-          avgScore: Number(row.avg_score),
-          avgRoi: Number(row.avg_roi),
-          medianScore: Number(row.median_score),
-          avgWinRate: row.avg_win_rate != null ? Number(row.avg_win_rate) : null,
-        }))
+        return (
+          rpcRows as Array<{
+            platform: string
+            trader_count: number
+            avg_score: number
+            avg_roi: number
+            median_score: number
+            avg_win_rate: number
+          }>
+        )
+          .filter((row) => isPublicRankingSourceAllowed(row.platform))
+          .map((row) => ({
+            platform: row.platform,
+            traderCount: Number(row.trader_count),
+            avgScore: Number(row.avg_score),
+            avgRoi: Number(row.avg_roi),
+            medianScore: Number(row.median_score),
+            avgWinRate: row.avg_win_rate != null ? Number(row.avg_win_rate) : null,
+          }))
       },
       'cold', // 1-hour Redis TTL
       ['rankings', 'platform-stats']
@@ -74,9 +88,6 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     logger.error('[platform-stats]', message)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

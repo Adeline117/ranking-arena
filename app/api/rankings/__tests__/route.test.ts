@@ -368,8 +368,16 @@ describe('GET /api/rankings', () => {
           is_stale: true,
         })
       )
-      expect(rankingQuery?.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
-      expect(freshnessQuery?.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
+      expect(rankingQuery?.not).toHaveBeenCalledWith(
+        'source',
+        'in',
+        '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      )
+      expect(freshnessQuery?.not).toHaveBeenCalledWith(
+        'source',
+        'in',
+        '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      )
     } finally {
       jest.useRealTimers()
     }
@@ -461,7 +469,10 @@ describe('GET /api/rankings', () => {
     const res = await GET(req)
 
     expect(res.status).toBe(200)
-    expect(mockTieredGet).toHaveBeenCalledWith('precomputed:composite:all:v2', 'hot')
+    expect(mockTieredGet).toHaveBeenCalledWith(
+      'public-rank-policy-v3:precomputed:composite:all:v2',
+      'hot'
+    )
   })
 
   it('keeps the composite writer key aligned while sanitizing its cached payload', async () => {
@@ -490,7 +501,10 @@ describe('GET /api/rankings', () => {
     const body = await res.json()
     const data = body.data ?? body
 
-    expect(mockTieredGet).toHaveBeenCalledWith('precomputed:composite:all:v2', 'hot')
+    expect(mockTieredGet).toHaveBeenCalledWith(
+      'public-rank-policy-v3:precomputed:composite:all:v2',
+      'hot'
+    )
     expect(data.traders).toEqual([first, last])
     expect(data.totalCount).toBe(3)
     expect(data.totalcount).toBe(3)
@@ -533,7 +547,7 @@ describe('GET /api/rankings', () => {
     const data = body.data ?? body
 
     expect(mockTieredGetOrSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v2:api:rankings:v3:/),
+      expect.stringMatching(/^public-rank-policy-v3:api:rankings:v3:/),
       expect.any(Function),
       'hot',
       ['rankings']

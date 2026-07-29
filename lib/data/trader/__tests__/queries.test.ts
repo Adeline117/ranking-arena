@@ -176,14 +176,18 @@ describe('getLeaderboard source exclusion', () => {
 
     await getLeaderboard(supabase as never, {
       period: '90D',
-      platform: 'okx_web3_solana',
+      platform: 'binance_futures',
       excludeSources: ['okx_web3_solana'],
       limit: 20,
       signal,
     })
 
-    expect(leaderboardQuery.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
-    expect(leaderboardQuery.eq).toHaveBeenCalledWith('source', 'okx_web3_solana')
+    expect(leaderboardQuery.not).toHaveBeenCalledWith(
+      'source',
+      'in',
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+    )
+    expect(leaderboardQuery.eq).toHaveBeenCalledWith('source', 'binance_futures')
     expect(leaderboardQuery.range).toHaveBeenCalledWith(0, 19)
     expect(leaderboardQuery.abortSignal).toHaveBeenCalledWith(signal)
     expect(countQuery.abortSignal).toHaveBeenCalledWith(signal)
@@ -191,4 +195,14 @@ describe('getLeaderboard source exclusion', () => {
       leaderboardQuery.range.mock.invocationCallOrder[0]
     )
   })
+
+  it.each(['okx_web3_solana', 'bitget_bots_futures', 'bitget_bots_spot'])(
+    'does not query quarantined platform %s',
+    async (platform) => {
+      const from = jest.fn()
+      const result = await getLeaderboard({ from } as never, { platform })
+      expect(result).toEqual({ traders: [], total: 0 })
+      expect(from).not.toHaveBeenCalled()
+    }
+  )
 })

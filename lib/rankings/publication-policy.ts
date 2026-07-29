@@ -8,7 +8,7 @@
  * and a cache-epoch bump.
  */
 
-export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v2'
+export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v3'
 export const PUBLIC_RANKING_MAX_COMPUTED_AGE_MS = 48 * 60 * 60 * 1000
 export const PUBLIC_RANKING_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 
@@ -18,6 +18,18 @@ export const PUBLIC_RANKING_SOURCE_QUARANTINES = [
     contract: 'okx-web3-ranking-quarantine@1',
     reason: 'population_and_window_authority_unverified',
     reviewedAt: '2026-07-24',
+  },
+  {
+    source: 'bitget_bots_futures',
+    contract: 'bitget-bot-cumulative-rank-quarantine@1',
+    reason: 'inception_cumulative_metrics_are_not_window_rank_authority',
+    reviewedAt: '2026-07-28',
+  },
+  {
+    source: 'bitget_bots_spot',
+    contract: 'bitget-bot-cumulative-rank-quarantine@1',
+    reason: 'inception_cumulative_metrics_are_not_window_rank_authority',
+    reviewedAt: '2026-07-28',
   },
 ] as const
 

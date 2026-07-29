@@ -15,6 +15,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { getOrSetWithLock } from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'
+import {
+  isPublicRankingSourceAllowed,
+  publicRankingCacheKey,
+} from '@/lib/rankings/publication-policy'
 
 const log = createLogger('api:movers')
 
@@ -36,7 +40,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await getOrSetWithLock(
-      'api:rankings:movers',
+      publicRankingCacheKey('api:rankings:movers'),
       async () => computeMovers(),
       // 120s Redis TTL (was 600s). Movers computation is cheap (~100ms, 2 queries).
       // Short TTL ensures empty results from leaderboard outages recover quickly.
@@ -120,7 +124,7 @@ async function computeMoversInner() {
   const snapsByPlatform = new Map<string, string[]>()
   const yesterdayRoiMap = new Map<string, number>()
   for (const s of yesterdaySnaps) {
-    if (s.roi == null) continue
+    if (s.roi == null || !isPublicRankingSourceAllowed(s.platform)) continue
     const key = `${s.platform}:${s.trader_key}`
     yesterdayRoiMap.set(key, parseFloat(String(s.roi)))
     if (!snapsByPlatform.has(s.platform)) snapsByPlatform.set(s.platform, [])
@@ -145,6 +149,7 @@ async function computeMoversInner() {
   // Compute ROI changes
   const movers: Mover[] = []
   for (const r of allCurrentRanks) {
+    if (!isPublicRankingSourceAllowed(r.source)) continue
     const key = `${r.source}:${r.source_trader_id}`
     const yesterdayRoi = yesterdayRoiMap.get(key)
     if (yesterdayRoi == null || r.roi == null || r.arena_score == null) continue

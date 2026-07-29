@@ -1,8 +1,8 @@
 /**
  * GET /api/cron/sync-ranking-store
  *
- * Keeps the near-real-time ranking Redis sorted set (`ranking:live:<season>`,
- * read by /api/rankings/live) in sync with `leaderboard_ranks.arena_score`.
+ * Keeps the authority-epoched near-real-time ranking Redis sorted set (read by
+ * /api/rankings/live) in sync with `leaderboard_ranks.arena_score`.
  *
  * Why a dedicated cron (2026-07-09): compute-leaderboard already syncs the
  * sorted set, but only via `fireAndForget(syncRedisSortedSet(...))` at the very

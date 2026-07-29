@@ -129,8 +129,16 @@ describe('GET /api/v2/rankings source freshness', () => {
         computed_at: '2026-07-18T11:59:00.000Z',
       })
     )
-    expect(rankingQuery?.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
-    expect(freshnessQuery?.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
+    expect(rankingQuery?.not).toHaveBeenCalledWith(
+      'source',
+      'in',
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+    )
+    expect(freshnessQuery?.not).toHaveBeenCalledWith(
+      'source',
+      'in',
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+    )
   })
 
   it('sanitizes a polluted cache hit and epochs the reader/writer key together', async () => {
@@ -159,7 +167,7 @@ describe('GET /api/v2/rankings source freshness', () => {
     const body = await response.json()
 
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v2:v2-rankings:v3:/),
+      expect.stringMatching(/^public-rank-policy-v3:v2-rankings:v3:/),
       expect.any(Function),
       expect.any(Object)
     )

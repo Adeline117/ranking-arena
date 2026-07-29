@@ -5,7 +5,7 @@
  * sources only — legacy sources keep using /api/traders/[handle].
  *
  * Cache ladder:
- *   warm  — arena.trader_stats fresh within TTL → edge-cacheable (s-maxage=30)
+ *   warm  — arena.trader_stats fresh within TTL → return immediately (no-store)
  *   stale — return stale payload immediately, fire-and-forget Tier-C refresh,
  *           cacheState 'pending' keeps the client polling (no-store)
  *   cold  — enqueue Tier-C (single-flight jobId) + poll the worker's Redis
@@ -17,10 +17,11 @@ import { NextRequest, after } from 'next/server'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { ApiError } from '@/lib/api/errors'
-import { success as apiSuccess, withCache } from '@/lib/api/response'
+import { success as apiSuccess } from '@/lib/api/response'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getCoreModules, hasRequiredProfileSeries, isFresh, tfToInt } from '@/lib/data/serving/core'
 import { requestTierC, coreModulesFromTierC } from '@/lib/data/serving/tier-c'
+import { METRIC_AUTHORITY_NO_STORE_HEADERS } from '@/lib/data/serving/cache-policy'
 import type { ServingTimeframe, TraderCoreResponse } from '@/lib/data/serving/types'
 
 const handleSchema = z.string().min(1).max(255)
@@ -62,12 +63,11 @@ export async function GET(
       // background Tier-C deep fetch while serving what we have.
       const hasRequiredSeries = !!warm && hasRequiredProfileSeries(warm)
 
-      // Warm hit — the only edge-cacheable answer.
+      // Warm hit. Profile metrics deliberately bypass shared edge caches: an
+      // authority migration can withdraw a metric immediately, while SWR
+      // would otherwise keep the previous value public after the cutover.
       if (warm && hasRequiredSeries && isFresh(warm.provenance.asOf, CORE_FRESH_TTL_SECONDS)) {
-        return withCache(apiSuccess<TraderCoreResponse>(warm), {
-          maxAge: 30,
-          staleWhileRevalidate: 120,
-        })
+        return apiSuccess<TraderCoreResponse>(warm, 200, METRIC_AUTHORITY_NO_STORE_HEADERS)
       }
 
       const tierCReq = {
@@ -85,9 +85,11 @@ export async function GET(
       // stats refresh silently never fires (the ~99%-empty-chart bug).
       if (warm) {
         after(() => requestTierC(tierCReq, { fireAndForget: true }))
-        return apiSuccess<TraderCoreResponse>({ ...warm, cacheState: 'pending' }, 200, {
-          'Cache-Control': 'no-store',
-        })
+        return apiSuccess<TraderCoreResponse>(
+          { ...warm, cacheState: 'pending' },
+          200,
+          METRIC_AUTHORITY_NO_STORE_HEADERS
+        )
       }
 
       // Cold miss — single-flight enqueue + poll ≤8s.
@@ -95,13 +97,15 @@ export async function GET(
       if (payload) {
         const fetched = coreModulesFromTierC(resolved.source, tfToInt(tf), payload)
         if (fetched) {
-          return apiSuccess<TraderCoreResponse>(fetched, 200, { 'Cache-Control': 'no-store' })
+          return apiSuccess<TraderCoreResponse>(fetched, 200, METRIC_AUTHORITY_NO_STORE_HEADERS)
         }
       }
 
-      return apiSuccess<TraderCoreResponse>({ timeframe: tf, cacheState: 'pending' }, 200, {
-        'Cache-Control': 'no-store',
-      })
+      return apiSuccess<TraderCoreResponse>(
+        { timeframe: tf, cacheState: 'pending' },
+        200,
+        METRIC_AUTHORITY_NO_STORE_HEADERS
+      )
     },
     { name: 'trader-core', rateLimit: 'public' }
   )

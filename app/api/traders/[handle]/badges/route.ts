@@ -5,6 +5,10 @@ import { resolveTrader } from '@/lib/data/unified'
 import { calculateBadges, type EarnedBadge } from '@/lib/badges'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
+import {
+  isPublicRankingSourceAllowed,
+  publicRankingCacheKey,
+} from '@/lib/rankings/publication-policy'
 
 /**
  * GET /api/traders/[handle]/badges
@@ -26,7 +30,7 @@ export async function GET(
   const cacheHeaders = { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
 
   // Check cache first
-  const cacheKey = `badges:${handle}`
+  const cacheKey = publicRankingCacheKey(`badges:${handle}`)
   const { data: cached } = await tieredGet<{ badges: EarnedBadge[] }>(cacheKey, 'warm')
   if (cached) {
     return NextResponse.json(cached, { headers: cacheHeaders })
@@ -38,6 +42,9 @@ export async function GET(
   const resolved = await resolveTrader(supabase, { handle })
   if (!resolved) {
     return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
+  }
+  if (!isPublicRankingSourceAllowed(resolved.platform)) {
+    return NextResponse.json({ badges: [] }, { headers: cacheHeaders })
   }
 
   // Fetch trader data from leaderboard_ranks (precomputed, fast)

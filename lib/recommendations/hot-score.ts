@@ -12,6 +12,7 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import { filterPublicRankingRows } from '@/lib/rankings/publication-policy'
 
 const logger = createLogger('hot-score')
 
@@ -112,7 +113,8 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
     return []
   }
 
-  const typedRanks = ranks as unknown as RankRow[]
+  const typedRanks = filterPublicRankingRows(ranks as unknown as RankRow[], (rank) => rank.source)
+  if (typedRanks.length === 0) return []
 
   // 2. Fetch recent daily snapshots for momentum calculation.
   // Migrated off retiring trader_snapshots_v2 → trader_daily_snapshots (daily

@@ -213,7 +213,7 @@ export const GET = withPublic(
             is_stale: boolean
             age_seconds: number | null
           }>
-        }>(`${precomputedKey}:v2`, 'hot')
+        }>(publicRankingCacheKey(`${precomputedKey}:v2`), 'hot')
 
         if (
           precomputed &&

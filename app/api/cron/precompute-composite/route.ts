@@ -15,6 +15,7 @@ import { getReadReplica } from '@/lib/supabase/read-replica'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getPool } from '@/lib/db'
 import { tieredSet } from '@/lib/cache/redis-layer'
+import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { GranularPlatform } from '@/lib/types/leaderboard'
 import { ARENA_CONFIG } from '@/lib/utils/arena-score'
@@ -345,7 +346,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Store the full composite result
-    await tieredSet('precomputed:composite:all:v2', compositeData, 'hot', ['rankings', 'composite'])
+    await tieredSet(publicRankingCacheKey('precomputed:composite:all:v2'), compositeData, 'hot', [
+      'rankings',
+      'composite',
+    ])
 
     // Also store per-category composites for faster filtered queries
     const categories = ['futures', 'spot', 'onchain'] as const
@@ -364,7 +368,7 @@ export async function GET(request: NextRequest) {
           source_freshness: catFreshness.sources,
           availableSources: catSources.sort(),
         }
-        await tieredSet(`precomputed:composite:${cat}:v2`, catData, 'hot', [
+        await tieredSet(publicRankingCacheKey(`precomputed:composite:${cat}:v2`), catData, 'hot', [
           'rankings',
           'composite',
         ])
