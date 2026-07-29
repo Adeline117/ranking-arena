@@ -2422,6 +2422,7 @@ export type Database = {
           currency: string
           group_id: string
           id: string
+          livemode: boolean
           outcome: string
           payment_intent_id: string
           payment_member_joined_at: string | null
@@ -2440,6 +2441,7 @@ export type Database = {
           currency: string
           group_id: string
           id?: string
+          livemode: boolean
           outcome: string
           payment_intent_id: string
           payment_member_joined_at?: string | null
@@ -2458,6 +2460,7 @@ export type Database = {
           currency?: string
           group_id?: string
           id?: string
+          livemode?: boolean
           outcome?: string
           payment_intent_id?: string
           payment_member_joined_at?: string | null
@@ -6166,6 +6169,7 @@ export type Database = {
         Row: {
           event_created_at: string
           event_id: string
+          livemode: boolean
           observations: Json
           observed_at: string
           refund_state: string
@@ -6175,6 +6179,7 @@ export type Database = {
         Insert: {
           event_created_at: string
           event_id: string
+          livemode: boolean
           observations?: Json
           observed_at?: string
           refund_state: string
@@ -6184,6 +6189,7 @@ export type Database = {
         Update: {
           event_created_at?: string
           event_id?: string
+          livemode?: boolean
           observations?: Json
           observed_at?: string
           refund_state?: string
@@ -6208,6 +6214,7 @@ export type Database = {
           currency: string
           latest_refund_event_created_at: string
           latest_refund_event_id: string
+          livemode: boolean
           merged_payment_id: string | null
           refund_snapshot_event_created_at: string
           refund_snapshot_event_id: string
@@ -6228,6 +6235,7 @@ export type Database = {
           currency: string
           latest_refund_event_created_at: string
           latest_refund_event_id: string
+          livemode: boolean
           merged_payment_id?: string | null
           refund_snapshot_event_created_at: string
           refund_snapshot_event_id: string
@@ -6248,6 +6256,7 @@ export type Database = {
           currency?: string
           latest_refund_event_created_at?: string
           latest_refund_event_id?: string
+          livemode?: boolean
           merged_payment_id?: string | null
           refund_snapshot_event_created_at?: string
           refund_snapshot_event_id?: string
@@ -6379,6 +6388,7 @@ export type Database = {
           id: string
           latest_refund_event_created_at: string | null
           latest_refund_event_id: string | null
+          livemode: boolean
           payment_kind: string
           payment_status: string
           period_end: string | null
@@ -6404,6 +6414,7 @@ export type Database = {
           id?: string
           latest_refund_event_created_at?: string | null
           latest_refund_event_id?: string | null
+          livemode: boolean
           payment_kind: string
           payment_status: string
           period_end?: string | null
@@ -6429,6 +6440,7 @@ export type Database = {
           id?: string
           latest_refund_event_created_at?: string | null
           latest_refund_event_id?: string | null
+          livemode?: boolean
           payment_kind?: string
           payment_status?: string
           period_end?: string | null
@@ -6453,6 +6465,7 @@ export type Database = {
           entitlement_payment_id: string
           event_created_at: string
           event_id: string
+          livemode: boolean
           observations: Json
           observed_at: string
           refund_state: string
@@ -6464,6 +6477,7 @@ export type Database = {
           entitlement_payment_id: string
           event_created_at: string
           event_id: string
+          livemode: boolean
           observations?: Json
           observed_at?: string
           refund_state: string
@@ -6475,6 +6489,7 @@ export type Database = {
           entitlement_payment_id?: string
           event_created_at?: string
           event_id?: string
+          livemode?: boolean
           observations?: Json
           observed_at?: string
           refund_state?: string
@@ -6725,6 +6740,7 @@ export type Database = {
           currency: string
           id: string
           ledger_id: string
+          livemode: boolean
           owner_user_id: string | null
           product_kind: string
           stripe_charge_id: string
@@ -6738,6 +6754,7 @@ export type Database = {
           currency: string
           id?: string
           ledger_id: string
+          livemode: boolean
           owner_user_id?: string | null
           product_kind: string
           stripe_charge_id: string
@@ -6751,6 +6768,7 @@ export type Database = {
           currency?: string
           id?: string
           ledger_id?: string
+          livemode?: boolean
           owner_user_id?: string | null
           product_kind?: string
           stripe_charge_id?: string
@@ -6841,6 +6859,7 @@ export type Database = {
           current_invoice_id: string | null
           event_created_at: string
           event_id: string
+          livemode: boolean
           observed_at: string
           outcome: string
           period_end: string
@@ -6858,6 +6877,7 @@ export type Database = {
           current_invoice_id?: string | null
           event_created_at: string
           event_id: string
+          livemode: boolean
           observed_at?: string
           outcome?: string
           period_end: string
@@ -6875,6 +6895,7 @@ export type Database = {
           current_invoice_id?: string | null
           event_created_at?: string
           event_id?: string
+          livemode?: boolean
           observed_at?: string
           outcome?: string
           period_end?: string
@@ -6914,6 +6935,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          livemode: boolean
           period_end: string
           period_start: string
           plan: string
@@ -6928,6 +6950,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          livemode: boolean
           period_end: string
           period_start: string
           plan: string
@@ -6942,6 +6965,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          livemode?: boolean
           period_end?: string
           period_start?: string
           plan?: string
@@ -10288,6 +10312,7 @@ export type Database = {
           p_checkout_session_id: string
           p_currency: string
           p_group_id: string
+          p_livemode: boolean
           p_payment_intent_id: string
           p_stripe_charge_id: string
           p_stripe_customer_id: string
@@ -10304,6 +10329,7 @@ export type Database = {
           p_amount_paid: number
           p_checkout_session_id: string
           p_currency: string
+          p_livemode: boolean
           p_paid_at: string
           p_payment_status: string
           p_reservation_id: string | null
@@ -10318,6 +10344,7 @@ export type Database = {
         Args: {
           p_amount_paid: number
           p_currency: string
+          p_livemode: boolean
           p_payment_status: string
           p_period_end: string
           p_period_start: string
@@ -10337,6 +10364,7 @@ export type Database = {
           p_period_end: string
           p_period_start: string
           p_plan: string
+          p_livemode: boolean
           p_stripe_customer_id: string
           p_stripe_subscription_id: string
           p_stripe_subscription_status: string
@@ -11973,6 +12001,7 @@ export type Database = {
           p_event_created_at: string
           p_event_id: string
           p_grace_expires_at: string | null
+          p_livemode: boolean
           p_period_end: string
           p_period_start: string
           p_plan: string

@@ -384,6 +384,7 @@ describe('/api/groups/subscribe atomic boundary', () => {
         p_checkout_session_id: CHECKOUT_SESSION_ID,
         p_amount_cents: 990,
         p_currency: 'usd',
+        p_livemode: false,
         p_stripe_charge_id: CHARGE_ID,
         p_stripe_customer_id: CUSTOMER_ID,
       }

@@ -93,6 +93,7 @@ const activationFailureStatuses = [
   'official',
   'invalid',
   'invalid_payment',
+  'test_mode_non_entitling',
 ] as const
 
 const activationSuccessSchema = z
@@ -202,6 +203,7 @@ type VerifiedStripePayment = {
   customerId: string
   amountCents: number
   currency: 'usd'
+  livemode: boolean
 }
 
 function metadataMatchesGroupPass(
@@ -350,6 +352,7 @@ async function verifyStripePayment(input: {
     customerId: sessionCustomerId,
     amountCents: paymentIntent.amount_received,
     currency: 'usd',
+    livemode: session.livemode,
   }
 }
 
@@ -483,6 +486,7 @@ export const POST = withAuth(
             p_currency: verifiedPayment.currency,
             p_stripe_charge_id: verifiedPayment.chargeId,
             p_stripe_customer_id: verifiedPayment.customerId,
+            p_livemode: verifiedPayment.livemode,
           })
         : await supabase.rpc('activate_group_subscription_atomic', {
             p_actor_id: user.id,
@@ -557,6 +561,10 @@ export const POST = withAuth(
         official: { message: 'Official groups do not accept group passes', http: 403 },
         invalid: { message: 'Invalid group pass request', http: 400 },
         invalid_payment: { message: 'Invalid payment proof', http: 400 },
+        test_mode_non_entitling: {
+          message: 'Test-mode payments cannot activate a group pass',
+          http: 409,
+        },
         refund_observed: { message: 'This payment was already refunded', http: 409 },
         identity_conflict: { message: 'This payment is already assigned', http: 409 },
         manual_review: { message: 'This payment requires manual review', http: 409 },

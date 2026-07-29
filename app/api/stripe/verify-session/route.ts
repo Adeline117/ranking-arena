@@ -167,6 +167,7 @@ export async function POST(request: NextRequest) {
         supabase: supabaseAdmin,
         session,
         expectedUserId: authUser.id,
+        expectedLivemode: session.livemode,
       })
       if (!lifetimeActivationGranted(outcome.status)) {
         logger.warn('Lifetime verification reached a safe non-grant terminal state', {
@@ -334,7 +335,7 @@ export async function POST(request: NextRequest) {
       const { data: payment, error: paymentError } = await supabaseAdmin
         .from('stripe_entitlement_payments')
         .select(
-          'id,user_id,payment_kind,payment_status,plan,stripe_customer_id,stripe_subscription_id,period_start,period_end,refund_state,refund_succeeded_amount,amount_paid'
+          'id,user_id,payment_kind,payment_status,plan,stripe_customer_id,stripe_subscription_id,period_start,period_end,refund_state,refund_succeeded_amount,amount_paid,livemode'
         )
         .eq('id', localSubscription.entitlement_payment_id)
         .maybeSingle()
@@ -351,6 +352,7 @@ export async function POST(request: NextRequest) {
       exactBindingPresent =
         !!payment &&
         payment.id === localSubscription.entitlement_payment_id &&
+        payment.livemode === true &&
         payment.user_id === userId &&
         payment.payment_kind === 'recurring' &&
         (payment.payment_status === 'paid' || payment.payment_status === 'succeeded') &&
@@ -367,7 +369,7 @@ export async function POST(request: NextRequest) {
       const { data: trial, error: trialError } = await supabaseAdmin
         .from('stripe_trial_entitlements')
         .select(
-          'id,user_id,stripe_customer_id,stripe_subscription_id,plan,period_start,period_end,revoked_at'
+          'id,user_id,stripe_customer_id,stripe_subscription_id,plan,period_start,period_end,revoked_at,livemode'
         )
         .eq('id', localSubscription.entitlement_trial_id)
         .maybeSingle()
@@ -384,6 +386,7 @@ export async function POST(request: NextRequest) {
       exactBindingPresent =
         !!trial &&
         trial.id === localSubscription.entitlement_trial_id &&
+        trial.livemode === true &&
         trial.user_id === userId &&
         trial.stripe_customer_id === sessionCustomerId &&
         trial.stripe_subscription_id === subscriptionId &&

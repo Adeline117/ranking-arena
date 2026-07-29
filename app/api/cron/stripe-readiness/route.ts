@@ -46,7 +46,18 @@ const ENTITLEMENT_READINESS_METRIC_KEYS = [
   'api_tier_payment_ownership_anomalies',
   'api_tier_payment_backfill_incomplete',
   'api_tier_reversal_actions_incomplete',
+  'test_mode_entitlement_payments',
+  'test_mode_trial_entitlements',
+  'non_live_current_pro_authorities',
+  'non_live_current_group_passes',
+  'stripe_payment_mode_anomalies',
+  'refund_mode_anomalies',
+  'group_payment_mode_anomalies',
 ] as const
+
+const ENTITLEMENT_READINESS_BLOCKING_KEYS = ENTITLEMENT_READINESS_METRIC_KEYS.filter(
+  (key) => key !== 'test_mode_entitlement_payments' && key !== 'test_mode_trial_entitlements'
+)
 
 export const STRIPE_PAID_READINESS_KEYS = ['status', ...ENTITLEMENT_READINESS_METRIC_KEYS] as const
 
@@ -125,6 +136,13 @@ function parseStripePaidReadiness(value: unknown): StripePaidReadiness | null {
     api_tier_payment_ownership_anomalies: record.api_tier_payment_ownership_anomalies as number,
     api_tier_payment_backfill_incomplete: record.api_tier_payment_backfill_incomplete as number,
     api_tier_reversal_actions_incomplete: record.api_tier_reversal_actions_incomplete as number,
+    test_mode_entitlement_payments: record.test_mode_entitlement_payments as number,
+    test_mode_trial_entitlements: record.test_mode_trial_entitlements as number,
+    non_live_current_pro_authorities: record.non_live_current_pro_authorities as number,
+    non_live_current_group_passes: record.non_live_current_group_passes as number,
+    stripe_payment_mode_anomalies: record.stripe_payment_mode_anomalies as number,
+    refund_mode_anomalies: record.refund_mode_anomalies as number,
+    group_payment_mode_anomalies: record.group_payment_mode_anomalies as number,
   }
 }
 
@@ -261,7 +279,7 @@ export const GET = withCron(
       if (!parsedReadiness) {
         failures.push('Stripe entitlement authority readiness contract is invalid')
       } else if (parsedReadiness.status !== 'ready') {
-        const blockedMetrics = ENTITLEMENT_READINESS_METRIC_KEYS.filter(
+        const blockedMetrics = ENTITLEMENT_READINESS_BLOCKING_KEYS.filter(
           (key) => parsedReadiness[key] !== 0
         ).map((key) => `${key}=${parsedReadiness[key]}`)
         failures.push(
