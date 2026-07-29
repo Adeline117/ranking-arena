@@ -26,4 +26,4 @@ export const GET = withCron('ensure-partitions', async (_request, { supabase }) 
     count: 1,
     partitions_created: data,
   }
-})
+}, { safetyTimeoutMs: 55_000 })

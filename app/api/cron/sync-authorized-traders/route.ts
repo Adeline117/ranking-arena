@@ -42,4 +42,4 @@ export const GET = withCron('sync-authorized-traders', async (request: NextReque
     errors: result.errors,
     total: result.total,
   }
-})
+}, { safetyTimeoutMs: 290_000 })

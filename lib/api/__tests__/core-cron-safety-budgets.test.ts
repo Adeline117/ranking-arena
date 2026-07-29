@@ -9,6 +9,11 @@ const CORE_CRON_ROUTES = [
   'app/api/cron/worker-heartbeat-check/route.ts',
   'app/api/cron/meta-monitor/route.ts',
   'app/api/cron/sync-ranking-store/route.ts',
+  'app/api/cron/ensure-partitions/route.ts',
+  'app/api/cron/retry-dead-letters/route.ts',
+  'app/api/cron/data-reconciliation/route.ts',
+  'app/api/cron/score-backtest/route.ts',
+  'app/api/cron/sync-authorized-traders/route.ts',
 ] as const
 
 describe('core cron safety budgets', () => {

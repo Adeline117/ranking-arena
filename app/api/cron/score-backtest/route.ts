@@ -41,4 +41,4 @@ export const GET = withCron('score-backtest', async (_request: NextRequest, { su
     evaluation: ev,
     errors: [snapErr?.message, evalErr?.message].filter(Boolean),
   }
-})
+}, { safetyTimeoutMs: 55_000 })

@@ -94,4 +94,4 @@ export const GET = withCron('data-reconciliation', async (_request, { supabase }
     platforms_affected: gaps.length,
     top_gaps: gaps.slice(0, 10),
   }
-})
+}, { safetyTimeoutMs: 115_000 })

@@ -146,4 +146,4 @@ export const GET = withCron('retry-dead-letters', async (_request, { supabase: _
     permanently_failed: permanentlyFailed,
     stale_cleaned: cleaned,
   }
-})
+}, { safetyTimeoutMs: 115_000 })
