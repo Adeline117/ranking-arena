@@ -262,13 +262,20 @@ const SYNC_SELECT_FIELDS = [
  * Called after compute-leaderboard finishes to ensure full consistency.
  * Also stores trader display details in a Redis Hash for Redis-first reads.
  * Returns the number of traders synced.
+ *
+ * Throws rather than reporting a false zero-success when Redis or any database
+ * page is unavailable. The previous implementation treated a later-page query
+ * error as end-of-data and replaced the complete live board with that partial
+ * prefix.
  */
 export async function syncSortedSetFromLeaderboard(
   supabase: SupabaseClient<Database>,
   period: string
 ): Promise<number> {
   const redis = await getSharedRedis()
-  if (!redis) return 0
+  if (!redis) {
+    throw new Error(`[ranking-store] Redis unavailable while syncing ${period}`)
+  }
 
   try {
     const key = redisKey(period)
@@ -289,7 +296,19 @@ export async function syncSortedSetFromLeaderboard(
         .order('arena_score', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1)
 
-      if (error || !data?.length) break
+      if (error) {
+        const page = offset / PAGE_SIZE + 1
+        throw new Error(
+          `[ranking-store] leaderboard_ranks query failed for ${period} page ${page}: ${error.message}`
+        )
+      }
+      if (!data) {
+        const page = offset / PAGE_SIZE + 1
+        throw new Error(
+          `[ranking-store] leaderboard_ranks returned no result for ${period} page ${page}`
+        )
+      }
+      if (data.length === 0) break
       allTraders = allTraders.concat(data as unknown as Array<Record<string, unknown>>)
       if (data.length < PAGE_SIZE) break
       offset += PAGE_SIZE
@@ -298,13 +317,16 @@ export async function syncSortedSetFromLeaderboard(
     allTraders = filterPublicRankingRows(allTraders, (trader) => trader.source)
 
     if (allTraders.length === 0) {
-      logger.warn(`[ranking-store] No traders found for ${period}, skipping sync`)
-      return 0
+      throw new Error(
+        `[ranking-store] No public traders found for ${period}; preserving the last-good live board`
+      )
     }
 
-    // Pipeline 1: Sorted set (ZADD) for ranking
-    const pipeline = redis.pipeline()
-    pipeline.del(key)
+    // Publish both Redis readers in one transaction. A plain Upstash pipeline
+    // is not atomic: DEL could succeed before a later command failed, exposing
+    // an empty or partial live board.
+    const transaction = redis.multi()
+    transaction.del(key)
 
     const CHUNK_SIZE = 500
     for (let i = 0; i < allTraders.length; i += CHUNK_SIZE) {
@@ -312,24 +334,25 @@ export async function syncSortedSetFromLeaderboard(
       for (const t of chunk) {
         const source = String(t.source)
         const traderId = String(t.source_trader_id)
-        pipeline.zadd(key, { score: Number(t.arena_score), member: memberKey(source, traderId) })
+        transaction.zadd(key, {
+          score: Number(t.arena_score),
+          member: memberKey(source, traderId),
+        })
       }
     }
-    pipeline.expire(key, TTL_SECONDS)
-    await pipeline.exec()
+    transaction.expire(key, TTL_SECONDS)
 
-    // Pipeline 2: Hash map for trader details (top 200 only to limit memory)
+    // Hash map for trader details (top 200 only to limit memory)
     // Beyond top 200, fallback to DB is acceptable (low traffic)
     const TOP_N_CACHED = 200
     const topTraders = allTraders.slice(0, TOP_N_CACHED)
-    const hashPipeline = redis.pipeline()
-    hashPipeline.del(hashKey)
+    transaction.del(hashKey)
     for (const t of topTraders) {
       const member = memberKey(String(t.source), String(t.source_trader_id))
-      hashPipeline.hset(hashKey, { [member]: JSON.stringify(t) })
+      transaction.hset(hashKey, { [member]: JSON.stringify(t) })
     }
-    hashPipeline.expire(hashKey, DETAIL_HASH_TTL)
-    await hashPipeline.exec()
+    transaction.expire(hashKey, DETAIL_HASH_TTL)
+    await transaction.exec()
 
     logger.info(
       `[ranking-store] Synced ${allTraders.length} traders to ${key}, ${topTraders.length} details to ${hashKey}`
@@ -337,7 +360,7 @@ export async function syncSortedSetFromLeaderboard(
     return allTraders.length
   } catch (error) {
     logger.error('[ranking-store] syncSortedSetFromLeaderboard failed:', error)
-    return 0
+    throw error
   }
 }
 
