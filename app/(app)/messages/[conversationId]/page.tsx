@@ -5,7 +5,6 @@ import { redirect } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
-import { getCsrfHeaders } from '@/lib/api/client'
 import { usePresence } from '@/lib/hooks/usePresence'
 import ChatSettingsDrawer from '@/app/components/features/ChatSettingsDrawer'
 import ChatSearchOverlay from '@/app/components/features/ChatSearchOverlay'
@@ -59,6 +58,7 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
 
   // Messages hook
   const msgHook = useConversationMessages({ conversationId, userId, accessToken })
+  const markRead = msgHook.markRead
 
   // File upload hook
   const fileHook = useFileUpload({ userId, accessToken, conversationId })
@@ -112,16 +112,8 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
   // Mark as read on open
   useEffect(() => {
     if (!conversationId || !accessToken) return
-    fetch('/api/messages/read', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-        ...getCsrfHeaders(),
-      },
-      body: JSON.stringify({ conversationId }),
-    }).catch((err) => console.warn('[Messages] fetch failed', err))
-  }, [conversationId, accessToken])
+    void markRead()
+  }, [accessToken, conversationId, markRead])
 
   // Inject spin animation
   useEffect(() => {
@@ -148,7 +140,7 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
   // Load messages when auth + conversationId ready
   useEffect(() => {
     if (userId && conversationId && accessToken) {
-      msgHook.loadMessages(userId, conversationId, accessToken)
+      void msgHook.loadMessages()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- msgHook.loadMessages is stable, excluding to avoid infinite loop
   }, [conversationId, userId, accessToken])
