@@ -200,11 +200,21 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
 
   // Equity curve
   const mapEC = (points: EquityPoint[]) =>
-    points.map((p) => ({
-      date: p.date,
-      roi: p.roi ?? 0,
-      pnl: p.pnl ?? 0,
-    }))
+    points.flatMap((p) => {
+      // The legacy chart contract requires both fields to be finite numbers.
+      // Omitting an incomplete point is the only type-safe way to keep unknown
+      // values away from consumers that perform arithmetic on both columns.
+      // In particular, never turn a missing value into a measured zero.
+      if (
+        typeof p.roi !== 'number' ||
+        !Number.isFinite(p.roi) ||
+        typeof p.pnl !== 'number' ||
+        !Number.isFinite(p.pnl)
+      ) {
+        return []
+      }
+      return [{ date: p.date, roi: p.roi, pnl: p.pnl }]
+    })
   const equityCurve = {
     '90D': mapEC(detail.equityCurve['90D'] || []),
     '30D': mapEC(detail.equityCurve['30D'] || []),
