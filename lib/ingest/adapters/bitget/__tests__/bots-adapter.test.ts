@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ParseCtx, SourceRow, Timeframe } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
-import { bitgetBotsAdapter, captureBitgetBotsLeaderboard } from '../bots'
+import {
+  bitgetBotsAdapter,
+  captureBitgetBotsLeaderboard,
+  projectBitgetBotsLeaderboardRequest,
+} from '../bots'
 
 type BotPayload = {
   code: string
@@ -85,8 +89,17 @@ function source(boards: string[] = ['futures_grid', 'futures_martingale']): Sour
   }
 }
 
+function spotSource(boards: string[] = ['spot_grid', 'spot_martingale']): SourceRow {
+  return {
+    ...source(),
+    slug: 'bitget_bots_spot',
+    product_type: 'spot',
+    meta: { boards },
+  }
+}
+
 function payload(input: {
-  strategyType: 2 | 4
+  strategyType: 1 | 2 | 3 | 4
   pageNo?: number
   total: number
   rowCount: number
@@ -257,6 +270,106 @@ describe('Bitget bot V4 partitioned capture boundary', () => {
         (page) => bitgetBotsAdapter.parseLeaderboard(page.payload, profileCtx).rows
       )
     ).toHaveLength(24)
+  })
+
+  it('uses the canonical spot partition order and strategy identities', async () => {
+    const requests: ReplayRequestTemplate[] = []
+    const capture = await captureBitgetBotsLeaderboard(
+      session(async (request) => {
+        requests.push(request)
+        const strategyType = (request.body as { strategyType: 1 | 3 }).strategyType
+        return {
+          status: 200,
+          json: payload({ strategyType, total: 1, rowCount: 1, nextFlag: false }),
+        }
+      }),
+      spotSource(),
+      30
+    )
+
+    expect(requests.map((request) => request.body)).toEqual([
+      { strategyType: 1, orderType: 3, pageNo: 1, pageSize: 20 },
+      { strategyType: 3, orderType: 3, pageNo: 1, pageSize: 20 },
+    ])
+    expect(capture.paginationTopology.expected_partition_ids).toEqual([
+      'spot_grid',
+      'spot_martingale',
+    ])
+    expect(capture.parserTransformation.page_bindings).toMatchObject([
+      { partition_id: 'spot_grid', request_page_index: 1 },
+      { partition_id: 'spot_martingale', request_page_index: 1 },
+    ])
+  })
+
+  it('fails closed when the actual Bitget request drifts outside four reviewed fields', () => {
+    const expected = {
+      url: 'https://www.bitget.com/v1/strategyPlatform/public/traceRanks',
+      strategyType: 2,
+      pageIndex: 1,
+      pageSize: 20,
+    }
+    const request: ReplayRequestTemplate = {
+      url: expected.url,
+      method: 'POST',
+      headers: { authorization: 'never-persisted' },
+      body: { strategyType: 2, orderType: 3, pageNo: 1, pageSize: 20 },
+    }
+    expect(projectBitgetBotsLeaderboardRequest(request, expected)).toEqual({
+      url: expected.url,
+      method: 'POST',
+      body: request.body,
+    })
+
+    const invalidRequests: ReplayRequestTemplate[] = [
+      { ...request, method: 'GET' },
+      { ...request, url: `${expected.url}?hidden=semantic-drift` },
+      { ...request, body: { strategyType: 2, orderType: 3, pageNo: 1 } },
+      { ...request, body: { ...(request.body as object), extra: true } },
+      { ...request, body: { ...(request.body as object), strategyType: 4 } },
+      { ...request, body: { ...(request.body as object), orderType: 2 } },
+      { ...request, body: { ...(request.body as object), pageNo: '1' } },
+      { ...request, body: { ...(request.body as object), pageSize: 21 } },
+    ]
+    for (const invalid of invalidRequests) {
+      expect(() => projectBitgetBotsLeaderboardRequest(invalid, expected)).toThrow()
+    }
+  })
+
+  it('rejects every source-contract drift before warmup or replay I/O', async () => {
+    const goto = jest.fn(async () => undefined)
+    const pageFetch = jest.fn(async () => ({ status: 200, json: {} }))
+    const noNetworkSession = {
+      sourceSlug: 'bitget_bots_futures',
+      page: async () => ({
+        goto,
+        waitForLoadState: jest.fn(async () => undefined),
+      }),
+      pageFetch,
+      paced: async <T>(fn: () => Promise<T>) => fn(),
+    } as unknown as FetchSession
+    const canonical = source()
+    const invalidSources: SourceRow[] = [
+      { ...canonical, slug: 'bitget_bots_unknown' },
+      { ...canonical, adapter_slug: 'bitget' },
+      { ...canonical, product_type: 'spot' },
+      { ...canonical, page_size: 21 },
+      { ...canonical, pagination_kind: 'api_cursor' },
+      { ...canonical, timeframes_native: [7, 30] },
+      { ...canonical, timeframes_derived: [7] },
+      { ...canonical, status: 'disabled' },
+      { ...canonical, meta: { boards: ['futures_martingale', 'futures_grid'] } },
+    ] as SourceRow[]
+
+    for (const invalid of invalidSources) {
+      await expect(captureBitgetBotsLeaderboard(noNetworkSession, invalid, 30)).rejects.toThrow(
+        'leaderboard publication contract failed'
+      )
+    }
+    await expect(
+      captureBitgetBotsLeaderboard(noNetworkSession, canonical, 7 as never)
+    ).rejects.toThrow('leaderboard publication contract failed')
+    expect(goto).not.toHaveBeenCalled()
+    expect(pageFetch).not.toHaveBeenCalled()
   })
 
   it('rejects partition report drift and invalid source configuration before publication', async () => {
