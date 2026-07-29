@@ -5,65 +5,115 @@
 
 import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
-import { getOrSetWithLock } from '@/lib/cache'
-import { filterPublicRankingRows, publicRankingCacheKey } from '@/lib/rankings/publication-policy'
+import { del, getOrSetWithLock } from '@/lib/cache'
+import {
+  filterPublicRankingSources,
+  publicRankingCacheKey,
+  sanitizePublicRankingSourcePayload,
+} from '@/lib/rankings/publication-policy'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import { getReadReplica } from '@/lib/supabase/read-replica'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 export const runtime = 'edge'
+const SIDEBAR_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
+const SIDEBAR_SEASON = '90D' as const
 
 export const GET = withPublic(
-  async ({ supabase }) => {
-    const data = await getOrSetWithLock(
-      publicRankingCacheKey('sidebar:top-traders'),
-      async () => {
-        // Fetch top 50 to diversify across exchanges (avoid showing only 1-2 exchanges)
-        const { data: snapData, error: snapErr } = await supabase
-          .from('leaderboard_ranks')
-          .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score')
-          .eq('season_id', '90D')
-          .not('arena_score', 'is', null)
-          .gt('arena_score', 50)
-          .or('is_outlier.is.null,is_outlier.eq.false')
-          .order('arena_score', { ascending: false })
-          .limit(50)
+  async () => {
+    const cacheKey = publicRankingCacheKey('sidebar:top-traders-sealed-v2:90D')
+    const fetchSealedEntry = async () => {
+      const supabase = getReadReplica()
+      const sealedRead = await readSealedRankingGeneration(
+        supabase,
+        { season: SIDEBAR_SEASON, sources: SIDEBAR_RANKING_SOURCES },
+        async (publication) => {
+          // Fetch top 50 to diversify across exchanges (avoid showing only 1-2 exchanges)
+          const { data: snapData, error: snapErr } = await supabase
+            .from('leaderboard_ranks')
+            .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score')
+            .eq('season_id', SIDEBAR_SEASON)
+            .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+            .in('source', SIDEBAR_RANKING_SOURCES)
+            .not('arena_score', 'is', null)
+            .gt('arena_score', 50)
+            .or('is_outlier.is.null,is_outlier.eq.false')
+            .order('arena_score', { ascending: false })
+            .order('source', { ascending: true })
+            .order('source_trader_id', { ascending: true })
+            .limit(50)
 
-        if (snapErr) {
-          throw snapErr
-        }
-        const publicRows = filterPublicRankingRows(snapData ?? [], (row) => row.source)
-        if (publicRows.length === 0) {
-          return { traders: [] }
-        }
-
-        // Diversify: pick top 1 per exchange first, then fill remaining slots by score
-        const perExchange = new Map<string, (typeof publicRows)[0]>()
-        const rest: typeof publicRows = []
-        for (const d of publicRows) {
-          if (!perExchange.has(d.source)) {
-            perExchange.set(d.source, d)
-          } else {
-            rest.push(d)
+          if (snapErr || snapData === null) {
+            throw new Error(`sidebar cohort query failed: ${snapErr?.message ?? 'null payload'}`)
           }
-        }
-        // Start with 1 per exchange (diverse), sorted by score
-        const diverse = [...perExchange.values()].sort(
-          (a, b) => (b.arena_score ?? 0) - (a.arena_score ?? 0)
-        )
-        // Fill remaining to reach 10
-        const traders = [...diverse, ...rest].slice(0, 10).map((d) => ({
-          source: d.source,
-          source_trader_id: d.source_trader_id,
-          handle: d.handle || null,
-          avatar_url: d.avatar_url || null,
-          roi: d.roi,
-          arena_score: d.arena_score,
-        }))
+          if (
+            snapData.length === 0 &&
+            publication.proofs.some((proof) => proof.published_rank_count > 0)
+          ) {
+            throw new Error('sidebar cohort query returned no rows for a non-empty publication')
+          }
 
-        return { traders }
-      },
-      { ttl: 300, lockTtl: 10 } // Cache 5 minutes
+          // Diversify: pick top 1 per exchange first, then fill remaining slots by score
+          const perExchange = new Map<string, (typeof snapData)[0]>()
+          const rest: typeof snapData = []
+          for (const row of snapData) {
+            if (!perExchange.has(row.source)) {
+              perExchange.set(row.source, row)
+            } else {
+              rest.push(row)
+            }
+          }
+          const diverse = [...perExchange.values()].sort(
+            (a, b) => (b.arena_score ?? 0) - (a.arena_score ?? 0)
+          )
+          const traders = [...diverse, ...rest].slice(0, 10).map((row) => ({
+            source: row.source,
+            source_trader_id: row.source_trader_id,
+            handle: row.handle || null,
+            avatar_url: row.avatar_url || null,
+            roi: row.roi,
+            arena_score: row.arena_score,
+          }))
+
+          return { traders }
+        },
+        { timeoutMs: 10_000 }
+      )
+      return createSealedRankingCacheEntry(sealedRead)
+    }
+
+    let cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, {
+      ttl: 300,
+      lockTtl: 10,
+    })
+    let sealedCache = parseSealedRankingCacheEntry<{ traders: unknown[] }>(
+      cached,
+      SIDEBAR_SEASON,
+      SIDEBAR_RANKING_SOURCES
     )
+    if (!sealedCache) {
+      await del(cacheKey)
+      cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, {
+        ttl: 300,
+        lockTtl: 10,
+      })
+      sealedCache = parseSealedRankingCacheEntry<{ traders: unknown[] }>(
+        cached,
+        SIDEBAR_SEASON,
+        SIDEBAR_RANKING_SOURCES
+      )
+    }
+    if (!sealedCache || !Array.isArray(sealedCache.value.traders)) {
+      throw new Error('sidebar cache did not satisfy the sealed publication contract')
+    }
 
-    const response = NextResponse.json(data)
+    const response = NextResponse.json(sanitizePublicRankingSourcePayload(sealedCache.value))
     response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
     return response
   },

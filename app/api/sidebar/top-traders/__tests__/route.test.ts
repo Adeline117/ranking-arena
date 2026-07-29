@@ -22,17 +22,30 @@ jest.mock('next/server', () => {
 })
 
 const mockGetOrSetWithLock = jest.fn()
+const mockDel = jest.fn()
 
 jest.mock('@/lib/cache', () => ({
   getOrSetWithLock: (...args: unknown[]) => mockGetOrSetWithLock(...args),
+  del: (...args: unknown[]) => mockDel(...args),
 }))
 
 const mockFrom = jest.fn()
 
 jest.mock('@/lib/api/middleware', () => ({
-  withPublic: (handler: (context: unknown) => unknown) => () =>
-    handler({ supabase: { from: mockFrom } }),
+  withPublic: (handler: (context: unknown) => unknown) => () => handler({}),
 }))
+
+jest.mock('@/lib/supabase/read-replica', () => ({
+  getReadReplica: () => ({ from: mockFrom }),
+}))
+
+const mockReadSealedRankingGeneration = jest.fn()
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  sealedRankingPublicationIdentity: (publication: unknown) => JSON.stringify(publication),
+}))
+
+const COHORT_ID = '11111111-1111-4111-8111-111111111111'
 
 function makeQuery(result: { data: unknown[] | null; error: unknown }) {
   const proxy = new Proxy<Record<string, unknown>>(
@@ -57,8 +70,44 @@ import { GET } from '../route'
 describe('GET /api/sidebar/top-traders', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockDel.mockResolvedValue(true)
     mockGetOrSetWithLock.mockImplementation(async (_key: string, loader: () => Promise<unknown>) =>
       loader()
+    )
+    mockReadSealedRankingGeneration.mockImplementation(
+      async (
+        _client: unknown,
+        input: { season: '90D'; sources: string[] },
+        reader: (publication: {
+          state: 'sealed'
+          season: '90D'
+          scoreCohortId: string
+          proofs: Array<Record<string, unknown>>
+        }) => Promise<unknown>
+      ) => {
+        const publication = {
+          state: 'sealed' as const,
+          season: input.season,
+          scoreCohortId: COHORT_ID,
+          proofs: input.sources.map((source) => ({
+            season_id: input.season,
+            source,
+            source_as_of: '2026-07-29T09:00:00.000000Z',
+            recorded_at: '2026-07-29T09:05:00.000000Z',
+            score_cohort_id: COHORT_ID,
+            rank_mutation_seq: 3,
+            current_mutation_seq: 3,
+            published_rank_count: 0,
+            published_identity_sha256: 'a'.repeat(64),
+            is_sealed: true,
+          })),
+        }
+        return {
+          value: await reader(publication),
+          publication,
+          publicationIdentity: JSON.stringify(publication),
+        }
+      }
     )
   })
 
@@ -74,9 +123,9 @@ describe('GET /api/sidebar/top-traders', () => {
     const databaseError = new Error('leaderboard unavailable')
     mockFrom.mockReturnValue(makeQuery({ data: null, error: databaseError }))
 
-    await expect(GET()).rejects.toBe(databaseError)
+    await expect(GET()).rejects.toThrow('sidebar cohort query failed: leaderboard unavailable')
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      'public-rank-policy-v4:sidebar:top-traders',
+      'public-rank-policy-v4:sidebar:top-traders-sealed-v2:90D',
       expect.any(Function),
       expect.objectContaining({ ttl: 300 })
     )
