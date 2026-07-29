@@ -135,6 +135,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729024000_api_tier_payment_reversals.sql
   20260729025000_recurring_pro_checkout_admission.sql
   20260729054400_leaderboard_rank_generation_private_staging.sql
+  20260729055000_account_recovery_auth_manual_review.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
