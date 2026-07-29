@@ -308,6 +308,7 @@ describe('POST /api/portfolio/sync atomic publication boundary', () => {
         reason: 'superseded',
         message: 'A newer portfolio sync is already in progress.',
         portfolio_id: PORTFOLIO_ID,
+        viewer_id: USER_ID,
       },
     })
   })

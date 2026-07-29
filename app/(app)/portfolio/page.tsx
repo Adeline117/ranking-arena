@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import dynamic from 'next/dynamic'
 import PageHeader from '@/app/components/ui/PageHeader'
@@ -20,8 +19,13 @@ const PortfolioAnalytics = dynamic(() => import('@/app/components/portfolio/Port
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { getCsrfHeaders } from '@/lib/api/client'
-import { bootstrapClientAuth } from '@/lib/auth/client-auth-bootstrap'
+import { authedFetch, type ScopedFetchResult } from '@/lib/api/client'
+import { useAuthSession, type AuthSessionReturn } from '@/lib/hooks/useAuthSession'
+import {
+  captureExchangeViewer,
+  isExchangeViewerCurrent,
+  type ExchangeViewerSnapshot,
+} from '@/lib/exchange/viewer-scope'
 import { logger } from '@/lib/logger'
 
 interface Portfolio {
@@ -52,12 +56,12 @@ interface Snapshot {
   snapshot_at: string
 }
 
-async function readListResponse<T>(response: Response, endpoint: string): Promise<T[]> {
-  if (!response.ok) {
-    throw new Error(`${endpoint} returned HTTP ${response.status}`)
+function readListResult<T>(result: ScopedFetchResult<unknown>, endpoint: string): T[] {
+  if (!result.ok) {
+    throw new Error(`${endpoint} returned HTTP ${result.status}`)
   }
 
-  const payload = (await response.json()) as { data?: unknown } | null
+  const payload = result.data as { data?: unknown } | null
   if (!Array.isArray(payload?.data)) {
     throw new Error(`${endpoint} returned an invalid portfolio payload`)
   }
@@ -67,13 +71,65 @@ async function readListResponse<T>(response: Response, endpoint: string): Promis
 
 export default function PortfolioPage() {
   const router = useRouter()
-  const push = router.push
+  const auth = useAuthSession()
+  const { t } = useLanguage()
+
+  useEffect(() => {
+    if (auth.authChecked && !auth.loading && !auth.userId) {
+      router.push('/login?redirect=/portfolio')
+    }
+  }, [auth.authChecked, auth.loading, auth.userId, router])
+
+  const viewer = captureExchangeViewer(auth, auth.userId)
+
+  if (!viewer) {
+    const inconsistentAuth = auth.authChecked && !auth.loading && !!auth.userId
+    return (
+      <div style={styles.page}>
+        <div style={styles.container}>
+          <PageHeader title={t('portfolioTitle')} compact />
+          {inconsistentAuth ? (
+            <ErrorState
+              title={t('somethingWentWrong')}
+              description={t('loadFailedRetryShort')}
+              retry={() => void auth.refreshSession()}
+              variant="compact"
+            />
+          ) : (
+            <PortfolioOverview
+              totalEquity={0}
+              totalPnl={0}
+              totalPnlPct={0}
+              snapshots={[]}
+              isLoading
+            />
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const scopeKey = `${viewer.viewerKey}\u0000${viewer.sessionGeneration}`
+  return <PortfolioPageContent key={scopeKey} auth={auth} viewer={viewer} />
+}
+
+type PortfolioOperation = {
+  controller: AbortController
+  id: number
+  viewer: ExchangeViewerSnapshot
+}
+
+function PortfolioPageContent({
+  auth,
+  viewer,
+}: {
+  auth: AuthSessionReturn
+  viewer: ExchangeViewerSnapshot
+}) {
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
   const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
-  const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [token, setToken] = useState<string | null>(null)
   const [portfolios, setPortfolios] = useState<Portfolio[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
@@ -82,57 +138,86 @@ export default function PortfolioPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [syncingId, setSyncingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const operationSequenceRef = useRef(0)
+  const loadOperationRef = useRef<PortfolioOperation | null>(null)
+  const addOperationRef = useRef<PortfolioOperation | null>(null)
+  const syncOperationRef = useRef<PortfolioOperation | null>(null)
+  const deleteOperationRef = useRef<PortfolioOperation | null>(null)
 
-  const loadAuth = useCallback(async () => {
-    setAuthStatus('loading')
-    const result = await bootstrapClientAuth(supabase.auth)
-
-    if (result.status === 'signed-out') {
-      push('/login?redirect=/portfolio')
-      return
+  const beginOperation = useCallback((): PortfolioOperation => {
+    const operation = {
+      controller: new AbortController(),
+      id: ++operationSequenceRef.current,
+      viewer,
     }
-    if (result.status === 'error' || !result.session?.access_token) {
-      setAuthStatus('error')
-      return
-    }
+    return operation
+  }, [viewer])
 
-    setToken(result.session.access_token)
-    setAuthStatus('ready')
-  }, [push])
+  const operationIsCurrent = useCallback((operation: PortfolioOperation) => {
+    return isExchangeViewerCurrent(operation.viewer, authRef.current, operation.viewer.userId)
+  }, [])
 
   useEffect(() => {
-    void loadAuth()
-  }, [loadAuth])
-
-  const fetchHeaders = useCallback((): Record<string, string> => {
-    if (!token) return { ...getCsrfHeaders() }
-    return { Authorization: `Bearer ${token}`, ...getCsrfHeaders() }
-  }, [token])
+    return () => {
+      loadOperationRef.current?.controller.abort()
+      addOperationRef.current?.controller.abort()
+      syncOperationRef.current?.controller.abort()
+      deleteOperationRef.current?.controller.abort()
+    }
+  }, [])
 
   // Load portfolios + positions in parallel with request dedup
   const lastFetchRef = useRef<number>(0)
-  const loadInFlightRef = useRef(false)
   const loadAll = useCallback(
     async (force = false) => {
-      if (!token) return
-      if (loadInFlightRef.current) return
+      if (loadOperationRef.current) return
       // Skip if fetched < 30s ago (dedup rapid remounts)
       if (!force && Date.now() - lastFetchRef.current < 30_000) return
       lastFetchRef.current = Date.now()
-      loadInFlightRef.current = true
+      const operation = beginOperation()
+      loadOperationRef.current = operation
       setLoading(true)
-      const headers = { Authorization: `Bearer ${token}` }
       try {
-        const [pRes, posRes, snapRes] = await Promise.all([
-          fetch('/api/portfolio', { headers }),
-          fetch('/api/portfolio/positions', { headers }),
-          fetch('/api/portfolio/snapshots', { headers }),
+        const scope = {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
+        }
+        const [portfolioResult, positionResult, snapshotResult] = await Promise.all([
+          authedFetch<unknown>(
+            '/api/portfolio',
+            'GET',
+            operation.viewer.accessToken,
+            undefined,
+            15_000,
+            scope
+          ),
+          authedFetch<unknown>(
+            '/api/portfolio/positions',
+            'GET',
+            operation.viewer.accessToken,
+            undefined,
+            15_000,
+            scope
+          ),
+          authedFetch<unknown>(
+            '/api/portfolio/snapshots',
+            'GET',
+            operation.viewer.accessToken,
+            undefined,
+            15_000,
+            scope
+          ),
         ])
-        const [nextPortfolios, nextPositions, nextSnapshots] = await Promise.all([
-          readListResponse<Portfolio>(pRes, '/api/portfolio'),
-          readListResponse<Position>(posRes, '/api/portfolio/positions'),
-          readListResponse<Snapshot>(snapRes, '/api/portfolio/snapshots'),
-        ])
+        const nextPortfolios = readListResult<Portfolio>(portfolioResult, '/api/portfolio')
+        const nextPositions = readListResult<Position>(positionResult, '/api/portfolio/positions')
+        const nextSnapshots = readListResult<Snapshot>(snapshotResult, '/api/portfolio/snapshots')
+
+        if (loadOperationRef.current?.id !== operation.id || !operationIsCurrent(operation)) {
+          return
+        }
 
         // Treat the three endpoints as one snapshot. A partial refresh must not
         // replace last-good data with misleading empty/$0 sections.
@@ -142,15 +227,20 @@ export default function PortfolioPage() {
         setHasSuccessfulLoad(true)
         setLoadFailed(false)
       } catch (error) {
+        if (loadOperationRef.current?.id !== operation.id || !operationIsCurrent(operation)) {
+          return
+        }
         logger.error('Failed to refresh portfolio:', error)
         setLoadFailed(true)
         showToast(t('portfolioLoadFailed'), 'error')
       } finally {
-        loadInFlightRef.current = false
-        setLoading(false)
+        if (loadOperationRef.current?.id === operation.id) {
+          loadOperationRef.current = null
+          if (operationIsCurrent(operation)) setLoading(false)
+        }
       }
     },
-    [showToast, t, token]
+    [beginOperation, operationIsCurrent, showToast, t]
   )
 
   useEffect(() => {
@@ -164,32 +254,64 @@ export default function PortfolioPage() {
     api_passphrase?: string
     label: string
   }) => {
-    const res = await fetch('/api/portfolio', {
-      method: 'POST',
-      headers: { ...fetchHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-    if (!res.ok) {
-      const json = await res.json()
-      throw new Error(json.error || t('portfolioAddFailed'))
+    if (addOperationRef.current) throw new Error(t('portfolioAddFailed'))
+    const operation = beginOperation()
+    addOperationRef.current = operation
+    try {
+      const result = await authedFetch<{
+        data?: { exchange?: unknown; viewer_id?: unknown }
+        error?: unknown
+      }>('/api/portfolio', 'POST', operation.viewer.accessToken, data, 15_000, {
+        expectedUserId: operation.viewer.userId,
+        expectedSessionGeneration: operation.viewer.sessionGeneration,
+        signal: operation.controller.signal,
+      })
+      if (!operationIsCurrent(operation) || addOperationRef.current?.id !== operation.id) return
+      if (
+        !result.ok ||
+        result.data?.data?.viewer_id !== operation.viewer.userId ||
+        result.data?.data?.exchange !== data.exchange.toLowerCase()
+      ) {
+        const error = typeof result.data?.error === 'string' ? result.data.error : null
+        throw new Error(error || t('portfolioAddFailed'))
+      }
+      showToast(t('portfolioConnectSuccess'), 'success')
+      await loadAll(true)
+    } finally {
+      if (addOperationRef.current?.id === operation.id) addOperationRef.current = null
     }
-    showToast(t('portfolioConnectSuccess'), 'success')
-    await loadAll(true)
   }
 
   const handleSync = async (portfolioId: string) => {
-    if (!token || syncingId) return
+    if (syncOperationRef.current) return
+    const operation = beginOperation()
+    syncOperationRef.current = operation
     setSyncingId(portfolioId)
     try {
-      const res = await fetch('/api/portfolio/sync', {
-        method: 'POST',
-        headers: { ...fetchHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ portfolio_id: portfolioId }),
-      })
-      const json = (await res.json().catch(() => null)) as {
-        data?: { synced?: boolean; reason?: string }
-      } | null
-      const reason = json?.data?.reason
+      const result = await authedFetch<{
+        data?: {
+          portfolio_id?: unknown
+          reason?: string
+          synced?: boolean
+          viewer_id?: unknown
+        }
+      }>(
+        '/api/portfolio/sync',
+        'POST',
+        operation.viewer.accessToken,
+        { portfolio_id: portfolioId },
+        30_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
+        }
+      )
+      if (!operationIsCurrent(operation) || syncOperationRef.current?.id !== operation.id) return
+      const payload = result.data?.data
+      const exactAck =
+        payload?.viewer_id === operation.viewer.userId && payload.portfolio_id === portfolioId
+      const reason = payload?.reason
       // Map stable server reason codes → localized copy.
       const reasonKey: Record<string, string> = {
         geo_unavailable: 'portfolioSyncGeoUnavailable',
@@ -198,11 +320,11 @@ export default function PortfolioPage() {
         keys_unreadable: 'portfolioSyncKeysUnreadable',
         exchange_error: 'portfolioSyncExchangeError',
       }
-      if (!res.ok) {
+      if (!result.ok || !exactAck) {
         showToast(reason ? t(reasonKey[reason]) : t('portfolioSyncFailed'), 'error')
         return
       }
-      if (json?.data?.synced === false) {
+      if (payload?.synced === false) {
         // Soft outcome (geo/passphrase/unsupported) — inform, don't error.
         showToast(reason ? t(reasonKey[reason]) : t('portfolioSyncFailed'), 'info')
         return
@@ -210,32 +332,56 @@ export default function PortfolioPage() {
       await loadAll(true)
       showToast(t('portfolioSyncSuccess'), 'success')
     } catch {
-      showToast(t('portfolioNetworkError'), 'error')
+      if (operationIsCurrent(operation)) showToast(t('portfolioNetworkError'), 'error')
     } finally {
-      setSyncingId(null)
+      if (syncOperationRef.current?.id === operation.id) {
+        syncOperationRef.current = null
+        if (operationIsCurrent(operation)) setSyncingId(null)
+      }
     }
   }
 
   const handleDelete = async (portfolioId: string) => {
-    if (!token || deletingId) return
-    const confirmed = await showConfirm(t('portfolioRemoveExchange'), t('portfolioRemoveConfirm'))
-    if (!confirmed) return
+    if (deleteOperationRef.current) return
+    const operation = beginOperation()
+    deleteOperationRef.current = operation
     setDeletingId(portfolioId)
     try {
-      const res = await fetch(`/api/portfolio?id=${portfolioId}`, {
-        method: 'DELETE',
-        headers: fetchHeaders(),
-      })
-      if (!res.ok) {
+      const confirmed = await showConfirm(t('portfolioRemoveExchange'), t('portfolioRemoveConfirm'))
+      if (!confirmed || !operationIsCurrent(operation)) return
+      const result = await authedFetch<{
+        data?: { deleted?: unknown; portfolio_id?: unknown; viewer_id?: unknown }
+      }>(
+        `/api/portfolio?id=${encodeURIComponent(portfolioId)}`,
+        'DELETE',
+        operation.viewer.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
+        }
+      )
+      if (!operationIsCurrent(operation) || deleteOperationRef.current?.id !== operation.id) return
+      if (
+        !result.ok ||
+        result.data?.data?.deleted !== true ||
+        result.data.data.portfolio_id !== portfolioId ||
+        result.data.data.viewer_id !== operation.viewer.userId
+      ) {
         showToast(t('portfolioRemoveFailed'), 'error')
         return
       }
       await loadAll(true)
       showToast(t('portfolioRemoved'), 'success')
     } catch {
-      showToast(t('portfolioNetworkError'), 'error')
+      if (operationIsCurrent(operation)) showToast(t('portfolioNetworkError'), 'error')
     } finally {
-      setDeletingId(null)
+      if (deleteOperationRef.current?.id === operation.id) {
+        deleteOperationRef.current = null
+        if (operationIsCurrent(operation)) setDeletingId(null)
+      }
     }
   }
 
@@ -244,22 +390,6 @@ export default function PortfolioPage() {
   const totalEquity = positions.reduce((sum, p) => sum + Number(p.size) * Number(p.mark_price), 0)
   const totalPnlPct = totalEquity > 0 ? (totalPnl / totalEquity) * 100 : 0
   const isInitialLoad = loading && !hasSuccessfulLoad
-
-  if (authStatus === 'error') {
-    return (
-      <div style={styles.page}>
-        <div style={styles.container}>
-          <PageHeader title={t('portfolioTitle')} compact />
-          <ErrorState
-            title={t('somethingWentWrong')}
-            description={t('loadFailedRetryShort')}
-            retry={() => void loadAuth()}
-            variant="compact"
-          />
-        </div>
-      </div>
-    )
-  }
 
   return (
     <>

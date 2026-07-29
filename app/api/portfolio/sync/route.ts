@@ -189,6 +189,7 @@ export async function POST(request: NextRequest) {
             reason: result.reason,
             message: messages[result.reason],
             portfolio_id,
+            viewer_id: user.id,
           },
         },
         { status }
@@ -235,6 +236,7 @@ export async function POST(request: NextRequest) {
             reason: 'superseded',
             message: 'A newer portfolio sync is already in progress.',
             portfolio_id,
+            viewer_id: user.id,
           },
         },
         { status: 409 }
@@ -258,6 +260,7 @@ export async function POST(request: NextRequest) {
       positions: result.positions.length,
       total_equity: result.equity,
       portfolio_id,
+      viewer_id: user.id,
     })
   } catch (err) {
     return handleError(err)

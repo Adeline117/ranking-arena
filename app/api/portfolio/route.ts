@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
 
-    return success(data, 201)
+    return success({ ...data, viewer_id: user.id }, 201)
   } catch (err) {
     return handleError(err)
   }
@@ -121,23 +121,22 @@ export async function DELETE(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    // Verify ownership
-    const { data: portfolio } = await supabase
+    // Keep the ownership predicate on the destructive statement itself. A
+    // separate read followed by an id-only delete leaves a check/use race.
+    const { data: portfolio, error } = await supabase
       .from('user_portfolios')
-      .select('id')
+      .delete()
       .eq('id', id)
       .eq('user_id', user.id)
-      .single()
+      .select('id')
+      .maybeSingle()
 
+    if (error) throw error
     if (!portfolio) {
       return NextResponse.json({ error: 'Portfolio not found' }, { status: 404 })
     }
 
-    const { error } = await supabase.from('user_portfolios').delete().eq('id', id)
-
-    if (error) throw error
-
-    return success({ deleted: true })
+    return success({ deleted: true, portfolio_id: portfolio.id, viewer_id: user.id })
   } catch (err) {
     return handleError(err)
   }
