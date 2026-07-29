@@ -80,6 +80,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/api-tier-payment-reconciliation",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/fetch-market-data?type=prices",
       "schedule": "14 */4 * * *"
     },

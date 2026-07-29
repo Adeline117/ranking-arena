@@ -459,6 +459,122 @@ export type Database = {
         }
         Relationships: []
       }
+      api_tier_payment_backfill_targets: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          last_error: string | null
+          last_invoice_id: string | null
+          lease_expires_at: string | null
+          lease_token: string | null
+          livemode: boolean
+          scanned_invoice_count: number
+          state: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          last_error?: string | null
+          last_invoice_id?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          livemode: boolean
+          scanned_invoice_count?: number
+          state?: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          last_error?: string | null
+          last_invoice_id?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          livemode?: boolean
+          scanned_invoice_count?: number
+          state?: string
+          stripe_customer_id?: string
+          stripe_subscription_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      api_tier_reversal_actions: {
+        Row: {
+          action_kind: string
+          attempts: number
+          completed_at: string | null
+          completed_disposition: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          lease_expires_at: string | null
+          lease_token: string | null
+          livemode: boolean
+          next_attempt_at: string
+          ownership_id: string
+          state: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action_kind?: string
+          attempts?: number
+          completed_at?: string | null
+          completed_disposition?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          livemode: boolean
+          next_attempt_at?: string
+          ownership_id: string
+          state?: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action_kind?: string
+          attempts?: number
+          completed_at?: string | null
+          completed_disposition?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          livemode?: boolean
+          next_attempt_at?: string
+          ownership_id?: string
+          state?: string
+          stripe_customer_id?: string
+          stripe_subscription_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'api_tier_reversal_actions_ownership_id_fkey'
+            columns: ['ownership_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_payment_ownerships'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       api_tier_stripe_event_ledger: {
         Row: {
           api_tier: string
@@ -5842,6 +5958,198 @@ export type Database = {
           },
         ]
       }
+      stripe_api_tier_payment_events: {
+        Row: {
+          api_tier_payment_id: string
+          livemode: boolean
+          observation_created: number
+          observation_id: string
+          observation_type: string
+          observed_at: string
+        }
+        Insert: {
+          api_tier_payment_id: string
+          livemode: boolean
+          observation_created: number
+          observation_id: string
+          observation_type: string
+          observed_at?: string
+        }
+        Update: {
+          api_tier_payment_id?: string
+          livemode?: boolean
+          observation_created?: number
+          observation_id?: string
+          observation_type?: string
+          observed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_api_tier_payment_events_api_tier_payment_id_fkey'
+            columns: ['api_tier_payment_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_api_tier_payments'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      stripe_api_tier_payments: {
+        Row: {
+          amount_paid: number
+          api_plan: string
+          checkout_reservation_id: string
+          currency: string
+          id: string
+          invoice_created: number
+          livemode: boolean
+          paid_at: number
+          period_end: number
+          period_start: number
+          recorded_at: string
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_invoice_id: string
+          stripe_invoice_payment_id: string
+          stripe_payment_intent_id: string | null
+          stripe_price_id: string
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Insert: {
+          amount_paid: number
+          api_plan: string
+          checkout_reservation_id: string
+          currency: string
+          id?: string
+          invoice_created: number
+          livemode: boolean
+          paid_at: number
+          period_end: number
+          period_start: number
+          recorded_at?: string
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_invoice_id: string
+          stripe_invoice_payment_id: string
+          stripe_payment_intent_id?: string | null
+          stripe_price_id: string
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Update: {
+          amount_paid?: number
+          api_plan?: string
+          checkout_reservation_id?: string
+          currency?: string
+          id?: string
+          invoice_created?: number
+          livemode?: boolean
+          paid_at?: number
+          period_end?: number
+          period_start?: number
+          recorded_at?: string
+          stripe_charge_id?: string
+          stripe_customer_id?: string
+          stripe_invoice_id?: string
+          stripe_invoice_payment_id?: string
+          stripe_payment_intent_id?: string | null
+          stripe_price_id?: string
+          stripe_subscription_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_api_tier_payments_checkout_reservation_id_fkey'
+            columns: ['checkout_reservation_id']
+            isOneToOne: false
+            referencedRelation: 'api_tier_checkout_reservations'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      stripe_api_tier_reversal_events: {
+        Row: {
+          currency: string
+          dispute_amount: number | null
+          dispute_reason: string | null
+          dispute_status: string | null
+          livemode: boolean
+          ownership_id: string
+          recorded_at: string
+          refund_state: string | null
+          refund_succeeded_amount: number | null
+          reversal_kind: string
+          stripe_charge_id: string
+          stripe_dispute_id: string | null
+          stripe_event_created: number
+          stripe_event_id: string
+        }
+        Insert: {
+          currency: string
+          dispute_amount?: number | null
+          dispute_reason?: string | null
+          dispute_status?: string | null
+          livemode: boolean
+          ownership_id: string
+          recorded_at?: string
+          refund_state?: string | null
+          refund_succeeded_amount?: number | null
+          reversal_kind: string
+          stripe_charge_id: string
+          stripe_dispute_id?: string | null
+          stripe_event_created: number
+          stripe_event_id: string
+        }
+        Update: {
+          currency?: string
+          dispute_amount?: number | null
+          dispute_reason?: string | null
+          dispute_status?: string | null
+          livemode?: boolean
+          ownership_id?: string
+          recorded_at?: string
+          refund_state?: string | null
+          refund_succeeded_amount?: number | null
+          reversal_kind?: string
+          stripe_charge_id?: string
+          stripe_dispute_id?: string | null
+          stripe_event_created?: number
+          stripe_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_api_tier_reversal_events_ownership_id_fkey'
+            columns: ['ownership_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_payment_ownerships'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      stripe_charge_refund_observation_modes: {
+        Row: {
+          livemode: boolean
+          recorded_at: string
+          stripe_charge_id: string
+          stripe_event_created: number
+          stripe_event_id: string
+        }
+        Insert: {
+          livemode: boolean
+          recorded_at?: string
+          stripe_charge_id: string
+          stripe_event_created: number
+          stripe_event_id: string
+        }
+        Update: {
+          livemode?: boolean
+          recorded_at?: string
+          stripe_charge_id?: string
+          stripe_event_created?: number
+          stripe_event_id?: string
+        }
+        Relationships: []
+      }
       stripe_charge_refund_tombstone_events: {
         Row: {
           event_created_at: string
@@ -9570,6 +9878,143 @@ export type Database = {
       }
     }
     Functions: {
+      assert_recurring_pro_checkout_completed_atomic: {
+        Args: {
+          p_livemode: boolean
+          p_operation_id: string
+          p_plan: string
+          p_reservation_id: string
+          p_reservation_nonce: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_trial_requested: boolean
+          p_user_id: string
+        }
+        Returns: string
+      }
+      checkpoint_api_tier_payment_backfill_target_atomic: {
+        Args: {
+          p_last_invoice_id: string
+          p_lease_seconds: number
+          p_lease_token: string
+          p_livemode: boolean
+          p_scanned_delta: number
+          p_stripe_subscription_id: string
+        }
+        Returns: string
+      }
+      claim_api_tier_payment_backfill_targets_atomic: {
+        Args: {
+          p_lease_seconds: number
+          p_limit: number
+          p_livemode: boolean
+          p_worker_token: string
+        }
+        Returns: Json
+      }
+      claim_api_tier_payment_ownership_atomic: {
+        Args: { p_api_tier_payment_id: string }
+        Returns: Json
+      }
+      claim_api_tier_reversal_actions_atomic: {
+        Args: {
+          p_lease_seconds: number
+          p_limit: number
+          p_livemode: boolean
+          p_worker_token: string
+        }
+        Returns: Json
+      }
+      finish_api_tier_payment_backfill_target_atomic: {
+        Args: {
+          p_error: string | null
+          p_lease_token: string
+          p_livemode: boolean
+          p_requires_attention: boolean
+          p_stripe_subscription_id: string
+          p_succeeded: boolean
+        }
+        Returns: string
+      }
+      finish_api_tier_reversal_action_atomic: {
+        Args: {
+          p_action_id: string
+          p_disposition: string | null
+          p_error: string | null
+          p_lease_token: string
+          p_retry_after_seconds: number | null
+          p_succeeded: boolean
+        }
+        Returns: string
+      }
+      project_api_tier_financial_reversal_atomic: {
+        Args: { p_ownership_id: string; p_should_revoke: boolean }
+        Returns: Json
+      }
+      record_api_tier_dispute_reversal_atomic: {
+        Args: {
+          p_captured_amount: number
+          p_currency: string
+          p_dispute_amount: number
+          p_dispute_reason: string
+          p_dispute_status: string
+          p_livemode: boolean
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_dispute_id: string
+          p_stripe_event_created: number
+          p_stripe_event_id: string
+          p_stripe_payment_intent_id: string | null
+        }
+        Returns: Json
+      }
+      record_api_tier_payment_atomic: {
+        Args: {
+          p_amount_paid: number
+          p_api_plan: string
+          p_checkout_reservation_id: string
+          p_currency: string
+          p_invoice_created: number
+          p_livemode: boolean
+          p_observation_created: number
+          p_observation_id: string
+          p_observation_type: string
+          p_paid_at: number
+          p_period_end: number
+          p_period_start: number
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_invoice_id: string
+          p_stripe_invoice_payment_id: string
+          p_stripe_payment_intent_id: string | null
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      record_charge_refund_tombstone_with_mode_atomic: {
+        Args: {
+          p_amount_paid: number
+          p_captured: boolean
+          p_currency: string
+          p_livemode: boolean
+          p_refund_event_created_at: string
+          p_refund_event_id: string
+          p_refund_state: string
+          p_refund_succeeded_amount: number
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_payment_intent_id: string | null
+          p_user_id: string | null
+        }
+        Returns: Json
+      }
+      stripe_resolve_api_tier_refund_tombstone_atomic: {
+        Args: { p_ownership_id: string }
+        Returns: Json
+      }
       ack_report_evidence_cleanup: {
         Args: {
           p_evidence_ref: string
