@@ -35,4 +35,12 @@ describe('daily market post ranking authority', () => {
     expect(route).toContain(".order('source_trader_id', { ascending: true })")
     expect(route).toContain('.range(offset, offset + 2)')
   })
+
+  it('bounds auth and every database phase inside the route budget', () => {
+    expect(route).toContain('const workSignal = AbortSignal.timeout(45_000)')
+    expect(route).toContain('await waitForSignal(')
+    expect(route.match(/\.abortSignal\((workSignal|signal)\)/g)).toHaveLength(5)
+    expect(route).toContain('throw new Error(`Could not create system user profile:')
+    expect(route).toContain('{ safetyTimeoutMs: 55_000 }')
+  })
 })

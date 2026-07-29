@@ -47,11 +47,30 @@ interface TopTrader {
   roi_pct: number | null
 }
 
+function waitForSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    operation.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      }
+    )
+  })
+}
+
 const handler = withCron('auto-post-market-summary', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin()
+  const workSignal = AbortSignal.timeout(45_000)
 
   // Ensure system user exists
-  await ensureSystemUser(supabase)
+  await ensureSystemUser(supabase, workSignal)
 
   // Check if we already posted today (prevent duplicates)
   const today = new Date().toISOString().split('T')[0]
@@ -63,6 +82,7 @@ const handler = withCron('auto-post-market-summary', async (_request: NextReques
     .gte('created_at', `${today}T00:00:00Z`)
     .lt('created_at', `${today}T23:59:59Z`)
     .limit(1)
+    .abortSignal(workSignal)
     .maybeSingle()
 
   if (existingPostError) {
@@ -74,9 +94,9 @@ const handler = withCron('auto-post-market-summary', async (_request: NextReques
 
   // Fetch market data
   const [prices, topPerformers, trendingTraders] = await Promise.all([
-    fetchMarketPrices(supabase),
-    fetchTopPerformers(supabase),
-    fetchTrendingTraders(supabase),
+    fetchMarketPrices(supabase, workSignal),
+    fetchTopPerformers(supabase, workSignal),
+    fetchTrendingTraders(supabase, workSignal),
   ])
 
   // Generate post content
@@ -95,6 +115,7 @@ const handler = withCron('auto-post-market-summary', async (_request: NextReques
       hot_score: 50, // Give system posts a baseline hot score
     })
     .select('id')
+    .abortSignal(workSignal)
     .single()
 
   if (insertError) {
@@ -102,20 +123,26 @@ const handler = withCron('auto-post-market-summary', async (_request: NextReques
   }
 
   return { count: 1, postId: post.id }
-})
+}, { safetyTimeoutMs: 55_000 })
 
 export const GET = handler
 
-async function ensureSystemUser(supabase: AnySupabase) {
+async function ensureSystemUser(supabase: AnySupabase, signal: AbortSignal) {
   // Must exist in auth.users first (user_activities trigger has FK to auth.users)
-  const { data: authUser } = await supabase.auth.admin.getUserById(SYSTEM_USER_ID)
+  const { data: authUser } = await waitForSignal(
+    supabase.auth.admin.getUserById(SYSTEM_USER_ID),
+    signal
+  )
   if (!authUser?.user) {
-    const { error: authErr } = await supabase.auth.admin.createUser({
-      id: SYSTEM_USER_ID,
-      email: 'arena-bot@arenafi.org',
-      email_confirm: true,
-      user_metadata: { handle: SYSTEM_HANDLE, display_name: SYSTEM_DISPLAY_NAME },
-    } as Parameters<typeof supabase.auth.admin.createUser>[0])
+    const { error: authErr } = await waitForSignal(
+      supabase.auth.admin.createUser({
+        id: SYSTEM_USER_ID,
+        email: 'arena-bot@arenafi.org',
+        email_confirm: true,
+        user_metadata: { handle: SYSTEM_HANDLE, display_name: SYSTEM_DISPLAY_NAME },
+      } as Parameters<typeof supabase.auth.admin.createUser>[0]),
+      signal
+    )
     if (authErr && !authErr.message.includes('already')) {
       throw new Error(
         `Cannot create system auth user (required for user_activities FK): ${authErr.message}`
@@ -137,13 +164,17 @@ async function ensureSystemUser(supabase: AnySupabase) {
       },
       { onConflict: 'id' }
     )
+    .abortSignal(signal)
 
   if (error) {
-    log.warn('Could not create system user profile', { error: error.message })
+    throw new Error(`Could not create system user profile: ${error.message}`)
   }
 }
 
-async function fetchMarketPrices(supabase: AnySupabase): Promise<MarketPrice[]> {
+async function fetchMarketPrices(
+  supabase: AnySupabase,
+  signal: AbortSignal
+): Promise<MarketPrice[]> {
   const today = new Date().toISOString().split('T')[0]
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
 
@@ -154,6 +185,7 @@ async function fetchMarketPrices(supabase: AnySupabase): Promise<MarketPrice[]> 
     .in('symbol', ['BTC', 'ETH'])
     .in('date', [today, yesterday])
     .order('date', { ascending: false })
+    .abortSignal(signal)
 
   if (error) throw new Error(`Market benchmark query failed: ${error.message}`)
   if (!data || data.length === 0) return []
@@ -174,19 +206,26 @@ async function fetchMarketPrices(supabase: AnySupabase): Promise<MarketPrice[]> 
   return result
 }
 
-async function fetchTopPerformers(supabase: AnySupabase): Promise<TopTrader[]> {
-  return fetchSealedRankedTraders(supabase, '7D', 0)
+async function fetchTopPerformers(
+  supabase: AnySupabase,
+  signal: AbortSignal
+): Promise<TopTrader[]> {
+  return fetchSealedRankedTraders(supabase, '7D', 0, signal)
 }
 
-async function fetchTrendingTraders(supabase: AnySupabase): Promise<TopTrader[]> {
+async function fetchTrendingTraders(
+  supabase: AnySupabase,
+  signal: AbortSignal
+): Promise<TopTrader[]> {
   // Trending = the next three sealed 30D leaders when view data is unavailable.
-  return fetchSealedRankedTraders(supabase, '30D', 3)
+  return fetchSealedRankedTraders(supabase, '30D', 3, signal)
 }
 
 async function fetchSealedRankedTraders(
   supabase: AnySupabase,
   season: '7D' | '30D',
-  offset: number
+  offset: number,
+  signal: AbortSignal
 ): Promise<TopTrader[]> {
   const sealedRead = await readSealedRankingAuthorityGeneration(
     supabase,
@@ -205,6 +244,7 @@ async function fetchSealedRankedTraders(
         .order('source', { ascending: true })
         .order('source_trader_id', { ascending: true })
         .range(offset, offset + 2)
+        .abortSignal(signal)
 
       if (error || data === null) {
         throw new Error(
