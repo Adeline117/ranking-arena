@@ -5,6 +5,10 @@ import type {
   PublishSnapshotInput,
   PublishTrustedSnapshotInput,
 } from '@/lib/ingest/serving/publish'
+import type {
+  LeaderboardAttemptBoundV4Bundle,
+  PreparedLeaderboardAttemptBoundV4Evidence,
+} from '@/lib/ingest/serving/metric-trust-publish'
 
 import type { AuthorizedConsumedRegionContext } from '../consumed-region-context'
 import type { RegionAuthorityFence } from '../region-authority-lifecycle'
@@ -16,6 +20,9 @@ const mockPublishTrustedSnapshot = jest.fn()
 const mockPrepareBoardSeries = jest.fn()
 const mockPublishBoardSeries = jest.fn()
 const mockPublicationWrite = jest.fn()
+const mockPrepareAttemptEvidence = jest.fn()
+const mockFenceAttemptEvidence = jest.fn()
+const mockSnapshotTrustValue = jest.fn((value: unknown) => value)
 
 jest.mock('@/lib/ingest/serving/publish', () => ({
   prepareBoardSeriesPublication: (...args: unknown[]) => mockPrepareBoardSeries(...args),
@@ -25,10 +32,20 @@ jest.mock('@/lib/ingest/serving/publish', () => ({
     mockPublishTrustedSnapshot(...args),
 }))
 
+jest.mock('@/lib/ingest/serving/metric-trust-publish', () => ({
+  fenceAttemptBoundLeaderboardEvidencePublicationCommit: (...args: unknown[]) =>
+    mockFenceAttemptEvidence(...args),
+  prepareLeaderboardAttemptBoundV4Evidence: (...args: unknown[]) =>
+    mockPrepareAttemptEvidence(...args),
+  snapshotLeaderboardTrustValue: (value: unknown) => mockSnapshotTrustValue(value),
+}))
+
 import {
   publishFencedBoardSeries,
+  publishFencedAttemptBoundLeaderboardSnapshot,
   publishFencedLeaderboardSnapshot,
   publishFencedTrustedLeaderboardSnapshot,
+  type PublishAttemptBoundLeaderboardSnapshotInput,
 } from '../fenced-tier-a-publication'
 
 const src = {
@@ -220,6 +237,45 @@ function trustedInput(
   }
 }
 
+function preparedAttemptEvidence(): PreparedLeaderboardAttemptBoundV4Evidence {
+  return {
+    src,
+    timeframe: 30,
+    rows: [],
+    manifest: {
+      data_contract: 'arena.ingest.leaderboard-acquisition-manifest@4',
+      observation_cycle_id: 'tier-a:bitget_bots_futures:job-1:1785232800000',
+    },
+    sourceRunId: 'a'.repeat(64),
+    artifacts: {
+      sourcePayload: {
+        id: 201,
+        storagePath: 'bitget_bots_futures/tier_a/source.json.gz',
+        contentHash: 'b'.repeat(64),
+      },
+      populationManifest: {
+        id: 202,
+        storagePath: 'bitget_bots_futures/tier_a/manifest.json.gz',
+        contentHash: 'a'.repeat(64),
+      },
+    },
+  } as PreparedLeaderboardAttemptBoundV4Evidence
+}
+
+function attemptBoundInput(
+  overrides: Partial<PublishAttemptBoundLeaderboardSnapshotInput> = {}
+): PublishAttemptBoundLeaderboardSnapshotInput {
+  return {
+    src,
+    timeframe: 30,
+    rows: [],
+    rejects: [],
+    observationCycleId: 'tier-a:bitget_bots_futures:job-1:1785232800000',
+    attemptEvidence: {} as LeaderboardAttemptBoundV4Bundle,
+    ...overrides,
+  }
+}
+
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void
   const promise = new Promise<void>((settle) => {
@@ -237,6 +293,8 @@ function harness(options?: {
   liveRows?: unknown[]
   rowCount?: number | null
   traderRowCount?: number | null
+  snapshotBindingRowCount?: number | null
+  onCommit?: jest.Mock
 }) {
   const query = jest.fn(async (text: string) => {
     validateWorkerDbFencedWriteStatement(text)
@@ -253,6 +311,13 @@ function harness(options?: {
         rowCount: options?.traderRowCount === undefined ? rows.length : options.traderRowCount,
       }
     }
+    if (text.includes('UPDATE arena.leaderboard_snapshots')) {
+      return {
+        rows: [],
+        rowCount:
+          options?.snapshotBindingRowCount === undefined ? 1 : options.snapshotBindingRowCount,
+      }
+    }
     throw new Error(`unexpected fenced publication query: ${text}`)
   })
   const transaction = Object.freeze({
@@ -263,6 +328,7 @@ function harness(options?: {
     async <T>(callback: (candidate: WorkerDbFencedWrite) => Promise<T>): Promise<T> => {
       const result = await callback(transaction)
       if (options?.commitBarrier !== undefined) await options.commitBarrier
+      options?.onCommit?.()
       return result
     }
   )
@@ -312,6 +378,8 @@ describe('fenced Tier-A publication', () => {
       }
     )
     mockPrepareBoardSeries.mockImplementation(() => boardPlan())
+    mockPrepareAttemptEvidence.mockImplementation(() => preparedAttemptEvidence())
+    mockFenceAttemptEvidence.mockResolvedValue(undefined)
     mockPublishBoardSeries.mockImplementation(
       async (
         transaction: WorkerDbFencedWrite,
@@ -362,6 +430,138 @@ describe('fenced Tier-A publication', () => {
     )
     expect(mockPublishSnapshot).not.toHaveBeenCalled()
     expect(mockPublicationWrite).toHaveBeenCalledTimes(1)
+  })
+
+  it('publishes V4 through the attempt fence without writing metric trust', async () => {
+    const prepared = preparedAttemptEvidence()
+    mockPrepareAttemptEvidence.mockReturnValueOnce(prepared)
+    mockPublishSnapshot.mockImplementationOnce(
+      async (
+        transaction: WorkerDbFencedWrite,
+        _input: PublishSnapshotInput,
+        sourceAuthorityGuard: (candidate: WorkerDbFencedWrite) => Promise<void>
+      ) => {
+        await sourceAuthorityGuard(transaction)
+        mockPublicationWrite()
+        return {
+          snapshotId: 99,
+          scrapedAt: '2026-07-28T10:00:03.000Z',
+          verdict: { passed: true, baselineUsed: 2, deviationPct: 0 },
+          published: true,
+          traderIds: new Map(),
+        }
+      }
+    )
+    const input = attemptBoundInput()
+    const { context, query, transaction, withFencedWrite } = harness()
+
+    await expect(publishFencedAttemptBoundLeaderboardSnapshot(input, context)).resolves.toEqual({
+      snapshotId: 99,
+      scrapedAt: '2026-07-28T10:00:03.000Z',
+      verdict: { passed: true, baselineUsed: 2, deviationPct: 0 },
+      published: true,
+      traderIds: new Map(),
+    })
+
+    expect(mockPrepareAttemptEvidence).toHaveBeenCalledWith({
+      src,
+      timeframe: 30,
+      rows: [],
+      rejectedRowCount: 0,
+      bundle: input.attemptEvidence,
+    })
+    expect(withFencedWrite).toHaveBeenCalledTimes(1)
+    expect(mockPublishSnapshot).toHaveBeenCalledWith(
+      transaction,
+      expect.objectContaining({
+        src,
+        timeframe: 30,
+        rows: [],
+        rejects: [],
+        rawObjectId: 201,
+        isDerived: false,
+      }),
+      expect.any(Function)
+    )
+    expect(mockPublishTrustedSnapshot).not.toHaveBeenCalled()
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('arena.metric_trust'))).toBe(false)
+
+    const bindingCallIndex = query.mock.calls.findIndex(([sql]) =>
+      String(sql).includes('UPDATE arena.leaderboard_snapshots')
+    )
+    const bindingCall = query.mock.calls[bindingCallIndex]
+    expect(bindingCall).toBeDefined()
+    expect(bindingCall?.[1]).toEqual([
+      99,
+      JSON.stringify({
+        source_run_id: 'a'.repeat(64),
+        source_payload_raw_object_id: 201,
+        manifest_raw_object_id: 202,
+        acquisition_contract: 'arena.ingest.leaderboard-acquisition-manifest@4',
+      }),
+      src.id,
+      30,
+      '2026-07-28T10:00:03.000Z',
+      201,
+    ])
+    expect(mockFenceAttemptEvidence).toHaveBeenCalledWith(transaction, prepared)
+    expect(query.mock.invocationCallOrder[bindingCallIndex]).toBeLessThan(
+      mockFenceAttemptEvidence.mock.invocationCallOrder[0]
+    )
+  })
+
+  it.each(['latest terminal changed', 'RAW pointer mismatch', 'RAW hash mismatch'])(
+    'rejects the fenced transaction without commit when V4 evidence fails: %s',
+    async (reason) => {
+      mockPublishSnapshot.mockImplementationOnce(
+        async (
+          transaction: WorkerDbFencedWrite,
+          _input: PublishSnapshotInput,
+          sourceAuthorityGuard: (candidate: WorkerDbFencedWrite) => Promise<void>
+        ) => {
+          await sourceAuthorityGuard(transaction)
+          mockPublicationWrite()
+          return {
+            snapshotId: 99,
+            scrapedAt: '2026-07-28T10:00:03.000Z',
+            verdict: { passed: true, baselineUsed: 2, deviationPct: 0 },
+            published: true,
+            traderIds: new Map(),
+          }
+        }
+      )
+      const failure = new Error(reason)
+      mockFenceAttemptEvidence.mockRejectedValueOnce(failure)
+      const onCommit = jest.fn()
+      const { context, query } = harness({ onCommit })
+
+      await expect(
+        publishFencedAttemptBoundLeaderboardSnapshot(attemptBoundInput(), context)
+      ).rejects.toBe(failure)
+
+      expect(mockPublicationWrite).toHaveBeenCalledTimes(1)
+      expect(
+        query.mock.calls.some(([sql]) => String(sql).includes('UPDATE arena.leaderboard_snapshots'))
+      ).toBe(true)
+      expect(onCommit).not.toHaveBeenCalled()
+      expect(mockPublishTrustedSnapshot).not.toHaveBeenCalled()
+    }
+  )
+
+  it('fails a wrong V4 contract before opening the fenced transaction', async () => {
+    const failure = new Error('attempt-bound canonical publication requires a v4 manifest')
+    mockPrepareAttemptEvidence.mockImplementationOnce(() => {
+      throw failure
+    })
+    const { context, withFencedWrite } = harness()
+
+    await expect(
+      publishFencedAttemptBoundLeaderboardSnapshot(attemptBoundInput(), context)
+    ).rejects.toBe(failure)
+
+    expect(withFencedWrite).not.toHaveBeenCalled()
+    expect(mockPublishSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishTrustedSnapshot).not.toHaveBeenCalled()
   })
 
   it('publishes a prepared board plan through the same fenced transaction and source guard', async () => {
