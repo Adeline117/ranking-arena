@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
 import { Button } from '../base'
 import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
@@ -14,6 +13,13 @@ import {
   buildTraderClaimLoginHref,
   buildTraderClaimReturnPath,
 } from '@/lib/auth/trader-claim-login'
+import { authedFetch } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
 interface ClaimTraderButtonProps {
   traderId: string
@@ -42,114 +48,213 @@ function isDexPlatform(source: string): boolean {
   return DEX_WALLET_PLATFORMS.some((p) => source.toLowerCase().startsWith(p))
 }
 
-export default function ClaimTraderButton({
+type ClaimOperation = {
+  id: number
+  viewer: SettingsViewerSnapshot
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readClaimStatus(
+  value: unknown,
+  expected: {
+    source: string
+    traderId: string
+    userId: string
+  }
+): {
+  claimStatus: string | null
+  hasVerifiedAccounts: boolean
+  thisTraderLinked: boolean
+} | null {
+  if (!isRecord(value) || value.success !== true || !isRecord(value.data)) return null
+  const data = value.data
+  if (!Array.isArray(data.linked_traders) || typeof data.is_verified !== 'boolean') return null
+  const normalizedSource = expected.source.toLowerCase()
+  const matchesCurrentTrader = (candidate: Record<string, unknown>): boolean =>
+    candidate.source === normalizedSource &&
+    typeof candidate.trader_id === 'string' &&
+    (isDexWalletPlatform(normalizedSource)
+      ? walletIdentitiesMatch(candidate.trader_id, expected.traderId, normalizedSource)
+      : candidate.trader_id === expected.traderId)
+
+  const linked: Record<string, unknown>[] = []
+  for (const candidate of data.linked_traders) {
+    if (
+      !isRecord(candidate) ||
+      candidate.user_id !== expected.userId ||
+      typeof candidate.trader_id !== 'string' ||
+      typeof candidate.source !== 'string'
+    ) {
+      return null
+    }
+    linked.push(candidate)
+  }
+
+  const claim = data.claim
+  if (
+    claim !== null &&
+    (!isRecord(claim) ||
+      claim.user_id !== expected.userId ||
+      typeof claim.trader_id !== 'string' ||
+      typeof claim.source !== 'string' ||
+      typeof claim.status !== 'string')
+  ) {
+    return null
+  }
+
+  const thisTraderLinked = linked.some(matchesCurrentTrader)
+  return {
+    claimStatus: thisTraderLinked
+      ? 'verified'
+      : isRecord(claim) && matchesCurrentTrader(claim)
+        ? (claim.status as string)
+        : null,
+    hasVerifiedAccounts: linked.length > 0 || data.is_verified,
+    thisTraderLinked,
+  }
+}
+
+export default function ClaimTraderButton(props: ClaimTraderButtonProps) {
+  const auth = useAuthSession()
+  const viewer = captureSettingsViewer(auth)
+  const exactViewer = viewer?.userId === props.userId ? viewer : null
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${props.userId}\u0000${props.source ?? 'binance'}\u0000${props.traderId}`
+
+  return <ViewerScopedClaimTraderButton key={scopeKey} {...props} viewer={exactViewer} />
+}
+
+function ViewerScopedClaimTraderButton({
   traderId,
   handle,
   userId,
   source = 'binance',
-}: ClaimTraderButtonProps) {
+  viewer,
+}: ClaimTraderButtonProps & {
+  viewer: SettingsViewerSnapshot | null
+}) {
   const router = useRouter()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
   const { t } = useLanguage()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const mountedRef = useRef(false)
+  const nextOperationIdRef = useRef(0)
+  const statusOperationRef = useRef<ClaimOperation | null>(null)
+  const confirmOperationRef = useRef<ClaimOperation | null>(null)
   const [claimStatus, setClaimStatus] = useState<string | null>(null)
   const [hasVerifiedAccounts, setHasVerifiedAccounts] = useState(false)
   const [thisTraderLinked, setThisTraderLinked] = useState(false)
   const claimIdentity = { traderId, source, handle }
   const claimReturnPath = buildTraderClaimReturnPath(claimIdentity)
 
+  const operationIsCurrent = (
+    operation: ClaimOperation,
+    operationRef: { current: ClaimOperation | null }
+  ): boolean =>
+    mountedRef.current &&
+    operationRef.current?.id === operation.id &&
+    isSettingsViewerCurrent(operation.viewer, authRef.current)
+
   useEffect(() => {
-    let alive = true
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      statusOperationRef.current = null
+      confirmOperationRef.current = null
+    }
+  }, [])
 
+  useEffect(() => {
     async function checkClaimStatus(): Promise<void> {
+      if (!viewer || !isSettingsViewerCurrent(viewer, authRef.current)) return
+      const operation: ClaimOperation = {
+        id: ++nextOperationIdRef.current,
+        viewer,
+      }
+      const controller = new AbortController()
+      statusOperationRef.current = operation
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        if (!alive || !session) return
-
         const normalizedSource = source.toLowerCase()
-        const matchesCurrentTrader = (candidate: { trader_id: string; source: string }): boolean =>
-          candidate.source === normalizedSource &&
-          (isDexWalletPlatform(normalizedSource)
-            ? walletIdentitiesMatch(candidate.trader_id, traderId, normalizedSource)
-            : candidate.trader_id === traderId)
         const query = new URLSearchParams({
           trader_id: traderId,
           source: normalizedSource,
         })
-        const res = await fetch(`/api/traders/claim?${query.toString()}`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
+        const result = await authedFetch<unknown>(
+          `/api/traders/claim?${query.toString()}`,
+          'GET',
+          operation.viewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: controller.signal,
+          }
+        )
+        if (!operationIsCurrent(operation, statusOperationRef) || result.stale) return
+        if (!result.ok) throw new Error(`Claim status request failed (${result.status})`)
+        const next = readClaimStatus(result.data, {
+          source,
+          traderId,
+          userId: operation.viewer.userId,
         })
-
-        if (res.ok) {
-          const payload = await res.json()
-          const data = payload?.data
-          if (!data || typeof data !== 'object') {
-            throw new Error('Invalid claim status response')
-          }
-          if (alive) {
-            const linked = Array.isArray(data.linked_traders) ? data.linked_traders : []
-            const linkedCount = linked.length
-            setHasVerifiedAccounts(linkedCount > 0 || data.is_verified === true)
-
-            // Check if this specific trader is already linked
-            const isLinked = linked.some(matchesCurrentTrader)
-            setThisTraderLinked(isLinked)
-
-            if (isLinked) {
-              setClaimStatus('verified')
-            } else if (
-              data.claim &&
-              matchesCurrentTrader(data.claim) &&
-              typeof data.claim?.status === 'string'
-            ) {
-              setClaimStatus(data.claim.status)
-            } else {
-              setClaimStatus(null)
-            }
-          }
-        } else {
-          throw new Error(`Claim status request failed (${res.status})`)
-        }
+        if (!next) throw new Error('Invalid claim status response')
+        setHasVerifiedAccounts(next.hasVerifiedAccounts)
+        setThisTraderLinked(next.thisTraderLinked)
+        setClaimStatus(next.claimStatus)
       } catch (err: unknown) {
-        if (err instanceof Error) {
+        if (operationIsCurrent(operation, statusOperationRef) && err instanceof Error) {
           logger.error('[ClaimTrader] Status check failed:', {
             message: err.message,
-            userId,
+            userId: operation.viewer.userId,
             source,
           })
+        }
+      } finally {
+        if (statusOperationRef.current?.id === operation.id) {
+          statusOperationRef.current = null
         }
       }
     }
 
-    checkClaimStatus()
+    void checkClaimStatus()
     // Re-check when user returns to this tab (instead of polling every 30s)
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && alive) {
-        checkClaimStatus()
+      if (document.visibilityState === 'visible' && mountedRef.current) {
+        void checkClaimStatus()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
-      alive = false
+      statusOperationRef.current = null
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [userId, source, traderId])
+  }, [source, traderId, userId, viewer])
 
   const handleClaim = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    if (!session) {
-      showToast(t('pleaseLoginFirst'), 'warning')
-      router.push(buildTraderClaimLoginHref(claimIdentity))
+    const operationViewer = captureSettingsViewer(authRef.current)
+    if (!operationViewer || operationViewer.userId !== userId) {
+      if (authRef.current.authChecked && !authRef.current.loading && !authRef.current.userId) {
+        showToast(t('pleaseLoginFirst'), 'warning')
+        router.push(buildTraderClaimLoginHref(claimIdentity))
+      }
       return
     }
+    const operation: ClaimOperation = {
+      id: ++nextOperationIdRef.current,
+      viewer: operationViewer,
+    }
+    confirmOperationRef.current = operation
 
     // For DEX platforms, redirect to the claim page with wallet flow
     if (isDexPlatform(source)) {
-      router.push(claimReturnPath)
+      if (operationIsCurrent(operation, confirmOperationRef)) router.push(claimReturnPath)
+      confirmOperationRef.current = null
       return
     }
 
@@ -159,11 +264,15 @@ export default function ClaimTraderButton({
       : `${t('confirmClaimDesc').replace('{handle}', handle)}\n${t('verifyOwnership')}`
 
     const confirmed = await showConfirm(confirmTitle, confirmDesc)
+    if (!operationIsCurrent(operation, confirmOperationRef)) return
+    confirmOperationRef.current = null
     if (!confirmed) return
 
     // For CEX platforms, redirect to claim page with API key flow
     router.push(claimReturnPath)
   }
+
+  const authPending = !viewer && (!auth.authChecked || auth.loading || Boolean(auth.userId))
 
   if (thisTraderLinked || claimStatus === 'verified') {
     return (
@@ -185,7 +294,7 @@ export default function ClaimTraderButton({
   const buttonLabel = hasVerifiedAccounts ? t('linkToProfile') : t('claimTrader')
 
   return (
-    <Button variant="primary" size="sm" onClick={handleClaim}>
+    <Button variant="primary" size="sm" onClick={handleClaim} disabled={authPending}>
       {buttonLabel}
     </Button>
   )
