@@ -1,0 +1,142 @@
+-- Production-shaped API-key authority prerequisites layered onto the Stripe
+-- entitlement PG17 harness before the additive migration chain is applied.
+
+GRANT service_role TO authenticator
+  WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
+
+ALTER TABLE public.user_profiles
+  ADD COLUMN api_tier text NOT NULL DEFAULT 'free'
+    CHECK (api_tier IN ('free', 'starter', 'pro')),
+  ADD COLUMN api_stripe_subscription_id text;
+ALTER TABLE public.user_profiles OWNER TO postgres;
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_profiles NO FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE public.api_keys (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  user_id uuid NOT NULL,
+  key text NOT NULL UNIQUE,
+  name text NOT NULL DEFAULT 'Default',
+  active boolean NOT NULL DEFAULT true,
+  tier text NOT NULL DEFAULT 'free'
+    CHECK (tier IN ('free', 'starter', 'pro')),
+  daily_limit integer NOT NULL DEFAULT 100,
+  request_count_today integer NOT NULL DEFAULT 0,
+  last_used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  revoked_at timestamptz
+);
+ALTER TABLE public.api_keys OWNER TO postgres;
+ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.api_keys NO FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE public.api_key_usage_daily (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  api_key_id uuid NOT NULL
+    REFERENCES public.api_keys(id) ON DELETE CASCADE,
+  date date NOT NULL,
+  request_count integer NOT NULL DEFAULT 0,
+  UNIQUE (api_key_id, date)
+);
+ALTER TABLE public.api_key_usage_daily OWNER TO postgres;
+ALTER TABLE public.api_key_usage_daily ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.api_key_usage_daily NO FORCE ROW LEVEL SECURITY;
+
+CREATE FUNCTION public.reset_api_key_daily_counts()
+RETURNS void
+LANGUAGE sql
+SET search_path = public
+AS $function$
+  UPDATE api_keys
+  SET request_count_today = 0
+  WHERE request_count_today > 0;
+$function$;
+ALTER FUNCTION public.reset_api_key_daily_counts() OWNER TO postgres;
+
+CREATE FUNCTION public.increment_api_key_usage(p_key text)
+RETURNS TABLE(allowed boolean, remaining integer, daily_limit integer)
+LANGUAGE plpgsql
+SET search_path = public
+AS $function$
+DECLARE
+  v_daily_limit integer;
+  v_new_count integer;
+BEGIN
+  UPDATE api_keys
+  SET
+    request_count_today = request_count_today + 1,
+    last_used_at = pg_catalog.clock_timestamp()
+  WHERE key = p_key
+    AND active
+  RETURNING api_keys.daily_limit, request_count_today
+  INTO v_daily_limit, v_new_count;
+
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT false, 0, 0;
+    RETURN;
+  END IF;
+
+  RETURN QUERY SELECT
+    v_daily_limit = 0 OR v_new_count <= v_daily_limit,
+    CASE
+      WHEN v_daily_limit = 0 THEN -1
+      ELSE pg_catalog.greatest(v_daily_limit - v_new_count, 0)
+    END,
+    v_daily_limit;
+END
+$function$;
+ALTER FUNCTION public.increment_api_key_usage(text) OWNER TO postgres;
+
+CREATE FUNCTION public.rollup_api_key_usage()
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = public
+AS $function$
+BEGIN
+  INSERT INTO api_key_usage_daily (
+    api_key_id,
+    date,
+    request_count
+  )
+  SELECT id, CURRENT_DATE, request_count_today
+  FROM api_keys
+  WHERE request_count_today > 0
+  ON CONFLICT (api_key_id, date)
+  DO UPDATE SET request_count = EXCLUDED.request_count;
+
+  UPDATE api_keys
+  SET request_count_today = 0
+  WHERE request_count_today > 0;
+END
+$function$;
+ALTER FUNCTION public.rollup_api_key_usage() OWNER TO postgres;
+
+CREATE FUNCTION public.update_user_api_tier(
+  p_user_id uuid,
+  p_api_tier text,
+  p_stripe_subscription_id text,
+  p_daily_limit integer
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+BEGIN
+  UPDATE user_profiles
+  SET
+    api_tier = p_api_tier,
+    api_stripe_subscription_id = p_stripe_subscription_id,
+    updated_at = pg_catalog.clock_timestamp()
+  WHERE id = p_user_id;
+
+  UPDATE api_keys
+  SET
+    tier = p_api_tier,
+    daily_limit = p_daily_limit
+  WHERE user_id = p_user_id
+    AND active;
+END
+$function$;
+ALTER FUNCTION public.update_user_api_tier(uuid, text, text, integer)
+  OWNER TO postgres;
