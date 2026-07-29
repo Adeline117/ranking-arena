@@ -1,12 +1,15 @@
 import Stripe from 'stripe'
+import { createHash } from 'node:crypto'
 import { getSupabase, logger } from './shared'
 import { getStripe } from '@/lib/stripe'
 import { stripeObjectId } from '@/lib/stripe/identity'
 import type { Database, Json } from '@/lib/supabase/database.types'
+import { drainApiTierReversalActions } from '@/lib/stripe/api-tier-reversal-actions'
 
 export type StripeRefundEventContext = {
   eventId: string
   eventCreatedAt: number
+  livemode: boolean
 }
 
 type EntitlementPaymentRow = Database['public']['Tables']['stripe_entitlement_payments']['Row']
@@ -34,6 +37,7 @@ type ChargeRefundSnapshot = {
   chargeId: string
   customerId: string
   paymentIntentId: string | null
+  livemode: boolean
   capturedAmount: number
   stripeRefundedAmount: number
   currency: string
@@ -46,6 +50,7 @@ type ChargeRefundAuthority = ChargeRefundSnapshot & {
 type RefundEventIdentity = {
   eventId: string
   eventCreatedAt: string
+  livemode: boolean
 }
 
 type StripeRefundState = 'pending' | 'requires_action' | 'succeeded' | 'failed' | 'canceled'
@@ -70,6 +75,7 @@ type DeterministicRefundReview = {
     | 'payment_intent'
     | 'refund'
     | 'refund_event'
+    | 'dispute'
     | 'subscription'
   objectId: string
   userId: string | null
@@ -157,6 +163,18 @@ const PRO_TOMBSTONE_PROJECTION_STATUSES = new Set([
   'refunded_payment',
 ])
 
+const API_TIER_PROJECTION_STATUSES = new Set([
+  'audit_only',
+  'subject_deleted',
+  'already_subject_deleted',
+  'not_current',
+  'already_not_current',
+  'reprojected',
+  'already_reprojected',
+  'revoked',
+  'already_revoked',
+])
+
 const STRIPE_REFUND_STATES = new Set<StripeRefundState>([
   'pending',
   'requires_action',
@@ -200,10 +218,32 @@ type TombstoneAcknowledgement =
     }
   | {
       status: string
+      route: 'api_tier'
+      entitlementPaymentId: null
+      ownershipId: string
+      productKind: 'api_tier'
+      projectionStatus: string
+      apiTierUserId: string
+      apiTierCustomerId: string
+      apiTierSubscriptionId: string
+      livemode: boolean
+      shouldCancel: boolean
+    }
+  | {
+      status: string
+      route: 'group_pass_revocation'
+      entitlementPaymentId: null
+      ownershipId: string
+      productKind: 'group_pass'
+      projectionStatus: null
+      groupPassSubscriptionId: string
+    }
+  | {
+      status: string
       route: 'durable_attention'
       entitlementPaymentId: null
       ownershipId: string | null
-      productKind: 'group_pass' | 'pro_entitlement' | 'tip' | null
+      productKind: 'api_tier' | 'group_pass' | 'pro_entitlement' | 'tip' | null
       projectionStatus: null
     }
   | {
@@ -269,10 +309,14 @@ function isStripeResourceMissing(error: unknown): boolean {
 
 function readRefundEventIdentity(
   context: StripeRefundEventContext,
-  fallbackObjectType: 'charge' | 'refund',
+  fallbackObjectType: 'charge' | 'dispute' | 'refund',
   fallbackObjectId: unknown
 ): RefundEventIdentity {
-  if (!context?.eventId?.startsWith('evt_')) {
+  if (
+    !context?.eventId ||
+    !/^evt_[A-Za-z0-9_]+$/.test(context.eventId) ||
+    context.eventId.length > MAX_STRIPE_OBJECT_ID_LENGTH
+  ) {
     deterministicPoison({
       objectType: fallbackObjectType,
       objectId: reviewObjectId(fallbackObjectId, 'invalid_refund_event'),
@@ -288,7 +332,11 @@ function readRefundEventIdentity(
       },
     })
   }
-  if (!Number.isSafeInteger(context.eventCreatedAt) || context.eventCreatedAt <= 0) {
+  if (
+    !Number.isSafeInteger(context.eventCreatedAt) ||
+    context.eventCreatedAt <= 0 ||
+    typeof context.livemode !== 'boolean'
+  ) {
     deterministicPoison({
       objectType: 'refund_event',
       objectId: context.eventId,
@@ -298,6 +346,7 @@ function readRefundEventIdentity(
       evidence: {
         event_id: context.eventId,
         event_created_at: null,
+        livemode: typeof context.livemode === 'boolean' ? context.livemode : null,
       },
     })
   }
@@ -318,6 +367,7 @@ function readRefundEventIdentity(
   return {
     eventId: context.eventId,
     eventCreatedAt: createdAt.toISOString(),
+    livemode: context.livemode,
   }
 }
 
@@ -326,6 +376,7 @@ function readChargeRefundSnapshot(
   options: {
     allowZeroRefund?: boolean
     eventId: string
+    expectedLivemode: boolean
     source: 'fresh' | 'signed'
   }
 ): ChargeRefundSnapshot {
@@ -346,6 +397,7 @@ function readChargeRefundSnapshot(
     charge.captured !== true ||
     charge.paid !== true ||
     charge.status !== 'succeeded' ||
+    charge.livemode !== options.expectedLivemode ||
     !Number.isSafeInteger(capturedAmount) ||
     capturedAmount <= 0 ||
     !Number.isSafeInteger(stripeRefundedAmount) ||
@@ -369,6 +421,8 @@ function readChargeRefundSnapshot(
         captured: charge.captured,
         paid: charge.paid,
         charge_status: safeEvidenceString(charge.status),
+        charge_livemode: typeof charge.livemode === 'boolean' ? charge.livemode : null,
+        expected_livemode: options.expectedLivemode,
         amount_captured: Number.isSafeInteger(capturedAmount) ? capturedAmount : null,
         amount_refunded: Number.isSafeInteger(stripeRefundedAmount) ? stripeRefundedAmount : null,
         currency: safeEvidenceString(currency),
@@ -381,6 +435,7 @@ function readChargeRefundSnapshot(
     chargeId,
     customerId,
     paymentIntentId,
+    livemode: charge.livemode,
     capturedAmount,
     stripeRefundedAmount,
     currency,
@@ -396,6 +451,7 @@ function assertFreshChargeMatchesEvent(
     freshSnapshot.chargeId !== eventCharge.chargeId ||
     freshSnapshot.customerId !== eventCharge.customerId ||
     freshSnapshot.paymentIntentId !== eventCharge.paymentIntentId ||
+    freshSnapshot.livemode !== eventCharge.livemode ||
     freshSnapshot.capturedAmount !== eventCharge.capturedAmount ||
     freshSnapshot.currency !== eventCharge.currency
   ) {
@@ -412,6 +468,8 @@ function assertFreshChargeMatchesEvent(
         fresh_customer_id: freshSnapshot.customerId,
         event_payment_intent_id: eventCharge.paymentIntentId,
         fresh_payment_intent_id: freshSnapshot.paymentIntentId,
+        event_livemode: eventCharge.livemode,
+        fresh_livemode: freshSnapshot.livemode,
         event_amount_captured: eventCharge.capturedAmount,
         fresh_amount_captured: freshSnapshot.capturedAmount,
         event_currency: eventCharge.currency,
@@ -453,6 +511,7 @@ async function retrieveFreshChargeRefundSnapshot(
   const freshSnapshot = readChargeRefundSnapshot(freshCharge, {
     allowZeroRefund: true,
     eventId: event.eventId,
+    expectedLivemode: event.livemode,
     source: 'fresh',
   })
   if (freshSnapshot.chargeId !== chargeId) {
@@ -624,6 +683,7 @@ async function resolveRefundChargeId(
   const latestChargeId = stripeObjectId(paymentIntent.latest_charge)
   if (
     returnedPaymentIntentId !== refund.paymentIntentId ||
+    paymentIntent.livemode !== event.livemode ||
     !latestChargeId ||
     !latestChargeId.startsWith('ch_')
   ) {
@@ -638,6 +698,9 @@ async function resolveRefundChargeId(
         refund_id: refund.refundId,
         requested_payment_intent_id: refund.paymentIntentId,
         returned_payment_intent_id: safeEvidenceString(returnedPaymentIntentId),
+        payment_intent_livemode:
+          typeof paymentIntent.livemode === 'boolean' ? paymentIntent.livemode : null,
+        expected_livemode: event.livemode,
         latest_charge_id: safeEvidenceString(latestChargeId),
       },
     })
@@ -868,21 +931,25 @@ function readTombstoneAcknowledgement(value: unknown): TombstoneAcknowledgement 
       'product_kind',
       'reason_key',
       'record_status',
+      'group_pass_subscription_id',
     ]) &&
     typeof result.ownership_id === 'string' &&
     UUID_PATTERN.test(result.ownership_id) &&
     result.product_kind === 'group_pass' &&
     result.reason_key === 'group_pass_full_refund_revocation_required' &&
+    typeof result.group_pass_subscription_id === 'string' &&
+    UUID_PATTERN.test(result.group_pass_subscription_id) &&
     typeof result.record_status === 'string' &&
     TOMBSTONE_RECORD_OR_RECONCILIATION_STATUSES.has(result.record_status)
   ) {
     return {
       status,
-      route: 'durable_attention',
+      route: 'group_pass_revocation',
       entitlementPaymentId: null,
       ownershipId: result.ownership_id,
       productKind: 'group_pass',
       projectionStatus: null,
+      groupPassSubscriptionId: result.group_pass_subscription_id.toLowerCase(),
     }
   }
 
@@ -919,6 +986,51 @@ function readTombstoneAcknowledgement(value: unknown): TombstoneAcknowledgement 
       ownershipId: result.ownership_id,
       productKind: 'pro_entitlement',
       projectionStatus: result.projection_status,
+    }
+  }
+
+  if (
+    status &&
+    TOMBSTONE_RECORD_STATUSES.has(status) &&
+    result.ownership_status === 'already_claimed' &&
+    typeof result.ownership_id === 'string' &&
+    UUID_PATTERN.test(result.ownership_id) &&
+    result.product_kind === 'api_tier' &&
+    typeof result.projection_status === 'string' &&
+    API_TIER_PROJECTION_STATUSES.has(result.projection_status) &&
+    typeof result.api_tier_user_id === 'string' &&
+    UUID_PATTERN.test(result.api_tier_user_id) &&
+    typeof result.api_tier_customer_id === 'string' &&
+    result.api_tier_customer_id.startsWith('cus_') &&
+    typeof result.api_tier_subscription_id === 'string' &&
+    result.api_tier_subscription_id.startsWith('sub_') &&
+    typeof result.api_tier_livemode === 'boolean' &&
+    typeof result.api_tier_should_cancel === 'boolean' &&
+    hasExactKeys(result, [
+      'status',
+      'ownership_status',
+      'ownership_id',
+      'product_kind',
+      'projection_status',
+      'api_tier_user_id',
+      'api_tier_customer_id',
+      'api_tier_subscription_id',
+      'api_tier_livemode',
+      'api_tier_should_cancel',
+    ])
+  ) {
+    return {
+      status,
+      route: 'api_tier',
+      entitlementPaymentId: null,
+      ownershipId: result.ownership_id,
+      productKind: 'api_tier',
+      projectionStatus: result.projection_status,
+      apiTierUserId: result.api_tier_user_id.toLowerCase(),
+      apiTierCustomerId: result.api_tier_customer_id,
+      apiTierSubscriptionId: result.api_tier_subscription_id,
+      livemode: result.api_tier_livemode,
+      shouldCancel: result.api_tier_should_cancel,
     }
   }
 
@@ -1008,12 +1120,15 @@ async function persistDeterministicRefundReview(
   })
 }
 
-async function withDeterministicRefundReview(operation: () => Promise<void>): Promise<void> {
+async function withDeterministicRefundReview<T>(
+  operation: () => Promise<T>
+): Promise<T | undefined> {
   try {
-    await operation()
+    return await operation()
   } catch (error) {
     if (!(error instanceof DeterministicRefundPoisonError)) throw error
     await persistDeterministicRefundReview(error)
+    return undefined
   }
 }
 
@@ -1111,6 +1226,7 @@ async function readRecurringSubscriptionStatus(
   const customerId = stripeObjectId(subscription.customer)
   if (
     subscription.id !== subscriptionId ||
+    subscription.livemode !== event.livemode ||
     !customerId ||
     !customerId.startsWith('cus_') ||
     customerId !== payment.stripe_customer_id ||
@@ -1128,6 +1244,9 @@ async function readRecurringSubscriptionStatus(
         entitlement_payment_id: payment.id,
         requested_subscription_id: subscriptionId,
         returned_subscription_id: safeEvidenceString(subscription.id),
+        subscription_livemode:
+          typeof subscription.livemode === 'boolean' ? subscription.livemode : null,
+        expected_livemode: event.livemode,
         ledger_customer_id: payment.stripe_customer_id,
         returned_customer_id: safeEvidenceString(customerId),
         subscription_status: safeEvidenceString(subscription.status),
@@ -1218,23 +1337,109 @@ async function recordChargeTombstone(
   event: RefundEventIdentity,
   refundState: StripeRefundState
 ): Promise<TombstoneAcknowledgement> {
-  const { data, error } = await getSupabase().rpc('record_charge_refund_tombstone_atomic', {
-    p_user_id: null,
-    p_stripe_customer_id: charge.customerId,
-    p_stripe_payment_intent_id: charge.paymentIntentId,
-    p_stripe_charge_id: charge.chargeId,
-    p_captured: true,
-    p_amount_paid: charge.capturedAmount,
-    p_currency: charge.currency,
-    p_refund_succeeded_amount: charge.succeededRefundedAmount,
-    p_refund_state: refundState,
-    p_refund_event_id: event.eventId,
-    p_refund_event_created_at: event.eventCreatedAt,
-  })
+  const { data, error } = await getSupabase().rpc(
+    'record_charge_refund_tombstone_with_mode_atomic',
+    {
+      p_livemode: event.livemode,
+      p_user_id: null,
+      p_stripe_customer_id: charge.customerId,
+      p_stripe_payment_intent_id: charge.paymentIntentId,
+      p_stripe_charge_id: charge.chargeId,
+      p_captured: true,
+      p_amount_paid: charge.capturedAmount,
+      p_currency: charge.currency,
+      p_refund_succeeded_amount: charge.succeededRefundedAmount,
+      p_refund_state: refundState,
+      p_refund_event_id: event.eventId,
+      p_refund_event_created_at: event.eventCreatedAt,
+    }
+  )
   if (error) {
     throw new Error(`Failed to record Charge refund tombstone: ${error.message}`)
   }
   return readTombstoneAcknowledgement(data)
+}
+
+const GROUP_PASS_SUBSCRIPTION_ACTIONS = new Set([
+  'already_inactive',
+  'already_missing',
+  'expired_exact_payment',
+])
+const GROUP_PASS_MEMBERSHIP_ACTIONS = new Set([
+  'membership_preexisting',
+  'membership_role_changed',
+  'payment_member_already_absent',
+  'payment_member_deleted',
+  'payment_member_retained_independent_authority',
+])
+
+function readGroupPassRevocationAcknowledgement(
+  value: unknown,
+  expected: { ownershipId: string; subscriptionId: string }
+): 'acknowledged' | 'already_acknowledged' {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Group pass refund revocation RPC returned a malformed acknowledgement')
+  }
+  const result = value as Record<string, unknown>
+  const commonIdentity =
+    typeof result.acknowledgment_id === 'string' &&
+    UUID_PATTERN.test(result.acknowledgment_id) &&
+    result.ownership_id === expected.ownershipId &&
+    result.subscription_id === expected.subscriptionId
+
+  if (
+    result.status === 'already_acknowledged' &&
+    commonIdentity &&
+    hasExactKeys(result, ['status', 'acknowledgment_id', 'ownership_id', 'subscription_id'])
+  ) {
+    return result.status
+  }
+  if (
+    result.status === 'acknowledged' &&
+    commonIdentity &&
+    typeof result.subscription_action === 'string' &&
+    GROUP_PASS_SUBSCRIPTION_ACTIONS.has(result.subscription_action) &&
+    typeof result.membership_action === 'string' &&
+    GROUP_PASS_MEMBERSHIP_ACTIONS.has(result.membership_action) &&
+    hasExactKeys(result, [
+      'status',
+      'acknowledgment_id',
+      'ownership_id',
+      'subscription_id',
+      'subscription_action',
+      'membership_action',
+    ])
+  ) {
+    return result.status
+  }
+  throw new Error('Group pass refund revocation RPC did not prove exact access revocation')
+}
+
+async function acknowledgeGroupPassFullRefund(
+  tombstone: Extract<TombstoneAcknowledgement, { route: 'group_pass_revocation' }>,
+  snapshot: ChargeRefundAuthority,
+  event: RefundEventIdentity
+): Promise<'acknowledged' | 'already_acknowledged'> {
+  const actionReference = `stripe-refund:${createHash('sha256')
+    .update(event.eventId, 'utf8')
+    .digest('hex')}`
+  const { data, error } = await getSupabase().rpc(
+    'acknowledge_group_pass_full_refund_revocation_atomic',
+    {
+      p_ownership_id: tombstone.ownershipId,
+      p_subscription_id: tombstone.groupPassSubscriptionId,
+      p_refund_snapshot_event_id: event.eventId,
+      p_refund_succeeded_amount: snapshot.succeededRefundedAmount,
+      p_revocation_action_reference: actionReference,
+    }
+  )
+  if (error) {
+    throw new Error(`Failed to revoke exact group pass refund authority: ${error.message}`)
+  }
+  return readGroupPassRevocationAcknowledgement(data, {
+    ownershipId: tombstone.ownershipId,
+    subscriptionId: tombstone.groupPassSubscriptionId,
+  })
 }
 
 async function persistChargeRefundObservation(
@@ -1258,6 +1463,47 @@ async function persistChargeRefundObservation(
       snapshot,
       status
     )
+    return
+  }
+
+  if (tombstone.route === 'api_tier') {
+    if (
+      tombstone.livemode !== event.livemode ||
+      tombstone.apiTierCustomerId !== snapshot.customerId ||
+      tombstone.shouldCancel !== snapshot.succeededRefundedAmount > 0
+    ) {
+      throw new Error('API tier refund acknowledgement contradicts fresh Charge authority')
+    }
+    logger.info('Charge refund projected through exact API tier payment ownership', {
+      chargeId: snapshot.chargeId,
+      ownershipId: tombstone.ownershipId,
+      userId: tombstone.apiTierUserId,
+      subscriptionId: tombstone.apiTierSubscriptionId,
+      projectionStatus: tombstone.projectionStatus,
+      shouldCancel: tombstone.shouldCancel,
+    })
+    if (tombstone.shouldCancel) {
+      try {
+        await drainApiTierReversalActions({ limit: 1 })
+      } catch (error) {
+        logger.error('Durable API tier cancellation remains queued after refund', {
+          chargeId: snapshot.chargeId,
+          subscriptionId: tombstone.apiTierSubscriptionId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+    return
+  }
+
+  if (tombstone.route === 'group_pass_revocation') {
+    const revocationStatus = await acknowledgeGroupPassFullRefund(tombstone, snapshot, event)
+    logger.info('Charge refund revoked exact group pass payment authority', {
+      chargeId: snapshot.chargeId,
+      ownershipId: tombstone.ownershipId,
+      subscriptionId: tombstone.groupPassSubscriptionId,
+      status: revocationStatus,
+    })
     return
   }
 
@@ -1293,6 +1539,7 @@ export async function handleChargeRefunded(
     const event = readRefundEventIdentity(context, 'charge', charge?.id)
     const eventSnapshot = readChargeRefundSnapshot(charge, {
       eventId: event.eventId,
+      expectedLivemode: event.livemode,
       source: 'signed',
     })
     const snapshot = await retrieveFreshChargeRefundSnapshot(eventSnapshot.chargeId, event)
@@ -1326,21 +1573,216 @@ export async function handleRefundLifecycle(
 // from legacy charge refund events to the canonical Refund lifecycle.
 export const handleRefundUpdated = handleRefundLifecycle
 
+type ApiTierDisputeAcknowledgement =
+  | { status: 'not_api' | 'identity_conflict' | 'manual_review' }
+  | {
+      status: 'api_tier'
+      projectionStatus: string
+      ownershipId: string
+      userId: string
+      customerId: string
+      subscriptionId: string
+      livemode: boolean
+      shouldCancel: true
+    }
+
+function readApiTierDisputeAcknowledgement(value: unknown): ApiTierDisputeAcknowledgement {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('API tier dispute RPC returned a malformed acknowledgement')
+  }
+  const result = value as Record<string, unknown>
+  if (
+    (result.status === 'not_api' ||
+      result.status === 'identity_conflict' ||
+      result.status === 'manual_review') &&
+    hasExactKeys(result, ['status'])
+  ) {
+    return { status: result.status }
+  }
+  if (
+    result.status === 'api_tier' &&
+    typeof result.projection_status === 'string' &&
+    API_TIER_PROJECTION_STATUSES.has(result.projection_status) &&
+    typeof result.ownership_id === 'string' &&
+    UUID_PATTERN.test(result.ownership_id) &&
+    typeof result.user_id === 'string' &&
+    UUID_PATTERN.test(result.user_id) &&
+    typeof result.stripe_customer_id === 'string' &&
+    result.stripe_customer_id.startsWith('cus_') &&
+    typeof result.stripe_subscription_id === 'string' &&
+    result.stripe_subscription_id.startsWith('sub_') &&
+    typeof result.livemode === 'boolean' &&
+    result.should_cancel === true &&
+    hasExactKeys(result, [
+      'status',
+      'projection_status',
+      'ownership_id',
+      'user_id',
+      'stripe_customer_id',
+      'stripe_subscription_id',
+      'livemode',
+      'should_cancel',
+    ])
+  ) {
+    return {
+      status: 'api_tier',
+      projectionStatus: result.projection_status,
+      ownershipId: result.ownership_id,
+      userId: result.user_id.toLowerCase(),
+      customerId: result.stripe_customer_id,
+      subscriptionId: result.stripe_subscription_id,
+      livemode: result.livemode,
+      shouldCancel: true,
+    }
+  }
+  throw new Error('API tier dispute RPC returned a contradictory acknowledgement')
+}
+
 /**
- * Chargeback / dispute (2026-07-11 上线审计:此前 webhook 完全不处理 dispute)。
- * 切 live 后首笔 chargeback:钱被划走 + $15 dispute fee,用户还留着 Pro,团队
- * 无感知。这里最小处置:记 payment_history + Telegram 告警(不自动撤权——
- * dispute 可能被商家赢回,撤权留人工在 Stripe Dashboard 判)。webhook 事件
- * 订阅需在 Stripe 后台加 charge.dispute.created(见 docs/STRIPE_GO_LIVE.md)。
+ * A dispute is a sticky financial reversal for the exact API subscription that
+ * owned its Charge. Persist that boundary before attempting an alert or remote
+ * Stripe cancellation; the outbox retries cancellation after crashes.
  */
-export async function handleChargeDisputeCreated(dispute: Stripe.Dispute) {
-  const charge = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id
+export async function handleChargeDisputeCreated(
+  dispute: Stripe.Dispute,
+  context: StripeRefundEventContext
+) {
+  const durableResult = await withDeterministicRefundReview(async () => {
+    const event = readRefundEventIdentity(context, 'dispute', dispute?.id)
+    const disputeId = stripeObjectId(dispute.id)
+    const signedChargeId = stripeObjectId(dispute.charge)
+    if (
+      !disputeId ||
+      !disputeId.startsWith('dp_') ||
+      !signedChargeId ||
+      !signedChargeId.startsWith('ch_') ||
+      dispute.livemode !== event.livemode
+    ) {
+      deterministicPoison({
+        objectType: 'dispute',
+        objectId: reviewObjectId(disputeId, event.eventId),
+        userId: null,
+        reasonKey: 'signed_dispute_identity_invalid',
+        reason: 'A signed Stripe dispute event has invalid immutable identity or mode.',
+        evidence: {
+          event_id: event.eventId,
+          dispute_id: safeEvidenceString(disputeId),
+          charge_id: safeEvidenceString(signedChargeId),
+          dispute_livemode: typeof dispute.livemode === 'boolean' ? dispute.livemode : null,
+          event_livemode: event.livemode,
+        },
+      })
+    }
+
+    const freshDispute = await getStripe()
+      .disputes.retrieve(disputeId)
+      .catch((error: unknown) => {
+        if (isStripeResourceMissing(error)) {
+          deterministicPoison({
+            objectType: 'dispute',
+            objectId: disputeId,
+            userId: null,
+            reasonKey: 'stripe_dispute_resource_missing',
+            reason: 'The exact Stripe Dispute is missing from the configured account and mode.',
+            evidence: {
+              event_id: event.eventId,
+              dispute_id: disputeId,
+              stripe_error_code: 'resource_missing',
+            },
+          })
+        }
+        throw error
+      })
+
+    const chargeId = stripeObjectId(freshDispute.charge)
+    const currency = freshDispute.currency?.trim().toLowerCase()
+    if (
+      freshDispute.id !== disputeId ||
+      freshDispute.livemode !== event.livemode ||
+      chargeId !== signedChargeId ||
+      freshDispute.amount !== dispute.amount ||
+      freshDispute.currency !== dispute.currency ||
+      freshDispute.reason !== dispute.reason ||
+      !Number.isSafeInteger(freshDispute.amount) ||
+      freshDispute.amount <= 0 ||
+      !currency ||
+      !/^[a-z]{3}$/.test(currency) ||
+      !freshDispute.status ||
+      !freshDispute.reason
+    ) {
+      deterministicPoison({
+        objectType: 'dispute',
+        objectId: disputeId,
+        userId: null,
+        reasonKey: 'fresh_dispute_signed_identity_conflict',
+        reason: 'Fresh Stripe Dispute authority conflicts with its signed event snapshot.',
+        evidence: {
+          event_id: event.eventId,
+          dispute_id: disputeId,
+          signed_charge_id: signedChargeId,
+          fresh_charge_id: safeEvidenceString(chargeId),
+          signed_amount: dispute.amount,
+          fresh_amount: freshDispute.amount,
+          signed_currency: safeEvidenceString(dispute.currency),
+          fresh_currency: safeEvidenceString(freshDispute.currency),
+          signed_reason: safeEvidenceString(dispute.reason),
+          fresh_reason: safeEvidenceString(freshDispute.reason),
+          fresh_status: safeEvidenceString(freshDispute.status),
+        },
+      })
+    }
+
+    const charge = await retrieveFreshChargeRefundSnapshot(chargeId, event)
+    const { data, error } = await getSupabase().rpc('record_api_tier_dispute_reversal_atomic', {
+      p_livemode: event.livemode,
+      p_stripe_event_id: event.eventId,
+      p_stripe_event_created: context.eventCreatedAt,
+      p_stripe_dispute_id: freshDispute.id,
+      p_dispute_status: freshDispute.status,
+      p_dispute_reason: freshDispute.reason,
+      p_dispute_amount: freshDispute.amount,
+      p_currency: currency,
+      p_stripe_customer_id: charge.customerId,
+      p_stripe_payment_intent_id: charge.paymentIntentId,
+      p_stripe_charge_id: charge.chargeId,
+      p_captured_amount: charge.capturedAmount,
+    })
+    if (error) {
+      throw new Error(`Failed to persist API tier dispute reversal: ${error.message}`)
+    }
+    const acknowledgement = readApiTierDisputeAcknowledgement(data)
+    if (
+      acknowledgement.status === 'api_tier' &&
+      (acknowledgement.livemode !== event.livemode ||
+        acknowledgement.customerId !== charge.customerId ||
+        acknowledgement.subscriptionId.length > MAX_STRIPE_OBJECT_ID_LENGTH)
+    ) {
+      throw new Error('API tier dispute acknowledgement contradicts fresh Stripe authority')
+    }
+    return { acknowledgement, chargeId, freshDispute }
+  })
+
+  if (!durableResult) return
+  const { acknowledgement, chargeId, freshDispute } = durableResult
+  if (acknowledgement.status === 'api_tier') {
+    try {
+      await drainApiTierReversalActions({ limit: 1 })
+    } catch (error) {
+      logger.error('Durable API tier cancellation remains queued after dispute', {
+        disputeId: freshDispute.id,
+        subscriptionId: acknowledgement.subscriptionId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
   logger.error('Chargeback/dispute created', {
-    disputeId: dispute.id,
-    chargeId: charge,
-    amount: dispute.amount,
-    reason: dispute.reason,
-    status: dispute.status,
+    disputeId: freshDispute.id,
+    chargeId,
+    amount: freshDispute.amount,
+    reason: freshDispute.reason,
+    status: freshDispute.status,
+    apiTierStatus: acknowledgement.status,
   })
   try {
     const { sendAlert } = await import('@/lib/alerts/send-alert')
@@ -1348,8 +1790,13 @@ export async function handleChargeDisputeCreated(dispute: Stripe.Dispute) {
       level: 'critical',
       source: 'stripe',
       title: 'Chargeback / 支付争议',
-      message: `收到 chargeback(${dispute.reason})，金额 ${(dispute.amount / 100).toFixed(2)} ${dispute.currency.toUpperCase()}。去 Stripe Dashboard 应诉或接受，并决定是否撤销该用户 Pro。`,
-      details: { disputeId: dispute.id, chargeId: charge ?? '—', status: dispute.status },
+      message: `收到 chargeback(${freshDispute.reason})，金额 ${(freshDispute.amount / 100).toFixed(2)} ${freshDispute.currency.toUpperCase()}。财务撤权边界已持久化，请去 Stripe Dashboard 应诉或接受。`,
+      details: {
+        disputeId: freshDispute.id,
+        chargeId: chargeId ?? '—',
+        status: freshDispute.status,
+        apiTierStatus: acknowledgement.status,
+      },
     })
   } catch (err) {
     logger.error('dispute alert failed (non-fatal)', {

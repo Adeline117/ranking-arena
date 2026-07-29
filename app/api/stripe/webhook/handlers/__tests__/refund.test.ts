@@ -48,10 +48,13 @@ type DbError = { message: string }
 const PAYMENT_ID = '11111111-1111-4111-8111-111111111111'
 const OWNERSHIP_ID = '22222222-2222-4222-8222-222222222222'
 const USER_ID = '33333333-3333-4333-8333-333333333333'
+const GROUP_SUBSCRIPTION_ID = '44444444-4444-4444-8444-444444444444'
+const GROUP_ACK_ID = '55555555-5555-4555-8555-555555555555'
 
 const refundEvent: StripeRefundEventContext = {
   eventId: 'evt_charge_refunded',
   eventCreatedAt: 1_700_000_000,
+  livemode: true,
 }
 
 function paymentLookup(data: unknown, error: DbError | null = null) {
@@ -76,6 +79,7 @@ function refundedCharge(overrides: Partial<Stripe.Charge> = {}): Stripe.Charge {
     created: 1_699_999_000,
     currency: 'usd',
     customer: 'cus_owner',
+    livemode: true,
     paid: true,
     payment_intent: 'pi_refunded',
     refunded: true,
@@ -192,6 +196,8 @@ function configureRpc(
     tombstoneError?: DbError | null
     manualReviewData?: unknown
     manualReviewError?: DbError | null
+    groupRevocationData?: unknown
+    groupRevocationError?: DbError | null
   } = {}
 ) {
   mockRpc.mockImplementation((name: string) => {
@@ -201,7 +207,7 @@ function configureRpc(
         error: options.reconciliationError ?? null,
       })
     }
-    if (name === 'record_charge_refund_tombstone_atomic') {
+    if (name === 'record_charge_refund_tombstone_with_mode_atomic') {
       return Promise.resolve({
         data:
           options.tombstoneData ??
@@ -213,6 +219,21 @@ function configureRpc(
       return Promise.resolve({
         data: options.manualReviewData ?? { status: 'recorded' },
         error: options.manualReviewError ?? null,
+      })
+    }
+    if (name === 'acknowledge_group_pass_full_refund_revocation_atomic') {
+      return Promise.resolve({
+        data:
+          options.groupRevocationData ??
+          ({
+            status: 'acknowledged',
+            acknowledgment_id: GROUP_ACK_ID,
+            ownership_id: OWNERSHIP_ID,
+            subscription_id: GROUP_SUBSCRIPTION_ID,
+            subscription_action: 'expired_exact_payment',
+            membership_action: 'payment_member_deleted',
+          } as const),
+        error: options.groupRevocationError ?? null,
       })
     }
     throw new Error('Unexpected RPC ' + name)
@@ -252,10 +273,12 @@ describe('refund webhook product ownership routing', () => {
     mockRetrievePaymentIntent.mockResolvedValue({
       id: 'pi_refunded',
       latest_charge: 'ch_refunded',
+      livemode: true,
     } as Stripe.PaymentIntent)
     mockRetrieveSubscription.mockResolvedValue({
       id: 'sub_owner',
       customer: 'cus_owner',
+      livemode: true,
       status: 'active',
     })
     configureRpc()
@@ -267,7 +290,7 @@ describe('refund webhook product ownership routing', () => {
     expect(mockRetrieveCharge).toHaveBeenCalledWith('ch_refunded')
     expect(mockListRefunds).toHaveBeenCalledWith({ charge: 'ch_refunded', limit: 100 })
     expect(mockRpc).toHaveBeenCalledWith(
-      'record_charge_refund_tombstone_atomic',
+      'record_charge_refund_tombstone_with_mode_atomic',
       expect.objectContaining({
         p_stripe_charge_id: 'ch_refunded',
         p_refund_succeeded_amount: 2500,
@@ -294,7 +317,7 @@ describe('refund webhook product ownership routing', () => {
     await handleChargeRefunded(charge, refundEvent)
 
     expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
-      'record_charge_refund_tombstone_atomic',
+      'record_charge_refund_tombstone_with_mode_atomic',
       'reconcile_stripe_entitlement_refund_atomic',
     ])
     expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(mockFrom.mock.invocationCallOrder[0])
@@ -361,7 +384,64 @@ describe('refund webhook product ownership routing', () => {
     }
   )
 
-  it('ACKs an exact durable group-pass revocation review', async () => {
+  it('revokes exact group-pass access before ACKing a full refund', async () => {
+    configureRpc({
+      tombstoneData: {
+        status: 'manual_review',
+        record_status: 'recorded',
+        ownership_id: OWNERSHIP_ID,
+        product_kind: 'group_pass',
+        reason_key: 'group_pass_full_refund_revocation_required',
+        group_pass_subscription_id: GROUP_SUBSCRIPTION_ID,
+      },
+    })
+
+    await expect(handleChargeRefunded(refundedCharge(), refundEvent)).resolves.toBeUndefined()
+
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
+      'record_charge_refund_tombstone_with_mode_atomic',
+      'acknowledge_group_pass_full_refund_revocation_atomic',
+    ])
+    expect(mockRpc).toHaveBeenLastCalledWith(
+      'acknowledge_group_pass_full_refund_revocation_atomic',
+      expect.objectContaining({
+        p_ownership_id: OWNERSHIP_ID,
+        p_subscription_id: GROUP_SUBSCRIPTION_ID,
+        p_refund_snapshot_event_id: refundEvent.eventId,
+        p_refund_succeeded_amount: 2500,
+        p_revocation_action_reference: expect.stringMatching(/^stripe-refund:[0-9a-f]{64}$/),
+      })
+    )
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'Charge refund revoked exact group pass payment authority',
+      expect.objectContaining({
+        ownershipId: OWNERSHIP_ID,
+        subscriptionId: GROUP_SUBSCRIPTION_ID,
+        status: 'acknowledged',
+      })
+    )
+  })
+
+  it('retries a group-pass full refund until exact access revocation is acknowledged', async () => {
+    configureRpc({
+      tombstoneData: {
+        status: 'manual_review',
+        record_status: 'recorded',
+        ownership_id: OWNERSHIP_ID,
+        product_kind: 'group_pass',
+        reason_key: 'group_pass_full_refund_revocation_required',
+        group_pass_subscription_id: GROUP_SUBSCRIPTION_ID,
+      },
+      groupRevocationError: { message: 'group revocation unavailable' },
+    })
+
+    await expect(handleChargeRefunded(refundedCharge(), refundEvent)).rejects.toThrow(
+      'Failed to revoke exact group pass refund authority: group revocation unavailable'
+    )
+  })
+
+  it('rejects a durable group-pass review without its immutable subscription identity', async () => {
     configureRpc({
       tombstoneData: {
         status: 'manual_review',
@@ -372,13 +452,10 @@ describe('refund webhook product ownership routing', () => {
       },
     })
 
-    await expect(handleChargeRefunded(refundedCharge(), refundEvent)).resolves.toBeUndefined()
-
-    expect(mockFrom).not.toHaveBeenCalled()
-    expect(mockLoggerWarn).toHaveBeenCalledWith(
-      'Charge refund reached a durable review state',
-      expect.objectContaining({ productKind: 'group_pass', status: 'manual_review' })
+    await expect(handleChargeRefunded(refundedCharge(), refundEvent)).rejects.toThrow(
+      /acknowledgement|ownership/
     )
+    expect(mockRpc).toHaveBeenCalledTimes(1)
   })
 
   it('accepts an opaque Refund id and a direct Charge when payment_intent is null', async () => {
@@ -406,7 +483,7 @@ describe('refund webhook product ownership routing', () => {
     expect(mockRetrieveRefund).toHaveBeenCalledWith('pyr_1234')
     expect(mockRetrievePaymentIntent).not.toHaveBeenCalled()
     expect(mockRpc).toHaveBeenCalledWith(
-      'record_charge_refund_tombstone_atomic',
+      'record_charge_refund_tombstone_with_mode_atomic',
       expect.objectContaining({ p_refund_succeeded_amount: 0, p_refund_state: 'failed' })
     )
   })
@@ -417,6 +494,7 @@ describe('refund webhook product ownership routing', () => {
     mockRetrievePaymentIntent.mockResolvedValueOnce({
       id: 'pi_refunded',
       latest_charge: 'ch_refunded',
+      livemode: true,
     } as Stripe.PaymentIntent)
     mockRetrieveCharge.mockResolvedValueOnce(
       refundedCharge({ amount_refunded: 0, refunded: false })
@@ -428,7 +506,7 @@ describe('refund webhook product ownership routing', () => {
     expect(mockRetrievePaymentIntent).toHaveBeenCalledWith('pi_refunded')
     expect(mockRetrieveCharge).toHaveBeenCalledWith('ch_refunded')
     expect(mockRpc).toHaveBeenCalledWith(
-      'record_charge_refund_tombstone_atomic',
+      'record_charge_refund_tombstone_with_mode_atomic',
       expect.objectContaining({ p_refund_succeeded_amount: 0, p_refund_state: 'pending' })
     )
   })
@@ -472,7 +550,7 @@ describe('refund webhook product ownership routing', () => {
     expect(mockRetrieveRefund).toHaveBeenCalledWith('re_updated')
     expect(mockRetrieveCharge).toHaveBeenCalledWith('ch_refunded')
     expect(mockRpc).toHaveBeenCalledWith(
-      'record_charge_refund_tombstone_atomic',
+      'record_charge_refund_tombstone_with_mode_atomic',
       expect.objectContaining({
         p_stripe_payment_intent_id: null,
         p_refund_succeeded_amount: 0,
@@ -513,7 +591,7 @@ describe('refund webhook product ownership routing', () => {
       [{ charge: 'ch_refunded', limit: 100, starting_after: 're_failed_cursor' }],
     ])
     expect(mockRpc).toHaveBeenCalledWith(
-      'record_charge_refund_tombstone_atomic',
+      'record_charge_refund_tombstone_with_mode_atomic',
       expect.objectContaining({ p_refund_succeeded_amount: 700, p_refund_state: 'pending' })
     )
   })
@@ -597,6 +675,7 @@ describe('refund webhook product ownership routing', () => {
     mockRetrievePaymentIntent.mockResolvedValueOnce({
       id: 'pi_refunded',
       latest_charge: 'ch_refunded',
+      livemode: true,
     } as Stripe.PaymentIntent)
     mockRetrieveCharge.mockResolvedValueOnce(
       refundedCharge({ amount_refunded: 0, refunded: false })
@@ -629,7 +708,7 @@ describe('refund webhook product ownership routing', () => {
     await handleRefundLifecycle(failedTrigger, refundEvent)
 
     expect(mockRpc).toHaveBeenCalledWith(
-      'record_charge_refund_tombstone_atomic',
+      'record_charge_refund_tombstone_with_mode_atomic',
       expect.objectContaining({
         p_refund_succeeded_amount: 2500,
         p_refund_state: 'succeeded',
@@ -756,6 +835,7 @@ describe('refund webhook product ownership routing', () => {
       handleRefundLifecycle(refundObject(), {
         eventId: 'not-an-event',
         eventCreatedAt: refundEvent.eventCreatedAt,
+        livemode: true,
       })
     ).resolves.toBeUndefined()
 

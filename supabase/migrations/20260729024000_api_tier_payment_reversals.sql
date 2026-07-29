@@ -2646,6 +2646,7 @@ AS $function$
 DECLARE
   v_result jsonb;
   v_event_created bigint;
+  v_group_subscription_id uuid;
 BEGIN
   IF COALESCE((SELECT auth.role()), '') IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'service role required' USING ERRCODE = '42501';
@@ -2726,6 +2727,44 @@ BEGIN
     p_refund_event_id,
     p_refund_event_created_at
   );
+
+  -- The legacy resolver deliberately opens a durable review before revoking a
+  -- paid group pass. Return the immutable subscription identity to the
+  -- webhook so it can invoke the existing exact revocation RPC. Never make
+  -- the application infer this UUID from mutable membership or subscription
+  -- rows.
+  IF COALESCE(v_result ->> 'status', '') = 'manual_review'
+    AND COALESCE(v_result ->> 'product_kind', '') = 'group_pass'
+    AND COALESCE(v_result ->> 'reason_key', '') =
+      'group_pass_full_refund_revocation_required'
+  THEN
+    SELECT consumption.subscription_id
+    INTO v_group_subscription_id
+    FROM public.stripe_payment_ownerships AS ownership
+    JOIN public.group_payment_consumptions AS consumption
+      ON consumption.id = ownership.ledger_id
+    WHERE ownership.id::text = v_result ->> 'ownership_id'
+      AND ownership.product_kind = 'group_pass'
+      AND ownership.stripe_charge_id = p_stripe_charge_id
+      AND ownership.stripe_customer_id = p_stripe_customer_id
+      AND ownership.stripe_payment_intent_id
+        IS NOT DISTINCT FROM p_stripe_payment_intent_id
+      AND ownership.amount_paid = p_amount_paid
+      AND ownership.currency = pg_catalog.lower(p_currency)
+      AND consumption.stripe_charge_id = p_stripe_charge_id
+      AND consumption.stripe_customer_id = p_stripe_customer_id
+      AND consumption.outcome IN ('activated', 'renewed');
+
+    IF v_group_subscription_id IS NULL THEN
+      RAISE EXCEPTION
+        'group pass full refund has no exact immutable subscription identity'
+        USING ERRCODE = '23514';
+    END IF;
+
+    v_result := v_result || pg_catalog.jsonb_build_object(
+      'group_pass_subscription_id', v_group_subscription_id
+    );
+  END IF;
 
   IF COALESCE(v_result ->> 'product_kind', '') = 'api_tier'
     AND COALESCE((v_result ->> 'api_tier_livemode')::boolean, NOT p_livemode)
