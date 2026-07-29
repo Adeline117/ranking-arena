@@ -5,10 +5,9 @@ const route = readFileSync(join(process.cwd(), 'app/api/cron/snapshot-ranks/rout
 
 describe('rank history snapshot authority', () => {
   it('reads every period from one sealed public generation', () => {
-    expect(route).toContain('filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)')
-    expect(route).toContain('readSealedRankingGeneration(')
-    expect(route).toContain('{ season: period, sources: SNAPSHOT_RANKING_SOURCES }')
-    expect(route).toContain(".in('source', SNAPSHOT_RANKING_SOURCES)")
+    expect(route).toContain('readSealedRankingAuthorityGeneration(')
+    expect(route).toContain('const authoritySources = publication.proofs.map')
+    expect(route).toContain(".in('source', authoritySources)")
     expect(route).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
     expect(route).toContain('!isPublicRankingSourceAllowed(row.source)')
   })

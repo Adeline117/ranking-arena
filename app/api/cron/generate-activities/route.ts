@@ -10,17 +10,10 @@ import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 import { withCron } from '@/lib/api/with-cron'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const log = createLogger('cron:generate-activities')
-const ACTIVITY_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -65,14 +58,15 @@ export const GET = withCron('generate-activities', async (_request: NextRequest)
   }> = []
 
   // Fetch top traders from one stable public generation.
-  const sealedRead = await readSealedRankingGeneration(
+  const sealedRead = await readSealedRankingAuthorityGeneration(
     supabase,
-    { season: '90D', sources: ACTIVITY_RANKING_SOURCES },
+    '90D',
     async (publication) => {
+      const authoritySources = publication.proofs.map((proof) => proof.source)
       const { data, error } = await supabase
         .from('leaderboard_ranks')
         .select('source, source_trader_id, handle, avatar_url, rank, arena_score, roi, pnl')
-        .in('source', ACTIVITY_RANKING_SOURCES)
+        .in('source', authoritySources)
         .eq('season_id', '90D')
         .filter('rank_publication_id', 'eq', publication.scoreCohortId)
         .gt('arena_score', 0)

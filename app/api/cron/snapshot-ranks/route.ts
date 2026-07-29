@@ -11,12 +11,8 @@ import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 import { withCron } from '@/lib/api/with-cron'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const log = createLogger('cron:snapshot-ranks')
 
@@ -27,9 +23,6 @@ const PERIODS = ['7D', '30D', '90D'] as const
 const TOP_N = 500
 const RETAIN_DAYS = 30
 const UPSERT_BATCH = 500
-const SNAPSHOT_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 export const GET = withCron('snapshot-ranks', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin()
@@ -39,14 +32,15 @@ export const GET = withCron('snapshot-ranks', async (_request: NextRequest) => {
   // Parallel fetch + upsert across all 3 periods (was serial)
   const periodResults = await Promise.all(
     PERIODS.map(async (period) => {
-      const sealedRows = await readSealedRankingGeneration(
+      const sealedRows = await readSealedRankingAuthorityGeneration(
         supabase,
-        { season: period, sources: SNAPSHOT_RANKING_SOURCES },
+        period,
         async (publication) => {
+          const authoritySources = publication.proofs.map((proof) => proof.source)
           const { data, error } = await supabase
             .from('leaderboard_ranks')
             .select('source, source_trader_id, rank, arena_score')
-            .in('source', SNAPSHOT_RANKING_SOURCES)
+            .in('source', authoritySources)
             .eq('season_id', period)
             .filter('rank_publication_id', 'eq', publication.scoreCohortId)
             .not('rank', 'is', null)
