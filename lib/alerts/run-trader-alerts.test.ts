@@ -1,13 +1,19 @@
 import { runTraderAlerts } from './run-trader-alerts'
 
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
-  readSealedRankingGeneration: jest.fn(
+  readSealedRankingAuthorityGeneration: jest.fn(
     async (
       _client: unknown,
-      _input: unknown,
-      reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+      _season: unknown,
+      reader: (publication: {
+        scoreCohortId: string
+        proofs: Array<{ source: string }>
+      }) => Promise<unknown>
     ) => ({
-      value: await reader({ scoreCohortId: 'sealed-cohort' }),
+      value: await reader({
+        scoreCohortId: 'sealed-cohort',
+        proofs: [{ source: 'binance_futures' }],
+      }),
       publication: {},
       publicationIdentity: 'sealed-publication',
     })

@@ -19,13 +19,19 @@ jest.mock('@/lib/supabase/server', () => ({
   }),
 }))
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
-  readSealedRankingGeneration: async (
+  readSealedRankingAuthorityGeneration: async (
     _supabase: unknown,
-    _request: unknown,
-    reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+    _season: unknown,
+    reader: (publication: {
+      scoreCohortId: string
+      proofs: Array<{ source: string }>
+    }) => Promise<unknown>
   ) => ({
-    publication: { scoreCohortId: 'cohort-1', proofs: [] },
-    value: await reader({ scoreCohortId: 'cohort-1' }),
+    publication: { scoreCohortId: 'cohort-1', proofs: [{ source: 'bybit' }] },
+    value: await reader({
+      scoreCohortId: 'cohort-1',
+      proofs: [{ source: 'bybit' }],
+    }),
   }),
 }))
 jest.mock('@/lib/utils/logger', () => ({

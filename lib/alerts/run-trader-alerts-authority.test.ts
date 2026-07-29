@@ -8,10 +8,9 @@ const runBody = implementation.slice(
 
 describe('trader alert ranking authority', () => {
   it('reads observations from one sealed public generation', () => {
-    expect(implementation).toContain('filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)')
-    expect(implementation).toContain('readSealedRankingGeneration(')
-    expect(implementation).toContain("{ season: '90D', sources: ALERT_RANKING_SOURCES }")
-    expect(implementation).toContain(".in('source', ALERT_RANKING_SOURCES)")
+    expect(implementation).toContain('readSealedRankingAuthorityGeneration(')
+    expect(implementation).toContain('const authoritySources = publication.proofs.map')
+    expect(implementation).toContain(".in('source', authoritySources)")
     expect(implementation).toContain(
       ".filter('rank_publication_id', 'eq', publication.scoreCohortId)"
     )

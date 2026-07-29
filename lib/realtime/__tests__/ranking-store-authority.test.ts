@@ -5,9 +5,9 @@ const store = readFileSync(join(process.cwd(), 'lib/realtime/ranking-store.ts'),
 
 describe('sealed Redis ranking cache authority', () => {
   it('rebuilds from one stable sealed publication generation', () => {
-    expect(store).toContain('readSealedRankingGeneration(')
-    expect(store).toContain('{ season, sources: SYNC_RANKING_SOURCES }')
-    expect(store).toContain(".in('source', SYNC_RANKING_SOURCES)")
+    expect(store).toContain('readSealedRankingAuthorityGeneration(')
+    expect(store).toContain('const authoritySources = publication.proofs.map')
+    expect(store).toContain(".in('source', authoritySources)")
     expect(store).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
     expect(store).toContain(".order('arena_score', { ascending: false })")
     expect(store).toContain(".order('source', { ascending: true })")

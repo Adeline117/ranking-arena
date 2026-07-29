@@ -15,22 +15,17 @@ import { getSharedRedis } from '@/lib/cache/redis-client'
 import { createLogger } from '@/lib/utils/logger'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import {
-  filterPublicRankingSources,
   isPublicRankingSourceAllowed,
   publicRankingCacheKey,
 } from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import type { LeaderboardPublicationSeason } from '@/lib/rankings/read-publication-proofs'
 
 const logger = createLogger('ranking-store')
 
 const REDIS_KEY_PREFIX = 'ranking:sealed-v1'
 const TTL_SECONDS = 2 * 60 * 60 // 2 hours
-const SYNC_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 function redisKey(period: string): string {
   return publicRankingCacheKey(`${REDIS_KEY_PREFIX}:${period.toUpperCase()}`)
@@ -225,10 +220,11 @@ export async function syncSortedSetFromLeaderboard(
     const season = parsePublicationSeason(period)
     const key = redisKey(season)
     const hashKey = detailHashKey(season)
-    const sealedRead = await readSealedRankingGeneration(
+    const sealedRead = await readSealedRankingAuthorityGeneration(
       supabase,
-      { season, sources: SYNC_RANKING_SOURCES },
+      season,
       async (publication) => {
+        const authoritySources = publication.proofs.map((proof) => proof.source)
         const rows: Array<Record<string, unknown>> = []
         let offset = 0
         const PAGE_SIZE = 1000
@@ -237,7 +233,7 @@ export async function syncSortedSetFromLeaderboard(
           const { data, error } = await supabase
             .from('leaderboard_ranks')
             .select(SYNC_SELECT_FIELDS)
-            .in('source', SYNC_RANKING_SOURCES)
+            .in('source', authoritySources)
             .eq('season_id', season)
             .filter('rank_publication_id', 'eq', publication.scoreCohortId)
             .gt('arena_score', 0)

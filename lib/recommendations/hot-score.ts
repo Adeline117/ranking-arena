@@ -12,12 +12,8 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
-import {
-  filterPublicRankingRows,
-  filterPublicRankingSources,
-} from '@/lib/rankings/publication-policy'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { filterPublicRankingRows } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const logger = createLogger('hot-score')
 
@@ -61,7 +57,6 @@ const WEIGHTS = {
 
 /** How many hours back to look for "recent" snapshots */
 const LOOKBACK_HOURS = 48
-const HOT_RANKING_SOURCES = Object.freeze(filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES))
 
 // ---------------------------------------------------------------------------
 // Supabase helper
@@ -107,10 +102,11 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
   // valid candidates even if they are removed later.
   let ranks: RankRow[]
   try {
-    const sealedRead = await readSealedRankingGeneration(
+    const sealedRead = await readSealedRankingAuthorityGeneration(
       supabase,
-      { season: '90D', sources: HOT_RANKING_SOURCES },
+      '90D',
       async (publication) => {
+        const authoritySources = publication.proofs.map((proof) => proof.source)
         const { data, error } = await supabase
           .from('leaderboard_ranks')
           .select(
@@ -118,7 +114,7 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
           )
           .eq('season_id', '90D')
           .filter('rank_publication_id', 'eq', publication.scoreCohortId)
-          .in('source', HOT_RANKING_SOURCES)
+          .in('source', authoritySources)
           .not('arena_score', 'is', null)
           .or('is_outlier.is.null,is_outlier.eq.false')
           .order('arena_score', { ascending: false })
