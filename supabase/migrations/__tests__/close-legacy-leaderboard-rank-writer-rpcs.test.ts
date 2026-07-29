@@ -50,9 +50,10 @@ describe('legacy leaderboard rank writer RPC closure', () => {
     const quarantined = migrationNames('QUARANTINED_PREDEPLOY_MIGRATIONS')
     const superseded = migrationNames('SUPERSEDED_MIGRATIONS')
 
-    expect(postdeploy.slice(-2)).toEqual([
+    expect(postdeploy.slice(-3)).toEqual([
       '20260729152000_close_leaderboard_rank_direct_writes.sql',
       migrationName,
+      '20260729154000_close_leaderboard_publication_authority.sql',
     ])
     expect(postdeploy.filter((name) => name === migrationName)).toHaveLength(1)
     for (const phase of [predeploy, recoveryPrerequisites, recovery, quarantined, superseded]) {
