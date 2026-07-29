@@ -163,14 +163,19 @@ export async function getTraderAvoidVotes(
 
   if (!data || data.length === 0) return []
 
-  // 获取投票者信息
+  // This function is served through a public service-role endpoint. Enrich only
+  // from the public projection so private/deleted profiles cannot be disclosed
+  // by an avoid-list vote.
   const userIds = Array.from(new Set(data.map((v) => v.user_id)))
   const { data: profiles, error: profilesError } = await supabase
-    .from('user_profiles')
+    .from('public_user_profiles')
     .select('id, handle, avatar_url')
     .in('id', userIds)
   if (profilesError)
-    logger.warn('[getTraderAvoidVotes] user_profiles query error (drift?):', profilesError.message)
+    logger.warn(
+      '[getTraderAvoidVotes] public_user_profiles query error (drift?):',
+      profilesError.message
+    )
 
   const profileMap = new Map<string, { handle: string; avatar_url: string | null }>()
   profiles?.forEach((p) => {
