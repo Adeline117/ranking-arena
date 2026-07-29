@@ -1,6 +1,10 @@
 /**
- * 验证 Stripe Checkout Session 并同步订阅状态
- * 用于本地开发或 webhook 失败时的备用方案
+ * 验证 Stripe Checkout Session 并同步订阅投影。
+ *
+ * Checkout/Subscription 对象本身不是 recurring 付款证明：退款后原 Session
+ * 仍然是 paid，Subscription 也可以继续保持 active。recurring 路径因此只会
+ * 确认 webhook 已持久化的 exact payment/trial authority，绝不从 Stripe
+ * Subscription 直接铸造本地权益。
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -35,6 +39,23 @@ function getPlanFromPriceId(priceId: string): 'monthly' | 'yearly' | null {
 }
 
 const logger = createLogger('stripe-verify-session')
+
+function timestampMatches(left: string | null, right: string | null): boolean {
+  if (left === null || right === null) return left === right
+  const leftTime = Date.parse(left)
+  const rightTime = Date.parse(right)
+  return Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime === rightTime
+}
+
+function recurringAuthorityPending() {
+  return NextResponse.json(
+    {
+      error: 'Payment confirmation is still processing or is no longer eligible.',
+      code: 'RECURRING_ENTITLEMENT_NOT_READY',
+    },
+    { status: 409 }
+  )
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -118,8 +139,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const userId = session.metadata?.supabase_user_id || session.metadata?.userId
-    const customerId = session.customer as string
+    const metadataSupabaseUserId = session.metadata?.supabase_user_id
+    const metadataUserId = session.metadata?.userId
+    if (metadataSupabaseUserId && metadataUserId && metadataSupabaseUserId !== metadataUserId) {
+      return NextResponse.json({ error: 'Checkout identity is inconsistent' }, { status: 400 })
+    }
+    const userId = metadataSupabaseUserId || metadataUserId
     const plan = session.metadata?.plan
 
     if (!userId) {
@@ -182,24 +207,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // session.subscription 在未 expand 时始终是 string | null
-    const subscriptionId = session.subscription as string | null
+    // This retrieval intentionally did not expand Subscription or Customer.
+    // Refuse an unexpected object shape instead of coercing it into an ID.
+    const subscriptionId = typeof session.subscription === 'string' ? session.subscription : null
+    const sessionCustomerId = typeof session.customer === 'string' ? session.customer : null
 
-    if (!subscriptionId) {
-      return NextResponse.json({ error: 'Subscription ID not found in session' }, { status: 400 })
+    if (!subscriptionId || !sessionCustomerId || session.status !== 'complete') {
+      return NextResponse.json(
+        { error: 'Checkout subscription identity is incomplete' },
+        { status: 400 }
+      )
     }
 
-    // 获取订阅详情
+    // Stripe remains useful for checking the current product and object
+    // identity, but it must never be the authority that grants recurring Pro.
     const tier = 'pro' as const
     let verifiedPlan: 'monthly' | 'yearly' | null = null
     let periodStart: string | null = null
     let periodEnd: string | null = null
     let subscriptionStatus = 'active'
-    let cancelAtPeriodEnd = false
 
     try {
       const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-      const priceId = subscription.items.data[0]?.price.id || ''
+      const subscriptionCustomerId =
+        typeof subscription.customer === 'string' ? subscription.customer : null
+      const item = subscription.items.data.length === 1 ? subscription.items.data[0] : null
+      const priceId = item?.price.id || ''
       verifiedPlan = getPlanFromPriceId(priceId)
       if (!verifiedPlan) {
         logger.error('verify-session encountered unknown Stripe price', {
@@ -212,13 +245,18 @@ export async function POST(request: NextRequest) {
         )
       }
       subscriptionStatus = subscription.status
-      cancelAtPeriodEnd = subscription.cancel_at_period_end
 
       // 检查订阅状态
-      if (subscription.status !== 'active' && subscription.status !== 'trialing') {
+      if (
+        subscription.id !== subscriptionId ||
+        subscriptionCustomerId !== sessionCustomerId ||
+        item?.quantity !== 1 ||
+        plan !== verifiedPlan ||
+        (subscription.status !== 'active' && subscription.status !== 'trialing')
+      ) {
         return NextResponse.json(
           {
-            error: 'Subscription is not active',
+            error: 'Subscription identity is not eligible',
             status: subscription.status,
           },
           { status: 400 }
@@ -226,9 +264,8 @@ export async function POST(request: NextRequest) {
       }
 
       // Stripe API 2026-04-22 exposes billing periods on subscription items.
-      const itemPeriod = subscription.items.data[0]
-      const pStart = itemPeriod?.current_period_start
-      const pEnd = itemPeriod?.current_period_end
+      const pStart = item.current_period_start
+      const pEnd = item.current_period_end
       if (pStart) {
         periodStart = new Date(pStart * 1000).toISOString()
       }
@@ -260,24 +297,133 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { error: syncError } = await supabaseAdmin.rpc('update_subscription_and_profile', {
-      p_user_id: userId,
-      p_tier: tier,
-      p_status: subscriptionStatus,
-      p_stripe_sub_id: subscriptionId,
-      p_stripe_customer_id: customerId,
-      p_plan: verifiedPlan,
-      p_period_start: periodStart,
-      p_period_end: periodEnd,
-      p_cancel_at_period_end: cancelAtPeriodEnd,
-    })
-
-    if (syncError) {
-      logger.error('Atomic subscription verification sync failed', { error: syncError, userId })
-      return NextResponse.json({ error: 'Failed to activate subscription' }, { status: 500 })
+    const { data: localSubscription, error: localSubscriptionError } = await supabaseAdmin
+      .from('subscriptions')
+      .select(
+        'user_id,tier,status,plan,stripe_subscription_id,stripe_customer_id,current_period_start,current_period_end,entitlement_payment_id,entitlement_trial_id'
+      )
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (localSubscriptionError) {
+      logger.error('Exact recurring subscription lookup failed', {
+        error: localSubscriptionError.message,
+        userId,
+      })
+      return NextResponse.json(
+        { error: 'Unable to verify recurring payment authority. Please retry.' },
+        { status: 503 }
+      )
     }
 
-    logger.info('Updated subscription', { userId, tier })
+    if (
+      !localSubscription ||
+      localSubscription.user_id !== userId ||
+      localSubscription.tier !== 'pro' ||
+      localSubscription.status !== subscriptionStatus ||
+      localSubscription.plan !== verifiedPlan ||
+      localSubscription.stripe_subscription_id !== subscriptionId ||
+      localSubscription.stripe_customer_id !== sessionCustomerId ||
+      !timestampMatches(localSubscription.current_period_start, periodStart) ||
+      !timestampMatches(localSubscription.current_period_end, periodEnd)
+    ) {
+      return recurringAuthorityPending()
+    }
+
+    let exactBindingPresent = false
+    if (localSubscription.entitlement_payment_id) {
+      const { data: payment, error: paymentError } = await supabaseAdmin
+        .from('stripe_entitlement_payments')
+        .select(
+          'id,user_id,payment_kind,payment_status,plan,stripe_customer_id,stripe_subscription_id,period_start,period_end,refund_state,refund_succeeded_amount,amount_paid'
+        )
+        .eq('id', localSubscription.entitlement_payment_id)
+        .maybeSingle()
+      if (paymentError) {
+        logger.error('Exact recurring payment lookup failed', {
+          error: paymentError.message,
+          userId,
+        })
+        return NextResponse.json(
+          { error: 'Unable to verify recurring payment authority. Please retry.' },
+          { status: 503 }
+        )
+      }
+      exactBindingPresent =
+        !!payment &&
+        payment.id === localSubscription.entitlement_payment_id &&
+        payment.user_id === userId &&
+        payment.payment_kind === 'recurring' &&
+        (payment.payment_status === 'paid' || payment.payment_status === 'succeeded') &&
+        payment.plan === verifiedPlan &&
+        payment.stripe_customer_id === sessionCustomerId &&
+        payment.stripe_subscription_id === subscriptionId &&
+        timestampMatches(payment.period_start, periodStart) &&
+        timestampMatches(payment.period_end, periodEnd) &&
+        !(
+          payment.refund_state === 'succeeded' &&
+          payment.refund_succeeded_amount >= payment.amount_paid
+        )
+    } else if (subscriptionStatus === 'trialing' && localSubscription.entitlement_trial_id) {
+      const { data: trial, error: trialError } = await supabaseAdmin
+        .from('stripe_trial_entitlements')
+        .select(
+          'id,user_id,stripe_customer_id,stripe_subscription_id,plan,period_start,period_end,revoked_at'
+        )
+        .eq('id', localSubscription.entitlement_trial_id)
+        .maybeSingle()
+      if (trialError) {
+        logger.error('Exact recurring trial lookup failed', {
+          error: trialError.message,
+          userId,
+        })
+        return NextResponse.json(
+          { error: 'Unable to verify recurring payment authority. Please retry.' },
+          { status: 503 }
+        )
+      }
+      exactBindingPresent =
+        !!trial &&
+        trial.id === localSubscription.entitlement_trial_id &&
+        trial.user_id === userId &&
+        trial.stripe_customer_id === sessionCustomerId &&
+        trial.stripe_subscription_id === subscriptionId &&
+        trial.plan === verifiedPlan &&
+        timestampMatches(trial.period_start, periodStart) &&
+        timestampMatches(trial.period_end, periodEnd) &&
+        trial.revoked_at === null
+    }
+
+    if (!exactBindingPresent) {
+      logger.warn('Recurring Checkout replay has no current exact authority', {
+        userId,
+        subscriptionId,
+      })
+      return recurringAuthorityPending()
+    }
+
+    // This owner-only RPC rechecks payment/trial refund and expiry state inside
+    // its transaction before repairing the denormalized profile projection. A
+    // refund racing the reads above therefore still makes this request fail
+    // closed instead of reviving the legacy subscriptions row.
+    const { data: hasExactAuthority, error: syncError } = await supabaseAdmin.rpc(
+      'sync_current_pro_projection_atomic',
+      { p_user_id: userId }
+    )
+    if (syncError || typeof hasExactAuthority !== 'boolean') {
+      logger.error('Exact recurring entitlement projection sync failed', {
+        error: syncError?.message,
+        userId,
+      })
+      return NextResponse.json(
+        { error: 'Unable to verify recurring payment authority. Please retry.' },
+        { status: 503 }
+      )
+    }
+    if (!hasExactAuthority) {
+      return recurringAuthorityPending()
+    }
+
+    logger.info('Exact recurring subscription authority verified', { userId, subscriptionId })
 
     return NextResponse.json({
       success: true,
