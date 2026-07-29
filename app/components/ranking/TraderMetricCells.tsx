@@ -10,6 +10,7 @@ import { TRADER_TEXT_TERTIARY } from './shared/TraderDisplay'
 import { Sparkline } from './Sparkline'
 import { formatROI } from './utils'
 import Metric from '../ui/Metric'
+import { formatDrawdown, NULL_DISPLAY } from '@/lib/utils/format'
 import type { Trader } from './RankingTable'
 import {
   NA_STYLE,
@@ -115,6 +116,10 @@ export const TraderMetricCells = memo(function TraderMetricCells({
   // PnL
   const pnl = trader.pnl
   const hasPnl = pnl != null
+  const parsedDrawdown = trader.max_drawdown == null ? null : Number(trader.max_drawdown)
+  const drawdownDisplay = formatDrawdown(parsedDrawdown)
+  const hasDrawdown = drawdownDisplay !== NULL_DISPLAY
+  const drawdownValue = hasDrawdown ? -Math.abs(parsedDrawdown ?? 0) : null
 
   return (
     <>
@@ -175,15 +180,11 @@ export const TraderMetricCells = memo(function TraderMetricCells({
           Pre-formatted via `display` because the values are already in percent
           units (Metric's `percent` formatter would multiply by 100). */}
       <Box className="col-mdd" style={RIGHT_CELL_STYLE}>
-        {trader.max_drawdown != null && Number.isFinite(Number(trader.max_drawdown)) ? (
+        {hasDrawdown ? (
           <Metric
-            value={-Math.abs(Number(trader.max_drawdown))}
+            value={drawdownValue}
             format="percent"
-            display={`${trader.metrics_estimated ? '~' : ''}${
-              Math.abs(Number(trader.max_drawdown)) < 0.05
-                ? '< 0.1%'
-                : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}%`
-            }`}
+            display={`${trader.metrics_estimated ? '~' : ''}${drawdownDisplay}`}
             size="sm"
             align="right"
             showArrow

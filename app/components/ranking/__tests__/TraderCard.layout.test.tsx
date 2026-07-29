@@ -39,7 +39,19 @@ jest.mock('../shared/TraderDisplay', () => ({
   RankDisplay: ({ rank }: { rank: number }) => <span>{rank}</span>,
   TraderAvatar: () => <span>Avatar</span>,
   ScoreConfidenceIndicator: () => null,
-  MetricStat: ({ label }: { label: string }) => <span>{label}</span>,
+  MetricStat: ({
+    label,
+    value,
+    nullTooltip,
+  }: {
+    label: string
+    value?: React.ReactNode
+    nullTooltip?: string
+  }) => (
+    <span data-testid={`metric-${label}`} title={nullTooltip}>
+      {label}:{value ?? '—'}
+    </span>
+  ),
   areTraderPropsEqual: () => false,
   getScoreStyle: () => ({
     bgGradient: 'transparent',
@@ -106,5 +118,55 @@ describe('TraderCard narrow-card layout', () => {
 
     expect(criticalCss).toContain('.ranking-table-grid.ranking-row{display:grid')
     expect(criticalCss).not.toContain('\n.ranking-row{display:grid')
+  })
+
+  it.each([
+    [0, '0.0%'],
+    [0.01, '< 0.1%'],
+    [12.34, '-12.3%'],
+    [100.01, '—'],
+    [null, '—'],
+  ])('renders max drawdown %p as %s', (maxDrawdown, expected) => {
+    render(
+      <TraderCard
+        trader={{ ...trader, max_drawdown: maxDrawdown }}
+        rank={4}
+        language="en"
+        getMedalGlowClass={() => ''}
+        parseSourceInfo={() => ({
+          exchange: 'Binance',
+          type: 'Futures',
+          typeColor: '#777',
+        })}
+      />
+    )
+
+    expect(screen.getByTestId('metric-MDD')).toHaveTextContent(expected)
+    if (maxDrawdown === 0 || maxDrawdown == null || maxDrawdown > 100) {
+      expect(screen.getByTestId('metric-MDD')).not.toHaveTextContent('▼')
+    }
+    if (maxDrawdown == null || maxDrawdown > 100) {
+      expect(screen.getByTestId('metric-MDD')).toHaveAttribute('title')
+    }
+  })
+
+  it('labels estimated drawdown consistently with the table row', () => {
+    render(
+      <TraderCard
+        trader={{ ...trader, max_drawdown: 0, metrics_estimated: true }}
+        rank={4}
+        language="en"
+        getMedalGlowClass={() => ''}
+        parseSourceInfo={() => ({
+          exchange: 'Binance',
+          type: 'Futures',
+          typeColor: '#777',
+        })}
+      />
+    )
+
+    const mdd = screen.getByTestId('metric-MDD')
+    expect(mdd).toHaveTextContent('~0.0%')
+    expect(within(mdd).getByTitle('estimatedFromRoi')).toBeInTheDocument()
   })
 })
