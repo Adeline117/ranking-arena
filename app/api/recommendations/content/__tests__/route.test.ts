@@ -39,7 +39,7 @@ type QueryChain = Record<string, jest.Mock> & { then: Promise<QueryResult>['then
 
 function makeQuery(result: QueryResult): QueryChain {
   const chain = {} as QueryChain
-  for (const method of ['select', 'in', 'is', 'eq', 'gt', 'or', 'order']) {
+  for (const method of ['select', 'in', 'is', 'eq', 'filter', 'gt', 'or', 'order']) {
     chain[method] = jest.fn(() => chain)
   }
   chain.limit = jest.fn(async () => result)
@@ -51,6 +51,7 @@ const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 const mockGetAuthUser = jest.fn()
 const mockTieredGetOrSet = jest.fn()
+const mockReadSealedRankingGeneration = jest.fn()
 const mockHandleError = jest.fn((error: unknown) => {
   const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
   return NextResponse.json(
@@ -87,6 +88,10 @@ jest.mock('@/lib/data/service-post-audience', () => ({
   filterServiceReadablePostRows: jest.fn(async (_client, rows: unknown[]) => rows),
 }))
 
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+}))
+
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 
@@ -95,6 +100,17 @@ describe('GET /api/recommendations/content group discovery boundary', () => {
     jest.clearAllMocks()
     mockGetAuthUser.mockResolvedValue(null)
     mockRpc.mockResolvedValue({ data: [], error: null })
+    mockReadSealedRankingGeneration.mockImplementation(
+      async (
+        _client,
+        _input,
+        reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+      ) => ({
+        value: await reader({ scoreCohortId: 'cohort-1' }),
+        publication: { state: 'sealed' },
+        publicationIdentity: 'proof',
+      })
+    )
   })
 
   it('serves anonymous group recommendations from current groups, never the post cache', async () => {
@@ -209,6 +225,17 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
     jest.clearAllMocks()
     mockGetAuthUser.mockResolvedValue(null)
     mockRpc.mockResolvedValue({ data: [], error: null })
+    mockReadSealedRankingGeneration.mockImplementation(
+      async (
+        _client,
+        _input,
+        reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+      ) => ({
+        value: await reader({ scoreCohortId: 'cohort-1' }),
+        publication: { state: 'sealed' },
+        publicationIdentity: 'proof',
+      })
+    )
   })
 
   it('serves anonymous traders from current rank rows, never from the post cache', async () => {
@@ -230,6 +257,7 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
     expect(mockRpc).not.toHaveBeenCalled()
     expect(mockFrom).toHaveBeenCalledWith('leaderboard_ranks')
     expect(topQuery.eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(topQuery.filter).toHaveBeenCalledWith('rank_publication_id', 'eq', 'cohort-1')
     expect(topQuery.gt).toHaveBeenCalledWith('arena_score', 0)
     expect(topQuery.or).toHaveBeenCalledWith('is_outlier.is.null,is_outlier.eq.false')
     expect(body).toEqual({
@@ -262,7 +290,7 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
           arena_score: 70,
         },
         {
-          source: 'wrong_source',
+          source: 'bybit',
           source_trader_id: 'missing',
           handle: 'Wrong composite identity',
           arena_score: 60,
@@ -284,6 +312,7 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
       p_limit: 2,
     })
     expect(currentQuery.in).toHaveBeenCalledWith('source_trader_id', ['key:with-colon', 'missing'])
+    expect(currentQuery.filter).toHaveBeenCalledWith('rank_publication_id', 'eq', 'cohort-1')
     expect(body.data).toEqual({
       recommendations: [
         {
@@ -319,6 +348,30 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
 
     expect(response.status).toBe(500)
     expect(body).toEqual({ success: false, error: 'current traders unavailable' })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+  })
+
+  it('fails closed if a service-role rank read crosses the public source boundary', async () => {
+    mockFrom.mockReturnValueOnce(
+      makeQuery({
+        data: [
+          {
+            source: 'okx_web3_solana',
+            source_trader_id: 'quarantined',
+            arena_score: 99,
+          },
+        ],
+        error: null,
+      })
+    )
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/recommendations/content?type=trader&limit=1')
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body.error).toContain('crossed the public source boundary')
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
   })
 })
