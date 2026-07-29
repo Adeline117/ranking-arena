@@ -9,6 +9,21 @@ import type { NextRequest } from 'next/server'
 
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
+const SENDER_ID = '11111111-1111-4111-8111-111111111111'
+const RECEIVER_ID = '22222222-2222-4222-8222-222222222222'
+const CONVERSATION_ID = '33333333-3333-4333-8333-333333333333'
+
+function selectQuery(result: { data: unknown; error: { code?: string; message?: string } | null }) {
+  const query = {
+    select: jest.fn(),
+    eq: jest.fn(),
+    maybeSingle: jest.fn().mockResolvedValue(result),
+    single: jest.fn().mockResolvedValue(result),
+  }
+  query.select.mockReturnValue(query)
+  query.eq.mockReturnValue(query)
+  return query
+}
 
 // Mock dependencies
 jest.mock('next/server', () => {
@@ -37,7 +52,7 @@ jest.mock('@/lib/api/middleware', () => ({
   withAuth:
     (handler: (context: Record<string, unknown>) => Promise<unknown>) => (request: unknown) =>
       handler({
-        user: { id: '11111111-1111-4111-8111-111111111111' },
+        user: { id: SENDER_ID },
         supabase: { rpc: mockRpc, from: mockFrom },
         request,
       }),
@@ -114,7 +129,7 @@ describe('POST /api/messages/start', () => {
 
       const { POST } = await import('../route')
       const response = await POST({
-        json: async () => ({ receiverId: '22222222-2222-4222-8222-222222222222' }),
+        json: async () => ({ receiverId: RECEIVER_ID }),
       } as NextRequest)
 
       expect(response.status).toBe(403)
@@ -125,4 +140,111 @@ describe('POST /api/messages/start', () => {
       expect(mockFrom).not.toHaveBeenCalled()
     }
   )
+
+  test.each([
+    null,
+    {},
+    { allowed: 'yes' },
+    { allowed: true, reason: 'BLOCKED' },
+    { allowed: false },
+    { allowed: false, reason: 'LIMIT_REACHED', sent_count: 2 },
+  ])('fails closed for malformed permission acknowledgement %#', async (permission) => {
+    mockRpc.mockResolvedValue({ data: permission, error: null })
+
+    const { POST } = await import('../route')
+    const response = await POST({
+      json: async () => ({ receiverId: RECEIVER_ID }),
+    } as NextRequest)
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to check permissions',
+      error_code: 'PERMISSION_CHECK_FAILED',
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  test('does not create a conversation after an existing-conversation lookup error', async () => {
+    mockRpc.mockResolvedValue({ data: { allowed: true }, error: null })
+    const profileQuery = selectQuery({ data: { handle: 'receiver' }, error: null })
+    const conversationQuery = selectQuery({
+      data: null,
+      error: { code: '57014', message: 'query cancelled' },
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'user_profiles') return profileQuery
+      if (table === 'conversations') return conversationQuery
+      throw new Error(`Unexpected table: ${table}`)
+    })
+
+    const { POST } = await import('../route')
+    const response = await POST({
+      json: async () => ({ receiverId: RECEIVER_ID }),
+    } as NextRequest)
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({ error: 'Failed to find conversation' })
+    expect(conversationQuery.single).not.toHaveBeenCalled()
+  })
+
+  test('returns an identity-bound acknowledgement for the exact conversation pair', async () => {
+    mockRpc.mockResolvedValue({ data: { allowed: true, is_mutual: true }, error: null })
+    const profileQuery = selectQuery({ data: { handle: 'receiver' }, error: null })
+    const conversationQuery = selectQuery({
+      data: {
+        id: CONVERSATION_ID,
+        user1_id: SENDER_ID,
+        user2_id: RECEIVER_ID,
+        created_at: '2026-07-29T00:00:00.000Z',
+      },
+      error: null,
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'user_profiles') return profileQuery
+      if (table === 'conversations') return conversationQuery
+      throw new Error(`Unexpected table: ${table}`)
+    })
+
+    const { POST } = await import('../route')
+    const response = await POST({
+      json: async () => ({ receiverId: RECEIVER_ID }),
+    } as NextRequest)
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      conversation_id: CONVERSATION_ID,
+      sender_id: SENDER_ID,
+      receiver_id: RECEIVER_ID,
+      can_message: true,
+      is_mutual_follow: true,
+      message_limit: null,
+      receiver_handle: 'receiver',
+    })
+  })
+
+  test('rejects a conversation row belonging to a different user pair', async () => {
+    mockRpc.mockResolvedValue({ data: { allowed: true }, error: null })
+    const profileQuery = selectQuery({ data: { handle: 'receiver' }, error: null })
+    const conversationQuery = selectQuery({
+      data: {
+        id: CONVERSATION_ID,
+        user1_id: SENDER_ID,
+        user2_id: '44444444-4444-4444-8444-444444444444',
+      },
+      error: null,
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'user_profiles') return profileQuery
+      if (table === 'conversations') return conversationQuery
+      throw new Error(`Unexpected table: ${table}`)
+    })
+
+    const { POST } = await import('../route')
+    const response = await POST({
+      json: async () => ({ receiverId: RECEIVER_ID }),
+    } as NextRequest)
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({ error: 'Unable to create conversation' })
+  })
 })

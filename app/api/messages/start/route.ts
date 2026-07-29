@@ -19,6 +19,25 @@ const StartConversationSchema = z.object({
   receiverId: z.string().uuid('Invalid receiver ID'),
 })
 
+const DmPermissionSchema = z
+  .object({
+    allowed: z.boolean(),
+    reason: z.string().min(1).nullable().optional(),
+    is_mutual: z.boolean().optional(),
+    receiver_replied: z.boolean().optional(),
+    sent_count: z.number().int().nonnegative().optional(),
+  })
+  .passthrough()
+
+const ConversationSchema = z
+  .object({
+    id: z.string().uuid(),
+    user1_id: z.string().uuid(),
+    user2_id: z.string().uuid(),
+    created_at: z.string().optional(),
+  })
+  .passthrough()
+
 export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
@@ -66,22 +85,34 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Failed to check permissions' }, { status: 500 })
     }
 
-    if (!permCheck) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const parsedPermission = DmPermissionSchema.safeParse(permCheck)
+    if (
+      !parsedPermission.success ||
+      (parsedPermission.data.allowed && parsedPermission.data.reason != null) ||
+      (!parsedPermission.data.allowed && !parsedPermission.data.reason) ||
+      (parsedPermission.data.reason === 'LIMIT_REACHED' &&
+        (parsedPermission.data.sent_count ?? 0) < 3)
+    ) {
+      logger.error('[Start Message API] Invalid check_dm_permission response:', permCheck)
+      return NextResponse.json(
+        { error: 'Failed to check permissions', error_code: 'PERMISSION_CHECK_FAILED' },
+        { status: 500 }
+      )
     }
 
-    const canMessage = permCheck.allowed !== false
-    const isMutualFollow = permCheck.is_mutual || false
+    const permission = parsedPermission.data
+    const canMessage = permission.allowed
+    const isMutualFollow = permission.is_mutual === true
 
     let messageLimit = null
-    if (permCheck.reason === 'LIMIT_REACHED') {
-      messageLimit = { reached: true, sent: permCheck.sent_count || 3, max: 3 }
-    } else if (permCheck.reason === 'DM_DISABLED') {
+    if (permission.reason === 'LIMIT_REACHED') {
+      messageLimit = { reached: true, sent: permission.sent_count!, max: 3 }
+    } else if (permission.reason === 'DM_DISABLED') {
       return NextResponse.json(
         { error: 'This user has disabled direct messages', error_code: 'PERMISSION_DENIED' },
         { status: 403 }
       )
-    } else if (permCheck.reason === 'USER_NOT_FOUND') {
+    } else if (permission.reason === 'USER_NOT_FOUND') {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     } else if (!canMessage) {
       // BLOCKED, SENDER_UNAVAILABLE and future denial reasons must fail closed.
@@ -90,9 +121,9 @@ export const POST = withAuth(
         { error: 'Permission denied', error_code: 'PERMISSION_DENIED' },
         { status: 403 }
       )
-    } else if (!permCheck.is_mutual) {
+    } else if (!isMutualFollow && typeof permission.sent_count === 'number') {
       // Non-mutual sender with capacity remaining.
-      messageLimit = { reached: false, sent: permCheck.sent_count || 0, max: 3 }
+      messageLimit = { reached: false, sent: permission.sent_count, max: 3 }
     }
 
     // Get receiver handle for response
@@ -106,12 +137,19 @@ export const POST = withAuth(
     const orderedUser1 = senderId < receiverId ? senderId : receiverId
     const orderedUser2 = senderId < receiverId ? receiverId : senderId
 
-    let { data: conversation } = await supabase
+    const { data: existingConversation, error: existingConversationError } = await supabase
       .from('conversations')
       .select('id, user1_id, user2_id, created_at')
       .eq('user1_id', orderedUser1)
       .eq('user2_id', orderedUser2)
       .maybeSingle()
+
+    if (existingConversationError) {
+      logger.error('[Start Message API] 查询会话错误:', existingConversationError)
+      return NextResponse.json({ error: 'Failed to find conversation' }, { status: 500 })
+    }
+
+    let conversation: unknown = existingConversation
 
     // 如果会话不存在，创建新会话
     if (!conversation) {
@@ -124,12 +162,16 @@ export const POST = withAuth(
       if (convError) {
         // 如果是并发创建导致的重复，再次查询
         if (convError.code === '23505') {
-          const { data: existingConv } = await supabase
+          const { data: existingConv, error: existingConvError } = await supabase
             .from('conversations')
             .select('id, user1_id, user2_id, created_at')
             .eq('user1_id', orderedUser1)
             .eq('user2_id', orderedUser2)
             .single()
+          if (existingConvError) {
+            logger.error('[Start Message API] 并发查询会话错误:', existingConvError)
+            return NextResponse.json({ error: 'Failed to find conversation' }, { status: 500 })
+          }
           conversation = existingConv
         } else {
           logger.error('[Start Message API] 创建会话错误:', convError)
@@ -140,21 +182,30 @@ export const POST = withAuth(
       }
     }
 
-    if (!conversation) {
+    const parsedConversation = ConversationSchema.safeParse(conversation)
+    if (
+      !parsedConversation.success ||
+      parsedConversation.data.user1_id !== orderedUser1 ||
+      parsedConversation.data.user2_id !== orderedUser2
+    ) {
+      logger.error('[Start Message API] Invalid conversation acknowledgement:', conversation)
       return NextResponse.json({ error: 'Unable to create conversation' }, { status: 500 })
     }
+    const acknowledgedConversation = parsedConversation.data
 
     // 追踪会话创建/获取
     traceMessage({
       event: 'conversation_created',
-      conversationId: conversation.id,
+      conversationId: acknowledgedConversation.id,
       senderId,
       receiverId,
       metadata: { isMutualFollow },
     })
 
     return NextResponse.json({
-      conversation_id: conversation.id,
+      conversation_id: acknowledgedConversation.id,
+      sender_id: senderId,
+      receiver_id: receiverId,
       can_message: canMessage,
       is_mutual_follow: isMutualFollow,
       message_limit: messageLimit,
