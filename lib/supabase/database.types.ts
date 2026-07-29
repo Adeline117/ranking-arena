@@ -12920,6 +12920,19 @@ export type Database = {
           removed_trader_id: string
         }[]
       }
+      update_group_channel_metadata_atomic: {
+        Args: {
+          p_actor_id: string
+          p_avatar_url: string | null
+          p_avatar_url_present: boolean
+          p_channel_id: string
+          p_description: string | null
+          p_description_present: boolean
+          p_name: string | null
+          p_name_present: boolean
+        }
+        Returns: Json
+      }
       update_verified_trader_profile_cas: {
         Args: {
           p_expected_version: number
