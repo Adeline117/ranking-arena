@@ -7,12 +7,10 @@
  * page. Fires POST /api/presence (updates user_profiles.last_seen_at +
  * is_online) once on sign-in and every 60s thereafter.
  *
- * WHY THIS EXISTS: the only other caller of /api/presence is usePresence(),
- * which is mounted ONLY inside /messages/[conversationId] and
- * /channels/[channelId]. Virtually no user ever opens a DM/channel, so
- * last_seen_at stayed NULL for every account — the app's active-user sensor
- * was dead. This component makes the sensor fire for all logged-in users,
- * regardless of which page they're on. (See docs/USER_TRUTH_2026-07.md.)
+ * WHY THIS EXISTS: room-scoped usePresence tracks ephemeral Realtime state,
+ * but durable last_seen_at must be refreshed for every authenticated user,
+ * including people who never open a DM/channel. This global component is the
+ * single heartbeat owner. (See docs/USER_TRUTH_2026-07.md.)
  *
  * Behavior:
  * - Beats on mount (if signed in), on auth → signed-in transition, and every

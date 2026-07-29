@@ -1,4 +1,5 @@
 import type { RealtimeChannel, RealtimeClient } from '@supabase/supabase-js'
+import type { RealtimeChannelOptions } from '@supabase/realtime-js'
 import { logger } from '@/lib/logger'
 
 type OwnedRealtimeChannelClient = Pick<RealtimeClient, 'channel' | 'getChannels' | 'removeChannel'>
@@ -451,11 +452,13 @@ export function removeOwnedRealtimeChannels(
  */
 export function subscribeOwnedRealtimeChannel(options: {
   client: OwnedRealtimeClient
+  channelOptions?: RealtimeChannelOptions
   configure: (channel: RealtimeChannel) => void
   context: string
+  onSubscribeStatus?: Parameters<RealtimeChannel['subscribe']>[0]
   topic: string
 }): RealtimeChannel | null {
-  const { client, configure, context, topic } = options
+  const { channelOptions, client, configure, context, onSubscribeStatus, topic } = options
   let before: Set<RealtimeChannel>
 
   try {
@@ -468,7 +471,7 @@ export function subscribeOwnedRealtimeChannel(options: {
   let channel: RealtimeChannel | null = null
   try {
     // Keep the physical handle before either `.on()` or `.subscribe()` runs.
-    channel = client.channel(topic)
+    channel = client.channel(topic, channelOptions)
     if (before.has(channel)) {
       logRealtimeFailure(
         `${context}:topic-collision`,
@@ -478,7 +481,11 @@ export function subscribeOwnedRealtimeChannel(options: {
     }
 
     configure(channel)
-    channel.subscribe()
+    if (onSubscribeStatus) {
+      channel.subscribe(onSubscribeStatus)
+    } else {
+      channel.subscribe()
+    }
     return channel
   } catch (error) {
     let ownedChannels: RealtimeChannel[] = []

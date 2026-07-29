@@ -1,182 +1,272 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase/client'
+import {
+  removeOwnedRealtimeChannels,
+  subscribeOwnedRealtimeChannel,
+  type OwnedRealtimeClient,
+} from '@/lib/realtime/owned-channel'
+import { fireAndForget } from '@/lib/logger'
 
-function getPresenceShard(userId: string): string {
-  let hash = 0
-  for (let i = 0; i < userId.length; i++) {
-    hash = (hash << 5) - hash + userId.charCodeAt(i)
-    hash |= 0
-  }
-  return `presence:${Math.abs(hash) % 100}`
+const ONLINE_GRACE_MS = 90_000
+const MAX_FUTURE_CLOCK_SKEW_MS = 60_000
+
+export type PresenceRoom = {
+  kind: 'channel' | 'conversation'
+  id: string
 }
 
 type PresenceState = {
   userId: string
   isOnline: boolean
   lastSeenAt: string | null
+  typingIn: string | null
+}
+
+type PresenceSnapshot = {
+  scopeKey: string | null
+  realtimeSynced: boolean
+  values: Record<string, PresenceState>
+}
+
+type PresenceConnection = {
+  roomId: string
+  scopeKey: string
+  topic: string
+}
+
+const EMPTY_PRESENCE_VALUES: Record<string, PresenceState> = {}
+const realtimeClient: OwnedRealtimeClient = supabase
+
+function getPresenceConnection(
+  currentUserId: string | null,
+  room: PresenceRoom | null
+): PresenceConnection | null {
+  const roomId = room?.id.trim()
+  if (!currentUserId || !roomId || !room) return null
+
+  return {
+    roomId,
+    scopeKey: `${currentUserId}:${room.kind}:${roomId}`,
+    topic: `presence:${room.kind}:${encodeURIComponent(roomId)}`,
+  }
+}
+
+function isFreshOnlineTimestamp(lastSeenAt: string | null, now: number): boolean {
+  if (!lastSeenAt) return false
+  const seenAt = Date.parse(lastSeenAt)
+  if (!Number.isFinite(seenAt)) return false
+
+  const age = now - seenAt
+  return age >= -MAX_FUTURE_CLOCK_SKEW_MS && age <= ONLINE_GRACE_MS
+}
+
+function latestTimestamp(first: string | null, second: string | null): string | null {
+  if (!first) return second
+  if (!second) return first
+  const firstTime = Date.parse(first)
+  const secondTime = Date.parse(second)
+  if (!Number.isFinite(firstTime)) return second
+  if (!Number.isFinite(secondTime)) return first
+  return firstTime >= secondTime ? first : second
+}
+
+function trackBestEffort(channel: RealtimeChannel, payload: Record<string, unknown>): void {
+  try {
+    fireAndForget(Promise.resolve(channel.track(payload)), 'presence-room-track')
+  } catch {
+    // A synchronous transport failure must not break typing or page cleanup.
+  }
 }
 
 /**
- * Track online presence for a set of user IDs using Supabase Realtime Presence.
- * Also updates the current user's last_seen_at periodically.
+ * Track online/typing state inside the exact chat room shared by participants.
+ * Durable last-seen heartbeats are handled globally by PresenceHeartbeat.
  */
-export function usePresence(currentUserId: string | null, watchUserIds: string[]) {
-  const [presenceMap, setPresenceMap] = useState<Record<string, PresenceState>>({})
-  const channelRef = useRef<RealtimeChannel | null>(null)
-  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  // AbortController for in-flight heartbeat POSTs and last_seen fetches.
-  // Without this, a slow heartbeat request that resolves after unmount
-  // holds the Response body + JSON parser scope in memory until GC.
-  const fetchAbortRef = useRef<AbortController | null>(null)
+export function usePresence(
+  currentUserId: string | null,
+  watchUserIds: string[],
+  room: PresenceRoom | null
+) {
+  const connection = getPresenceConnection(currentUserId, room)
+  const scopeKey = connection?.scopeKey ?? null
+  const roomId = connection?.roomId ?? null
+  const topic = connection?.topic ?? null
+  const watchedIds = [...new Set(watchUserIds.filter(Boolean))].sort()
+  const watchedIdsKey = JSON.stringify(watchedIds)
+  const [snapshot, setSnapshot] = useState<PresenceSnapshot>({
+    scopeKey: null,
+    realtimeSynced: false,
+    values: {},
+  })
+  const renderedScopeRef = useRef<string | null>(scopeKey)
+  const channelRef = useRef<{
+    channel: RealtimeChannel
+    roomId: string
+    scopeKey: string
+  } | null>(null)
+
+  // Reject callbacks from the previous viewer/room in the same render that the
+  // owner changes; waiting for an effect cleanup would expose stale presence.
+  renderedScopeRef.current = scopeKey
 
   useEffect(() => {
-    if (!currentUserId) return
+    if (!scopeKey || !roomId || !topic || !currentUserId) return
 
-    // Create a fresh AbortController for this mount cycle.
-    const abortController = new AbortController()
-    fetchAbortRef.current = abortController
+    const effectScopeKey = scopeKey
+    let active = true
+    let callbackChannel: RealtimeChannel | null = null
+    const isCurrent = () => active && renderedScopeRef.current === effectScopeKey
 
-    const channel = supabase.channel(getPresenceShard(currentUserId), {
-      config: { presence: { key: currentUserId } },
+    const syncFromRoom = () => {
+      if (!isCurrent() || !callbackChannel) return
+
+      const roomState = callbackChannel.presenceState()
+      const observedAt = new Date().toISOString()
+      setSnapshot((previous) => {
+        if (!isCurrent()) return previous
+
+        const previousValues =
+          previous.scopeKey === effectScopeKey ? previous.values : EMPTY_PRESENCE_VALUES
+        const values: Record<string, PresenceState> = {}
+
+        for (const [userId, prior] of Object.entries(previousValues)) {
+          values[userId] = {
+            ...prior,
+            isOnline: false,
+            lastSeenAt: prior.isOnline ? observedAt : prior.lastSeenAt,
+            typingIn: null,
+          }
+        }
+
+        for (const [userId, presences] of Object.entries(roomState)) {
+          if (!Array.isArray(presences) || presences.length === 0) continue
+          const typingPresence = presences.find(
+            (presence) =>
+              typeof (presence as Record<string, unknown>).typing_in === 'string' &&
+              (presence as Record<string, unknown>).typing_in === roomId
+          ) as Record<string, unknown> | undefined
+
+          values[userId] = {
+            userId,
+            isOnline: true,
+            lastSeenAt: observedAt,
+            typingIn:
+              typeof typingPresence?.typing_in === 'string' ? typingPresence.typing_in : null,
+          }
+        }
+
+        return {
+          scopeKey: effectScopeKey,
+          realtimeSynced: true,
+          values,
+        }
+      })
+    }
+
+    const channel = subscribeOwnedRealtimeChannel({
+      client: realtimeClient,
+      channelOptions: {
+        config: { presence: { key: currentUserId } },
+      },
+      configure: (candidate) => {
+        callbackChannel = candidate
+        candidate
+          .on('presence', { event: 'sync' }, syncFromRoom)
+          .on('presence', { event: 'join' }, syncFromRoom)
+          .on('presence', { event: 'leave' }, syncFromRoom)
+      },
+      context: `presence:${effectScopeKey}`,
+      onSubscribeStatus: (status) => {
+        if (status !== 'SUBSCRIBED' || !isCurrent() || !callbackChannel) return
+        trackBestEffort(callbackChannel, {
+          user_id: currentUserId,
+          online_at: new Date().toISOString(),
+          typing_in: null,
+        })
+      },
+      topic,
     })
 
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState()
-        const newMap: Record<string, PresenceState> = {}
+    setSnapshot((previous) =>
+      previous.scopeKey === effectScopeKey
+        ? previous
+        : { scopeKey: effectScopeKey, realtimeSynced: false, values: {} }
+    )
 
-        for (const [key, presences] of Object.entries(state)) {
-          if (presences && presences.length > 0) {
-            newMap[key] = {
-              userId: key,
-              isOnline: true,
-              lastSeenAt: new Date().toISOString(),
-            }
-          }
-        }
-
-        setPresenceMap((prev) => {
-          // Merge: keep offline users from previous state, update online ones
-          const merged = { ...prev }
-          // Mark all previously online as potentially offline
-          for (const uid of Object.keys(merged)) {
-            if (!newMap[uid]) {
-              merged[uid] = { ...merged[uid], isOnline: false }
-            }
-          }
-          // Update with current online users
-          for (const [uid, state] of Object.entries(newMap)) {
-            merged[uid] = state
-          }
-          return merged
-        })
-      })
-      .on('presence', { event: 'join' }, ({ key }) => {
-        if (key) {
-          setPresenceMap((prev) => ({
-            ...prev,
-            [key]: { userId: key, isOnline: true, lastSeenAt: new Date().toISOString() },
-          }))
-        }
-      })
-      .on('presence', { event: 'leave' }, ({ key }) => {
-        if (key) {
-          setPresenceMap((prev) => ({
-            ...prev,
-            [key]: {
-              ...prev[key],
-              userId: key,
-              isOnline: false,
-              lastSeenAt: new Date().toISOString(),
-            },
-          }))
-        }
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ user_id: currentUserId, online_at: new Date().toISOString() })
-        }
-      })
-
-    channelRef.current = channel
-
-    // Heartbeat: update presence every 30s
-    heartbeatRef.current = setInterval(() => {
-      channel.track({ user_id: currentUserId, online_at: new Date().toISOString() })
-    }, 30000)
-
-    // Update last_seen_at in DB periodically (every 60s)
-    const dbHeartbeat = setInterval(async () => {
-      if (abortController.signal.aborted) return
-      try {
-        // /api/presence auth reads only the Authorization Bearer header —
-        // heartbeats 401'd without it
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        if (!session?.access_token || abortController.signal.aborted) return
-        await fetch('/api/presence', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ action: 'heartbeat' }),
-          signal: abortController.signal,
-        })
-      } catch (_err) {
-        // Intentionally swallowed: presence heartbeat is best-effort, missed heartbeats auto-recover
+    if (channel) {
+      channelRef.current = {
+        channel,
+        roomId,
+        scopeKey: effectScopeKey,
       }
-    }, 60000)
+    } else {
+      callbackChannel = null
+    }
 
     return () => {
-      // Abort any in-flight heartbeat fetch before tearing down intervals —
-      // otherwise an in-flight request resolves post-unmount and holds the
-      // response body in memory until GC.
-      abortController.abort()
-      if (fetchAbortRef.current === abortController) fetchAbortRef.current = null
-      if (heartbeatRef.current) clearInterval(heartbeatRef.current)
-      clearInterval(dbHeartbeat)
-      channel.unsubscribe()
-      supabase.removeChannel(channel)
+      active = false
+      if (channelRef.current?.scopeKey === effectScopeKey) channelRef.current = null
+      void removeOwnedRealtimeChannels(
+        realtimeClient,
+        [channel],
+        `presence:${effectScopeKey}:cleanup`
+      )
     }
-  }, [currentUserId])
+  }, [currentUserId, roomId, scopeKey, topic])
 
   // Fetch initial last_seen_at for watched users
   useEffect(() => {
-    if (watchUserIds.length === 0) return
+    if (!scopeKey || watchedIds.length === 0) return
 
-    // Track whether this effect instance has been unmounted so we can
-    // skip the setState after the async supabase call resolves.
-    // The Supabase client doesn't support AbortController directly, so a
-    // mounted flag is the idiomatic guard.
-    let aborted = false
+    const effectScopeKey = scopeKey
+    let cancelled = false
 
     const fetchLastSeen = async () => {
       try {
         const { data } = await supabase
           .from('user_profiles')
           .select('id, last_seen_at, is_online')
-          .in('id', watchUserIds)
+          .in('id', watchedIds)
 
-        if (aborted) return
+        if (cancelled || renderedScopeRef.current !== effectScopeKey) return
 
         if (data) {
-          setPresenceMap((prev) => {
-            const updated = { ...prev }
+          const now = Date.now()
+          setSnapshot((previous) => {
+            if (cancelled || renderedScopeRef.current !== effectScopeKey) return previous
+
+            const base =
+              previous.scopeKey === effectScopeKey
+                ? previous
+                : { scopeKey: effectScopeKey, realtimeSynced: false, values: {} }
+            const values = { ...base.values }
+
             for (const user of data) {
-              if (!updated[user.id]?.isOnline) {
-                updated[user.id] = {
-                  userId: user.id,
-                  isOnline: user.is_online || false,
-                  lastSeenAt: user.last_seen_at || null,
-                }
+              const existing = values[user.id]
+              if (existing?.isOnline) continue
+
+              const lastSeenAt = latestTimestamp(
+                existing?.lastSeenAt ?? null,
+                user.last_seen_at || null
+              )
+              values[user.id] = {
+                userId: user.id,
+                // A successful Realtime sync is authoritative for this room.
+                // Before it arrives, the durable heartbeat is only "online"
+                // inside a bounded grace window; is_online is never permanent.
+                isOnline:
+                  !base.realtimeSynced &&
+                  Boolean(user.is_online) &&
+                  isFreshOnlineTimestamp(user.last_seen_at || null, now),
+                lastSeenAt,
+                typingIn: existing?.typingIn ?? null,
               }
             }
-            return updated
+
+            return { ...base, values }
           })
         }
       } catch (_err) {
@@ -186,40 +276,59 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
 
     fetchLastSeen()
     return () => {
-      aborted = true
+      cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- join produces stable string key
-  }, [watchUserIds.join(',')])
+    // watchedIdsKey is a canonical de-duplicated/sorted representation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey, watchedIdsKey])
+
+  const visibleValues = snapshot.scopeKey === scopeKey ? snapshot.values : EMPTY_PRESENCE_VALUES
 
   const getUserPresence = useCallback(
     (userId: string): PresenceState => {
-      return presenceMap[userId] || { userId, isOnline: false, lastSeenAt: null }
+      return (
+        visibleValues[userId] || {
+          userId,
+          isOnline: false,
+          lastSeenAt: null,
+          typingIn: null,
+        }
+      )
     },
-    [presenceMap]
+    [visibleValues]
   )
 
   const setTyping = useCallback(
     (conversationId: string, isTyping: boolean) => {
-      if (!currentUserId || !channelRef.current) return
-      channelRef.current.track({
+      const ownedChannel = channelRef.current
+      if (
+        !currentUserId ||
+        !roomId ||
+        !scopeKey ||
+        !ownedChannel ||
+        renderedScopeRef.current !== scopeKey ||
+        ownedChannel.scopeKey !== scopeKey ||
+        ownedChannel.roomId !== conversationId
+      ) {
+        return
+      }
+
+      trackBestEffort(ownedChannel.channel, {
         user_id: currentUserId,
         online_at: new Date().toISOString(),
         typing_in: isTyping ? conversationId : null,
       })
     },
-    [currentUserId]
+    [currentUserId, roomId, scopeKey]
   )
 
-  const isUserTyping = useCallback((userId: string, conversationId: string): boolean => {
-    const channel = channelRef.current
-    if (!channel) return false
-    const state = channel.presenceState()
-    const presences = state[userId]
-    if (!presences || presences.length === 0) return false
-    return presences.some((p: Record<string, unknown>) => p.typing_in === conversationId)
-  }, [])
+  const isUserTyping = useCallback(
+    (userId: string, conversationId: string): boolean =>
+      roomId === conversationId && visibleValues[userId]?.typingIn === conversationId,
+    [roomId, visibleValues]
+  )
 
-  return { presenceMap, getUserPresence, setTyping, isUserTyping }
+  return { presenceMap: visibleValues, getUserPresence, setTyping, isUserTyping }
 }
 
 /**
