@@ -150,6 +150,33 @@ export function isAccountRecoveryToken(value: string | null | undefined): value 
   }
 }
 
+/**
+ * Generate the recovery credential before account deletion is dispatched.
+ *
+ * The caller can durably stage this value first, closing the commit/response
+ * gap where the server schedules deletion but the only plaintext credential
+ * is lost with a dropped response.
+ */
+export function generateAccountRecoveryToken(): string {
+  if (
+    typeof globalThis.crypto?.getRandomValues !== 'function' ||
+    typeof globalThis.btoa !== 'function'
+  ) {
+    throw new Error('Secure account recovery token generation is unavailable')
+  }
+
+  const bytes = new Uint8Array(32)
+  globalThis.crypto.getRandomValues(bytes)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  const token = globalThis.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/u, '')
+
+  if (!isAccountRecoveryToken(token)) {
+    throw new Error('Secure account recovery token generation failed')
+  }
+  return token
+}
+
 function removeStorageToken(storage: Storage, key: string): void {
   try {
     storage.removeItem(key)

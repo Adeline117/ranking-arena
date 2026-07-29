@@ -11,6 +11,8 @@ import { isHapticsEnabled } from '@/lib/utils/haptics'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import {
   buildAccountRecoveryLoginPath,
+  generateAccountRecoveryToken,
+  isAccountRecoveryToken,
   persistAccountRecoveryToken,
   replaceDocumentForAccountRecovery,
 } from '@/lib/auth/account-recovery-token'
@@ -1707,10 +1709,18 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     if (deleteHasPassword ? !deletePassword : deleteConfirm.trim().toUpperCase() !== 'DELETE')
       return
     const scope = captureViewer()
-    if (!scope || !stateBelongsToViewer(scope)) return
+    if (submittingRef.current || deletingAccount || !scope || !stateBelongsToViewer(scope)) return
+    submittingRef.current = true
     setDeletingAccount(true)
     setDeleteError(null)
+    let stagedRecoveryToken: string | null = null
     try {
+      // Stage the exact server credential before crossing the irreversible
+      // request boundary. A dropped response can no longer erase the only
+      // recovery path for OAuth/wallet accounts.
+      stagedRecoveryToken = generateAccountRecoveryToken()
+      persistAccountRecoveryToken(stagedRecoveryToken)
+
       const token = await getFreshToken(scope)
       if (!viewerIsCurrent(scope)) return
       if (!token) {
@@ -1726,8 +1736,16 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         },
         body: JSON.stringify(
           deleteHasPassword
-            ? { password: deletePassword, reason: deleteReason }
-            : { confirm: deleteConfirm, reason: deleteReason }
+            ? {
+                password: deletePassword,
+                reason: deleteReason,
+                recovery_token: stagedRecoveryToken,
+              }
+            : {
+                confirm: deleteConfirm,
+                reason: deleteReason,
+                recovery_token: stagedRecoveryToken,
+              }
         ),
       })
       if (!viewerIsCurrent(scope)) return
@@ -1739,15 +1757,26 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       }
       const recoveryLoginPath = buildAccountRecoveryLoginPath()
       let fullDocumentRecoveryToken: string | null = null
-      if (typeof data.recovery_token === 'string' && data.recovery_token) {
+      const responseRecoveryToken = isAccountRecoveryToken(data.recovery_token)
+        ? data.recovery_token
+        : stagedRecoveryToken
+      if (responseRecoveryToken) {
         // One-time credential for OAuth/wallet recovery. The server stores only
         // its SHA-256 hash. Normal SPA navigation is always credential-free.
         // When neither storage lane is durable, use only the parser-first
         // full-document fallback; never expose the credential to client history.
-        const persistence = persistAccountRecoveryToken(data.recovery_token)
+        const persistence = persistAccountRecoveryToken(responseRecoveryToken)
         if (persistence.status === 'memory' || persistence.status === 'unavailable') {
-          fullDocumentRecoveryToken = data.recovery_token
+          fullDocumentRecoveryToken = responseRecoveryToken
         }
+      }
+      if (
+        data?.success !== true ||
+        data?.user_id !== scope.userId ||
+        !isAccountRecoveryToken(data?.recovery_token)
+      ) {
+        setDeleteError(t('operationFailed'))
+        return
       }
       showToast(t('accountMarkedDeleted'), 'success')
       setShowDeleteAccountModal(false)
@@ -1767,7 +1796,10 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     } catch {
       if (viewerIsCurrent(scope)) setDeleteError(t('networkErrorRetry'))
     } finally {
-      if (viewerIsCurrent(scope)) setDeletingAccount(false)
+      if (viewerIsCurrent(scope)) {
+        setDeletingAccount(false)
+        submittingRef.current = false
+      }
     }
   }
 

@@ -19,6 +19,7 @@ import {
   type AccountDeletionOneTimeSettlementObservation,
 } from '@/lib/stripe/account-deletion'
 import { persistAccountDeletionOneTimeSettlementScan } from '@/lib/stripe/account-deletion-settlement'
+import { isAccountRecoveryToken } from '@/lib/auth/account-recovery-token'
 
 const logger = createLogger('account-delete')
 
@@ -114,7 +115,12 @@ function isExactCustomerBindingAck(value: unknown): boolean {
 
 export const POST = withAuth(
   async ({ user, request }) => {
-    let body: { password?: string; reason?: string; confirm?: string }
+    let body: {
+      password?: string
+      reason?: string
+      confirm?: string
+      recovery_token?: string
+    }
     try {
       body = await request.json()
     } catch {
@@ -122,9 +128,19 @@ export const POST = withAuth(
     }
 
     const { password, reason, confirm } = body
+    if (body.recovery_token !== undefined && !isAccountRecoveryToken(body.recovery_token)) {
+      return badRequest('Invalid recovery credential')
+    }
     const providers = (user.identities ?? []).map((identity) => identity.provider)
     const isWalletEmail = (user.email ?? '').endsWith('@wallet.arena')
     const hasPassword = !isWalletEmail && providers.includes('email')
+
+    // Passwordless accounts have no secondary credential recovery lane. An
+    // older browser bundle that cannot pre-stage the plaintext must fail before
+    // any billing/database mutation instead of risking an unrecoverable delete.
+    if (!hasPassword && !body.recovery_token) {
+      return badRequest('Recovery credential required')
+    }
 
     if (hasPassword) {
       if (!password) return badRequest('Password required')
@@ -144,7 +160,11 @@ export const POST = withAuth(
     const adminSupabase = getSupabaseAdmin()
     const now = new Date()
     const scheduledDeletion = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000)
-    const recoveryToken = randomBytes(32).toString('base64url')
+    // New clients stage this exact credential before dispatch so a successful
+    // database commit cannot strand a passwordless account when the response
+    // is lost. The fallback keeps a rolling deployment compatible with older
+    // clients until every browser bundle has refreshed.
+    const recoveryToken = body.recovery_token ?? randomBytes(32).toString('base64url')
     const recoveryTokenHash = createHash('sha256').update(recoveryToken).digest('hex')
 
     // Stop every recurring billing surface before writing the deletion
@@ -333,6 +353,7 @@ export const POST = withAuth(
     logger.info('Account deletion scheduled', { userId: user.id })
     return NextResponse.json({
       success: true,
+      user_id: user.id,
       deletion_scheduled_at: scheduledDeletion.toISOString(),
       recovery_token: recoveryToken,
       message: 'Account marked for deletion, recoverable within 30 days',

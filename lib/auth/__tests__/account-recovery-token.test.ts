@@ -6,6 +6,7 @@ import {
   buildAccountRecoveryLoginPath,
   clearAccountRecoveryToken,
   consumeAccountRecoveryToken,
+  generateAccountRecoveryToken,
   isAccountRecoveryToken,
   persistAccountRecoveryToken,
   persistAccountRecoveryTokenForRetry,
@@ -37,6 +38,17 @@ describe('account recovery token handoff', () => {
     expect(isAccountRecoveryToken(`${'A'.repeat(42)}+`)).toBe(false)
     expect(isAccountRecoveryToken(`${'A'.repeat(42)}/`)).toBe(false)
     expect(isAccountRecoveryToken(`${'A'.repeat(42)}\n`)).toBe(false)
+  })
+
+  it('generates independent 256-bit canonical credentials for pre-dispatch staging', () => {
+    const first = generateAccountRecoveryToken()
+    const second = generateAccountRecoveryToken()
+
+    expect(first).toHaveLength(43)
+    expect(second).toHaveLength(43)
+    expect(isAccountRecoveryToken(first)).toBe(true)
+    expect(isAccountRecoveryToken(second)).toBe(true)
+    expect(second).not.toBe(first)
   })
 
   it('consumes raw lanes once while retaining a remount-safe in-memory lease', () => {

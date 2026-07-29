@@ -181,6 +181,7 @@ describe('account deletion scheduling', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
+    expect(body.user_id).toBe('user-1')
     expect(body.recovery_token).toMatch(/^[A-Za-z0-9_-]{40,}$/)
     expect(mockRpc).toHaveBeenCalledWith(
       'schedule_account_deletion_with_billing_blocks',
@@ -234,6 +235,43 @@ describe('account deletion scheduling', () => {
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
     expect(mockAdminSignOut).toHaveBeenCalledWith('user-1', 'global')
     expect(mockFrom).toHaveBeenCalledTimes(3)
+  })
+
+  it('commits the exact caller-staged recovery credential for response-loss safety', async () => {
+    const recoveryToken = 'A'.repeat(43)
+
+    const response = await POST(
+      request({ password: 'correct', reason: 'privacy', recovery_token: recoveryToken })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toEqual(
+      expect.objectContaining({
+        success: true,
+        user_id: 'user-1',
+        recovery_token: recoveryToken,
+      })
+    )
+    expect(mockRpc).toHaveBeenCalledWith(
+      'schedule_account_deletion_with_billing_blocks',
+      expect.objectContaining({
+        p_user_id: 'user-1',
+        p_recovery_token_hash: createHash('sha256').update(recoveryToken).digest('hex'),
+      })
+    )
+  })
+
+  it('rejects a malformed caller recovery credential before authentication or billing', async () => {
+    const response = await POST(
+      request({ password: 'correct', recovery_token: 'not-a-canonical-token' })
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 
   it('never revives canceled billing when database scheduling fails', async () => {
@@ -446,7 +484,8 @@ describe('account deletion scheduling', () => {
       api_stripe_subscription_id: null,
     }
 
-    const response = await POST(request({ confirm: 'DELETE' }))
+    const recoveryToken = 'A'.repeat(43)
+    const response = await POST(request({ confirm: 'DELETE', recovery_token: recoveryToken }))
 
     expect(response.status).toBe(200)
     expect(mockPasswordSignIn).not.toHaveBeenCalled()
@@ -461,9 +500,24 @@ describe('account deletion scheduling', () => {
     expect(mockRpc).toHaveBeenCalledWith(
       'schedule_account_deletion_with_billing_blocks',
       expect.objectContaining({
+        p_recovery_token_hash: createHash('sha256').update(recoveryToken).digest('hex'),
         p_stripe_customer_id: null,
         p_stripe_subscription_ids: [],
       })
     )
+  })
+
+  it('blocks legacy passwordless deletion before mutations when no token was staged', async () => {
+    mockUser.email = 'wallet@wallet.arena'
+    mockUser.identities = [{ provider: 'privy' }]
+
+    const response = await POST(request({ confirm: 'DELETE' }))
+
+    expect(response.status).toBe(400)
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
+    expect(mockPersistOneTimeSettlementScan).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 })
