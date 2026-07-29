@@ -27,19 +27,20 @@ describe('public ranking freshness route contracts', () => {
     expect(v2).toContain('updated_at: freshnessSummary.asOf')
   })
 
-  it.each(['app/api/rankings/route.ts', 'app/api/traders/route.ts'])(
-    '%s cannot bypass live proof checks through an edge cache',
-    (path) => {
-      const route = source(path)
+  it.each([
+    'app/api/rankings/route.ts',
+    'app/api/traders/route.ts',
+    'app/api/v2/rankings/route.ts',
+  ])('%s cannot bypass live proof checks through an edge cache', (path) => {
+    const route = source(path)
 
-      expect(route).toContain("export const dynamic = 'force-dynamic'")
-      expect(route).toContain('export const revalidate = 0')
-      expect(route).toContain("'Cache-Control': 'private, no-store, max-age=0'")
-      expect(route).toContain("'CDN-Cache-Control': 'no-store'")
-      expect(route).toContain("'Vercel-CDN-Cache-Control': 'no-store'")
-      expect(route).not.toContain("response.headers.set('Cache-Control', 'public")
-    }
-  )
+    expect(route).toContain("export const dynamic = 'force-dynamic'")
+    expect(route).toContain('export const revalidate = 0')
+    expect(route).toContain("'Cache-Control': 'private, no-store, max-age=0'")
+    expect(route).toContain("'CDN-Cache-Control': 'no-store'")
+    expect(route).toContain("'Vercel-CDN-Cache-Control': 'no-store'")
+    expect(route).not.toContain("response.headers.set('Cache-Control', 'public")
+  })
 
   it('the composite endpoint reads all three dynamic authorities and exact cohorts', () => {
     const route = source('app/api/rankings/route.ts')

@@ -64,9 +64,16 @@ import {
   parseSealedRankingCacheEntry,
 } from '@/lib/rankings/sealed-ranking-cache'
 
-// Removed force-dynamic — it contradicted revalidate and prevented CDN caching.
-// With Redis cache + CDN s-maxage headers, this route is fast and scalable.
-export const revalidate = 600 // ISR: revalidate every 10 minutes (data refreshes via cron every 30 min)
+// The Redis envelope remains the performance cache. HTTP responses cannot be
+// shared because every request must prove that envelope against live authority.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+const RANKING_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 // ── Input validation schema ──────────────────────────────────────────────────
 const v2RankingsSchema = z.object({
@@ -132,9 +139,7 @@ export const GET = withPublic(
           ranking_visibility_reasons: ['quarantined_source_requested'],
         },
         {
-          headers: {
-            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-          },
+          headers: RANKING_NO_STORE_HEADERS,
         }
       )
     }
@@ -400,9 +405,7 @@ export const GET = withPublic(
     }
 
     return NextResponse.json(sanitizePublicRankingSourcePayload(sealedCache.value), {
-      headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-      },
+      headers: RANKING_NO_STORE_HEADERS,
     })
   },
   { name: 'v2-rankings' }
