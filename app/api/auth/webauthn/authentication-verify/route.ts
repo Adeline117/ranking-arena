@@ -38,6 +38,22 @@ interface PasskeyRow {
   transports: string[] | null
 }
 
+interface LoginProfileRow {
+  id: string
+  banned_at: string | null
+  ban_expires_at: string | null
+  deleted_at: string | null
+  is_banned: boolean | null
+}
+
+function isLoginProfileSuspended(profile: LoginProfileRow): boolean {
+  if (profile.banned_at !== null || profile.deleted_at !== null) return true
+  if (profile.is_banned !== true) return false
+  if (profile.ban_expires_at === null) return true
+  const expiresAt = Date.parse(profile.ban_expires_at)
+  return !Number.isFinite(expiresAt) || expiresAt > Date.now()
+}
+
 export const POST = withPublic(
   async ({ supabase, request }) => {
     let body: unknown
@@ -117,18 +133,25 @@ export const POST = withPublic(
     // for an auth identity whose required application profile is missing.
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('id')
+      .select('id, banned_at, ban_expires_at, deleted_at, is_banned')
       .eq('id', row.user_id)
       .maybeSingle()
 
-    if (profileError || !profile) {
+    const loginProfile = profile as LoginProfileRow | null
+    if (
+      profileError ||
+      !loginProfile ||
+      loginProfile.id !== row.user_id ||
+      isLoginProfileSuspended(loginProfile)
+    ) {
       logger.error('[authentication-verify] Provisioned profile unavailable:', profileError)
       return serverError('Login failed')
     }
 
     // Update the signature counter + last used timestamp (replay protection).
-    // A failed or zero-row counter write must block login; otherwise the same
-    // authenticator response can remain reusable against the stale counter.
+    // Bind the write to every security-sensitive value we verified. This CAS
+    // prevents two stale reads from overwriting a winning higher counter and
+    // prevents a concurrently replaced credential from inheriting the proof.
     const { data: updatedCredential, error: updateError } = await supabase
       .from('user_passkeys')
       .update({
@@ -136,6 +159,9 @@ export const POST = withPublic(
         last_used_at: new Date().toISOString(),
       })
       .eq('id', row.id)
+      .eq('user_id', row.user_id)
+      .eq('credential_id', credentialId)
+      .eq('counter', row.counter)
       .select('id')
       .maybeSingle()
 
@@ -148,8 +174,9 @@ export const POST = withPublic(
     const { data: userResult, error: getUserError } = await supabase.auth.admin.getUserById(
       row.user_id
     )
-    const email = userResult?.user?.email
-    if (getUserError || !email) {
+    const authUser = userResult?.user
+    const email = authUser?.email
+    if (getUserError || !authUser || authUser.id !== row.user_id || !email) {
       logger.error('[authentication-verify] Could not resolve user email:', getUserError)
       return serverError('Login failed')
     }

@@ -24,6 +24,8 @@ jest.mock('@/lib/auth/webauthn', () => ({
 const mockLookupCredential = jest.fn()
 const mockLookupProfile = jest.fn()
 const mockUpdateCredential = jest.fn()
+const mockUpdateCredentialEq = jest.fn()
+const mockUpdateCredentialPayload = jest.fn()
 const mockGetUserById = jest.fn()
 const mockGenerateLink = jest.fn()
 const mockVerifyOtp = jest.fn()
@@ -36,11 +38,19 @@ const mockSupabase = {
       }
     }
     if (table === 'user_passkeys') {
+      const updateBuilder = {
+        eq: (...args: unknown[]) => {
+          mockUpdateCredentialEq(...args)
+          return updateBuilder
+        },
+        select: () => ({ maybeSingle: mockUpdateCredential }),
+      }
       return {
         select: () => ({ eq: () => ({ maybeSingle: mockLookupCredential }) }),
-        update: () => ({
-          eq: () => ({ select: () => ({ maybeSingle: mockUpdateCredential }) }),
-        }),
+        update: (...args: unknown[]) => {
+          mockUpdateCredentialPayload(...args)
+          return updateBuilder
+        },
       }
     }
     throw new Error(`Unexpected table: ${table}`)
@@ -109,7 +119,16 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
       verified: true,
       authenticationInfo: { newCounter: 5 },
     })
-    mockLookupProfile.mockResolvedValue({ data: { id: USER_ID }, error: null })
+    mockLookupProfile.mockResolvedValue({
+      data: {
+        id: USER_ID,
+        banned_at: null,
+        ban_expires_at: null,
+        deleted_at: null,
+        is_banned: false,
+      },
+      error: null,
+    })
     mockUpdateCredential.mockResolvedValue({ data: { id: CREDENTIAL_ROW.id }, error: null })
     mockGetUserById.mockResolvedValue({
       data: { user: { id: USER_ID, email: 'wallet@example.com' } },
@@ -141,6 +160,15 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
     })
     expect(mockLookupProfile).toHaveBeenCalledTimes(1)
     expect(mockUpdateCredential).toHaveBeenCalledTimes(1)
+    expect(mockUpdateCredentialPayload).toHaveBeenCalledWith(
+      expect.objectContaining({ counter: 5, last_used_at: expect.any(String) })
+    )
+    expect(mockUpdateCredentialEq.mock.calls).toEqual([
+      ['id', CREDENTIAL_ROW.id],
+      ['user_id', USER_ID],
+      ['credential_id', 'credential-id'],
+      ['counter', 4],
+    ])
     expect(mockLookupProfile.mock.invocationCallOrder[0]).toBeLessThan(
       mockGenerateLink.mock.invocationCallOrder[0]
     )
@@ -160,6 +188,77 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
     expect(response.status).toBe(500)
     expect(mockUpdateCredential).not.toHaveBeenCalled()
     expect(mockGenerateLink).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'banned',
+      {
+        id: USER_ID,
+        banned_at: '2026-07-29T00:00:00.000Z',
+        ban_expires_at: null,
+        deleted_at: null,
+        is_banned: false,
+      },
+    ],
+    [
+      'deleted',
+      {
+        id: USER_ID,
+        banned_at: null,
+        ban_expires_at: null,
+        deleted_at: '2026-07-29T00:00:00.000Z',
+        is_banned: false,
+      },
+    ],
+    [
+      'active legacy ban',
+      {
+        id: USER_ID,
+        banned_at: null,
+        ban_expires_at: '2999-01-01T00:00:00.000Z',
+        deleted_at: null,
+        is_banned: true,
+      },
+    ],
+    [
+      'wrong-subject',
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        banned_at: null,
+        ban_expires_at: null,
+        deleted_at: null,
+        is_banned: false,
+      },
+    ],
+  ])('does not mint a session for a %s profile', async (_label, profile) => {
+    mockLookupProfile.mockResolvedValue({ data: profile, error: null })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(mockUpdateCredential).not.toHaveBeenCalled()
+    expect(mockGetUserById).not.toHaveBeenCalled()
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockVerifyOtp).not.toHaveBeenCalled()
+  })
+
+  it('allows a legacy temporary ban only after its expiry', async () => {
+    mockLookupProfile.mockResolvedValue({
+      data: {
+        id: USER_ID,
+        banned_at: null,
+        ban_expires_at: '2000-01-01T00:00:00.000Z',
+        deleted_at: null,
+        is_banned: true,
+      },
+      error: null,
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(200)
+    expect(mockGenerateLink).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -189,5 +288,23 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
     const response = await POST(request())
 
     expect(response.status).toBe(500)
+  })
+
+  it('rejects an Auth lookup response belonging to another identity before link minting', async () => {
+    mockGetUserById.mockResolvedValue({
+      data: {
+        user: {
+          id: '22222222-2222-4222-8222-222222222222',
+          email: 'wrong@example.com',
+        },
+      },
+      error: null,
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockVerifyOtp).not.toHaveBeenCalled()
   })
 })
