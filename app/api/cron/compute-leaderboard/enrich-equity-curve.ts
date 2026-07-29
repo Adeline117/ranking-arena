@@ -14,6 +14,10 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/api'
+import {
+  PUBLIC_RANKING_FUTURE_TOLERANCE_MS,
+  PUBLIC_RANKING_MAX_COMPUTED_AGE_MS,
+} from '@/lib/rankings/publication-policy'
 import type { Period } from '@/lib/utils/arena-score'
 import type { TraderRow } from './trader-row'
 
@@ -35,6 +39,10 @@ export async function deriveWrMddFromEquityCurve(
   )
   if (stillNeedingData.length === 0) return 0
 
+  const nowMs = Date.now()
+  const capturedAfter = new Date(nowMs - PUBLIC_RANKING_MAX_COMPUTED_AGE_MS).toISOString()
+  const capturedBefore = new Date(nowMs + PUBLIC_RANKING_FUTURE_TOLERANCE_MS).toISOString()
+
   const eqBySource = new Map<string, string[]>()
   for (const t of stillNeedingData) {
     const ids = eqBySource.get(t.source) || []
@@ -51,10 +59,12 @@ export async function deriveWrMddFromEquityCurve(
         const chunk = traderIds.slice(i, i + 50)
         const { data: eqRows } = await supabase
           .from('trader_equity_curve')
-          .select('source_trader_id, pnl_usd, roi_pct, data_date')
+          .select('source_trader_id, pnl_usd, roi_pct, data_date, captured_at')
           .eq('source', source)
           .eq('period', season)
           .in('source_trader_id', chunk)
+          .gte('captured_at', capturedAfter)
+          .lte('captured_at', capturedBefore)
           .order('data_date', { ascending: true })
           .limit(1000)
         if (!eqRows?.length) continue
@@ -144,6 +154,10 @@ export async function deriveAdvancedFromEquityCurve(
   )
   if (needAdvanced.length === 0) return 0
 
+  const nowMs = Date.now()
+  const capturedAfter = new Date(nowMs - PUBLIC_RANKING_MAX_COMPUTED_AGE_MS).toISOString()
+  const capturedBefore = new Date(nowMs + PUBLIC_RANKING_FUTURE_TOLERANCE_MS).toISOString()
+
   const advBySource = new Map<string, string[]>()
   for (const t of needAdvanced) {
     const ids = advBySource.get(t.source) || []
@@ -161,10 +175,12 @@ export async function deriveAdvancedFromEquityCurve(
         const chunk = traderIds.slice(i, i + 50)
         const { data: eqRows } = await supabase
           .from('trader_equity_curve')
-          .select('source_trader_id, roi_pct, pnl_usd, data_date')
+          .select('source_trader_id, roi_pct, pnl_usd, data_date, captured_at')
           .eq('source', source)
           .eq('period', season)
           .in('source_trader_id', chunk)
+          .gte('captured_at', capturedAfter)
+          .lte('captured_at', capturedBefore)
           .order('data_date', { ascending: true })
           .limit(1000)
         if (!eqRows?.length) continue

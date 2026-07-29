@@ -10,6 +10,10 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/api'
+import {
+  PUBLIC_RANKING_FUTURE_TOLERANCE_MS,
+  PUBLIC_RANKING_MAX_COMPUTED_AGE_MS,
+} from '@/lib/rankings/publication-policy'
 import type { Period } from '@/lib/utils/arena-score'
 import type { TraderRow } from './trader-row'
 
@@ -43,6 +47,10 @@ export async function enrichFromStatsDetail(
 
   if (tradersNeedingEnrichment.length === 0) return 0
 
+  const nowMs = Date.now()
+  const capturedAfter = new Date(nowMs - PUBLIC_RANKING_MAX_COMPUTED_AGE_MS).toISOString()
+  const capturedBefore = new Date(nowMs + PUBLIC_RANKING_FUTURE_TOLERANCE_MS).toISOString()
+
   const enrichBySource = new Map<string, string[]>()
   for (const t of tradersNeedingEnrichment) {
     const ids = enrichBySource.get(t.source) || []
@@ -58,11 +66,13 @@ export async function enrichFromStatsDetail(
         const { data: statsRows } = await supabase
           .from('trader_stats_detail')
           .select(
-            'source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, copiers_count, aum, period'
+            'source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, copiers_count, aum, period, captured_at'
           )
           .eq('source', source)
           .eq('period', season)
           .in('source_trader_id', chunk)
+          .gte('captured_at', capturedAfter)
+          .lte('captured_at', capturedBefore)
           .order('captured_at', { ascending: false })
           .limit(1000)
         if (!statsRows) continue

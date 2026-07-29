@@ -9,12 +9,16 @@ import type { TraderRow } from '../trader-row'
 interface QueryRecord {
   table: string
   equalities: Array<[string, unknown]>
+  lowerBounds: Array<[string, unknown]>
+  upperBounds: Array<[string, unknown]>
 }
 
 interface FakeBuilder {
   select: jest.Mock<FakeBuilder, [string]>
   eq: jest.Mock<FakeBuilder, [string, unknown]>
   in: jest.Mock<FakeBuilder, [string, readonly unknown[]]>
+  gte: jest.Mock<FakeBuilder, [string, unknown]>
+  lte: jest.Mock<FakeBuilder, [string, unknown]>
   order: jest.Mock<FakeBuilder, [string, Record<string, unknown>]>
   limit: jest.Mock<Promise<{ data: Array<Record<string, unknown>> }>, [number]>
 }
@@ -24,6 +28,8 @@ function filteringClient(rowsByTable: Readonly<Record<string, Array<Record<strin
   const from = jest.fn((table: string) => {
     const equalities: Array<[string, unknown]> = []
     const memberships: Array<[string, readonly unknown[]]> = []
+    const lowerBounds: Array<[string, unknown]> = []
+    const upperBounds: Array<[string, unknown]> = []
     const builder = {} as FakeBuilder
     builder.select = jest.fn(() => builder)
     builder.eq = jest.fn((column, value) => {
@@ -34,15 +40,25 @@ function filteringClient(rowsByTable: Readonly<Record<string, Array<Record<strin
       memberships.push([column, values])
       return builder
     })
+    builder.gte = jest.fn((column, value) => {
+      lowerBounds.push([column, value])
+      return builder
+    })
+    builder.lte = jest.fn((column, value) => {
+      upperBounds.push([column, value])
+      return builder
+    })
     builder.order = jest.fn(() => builder)
     builder.limit = jest.fn(async () => ({
       data: (rowsByTable[table] ?? []).filter(
         (row) =>
           equalities.every(([column, value]) => row[column] === value) &&
-          memberships.every(([column, values]) => values.includes(row[column]))
+          memberships.every(([column, values]) => values.includes(row[column])) &&
+          lowerBounds.every(([column, value]) => String(row[column]) >= String(value)) &&
+          upperBounds.every(([column, value]) => String(row[column]) <= String(value))
       ),
     }))
-    queries.push({ table, equalities })
+    queries.push({ table, equalities, lowerBounds, upperBounds })
     return builder
   })
 
@@ -85,6 +101,14 @@ function traderMap(row: TraderRow): Map<string, TraderRow> {
 }
 
 describe('leaderboard enrichment period isolation', () => {
+  beforeAll(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-29T12:00:00.000Z'))
+  })
+
+  afterAll(() => {
+    jest.useRealTimers()
+  })
+
   it('does not fill current-season stats from another period', async () => {
     const row = trader()
     const { client, queries } = filteringClient({
@@ -93,6 +117,7 @@ describe('leaderboard enrichment period isolation', () => {
           source: 'exchange',
           source_trader_id: 'trader-1',
           period: '90D',
+          captured_at: '2026-07-29T11:00:00.000Z',
           profitable_trades_pct: 99,
           max_drawdown: 1,
           sharpe_ratio: 10,
@@ -122,6 +147,7 @@ describe('leaderboard enrichment period isolation', () => {
           source: 'exchange',
           source_trader_id: 'trader-1',
           period: '90D',
+          captured_at: '2026-07-29T11:00:00.000Z',
           data_date: '2026-07-28',
           pnl_usd: 100,
           roi_pct: 10,
@@ -130,6 +156,7 @@ describe('leaderboard enrichment period isolation', () => {
           source: 'exchange',
           source_trader_id: 'trader-1',
           period: '90D',
+          captured_at: '2026-07-29T11:00:00.000Z',
           data_date: '2026-07-29',
           pnl_usd: 200,
           roi_pct: 5,
@@ -150,6 +177,7 @@ describe('leaderboard enrichment period isolation', () => {
       source: 'exchange',
       source_trader_id: 'trader-1',
       period: '90D',
+      captured_at: '2026-07-29T11:00:00.000Z',
       data_date: `2026-07-${String(20 + index).padStart(2, '0')}`,
       pnl_usd: index % 2 === 0 ? index * 100 : index * 50,
       roi_pct: index % 2 === 0 ? index * 2 : index,
@@ -167,5 +195,69 @@ describe('leaderboard enrichment period isolation', () => {
         profit_factor: null,
       })
     )
+  })
+
+  it('does not fill current rankings from stale same-period enrichment', async () => {
+    const statsRow = trader()
+    const staleStats = filteringClient({
+      trader_stats_detail: [
+        {
+          source: 'exchange',
+          source_trader_id: 'trader-1',
+          period: '7D',
+          captured_at: '2026-07-26T11:59:59.999Z',
+          profitable_trades_pct: 99,
+          max_drawdown: 1,
+          sharpe_ratio: 10,
+          total_trades: 500,
+        },
+      ],
+    })
+
+    await enrichFromStatsDetail(staleStats.client, traderMap(statsRow), '7D', () => false)
+
+    expect(staleStats.queries[0].lowerBounds).toContainEqual([
+      'captured_at',
+      '2026-07-27T12:00:00.000Z',
+    ])
+    expect(statsRow.win_rate).toBeNull()
+    expect(statsRow.max_drawdown).toBeNull()
+
+    const equityRow = trader()
+    const staleCurve = filteringClient({
+      trader_equity_curve: [
+        {
+          source: 'exchange',
+          source_trader_id: 'trader-1',
+          period: '7D',
+          captured_at: '2026-07-26T11:59:59.999Z',
+          data_date: '2026-07-28',
+          pnl_usd: 100,
+          roi_pct: 10,
+        },
+        {
+          source: 'exchange',
+          source_trader_id: 'trader-1',
+          period: '7D',
+          captured_at: '2026-07-26T11:59:59.999Z',
+          data_date: '2026-07-29',
+          pnl_usd: 200,
+          roi_pct: 5,
+        },
+      ],
+    })
+
+    await deriveWrMddFromEquityCurve(staleCurve.client, traderMap(equityRow), '7D', () => false)
+
+    expect(staleCurve.queries[0].lowerBounds).toContainEqual([
+      'captured_at',
+      '2026-07-27T12:00:00.000Z',
+    ])
+    expect(staleCurve.queries[0].upperBounds).toContainEqual([
+      'captured_at',
+      '2026-07-29T12:05:00.000Z',
+    ])
+    expect(equityRow.win_rate).toBeNull()
+    expect(equityRow.max_drawdown).toBeNull()
   })
 })
