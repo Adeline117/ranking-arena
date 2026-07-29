@@ -117,6 +117,24 @@ SQL
 
 psql_cmd -f "$MIGRATION" >/dev/null
 
+service_query "
+  INSERT INTO public.oauth_states (user_id, exchange, state, expires_at)
+  VALUES (
+    '10000000-0000-4000-8000-000000000001', 'binance', 'unique-state',
+    pg_catalog.clock_timestamp() + interval '10 minutes'
+  );
+" >/dev/null
+if service_query "
+  INSERT INTO public.oauth_states (user_id, exchange, state, expires_at)
+  VALUES (
+    '10000000-0000-4000-8000-000000000001', 'binance', 'unique-state',
+    pg_catalog.clock_timestamp() + interval '10 minutes'
+  );
+" >"$TMP_ROOT/duplicate-state.out" 2>&1; then
+  echo "duplicate callback state identity was accepted" >&2
+  exit 1
+fi
+
 if psql_cmd -qAtc "
   SET ROLE authenticated;
   SET request.jwt.claim.role = 'authenticated';

@@ -30,7 +30,7 @@ BEGIN
 END
 $do$;
 
-CREATE INDEX IF NOT EXISTS oauth_states_callback_lookup_idx
+CREATE UNIQUE INDEX IF NOT EXISTS oauth_states_callback_identity_key
   ON public.oauth_states (user_id, exchange, state);
 
 CREATE OR REPLACE FUNCTION public.claim_exchange_oauth_state_atomic(
@@ -59,6 +59,7 @@ BEGIN
      OR pg_catalog.length(pg_catalog.btrim(p_exchange)) = 0
      OR p_state IS NULL
      OR pg_catalog.length(p_state) = 0
+     OR p_lease_seconds IS NULL
      OR p_lease_seconds < 15
      OR p_lease_seconds > 300 THEN
     RETURN pg_catalog.jsonb_build_object('status', 'invalid_input');
