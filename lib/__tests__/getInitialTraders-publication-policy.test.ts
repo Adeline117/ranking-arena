@@ -161,8 +161,16 @@ describe('SSR public ranking source quarantine', () => {
     expect(result.categoryCounts).toEqual({ all: 2, futures: 1, spot: 0, onchain: 1 })
     expect(result.lastUpdated).toBeNull()
     expect(result.isStale).toBe(true)
-    expect(rankingQuery?.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
-    expect(freshnessQuery?.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
+    expect(rankingQuery?.not).toHaveBeenCalledWith(
+      'source',
+      'in',
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+    )
+    expect(freshnessQuery?.not).toHaveBeenCalledWith(
+      'source',
+      'in',
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+    )
   })
 
   it('fills SSR page zero from a DB query that excludes quarantine before LIMIT', async () => {
@@ -231,7 +239,11 @@ describe('SSR public ranking source quarantine', () => {
 
     expect(result.traders.map(({ id }) => id)).toEqual(['safe-1', 'safe-2', 'safe-3'])
     expect(result.totalCount).toBe(3)
-    expect(rankingQuery?.not).toHaveBeenCalledWith('source', 'in', '(okx_web3_solana)')
+    expect(rankingQuery?.not).toHaveBeenCalledWith(
+      'source',
+      'in',
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+    )
     expect(rankingQuery?.range).toHaveBeenCalledWith(0, 2)
     expect((rankingQuery?.not as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
       (rankingQuery?.range as jest.Mock).mock.invocationCallOrder[0]
@@ -253,7 +265,7 @@ describe('SSR public ranking source quarantine', () => {
     const result = await getInitialTraders('90D', 3, 1)
 
     expect(mockCacheGet).toHaveBeenCalledWith(
-      'public-rank-policy-v2:home-initial-traders-v4:90D:p1'
+      'public-rank-policy-v3:home-initial-traders-v4:90D:p1'
     )
     expect(result.traders).toEqual([first, last])
     expect(result.totalCount).toBe(2)
@@ -281,11 +293,11 @@ describe('SSR public ranking source quarantine', () => {
 
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       1,
-      'public-rank-policy-v2:home-initial-traders-v4:90D:p0'
+      'public-rank-policy-v3:home-initial-traders-v4:90D:p0'
     )
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       2,
-      'public-rank-policy-v2:home-initial-traders-fallback-v4:90D:p0'
+      'public-rank-policy-v3:home-initial-traders-fallback-v4:90D:p0'
     )
     expect(result).toEqual({ ...fallback, isStale: true })
     expect(mockFrom).not.toHaveBeenCalled()

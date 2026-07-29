@@ -285,7 +285,7 @@ describe('GET /api/cron/precompute-composite', () => {
     expect(mockTieredSet).toHaveBeenCalled()
     // First call stores the freshness-aware composite cache generation.
     const firstCall = mockTieredSet.mock.calls[0]
-    expect(firstCall[0]).toBe('precomputed:composite:all:v2')
+    expect(firstCall[0]).toBe('public-rank-policy-v3:precomputed:composite:all:v2')
     const compositeData = firstCall[1]
     expect(compositeData.window).toBe('COMPOSITE')
     expect(compositeData.precomputed).toBe(true)
@@ -352,7 +352,7 @@ describe('GET /api/cron/precompute-composite', () => {
       expect(res.status).toBe(200)
 
       const compositeData = mockTieredSet.mock.calls.find(
-        ([key]) => key === 'precomputed:composite:all:v2'
+        ([key]) => key === 'public-rank-policy-v3:precomputed:composite:all:v2'
       )?.[1]
       expect(compositeData).toBeDefined()
       expect(compositeData.is_stale).toBe(true)

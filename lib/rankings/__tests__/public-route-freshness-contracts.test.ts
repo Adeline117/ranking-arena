@@ -33,7 +33,7 @@ describe('public ranking freshness route contracts', () => {
     expect(route).toContain('LEFT JOIN leaderboard_source_freshness AS freshness')
     expect(route).toContain('freshness.source_as_of AS as_of_ts')
     expect(route).not.toContain('computed_at >= $2')
-    expect(route).toContain("'precomputed:composite:all:v2'")
+    expect(route).toContain("publicRankingCacheKey('precomputed:composite:all:v2')")
   })
 
   it('SSR derives its timestamp from the complete live source generation', () => {

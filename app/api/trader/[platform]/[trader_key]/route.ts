@@ -27,6 +27,7 @@ import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { after } from 'next/server'
 import { ALL_SOURCES } from '@/lib/constants/exchanges'
 import { createLogger } from '@/lib/utils/logger'
+import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
 
 const log = createLogger('api:trader-detail')
 
@@ -59,7 +60,7 @@ export async function GET(
       const CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300'
 
       // Check cache first (warm tier - 5min TTL)
-      const cacheKey = `trader:${platform}:${trader_key}`
+      const cacheKey = publicRankingCacheKey(`trader:${platform}:${trader_key}`)
       const cached = await tieredGet<TraderDetailResponse>(cacheKey)
       if (cached.data) {
         return NextResponse.json(cached.data, {

@@ -29,6 +29,7 @@ import {
 import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
 const handleSchema = z.string().min(1).max(255)
@@ -39,7 +40,7 @@ const logger = createLogger('trader-api')
 export const revalidate = 300 // 5分钟，与 Cache-Control s-maxage 一致
 
 // 缓存键前缀
-const CACHE_PREFIX = 'trader:'
+const CACHE_PREFIX = publicRankingCacheKey('trader:')
 
 /**
  * E2E test fixture mode — returns deterministic mock data when the

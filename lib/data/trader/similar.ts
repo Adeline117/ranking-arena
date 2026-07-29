@@ -9,6 +9,10 @@ import { mapLeaderboardRow } from './mappers'
 import { LR } from '@/lib/types/schema-mapping'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
+import {
+  isPublicRankingSourceAllowed,
+  publicRankingCacheKey,
+} from '@/lib/rankings/publication-policy'
 
 export async function fetchSimilarTraders(
   supabase: SupabaseClient,
@@ -17,6 +21,7 @@ export async function fetchSimilarTraders(
   arenaScore: number | null,
   roi: number | null
 ): Promise<UnifiedTrader[]> {
+  if (!isPublicRankingSourceAllowed(platform)) return []
   // Cache key bucketed by score decile to reduce cardinality (3K traders → ~10 buckets per platform)
   const scoreBucket =
     arenaScore != null
@@ -24,7 +29,7 @@ export async function fetchSimilarTraders(
       : roi != null
         ? `roi${Math.round(roi / 50) * 50}`
         : 'none'
-  const cacheKey = `similar:${platform}:${scoreBucket}`
+  const cacheKey = publicRankingCacheKey(`similar:${platform}:${scoreBucket}`)
   try {
     return await tieredGetOrSet(
       cacheKey,
@@ -90,6 +95,7 @@ async function fetchSimilarTradersUncached(
     const seen = new Set<string>()
     return data
       .filter((row) => {
+        if (!isPublicRankingSourceAllowed(row[LR.source])) return false
         const id = String(row[LR.source_trader_id] || '')
         if (seen.has(id)) return false
         seen.add(id)

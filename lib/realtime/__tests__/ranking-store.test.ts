@@ -34,6 +34,7 @@ jest.mock('@/lib/utils/logger', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { __mocks } = require('@/lib/cache/redis-client')
 
+import { PUBLIC_RANKING_CACHE_EPOCH } from '@/lib/rankings/publication-policy'
 import { updateTraderScore, flushBuffer } from '../ranking-store'
 
 describe('ranking-store', () => {
@@ -64,6 +65,16 @@ describe('ranking-store', () => {
       expect(__mocks.pipeline).toHaveBeenCalled()
       expect(__mocks.exec).toHaveBeenCalled()
     })
+
+    it.each(['bitget_bots_futures', 'bitget_bots_spot'])(
+      'never buffers quarantined source %s',
+      async (source) => {
+        await updateTraderScore('30D', source, 'cumulative-bot', 99)
+        await flushBuffer()
+        expect(__mocks.pipeline).not.toHaveBeenCalled()
+        expect(__mocks.zadd).not.toHaveBeenCalled()
+      }
+    )
   })
 
   describe('flushBuffer', () => {
@@ -79,6 +90,11 @@ describe('ranking-store', () => {
 
       expect(__mocks.pipeline).toHaveBeenCalled()
       expect(__mocks.zadd).toHaveBeenCalledTimes(2)
+      expect(__mocks.zadd).toHaveBeenNthCalledWith(
+        1,
+        `${PUBLIC_RANKING_CACHE_EPOCH}:ranking:live:90D`,
+        { score: 72.3, member: 'bybit:trader_a' }
+      )
       expect(__mocks.expire).toHaveBeenCalled()
       expect(__mocks.exec).toHaveBeenCalled()
     })

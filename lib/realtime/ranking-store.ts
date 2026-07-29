@@ -5,7 +5,7 @@
  * that updates incrementally as new trader data arrives from batch-fetch-traders,
  * and fully syncs after compute-leaderboard runs.
  *
- * Key schema: ranking:live:{period} (e.g. ranking:live:90D)
+ * Key schema: {publication-epoch}:ranking:live:{period}
  * Member format: {platform}:{traderKey}
  * Score: arena_score (float)
  * TTL: 2 hours (auto-expire if cron stops running)
@@ -15,6 +15,11 @@ import { getSharedRedis } from '@/lib/cache/redis-client'
 import { createLogger } from '@/lib/utils/logger'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
+import {
+  filterPublicRankingRows,
+  isPublicRankingSourceAllowed,
+  publicRankingCacheKey,
+} from '@/lib/rankings/publication-policy'
 
 const logger = createLogger('ranking-store')
 
@@ -27,7 +32,7 @@ const BUFFER_MAX_SIZE = 100 // or when buffer hits 100 items per key
 const BUFFER_MAX_TOTAL_ITEMS = 50000 // hard cap: prevent OOM during Redis outage
 
 function redisKey(period: string): string {
-  return `${REDIS_KEY_PREFIX}:${period.toUpperCase()}`
+  return publicRankingCacheKey(`${REDIS_KEY_PREFIX}:${period.toUpperCase()}`)
 }
 
 function memberKey(platform: string, traderKey: string): string {
@@ -110,6 +115,7 @@ export async function updateTraderScore(
   traderKey: string,
   arenaScore: number
 ): Promise<void> {
+  if (!isPublicRankingSourceAllowed(platform)) return
   const key = redisKey(period)
   const member = memberKey(platform, traderKey)
 
@@ -139,6 +145,7 @@ export async function getTraderRank(
   platform: string,
   traderKey: string
 ): Promise<number | null> {
+  if (!isPublicRankingSourceAllowed(platform)) return null
   const redis = await getSharedRedis()
   if (!redis) return null
 
@@ -179,6 +186,7 @@ export async function getTopTraders(
       const member = results[i]
       const score = Number(results[i + 1])
       const { platform, traderKey } = parseMemberKey(member)
+      if (!isPublicRankingSourceAllowed(platform)) continue
       traders.push({
         platform,
         traderKey,
@@ -214,7 +222,7 @@ const DETAIL_HASH_PREFIX = 'ranking:detail'
 const DETAIL_HASH_TTL = 2 * 60 * 60 // 2 hours (same as sorted set)
 
 function detailHashKey(period: string): string {
-  return `${DETAIL_HASH_PREFIX}:${period.toUpperCase()}`
+  return publicRankingCacheKey(`${DETAIL_HASH_PREFIX}:${period.toUpperCase()}`)
 }
 
 /** Fields fetched from leaderboard_ranks for Redis-first reads */
@@ -286,6 +294,8 @@ export async function syncSortedSetFromLeaderboard(
       if (data.length < PAGE_SIZE) break
       offset += PAGE_SIZE
     }
+
+    allTraders = filterPublicRankingRows(allTraders, (trader) => trader.source)
 
     if (allTraders.length === 0) {
       logger.warn(`[ranking-store] No traders found for ${period}, skipping sync`)
@@ -374,7 +384,8 @@ export async function getTopTradersWithDetails(
       const raw = detailResults[i] as string | null
       if (raw) {
         try {
-          traders.push(JSON.parse(raw) as Record<string, unknown>)
+          const trader = JSON.parse(raw) as Record<string, unknown>
+          if (isPublicRankingSourceAllowed(trader.source)) traders.push(trader)
         } catch {
           // Corrupted entry, skip
         }

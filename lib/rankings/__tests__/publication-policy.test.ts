@@ -35,8 +35,8 @@ function eligibleRow(overrides: Record<string, unknown> = {}) {
 }
 
 describe('public ranking publication policy', () => {
-  it('binds the cache epoch to the reviewed OKX quarantine contract', () => {
-    expect(PUBLIC_RANKING_CACHE_EPOCH).toBe('public-rank-policy-v2')
+  it('binds the cache epoch to the current ranking-authority contract', () => {
+    expect(PUBLIC_RANKING_CACHE_EPOCH).toBe('public-rank-policy-v3')
     expect(PUBLIC_RANKING_MAX_COMPUTED_AGE_MS).toBe(48 * 60 * 60 * 1000)
     expect(PUBLIC_RANKING_FUTURE_TOLERANCE_MS).toBe(5 * 60 * 1000)
     expect(PUBLIC_RANKING_SOURCE_QUARANTINES).toEqual([
@@ -46,14 +46,34 @@ describe('public ranking publication policy', () => {
         reason: 'population_and_window_authority_unverified',
         reviewedAt: '2026-07-24',
       },
+      {
+        source: 'bitget_bots_futures',
+        contract: 'bitget-bot-cumulative-rank-quarantine@1',
+        reason: 'inception_cumulative_metrics_are_not_window_rank_authority',
+        reviewedAt: '2026-07-28',
+      },
+      {
+        source: 'bitget_bots_spot',
+        contract: 'bitget-bot-cumulative-rank-quarantine@1',
+        reason: 'inception_cumulative_metrics_are_not_window_rank_authority',
+        reviewedAt: '2026-07-28',
+      },
     ])
-    expect(PUBLIC_RANKING_QUARANTINED_SOURCES).toEqual(['okx_web3_solana'])
-    expect(PUBLIC_RANKING_POSTGREST_EXCLUSION).toBe('(okx_web3_solana)')
+    expect(PUBLIC_RANKING_QUARANTINED_SOURCES).toEqual([
+      'okx_web3_solana',
+      'bitget_bots_futures',
+      'bitget_bots_spot',
+    ])
+    expect(PUBLIC_RANKING_POSTGREST_EXCLUSION).toBe(
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+    )
     expect(hasActivePublicRankingQuarantine()).toBe(true)
   })
 
   it('normalizes exact source identifiers and fails closed on missing identity', () => {
     expect(isPublicRankingSourceQuarantined(' OKX_WEB3_SOLANA ')).toBe(true)
+    expect(isPublicRankingSourceQuarantined(' BITGET_BOTS_FUTURES ')).toBe(true)
+    expect(isPublicRankingSourceQuarantined('bitget_bots_spot')).toBe(true)
     expect(isPublicRankingSourceAllowed('okx_web3_solana')).toBe(false)
     expect(isPublicRankingSourceAllowed('binance_futures')).toBe(true)
     expect(isPublicRankingSourceAllowed('')).toBe(false)
@@ -66,6 +86,8 @@ describe('public ranking publication policy', () => {
         { source: 'binance_futures', id: 1 },
         { source: 'okx_web3_solana', id: 2 },
         { source: 'hyperliquid', id: 3 },
+        { source: 'bitget_bots_futures', id: 4 },
+        { source: 'bitget_bots_spot', id: 5 },
       ],
       (row) => row.source
     )
@@ -73,6 +95,8 @@ describe('public ranking publication policy', () => {
     expect(
       filterPublicRankingSources([
         'okx_web3_solana',
+        'bitget_bots_futures',
+        'bitget_bots_spot',
         'hyperliquid',
         'binance_futures',
         'hyperliquid',
@@ -243,7 +267,7 @@ describe('public ranking publication policy', () => {
 
   it('epochs ordinary public ranking cache keys', () => {
     expect(publicRankingCacheKey('leaderboard:v3:90D')).toBe(
-      'public-rank-policy-v2:leaderboard:v3:90D'
+      'public-rank-policy-v3:leaderboard:v3:90D'
     )
   })
 

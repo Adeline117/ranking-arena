@@ -6,13 +6,14 @@
 import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
 import { getOrSetWithLock } from '@/lib/cache'
+import { filterPublicRankingRows, publicRankingCacheKey } from '@/lib/rankings/publication-policy'
 
 export const runtime = 'edge'
 
 export const GET = withPublic(
   async ({ supabase }) => {
     const data = await getOrSetWithLock(
-      'sidebar:top-traders',
+      publicRankingCacheKey('sidebar:top-traders'),
       async () => {
         // Fetch top 50 to diversify across exchanges (avoid showing only 1-2 exchanges)
         const { data: snapData, error: snapErr } = await supabase
@@ -28,14 +29,15 @@ export const GET = withPublic(
         if (snapErr) {
           throw snapErr
         }
-        if (!snapData || snapData.length === 0) {
+        const publicRows = filterPublicRankingRows(snapData ?? [], (row) => row.source)
+        if (publicRows.length === 0) {
           return { traders: [] }
         }
 
         // Diversify: pick top 1 per exchange first, then fill remaining slots by score
-        const perExchange = new Map<string, (typeof snapData)[0]>()
-        const rest: typeof snapData = []
-        for (const d of snapData) {
+        const perExchange = new Map<string, (typeof publicRows)[0]>()
+        const rest: typeof publicRows = []
+        for (const d of publicRows) {
           if (!perExchange.has(d.source)) {
             perExchange.set(d.source, d)
           } else {

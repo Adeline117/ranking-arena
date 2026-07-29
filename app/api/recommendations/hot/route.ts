@@ -13,6 +13,7 @@ import { createLogger } from '@/lib/utils/logger'
 import type { HotTrader } from '@/lib/recommendations/hot-score'
 import { socialFeatureGuard } from '@/lib/features'
 import { parseLimit } from '@/lib/utils/safe-parse'
+import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
 
 const _logger = createLogger('api-rec-hot')
 
@@ -20,29 +21,32 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
 
-const CACHE_KEY = 'recommendations:hot'
+const CACHE_KEY = publicRankingCacheKey('recommendations:hot')
 
-export const GET = withPublic(async ({ request }) => {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const GET = withPublic(
+  async ({ request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  const { searchParams } = new URL(request.url)
-  const limit = parseLimit(searchParams.get('limit'), 20, 100)
+    const { searchParams } = new URL(request.url)
+    const limit = parseLimit(searchParams.get('limit'), 20, 100)
 
-  const traders = await tieredGetOrSet<HotTrader[]>(
-    CACHE_KEY,
-    () => computeHotTraders(100),
-    'hot',
-    ['recommendations'],
-  )
+    const traders = await tieredGetOrSet<HotTrader[]>(
+      CACHE_KEY,
+      () => computeHotTraders(100),
+      'hot',
+      ['recommendations']
+    )
 
-  const sliced = traders.slice(0, limit)
+    const sliced = traders.slice(0, limit)
 
-  const response = NextResponse.json({
-    success: true,
-    data: sliced,
-    meta: { count: sliced.length, cached: true },
-  })
-  response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
-  return response
-}, { name: 'get-recommendations-hot', rateLimit: 'public' })
+    const response = NextResponse.json({
+      success: true,
+      data: sliced,
+      meta: { count: sliced.length, cached: true },
+    })
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
+    return response
+  },
+  { name: 'get-recommendations-hot', rateLimit: 'public' }
+)

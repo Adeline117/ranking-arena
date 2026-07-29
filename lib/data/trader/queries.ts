@@ -20,6 +20,11 @@ import { fetchSimilarTraders } from './similar'
 import { LR, ENRICH } from '@/lib/types/schema-mapping'
 import { SSR_HEAVY_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
 import { type DataResult, success, failure } from '@/lib/types/result'
+import {
+  PUBLIC_RANKING_QUARANTINED_SOURCES,
+  filterPublicRankingRows,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
 
 // ============================================================
 // INTERNAL: Safe query helper
@@ -125,6 +130,12 @@ export async function getLeaderboard(
     signal,
   } = params
   const opts = params
+  if (platform && !isPublicRankingSourceAllowed(platform)) {
+    return { traders: [], total: 0 }
+  }
+  const requiredExclusions = [
+    ...new Set([...excludeSources, ...PUBLIC_RANKING_QUARANTINED_SOURCES]),
+  ]
 
   // Redis-first path: default queries (no filters, sorted by rank/score, within top 200)
   // These cover ~90% of homepage and ranking page loads
@@ -177,8 +188,8 @@ export async function getLeaderboard(
     )
     .eq(LR.season_id, period)
 
-  if (excludeSources.length > 0) {
-    query = query.not(LR.source, 'in', `(${excludeSources.join(',')})`)
+  if (requiredExclusions.length > 0) {
+    query = query.not(LR.source, 'in', `(${requiredExclusions.join(',')})`)
   }
   if (platform) {
     query = query.eq(LR.source, platform)
@@ -227,7 +238,9 @@ export async function getLeaderboard(
     return { traders: [], total: 0, error: error.message }
   }
 
-  const traders = (data || []).map((row: Record<string, unknown>) => mapLeaderboardRow(row))
+  const traders = filterPublicRankingRows(data || [], (row) => row[LR.source]).map(
+    (row: Record<string, unknown>) => mapLeaderboardRow(row)
+  )
 
   // Total count from pre-computed cache (instant) instead of traders.length
   // which only reflects the current page size and breaks pagination.
@@ -270,6 +283,7 @@ export async function getTraderDetail(
   }
 ): Promise<TraderDetail | null> {
   const { platform, traderKey } = params
+  if (!isPublicRankingSourceAllowed(platform)) return null
   const sourceAliases = getSourceAliases(platform)
 
   // --- Phase 1: Fetch basic data + profile in parallel (4 queries) ---
