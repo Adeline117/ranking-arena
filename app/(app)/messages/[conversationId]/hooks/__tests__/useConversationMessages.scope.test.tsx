@@ -369,7 +369,15 @@ describe('useConversationMessages viewer scope', () => {
 
     await act(async () => {
       await result.current.handleRetry(failedMessage)
-      await result.current.handleVoiceSent('https://cdn.example.com/voice.webm', 2)
+      await result.current.handleVoiceSent(
+        {
+          fileName: 'voice-message.webm',
+          originalName: 'voice-message.webm',
+          type: 'file',
+          url: 'https://cdn.example.com/voice.webm',
+        },
+        2
+      )
     })
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(2)

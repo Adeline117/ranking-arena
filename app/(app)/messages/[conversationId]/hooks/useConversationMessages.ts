@@ -876,19 +876,13 @@ export function useConversationMessages({
   )
 
   const handleVoiceSent = useCallback(
-    async (voiceUrl: string, duration: number) => {
-      if (!userId || !otherUser || !voiceUrl) return
+    async (attachment: MediaAttachment, duration: number) => {
+      if (!userId || !otherUser || !attachment.url) return
       const receiverId = otherUser.id
       const operation = beginOperation(null, { conversationId, userId })
       if (!operation || operation.viewer.userId !== userId) return
       const content = `[Voice] ${t('voiceMessage')} (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`
       const tempId = `voice-${Date.now()}`
-      const attachment: MediaAttachment = {
-        url: voiceUrl,
-        type: 'file',
-        fileName: 'voice-message.webm',
-        originalName: 'voice-message.webm',
-      }
       const tempMsg: Message = {
         id: tempId,
         sender_id: operation.viewer.userId,
@@ -896,9 +890,9 @@ export function useConversationMessages({
         content,
         read: false,
         created_at: new Date().toISOString(),
-        media_url: voiceUrl,
-        media_type: 'file',
-        media_name: 'voice-message.webm',
+        media_url: attachment.url,
+        media_type: attachment.type,
+        media_name: attachment.originalName,
         _status: 'sending',
         _tempId: tempId,
         _attachment: attachment,

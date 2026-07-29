@@ -13,6 +13,7 @@ const ALLOWED_FILE_TYPES = [
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'text/plain',
+  'audio/webm',
   'application/zip',
   'application/x-rar-compressed',
 ]
@@ -59,22 +60,28 @@ export const POST = withAuth(
       fileCategory = 'file'
       maxSize = MAX_FILE_SIZE
     } else {
-      return NextResponse.json({
-        error: 'Unsupported file type',
-        allowedTypes: {
-          images: ['jpg', 'png', 'gif', 'webp'],
-          videos: ['mp4', 'webm', 'mov'],
-          files: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip', 'rar'],
+      return NextResponse.json(
+        {
+          error: 'Unsupported file type',
+          allowedTypes: {
+            images: ['jpg', 'png', 'gif', 'webp'],
+            videos: ['mp4', 'webm', 'mov'],
+            files: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip', 'rar'],
+          },
         },
-      }, { status: 400 })
+        { status: 400 }
+      )
     }
 
     // Validate file size
     if (file.size > maxSize) {
       const maxSizeMB = Math.round(maxSize / (1024 * 1024))
-      return NextResponse.json({
-        error: `File too large, maximum ${maxSizeMB}MB`,
-      }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: `File too large, maximum ${maxSizeMB}MB`,
+        },
+        { status: 400 }
+      )
     }
 
     // SECURITY (audit P1-SEC-2 follow-up): for the image category, sniff
@@ -88,9 +95,13 @@ export const POST = withAuth(
     if (fileCategory === 'image') {
       const sniffed = await sniffImageFile(file, ['jpeg', 'png', 'gif', 'webp', 'avif'])
       if (!sniffed) {
-        return NextResponse.json({
-          error: 'Image content does not match a supported format. Try jpg, png, gif, webp, avif.',
-        }, { status: 400 })
+        return NextResponse.json(
+          {
+            error:
+              'Image content does not match a supported format. Try jpg, png, gif, webp, avif.',
+          },
+          { status: 400 }
+        )
       }
       sniffedMime = sniffed.mime
       sniffedExt = sniffed.extension
@@ -100,10 +111,13 @@ export const POST = withAuth(
     const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
     if (bucketsError) {
       logger.error('Error listing buckets:', bucketsError)
-      return NextResponse.json({
-        error: 'Storage service unavailable',
-        details: bucketsError.message,
-      }, { status: 503 })
+      return NextResponse.json(
+        {
+          error: 'Storage service unavailable',
+          details: bucketsError.message,
+        },
+        { status: 503 }
+      )
     }
 
     const chatBucketExists = buckets?.some((b: { id: string }) => b.id === 'chat')
@@ -115,9 +129,12 @@ export const POST = withAuth(
       })
       if (createBucketError && !createBucketError.message?.includes('already exists')) {
         logger.error('Error creating chat bucket:', createBucketError)
-        return NextResponse.json({
-          error: 'Could not create storage bucket',
-        }, { status: 503 })
+        return NextResponse.json(
+          {
+            error: 'Could not create storage bucket',
+          },
+          { status: 503 }
+        )
       }
     }
 
@@ -133,12 +150,10 @@ export const POST = withAuth(
 
     // Upload to Supabase Storage with sniffed Content-Type for images,
     // declared type for video/file (out of scope for sniffing — see comment above)
-    const { data, error } = await supabase.storage
-      .from('chat')
-      .upload(fileName, file, {
-        contentType: sniffedMime || file.type,
-        upsert: false,
-      })
+    const { data, error } = await supabase.storage.from('chat').upload(fileName, file, {
+      contentType: sniffedMime || file.type,
+      upsert: false,
+    })
 
     if (error) {
       logger.error('Upload error:', error)
@@ -146,9 +161,7 @@ export const POST = withAuth(
     }
 
     // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('chat')
-      .getPublicUrl(fileName)
+    const { data: urlData } = supabase.storage.from('chat').getPublicUrl(fileName)
 
     return NextResponse.json({
       url: urlData.publicUrl,

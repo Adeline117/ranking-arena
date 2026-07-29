@@ -255,4 +255,39 @@ describe('useFileUpload viewer scope', () => {
     expect(result.current.pendingAttachment).toBeNull()
     expect(mockShowToast).toHaveBeenCalledWith('uploadFailedRetry', 'error')
   })
+
+  it('returns a voice attachment without publishing it in the composer', async () => {
+    const file = new File(['voice'], 'voice.webm', { type: 'audio/webm' })
+    globalThis.fetch = jest.fn().mockResolvedValue(
+      jsonResponse({
+        url: 'https://cdn.example.com/voice.webm',
+        fileName: 'conversation-a/file/voice.webm',
+        originalName: file.name,
+        fileSize: file.size,
+        category: 'file',
+      })
+    ) as typeof fetch
+
+    const { result } = renderHook(() =>
+      useFileUpload({
+        accessToken: 'access-token-a',
+        conversationId: 'conversation-a',
+        userId: VIEWER_A,
+      })
+    )
+
+    let attachment = null
+    await act(async () => {
+      attachment = await result.current.uploadFile(file, { publishPending: false })
+    })
+
+    expect(attachment).toEqual({
+      url: 'https://cdn.example.com/voice.webm',
+      type: 'file',
+      fileName: 'conversation-a/file/voice.webm',
+      originalName: file.name,
+      fileSize: file.size,
+    })
+    expect(result.current.pendingAttachment).toBeNull()
+  })
 })

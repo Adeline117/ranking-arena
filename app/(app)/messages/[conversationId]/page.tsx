@@ -59,9 +59,11 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
   // Messages hook
   const msgHook = useConversationMessages({ conversationId, userId, accessToken })
   const markRead = msgHook.markRead
+  const sendVoiceMessage = msgHook.handleVoiceSent
 
   // File upload hook
   const fileHook = useFileUpload({ userId, accessToken, conversationId })
+  const uploadFile = fileHook.uploadFile
 
   // Online presence
   const watchIds = msgHook.otherUser ? [msgHook.otherUser.id] : []
@@ -179,6 +181,15 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
     await msgHook.handleSend(content, attachment)
     setSending(false)
   }
+
+  const handleVoiceRecorded = useCallback(
+    async (file: File, duration: number) => {
+      const attachment = await uploadFile(file, { publishPending: false })
+      if (!attachment) return
+      await sendVoiceMessage(attachment, duration)
+    },
+    [sendVoiceMessage, uploadFile]
+  )
 
   // Auth / loading states
   if (!authChecked || (authChecked && !userId && msgHook.loading)) {
@@ -689,7 +700,7 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
         showStickerPicker={showStickerPicker}
         setShowStickerPicker={setShowStickerPicker}
         onSend={handleSend}
-        onVoiceSent={msgHook.handleVoiceSent}
+        onVoiceRecorded={handleVoiceRecorded}
         onPreviewOpen={setPreviewOpen}
         t={t}
         language={language}

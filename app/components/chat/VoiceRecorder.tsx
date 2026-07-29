@@ -1,16 +1,15 @@
 'use client'
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 
 interface VoiceRecorderProps {
-  onVoiceSent: (url: string, duration: number) => void
+  onVoiceRecorded: (file: File, duration: number) => Promise<void>
   disabled?: boolean
 }
 
-export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderProps) {
+export default function VoiceRecorder({ onVoiceRecorded, disabled }: VoiceRecorderProps) {
   const { t } = useLanguage()
   const [recording, setRecording] = useState(false)
   const [duration, setDuration] = useState(0)
@@ -20,9 +19,12 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = useRef<number>(0)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
       // Clean up interval
       if (timerRef.current) {
         clearInterval(timerRef.current)
@@ -48,6 +50,10 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
       streamRef.current = stream
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
@@ -68,25 +74,20 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
         const recordedDuration = Math.round((Date.now() - startTimeRef.current) / 1000)
 
-        if (recordedDuration < 1) return // too short
+        if (recordedDuration < 1 || !mountedRef.current) return // too short or stale recorder
 
         setUploading(true)
         try {
           const fileName = `voice_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.webm`
-          const { data, error } = await supabase.storage
-            .from('voice-messages')
-            .upload(fileName, blob, { contentType: 'audio/webm' })
-
-          if (error) throw error
-
-          const { data: urlData } = supabase.storage.from('voice-messages').getPublicUrl(data.path)
-
-          onVoiceSent(urlData.publicUrl, recordedDuration)
+          const file = new File([blob], fileName, { type: 'audio/webm' })
+          await onVoiceRecorded(file, recordedDuration)
         } catch (err) {
           logger.error('Voice upload failed:', err)
         } finally {
-          setUploading(false)
-          setDuration(0)
+          if (mountedRef.current) {
+            setUploading(false)
+            setDuration(0)
+          }
         }
       }
 
@@ -100,7 +101,7 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
     } catch (err) {
       logger.error('Microphone access denied:', err)
     }
-  }, [onVoiceSent])
+  }, [onVoiceRecorded])
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {

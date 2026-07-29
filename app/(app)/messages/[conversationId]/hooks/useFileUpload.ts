@@ -18,6 +18,10 @@ interface UseFileUploadOptions {
   conversationId: string
 }
 
+type UploadFileOptions = {
+  publishPending?: boolean
+}
+
 type UploadOperation = {
   controller: AbortController
   conversationId: string
@@ -108,8 +112,11 @@ export function useFileUpload({ userId, accessToken, conversationId }: UseFileUp
   }, [])
 
   const uploadFile = useCallback(
-    async (file: File) => {
-      if (!userId || !conversationId) return
+    async (
+      file: File,
+      { publishPending = true }: UploadFileOptions = {}
+    ): Promise<MediaAttachment | null> => {
+      if (!userId || !conversationId) return null
       const viewer = captureSettingsViewer(authRef.current)
       if (
         !viewer ||
@@ -117,7 +124,7 @@ export function useFileUpload({ userId, accessToken, conversationId }: UseFileUp
         viewer.accessToken !== accessToken ||
         !isSettingsViewerCurrent(viewer, authRef.current)
       ) {
-        return
+        return null
       }
       const operation: UploadOperation = {
         controller: new AbortController(),
@@ -141,11 +148,12 @@ export function useFileUpload({ userId, accessToken, conversationId }: UseFileUp
           signal: operation.controller.signal,
         })
         const data: unknown = await res.json().catch(() => null)
-        if (!operationIsCurrent(operation)) return
+        if (!operationIsCurrent(operation)) return null
         if (res.ok) {
           const attachment = readUploadAcknowledgement(data, { conversationId, file })
           if (!attachment) throw new Error('Invalid chat upload acknowledgement')
-          setPendingAttachment(attachment)
+          if (publishPending) setPendingAttachment(attachment)
+          return attachment
         } else {
           const error =
             data &&
@@ -170,6 +178,7 @@ export function useFileUpload({ userId, accessToken, conversationId }: UseFileUp
           setUploading(false)
         }
       }
+      return null
     },
     [accessToken, userId, conversationId, operationIsCurrent, showToast, t]
   )

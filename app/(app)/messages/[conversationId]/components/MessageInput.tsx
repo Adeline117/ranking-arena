@@ -17,11 +17,11 @@ interface MessageInputProps {
   setPendingAttachment: (a: MediaAttachment | null) => void
   sending: boolean
   uploading: boolean
-  onFileUpload: (file: File) => Promise<void>
+  onFileUpload: (file: File) => Promise<MediaAttachment | null>
   showStickerPicker: boolean
   setShowStickerPicker: (v: boolean) => void
   onSend: () => void
-  onVoiceSent: (url: string, duration: number) => void
+  onVoiceRecorded: (file: File, duration: number) => Promise<void>
   onPreviewOpen: (preview: {
     type: 'image' | 'video' | 'file'
     url: string
@@ -59,7 +59,7 @@ export default function MessageInput({
   showStickerPicker,
   setShowStickerPicker,
   onSend,
-  onVoiceSent,
+  onVoiceRecorded,
   onPreviewOpen,
   t,
   language: _language,
@@ -520,7 +520,7 @@ export default function MessageInput({
           />
         </div>
 
-        <VoiceRecorder onVoiceSent={onVoiceSent} disabled={sending} />
+        <VoiceRecorder onVoiceRecorded={onVoiceRecorded} disabled={sending || uploading} />
 
         {/* Send button */}
         <button
