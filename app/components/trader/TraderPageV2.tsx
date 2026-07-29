@@ -7,7 +7,13 @@
 
 import { useState } from 'react'
 import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
-import { formatROI, formatPnL, formatNumber } from '@/lib/utils/format'
+import {
+  formatDrawdown,
+  formatROI,
+  formatPnL,
+  formatNumber,
+  NULL_DISPLAY,
+} from '@/lib/utils/format'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderDetailV2 } from '@/lib/hooks/useTraderDetailV2'
 import dynamic from 'next/dynamic'
@@ -320,7 +326,7 @@ function StatItem({
   )
 }
 
-function SnapshotCard({
+export function SnapshotCard({
   window,
   metrics,
 }: {
@@ -347,6 +353,13 @@ function SnapshotCard({
 
   const roi = metrics.roi
   const pnl = metrics.pnl
+  const maxDrawdown = formatDrawdown(metrics.max_drawdown)
+  const maxDrawdownColor =
+    maxDrawdown === NULL_DISPLAY
+      ? tokens.colors.text.tertiary
+      : Math.abs(metrics.max_drawdown ?? 0) > 0
+        ? tokens.colors.accent.error
+        : tokens.colors.text.primary
   const roiColor =
     roi != null && roi >= 0
       ? tokens.colors.accent.success
@@ -423,18 +436,14 @@ function SnapshotCard({
             </span>
           </div>
         )}
-        {metrics.max_drawdown != null && Number.isFinite(metrics.max_drawdown) && (
-          <div className="flex justify-between">
-            <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>
-              {t('mddLabel')}
-            </span>
-            <span className="text-sm" style={{ color: tokens.colors.accent.error }}>
-              {Math.abs(metrics.max_drawdown) < 0.05
-                ? '< 0.1%'
-                : `-${Math.min(Math.abs(metrics.max_drawdown), 100).toFixed(1)}%`}
-            </span>
-          </div>
-        )}
+        <div className="flex justify-between">
+          <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>
+            {t('mddLabel')}
+          </span>
+          <span className="text-sm" style={{ color: maxDrawdownColor }}>
+            {maxDrawdown}
+          </span>
+        </div>
         {metrics.sharpe_ratio != null && (
           <div className="flex justify-between">
             <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>
