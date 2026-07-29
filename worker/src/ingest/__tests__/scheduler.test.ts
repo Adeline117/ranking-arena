@@ -41,6 +41,18 @@ const mockGetRegionQueue = jest.fn((region: string) =>
 )
 const mockGetFastQueue = jest.fn(() => mockFastQueue)
 const mockDbQuery = jest.fn().mockResolvedValue({ rows: [] })
+const mockGetServingSourceNames = jest.fn().mockResolvedValue(['srcx'])
+const mockRedisSet = jest.fn().mockResolvedValue('OK')
+const mockGetAdapter = jest.fn().mockReturnValue({
+  capabilities: {
+    profile: true,
+    positions: true,
+    positionHistory: true,
+    orders: true,
+    transfers: true,
+    copiers: true,
+  },
+})
 
 jest.mock('../queues', () => ({
   INGEST_JOB: {
@@ -72,10 +84,20 @@ jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: () => ({ query: mockDbQuery }),
 }))
 
+jest.mock('../../connection', () => ({
+  getConnection: () => ({ set: (...args: unknown[]) => mockRedisSet(...args) }),
+}))
+
+jest.mock('@/lib/ingest/core/adapter', () => ({
+  getAdapter: (...args: unknown[]) => mockGetAdapter(...args),
+}))
+
 jest.mock('@/lib/ingest/sources', () => ({
+  getServingSourceNames: (...args: unknown[]) => mockGetServingSourceNames(...args),
   getActiveSources: jest.fn().mockResolvedValue([
     {
       slug: 'srcx',
+      adapter_slug: 'adapterx',
       fetch_region: 'local',
       cadence_tier_a_seconds: 3600,
       cadence_tier_b_seconds: 7200,
@@ -311,6 +333,7 @@ describe('reconcileSchedulers cleanup/revival', () => {
 
   // ── Fast-lane routing (2026-06-13 slot-starvation root fix) ──
   const baseSource = {
+    adapter_slug: 'adapterx',
     fetch_region: 'local',
     cadence_tier_a_seconds: 3600,
     cadence_tier_b_seconds: 7200,
@@ -369,6 +392,69 @@ describe('reconcileSchedulers cleanup/revival', () => {
         expect.objectContaining({ name })
       )
     }
+  })
+
+  it('omits recurring jobs for source surfaces the adapter does not expose', async () => {
+    mockGetAdapter.mockReturnValueOnce({
+      capabilities: {
+        profile: false,
+        positions: false,
+        positionHistory: false,
+        orders: false,
+        transfers: false,
+        copiers: false,
+      },
+    })
+    ;(getActiveSources as jest.Mock).mockResolvedValueOnce([
+      { ...baseSource, slug: 'boardonly', expected_count: null },
+    ])
+
+    await reconcileSchedulers()
+
+    expect(mockQueue.upsertJobScheduler).toHaveBeenCalledWith(
+      'tiera:boardonly',
+      expect.anything(),
+      expect.objectContaining({ name: 'tiera:leaderboard' })
+    )
+    expect(mockQueue.upsertJobScheduler).not.toHaveBeenCalledWith(
+      'tierb:boardonly',
+      expect.anything(),
+      expect.anything()
+    )
+    expect(mockQueue.upsertJobScheduler).not.toHaveBeenCalledWith(
+      'tierd:boardonly',
+      expect.anything(),
+      expect.anything()
+    )
+  })
+
+  it('keeps Tier B scheduled for a history-only adapter', async () => {
+    mockGetAdapter.mockReturnValueOnce({
+      capabilities: {
+        profile: false,
+        positions: false,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+    })
+    ;(getActiveSources as jest.Mock).mockResolvedValueOnce([
+      { ...baseSource, slug: 'historyonly', expected_count: null },
+    ])
+
+    await reconcileSchedulers()
+
+    expect(mockQueue.upsertJobScheduler).toHaveBeenCalledWith(
+      'tierb:historyonly',
+      expect.anything(),
+      expect.objectContaining({ name: 'tierb:profiles' })
+    )
+    expect(mockQueue.upsertJobScheduler).not.toHaveBeenCalledWith(
+      'tierd:historyonly',
+      expect.anything(),
+      expect.anything()
+    )
   })
 
   it('keeps a giant board Tier-A on the bulk queue (heavy, > threshold)', async () => {

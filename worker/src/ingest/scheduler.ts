@@ -8,6 +8,8 @@
  */
 
 import { getActiveSources, getServingSourceNames } from '@/lib/ingest/sources'
+import { getAdapter } from '@/lib/ingest/core/adapter'
+import { supportsSourceSurface } from '@/lib/ingest/core/surface-capabilities'
 import {
   EXPECTED_METRICS,
   EXPECTED_METRICS_BY_SOURCE,
@@ -118,6 +120,12 @@ export async function reconcileSchedulers(): Promise<void> {
 
   for (const src of sources) {
     const data = { sourceSlug: src.slug }
+    const adapter = getAdapter(src.adapter_slug)
+    const profileSupported = supportsSourceSurface(adapter, src, 'profile')
+    const historySupported = (['positionHistory', 'orders', 'transfers', 'copiers'] as const).some(
+      (surface) => supportsSourceSurface(adapter, src, surface)
+    )
+    const positionsSupported = supportsSourceSurface(adapter, src, 'positions')
     // Bulk tiers run on the source's fetch_region queue so a worker
     // co-located with that region picks them up (remote-WS chain gone).
     const queue = getRegionQueue(src.fetch_region)
@@ -143,28 +151,32 @@ export async function reconcileSchedulers(): Promise<void> {
       { name: INGEST_JOB.TIER_A, data, opts: { priority: 1 } }
     )
 
-    const tierB = `tierb:${src.slug}`
-    wanted.set(tierB, bulkName)
-    await queue.upsertJobScheduler(
-      tierB,
-      { every: src.cadence_tier_b_seconds * 1000 },
-      { name: INGEST_JOB.TIER_B, data, opts: { priority: 6 } }
-    )
+    if (profileSupported || historySupported) {
+      const tierB = `tierb:${src.slug}`
+      wanted.set(tierB, bulkName)
+      await queue.upsertJobScheduler(
+        tierB,
+        { every: src.cadence_tier_b_seconds * 1000 },
+        { name: INGEST_JOB.TIER_B, data, opts: { priority: 6 } }
+      )
+    }
 
-    const tierD = `tierd:${src.slug}`
-    wanted.set(tierD, bulkName)
-    await queue.upsertJobScheduler(
-      tierD,
-      { every: src.cadence_tier_d_seconds * 1000 },
-      { name: INGEST_JOB.TIER_D, data, opts: { priority: 3 } }
-    )
+    if (positionsSupported) {
+      const tierD = `tierd:${src.slug}`
+      wanted.set(tierD, bulkName)
+      await queue.upsertJobScheduler(
+        tierD,
+        { every: src.cadence_tier_d_seconds * 1000 },
+        { name: INGEST_JOB.TIER_D, data, opts: { priority: 3 } }
+      )
+    }
 
     // Series backfill (spec §13.1): slow sweep of ranked traders beyond
     // deep_profile_topn — only for sources that opt in via
     // meta.series_backfill_topn. Default 30-min cadence drips a bounded batch
     // so long-tail chart coverage grows over days within the rate budget.
     const backfillTopN = Number(src.meta?.series_backfill_topn ?? 0)
-    if (backfillTopN > src.deep_profile_topn) {
+    if (profileSupported && backfillTopN > src.deep_profile_topn) {
       const cadenceSec = Number(src.meta?.series_backfill_cadence_seconds ?? 1800)
       const seriesBackfill = `tierbs:${src.slug}`
       wanted.set(seriesBackfill, bulkName)
