@@ -16,6 +16,7 @@ jest.mock('@supabase/supabase-js', () => ({
 import {
   getActiveAppUserFromToken,
   getProvisioningUserFromToken,
+  getUserAccountStatus,
   getUserFromToken,
 } from '../server'
 
@@ -153,4 +154,38 @@ describe('server auth application-account status', () => {
       await expect(getUserFromToken('token')).resolves.toBeNull()
     }
   )
+
+  it.each([
+    ['permanent legacy ban', null],
+    ['unexpired legacy ban', '2999-01-01T00:00:00.000Z'],
+    ['malformed legacy ban expiry', 'not-a-timestamp'],
+  ])('fails the direct status fallback closed for %s', async (_label, banExpiresAt) => {
+    mockMaybeSingle.mockResolvedValue({
+      data: {
+        banned_at: null,
+        ban_expires_at: banExpiresAt,
+        deleted_at: null,
+        email: 'legacy-ban@example.com',
+        is_banned: true,
+      },
+      error: null,
+    })
+
+    await expect(getUserAccountStatus('direct-legacy-ban')).resolves.toBe('suspended')
+  })
+
+  it('allows the direct status fallback after a legacy temporary ban expires', async () => {
+    mockMaybeSingle.mockResolvedValue({
+      data: {
+        banned_at: null,
+        ban_expires_at: '2000-01-01T00:00:00.000Z',
+        deleted_at: null,
+        email: 'expired-ban@example.com',
+        is_banned: true,
+      },
+      error: null,
+    })
+
+    await expect(getUserAccountStatus('direct-expired-ban')).resolves.toBe('active')
+  })
 })

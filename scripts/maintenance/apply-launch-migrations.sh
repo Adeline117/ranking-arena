@@ -159,6 +159,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729075400_verified_auth_profile_email.sql
   20260729075500_account_recovery_auth_email_authority.sql
   20260729075550_preserve_stripe_event_idempotency.sql
+  20260729075600_verified_auth_profile_ban_authority.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055

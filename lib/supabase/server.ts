@@ -111,6 +111,16 @@ export type UserAccountStatus = 'active' | 'suspended' | 'missing' | 'unavailabl
 
 type VerifiedAuthIdentity = Readonly<{ verifiedEmail: string | null }>
 
+function hasActiveLegacyBan(profile: {
+  is_banned: boolean | null
+  ban_expires_at: string | null
+}): boolean {
+  if (profile.is_banned !== true) return false
+  if (profile.ban_expires_at === null) return true
+  const expiresAt = Date.parse(profile.ban_expires_at)
+  return !Number.isFinite(expiresAt) || expiresAt > Date.now()
+}
+
 async function admitVerifiedAuthProfile(
   userId: string,
   verifiedEmail: string | null
@@ -175,7 +185,7 @@ export async function getUserAccountStatus(
     const supabase = getSupabaseAdmin()
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('banned_at, deleted_at, email')
+      .select('banned_at, ban_expires_at, deleted_at, email, is_banned')
       .eq('id', userId)
       .maybeSingle()
 
@@ -194,7 +204,7 @@ export async function getUserAccountStatus(
       return 'missing'
     }
 
-    if (profile.banned_at || profile.deleted_at) {
+    if (profile.banned_at || profile.deleted_at || hasActiveLegacyBan(profile)) {
       return 'suspended'
     }
 
