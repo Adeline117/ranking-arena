@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "auditedAt": "2026-07-29",
+  "countUnit": "source_board",
+  "counts": {
+    "codeRegistrySourceBoards": 37,
+    "publicRankingAllowedSourceBoards": 34,
+    "companyOrProtocolFamilies": 23,
+    "configuredSourcesWithData": 34
+  },
+  "families": [
+    {
+      "id": "binance",
+      "sources": ["binance_futures", "binance_spot", "binance_web3"]
+    },
+    {
+      "id": "bybit",
+      "sources": ["bybit", "bybit_mt5"]
+    },
+    {
+      "id": "bitget",
+      "sources": [
+        "bitget_futures",
+        "bitget_cfd",
+        "bitget_bots_futures",
+        "bitget_bots_spot",
+        "bitget_spot"
+      ]
+    },
+    {
+      "id": "mexc",
+      "sources": ["mexc"]
+    },
+    {
+      "id": "coinex",
+      "sources": ["coinex"]
+    },
+    {
+      "id": "okx",
+      "sources": ["okx_futures", "okx_spot", "okx_web3_solana"]
+    },
+    {
+      "id": "kucoin",
+      "sources": ["kucoin"]
+    },
+    {
+      "id": "phemex",
+      "sources": ["phemex"]
+    },
+    {
+      "id": "htx",
+      "sources": ["htx_futures", "htx_spot"]
+    },
+    {
+      "id": "bingx",
+      "sources": ["bingx", "bingx_spot"]
+    },
+    {
+      "id": "gate",
+      "sources": ["gateio", "gate_cfd"]
+    },
+    {
+      "id": "xt",
+      "sources": ["xt", "xt_spot"]
+    },
+    {
+      "id": "lbank",
+      "sources": ["lbank"]
+    },
+    {
+      "id": "blofin",
+      "sources": ["blofin", "blofin_spot"]
+    },
+    {
+      "id": "bitmart",
+      "sources": ["bitmart_futures"]
+    },
+    {
+      "id": "toobit",
+      "sources": ["toobit_futures"]
+    },
+    {
+      "id": "gmx",
+      "sources": ["gmx"]
+    },
+    {
+      "id": "hyperliquid",
+      "sources": ["hyperliquid"]
+    },
+    {
+      "id": "drift",
+      "sources": ["drift"]
+    },
+    {
+      "id": "paradex",
+      "sources": ["paradex"]
+    },
+    {
+      "id": "bitunix",
+      "sources": ["bitunix"]
+    },
+    {
+      "id": "btcc",
+      "sources": ["btcc"]
+    },
+    {
+      "id": "bitfinex",
+      "sources": ["bitfinex"]
+    }
+  ],
+  "publicRankingQuarantinedSources": [
+    "okx_web3_solana",
+    "bitget_bots_futures",
+    "bitget_bots_spot"
+  ],
+  "configuredSourcesWithData": [
+    "binance_futures",
+    "bybit",
+    "bitget_futures",
+    "bitget_cfd",
+    "bitget_bots_futures",
+    "bitmart_futures",
+    "bybit_mt5",
+    "gate_cfd",
+    "okx_futures",
+    "mexc",
+    "htx_futures",
+    "coinex",
+    "bingx",
+    "gateio",
+    "xt",
+    "lbank",
+    "blofin",
+    "btcc",
+    "bitfinex",
+    "bitunix",
+    "kucoin",
+    "phemex",
+    "toobit_futures",
+    "binance_spot",
+    "bitget_bots_spot",
+    "bitget_spot",
+    "blofin_spot",
+    "htx_spot",
+    "okx_spot",
+    "xt_spot",
+    "gmx",
+    "hyperliquid",
+    "binance_web3",
+    "okx_web3_solana"
+  ],
+  "setDifferences": {
+    "publicAllowedWithoutConfiguredData": ["bingx_spot", "drift", "paradex"],
+    "configuredDataWithoutPublicRankingPermission": [
+      "bitget_bots_futures",
+      "bitget_bots_spot",
+      "okx_web3_solana"
+    ]
+  },
+  "currentServing": {
+    "count": null,
+    "status": "unverified",
+    "reason": "Production database and RPC were unavailable during this audit; a checked-in historical artifact is not current serving authority."
+  },
+  "latestCheckedInServingEvidence": {
+    "artifact": "docs/EXCHANGE_FIELD_COVERAGE.md",
+    "generatedAt": "2026-07-16T16:58:29.143Z",
+    "count": 34,
+    "scope": "arena.trader_stats source slugs present when the production field-coverage artifact was generated",
+    "registrySlugs": [
+      "binance_futures",
+      "binance_spot",
+      "binance_web3_bsc",
+      "bingx_futures",
+      "bitfinex",
+      "bitget_bots_futures",
+      "bitget_bots_spot",
+      "bitget_cfd",
+      "bitget_futures",
+      "bitget_spot",
+      "bitmart_futures",
+      "bitunix_futures",
+      "blofin_futures",
+      "blofin_spot",
+      "btcc_futures",
+      "bybit_copytrade",
+      "bybit_mt5",
+      "gate_cfd",
+      "gate_futures",
+      "gmx",
+      "gtrade",
+      "htx_futures",
+      "htx_spot",
+      "hyperliquid",
+      "kucoin_futures",
+      "lbank_futures",
+      "mexc_futures",
+      "okx_futures",
+      "okx_spot",
+      "okx_web3_solana",
+      "phemex_futures",
+      "toobit_futures",
+      "xt_futures",
+      "xt_spot"
+    ]
+  },
+  "verification": {
+    "command": "npx jest lib/constants/__tests__/source-board-ledger.test.ts --runInBand"
+  }
+}
