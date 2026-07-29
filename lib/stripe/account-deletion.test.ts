@@ -653,6 +653,7 @@ describe('account deletion Stripe shutdown', () => {
       resumeStripeSubscriptionRenewals({
         stripeClient,
         subscriptionIds: ['sub_resume', 'sub_terminal'],
+        expectedCustomerId: 'cus_owner',
         pauseMarker: PAUSE_MARKER,
       })
     ).resolves.toEqual({
@@ -669,6 +670,21 @@ describe('account deletion Stripe shutdown', () => {
         [ACCOUNT_DELETION_PAUSE_METADATA_KEY]: '',
       },
     })
+  })
+
+  it('refuses to derive a Customer inside the Stripe mutation boundary', async () => {
+    await expect(
+      resumeStripeSubscriptionRenewals({
+        stripeClient,
+        subscriptionIds: ['sub_foreign'],
+        expectedCustomerId: '',
+        pauseMarker: PAUSE_MARKER,
+      })
+    ).rejects.toThrow('durably bound Stripe customer')
+
+    expect(mockRetrieveSubscription).not.toHaveBeenCalled()
+    expect(mockUpdateSubscription).not.toHaveBeenCalled()
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
   })
 
   it('enumerates a customer but resumes only subscriptions marked by this deletion', async () => {

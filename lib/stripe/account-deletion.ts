@@ -286,11 +286,14 @@ export async function stopStripeSubscriptionRenewals(params: {
 export async function resumeStripeSubscriptionRenewals(params: {
   stripeClient: Stripe
   subscriptionIds: string[]
-  expectedCustomerId?: string | null
+  expectedCustomerId: string
   includeCustomerSubscriptions?: boolean
   pauseMarker: string
 }): Promise<ResumeSubscriptionRenewalsResult> {
   assertPauseMarker(params.pauseMarker)
+  if (!params.expectedCustomerId) {
+    throw new Error('Account recovery requires a durably bound Stripe customer')
+  }
   const { customerId, subscriptions } = await loadStripeSubscriptions({
     stripeClient: params.stripeClient,
     subscriptionIds: params.subscriptionIds,

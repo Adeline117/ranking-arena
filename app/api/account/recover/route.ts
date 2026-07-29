@@ -1,6 +1,6 @@
 /** Recover an account during its 30-day deletion grace period. */
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { withPublic } from '@/lib/api/middleware'
@@ -11,6 +11,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { getStripe } from '@/lib/stripe'
 import {
+  discoverStripeSubscriptionBilling,
   resumeStripeSubscriptionRenewals,
   stopStripeSubscriptionRenewals,
 } from '@/lib/stripe/account-deletion'
@@ -21,12 +22,101 @@ const INVALID_RECOVERY = 'Invalid credentials or no pending deletion'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-async function reban(userId: string): Promise<void> {
+async function reban(userId: string): Promise<boolean> {
   const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, {
     ban_duration: '720h',
   })
-  if (error)
+  if (error) {
     logger.error('Failed to restore deletion ban after recovery failure', { userId, error })
+    return false
+  }
+  return true
+}
+
+type RecoveryClaimAck = 'claimed' | 'busy' | 'finished' | 'invalid'
+type RecoveryFinishAck = 'finished' | 'aborted' | 'absent' | 'invalid'
+type RecoveryAbortAck = 'aborted' | 'finished' | 'absent'
+
+interface RecoveryRpcResult {
+  data: unknown
+  error: { message: string } | null
+}
+
+async function recoveryRpc(
+  functionName: string,
+  args: Record<string, unknown>
+): Promise<RecoveryRpcResult> {
+  const admin = getSupabaseAdmin()
+  return (await Reflect.apply(admin.rpc, admin, [functionName, args])) as RecoveryRpcResult
+}
+
+async function claimRecoveryAdmission(params: {
+  userId: string
+  recoveryTokenHash: string | null
+  operationId: string
+}): Promise<RecoveryClaimAck> {
+  const { data, error } = await recoveryRpc('claim_account_recovery_admission_atomic', {
+    p_user_id: params.userId,
+    p_recovery_token_hash: params.recoveryTokenHash,
+    p_operation_id: params.operationId,
+  })
+  if (
+    error ||
+    (data !== 'claimed' && data !== 'busy' && data !== 'finished' && data !== 'invalid')
+  ) {
+    throw new Error(error?.message ?? 'Recovery admission returned an invalid acknowledgement')
+  }
+  return data
+}
+
+async function finishRecoveryAdmission(params: {
+  userId: string
+  operationId: string
+}): Promise<RecoveryFinishAck> {
+  const { data, error } = await recoveryRpc('finish_account_recovery_admission_atomic', {
+    p_user_id: params.userId,
+    p_operation_id: params.operationId,
+  })
+  if (
+    error ||
+    (data !== 'finished' && data !== 'aborted' && data !== 'absent' && data !== 'invalid')
+  ) {
+    throw new Error(error?.message ?? 'Recovery finish returned an invalid acknowledgement')
+  }
+  return data
+}
+
+async function abortRecoveryAdmission(params: {
+  userId: string
+  operationId: string
+}): Promise<RecoveryAbortAck> {
+  const { data, error } = await recoveryRpc('abort_account_recovery_admission_atomic', {
+    p_user_id: params.userId,
+    p_operation_id: params.operationId,
+  })
+  if (error || (data !== 'aborted' && data !== 'finished' && data !== 'absent')) {
+    throw new Error(error?.message ?? 'Recovery abort returned an invalid acknowledgement')
+  }
+  return data
+}
+
+async function abortRecoveryAdmissionBestEffort(params: {
+  userId: string
+  operationId: string
+}): Promise<RecoveryAbortAck | null> {
+  try {
+    const ack = await abortRecoveryAdmission(params)
+    if (ack === 'finished') {
+      logger.error('Recovery abort observed an already-finished admission', params)
+    }
+    return ack
+  } catch (error) {
+    logger.error('Failed to abort account recovery admission', {
+      ...params,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
 }
 
 interface BillingRecoveryState {
@@ -34,6 +124,16 @@ interface BillingRecoveryState {
   consumerSubscriptionId: string | null
   resumedSubscriptionIds: string[]
   terminalSubscriptionIds: string[]
+}
+
+function isExactCustomerBindingAck(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const ack = value as Record<string, unknown>
+  return (
+    Object.keys(ack).length === 1 &&
+    Object.prototype.hasOwnProperty.call(ack, 'status') &&
+    (ack.status === 'bound' || ack.status === 'already_bound')
+  )
 }
 
 async function resumeSubscription(userId: string): Promise<BillingRecoveryState> {
@@ -81,10 +181,36 @@ async function resumeSubscription(userId: string): Promise<BillingRecoveryState>
     }
   }
 
+  const stripeClient = getStripe()
+  let stripeCustomerId = billingProfile.stripe_customer_id
+  if (!stripeCustomerId) {
+    const discovery = await discoverStripeSubscriptionBilling({
+      stripeClient,
+      subscriptionIds,
+      expectedUserId: userId,
+      includeCustomerSubscriptions: true,
+    })
+    if (!discovery.customerId) {
+      throw new Error('Stripe customer identity could not be proven for account recovery')
+    }
+    const { data: bindAck, error: bindError } = await admin.rpc(
+      'bind_stripe_customer_owner_atomic',
+      {
+        p_user_id: userId,
+        p_new_stripe_customer_id: discovery.customerId,
+        p_expected_previous_stripe_customer_id: null,
+      }
+    )
+    if (bindError || !isExactCustomerBindingAck(bindAck)) {
+      throw new Error('Stripe customer ownership could not be bound for account recovery')
+    }
+    stripeCustomerId = discovery.customerId
+  }
+
   const resumed = await resumeStripeSubscriptionRenewals({
-    stripeClient: getStripe(),
+    stripeClient,
     subscriptionIds,
-    expectedCustomerId: billingProfile.stripe_customer_id,
+    expectedCustomerId: stripeCustomerId,
     includeCustomerSubscriptions: true,
     pauseMarker: userId,
   })
@@ -101,14 +227,14 @@ async function resumeSubscription(userId: string): Promise<BillingRecoveryState>
       .eq('stripe_subscription_id', consumerSubscriptionId)
       .eq('user_id', userId)
     if (updateError) {
-      await restoreDeletionBillingShutdown(userId, recovery)
+      await stopUncommittedBillingRecovery(userId, recovery)
       throw updateError
     }
   }
   return recovery
 }
 
-async function restoreDeletionBillingShutdown(
+async function stopUncommittedBillingRecovery(
   userId: string,
   recovery: BillingRecoveryState
 ): Promise<void> {
@@ -199,46 +325,27 @@ export const POST = withPublic(
       }
 
       userId = profile.id
-      const { error: unbanError } = await admin.auth.admin.updateUserById(userId, {
-        ban_duration: 'none',
-      })
-      if (unbanError) {
-        logger.error('Failed to open credential verification window', { userId, unbanError })
-        return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
-      }
-
-      let valid = false
-      try {
-        const anon = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-        const { error: signInError } = await anon.auth.signInWithPassword({ email, password })
-        valid = !signInError
-      } finally {
-        if (!valid) await reban(userId)
-      }
-      if (!valid) {
-        return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
-      }
     }
 
-    // Token holders also need the auth ban lifted before the account becomes
-    // usable again. A failed DB restore is compensated by re-banning below.
-    if (recoveryTokenHash) {
-      const { error: unbanError } = await admin.auth.admin.updateUserById(userId, {
-        ban_duration: 'none',
-      })
-      if (unbanError) {
-        logger.error('Failed to unban token recovery', { userId, unbanError })
-        return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
-      }
+    if (!userId) {
+      return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
     }
 
-    let billingRecovery: BillingRecoveryState
+    // The claim is the cross-system serialization point. No Auth or Stripe
+    // mutation is permitted before an exact single-winner acknowledgement.
+    const operationId = randomUUID()
+    let claimAck: RecoveryClaimAck
     try {
-      billingRecovery = await resumeSubscription(userId)
-    } catch (error) {
-      await reban(userId)
-      logger.error('Subscription renewal could not be resumed; account remains pending deletion', {
+      claimAck = await claimRecoveryAdmission({
         userId,
+        recoveryTokenHash: recoveryTokenHash ?? null,
+        operationId,
+      })
+    } catch (error) {
+      await abortRecoveryAdmissionBestEffort({ userId, operationId })
+      logger.error('Failed to claim account recovery admission', {
+        userId,
+        operationId,
         error: error instanceof Error ? error.message : String(error),
       })
       return NextResponse.json(
@@ -246,30 +353,105 @@ export const POST = withPublic(
         { status: 503 }
       )
     }
+    if (claimAck === 'busy') {
+      return NextResponse.json(
+        { success: false, error: 'Account recovery is already in progress.' },
+        { status: 409 }
+      )
+    }
+    if (claimAck !== 'claimed') {
+      return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
+    }
 
-    const { data: restoredUserId, error: restoreError } = await admin.rpc(
-      'restore_pending_account',
-      {
-        p_user_id: userId,
-        ...(recoveryTokenHash ? { p_recovery_token_hash: recoveryTokenHash } : {}),
-      }
-    )
-
-    if (restoreError || !restoredUserId) {
-      try {
-        await restoreDeletionBillingShutdown(userId, billingRecovery)
-      } catch (error) {
-        logger.error('Failed to restore billing pause after account recovery rollback', {
+    // Password verification requires a short Auth window. Close it again
+    // before the PostgreSQL finish transition so an ambiguous finish always
+    // leaves the subject banned rather than racing an active session.
+    if (!recoveryTokenHash) {
+      const email = body.email!
+      const password = body.password!
+      const { error: verificationUnbanError } = await admin.auth.admin.updateUserById(userId, {
+        ban_duration: 'none',
+      })
+      if (verificationUnbanError) {
+        await reban(userId)
+        await abortRecoveryAdmissionBestEffort({ userId, operationId })
+        logger.error('Failed to open credential verification window', {
           userId,
-          error: error instanceof Error ? error.message : String(error),
+          verificationUnbanError,
         })
+        return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
       }
-      await reban(userId)
-      logger.error('Failed to restore pending account', {
+
+      const anon = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+      const { error: signInError } = await anon.auth.signInWithPassword({ email, password })
+      const banRestored = await reban(userId)
+      if (!banRestored) {
+        await abortRecoveryAdmissionBestEffort({ userId, operationId })
+        return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
+      }
+      if (signInError) {
+        await abortRecoveryAdmissionBestEffort({ userId, operationId })
+        return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
+      }
+    }
+
+    let finishAck: RecoveryFinishAck
+    try {
+      finishAck = await finishRecoveryAdmission({ userId, operationId })
+    } catch (error) {
+      const resolution = await abortRecoveryAdmissionBestEffort({ userId, operationId })
+      logger.error('Failed to finish account recovery admission', {
         userId,
-        error: restoreError?.message ?? 'expired or invalid recovery',
+        operationId,
+        error: error instanceof Error ? error.message : String(error),
+        resolution,
+      })
+      if (resolution !== 'finished') {
+        return NextResponse.json(
+          { success: false, error: 'Recovery is temporarily unavailable. Please try again.' },
+          { status: 503 }
+        )
+      }
+      finishAck = 'finished'
+    }
+    if (finishAck !== 'finished') {
+      await abortRecoveryAdmissionBestEffort({ userId, operationId })
+      logger.error('Account recovery admission did not finish', {
+        userId,
+        operationId,
+        finishAck,
+      })
+      return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
+    }
+
+    const { error: finalUnbanError } = await admin.auth.admin.updateUserById(userId, {
+      ban_duration: 'none',
+    })
+    if (finalUnbanError) {
+      logger.error('Account restored but final Auth unban failed', {
+        userId,
+        operationId,
+        finalUnbanError,
       })
       return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
+    }
+
+    let billingRecovery: BillingRecoveryState
+    try {
+      billingRecovery = await resumeSubscription(userId)
+    } catch (error) {
+      logger.error('Account recovered but subscription renewal could not be resumed', {
+        userId,
+        operationId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return NextResponse.json({
+        success: true,
+        subscription_resumed: false,
+        billing_reactivation_required: true,
+        message:
+          'Account and retained data recovered, but billing must be reactivated from account settings.',
+      })
     }
 
     logger.info('Account recovered successfully', { userId })
