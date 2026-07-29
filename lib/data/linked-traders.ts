@@ -2,14 +2,17 @@
  * lib/data/linked-traders.ts
  *
  * Data helpers for multi-account linked traders.
- * Queries `user_linked_traders` (Phase 1 table) with fallback to `trader_links`.
+ * Queries canonical `user_linked_traders`, with a legacy-table compatibility
+ * fallback only when the canonical relation itself is unavailable.
  * Computes aggregated stats across all linked accounts.
- * Results cached in Redis for 5 minutes.
+ * Membership is read live. Unlinking an account is a privacy boundary, so this
+ * module must not rely on process-local or delete-only caches for correctness.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import * as cache from '@/lib/cache'
+import { normalizeDrawdownMagnitude } from '@/lib/utils/format'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -33,23 +36,21 @@ export interface LinkedTraderAccount {
 }
 
 export interface AggregatedStats {
-  combinedPnl: number
+  combinedPnl: number | null
   bestRoi: { value: number; platform: string; traderKey: string } | null
-  weightedScore: number
+  weightedScore: number | null
   totalAccounts: number
   accounts: LinkedTraderAccount[]
 }
 
 // ─── Cache keys ────────────────────────────────────────────────────────────────
 
-const CACHE_TTL = 300 // 5 minutes
-
 function linkedCacheKey(userId: string): string {
-  return `linked-traders:${userId}`
+  return `linked-traders:v2:${userId}`
 }
 
 function aggCacheKey(userId: string): string {
-  return `linked-traders-agg:${userId}`
+  return `linked-traders-agg:v2:${userId}`
 }
 
 /**
@@ -57,23 +58,40 @@ function aggCacheKey(userId: string): string {
  * invalidator so the route and every linked-account write cannot drift apart.
  */
 export function linkedTraderRouteAggregateCacheKey(userId: string): string {
-  return `aggregate:user:${userId}`
+  return `aggregate:v2:user:${userId}`
+}
+
+function finiteNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function roiOrNull(value: unknown): number | null {
+  const parsed = finiteNumberOrNull(value)
+  return parsed != null && parsed >= -10_000 && parsed <= 10_000 ? parsed : null
+}
+
+function boundedPercentOrNull(value: unknown): number | null {
+  const parsed = finiteNumberOrNull(value)
+  return parsed != null && parsed >= 0 && parsed <= 100 ? parsed : null
+}
+
+function isMissingRelationCompatibilityError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || Array.isArray(error)) return false
+  const code = (error as Record<string, unknown>).code
+  return code === '42P01' || code === 'PGRST205'
 }
 
 // ─── Data Fetching ──────────────────────────────────────────────────────────────
 
 /**
  * Fetch all linked trader accounts for a user, with their latest snapshot stats.
- * Tries `user_linked_traders` first (Phase 1 table), falls back to `trader_links`.
+ * Tries `user_linked_traders` first. A successful empty canonical read is
+ * authoritative: falling back then could resurrect a retired row after unlink.
  */
 export async function getLinkedTraders(
   supabase: SupabaseClient,
   userId: string
 ): Promise<LinkedTraderAccount[]> {
-  // Check cache first
-  const cached = await cache.get<LinkedTraderAccount[]>(linkedCacheKey(userId))
-  if (cached) return cached
-
   let links: LinkedTraderAccount[] = []
 
   // Strategy 1: user_linked_traders table (Phase 1)
@@ -85,7 +103,13 @@ export async function getLinkedTraders(
     .order('is_primary', { ascending: false })
     .order('verified_at', { ascending: true })
 
-  if (!ultError && ult && ult.length > 0) {
+  if (ultError && !isMissingRelationCompatibilityError(ultError)) {
+    throw new Error(`linked trader lookup failed: ${ultError.message || 'unknown error'}`)
+  }
+
+  if (!ultError) {
+    if (!ult || ult.length === 0) return []
+
     links = ult.map((row: Record<string, unknown>) => ({
       id: String(row.id),
       userId: String(row.user_id),
@@ -103,14 +127,18 @@ export async function getLinkedTraders(
       rank: null,
     }))
   } else {
-    // Fallback: trader_links table (legacy)
+    // Compatibility fallback only for deployments where the canonical table
+    // is genuinely unavailable. `trader_links` is retired and read-only.
     const { data: tl, error: tlError } = await supabase
       .from('trader_links')
       .select('id, user_id, trader_id, source, handle, verified_at, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: true })
 
-    if (tlError || !tl || tl.length === 0) {
+    if (tlError) {
+      throw new Error(`linked trader lookup failed: ${tlError.message || 'unknown error'}`)
+    }
+    if (!tl || tl.length === 0) {
       return []
     }
 
@@ -147,19 +175,27 @@ export async function getLinkedTraders(
   // Previously queried trader_snapshots_v2 with wrong column names (roi→roi_pct, pnl→pnl_usd,
   // rank doesn't exist), causing null values for linked account stats.
   const snapshotMap = new Map<string, Record<string, unknown>>()
+  const snapshotErrors: Error[] = []
   await Promise.all(
     [...byPlatform.entries()].map(async ([platform, traderKeys]) => {
       const { data: snapshots, error: snapshotsError } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, roi, pnl, arena_score, win_rate, max_drawdown, rank')
+        .select('source, source_trader_id, roi, win_rate, max_drawdown')
         .eq('source', platform)
         .in('source_trader_id', traderKeys)
         .eq('season_id', '90D')
-      if (snapshotsError)
+      if (snapshotsError) {
         logger.warn(
-          '[getLinkedTraders] leaderboard_ranks query error (drift?):',
+          `[getLinkedTraders] leaderboard_ranks query failed for ${platform}:`,
           snapshotsError.message
         )
+        snapshotErrors.push(
+          new Error(
+            `linked trader snapshot lookup failed for ${platform}: ${snapshotsError.message || 'unknown error'}`
+          )
+        )
+        return
+      }
 
       if (snapshots) {
         for (const s of snapshots) {
@@ -168,22 +204,25 @@ export async function getLinkedTraders(
       }
     })
   )
+  if (snapshotErrors.length > 0) throw snapshotErrors[0]
 
   // Apply snapshot data to links
   for (const link of links) {
     const snapshot = snapshotMap.get(`${link.platform}:${link.traderKey}`)
     if (snapshot) {
-      link.roi = snapshot.roi as number | null
-      link.pnl = snapshot.pnl as number | null
-      link.arenaScore = snapshot.arena_score as number | null
-      link.winRate = snapshot.win_rate as number | null
-      link.maxDrawdown = snapshot.max_drawdown as number | null
-      link.rank = snapshot.rank as number | null
+      link.roi = roiOrNull(snapshot.roi)
+      link.winRate = boundedPercentOrNull(snapshot.win_rate)
+      link.maxDrawdown = normalizeDrawdownMagnitude(finiteNumberOrNull(snapshot.max_drawdown))
+      // A bare PnL number has no settlement-currency contract. Keep it unknown
+      // until the linked projection returns a Money value bound to provenance.
+      link.pnl = null
+      // Arena Score and rank remain unknown until this row is bound to the
+      // current sealed publication proof/cohort. Row-level flags and
+      // computed_at alone cannot establish source freshness or immutability.
+      link.arenaScore = null
+      link.rank = null
     }
   }
-
-  // Cache results
-  await cache.set(linkedCacheKey(userId), links, { ttl: CACHE_TTL })
 
   return links
 }
@@ -191,65 +230,29 @@ export async function getLinkedTraders(
 /**
  * Compute aggregated stats across all linked accounts for a user.
  *
- * - combined_pnl: SUM of all accounts' PnL
- * - best_roi: MAX roi across accounts (with source platform)
- * - weighted_score: Weighted average of arena_scores by |pnl|
+ * Cross-source PnL is intentionally unavailable until every account carries
+ * an attested settlement currency. A bare leaderboard_ranks.pnl number must
+ * never be summed or used as a cross-currency score weight.
+ *
+ * Aggregate numerics remain unavailable until every intended account is bound
+ * to the same complete, fresh publication contract. A complete-looking subset
+ * must not masquerade as an aggregate.
  * - total_accounts: count
  */
 export async function getAggregatedStats(
   supabase: SupabaseClient,
   userId: string
 ): Promise<AggregatedStats | null> {
-  // Check cache first
-  const cached = await cache.get<AggregatedStats>(aggCacheKey(userId))
-  if (cached) return cached
-
   const accounts = await getLinkedTraders(supabase, userId)
-  if (accounts.length < 2) return null // No aggregation for single accounts
-
-  let combinedPnl = 0
-  let bestRoi: AggregatedStats['bestRoi'] = null
-  let weightedScoreNumerator = 0
-  let weightedScoreDenominator = 0
-
-  for (const account of accounts) {
-    // Combined PnL
-    if (account.pnl != null) {
-      combinedPnl += account.pnl
-    }
-
-    // Best ROI
-    if (account.roi != null) {
-      if (!bestRoi || account.roi > bestRoi.value) {
-        bestRoi = {
-          value: account.roi,
-          platform: account.platform,
-          traderKey: account.traderKey,
-        }
-      }
-    }
-
-    // Weighted score by |pnl|
-    if (account.arenaScore != null && account.pnl != null) {
-      const weight = Math.abs(account.pnl) + 1 // +1 to avoid zero weight
-      weightedScoreNumerator += account.arenaScore * weight
-      weightedScoreDenominator += weight
-    }
-  }
-
-  const weightedScore =
-    weightedScoreDenominator > 0 ? weightedScoreNumerator / weightedScoreDenominator : 0
+  if (accounts.length === 0) return null
 
   const result: AggregatedStats = {
-    combinedPnl,
-    bestRoi,
-    weightedScore,
+    combinedPnl: null,
+    bestRoi: null,
+    weightedScore: null,
     totalAccounts: accounts.length,
     accounts,
   }
-
-  // Cache results
-  await cache.set(aggCacheKey(userId), result, { ttl: CACHE_TTL })
 
   return result
 }
@@ -272,12 +275,19 @@ export async function findUserByTrader(
     .eq('trader_id', traderKey)
     .limit(1)
     .maybeSingle()
+  if (ultError && !isMissingRelationCompatibilityError(ultError)) {
+    throw new Error(`linked trader owner lookup failed: ${ultError.message || 'unknown error'}`)
+  }
   if (ultError)
     logger.warn('[findUserByTrader] user_linked_traders query error (drift?):', ultError.message)
 
   if (ult?.user_id) return String(ult.user_id)
 
-  // Fallback to trader_links
+  // A successful canonical miss is authoritative. Falling through to the
+  // retired table could re-publish an account that has since been unlinked.
+  if (!ultError) return null
+
+  // Compatibility fallback only when the canonical relation is unavailable.
   const { data: tl, error: tlError } = await supabase
     .from('trader_links')
     .select('user_id')
@@ -285,7 +295,11 @@ export async function findUserByTrader(
     .eq('trader_id', traderKey)
     .limit(1)
     .maybeSingle()
-  if (tlError) logger.warn('[findUserByTrader] trader_links query error (drift?):', tlError.message)
+  if (tlError) {
+    throw new Error(
+      `legacy linked trader owner lookup failed: ${tlError.message || 'unknown error'}`
+    )
+  }
 
   if (tl?.user_id) return String(tl.user_id)
 
@@ -299,8 +313,11 @@ export async function findUserByTrader(
 export async function invalidateLinkedTraderCache(userId: string): Promise<void> {
   try {
     await Promise.all([
+      cache.del(`linked-traders:${userId}`),
       cache.del(linkedCacheKey(userId)),
+      cache.del(`linked-traders-agg:${userId}`),
       cache.del(aggCacheKey(userId)),
+      cache.del(`aggregate:user:${userId}`),
       cache.del(linkedTraderRouteAggregateCacheKey(userId)),
     ])
   } catch (err) {
