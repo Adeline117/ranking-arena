@@ -15,7 +15,7 @@
  * - tracked_since（Arena 首次追踪时间）
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
@@ -27,11 +27,7 @@ import {
   type TraderDetailRankingPublicationRead,
 } from '@/lib/data/unified'
 import { ApiError } from '@/lib/api/errors'
-import {
-  success as apiSuccess,
-  unauthorized as apiUnauthorized,
-  withCache,
-} from '@/lib/api/response'
+import { success as apiSuccess, unauthorized as apiUnauthorized } from '@/lib/api/response'
 import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
 import { tieredDel, tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
@@ -48,14 +44,21 @@ const handleSchema = z.string().min(1).max(255)
 
 const logger = createLogger('trader-api')
 
-// Next.js 缓存配置
-export const revalidate = 300 // 5分钟，与 Cache-Control s-maxage 一致
+// Ranking authority is revalidated inside the handler on every request. A
+// route/CDN cache would bypass that proof check entirely.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 // 缓存键前缀
 const CACHE_PREFIX = publicRankingCacheKey('trader:sealed-v2:')
 const TRADER_PAGE_SEASONS = ['7D', '30D', '90D'] as const
 const SEALED_TRADER_PAGE_CACHE_CONTRACT = 'sealed-trader-page-cache@1'
 const SEALED_TRADER_PAGE_BINDING_CONTRACT = 'sealed-trader-page-binding@1'
+const RANKING_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 type TraderPageSeason = (typeof TRADER_PAGE_SEASONS)[number]
 
@@ -83,6 +86,13 @@ interface SealedTraderPageCache {
 interface ParsedSealedTraderPageCache {
   readonly value: TraderPageValue
   readonly publicationIdentities: Readonly<Record<TraderPageSeason, string>>
+}
+
+function withRankingNoStore(response: NextResponse): NextResponse {
+  for (const [header, value] of Object.entries(RANKING_NO_STORE_HEADERS)) {
+    response.headers.set(header, value)
+  }
+  return response
 }
 
 /**
@@ -202,10 +212,9 @@ export async function GET(
       const consistencyProbe = consistencyProbeRequested && verifyCronSecret(req)
       if (consistencyProbeRequested && !consistencyProbe) {
         const response = apiUnauthorized('Unauthorized')
-        response.headers.set('Cache-Control', 'private, no-store, max-age=0')
         response.headers.set('Pragma', 'no-cache')
         response.headers.set('Vary', 'Authorization')
-        return response
+        return withRankingNoStore(response)
       }
 
       // Resolve on every request before consulting the detail cache. A handle can
@@ -508,18 +517,11 @@ export async function GET(
       const duration = Date.now() - startTime
       const response = apiSuccess({ ...responseData, cached: false, fetchTime: duration })
       if (consistencyProbe) {
-        response.headers.set('Cache-Control', 'private, no-store, max-age=0')
         response.headers.set('Pragma', 'no-cache')
         response.headers.set('X-Arena-Consistency-Proof', 'live-loader-v1')
-        return response
+        return withRankingNoStore(response)
       }
-      if (includes.includes('aggregate')) {
-        response.headers.set('Cache-Control', 'private, no-store, max-age=0')
-        response.headers.set('CDN-Cache-Control', 'no-store')
-        response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
-        return response
-      }
-      return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
+      return withRankingNoStore(response)
     },
     { name: 'trader-detail', rateLimit: 'public' }
   )

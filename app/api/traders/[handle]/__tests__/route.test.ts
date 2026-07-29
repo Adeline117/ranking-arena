@@ -391,9 +391,9 @@ describe('GET /api/traders/[handle]', () => {
     const res = await GET(request as any, { params })
 
     expect(res.status).toBe(200)
-    expect(res.headers.get('Cache-Control')).toBe(
-      'public, max-age=300, s-maxage=300, stale-while-revalidate=600'
-    )
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
     expect(res.headers.get('X-Arena-Consistency-Proof')).toBeNull()
     expect(mockResolveTrader).toHaveBeenCalledTimes(1)
     expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(3)
