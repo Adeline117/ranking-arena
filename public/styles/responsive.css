@@ -1563,10 +1563,25 @@
     padding-right: 4px !important;
   }
 
-  /* 2. Founding Member banner: prevent CTA button clipping */
+  /* 2. Founding Member banner: the reserved first-paint slot is exactly one
+     31px row. Children shrink/ellipsis inside it instead of wrapping beneath
+     the clipped containment boundary. */
   .founding-member-banner {
-    flex-wrap: wrap !important;
+    flex-wrap: nowrap !important;
     gap: 4px !important;
+    min-width: 0;
+    overflow: hidden;
+  }
+  /* This fixed-height strip is the intentional exception to the blanket
+     mobile 44px element rule above. The 44px boxes overflowed both edges of
+     the 31px slot and made the clipped close control impossible to hit. */
+  .founding-member-banner .fm-cta {
+    min-width: 0 !important;
+    min-height: 0 !important;
+  }
+  .founding-member-banner button {
+    min-width: 22px !important;
+    min-height: 22px !important;
   }
 
   /* 3. Ranking toolbar: hide text labels on mobile, keep icons */

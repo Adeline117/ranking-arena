@@ -58,7 +58,7 @@ export default function LanguageToggle() {
   )
 
   return (
-    <div ref={dropdownRef} style={{ position: 'relative' }}>
+    <div ref={dropdownRef} className="top-nav-language-action" style={{ position: 'relative' }}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         aria-label={t('switchLanguage')}

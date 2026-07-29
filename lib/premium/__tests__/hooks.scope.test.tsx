@@ -6,7 +6,7 @@ jest.mock('@/lib/supabase/client', () => ({ supabase: {} }))
 
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getAuthSession } from '@/lib/auth'
-import { PremiumProvider, usePremium } from '../hooks'
+import { PremiumProvider, usePremium, usePremiumProviderPresent } from '../hooks'
 
 const mockUseAuthSession = useAuthSession as jest.Mock
 const mockGetAuthSession = getAuthSession as jest.Mock
@@ -39,9 +39,34 @@ function BadgeProbe() {
   )
 }
 
+function ProviderPresenceProbe() {
+  return (
+    <div data-testid="provider-presence">{usePremiumProviderPresent() ? 'present' : 'absent'}</div>
+  )
+}
+
 describe('PremiumProvider viewer ownership', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+  })
+
+  it('distinguishes the provider-light homepage from a loading provider', () => {
+    mockUseAuthSession.mockReturnValue({
+      authChecked: false,
+      viewerKey: 'pending',
+      sessionGeneration: 0,
+      userId: null,
+    })
+
+    const view = render(<ProviderPresenceProbe />)
+    expect(screen.getByTestId('provider-presence')).toHaveTextContent('absent')
+
+    view.rerender(
+      <PremiumProvider>
+        <ProviderPresenceProbe />
+      </PremiumProvider>
+    )
+    expect(screen.getByTestId('provider-presence')).toHaveTextContent('present')
   })
 
   it('fails empty on the first B render and discards A-owned entitlement state', async () => {
