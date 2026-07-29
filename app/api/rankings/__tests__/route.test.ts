@@ -71,6 +71,19 @@ jest.mock('@/lib/rankings/read-publication-authority', () => ({
     mockReadLeaderboardPublicationAuthority(...args),
 }))
 
+const mockReadSealedCompositeRankingGeneration = jest.fn()
+jest.mock('@/lib/rankings/read-sealed-composite-ranking-generation', () => ({
+  ...jest.requireActual('@/lib/rankings/read-sealed-composite-ranking-generation'),
+  readSealedCompositeRankingGeneration: (...args: unknown[]) =>
+    mockReadSealedCompositeRankingGeneration(...args),
+}))
+
+const mockReadCompositeRankingPage = jest.fn()
+jest.mock('@/lib/rankings/read-composite-ranking-page', () => ({
+  ...jest.requireActual('@/lib/rankings/read-composite-ranking-page'),
+  readCompositeRankingPage: (...args: unknown[]) => mockReadCompositeRankingPage(...args),
+}))
+
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
@@ -125,6 +138,11 @@ import { createSealedCompositeCacheEntry } from '@/lib/rankings/sealed-composite
 
 const TEST_COHORT_ID = '11111111-1111-4111-8111-111111111111'
 let mockAuthoritySources = [...PUBLIC_ACTIVE_RANKING_SOURCES].sort()
+const TEST_COMPOSITE_COHORTS = {
+  '7D': '11111111-1111-4111-8111-111111111111',
+  '30D': '22222222-2222-4222-8222-222222222222',
+  '90D': '33333333-3333-4333-8333-333333333333',
+} as const
 const mockPublicationProofOverrides = new Map<
   string,
   { sourceAsOf?: string; publishedRankCount?: number }
@@ -247,6 +265,83 @@ async function readThroughSealedGeneration(
   }
 }
 
+async function readThroughSealedCompositeGeneration(
+  _supabase: unknown,
+  reader: (publication: {
+    state: 'sealed'
+    publications: Array<{
+      state: 'sealed'
+      season: '7D' | '30D' | '90D'
+      scoreCohortId: string
+      proofs: unknown[]
+    }>
+  }) => Promise<unknown>
+) {
+  const publication = {
+    state: 'sealed' as const,
+    publications: (['7D', '30D', '90D'] as const).map((season) => ({
+      state: 'sealed' as const,
+      season,
+      scoreCohortId: TEST_COMPOSITE_COHORTS[season],
+      proofs: ['binance_futures', 'hyperliquid'].map((source) => ({
+        season_id: season,
+        source,
+        source_as_of: '2026-07-29T10:00:00.000000Z',
+        recorded_at: '2026-07-29T10:01:00.000000Z',
+        score_cohort_id: TEST_COMPOSITE_COHORTS[season],
+        rank_mutation_seq: 9,
+        current_mutation_seq: 9,
+        published_rank_count: source === 'binance_futures' ? 1 : 0,
+        published_identity_sha256: 'a'.repeat(64),
+        is_sealed: true as const,
+      })),
+    })),
+  }
+  const value = await reader(publication)
+  return {
+    value,
+    publication,
+    publicationIdentity: JSON.stringify(publication),
+  }
+}
+
+function makeCompositeRow(overrides: Record<string, unknown> = {}) {
+  return {
+    source: 'binance_futures',
+    source_trader_id: 'alice',
+    handle: 'Alice',
+    source_type: 'futures',
+    roi: 40,
+    pnl: 1000,
+    win_rate: 0.6,
+    max_drawdown: -10,
+    trades_count: 30,
+    followers: 20,
+    copiers: 10,
+    avatar_url: null,
+    computed_at: '2026-07-29T10:00:00.000Z',
+    profitability_score: 80,
+    risk_control_score: 70,
+    execution_score: 75,
+    score_completeness: 'full',
+    trading_style: 'swing',
+    avg_holding_hours: 12,
+    sharpe_ratio: 1.2,
+    sortino_ratio: 1.4,
+    calmar_ratio: 1.1,
+    profit_factor: 1.5,
+    trader_type: 'human',
+    primary_season: '90D',
+    primary_publication_id: TEST_COMPOSITE_COHORTS['90D'],
+    score_7d: 90,
+    score_30d: 80,
+    score_90d: 70,
+    composite_score: 73.5,
+    composite_rank: 1,
+    ...overrides,
+  }
+}
+
 /** Build a thenable chainable Supabase mock */
 function makeChainableQuery(result = { data: [], error: null, count: 0 }) {
   const storage: Record<string, jest.Mock> = {}
@@ -279,6 +374,10 @@ describe('GET /api/rankings', () => {
       ...mockAuthoritySources,
     ])
     mockReadSealedRankingGeneration.mockImplementation(readThroughSealedGeneration)
+    mockReadSealedCompositeRankingGeneration.mockImplementation(
+      readThroughSealedCompositeGeneration
+    )
+    mockReadCompositeRankingPage.mockResolvedValue({ rows: [], totalCount: 0 })
     // Default: Supabase query returns empty results
     mockSupabaseQuery.mockReturnValue(makeChainableQuery())
   })
@@ -328,8 +427,10 @@ describe('GET /api/rankings', () => {
     ['min_trades=-1', /min_trades/i],
     ['min_trades=1.5', /min_trades/i],
     ['trader_type=robot', /trader_type/i],
-  ])('returns 400 for invalid query parameter %s', async (query, message) => {
-    const req = new NextRequest(`http://localhost/api/rankings?window=90d&${query}`)
+    ['trader_type=whale', /trader_type/i],
+    ['offset=999999999999999999999', /offset/i],
+  ])('returns 400 for invalid query filter %s', async (query, message) => {
+    const req = new NextRequest(`http://localhost/api/rankings?window=composite&${query}`)
     const res = await GET(req)
     const body = await res.json()
 
@@ -337,6 +438,8 @@ describe('GET /api/rankings', () => {
     expect(body.error).toMatch(message)
     expect(mockTieredGet).not.toHaveBeenCalled()
     expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
+    expect(mockReadSealedCompositeRankingGeneration).not.toHaveBeenCalled()
+    expect(mockReadCompositeRankingPage).not.toHaveBeenCalled()
   })
 
   it('returns 400 for invalid platform', async () => {
@@ -647,6 +750,8 @@ describe('GET /api/rankings', () => {
 
     const req = new NextRequest('http://localhost/api/rankings?window=90d&sort_by=roi')
     const res = await GET(req)
+    const body = await res.json()
+    const data = body.data ?? body
 
     expect(res.status).toBe(200)
     expect(mockReadLeaderboardPublicationAuthority).toHaveBeenCalledWith(expect.anything(), '90D', {
@@ -714,14 +819,11 @@ describe('GET /api/rankings', () => {
 
   // --- Composite Window ---
 
-  it('serves the sealed composite cache without relabeling a 90D database read', async () => {
-    const trader = {
-      platform: 'binance_futures',
-      trader_key: 'composite-leader',
-      arena_score: 91.5,
-      roi: 42,
-    }
-    mockTieredGet.mockResolvedValue({ data: makeCompositeCache([trader]) })
+  it('computes composite window from sealed 7D, 30D, and 90D scores', async () => {
+    mockReadCompositeRankingPage.mockResolvedValue({
+      rows: [makeCompositeRow()],
+      totalCount: 1,
+    })
 
     const req = new NextRequest('http://localhost/api/rankings?window=composite')
     const res = await GET(req)
@@ -729,91 +831,69 @@ describe('GET /api/rankings', () => {
     const data = body.data ?? body
 
     expect(res.status).toBe(200)
-    expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:precomputed:composite:all:v3',
-      'hot'
-    )
-    expect(data.window).toBe('COMPOSITE')
-    expect(data.traders).toEqual([expect.objectContaining(trader)])
-    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
+    expect(mockTieredGet).not.toHaveBeenCalled()
     expect(mockTieredSet).not.toHaveBeenCalled()
+    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
+    expect(mockReadSealedCompositeRankingGeneration).toHaveBeenCalledTimes(1)
+    expect(mockReadCompositeRankingPage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        scopeSources: ['binance_futures', 'hyperliquid'],
+        limit: 100,
+        offset: 0,
+        sortBy: 'arena_score',
+        sortDir: 'desc',
+      })
+    )
+    expect(data).toEqual(
+      expect.objectContaining({
+        window: 'COMPOSITE',
+        totalCount: 1,
+        traders: [
+          expect.objectContaining({
+            trader_key: 'alice',
+            arena_score: 73.5,
+            composite_scores: { '7d': 90, '30d': 80, '90d': 70 },
+          }),
+        ],
+      })
+    )
   })
 
-  it('fails closed on an unsealed legacy composite cache instead of returning fake 90D data', async () => {
+  it('never reads an unsealed legacy composite cache payload', async () => {
+    const first = { platform: 'binance_futures', trader_key: 'first' }
+    const last = { platform: 'hyperliquid', trader_key: 'last' }
+    const nextPage = { platform: 'bybit', trader_key: 'next-page' }
     mockTieredGet.mockResolvedValue({
       data: {
-        traders: [{ platform: 'binance_futures', trader_key: 'legacy' }],
-        window: 'COMPOSITE',
+        traders: [{ platform: 'okx_web3_solana', trader_key: 'blocked' }, first, last, nextPage],
+        totalcount: 999,
+        total_count: 999,
+        as_of: 'blocked-aggregate-watermark',
+        is_stale: false,
+        availableSources: ['binance_futures', 'okx_web3_solana', 'hyperliquid', 'bybit'],
+        source_freshness: [
+          { source: 'binance_futures', updated_at: 'safe' },
+          { source: 'okx_web3_solana', updated_at: 'blocked' },
+          { source: 'hyperliquid', updated_at: 'safe' },
+          { source: 'bybit', updated_at: 'safe' },
+        ],
       },
     })
 
     const req = new NextRequest('http://localhost/api/rankings?window=composite&limit=2')
     const res = await GET(req)
-
-    expect(res.status).toBe(503)
-    expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:precomputed:composite:all:v3',
-      'hot'
-    )
-    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
-    expect(mockTieredSet).not.toHaveBeenCalled()
-  })
-
-  it('sorts and paginates a sealed platform composite without changing cache scope', async () => {
-    const low = {
-      platform: 'binance_futures',
-      trader_key: 'low-roi',
-      arena_score: 90,
-      roi: 10,
-      trades_count: 50,
-    }
-    const high = {
-      platform: 'binance_futures',
-      trader_key: 'high-roi',
-      arena_score: 80,
-      roi: 30,
-      trades_count: 80,
-    }
-    mockTieredGet.mockResolvedValue({
-      data: makeCompositeCache([low, high], {
-        sources: ['binance_futures'],
-        availableSources: ['binance_futures'],
-      }),
-    })
-
-    const req = new NextRequest(
-      'http://localhost/api/rankings?window=composite&platform=binance_futures&sort_by=roi&sort_dir=asc&offset=1&limit=1'
-    )
-    const res = await GET(req)
     const body = await res.json()
     const data = body.data ?? body
 
     expect(res.status).toBe(200)
-    expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:precomputed:composite:platform:binance_futures:v3',
-      'hot'
-    )
-    expect(data.traders).toEqual([expect.objectContaining({ trader_key: 'high-roi', rank: 2 })])
-    expect(data.totalCount).toBe(2)
+    expect(mockTieredGet).not.toHaveBeenCalled()
+    expect(mockTieredSet).not.toHaveBeenCalled()
+    expect(data.traders).toEqual([])
+    expect(data.traders).not.toContainEqual(first)
+    expect(data.traders).not.toContainEqual(last)
     expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
-  })
-
-  it('rejects a sealed composite whose rows escape the requested category cache scope', async () => {
-    mockTieredGet.mockResolvedValue({
-      data: makeCompositeCache([
-        {
-          platform: 'hyperliquid',
-          trader_key: 'wrong-category',
-          arena_score: 88,
-        },
-      ]),
-    })
-
-    const req = new NextRequest('http://localhost/api/rankings?window=composite&category=futures')
-    const res = await GET(req)
-
-    expect(res.status).toBe(503)
-    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
+    expect(mockReadSealedCompositeRankingGeneration).toHaveBeenCalledTimes(1)
   })
 
   it('rejects a polluted generic hot-cache page', async () => {

@@ -61,6 +61,15 @@ import {
   parseSealedCompositeCacheEntry,
   type SealedCompositePublications,
 } from '@/lib/rankings/sealed-composite-cache'
+import {
+  readSealedCompositeRankingGeneration,
+  type SealedCompositeRankingPublicationSet,
+} from '@/lib/rankings/read-sealed-composite-ranking-generation'
+import {
+  readCompositeRankingPage,
+  type CompositeRankingRow,
+  type CompositeRankingSortBy,
+} from '@/lib/rankings/read-composite-ranking-page'
 
 const logger = createLogger('rankings-api')
 
@@ -373,6 +382,34 @@ async function readCompositeRankings(input: {
   }
 }
 
+const PLACEHOLDER_NAMES = new Set(['Enter Name', 'enter name', 'Unknown', 'null', 'undefined', ''])
+
+function truncateRankingAddress(value: string): string | null {
+  if (value.startsWith('0x') && value.length >= 10) {
+    return `${value.slice(0, 6)}...${value.slice(-4)}`
+  }
+  if (/^[1-9A-HJ-NP-Za-km-z]{30,50}$/.test(value)) {
+    return `${value.slice(0, 4)}...${value.slice(-4)}`
+  }
+  return null
+}
+
+function formatRankingDisplayName(handle: string | null, traderId: string): string {
+  if (handle && !PLACEHOLDER_NAMES.has(handle)) {
+    return truncateRankingAddress(handle) ?? handle
+  }
+  if (traderId.startsWith('0x') && traderId.length >= 10) {
+    return `${traderId.slice(0, 6)}...${traderId.slice(-4)}`
+  }
+  if (traderId.includes(':')) {
+    const address = traderId.split(':')[1]
+    if (address?.startsWith('0x') && address.length >= 10) {
+      return `${address.slice(0, 6)}...${address.slice(-4)}`
+    }
+  }
+  return truncateRankingAddress(traderId) ?? traderId ?? 'Anonymous'
+}
+
 export const GET = withPublic(
   async ({ request }) => {
     const { searchParams } = new URL(request.url)
@@ -411,6 +448,9 @@ export const GET = withPublic(
 
     const limit = parseLimit(searchParams.get('limit'), 100, 500)
     const offset = parseOffset(searchParams.get('offset'))
+    if (!Number.isSafeInteger(offset) || offset > 1_000_000) {
+      throw ApiError.validation('Invalid offset. Must be an integer between 0 and 1000000')
+    }
     const cursor = searchParams.get('cursor') || undefined // format: "score:id" for keyset pagination
     if (cursor) {
       throw ApiError.validation('cursor pagination is not implemented; use offset')
@@ -429,9 +469,10 @@ export const GET = withPublic(
     if (
       requestedTraderType !== null &&
       requestedTraderType !== 'human' &&
-      requestedTraderType !== 'bot'
+      requestedTraderType !== 'bot' &&
+      requestedTraderType !== 'suspected_bot'
     ) {
-      throw ApiError.validation('Invalid trader_type. Must be one of: human, bot')
+      throw ApiError.validation('Invalid trader_type. Must be one of: human, bot, suspected_bot')
     }
     const traderType = requestedTraderType
 
@@ -456,26 +497,11 @@ export const GET = withPublic(
       )
     }
 
-    if (normalizedWindow === 'composite') {
-      const composite = await readCompositeRankings({
-        category,
-        platform,
-        sortBy,
-        sortDir,
-        limit,
-        offset,
-        minPnl,
-        minTrades,
-        traderType,
-      })
-      return withCache(apiSuccess(sanitizePublicRankingSourcePayload(composite)), {
-        maxAge: 60,
-        staleWhileRevalidate: 300,
-      })
-    }
-
     const query: RankingsQuery = {
-      window: normalizedWindow,
+      // Composite has its own three-generation reader below. Keep the shared
+      // query shape on a real season so it cannot be passed to a one-season
+      // reader accidentally.
+      window: normalizedWindow === 'composite' ? '90d' : normalizedWindow,
       category: category || undefined,
       platform: (platform || undefined) as Platform | undefined,
       limit,
@@ -486,6 +512,15 @@ export const GET = withPublic(
       min_trades: minTrades,
       trader_type: traderType || undefined,
     }
+
+    if (normalizedWindow === 'composite') {
+      const sealedRead = await getCompositeRankings(query)
+      return withCache(apiSuccess(sanitizePublicRankingSourcePayload(sealedRead.value)), {
+        maxAge: 60,
+        staleWhileRevalidate: 300,
+      })
+    }
+
     const cacheSeason = query.window.toUpperCase() as TradingPeriod
     const { getReadReplica } = await import('@/lib/supabase/read-replica')
     const supabase = getReadReplica()
@@ -621,6 +656,154 @@ async function getRankingsFallback(
     throw new Error('rankings authority changed before the sealed read')
   }
   return sealedRead
+}
+
+function compositeRankingScopeSources(
+  rankingsQuery: RankingsQuery,
+  publication: SealedCompositeRankingPublicationSet
+): string[] {
+  const authoritySources = filterPublicRankingSources(
+    publication.publications.flatMap((season) => season.proofs.map((proof) => proof.source))
+  )
+  if (rankingsQuery.platform) {
+    return authoritySources.includes(rankingsQuery.platform) ? [rankingsQuery.platform] : []
+  }
+  if (rankingsQuery.category) {
+    return authoritySources.filter(
+      (source) =>
+        PLATFORM_CATEGORY[source as keyof typeof PLATFORM_CATEGORY] === rankingsQuery.category
+    )
+  }
+  return authoritySources
+}
+
+function compositeSourceFreshness(
+  publication: SealedCompositeRankingPublicationSet,
+  scopeSources: readonly string[]
+) {
+  const nowMs = Date.now()
+  const sources = scopeSources.flatMap((source) => {
+    const contributingProofs = publication.publications
+      .flatMap((season) => season.proofs)
+      .filter((proof) => proof.source === source && proof.published_rank_count > 0)
+    if (contributingProofs.length === 0) return []
+    const updatedAt = contributingProofs.reduce(
+      (oldest, proof) => (proof.source_as_of < oldest ? proof.source_as_of : oldest),
+      contributingProofs[0].source_as_of
+    )
+    return [
+      {
+        source,
+        updated_at: updatedAt,
+        is_stale: false,
+        age_seconds: Math.max(0, Math.floor((nowMs - Date.parse(updatedAt)) / 1000)),
+      },
+    ]
+  })
+  const asOf =
+    sources.length === 0
+      ? null
+      : sources.reduce(
+          (oldest, source) => (source.updated_at < oldest ? source.updated_at : oldest),
+          sources[0].updated_at
+        )
+  return { asOf, sources }
+}
+
+function compositeResponseRow(
+  row: CompositeRankingRow,
+  freshnessBySource: ReadonlyMap<
+    string,
+    { updated_at: string; is_stale: boolean; age_seconds: number }
+  >
+) {
+  let displayPlatform = row.source
+  let displayTraderKey = row.source_trader_id
+  if (displayPlatform === 'copin' && displayTraderKey.includes(':')) {
+    const [realPlatform, ...rest] = displayTraderKey.split(':')
+    displayPlatform = realPlatform
+    displayTraderKey = rest.join(':')
+  }
+  const sourceFreshness = freshnessBySource.get(row.source)
+  return {
+    platform: displayPlatform as Platform,
+    trader_key: displayTraderKey,
+    display_name: formatRankingDisplayName(row.handle, displayTraderKey),
+    avatar_url: row.avatar_url,
+    roi: row.roi,
+    pnl: row.pnl,
+    arena_score: row.composite_score,
+    win_rate: row.win_rate,
+    max_drawdown: row.max_drawdown,
+    sharpe_ratio: row.sharpe_ratio,
+    trades_count: row.trades_count,
+    followers: row.followers,
+    copiers: row.copiers,
+    rank: row.composite_rank,
+    rank_change: null,
+    is_new: false,
+    quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
+    updated_at: sourceFreshness?.updated_at ?? null,
+    is_stale: sourceFreshness?.is_stale ?? true,
+    computed_at: row.computed_at,
+    profitability_score: row.profitability_score,
+    risk_control_score: row.risk_control_score,
+    execution_score: row.execution_score,
+    score_completeness: row.score_completeness,
+    trading_style: row.trading_style,
+    avg_holding_hours: row.avg_holding_hours,
+    style_confidence: null,
+    is_bot:
+      row.source === 'web3_bot' || row.trader_type === 'bot' || row.trader_type === 'suspected_bot',
+    trader_type: row.trader_type || (row.source === 'web3_bot' ? 'bot' : null),
+    composite_scores: {
+      '7d': row.score_7d,
+      '30d': row.score_30d,
+      '90d': row.score_90d,
+    },
+  }
+}
+
+async function getCompositeRankings(rankingsQuery: RankingsQuery) {
+  const { getReadReplica } = await import('@/lib/supabase/read-replica')
+  const supabase = getReadReplica()
+  const signal = AbortSignal.timeout(20_000)
+
+  return readSealedCompositeRankingGeneration(
+    supabase,
+    async (publication) => {
+      const scopeSources = compositeRankingScopeSources(rankingsQuery, publication)
+      const page = await readCompositeRankingPage(supabase, {
+        publication,
+        scopeSources,
+        limit: rankingsQuery.limit ?? 100,
+        offset: rankingsQuery.offset ?? 0,
+        sortBy: (rankingsQuery.sort_by ?? 'arena_score') as CompositeRankingSortBy,
+        sortDir: rankingsQuery.sort_dir ?? 'desc',
+        minPnl: rankingsQuery.min_pnl,
+        minTrades: rankingsQuery.min_trades,
+        traderType: rankingsQuery.trader_type,
+        signal,
+      })
+      const freshness = compositeSourceFreshness(publication, scopeSources)
+      const freshnessBySource = new Map(
+        freshness.sources.map((source) => [source.source, source] as const)
+      )
+      return {
+        traders: page.rows.map((row) => compositeResponseRow(row, freshnessBySource)),
+        window: 'COMPOSITE' as const,
+        totalCount: page.totalCount,
+        totalcount: page.totalCount,
+        total_count: page.totalCount,
+        as_of: freshness.asOf,
+        is_stale: false,
+        source_freshness: freshness.sources,
+        availableSources: freshness.sources.map((source) => source.source),
+        next_cursor: null,
+      }
+    },
+    { timeoutMs: 10_000, signal }
+  )
 }
 
 async function getRankingsFallbackForCohort(
@@ -814,39 +997,6 @@ async function getRankingsFallbackForCohort(
   }
   const freshnessBySource = sourceFreshnessStatusMap(freshnessSummary)
 
-  // Transform to response format
-  const PLACEHOLDER_NAMES = new Set([
-    'Enter Name',
-    'enter name',
-    'Unknown',
-    'null',
-    'undefined',
-    '',
-  ])
-  // Truncate raw wallet addresses (0x hex or bare base58 Solana/Tron) so they
-  // don't overflow the name cell on mobile. Returns null if not address-like.
-  const truncAddr = (s: string): string | null => {
-    if (s.startsWith('0x') && s.length >= 10) return `${s.slice(0, 6)}...${s.slice(-4)}`
-    if (/^[1-9A-HJ-NP-Za-km-z]{30,50}$/.test(s)) return `${s.slice(0, 4)}...${s.slice(-4)}`
-    return null
-  }
-  const formatDisplayName = (handle: string | null, traderId: string): string => {
-    // A real handle may itself be a raw address (e.g. okx_web3_solana stores the
-    // full base58 address as handle) — truncate those before returning.
-    if (handle && !PLACEHOLDER_NAMES.has(handle)) return truncAddr(handle) ?? handle
-    // Format 0x addresses as "0x1234...5678"
-    if (traderId?.startsWith('0x') && traderId.length >= 10) {
-      return `${traderId.slice(0, 6)}...${traderId.slice(-4)}`
-    }
-    // Copin format: "protocol:0xAddr" → show the address part
-    if (traderId?.includes(':')) {
-      const addr = traderId.split(':')[1]
-      if (addr?.startsWith('0x') && addr.length >= 10)
-        return `${addr.slice(0, 6)}...${addr.slice(-4)}`
-    }
-    return truncAddr(traderId) ?? traderId ?? 'Anonymous'
-  }
-
   const traders = paginatedRows.map((row: Record<string, unknown>, idx: number) => {
     const traderId = row.source_trader_id as string
     // For copin aggregator: extract real platform from trader_key (e.g., "hyperliquid:0x..." → "hyperliquid")
@@ -866,7 +1016,7 @@ async function getRankingsFallbackForCohort(
     return {
       platform: displayPlatform as Platform,
       trader_key: displayTraderKey,
-      display_name: formatDisplayName(row.handle as string | null, displayTraderKey),
+      display_name: formatRankingDisplayName(row.handle as string | null, displayTraderKey),
       avatar_url: (row.avatar_url as string) || null,
       // Top-level metrics for frontend compatibility
       roi,

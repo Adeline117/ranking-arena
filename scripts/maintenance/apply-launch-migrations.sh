@@ -151,6 +151,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729068000_atomic_profile_settings_revision.sql
   20260729070000_atomic_verified_trader_profile_revision.sql
   20260729071000_atomic_primary_trader_projection.sql
+  20260729071757_sealed_composite_rankings_rpc.sql
   20260729072000_stripe_refund_retry_authority.sql
 )
 

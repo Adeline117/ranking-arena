@@ -27,6 +27,22 @@ describe('public ranking freshness route contracts', () => {
     expect(v2).toContain('updated_at: freshnessSummary.asOf')
   })
 
+  it('the composite endpoint reads all three dynamic authorities and exact cohorts', () => {
+    const route = source('app/api/rankings/route.ts')
+    const reader = source('lib/rankings/read-sealed-composite-ranking-generation.ts')
+    const rpc = source('lib/rankings/read-composite-ranking-page.ts')
+
+    expect(route).toContain('readSealedCompositeRankingGeneration(')
+    expect(route).toContain('readCompositeRankingPage(')
+    expect(route).not.toContain("? { ...sealedRead.value, window: 'COMPOSITE'")
+    expect(reader).toContain("['7D', '30D', '90D']")
+    expect(reader).toContain('readLeaderboardPublicationAuthority')
+    expect(reader).toContain('readLeaderboardPublicationProofs')
+    expect(rpc).toContain('p_7d_cohort_id: publication7d.scoreCohortId')
+    expect(rpc).toContain('p_30d_cohort_id: publication30d.scoreCohortId')
+    expect(rpc).toContain('p_90d_cohort_id: publication90d.scoreCohortId')
+  })
+
   it('composite cache uses sealed publication proof watermarks', () => {
     const route = source('app/api/cron/precompute-composite/route.ts')
 

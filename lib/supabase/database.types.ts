@@ -10637,6 +10637,25 @@ export type Database = {
         }[]
       }
       arena_latest_snapshot_at: { Args: never; Returns: string }
+      arena_read_composite_rankings_v1: {
+        Args: {
+          p_7d_cohort_id: string
+          p_30d_cohort_id: string
+          p_90d_cohort_id: string
+          p_7d_sources: string[]
+          p_30d_sources: string[]
+          p_90d_sources: string[]
+          p_scope_sources: string[]
+          p_limit: number
+          p_offset: number
+          p_sort_by: string
+          p_sort_dir: string
+          p_min_pnl: number | null
+          p_min_trades: number | null
+          p_trader_type: string | null
+        }
+        Returns: Json
+      }
       arena_pipeline_panel: {
         Args: never
         Returns: {
