@@ -50,6 +50,12 @@ const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
   Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.name])
 )
 const TRADER_SCORE_SEASONS = ['7D', '30D', '90D'] as const
+type TraderScoreSeason = (typeof TRADER_SCORE_SEASONS)[number]
+
+interface TraderPublicationSnapshot {
+  readonly fingerprint: string
+  readonly identities: Readonly<Record<TraderScoreSeason, string>>
+}
 
 function traderPublicationFingerprint(
   reads: readonly TraderDetailRankingPublicationRead[]
@@ -68,22 +74,30 @@ function traderPublicationFingerprint(
     .digest('hex')
 }
 
-const currentTraderPublicationFingerprint = cache(async (platform: string): Promise<string> => {
-  const [publicPlatform] = filterPublicRankingSources([platform])
-  if (!publicPlatform) throw new Error('trader SSR source is not public')
-  const supabase = getReadReplica()
-  const reads = await Promise.all(
-    TRADER_SCORE_SEASONS.map((season) =>
-      readSealedRankingGeneration(
-        supabase,
-        { season, sources: [publicPlatform] },
-        async () => null,
-        { timeoutMs: SSR_QUERY_TIMEOUT_MS }
+const currentTraderPublicationSnapshot = cache(
+  async (platform: string): Promise<TraderPublicationSnapshot> => {
+    const [publicPlatform] = filterPublicRankingSources([platform])
+    if (!publicPlatform) throw new Error('trader SSR source is not public')
+    const supabase = getReadReplica()
+    const reads = await Promise.all(
+      TRADER_SCORE_SEASONS.map((season) =>
+        readSealedRankingGeneration(
+          supabase,
+          { season, sources: [publicPlatform] },
+          async () => null,
+          { timeoutMs: SSR_QUERY_TIMEOUT_MS }
+        )
       )
     )
-  )
-  return traderPublicationFingerprint(reads)
-})
+    const identities = Object.fromEntries(
+      reads.map((read) => [read.publication.season, read.publicationIdentity] as const)
+    ) as Record<TraderScoreSeason, string>
+    return Object.freeze({
+      fingerprint: traderPublicationFingerprint(reads),
+      identities: Object.freeze(identities),
+    })
+  }
+)
 
 // ---------------------------------------------------------------------------
 // unstable_cache wrappers — use Next.js data cache instead of Redis.
@@ -173,9 +187,9 @@ const cachedGetTraderDetailISR = unstable_cache(
 const SSR_DETAIL_TIMEOUT_MS = SSR_QUERY_TIMEOUT_MS + 1000 // 4s: 1s headroom over inner AbortSignal
 const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
   try {
-    const publicationFingerprint = await currentTraderPublicationFingerprint(platform)
+    const publicationSnapshot = await currentTraderPublicationSnapshot(platform)
     return await Promise.race([
-      cachedGetTraderDetailISR(platform, traderKey, publicationFingerprint),
+      cachedGetTraderDetailISR(platform, traderKey, publicationSnapshot.fingerprint),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)),
     ])
   } catch (err) {
@@ -305,12 +319,13 @@ const cachedCapabilities = async () => {
 const cachedServingScoreEntries = unstable_cache(
   async (
     platform: string,
-    traderKey: string
+    traderKey: string,
+    expectedPublicationFingerprint: string
   ): Promise<SealedRankingCacheEntry<ServingScoreRow[]>[]> => {
     const [publicPlatform] = filterPublicRankingSources([platform])
     if (!publicPlatform) throw new Error('trader score source is not public')
 
-    return Promise.all(
+    const reads = await Promise.all(
       TRADER_SCORE_SEASONS.map(async (season) => {
         const supabase = getReadReplica()
         const sealedRead = await readSealedRankingGeneration(
@@ -333,11 +348,15 @@ const cachedServingScoreEntries = unstable_cache(
           },
           { timeoutMs: SSR_QUERY_TIMEOUT_MS }
         )
-        return createSealedRankingCacheEntry(sealedRead)
+        return sealedRead
       })
     )
+    if (traderPublicationFingerprint(reads) !== expectedPublicationFingerprint) {
+      throw new Error('trader serving scores changed before ISR cache publication')
+    }
+    return reads.map((read) => createSealedRankingCacheEntry(read))
   },
-  ['trader-serving-scores-sealed-v3'],
+  ['trader-serving-scores-sealed-v4'],
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
@@ -345,20 +364,29 @@ const cachedServingScores = async (
   platform: string,
   traderKey: string
 ): Promise<ServingScoreRow[]> => {
-  const entries = await cachedServingScoreEntries(platform, traderKey)
+  const publicationSnapshot = await currentTraderPublicationSnapshot(platform)
+  const entries = await cachedServingScoreEntries(
+    platform,
+    traderKey,
+    publicationSnapshot.fingerprint
+  )
   if (!Array.isArray(entries) || entries.length !== TRADER_SCORE_SEASONS.length) {
     throw new Error('trader score cache returned an incomplete sealed set')
   }
 
-  return entries.flatMap((input, index) => {
+  const parsedEntries = entries.map((input, index) => {
     const entry = parseSealedRankingCacheEntry<ServingScoreRow[]>(
       input,
       TRADER_SCORE_SEASONS[index],
       [platform]
     )
     if (!entry) throw new Error('trader score cache returned an invalid sealed entry')
-    return entry.value
+    return entry
   })
+  if (traderPublicationFingerprint(parsedEntries) !== publicationSnapshot.fingerprint) {
+    throw new Error('trader score cache is not the current sealed publication')
+  }
+  return parsedEntries.flatMap((entry) => entry.value)
 }
 
 // Cached leaderboard query for OG metadata.
@@ -371,7 +399,7 @@ interface LeaderboardMetaRow {
 }
 
 const cachedLeaderboardMetaEntry = unstable_cache(
-  async (platform: string, traderKey: string) => {
+  async (platform: string, traderKey: string, expectedPublicationIdentity: string) => {
     const [publicPlatform] = filterPublicRankingSources([platform])
     if (!publicPlatform) throw new Error('trader metadata source is not public')
     const supabase = getReadReplica()
@@ -394,9 +422,12 @@ const cachedLeaderboardMetaEntry = unstable_cache(
       },
       { timeoutMs: SSR_QUERY_TIMEOUT_MS }
     )
+    if (sealedRead.publicationIdentity !== expectedPublicationIdentity) {
+      throw new Error('trader metadata changed before ISR cache publication')
+    }
     return createSealedRankingCacheEntry(sealedRead)
   },
-  ['trader-lb-meta-sealed-v3'],
+  ['trader-lb-meta-sealed-v4'],
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
@@ -404,12 +435,16 @@ const cachedLeaderboardMeta = async (
   platform: string,
   traderKey: string
 ): Promise<LeaderboardMetaRow | null> => {
+  const publicationSnapshot = await currentTraderPublicationSnapshot(platform)
+  const expectedPublicationIdentity = publicationSnapshot.identities['90D']
   const entry = parseSealedRankingCacheEntry<LeaderboardMetaRow | null>(
-    await cachedLeaderboardMetaEntry(platform, traderKey),
+    await cachedLeaderboardMetaEntry(platform, traderKey, expectedPublicationIdentity),
     '90D',
     [platform]
   )
-  if (!entry) throw new Error('trader metadata cache returned an invalid sealed entry')
+  if (!entry || entry.publicationIdentity !== expectedPublicationIdentity) {
+    throw new Error('trader metadata cache is not the current sealed publication')
+  }
   return entry.value
 }
 

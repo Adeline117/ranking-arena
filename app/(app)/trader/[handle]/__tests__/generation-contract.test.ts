@@ -16,7 +16,7 @@ describe('trader page direct ranking generation contract', () => {
   it('keys legacy SSR detail by the current three-window publication fingerprint', () => {
     expect(page).not.toContain("['trader-resolve']")
     expect(page).toContain("['trader-detail-sealed-v2']")
-    expect(page).toContain('currentTraderPublicationFingerprint(platform)')
+    expect(page).toContain('currentTraderPublicationSnapshot(platform)')
     expect(page).toContain('onRankingPublications: (reads) =>')
     expect(page).toContain(
       'traderPublicationFingerprint(capturedPublications) !== expectedPublicationFingerprint'
@@ -25,10 +25,27 @@ describe('trader page direct ranking generation contract', () => {
     expect(page).toContain('export const revalidate = 0')
   })
 
+  it('keys serving score and metadata caches by current publication identity', () => {
+    expect(page).toContain("['trader-serving-scores-sealed-v4']")
+    expect(page).toContain("['trader-lb-meta-sealed-v4']")
+    expect(page).toContain('cachedServingScoreEntries(\n    platform,\n    traderKey,')
+    expect(page).toContain('publicationSnapshot.fingerprint')
+    expect(page).toContain('traderPublicationFingerprint(reads) !== expectedPublicationFingerprint')
+    expect(page).toContain(
+      'traderPublicationFingerprint(parsedEntries) !== publicationSnapshot.fingerprint'
+    )
+    expect(page).toContain(
+      "const expectedPublicationIdentity = publicationSnapshot.identities['90D']"
+    )
+    expect(page).toContain(
+      'cachedLeaderboardMetaEntry(platform, traderKey, expectedPublicationIdentity)'
+    )
+    expect(page).toContain('sealedRead.publicationIdentity !== expectedPublicationIdentity')
+    expect(page).toContain('entry.publicationIdentity !== expectedPublicationIdentity')
+  })
+
   it('keeps cached ranking values in source-scoped sealed envelopes', () => {
-    expect(page).toContain("['trader-serving-scores-sealed-v3']")
-    expect(page).toContain("['trader-lb-meta-sealed-v3']")
-    expect(page.match(/createSealedRankingCacheEntry\(sealedRead\)/g)).toHaveLength(2)
+    expect(page.match(/createSealedRankingCacheEntry\(/g)).toHaveLength(2)
     expect(page.match(/parseSealedRankingCacheEntry</g)).toHaveLength(2)
     expect(page.match(/sources: \[publicPlatform\]/g)).toHaveLength(3)
     expect(page.match(/\[platform\]/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
