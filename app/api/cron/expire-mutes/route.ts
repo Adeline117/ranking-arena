@@ -2,94 +2,59 @@
  * Expire Mutes & Temp Bans Cron
  * GET /api/cron/expire-mutes
  *
- * Runs hourly. Clears expired group mutes and expired temp bans from user_strikes.
+ * Runs hourly. Clears expired group mutes and temporary account bans through
+ * one database transaction. Active/permanent sanctions always fail closed.
  */
 
 import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import logger from '@/lib/logger'
 import { withCron } from '@/lib/api/with-cron'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
-export const GET = withCron('expire-mutes', async (_request: NextRequest) => {
-  const supabase = getSupabaseAdmin() as SupabaseClient
-  const now = new Date().toISOString()
-  let mutesCleared = 0
-  let bansCleared = 0
+interface ExpiredSanctionCleanupResult {
+  group_mutes_cleared: number
+  temp_bans_cleared: number
+  temp_bans_preserved: number
+}
 
-  // 1. Clear expired group mutes. group_members 是复合主键(group_id,user_id)无 id 列——
-  // 旧代码 select('id') 400→整块跳过→静音永不过期。直接按 muted_until 过滤 UPDATE，
-  // .select('group_id') 用于计数。
-  const { data: clearedMutes, error: muteUpdateError } = await supabase
-    .from('group_members')
-    .update({
-      muted_until: null,
-      mute_reason: null,
-      muted_by: null,
-    })
-    .not('muted_until', 'is', null)
-    .lt('muted_until', now)
-    .select('group_id')
-
-  if (muteUpdateError) {
-    logger.error('[expire-mutes] Error clearing mutes:', muteUpdateError)
-  } else if (clearedMutes && clearedMutes.length > 0) {
-    mutesCleared = clearedMutes.length
-    logger.info(`[expire-mutes] Cleared ${mutesCleared} expired group mutes`)
+function parseCleanupResult(value: unknown): ExpiredSanctionCleanupResult {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Expired-sanction cleanup returned an invalid acknowledgement')
   }
+  const candidate = value as Record<string, unknown>
+  const fields = [
+    candidate.group_mutes_cleared,
+    candidate.temp_bans_cleared,
+    candidate.temp_bans_preserved,
+  ]
+  if (fields.some((field) => !Number.isSafeInteger(field) || Number(field) < 0)) {
+    throw new Error('Expired-sanction cleanup returned invalid counters')
+  }
+  return candidate as unknown as ExpiredSanctionCleanupResult
+}
 
-  // 2. Clear expired temp bans from user_strikes + unban from user_profiles
-  const { data: expiredBans, error: banQueryError } = await supabase
-    .from('user_strikes')
-    .select('id, user_id')
-    .in('strike_type', ['temp_ban', 'mute'])
-    .not('expires_at', 'is', null)
-    .lt('expires_at', now)
+export const GET = withCron(
+  'expire-mutes',
+  async (_request: NextRequest) => {
+    const supabase = getSupabaseAdmin()
+    const { data, error } = (await Reflect.apply(supabase.rpc, supabase, [
+      'expire_mutes_and_temporary_bans_atomic',
+      { p_limit: 500 },
+    ])) as { data: unknown; error: { message?: string } | null }
 
-  if (banQueryError) {
-    logger.error('[expire-mutes] Error querying expired bans:', banQueryError)
-  } else if (expiredBans && expiredBans.length > 0) {
-    bansCleared = expiredBans.length
-
-    // Get unique user IDs with expired temp_bans to unban them
-    const userIdsToUnban = [...new Set(expiredBans.map((b) => b.user_id))]
-
-    // For each user, check if they have any OTHER active bans before unbanning
-    for (const userId of userIdsToUnban) {
-      const { data: activeStrikes } = await supabase
-        .from('user_strikes')
-        .select('id, strike_type, expires_at')
-        .eq('user_id', userId)
-        .in('strike_type', ['temp_ban', 'perm_ban'])
-        .or(`expires_at.is.null,expires_at.gt.${now}`)
-
-      const hasActiveBan =
-        activeStrikes &&
-        activeStrikes.some(
-          (s) => s.strike_type === 'perm_ban' || (s.expires_at && s.expires_at > now)
-        )
-
-      if (!hasActiveBan) {
-        // No other active bans — unban the user
-        await supabase
-          .from('user_profiles')
-          .update({
-            banned_at: null,
-            banned_reason: null,
-            banned_by: null,
-            ban_expires_at: null,
-          })
-          .eq('id', userId)
-
-        logger.info(`[expire-mutes] Unbanned user ${userId} (temp ban expired)`)
-      }
+    if (error) {
+      throw new Error(
+        `Expired-sanction cleanup failed: ${error.message ?? 'unknown database error'}`
+      )
     }
-  }
-
-  const totalProcessed = mutesCleared + bansCleared
-  return { count: totalProcessed, mutesCleared, bansCleared }
-})
+    const result = parseCleanupResult(data)
+    return {
+      count: result.group_mutes_cleared + result.temp_bans_cleared,
+      ...result,
+    }
+  },
+  { safetyTimeoutMs: 25_000 }
+)
