@@ -9,6 +9,12 @@
 
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import {
+  publicRankingResponseCacheHeaders,
+  publicRankingResponseRejectionHeaders,
+  redirectToPublicRankingResponseCacheEpoch,
+} from '@/lib/rankings/public-response-cache'
 
 export const runtime = 'edge'
 
@@ -58,6 +64,22 @@ export async function GET(request: NextRequest) {
   const scores = (searchParams.get('scores') || '').split(',').map(Number)
   const pnls = (searchParams.get('pnls') || '').split(',').map(Number)
 
+  if (
+    names.length === 0 ||
+    platforms.length < names.length ||
+    platforms
+      .slice(0, Math.min(names.length, 3))
+      .some((platform) => !isPublicRankingSourceAllowed(platform))
+  ) {
+    return new Response('Unknown or unavailable ranking source', {
+      status: 404,
+      headers: publicRankingResponseRejectionHeaders(),
+    })
+  }
+
+  const epochRedirect = redirectToPublicRankingResponseCacheEpoch(request)
+  if (epochRedirect) return epochRedirect
+
   const traders: TraderData[] = names.slice(0, 3).map((name, i) => ({
     name,
     platform: platforms[i] || '',
@@ -65,10 +87,6 @@ export async function GET(request: NextRequest) {
     score: scores[i] || 0,
     pnl: pnls[i] || 0,
   }))
-
-  if (traders.length === 0) {
-    traders.push({ name: 'Trader A', platform: '', roi: 0, score: 0, pnl: 0 })
-  }
 
   const cardWidth = traders.length === 1 ? 900 : traders.length === 2 ? 440 : 280
 
@@ -205,9 +223,9 @@ export async function GET(request: NextRequest) {
     {
       width: 1200,
       height: 630,
-      headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
-      },
+      headers: publicRankingResponseCacheHeaders(
+        'public, s-maxage=300, stale-while-revalidate=3600'
+      ),
     }
   )
 }

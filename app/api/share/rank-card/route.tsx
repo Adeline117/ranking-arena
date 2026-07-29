@@ -1,6 +1,12 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import {
+  publicRankingResponseCacheHeaders,
+  publicRankingResponseRejectionHeaders,
+  redirectToPublicRankingResponseCacheEpoch,
+} from '@/lib/rankings/public-response-cache'
 
 export const runtime = 'edge'
 
@@ -70,6 +76,14 @@ export async function GET(request: NextRequest) {
     windowParam = sp.get('window') || '7d',
     ref = sp.get('ref') || ''
   if (!handle) return NextResponse.json({ error: 'handle required' }, { status: 400 })
+  if (platform && !isPublicRankingSourceAllowed(platform)) {
+    return NextResponse.json(
+      { error: 'Unknown or unavailable ranking source' },
+      { status: 404, headers: publicRankingResponseRejectionHeaders() }
+    )
+  }
+  const epochRedirect = redirectToPublicRankingResponseCacheEpoch(request)
+  if (epochRedirect) return epochRedirect
   const sb = getSupabaseAdmin()
   const sMap: Record<string, string> = {
     '7d': '7D',
@@ -89,6 +103,12 @@ export async function GET(request: NextRequest) {
   if (platform) q = q.eq('source', platform)
   const { data: tr } = await q.maybeSingle()
   if (!tr) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!isPublicRankingSourceAllowed(tr.source)) {
+    return NextResponse.json(
+      { error: 'Not found' },
+      { status: 404, headers: publicRankingResponseRejectionHeaders() }
+    )
+  }
   const { data: lr } = await sb
     .from('leaderboard_ranks')
     .select('rank, roi, win_rate, arena_score')
@@ -409,7 +429,9 @@ export async function GET(request: NextRequest) {
     {
       width: 1200,
       height: 630,
-      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600' },
+      headers: publicRankingResponseCacheHeaders(
+        'public, s-maxage=300, stale-while-revalidate=3600'
+      ),
     }
   )
 }

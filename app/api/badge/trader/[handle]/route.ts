@@ -17,6 +17,11 @@
  */
 
 import type { NextRequest } from 'next/server'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import {
+  publicRankingResponseCacheHeaders,
+  redirectToPublicRankingResponseCacheEpoch,
+} from '@/lib/rankings/public-response-cache'
 
 export const runtime = 'edge'
 
@@ -51,6 +56,7 @@ async function fetchRank(handle: string) {
   if (!source) return null
   const srcName = source.source as string
   const srcTraderId = source.source_trader_id as string
+  if (!isPublicRankingSourceAllowed(srcName)) return null
   // A1 data-authenticity: an ACTIVE trader_authorizations row = read-only API
   // key connected → numbers are API-verified, not scraped. Mirrors
   // lib/data/verified-traders.ts. Fail-open (null → Tracked).
@@ -141,6 +147,8 @@ export async function GET(
   const { handle: rawHandle } = await params
   // Allow ".svg" suffix so the URL reads like an image file in <img src>.
   const handle = rawHandle.replace(/\.svg$/i, '')
+  const epochRedirect = redirectToPublicRankingResponseCacheEpoch(_request)
+  if (epochRedirect) return epochRedirect
 
   let name = 'Trader'
   let rank: number | null = null
@@ -162,7 +170,9 @@ export async function GET(
     headers: {
       'Content-Type': 'image/svg+xml; charset=utf-8',
       // CDN-cache 10 min, serve-stale a day — ranks move slowly, embeds are hot.
-      'Cache-Control': 'public, max-age=300, s-maxage=600, stale-while-revalidate=86400',
+      ...publicRankingResponseCacheHeaders(
+        'public, max-age=300, s-maxage=600, stale-while-revalidate=86400'
+      ),
     },
   })
 }
