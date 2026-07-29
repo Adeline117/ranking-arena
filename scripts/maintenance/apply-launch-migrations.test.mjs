@@ -153,6 +153,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260717120000_trader_follows_composite_identity.sql',
     legacyApiTierCleanupMigration,
     '20260729063000_close_trader_follow_direct_writes.sql',
+    '20260729065000_stripe_entitlement_livemode_authority.sql',
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   assert.deepEqual(recoveryPrerequisites, [
@@ -253,7 +254,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 130)
+  assert.equal(new Set(all).size, 131)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
