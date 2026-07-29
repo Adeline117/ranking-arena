@@ -134,9 +134,9 @@ describe('GET /api/rankings/platform-stats', () => {
       ],
       season: '90D',
     })
-    expect(response.headers.get('Cache-Control')).toBe(
-      'public, s-maxage=300, stale-while-revalidate=600'
-    )
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
   })
 
   it('fails closed if the aggregate RPC escapes publication authority', async () => {

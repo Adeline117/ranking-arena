@@ -7,7 +7,7 @@
  * Includes trader count, average/median arena score, average ROI per platform.
  *
  * Response: { platforms: PlatformStat[], season: '90D' }
- * Redis cache: 1 hour per sealed proof identity. CDN cache: 5 minutes.
+ * Redis cache: 1 hour per sealed proof identity. HTTP responses are not shared.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -25,9 +25,17 @@ import {
   sealedRankingPublicationIdentity,
 } from '@/lib/rankings/read-sealed-ranking-generation'
 
-// The response is briefly CDN-cacheable; Redis entries are keyed by the exact
-// sealed proof identity so a new publication cannot inherit an older aggregate.
+// Redis entries are keyed by the exact sealed proof identity. HTTP responses
+// stay dynamic so every request re-establishes the current authority.
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+const RANKING_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 interface PlatformStat {
   platform: string
@@ -152,9 +160,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { platforms: platformStats, season: '90D' },
       {
-        headers: {
-          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-        },
+        headers: RANKING_NO_STORE_HEADERS,
       }
     )
   } catch (err) {
