@@ -10,6 +10,7 @@ const mockCreateStore = jest.fn()
 const mockDrain = jest.fn()
 const mockJoinGroup = jest.fn()
 const mockSendAlert = jest.fn()
+const mockReconcileAccountDeletions = jest.fn()
 const mockSupabase = { rpc: jest.fn() }
 
 jest.mock('@/lib/api/with-cron', () => ({
@@ -44,6 +45,11 @@ jest.mock('@/lib/alerts/send-alert', () => ({
   sendRateLimitedAlert: (...args: unknown[]) => mockSendAlert(...args),
 }))
 
+jest.mock('@/lib/account/deletion-billing-reconciliation', () => ({
+  reconcilePreparedAccountDeletionBilling: (...args: unknown[]) =>
+    mockReconcileAccountDeletions(...args),
+}))
+
 import { GET, dynamic, maxDuration, runtime } from '../route'
 import { withCron } from '@/lib/api/with-cron'
 
@@ -58,6 +64,7 @@ describe('Stripe entitlement effect cron', () => {
       mockDrain,
       mockJoinGroup,
       mockSendAlert,
+      mockReconcileAccountDeletions,
     ]) {
       mock.mockReset()
     }
@@ -72,6 +79,7 @@ describe('Stripe entitlement effect cron', () => {
       deadLettered: 0,
       superseded: 0,
     })
+    mockReconcileAccountDeletions.mockResolvedValue({ count: 1, examined: 1, settled: 1 })
   })
 
   afterAll(() => {
@@ -86,6 +94,7 @@ describe('Stripe entitlement effect cron', () => {
     await expect(response.json()).resolves.toMatchObject({
       count: 1,
       completed: 1,
+      accountDeletionBilling: { count: 1, examined: 1, settled: 1 },
     })
     expect({ runtime, dynamic, maxDuration }).toEqual({
       runtime: 'nodejs',
@@ -107,6 +116,11 @@ describe('Stripe entitlement effect cron', () => {
       }),
       { limit: 10, leaseSeconds: 120 }
     )
+    expect(mockReconcileAccountDeletions).toHaveBeenCalledWith({
+      supabase: mockSupabase,
+      stripeClient: { marker: 'stripe' },
+      limit: 5,
+    })
   })
 
   it('fails before leasing when the Stripe runtime is not safe', async () => {
@@ -119,6 +133,7 @@ describe('Stripe entitlement effect cron', () => {
     ).rejects.toThrow('runtime closed')
     expect(mockCreateStore).not.toHaveBeenCalled()
     expect(mockDrain).not.toHaveBeenCalled()
+    expect(mockReconcileAccountDeletions).not.toHaveBeenCalled()
   })
 
   it('fails before leasing when the secret key mode is ambiguous', async () => {
@@ -128,6 +143,18 @@ describe('Stripe entitlement effect cron', () => {
       GET(new NextRequest('https://www.arenafi.org/api/cron/stripe-entitlement-effects'))
     ).rejects.toThrow('Stripe secret key mode is invalid')
     expect(mockCreateStore).not.toHaveBeenCalled()
+    expect(mockReconcileAccountDeletions).not.toHaveBeenCalled()
+  })
+
+  it('surfaces deletion reconciliation failures while still starting the durable effect drain', async () => {
+    mockReconcileAccountDeletions.mockRejectedValueOnce(new Error('prepared deletion retry failed'))
+
+    await expect(
+      GET(new NextRequest('https://www.arenafi.org/api/cron/stripe-entitlement-effects'))
+    ).rejects.toThrow('prepared deletion retry failed')
+
+    expect(mockDrain).toHaveBeenCalledTimes(1)
+    expect(mockReconcileAccountDeletions).toHaveBeenCalledTimes(1)
   })
 
   it('is scheduled every five minutes in the deployment manifest', () => {

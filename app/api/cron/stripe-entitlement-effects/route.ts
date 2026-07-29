@@ -7,6 +7,7 @@ import {
   createStripeEntitlementEffectStore,
   drainStripeEntitlementEffects,
 } from '@/lib/stripe/entitlement-effect-worker'
+import { reconcilePreparedAccountDeletionBilling } from '@/lib/account/deletion-billing-reconciliation'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,16 +24,26 @@ export const GET = withCron(
       throw new Error('Stripe secret key mode is invalid')
     }
 
-    return drainStripeEntitlementEffects(
-      {
-        store: createStripeEntitlementEffectStore(supabase),
-        stripe: getStripe(),
-        expectedLivemode: secretKey.startsWith('sk_live_'),
-        joinProOfficialGroup,
-        sendRateLimitedAlert,
-      },
-      { limit: 10, leaseSeconds: 120 }
-    )
+    const stripeClient = getStripe()
+    const [effects, accountDeletionBilling] = await Promise.all([
+      drainStripeEntitlementEffects(
+        {
+          store: createStripeEntitlementEffectStore(supabase),
+          stripe: stripeClient,
+          expectedLivemode: secretKey.startsWith('sk_live_'),
+          joinProOfficialGroup,
+          sendRateLimitedAlert,
+        },
+        { limit: 10, leaseSeconds: 120 }
+      ),
+      reconcilePreparedAccountDeletionBilling({
+        supabase,
+        stripeClient,
+        limit: 5,
+      }),
+    ])
+
+    return { ...effects, accountDeletionBilling }
   },
   { safetyTimeoutMs: 50_000 }
 )
