@@ -134,7 +134,6 @@ import {
   filterPublicRankingSources,
   PUBLIC_RANKING_QUARANTINED_SOURCES,
 } from '@/lib/rankings/publication-policy'
-import { createSealedCompositeCacheEntry } from '@/lib/rankings/sealed-composite-cache'
 
 const TEST_COHORT_ID = '11111111-1111-4111-8111-111111111111'
 let mockAuthoritySources = [...PUBLIC_ACTIVE_RANKING_SOURCES].sort()
@@ -159,73 +158,6 @@ function rankingCacheKey(
     .digest('hex')
     .slice(0, 16)
   return `public-rank-policy-v4:api:rankings:sealed-v5:${fingerprint}:${window}:${category}:${limit}`
-}
-
-function makeCompositePublication(season: '7D' | '30D' | '90D', sources: readonly string[]) {
-  const scoreCohortId =
-    season === '7D'
-      ? '11111111-1111-4111-8111-111111111111'
-      : season === '30D'
-        ? '22222222-2222-4222-8222-222222222222'
-        : '33333333-3333-4333-8333-333333333333'
-  return {
-    state: 'sealed' as const,
-    season,
-    scoreCohortId,
-    proofs: [...sources].sort().map((source) => ({
-      season_id: season,
-      source,
-      source_as_of: '2026-07-29T10:00:00.000000Z',
-      recorded_at: '2026-07-29T10:01:00.000000Z',
-      score_cohort_id: scoreCohortId,
-      rank_mutation_seq: 9,
-      current_mutation_seq: 9,
-      published_rank_count: 1,
-      published_identity_sha256: 'a'.repeat(64),
-      is_sealed: true as const,
-    })),
-  }
-}
-
-function makeCompositeCache(
-  rows: readonly Record<string, unknown>[],
-  options: { sources?: readonly string[]; availableSources?: readonly string[] } = {}
-) {
-  const sources = options.sources ?? ['binance_futures', 'hyperliquid']
-  const availableSources = options.availableSources ?? [
-    ...new Set(rows.map((row) => String(row.platform))),
-  ]
-  const traders = rows.map((row, index) => ({
-    arena_score: 80 - index,
-    rank: index + 1,
-    ...row,
-  }))
-  return createSealedCompositeCacheEntry(
-    {
-      traders,
-      window: 'COMPOSITE',
-      totalCount: traders.length,
-      totalcount: traders.length,
-      total_count: traders.length,
-      as_of: '2026-07-29T10:00:00.000Z',
-      is_stale: false,
-      source_freshness: availableSources.map((source) => ({
-        source,
-        updated_at: '2026-07-29T10:00:00.000Z',
-        is_stale: false,
-        age_seconds: 0,
-      })),
-      availableSources,
-      next_cursor: null,
-      precomputed: true,
-    },
-    {
-      '7D': makeCompositePublication('7D', sources),
-      '30D': makeCompositePublication('30D', sources),
-      '90D': makeCompositePublication('90D', sources),
-    },
-    new Date('2026-07-29T10:02:00.000Z')
-  )
 }
 
 async function readThroughSealedGeneration(
