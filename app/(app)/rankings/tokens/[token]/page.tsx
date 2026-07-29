@@ -33,7 +33,7 @@ export async function loadTokenTradersSSR(
  * de-duped with the API's own Redis layer by the shared 1h ISR window.
  */
 // Do not inherit empty entries cached by the former catch-and-return loader.
-const getTokenTradersSSR = unstable_cache(loadTokenTradersSSR, ['token-traders-ssr-v3'], {
+const getTokenTradersSSR = unstable_cache(loadTokenTradersSSR, ['token-traders-ssr-v4'], {
   revalidate: 3600,
   tags: ['rankings', 'by-token'],
 })

@@ -1,7 +1,13 @@
 const mockReadSealedRankIdentities = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 
 jest.mock('@/lib/rankings/read-sealed-rank-identities', () => ({
   readSealedRankIdentities: (...args: unknown[]) => mockReadSealedRankIdentities(...args),
+}))
+
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
 }))
 
 import {
@@ -13,7 +19,7 @@ import {
 describe('getTokenTraderRankingCacheKey', () => {
   test('uses the aggregate-backed cache namespace', () => {
     expect(getTokenTraderRankingCacheKey('BTC', '90D', 25, 0)).toBe(
-      'rankings:by-token:v3:BTC:90D:25:0'
+      'rankings:by-token:v4:BTC:90D:25:0'
     )
   })
 })
@@ -21,6 +27,23 @@ describe('getTokenTraderRankingCacheKey', () => {
 describe('getTokenTraderRankings', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(
+      async (
+        _client: unknown,
+        season: string,
+        reader: (publication: {
+          scoreCohortId: string
+          proofs: Array<{ source: string }>
+        }) => Promise<unknown>
+      ) => ({
+        value: await reader({
+          scoreCohortId: 'cohort-1',
+          proofs: [{ source: 'hyperliquid' }],
+        }),
+        publication: { state: 'sealed', season },
+        publicationIdentity: 'proof',
+      })
+    )
   })
 
   test('binds profile enrichment to exact identities in one sealed period', async () => {
@@ -59,6 +82,11 @@ describe('getTokenTraderRankings', () => {
 
     const result = await getTokenTraderRankings(client as never, 'BTC', '90D', 25, 0)
 
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledWith(
+      client,
+      '90D',
+      expect.any(Function)
+    )
     expect(client.rpc).toHaveBeenCalledWith(
       'get_public_token_trader_rankings',
       expect.objectContaining({
@@ -66,10 +94,11 @@ describe('getTokenTraderRankings', () => {
         lookback_days: 90,
         max_traders: 25,
         row_offset: 0,
-        allowed_sources: expect.arrayContaining(['hyperliquid', 'bybit']),
+        allowed_sources: ['hyperliquid'],
       })
     )
     const allowedSources = client.rpc.mock.calls[0][1].allowed_sources as string[]
+    expect(allowedSources).not.toContain('bybit')
     expect(allowedSources).not.toContain('okx_web3_solana')
     expect(allowedSources).not.toContain('bitget_bots_futures')
     expect(allowedSources).not.toContain('bitget_bots_spot')
@@ -112,10 +141,25 @@ describe('getTokenTraderRankings', () => {
       message: 'invalid public identity',
     },
     {
-      label: 'inconsistent total',
+      label: 'source outside publication authority',
       data: [
         {
           source: 'bybit',
+          source_trader_id: 'not-authorized',
+          token_pnl: 1,
+          token_trade_count: 1,
+          token_win_rate: 100,
+          token_avg_pnl_pct: 1,
+          total_count: 1,
+        },
+      ],
+      message: 'outside publication authority',
+    },
+    {
+      label: 'inconsistent total',
+      data: [
+        {
+          source: 'hyperliquid',
           source_trader_id: 'one',
           token_pnl: 2,
           token_trade_count: 1,
@@ -124,7 +168,7 @@ describe('getTokenTraderRankings', () => {
           total_count: 2,
         },
         {
-          source: 'bybit',
+          source: 'hyperliquid',
           source_trader_id: 'two',
           token_pnl: 1,
           token_trade_count: 1,
@@ -152,7 +196,7 @@ describe('getTokenTraderRankings', () => {
       rpc: jest.fn().mockResolvedValue({
         data: [
           {
-            source: 'bybit',
+            source: 'hyperliquid',
             source_trader_id: 'trader-1',
             token_pnl: 1,
             token_trade_count: 1,
