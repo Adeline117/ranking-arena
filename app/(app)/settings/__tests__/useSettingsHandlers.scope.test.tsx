@@ -719,4 +719,72 @@ describe('useSettingsHandlers viewer ownership', () => {
     )
     expect(hook.result.current.deleteError).toBe('networkErrorRetry')
   })
+
+  it('lets B start after the viewer reset without allowing late A to clear B single-flight', async () => {
+    const deletionA = deferred<Response>()
+    const deletionB = deferred<Response>()
+    mockPublicMaybeSingle
+      .mockResolvedValueOnce(publicProfile('alpha'))
+      .mockResolvedValueOnce(publicProfile('bravo'))
+    mockSensitiveMaybeSingle
+      .mockResolvedValueOnce(sensitiveProfile())
+      .mockResolvedValueOnce(sensitiveProfile())
+    mockForceRefresh.mockImplementation(async ({ expectedUserId }: { expectedUserId: string }) =>
+      jwt(expectedUserId)
+    )
+    global.fetch = jest
+      .fn()
+      .mockReturnValueOnce(deletionA.promise)
+      .mockReturnValueOnce(deletionB.promise) as unknown as typeof fetch
+
+    const scopeA = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(
+      ({ auth }) => useSettingsHandlers({ auth, showToast, showConfirm, t }),
+      { initialProps: { auth: authFor('user-a', scopeA.sessionGeneration) } }
+    )
+    await waitFor(() => expect(hook.result.current.handle).toBe('alpha'))
+    act(() => {
+      hook.result.current.setShowDeleteAccountModal(true)
+      hook.result.current.setDeleteConfirm('DELETE')
+    })
+    await waitFor(() => expect(hook.result.current.deleteHasPassword).toBe(false))
+
+    let requestA!: Promise<void>
+    act(() => {
+      requestA = hook.result.current.handleDeleteAccount()
+    })
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+
+    const transition = beginViewerTransition('user-b')
+    const scopeB = commitViewerTransition(transition, 'user-b')!
+    hook.rerender({ auth: authFor('user-b', scopeB.sessionGeneration) })
+    await waitFor(() => expect(hook.result.current.handle).toBe('bravo'))
+    act(() => {
+      hook.result.current.setShowDeleteAccountModal(true)
+      hook.result.current.setDeleteConfirm('DELETE')
+    })
+    await waitFor(() => expect(hook.result.current.deleteHasPassword).toBe(false))
+
+    let requestB!: Promise<void>
+    act(() => {
+      requestB = hook.result.current.handleDeleteAccount()
+      void hook.result.current.handleDeleteAccount()
+    })
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      deletionA.resolve(new Response(null, { status: 200 }))
+      await requestA
+    })
+
+    act(() => {
+      void hook.result.current.handleDeleteAccount()
+    })
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      deletionB.reject(new TypeError('B response pending outcome'))
+      await requestB
+    })
+  })
 })

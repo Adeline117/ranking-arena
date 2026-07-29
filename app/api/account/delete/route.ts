@@ -3,7 +3,7 @@
  * Related account data is retained until the hard-delete cron runs.
  */
 
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
@@ -128,19 +128,13 @@ export const POST = withAuth(
     }
 
     const { password, reason, confirm } = body
-    if (body.recovery_token !== undefined && !isAccountRecoveryToken(body.recovery_token)) {
+    const recoveryToken = body.recovery_token
+    if (!isAccountRecoveryToken(recoveryToken)) {
       return badRequest('Invalid recovery credential')
     }
     const providers = (user.identities ?? []).map((identity) => identity.provider)
     const isWalletEmail = (user.email ?? '').endsWith('@wallet.arena')
     const hasPassword = !isWalletEmail && providers.includes('email')
-
-    // Passwordless accounts have no secondary credential recovery lane. An
-    // older browser bundle that cannot pre-stage the plaintext must fail before
-    // any billing/database mutation instead of risking an unrecoverable delete.
-    if (!hasPassword && !body.recovery_token) {
-      return badRequest('Recovery credential required')
-    }
 
     if (hasPassword) {
       if (!password) return badRequest('Password required')
@@ -160,11 +154,10 @@ export const POST = withAuth(
     const adminSupabase = getSupabaseAdmin()
     const now = new Date()
     const scheduledDeletion = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000)
-    // New clients stage this exact credential before dispatch so a successful
-    // database commit cannot strand a passwordless account when the response
-    // is lost. The fallback keeps a rolling deployment compatible with older
-    // clients until every browser bundle has refreshed.
-    const recoveryToken = body.recovery_token ?? randomBytes(32).toString('base64url')
+    // The client staged this exact credential before dispatch, so a successful
+    // database commit cannot strand the account when the response is lost.
+    // Legacy bundles fail above before any billing/database mutation and can
+    // safely retry after refreshing their code.
     const recoveryTokenHash = createHash('sha256').update(recoveryToken).digest('hex')
 
     // Stop every recurring billing surface before writing the deletion

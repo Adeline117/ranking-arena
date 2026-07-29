@@ -16,6 +16,7 @@ const mockExpireOpenSubscriptionCheckouts = jest.fn()
 const mockDiscoverStripeSubscriptionBilling = jest.fn()
 const mockPersistOneTimeSettlementScan = jest.fn()
 const mockStripeClient = { marker: 'stripe-client' }
+const DEFAULT_RECOVERY_TOKEN = 'Q'.repeat(43)
 let subscriptionResult: { data: Record<string, unknown> | null; error: unknown }
 let billingProfileResult: { data: Record<string, unknown> | null; error: unknown }
 
@@ -106,11 +107,13 @@ jest.mock('@/lib/utils/logger', () => ({
 import { createHash } from 'node:crypto'
 import { POST } from '../route'
 
-function request(body: Record<string, unknown>): Request {
+function request(body: Record<string, unknown>, includeRecoveryToken = true): Request {
   return new Request('https://www.arenafi.org/api/account/delete', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(
+      includeRecoveryToken ? { recovery_token: DEFAULT_RECOVERY_TOKEN, ...body } : body
+    ),
   })
 }
 
@@ -511,7 +514,7 @@ describe('account deletion scheduling', () => {
     mockUser.email = 'wallet@wallet.arena'
     mockUser.identities = [{ provider: 'privy' }]
 
-    const response = await POST(request({ confirm: 'DELETE' }))
+    const response = await POST(request({ confirm: 'DELETE' }, false))
 
     expect(response.status).toBe(400)
     expect(mockPasswordSignIn).not.toHaveBeenCalled()
