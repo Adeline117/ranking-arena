@@ -48,9 +48,9 @@ const messages: Record<BotLang, Record<string, string>> = {
     // /stats
     statsTitle: 'Arena Platform Stats',
     totalTraders: 'Ranked Traders',
-    activeExchanges: 'Active Exchanges',
+    activeSourceBoards: 'Active Source Boards',
     scoringPeriods: 'Scoring Periods',
-    exchangeList: 'Exchanges',
+    sourceBoardList: 'Source Boards',
     website: 'Website',
 
     // /help
@@ -101,9 +101,9 @@ const messages: Record<BotLang, Record<string, string>> = {
 
     statsTitle: 'Arena 平台统计',
     totalTraders: '排名交易员',
-    activeExchanges: '活跃交易所',
+    activeSourceBoards: '活跃来源板',
     scoringPeriods: '评分周期',
-    exchangeList: '交易所列表',
+    sourceBoardList: '来源板列表',
     website: '网站',
 
     commands: '命令列表',

@@ -358,7 +358,7 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
 async function handleStats(chatId: number, lang: BotLang): Promise<void> {
   const supabase = getSupabaseAdmin()
 
-  // Get trader count and exchange count from leaderboard_ranks
+  // Get trader count and source-board count from leaderboard_ranks
   // Estimated — this is a /stats Telegram bot command showing a rough
   // headline number. Exact scan of leaderboard_ranks (~300k) is overkill.
   const [traderResult, exchangeResult] = await Promise.all([
@@ -374,22 +374,24 @@ async function handleStats(chatId: number, lang: BotLang): Promise<void> {
 
   const traderCount = traderResult.count ?? 0
 
-  // Count unique exchanges
-  const exchanges = new Set((exchangeResult.data || []).map((r: { source: string }) => r.source))
-  const exchangeCount = exchanges.size
+  // A source is a rankable market/product board, not an exchange company.
+  const sourceBoards = new Set(
+    (exchangeResult.data || []).map((r: { source: string }) => r.source)
+  )
+  const sourceBoardCount = sourceBoards.size
 
-  // Active exchange list
-  const activeExchanges = Array.from(exchanges)
+  // Active source-board list
+  const activeSourceBoards = Array.from(sourceBoards)
     .map((s) => EXCHANGE_CONFIG[s as keyof typeof EXCHANGE_CONFIG]?.name || s)
     .sort()
 
   const lines = [
     `<b>${botMessages(lang, 'statsTitle')}</b>\n`,
     `${botMessages(lang, 'totalTraders')}: ${traderCount.toLocaleString()}`,
-    `${botMessages(lang, 'activeExchanges')}: ${exchangeCount}`,
+    `${botMessages(lang, 'activeSourceBoards')}: ${sourceBoardCount}`,
     `${botMessages(lang, 'scoringPeriods')}: 7D / 30D / 90D`,
-    `\n${botMessages(lang, 'exchangeList')}:`,
-    activeExchanges.map((e) => `  ${e}`).join('\n'),
+    `\n${botMessages(lang, 'sourceBoardList')}:`,
+    activeSourceBoards.map((sourceBoard) => `  ${sourceBoard}`).join('\n'),
     `\n${botMessages(lang, 'website')}: ${BASE_URL}`,
   ]
 
