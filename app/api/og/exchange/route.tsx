@@ -13,6 +13,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readOgExchangeRanking } from '@/lib/rankings/read-og-exchange'
 import {
   publicRankingResponseCacheHeaders,
   publicRankingResponseRejectionHeaders,
@@ -110,60 +111,6 @@ function formatRoi(roi: number): string {
   return sign + abs.toFixed(1) + '%'
 }
 
-interface TopTrader {
-  handle: string | null
-  avatar_url: string | null
-  roi: number | null
-  arena_score: number | null
-  rank: number
-}
-
-async function fetchExchangeData(
-  exchange: string
-): Promise<{ traders: TopTrader[]; total: number }> {
-  const supabase = getSupabaseAdmin()
-
-  const { data: top3, error: topErr } = await supabase
-    .from('leaderboard_ranks')
-    .select('handle, avatar_url, roi, arena_score, rank')
-    .eq('source', exchange)
-    .eq('season_id', '90D')
-    .not('arena_score', 'is', null)
-    .gt('arena_score', 0)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('arena_score', { ascending: false, nullsFirst: false })
-    .limit(3)
-
-  if (topErr) {
-    logger.error('[OG Exchange] Error fetching top traders:', topErr)
-  }
-
-  // Estimated — OG exchange image shows "N traders tracked" as a
-  // marketing tile; rounded marketing headline.
-  const { count, error: countErr } = await supabase
-    .from('leaderboard_ranks')
-    .select('*', { count: 'estimated', head: true })
-    .eq('source', exchange)
-    .eq('season_id', '90D')
-    .not('arena_score', 'is', null)
-    .gt('arena_score', 0)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-
-  if (countErr) {
-    logger.error('[OG Exchange] Error fetching count:', countErr)
-  }
-
-  const traders: TopTrader[] = (top3 || []).map((t, i) => ({
-    handle: t.handle as string | null,
-    avatar_url: t.avatar_url as string | null,
-    roi: t.roi as number | null,
-    arena_score: t.arena_score as number | null,
-    rank: i + 1,
-  }))
-
-  return { traders, total: count ?? 0 }
-}
-
 const MEDAL_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32']
 
 export async function GET(request: NextRequest) {
@@ -189,7 +136,7 @@ export async function GET(request: NextRequest) {
       exchange.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
     const platformColor = PLATFORM_COLORS[exchange] || C.purpleLight
 
-    const { traders, total } = await fetchExchangeData(exchange)
+    const { traders, total } = await readOgExchangeRanking(getSupabaseAdmin(), exchange)
 
     // Pre-fetch all trader avatars as base64 data URLs so Satori (next/og)
     // doesn't try to load them itself — self-referential proxy calls from Edge

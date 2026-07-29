@@ -49,4 +49,10 @@ describe('public ranking asset publication boundary', () => {
     expect(text).not.toContain('overrideSource ||')
     expect(text).not.toContain('/rest/v1/leaderboard_ranks')
   })
+
+  it('delegates exchange OG metrics to the sealed generation reader', () => {
+    const text = source('app/api/og/exchange/route.tsx')
+    expect(text).toContain('readOgExchangeRanking(getSupabaseAdmin(), exchange)')
+    expect(text).not.toContain(".from('leaderboard_ranks')")
+  })
 })
