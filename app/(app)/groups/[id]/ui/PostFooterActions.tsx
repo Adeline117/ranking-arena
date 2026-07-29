@@ -1,13 +1,18 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/ui/icons'
 import { useToast } from '@/app/components/ui/Toast'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { getCsrfHeaders } from '@/lib/api/client'
-import { supabase } from '@/lib/supabase/client'
+import { authedFetch } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
 type Post = {
   id: string
@@ -24,60 +29,158 @@ const TIP_AMOUNTS = [
   { cents: 1000, label: '$10' },
 ]
 
+type TipCheckoutResponse = {
+  error?: unknown
+  sessionId?: unknown
+  url?: unknown
+}
+
+type TipOperation = {
+  amountCents: number
+  controller: AbortController
+  id: number
+  postId: string
+  resourceScopeKey: string
+  viewer: SettingsViewerSnapshot
+}
+
+const STRIPE_SESSION_ID_PATTERN = /^cs_[A-Za-z0-9_]+$/
+
+function checkoutUrl(value: TipCheckoutResponse | null): string | null {
+  if (
+    !value ||
+    typeof value.sessionId !== 'string' ||
+    !STRIPE_SESSION_ID_PATTERN.test(value.sessionId) ||
+    typeof value.url !== 'string'
+  ) {
+    return null
+  }
+  try {
+    const url = new URL(value.url)
+    return url.protocol === 'https:' &&
+      url.hostname === 'checkout.stripe.com' &&
+      url.pathname.includes(value.sessionId)
+      ? url.href
+      : null
+  } catch {
+    return null
+  }
+}
+
 export default function PostFooterActions({ post }: { post: Post }) {
   const { showToast } = useToast()
   const { language: _language, t } = useLanguage()
-  const [showTipModal, setShowTipModal] = useState(false)
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const viewer = captureSettingsViewer(auth)
+  const resourceScopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${post.id}`
+  const resourceScopeKeyRef = useRef(resourceScopeKey)
+  resourceScopeKeyRef.current = resourceScopeKey
+  const [tipModalScope, setTipModalScope] = useState<string | null>(null)
   const [selectedAmount, setSelectedAmount] = useState(100)
   const [loading, setLoading] = useState(false)
+  const mountedRef = useRef(false)
+  const nextOperationIdRef = useRef(0)
+  const operationRef = useRef<TipOperation | null>(null)
+  const showTipModal = tipModalScope === resourceScopeKey
+
+  const operationIsCurrent = useCallback(
+    (operation: TipOperation): boolean =>
+      mountedRef.current &&
+      operationRef.current?.id === operation.id &&
+      resourceScopeKeyRef.current === operation.resourceScopeKey &&
+      isSettingsViewerCurrent(operation.viewer, authRef.current),
+    []
+  )
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      operationRef.current?.controller.abort()
+      operationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tipModalScope && tipModalScope !== resourceScopeKey) {
+      setTipModalScope(null)
+      setSelectedAmount(100)
+    }
+    const operation = operationRef.current
+    if (!operation || operation.resourceScopeKey === resourceScopeKey) return
+    operation.controller.abort()
+    operationRef.current = null
+    setLoading(false)
+  }, [resourceScopeKey, tipModalScope])
 
   const handleTip = async () => {
+    if (operationRef.current || loading || tipModalScope !== resourceScopeKey) return
+    const currentViewer = captureSettingsViewer(authRef.current)
+    if (!currentViewer || resourceScopeKeyRef.current !== resourceScopeKey) {
+      if (!authRef.current.authChecked || authRef.current.loading) return
+      showToast(t('loginToTip'), 'warning')
+      setTipModalScope(null)
+      return
+    }
+
+    const operation: TipOperation = {
+      amountCents: selectedAmount,
+      controller: new AbortController(),
+      id: ++nextOperationIdRef.current,
+      postId: post.id,
+      resourceScopeKey,
+      viewer: currentViewer,
+    }
+    operationRef.current = operation
     setLoading(true)
     try {
-      // 获取用户 session
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const token = session?.access_token
-
-      if (!token) {
-        showToast(t('loginToTip'), 'warning')
-        setShowTipModal(false)
-        return
-      }
-
-      const res = await fetch('/api/tip/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          ...getCsrfHeaders(),
+      const result = await authedFetch<TipCheckoutResponse>(
+        '/api/tip/checkout',
+        'POST',
+        operation.viewer.accessToken,
+        {
+          post_id: operation.postId,
+          amount_cents: operation.amountCents,
         },
-        body: JSON.stringify({
-          post_id: post.id,
-          amount_cents: selectedAmount,
-        }),
-      })
-
-      const json = await res.json()
-
-      if (!res.ok) {
-        showToast(json.error || t('createPaymentFailed'), 'error')
+        20_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
+        }
+      )
+      if (!operationIsCurrent(operation) || result.stale) return
+      if (!result.ok) {
+        const error =
+          typeof result.data?.error === 'string' ? result.data.error : t('createPaymentFailed')
+        showToast(error, 'error')
         return
       }
 
-      // 重定向到 Stripe Checkout
-      if (json.url) {
-        window.location.href = json.url
+      const url = checkoutUrl(result.data)
+      if (!url) {
+        showToast(t('createPaymentFailed'), 'error')
+        return
       }
+      window.location.href = url
     } catch (error) {
-      logger.error('Tip error:', error)
-      showToast(t('tipFailed'), 'error')
+      if (operationIsCurrent(operation)) {
+        logger.error('Tip error:', error)
+        showToast(t('tipFailed'), 'error')
+      }
     } finally {
-      setLoading(false)
+      const ownsOperation = operationRef.current?.id === operation.id
+      const isCurrent = operationIsCurrent(operation)
+      if (ownsOperation) {
+        operationRef.current = null
+        if (isCurrent) setLoading(false)
+      }
     }
   }
+
+  const authPending = !viewer && (!auth.authChecked || auth.loading || Boolean(auth.userId))
 
   return (
     <>
@@ -96,7 +199,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
             border: '1px solid var(--color-border-primary)',
             background: 'var(--color-bg-tertiary)',
           }}
-          onClick={() => setShowTipModal(true)}
+          onClick={() => setTipModalScope(resourceScopeKey)}
         >
           {t('tip')}
         </button>
@@ -104,7 +207,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
 
       {/* 打赏弹窗 */}
       {showTipModal && (
-        <TipModalOverlay onClose={() => setShowTipModal(false)}>
+        <TipModalOverlay onClose={() => setTipModalScope(null)}>
           <div
             className="w-full max-w-sm rounded-lg p-6"
             style={{ background: 'var(--color-bg-secondary)', boxShadow: 'var(--shadow-elevated)' }}
@@ -150,7 +253,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
                   background: 'var(--color-bg-tertiary)',
                   color: 'var(--color-text-secondary)',
                 }}
-                onClick={() => setShowTipModal(false)}
+                onClick={() => setTipModalScope(null)}
               >
                 {t('cancel')}
               </button>
@@ -158,7 +261,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
                 className="flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
                 style={{ background: 'var(--color-accent-primary)', color: 'var(--foreground)' }}
                 onClick={handleTip}
-                disabled={loading}
+                disabled={loading || authPending}
               >
                 {loading
                   ? t('processing')
