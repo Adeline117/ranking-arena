@@ -36,8 +36,11 @@ import {
 } from '@/lib/rankings/publication-policy'
 import {
   readSealedRankingAuthorityGeneration,
+  sealedRankingPublicationIdentity,
   type SealedRankingGenerationRead,
 } from '@/lib/rankings/read-sealed-ranking-generation'
+import { readLeaderboardPublicationAuthority } from '@/lib/rankings/read-publication-authority'
+import { readLeaderboardPublicationProofs } from '@/lib/rankings/read-publication-proofs'
 import type { SealedLeaderboardPublicationProofSet } from '@/lib/rankings/read-publication-proofs'
 import {
   createSealedRankingCacheEntry,
@@ -203,23 +206,58 @@ export async function getInitialTraders(
   const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, page)
   let cached: InitialTradersResult | null = null
   let fallbackCached: InitialTradersResult | null = null
+  let authorityPromise: Promise<readonly string[]> | undefined
+  let currentPublicationIdentityPromise: Promise<string> | undefined
+  const authorizeCacheEntry = async (rawEntry: unknown) => {
+    const sealedEntry = parseSealedRankingCacheEntry<InitialTradersResult>(rawEntry, timeRange)
+    if (!sealedEntry) return { entry: null, authorityUnavailable: false }
+
+    try {
+      authorityPromise ??= readLeaderboardPublicationAuthority(getSupabaseAdmin(), timeRange, {
+        timeoutMs: 1_500,
+      })
+      const expectedSources = await authorityPromise
+      const authorityBoundEntry = parseSealedRankingCacheEntry<InitialTradersResult>(
+        rawEntry,
+        timeRange,
+        expectedSources
+      )
+      if (!authorityBoundEntry) return { entry: null, authorityUnavailable: false }
+
+      currentPublicationIdentityPromise ??= readLeaderboardPublicationProofs(
+        getSupabaseAdmin(),
+        { season: timeRange, sources: expectedSources },
+        { timeoutMs: 1_500 }
+      ).then(sealedRankingPublicationIdentity)
+      const currentPublicationIdentity = await currentPublicationIdentityPromise
+      return {
+        entry:
+          currentPublicationIdentity === authorityBoundEntry.publicationIdentity
+            ? authorityBoundEntry
+            : null,
+        authorityUnavailable: false,
+      }
+    } catch {
+      // The envelope remains an authenticated last-good value, but without the
+      // live registry authority it may only be exposed as explicitly stale.
+      return { entry: sealedEntry, authorityUnavailable: true }
+    }
+  }
   try {
-    const cachedEntry = parseSealedRankingCacheEntry<InitialTradersResult>(
-      await cache.get<unknown>(cacheKey),
-      timeRange
-    )
-    cached = cachedEntry?.value ?? null
+    const cachedAuthorization = await authorizeCacheEntry(await cache.get<unknown>(cacheKey))
+    cached = cachedAuthorization.entry?.value ?? null
     if (cached?.traders && cached.traders.length > 0) {
       const safeCached = sanitizePublicRankingSourcePayload(cached)
-      if (safeCached.traders.length > 0) return safeCached
+      if (safeCached.traders.length > 0) {
+        return cachedAuthorization.authorityUnavailable
+          ? { ...safeCached, isStale: true }
+          : safeCached
+      }
       cached = safeCached
     }
     // Primary cache miss — try fallback (longer TTL, may be stale but better than empty)
-    const fallbackEntry = parseSealedRankingCacheEntry<InitialTradersResult>(
-      await cache.get<unknown>(fallbackKey),
-      timeRange
-    )
-    fallbackCached = fallbackEntry?.value ?? null
+    const fallbackAuthorization = await authorizeCacheEntry(await cache.get<unknown>(fallbackKey))
+    fallbackCached = fallbackAuthorization.entry?.value ?? null
     if (fallbackCached) {
       fallbackCached = sanitizePublicRankingSourcePayload(fallbackCached)
       const stale = staleCacheResult(fallbackCached)

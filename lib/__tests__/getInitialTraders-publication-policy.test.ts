@@ -4,6 +4,8 @@ const mockCacheGet = jest.fn()
 const mockCacheSet = jest.fn()
 const mockAttachAvatarMirrors = jest.fn(async (_supabase: unknown, traders: unknown[]) => traders)
 const mockReadSealedRankingAuthorityGeneration = jest.fn()
+const mockReadLeaderboardPublicationAuthority = jest.fn()
+const mockReadLeaderboardPublicationProofs = jest.fn()
 const mockPublishedCounts = new Map<string, number>()
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -30,6 +32,17 @@ jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
     mockReadSealedRankingAuthorityGeneration(...args),
 }))
 
+jest.mock('@/lib/rankings/read-publication-authority', () => ({
+  readLeaderboardPublicationAuthority: (...args: unknown[]) =>
+    mockReadLeaderboardPublicationAuthority(...args),
+}))
+
+jest.mock('@/lib/rankings/read-publication-proofs', () => ({
+  ...jest.requireActual('@/lib/rankings/read-publication-proofs'),
+  readLeaderboardPublicationProofs: (...args: unknown[]) =>
+    mockReadLeaderboardPublicationProofs(...args),
+}))
+
 const TEST_COHORT_ID = '11111111-1111-4111-8111-111111111111'
 const TEST_AUTHORITY_SOURCES = ['binance_futures', 'bybit', 'gmx', 'hyperliquid']
 
@@ -43,28 +56,32 @@ async function readThroughSealedGeneration(
     proofs: unknown[]
   }) => Promise<unknown>
 ) {
-  const publication = {
+  const publication = publicationFor(season)
+  const value = await reader(publication)
+  return {
+    value,
+    publication,
+    publicationIdentity: JSON.stringify(publication),
+  }
+}
+
+function publicationFor(season: '7D' | '30D' | '90D', scoreCohortId = TEST_COHORT_ID) {
+  return {
     state: 'sealed' as const,
     season,
-    scoreCohortId: TEST_COHORT_ID,
+    scoreCohortId,
     proofs: TEST_AUTHORITY_SOURCES.map((source) => ({
       season_id: season,
       source,
       source_as_of: '2026-07-24T11:00:00.000000Z',
       recorded_at: '2026-07-24T11:01:00.000000Z',
-      score_cohort_id: TEST_COHORT_ID,
+      score_cohort_id: scoreCohortId,
       rank_mutation_seq: 9,
       current_mutation_seq: 9,
       published_rank_count: mockPublishedCounts.get(source) ?? 0,
       published_identity_sha256: 'a'.repeat(64),
       is_sealed: true,
     })),
-  }
-  const value = await reader(publication)
-  return {
-    value,
-    publication,
-    publicationIdentity: JSON.stringify(publication),
   }
 }
 
@@ -189,6 +206,11 @@ describe('SSR public ranking source quarantine', () => {
     jest.clearAllMocks()
     mockPublishedCounts.clear()
     mockReadSealedRankingAuthorityGeneration.mockImplementation(readThroughSealedGeneration)
+    mockReadLeaderboardPublicationAuthority.mockResolvedValue(TEST_AUTHORITY_SOURCES)
+    mockReadLeaderboardPublicationProofs.mockImplementation(
+      async (_supabase: unknown, input: { season: '7D' | '30D' | '90D' }) =>
+        publicationFor(input.season)
+    )
     mockCacheGet.mockResolvedValue(null)
     mockCacheSet.mockResolvedValue(undefined)
     jest.useFakeTimers().setSystemTime(new Date('2026-07-24T12:00:00.000Z'))
@@ -646,6 +668,99 @@ describe('SSR public ranking source quarantine', () => {
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
     expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('rejects a sealed cache page when current dynamic authority membership changed', async () => {
+    const cachedValue = {
+      traders: [{ source: 'bybit', source_type: 'futures', id: 'removed-source' }],
+      lastUpdated: '2026-07-24T10:00:00.000Z',
+      isStale: false,
+      totalCount: 1,
+      categoryCounts: { all: 1, futures: 1, spot: 0, onchain: 0 },
+    }
+    const sealed = await readThroughSealedGeneration({}, '90D', async () => cachedValue)
+    mockCacheGet.mockResolvedValueOnce({
+      contract: 'sealed-ranking-cache@1',
+      season: '90D',
+      publicationIdentity: sealed.publicationIdentity,
+      publication: sealed.publication,
+      cachedAt: '2026-07-24T11:02:00.000Z',
+      value: cachedValue,
+    })
+    mockReadLeaderboardPublicationAuthority.mockResolvedValueOnce(['binance_futures'])
+    mockReadSealedRankingAuthorityGeneration.mockRejectedValueOnce(
+      new Error('current generation unavailable')
+    )
+
+    const result = await getInitialTraders('90D', 20, 0)
+
+    expect(result.traders).toEqual([])
+    expect(mockReadLeaderboardPublicationAuthority).toHaveBeenCalledWith(expect.anything(), '90D', {
+      timeoutMs: 1_500,
+    })
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
+    expect(mockCacheGet).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses an unverified sealed cache only as explicitly stale last-good data', async () => {
+    const cachedValue = {
+      traders: [{ source: 'binance_futures', source_type: 'futures', id: 'last-good' }],
+      lastUpdated: '2026-07-24T10:00:00.000Z',
+      isStale: false,
+      totalCount: 1,
+      categoryCounts: { all: 1, futures: 1, spot: 0, onchain: 0 },
+    }
+    const sealed = await readThroughSealedGeneration({}, '90D', async () => cachedValue)
+    mockCacheGet.mockResolvedValueOnce({
+      contract: 'sealed-ranking-cache@1',
+      season: '90D',
+      publicationIdentity: sealed.publicationIdentity,
+      publication: sealed.publication,
+      cachedAt: '2026-07-24T11:02:00.000Z',
+      value: cachedValue,
+    })
+    mockReadLeaderboardPublicationAuthority.mockRejectedValueOnce(new Error('authority timeout'))
+
+    const result = await getInitialTraders('90D', 20, 0)
+
+    expect(result).toEqual({ ...cachedValue, isStale: true })
+    expect(mockReadSealedRankingAuthorityGeneration).not.toHaveBeenCalled()
+    expect(mockCacheGet).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a sealed cache page after the same sources advance to another cohort', async () => {
+    const cachedValue = {
+      traders: [{ source: 'binance_futures', source_type: 'futures', id: 'old-generation' }],
+      lastUpdated: '2026-07-24T10:00:00.000Z',
+      isStale: false,
+      totalCount: 1,
+      categoryCounts: { all: 1, futures: 1, spot: 0, onchain: 0 },
+    }
+    const sealed = await readThroughSealedGeneration({}, '90D', async () => cachedValue)
+    mockCacheGet.mockResolvedValueOnce({
+      contract: 'sealed-ranking-cache@1',
+      season: '90D',
+      publicationIdentity: sealed.publicationIdentity,
+      publication: sealed.publication,
+      cachedAt: '2026-07-24T11:02:00.000Z',
+      value: cachedValue,
+    })
+    mockReadLeaderboardPublicationProofs.mockResolvedValueOnce(
+      publicationFor('90D', '22222222-2222-4222-8222-222222222222')
+    )
+    mockReadSealedRankingAuthorityGeneration.mockRejectedValueOnce(
+      new Error('current generation unavailable')
+    )
+
+    const result = await getInitialTraders('90D', 20, 0)
+
+    expect(result.traders).toEqual([])
+    expect(mockReadLeaderboardPublicationProofs).toHaveBeenCalledWith(
+      expect.anything(),
+      { season: '90D', sources: TEST_AUTHORITY_SOURCES },
+      { timeoutMs: 1_500 }
+    )
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
   })
 
   it('passes one shared AbortSignal through every related Supabase read', async () => {
