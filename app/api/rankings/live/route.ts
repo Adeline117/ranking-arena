@@ -16,15 +16,13 @@ import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
-  filterPublicRankingSources,
   filterPublicRankingRows,
   publicRankingCacheKey,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import {
   createSealedRankingCacheEntry,
   parseSealedRankingCacheEntry,
@@ -34,7 +32,6 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const logger = createLogger('rankings-live')
-const LIVE_PROOF_SOURCES = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
 
 // ── Input validation schema ──────────────────────────────────────────────────
 const liveRankingsSchema = z.object({
@@ -65,13 +62,9 @@ export async function GET(request: NextRequest) {
 
   try {
     // Dedicated read-through cache: generic live pages have no generation proof.
-    const cacheKey = publicRankingCacheKey(`rankings:live:sealed-v5:${period}:${limit}:${offset}`)
+    const cacheKey = publicRankingCacheKey(`rankings:live:sealed-v6:${period}:${limit}:${offset}`)
     const cached = await tieredGet<unknown>(cacheKey, 'hot')
-    const cachedEntry = parseSealedRankingCacheEntry<Record<string, unknown>>(
-      cached.data,
-      period,
-      LIVE_PROOF_SOURCES
-    )
+    const cachedEntry = parseSealedRankingCacheEntry<Record<string, unknown>>(cached.data, period)
     if (cachedEntry) {
       const response = NextResponse.json(sanitizePublicRankingSourcePayload(cachedEntry.value))
       // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
@@ -89,17 +82,18 @@ export async function GET(request: NextRequest) {
     // carries and validates the same proof identity.
     const supabase = getSupabaseAdmin()
 
-    const sealedRead = await readSealedRankingGeneration(
+    const sealedRead = await readSealedRankingAuthorityGeneration(
       supabase,
-      { season: period, sources: LIVE_PROOF_SOURCES },
+      period,
       async (publication) => {
+        const authoritySources = publication.proofs.map((proof) => proof.source)
         let query = supabase
           .from('leaderboard_ranks')
           .select(
             'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type'
           )
           .eq('season_id', period)
-          .in('source', LIVE_PROOF_SOURCES)
+          .in('source', authoritySources)
           .filter('rank_publication_id', 'eq', publication.scoreCohortId)
 
         if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
