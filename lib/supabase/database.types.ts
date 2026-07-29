@@ -9962,6 +9962,15 @@ export type Database = {
       }
     }
     Functions: {
+      apply_referral_attribution_atomic: {
+        Args: {
+          p_provider: string | null
+          p_referred_id: string
+          p_referrer_id: string
+          p_signup_ip_hash: string | null
+        }
+        Returns: Json
+      }
       assert_recurring_pro_checkout_completed_atomic: {
         Args: {
           p_livemode: boolean
