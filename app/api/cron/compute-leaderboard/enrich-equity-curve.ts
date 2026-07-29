@@ -22,6 +22,9 @@ import type { Period } from '@/lib/utils/arena-score'
 import type { TraderRow } from './trader-row'
 
 const periodDaysFor = (season: Period): number => (season === '7D' ? 7 : season === '30D' ? 30 : 90)
+// trader_equity_curve is unique per data_date. Ten 90D curves fit below the
+// explicit 1,000-row response cap, so no trader is scored from a truncated tail.
+const EQUITY_TRADERS_PER_QUERY = 10
 
 /**
  * Phase 4: derive win_rate + max_drawdown from trader_equity_curve for any
@@ -54,9 +57,9 @@ export async function deriveWrMddFromEquityCurve(
   await Promise.all(
     Array.from(eqBySource.entries()).map(async ([source, traderIds]) => {
       // A 7D/30D/90D curve is a different metric input; never mix periods.
-      for (let i = 0; i < traderIds.length; i += 50) {
+      for (let i = 0; i < traderIds.length; i += EQUITY_TRADERS_PER_QUERY) {
         if (isOutOfTime(60_000)) break
-        const chunk = traderIds.slice(i, i + 50)
+        const chunk = traderIds.slice(i, i + EQUITY_TRADERS_PER_QUERY)
         const { data: eqRows } = await supabase
           .from('trader_equity_curve')
           .select('source_trader_id, pnl_usd, roi_pct, data_date, captured_at')
@@ -135,7 +138,7 @@ export async function deriveWrMddFromEquityCurve(
  * Also estimates trades_count from `points.length` as a last-resort fallback
  * for platforms that don't return a real trade count.
  *
- * Same per-source 50-id chunked parallelism as Phase 4. Mutates traderMap.
+ * Same bounded per-source chunking as Phase 4. Mutates traderMap.
  */
 export async function deriveAdvancedFromEquityCurve(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -170,9 +173,9 @@ export async function deriveAdvancedFromEquityCurve(
 
   await Promise.all(
     Array.from(advBySource.entries()).map(async ([source, traderIds]) => {
-      for (let i = 0; i < traderIds.length; i += 50) {
+      for (let i = 0; i < traderIds.length; i += EQUITY_TRADERS_PER_QUERY) {
         if (isOutOfTime(50_000)) break
-        const chunk = traderIds.slice(i, i + 50)
+        const chunk = traderIds.slice(i, i + EQUITY_TRADERS_PER_QUERY)
         const { data: eqRows } = await supabase
           .from('trader_equity_curve')
           .select('source_trader_id, roi_pct, pnl_usd, data_date, captured_at')

@@ -17,10 +17,12 @@ import {
 import type { Period } from '@/lib/utils/arena-score'
 import type { TraderRow } from './trader-row'
 
+const STATS_TRADERS_PER_QUERY = 10
+
 /**
  * Find traders missing any of: win_rate, max_drawdown, sharpe, sortino,
  * calmar, trades_count. Then look them up in trader_stats_detail and fill
- * the gaps in place. Per-source query in chunks of 100, parallelized across
+ * the gaps in place. Per-source query in bounded chunks, parallelized across
  * sources.
  *
  * Returns the count of traders that were *attempted* (i.e. how many had at
@@ -60,9 +62,9 @@ export async function enrichFromStatsDetail(
 
   await Promise.all(
     Array.from(enrichBySource.entries()).map(async ([source, traderIds]) => {
-      for (let i = 0; i < traderIds.length; i += 100) {
+      for (let i = 0; i < traderIds.length; i += STATS_TRADERS_PER_QUERY) {
         if (isOutOfTime(60_000)) break // leave time for scoring + upsert
-        const chunk = traderIds.slice(i, i + 100)
+        const chunk = traderIds.slice(i, i + STATS_TRADERS_PER_QUERY)
         const { data: statsRows } = await supabase
           .from('trader_stats_detail')
           .select(

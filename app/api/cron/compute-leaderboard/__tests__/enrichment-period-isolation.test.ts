@@ -9,6 +9,7 @@ import type { TraderRow } from '../trader-row'
 interface QueryRecord {
   table: string
   equalities: Array<[string, unknown]>
+  memberships: Array<[string, readonly unknown[]]>
   lowerBounds: Array<[string, unknown]>
   upperBounds: Array<[string, unknown]>
 }
@@ -58,7 +59,7 @@ function filteringClient(rowsByTable: Readonly<Record<string, Array<Record<strin
           upperBounds.every(([column, value]) => String(row[column]) <= String(value))
       ),
     }))
-    queries.push({ table, equalities, lowerBounds, upperBounds })
+    queries.push({ table, equalities, memberships, lowerBounds, upperBounds })
     return builder
   })
 
@@ -98,6 +99,16 @@ function trader(): TraderRow {
 
 function traderMap(row: TraderRow): Map<string, TraderRow> {
   return new Map([[`${row.source}:${row.source_trader_id}`, row]])
+}
+
+function manyTraderMap(count: number): Map<string, TraderRow> {
+  return new Map(
+    Array.from({ length: count }, (_, index) => {
+      const row = trader()
+      row.source_trader_id = `trader-${index + 1}`
+      return [`${row.source}:${row.source_trader_id}`, row]
+    })
+  )
 }
 
 describe('leaderboard enrichment period isolation', () => {
@@ -259,5 +270,31 @@ describe('leaderboard enrichment period isolation', () => {
     ])
     expect(equityRow.win_rate).toBeNull()
     expect(equityRow.max_drawdown).toBeNull()
+  })
+
+  it('keeps 90D equity requests below the 1,000-row response cap', async () => {
+    const { client, queries } = filteringClient({ trader_equity_curve: [] })
+
+    await deriveWrMddFromEquityCurve(client, manyTraderMap(11), '90D', () => false)
+
+    expect(queries).toHaveLength(2)
+    expect(
+      queries.map(
+        (query) => query.memberships.find(([column]) => column === 'source_trader_id')?.[1].length
+      )
+    ).toEqual([10, 1])
+  })
+
+  it('bounds stats-detail batches so recent history cannot starve most traders', async () => {
+    const { client, queries } = filteringClient({ trader_stats_detail: [] })
+
+    await enrichFromStatsDetail(client, manyTraderMap(11), '90D', () => false)
+
+    expect(queries).toHaveLength(2)
+    expect(
+      queries.map(
+        (query) => query.memberships.find(([column]) => column === 'source_trader_id')?.[1].length
+      )
+    ).toEqual([10, 1])
   })
 })
