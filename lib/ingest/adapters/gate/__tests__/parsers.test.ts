@@ -162,6 +162,16 @@ describe('parseGatePositions', () => {
     expect(p.entryPrice).toBeCloseTo(69841.1, 1)
     expect(p.unrealizedPnl).toBeCloseTo(4978.93, 2)
   })
+
+  it('allows only an explicit successful empty snapshot', () => {
+    expect(parseGatePositions({ code: 200, data: [] }, ctx)).toEqual([])
+    expect(() => parseGatePositions({ code: 401, data: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseGatePositions({ code: 200, data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
 })
 
 describe('parseGateHistory', () => {

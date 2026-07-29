@@ -126,6 +126,16 @@ describe('parseBitunixPositions', () => {
     })
     expect(positions[0].entryPrice).toBeCloseTo(0.16779, 5)
   })
+
+  it('allows only an explicit successful empty snapshot', () => {
+    expect(parseBitunixPositions({ code: 0, success: true, data: [] }, ctx)).toEqual([])
+    expect(() => parseBitunixPositions({ code: 1001, success: false, data: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseBitunixPositions({ code: 0, success: true, data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
 })
 
 describe('parseBitunixHistory', () => {

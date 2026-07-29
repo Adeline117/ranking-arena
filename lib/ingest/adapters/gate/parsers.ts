@@ -348,8 +348,17 @@ export function parseGateProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
  * 用户 ID) — gate_cfd sources keep positions_topn=0.
  */
 export function parseGatePositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const data = (raw as Dict)?.data
-  if (!Array.isArray(data)) return []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[gate] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== 200) {
+    throw new TypeError(`[gate] position response failed with code ${String(envelope.code)}`)
+  }
+  const data = envelope.data
+  if (!Array.isArray(data)) {
+    throw new TypeError('[gate] malformed position response data')
+  }
   const out: ParsedPosition[] = []
   for (const item of data as Dict[]) {
     const symbol = item.market

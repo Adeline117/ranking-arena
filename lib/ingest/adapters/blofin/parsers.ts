@@ -262,6 +262,17 @@ export function parseBlofinLeaderboardSeries(
  *  (size summed, entry size-weighted) or the (trader,symbol,side) upsert key
  *  collides ("ON CONFLICT cannot affect row a second time"). */
 export function parseBlofinPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[blofin] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== 200) {
+    throw new TypeError(`[blofin] position response failed with code ${String(envelope.code)}`)
+  }
+  if (!Array.isArray(envelope.data)) {
+    throw new TypeError('[blofin] malformed position response data')
+  }
+
   const byKey = new Map<
     string,
     {
@@ -275,7 +286,7 @@ export function parseBlofinPositions(raw: unknown, _ctx: ParseCtx): ParsedPositi
       rows: Dict[]
     }
   >()
-  for (const r of dataRows(raw)) {
+  for (const r of envelope.data as Dict[]) {
     if (r.close_time !== null && r.close_time !== undefined) continue // closed → history surface
     const symbol = typeof r.symbol === 'string' ? r.symbol : null
     if (!symbol) continue
