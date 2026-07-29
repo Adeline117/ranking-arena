@@ -67,7 +67,7 @@ function message(overrides: Record<string, unknown> = {}) {
     content: 'hello',
     read: false,
     read_at: null,
-    created_at: '2026-07-29T20:00:00.000Z',
+    created_at: '2026-07-29T20:00:00.000+00:00',
     deleted_at: null,
     media_url: null,
     media_type: null,
@@ -158,6 +158,13 @@ describe('POST /api/messages atomic authority', () => {
       'wrong sender',
       {
         data: successAck({ message: message({ sender_id: RECEIVER_ID }) }),
+        error: null,
+      },
+    ],
+    [
+      'malformed timestamp',
+      {
+        data: successAck({ message: message({ created_at: 'later' }) }),
         error: null,
       },
     ],
