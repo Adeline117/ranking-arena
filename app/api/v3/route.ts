@@ -18,18 +18,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getLeaderboard, getTraderDetail, searchTraders } from '@/lib/data/unified'
+import { getTraderDetail, searchTraders } from '@/lib/data/unified'
 import {
   EXCHANGE_CONFIG,
   DEAD_BLOCKED_PLATFORMS,
   ALL_SOURCES,
   SOURCE_TYPE_MAP,
+  parsePublicActiveRankingSource,
 } from '@/lib/constants/exchanges'
 import type { TradingPeriod } from '@/lib/data/unified'
 import { checkRateLimitFull } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { apiSuccess, apiError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
+import { readV3Leaderboard } from '@/lib/rankings/read-v3-leaderboard'
 
 export const runtime = 'edge'
 
@@ -142,7 +144,12 @@ function errorResponse(message: string, status: number) {
 // ---------------------------------------------------------------------------
 
 const v3RankingsSchema = z.object({
-  platform: z.string().max(50).optional(),
+  platform: z
+    .custom<string>(
+      (value) => typeof value === 'string' && parsePublicActiveRankingSource(value) !== null,
+      'Invalid platform'
+    )
+    .optional(),
   period: z
     .string()
     .toUpperCase()
@@ -266,9 +273,9 @@ async function handleRankings(params: URLSearchParams) {
     return { error: 'Invalid parameters', status: 400 }
   }
 
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const { platform, period, limit, offset } = parsed.data
-  const result = await getLeaderboard(supabase, {
+  const result = await readV3Leaderboard(supabase, {
     platform,
     period: period as TradingPeriod,
     limit,
@@ -389,8 +396,8 @@ async function handleBulk(params: URLSearchParams) {
   }
 
   const { period, limit } = parsed.data
-  const supabase = getSupabaseAdmin() as SupabaseClient
-  const result = await getLeaderboard(supabase, {
+  const supabase = getSupabaseAdmin()
+  const result = await readV3Leaderboard(supabase, {
     period: period as TradingPeriod,
     limit,
     offset: 0,
