@@ -268,7 +268,7 @@ export async function processFirstPartySync(
       ...(proxyFetch ? { fetchImplementation: proxyFetch } : {}),
       enableRateLimit: true,
       timeout: 15_000,
-      options: { defaultType: src.product_type === 'spot' ? 'spot' : 'swap' },
+      options: { defaultType: 'swap' },
     })
 
     // ── Prior snapshots (ROI denominator / MDD path) ──
