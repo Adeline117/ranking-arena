@@ -32,6 +32,10 @@ STAGING_ONLY_WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729061533_lead
 STAGING_FULL_XID_MIGRATION="$ROOT_DIR/supabase/migrations/20260729063000_leaderboard_rank_staging_full_xid_guard.sql"
 PUBLICATION_PLAN_MIGRATION="$ROOT_DIR/supabase/migrations/20260729064500_leaderboard_rank_generation_publication_plan.sql"
 PUBLICATION_PLAN_PROOF="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-publication-plan.pg17.inc.sh"
+V5_SCORER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729070000_pure_arena_score_v5_zero_metric_scorer.sql"
+MANIFEST_V2_MIGRATION="$ROOT_DIR/supabase/migrations/20260729070500_leaderboard_score_input_manifest_v2.sql"
+PROJECTION_V2_MIGRATION="$ROOT_DIR/supabase/migrations/20260729071000_leaderboard_metric_trust_projection_v2.sql"
+PROJECTION_V2_PROOF="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-metric-trust-projection-v2.pg17.inc.sh"
 CAPACITY_BENCHMARK="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-64k-benchmark.pg17.psql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 BENCHMARK_64K="${ARENA_ATOMIC_WRITER_BENCHMARK_64K:-0}"
@@ -43,6 +47,7 @@ STAGING_XID_REPAIR_TIMING="${ARENA_ATOMIC_WRITER_STAGING_XID_REPAIR_TIMING:-befo
 PUBLICATION_PLAN="${ARENA_ATOMIC_WRITER_PUBLICATION_PLAN:-0}"
 PUBLICATION_PLAN_MANIFEST_MUTATION="${ARENA_ATOMIC_WRITER_PUBLICATION_PLAN_MANIFEST_MUTATION:-none}"
 PUBLICATION_PLAN_RETAIN_MODE="${ARENA_ATOMIC_WRITER_PUBLICATION_PLAN_RETAIN_MODE:-legacy}"
+PROJECTION_V2="${ARENA_ATOMIC_WRITER_PROJECTION_V2:-0}"
 
 if [[ "$BENCHMARK_64K" != '0' && "$BENCHMARK_64K" != '1' ]]; then
   echo 'ARENA_ATOMIC_WRITER_BENCHMARK_64K must be 0 or 1' >&2
@@ -83,6 +88,17 @@ if [[ "$PUBLICATION_PLAN_RETAIN_MODE" != 'legacy' \
    && "$PUBLICATION_PLAN_RETAIN_MODE" != 'trusted' \
    && "$PUBLICATION_PLAN_RETAIN_MODE" != 'expired' ]]; then
   echo 'ARENA_ATOMIC_WRITER_PUBLICATION_PLAN_RETAIN_MODE must be legacy, trusted, or expired' >&2
+  exit 1
+fi
+if [[ "$PROJECTION_V2" != '0' && "$PROJECTION_V2" != '1' ]]; then
+  echo 'ARENA_ATOMIC_WRITER_PROJECTION_V2 must be 0 or 1' >&2
+  exit 1
+fi
+if [[ "$PROJECTION_V2" == '1' \
+   && ( "$PUBLICATION_PLAN" != '1' \
+        || "$PUBLICATION_PLAN_MANIFEST_MUTATION" != 'none' \
+        || "$PUBLICATION_PLAN_RETAIN_MODE" != 'legacy' ) ]]; then
+  echo 'projection-v2 proof requires the unmutated legacy publication fixture' >&2
   exit 1
 fi
 if [[ "$PUBLICATION_PLAN_MANIFEST_MUTATION" != 'none' \
@@ -129,6 +145,18 @@ for executable in initdb pg_ctl pg_resetwal psql; do
     exit 1
   fi
 done
+if [[ "$PROJECTION_V2" == '1' ]]; then
+  for required_file in \
+    "$V5_SCORER_MIGRATION" \
+    "$MANIFEST_V2_MIGRATION" \
+    "$PROJECTION_V2_MIGRATION" \
+    "$PROJECTION_V2_PROOF"; do
+    if [[ ! -f "$required_file" ]]; then
+      echo "required projection-v2 proof input is missing: $required_file" >&2
+      exit 1
+    fi
+  done
+fi
 if [[ "$("$PG_BIN/psql" --version)" != psql\ \(PostgreSQL\)\ 17.* ]]; then
   echo 'This integration proof requires PostgreSQL 17' >&2
   exit 1
@@ -1196,6 +1224,14 @@ SQL
       echo 'publication-plan migration failed after the real staging dependency chain' >&2
       sed -n '1,360p' "$ERROR_FILE" >&2
       exit 1
+    fi
+    if [[ "$PROJECTION_V2" == '1' ]]; then
+      psql_cmd -q -f "$V5_SCORER_MIGRATION"
+      psql_cmd -q -f "$MANIFEST_V2_MIGRATION"
+      source "$PROJECTION_V2_PROOF"
+      run_metric_trust_projection_v2_proof
+      printf 'PostgreSQL 17 metric-trust projection v2 proof passed.\n'
+      exit 0
     fi
     seed_trusted_publication_plan_fixture
   fi
