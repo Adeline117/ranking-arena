@@ -24,6 +24,7 @@ import {
   type SurfaceCapability,
 } from '@/lib/ingest/core/surface-capabilities'
 import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
+import { assertPositionSnapshotEvidence } from '@/lib/ingest/core/position-snapshot'
 import {
   findIncompleteProfileWindow,
   IncompleteProfileWindowError,
@@ -270,6 +271,17 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
     if (surface === 'positions') {
       const bundle = await adapter.getPositions(session, src, exchangeTraderId, traderMeta)
       rawPayload = bundle.pages
+      await writeRawObject({
+        sourceId: src.id,
+        sourceSlug: src.slug,
+        jobType: 'tier_c',
+        traderId,
+        timeframe,
+        payload: rawPayload,
+        meta: { surface },
+      })
+      rawPersisted = true
+      assertPositionSnapshotEvidence(bundle, `${src.slug}/${exchangeTraderId}`)
       const positions = bundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctx))
       rows = positions.map((p) => ({ ...p, currency: src.currency }))
 

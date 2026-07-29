@@ -10,6 +10,7 @@ import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
+import { assertPositionSnapshotEvidence } from '@/lib/ingest/core/position-snapshot'
 import { supportsSourceSurface } from '@/lib/ingest/core/surface-capabilities'
 import type { ParseCtx } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
@@ -114,6 +115,8 @@ export async function processTierD(
           timeframe: null,
           payload: bundle.pages,
         })
+
+        assertPositionSnapshotEvidence(bundle, `${src.slug}/${trader.exchange_trader_id}`)
 
         const ctx: ParseCtx = {
           sourceSlug: src.slug,

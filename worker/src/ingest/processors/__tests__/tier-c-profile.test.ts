@@ -15,6 +15,7 @@ const mockWriteRawObject = jest.fn()
 const mockRecordStagingRejects = jest.fn()
 const mockResolveTraderId = jest.fn()
 const mockPublishProfile = jest.fn()
+const mockPublishPositions = jest.fn()
 const mockDbQuery = jest.fn()
 
 jest.mock('../../../connection', () => ({
@@ -39,7 +40,7 @@ jest.mock('@/lib/ingest/staging/rejects', () => ({
 jest.mock('@/lib/ingest/serving/publish', () => ({
   getHistoryCursor: jest.fn(),
   publishHistoryRows: jest.fn(),
-  publishPositions: jest.fn(),
+  publishPositions: (...args: unknown[]) => mockPublishPositions(...args),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
   resolveTraderId: (...args: unknown[]) => mockResolveTraderId(...args),
 }))
@@ -141,6 +142,7 @@ describe('Tier-C incomplete profile window gate', () => {
     mockValidateProfile.mockReturnValue([])
     mockRedisSet.mockResolvedValue('OK')
     mockPublishProfile.mockResolvedValue(undefined)
+    mockPublishPositions.mockResolvedValue(undefined)
     mockSessionClose.mockResolvedValue(undefined)
   })
 
@@ -377,6 +379,30 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockOpenSession).not.toHaveBeenCalled()
     expect(mockGetPositions).not.toHaveBeenCalled()
     expect(mockGetSourceBySlug).toHaveBeenCalledTimes(1)
+  })
+
+  it('persists RAW but never clears positions for an empty acquisition bundle', async () => {
+    mockGetAdapter.mockReturnValue({
+      capabilities: { positions: true },
+      supportsSurface: () => true,
+      getPositions: mockGetPositions,
+      parsePositions: jest.fn(),
+    })
+    mockGetPositions.mockResolvedValue({ ...bundle, pages: [] })
+    const heavyJob = {
+      data: { ...job.data, surface: 'positions' },
+    } as Job<TierCJobData>
+
+    await expect(processTierC(heavyJob, 'local')).rejects.toThrow(
+      'snapshot has no captured source page'
+    )
+
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({ jobType: 'tier_c', traderId: 42, payload: [] })
+    )
+    expect(mockRedisSet).not.toHaveBeenCalled()
+    expect(mockPublishPositions).not.toHaveBeenCalled()
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
 
   it.each(['profile', 'positions'] as const)(

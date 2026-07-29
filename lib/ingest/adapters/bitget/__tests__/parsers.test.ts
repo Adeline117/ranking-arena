@@ -220,10 +220,18 @@ describe('parseBitgetPositions (live-captured fixture, 2026-06-11)', () => {
     expect(positions[0].raw).toMatchObject({ symbolId: 'SOLUSDT_UMCBL' })
   })
 
-  it('returns empty for junk/blocked payloads', () => {
-    expect(parseBitgetPositions(null, ctx)).toHaveLength(0)
-    expect(parseBitgetPositions({ code: '30066', msg: '仓位保护' }, ctx)).toHaveLength(0)
-    expect(parseBitgetPositions({ data: null }, ctx)).toHaveLength(0)
+  it('returns empty only for a successful, explicit empty snapshot', () => {
+    expect(parseBitgetPositions({ code: '200', data: [] }, ctx)).toEqual([])
+  })
+
+  it('rejects junk/blocked payloads instead of clearing last-good positions', () => {
+    expect(() => parseBitgetPositions(null, ctx)).toThrow('malformed position response envelope')
+    expect(() => parseBitgetPositions({ code: '30066', msg: '仓位保护' }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseBitgetPositions({ code: '200', data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
   })
 })
 

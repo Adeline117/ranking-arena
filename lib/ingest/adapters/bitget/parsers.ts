@@ -257,8 +257,17 @@ function bitgetSide(v: unknown): 'long' | 'short' | null {
  * contract size / mark price / uPnL — those stay NULL (NULL-collapse, §6).
  */
 export function parseBitgetPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const data = (raw as Dict)?.data
-  if (!Array.isArray(data)) return []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[bitget] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== '200') {
+    throw new TypeError(`[bitget] position response failed with code ${String(envelope.code)}`)
+  }
+  const data = envelope.data
+  if (!Array.isArray(data)) {
+    throw new TypeError('[bitget] malformed position response data')
+  }
   const out: ParsedPosition[] = []
   for (const item of data as Dict[]) {
     const symbol = (item.symbolDisplayName ?? item.symbolId) as string | undefined
