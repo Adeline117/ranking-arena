@@ -53,6 +53,7 @@ jest.mock('@/lib/alerts/send-alert', () => ({
 
 import {
   handleChargeDisputeCreated,
+  handleChargeDisputeFundsWithdrawn,
   handleChargeDisputeFundsReinstated,
   handleChargeRefunded,
   handleRefundLifecycle,
@@ -132,7 +133,7 @@ function disputeObject(overrides: Partial<Stripe.Dispute> = {}): Stripe.Dispute 
     currency: 'usd',
     livemode: true,
     reason: 'fraudulent',
-    status: 'warning_needs_response',
+    status: 'needs_response',
     ...overrides,
   } as Stripe.Dispute
 }
@@ -908,7 +909,7 @@ describe('refund webhook product ownership routing', () => {
       p_stripe_event_id: 'evt_dispute_generic',
       p_stripe_event_created: 1_700_000_000,
       p_stripe_dispute_id: 'dp_generic',
-      p_dispute_status: 'warning_needs_response',
+      p_dispute_status: 'needs_response',
       p_dispute_reason: 'fraudulent',
       p_dispute_amount: 2500,
       p_currency: 'usd',
@@ -925,6 +926,84 @@ describe('refund webhook product ownership routing', () => {
         details: expect.objectContaining({
           disputeId: 'dp_generic',
           apiTierStatus: 'not_api',
+        }),
+      })
+    )
+  })
+
+  it('preserves paid access for a fresh warning inquiry without withdrawn funds', async () => {
+    const dispute = disputeObject({ status: 'warning_needs_response' })
+    mockRetrieveDispute.mockResolvedValueOnce(dispute)
+
+    await handleChargeDisputeCreated(dispute, {
+      eventId: 'evt_dispute_inquiry',
+      eventCreatedAt: 1_700_000_001,
+      livemode: true,
+    })
+
+    expect(mockRetrieveDispute).toHaveBeenCalledWith('dp_generic')
+    expect(mockRetrieveCharge).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockDrainApiTierReversalActions).not.toHaveBeenCalled()
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'Stripe dispute inquiry observed without funds withdrawal',
+      expect.objectContaining({
+        source: 'charge.dispute.created',
+        disputeId: 'dp_generic',
+        status: 'warning_needs_response',
+      })
+    )
+    expect(mockSendAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        source: 'stripe',
+        details: expect.objectContaining({
+          disputeId: 'dp_generic',
+          fundsWithdrawn: false,
+          apiTierStatus: 'not_applicable',
+        }),
+      })
+    )
+  })
+
+  it('accepts an idempotent funds-withdrawn replay after fresh Stripe verification', async () => {
+    const dispute = disputeObject()
+    mockRetrieveCharge.mockResolvedValueOnce(
+      refundedCharge({
+        amount_refunded: 0,
+        refunded: false,
+      })
+    )
+    mockRpc.mockResolvedValueOnce({
+      data: { status: 'already_withdrawn' },
+      error: null,
+    })
+
+    await handleChargeDisputeFundsWithdrawn(dispute, {
+      eventId: 'evt_dispute_withdrawn',
+      eventCreatedAt: 1_700_000_002,
+      livemode: true,
+    })
+
+    expect(mockRetrieveDispute).toHaveBeenCalledWith('dp_generic')
+    expect(mockRetrieveCharge).toHaveBeenCalledWith('ch_refunded')
+    expect(mockRpc).toHaveBeenCalledWith(
+      'record_api_tier_dispute_reversal_atomic',
+      expect.objectContaining({
+        p_livemode: true,
+        p_stripe_event_id: 'evt_dispute_withdrawn',
+        p_stripe_dispute_id: 'dp_generic',
+        p_dispute_status: 'needs_response',
+      })
+    )
+    expect(mockDrainApiTierReversalActions).toHaveBeenCalledWith({ limit: 1 })
+    expect(mockSendAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'critical',
+        details: expect.objectContaining({
+          source: 'charge.dispute.funds_withdrawn',
+          fundsWithdrawn: true,
+          apiTierStatus: 'already_withdrawn',
         }),
       })
     )
