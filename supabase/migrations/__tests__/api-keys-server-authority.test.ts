@@ -113,8 +113,6 @@ describe('API keys server authority migration', () => {
       .sort()
 
     expect(callers).toEqual([
-      'app/api/stripe/webhook/handlers/checkout.ts',
-      'app/api/stripe/webhook/handlers/subscription.ts',
       'app/api/user/api-keys/route.ts',
       'app/api/user/api-keys/usage/route.ts',
       'app/api/v3/route.ts',
