@@ -33,7 +33,18 @@ import { getLeaderboard, safeQuery, withTimeout } from '../queries'
 
 function chainableQuery() {
   const query: Record<string, jest.Mock> = {}
-  for (const method of ['select', 'eq', 'not', 'or', 'gt', 'gte', 'order', 'range']) {
+  for (const method of [
+    'select',
+    'eq',
+    'filter',
+    'in',
+    'not',
+    'or',
+    'gt',
+    'gte',
+    'order',
+    'range',
+  ]) {
     query[method] = jest.fn(() => query)
   }
   query.abortSignal = jest.fn().mockResolvedValue({ data: [], error: null })
@@ -205,4 +216,51 @@ describe('getLeaderboard source exclusion', () => {
       expect(from).not.toHaveBeenCalled()
     }
   )
+
+  it('lets sealed cohort proof govern freshness and never reads a generic count cache', async () => {
+    const leaderboardQuery = chainableQuery()
+    leaderboardQuery.abortSignal.mockResolvedValue({
+      data: [
+        {
+          source: 'binance_futures',
+          source_trader_id: 'sealed-a',
+          season_id: '90D',
+          rank: 11,
+        },
+        {
+          source: 'hyperliquid',
+          source_trader_id: 'sealed-b',
+          season_id: '90D',
+          rank: 12,
+        },
+      ],
+      error: null,
+    })
+    const from = jest.fn((table: string) => {
+      if (table !== 'leaderboard_ranks') {
+        throw new Error(`unexpected table: ${table}`)
+      }
+      return leaderboardQuery
+    })
+    const signal = new AbortController().signal
+
+    const result = await getLeaderboard({ from } as never, {
+      period: '90D',
+      scoreCohortId: '11111111-1111-4111-8111-111111111111',
+      allowedSources: ['binance_futures', 'hyperliquid'],
+      offset: 10,
+      limit: 2,
+      signal,
+    })
+
+    expect(leaderboardQuery.filter).toHaveBeenCalledWith(
+      'rank_publication_id',
+      'eq',
+      '11111111-1111-4111-8111-111111111111'
+    )
+    expect(leaderboardQuery.gte).not.toHaveBeenCalled()
+    expect(from).not.toHaveBeenCalledWith('leaderboard_count_cache')
+    expect(result.traders).toHaveLength(2)
+    expect(result.total).toBe(13)
+  })
 })

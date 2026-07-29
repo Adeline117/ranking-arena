@@ -147,6 +147,7 @@ export async function getLeaderboard(
   // These cover ~90% of homepage and ranking page loads
   const isDefaultQuery =
     !platform &&
+    !scoreCohortId &&
     allowedSources.length === 0 &&
     excludeSources.length === 0 &&
     !minScore &&
@@ -217,14 +218,19 @@ export async function getLeaderboard(
     query = query.gt('arena_score', minScore)
   }
 
-  // Graceful freshness: prefer data <6h old, but fall back to <24h rather than
-  // showing empty rankings. The UI should indicate staleness for >6h data.
-  const FRESH_HOURS = 6
-  const STALE_FALLBACK_HOURS = 24
-  const freshCutoff = new Date(Date.now() - FRESH_HOURS * 3600_000).toISOString()
-  const staleCutoff = new Date(Date.now() - STALE_FALLBACK_HOURS * 3600_000).toISOString()
-  const effectiveCutoff = opts?.allowStale ? staleCutoff : freshCutoff
-  query = query.gte('computed_at', effectiveCutoff)
+  // A sealed cohort already carries source-level freshness proof. Applying an
+  // independent wall-clock cutoff here can hide a valid last-good generation
+  // (the proof contract permits a wider recovery window).
+  if (!scoreCohortId) {
+    // Graceful freshness: prefer data <6h old, but fall back to <24h rather than
+    // showing empty rankings. The UI should indicate staleness for >6h data.
+    const FRESH_HOURS = 6
+    const STALE_FALLBACK_HOURS = 24
+    const freshCutoff = new Date(Date.now() - FRESH_HOURS * 3600_000).toISOString()
+    const staleCutoff = new Date(Date.now() - STALE_FALLBACK_HOURS * 3600_000).toISOString()
+    const effectiveCutoff = opts?.allowStale ? staleCutoff : freshCutoff
+    query = query.gte('computed_at', effectiveCutoff)
+  }
 
   // Sorting
   const sortColumn =
@@ -252,9 +258,22 @@ export async function getLeaderboard(
     return { traders: [], total: 0, error: error.message }
   }
 
-  const traders = filterPublicRankingRows(data || [], (row) => row[LR.source]).map(
-    (row: Record<string, unknown>) => mapLeaderboardRow(row)
-  )
+  const rawRows = data || []
+  const publicRows = filterPublicRankingRows(rawRows, (row) => row[LR.source])
+  const traders = publicRows.map((row: Record<string, unknown>) => mapLeaderboardRow(row))
+
+  if (scoreCohortId) {
+    // leaderboard_count_cache has no cohort identity, so it cannot authoritatively
+    // describe this generation. Return a conservative lower bound from the page;
+    // one extra sentinel preserves "next page" when the current page is full.
+    const removedNonPublicRows = publicRows.length !== rawRows.length
+    const pageLowerBound = removedNonPublicRows ? traders.length : offset + traders.length
+    const total =
+      !removedNonPublicRows && limit > 0 && traders.length === limit
+        ? pageLowerBound + 1
+        : pageLowerBound
+    return { traders, total }
+  }
 
   // Total count from pre-computed cache (instant) instead of traders.length
   // which only reflects the current page size and breaks pagination.
