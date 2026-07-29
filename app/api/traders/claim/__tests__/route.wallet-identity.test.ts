@@ -134,6 +134,12 @@ describe('GET /api/traders/claim identity scope', () => {
       canonicalEvm,
       'hyperliquid'
     )
+    expect(mockGetUserVerifiedTrader).toHaveBeenCalledWith(
+      mockSupabase,
+      'user-1',
+      canonicalEvm,
+      'hyperliquid'
+    )
   })
 
   it('preserves exact Solana Base58 case in the scoped lookup', async () => {
@@ -143,6 +149,12 @@ describe('GET /api/traders/claim identity scope', () => {
 
     expect(response.status).toBe(200)
     expect(mockGetUserClaimForTrader).toHaveBeenCalledWith(
+      mockSupabase,
+      'user-1',
+      solanaTrader,
+      'drift'
+    )
+    expect(mockGetUserVerifiedTrader).toHaveBeenCalledWith(
       mockSupabase,
       'user-1',
       solanaTrader,

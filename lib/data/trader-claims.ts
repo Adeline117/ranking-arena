@@ -347,20 +347,23 @@ export async function getUserClaimForTrader(
  */
 export async function getUserVerifiedTrader(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  traderId: string,
+  source: string
 ): Promise<VerifiedTrader | null> {
   const { data, error } = await supabase
     .from('verified_traders')
     .select(VERIFIED_TRADER_FIELDS)
     .eq('user_id', userId)
-    .order('created_at', { ascending: true })
-    .limit(1)
+    .eq('trader_id', traderId)
+    .eq('source', source)
+    .maybeSingle()
 
   if (error) {
     throw error
   }
 
-  return data?.[0] ?? null
+  return data
 }
 
 /**

@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
 
     const [claim, verified, linkedResult] = await Promise.all([
       getUserClaimForTrader(supabase, user.id, traderId, source),
-      getUserVerifiedTrader(supabase, user.id),
+      getUserVerifiedTrader(supabase, user.id, traderId, source),
       supabase
         .from('user_linked_traders')
         .select(

@@ -25,6 +25,7 @@ jest.mock('@/lib/logger', () => ({
 import {
   activateClaim,
   getUserClaimForTrader,
+  getUserVerifiedTrader,
   reviewClaim,
   submitClaim,
   updateVerifiedTrader,
@@ -134,6 +135,33 @@ describe('trader claim identity scope', () => {
     await expect(getUserClaimForTrader(client, USER_ID, 'trader-b', 'drift')).resolves.toEqual(
       traderBClaim
     )
+  })
+
+  it('queries the exact verified profile instead of the user oldest account', async () => {
+    const builder: Record<string, jest.Mock> = {}
+    builder.select = jest.fn(() => builder)
+    builder.eq = jest.fn(() => builder)
+    builder.maybeSingle = jest.fn().mockResolvedValue({
+      data: verifiedTrader({ trader_id: 'trader-b', source: 'drift' }),
+      error: null,
+    })
+    const from = jest.fn(() => builder)
+    const client = { from } as unknown as SupabaseClient<Database>
+
+    await expect(
+      getUserVerifiedTrader(client, USER_ID, 'trader-b', 'drift')
+    ).resolves.toMatchObject({
+      user_id: USER_ID,
+      trader_id: 'trader-b',
+      source: 'drift',
+    })
+    expect(from).toHaveBeenCalledWith('verified_traders')
+    expect(builder.eq.mock.calls).toEqual([
+      ['user_id', USER_ID],
+      ['trader_id', 'trader-b'],
+      ['source', 'drift'],
+    ])
+    expect(builder.maybeSingle).toHaveBeenCalledTimes(1)
   })
 })
 
