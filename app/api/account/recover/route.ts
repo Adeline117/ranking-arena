@@ -15,6 +15,7 @@ import {
   resumeStripeSubscriptionRenewals,
   stopStripeSubscriptionRenewals,
 } from '@/lib/stripe/account-deletion'
+import { enforceAccountDeletionAuthBan } from '@/lib/account/deletion-auth-invalidation'
 
 const logger = createLogger('account-recover')
 const INVALID_RECOVERY = 'Invalid credentials or no pending deletion'
@@ -23,14 +24,16 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 async function reban(userId: string): Promise<boolean> {
-  const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, {
-    ban_duration: '720h',
-  })
-  if (error) {
-    logger.error('Failed to restore deletion ban after recovery failure', { userId, error })
+  try {
+    await enforceAccountDeletionAuthBan(getSupabaseAdmin().auth.admin, userId)
+    return true
+  } catch (error) {
+    logger.error('Failed to restore deletion ban after recovery failure', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    })
     return false
   }
-  return true
 }
 
 type RecoveryClaimAck = 'claimed' | 'busy' | 'finished' | 'invalid'

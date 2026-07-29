@@ -278,7 +278,7 @@ describe('account deletion scheduling', () => {
       mockRpc.mock.invocationCallOrder.at(-1)!
     )
     expect(mockLocalSubscriptionUpdate).not.toHaveBeenCalled()
-    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
+    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '876000h' })
     expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
     expect(mockFrom).toHaveBeenCalledTimes(2)
   })
@@ -472,7 +472,7 @@ describe('account deletion scheduling', () => {
       'finish_account_deletion_billing_atomic',
       expect.any(Object)
     )
-    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
+    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '876000h' })
     expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
   })
 
@@ -644,7 +644,7 @@ describe('account deletion scheduling', () => {
         ([functionName]) => functionName === 'finish_account_deletion_billing_atomic'
       )
     ).toBe(false)
-    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
+    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '876000h' })
     expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
   })
 

@@ -120,7 +120,7 @@ describe('prepared account deletion billing reconciliation', () => {
       customerId: 'cus_owner',
       expectedUserId: USER_ID,
     })
-    expect(mockUpdateUser).toHaveBeenCalledWith(USER_ID, { ban_duration: '720h' })
+    expect(mockUpdateUser).toHaveBeenCalledWith(USER_ID, { ban_duration: '876000h' })
     expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledWith({
       stripeClient: mockStripeClient,
       subscriptionIds: ['sub_checkout_race', 'sub_initial'],

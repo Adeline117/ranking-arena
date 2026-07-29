@@ -298,7 +298,7 @@ describe('account recovery', () => {
       ban_duration: 'none',
     })
     expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(2, 'user-1', {
-      ban_duration: '720h',
+      ban_duration: '876000h',
     })
     expect(mockRpc).toHaveBeenCalledWith(
       'claim_account_recovery_admission_atomic',
@@ -337,7 +337,7 @@ describe('account recovery', () => {
       ban_duration: 'none',
     })
     expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(2, 'user-1', {
-      ban_duration: '720h',
+      ban_duration: '876000h',
     })
     expect(mockRpc).toHaveBeenCalledWith(
       'abort_account_recovery_admission_atomic',
@@ -376,7 +376,7 @@ describe('account recovery', () => {
     expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
     expect(mockSubscriptionUpdate).not.toHaveBeenCalled()
     expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', {
-      ban_duration: '720h',
+      ban_duration: '876000h',
     })
   })
 
@@ -450,7 +450,7 @@ describe('account recovery', () => {
       ban_duration: 'none',
     })
     expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(2, 'user-1', {
-      ban_duration: '720h',
+      ban_duration: '876000h',
     })
     expect(mockRpc).not.toHaveBeenCalledWith(
       'finish_account_recovery_admission_atomic',
@@ -521,7 +521,7 @@ describe('account recovery', () => {
       ([functionName]) => functionName === 'claim_account_recovery_admission_atomic'
     )?.[1].p_operation_id
     expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(2, 'user-1', {
-      ban_duration: '720h',
+      ban_duration: '876000h',
     })
     expect(mockRpc).toHaveBeenCalledWith('record_account_recovery_auth_manual_review', {
       p_user_id: 'user-1',
@@ -577,7 +577,7 @@ describe('account recovery', () => {
       ban_duration: 'none',
     })
     expect(mockAdminUpdateUser).not.toHaveBeenCalledWith('user-1', {
-      ban_duration: '720h',
+      ban_duration: '876000h',
     })
     expect(mockResumeStripeSubscriptionRenewals).toHaveBeenCalledTimes(1)
     expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
