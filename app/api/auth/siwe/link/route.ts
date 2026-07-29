@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { getSupabaseAdmin, getProvisioningAuthUser } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { consumeSiweNonce } from '@/lib/auth/siwe-nonce'
+import { resolveSiweRequestOrigin } from '@/lib/auth/siwe-origin'
 import logger from '@/lib/logger'
 
 // Must match the verify route's chainId — Base mainnet.
@@ -78,14 +79,13 @@ export async function POST(request: NextRequest) {
     // victim's wallet to the attacker's logged-in Supabase session,
     // hijacking the victim's wallet identity in Arena. The /verify route
     // already does this — link must mirror it.
-    const requestHost = request.headers.get('host')
-    const requestOrigin = request.headers.get('origin')
-    if (!requestHost || !requestOrigin) {
-      return NextResponse.json({ error: 'Missing required Host or Origin header' }, { status: 400 })
+    const requestOrigin = resolveSiweRequestOrigin(request)
+    if (!requestOrigin) {
+      return NextResponse.json({ error: 'Unrecognized request origin' }, { status: 400 })
     }
     if (
-      fields.domain !== requestHost ||
-      fields.uri !== requestOrigin ||
+      fields.domain !== requestOrigin.domain ||
+      fields.uri !== requestOrigin.origin ||
       fields.chainId !== EXPECTED_CHAIN_ID
     ) {
       return NextResponse.json({ error: 'Domain or chain mismatch' }, { status: 400 })
