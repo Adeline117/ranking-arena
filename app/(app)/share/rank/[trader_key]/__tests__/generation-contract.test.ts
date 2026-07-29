@@ -5,8 +5,7 @@ const page = readFileSync(join(__dirname, '..', 'page.tsx'), 'utf8')
 
 describe('legacy share rank generation contract', () => {
   it('reads the trader row and global denominator through one sealed generation', () => {
-    expect(page).toContain('readSealedRankingGeneration(')
-    expect(page).toContain('sources: WRAPPED_PROOF_SOURCES')
+    expect(page).toContain('readSealedRankingAuthorityGeneration(')
     expect(page).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
     expect(page).toContain('sum + proof.published_rank_count')
   })

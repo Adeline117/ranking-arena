@@ -16,9 +16,8 @@ import WrappedCardClient from './WrappedCardClient'
 import WrappedEmptyState from './WrappedEmptyState'
 import WrappedUnavailableState from './WrappedUnavailableState'
 import { BASE_URL } from '@/lib/constants/urls'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 // This route only reads public ranking data. Its searchParams prop keeps each
 // platform/window variant request-rendered; leave the segment on Next's
@@ -81,7 +80,6 @@ interface Props {
 // for 30+ seconds. Race against this timeout so users get a fast, retryable
 // unavailable state (NOT a 404 — the trader may well exist).
 const SSR_TIMEOUT_MS = 3000
-const WRAPPED_PROOF_SOURCES = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
 
 // Discriminated result so the page can tell "no matching snapshot" (→ empty
 // state) apart from transient timeouts / DB errors (→ retryable unavailable
@@ -138,9 +136,9 @@ async function fetchWrappedDataUncached(
       effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
     const sealedRead = await Promise.race([
-      readSealedRankingGeneration(
+      readSealedRankingAuthorityGeneration(
         supabase,
-        { season: seasonId, sources: WRAPPED_PROOF_SOURCES },
+        seasonId,
         async (publication) => {
           const rankResult = await supabase
             .from('leaderboard_ranks')

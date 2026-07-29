@@ -19,9 +19,8 @@ import type { WrappedTraderData } from '@/app/(app)/wrapped/[handle]/page'
 import { BASE_URL } from '@/lib/constants/urls'
 import { platformLabel } from '@/lib/constants/platform-labels'
 import { createLogger } from '@/lib/utils/logger'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const logger = createLogger('share-rank')
 
@@ -30,7 +29,6 @@ export const revalidate = 300
 // SSR timeout: during cron contention, resolveTrader can block on row locks
 // for 30+ seconds. Race against this timeout so users see a fast 404 instead.
 const SSR_TIMEOUT_MS = 3000
-const WRAPPED_PROOF_SOURCES = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
 
 interface Props {
   params: Promise<{ trader_key: string }>
@@ -69,9 +67,9 @@ async function resolveTraderForWrapped(
     const platLabel = platformLabel(publicPlatform)
 
     const sealedRead = await Promise.race([
-      readSealedRankingGeneration(
+      readSealedRankingAuthorityGeneration(
         supabase,
-        { season: seasonId as '7D' | '30D' | '90D', sources: WRAPPED_PROOF_SOURCES },
+        seasonId as '7D' | '30D' | '90D',
         async (publication) => {
           const rankResult = await supabase
             .from('leaderboard_ranks')
