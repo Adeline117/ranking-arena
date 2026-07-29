@@ -21,7 +21,6 @@ import {
   revalidateRankingPages,
   warmupLeaderboardCache,
 } from './post-processing'
-import { deriveWinRateMDD } from './helpers'
 import { type TraderRow, makeAddToTraderMap, sanitizeTraderRow } from './trader-row'
 import { computeLastResortCalmar, classifyTradingStyle } from './scoring-helpers'
 import { fetchHandleAvatarMap } from './fetch-handles'
@@ -42,8 +41,6 @@ import { acquireLeaderboardSeasonLocks, type LeaderboardSeasonLockRedis } from '
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
-
-// getFreshnessHours and deriveWinRateMDD live in ./helpers.ts.
 
 const logger = createLogger('compute-leaderboard')
 
@@ -300,22 +297,6 @@ export async function GET(request: NextRequest) {
     // (syncSubscoresToV2). v2 is being retired; leaderboard_ranks holds the
     // canonical sub-scores. See post-processing.ts.
 
-    // Post-compute: derive WR/MDD from historical snapshots for traders missing them
-    // Gated by time budget: this queries historical data and can be slow
-    let wrMddDerived = 0
-    if (remainingMs() > 40_000) {
-      try {
-        wrMddDerived = await deriveWinRateMDD(supabase)
-        if (wrMddDerived > 0) logger.info(`Derived WR/MDD for ${wrMddDerived} traders`)
-      } catch (e) {
-        logger.warn('WR/MDD derivation failed (non-critical):', e)
-      }
-    } else {
-      logger.warn(
-        `Skipping WR/MDD derivation — only ${Math.round(remainingMs() / 1000)}s remaining`
-      )
-    }
-
     // Post-processing blocks extracted to post-processing.ts.
     fireAndForget(warmupLeaderboardCache(supabase, SEASONS), 'warmup-leaderboard-cache')
     fireAndForget(warmupSsrHomepageCache(), 'warmup-ssr-homepage-cache')
@@ -352,7 +333,6 @@ export async function GET(request: NextRequest) {
         previous_counts: previousCounts,
         warnings: warnings.length > 0 ? warnings : undefined,
         rolled_back: rolledBack.length > 0 ? rolledBack : undefined,
-        wr_mdd_derived: wrMddDerived,
       },
       { status: hasRealFailures ? 500 : 200 }
     )
@@ -690,8 +670,6 @@ async function computeSeason(
   )
   return publication.publishedCount
 }
-
-// deriveWinRateMDD lives in ./helpers.ts (single source of truth, 2026-04-09)
 
 /**
  * Pre-populate Redis with top 100 leaderboard rows for each season.
