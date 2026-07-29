@@ -278,6 +278,13 @@ test('skips duplicate Next type validation only for a CI-attested candidate', ()
   )
 })
 
+test('allocates enough V8 heap for the production application build', () => {
+  assert.match(
+    ciWorkflow,
+    /build:\n[\s\S]*?- name: Build application\n\s+env:\n\s+# The production webpack graph[\s\S]*?NODE_OPTIONS: --max-old-space-size=4096[\s\S]*?run: npm run build/
+  )
+})
+
 test('makes every deploy-gate Telegram failure observable without blocking the gate', () => {
   const workflow = deployGate
   assert.match(
