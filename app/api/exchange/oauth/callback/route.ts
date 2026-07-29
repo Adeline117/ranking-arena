@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
+import { encryptOAuthToken } from '@/lib/exchange/oauth-token-encryption'
+import { fetchOAuthJsonWithTimeout } from '@/lib/exchange/oauth-http'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { fetchWithTimeout } from '@/lib/utils/error-messages'
 import { env } from '@/lib/env'
 
 const logger = createLogger('exchange-oauth-callback')
@@ -17,6 +17,26 @@ type OAuthStateClaim = {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function parseExpiresIn(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function providerErrorMessage(payload: unknown): string {
+  if (!isRecord(payload)) return 'Failed to exchange token'
+  const message =
+    typeof payload.error_description === 'string'
+      ? payload.error_description
+      : typeof payload.error === 'string'
+        ? payload.error
+        : ''
+  return message.length > 0 && message.length <= 200 ? message : 'Failed to exchange token'
+}
 
 function parseClaim(
   raw: unknown
@@ -64,29 +84,6 @@ const TOKEN_CONFIG: Record<
     tokenUrl: 'https://api.bybit.com/v5/account/oauth/token',
     redirectUri: `${env.NEXT_PUBLIC_APP_URL}/exchange/auth/callback`,
   },
-}
-
-/**
- * AES-256-CBC 加密
- */
-function encrypt(text: string, key: string): string {
-  const iv = crypto.randomBytes(16)
-  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv)
-  let encrypted = cipher.update(text, 'utf8', 'hex')
-  encrypted += cipher.final('hex')
-  return iv.toString('hex') + ':' + encrypted
-}
-
-/**
- * AES-256-CBC 解密
- */
-function _decrypt(encryptedText: string, key: string): string {
-  const [ivHex, encrypted] = encryptedText.split(':')
-  const iv = Buffer.from(ivHex, 'hex')
-  const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv)
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8')
-  decrypted += decipher.final('utf8')
-  return decrypted
 }
 
 /**
@@ -181,7 +178,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 交换 code 获取 access_token
-      const tokenResponse = await fetchWithTimeout(
+      const tokenResponse = await fetchOAuthJsonWithTimeout(
         config.tokenUrl,
         {
           method: 'POST',
@@ -194,53 +191,67 @@ export async function POST(request: NextRequest) {
       )
 
       if (!tokenResponse.ok) {
-        const errorText = await tokenResponse.text()
-        logger.error('Token exchange failed', { errorText, exchange })
-        try {
-          const errorJson = JSON.parse(errorText)
-          return NextResponse.json(
-            {
-              error: errorJson.error_description || errorJson.error || 'Failed to exchange token',
-            },
-            { status: 400 }
-          )
-        } catch {
-          return NextResponse.json({ error: 'Failed to exchange token' }, { status: 400 })
-        }
+        logger.error('Token exchange failed', { exchange, status: tokenResponse.status })
+        return NextResponse.json(
+          { error: providerErrorMessage(tokenResponse.data) },
+          { status: 400 }
+        )
       }
 
-      const tokenData = await tokenResponse.json()
-      const { access_token, refresh_token, expires_in } = tokenData
+      const tokenData = tokenResponse.data
+      const accessToken =
+        isRecord(tokenData) && typeof tokenData.access_token === 'string'
+          ? tokenData.access_token
+          : ''
+      const refreshToken =
+        isRecord(tokenData) && typeof tokenData.refresh_token === 'string'
+          ? tokenData.refresh_token
+          : null
+      const expiresIn = isRecord(tokenData) ? parseExpiresIn(tokenData.expires_in) : null
 
-      if (!access_token) {
+      if (!accessToken) {
         return NextResponse.json({ error: 'No access token received' }, { status: 400 })
       }
 
       // 加密存储 tokens
-      const encryptedAccessToken = encrypt(access_token, encryptionKey)
-      const encryptedRefreshToken = refresh_token ? encrypt(refresh_token, encryptionKey) : null
+      const encryptedAccessToken = encryptOAuthToken(accessToken, encryptionKey, {
+        viewerId: userId,
+        exchange,
+        purpose: 'access',
+      })
+      const encryptedRefreshToken = refreshToken
+        ? encryptOAuthToken(refreshToken, encryptionKey, {
+            viewerId: userId,
+            exchange,
+            purpose: 'refresh',
+          })
+        : null
 
       // 计算过期时间
-      const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000).toISOString() : null
+      const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null
 
       // 尝试获取用户信息
       let exchangeUserId: string | null = null
       if (config.userInfoUrl) {
         try {
-          const userInfoResponse = await fetchWithTimeout(
+          const userInfoResponse = await fetchOAuthJsonWithTimeout(
             config.userInfoUrl,
             {
               headers: {
-                Authorization: `Bearer ${access_token}`,
+                Authorization: `Bearer ${accessToken}`,
               },
             },
             10_000
           )
           if (userInfoResponse.ok) {
-            const userInfo = await userInfoResponse.json()
+            const userInfo = userInfoResponse.data
             // Binance 返回格式: { code: "000000", data: { userId: "...", email: "..." } }
-            if (userInfo.data?.userId) {
-              exchangeUserId = userInfo.data.userId
+            if (
+              isRecord(userInfo) &&
+              isRecord(userInfo.data) &&
+              (typeof userInfo.data.userId === 'string' || typeof userInfo.data.userId === 'number')
+            ) {
+              exchangeUserId = String(userInfo.data.userId)
             }
           }
         } catch (e: unknown) {

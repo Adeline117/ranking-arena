@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import { encryptOAuthToken, decryptOAuthToken } from '@/lib/exchange/oauth-token-encryption'
+import { fetchOAuthJsonWithTimeout } from '@/lib/exchange/oauth-http'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
-// Token 刷新配置
-const REFRESH_CONFIG: Record<string, {
+type RefreshConfig = {
   clientId: string
   clientSecret: string
   tokenUrl: string
-}> = {
+}
+
+const REFRESH_CONFIG: Record<string, RefreshConfig> = {
   binance: {
     clientId: process.env.BINANCE_OAUTH_CLIENT_ID || '',
     clientSecret: process.env.BINANCE_OAUTH_CLIENT_SECRET || '',
@@ -23,95 +26,300 @@ const REFRESH_CONFIG: Record<string, {
   },
 }
 
-/**
- * AES-256-CBC 加密
- */
-function encrypt(text: string, key: string): string {
-  const iv = crypto.randomBytes(16)
-  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv)
-  let encrypted = cipher.update(text, 'utf8', 'hex')
-  encrypted += cipher.final('hex')
-  return iv.toString('hex') + ':' + encrypted
+type RefreshConnection = {
+  id: string
+  user_id: string
+  exchange: string
+  refresh_token_encrypted: string
+}
+
+type RefreshFailure = 'reauth_required' | 'retryable'
+
+type RefreshLease = {
+  claimId: string
+  expiresAt: number
+  tokenCiphertext: string
+  storedValue: string
+}
+
+const REFRESH_LEASE_PREFIX = 'refresh-lease-v1'
+const REFRESH_LEASE_MS = 120_000
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function classifyUpstreamFailure(status: number, payload: unknown): RefreshFailure {
+  const errorCode = isRecord(payload) && typeof payload.error === 'string' ? payload.error : ''
+  if (status === 401 || errorCode === 'invalid_grant' || errorCode === 'invalid_token') {
+    return 'reauth_required'
+  }
+  return 'retryable'
+}
+
+function parseExpiresIn(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function parseRefreshLease(value: string): RefreshLease | null {
+  const parts = value.split(':')
+  if (
+    parts.length !== 4 ||
+    parts[0] !== REFRESH_LEASE_PREFIX ||
+    !/^\d{13}$/.test(parts[1]) ||
+    !/^[0-9a-f]{32}$/.test(parts[2]) ||
+    !/^[A-Za-z0-9_-]+$/.test(parts[3])
+  ) {
+    return null
+  }
+  const expiresAt = Number(parts[1])
+  const tokenCiphertext = Buffer.from(parts[3], 'base64url').toString('utf8')
+  if (
+    !Number.isSafeInteger(expiresAt) ||
+    !tokenCiphertext ||
+    Buffer.from(tokenCiphertext, 'utf8').toString('base64url') !== parts[3]
+  ) {
+    return null
+  }
+  return {
+    claimId: parts[2],
+    expiresAt,
+    tokenCiphertext,
+    storedValue: value,
+  }
+}
+
+function createRefreshLease(tokenCiphertext: string): RefreshLease {
+  const claimId = crypto.randomBytes(16).toString('hex')
+  const expiresAt = Date.now() + REFRESH_LEASE_MS
+  const encodedCiphertext = Buffer.from(tokenCiphertext, 'utf8').toString('base64url')
+  const storedValue = `${REFRESH_LEASE_PREFIX}:${expiresAt}:${claimId}:${encodedCiphertext}`
+  return { claimId, expiresAt, tokenCiphertext, storedValue }
 }
 
 /**
- * AES-256-CBC 解密
- */
-function decrypt(encryptedText: string, key: string): string {
-  const [ivHex, encrypted] = encryptedText.split(':')
-  const iv = Buffer.from(ivHex, 'hex')
-  const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv)
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8')
-  decrypted += decipher.final('utf8')
-  return decrypted
-}
-
-/**
- * POST: 刷新 Access Token
- * 
- * 根据 Binance 官方文档：
- * POST https://accounts.binance.com/oauth/token
- * 参数：grant_type=refresh_token&refresh_token=xxx&client_id=xxx&client_secret=xxx
+ * POST: refresh an OAuth access token for the authenticated viewer.
+ *
+ * A short, recoverable lease is installed in the refresh-token column before
+ * contacting the provider. This prevents two server instances from rotating
+ * the same provider token concurrently. Every later write is fenced by the
+ * exact viewer/exchange/lease generation.
  */
 export async function POST(request: NextRequest) {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 
   try {
-    // Auth check - use authenticated user's ID instead of trusting request body
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // CSRF validation
     const csrfCookie = request.cookies.get(CSRF_COOKIE_NAME)?.value
     const csrfHeader = request.headers.get(CSRF_HEADER_NAME) ?? undefined
     if (!validateCsrfToken(csrfCookie, csrfHeader)) {
       return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     }
 
-    const body = await request.json()
-    const { exchange } = body
-    const userId = user.id // Use authenticated user ID, not from body
-
+    let rawBody: unknown
+    try {
+      rawBody = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const exchange =
+      isRecord(rawBody) && typeof rawBody.exchange === 'string'
+        ? rawBody.exchange.trim().toLowerCase()
+        : ''
     if (!exchange) {
       return NextResponse.json({ error: 'Missing exchange' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin()
-
-    // 获取用户的交易所连接
-    const { data: connection, error: connError } = await supabase
-      .from('user_exchange_connections')
-      .select('id, refresh_token_encrypted')
-      .eq('user_id', userId)
-      .eq('exchange', exchange)
-      .single()
-
-    if (connError || !connection) {
-      return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
-    }
-
-    if (!connection.refresh_token_encrypted) {
-      return NextResponse.json({ error: 'No refresh token available' }, { status: 400 })
-    }
-
-    // 解密 refresh_token
-    const encryptionKey = process.env.ENCRYPTION_KEY
-    if (!encryptionKey) {
-      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
-    }
-
-    const refreshToken = decrypt(connection.refresh_token_encrypted, encryptionKey)
-
-    // 获取配置
     const config = REFRESH_CONFIG[exchange]
     if (!config || !config.clientId || !config.clientSecret) {
       return NextResponse.json({ error: `Refresh not configured for ${exchange}` }, { status: 400 })
     }
 
-    // 根据 Binance 文档，使用 URL 参数格式
+    const encryptionKey = process.env.ENCRYPTION_KEY
+    if (!encryptionKey || !/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
+      logger.error('OAuth refresh encryption key is missing or invalid')
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+    }
+
+    const userId = user.id
+    const supabase = getSupabaseAdmin()
+    const { data: rawConnection, error: connectionError } = await supabase
+      .from('user_exchange_connections')
+      .select('id, user_id, exchange, refresh_token_encrypted')
+      .eq('user_id', userId)
+      .eq('exchange', exchange)
+      .eq('is_active', true)
+      .single()
+
+    if (connectionError || !rawConnection) {
+      return NextResponse.json({ error: 'Active connection not found' }, { status: 404 })
+    }
+    if (
+      rawConnection.user_id !== userId ||
+      rawConnection.exchange !== exchange ||
+      typeof rawConnection.refresh_token_encrypted !== 'string' ||
+      rawConnection.refresh_token_encrypted.length === 0
+    ) {
+      logger.error('OAuth refresh connection identity mismatch', {
+        connectionId: rawConnection.id,
+        exchange,
+        userId,
+      })
+      return NextResponse.json({ error: 'Connection identity mismatch' }, { status: 409 })
+    }
+    const connection: RefreshConnection = {
+      id: rawConnection.id,
+      user_id: rawConnection.user_id,
+      exchange: rawConnection.exchange,
+      refresh_token_encrypted: rawConnection.refresh_token_encrypted,
+    }
+
+    const existingLease = parseRefreshLease(connection.refresh_token_encrypted)
+    if (
+      connection.refresh_token_encrypted.startsWith(`${REFRESH_LEASE_PREFIX}:`) &&
+      !existingLease
+    ) {
+      logger.error('Stored OAuth refresh lease is malformed', {
+        connectionId: connection.id,
+        exchange,
+        userId,
+      })
+      return NextResponse.json({ error: 'Stored OAuth credential is invalid' }, { status: 409 })
+    }
+    if (existingLease && existingLease.expiresAt > Date.now()) {
+      return NextResponse.json({ error: 'Token refresh already in progress' }, { status: 409 })
+    }
+    const tokenCiphertext = existingLease?.tokenCiphertext ?? connection.refresh_token_encrypted
+
+    let refreshToken: string
+    try {
+      refreshToken = decryptOAuthToken(tokenCiphertext, encryptionKey, {
+        viewerId: userId,
+        exchange,
+        purpose: 'refresh',
+      })
+    } catch (decryptError) {
+      logger.error('Stored OAuth refresh token failed authentication', {
+        connectionId: connection.id,
+        error: decryptError,
+        exchange,
+        userId,
+      })
+      return NextResponse.json(
+        { error: 'Stored OAuth credential is invalid; re-authenticate' },
+        { status: 409 }
+      )
+    }
+
+    const refreshLease = createRefreshLease(tokenCiphertext)
+    const { data: claimedConnection, error: claimError } = await supabase
+      .from('user_exchange_connections')
+      .update({ refresh_token_encrypted: refreshLease.storedValue })
+      .eq('id', connection.id)
+      .eq('user_id', userId)
+      .eq('exchange', exchange)
+      .eq('is_active', true)
+      .eq('refresh_token_encrypted', connection.refresh_token_encrypted)
+      .select('id, user_id, exchange, refresh_token_encrypted')
+      .maybeSingle()
+
+    if (claimError) {
+      logger.error('Failed to claim OAuth refresh generation', {
+        connectionId: connection.id,
+        error: claimError,
+        exchange,
+        userId,
+      })
+      return NextResponse.json({ error: 'Failed to initialize token refresh' }, { status: 500 })
+    }
+    if (!claimedConnection) {
+      return NextResponse.json({ error: 'Connection changed during refresh' }, { status: 409 })
+    }
+    if (
+      claimedConnection.id !== connection.id ||
+      claimedConnection.user_id !== userId ||
+      claimedConnection.exchange !== exchange ||
+      claimedConnection.refresh_token_encrypted !== refreshLease.storedValue
+    ) {
+      logger.error('OAuth refresh claim ACK identity mismatch', {
+        connectionId: connection.id,
+        exchange,
+        userId,
+      })
+      return NextResponse.json({ error: 'Refresh claim acknowledgement mismatch' }, { status: 500 })
+    }
+
+    const markFailure = async (
+      failure: RefreshFailure
+    ): Promise<'recorded' | 'stale' | 'error'> => {
+      const attemptedAt = new Date().toISOString()
+      const { data, error } = await supabase
+        .from('user_exchange_connections')
+        .update({
+          // Release the lease back to the exact pre-refresh token generation.
+          refresh_token_encrypted: tokenCiphertext,
+          // A refresh failure never disables a connection. Only an explicit
+          // disconnect/revocation path owns is_active.
+          last_sync_at: attemptedAt,
+          last_sync_status: 'error',
+          last_sync_error:
+            failure === 'reauth_required'
+              ? 'OAuth token refresh requires re-authorization'
+              : 'OAuth token refresh temporarily unavailable',
+        })
+        .eq('id', connection.id)
+        .eq('user_id', userId)
+        .eq('exchange', exchange)
+        .eq('is_active', true)
+        .eq('refresh_token_encrypted', refreshLease.storedValue)
+        .select('id, user_id, exchange, refresh_token_encrypted')
+        .maybeSingle()
+
+      if (error) {
+        logger.error('Failed to record OAuth refresh failure', {
+          connectionId: connection.id,
+          error,
+          exchange,
+          userId,
+        })
+        return 'error'
+      }
+      if (!data) return 'stale'
+      if (
+        data.id !== connection.id ||
+        data.user_id !== userId ||
+        data.exchange !== exchange ||
+        data.refresh_token_encrypted !== tokenCiphertext
+      ) {
+        logger.error('OAuth refresh failure ACK identity mismatch', {
+          connectionId: connection.id,
+          exchange,
+          userId,
+        })
+        return 'error'
+      }
+      return 'recorded'
+    }
+
+    const failureResponse = async (failure: RefreshFailure) => {
+      const outcome = await markFailure(failure)
+      if (outcome === 'stale') {
+        return NextResponse.json({ error: 'Connection changed during refresh' }, { status: 409 })
+      }
+      if (outcome === 'error') {
+        return NextResponse.json({ error: 'Failed to record refresh result' }, { status: 500 })
+      }
+      return failure === 'reauth_required'
+        ? NextResponse.json({ error: 'Token refresh requires re-authentication' }, { status: 401 })
+        : NextResponse.json({ error: 'Token refresh temporarily unavailable' }, { status: 503 })
+    }
+
     const refreshParams = new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
@@ -119,76 +327,133 @@ export async function POST(request: NextRequest) {
       client_secret: config.clientSecret,
     })
 
-    const tokenResponse = await fetch(config.tokenUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: refreshParams.toString(),
-    })
+    let tokenResponse: Awaited<ReturnType<typeof fetchOAuthJsonWithTimeout>>
+    try {
+      tokenResponse = await fetchOAuthJsonWithTimeout(
+        config.tokenUrl,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: refreshParams.toString(),
+        },
+        20_000
+      )
+    } catch (fetchError) {
+      logger.warn('OAuth token refresh transport failed', {
+        connectionId: connection.id,
+        error: fetchError,
+        exchange,
+        userId,
+      })
+      return failureResponse('retryable')
+    }
 
     if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text()
-      logger.error('Token refresh failed:', errorText)
-      
-      // 如果刷新失败，标记连接为不活跃
-      await supabase
-        .from('user_exchange_connections')
-        .update({
-          is_active: false,
-          last_sync_status: 'error',
-          last_sync_error: 'Token refresh failed',
-        })
-        .eq('id', connection.id)
-
-      return NextResponse.json({ error: 'Token refresh failed, please re-authenticate' }, { status: 401 })
+      const failure = classifyUpstreamFailure(tokenResponse.status, tokenResponse.data)
+      logger.warn('OAuth token refresh rejected by provider', {
+        connectionId: connection.id,
+        exchange,
+        status: tokenResponse.status,
+        userId,
+      })
+      return failureResponse(failure)
     }
 
-    const tokenData = await tokenResponse.json()
-    const { access_token, refresh_token: newRefreshToken, expires_in } = tokenData
-
-    if (!access_token) {
-      return NextResponse.json({ error: 'No access token received' }, { status: 400 })
+    const tokenPayload = tokenResponse.data
+    const accessToken =
+      isRecord(tokenPayload) && typeof tokenPayload.access_token === 'string'
+        ? tokenPayload.access_token
+        : ''
+    const rotatedRefreshToken =
+      isRecord(tokenPayload) && typeof tokenPayload.refresh_token === 'string'
+        ? tokenPayload.refresh_token
+        : refreshToken
+    if (!accessToken || !rotatedRefreshToken) {
+      logger.error('OAuth provider returned a malformed refresh response', {
+        connectionId: connection.id,
+        exchange,
+        userId,
+      })
+      return failureResponse('retryable')
     }
 
-    // 加密新的 tokens
-    const encryptedAccessToken = encrypt(access_token, encryptionKey)
-    const encryptedRefreshToken = newRefreshToken 
-      ? encrypt(newRefreshToken, encryptionKey) 
-      : connection.refresh_token_encrypted
+    const expiresIn = isRecord(tokenPayload) ? parseExpiresIn(tokenPayload.expires_in) : null
+    const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null
+    const encryptedAccessToken = encryptOAuthToken(accessToken, encryptionKey, {
+      viewerId: userId,
+      exchange,
+      purpose: 'access',
+    })
+    // Always rewrite the refresh token. This transparently migrates a legacy
+    // CBC row to authenticated v2 GCM even when the provider does not rotate.
+    const encryptedRefreshToken = encryptOAuthToken(rotatedRefreshToken, encryptionKey, {
+      viewerId: userId,
+      exchange,
+      purpose: 'refresh',
+    })
+    const refreshedAt = new Date().toISOString()
 
-    // 计算新的过期时间
-    const expiresAt = expires_in
-      ? new Date(Date.now() + expires_in * 1000).toISOString()
-      : null
-
-    // 更新数据库
-    const { error: updateError } = await supabase
+    const { data: updatedConnection, error: updateError } = await supabase
       .from('user_exchange_connections')
       .update({
         access_token_encrypted: encryptedAccessToken,
         refresh_token_encrypted: encryptedRefreshToken,
         expires_at: expiresAt,
-        last_sync_at: new Date().toISOString(),
+        last_sync_at: refreshedAt,
         last_sync_status: 'success',
         last_sync_error: null,
       })
       .eq('id', connection.id)
+      .eq('user_id', userId)
+      .eq('exchange', exchange)
+      .eq('is_active', true)
+      .eq('refresh_token_encrypted', refreshLease.storedValue)
+      .select(
+        'id, user_id, exchange, access_token_encrypted, refresh_token_encrypted, expires_at, last_sync_status'
+      )
+      .maybeSingle()
 
     if (updateError) {
-      logger.error('Error updating connection:', updateError)
+      logger.error('Failed to publish refreshed OAuth tokens', {
+        connectionId: connection.id,
+        error: updateError,
+        exchange,
+        userId,
+      })
       return NextResponse.json({ error: 'Failed to save new tokens' }, { status: 500 })
     }
+    if (!updatedConnection) {
+      return NextResponse.json({ error: 'Connection changed during refresh' }, { status: 409 })
+    }
+    if (
+      updatedConnection.id !== connection.id ||
+      updatedConnection.user_id !== userId ||
+      updatedConnection.exchange !== exchange ||
+      updatedConnection.access_token_encrypted !== encryptedAccessToken ||
+      updatedConnection.refresh_token_encrypted !== encryptedRefreshToken ||
+      updatedConnection.last_sync_status !== 'success'
+    ) {
+      logger.error('OAuth refresh success ACK identity mismatch', {
+        connectionId: connection.id,
+        exchange,
+        userId,
+      })
+      return NextResponse.json({ error: 'Refresh acknowledgement mismatch' }, { status: 500 })
+    }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      expiresAt,
+      // Preserve the legacy field while new callers require data identity.
+      expiresAt: updatedConnection.expires_at,
+      data: {
+        viewerId: userId,
+        exchange,
+        connectionId: connection.id,
+        expiresAt: updatedConnection.expires_at,
+      },
     })
   } catch (error: unknown) {
-    logger.error('Error refreshing token:', error)
-    // SECURITY: Do not leak internal error details to client
+    logger.error('Error refreshing OAuth token', { error })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-

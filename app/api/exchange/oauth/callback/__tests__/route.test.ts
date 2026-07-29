@@ -142,15 +142,21 @@ function installTokenSuccess() {
     .fn()
     .mockResolvedValueOnce({
       ok: true,
-      json: jest.fn().mockResolvedValue({
-        access_token: 'exchange-access-token',
-        refresh_token: 'exchange-refresh-token',
-        expires_in: 3600,
-      }),
+      status: 200,
+      headers: new Headers(),
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          access_token: 'exchange-access-token',
+          refresh_token: 'exchange-refresh-token',
+          expires_in: 3600,
+        })
+      ),
     })
     .mockResolvedValueOnce({
       ok: true,
-      json: jest.fn().mockResolvedValue({ data: { userId: 'binance-user-a' } }),
+      status: 200,
+      headers: new Headers(),
+      text: jest.fn().mockResolvedValue(JSON.stringify({ data: { userId: 'binance-user-a' } })),
     }) as jest.Mock
 }
 
@@ -220,6 +226,9 @@ describe('POST /api/exchange/oauth/callback', () => {
       expect.objectContaining({ user_id: USER_A, exchange: 'binance' }),
       { onConflict: 'user_id,exchange' }
     )
+    const storedConnection = mockUpsert.mock.calls[0][0] as Record<string, unknown>
+    expect(storedConnection.access_token_encrypted).toEqual(expect.stringMatching(/^v2:/))
+    expect(storedConnection.refresh_token_encrypted).toEqual(expect.stringMatching(/^v2:/))
     expect(mockRpc).toHaveBeenNthCalledWith(2, 'finish_exchange_oauth_state_claim_atomic', {
       p_user_id: USER_A,
       p_exchange: 'binance',
@@ -255,6 +264,8 @@ describe('POST /api/exchange/oauth/callback', () => {
   it('releases the exact lease when token exchange fails so the callback can retry', async () => {
     global.fetch = jest.fn().mockResolvedValueOnce({
       ok: false,
+      status: 503,
+      headers: new Headers(),
       text: jest.fn().mockResolvedValue('{"error":"temporarily_unavailable"}'),
     }) as jest.Mock
 
