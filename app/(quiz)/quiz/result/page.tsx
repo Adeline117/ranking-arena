@@ -8,11 +8,20 @@
 import type { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import { PERSONALITY_TYPE_MAP, PERSONALITY_TYPES } from '../components/quiz-data'
 import type { PersonalityTypeId, RecommendedTrader } from '../components/types'
 import ResultPageClient from './ResultPageClient'
 
 export const revalidate = 3600
+const QUIZ_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 interface Props {
   searchParams: Promise<{
@@ -64,17 +73,38 @@ async function getRecommendedTraders(typeId: PersonalityTypeId): Promise<Recomme
     const supabase = getSupabaseAdmin()
     const query = TRADER_QUERIES[typeId] || { orderBy: 'arena_score', ascending: false }
 
-    const { data } = await supabase
-      .from('leaderboard_ranks')
-      .select('source, source_trader_id, handle, avatar_url, roi, arena_score, win_rate, pnl, rank')
-      .eq('season_id', '90D')
-      .not(query.orderBy, 'is', null)
-      .order(query.orderBy, { ascending: query.ascending })
-      .limit(3)
+    const sealedRead = await readSealedRankingGeneration(
+      supabase,
+      { season: '90D', sources: QUIZ_RANKING_SOURCES },
+      async (publication) => {
+        const { data, error } = await supabase
+          .from('leaderboard_ranks')
+          .select(
+            'source, source_trader_id, handle, avatar_url, roi, arena_score, win_rate, pnl, rank'
+          )
+          .in('source', QUIZ_RANKING_SOURCES)
+          .eq('season_id', '90D')
+          .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+          .not(query.orderBy, 'is', null)
+          .gt('arena_score', 0)
+          .or('is_outlier.is.null,is_outlier.eq.false')
+          .order(query.orderBy, { ascending: query.ascending })
+          .order('source', { ascending: true })
+          .order('source_trader_id', { ascending: true })
+          .limit(3)
 
-    if (!data?.length) return []
+        if (error || data === null) {
+          throw new Error(`quiz ranking query failed: ${error?.message ?? 'null payload'}`)
+        }
+        if (data.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+          throw new Error('quiz ranking query crossed the public source boundary')
+        }
+        return data
+      },
+      { timeoutMs: 10_000 }
+    )
 
-    return data.map((row) => ({
+    return sealedRead.value.map((row) => ({
       handle: row.handle || row.source_trader_id || '',
       name: row.handle || row.source_trader_id || 'Unknown',
       avatar_url: row.avatar_url || null,
