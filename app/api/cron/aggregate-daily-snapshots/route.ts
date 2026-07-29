@@ -21,9 +21,21 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
+
+const AGGREGATE_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
+const PER_PLATFORM_FALLBACK_LIMIT = 10_000
+const GAP_FILL_LIMIT = 50_000
 
 export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
@@ -57,6 +69,9 @@ export async function GET(request: NextRequest) {
         targetDate.setUTCDate(targetDate.getUTCDate() - dayOffset)
         const dateStr = targetDate.toISOString().split('T')[0]
         const { inserted, errors } = await aggregateForDate(supabase, dateStr, plog)
+        if (errors > 0) {
+          throw new Error(`${errors} snapshot writes failed for ${dateStr}`)
+        }
         totalInserted += inserted
         totalErrors += errors
         logger.info(`[aggregate] ${dateStr}: inserted=${inserted}, errors=${errors}`)
@@ -96,8 +111,6 @@ async function aggregateForDate(
   _plog: PipelineLogHandle
 ): Promise<{ inserted: number; errors: number }> {
   const readDb = getReadReplica() // Read replica for heavy SELECT queries
-  const today = new Date()
-  const _todayStr = today.toISOString().split('T')[0]
 
   // Step 1: Fetch ALL yesterday's snapshots in one query using RPC or direct query
   // Use distinct on (source, source_trader_id) ordered by captured_at desc to get latest per trader
@@ -106,7 +119,7 @@ async function aggregateForDate(
     { target_date: dateStr }
   )
 
-  let snapshotMap: Map<
+  const snapshotMap: Map<
     string,
     {
       source: string
@@ -118,142 +131,142 @@ async function aggregateForDate(
       followers: number | null
       trades_count: number | null
     }
-  >
+  > = new Map()
 
-  if (snapshotError || !snapshots) {
-    // Fallback: fetch with regular query per-platform (prevents large platforms from crowding out small ones)
-    logger.warn('[aggregate] RPC not available, falling back to v2 per-platform query')
-
-    const recentCutoff = new Date()
-    recentCutoff.setUTCDate(recentCutoff.getUTCDate() - 2)
-    const recentCutoffStr = recentCutoff.toISOString()
-
-    // Get distinct platform names from trader_sources (canonical identity table)
-    const { data: platformList, error: platformListError } = await readDb
-      .from('trader_sources')
-      .select('source')
-      .eq('is_active', true)
-
-    if (platformListError || !platformList) {
-      logger.error(`[aggregate] Failed to fetch platform list for ${dateStr}`, {
-        error: platformListError?.message,
-      })
-      return { inserted: 0, errors: 1 }
-    }
-
-    const distinctPlatforms = [...new Set(platformList.map((r: { source: string }) => r.source))]
-
-    snapshotMap = new Map()
-
-    // Fetch per-platform: each platform gets its own query with a per-platform limit
-    // This ensures small platforms (bingx: 228, toobit: 1597) aren't crowded out by
-    // large platforms (gmx: 156K, hyperliquid: 155K)
-    // Was 2000 — Hyperliquid (155K) and GMX (156K) were silently losing 98%
-    // of their traders. Bumped to 10000 to cover top-ranked traders on large
-    // platforms while keeping query time reasonable (~3s/platform at 10K).
-    const PER_PLATFORM_LIMIT = 10000
-    // Parallel fetch — was 32 serial queries, one per platform
-    await Promise.all(
-      distinctPlatforms.map(async (platform) => {
-        try {
-          // Migrated off retiring trader_latest → leaderboard_ranks (aliased so
-          // the downstream mapping keys are unchanged; ranked traders per source).
-          const { data: platformData, error: platformError } = await (readDb as any)
-            .from('leaderboard_ranks')
-            .select(
-              'platform:source, trader_key:source_trader_id, roi_pct:roi, pnl_usd:pnl, win_rate, max_drawdown, followers, trades_count, updated_at:computed_at'
-            )
-            .eq('source', platform)
-            .eq('season_id', '90D')
-            .gte('computed_at', recentCutoffStr)
-            .order('computed_at', { ascending: false })
-            .limit(PER_PLATFORM_LIMIT)
-
-          if (platformError || !platformData) {
-            logger.warn(
-              `[aggregate] Failed to fetch platform ${platform}: ${platformError?.message}`
-            )
-            return
-          }
-
-          for (const s of platformData) {
-            const key = `${s.platform}:${s.trader_key}`
-            if (!snapshotMap.has(key)) {
-              snapshotMap.set(key, {
-                source: s.platform,
-                source_trader_id: s.trader_key,
-                roi: s.roi_pct,
-                pnl: s.pnl_usd,
-                win_rate: s.win_rate,
-                max_drawdown: s.max_drawdown,
-                followers: s.followers,
-                trades_count: s.trades_count,
-              })
-            }
-          }
-        } catch (err) {
-          logger.warn(
-            `[aggregate] Platform ${platform} query failed: ${err instanceof Error ? err.message : String(err)}`
-          )
-        }
-      })
+  const useLeaderboardFallback = snapshotError !== null || snapshots === null
+  const yesterday = new Date()
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+  const isLatestSnapshotDate = dateStr === yesterday.toISOString().split('T')[0]
+  if (useLeaderboardFallback && !isLatestSnapshotDate) {
+    throw new Error(
+      `Historical snapshot source unavailable for ${dateStr}; current ranks cannot backfill past dates`
     )
-
-    if (snapshotMap.size > 0) {
-      logger.info(
-        `[aggregate] Loaded ${snapshotMap.size} traders from ${distinctPlatforms.length} platforms (per-platform query)`
-      )
-    }
+  }
+  if (useLeaderboardFallback) {
+    logger.warn('[aggregate] Historical snapshot RPC unavailable; using sealed rank fallback', {
+      date: dateStr,
+      error: snapshotError?.message,
+    })
   } else {
-    snapshotMap = new Map()
     for (const s of snapshots) {
+      if (
+        !isPublicRankingSourceAllowed(s.source) ||
+        typeof s.source_trader_id !== 'string' ||
+        s.source_trader_id.length === 0
+      ) {
+        continue
+      }
       snapshotMap.set(`${s.source}:${s.source_trader_id}`, s)
     }
   }
 
-  // Step 2: Fill gaps from leaderboard_ranks (always has 100% roi/pnl coverage)
-  {
-    const { data: lrRows } = await readDb
-      .from('leaderboard_ranks')
-      .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, followers, trades_count')
-      .eq('season_id', '90D')
-      .not('arena_score', 'is', null)
-      .limit(50000)
-    if (lrRows) {
-      let filled = 0
-      for (const lr of lrRows) {
-        const key = `${lr.source}:${lr.source_trader_id}`
-        if (!snapshotMap.has(key)) {
-          snapshotMap.set(key, {
-            source: lr.source,
-            source_trader_id: lr.source_trader_id,
-            roi: lr.roi,
-            pnl: lr.pnl,
-            win_rate: lr.win_rate,
-            max_drawdown: lr.max_drawdown,
-            followers: lr.followers,
-            trades_count: lr.trades_count,
+  // Step 2: Fill gaps from one immutable published 90D generation. If the
+  // retired historical RPC is unavailable, the same sealed read becomes the
+  // explicit fallback; it must never mix partial per-source generations.
+  const sealedRankRows = await readSealedRankingGeneration(
+    readDb,
+    { season: '90D', sources: AGGREGATE_RANKING_SOURCES },
+    async (publication) => {
+      // A current publication can fill yesterday's end-of-day snapshot only.
+      // Reusing it for an older backfill date would rewrite history with
+      // today's metrics, so historical dates rely solely on their dated RPC.
+      if (!isLatestSnapshotDate) return []
+
+      if (useLeaderboardFallback) {
+        const batches = await Promise.all(
+          AGGREGATE_RANKING_SOURCES.map(async (source) => {
+            const { data, error } = await readDb
+              .from('leaderboard_ranks')
+              .select(
+                'source, source_trader_id, roi, pnl, win_rate, max_drawdown, followers, trades_count, rank'
+              )
+              .eq('source', source)
+              .eq('season_id', '90D')
+              .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+              .not('arena_score', 'is', null)
+              .order('rank', { ascending: true })
+              .order('source_trader_id', { ascending: true })
+              .limit(PER_PLATFORM_FALLBACK_LIMIT)
+
+            if (error || data === null) {
+              throw new Error(
+                `sealed aggregate fallback failed for ${source}: ${error?.message ?? 'null payload'}`
+              )
+            }
+            if (
+              data.some((row) => row.source !== source || !isPublicRankingSourceAllowed(row.source))
+            ) {
+              throw new Error(`sealed aggregate fallback crossed source boundary for ${source}`)
+            }
+            const proof = publication.proofs.find((candidate) => candidate.source === source)
+            if ((proof?.published_rank_count ?? 0) > 0 && data.length === 0) {
+              throw new Error(`sealed aggregate fallback returned no rows for ${source}`)
+            }
+            return data
           })
-          filled++
-        } else {
-          // Fill null roi/pnl from LR if v2 had nulls
-          const existing = snapshotMap.get(key)!
-          if (existing.roi == null && lr.roi != null) existing.roi = lr.roi
-          if (existing.pnl == null && lr.pnl != null) existing.pnl = lr.pnl
-        }
+        )
+        return batches.flat()
       }
-      if (filled > 0) {
-        logger.info(`[aggregate] Filled ${filled} traders from leaderboard_ranks (not in v2)`)
+
+      const { data, error } = await readDb
+        .from('leaderboard_ranks')
+        .select(
+          'source, source_trader_id, roi, pnl, win_rate, max_drawdown, followers, trades_count, rank'
+        )
+        .in('source', AGGREGATE_RANKING_SOURCES)
+        .eq('season_id', '90D')
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .not('arena_score', 'is', null)
+        .order('rank', { ascending: true })
+        .order('source', { ascending: true })
+        .order('source_trader_id', { ascending: true })
+        .limit(GAP_FILL_LIMIT)
+
+      if (error || data === null) {
+        throw new Error(`sealed aggregate gap fill failed: ${error?.message ?? 'null payload'}`)
       }
+      if (data.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+        throw new Error('sealed aggregate gap fill crossed the public source boundary')
+      }
+      const publishedCount = publication.proofs.reduce(
+        (total, proof) => total + proof.published_rank_count,
+        0
+      )
+      if (publishedCount > 0 && data.length === 0) {
+        throw new Error('sealed aggregate gap fill returned no published rows')
+      }
+      return data
+    },
+    { timeoutMs: 10_000 }
+  )
+
+  let filled = 0
+  for (const lr of sealedRankRows.value) {
+    const key = `${lr.source}:${lr.source_trader_id}`
+    if (!snapshotMap.has(key)) {
+      snapshotMap.set(key, {
+        source: lr.source,
+        source_trader_id: lr.source_trader_id,
+        roi: lr.roi,
+        pnl: lr.pnl,
+        win_rate: lr.win_rate,
+        max_drawdown: lr.max_drawdown,
+        followers: lr.followers,
+        trades_count: lr.trades_count,
+      })
+      filled++
+    } else {
+      const existing = snapshotMap.get(key)!
+      if (existing.roi == null && lr.roi != null) existing.roi = lr.roi
+      if (existing.pnl == null && lr.pnl != null) existing.pnl = lr.pnl
     }
+  }
+  if (filled > 0) {
+    logger.info(`[aggregate] Filled ${filled} traders from sealed leaderboard generation`)
   }
 
   if (snapshotMap.size === 0) {
-    // Zero snapshots for a past date is suspicious — upstream pipeline likely failed
-    if (new Date(dateStr) < new Date(new Date().toISOString().split('T')[0])) {
-      logger.warn(`[aggregate] Zero snapshots for ${dateStr} — possible upstream pipeline failure`)
-    }
-    return { inserted: 0, errors: 0 }
+    throw new Error(`No authoritative public snapshot rows available for ${dateStr}`)
   }
 
   // Step 3: Fetch ALL previous daily snapshots in one query
@@ -264,8 +277,10 @@ async function aggregateForDate(
     before_date: dateStr,
   })
 
-  if (prevError) {
-    logger.warn(`[aggregate] get_latest_prev_snapshots RPC error: ${prevError.message}`)
+  if (prevError || prevSnapshots === null) {
+    throw new Error(
+      `get_latest_prev_snapshots failed for ${dateStr}: ${prevError?.message ?? 'null payload'}`
+    )
   }
 
   const prevDataMap = new Map<string, { pnl: number | null; roi: number | null }>()
@@ -353,11 +368,8 @@ async function aggregateForDate(
   const safeUpsert = async (
     batch: typeof records
   ): Promise<{ ok: boolean; sub_inserted: number; sub_errors: number }> => {
-    const { valid: validBatch, rejected } = validateBeforeWrite(
-      batch as Record<string, unknown>[],
-      'trader_daily_snapshots'
-    )
-    if (rejected.length) logRejectedWrites(rejected, supabase)
+    const { valid: validBatch, rejected } = validateBeforeWrite(batch, 'trader_daily_snapshots')
+    if (rejected.length) await logRejectedWrites(rejected, supabase)
     if (validBatch.length === 0) return { ok: false, sub_inserted: 0, sub_errors: batch.length }
 
     const { error: upsertError } = await supabase
@@ -379,8 +391,8 @@ async function aggregateForDate(
     // Splits happen log2(250) ≈ 8 times max → bounded extra round trips.
     if (validBatch.length > 1) {
       const mid = Math.floor(validBatch.length / 2)
-      const a = await safeUpsert(validBatch.slice(0, mid) as unknown as typeof batch)
-      const b = await safeUpsert(validBatch.slice(mid) as unknown as typeof batch)
+      const a = await safeUpsert(validBatch.slice(0, mid))
+      const b = await safeUpsert(validBatch.slice(mid))
       return {
         ok: a.ok && b.ok,
         sub_inserted: a.sub_inserted + b.sub_inserted,

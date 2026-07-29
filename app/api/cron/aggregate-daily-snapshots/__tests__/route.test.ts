@@ -34,11 +34,39 @@ jest.mock('@/lib/cache/redis-client', () => ({
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
 
+jest.mock('@/lib/constants/exchanges', () => ({
+  ...jest.requireActual('@/lib/constants/exchanges'),
+  PUBLIC_ACTIVE_RANKING_SOURCES: ['binance_futures'],
+}))
+
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
     rpc: (...args: unknown[]) => mockRpc(...args),
     from: (...args: unknown[]) => mockFrom(...args),
   })),
+}))
+
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  readSealedRankingGeneration: jest.fn(
+    async (
+      _supabase: unknown,
+      input: { season: string; sources: string[] },
+      reader: (publication: {
+        scoreCohortId: string
+        proofs: Array<{ source: string; published_rank_count: number }>
+      }) => Promise<unknown>
+    ) => {
+      const publication = {
+        scoreCohortId: '00000000-0000-4000-8000-000000000001',
+        proofs: input.sources.map((source) => ({ source, published_rank_count: 1 })),
+      }
+      return {
+        value: await reader(publication),
+        publication,
+        publicationIdentity: 'test-publication',
+      }
+    }
+  ),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -166,7 +194,22 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'leaderboard_ranks') {
-        return buildChainProxy({ data: [], error: null })
+        return buildChainProxy({
+          data: [
+            {
+              source: 'binance_futures',
+              source_trader_id: 't1',
+              roi: 50,
+              pnl: 1000,
+              win_rate: 0.6,
+              max_drawdown: -10,
+              followers: 100,
+              trades_count: 20,
+              rank: 1,
+            },
+          ],
+          error: null,
+        })
       }
       if (table === 'trader_daily_snapshots') {
         return {
@@ -186,7 +229,7 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
 
   // ---- Empty data ----------------------------------------------------------
 
-  it('handles no snapshots gracefully', async () => {
+  it('fails closed when no authoritative snapshot rows are available', async () => {
     // First RPC: get_latest_snapshots_for_date → returns empty
     mockRpc.mockResolvedValueOnce({ data: [], error: null })
 
@@ -196,23 +239,37 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
     const res = await POST(createCronRequest(CRON_SECRET))
     const body = await res.json()
 
-    expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
-    expect(body.inserted).toBe(0)
+    expect(res.status).toBe(500)
+    expect(body.success).toBe(false)
+    expect(body.error).toContain('sealed aggregate gap fill returned no published rows')
   })
 
   // ---- RPC fallback --------------------------------------------------------
 
   it('falls back to direct query when RPC is not available', async () => {
     // First RPC: get_latest_snapshots_for_date fails → triggers fallback
-    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'function not found' } })
+    mockRpc
+      .mockResolvedValueOnce({ data: null, error: { message: 'function not found' } })
+      .mockResolvedValueOnce({ data: [], error: null })
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots_v2') {
-        return buildChainProxy({ data: [], error: null })
-      }
       if (table === 'leaderboard_ranks') {
-        return buildChainProxy({ data: [], error: null })
+        return buildChainProxy({
+          data: [
+            {
+              source: 'binance_futures',
+              source_trader_id: 't1',
+              roi: 50,
+              pnl: 1000,
+              win_rate: 60,
+              max_drawdown: 10,
+              followers: 100,
+              trades_count: 20,
+              rank: 1,
+            },
+          ],
+          error: null,
+        })
       }
       if (table === 'trader_daily_snapshots') {
         return {
@@ -241,20 +298,21 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
     expect(body.error).toContain('Database unavailable')
   })
 
-  it('returns success with errors when fallback query fails', async () => {
+  it('fails closed when the sealed fallback query fails', async () => {
     // RPC fails → triggers fallback
     mockRpc.mockResolvedValue({ data: null, error: { message: 'function not found' } })
 
     // Fallback query also returns error
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots_v2') {
+      if (table === 'leaderboard_ranks') {
         return buildChainProxy({ data: null, error: { message: 'Query failed' } })
       }
       return buildChainProxy({ data: [], error: null })
     })
 
     const res = await POST(createCronRequest(CRON_SECRET))
-    // With per-date aggregation, individual date errors are caught — returns 200 with error count
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).toContain('sealed aggregate fallback failed')
   })
 })
