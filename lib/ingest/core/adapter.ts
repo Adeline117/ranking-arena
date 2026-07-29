@@ -88,7 +88,8 @@ export interface SourceAdapter {
   captureLeaderboard?(
     session: FetchSession,
     src: SourceRow,
-    timeframe: RankingTimeframe
+    timeframe: RankingTimeframe,
+    options?: { signal?: AbortSignal }
   ): Promise<AnyLeaderboardCapture>
 
   /** Tier B/C: the main profile surface (stats blocks + charts) for one TF.

@@ -212,11 +212,18 @@ const binanceAdapter: SourceAdapter = {
     copiers: true, // both boards (PII rules apply downstream)
   },
 
-  async captureLeaderboard(session: FetchSession, src: SourceRow, timeframe: RankingTimeframe) {
+  async captureLeaderboard(
+    session: FetchSession,
+    src: SourceRow,
+    timeframe: RankingTimeframe,
+    options?: { signal?: AbortSignal }
+  ) {
     const listUrl = endpoint(src, 'list')
     const pageSize = src.page_size ?? 20
     const callerPageCap = configuredCallerPageCap(src.meta.max_pages)
+    options?.signal?.throwIfAborted()
     await warmSession(session, src)
+    options?.signal?.throwIfAborted()
 
     return captureNumericLeaderboard({
       session,
@@ -232,6 +239,7 @@ const binanceAdapter: SourceAdapter = {
       extractMeta: binanceLeaderboardMeta,
       pageSize,
       callerPageCap,
+      signal: options?.signal,
     })
   },
 

@@ -174,6 +174,44 @@ function partitionedCaptureOptions(
 }
 
 describe('captureNumericLeaderboard', () => {
+  it('rejects an already-cancelled capture before its first request', async () => {
+    const controller = new AbortController()
+    const cancellation = new Error('source lease already lost')
+    controller.abort(cancellation)
+    const fetcher = jest.fn(makeCaptureFetcher([{ rows: ['one'], total: 1 }]))
+
+    await expect(
+      captureNumericLeaderboard(captureOptions(fetcher, { signal: controller.signal }))
+    ).rejects.toBe(cancellation)
+
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('checks cancellation between pages before another request can start', async () => {
+    const controller = new AbortController()
+    const cancellation = new Error('source lease lost after page one')
+    const fetcher = jest.fn(
+      makeCaptureFetcher([
+        { rows: ['one', 'two'], total: 4 },
+        { rows: ['three', 'four'], total: 4 },
+      ])
+    )
+    const base = captureOptions(fetcher, { signal: controller.signal })
+
+    await expect(
+      captureNumericLeaderboard({
+        ...base,
+        extractMeta: (payload, requestPageIndex) => {
+          const meta = base.extractMeta(payload, requestPageIndex)
+          controller.abort(cancellation)
+          return meta
+        },
+      })
+    ).rejects.toBe(cancellation)
+
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
   it('hashes the fixed caller-declared public projection and binds POST page bodies', () => {
     const first = {
       url: 'https://x.test/board',

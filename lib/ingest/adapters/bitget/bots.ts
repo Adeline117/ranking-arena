@@ -295,7 +295,8 @@ export function projectBitgetBotsLeaderboardRequest(
 export async function captureBitgetBotsLeaderboard(
   session: FetchSession,
   src: SourceRow,
-  timeframe: RankingTimeframe
+  timeframe: RankingTimeframe,
+  options?: { signal?: AbortSignal }
 ) {
   const contract = assertCanonicalBitgetBotsSource(src, timeframe)
   const canonicalListUrl = `${S_BASE}/traceRanks`
@@ -307,11 +308,14 @@ export async function captureBitgetBotsLeaderboard(
   }
   const pageSize = src.page_size!
   const callerPageCap = configuredCallerPageCap(src.meta.max_pages)
+  options?.signal?.throwIfAborted()
   await warmSession(session, src)
+  options?.signal?.throwIfAborted()
 
   return capturePartitionedNumericLeaderboard({
     session,
     fetcher: pageFetcher(session),
+    signal: options?.signal,
     partitions: contract.boards.map((board) => {
       const strategyType = BOT_BOARD_STRATEGY_TYPE[board]
       if (strategyType === undefined) {
