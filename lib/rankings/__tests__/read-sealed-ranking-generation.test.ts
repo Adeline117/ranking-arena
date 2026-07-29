@@ -73,7 +73,7 @@ describe('readSealedRankingGeneration', () => {
     ).resolves.toEqual({
       value: [{ rank: 1 }],
       publication: scopedPublication,
-      publicationIdentity: sealedRankingPublicationIdentity(authorityPublication),
+      publicationIdentity: sealedRankingPublicationIdentity(scopedPublication),
       authorityPublication,
       authorityPublicationIdentity: sealedRankingPublicationIdentity(authorityPublication),
       authoritySources: AUTHORITY_SOURCES,

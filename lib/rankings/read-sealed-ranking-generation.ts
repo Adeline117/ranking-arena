@@ -131,9 +131,10 @@ async function readStableAuthorityGeneration<T>(
   return Object.freeze({
     value,
     publication,
-    // Ranking positions are season-global, so cache and caller identities must
-    // cover every authority source even when the data query requests one.
-    publicationIdentity: beforeIdentity,
+    // Preserve the scoped identity consumed by existing cache envelopes.
+    // Callers that fence season-global or multi-season data must use the
+    // explicitly exposed complete authority identity below.
+    publicationIdentity: sealedRankingPublicationIdentity(publication),
     authorityPublication: before,
     authorityPublicationIdentity: beforeIdentity,
     authoritySources: beforeAuthoritySources,
