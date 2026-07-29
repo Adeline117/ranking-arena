@@ -405,6 +405,59 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps position RAW internal while returning only canonical render fields', async () => {
+    const parsedPosition = {
+      symbol: 'BTCUSDT',
+      side: 'long',
+      leverage: 5,
+      size: 2,
+      entryPrice: 60_000,
+      markPrice: 61_000,
+      unrealizedPnl: 2_000,
+      raw: { accountId: 'private-upstream-id', email: 'masked@example.test' },
+    }
+    mockGetAdapter.mockReturnValue({
+      capabilities: { positions: true },
+      supportsSurface: () => true,
+      getPositions: mockGetPositions,
+      parsePositions: jest.fn(() => [parsedPosition]),
+    })
+    mockGetPositions.mockResolvedValue(bundle)
+    const heavyJob = {
+      data: { ...job.data, surface: 'positions' },
+    } as Job<TierCJobData>
+
+    await expect(processTierC(heavyJob, 'local')).resolves.toMatchObject({
+      traderId: 42,
+      surface: 'positions',
+      rows: 1,
+    })
+
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0]?.[1])) as {
+      rows: Array<Record<string, unknown>>
+    }
+    expect(renderPayload.rows).toEqual([
+      {
+        symbol: 'BTCUSDT',
+        side: 'long',
+        leverage: 5,
+        size: 2,
+        entryPrice: 60_000,
+        markPrice: 61_000,
+        unrealizedPnl: 2_000,
+        currency: 'USDC',
+      },
+    ])
+    expect(JSON.stringify(renderPayload)).not.toMatch(/raw|private-upstream-id|email/)
+    expect(mockPublishPositions).toHaveBeenCalledWith(
+      src,
+      42,
+      [parsedPosition],
+      expect.any(String),
+      expect.objectContaining({ pageCount: 1 })
+    )
+  })
+
   it.each(['profile', 'positions'] as const)(
     'rechecks the processor source snapshot before opening a %s session',
     async (surface) => {

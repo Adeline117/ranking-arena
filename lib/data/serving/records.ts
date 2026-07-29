@@ -27,6 +27,7 @@ const BANNED_ROW_KEYS: ReadonlySet<string> = new Set([
   'email',
   'user_id',
   'userId',
+  'raw',
 ])
 
 export function sanitizeRecordRow(row: Record<string, unknown>): Record<string, unknown> {

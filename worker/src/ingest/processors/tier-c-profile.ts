@@ -286,7 +286,10 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         `${src.slug}/${exchangeTraderId}`
       )
       const positions = bundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctx))
-      rows = positions.map((p) => ({ ...p, currency: src.currency }))
+      rows = positions.map(({ raw: _raw, ...position }) => ({
+        ...position,
+        currency: src.currency,
+      }))
 
       await redis.set(
         resultKey,

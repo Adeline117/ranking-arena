@@ -40,6 +40,7 @@ describe('copier PII rule (spec §6)', () => {
         copierLabel: 'x',
         email: 'a@b.c',
         user_id: '123',
+        raw: { accountId: 'private-upstream-id' },
       })
     ).toEqual({ symbol: 'BTCUSDT', realized_pnl: 12 })
   })
@@ -115,7 +116,13 @@ describe('getRecordsPage', () => {
 describe('recordsPageFromTierC', () => {
   it('maps a worker result payload into a cold-fetched page', () => {
     const page = recordsPageFromTierC('bitget_futures', {
-      rows: [{ symbol: 'BTCUSDT', copier_label: 'leak' }],
+      rows: [
+        {
+          symbol: 'BTCUSDT',
+          copier_label: 'leak',
+          raw: { accountId: 'private-upstream-id' },
+        },
+      ],
       nextCursor: null,
       asOf: '2026-06-10T12:00:00Z',
     })
