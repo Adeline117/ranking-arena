@@ -17,6 +17,7 @@ SCORER_MIGRATION="$ROOT_DIR/supabase/migrations/20260722041000_pure_arena_score_
 MANIFEST_MIGRATION="$ROOT_DIR/supabase/migrations/20260722051000_leaderboard_score_input_manifest_contract.sql"
 PNL_MIGRATION="$ROOT_DIR/supabase/migrations/20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql"
 MUTATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260724235000_leaderboard_publication_mutation_fence.sql"
+CLEANUP_MIGRATION="$ROOT_DIR/supabase/migrations/20260725013000_cleanup_leaderboard_rank_publication.sql"
 CLAIM_MIGRATION="$ROOT_DIR/supabase/migrations/20260725015000_leaderboard_rank_generation_claim.sql"
 CAPACITY_MIGRATION="$ROOT_DIR/supabase/migrations/20260725015500_bound_leaderboard_rank_generation_batches.sql"
 RECEIPT_MIGRATION="$ROOT_DIR/supabase/migrations/20260725016000_leaderboard_rank_generation_receipt_substrate.sql"
@@ -28,6 +29,8 @@ ATTESTATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260729011000_leaderboard_
 CANONICAL_BATCH_MIGRATION="$ROOT_DIR/supabase/migrations/20260729014500_leaderboard_rank_generation_canonical_batches.sql"
 ATTESTED_WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729015000_leaderboard_rank_generation_attested_batch_writer.sql"
 PRIVATE_STAGING_MIGRATION="$ROOT_DIR/supabase/migrations/20260729054400_leaderboard_rank_generation_private_staging.sql"
+SERVICE_PLANNER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729054500_leaderboard_rank_generation_service_planner.sql"
+ATOMIC_PUBLICATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260729054600_atomic_leaderboard_rank_generation_publication.sql"
 CAPACITY_BENCHMARK="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-64k-benchmark.pg17.psql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 BENCHMARK_64K="${ARENA_ATOMIC_WRITER_BENCHMARK_64K:-0}"
@@ -58,6 +61,7 @@ for required_file in \
   "$MANIFEST_MIGRATION" \
   "$PNL_MIGRATION" \
   "$MUTATION_MIGRATION" \
+  "$CLEANUP_MIGRATION" \
   "$CLAIM_MIGRATION" \
   "$CAPACITY_MIGRATION" \
   "$RECEIPT_MIGRATION" \
@@ -69,6 +73,8 @@ for required_file in \
   "$CANONICAL_BATCH_MIGRATION" \
   "$ATTESTED_WRITER_MIGRATION" \
   "$PRIVATE_STAGING_MIGRATION" \
+  "$SERVICE_PLANNER_MIGRATION" \
+  "$ATOMIC_PUBLICATION_MIGRATION" \
   "$CAPACITY_BENCHMARK"; do
   if [[ ! -f "$required_file" ]]; then
     echo "required atomic-writer proof input is missing: $required_file" >&2
@@ -345,6 +351,7 @@ SQL
 
 psql_cmd -q -f "$PNL_MIGRATION"
 psql_cmd -q -f "$MUTATION_MIGRATION"
+psql_cmd -q -f "$CLEANUP_MIGRATION"
 psql_cmd -q -f "$CLAIM_MIGRATION"
 psql_cmd -q -f "$CAPACITY_MIGRATION"
 psql_cmd -q -f "$RECEIPT_MIGRATION"
@@ -808,6 +815,16 @@ if ! psql_cmd -q -f "$PRIVATE_STAGING_MIGRATION" >"$ERROR_FILE" 2>&1; then
   sed -n '1,280p' "$ERROR_FILE" >&2
   exit 1
 fi
+if ! psql_cmd -q -f "$SERVICE_PLANNER_MIGRATION" >"$ERROR_FILE" 2>&1; then
+  echo 'service planner migration failed after the real dependency chain' >&2
+  sed -n '1,280p' "$ERROR_FILE" >&2
+  exit 1
+fi
+if ! psql_cmd -q -f "$ATOMIC_PUBLICATION_MIGRATION" >"$ERROR_FILE" 2>&1; then
+  echo 'atomic publication migration failed after the real dependency chain' >&2
+  sed -n '1,280p' "$ERROR_FILE" >&2
+  exit 1
+fi
 psql_cmd -q <<'SQL'
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA arena
   REVOKE SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
@@ -815,6 +832,387 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA arena
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA arena
   REVOKE EXECUTE ON FUNCTIONS FROM fixture_rogue;
 SQL
+
+# Prove the activated staging/finalization path independently from the legacy
+# owner-only live writer exercised below.  The first generation stages without
+# changing public state and then seals atomically.  A second generation reaches
+# the seal after live upsert/cleanup/rerank, deliberately regresses its source
+# watermark, and proves the whole finalizer transaction rolled back.
+psql_cmd -q <<'SQL'
+INSERT INTO arena.sources (
+  registry_slug,
+  filter_source,
+  exchange_name,
+  season_id
+) VALUES (
+  'gamma',
+  'gamma',
+  'Gamma',
+  '30D'
+);
+
+DO $atomic_publication_proof$
+DECLARE
+  v_manifest_seal jsonb;
+  v_manifest_id uuid;
+  v_manifest_digest text;
+  v_manifest jsonb;
+  v_output jsonb;
+  v_factors jsonb;
+  v_input jsonb;
+  v_row arena.leaderboard_rank_batch_row_v1;
+  v_rows jsonb;
+  v_batch_plan jsonb;
+  v_batch_sha256 text;
+  v_write_plan jsonb;
+  v_computed_at timestamptz := pg_catalog.clock_timestamp();
+  v_source_as_of timestamptz := pg_catalog.clock_timestamp() - interval '1 minute';
+  v_cohort_one constant uuid :=
+    '17600000-0000-4760-8760-000000000001'::uuid;
+  v_cohort_two constant uuid :=
+    '17600000-0000-4760-8760-000000000002'::uuid;
+  v_claim jsonb;
+  v_stage jsonb;
+  v_final jsonb;
+  v_publications jsonb;
+  v_generation_seq bigint;
+  v_mutation_seq bigint;
+  v_failed boolean := false;
+BEGIN
+  v_input := pg_catalog.jsonb_build_array(
+    pg_catalog.jsonb_build_object(
+      'source', 'gamma',
+      'source_trader_id', 'trader-stage-1',
+      'roi', 30,
+      'pnl', 12000,
+      'max_drawdown', 8,
+      'win_rate', 66,
+      'sharpe_ratio', 2.2,
+      'profit_factor', 2.1,
+      'trades_count', 140
+    )
+  );
+
+  v_manifest_seal := public.prepare_leaderboard_score_input_manifest_v1(
+    '30D',
+    pg_catalog.repeat('1', 64),
+    pg_catalog.repeat('2', 64),
+    pg_catalog.repeat('3', 64),
+    pg_catalog.jsonb_build_object(
+      'contract', 'fixture-source-evidence@1',
+      'sources', pg_catalog.jsonb_build_array('gamma')
+    ),
+    'leaderboard-enrichment-evidence@1',
+    pg_catalog.jsonb_build_object(
+      'contract', 'leaderboard-enrichment-evidence@1',
+      'rows', 1
+    ),
+    'leaderboard-eligibility-evidence@1',
+    pg_catalog.jsonb_build_object(
+      'contract', 'leaderboard-eligibility-evidence@1',
+      'included', pg_catalog.jsonb_build_array('gamma:trader-stage-1')
+    ),
+    v_input,
+    pg_catalog.clock_timestamp() + interval '1 hour'
+  );
+  v_manifest_id := (v_manifest_seal->>'manifestId')::uuid;
+  v_manifest_digest := v_manifest_seal->>'manifestDigest';
+
+  SELECT stored.manifest
+  INTO STRICT v_manifest
+  FROM arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest_id = v_manifest_id;
+  v_output := v_manifest->'outputs'->0;
+  v_factors := v_output->'factors';
+
+  v_row := ROW(
+    'gamma'::text,
+    'futures'::text,
+    'trader-stage-1'::text,
+    NULL::integer,
+    (v_output->>'totalScore')::numeric,
+    30::numeric,
+    12000::numeric,
+    66::numeric,
+    8::numeric,
+    10::integer,
+    140::integer,
+    'fixture-stage'::text,
+    'https://example.invalid/stage.png'::text,
+    pg_catalog.floor(
+      100::double precision * (
+        0.3::double precision * (v_factors->>'pnl')::double precision
+        + 0.2::double precision * (v_factors->>'roi')::double precision
+      ) / 0.5::double precision + 0.5::double precision
+    )::numeric(6, 2),
+    CASE
+      WHEN pg_catalog.jsonb_typeof(v_factors->'drawdown') = 'null'
+           AND pg_catalog.jsonb_typeof(v_factors->'sharpe') = 'null'
+        THEN 0::numeric(6, 2)
+      WHEN pg_catalog.jsonb_typeof(v_factors->'drawdown') = 'null'
+        THEN pg_catalog.floor(
+          100::double precision * (v_factors->>'sharpe')::double precision
+            + 0.5::double precision
+        )::numeric(6, 2)
+      WHEN pg_catalog.jsonb_typeof(v_factors->'sharpe') = 'null'
+        THEN pg_catalog.floor(
+          100::double precision * (v_factors->>'drawdown')::double precision
+            + 0.5::double precision
+        )::numeric(6, 2)
+      ELSE pg_catalog.floor(
+        100::double precision * (
+          (v_factors->>'drawdown')::double precision
+          + (v_factors->>'sharpe')::double precision
+        ) / 2::double precision + 0.5::double precision
+      )::numeric(6, 2)
+    END,
+    CASE
+      WHEN pg_catalog.jsonb_typeof(v_factors->'consistency') = 'null'
+        THEN NULL::numeric(6, 2)
+      ELSE pg_catalog.floor(
+        100::double precision *
+          (v_factors->>'consistency')::double precision
+          + 0.5::double precision
+      )::numeric(6, 2)
+    END,
+    'full'::text,
+    'swing'::text,
+    12.5::numeric,
+    0.8::numeric,
+    2.2::numeric,
+    2.5::numeric,
+    2.1::numeric,
+    1.2::numeric,
+    'verified'::text,
+    false,
+    false,
+    NULL::integer,
+    NULL::boolean,
+    10::integer,
+    (v_output->>'totalScore')::numeric,
+    (v_output->>'totalScore')::numeric,
+    v_factors
+  )::arena.leaderboard_rank_batch_row_v1;
+  v_rows := pg_catalog.jsonb_build_array(pg_catalog.to_jsonb(v_row));
+
+  v_batch_plan := public.plan_leaderboard_rank_generation_batch_v1(
+    '30D',
+    v_cohort_one,
+    v_computed_at,
+    v_rows
+  );
+  v_batch_sha256 := v_batch_plan->>'batch_sha256';
+  v_write_plan := public.plan_leaderboard_rank_generation_write_set_v1(
+    '30D',
+    v_cohort_one,
+    v_manifest_digest,
+    v_computed_at,
+    1,
+    ARRAY[v_batch_sha256]::text[]
+  );
+  v_claim := public.claim_leaderboard_rank_generation(
+    '30D',
+    v_cohort_one,
+    v_write_plan->>'write_set_sha256',
+    1,
+    1,
+    v_computed_at,
+    300
+  );
+  v_generation_seq := (v_claim->>'generation_seq')::bigint;
+  v_stage := public.stage_leaderboard_rank_generation_batch_v1(
+    '30D',
+    v_generation_seq,
+    v_cohort_one,
+    0,
+    v_manifest_id,
+    v_manifest_digest,
+    ARRAY[v_batch_sha256]::text[],
+    v_rows
+  );
+
+  IF v_stage->>'contract' IS DISTINCT FROM
+       'leaderboard-rank-generation-batch-stage@1'
+     OR EXISTS (
+       SELECT 1
+       FROM public.leaderboard_ranks AS rank_row
+       WHERE rank_row.season_id = '30D'
+     )
+     OR EXISTS (
+       SELECT 1
+       FROM public.leaderboard_source_freshness AS freshness
+       WHERE freshness.season_id = '30D'
+     ) THEN
+    RAISE EXCEPTION 'staged generation changed public state';
+  END IF;
+
+  v_publications := pg_catalog.jsonb_build_array(
+    pg_catalog.jsonb_build_object(
+      'source', 'gamma',
+      'source_as_of', pg_catalog.to_char(
+        v_source_as_of AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+      ),
+      'trader_ids', pg_catalog.jsonb_build_array('trader-stage-1')
+    )
+  );
+  v_final := public.finalize_leaderboard_rank_generation_v1(
+    '30D',
+    v_generation_seq,
+    v_cohort_one,
+    v_manifest_id,
+    v_manifest_digest,
+    v_publications
+  );
+
+  IF v_final->>'contract' IS DISTINCT FROM
+       'leaderboard-rank-generation-finalization@1'
+     OR (v_final->>'is_sealed')::boolean IS DISTINCT FROM true
+     OR v_final->>'phase' IS DISTINCT FROM 'sealed'
+     OR (
+       SELECT pg_catalog.count(*)::integer
+       FROM public.leaderboard_ranks AS rank_row
+       WHERE rank_row.season_id = '30D'
+         AND rank_row.source = 'gamma'
+         AND rank_row.source_trader_id = 'trader-stage-1'
+         AND rank_row.rank_publication_id = v_cohort_one
+         AND rank_row.rank = 1
+     ) <> 1
+     OR (
+       SELECT freshness.score_cohort_id
+       FROM public.leaderboard_source_freshness AS freshness
+       WHERE freshness.season_id = '30D'
+         AND freshness.source = 'gamma'
+     ) IS DISTINCT FROM v_cohort_one
+     OR (
+       SELECT head.phase
+       FROM arena.leaderboard_rank_generation_heads AS head
+       WHERE head.season_id = '30D'
+     ) IS DISTINCT FROM 'sealed' THEN
+    RAISE EXCEPTION 'atomic staged generation did not seal exactly: %', v_final;
+  END IF;
+
+  v_final := public.finalize_leaderboard_rank_generation_v1(
+    '30D',
+    v_generation_seq,
+    v_cohort_one,
+    v_manifest_id,
+    v_manifest_digest,
+    v_publications
+  );
+  IF (v_final->>'replayed')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'atomic finalizer response-loss replay was not frozen';
+  END IF;
+
+  SELECT freshness.rank_mutation_seq
+  INTO STRICT v_mutation_seq
+  FROM public.leaderboard_source_freshness AS freshness
+  WHERE freshness.season_id = '30D'
+    AND freshness.source = 'gamma';
+
+  -- Plan and stage a second generation over the same manifest and row.
+  v_computed_at := pg_catalog.clock_timestamp();
+  v_batch_plan := public.plan_leaderboard_rank_generation_batch_v1(
+    '30D',
+    v_cohort_two,
+    v_computed_at,
+    v_rows
+  );
+  v_batch_sha256 := v_batch_plan->>'batch_sha256';
+  v_write_plan := public.plan_leaderboard_rank_generation_write_set_v1(
+    '30D',
+    v_cohort_two,
+    v_manifest_digest,
+    v_computed_at,
+    1,
+    ARRAY[v_batch_sha256]::text[]
+  );
+  v_claim := public.claim_leaderboard_rank_generation(
+    '30D',
+    v_cohort_two,
+    v_write_plan->>'write_set_sha256',
+    1,
+    1,
+    v_computed_at,
+    300
+  );
+  v_generation_seq := (v_claim->>'generation_seq')::bigint;
+  PERFORM public.stage_leaderboard_rank_generation_batch_v1(
+    '30D',
+    v_generation_seq,
+    v_cohort_two,
+    0,
+    v_manifest_id,
+    v_manifest_digest,
+    ARRAY[v_batch_sha256]::text[],
+    v_rows
+  );
+
+  BEGIN
+    PERFORM public.finalize_leaderboard_rank_generation_v1(
+      '30D',
+      v_generation_seq,
+      v_cohort_two,
+      v_manifest_id,
+      v_manifest_digest,
+      pg_catalog.jsonb_build_array(
+        pg_catalog.jsonb_build_object(
+          'source', 'gamma',
+          'source_as_of', '2000-01-01T00:00:00.000000Z',
+          'trader_ids', pg_catalog.jsonb_build_array('trader-stage-1')
+        )
+      )
+    );
+  EXCEPTION
+    WHEN SQLSTATE '22023' THEN
+      IF SQLERRM NOT LIKE '%cannot regress a source watermark%' THEN
+        RAISE;
+      END IF;
+      v_failed := true;
+  END;
+
+  IF NOT v_failed
+     OR (
+       SELECT rank_row.rank_publication_id
+       FROM public.leaderboard_ranks AS rank_row
+       WHERE rank_row.season_id = '30D'
+         AND rank_row.source = 'gamma'
+         AND rank_row.source_trader_id = 'trader-stage-1'
+     ) IS DISTINCT FROM v_cohort_one
+     OR (
+       SELECT freshness.score_cohort_id
+       FROM public.leaderboard_source_freshness AS freshness
+       WHERE freshness.season_id = '30D'
+         AND freshness.source = 'gamma'
+     ) IS DISTINCT FROM v_cohort_one
+     OR (
+       SELECT freshness.rank_mutation_seq
+       FROM public.leaderboard_source_freshness AS freshness
+       WHERE freshness.season_id = '30D'
+         AND freshness.source = 'gamma'
+     ) IS DISTINCT FROM v_mutation_seq
+     OR EXISTS (
+       SELECT 1
+       FROM arena.leaderboard_rank_cleanup_receipts AS cleanup
+       WHERE cleanup.score_cohort_id = v_cohort_two
+     )
+     OR EXISTS (
+       SELECT 1
+       FROM arena.leaderboard_rank_publications AS publication
+       WHERE publication.id = v_cohort_two
+     )
+     OR (
+       SELECT head.phase
+       FROM arena.leaderboard_rank_generation_heads AS head
+       WHERE head.season_id = '30D'
+     ) IS DISTINCT FROM 'writing' THEN
+    RAISE EXCEPTION
+      'failed atomic finalizer changed last-good live/proof/head state';
+  END IF;
+END
+$atomic_publication_proof$;
+SQL
+
 psql_cmd -q <<'SQL'
 DO $attestation_encoder_proof$
 DECLARE
@@ -1511,10 +1909,10 @@ SQL
 AFTER_BATCH_ZERO="$(psql_cmd -Atqc "
 SELECT pg_catalog.concat_ws(
   '|',
-  (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks),
-  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_batch_receipts),
-  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_source_fence_receipts),
-  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_manifest_bindings),
+  (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks WHERE season_id='90D'),
+  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_batch_receipts WHERE season_id='90D' AND generation_seq=1),
+  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_source_fence_receipts WHERE season_id='90D' AND generation_seq=1),
+  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_manifest_bindings WHERE season_id='90D' AND generation_seq=1),
   (SELECT mutation_seq FROM arena.leaderboard_rank_mutation_fences WHERE season_id='90D' AND source='alpha'),
   (SELECT mutation_seq_before::text || ':' || mutation_seq_after::text FROM arena.leaderboard_rank_generation_source_fence_receipts WHERE season_id='90D' AND generation_seq=1 AND batch_index=0 AND source='alpha'),
   (SELECT phase FROM arena.leaderboard_rank_generation_heads WHERE season_id='90D'),
@@ -1542,7 +1940,7 @@ USING arena.fixture_atomic_writer_case AS case_row
 WHERE manifest.manifest_id = case_row.score_input_manifest_id;
 SQL
 
-if [[ "$(psql_cmd -Atqc 'SELECT pg_catalog.count(*) FROM ONLY arena.leaderboard_score_input_manifests;')" != '0' ]]; then
+if [[ "$(psql_cmd -Atqc 'SELECT pg_catalog.count(*) FROM ONLY arena.leaderboard_score_input_manifests AS manifest JOIN arena.fixture_atomic_writer_case AS case_row ON case_row.score_input_manifest_id = manifest.manifest_id;')" != '0' ]]; then
   echo 'raw manifest was not pruned immediately after batch-zero attestation' >&2
   exit 1
 fi
@@ -2001,11 +2399,11 @@ COMPLETE_STATE="$(psql_cmd -Atqc "
 SELECT pg_catalog.concat_ws(
   '|',
   (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks AS rank_row JOIN arena.fixture_atomic_writer_case AS case_row ON rank_row.season_id=case_row.season_id AND rank_row.rank_publication_id=case_row.score_cohort_id),
-  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_batch_receipts),
-  (SELECT pg_catalog.sum(row_count) FROM arena.leaderboard_rank_generation_batch_receipts),
-  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_source_fence_receipts),
-  (SELECT pg_catalog.string_agg(source || ':' || mutation_seq_before || ':' || mutation_seq_after, ',' ORDER BY source COLLATE pg_catalog.\"C\") FROM arena.leaderboard_rank_generation_source_fence_receipts),
-  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_manifest_bindings),
+  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_batch_receipts WHERE season_id='90D' AND generation_seq=1),
+  (SELECT pg_catalog.sum(row_count) FROM arena.leaderboard_rank_generation_batch_receipts WHERE season_id='90D' AND generation_seq=1),
+  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_source_fence_receipts WHERE season_id='90D' AND generation_seq=1),
+  (SELECT pg_catalog.string_agg(source || ':' || mutation_seq_before || ':' || mutation_seq_after, ',' ORDER BY source COLLATE pg_catalog.\"C\") FROM arena.leaderboard_rank_generation_source_fence_receipts WHERE season_id='90D' AND generation_seq=1),
+  (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_manifest_bindings WHERE season_id='90D' AND generation_seq=1),
   (SELECT phase FROM arena.leaderboard_rank_generation_heads WHERE season_id='90D')
 );")"
 if [[ "$COMPLETE_STATE" != '1001|2|1001|2|alpha:1:3,beta:0:1|1|writing' ]]; then
@@ -2213,16 +2611,23 @@ BEGIN
   SELECT pg_catalog.concat_ws(
     '|',
     (SELECT pg_catalog.count(*)
-     FROM ONLY arena.leaderboard_rank_generation_stage_batches),
+     FROM ONLY arena.leaderboard_rank_generation_stage_batches
+     WHERE season_id = '90D' AND generation_seq = 1),
     (SELECT pg_catalog.count(*)
-     FROM ONLY arena.leaderboard_rank_generation_stage_rows),
+     FROM ONLY arena.leaderboard_rank_generation_stage_rows
+     WHERE season_id = '90D' AND generation_seq = 1),
     (SELECT pg_catalog.sum(batch.row_count)
-     FROM ONLY arena.leaderboard_rank_generation_stage_batches AS batch),
+     FROM ONLY arena.leaderboard_rank_generation_stage_batches AS batch
+     WHERE batch.season_id = '90D' AND batch.generation_seq = 1),
     (SELECT pg_catalog.count(*)
      FROM ONLY arena.leaderboard_rank_generation_stage_rows AS staged
-     WHERE (staged.row_payload).rank IS NOT NULL
-        OR (staged.row_payload).rank_change IS NOT NULL
-        OR (staged.row_payload).is_new IS NOT NULL),
+     WHERE staged.season_id = '90D'
+       AND staged.generation_seq = 1
+       AND (
+         (staged.row_payload).rank IS NOT NULL
+         OR (staged.row_payload).rank_change IS NOT NULL
+         OR (staged.row_payload).is_new IS NOT NULL
+       )),
     (SELECT pg_catalog.count(*)
      FROM public.leaderboard_ranks AS rank_row
      JOIN arena.fixture_atomic_writer_case AS fixture
@@ -2261,6 +2666,8 @@ BEGIN
      AND staged.generation_seq = batch.generation_seq
      AND staged.batch_index = batch.batch_index
      AND staged.score_cohort_id = batch.score_cohort_id
+    WHERE batch.season_id = '90D'
+      AND batch.generation_seq = 1
     GROUP BY
       batch.season_id,
       batch.generation_seq,
@@ -2295,6 +2702,8 @@ BEGIN
     ON claim.season_id = batch.season_id
    AND claim.generation_seq = batch.generation_seq
    AND claim.score_cohort_id = batch.score_cohort_id
+  WHERE batch.season_id = '90D'
+    AND batch.generation_seq = 1
   GROUP BY
     batch.season_id,
     batch.score_cohort_id,
@@ -2365,7 +2774,8 @@ expect_failure \
 
 if [[ "$(psql_cmd -Atqc "
   SELECT pg_catalog.count(*)
-  FROM ONLY arena.leaderboard_rank_generation_stage_rows;
+  FROM ONLY arena.leaderboard_rank_generation_stage_rows
+  WHERE season_id = '90D' AND generation_seq = 1;
 ")" != '1001' ]]; then
   echo 'rejected private-stage attacks changed the committed row set' >&2
   exit 1
