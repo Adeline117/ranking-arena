@@ -25,6 +25,7 @@
  * Caching: s-maxage=60, stale-while-revalidate=300
  */
 
+import { createHash } from 'node:crypto'
 import type {
   RankingWindow,
   TradingCategory,
@@ -48,11 +49,9 @@ import {
   publicRankingCacheKey,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
-import {
-  PUBLIC_ACTIVE_RANKING_SOURCES,
-  parsePublicActiveRankingSource,
-} from '@/lib/constants/exchanges'
+import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { readLeaderboardPublicationAuthority } from '@/lib/rankings/read-publication-authority'
 import type { SealedLeaderboardPublicationProofSet } from '@/lib/rankings/read-publication-proofs'
 import {
   createSealedRankingCacheEntry,
@@ -65,16 +64,21 @@ import {
 
 const logger = createLogger('rankings-api')
 
-function rankingProofSources(rankingsQuery: RankingsQuery): string[] {
-  if (rankingsQuery.platform) return [rankingsQuery.platform]
+function rankingProofSources(
+  authoritySources: readonly string[],
+  rankingsQuery: RankingsQuery
+): string[] {
+  const publicAuthoritySources = filterPublicRankingSources(authoritySources)
+  if (rankingsQuery.platform) {
+    return publicAuthoritySources.includes(rankingsQuery.platform) ? [rankingsQuery.platform] : []
+  }
 
-  return filterPublicRankingSources(
-    rankingsQuery.category
-      ? PUBLIC_ACTIVE_RANKING_SOURCES.filter(
-          (source) => PLATFORM_CATEGORY[source] === rankingsQuery.category
-        )
-      : PUBLIC_ACTIVE_RANKING_SOURCES
-  )
+  return rankingsQuery.category
+    ? publicAuthoritySources.filter(
+        (source) =>
+          (PLATFORM_CATEGORY[source as GranularPlatform] || 'futures') === rankingsQuery.category
+      )
+    : publicAuthoritySources
 }
 
 const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite']
@@ -470,23 +474,6 @@ export const GET = withPublic(
       })
     }
 
-    // Only cache "hot" default queries (no filters, default sort, first page)
-    // Filtered/paginated queries skip cache to avoid key explosion (thousands of permutations)
-    const isDefaultQuery =
-      sortBy === 'arena_score' &&
-      sortDir === 'desc' &&
-      !platform &&
-      minPnl === undefined &&
-      minTrades === undefined &&
-      !traderType &&
-      !cursor &&
-      offset === 0
-    const cacheKey = isDefaultQuery
-      ? publicRankingCacheKey(
-          `api:rankings:sealed-v4:${normalizedWindow}:${category || 'all'}:${limit}`
-        )
-      : null // skip cache for filtered queries
-
     const query: RankingsQuery = {
       window: normalizedWindow,
       category: category || undefined,
@@ -500,7 +487,58 @@ export const GET = withPublic(
       trader_type: traderType || undefined,
     }
     const cacheSeason = query.window.toUpperCase() as TradingPeriod
-    const expectedCacheSources = rankingProofSources(query)
+    const { getReadReplica } = await import('@/lib/supabase/read-replica')
+    const supabase = getReadReplica()
+    const authoritySources = await readLeaderboardPublicationAuthority(supabase, cacheSeason, {
+      timeoutMs: 10_000,
+    })
+    const expectedCacheSources = rankingProofSources(authoritySources, query)
+    if (expectedCacheSources.length === 0) {
+      return withCache(
+        apiSuccess({
+          traders: [],
+          window: cacheSeason,
+          totalCount: 0,
+          totalcount: 0,
+          total_count: 0,
+          as_of: null,
+          is_stale: true,
+          source_freshness: [],
+          availableSources: [],
+          next_cursor: null,
+          ranking_visibility: 'partial',
+          ranking_visibility_reason: 'publication_authority_filtered',
+          ranking_visibility_reasons: [
+            platform
+              ? 'source_outside_publication_authority'
+              : 'category_outside_publication_authority',
+          ],
+        }),
+        { maxAge: 60, staleWhileRevalidate: 300 }
+      )
+    }
+
+    // Only cache "hot" default queries (no filters, default sort, first page).
+    // The complete dynamic authority fingerprint prevents a source add/remove
+    // from inheriting a sealed page for the previous source membership.
+    const isDefaultQuery =
+      sortBy === 'arena_score' &&
+      sortDir === 'desc' &&
+      !platform &&
+      minPnl === undefined &&
+      minTrades === undefined &&
+      !traderType &&
+      !cursor &&
+      offset === 0
+    const authorityFingerprint = createHash('sha256')
+      .update(authoritySources.join('\u0000'))
+      .digest('hex')
+      .slice(0, 16)
+    const cacheKey = isDefaultQuery
+      ? publicRankingCacheKey(
+          `api:rankings:sealed-v5:${authorityFingerprint}:${normalizedWindow}:${category || 'all'}:${limit}`
+        )
+      : null // skip cache for filtered queries
     let result: unknown
 
     try {
@@ -515,7 +553,7 @@ export const GET = withPublic(
       if (cachedEntry) {
         result = cachedEntry.value
       } else {
-        const sealedRead = await getRankingsFallback(query, cursor)
+        const sealedRead = await getRankingsFallback(query, cursor, expectedCacheSources, supabase)
         const safeValue = sanitizePublicRankingSourcePayload(sealedRead.value)
         const safeRead = { ...sealedRead, value: safeValue }
         if (cacheKey) {
@@ -562,18 +600,27 @@ export const GET = withPublic(
  * Fetch rankings via unified data layer (leaderboard_ranks).
  * Returns the same response shape as the legacy getRankingsFallback.
  */
-async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string) {
-  const { getReadReplica } = await import('@/lib/supabase/read-replica')
-  const supabase = getReadReplica()
+async function getRankingsFallback(
+  rankingsQuery: RankingsQuery,
+  cursor: string | undefined,
+  expectedSources: readonly string[],
+  supabase: ReturnType<typeof import('@/lib/supabase/read-replica').getReadReplica>
+) {
   const season = rankingsQuery.window.toUpperCase() as TradingPeriod
-  const proofSources = rankingProofSources(rankingsQuery)
-
-  return readSealedRankingGeneration(
+  const sealedRead = await readSealedRankingGeneration(
     supabase,
-    { season, sources: proofSources },
+    { season, sources: expectedSources },
     (publication) => getRankingsFallbackForCohort(rankingsQuery, cursor, supabase, publication),
     { timeoutMs: 10_000 }
   )
+  const currentSources = rankingProofSources(sealedRead.authoritySources, rankingsQuery)
+  if (
+    currentSources.length !== expectedSources.length ||
+    currentSources.some((source, index) => source !== expectedSources[index])
+  ) {
+    throw new Error('rankings authority changed before the sealed read')
+  }
+  return sealedRead
 }
 
 async function getRankingsFallbackForCohort(
@@ -584,8 +631,6 @@ async function getRankingsFallbackForCohort(
 ) {
   const {
     window,
-    category,
-    platform,
     limit = 100,
     offset = 0,
     sort_by = 'arena_score',
@@ -615,17 +660,6 @@ async function getRankingsFallbackForCohort(
   }
   const unifiedSortBy = sortByMap[sort_by] || 'arena_score'
 
-  // Determine platform filter based on category
-  const platformFilter: string | undefined = platform || undefined
-  let platformsInCategory: string[] | undefined
-  if (!platformFilter && category) {
-    platformsInCategory = filterPublicRankingSources(
-      Object.entries(PLATFORM_CATEGORY)
-        .filter(([, cat]) => cat === category)
-        .map(([p]) => p)
-    )
-  }
-
   // Sorting
   const sortColumn = unifiedSortBy === 'rank' ? 'rank' : unifiedSortBy
   const ascending = sort_dir === 'asc'
@@ -642,6 +676,10 @@ async function getRankingsFallbackForCohort(
       .select(SELECT_COLS, opts ? { count: opts.count } : undefined)
       .eq('season_id', seasonId)
       .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+      .in(
+        'source',
+        publication.proofs.map((proof) => proof.source)
+      )
       // >0 (not just non-null): excluded/zeroed traders are set to arena_score=0
       // by zeroOutExcluded; live board + Redis sync already use >0, so align the
       // main board's tail & counts with them (was .not(null) → leaked 0-score rows).
@@ -652,14 +690,6 @@ async function getRankingsFallbackForCohort(
 
     if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
       q = q.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-    }
-
-    if (platformFilter) {
-      q = q.eq('source', platformFilter)
-    } else if (platformsInCategory && platformsInCategory.length > 0) {
-      q = q.in('source', platformsInCategory)
-    } else {
-      q = q.in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
     }
 
     if (min_pnl != null) {

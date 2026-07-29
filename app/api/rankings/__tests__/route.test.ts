@@ -65,6 +65,12 @@ jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
   readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
 }))
 
+const mockReadLeaderboardPublicationAuthority = jest.fn()
+jest.mock('@/lib/rankings/read-publication-authority', () => ({
+  readLeaderboardPublicationAuthority: (...args: unknown[]) =>
+    mockReadLeaderboardPublicationAuthority(...args),
+}))
+
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
@@ -107,17 +113,35 @@ jest.mock('@/lib/api/versioning', () => ({
 }))
 
 import { NextRequest } from 'next/server'
+import { createHash } from 'node:crypto'
 import { GET } from '../route'
 import { EXCHANGE_SLUG_ALIASES, PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import { RETIRED_SOURCES } from '@/lib/constants/retired-sources'
-import { PUBLIC_RANKING_QUARANTINED_SOURCES } from '@/lib/rankings/publication-policy'
+import {
+  filterPublicRankingSources,
+  PUBLIC_RANKING_QUARANTINED_SOURCES,
+} from '@/lib/rankings/publication-policy'
 import { createSealedCompositeCacheEntry } from '@/lib/rankings/sealed-composite-cache'
 
 const TEST_COHORT_ID = '11111111-1111-4111-8111-111111111111'
+let mockAuthoritySources = [...PUBLIC_ACTIVE_RANKING_SOURCES].sort()
 const mockPublicationProofOverrides = new Map<
   string,
   { sourceAsOf?: string; publishedRankCount?: number }
 >()
+
+function rankingCacheKey(
+  window: '7d' | '30d' | '90d',
+  category: string,
+  limit: number,
+  authoritySources: readonly string[] = mockAuthoritySources
+) {
+  const fingerprint = createHash('sha256')
+    .update(authoritySources.join('\u0000'))
+    .digest('hex')
+    .slice(0, 16)
+  return `public-rank-policy-v4:api:rankings:sealed-v5:${fingerprint}:${window}:${category}:${limit}`
+}
 
 function makeCompositePublication(season: '7D' | '30D' | '90D', sources: readonly string[]) {
   const scoreCohortId =
@@ -219,6 +243,7 @@ async function readThroughSealedGeneration(
     value,
     publication,
     publicationIdentity: JSON.stringify(publication),
+    authoritySources: [...mockAuthoritySources],
   }
 }
 
@@ -245,10 +270,14 @@ function makeChainableQuery(result = { data: [], error: null, count: 0 }) {
 describe('GET /api/rankings', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockAuthoritySources = [...PUBLIC_ACTIVE_RANKING_SOURCES].sort()
     mockPublicationProofOverrides.clear()
     mockTieredGetOrSet.mockImplementation(async (_key: string, fn: () => Promise<unknown>) => fn())
     mockTieredGet.mockResolvedValue({ data: null })
     mockTieredSet.mockResolvedValue(true)
+    mockReadLeaderboardPublicationAuthority.mockImplementation(async () => [
+      ...mockAuthoritySources,
+    ])
     mockReadSealedRankingGeneration.mockImplementation(readThroughSealedGeneration)
     // Default: Supabase query returns empty results
     mockSupabaseQuery.mockReturnValue(makeChainableQuery())
@@ -547,7 +576,10 @@ describe('GET /api/rankings', () => {
         '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
       )
       expect(rankingQuery?.filter).toHaveBeenCalledWith('rank_publication_id', 'eq', TEST_COHORT_ID)
-      expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+      expect(rankingQuery?.in).toHaveBeenCalledWith(
+        'source',
+        filterPublicRankingSources(mockAuthoritySources)
+      )
       expect(mockSupabaseQuery).not.toHaveBeenCalledWith('leaderboard_count_cache')
       expect(mockSupabaseQuery).not.toHaveBeenCalledWith('leaderboard_source_freshness')
     } finally {
@@ -600,6 +632,84 @@ describe('GET /api/rankings', () => {
     } finally {
       jest.useRealTimers()
     }
+  })
+
+  it('binds the sealed read and rank query to the exact dynamic public authority', async () => {
+    mockAuthoritySources = ['binance_futures', 'hyperliquid']
+    let rankingQuery: ReturnType<typeof makeChainableQuery> | undefined
+    mockSupabaseQuery.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') {
+        rankingQuery = makeChainableQuery()
+        return rankingQuery
+      }
+      return makeChainableQuery()
+    })
+
+    const req = new NextRequest('http://localhost/api/rankings?window=90d&sort_by=roi')
+    const res = await GET(req)
+
+    expect(res.status).toBe(200)
+    expect(mockReadLeaderboardPublicationAuthority).toHaveBeenCalledWith(expect.anything(), '90D', {
+      timeoutMs: 10_000,
+    })
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      { season: '90D', sources: ['binance_futures', 'hyperliquid'] },
+      expect.any(Function),
+      { timeoutMs: 10_000 }
+    )
+    expect(rankingQuery?.in).toHaveBeenCalledWith('source', ['binance_futures', 'hyperliquid'])
+  })
+
+  it('returns an explicit empty board when a known source is outside current authority', async () => {
+    mockAuthoritySources = ['hyperliquid']
+
+    const req = new NextRequest('http://localhost/api/rankings?window=90d&platform=binance_futures')
+    const res = await GET(req)
+    const body = await res.json()
+    const data = body.data ?? body
+
+    expect(res.status).toBe(200)
+    expect(data).toEqual(
+      expect.objectContaining({
+        traders: [],
+        totalCount: 0,
+        availableSources: [],
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'publication_authority_filtered',
+        ranking_visibility_reasons: ['source_outside_publication_authority'],
+      })
+    )
+    expect(mockTieredGet).not.toHaveBeenCalled()
+    expect(mockTieredSet).not.toHaveBeenCalled()
+    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
+    expect(mockSupabaseQuery).not.toHaveBeenCalled()
+  })
+
+  it('changes the default cache namespace when authority membership changes', async () => {
+    const cache = new Map<string, unknown>()
+    mockTieredGet.mockImplementation(async (key: string) => ({ data: cache.get(key) ?? null }))
+    mockTieredSet.mockImplementation(async (key: string, value: unknown) => {
+      cache.set(key, value)
+      return true
+    })
+
+    mockAuthoritySources = ['binance_futures', 'hyperliquid']
+    const firstKey = rankingCacheKey('90d', 'all', 100)
+    const first = await GET(new NextRequest('http://localhost/api/rankings?window=90d'))
+    expect(first.status).toBe(200)
+
+    mockAuthoritySources = ['binance_futures']
+    const secondKey = rankingCacheKey('90d', 'all', 100)
+    const second = await GET(new NextRequest('http://localhost/api/rankings?window=90d'))
+    expect(second.status).toBe(200)
+
+    expect(secondKey).not.toBe(firstKey)
+    expect(mockTieredGet).toHaveBeenNthCalledWith(1, firstKey, 'hot')
+    expect(mockTieredGet).toHaveBeenNthCalledWith(2, secondKey, 'hot')
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(2)
+    expect(cache.has(firstKey)).toBe(true)
+    expect(cache.has(secondKey)).toBe(true)
   })
 
   // --- Composite Window ---
@@ -721,12 +831,9 @@ describe('GET /api/rankings', () => {
     const body = await res.json()
     const data = body.data ?? body
 
-    expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:api:rankings:sealed-v4:90d:all:100',
-      'hot'
-    )
+    expect(mockTieredGet).toHaveBeenCalledWith(rankingCacheKey('90d', 'all', 100), 'hot')
     expect(mockTieredSet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:api:rankings:sealed-v4:90d:all:100',
+      rankingCacheKey('90d', 'all', 100),
       expect.objectContaining({ contract: 'sealed-ranking-cache@1', season: '90D' }),
       'hot',
       ['rankings']
