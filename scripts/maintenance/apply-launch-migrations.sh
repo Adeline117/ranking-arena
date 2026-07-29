@@ -174,6 +174,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729155000_atomic_group_edit_application_page.sql
   20260729156000_atomic_group_notification_broadcast.sql
   20260729156500_inactive_auth_subject_request_admission.sql
+  20260729157000_atomic_expired_sanction_cleanup.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
