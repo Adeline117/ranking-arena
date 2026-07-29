@@ -170,6 +170,7 @@ describe('first-party sync processor', () => {
         balanceSource: 'bybit_total_equity',
         balanceSemantics: 'total_includes_unrealized',
         realizedPnlSource: 'positions_history',
+        requireStablePnlCurrency: true,
         positionHistoryMaxRangeDays: 7,
         transferLedgerContract: expect.objectContaining({
           maxRangeDays: 7,

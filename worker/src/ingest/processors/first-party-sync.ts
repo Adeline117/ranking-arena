@@ -66,6 +66,7 @@ interface FirstPartyExchangeContract {
   balanceSemantics: FirstPartyBalanceSemantics
   balanceSource?: FirstPartyBalanceSource
   realizedPnlSource: FirstPartyRealizedPnlSource
+  requireStablePnlCurrency: boolean
   positionHistoryMaxRangeDays?: number
   transferLedgerContract?: FirstPartyTransferLedgerContract
 }
@@ -77,6 +78,7 @@ const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchange
     balanceSource: 'binance_margin_balance',
     balanceSemantics: 'total_includes_unrealized',
     realizedPnlSource: 'income_ledger',
+    requireStablePnlCurrency: true,
     transferLedgerContract: {
       maxRangeDays: 90,
       pageLimit: 1000,
@@ -88,12 +90,14 @@ const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchange
     balanceSource: 'bitget_usdt_equity',
     balanceSemantics: 'total_includes_unrealized',
     realizedPnlSource: 'positions_history',
+    requireStablePnlCurrency: true,
     positionHistoryMaxRangeDays: 90,
   },
   bybit: {
     balanceSource: 'bybit_total_equity',
     balanceSemantics: 'total_includes_unrealized',
     realizedPnlSource: 'positions_history',
+    requireStablePnlCurrency: true,
     positionHistoryMaxRangeDays: 7,
     transferLedgerContract: {
       maxRangeDays: 7,
@@ -105,12 +109,14 @@ const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchange
   gateio: {
     balanceSemantics: 'wallet_excludes_unrealized',
     realizedPnlSource: 'positions_history',
+    requireStablePnlCurrency: true,
     positionHistoryMaxRangeDays: 90,
   },
   okx: {
     balanceSource: 'okx_total_equity',
     balanceSemantics: 'total_includes_unrealized',
     realizedPnlSource: 'positions_history',
+    requireStablePnlCurrency: true,
   },
 }
 

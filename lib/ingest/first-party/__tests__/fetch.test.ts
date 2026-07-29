@@ -254,7 +254,8 @@ describe('first-party account equity evidence', () => {
         amount: 25,
         direction: 'out',
         type: 'trade',
-        info: { incomeType: 'REALIZED_PNL', income: '-25' },
+        currency: 'USDT',
+        info: { incomeType: 'REALIZED_PNL', income: '-25', asset: 'USDT' },
       },
     ])
 
@@ -267,6 +268,7 @@ describe('first-party account equity evidence', () => {
         nowMs: NOW,
         balanceSemantics: 'total_includes_unrealized',
         realizedPnlSource: 'income_ledger',
+        requireStablePnlCurrency: true,
       }
     )
 
@@ -327,6 +329,31 @@ describe('first-party account equity evidence', () => {
     })
   })
 
+  it('rejects non-stable realized-PnL ledger units', async () => {
+    await expect(
+      fetchFirstPartyAccount(
+        client({
+          fetchLedger: jest.fn().mockResolvedValue([
+            {
+              timestamp: NOW - 1_000,
+              amount: 0.25,
+              direction: 'in',
+              type: 'trade',
+              currency: 'BTC',
+              info: { incomeType: 'REALIZED_PNL', income: '0.25', asset: 'BTC' },
+            },
+          ]),
+        }),
+        {
+          nowMs: NOW,
+          balanceSemantics: 'total_includes_unrealized',
+          realizedPnlSource: 'income_ledger',
+          requireStablePnlCurrency: true,
+        }
+      )
+    ).rejects.toThrow('realized PnL ledger currency evidence is invalid')
+  })
+
   it('windows realized PnL by position close time instead of open time', async () => {
     const openedBeforeWindow = NOW - 100 * DAY
     const closedInsideWindow = NOW - 1_000
@@ -349,6 +376,29 @@ describe('first-party account equity evidence', () => {
     )
 
     expect(result.events).toEqual([{ ts: closedInsideWindow, pnl: 12, positionLevel: true }])
+  })
+
+  it('rejects position PnL denominated in an unvalued collateral coin', async () => {
+    await expect(
+      fetchFirstPartyAccount(
+        client({
+          fetchPositionsHistory: jest.fn().mockResolvedValue([
+            {
+              symbol: 'BTC/USD:BTC',
+              lastUpdateTimestamp: NOW - 1_000,
+              realizedPnl: 0.25,
+              info: { ccy: 'BTC', instId: 'BTC-USD-SWAP' },
+            },
+          ]),
+        }),
+        {
+          nowMs: NOW,
+          balanceSemantics: 'total_includes_unrealized',
+          realizedPnlSource: 'positions_history',
+          requireStablePnlCurrency: true,
+        }
+      )
+    ).rejects.toThrow('position history currency evidence is invalid')
   })
 
   it('uses net closed-position profit when the exchange exposes fee-adjusted evidence', async () => {

@@ -15,6 +15,7 @@
 import type { FirstPartyComputeInput, RealizedEvent } from './engine'
 
 interface CcxtPositionHistoryRow {
+  symbol?: string | null
   timestamp?: number | null
   lastUpdateTimestamp?: number | null
   realizedPnl?: number | null
@@ -91,6 +92,30 @@ function ledgerCurrency(row: CcxtLedgerRow): string | null {
   return value.trim().toUpperCase()
 }
 
+function positionSettlementCurrency(row: CcxtPositionHistoryRow): string | null {
+  const info = row.info as {
+    ccy?: unknown
+    marginCoin?: unknown
+    settleCoin?: unknown
+    currency?: unknown
+    symbol?: unknown
+    contract?: unknown
+    instId?: unknown
+  }
+  const explicit = info?.ccy ?? info?.marginCoin ?? info?.settleCoin ?? info?.currency
+  if (typeof explicit === 'string' && explicit.trim() !== '') {
+    return explicit.trim().toUpperCase()
+  }
+
+  const instrument = row.symbol ?? info?.symbol ?? info?.contract ?? info?.instId
+  if (typeof instrument !== 'string') return null
+  const normalized = instrument.toUpperCase()
+  for (const currency of USD_STABLES) {
+    if (normalized.endsWith(currency)) return currency
+  }
+  return null
+}
+
 function balanceEvidence(
   balance: Awaited<ReturnType<CcxtLike['fetchBalance']>>,
   source: FirstPartyBalanceSource
@@ -152,7 +177,8 @@ async function eventsFromPositionsHistory(
   client: CcxtLike,
   sinceMs: number,
   untilMs: number,
-  maxRangeDays?: number
+  maxRangeDays?: number,
+  requireStableCurrency = false
 ): Promise<RealizedEvent[]> {
   if (!client.fetchPositionsHistory) {
     throw new Error('[first-party] position history evidence is unavailable')
@@ -192,8 +218,12 @@ async function eventsFromPositionsHistory(
       // `netProfit` also includes open/close fees and funding, which is the
       // amount that actually changed account equity.
       const pnl = num(info?.netProfit ?? r.realizedPnl ?? info?.closedPnl)
+      const currency = positionSettlementCurrency(r)
       if (ts === null || pnl === null || ts < start || ts > end) {
         throw new Error('[first-party] position history evidence is invalid')
+      }
+      if (requireStableCurrency && (currency === null || !USD_STABLES.has(currency))) {
+        throw new Error('[first-party] position history currency evidence is invalid')
       }
       out.push({ ts, pnl, positionLevel: true })
     }
@@ -212,7 +242,8 @@ async function eventsFromPositionsHistory(
 async function eventsFromLedger(
   client: CcxtLike,
   sinceMs: number,
-  untilMs: number
+  untilMs: number,
+  requireStableCurrency = false
 ): Promise<RealizedEvent[]> {
   if (!client.fetchLedger) {
     throw new Error('[first-party] realized PnL ledger evidence is unavailable')
@@ -249,6 +280,7 @@ async function eventsFromLedger(
         // the sign in `direction`; Binance's raw income remains signed.
         const rawIncome = num((r.info as { income?: unknown })?.income)
         const normalizedAmount = num(r.amount)
+        const currency = ledgerCurrency(r)
         const amt =
           rawIncome ??
           (normalizedAmount === null
@@ -260,6 +292,9 @@ async function eventsFromLedger(
                 : normalizedAmount)
         if (ts === null || amt === null || ts < rangeStart || ts > rangeEnd) {
           throw new Error('[first-party] realized PnL ledger evidence is invalid')
+        }
+        if (requireStableCurrency && (currency === null || !USD_STABLES.has(currency))) {
+          throw new Error('[first-party] realized PnL ledger currency evidence is invalid')
         }
         out.push({ ts, pnl: amt, positionLevel: false })
       }
@@ -339,6 +374,7 @@ export async function fetchFirstPartyAccount(
     balanceSemantics: FirstPartyBalanceSemantics
     balanceSource?: FirstPartyBalanceSource
     realizedPnlSource: FirstPartyRealizedPnlSource
+    requireStablePnlCurrency?: boolean
     positionHistoryMaxRangeDays?: number
     transferLedgerContract?: FirstPartyTransferLedgerContract
     lookbackDays?: number
@@ -394,8 +430,14 @@ export async function fetchFirstPartyAccount(
   // Realized events use the exchange's explicit, pinned evidence contract.
   const events =
     opts.realizedPnlSource === 'positions_history'
-      ? await eventsFromPositionsHistory(client, sinceMs, nowMs, opts.positionHistoryMaxRangeDays)
-      : await eventsFromLedger(client, sinceMs, nowMs)
+      ? await eventsFromPositionsHistory(
+          client,
+          sinceMs,
+          nowMs,
+          opts.positionHistoryMaxRangeDays,
+          opts.requireStablePnlCurrency
+        )
+      : await eventsFromLedger(client, sinceMs, nowMs, opts.requireStablePnlCurrency)
 
   // Transfers → per-window net-in + since-last-sync delta.
   const transfers = await netTransfers(client, sinceMs, nowMs, opts.transferLedgerContract)
