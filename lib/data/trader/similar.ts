@@ -7,12 +7,42 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { UnifiedTrader } from './types'
 import { mapLeaderboardRow } from './mappers'
 import { LR } from '@/lib/types/schema-mapping'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 import {
+  filterPublicRankingSources,
   isPublicRankingSourceAllowed,
   publicRankingCacheKey,
 } from '@/lib/rankings/publication-policy'
+import {
+  readSealedRankingGeneration,
+  sealedRankingPublicationIdentity,
+} from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
+
+function parseCachedSimilarTraders(
+  value: unknown,
+  platform: string,
+  traderKey: string
+): UnifiedTrader[] | null {
+  if (!Array.isArray(value) || value.length > 10) return null
+  for (const trader of value) {
+    if (
+      trader === null ||
+      typeof trader !== 'object' ||
+      Reflect.get(trader, 'platform') !== platform ||
+      Reflect.get(trader, 'period') !== '90D' ||
+      typeof Reflect.get(trader, 'traderKey') !== 'string' ||
+      Reflect.get(trader, 'traderKey') === traderKey
+    ) {
+      return null
+    }
+  }
+  return value as UnifiedTrader[]
+}
 
 export async function fetchSimilarTraders(
   supabase: SupabaseClient,
@@ -22,23 +52,74 @@ export async function fetchSimilarTraders(
   roi: number | null
 ): Promise<UnifiedTrader[]> {
   if (!isPublicRankingSourceAllowed(platform)) return []
-  // Cache key bucketed by score decile to reduce cardinality (3K traders → ~10 buckets per platform)
+  const proofSources = filterPublicRankingSources([platform])
+  if (proofSources.length !== 1) return []
+
+  // Bucket the score portion so small score changes do not churn a trader's key.
   const scoreBucket =
     arenaScore != null
       ? Math.round(arenaScore / 10) * 10
       : roi != null
         ? `roi${Math.round(roi / 50) * 50}`
         : 'none'
-  const cacheKey = publicRankingCacheKey(`similar:${platform}:${scoreBucket}`)
+  // Include the excluded identity: sharing one bucket page across different
+  // traders can otherwise return the current trader to themselves.
+  const cacheKey = publicRankingCacheKey(
+    `similar:sealed-v2:${platform}:${encodeURIComponent(traderKey)}:${scoreBucket}`
+  )
+
   try {
-    return await tieredGetOrSet(
-      cacheKey,
-      () => fetchSimilarTradersUncached(supabase, platform, traderKey, arenaScore, roi),
-      'warm', // 15min TTL — similar traders change at most once per cron cycle
-      ['similar-traders']
+    let cached: unknown = null
+    try {
+      cached = (await tieredGet<unknown>(cacheKey, 'warm')).data
+    } catch {
+      // Cache availability must not suppress a verifiable database read.
+    }
+
+    let reusedCache = false
+    const sealedRead = await readSealedRankingGeneration(
+      supabase,
+      { season: '90D', sources: proofSources },
+      async (publication) => {
+        const cachedEntry = parseSealedRankingCacheEntry<UnifiedTrader[]>(
+          cached,
+          '90D',
+          proofSources
+        )
+        if (
+          cachedEntry &&
+          cachedEntry.publicationIdentity === sealedRankingPublicationIdentity(publication)
+        ) {
+          const cachedTraders = parseCachedSimilarTraders(cachedEntry.value, platform, traderKey)
+          if (cachedTraders) {
+            reusedCache = true
+            return cachedTraders
+          }
+        }
+        return fetchSimilarTradersUncached(
+          supabase,
+          platform,
+          traderKey,
+          arenaScore,
+          roi,
+          publication.scoreCohortId
+        )
+      }
     )
+
+    if (!reusedCache) {
+      void tieredSet(cacheKey, createSealedRankingCacheEntry(sealedRead), 'warm', [
+        'similar-traders',
+      ]).catch((err) => {
+        logger.warn(
+          '[similar-traders] cache write failed:',
+          err instanceof Error ? err.message : String(err)
+        )
+      })
+    }
+    return sealedRead.value
   } catch {
-    // Cache miss + fetch error — return empty
+    // Proof or fetch error — fail closed rather than mixing generations.
     return []
   }
 }
@@ -48,7 +129,8 @@ async function fetchSimilarTradersUncached(
   platform: string,
   traderKey: string,
   arenaScore: number | null,
-  roi: number | null
+  roi: number | null,
+  scoreCohortId: string
 ): Promise<UnifiedTrader[]> {
   try {
     let data: Record<string, unknown>[] | null = null
@@ -63,6 +145,7 @@ async function fetchSimilarTradersUncached(
         )
         .eq(LR.source, platform)
         .eq(LR.season_id, '90D')
+        .filter('rank_publication_id', 'eq', scoreCohortId)
         .neq(LR.source_trader_id, traderKey)
         .not(LR.arena_score, 'is', null)
         .or('is_outlier.is.null,is_outlier.eq.false')
@@ -70,6 +153,7 @@ async function fetchSimilarTradersUncached(
         .lte(LR.arena_score, arenaScore + scoreRange)
         .order(LR.arena_score, { ascending: false })
         .limit(10)
+      if (result.error) throw new Error(result.error.message)
       data = result.data as Record<string, unknown>[] | null
     } else if (roi != null) {
       const roiRange = Math.max(Math.abs(roi) * 0.3, 20)
@@ -80,12 +164,14 @@ async function fetchSimilarTradersUncached(
         )
         .eq(LR.source, platform)
         .eq(LR.season_id, '90D')
+        .filter('rank_publication_id', 'eq', scoreCohortId)
         .neq(LR.source_trader_id, traderKey)
         .or('is_outlier.is.null,is_outlier.eq.false')
         .gte(LR.roi, roi - roiRange)
         .lte(LR.roi, roi + roiRange)
         .order(LR.roi, { ascending: false })
         .limit(10)
+      if (result.error) throw new Error(result.error.message)
       data = result.data as Record<string, unknown>[] | null
     }
 
