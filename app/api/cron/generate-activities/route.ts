@@ -10,17 +10,36 @@ import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 import { withCron } from '@/lib/api/with-cron'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const log = createLogger('cron:generate-activities')
+const ACTIVITY_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const EXCHANGE_NAMES: Record<string, string> = {
-  binance_futures: 'Binance', hyperliquid: 'Hyperliquid', okx_futures: 'OKX',
-  bitget_futures: 'Bitget', gmx: 'GMX', bybit: 'Bybit', dydx: 'dYdX',
-  aevo: 'Aevo', drift: 'Drift', gains: 'Gains', mexc: 'MEXC',
-  htx_futures: 'HTX', gateio: 'Gate.io', coinex: 'CoinEx',
+  binance_futures: 'Binance',
+  hyperliquid: 'Hyperliquid',
+  okx_futures: 'OKX',
+  bitget_futures: 'Bitget',
+  gmx: 'GMX',
+  bybit: 'Bybit',
+  dydx: 'dYdX',
+  aevo: 'Aevo',
+  drift: 'Drift',
+  gains: 'Gains',
+  mexc: 'MEXC',
+  htx_futures: 'HTX',
+  gateio: 'Gate.io',
+  coinex: 'CoinEx',
 }
 
 function exchangeName(source: string): string {
@@ -33,22 +52,49 @@ export const GET = withCron('generate-activities', async (_request: NextRequest)
   const now = new Date().toISOString()
 
   const activities: Array<{
-    source: string; source_trader_id: string; handle: string | null
-    avatar_url: string | null; activity_type: string; activity_text: string
-    metric_value: number | null; metric_label: string | null
-    dedup_key: string; occurred_at: string
+    source: string
+    source_trader_id: string
+    handle: string | null
+    avatar_url: string | null
+    activity_type: string
+    activity_text: string
+    metric_value: number | null
+    metric_label: string | null
+    dedup_key: string
+    occurred_at: string
   }> = []
 
-  // Fetch top traders
-  const { data: leaders } = await supabase
-    .from('leaderboard_ranks')
-    .select('source, source_trader_id, handle, avatar_url, rank, arena_score, roi, pnl')
-    .eq('season_id', '90D')
-    .not('arena_score', 'is', null)
-    .order('arena_score', { ascending: false })
-    .limit(200)
+  // Fetch top traders from one stable public generation.
+  const sealedRead = await readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: ACTIVITY_RANKING_SOURCES },
+    async (publication) => {
+      const { data, error } = await supabase
+        .from('leaderboard_ranks')
+        .select('source, source_trader_id, handle, avatar_url, rank, arena_score, roi, pnl')
+        .in('source', ACTIVITY_RANKING_SOURCES)
+        .eq('season_id', '90D')
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .gt('arena_score', 0)
+        .or('is_outlier.is.null,is_outlier.eq.false')
+        .order('arena_score', { ascending: false })
+        .order('source', { ascending: true })
+        .order('source_trader_id', { ascending: true })
+        .limit(200)
 
-  if (!leaders?.length) {
+      if (error || data === null) {
+        throw new Error(`activity ranking query failed: ${error?.message ?? 'null payload'}`)
+      }
+      if (data.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+        throw new Error('activity ranking query crossed the public source boundary')
+      }
+      return data
+    },
+    { timeoutMs: 10_000 }
+  )
+  const leaders = sealedRead.value
+
+  if (leaders.length === 0) {
     return { count: 0, reason: 'no leaderboard data' }
   }
 
@@ -56,14 +102,17 @@ export const GET = withCron('generate-activities', async (_request: NextRequest)
     const name = t.handle || t.source_trader_id
     const ex = exchangeName(t.source)
 
-    // Top 10 per platform
+    // leaderboard_ranks.rank is the global cross-source rank, not a platform-local rank.
     if (t.rank != null && t.rank <= 10) {
       activities.push({
-        source: t.source, source_trader_id: t.source_trader_id,
-        handle: t.handle, avatar_url: t.avatar_url,
+        source: t.source,
+        source_trader_id: t.source_trader_id,
+        handle: t.handle,
+        avatar_url: t.avatar_url,
         activity_type: 'entered_top10',
-        activity_text: `${name} ranked #${t.rank} on ${ex} with ${Number(t.roi).toFixed(1)}% ROI`,
-        metric_value: t.arena_score, metric_label: 'Arena Score',
+        activity_text: `${name} ranked #${t.rank} across Arena with ${Number(t.roi).toFixed(1)}% ROI (${ex})`,
+        metric_value: t.arena_score,
+        metric_label: 'Arena Score',
         dedup_key: `${t.source}:${t.source_trader_id}:top10:${today}`,
         occurred_at: now,
       })
@@ -72,11 +121,14 @@ export const GET = withCron('generate-activities', async (_request: NextRequest)
     // High ROI (>500%)
     if (Number(t.roi) > 500 && Number(t.arena_score) > 70) {
       activities.push({
-        source: t.source, source_trader_id: t.source_trader_id,
-        handle: t.handle, avatar_url: t.avatar_url,
+        source: t.source,
+        source_trader_id: t.source_trader_id,
+        handle: t.handle,
+        avatar_url: t.avatar_url,
         activity_type: 'roi_milestone',
         activity_text: `${name} achieved ${Math.round(Number(t.roi))}% ROI on ${ex}`,
-        metric_value: Number(t.roi), metric_label: 'ROI %',
+        metric_value: Number(t.roi),
+        metric_label: 'ROI %',
         dedup_key: `${t.source}:${t.source_trader_id}:roi500:${today}`,
         occurred_at: now,
       })
@@ -85,11 +137,14 @@ export const GET = withCron('generate-activities', async (_request: NextRequest)
     // Large profit (>$10K)
     if (Number(t.pnl) > 10000) {
       activities.push({
-        source: t.source, source_trader_id: t.source_trader_id,
-        handle: t.handle, avatar_url: t.avatar_url,
+        source: t.source,
+        source_trader_id: t.source_trader_id,
+        handle: t.handle,
+        avatar_url: t.avatar_url,
         activity_type: 'large_profit',
         activity_text: `${name} earned $${Math.round(Number(t.pnl)).toLocaleString()} profit`,
-        metric_value: Number(t.pnl), metric_label: 'PnL USD',
+        metric_value: Number(t.pnl),
+        metric_label: 'PnL USD',
         dedup_key: `${t.source}:${t.source_trader_id}:pnl10k:${today}`,
         occurred_at: now,
       })
