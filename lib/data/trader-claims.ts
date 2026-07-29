@@ -13,7 +13,7 @@ import { enqueueFirstPartySync } from '@/lib/ingest/first-party/enqueue'
 // ============================================
 
 export type VerificationMethod = 'api_key' | 'signature' | 'video' | 'social'
-export type ClaimStatus = 'pending' | 'reviewing' | 'verified' | 'rejected' | 'expired'
+export type ClaimStatus = 'pending' | 'reviewing' | 'verified' | 'rejected' | 'expired' | 'revoked'
 
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderClaim {

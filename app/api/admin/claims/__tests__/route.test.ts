@@ -157,7 +157,7 @@ describe('GET /api/admin/claims pagination', () => {
     expect(claimsQuery.range).toHaveBeenCalledWith(0, 49)
   })
 
-  it.each(['verified', 'rejected', 'all'])(
+  it.each(['verified', 'rejected', 'expired', 'revoked', 'all'])(
     'orders %s history newest first with a stable id tie-breaker',
     async (status) => {
       const { claimsQuery } = arrange([claim(1, status)], 1)

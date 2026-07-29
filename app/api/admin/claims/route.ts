@@ -17,6 +17,8 @@ const CLAIM_STATUS_FILTERS = [
   'reviewing',
   'verified',
   'rejected',
+  'expired',
+  'revoked',
 ] as const
 
 type ClaimStatusFilter = (typeof CLAIM_STATUS_FILTERS)[number]

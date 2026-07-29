@@ -44,9 +44,11 @@ describe('/api/traders/claim', () => {
 
   describe('claim status validation', () => {
     it('should only allow valid claim statuses', () => {
-      const validStatuses = ['pending', 'reviewing', 'verified', 'rejected', 'expired']
+      const validStatuses = ['pending', 'reviewing', 'verified', 'rejected', 'expired', 'revoked']
       for (const status of validStatuses) {
-        expect(['pending', 'reviewing', 'verified', 'rejected', 'expired']).toContain(status)
+        expect(['pending', 'reviewing', 'verified', 'rejected', 'expired', 'revoked']).toContain(
+          status
+        )
       }
     })
   })
