@@ -210,7 +210,9 @@ export async function reconcileSchedulers(): Promise<void> {
   // trader_authorizations row, every 15 min, on the local bulk queue —
   // geo-blocked exchanges go through the HTTP proxy (node-agnostic). Revoked/
   // error rows fall out of `wanted` and the cleanup pass below removes their
-  // schedulers. Fail-soft: a query error here must not abort the reconcile.
+  // schedulers. Fail-soft: a query error here must not abort the reconcile or
+  // make the cleanup pass treat every existing fp:* scheduler as revoked.
+  let firstPartyAuthorityLoaded = false
   try {
     const { rows: fpAuths } = await (await import('@/lib/ingest/db'))
       .getIngestPool()
@@ -218,9 +220,17 @@ export async function reconcileSchedulers(): Promise<void> {
         `SELECT id FROM public.trader_authorizations
           WHERE status = 'active' AND read_only_verified_at IS NOT NULL`
       )
+
+    // Establish the complete authority set before any BullMQ write. If one
+    // upsert fails mid-loop, cleanup must still preserve later valid accounts.
     for (const a of fpAuths) {
       const key = `fp:${a.id}`
       wanted.set(key, regionQueueName('local'))
+    }
+    firstPartyAuthorityLoaded = true
+
+    for (const a of fpAuths) {
+      const key = `fp:${a.id}`
       await localQueue.upsertJobScheduler(
         key,
         { every: 15 * 60_000 },
@@ -266,6 +276,10 @@ export async function reconcileSchedulers(): Promise<void> {
     for (const scheduler of existing) {
       const key = scheduler.key
       if (!key) continue
+      // Without a successful authorization read, absence from `wanted` is
+      // unknown rather than proof of revocation. Preserve claim schedulers
+      // until a later reconcile can make the destructive decision safely.
+      if (!firstPartyAuthorityLoaded && key.startsWith('fp:')) continue
       if (wanted.get(key) !== queueName) {
         await q.removeJobScheduler(key)
         console.log(`[ingest-scheduler] removed stale scheduler ${key} (${queueName})`)
