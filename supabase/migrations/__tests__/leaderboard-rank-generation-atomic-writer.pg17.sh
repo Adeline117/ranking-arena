@@ -28,10 +28,13 @@ ATTESTATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260729011000_leaderboard_
 CANONICAL_BATCH_MIGRATION="$ROOT_DIR/supabase/migrations/20260729014500_leaderboard_rank_generation_canonical_batches.sql"
 ATTESTED_WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729015000_leaderboard_rank_generation_attested_batch_writer.sql"
 PRIVATE_STAGING_MIGRATION="$ROOT_DIR/supabase/migrations/20260729054400_leaderboard_rank_generation_private_staging.sql"
+STAGING_ONLY_WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729061533_leaderboard_rank_generation_staging_only_writer.sql"
 CAPACITY_BENCHMARK="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-64k-benchmark.pg17.psql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 BENCHMARK_64K="${ARENA_ATOMIC_WRITER_BENCHMARK_64K:-0}"
 BENCHMARK_SCENARIO="${ARENA_ATOMIC_WRITER_BENCHMARK_SCENARIO:-insert}"
+STAGING_ONLY_WRITER="${ARENA_ATOMIC_WRITER_STAGING_ONLY:-0}"
+LEGACY_CUTOVER_REPLAY="${ARENA_ATOMIC_WRITER_LEGACY_CUTOVER_REPLAY:-0}"
 
 if [[ "$BENCHMARK_64K" != '0' && "$BENCHMARK_64K" != '1' ]]; then
   echo 'ARENA_ATOMIC_WRITER_BENCHMARK_64K must be 0 or 1' >&2
@@ -39,6 +42,23 @@ if [[ "$BENCHMARK_64K" != '0' && "$BENCHMARK_64K" != '1' ]]; then
 fi
 if [[ "$BENCHMARK_SCENARIO" != 'insert' && "$BENCHMARK_SCENARIO" != 'update' ]]; then
   echo 'ARENA_ATOMIC_WRITER_BENCHMARK_SCENARIO must be insert or update' >&2
+  exit 1
+fi
+if [[ "$STAGING_ONLY_WRITER" != '0' && "$STAGING_ONLY_WRITER" != '1' ]]; then
+  echo 'ARENA_ATOMIC_WRITER_STAGING_ONLY must be 0 or 1' >&2
+  exit 1
+fi
+if [[ "$LEGACY_CUTOVER_REPLAY" != '0' && "$LEGACY_CUTOVER_REPLAY" != '1' ]]; then
+  echo 'ARENA_ATOMIC_WRITER_LEGACY_CUTOVER_REPLAY must be 0 or 1' >&2
+  exit 1
+fi
+if [[ "$BENCHMARK_64K" == '1' && "$STAGING_ONLY_WRITER" == '1' ]]; then
+  echo 'staging-only proof and legacy 64k benchmark are separate scenarios' >&2
+  exit 1
+fi
+if [[ "$LEGACY_CUTOVER_REPLAY" == '1' \
+   && ( "$BENCHMARK_64K" == '1' || "$STAGING_ONLY_WRITER" == '1' ) ]]; then
+  echo 'legacy cutover replay, staging-only proof, and 64k benchmark are separate scenarios' >&2
   exit 1
 fi
 
@@ -69,6 +89,7 @@ for required_file in \
   "$CANONICAL_BATCH_MIGRATION" \
   "$ATTESTED_WRITER_MIGRATION" \
   "$PRIVATE_STAGING_MIGRATION" \
+  "$STAGING_ONLY_WRITER_MIGRATION" \
   "$CAPACITY_BENCHMARK"; do
   if [[ ! -f "$required_file" ]]; then
     echo "required atomic-writer proof input is missing: $required_file" >&2
@@ -815,6 +836,282 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA arena
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA arena
   REVOKE EXECUTE ON FUNCTIONS FROM fixture_rogue;
 SQL
+if [[ "$STAGING_ONLY_WRITER" == '1' ]]; then
+  capture_staging_cutover_state() {
+    psql_cmd -Atqc "
+      SELECT pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(
+            pg_catalog.jsonb_build_object(
+              'writer_oid', function_row.oid,
+              'writer_body', pg_catalog.pg_get_functiondef(function_row.oid),
+              'writer_acl', function_row.proacl,
+              'heads', COALESCE(
+                (
+                  SELECT pg_catalog.jsonb_agg(
+                    pg_catalog.to_jsonb(head.*)
+                    ORDER BY head.season_id COLLATE pg_catalog.\"C\"
+                  )
+                  FROM ONLY arena.leaderboard_rank_generation_heads AS head
+                ),
+                '[]'::jsonb
+              ),
+              'claims', COALESCE(
+                (
+                  SELECT pg_catalog.jsonb_agg(
+                    pg_catalog.to_jsonb(claim.*)
+                    ORDER BY claim.season_id COLLATE pg_catalog.\"C\",
+                             claim.generation_seq
+                  )
+                  FROM ONLY arena.leaderboard_rank_generation_claims AS claim
+                ),
+                '[]'::jsonb
+              ),
+              'stage_batches', COALESCE(
+                (
+                  SELECT pg_catalog.jsonb_agg(
+                    pg_catalog.to_jsonb(batch.*)
+                    ORDER BY batch.season_id COLLATE pg_catalog.\"C\",
+                             batch.generation_seq,
+                             batch.batch_index
+                  )
+                  FROM ONLY arena.leaderboard_rank_generation_stage_batches
+                    AS batch
+                ),
+                '[]'::jsonb
+              ),
+              'stage_rows', COALESCE(
+                (
+                  SELECT pg_catalog.jsonb_agg(
+                    pg_catalog.to_jsonb(staged.*)
+                    ORDER BY staged.season_id COLLATE pg_catalog.\"C\",
+                             staged.generation_seq,
+                             staged.batch_index,
+                             staged.batch_position
+                  )
+                  FROM ONLY arena.leaderboard_rank_generation_stage_rows
+                    AS staged
+                ),
+                '[]'::jsonb
+              )
+            )::text,
+            'UTF8'
+          )
+        ),
+        'hex'
+      )
+      FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid =
+        'arena.write_leaderboard_rank_generation_batch_v1(text,bigint,uuid,integer,uuid,text,text[],arena.leaderboard_rank_batch_row_v1[])'::pg_catalog.regprocedure;
+    "
+  }
+
+  # CREATE OR REPLACE retains the old function ACL. Deliberately contaminate
+  # that ACL with grant option and require the cutover to reject the baseline
+  # atomically rather than silently preserving an owner-capable caller.
+  psql_cmd -q <<'SQL'
+GRANT EXECUTE ON FUNCTION
+  arena.write_leaderboard_rank_generation_batch_v1(
+    text,
+    bigint,
+    uuid,
+    integer,
+    uuid,
+    text,
+    text[],
+    arena.leaderboard_rank_batch_row_v1[]
+  ) TO fixture_rogue WITH GRANT OPTION;
+SQL
+  if [[ "$(psql_cmd -Atqc "
+    SELECT pg_catalog.has_function_privilege(
+      'fixture_rogue',
+      'arena.write_leaderboard_rank_generation_batch_v1(text,bigint,uuid,integer,uuid,text,text[],arena.leaderboard_rank_batch_row_v1[])'::pg_catalog.regprocedure,
+      'EXECUTE WITH GRANT OPTION'
+    );
+  ")" != 't' ]]; then
+    echo 'hostile staging cutover ACL fixture was not established' >&2
+    exit 1
+  fi
+  STAGING_HOSTILE_ACL_BEFORE="$(capture_staging_cutover_state)"
+  if psql_cmd -q -f "$STAGING_ONLY_WRITER_MIGRATION" >"$ERROR_FILE" 2>&1; then
+    echo 'staging-only writer cutover preserved a hostile old-function ACL' >&2
+    exit 1
+  fi
+  if ! rg -qi 'baseline ACL drifted|ACL.*drift' "$ERROR_FILE"; then
+    echo 'staging-only writer cutover rejected hostile ACL for an unexpected reason' >&2
+    sed -n '1,320p' "$ERROR_FILE" >&2
+    exit 1
+  fi
+  STAGING_HOSTILE_ACL_AFTER="$(capture_staging_cutover_state)"
+  if [[ "$STAGING_HOSTILE_ACL_AFTER" != "$STAGING_HOSTILE_ACL_BEFORE" ]]; then
+    echo 'failed hostile-ACL staging cutover changed catalog or durable state' >&2
+    exit 1
+  fi
+  psql_cmd -q <<'SQL'
+REVOKE ALL PRIVILEGES ON FUNCTION
+  arena.write_leaderboard_rank_generation_batch_v1(
+    text,
+    bigint,
+    uuid,
+    integer,
+    uuid,
+    text,
+    text[],
+    arena.leaderboard_rank_batch_row_v1[]
+  ) FROM fixture_rogue CASCADE;
+SQL
+  if [[ "$(psql_cmd -Atqc "
+    SELECT pg_catalog.has_function_privilege(
+      'fixture_rogue',
+      'arena.write_leaderboard_rank_generation_batch_v1(text,bigint,uuid,integer,uuid,text,text[],arena.leaderboard_rank_batch_row_v1[])'::pg_catalog.regprocedure,
+      'EXECUTE'
+    );
+  ")" != 'f' ]]; then
+    echo 'hostile staging cutover ACL was not fully revoked' >&2
+    exit 1
+  fi
+
+  # Cutover must fail closed while an older generation can still invoke the
+  # replaced writer body. Hold the exact head admission lock used by that old
+  # body, observe the migration waiting on its first EXCLUSIVE barrier, then
+  # let the old transaction drain. The migration must still reject the active
+  # generation, with function/catalog state byte-identical.
+  psql_cmd -q <<'SQL'
+SELECT public.claim_leaderboard_rank_generation(
+  '7D',
+  '11500000-0000-4150-8150-000000000021'::uuid,
+  pg_catalog.repeat('e', 64),
+  1,
+  1,
+  pg_catalog.clock_timestamp(),
+  300
+);
+SQL
+  STAGING_CUTOVER_BEFORE="$(capture_staging_cutover_state)"
+  STAGING_CUTOVER_BLOCKER_LOG="$TMP_ROOT/staging-cutover-blocker.log"
+  STAGING_CUTOVER_WRITER_LOG="$TMP_ROOT/staging-cutover-old-writer.log"
+  STAGING_CUTOVER_MIGRATION_LOG="$TMP_ROOT/staging-cutover-migration.log"
+  (
+    psql_cmd -q >"$STAGING_CUTOVER_BLOCKER_LOG" 2>&1 <<'SQL'
+SET application_name = 'staging-cutover-advisory-blocker';
+SELECT pg_catalog.pg_advisory_lock(91337, 61532);
+SELECT pg_catalog.pg_sleep(30);
+SQL
+  ) &
+  STAGING_CUTOVER_BLOCKER_PID=$!
+  wait_for_sql_true \
+    'staging cutover advisory blocker' \
+    "SELECT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_stat_activity AS activity
+       WHERE activity.application_name='staging-cutover-advisory-blocker'
+         AND activity.wait_event='PgSleep'
+     );"
+
+  (
+    psql_cmd -q >"$STAGING_CUTOVER_WRITER_LOG" 2>&1 <<'SQL'
+BEGIN;
+SET LOCAL application_name = 'staging-cutover-old-writer';
+SELECT head.season_id
+FROM ONLY arena.leaderboard_rank_generation_heads AS head
+WHERE head.season_id = '7D'
+FOR UPDATE;
+SELECT pg_catalog.pg_advisory_lock(91337, 61532);
+COMMIT;
+SQL
+  ) &
+  STAGING_CUTOVER_WRITER_PID=$!
+  wait_for_sql_true \
+    'staging cutover old-writer admission holder' \
+    "SELECT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_stat_activity AS activity
+       WHERE activity.application_name='staging-cutover-old-writer'
+         AND activity.wait_event_type='Lock'
+         AND activity.wait_event='advisory'
+         AND EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_locks AS head_lock
+           WHERE head_lock.pid=activity.pid
+             AND head_lock.relation=
+                   'arena.leaderboard_rank_generation_heads'::regclass
+             AND head_lock.mode='RowShareLock'
+             AND head_lock.granted
+         )
+     );"
+
+  (
+    psql_cmd -q \
+      -c "SET application_name = 'staging-cutover-migration'" \
+      -f "$STAGING_ONLY_WRITER_MIGRATION"
+  ) >"$STAGING_CUTOVER_MIGRATION_LOG" 2>&1 &
+  STAGING_CUTOVER_MIGRATION_PID=$!
+  wait_for_sql_true \
+    'staging-only migration behind old writer admission' \
+    "SELECT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_stat_activity AS migration
+       WHERE migration.application_name='staging-cutover-migration'
+         AND EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_locks AS head_lock
+           WHERE head_lock.pid=migration.pid
+             AND head_lock.relation=
+                   'arena.leaderboard_rank_generation_heads'::regclass
+             AND head_lock.mode='ExclusiveLock'
+             AND NOT head_lock.granted
+         )
+         AND EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_stat_activity AS old_writer
+           WHERE old_writer.application_name='staging-cutover-old-writer'
+             AND old_writer.pid = ANY(
+                   pg_catalog.pg_blocking_pids(migration.pid)
+                 )
+         )
+     );"
+
+  psql_cmd -q -c "
+    SELECT pg_catalog.pg_terminate_backend(activity.pid)
+    FROM pg_catalog.pg_stat_activity AS activity
+    WHERE activity.application_name='staging-cutover-advisory-blocker';
+  " >/dev/null
+  wait "$STAGING_CUTOVER_BLOCKER_PID" || true
+  if ! wait "$STAGING_CUTOVER_WRITER_PID"; then
+    echo 'old writer admission transaction failed while cutover drained it' >&2
+    sed -n '1,240p' "$STAGING_CUTOVER_WRITER_LOG" >&2
+    exit 1
+  fi
+  if wait "$STAGING_CUTOVER_MIGRATION_PID"; then
+    echo 'staging-only writer cutover admitted an active legacy generation' >&2
+    exit 1
+  fi
+  if ! rg -qi \
+    'active|nonterminal|claimed generation|drain' \
+    "$STAGING_CUTOVER_MIGRATION_LOG"; then
+    echo 'staging-only writer cutover rejected active work for an unexpected reason' >&2
+    sed -n '1,320p' "$STAGING_CUTOVER_MIGRATION_LOG" >&2
+    exit 1
+  fi
+  STAGING_CUTOVER_AFTER="$(capture_staging_cutover_state)"
+  if [[ "$STAGING_CUTOVER_AFTER" != "$STAGING_CUTOVER_BEFORE" ]]; then
+    echo 'failed staging-only cutover changed writer or stage state' >&2
+    exit 1
+  fi
+  psql_cmd -q <<'SQL'
+UPDATE ONLY arena.leaderboard_rank_generation_heads
+SET phase = 'failed',
+    lease_expires_at = NULL,
+    updated_at = pg_catalog.clock_timestamp()
+WHERE season_id = '7D'
+  AND generation_seq = 1;
+SQL
+  if ! psql_cmd -q -f "$STAGING_ONLY_WRITER_MIGRATION" >"$ERROR_FILE" 2>&1; then
+    echo 'staging-only rank writer migration failed after private staging' >&2
+    sed -n '1,320p' "$ERROR_FILE" >&2
+    exit 1
+  fi
+fi
 psql_cmd -q <<'SQL'
 DO $attestation_encoder_proof$
 DECLARE
@@ -1197,6 +1494,970 @@ expect_failure \
   'service role executed the owner-only atomic writer' \
   'permission denied for function write_leaderboard_rank_generation_batch_v1' \
   "SET ROLE service_role; SELECT arena.write_leaderboard_rank_generation_batch_v1(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL::arena.leaderboard_rank_batch_row_v1[]);"
+
+if [[ "$STAGING_ONLY_WRITER" == '1' ]]; then
+  expect_failure \
+    'rogue default-privilege grantee executed the staging-only writer' \
+    'permission denied for function write_leaderboard_rank_generation_batch_v1' \
+    "SET ROLE fixture_rogue;
+     SELECT arena.write_leaderboard_rank_generation_batch_v1(
+       NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+       NULL::arena.leaderboard_rank_batch_row_v1[]
+     );"
+  expect_failure \
+    'service role read the private generation stage' \
+    'permission denied' \
+    "SET ROLE service_role;
+     SELECT pg_catalog.count(*)
+     FROM arena.leaderboard_rank_generation_stage_rows;"
+  expect_failure \
+    'rogue default-privilege grantee read the private generation stage' \
+    'permission denied' \
+    "SET ROLE fixture_rogue;
+     SELECT pg_catalog.count(*)
+     FROM arena.leaderboard_rank_generation_stage_batches;"
+
+  capture_staging_only_state() {
+    psql_cmd -Atqc "
+      SELECT pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(
+            pg_catalog.jsonb_build_object(
+              'head', (
+                SELECT pg_catalog.to_jsonb(head.*)
+                FROM ONLY arena.leaderboard_rank_generation_heads AS head
+                WHERE head.season_id='90D'
+              ),
+              'claim', (
+                SELECT pg_catalog.to_jsonb(claim.*)
+                FROM ONLY arena.leaderboard_rank_generation_claims AS claim
+                WHERE claim.season_id='90D'
+                  AND claim.generation_seq=1
+              ),
+              'receipts', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(receipt.*)
+                  ORDER BY receipt.batch_index
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_generation_batch_receipts AS receipt
+              ),
+              'bindings', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(binding.*)
+                  ORDER BY binding.season_id, binding.generation_seq
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_generation_manifest_bindings AS binding
+              ),
+              'attestations', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(header.*)
+                  ORDER BY header.season_id, header.generation_seq
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_manifest_attestations AS header
+              ),
+              'chunks', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(chunk.*)
+                  ORDER BY chunk.chunk_index
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+              ),
+              'stage_batches', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(batch.*)
+                  ORDER BY batch.batch_index
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_generation_stage_batches AS batch
+              ),
+              'stage_rows', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(staged.*)
+                  ORDER BY staged.batch_index, staged.batch_position
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_generation_stage_rows AS staged
+              ),
+              'live', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(rank_row.*)
+                  ORDER BY rank_row.season_id, rank_row.source,
+                           rank_row.source_trader_id
+                ), '[]'::jsonb)
+                FROM public.leaderboard_ranks AS rank_row
+              ),
+              'fences', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(fence.*)
+                  ORDER BY fence.season_id, fence.source
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_mutation_fences AS fence
+              ),
+              'source_receipts', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(source_receipt.*)
+                  ORDER BY source_receipt.batch_index, source_receipt.source
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_generation_source_fence_receipts
+                  AS source_receipt
+              ),
+              'freshness', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(freshness.*)
+                  ORDER BY freshness.season_id, freshness.source
+                ), '[]'::jsonb)
+                FROM public.leaderboard_source_freshness AS freshness
+              ),
+              'rank_sequence', (
+                SELECT pg_catalog.jsonb_build_object(
+                  'last_value', rank_sequence.last_value,
+                  'is_called', rank_sequence.is_called
+                )
+                FROM public.leaderboard_ranks_id_seq AS rank_sequence
+              )
+            )::text,
+            'UTF8'
+          )
+        ),
+        'hex'
+      );"
+  }
+
+  capture_staging_only_serving_state() {
+    psql_cmd -Atqc "
+      SELECT pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(
+            pg_catalog.jsonb_build_object(
+              'live', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(rank_row.*)
+                  ORDER BY rank_row.season_id, rank_row.source,
+                           rank_row.source_trader_id
+                ), '[]'::jsonb)
+                FROM public.leaderboard_ranks AS rank_row
+              ),
+              'fences', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(fence.*)
+                  ORDER BY fence.season_id, fence.source
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_mutation_fences AS fence
+              ),
+              'source_receipts', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(source_receipt.*)
+                  ORDER BY source_receipt.season_id,
+                           source_receipt.generation_seq,
+                           source_receipt.batch_index,
+                           source_receipt.source
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_generation_source_fence_receipts
+                  AS source_receipt
+              ),
+              'freshness', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(freshness.*)
+                  ORDER BY freshness.season_id, freshness.source
+                ), '[]'::jsonb)
+                FROM public.leaderboard_source_freshness AS freshness
+              ),
+              'rank_sequence', (
+                SELECT pg_catalog.jsonb_build_object(
+                  'last_value', rank_sequence.last_value,
+                  'is_called', rank_sequence.is_called
+                )
+                FROM public.leaderboard_ranks_id_seq AS rank_sequence
+              )
+            )::text,
+            'UTF8'
+          )
+        ),
+        'hex'
+      );"
+  }
+
+  psql_cmd -q <<'SQL'
+INSERT INTO public.leaderboard_ranks (
+  season_id,
+  source,
+  source_type,
+  source_trader_id,
+  rank,
+  arena_score,
+  roi,
+  pnl,
+  win_rate,
+  max_drawdown,
+  followers,
+  trades_count,
+  handle,
+  computed_at,
+  rank_change,
+  is_new,
+  score_completeness,
+  rank_publication_id
+)
+SELECT
+  fixture.season_id,
+  (fixture.batch_0_rows[1]).source,
+  'legacy',
+  (fixture.batch_0_rows[1]).source_trader_id,
+  999,
+  1,
+  -99,
+  -123,
+  1,
+  99,
+  1,
+  1,
+  'staging-isolation-sentinel',
+  '2000-01-01 00:00:00+00'::timestamptz,
+  -99,
+  false,
+  'partial',
+  '17500000-0000-4750-8750-000000000098'::uuid
+FROM arena.fixture_atomic_writer_case AS fixture;
+
+INSERT INTO public.leaderboard_source_freshness (
+  season_id,
+  source,
+  source_as_of,
+  recorded_at
+) VALUES
+  (
+    '90D',
+    'alpha',
+    '2000-01-01 00:00:00+00'::timestamptz,
+    '2000-01-02 00:00:00+00'::timestamptz
+  ),
+  (
+    '90D',
+    'beta',
+    '2000-01-03 00:00:00+00'::timestamptz,
+    '2000-01-04 00:00:00+00'::timestamptz
+  );
+
+DO $staging_serving_seed$
+BEGIN
+  IF (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks) <> 1
+     OR (SELECT pg_catalog.count(*) FROM public.leaderboard_source_freshness) <> 2
+     OR (
+       SELECT fence.mutation_seq
+       FROM ONLY arena.leaderboard_rank_mutation_fences AS fence
+       WHERE fence.season_id = '90D'
+         AND fence.source = 'alpha'
+     ) IS DISTINCT FROM 1::bigint THEN
+    RAISE EXCEPTION 'staging-only serving-state sentinel was not established';
+  END IF;
+END
+$staging_serving_seed$;
+SQL
+
+  STAGING_SERVING_BASELINE="$(capture_staging_only_serving_state)"
+
+  expect_staging_terminal_rejection() {
+    local terminal_field="$1"
+    local terminal_value="$2"
+    local before_state
+    local after_state
+    before_state="$(capture_staging_only_state)"
+    expect_failure \
+      "staging-only writer accepted caller-owned $terminal_field state" \
+      'terminal.*NULL|scorer.*terminal|terminal.*state|immutable generation plan' \
+      "SELECT arena.write_leaderboard_rank_generation_batch_v1(
+         fixture.season_id,
+         fixture.generation_seq,
+         fixture.score_cohort_id,
+         0,
+         fixture.score_input_manifest_id,
+         fixture.score_input_manifest_digest,
+         fixture.batch_sha256_plan,
+         (
+           SELECT pg_catalog.array_agg(
+             pg_catalog.jsonb_populate_record(
+               NULL::arena.leaderboard_rank_batch_row_v1,
+               pg_catalog.to_jsonb(fixture.batch_0_rows[position.value]) ||
+                 CASE WHEN position.value = 1
+                   THEN pg_catalog.jsonb_build_object(
+                     '$terminal_field', '$terminal_value'::jsonb
+                   )
+                   ELSE '{}'::jsonb
+                 END
+             )
+             ORDER BY position.value
+           )::arena.leaderboard_rank_batch_row_v1[]
+           FROM pg_catalog.generate_subscripts(fixture.batch_0_rows, 1)
+             AS position(value)
+         )
+       )
+       FROM arena.fixture_atomic_writer_case AS fixture;"
+    after_state="$(capture_staging_only_state)"
+    if [[ "$after_state" != "$before_state" \
+       || "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+      echo "rejected staging-only $terminal_field input changed durable state" >&2
+      exit 1
+    fi
+  }
+
+  expect_staging_terminal_rejection 'rank' '1'
+  expect_staging_terminal_rejection 'rank_change' '1'
+  expect_staging_terminal_rejection 'is_new' 'true'
+
+  # This test-only trigger pauses after physical private DML. Its sequence is
+  # nontransactional, so it proves that backend termination really crossed the
+  # stage append boundary even though every durable row must roll back.
+  psql_cmd -q <<'SQL'
+CREATE SEQUENCE arena.fixture_staging_pause_calls;
+
+CREATE FUNCTION arena.fixture_pause_staging_batch_zero()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF NEW.season_id = '90D'
+     AND NEW.generation_seq = 1
+     AND NEW.batch_index = 0
+     AND NEW.batch_position = 1
+     AND pg_catalog.current_setting('application_name') IN (
+       'staging-stage-crash-writer',
+       'staging-stage-race-a'
+     ) THEN
+    PERFORM pg_catalog.nextval(
+      'arena.fixture_staging_pause_calls'::pg_catalog.regclass
+    );
+    PERFORM pg_catalog.pg_advisory_xact_lock(91337, 61533);
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE TRIGGER fixture_pause_staging_batch_zero
+AFTER INSERT ON arena.leaderboard_rank_generation_stage_rows
+FOR EACH ROW EXECUTE FUNCTION arena.fixture_pause_staging_batch_zero();
+SQL
+
+  STAGING_CRASH_STATE_BEFORE="$(capture_staging_only_state)"
+  STAGING_CRASH_BLOCKER_LOG="$TMP_ROOT/staging-stage-crash-blocker.log"
+  STAGING_CRASH_WRITER_LOG="$TMP_ROOT/staging-stage-crash-writer.log"
+  (
+    psql_cmd -q >"$STAGING_CRASH_BLOCKER_LOG" 2>&1 <<'SQL'
+SET application_name = 'staging-stage-crash-blocker';
+SELECT pg_catalog.pg_advisory_lock(91337, 61533);
+SELECT pg_catalog.pg_sleep(30);
+SQL
+  ) &
+  STAGING_CRASH_BLOCKER_PID=$!
+  wait_for_sql_true \
+    'staging crash advisory blocker' \
+    "SELECT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_stat_activity AS activity
+       WHERE activity.application_name='staging-stage-crash-blocker'
+         AND activity.wait_event='PgSleep'
+     );"
+
+  (
+    psql_cmd -Atq >"$STAGING_CRASH_WRITER_LOG" 2>&1 <<'SQL'
+SET application_name = 'staging-stage-crash-writer';
+SELECT arena.write_leaderboard_rank_generation_batch_v1(
+  fixture.season_id,
+  fixture.generation_seq,
+  fixture.score_cohort_id,
+  0,
+  fixture.score_input_manifest_id,
+  fixture.score_input_manifest_digest,
+  fixture.batch_sha256_plan,
+  fixture.batch_0_rows
+)::text
+FROM arena.fixture_atomic_writer_case AS fixture;
+SQL
+  ) &
+  STAGING_CRASH_WRITER_PID=$!
+  wait_for_sql_true \
+    'staging writer after physical stage DML' \
+    "SELECT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_stat_activity AS activity
+       WHERE activity.application_name='staging-stage-crash-writer'
+         AND activity.wait_event_type='Lock'
+         AND activity.wait_event='advisory'
+         AND EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_locks AS stage_lock
+           WHERE stage_lock.pid=activity.pid
+             AND stage_lock.relation=
+                   'arena.leaderboard_rank_generation_stage_rows'::regclass
+             AND stage_lock.mode='RowExclusiveLock'
+             AND stage_lock.granted
+         )
+         AND (
+           SELECT sequence_row.is_called
+           FROM arena.fixture_staging_pause_calls AS sequence_row
+         )
+     );"
+
+  psql_cmd -q -c "
+    SELECT pg_catalog.pg_terminate_backend(activity.pid)
+    FROM pg_catalog.pg_stat_activity AS activity
+    WHERE activity.application_name='staging-stage-crash-writer';
+  " >/dev/null
+  if wait "$STAGING_CRASH_WRITER_PID"; then
+    echo 'terminated staging writer unexpectedly returned success' >&2
+    exit 1
+  fi
+  psql_cmd -q -c "
+    SELECT pg_catalog.pg_terminate_backend(activity.pid)
+    FROM pg_catalog.pg_stat_activity AS activity
+    WHERE activity.application_name='staging-stage-crash-blocker';
+  " >/dev/null
+  wait "$STAGING_CRASH_BLOCKER_PID" || true
+  if [[ "$(capture_staging_only_state)" != "$STAGING_CRASH_STATE_BEFORE" \
+     || "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'backend crash after stage DML left partial durable state' >&2
+    exit 1
+  fi
+  if [[ "$(psql_cmd -Atqc "
+    SELECT sequence_row.last_value || '|' || sequence_row.is_called
+    FROM arena.fixture_staging_pause_calls AS sequence_row;
+  ")" != '1|true' ]]; then
+    echo 'staging crash did not prove physical private DML' >&2
+    exit 1
+  fi
+
+  # Race two exact batch-zero requests at the same physical pause. Only the
+  # first may append; the waiter must re-read the committed receipt and return
+  # the identical frozen response instead of surfacing a uniqueness error.
+  STAGING_RACE_BLOCKER_LOG="$TMP_ROOT/staging-stage-race-blocker.log"
+  STAGING_RACE_A_LOG="$TMP_ROOT/staging-stage-race-a.log"
+  STAGING_RACE_B_LOG="$TMP_ROOT/staging-stage-race-b.log"
+  (
+    psql_cmd -q >"$STAGING_RACE_BLOCKER_LOG" 2>&1 <<'SQL'
+SET application_name = 'staging-stage-race-blocker';
+SELECT pg_catalog.pg_advisory_lock(91337, 61533);
+SELECT pg_catalog.pg_sleep(30);
+SQL
+  ) &
+  STAGING_RACE_BLOCKER_PID=$!
+  wait_for_sql_true \
+    'staging race advisory blocker' \
+    "SELECT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_stat_activity AS activity
+       WHERE activity.application_name='staging-stage-race-blocker'
+         AND activity.wait_event='PgSleep'
+     );"
+
+  (
+    psql_cmd -Atq >"$STAGING_RACE_A_LOG" 2>&1 <<'SQL'
+SET application_name = 'staging-stage-race-a';
+SELECT arena.write_leaderboard_rank_generation_batch_v1(
+  fixture.season_id,
+  fixture.generation_seq,
+  fixture.score_cohort_id,
+  0,
+  fixture.score_input_manifest_id,
+  fixture.score_input_manifest_digest,
+  fixture.batch_sha256_plan,
+  fixture.batch_0_rows
+)::text
+FROM arena.fixture_atomic_writer_case AS fixture;
+SQL
+  ) &
+  STAGING_RACE_A_PID=$!
+  wait_for_sql_true \
+    'first staging writer at race pause point' \
+    "SELECT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_stat_activity AS activity
+       WHERE activity.application_name='staging-stage-race-a'
+         AND activity.wait_event_type='Lock'
+         AND activity.wait_event='advisory'
+         AND (
+           SELECT sequence_row.last_value=2 AND sequence_row.is_called
+           FROM arena.fixture_staging_pause_calls AS sequence_row
+         )
+     );"
+
+  (
+    psql_cmd -Atq >"$STAGING_RACE_B_LOG" 2>&1 <<'SQL'
+SET application_name = 'staging-stage-race-b';
+SELECT arena.write_leaderboard_rank_generation_batch_v1(
+  fixture.season_id,
+  fixture.generation_seq,
+  fixture.score_cohort_id,
+  0,
+  fixture.score_input_manifest_id,
+  fixture.score_input_manifest_digest,
+  fixture.batch_sha256_plan,
+  fixture.batch_0_rows
+)::text
+FROM arena.fixture_atomic_writer_case AS fixture;
+SQL
+  ) &
+  STAGING_RACE_B_PID=$!
+  wait_for_sql_true \
+    'duplicate staging writer behind first head owner' \
+    "SELECT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_stat_activity AS duplicate
+       WHERE duplicate.application_name='staging-stage-race-b'
+         AND duplicate.wait_event_type='Lock'
+         AND EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_stat_activity AS first_writer
+           WHERE first_writer.application_name='staging-stage-race-a'
+             AND first_writer.pid = ANY(
+                   pg_catalog.pg_blocking_pids(duplicate.pid)
+                 )
+         )
+         AND EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_locks AS head_lock
+           WHERE head_lock.pid=duplicate.pid
+             AND head_lock.relation=
+                   'arena.leaderboard_rank_generation_heads'::regclass
+             AND head_lock.mode='RowShareLock'
+             AND head_lock.granted
+         )
+     );"
+
+  psql_cmd -q -c "
+    SELECT pg_catalog.pg_terminate_backend(activity.pid)
+    FROM pg_catalog.pg_stat_activity AS activity
+    WHERE activity.application_name='staging-stage-race-blocker';
+  " >/dev/null
+  wait "$STAGING_RACE_BLOCKER_PID" || true
+  if ! wait "$STAGING_RACE_A_PID"; then
+    echo 'first staging writer failed after race pause released' >&2
+    sed -n '1,260p' "$STAGING_RACE_A_LOG" >&2
+    exit 1
+  fi
+  if ! wait "$STAGING_RACE_B_PID"; then
+    echo 'duplicate staging writer failed instead of replaying the winner' >&2
+    sed -n '1,260p' "$STAGING_RACE_B_LOG" >&2
+    exit 1
+  fi
+  STAGING_RACE_A_RESULT="$(tr -d '\r\n' <"$STAGING_RACE_A_LOG")"
+  STAGING_RACE_B_RESULT="$(tr -d '\r\n' <"$STAGING_RACE_B_LOG")"
+  if [[ -z "$STAGING_RACE_A_RESULT" \
+     || "$STAGING_RACE_B_RESULT" != "$STAGING_RACE_A_RESULT" ]]; then
+    echo 'same-batch staging race did not return one frozen response' >&2
+    printf 'first: %s\nsecond: %s\n' \
+      "$STAGING_RACE_A_RESULT" "$STAGING_RACE_B_RESULT" >&2
+    exit 1
+  fi
+  if [[ "$(psql_cmd -Atqc "
+    SELECT sequence_row.last_value || '|' || sequence_row.is_called
+    FROM arena.fixture_staging_pause_calls AS sequence_row;
+  ")" != '2|true' ]]; then
+    echo 'duplicate staging writer executed a second stage append' >&2
+    exit 1
+  fi
+  STAGING_FIRST_RESULT="$STAGING_RACE_A_RESULT"
+
+  psql_cmd -q <<'SQL'
+DROP TRIGGER fixture_pause_staging_batch_zero
+  ON arena.leaderboard_rank_generation_stage_rows;
+DROP FUNCTION arena.fixture_pause_staging_batch_zero();
+DROP SEQUENCE arena.fixture_staging_pause_calls;
+SQL
+  if [[ "$STAGING_FIRST_RESULT" != *'"batch_index": 0'* \
+     || "$STAGING_FIRST_RESULT" != *'"row_count": 1000'* ]]; then
+    echo "staging-only batch zero returned an unexpected receipt: $STAGING_FIRST_RESULT" >&2
+    exit 1
+  fi
+
+  STAGING_BATCH_ZERO_STATE="$(psql_cmd -Atqc "
+    SELECT pg_catalog.concat_ws(
+      '|',
+      (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_mutation_fences),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_source_fence_receipts),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_batch_receipts),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_stage_batches),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_stage_rows),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_manifest_bindings),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_manifest_attestations),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_manifest_attestation_chunks),
+      (SELECT pg_catalog.count(*) FROM public.leaderboard_source_freshness),
+      (SELECT phase FROM arena.leaderboard_rank_generation_heads WHERE season_id='90D'),
+      (SELECT pg_catalog.bool_and(receipt.completed_at=batch.staged_at)
+       FROM arena.leaderboard_rank_generation_batch_receipts AS receipt
+       JOIN arena.leaderboard_rank_generation_stage_batches AS batch
+         USING (season_id,generation_seq,batch_index)),
+      (SELECT pg_catalog.count(*)
+       FROM arena.leaderboard_rank_generation_stage_rows AS staged
+       WHERE (staged.row_payload).rank IS NOT NULL
+          OR (staged.row_payload).rank_change IS NOT NULL
+          OR (staged.row_payload).is_new IS NOT NULL)
+    );")"
+  if [[ "$STAGING_BATCH_ZERO_STATE" != '1|1|0|1|1|1000|1|1|2|2|writing|t|0' ]]; then
+    echo "staging-only batch zero changed live state or missed evidence: $STAGING_BATCH_ZERO_STATE" >&2
+    exit 1
+  fi
+  if [[ "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'staging-only batch zero changed serving state' >&2
+    exit 1
+  fi
+
+  # Batch zero froze the manifest into immutable attestation chunks. Later
+  # batches and response-loss replay must not depend on the raw scorer row.
+  psql_cmd -q <<'SQL'
+DELETE FROM ONLY arena.leaderboard_score_input_manifests AS manifest
+USING arena.fixture_atomic_writer_case AS fixture
+WHERE manifest.manifest_id = fixture.score_input_manifest_id;
+SQL
+  if [[ "$(psql_cmd -Atqc '
+    SELECT pg_catalog.count(*)
+    FROM ONLY arena.leaderboard_score_input_manifests;
+  ')" != '0' ]]; then
+    echo 'staging-only batch zero did not permit raw manifest pruning' >&2
+    exit 1
+  fi
+
+  STAGING_ROLLBACK_BEFORE="$(capture_staging_only_state)"
+  psql_cmd -q >/dev/null <<'SQL'
+BEGIN;
+SELECT arena.write_leaderboard_rank_generation_batch_v1(
+  fixture.season_id,
+  fixture.generation_seq,
+  fixture.score_cohort_id,
+  1,
+  fixture.score_input_manifest_id,
+  fixture.score_input_manifest_digest,
+  fixture.batch_sha256_plan,
+  fixture.batch_1_rows
+)
+FROM arena.fixture_atomic_writer_case AS fixture;
+ROLLBACK;
+SQL
+  STAGING_ROLLBACK_AFTER="$(capture_staging_only_state)"
+  if [[ "$STAGING_ROLLBACK_AFTER" != "$STAGING_ROLLBACK_BEFORE" ]]; then
+    echo 'rolled-back staging-only batch changed durable state' >&2
+    exit 1
+  fi
+
+  STAGING_EXPIRED_BEFORE="$(capture_staging_only_state)"
+  expect_failure \
+    'staging-only writer committed after its lease expired' \
+    'generation lease expired' \
+    "BEGIN;
+     ALTER TABLE arena.leaderboard_rank_generation_claims
+       DISABLE TRIGGER leaderboard_rank_generation_claim_immutable;
+     WITH deadline AS MATERIALIZED (
+       SELECT pg_catalog.clock_timestamp()-interval '1 second' AS value
+     )
+     UPDATE ONLY arena.leaderboard_rank_generation_claims
+       SET claimed_at=deadline.value-interval '15 seconds',
+           lease_seconds=15,
+           lease_expires_at=deadline.value
+       FROM deadline
+       WHERE season_id='90D' AND generation_seq=1;
+     UPDATE ONLY arena.leaderboard_rank_generation_heads AS head
+       SET lease_expires_at=claim.lease_expires_at
+       FROM ONLY arena.leaderboard_rank_generation_claims AS claim
+       WHERE head.season_id=claim.season_id
+         AND head.generation_seq=claim.generation_seq
+         AND head.season_id='90D' AND head.generation_seq=1;
+     ALTER TABLE arena.leaderboard_rank_generation_claims
+       ENABLE TRIGGER leaderboard_rank_generation_claim_immutable;
+     SELECT arena.write_leaderboard_rank_generation_batch_v1(
+       fixture.season_id,fixture.generation_seq,fixture.score_cohort_id,1,
+       fixture.score_input_manifest_id,fixture.score_input_manifest_digest,
+       fixture.batch_sha256_plan,fixture.batch_1_rows
+     ) FROM arena.fixture_atomic_writer_case AS fixture;
+     COMMIT;"
+  if [[ "$(capture_staging_only_state)" != "$STAGING_EXPIRED_BEFORE" \
+     || "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'expired staging-only write changed durable state' >&2
+    exit 1
+  fi
+
+  # Move a valid lease close to expiry, then sleep only after the second batch
+  # has physically inserted its private row. The final clock check must roll
+  # back receipt/header/stage/head changes while the nontransactional sequence
+  # proves this is a post-DML failure rather than the admission precheck.
+  psql_cmd -q <<'SQL'
+CREATE SEQUENCE arena.fixture_staging_lease_stage_calls;
+
+CREATE FUNCTION arena.fixture_sleep_staging_batch_past_lease()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_lease_expires_at timestamptz;
+BEGIN
+  IF NEW.season_id = '90D'
+     AND NEW.generation_seq = 1
+     AND NEW.batch_index = 1
+     AND NEW.batch_position = 1 THEN
+    PERFORM pg_catalog.nextval(
+      'arena.fixture_staging_lease_stage_calls'::pg_catalog.regclass
+    );
+    SELECT head.lease_expires_at
+    INTO STRICT v_lease_expires_at
+    FROM ONLY arena.leaderboard_rank_generation_heads AS head
+    WHERE head.season_id = NEW.season_id;
+    PERFORM pg_catalog.pg_sleep_until(
+      v_lease_expires_at + interval '100 milliseconds'
+    );
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE TRIGGER fixture_sleep_staging_batch_past_lease
+AFTER INSERT ON arena.leaderboard_rank_generation_stage_rows
+FOR EACH ROW EXECUTE FUNCTION arena.fixture_sleep_staging_batch_past_lease();
+
+ALTER TABLE arena.leaderboard_rank_generation_claims
+  DISABLE TRIGGER leaderboard_rank_generation_claim_immutable;
+DO $short_staging_lease$
+DECLARE
+  v_lease_expires_at timestamptz :=
+    pg_catalog.clock_timestamp() + interval '3 seconds';
+BEGIN
+  UPDATE ONLY arena.leaderboard_rank_generation_claims AS claim
+  SET claimed_at = v_lease_expires_at - interval '15 seconds',
+      lease_seconds = 15,
+      lease_expires_at = v_lease_expires_at
+  WHERE claim.season_id = '90D'
+    AND claim.generation_seq = 1;
+
+  UPDATE ONLY arena.leaderboard_rank_generation_heads AS head
+  SET lease_expires_at = v_lease_expires_at
+  WHERE head.season_id = '90D'
+    AND head.generation_seq = 1
+    AND head.phase = 'writing';
+END
+$short_staging_lease$;
+ALTER TABLE arena.leaderboard_rank_generation_claims
+  ENABLE TRIGGER leaderboard_rank_generation_claim_immutable;
+SQL
+
+  STAGING_POST_DML_LEASE_BEFORE="$(capture_staging_only_state)"
+  expect_failure \
+    'staging-only writer survived lease expiry after private DML' \
+    'generation lease expired before staged batch commit|stage batch lost its exact generation authority' \
+    "SELECT arena.write_leaderboard_rank_generation_batch_v1(
+       fixture.season_id,
+       fixture.generation_seq,
+       fixture.score_cohort_id,
+       1,
+       fixture.score_input_manifest_id,
+       fixture.score_input_manifest_digest,
+       fixture.batch_sha256_plan,
+       fixture.batch_1_rows
+     )
+     FROM arena.fixture_atomic_writer_case AS fixture;"
+  if [[ "$(capture_staging_only_state)" != "$STAGING_POST_DML_LEASE_BEFORE" \
+     || "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'post-DML lease expiry left partial staging state' >&2
+    exit 1
+  fi
+  if [[ "$(psql_cmd -Atqc "
+    SELECT pg_catalog.concat_ws(
+      '|',
+      sequence_row.last_value,
+      sequence_row.is_called,
+      (SELECT pg_catalog.count(*)
+       FROM ONLY arena.leaderboard_rank_generation_stage_batches),
+      (SELECT pg_catalog.count(*)
+       FROM ONLY arena.leaderboard_rank_generation_stage_rows),
+      (SELECT pg_catalog.count(*)
+       FROM ONLY arena.leaderboard_rank_generation_batch_receipts)
+    )
+    FROM arena.fixture_staging_lease_stage_calls AS sequence_row;
+  ")" != '1|t|1|1000|1' ]]; then
+    echo 'post-DML lease proof did not roll back exactly batch one' >&2
+    exit 1
+  fi
+
+  psql_cmd -q <<'SQL'
+DROP TRIGGER fixture_sleep_staging_batch_past_lease
+  ON arena.leaderboard_rank_generation_stage_rows;
+DROP FUNCTION arena.fixture_sleep_staging_batch_past_lease();
+DROP SEQUENCE arena.fixture_staging_lease_stage_calls;
+
+ALTER TABLE arena.leaderboard_rank_generation_claims
+  DISABLE TRIGGER leaderboard_rank_generation_claim_immutable;
+DO $restore_staging_lease$
+DECLARE
+  v_claimed_at timestamptz := pg_catalog.clock_timestamp();
+  v_lease_expires_at timestamptz := v_claimed_at + interval '300 seconds';
+BEGIN
+  UPDATE ONLY arena.leaderboard_rank_generation_claims AS claim
+  SET claimed_at = v_claimed_at,
+      lease_seconds = 300,
+      lease_expires_at = v_lease_expires_at
+  WHERE claim.season_id = '90D'
+    AND claim.generation_seq = 1;
+
+  UPDATE ONLY arena.leaderboard_rank_generation_heads AS head
+  SET lease_expires_at = v_lease_expires_at
+  WHERE head.season_id = '90D'
+    AND head.generation_seq = 1
+    AND head.phase = 'writing';
+END
+$restore_staging_lease$;
+ALTER TABLE arena.leaderboard_rank_generation_claims
+  ENABLE TRIGGER leaderboard_rank_generation_claim_immutable;
+SQL
+
+  STAGING_SECOND_RESULT="$(psql_cmd -Atq <<'SQL'
+SELECT arena.write_leaderboard_rank_generation_batch_v1(
+  fixture.season_id,
+  fixture.generation_seq,
+  fixture.score_cohort_id,
+  1,
+  fixture.score_input_manifest_id,
+  fixture.score_input_manifest_digest,
+  fixture.batch_sha256_plan,
+  fixture.batch_1_rows
+)::text
+FROM arena.fixture_atomic_writer_case AS fixture;
+SQL
+)"
+  if [[ "$STAGING_SECOND_RESULT" != *'"batch_index": 1'* \
+     || "$STAGING_SECOND_RESULT" != *'"row_count": 1'* ]]; then
+    echo "staging-only batch one returned an unexpected receipt: $STAGING_SECOND_RESULT" >&2
+    exit 1
+  fi
+
+  STAGING_COMPLETE_STATE="$(psql_cmd -Atqc "
+    SELECT pg_catalog.concat_ws(
+      '|',
+      (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_mutation_fences),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_source_fence_receipts),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_batch_receipts),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_stage_batches),
+      (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_stage_rows),
+      (SELECT pg_catalog.sum(row_count) FROM arena.leaderboard_rank_generation_stage_batches),
+      (SELECT phase FROM arena.leaderboard_rank_generation_heads WHERE season_id='90D')
+    );")"
+  if [[ "$STAGING_COMPLETE_STATE" != '1|1|0|2|2|1001|1001|writing' ]]; then
+    echo "staging-only generation changed live state or is incomplete: $STAGING_COMPLETE_STATE" >&2
+    exit 1
+  fi
+  if [[ "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'staging-only batch one changed serving state' >&2
+    exit 1
+  fi
+
+  STAGING_REPLAY_BEFORE="$(capture_staging_only_state)"
+  STAGING_REPLAY_RESULT="$(psql_cmd -Atq <<'SQL'
+SELECT arena.write_leaderboard_rank_generation_batch_v1(
+  fixture.season_id,
+  fixture.generation_seq,
+  fixture.score_cohort_id,
+  1,
+  fixture.score_input_manifest_id,
+  fixture.score_input_manifest_digest,
+  fixture.batch_sha256_plan,
+  fixture.batch_1_rows
+)::text
+FROM arena.fixture_atomic_writer_case AS fixture;
+SQL
+)"
+  STAGING_REPLAY_AFTER="$(capture_staging_only_state)"
+  if [[ "$STAGING_REPLAY_RESULT" != "$STAGING_SECOND_RESULT" \
+     || "$STAGING_REPLAY_AFTER" != "$STAGING_REPLAY_BEFORE" \
+     || "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'staging-only response-loss replay was not byte-identical and zero-write' >&2
+    exit 1
+  fi
+
+  STAGING_ALTERED_REPLAY_BEFORE="$(capture_staging_only_state)"
+  expect_failure \
+    'staging-only replay accepted an altered full batch' \
+    'replay|digest|evidence|immutable|receipt' \
+    "SELECT arena.write_leaderboard_rank_generation_batch_v1(
+       fixture.season_id,
+       fixture.generation_seq,
+       fixture.score_cohort_id,
+       1,
+       fixture.score_input_manifest_id,
+       fixture.score_input_manifest_digest,
+       fixture.batch_sha256_plan,
+       (
+         SELECT pg_catalog.array_agg(
+           pg_catalog.jsonb_populate_record(
+             NULL::arena.leaderboard_rank_batch_row_v1,
+             pg_catalog.to_jsonb(fixture.batch_1_rows[position.value]) ||
+               CASE WHEN position.value = 1
+                 THEN pg_catalog.jsonb_build_object(
+                   'handle', 'altered-staging-replay'
+                 )
+                 ELSE '{}'::jsonb
+               END
+           )
+           ORDER BY position.value
+         )::arena.leaderboard_rank_batch_row_v1[]
+         FROM pg_catalog.generate_subscripts(fixture.batch_1_rows, 1)
+           AS position(value)
+       )
+     )
+     FROM arena.fixture_atomic_writer_case AS fixture;"
+  if [[ "$(capture_staging_only_state)" != "$STAGING_ALTERED_REPLAY_BEFORE" \
+     || "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'altered staging-only replay changed durable state' >&2
+    exit 1
+  fi
+
+  STAGING_MISSING_ROW_BEFORE="$(capture_staging_only_state)"
+  expect_failure \
+    'staging-only replay accepted a missing immutable staged row' \
+    'staged replay|stage.*incomplete|immutable replay|typed rank batch header is invalid' \
+    "BEGIN;
+     ALTER TABLE arena.leaderboard_rank_generation_stage_rows
+       DISABLE TRIGGER leaderboard_rank_generation_stage_rows_immutable;
+     DELETE FROM ONLY arena.leaderboard_rank_generation_stage_rows
+       WHERE season_id='90D' AND generation_seq=1
+         AND batch_index=1 AND batch_position=1;
+     ALTER TABLE arena.leaderboard_rank_generation_stage_rows
+       ENABLE TRIGGER leaderboard_rank_generation_stage_rows_immutable;
+     SELECT arena.write_leaderboard_rank_generation_batch_v1(
+       fixture.season_id,fixture.generation_seq,fixture.score_cohort_id,1,
+       fixture.score_input_manifest_id,fixture.score_input_manifest_digest,
+       fixture.batch_sha256_plan,fixture.batch_1_rows
+     ) FROM arena.fixture_atomic_writer_case AS fixture;
+     COMMIT;"
+  if [[ "$(capture_staging_only_state)" != "$STAGING_MISSING_ROW_BEFORE" \
+     || "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'missing-row staging-only replay changed durable state' >&2
+    exit 1
+  fi
+
+  psql_cmd -q <<'SQL'
+UPDATE ONLY arena.leaderboard_rank_generation_heads
+SET phase='sealed', lease_expires_at=NULL, updated_at=pg_catalog.clock_timestamp()
+WHERE season_id='90D' AND generation_seq=1;
+SQL
+  STAGING_TERMINAL_BEFORE="$(capture_staging_only_state)"
+  STAGING_TERMINAL_REPLAY="$(psql_cmd -Atq <<'SQL'
+SELECT arena.write_leaderboard_rank_generation_batch_v1(
+  fixture.season_id,fixture.generation_seq,fixture.score_cohort_id,1,
+  fixture.score_input_manifest_id,fixture.score_input_manifest_digest,
+  fixture.batch_sha256_plan,fixture.batch_1_rows
+)::text
+FROM arena.fixture_atomic_writer_case AS fixture;
+SQL
+)"
+  if [[ "$STAGING_TERMINAL_REPLAY" != "$STAGING_SECOND_RESULT" \
+     || "$(capture_staging_only_state)" != "$STAGING_TERMINAL_BEFORE" ]]; then
+    echo 'terminal staging-only generation exact replay was not frozen' >&2
+    exit 1
+  fi
+  if [[ "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'terminal staging-only replay changed serving state' >&2
+    exit 1
+  fi
+
+  printf 'PostgreSQL 17 staging-only leaderboard-rank writer proof passed.\n'
+  exit 0
+fi
 
 # Seed one pre-generation legacy tuple. Its INSERT establishes alpha fence 1;
 # batch zero must then update this identity and insert 999 peers in one UPSERT.
@@ -2603,6 +3864,131 @@ TOPOLOGY_RESTORED_STATE="$(capture_atomic_state)"
 if [[ "$TOPOLOGY_RESTORED_STATE" != "$TOPOLOGY_FULL_STATE" ]]; then
   echo 'temporary source-receipt topology was not fully restored' >&2
   exit 1
+fi
+
+# A production cutover can encounter immutable receipts created by the old
+# attested writer before private staging existed. Install the staging-only body
+# only after that generation is terminal and its complete attestation/source
+# topology has been restored. Both exact batches must replay from the legacy
+# authority with no staged evidence and with every captured relational byte
+# unchanged. Keep this scenario independent from the fresh staging-only proof.
+if [[ "$LEGACY_CUTOVER_REPLAY" == '1' ]]; then
+  LEGACY_CUTOVER_STAGE_BEFORE="$(psql_cmd -Atqc "
+    SELECT pg_catalog.concat_ws(
+      '|',
+      (SELECT pg_catalog.count(*)
+       FROM ONLY arena.leaderboard_rank_generation_stage_batches),
+      (SELECT pg_catalog.count(*)
+       FROM ONLY arena.leaderboard_rank_generation_stage_rows)
+    );
+  ")"
+  if [[ "$LEGACY_CUTOVER_STAGE_BEFORE" != '0|0' ]]; then
+    echo "legacy cutover fixture unexpectedly had staged evidence: $LEGACY_CUTOVER_STAGE_BEFORE" >&2
+    exit 1
+  fi
+
+  LEGACY_CUTOVER_STATE_BEFORE="$(capture_atomic_state)"
+  if ! psql_cmd -q -f "$STAGING_ONLY_WRITER_MIGRATION" >"$ERROR_FILE" 2>&1; then
+    echo 'staging-only writer migration rejected a terminal legacy receipt graph' >&2
+    sed -n '1,320p' "$ERROR_FILE" >&2
+    exit 1
+  fi
+  if [[ "$(capture_atomic_state)" != "$LEGACY_CUTOVER_STATE_BEFORE" ]]; then
+    echo 'legacy staging-only cutover changed captured durable state' >&2
+    exit 1
+  fi
+
+  LEGACY_CUTOVER_FIRST_RESULT="$(replay_batch_zero)"
+  if [[ "$LEGACY_CUTOVER_FIRST_RESULT" != "$FIRST_RESULT" ]]; then
+    echo 'staging-only cutover did not freeze the legacy batch-zero receipt' >&2
+    printf 'legacy: %s\ncutover: %s\n' \
+      "$FIRST_RESULT" "$LEGACY_CUTOVER_FIRST_RESULT" >&2
+    exit 1
+  fi
+
+  LEGACY_CUTOVER_SECOND_RESULT="$(psql_cmd -Atq <<'SQL'
+SELECT arena.write_leaderboard_rank_generation_batch_v1(
+  case_row.season_id,
+  case_row.generation_seq,
+  case_row.score_cohort_id,
+  1,
+  case_row.score_input_manifest_id,
+  case_row.score_input_manifest_digest,
+  case_row.batch_sha256_plan,
+  case_row.batch_1_rows
+)::text
+FROM arena.fixture_atomic_writer_case AS case_row;
+SQL
+)"
+  if [[ "$LEGACY_CUTOVER_SECOND_RESULT" != "$SECOND_RESULT" ]]; then
+    echo 'staging-only cutover did not freeze the legacy batch-one receipt' >&2
+    printf 'legacy: %s\ncutover: %s\n' \
+      "$SECOND_RESULT" "$LEGACY_CUTOVER_SECOND_RESULT" >&2
+    exit 1
+  fi
+
+  LEGACY_CUTOVER_STAGE_AFTER="$(psql_cmd -Atqc "
+    SELECT pg_catalog.concat_ws(
+      '|',
+      (SELECT pg_catalog.count(*)
+       FROM ONLY arena.leaderboard_rank_generation_stage_batches),
+      (SELECT pg_catalog.count(*)
+       FROM ONLY arena.leaderboard_rank_generation_stage_rows)
+    );
+  ")"
+  if [[ "$LEGACY_CUTOVER_STAGE_AFTER" != "$LEGACY_CUTOVER_STAGE_BEFORE" \
+     || "$(capture_atomic_state)" != "$LEGACY_CUTOVER_STATE_BEFORE" ]]; then
+    echo 'legacy cutover replay staged or rewrote durable state' >&2
+    exit 1
+  fi
+
+  # The compatibility path is still fail-closed: an old parent receipt cannot
+  # survive the loss of its exact per-source authority. Perform the hostile
+  # deletion and replay in one transaction so the expected error must restore
+  # both the row and immutable-trigger topology.
+  expect_failure \
+    'staging-only cutover replay accepted an incomplete legacy source graph' \
+    'generation batch receipt conflicts with immutable replay' \
+    "BEGIN;
+     ALTER TABLE arena.leaderboard_rank_generation_source_fence_receipts
+       DISABLE TRIGGER
+         leaderboard_rank_generation_source_fence_receipts_immutable;
+     DELETE FROM ONLY arena.leaderboard_rank_generation_source_fence_receipts
+     WHERE season_id='90D'
+       AND generation_seq=1
+       AND batch_index=0
+       AND source='alpha';
+     ALTER TABLE arena.leaderboard_rank_generation_source_fence_receipts
+       ENABLE TRIGGER
+         leaderboard_rank_generation_source_fence_receipts_immutable;
+     SELECT arena.write_leaderboard_rank_generation_batch_v1(
+       case_row.season_id,
+       case_row.generation_seq,
+       case_row.score_cohort_id,
+       0,
+       case_row.score_input_manifest_id,
+       case_row.score_input_manifest_digest,
+       case_row.batch_sha256_plan,
+       case_row.batch_0_rows
+     )
+     FROM arena.fixture_atomic_writer_case AS case_row;
+     COMMIT;"
+  if [[ "$(capture_atomic_state)" != "$LEGACY_CUTOVER_STATE_BEFORE" \
+     || "$(psql_cmd -Atqc "
+       SELECT pg_catalog.concat_ws(
+         '|',
+         (SELECT pg_catalog.count(*)
+          FROM ONLY arena.leaderboard_rank_generation_stage_batches),
+         (SELECT pg_catalog.count(*)
+          FROM ONLY arena.leaderboard_rank_generation_stage_rows)
+       );
+     ")" != "$LEGACY_CUTOVER_STAGE_BEFORE" ]]; then
+    echo 'rejected legacy cutover replay changed authority or stage state' >&2
+    exit 1
+  fi
+
+  printf 'PostgreSQL 17 legacy-receipt staging-only cutover replay proof passed.\n'
+  exit 0
 fi
 
 # A pre-attestation deployment may already contain batch-zero receipts. Never
