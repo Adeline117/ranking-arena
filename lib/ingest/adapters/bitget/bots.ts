@@ -34,9 +34,17 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { ProfileQualityReject } from '../../core/profile-quality'
 import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
 import {
+  capturePartitionedNumericLeaderboard,
+  pageFetcher,
+  replayJson,
+  replayPaged,
+} from '../../fetch/capture'
+import { LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT } from '../../acquisition-manifest'
+import {
+  assertCanonicalBitgetBotsSource,
   assertBitgetBotsLeaderboardPublication,
+  inspectBitgetBotsBoardPage,
   parseBitgetBotsBoardPage,
   parseBitgetBotsCopiers,
   parseBitgetBotsProfile,
@@ -195,6 +203,80 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
     // networkidle is best-effort — a busy page still yields valid cookies
   })
   warmedSessions.add(session)
+}
+
+function configuredCallerPageCap(value: unknown): number | null {
+  if (value === undefined || value === null) return null
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    Object.is(value, -0) ||
+    value < 1
+  ) {
+    throw new TypeError('[bitget_bots] meta.max_pages must be a positive safe integer')
+  }
+  return value
+}
+
+export async function captureBitgetBotsLeaderboard(
+  session: FetchSession,
+  src: SourceRow,
+  timeframe: RankingTimeframe
+) {
+  const contract = assertCanonicalBitgetBotsSource(src, timeframe)
+  const listUrl = endpoint(src, 'list', `${S_BASE}/traceRanks`)
+  const pageSize = src.page_size!
+  const callerPageCap = configuredCallerPageCap(src.meta.max_pages)
+  await warmSession(session, src)
+
+  return capturePartitionedNumericLeaderboard({
+    session,
+    fetcher: pageFetcher(session),
+    partitions: contract.boards.map((board) => {
+      const strategyType = BOT_BOARD_STRATEGY_TYPE[board]
+      if (strategyType === undefined) {
+        throw new TypeError(`[bitget_bots] unreviewed canonical board ${board}`)
+      }
+      let reportedTotal: number | null = null
+      return {
+        partitionId: board,
+        buildRequest: (pageIndex: number) => ({
+          url: listUrl,
+          method: 'POST' as const,
+          headers: HEADERS,
+          body: { strategyType, orderType: 3, pageNo: pageIndex, pageSize },
+        }),
+        projectPublicRequest: (_actualRequest: unknown, pageIndex: number) => ({
+          url: listUrl,
+          method: 'POST' as const,
+          body: { strategyType, orderType: 3, pageNo: pageIndex, pageSize },
+        }),
+        pageBinding: { location: 'body' as const, path: ['pageNo'] },
+        extractMeta: (payload: unknown, requestPageIndex: number) => {
+          const decoded = inspectBitgetBotsBoardPage({
+            data_contract: LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+            partition_id: board,
+            request_page_index: requestPageIndex,
+            request_page_size: pageSize,
+            payload,
+          })
+          if (reportedTotal === null) reportedTotal = decoded.page.reportedTotal
+          else if (decoded.page.reportedTotal !== reportedTotal) {
+            throw new TypeError(`[bitget_bots] ${board} totalRecord changed within one crawl`)
+          }
+          return {
+            rowCount: decoded.page.rows.length,
+            reportedPopulation: decoded.page.reportedTotal,
+            reportedPageCount: null,
+            reportedCurrentPage: decoded.reportedCurrentPage,
+            reportedPageSize: null,
+          }
+        },
+        pageSize,
+        callerPageCap,
+      }
+    }),
+  })
 }
 
 /** Session-scoped tradeStrategyInfo cache: one fetch serves all TF parses. */

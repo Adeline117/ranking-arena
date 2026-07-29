@@ -9,6 +9,7 @@
  */
 
 import { createHash } from 'crypto'
+import { LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT } from '../../acquisition-manifest'
 import type {
   ParseCtx,
   ParsedCopierRow,
@@ -183,11 +184,12 @@ function canonicalNonNegativeInteger(value: unknown, label: string): number {
   return numeric
 }
 
-function assertCanonicalSource(
+export function assertCanonicalBitgetBotsSource(
   src: SourceRow,
   timeframe: RankingTimeframe
 ): {
   product: 'spot' | 'futures'
+  boards: readonly string[]
 } {
   const contract = BOT_SOURCE_CONTRACT[src.slug as keyof typeof BOT_SOURCE_CONTRACT]
   if (!contract) publicationContractError(`unexpected source slug ${src.slug}`)
@@ -226,7 +228,7 @@ export function assertBitgetBotsLeaderboardPublication(
   src: SourceRow,
   timeframe: RankingTimeframe
 ): void {
-  const contract = assertCanonicalSource(src, timeframe)
+  const contract = assertCanonicalBitgetBotsSource(src, timeframe)
   if (!Number.isSafeInteger(result.rejectedRowCount) || result.rejectedRowCount !== 0) {
     publicationContractError('the complete board must have zero rejected rows')
   }
@@ -375,15 +377,56 @@ function pairOf(item: Dict): string | null {
   return typeof sid === 'string' ? sid.replace(/_[A-Z]+$/, '') : null
 }
 
+export interface DecodedBitgetBotsBoardPage {
+  page: ParsedLeaderboardPage
+  reportedCurrentPage: number
+}
+
 /**
- * Board page (wrapped at fetch time as {board, payload} so the strategy/
- * product split survives in RAW): payload.data.data[] cards, totalRecord.
- * Each card = one bot instance; strategyId is both the exchange_bot_id and
- * the shadow trader's exchange_trader_id.
+ * V4 parser pages carry deterministic partition metadata around the exact
+ * upstream payload. The legacy {board, payload} wrapper remains parseable for
+ * historical RAW replay, but canonical capture never writes that wrapper into
+ * source RAW.
  */
-export function parseBitgetBotsBoardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
+function decodeBitgetBotsBoardPage(raw: unknown): DecodedBitgetBotsBoardPage {
   const wrapper = dataRecord(raw, 'board page wrapper')
-  const board = canonicalRequiredString(wrapper.board, 'board page wrapper.board')
+  const partitioned = Object.hasOwn(wrapper, 'data_contract')
+  let board: string
+  let requestPageIndex: number | null = null
+  let requestPageSize: number | null = null
+  if (partitioned) {
+    exactDataFields(
+      wrapper,
+      ['data_contract', 'partition_id', 'request_page_index', 'request_page_size', 'payload'],
+      'partitioned board page wrapper'
+    )
+    if (wrapper.data_contract !== LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT) {
+      publicationContractError('partitioned board page data contract is unsupported')
+    }
+    board = canonicalRequiredString(wrapper.partition_id, 'board page wrapper.partition_id')
+    requestPageIndex = canonicalNonNegativeInteger(
+      wrapper.request_page_index,
+      'board page request_page_index'
+    )
+    requestPageSize = canonicalNonNegativeInteger(
+      wrapper.request_page_size,
+      'board page request_page_size'
+    )
+  } else {
+    board = canonicalRequiredString(wrapper.board, 'board page wrapper.board')
+    if (wrapper.requestPageIndex !== undefined) {
+      requestPageIndex = canonicalNonNegativeInteger(
+        wrapper.requestPageIndex,
+        'board page requestPageIndex'
+      )
+    }
+    if (wrapper.requestPageSize !== undefined) {
+      requestPageSize = canonicalNonNegativeInteger(
+        wrapper.requestPageSize,
+        'board page requestPageSize'
+      )
+    }
+  }
   const info = BOARD_FIELDS[board]
   if (!info) publicationContractError(`unreviewed board ${board}`)
   const payload = dataRecord(wrapper.payload, 'board page payload')
@@ -393,12 +436,8 @@ export function parseBitgetBotsBoardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
   const items = data.data as unknown[]
   const pageNo = canonicalNonNegativeInteger(data.pageNo, 'board page pageNo')
   if (pageNo < 1) publicationContractError('board page pageNo must be positive')
-  if (wrapper.requestPageIndex !== undefined) {
-    const requested = canonicalNonNegativeInteger(
-      wrapper.requestPageIndex,
-      'board page requestPageIndex'
-    )
-    if (requested < 1 || requested !== pageNo) {
+  if (requestPageIndex !== null) {
+    if (requestPageIndex < 1 || requestPageIndex !== pageNo) {
       publicationContractError('board page pageNo must match its exact request')
     }
   }
@@ -409,11 +448,8 @@ export function parseBitgetBotsBoardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
   if (typeof data.nextFlag !== 'boolean') {
     publicationContractError('board page nextFlag must be boolean')
   }
-  if (wrapper.requestPageSize !== undefined) {
-    const pageSize = canonicalNonNegativeInteger(
-      wrapper.requestPageSize,
-      'board page requestPageSize'
-    )
+  if (requestPageSize !== null) {
+    const pageSize = requestPageSize
     if (pageSize < 1) publicationContractError('board page requestPageSize must be positive')
     const rowsBeforePage = (pageNo - 1) * pageSize
     const pageCapacity = pageNo * pageSize
@@ -487,7 +523,15 @@ export function parseBitgetBotsBoardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
       },
     })
   }
-  return { rows, reportedTotal }
+  return { page: { rows, reportedTotal }, reportedCurrentPage: pageNo }
+}
+
+export function parseBitgetBotsBoardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
+  return decodeBitgetBotsBoardPage(raw).page
+}
+
+export function inspectBitgetBotsBoardPage(raw: unknown): DecodedBitgetBotsBoardPage {
+  return decodeBitgetBotsBoardPage(raw)
 }
 
 /** profitData rows: {amount, profitRate, fullTime "YYYY-MM-DD HH:mm:ss"}.
