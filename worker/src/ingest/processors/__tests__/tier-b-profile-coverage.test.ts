@@ -18,6 +18,7 @@ const mockValidateStats = jest.fn()
 const mockRoiCrossCheckOk = jest.fn()
 const mockGetHistoryCursor = jest.fn()
 const mockPublishProfile = jest.fn()
+const mockPublishHistoryRows = jest.fn()
 const mockDbQuery = jest.fn()
 const mockQueueAdd = jest.fn()
 
@@ -50,7 +51,7 @@ jest.mock('@/lib/ingest/staging/rejects', () => ({
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
   getHistoryCursor: (...args: unknown[]) => mockGetHistoryCursor(...args),
-  publishHistoryRows: jest.fn(),
+  publishHistoryRows: (...args: unknown[]) => mockPublishHistoryRows(...args),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
 }))
 jest.mock('@/lib/ingest/field-inventory', () => ({
@@ -157,6 +158,7 @@ describe('Tier-B profile coverage accounting', () => {
     mockValidateStats.mockImplementation((stats: unknown[]) => ({ valid: stats, rejects: [] }))
     mockRoiCrossCheckOk.mockReturnValue(null)
     mockPublishProfile.mockResolvedValue(undefined)
+    mockPublishHistoryRows.mockResolvedValue(0)
     mockQueueAdd.mockResolvedValue(undefined)
     mockGetLatestPassedNativeCohort.mockResolvedValue({
       traders: [
@@ -230,6 +232,86 @@ describe('Tier-B profile coverage accounting', () => {
         String(sql).includes('INSERT INTO arena.ingest_cursors')
       )
     ).toBe(true)
+  })
+
+  it('crawls declared histories when board rows replace the profile surface', async () => {
+    const parseHistory = jest.fn().mockReturnValue([{ dedupeHash: 'order-1' }])
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: false,
+        positions: true,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: async function* () {
+        yield {
+          pageIndex: 1,
+          payload: { orders: [{ id: 'order-1' }] },
+          url: 'https://bingx.test/orders',
+          fetchedAt: '2026-07-15T12:00:00.000Z',
+        }
+      },
+      parseHistory,
+    })
+    mockGetHistoryCursor.mockResolvedValue(null)
+    mockPublishHistoryRows.mockResolvedValue(1)
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      surfacesFetched: 0,
+      historyRowsWritten: 1,
+      errors: 0,
+    })
+
+    expect(mockProfileTimeframes).not.toHaveBeenCalled()
+    expect(mockGetProfile).not.toHaveBeenCalled()
+    expect(parseHistory).toHaveBeenCalledWith(
+      { orders: [{ id: 'order-1' }] },
+      'orders',
+      expect.objectContaining({ sourceSlug: src.slug })
+    )
+    expect(mockPublishHistoryRows).toHaveBeenCalledTimes(1)
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(true)
+  })
+
+  it('does not mark a history-only trader fresh when record fetching fails', async () => {
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: false,
+        positions: true,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: async function* () {
+        throw new Error('records unavailable')
+      },
+      parseHistory: jest.fn(),
+    })
+    mockGetHistoryCursor.mockResolvedValue(null)
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      surfacesFetched: 0,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+
+    expect(mockGetProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(false)
   })
 
   it('skips product-specific histories declared unsupported by a shared adapter', async () => {

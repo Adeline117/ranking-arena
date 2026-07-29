@@ -171,7 +171,9 @@ export async function processTierB(
   if (src.status !== 'active') return empty
 
   const adapter = getAdapter(src.adapter_slug)
-  if (!supportsSourceSurface(adapter, src, 'profile')) return empty
+  const profileSupported = supportsSourceSurface(adapter, src, 'profile')
+  const supportedHistoryKinds = historyKinds(adapter, src)
+  if (!profileSupported && supportedHistoryKinds.length === 0) return empty
 
   // Deadline chunking (2026-07-03 slot-monopoly root fix): a full top-300
   // deep-profile pass ran 3-4h per source and, phase-locked across sources,
@@ -210,7 +212,7 @@ export async function processTierB(
 
   // native ∪ derived: derived 30/90 boards are synthesized from these
   // profile stats (spec §1.1-C), so Tier-B must crawl their TFs too.
-  const timeframes = profileTimeframes(src)
+  const timeframes = profileSupported ? profileTimeframes(src) : []
   // Tier A intentionally keeps the legacy unsuffixed profile (warm cookies).
   // Tier B owns a stable lane so a long profile crawl cannot collide with it.
   const session = await openSession(src, {
@@ -227,6 +229,39 @@ export async function processTierB(
       // so a chain can never spin without advancing).
       if (attempted > 0 && Date.now() - startedAt > deadlineMs) break
       attempted += 1
+
+      // Some boards already contain the complete headline/profile substrate
+      // but still expose separate public record surfaces. BingX is the current
+      // example: profile=false while orders/transfers/copiers=true. The old
+      // profile-only entry gate made those implemented histories unreachable.
+      if (!profileSupported) {
+        try {
+          const ctx: ParseCtx = {
+            sourceSlug: src.slug,
+            currency: src.currency,
+            tfLabelMap: src.tf_label_map,
+            scrapedAt: new Date().toISOString(),
+            meta: src.meta,
+          }
+          result.historyRowsWritten += await crawlTraderHistories(
+            session,
+            adapter,
+            src,
+            trader,
+            ctx
+          )
+          await markProfileAttempted(trader.id)
+          result.tradersCrawled += 1
+        } catch (err) {
+          result.errors += 1
+          console.warn(
+            `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} histories failed:`,
+            err instanceof Error ? err.message : err
+          )
+        }
+        continue
+      }
+
       let terminalTimeframes = 0
       let successfulTimeframes = 0
       let traderHadQualityReject = false
