@@ -74,14 +74,17 @@ export async function translateWithGoogle(
   text: string,
   target: TranslateTarget,
   source: TranslateTarget = 'en',
-  timeoutMs = 5000
+  timeoutMs = 5000,
+  signal?: AbortSignal
 ): Promise<string | null> {
   const tl = GOOGLE_TARGET_CODE[target] ?? 'en'
   const sl = GOOGLE_SOURCE_CODE[source] ?? 'auto'
 
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`
-    const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+    const timeoutSignal = AbortSignal.timeout(timeoutMs)
+    const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+    const response = await fetch(url, { signal: requestSignal })
     if (!response.ok) return null
 
     const data = await response.json()
@@ -111,13 +114,14 @@ export async function translateText(
   text: string,
   target: TranslateTarget,
   source: TranslateTarget = 'en',
-  timeoutMs = 5000
+  timeoutMs = 5000,
+  signal?: AbortSignal
 ): Promise<string | null> {
   const trimmed = (text || '').trim()
   if (!trimmed) return null
   if (source === target) return trimmed
 
-  const raw = await translateWithGoogle(trimmed, target, source, timeoutMs)
+  const raw = await translateWithGoogle(trimmed, target, source, timeoutMs, signal)
   if (!raw) return null
   return fixCryptoTerms(raw, target)
 }
