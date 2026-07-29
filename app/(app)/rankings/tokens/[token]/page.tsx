@@ -4,11 +4,14 @@ import { unstable_cache } from 'next/cache'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import TokenRankingClient, { type Period, type TokenTrader } from './TokenRankingClient'
 import { BASE_URL } from '@/lib/constants/urls'
-import { getTokenTraderRankings } from '@/lib/rankings/token-traders'
+import { readSealedTokenTraderRankings } from '@/lib/rankings/token-traders'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 const CURRENT_YEAR = new Date().getFullYear()
 
-// ISR: 1 hour (matches the by-token API cold-cache TTL).
-export const revalidate = 3600
+// The page must establish current publication authority before selecting its
+// generation-keyed data cache entry; persisted ISR HTML would bypass that step.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 // Only allow 1-20 uppercase alphanumeric characters (valid crypto token symbols)
 const VALID_TOKEN_RE = /^[A-Z0-9]{1,20}$/
@@ -19,24 +22,50 @@ const PAGE_SIZE = 50
 // can retry without presenting a fabricated empty ranking.
 const SSR_TIMEOUT_MS = 4000
 
+/**
+ * Server-side first-page prefetch — replicates the GET /api/rankings/by-token
+ * aggregation for offset 0 so the board paints rows on first byte instead of a
+ * client-only spinner. The live publication identity participates in the cache
+ * key, and the loader verifies it again before publishing the entry.
+ */
+const getTokenTradersSSREntry = unstable_cache(
+  async (token: string, period: Period, expectedPublicationIdentity: string) => {
+    const sealedRead = await readSealedTokenTraderRankings(
+      getSupabaseAdmin(),
+      token,
+      period,
+      PAGE_SIZE,
+      0
+    )
+    if (sealedRead.publicationIdentity !== expectedPublicationIdentity) {
+      throw new Error('token ranking generation changed before SSR cache publication')
+    }
+    return sealedRead
+  },
+  ['token-traders-ssr-sealed-v5'],
+  { revalidate: 3600, tags: ['rankings', 'by-token'] }
+)
+
 export async function loadTokenTradersSSR(
   token: string,
   period: Period
 ): Promise<{ traders: TokenTrader[]; total: number }> {
-  return getTokenTraderRankings(getSupabaseAdmin(), token, period, PAGE_SIZE, 0)
+  const currentGeneration = await readSealedRankingAuthorityGeneration(
+    getSupabaseAdmin(),
+    period,
+    async () => null,
+    { timeoutMs: SSR_TIMEOUT_MS }
+  )
+  const sealedRead = await getTokenTradersSSREntry(
+    token,
+    period,
+    currentGeneration.publicationIdentity
+  )
+  if (sealedRead.publicationIdentity !== currentGeneration.publicationIdentity) {
+    throw new Error('token ranking SSR cache is not the current sealed publication')
+  }
+  return sealedRead.value
 }
-
-/**
- * Server-side first-page prefetch — replicates the GET /api/rankings/by-token
- * aggregation for offset 0 so the board paints rows on first byte instead of a
- * client-only spinner. Wrapped in unstable_cache (keyed on token+period) and
- * de-duped with the API's own Redis layer by the shared 1h ISR window.
- */
-// Do not inherit empty entries cached by the former catch-and-return loader.
-const getTokenTradersSSR = unstable_cache(loadTokenTradersSSR, ['token-traders-ssr-v4'], {
-  revalidate: 3600,
-  tags: ['rankings', 'by-token'],
-})
 
 async function withSsrTimeout<T>(promise: Promise<T>): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined
@@ -131,7 +160,7 @@ export default async function TokenDetailPage({
   let initial: { traders: TokenTrader[]; total: number } = { traders: [], total: 0 }
   let initialStatus: 'success' | 'error' = 'success'
   try {
-    initial = await withSsrTimeout(getTokenTradersSSR(token, period))
+    initial = await withSsrTimeout(loadTokenTradersSSR(token, period))
   } catch {
     initialStatus = 'error'
   }

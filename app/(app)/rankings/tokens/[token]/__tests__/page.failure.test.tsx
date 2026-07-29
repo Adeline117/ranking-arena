@@ -1,7 +1,10 @@
 import type { ReactElement } from 'react'
 
 const mockGetTokenTraderRankings = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 const mockNotFound = jest.fn()
+const mockCurrentPublicationIdentity = 'current-publication'
+let mockTokenPublicationIdentity = mockCurrentPublicationIdentity
 
 jest.mock('next/cache', () => ({
   unstable_cache: (loader: (...args: unknown[]) => unknown) => loader,
@@ -16,7 +19,15 @@ jest.mock('@/lib/supabase/server', () => ({
 }))
 
 jest.mock('@/lib/rankings/token-traders', () => ({
-  getTokenTraderRankings: (...args: unknown[]) => mockGetTokenTraderRankings(...args),
+  readSealedTokenTraderRankings: async (...args: unknown[]) => ({
+    value: await mockGetTokenTraderRankings(...args),
+    publicationIdentity: mockTokenPublicationIdentity,
+  }),
+}))
+
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
 }))
 
 jest.mock('../TokenRankingClient', () => ({
@@ -24,7 +35,7 @@ jest.mock('../TokenRankingClient', () => ({
   default: () => null,
 }))
 
-import TokenDetailPage, { loadTokenTradersSSR } from '../page'
+import TokenDetailPage, { dynamic, loadTokenTradersSSR, revalidate } from '../page'
 
 type TokenDetailProps = {
   token: string
@@ -37,6 +48,15 @@ type TokenDetailProps = {
 describe('token ranking detail SSR state', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockTokenPublicationIdentity = mockCurrentPublicationIdentity
+    mockReadSealedRankingAuthorityGeneration.mockResolvedValue({
+      publicationIdentity: mockCurrentPublicationIdentity,
+    })
+  })
+
+  it('renders dynamically so HTML cannot outlive publication authority', () => {
+    expect(dynamic).toBe('force-dynamic')
+    expect(revalidate).toBe(0)
   })
 
   it('throws upstream failures out of the cached loader and marks the client seed failed', async () => {
@@ -59,6 +79,8 @@ describe('token ranking detail SSR state', () => {
 
   it('keeps a legitimate empty page distinct from failure', async () => {
     mockGetTokenTraderRankings.mockResolvedValue({ traders: [], total: 0 })
+
+    await expect(loadTokenTradersSSR('BTC', '90D')).resolves.toEqual({ traders: [], total: 0 })
 
     const element = (await TokenDetailPage({
       params: Promise.resolve({ token: 'btc' }),
@@ -91,5 +113,34 @@ describe('token ranking detail SSR state', () => {
     } finally {
       jest.useRealTimers()
     }
+  })
+
+  it('keys the SSR entry with current publication authority', async () => {
+    mockGetTokenTraderRankings.mockResolvedValue({ traders: [], total: 0 })
+
+    await loadTokenTradersSSR('BTC', '30D')
+
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledWith(
+      { kind: 'admin-client' },
+      '30D',
+      expect.any(Function),
+      { timeoutMs: 4_000 }
+    )
+    expect(mockGetTokenTraderRankings).toHaveBeenCalledWith(
+      { kind: 'admin-client' },
+      'BTC',
+      '30D',
+      50,
+      0
+    )
+  })
+
+  it('rejects a generation that changes before cache publication', async () => {
+    mockTokenPublicationIdentity = 'superseded-publication'
+    mockGetTokenTraderRankings.mockResolvedValue({ traders: [], total: 0 })
+
+    await expect(loadTokenTradersSSR('BTC', '90D')).rejects.toThrow(
+      'token ranking generation changed before SSR cache publication'
+    )
   })
 })
