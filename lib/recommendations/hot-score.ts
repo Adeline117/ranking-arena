@@ -12,7 +12,12 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
-import { filterPublicRankingRows } from '@/lib/rankings/publication-policy'
+import {
+  filterPublicRankingRows,
+  filterPublicRankingSources,
+} from '@/lib/rankings/publication-policy'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const logger = createLogger('hot-score')
 
@@ -56,6 +61,7 @@ const WEIGHTS = {
 
 /** How many hours back to look for "recent" snapshots */
 const LOOKBACK_HOURS = 48
+const HOT_RANKING_SOURCES = Object.freeze(filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES))
 
 // ---------------------------------------------------------------------------
 // Supabase helper
@@ -96,31 +102,53 @@ interface RankRow {
 export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
   const supabase = getSupabase()
 
-  // 1. Fetch current leaderboard ranks (latest standings)
-  const { data: ranks, error: ranksErr } = await supabase
-    .from('leaderboard_ranks')
-    .select(
-      'source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate, followers'
-    )
-    .eq('season_id', '90D')
-    .not('arena_score', 'is', null)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('arena_score', { ascending: false })
-    .limit(300)
+  // 1. Candidate membership and rank fields must come from one immutable
+  // public generation. Filtering after LIMIT lets quarantined rows crowd out
+  // valid candidates even if they are removed later.
+  let ranks: RankRow[]
+  try {
+    const sealedRead = await readSealedRankingGeneration(
+      supabase,
+      { season: '90D', sources: HOT_RANKING_SOURCES },
+      async (publication) => {
+        const { data, error } = await supabase
+          .from('leaderboard_ranks')
+          .select(
+            'source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate, followers'
+          )
+          .eq('season_id', '90D')
+          .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+          .in('source', HOT_RANKING_SOURCES)
+          .not('arena_score', 'is', null)
+          .or('is_outlier.is.null,is_outlier.eq.false')
+          .order('arena_score', { ascending: false })
+          .order('source', { ascending: true })
+          .order('source_trader_id', { ascending: true })
+          .limit(300)
 
-  if (ranksErr || !ranks || ranks.length === 0) {
-    logger.error('Failed to fetch leaderboard_ranks', { error: ranksErr })
+        if (error || !Array.isArray(data)) {
+          throw new Error(`hot ranking query failed: ${error?.message ?? 'missing row array'}`)
+        }
+        const publicRows = filterPublicRankingRows(data as RankRow[], (rank) => rank.source)
+        if (publicRows.length !== data.length) {
+          throw new Error('hot ranking query crossed public source authority')
+        }
+        return publicRows
+      }
+    )
+    ranks = sealedRead.value
+  } catch (error) {
+    logger.error('Failed to fetch sealed leaderboard generation', { error })
     return []
   }
 
-  const typedRanks = filterPublicRankingRows(ranks as unknown as RankRow[], (rank) => rank.source)
-  if (typedRanks.length === 0) return []
+  if (ranks.length === 0) return []
 
   // 2. Fetch recent daily snapshots for momentum calculation.
   // Migrated off retiring trader_snapshots_v2 → trader_daily_snapshots (daily
   // roi trajectory; coarser than hourly but sufficient for momentum).
   const cutoffDate = new Date(Date.now() - LOOKBACK_HOURS * 3600 * 1000).toISOString().slice(0, 10)
-  const traderIds = typedRanks.map((r) => r.source_trader_id)
+  const traderIds = ranks.map((r) => r.source_trader_id)
 
   // Fetch in parallel batches to avoid oversized IN clause
   const batchSize = 100
@@ -137,10 +165,13 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
           .in('trader_key', batch)
           .gte('date', cutoffDate)
           .order('date', { ascending: true })
-      ).then(({ data: snaps }) => {
+      ).then(({ data: snaps, error }) => {
+        if (error || !Array.isArray(snaps)) {
+          throw new Error(`hot snapshot query failed: ${error?.message ?? 'missing row array'}`)
+        }
         if (snaps) {
           allSnapshots.push(
-            ...(snaps as unknown as Array<Record<string, unknown>>).map((s) => ({
+            ...snaps.map((s) => ({
               source: String(s.platform || ''),
               source_trader_id: String(s.trader_key || ''),
               roi: s.roi != null ? Number(s.roi) : null,
@@ -168,7 +199,7 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
   const now = Date.now()
   const scored: HotTrader[] = []
 
-  for (const rank of typedRanks) {
+  for (const rank of ranks) {
     const key = `${rank.source}:${rank.source_trader_id}`
     const snapshots = snapshotMap.get(key) || []
 
@@ -195,7 +226,12 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
     })
   }
 
-  scored.sort((a, b) => b.hot_score - a.hot_score)
+  scored.sort(
+    (a, b) =>
+      b.hot_score - a.hot_score ||
+      a.source.localeCompare(b.source) ||
+      a.source_trader_id.localeCompare(b.source_trader_id)
+  )
   return scored.slice(0, limit)
 }
 

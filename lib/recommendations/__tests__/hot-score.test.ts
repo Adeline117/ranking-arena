@@ -10,11 +10,22 @@ jest.mock('@/lib/supabase/server', () => ({
       const resp = mockResponses[table] ?? { data: [] }
       const p = Promise.resolve({ data: resp.data, error: resp.error ?? null })
       const obj: Record<string, unknown> = {}
-      for (const m of ['select', 'eq', 'not', 'or', 'in', 'gte', 'order']) obj[m] = () => obj
+      for (const m of ['select', 'eq', 'filter', 'not', 'or', 'in', 'gte', 'order'])
+        obj[m] = () => obj
       obj.limit = () => p
       obj.then = (...args: Parameters<Promise<unknown>['then']>) => p.then(...args)
       return obj
     },
+  }),
+}))
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  readSealedRankingGeneration: async (
+    _supabase: unknown,
+    _request: unknown,
+    reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+  ) => ({
+    publication: { scoreCohortId: 'cohort-1', proofs: [] },
+    value: await reader({ scoreCohortId: 'cohort-1' }),
   }),
 }))
 jest.mock('@/lib/utils/logger', () => ({

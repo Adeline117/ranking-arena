@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
 
-const CACHE_KEY = publicRankingCacheKey('recommendations:hot')
+const CACHE_KEY = publicRankingCacheKey('recommendations:hot:sealed-v2')
 
 export const GET = withPublic(
   async ({ request }) => {
