@@ -69,6 +69,44 @@ describe('first-party account equity evidence', () => {
     ).rejects.toThrow('unrealized PnL evidence is unavailable')
   })
 
+  it('rejects incomplete live-position PnL instead of treating the missing amount as zero', async () => {
+    const incompletePositions = client({
+      fetchPositions: jest.fn().mockResolvedValue([
+        { contracts: 1, unrealizedPnl: 20 },
+        { contracts: 2, unrealizedPnl: null },
+        { contracts: 0, unrealizedPnl: null },
+      ]),
+    })
+
+    await expect(
+      fetchFirstPartyAccount(incompletePositions, {
+        nowMs: NOW,
+        balanceSemantics: 'wallet_excludes_unrealized',
+        realizedPnlSource: 'positions_history',
+      })
+    ).rejects.toThrow('unrealized PnL evidence is unavailable')
+  })
+
+  it('does not publish a partial unrealized total beside authoritative total equity', async () => {
+    const incompletePositions = client({
+      fetchPositions: jest.fn().mockResolvedValue([
+        { contracts: 1, unrealizedPnl: 20 },
+        { contracts: 2, unrealizedPnl: null },
+      ]),
+    })
+
+    await expect(
+      fetchFirstPartyAccount(incompletePositions, {
+        nowMs: NOW,
+        balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
+      })
+    ).resolves.toMatchObject({
+      equityNow: 100,
+      unrealizedNow: null,
+    })
+  })
+
   it('can use authoritative total equity when the optional positions surface is unavailable', async () => {
     const missingPositions = client({
       fetchPositions: jest.fn().mockRejectedValue(new Error('positions unavailable')),

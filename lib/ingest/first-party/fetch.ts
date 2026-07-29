@@ -277,7 +277,21 @@ export async function fetchFirstPartyAccount(
   if (client.fetchPositions) {
     try {
       const positions = await client.fetchPositions(undefined)
-      unrealizedNow = positions.reduce((s, p) => s + (num(p.unrealizedPnl) ?? 0), 0)
+      let complete = true
+      let sum = 0
+      for (const position of positions) {
+        const contracts = num(position.contracts)
+        const pnl = num(position.unrealizedPnl)
+        // Exchanges commonly include dormant zero-contract rows with no PnL.
+        // A live (or indeterminate) row without PnL must not be invented as 0.
+        if (contracts === 0) continue
+        if (pnl === null) {
+          complete = false
+          break
+        }
+        sum += pnl
+      }
+      unrealizedNow = complete ? sum : null
     } catch {
       unrealizedNow = null
     }
