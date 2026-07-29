@@ -491,12 +491,9 @@ async function syncExpectedMetrics(
 export async function reconcileServingSources(): Promise<void> {
   try {
     const names = await getServingSourceNames()
-    if (names.length === 0) {
-      // Never blow away the list from an empty/transient read — the frontend
-      // would revert every trader to the empty legacy page.
-      console.warn('[ingest-scheduler] serving set empty; leaving Redis mirror untouched')
-      return
-    }
+    // An empty successful DB read is authoritative and must clear a stale
+    // mirror. Query failures throw before this point and leave the last-known
+    // Redis fallback intact.
     await getConnection().set('serving_sources', names.join(','))
     console.log(`[ingest-scheduler] serving_sources mirror updated: ${names.length} names`)
   } catch (err) {

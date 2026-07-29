@@ -109,7 +109,7 @@ jest.mock('@/lib/ingest/sources', () => ({
   ]),
 }))
 
-import { reconcileSchedulers } from '../scheduler'
+import { reconcileSchedulers, reconcileServingSources } from '../scheduler'
 import { getActiveSources } from '@/lib/ingest/sources'
 
 const HOUR = 3600_000
@@ -143,6 +143,56 @@ describe('reconcileSchedulers cleanup/revival', () => {
         opts: { priority: 4 },
       }
     )
+  })
+
+  it('clears the Redis fallback after an authoritative empty serving read', async () => {
+    mockGetServingSourceNames.mockResolvedValueOnce([])
+
+    await reconcileServingSources()
+
+    expect(mockRedisSet).toHaveBeenCalledWith('serving_sources', '')
+  })
+
+  it('preserves first-party schedulers when authorization authority cannot be loaded', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mockDbQuery.mockRejectedValueOnce(new Error('database unavailable'))
+    mockQueue.getJobSchedulers.mockResolvedValue([
+      {
+        key: 'fp:auth-1',
+        name: 'firstparty:sync',
+        next: Date.now() + HOUR,
+        every: 15 * 60_000,
+        template: { data: { authorizationId: 'auth-1' } },
+      },
+      scheduler('tiera:retired_source', Date.now() + HOUR),
+    ])
+
+    await reconcileSchedulers()
+
+    expect(mockQueue.removeJobScheduler).not.toHaveBeenCalledWith('fp:auth-1')
+    expect(mockQueue.removeJobScheduler).toHaveBeenCalledWith('tiera:retired_source')
+    expect(warn).toHaveBeenCalledWith(
+      '[ingest-scheduler] first-party scheduler pass failed (non-fatal):',
+      'database unavailable'
+    )
+    warn.mockRestore()
+  })
+
+  it('removes revoked first-party schedulers after an authoritative empty read', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] })
+    mockQueue.getJobSchedulers.mockResolvedValue([
+      {
+        key: 'fp:revoked-auth',
+        name: 'firstparty:sync',
+        next: Date.now() + HOUR,
+        every: 15 * 60_000,
+        template: { data: { authorizationId: 'revoked-auth' } },
+      },
+    ])
+
+    await reconcileSchedulers()
+
+    expect(mockQueue.removeJobScheduler).toHaveBeenCalledWith('fp:revoked-auth')
   })
 
   it('removes schedulers no longer wanted, addressing them by key (not id)', async () => {
