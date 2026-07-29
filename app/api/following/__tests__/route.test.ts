@@ -120,11 +120,34 @@ function buildChainMock(table: string): unknown {
 }
 
 const mockSupabaseFrom = jest.fn((table: string) => buildChainMock(table))
+const mockProofTimestamp = new Date(Date.now()).toISOString()
+const mockSupabaseRpc = jest.fn(
+  (_functionName: string, args: { p_season_id: string; p_sources: string[] }) => {
+    const result = Promise.resolve({
+      data: [...args.p_sources].sort().map((source) => ({
+        current_mutation_seq: 1,
+        is_sealed: true,
+        published_identity_sha256: '0'.repeat(64),
+        published_rank_count: 1,
+        rank_mutation_seq: 1,
+        recorded_at: mockProofTimestamp,
+        score_cohort_id: '00000000-0000-4000-8000-000000000001',
+        season_id: args.p_season_id,
+        source,
+        source_as_of: mockProofTimestamp,
+      })),
+      error: null,
+      status: 200,
+    })
+    return { abortSignal: jest.fn(() => result) }
+  }
+)
 
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   getSupabaseAdmin: jest.fn(() => ({
     from: (table: string) => mockSupabaseFrom(table),
+    rpc: (...args: unknown[]) => mockSupabaseRpc(...(args as [string, never])),
   })),
 }))
 
@@ -651,32 +674,37 @@ describe('GET /api/following', () => {
         users: [],
       },
     })
-    mockQueryResults.set('leaderboard_ranks', {
-      data: [
-        {
-          source_trader_id: 'shared-id',
-          source: 'binance_futures',
-          handle: 'Binance trader',
-          avatar_url: null,
-          roi: 20,
-          pnl: null,
-          win_rate: null,
-          followers: null,
-          arena_score: 70,
-        },
-        {
-          source_trader_id: 'shared-id',
-          source: 'bybit',
-          handle: 'Bybit trader',
-          avatar_url: null,
-          roi: 10,
-          pnl: null,
-          win_rate: null,
-          followers: null,
-          arena_score: 60,
-        },
-      ],
-      error: null,
+    const rankRows = [
+      {
+        source_trader_id: 'shared-id',
+        source: 'binance_futures',
+        handle: 'Binance trader',
+        avatar_url: null,
+        roi: 20,
+        pnl: null,
+        win_rate: null,
+        followers: null,
+        arena_score: 70,
+      },
+      {
+        source_trader_id: 'shared-id',
+        source: 'bybit',
+        handle: 'Bybit trader',
+        avatar_url: null,
+        roi: 10,
+        pnl: null,
+        win_rate: null,
+        followers: null,
+        arena_score: 60,
+      },
+    ]
+    mockQueryResponders.set('leaderboard_ranks', (calls) => {
+      const source = calls.find(({ method, args }) => method === 'eq' && args[0] === 'source')
+        ?.args[1]
+      return {
+        data: rankRows.filter((row) => row.source === source),
+        error: null,
+      }
     })
 
     const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))

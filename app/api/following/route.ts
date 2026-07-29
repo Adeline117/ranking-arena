@@ -18,6 +18,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { features } from '@/lib/features'
 import { isPublicProfileActive } from '@/lib/profile/public-audience'
+import { readSealedRankIdentities } from '@/lib/rankings/read-sealed-rank-identities'
 
 export const dynamic = 'force-dynamic'
 
@@ -294,24 +295,20 @@ async function materializeFollowingItems(
   }
 
   if (candidates.traders.length > 0) {
-    const traderIds = [...new Set(candidates.traders.map((candidate) => candidate.traderId))]
-    const lrData = await fetchRowsInChunks(traderIds, 'leaderboard_ranks', async (chunk) =>
-      supabase
-        .from('leaderboard_ranks')
-        .select(
-          'source_trader_id, handle, source, avatar_url, roi, pnl, win_rate, followers, arena_score, rank'
-        )
-        .in('source_trader_id', chunk)
-        .eq('season_id', '90D')
-        .gt('arena_score', 0)
-        .or('is_outlier.is.null,is_outlier.eq.false')
-        .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS))
+    const sealedRanks = await readSealedRankIdentities(
+      supabase,
+      '90D',
+      candidates.traders.flatMap((candidate) =>
+        candidate.source === null
+          ? []
+          : [{ source: candidate.source, sourceTraderId: candidate.traderId }]
+      )
     )
+    const lrData = sealedRanks?.value ?? []
 
     // A trader identity is composite. Matching only source_trader_id can attach
     // another exchange's handle and performance when platforms reuse an ID.
     const traderDataMap = new Map<string, TraderMaterializedData>()
-    const traderRowsByRawId = new Map<string, TraderMaterializedData[]>()
 
     for (const row of lrData) {
       const identity = traderRowIdentity(row)
@@ -327,9 +324,6 @@ async function materializeFollowingItems(
           arena_score: row.arena_score ?? undefined,
         }
         traderDataMap.set(identity, materialized)
-        const rows = traderRowsByRawId.get(row.source_trader_id) || []
-        rows.push(materialized)
-        traderRowsByRawId.set(row.source_trader_id, rows)
       }
     }
 
@@ -338,9 +332,7 @@ async function materializeFollowingItems(
         candidate.source === null
           ? undefined
           : traderDataMap.get(traderCandidateIdentity(candidate))
-      const legacyMatches =
-        candidate.source === null ? traderRowsByRawId.get(candidate.traderId) || [] : []
-      const data = exactData ?? (legacyMatches.length === 1 ? legacyMatches[0] : undefined)
+      const data = exactData
 
       if (!data && candidate.source !== null) {
         logger.warn(
@@ -348,9 +340,10 @@ async function materializeFollowingItems(
         )
       }
       if (!data && candidate.source === null) {
-        logger.warn(
-          `Legacy trader follow has no unambiguous current profile: ${candidate.traderId}`
-        )
+        // A legacy edge without a source is not an authoritative trader
+        // identity. Keep it visible/removable, but never guess one exchange's
+        // ranking data from a raw ID shared by many exchanges.
+        logger.warn(`Legacy trader follow has no authoritative source: ${candidate.traderId}`)
       }
 
       items.push({
