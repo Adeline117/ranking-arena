@@ -40,23 +40,23 @@ interface TraderCompareData {
   handle: string | null
   source: string
   roi: number
-  roi_7d?: number
-  roi_30d?: number
-  pnl?: number
-  max_drawdown?: number
-  win_rate?: number
-  trades_count?: number
-  arena_score?: number
-  return_score?: number
-  drawdown_score?: number
-  stability_score?: number
+  roi_7d?: number | null
+  roi_30d?: number | null
+  pnl?: number | null
+  max_drawdown?: number | null
+  win_rate?: number | null
+  trades_count?: number | null
+  arena_score?: number | null
+  return_score?: number | null
+  drawdown_score?: number | null
+  stability_score?: number | null
   // v4 serving sub-scores (0-100 dimension percentiles)
-  profitability_score?: number
-  risk_control_score?: number
-  execution_score?: number
+  profitability_score?: number | null
+  risk_control_score?: number | null
+  execution_score?: number | null
   is_bot?: boolean
   avatar_url?: string
-  followers?: number
+  followers?: number | null
   equity_curve?: Array<{ date: string; roi: number }>
 }
 
@@ -68,12 +68,55 @@ interface TraderComparisonProps {
 
 type TabKey = 'metrics' | 'bars' | 'equity'
 
+type ComparisonMetricKey =
+  | 'arena_score'
+  | 'roi'
+  | 'roi_30d'
+  | 'roi_7d'
+  | 'pnl'
+  | 'win_rate'
+  | 'max_drawdown'
+  | 'trades_count'
+  | 'profitability_score'
+  | 'risk_control_score'
+  | 'execution_score'
+  | 'followers'
+
+type ComparisonMetric = {
+  key: ComparisonMetricKey
+  label: string
+  format: (value: number) => string
+  higherBetter: boolean
+  isPercent?: boolean
+  isNegative?: boolean
+}
+
+const BOUNDED_SCORE_METRICS = new Set<ComparisonMetricKey>([
+  'arena_score',
+  'win_rate',
+  'profitability_score',
+  'risk_control_score',
+  'execution_score',
+])
+
 // Format helpers — formatPnL and formatRatio imported from @/lib/utils/format
 
 function getValueColor(value: number | undefined | null, isPositiveGood = true): string {
-  if (value == null) return tokens.colors.text.tertiary
+  if (value == null || !Number.isFinite(value)) return tokens.colors.text.tertiary
   if (isPositiveGood) return value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
   return value <= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+}
+
+function normalizedDimension(value: number | undefined | null): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
+    ? value
+    : null
+}
+
+function comparisonMetricValue(trader: TraderCompareData, key: ComparisonMetricKey): number | null {
+  const value = trader[key]
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return BOUNDED_SCORE_METRICS.has(key) ? normalizedDimension(value) : value
 }
 
 function getBestIndex(values: (number | undefined | null)[], isHigherBetter = true): number {
@@ -168,7 +211,7 @@ export default function TraderComparison({
   }
 
   // Metrics rows - bilingual
-  const metrics = [
+  const metrics: ComparisonMetric[] = [
     {
       key: 'arena_score',
       label: t('compareArenaScore'),
@@ -213,7 +256,7 @@ export default function TraderComparison({
     {
       key: 'trades_count',
       label: t('compareTrades'),
-      format: (v: number) => v?.toString() || '—',
+      format: (v: number) => v.toString(),
       higherBetter: true,
     },
     // v4 (2026-07): compare on the flagship's real sub-scores (0-100 dimension
@@ -250,20 +293,23 @@ export default function TraderComparison({
     // v4: 三维 = 盈利/风控/一致性(0-100 百分位),替换 V3 的 return/drawdown/stability
     {
       label: t('scoreProfit'),
-      values: traders.map((tr) => Math.min(tr.profitability_score ?? 0, 100)),
+      values: traders.map((tr) => normalizedDimension(tr.profitability_score)),
     },
     {
       label: t('scoreRisk'),
-      values: traders.map((tr) => Math.min(tr.risk_control_score ?? 0, 100)),
+      values: traders.map((tr) => normalizedDimension(tr.risk_control_score)),
     },
     {
       label: t('scoreExecution'),
-      values: traders.map((tr) => Math.min(tr.execution_score ?? 0, 100)),
+      values: traders.map((tr) => normalizedDimension(tr.execution_score)),
     },
-    { label: t('compareWinRate'), values: traders.map((tr) => Math.min(tr.win_rate ?? 0, 100)) },
+    {
+      label: t('compareWinRate'),
+      values: traders.map((tr) => normalizedDimension(tr.win_rate)),
+    },
     {
       label: t('compareArenaScore'),
-      values: traders.map((tr) => Math.min(tr.arena_score ?? 0, 100)),
+      values: traders.map((tr) => normalizedDimension(tr.arena_score)),
     },
   ]
 
@@ -572,10 +618,7 @@ export default function TraderComparison({
             </thead>
             <tbody role="rowgroup" style={{ display: 'block' }}>
               {metrics.map((metric, metricIdx) => {
-                const values = traders.map(
-                  (tr) =>
-                    (tr as unknown as Record<string, unknown>)[metric.key] as number | undefined
-                )
+                const values = traders.map((tr) => comparisonMetricValue(tr, metric.key))
                 const bestIdx = getBestIndex(values, metric.higherBetter)
 
                 return (
@@ -611,10 +654,9 @@ export default function TraderComparison({
                     </th>
 
                     {traders.map((trader, traderIdx) => {
-                      const value = (trader as unknown as Record<string, unknown>)[metric.key] as
-                        | number
-                        | undefined
-                      const isBest = traderIdx === bestIdx && value != null && isFinite(value)
+                      const value = comparisonMetricValue(trader, metric.key)
+                      const hasValue = value != null
+                      const isBest = traderIdx === bestIdx && hasValue
                       const color =
                         metric.isPercent || metric.isNegative
                           ? getValueColor(value, metric.higherBetter)
@@ -635,7 +677,7 @@ export default function TraderComparison({
                             weight={isBest ? 'black' : 'semibold'}
                             style={{ color, position: 'relative' }}
                           >
-                            {value != null ? metric.format(value) : '—'}
+                            {hasValue ? metric.format(value) : '—'}
                             {isBest && (
                               <span
                                 style={{
@@ -688,7 +730,7 @@ export default function TraderComparison({
                 >
                   {dim.values.map((rawValue, i) => {
                     const trader = traders[i]
-                    const value = Math.max(0, Math.min(rawValue, 100))
+                    const value = rawValue
                     const color = CHART_COLORS[i % CHART_COLORS.length]
                     return (
                       <Box
@@ -725,6 +767,12 @@ export default function TraderComparison({
                           {trader.handle || trader.id.slice(0, 10)}
                         </Text>
                         <Box
+                          role="progressbar"
+                          aria-label={`${dim.label}: ${trader.handle || trader.id}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={value ?? undefined}
+                          aria-valuetext={value == null ? t('notAvailable') : formatRatio(value, 0)}
                           style={{
                             flex: 1,
                             height: 8,
@@ -735,7 +783,7 @@ export default function TraderComparison({
                         >
                           <Box
                             style={{
-                              width: `${value}%`,
+                              width: `${value ?? 0}%`,
                               height: '100%',
                               borderRadius: tokens.radius.full,
                               background: color,
@@ -753,7 +801,7 @@ export default function TraderComparison({
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         >
-                          {formatRatio(value, 0)}
+                          {value == null ? '—' : formatRatio(value, 0)}
                         </Text>
                       </Box>
                     )
