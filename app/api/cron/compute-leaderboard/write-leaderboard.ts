@@ -110,8 +110,8 @@ export async function upsertSourceFreshness(params: {
   const sourceCount = new Set(scoredTraders.map((trader) => trader.source)).size
 
   if (rows.length < sourceCount) {
-    logger.warn(
-      `[${season}] source freshness skipped ${sourceCount - rows.length} source(s) with invalid board watermark`
+    throw new Error(
+      `[${season}] source freshness rejected ${sourceCount - rows.length} source(s) with invalid board watermark`
     )
   }
   if (rows.length === 0) return 0
@@ -201,7 +201,10 @@ export async function upsertLeaderboard(params: {
       batch as Record<string, unknown>[],
       'leaderboard_ranks'
     )
-    if (rejected.length) logRejectedWrites(rejected, supabase)
+    if (rejected.length) {
+      logRejectedWrites(rejected, supabase)
+      upsertErrors += rejected.length
+    }
 
     if (validBatch.length > 0) {
       // Guarantee trader_sources parent rows exist
@@ -291,8 +294,7 @@ export async function zeroOutExcluded(params: {
   let zeroed = 0
   for (const [source, ids] of excludedBySource) {
     if (isOutOfTime(20_000)) {
-      logger.warn(`[${season}] zero-out aborted after ${zeroed} traders`)
-      break
+      throw new Error(`[${season}] zero-out aborted after ${zeroed} traders`)
     }
     for (let i = 0; i < ids.length; i += 100) {
       const batch = ids.slice(i, i + 100)
@@ -303,7 +305,10 @@ export async function zeroOutExcluded(params: {
         .eq('source', source)
         .in('source_trader_id', batch)
         .gt('arena_score', 0)
-      if (!zeroErr) zeroed += batch.length
+      if (zeroErr) {
+        throw new Error(`[${season}] zero-out failed for ${source}: ${zeroErr.message}`)
+      }
+      zeroed += batch.length
     }
   }
 

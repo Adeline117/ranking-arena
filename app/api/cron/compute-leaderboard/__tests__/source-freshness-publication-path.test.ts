@@ -73,9 +73,21 @@ describe('compute leaderboard source freshness publication path', () => {
       return
     }
 
-    expect(route).toMatch(
-      /if\s*\(\s*!upsertAborted\s*&&\s*upsertErrors\s*===\s*0\s*\)\s*\{\s*try\s*\{[\s\S]*?\bawait\s+upsertSourceFreshness\s*\(/
-    )
+    const incompleteGuard = route.indexOf('if (upsertAborted || upsertErrors > 0)')
+    const incompleteThrow = route.indexOf('incomplete ranking upsert', incompleteGuard)
+    const zeroOut = route.indexOf('await zeroOutExcluded({', incompleteGuard)
+    const rerank = route.indexOf('await rerankAllRows(', zeroOut)
+    const cleanup = route.indexOf('await atomicPlatformCleanup(', rerank)
+    const publish = route.indexOf('await upsertSourceFreshness({', cleanup)
+
+    expect(incompleteGuard).toBeGreaterThan(-1)
+    expect(incompleteThrow).toBeGreaterThan(incompleteGuard)
+    expect(zeroOut).toBeGreaterThan(incompleteThrow)
+    expect(rerank).toBeGreaterThan(zeroOut)
+    expect(cleanup).toBeGreaterThan(rerank)
+    expect(publish).toBeGreaterThan(cleanup)
+    expect(route.slice(incompleteGuard, publish)).not.toContain('source freshness publish failed')
+    expect(writer).toContain('upsertErrors += rejected.length')
   })
 
   it('publishes source freshness inside the latest atomic finalize function before returning', () => {

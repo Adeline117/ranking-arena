@@ -165,17 +165,37 @@ describe('compute leaderboard source freshness writes', () => {
     ).rejects.toThrow('source freshness upsert failed: write failed')
   })
 
+  it('rejects the whole publication when any source watermark is invalid', async () => {
+    const from = jest.fn()
+
+    await expect(
+      upsertSourceFreshness({
+        supabase: { from } as never,
+        season: '90D',
+        scoredTraders: [
+          trader('mixed_source', new Date().toISOString(), 'valid'),
+          trader('mixed_source', 'invalid', 'invalid'),
+        ],
+      })
+    ).rejects.toThrow('source freshness rejected 1 source(s)')
+    expect(from).not.toHaveBeenCalled()
+  })
+
   it('publishes watermarks only after a complete, error-free ranking write', () => {
     const route = readFileSync(
       join(process.cwd(), 'app/api/cron/compute-leaderboard/route.ts'),
       'utf8'
     )
-    const guard = route.indexOf('if (!upsertAborted && upsertErrors === 0)')
+    const guard = route.indexOf('if (upsertAborted || upsertErrors > 0)')
+    const incompleteThrow = route.indexOf('incomplete ranking upsert', guard)
+    const zeroOut = route.indexOf('await zeroOutExcluded({', guard)
     const publish = route.indexOf('await upsertSourceFreshness({', guard)
 
     expect(guard).toBeGreaterThan(-1)
+    expect(incompleteThrow).toBeGreaterThan(guard)
+    expect(zeroOut).toBeGreaterThan(incompleteThrow)
     expect(publish).toBeGreaterThan(guard)
-    expect(route.slice(guard, publish)).not.toContain('||')
+    expect(route.slice(guard, publish)).not.toContain('source freshness publish failed')
   })
 
   it('does not rescore stale source inputs while preserving their last-good rows', () => {
@@ -217,5 +237,46 @@ describe('compute leaderboard source freshness writes', () => {
     expect(inIds).toHaveBeenCalledWith('source_trader_id', ['excluded'])
     expect(JSON.stringify(sourceEq.mock.calls)).not.toContain('stale')
     expect(JSON.stringify(inIds.mock.calls)).not.toContain('last-good')
+  })
+
+  it('fails the publication when zero-out writes fail', async () => {
+    const gt = jest.fn().mockResolvedValue({ error: { message: 'write failed' } })
+    const inIds = jest.fn(() => ({ gt }))
+    const sourceEq = jest.fn(() => ({ in: inIds }))
+    const seasonEq = jest.fn(() => ({ eq: sourceEq }))
+    const update = jest.fn(() => ({ eq: seasonEq }))
+    const from = jest.fn(() => ({ update }))
+
+    await expect(
+      zeroOutExcluded({
+        supabase: { from } as never,
+        season: '90D',
+        uniqueTraders: [],
+        traderMap: new Map([
+          ['fresh:excluded', { source: 'fresh', source_trader_id: 'excluded' } as TraderRow],
+        ]),
+        freshPlatforms: ['fresh'],
+        isOutOfTime: () => false,
+        upsertAborted: false,
+        timeLeftMs: () => 60_000,
+      })
+    ).rejects.toThrow('zero-out failed for fresh: write failed')
+  })
+
+  it('fails instead of publishing after a partial zero-out deadline', async () => {
+    await expect(
+      zeroOutExcluded({
+        supabase: { from: jest.fn() } as never,
+        season: '90D',
+        uniqueTraders: [],
+        traderMap: new Map([
+          ['fresh:excluded', { source: 'fresh', source_trader_id: 'excluded' } as TraderRow],
+        ]),
+        freshPlatforms: ['fresh'],
+        isOutOfTime: (buffer) => buffer === 20_000,
+        upsertAborted: false,
+        timeLeftMs: () => 19_000,
+      })
+    ).rejects.toThrow('zero-out aborted after 0 traders')
   })
 })

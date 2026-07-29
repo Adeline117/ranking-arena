@@ -10,7 +10,7 @@ jest.mock('@/lib/utils/logger', () => ({
   }),
 }))
 
-import { cleanupStaleRows } from '../rerank-cleanup'
+import { atomicPlatformCleanup, cleanupStaleRows, rerankAllRows } from '../rerank-cleanup'
 
 describe('stale leaderboard row cleanup', () => {
   beforeEach(() => {
@@ -75,5 +75,86 @@ describe('stale leaderboard row cleanup', () => {
 
     await expect(cleanupStaleRows({ from } as never, '7D')).resolves.toBe(0)
     expect(from).toHaveBeenCalledTimes(1)
+  })
+
+  it('surfaces stale-row delete failures', async () => {
+    const freshnessGte = jest.fn().mockResolvedValue({
+      data: [{ source: 'fresh_source' }],
+      error: null,
+    })
+    const staleLimit = jest.fn().mockResolvedValue({
+      data: [{ id: 'zombie', source: 'fresh_source' }],
+      error: null,
+    })
+    const deleteIn = jest.fn().mockResolvedValue({ error: { message: 'delete failed' } })
+    const from = jest.fn((table: string) => {
+      if (table === 'leaderboard_source_freshness') {
+        return {
+          select: () => ({
+            eq: () => ({ gte: freshnessGte }),
+          }),
+        }
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            lt: () => ({ limit: staleLimit }),
+          }),
+        }),
+        delete: () => ({ in: deleteIn }),
+      }
+    })
+
+    await expect(cleanupStaleRows({ from } as never, '90D')).rejects.toThrow(
+      'stale-row cleanup failed: delete failed'
+    )
+  })
+})
+
+describe('required leaderboard finalization', () => {
+  it('surfaces a rerank RPC failure', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      error: { code: 'XX000', message: 'rerank failed' },
+    })
+
+    await expect(rerankAllRows({ rpc } as never, '90D')).rejects.toThrow(
+      '90D: re-rank failed: rerank failed'
+    )
+  })
+
+  it('surfaces an inline rerank write failure', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      error: { code: '42883', message: 'missing' },
+    })
+    const order = jest
+      .fn()
+      .mockResolvedValue({ data: [{ id: 'row-1', arena_score: 90 }], error: null })
+    const upsert = jest.fn().mockResolvedValue({ error: { message: 'write failed' } })
+    const from = jest.fn(() => ({
+      select: () => ({
+        eq: () => ({ order }),
+      }),
+      upsert,
+    }))
+
+    await expect(rerankAllRows({ rpc, from } as never, '7D')).rejects.toThrow(
+      '7D: inline re-rank write failed: write failed'
+    )
+  })
+
+  it('surfaces platform cleanup failures', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'XX000', message: 'cleanup failed' },
+    })
+
+    await expect(
+      atomicPlatformCleanup(
+        { rpc } as never,
+        '30D',
+        ['binance_futures'],
+        new Map([['binance_futures', ['trader-1']]])
+      )
+    ).rejects.toThrow('30D: cleanup RPC failed for binance_futures: cleanup failed')
   })
 })

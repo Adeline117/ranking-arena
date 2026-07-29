@@ -35,7 +35,12 @@ import { rerankAllRows, cleanupStaleRows, atomicPlatformCleanup } from './rerank
 import { scoreTraders, type ScoredTrader } from './score-traders'
 import { checkDegradationGuard, saveScoredCount } from './degradation-guard'
 import { fetchCurrentScoreMap, buildChangedTraders } from './incremental-diff'
-import { upsertLeaderboard, upsertSourceFreshness, zeroOutExcluded } from './write-leaderboard'
+import {
+  buildSourceFreshnessWriteRows,
+  upsertLeaderboard,
+  upsertSourceFreshness,
+  zeroOutExcluded,
+} from './write-leaderboard'
 import { hasComputeFailures, type ComputeResult } from './result-status'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
@@ -691,6 +696,15 @@ async function computeSeason(
   })
   if (degradation.action === 'skip') return -1
 
+  // Validate every source publication timestamp before the first ranking
+  // mutation. Otherwise a source with invalid provenance could receive new
+  // rows while retaining a still-fresh last-good watermark.
+  const sourceCount = new Set(scoredFiltered.map((trader) => trader.source)).size
+  const sourcePublications = buildSourceFreshnessWriteRows(season, scoredFiltered)
+  if (sourcePublications.length !== sourceCount) {
+    throw new Error(`[${season}] invalid source publication provenance; refusing ranking writes`)
+  }
+
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
   const currentScoreMap = await fetchCurrentScoreMap(
     supabase as SupabaseClient,
@@ -720,6 +734,12 @@ async function computeSeason(
   })
   upsertAborted = upsertWasAborted
 
+  if (upsertAborted || upsertErrors > 0) {
+    throw new Error(
+      `[${season}] incomplete ranking upsert (aborted=${upsertAborted}, errors=${upsertErrors})`
+    )
+  }
+
   await zeroOutExcluded({
     supabase: supabase as SupabaseClient,
     season,
@@ -734,23 +754,24 @@ async function computeSeason(
   // Re-rank ALL rows to fix drift from incremental upserts. Stale traders
   // (outside freshness window) keep old ranks while new traders shift numbering;
   // this global re-rank ensures rank always matches arena_score DESC ordering.
-  // Skip if running out of time — next cron cycle will catch up. Logic in
-  // rerank-cleanup.ts.
+  // A publication without the final global rank pass is incomplete. Fail
+  // closed so watermarks/checkpoints cannot advance over rank drift.
   if (isOutOfTime(15_000)) {
-    logger.warn(`[${season}] SKIPPING re-rank — only ${Math.round(timeLeftMs() / 1000)}s left`)
-  } else {
-    await rerankAllRows(supabase, season)
+    throw new Error(
+      `[${season}] insufficient time for required re-rank (${Math.round(timeLeftMs() / 1000)}s left)`
+    )
   }
+  await rerankAllRows(supabase, season)
 
   // --- ROOT CAUSE FIX: Atomic per-platform cleanup ---
   // For each FRESH platform, delete all rows NOT in the new scored set.
   // This eliminates zombie rows immediately instead of waiting 5 days.
   // Stale/query-failed platforms are untouched (their data is preserved).
   if (isOutOfTime(15_000)) {
-    logger.warn(
-      `[${season}] SKIPPING atomic cleanup — only ${Math.round(timeLeftMs() / 1000)}s left`
+    throw new Error(
+      `[${season}] insufficient time for required platform cleanup (${Math.round(timeLeftMs() / 1000)}s left)`
     )
-  } else if (!upsertAborted) {
+  } else {
     // Build per-platform trader ID map from the scored result
     const scoredTradersByPlatform = new Map<string, string[]>()
     for (const t of scoredFiltered) {
@@ -784,29 +805,14 @@ async function computeSeason(
     }
   }
 
-  // Publish the source-data watermarks only after every ranking upsert for this
-  // season completed. A partial/errored write must leave the previous
-  // last-good watermarks untouched so public APIs fail closed to stale.
-  if (!upsertAborted && upsertErrors === 0) {
-    try {
-      const watermarksWritten = await upsertSourceFreshness({
-        supabase: supabase as SupabaseClient,
-        season,
-        scoredTraders: scoredFiltered,
-      })
-      logger.info(`[${season}] published ${watermarksWritten} source freshness watermarks`)
-    } catch (freshnessError) {
-      logger.warn(
-        `[${season}] source freshness publish failed; keeping prior watermarks: ${
-          freshnessError instanceof Error ? freshnessError.message : String(freshnessError)
-        }`
-      )
-    }
-  } else {
-    logger.warn(
-      `[${season}] source freshness publish skipped after partial ranking write (aborted=${upsertAborted}, errors=${upsertErrors})`
-    )
-  }
+  // Publish source-data watermarks only after every required ranking mutation
+  // succeeds. A failed watermark write is a failed publication, not a warning.
+  const watermarksWritten = await upsertSourceFreshness({
+    supabase: supabase as SupabaseClient,
+    season,
+    scoredTraders: scoredFiltered,
+  })
+  logger.info(`[${season}] published ${watermarksWritten} source freshness watermarks`)
 
   // Save scored count for future degradation checks
   await saveScoredCount(season, scored.length)
