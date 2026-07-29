@@ -22,6 +22,7 @@ const fixture = readFileSync(
   'utf8'
 )
 const databaseTypes = readFileSync(resolve(root, 'lib/supabase/database.types.ts'), 'utf8')
+const runner = readFileSync(resolve(root, 'scripts/maintenance/apply-launch-migrations.sh'), 'utf8')
 
 describe('financial subject retention after account deletion', () => {
   it('removes only the two dangerous profile/auth FKs', () => {
@@ -79,5 +80,13 @@ describe('financial subject retention after account deletion', () => {
     expect(fixture).toContain('$refund_routing_survives_hard_delete$')
     expect(fixture).toContain('public.stripe_refund_tombstone_is_resolved_v2')
     expect(fixture).toContain('Financial-subject retention fixture passed')
+  })
+
+  it('is wired as a predeploy release migration', () => {
+    const file = '20260729023000_preserve_financial_owner_after_account_deletion.sql'
+    const predeployStart = runner.indexOf('PREDEPLOY_MIGRATIONS=(')
+    const postdeployStart = runner.indexOf('POSTDEPLOY_MIGRATIONS=(')
+    expect(runner.slice(predeployStart, postdeployStart)).toContain(file)
+    expect(runner.slice(postdeployStart)).not.toContain(file)
   })
 })

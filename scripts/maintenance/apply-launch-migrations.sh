@@ -123,6 +123,7 @@ PREDEPLOY_MIGRATIONS=(
   20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql
   20260729010000_api_keys_server_authority.sql
   20260729020000_api_tier_cancellation_identity.sql
+  20260729023000_preserve_financial_owner_after_account_deletion.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
