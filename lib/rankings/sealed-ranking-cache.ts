@@ -91,7 +91,7 @@ export function parseSealedRankingCacheEntry<T>(
       contract: SEALED_RANKING_CACHE_CONTRACT,
       season,
       publicationIdentity: input.publicationIdentity,
-      publication: input.publication as SealedRankingCacheEntry<T>['publication'],
+      publication: input.publication as unknown as SealedRankingCacheEntry<T>['publication'],
       cachedAt: input.cachedAt,
       value: input.value as T,
     }
