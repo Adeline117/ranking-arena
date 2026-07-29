@@ -5298,31 +5298,40 @@ export type Database = {
       }
       referral_attributions: {
         Row: {
+          advocate_evaluated_at: string | null
           created_at: string
           friend_granted: boolean
+          friend_grant_status: string
           id: string
           provider: string | null
           qualified_at: string | null
+          qualification_checked_at: string | null
           referred_id: string
           referrer_id: string
           signup_ip_hash: string | null
         }
         Insert: {
+          advocate_evaluated_at?: string | null
           created_at?: string
           friend_granted?: boolean
+          friend_grant_status?: string
           id?: string
           provider?: string | null
           qualified_at?: string | null
+          qualification_checked_at?: string | null
           referred_id: string
           referrer_id: string
           signup_ip_hash?: string | null
         }
         Update: {
+          advocate_evaluated_at?: string | null
           created_at?: string
           friend_granted?: boolean
+          friend_grant_status?: string
           id?: string
           provider?: string | null
           qualified_at?: string | null
+          qualification_checked_at?: string | null
           referred_id?: string
           referrer_id?: string
           signup_ip_hash?: string | null
@@ -5375,6 +5384,7 @@ export type Database = {
       referral_rewards: {
         Row: {
           created_at: string
+          entitlement_granted_at: string | null
           granted_days: number | null
           id: string
           referrer_id: string
@@ -5382,6 +5392,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          entitlement_granted_at?: string | null
           granted_days?: number | null
           id?: string
           referrer_id: string
@@ -5389,6 +5400,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          entitlement_granted_at?: string | null
           granted_days?: number | null
           id?: string
           referrer_id?: string
@@ -10023,6 +10035,10 @@ export type Database = {
         Args: { p_actor_id: string; p_portfolio_id: string }
         Returns: Json
       }
+      claim_referral_qualification_candidates_atomic: {
+        Args: { p_limit: number; p_now: string }
+        Returns: Json
+      }
       finish_api_tier_payment_backfill_target_atomic: {
         Args: {
           p_error: string | null
@@ -10059,6 +10075,18 @@ export type Database = {
           p_total_equity: number
           p_total_pnl: number
           p_total_pnl_pct: number
+        }
+        Returns: Json
+      }
+      qualify_referral_attribution_atomic: {
+        Args: {
+          p_advocate_days: number
+          p_advocate_threshold: number
+          p_attribution_id: string
+          p_device_cap: number
+          p_friend_days: number
+          p_min_age_hours: number
+          p_now: string
         }
         Returns: Json
       }
