@@ -1,8 +1,33 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-const mockFetch = jest.fn()
+const mockAuthedFetch = jest.fn()
 const mockShowToast = jest.fn()
-const mockGetAuthHeaders = jest.fn().mockResolvedValue({ Authorization: 'Bearer token' })
+const VIEWER_A = '11111111-1111-4111-8111-111111111111'
+const VIEWER_B = '22222222-2222-4222-8222-222222222222'
+
+type MockAuth = {
+  accessToken: string | null
+  authChecked: boolean
+  email: string | null
+  loading: boolean
+  sessionGeneration: number
+  userId: string | null
+  viewerKey: 'anon' | `user:${string}`
+}
+
+function signedIn(userId: string, token: string, generation: number): MockAuth {
+  return {
+    accessToken: token,
+    authChecked: true,
+    email: null,
+    loading: false,
+    sessionGeneration: generation,
+    userId,
+    viewerKey: `user:${userId}`,
+  }
+}
+
+let mockAuth: MockAuth = signedIn(VIEWER_A, 'token-a', 1)
 
 const translations: Record<string, string> = {
   loadFollowingFailed: 'Failed to load following',
@@ -31,11 +56,37 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
 }))
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
-  useAuthSession: () => ({
-    email: 'viewer@example.com',
-    userId: 'viewer-1',
-    getAuthHeadersAsync: mockGetAuthHeaders,
-  }),
+  useAuthSession: () => mockAuth,
+}))
+
+jest.mock('@/app/(app)/settings/hooks/settings-viewer-scope', () => ({
+  captureSettingsViewer: (auth: MockAuth) => {
+    if (
+      auth.loading ||
+      !auth.authChecked ||
+      !auth.userId ||
+      !auth.accessToken ||
+      auth.viewerKey !== `user:${auth.userId}`
+    ) {
+      return null
+    }
+    return {
+      accessToken: auth.accessToken,
+      email: auth.email,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+      viewerKey: auth.viewerKey,
+    }
+  },
+  isSettingsViewerCurrent: (
+    viewer: { sessionGeneration: number; userId: string; viewerKey: string },
+    auth: MockAuth
+  ) =>
+    auth.authChecked &&
+    !auth.loading &&
+    auth.userId === viewer.userId &&
+    auth.viewerKey === viewer.viewerKey &&
+    auth.sessionGeneration === viewer.sessionGeneration,
 }))
 
 jest.mock('@/app/components/ui/Toast', () => ({
@@ -107,7 +158,7 @@ jest.mock('@/app/components/base', () => {
 })
 
 jest.mock('@/lib/api/client', () => ({
-  getCsrfHeaders: () => ({ 'X-CSRF-Token': 'csrf' }),
+  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -124,12 +175,12 @@ jest.mock('@/lib/features', () => ({
 
 import FollowingPageClient from '../FollowingPageClient'
 
-function response(body: unknown, status = 200): Response {
+function response(data: unknown, status = 200) {
   return {
+    data,
     ok: status >= 200 && status < 300,
     status,
-    json: jest.fn().mockResolvedValue(body),
-  } as unknown as Response
+  }
 }
 
 const alice = {
@@ -146,11 +197,11 @@ const alice = {
 describe('FollowingPageClient load errors', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    global.fetch = mockFetch
+    mockAuth = signedIn(VIEWER_A, 'token-a', 1)
   })
 
   it('shows a persistent retry state instead of a false empty state after initial failure', async () => {
-    mockFetch
+    mockAuthedFetch
       .mockResolvedValueOnce(response({ error: 'Unavailable' }, 503))
       .mockResolvedValueOnce(response({ items: [alice], hasMore: false }))
 
@@ -166,7 +217,7 @@ describe('FollowingPageClient load errors', () => {
   })
 
   it('keeps the last successful list visible when refresh fails and clears the error on retry', async () => {
-    mockFetch
+    mockAuthedFetch
       .mockResolvedValueOnce(response({ items: [alice], hasMore: false }))
       .mockResolvedValueOnce(response({ error: 'Unavailable' }, 503))
       .mockResolvedValueOnce(response({ items: [alice], hasMore: false }))
@@ -182,8 +233,65 @@ describe('FollowingPageClient load errors', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3))
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
     expect(screen.getAllByText('Alice').length).toBeGreaterThan(0)
+  })
+
+  it('remounts private list state and drops an old unfollow after an account switch', async () => {
+    let resolveUnfollow:
+      | ((value: { data: Record<string, unknown>; ok: boolean; status: number }) => void)
+      | undefined
+    mockAuthedFetch.mockImplementation((_url: string, method: string, token: string) => {
+      if (method === 'POST') {
+        return new Promise((resolve) => {
+          resolveUnfollow = resolve
+        })
+      }
+      return Promise.resolve(
+        response({
+          hasMore: false,
+          items:
+            token === 'token-a'
+              ? [alice]
+              : [
+                  {
+                    ...alice,
+                    handle: 'Bob private copy',
+                  },
+                ],
+        })
+      )
+    })
+
+    const { rerender } = render(<FollowingPageClient />)
+    expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: 'followingUnfollowTitle' }))
+    await waitFor(() =>
+      expect(mockAuthedFetch).toHaveBeenCalledWith(
+        '/api/follow',
+        'POST',
+        'token-a',
+        { action: 'unfollow', source: 'binance_futures', traderId: 'alice-id' },
+        15_000,
+        expect.objectContaining({
+          expectedSessionGeneration: 1,
+          expectedUserId: VIEWER_A,
+          signal: expect.any(AbortSignal),
+        })
+      )
+    )
+
+    mockAuth = signedIn(VIEWER_B, 'token-b', 2)
+    rerender(<FollowingPageClient />)
+    expect((await screen.findAllByText('Bob private copy')).length).toBeGreaterThan(0)
+
+    resolveUnfollow?.({
+      data: { data: { following: false }, success: true },
+      ok: true,
+      status: 200,
+    })
+    await waitFor(() => expect(screen.getAllByText('Bob private copy').length).toBeGreaterThan(0))
+    expect(mockShowToast).not.toHaveBeenCalledWith('followingUnfollowed', 'success')
   })
 })

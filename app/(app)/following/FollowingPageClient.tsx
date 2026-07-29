@@ -15,12 +15,17 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
 import { trackInteraction } from '@/lib/tracking'
 import { features } from '@/lib/features'
 import { traderCountLabel } from '@/lib/utils/trader-count'
 import { followItemHref, followItemIdentity, removeFollowItemByIdentity } from './identity'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; labelEn: string; color: string }> = {
@@ -86,6 +91,69 @@ type FollowItem = {
 }
 
 type SortMode = 'recent' | 'roi' | 'score'
+
+type FollowingPayload = {
+  hasMore?: unknown
+  items?: unknown
+}
+
+type UnfollowPayload = {
+  data?: unknown
+  followedBy?: unknown
+  following?: unknown
+  mutual?: unknown
+  success?: unknown
+}
+
+type UnfollowOperation = {
+  controller: AbortController
+  id: number
+  item: FollowItem
+  viewer: SettingsViewerSnapshot
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isFollowItem(value: unknown): value is FollowItem {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    typeof value.identity_key === 'string' &&
+    value.identity_key.length > 0 &&
+    typeof value.handle === 'string' &&
+    (value.type === 'trader' || value.type === 'user') &&
+    (value.source === undefined || value.source === null || typeof value.source === 'string')
+  )
+}
+
+function readFollowingPayload(value: FollowingPayload | null): {
+  hasMore: boolean
+  items: FollowItem[]
+} | null {
+  if (!Array.isArray(value?.items) || !value.items.every(isFollowItem)) return null
+  if (typeof value.hasMore !== 'boolean') return null
+  return { hasMore: value.hasMore, items: value.items }
+}
+
+function isUnfollowAcknowledgement(
+  value: UnfollowPayload | null,
+  type: FollowItem['type']
+): boolean {
+  if (!isRecord(value)) return false
+  if (type === 'user') {
+    return (
+      value.success === true &&
+      value.following === false &&
+      typeof value.followedBy === 'boolean' &&
+      typeof value.mutual === 'boolean' &&
+      value.mutual === false
+    )
+  }
+  return value.success === true && isRecord(value.data) && value.data.following === false
+}
 
 // ============================================
 // 统计卡片组件
@@ -193,10 +261,32 @@ function RoiDisplay({ value, label }: { value?: number; label?: string }) {
 // ============================================
 
 export default function FollowingPageClient() {
+  const auth = useAuthSession()
+  const viewer = captureSettingsViewer(auth)
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  return (
+    <ViewerScopedFollowingPage
+      key={scopeKey}
+      authResolved={auth.authChecked && !auth.loading}
+      viewer={viewer}
+    />
+  )
+}
+
+function ViewerScopedFollowingPage({
+  authResolved,
+  viewer,
+}: {
+  authResolved: boolean
+  viewer: SettingsViewerSnapshot | null
+}) {
   const router = useRouter()
   const { showToast } = useToast()
   const { language, t } = useLanguage()
-  const { userId, getAuthHeadersAsync } = useAuthSession()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const userId = viewer?.userId ?? null
   const [items, setItems] = useState<FollowItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -209,12 +299,34 @@ export default function FollowingPageClient() {
   const PAGE_SIZE = 50
   const offsetRef = useRef(0)
   const failedRequestRef = useRef({ offset: 0, append: false })
+  const mountedRef = useRef(false)
+  const nextUnfollowOperationIdRef = useRef(0)
+  const unfollowOperationRef = useRef<UnfollowOperation | null>(null)
+  const fetchControllerRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      unfollowOperationRef.current?.controller.abort()
+      unfollowOperationRef.current = null
+      fetchControllerRef.current?.abort()
+      fetchControllerRef.current = null
+    }
+  }, [])
 
   // Inline unfollow with optimistic UI
   const handleUnfollow = useCallback(
     async (item: FollowItem, e: React.MouseEvent) => {
       e.stopPropagation()
-      if (unfollowingId) return
+      if (!viewer || unfollowingId || unfollowOperationRef.current) return
+      const operation: UnfollowOperation = {
+        controller: new AbortController(),
+        id: ++nextUnfollowOperationIdRef.current,
+        item,
+        viewer,
+      }
+      unfollowOperationRef.current = operation
       const itemIdentity = followItemIdentity(item)
       setUnfollowingId(itemIdentity)
 
@@ -225,8 +337,6 @@ export default function FollowingPageClient() {
       setItems((prev) => removeFollowItemByIdentity(prev, item))
 
       try {
-        const authHeaders = await getAuthHeadersAsync()
-        const csrfHeaders = getCsrfHeaders()
         // Use different API endpoint for traders vs users
         const url = item.type === 'user' ? '/api/users/follow' : '/api/follow'
         const reqBody =
@@ -234,28 +344,48 @@ export default function FollowingPageClient() {
             ? { followingId: item.id, action: 'unfollow' }
             : { traderId: item.id, source: item.source ?? null, action: 'unfollow' }
 
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders, ...csrfHeaders },
-          body: JSON.stringify(reqBody),
-        })
-
-        if (!response.ok) {
-          // Rollback to snapshot (preserves original order)
-          setItems(snapshot)
-          showToast(t('operationFailed'), 'error')
-        } else {
-          showToast(t('followingUnfollowed'), 'success')
+        const result = await authedFetch<UnfollowPayload>(
+          url,
+          'POST',
+          operation.viewer.accessToken,
+          reqBody,
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: operation.controller.signal,
+          }
+        )
+        const operationIsCurrent =
+          mountedRef.current &&
+          unfollowOperationRef.current?.id === operation.id &&
+          isSettingsViewerCurrent(operation.viewer, authRef.current)
+        if (result.stale || !operationIsCurrent) return
+        if (!result.ok || !isUnfollowAcknowledgement(result.data, operation.item.type)) {
+          throw new Error(`Unfollow failed (${result.status})`)
         }
+        showToast(t('followingUnfollowed'), 'success')
       } catch {
+        if (
+          !mountedRef.current ||
+          unfollowOperationRef.current?.id !== operation.id ||
+          !isSettingsViewerCurrent(operation.viewer, authRef.current)
+        ) {
+          return
+        }
         // Rollback to snapshot (preserves original order)
         setItems(snapshot)
         showToast(t('operationFailed'), 'error')
       } finally {
-        setUnfollowingId(null)
+        if (unfollowOperationRef.current?.id === operation.id) {
+          unfollowOperationRef.current = null
+          if (mountedRef.current && isSettingsViewerCurrent(operation.viewer, authRef.current)) {
+            setUnfollowingId(null)
+          }
+        }
       }
     },
-    [items, unfollowingId, getAuthHeadersAsync, showToast, t]
+    [items, showToast, t, unfollowingId, viewer]
   )
 
   // userId now comes from useAuthSession directly
@@ -263,27 +393,39 @@ export default function FollowingPageClient() {
   const fetchingRef = useRef(false)
   const fetchFollowing = useCallback(
     async (offset: number, append: boolean) => {
-      if (!userId || fetchingRef.current) return
+      if (!viewer || fetchingRef.current) return
+      const operationViewer = viewer
+      const controller = new AbortController()
+      fetchControllerRef.current = controller
       fetchingRef.current = true
       try {
         // /api/following 是 Bearer-only 鉴权（getAuthUser 只读 Authorization 头，
         // 无 cookie 回退）—— 必须显式带上 auth 头，否则登录用户也 401、关注列表空。
-        const authHeaders = await getAuthHeadersAsync()
-        const response = await fetch(
-          `/api/following?userId=${userId}&limit=${PAGE_SIZE}&offset=${offset}`,
-          { headers: authHeaders }
+        const result = await authedFetch<FollowingPayload>(
+          `/api/following?userId=${operationViewer.userId}&limit=${PAGE_SIZE}&offset=${offset}`,
+          'GET',
+          operationViewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: operationViewer.userId,
+            expectedSessionGeneration: operationViewer.sessionGeneration,
+            signal: controller.signal,
+          }
         )
-        const data = await response.json()
-
-        if (!response.ok) {
-          logger.error('Error fetching following:', data.error)
-          failedRequestRef.current = { offset, append }
-          setLoadError(t('loadFollowingFailed'))
-          showToast(t('loadFollowingFailed'), 'error')
+        if (
+          result.stale ||
+          controller.signal.aborted ||
+          !mountedRef.current ||
+          !isSettingsViewerCurrent(operationViewer, authRef.current)
+        ) {
           return
         }
+        if (!result.ok) throw new Error(`Following request failed (${result.status})`)
+        const data = readFollowingPayload(result.data)
+        if (!data) throw new Error('Following request returned an invalid snapshot')
 
-        const newItems: FollowItem[] = data.items || []
+        const newItems = data.items
         if (append) {
           setItems((prev) => [...prev, ...newItems])
         } else {
@@ -293,15 +435,23 @@ export default function FollowingPageClient() {
         setHasMore(data.hasMore === true)
         setLoadError(null)
       } catch (error) {
+        if (
+          controller.signal.aborted ||
+          !mountedRef.current ||
+          !isSettingsViewerCurrent(operationViewer, authRef.current)
+        ) {
+          return
+        }
         logger.error('Error loading following:', error)
         failedRequestRef.current = { offset, append }
         setLoadError(t('loadFollowingFailed'))
         showToast(t('loadFollowingFailed'), 'error')
       } finally {
         fetchingRef.current = false
+        if (fetchControllerRef.current === controller) fetchControllerRef.current = null
       }
     },
-    [userId, showToast, t, getAuthHeadersAsync]
+    [showToast, t, viewer]
   )
 
   const loadMore = useCallback(async () => {
@@ -324,7 +474,7 @@ export default function FollowingPageClient() {
 
   useEffect(() => {
     if (!userId) {
-      setLoading(false)
+      setLoading(!authResolved)
       return
     }
 
@@ -337,7 +487,7 @@ export default function FollowingPageClient() {
 
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchFollowing excluded to avoid refetch loop on callback identity change
-  }, [userId])
+  }, [authResolved, userId])
 
   // Filter out user follows when social is off
   const visibleItems = useMemo(
@@ -426,7 +576,7 @@ export default function FollowingPageClient() {
   }
 
   // 未登录
-  if (!userId && !loading) {
+  if (authResolved && !userId && !loading) {
     return (
       <Box
         style={{
@@ -463,8 +613,8 @@ export default function FollowingPageClient() {
                     color: tokens.colors.white,
                     borderRadius: tokens.radius.md,
                     textDecoration: 'none',
-                    fontWeight: 700,
-                    fontSize: 14,
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontSize: tokens.typography.fontSize.base,
                   }}
                 >
                   {t('goToLogin')}
@@ -481,8 +631,8 @@ export default function FollowingPageClient() {
                     color: tokens.colors.text.primary,
                     borderRadius: tokens.radius.md,
                     textDecoration: 'none',
-                    fontWeight: 600,
-                    fontSize: 14,
+                    fontWeight: tokens.typography.fontWeight.semibold,
+                    fontSize: tokens.typography.fontSize.base,
                   }}
                 >
                   {t('goToRankings')}
@@ -557,8 +707,8 @@ export default function FollowingPageClient() {
                     color: tokens.colors.white,
                     borderRadius: tokens.radius.md,
                     textDecoration: 'none',
-                    fontWeight: 700,
-                    fontSize: 14,
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontSize: tokens.typography.fontSize.base,
                   }}
                 >
                   {t('goToRankings')}
@@ -759,7 +909,7 @@ export default function FollowingPageClient() {
                         {/* 类型标签 */}
                         <span
                           style={{
-                            fontSize: 10,
+                            fontSize: tokens.typography.fontSize.xs,
                             padding: '2px 6px',
                             borderRadius: tokens.radius.sm,
                             background:
@@ -770,7 +920,7 @@ export default function FollowingPageClient() {
                               item.type === 'trader'
                                 ? getSourceColor(item.platform || item.source || 'legacy')
                                 : tokens.colors.accent.brand,
-                            fontWeight: 500,
+                            fontWeight: tokens.typography.fontWeight.medium,
                           }}
                         >
                           {item.type === 'trader'
@@ -799,7 +949,12 @@ export default function FollowingPageClient() {
                           {item.arena_score !== undefined && item.arena_score > 0 && (
                             <Text size="xs" color="tertiary">
                               Score:{' '}
-                              <span style={{ color: tokens.colors.accent.brand, fontWeight: 500 }}>
+                              <span
+                                style={{
+                                  color: tokens.colors.accent.brand,
+                                  fontWeight: tokens.typography.fontWeight.medium,
+                                }}
+                              >
                                 {item.arena_score.toFixed(1)}
                               </span>
                             </Text>
@@ -857,7 +1012,7 @@ export default function FollowingPageClient() {
                             <Text
                               size="xs"
                               color="tertiary"
-                              style={{ fontSize: 10, lineHeight: 1 }}
+                              style={{ fontSize: tokens.typography.fontSize.xs, lineHeight: 1 }}
                             >
                               Score
                             </Text>
@@ -961,7 +1116,7 @@ export default function FollowingPageClient() {
                     background: tokens.colors.accent.brand,
                     color: tokens.colors.white,
                     textDecoration: 'none',
-                    fontWeight: 600,
+                    fontWeight: tokens.typography.fontWeight.semibold,
                     fontSize: tokens.typography.fontSize.sm,
                     transition: `opacity ${tokens.transition.base}`,
                   }}
