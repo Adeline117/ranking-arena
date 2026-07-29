@@ -30,7 +30,8 @@ import type {
   Timeframe,
 } from './types'
 import type { FetchSession } from '../fetch/types'
-import type { LeaderboardCapture } from '../fetch/capture'
+import type { AnyLeaderboardCapture } from '../fetch/capture'
+import type { AttemptBoundLeaderboardAcquisitionContract } from '../acquisition-attempts'
 import type { ProfileQualityReject } from './profile-quality'
 
 /** Lets expensive adapters defer deep enrichment off interactive/series paths. */
@@ -38,6 +39,10 @@ export type ProfileFetchIntent = 'scheduled_full' | 'series_only' | 'interactive
 
 export interface ProfileFetchOptions {
   intent: ProfileFetchIntent
+}
+
+export interface LeaderboardValidationOptions {
+  purpose: 'publication' | 'evidence_only'
 }
 
 export interface SourceAdapter {
@@ -58,6 +63,15 @@ export interface SourceAdapter {
    *  Optional during rollout — the parity test flags undeclared adapters. */
   readonly expectedMetrics?: ExpectedMetrics
 
+  /**
+   * Exact attempt-bound evidence contract requested before any upstream I/O.
+   * Existing capture adapters default to V3; partitioned adapters must name
+   * V4 explicitly so registry lookup can never substitute another contract.
+   */
+  readonly leaderboardAcquisitionContract?: AttemptBoundLeaderboardAcquisitionContract
+  /** Authoritative ordered partition ids for an explicitly partitioned capture. */
+  leaderboardPartitionIds?(src: SourceRow, timeframe: RankingTimeframe): readonly string[]
+
   /** Tier A: stream leaderboard pages for one timeframe. */
   listLeaderboard(
     session: FetchSession,
@@ -75,7 +89,7 @@ export interface SourceAdapter {
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
-  ): Promise<LeaderboardCapture>
+  ): Promise<AnyLeaderboardCapture>
 
   /** Tier B/C: the main profile surface (stats blocks + charts) for one TF.
    *  Must be a small number of replayed JSON requests (spec §2.4: 1-3s).
@@ -121,7 +135,8 @@ export interface SourceAdapter {
       rejectedRowCount: number
     }>,
     src: SourceRow,
-    timeframe: RankingTimeframe
+    timeframe: RankingTimeframe,
+    options?: LeaderboardValidationOptions
   ): void
   parseProfile(raw: unknown, ctx: ParseCtx): ParsedProfile
   /** Optional source-specific whole-profile quality gate. Processors invoke

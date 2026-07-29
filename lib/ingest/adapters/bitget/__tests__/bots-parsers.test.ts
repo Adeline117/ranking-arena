@@ -258,6 +258,31 @@ describe('assertBitgetBotsLeaderboardPublication', () => {
     ).toThrow('both configured strategy partitions')
   })
 
+  it('validates partial upstream-error evidence without claiming a complete publication', () => {
+    const gridOnly = fullFuturesRows().filter((row) => row.botStrategy === 'grid')
+    expect(() =>
+      assertBitgetBotsLeaderboardPublication(publicationResult(gridOnly), source(), 30, {
+        purpose: 'evidence_only',
+      })
+    ).not.toThrow()
+    expect(() =>
+      assertBitgetBotsLeaderboardPublication(
+        { parsedRows: [], validRows: [], rejectedRowCount: 0 },
+        source(),
+        30,
+        { purpose: 'evidence_only' }
+      )
+    ).not.toThrow()
+    expect(() =>
+      assertBitgetBotsLeaderboardPublication(
+        { parsedRows: gridOnly, validRows: gridOnly.slice(1), rejectedRowCount: 0 },
+        source(),
+        30,
+        { purpose: 'evidence_only' }
+      )
+    ).toThrow('changed the board population')
+  })
+
   it('rejects malformed or crossed bot metadata before publication', () => {
     const missingMeta = fullFuturesRows()
     missingMeta[0] = { ...missingMeta[0], traderMeta: null }
