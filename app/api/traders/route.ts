@@ -25,23 +25,23 @@ import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-tr
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import {
-  currentScoredSources,
-  type LeaderboardCountCacheRow,
-} from '@/lib/data/leaderboard-count-cache'
-import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
-import {
-  sourceFreshnessStatusMap,
-  summarizeSourceFreshness,
-  type SourceFreshnessRow,
-} from '@/lib/rankings/source-freshness'
+  PUBLIC_ACTIVE_RANKING_SOURCES,
+  SOURCE_TYPE_MAP,
+  parsePublicActiveRankingSource,
+} from '@/lib/constants/exchanges'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
   filterPublicRankingSources,
   isPublicRankingSourceQuarantined,
   publicRankingCacheKey,
-  publicRankingCountFromCache,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import type { SealedLeaderboardPublicationProofSet } from '@/lib/rankings/read-publication-proofs'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 const logger = createLogger('traders-api')
 
@@ -67,15 +67,44 @@ const tradersQuerySchema = z.object({
   page: z.coerce.number().int().min(0).optional(),
 })
 
-// In-memory cache for available sources. Keep this shorter than a normal capture
-// cycle so a newly visible or withdrawn source reaches filters promptly.
-const availableSourcesCache = new Map<string, { sources: string[]; ts: number }>()
-const SOURCES_TTL = 5 * 60 * 1000
-const SOURCES_CACHE_MAX = 50 // prevent unbounded growth
-
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
 const LEADERBOARD_COLUMNS =
   'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
+
+interface TradersRankingResponse {
+  traders: unknown[]
+  dataAgeMinutes: number | null
+  isStale: boolean
+  [key: string]: unknown
+}
+
+interface TradersQueryParams {
+  timeRange: Period
+  exchangeFilter: string | null
+  categoryFilter: string | null
+  sortBy: string
+  order: 'asc' | 'desc'
+  cursor: number | null
+  limit: number
+  useLegacyPaging: boolean
+  page: number
+}
+
+function tradersProofSources(
+  exchangeFilter: string | null,
+  categoryFilter: string | null
+): string[] {
+  if (exchangeFilter) return [exchangeFilter]
+
+  return filterPublicRankingSources(
+    categoryFilter
+      ? PUBLIC_ACTIVE_RANKING_SOURCES.filter((source) => {
+          const sourceType = SOURCE_TYPE_MAP[source] || 'futures'
+          return sourceType === (categoryFilter === 'onchain' ? 'web3' : categoryFilter)
+        })
+      : PUBLIC_ACTIVE_RANKING_SOURCES
+  )
+}
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
@@ -95,13 +124,17 @@ export const GET = withPublic(
       limit,
     } = parsed.data
     const timeRange = timeRangeStr as Period
+    const canonicalExchange = exchangeFilter ? parsePublicActiveRankingSource(exchangeFilter) : null
+    if (exchangeFilter && !canonicalExchange) {
+      return badRequest('Invalid exchange')
+    }
     const cursor = parsed.data.cursor != null ? String(parsed.data.cursor) : null
     const page = parsed.data.page ?? NaN
     const useLegacyPaging = !isNaN(page) && !cursor
 
     const effectiveSortBy = sortBy || 'arena_score'
 
-    if (isPublicRankingSourceQuarantined(exchangeFilter)) {
+    if (isPublicRankingSourceQuarantined(canonicalExchange)) {
       return NextResponse.json({
         traders: [],
         timeRange,
@@ -124,29 +157,40 @@ export const GET = withPublic(
 
     // Cache key
     const cacheKey = publicRankingCacheKey(
-      `leaderboard:v3:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
+      `leaderboard:sealed-v4:${timeRange}:${canonicalExchange || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
     )
+    const expectedSources = tradersProofSources(canonicalExchange, categoryFilter ?? null)
 
-    const cachedData = sanitizePublicRankingSourcePayload(
+    const cacheEntry = parseSealedRankingCacheEntry<TradersRankingResponse>(
       await getOrSetWithLock(
         cacheKey,
-        async () =>
-          sanitizePublicRankingSourcePayload(
-            await fetchFromLeaderboard(supabase, {
-              timeRange,
-              exchangeFilter: exchangeFilter ?? null,
-              categoryFilter: categoryFilter ?? null,
-              sortBy: effectiveSortBy,
-              order,
-              cursor: cursor ? safeParseInt(cursor, 0) : null,
-              limit,
-              useLegacyPaging,
-              page: useLegacyPaging ? Math.max(0, page) : 0,
-            })
-          ),
+        async () => {
+          const sealedRead = await fetchFromLeaderboard(supabase, {
+            timeRange,
+            exchangeFilter: canonicalExchange,
+            categoryFilter: categoryFilter ?? null,
+            sortBy: effectiveSortBy,
+            order,
+            cursor: cursor ? safeParseInt(cursor, 0) : null,
+            limit,
+            useLegacyPaging,
+            page: useLegacyPaging ? Math.max(0, page) : 0,
+          })
+          const safeRead = {
+            ...sealedRead,
+            value: sanitizePublicRankingSourcePayload(sealedRead.value),
+          }
+          return createSealedRankingCacheEntry(safeRead)
+        },
         { ttl: 300, lockTtl: 10 }
-      )
+      ),
+      timeRange,
+      expectedSources
     )
+    if (!cacheEntry) {
+      throw new Error('traders ranking cache returned an unsealed value')
+    }
+    const cachedData = sanitizePublicRankingSourcePayload(cacheEntry.value)
 
     // Dev-only: validate output shape to catch response drift early (no-op in prod)
     validateTradersResponse(cachedData, logger)
@@ -180,17 +224,22 @@ const SORT_COLUMN: Record<string, string> = {
 
 async function fetchFromLeaderboard(
   supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
-  params: {
-    timeRange: Period
-    exchangeFilter: string | null
-    categoryFilter: string | null
-    sortBy: string
-    order: 'asc' | 'desc'
-    cursor: number | null
-    limit: number
-    useLegacyPaging: boolean
-    page: number
-  }
+  params: TradersQueryParams
+) {
+  const proofSources = tradersProofSources(params.exchangeFilter, params.categoryFilter)
+
+  return readSealedRankingGeneration(
+    supabase,
+    { season: params.timeRange, sources: proofSources },
+    (publication) => fetchFromLeaderboardCohort(supabase, params, publication),
+    { timeoutMs: 10_000 }
+  )
+}
+
+async function fetchFromLeaderboardCohort(
+  supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
+  params: TradersQueryParams,
+  publication: SealedLeaderboardPublicationProofSet
 ) {
   const {
     timeRange,
@@ -204,15 +253,16 @@ async function fetchFromLeaderboard(
     page,
   } = params
 
-  // Build query — select only needed columns (avoid SELECT *)
-  // ROOT CAUSE FIX: count: 'exact' was taking 47 SECONDS on this 73K-row table
-  // because Index Only Scan needed heap fetches when visibility map was stale.
-  // Solution: read pre-computed count from leaderboard_count_cache (updated by
-  // compute-leaderboard cron) instead of running count(*) on every request.
+  // Build one generation-bound query and select only needed columns.
   let query = supabase
     .from('leaderboard_ranks')
     .select(LEADERBOARD_COLUMNS)
     .eq('season_id', timeRange)
+    .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+    .in(
+      'source',
+      publication.proofs.map((proof) => proof.source)
+    )
 
   if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
     query = query.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
@@ -281,31 +331,18 @@ async function fetchFromLeaderboard(
     throw new Error(`leaderboard_ranks query failed: ${error.message}`)
   }
 
-  // Read totalCount from pre-computed cache (instant) instead of count: 'exact' (47s)
-  // Always read count — needed for pagination UI and API consumers
-  // Read the `_gt0` count variant to match the serving query's `arena_score>0`
-  // filter. The plain key counts arena_score<=0 rows too → under-counts the
-  // served set and makes `hasMore` truncate the board early (see rankings/route).
-  const { data: cacheRows } = await supabase
-    .from('leaderboard_count_cache')
-    .select('source,total_count,updated_at')
-    .eq('season_id', timeRange)
-    .like('source', '%_gt0')
-  const countRows = (cacheRows || []) as LeaderboardCountCacheRow[]
-  const publicSources = filterPublicRankingSources(currentScoredSources(countRows))
-  const categorySourceType =
-    categoryFilter === 'onchain' ? 'web3' : categoryFilter === 'spot' ? 'spot' : 'futures'
-  const categorySources = categoryFilter
-    ? publicSources.filter(
-        (source) => (SOURCE_TYPE_MAP[source] || 'futures') === categorySourceType
-      )
-    : []
-  const cachedTotal = publicRankingCountFromCache(
-    countRows,
-    exchangeFilter ? { source: exchangeFilter } : categoryFilter ? { sources: categorySources } : {}
+  // Exact totals and source membership come from the same immutable proof set
+  // that authorized the rank rows. A post-processing count cache can lag an
+  // atomic generation cutover and must not define pagination.
+  const publicSources = publication.proofs
+    .filter((proof) => proof.published_rank_count > 0)
+    .map((proof) => proof.source)
+  const publishedTotal = publication.proofs.reduce(
+    (total, proof) => total + proof.published_rank_count,
+    0
   )
   const pageStart = useLegacyPaging ? page * limit : 0
-  const totalCount = cachedTotal ?? pageStart + (data?.length || 0)
+  const totalCount = Math.max(publishedTotal, pageStart + (data?.length || 0))
 
   // Verified-data set (A1): traders with an active read-only API-key
   // authorization → ✓ Verified badge (vs scraped "Tracked"). Cached, O(1) lookup.
@@ -401,49 +438,31 @@ async function fetchFromLeaderboard(
   const nextCursor = lastTrader ? lastTrader.rank : null
   const hasMore = useLegacyPaging ? (page + 1) * limit < totalCount : traders.length === limit
 
-  // Available sources (for UI filter) — cached in-memory with 5-min TTL
-  const sourcesCacheKey = publicRankingCacheKey(timeRange)
-  const sourceCacheEntry = availableSourcesCache.get(sourcesCacheKey)
-  let availableSources: string[]
-  if (sourceCacheEntry && Date.now() - sourceCacheEntry.ts < SOURCES_TTL) {
-    availableSources = filterPublicRankingSources(sourceCacheEntry.sources)
-  } else {
-    // Extract distinct sources from the current page, then supplement them from
-    // the same score-visible cache generation used by totalCount.
-    const allSourceSet = new Set<string>()
-    for (const r of data || []) allSourceSet.add((r as { source: string }).source)
-    for (const source of publicSources) {
-      allSourceSet.add(source)
-    }
-    availableSources = filterPublicRankingSources([...allSourceSet])
-    if (availableSourcesCache.size >= SOURCES_CACHE_MAX) {
-      availableSourcesCache.clear()
-    }
-    availableSourcesCache.set(sourcesCacheKey, { sources: availableSources, ts: Date.now() })
-  }
-
-  const relevantSources = exchangeFilter
-    ? [exchangeFilter]
-    : categoryFilter
-      ? availableSources.filter(
-          (source) => (SOURCE_TYPE_MAP[source] || 'futures') === categorySourceType
+  const availableSources = filterPublicRankingSources(publicSources)
+  const nowMs = Date.now()
+  const sourceFreshness = publication.proofs
+    .filter((proof) => proof.published_rank_count > 0)
+    .map((proof) => {
+      const ageSeconds = Math.max(0, Math.floor((nowMs - Date.parse(proof.source_as_of)) / 1000))
+      return {
+        source: proof.source,
+        updated_at: proof.source_as_of,
+        is_stale: false,
+        age_seconds: ageSeconds,
+      }
+    })
+  const freshnessBySource = new Map(sourceFreshness.map((status) => [status.source, status]))
+  const lastUpdated =
+    sourceFreshness.length > 0
+      ? sourceFreshness.reduce(
+          (oldest, status) => (status.updated_at < oldest ? status.updated_at : oldest),
+          sourceFreshness[0].updated_at
         )
-      : availableSources
-  let freshnessQuery = supabase
-    .from('leaderboard_source_freshness')
-    .select('source,source_as_of')
-    .eq('season_id', timeRange)
-  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-    freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-  }
-  const { data: sourceWatermarks } = await freshnessQuery
-  const freshnessSummary = summarizeSourceFreshness(
-    (sourceWatermarks || []) as SourceFreshnessRow[],
-    relevantSources
-  )
-  const freshnessBySource = sourceFreshnessStatusMap(freshnessSummary)
+      : null
   const dataAgeMinutes =
-    freshnessSummary.ageSeconds == null ? null : Math.round(freshnessSummary.ageSeconds / 60)
+    sourceFreshness.length === 0
+      ? null
+      : Math.round(Math.max(...sourceFreshness.map((status) => status.age_seconds)) / 60)
 
   // Apply profanity filter to all handles before returning
   const sanitizedTraders = dedupedTraders.map(
@@ -460,10 +479,10 @@ async function fetchFromLeaderboard(
     timeRange,
     totalCount,
     rankingMode: 'arena_score',
-    lastUpdated: freshnessSummary.asOf,
-    isStale: freshnessSummary.isStale,
+    lastUpdated,
+    isStale: false,
     dataAgeMinutes,
-    source_freshness: freshnessSummary.sources,
+    source_freshness: sourceFreshness,
     // Cursor-based pagination
     nextCursor,
     hasMore,
