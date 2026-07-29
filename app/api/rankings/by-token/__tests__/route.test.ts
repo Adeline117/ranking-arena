@@ -1,0 +1,181 @@
+/** @jest-environment node */
+
+jest.mock('next/server', () => {
+  class MockNextResponse {
+    private readonly body: unknown
+    readonly status: number
+    readonly headers: Headers
+
+    constructor(body: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
+      this.body = body
+      this.status = init.status ?? 200
+      this.headers = new Headers(init.headers)
+    }
+
+    async json() {
+      return this.body
+    }
+
+    static json(body: unknown, init?: { status?: number; headers?: Record<string, string> }) {
+      return new MockNextResponse(body, init)
+    }
+  }
+
+  return { NextResponse: MockNextResponse }
+})
+
+const mockCheckRateLimit = jest.fn()
+const mockGetSupabaseAdmin = jest.fn()
+jest.mock('@/lib/api', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  RateLimitPresets: { read: {} },
+  getSupabaseAdmin: () => mockGetSupabaseAdmin(),
+}))
+
+const mockTieredGetOrSet = jest.fn()
+const mockTieredDel = jest.fn()
+jest.mock('@/lib/cache/redis-layer', () => ({
+  tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
+  tieredDel: (...args: unknown[]) => mockTieredDel(...args),
+}))
+
+const mockReadSealedTokenTraderRankings = jest.fn()
+jest.mock('@/lib/rankings/token-traders', () => ({
+  getTokenTraderRankingCacheKey: (token: string, period: string, limit: number, offset: number) =>
+    `rankings:by-token:v5:${token}:${period}:${limit}:${offset}`,
+  readSealedTokenTraderRankings: (...args: unknown[]) => mockReadSealedTokenTraderRankings(...args),
+}))
+
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  ...jest.requireActual('@/lib/rankings/read-sealed-ranking-generation'),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
+}))
+
+jest.mock('@/lib/logger', () => ({
+  logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn() },
+}))
+
+const CURRENT_COHORT_ID = '11111111-1111-4111-8111-111111111111'
+
+function publicationFor(scoreCohortId = CURRENT_COHORT_ID) {
+  return {
+    state: 'sealed' as const,
+    season: '90D' as const,
+    scoreCohortId,
+    proofs: [
+      {
+        season_id: '90D' as const,
+        source: 'hyperliquid',
+        source_as_of: '2026-07-29T09:00:00.000000Z',
+        recorded_at: '2026-07-29T09:01:00.000000Z',
+        score_cohort_id: scoreCohortId,
+        rank_mutation_seq: 9,
+        current_mutation_seq: 9,
+        published_rank_count: 1,
+        published_identity_sha256: 'a'.repeat(64),
+        is_sealed: true as const,
+      },
+    ],
+  }
+}
+
+function tokenTrader(id: string) {
+  return {
+    source: 'hyperliquid',
+    source_trader_id: id,
+    handle: id,
+    avatar_url: null,
+    arena_score: 80,
+    roi: 20,
+    total_pnl: 100,
+    token_pnl: 10,
+    token_trade_count: 2,
+    token_win_rate: 50,
+    token_avg_pnl_pct: 5,
+  }
+}
+
+function cacheEntry(id: string, scoreCohortId = CURRENT_COHORT_ID) {
+  const publication = publicationFor(scoreCohortId)
+  return {
+    contract: 'sealed-ranking-cache@1',
+    season: '90D',
+    publicationIdentity: JSON.stringify(publication),
+    publication,
+    cachedAt: '2026-07-29T09:02:00.000Z',
+    value: { traders: [tokenTrader(id)], token: 'BTC', period: '90D', total: 1 },
+  }
+}
+
+import { GET } from '../route'
+
+function request() {
+  return {
+    nextUrl: new URL(
+      'http://localhost/api/rankings/by-token?token=BTC&period=90D&limit=25&offset=0'
+    ),
+  } as never
+}
+
+describe('GET /api/rankings/by-token publication cache', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockCheckRateLimit.mockResolvedValue(null)
+    mockGetSupabaseAdmin.mockReturnValue({})
+    mockTieredDel.mockResolvedValue(undefined)
+    mockTieredGetOrSet.mockImplementation(async (_key: string, fetcher: () => Promise<unknown>) =>
+      fetcher()
+    )
+    mockReadSealedTokenTraderRankings.mockImplementation(async () => {
+      const publication = publicationFor()
+      return {
+        value: { traders: [tokenTrader('current-row')], total: 1 },
+        publication,
+        publicationIdentity: JSON.stringify(publication),
+      }
+    })
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(
+      async (_client: unknown, _season: unknown, reader: () => Promise<unknown>) => {
+        const publication = publicationFor()
+        return {
+          value: await reader(),
+          publication,
+          publicationIdentity: JSON.stringify(publication),
+        }
+      }
+    )
+  })
+
+  it('serves a sealed token page only while its publication remains current', async () => {
+    mockTieredGetOrSet.mockResolvedValueOnce(cacheEntry('current-cache-row'))
+
+    const response = await GET(request())
+    const body = await response.json()
+
+    expect(body.traders).toEqual([
+      expect.objectContaining({ source_trader_id: 'current-cache-row' }),
+    ])
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
+    expect(mockReadSealedTokenTraderRankings).not.toHaveBeenCalled()
+    expect(mockTieredDel).not.toHaveBeenCalled()
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+  })
+
+  it('evicts a sealed token page after the authority advances to another cohort', async () => {
+    mockTieredGetOrSet
+      .mockResolvedValueOnce(cacheEntry('old-cache-row', '22222222-2222-4222-8222-222222222222'))
+      .mockImplementation(async (_key: string, fetcher: () => Promise<unknown>) => fetcher())
+
+    const response = await GET(request())
+    const body = await response.json()
+
+    expect(body.traders).toEqual([expect.objectContaining({ source_trader_id: 'current-row' })])
+    expect(JSON.stringify(body)).not.toContain('old-cache-row')
+    expect(mockTieredDel).toHaveBeenCalledWith('rankings:by-token:v5:BTC:90D:25:0')
+    expect(mockTieredGetOrSet).toHaveBeenCalledTimes(2)
+    expect(mockReadSealedTokenTraderRankings).toHaveBeenCalledTimes(1)
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(2)
+  })
+})

@@ -19,7 +19,7 @@ import {
 describe('getTokenTraderRankingCacheKey', () => {
   test('uses the aggregate-backed cache namespace', () => {
     expect(getTokenTraderRankingCacheKey('BTC', '90D', 25, 0)).toBe(
-      'rankings:by-token:v4:BTC:90D:25:0'
+      'rankings:by-token:v5:BTC:90D:25:0'
     )
   })
 })

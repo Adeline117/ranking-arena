@@ -2,7 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import { readSealedRankIdentities } from '@/lib/rankings/read-sealed-rank-identities'
-import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  readSealedRankingAuthorityGeneration,
+  type SealedRankingGenerationRead,
+} from '@/lib/rankings/read-sealed-ranking-generation'
 import type { LeaderboardPublicationSeason } from '@/lib/rankings/read-publication-proofs'
 
 const PERIOD_DAYS: Record<string, number> = {
@@ -14,7 +17,7 @@ const PERIOD_DAYS: Record<string, number> = {
 // results produced by its retired raw-history query. Reusing that namespace
 // after switching to the aggregate RPC can keep a repaired token board empty
 // until the old Redis entry expires.
-export const TOKEN_TRADER_RANKING_CACHE_VERSION = 'v4'
+export const TOKEN_TRADER_RANKING_CACHE_VERSION = 'v5'
 
 export function getTokenTraderRankingCacheKey(
   token: string,
@@ -181,6 +184,55 @@ export function mergeTokenRankingsWithProfiles(
   }
 }
 
+export async function readSealedTokenTraderRankings(
+  supabase: SupabaseClient<Database>,
+  token: string,
+  period: string,
+  limit: number,
+  offset: number
+): Promise<SealedRankingGenerationRead<TokenTraderRankingPage>> {
+  const season: LeaderboardPublicationSeason =
+    period === '7D' || period === '30D' || period === '90D' ? period : '90D'
+  return readSealedRankingAuthorityGeneration(supabase, season, async (publication) => {
+    const allowedSources = publication.proofs
+      .map((proof) => proof.source)
+      .filter(isPublicRankingSourceAllowed)
+    if (allowedSources.length === 0) {
+      throw new Error('token trader ranking publication has no public sources')
+    }
+
+    const { data, error } = await supabase.rpc('get_public_token_trader_rankings', {
+      token_symbol: token,
+      lookback_days: PERIOD_DAYS[season],
+      max_traders: limit,
+      row_offset: offset,
+      allowed_sources: allowedSources,
+    })
+    if (error) throw new Error(error.message)
+
+    const rows = parseAggregatedRows(data, offset)
+    const allowedSourceSet = new Set(allowedSources)
+    if (rows.some((row) => !allowedSourceSet.has(row.source))) {
+      throw new Error('token trader ranking RPC returned a source outside publication authority')
+    }
+    if (rows.length === 0) return { traders: [], total: 0 }
+
+    const sealedProfiles = await readSealedRankIdentities(
+      supabase,
+      season,
+      rows.map((row) => ({
+        source: row.source,
+        sourceTraderId: row.source_trader_id,
+      }))
+    )
+    if (!sealedProfiles) {
+      throw new Error('token trader profiles had no public ranking authority')
+    }
+
+    return mergeTokenRankingsWithProfiles(rows, sealedProfiles.value)
+  })
+}
+
 export async function getTokenTraderRankings(
   supabase: SupabaseClient<Database>,
   token: string,
@@ -188,50 +240,5 @@ export async function getTokenTraderRankings(
   limit: number,
   offset: number
 ): Promise<TokenTraderRankingPage> {
-  const season: LeaderboardPublicationSeason =
-    period === '7D' || period === '30D' || period === '90D' ? period : '90D'
-  const sealedPage = await readSealedRankingAuthorityGeneration(
-    supabase,
-    season,
-    async (publication) => {
-      const allowedSources = publication.proofs
-        .map((proof) => proof.source)
-        .filter(isPublicRankingSourceAllowed)
-      if (allowedSources.length === 0) {
-        throw new Error('token trader ranking publication has no public sources')
-      }
-
-      const { data, error } = await supabase.rpc('get_public_token_trader_rankings', {
-        token_symbol: token,
-        lookback_days: PERIOD_DAYS[season],
-        max_traders: limit,
-        row_offset: offset,
-        allowed_sources: allowedSources,
-      })
-      if (error) throw new Error(error.message)
-
-      const rows = parseAggregatedRows(data, offset)
-      const allowedSourceSet = new Set(allowedSources)
-      if (rows.some((row) => !allowedSourceSet.has(row.source))) {
-        throw new Error('token trader ranking RPC returned a source outside publication authority')
-      }
-      if (rows.length === 0) return { traders: [], total: 0 }
-
-      const sealedProfiles = await readSealedRankIdentities(
-        supabase,
-        season,
-        rows.map((row) => ({
-          source: row.source,
-          sourceTraderId: row.source_trader_id,
-        }))
-      )
-      if (!sealedProfiles) {
-        throw new Error('token trader profiles had no public ranking authority')
-      }
-
-      return mergeTokenRankingsWithProfiles(rows, sealedProfiles.value)
-    }
-  )
-
-  return sealedPage.value
+  return (await readSealedTokenTraderRankings(supabase, token, period, limit, offset)).value
 }

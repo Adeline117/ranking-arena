@@ -14,14 +14,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { tieredDel, tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
 import {
   getTokenTraderRankingCacheKey,
-  getTokenTraderRankings,
+  readSealedTokenTraderRankings,
   type TokenTraderRanking,
 } from '@/lib/rankings/token-traders'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 export const runtime = 'nodejs'
 
@@ -30,6 +36,58 @@ interface PopularToken {
   trade_count: number
   trader_count: number
   total_pnl: number
+}
+
+interface TokenRankingResponse {
+  traders: TokenTraderRanking[]
+  token: string
+  period: '7D' | '30D' | '90D'
+  total: number
+}
+
+function isTokenRankingResponse(
+  value: unknown,
+  token: string,
+  period: TokenRankingResponse['period'],
+  limit: number,
+  offset: number,
+  proofSources: readonly string[]
+): value is TokenRankingResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const traders = Reflect.get(value, 'traders')
+  const total = Reflect.get(value, 'total')
+  if (
+    Reflect.get(value, 'token') !== token ||
+    Reflect.get(value, 'period') !== period ||
+    !Array.isArray(traders) ||
+    traders.length > limit ||
+    !Number.isSafeInteger(total) ||
+    Number(total) < 0 ||
+    (traders.length > 0 && Number(total) < offset + traders.length)
+  ) {
+    return false
+  }
+
+  const allowedSources = new Set(proofSources)
+  const seen = new Set<string>()
+  return traders.every((trader) => {
+    if (!trader || typeof trader !== 'object' || Array.isArray(trader)) return false
+    const source = Reflect.get(trader, 'source')
+    const traderId = Reflect.get(trader, 'source_trader_id')
+    if (
+      typeof source !== 'string' ||
+      !allowedSources.has(source) ||
+      !isPublicRankingSourceAllowed(source) ||
+      typeof traderId !== 'string' ||
+      traderId.length === 0
+    ) {
+      return false
+    }
+    const identity = `${source}\u0000${traderId}`
+    if (seen.has(identity)) return false
+    seen.add(identity)
+    return true
+  })
 }
 
 // ── Popular Tokens Handler ──────────────────────────────────────────────────
@@ -132,32 +190,56 @@ export async function GET(request: NextRequest) {
 
   try {
     const CACHE_KEY = getTokenTraderRankingCacheKey(token, period, limit, offset)
+    const supabase = getSupabaseAdmin()
+    const fetchSealedEntry = async () => {
+      const sealedRead = await readSealedTokenTraderRankings(supabase, token, period, limit, offset)
+      return createSealedRankingCacheEntry({
+        ...sealedRead,
+        value: { ...sealedRead.value, token, period },
+      })
+    }
+    const readAuthorizedCache = async () => {
+      const cached = await tieredGetOrSet<unknown>(CACHE_KEY, fetchSealedEntry, 'cold', [
+        'rankings',
+        'by-token',
+      ])
+      const entry = parseSealedRankingCacheEntry<TokenRankingResponse>(cached, period)
+      const proofSources = entry?.publication.proofs.map((proof) => proof.source) ?? []
+      if (
+        !entry ||
+        !isTokenRankingResponse(entry.value, token, period, limit, offset, proofSources)
+      ) {
+        return null
+      }
 
-    const result = await tieredGetOrSet<{
-      traders: TokenTraderRanking[]
-      token: string
-      period: string
-      total: number
-    }>(
-      CACHE_KEY,
-      async () => {
-        const supabase = getSupabaseAdmin()
-        const { traders, total } = await getTokenTraderRankings(
-          supabase,
-          token,
-          period,
-          limit,
-          offset
-        )
-        return { traders, token, period, total }
-      },
-      'cold',
-      ['rankings', 'by-token']
-    )
+      const currentGeneration = await readSealedRankingAuthorityGeneration(
+        supabase,
+        period,
+        async () => null,
+        { timeoutMs: 10_000 }
+      )
+      return currentGeneration.publicationIdentity === entry.publicationIdentity
+        ? entry.value
+        : null
+    }
+
+    let result = await readAuthorizedCache()
+    if (!result) {
+      await tieredDel(CACHE_KEY)
+      result = await readAuthorizedCache()
+    }
+    if (!result) {
+      throw new Error('token ranking cache did not satisfy the sealed publication contract')
+    }
 
     return NextResponse.json(result, {
       headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800',
+        // The Redis value is re-authorized against live publication proofs on
+        // every request. A CDN copy cannot perform that check, so it must not
+        // outlive a cohort cutover as falsely-current token ranking data.
+        'Cache-Control': 'private, no-store, max-age=0',
+        'CDN-Cache-Control': 'no-store',
+        'Vercel-CDN-Cache-Control': 'no-store',
       },
     })
   } catch (err) {
