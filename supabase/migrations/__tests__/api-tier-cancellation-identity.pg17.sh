@@ -7,6 +7,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260729020000_api_tier_cancellation_identity.sql"
+CLEANUP_MIGRATION="$ROOT_DIR/supabase/migrations/20260729021000_disable_legacy_api_tier_writer.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -2951,6 +2952,23 @@ if [[ "$ledger_count_before" != "$ledger_count_after" ]]; then
   exit 1
 fi
 
+# Only after the additive migration and replacement callers are proven live
+# does the separate postdeploy migration remove the compatibility writer.
+psql_cmd -f "$CLEANUP_MIGRATION"
+expect_failure \
+  "SET ROLE service_role; SELECT public.update_user_api_tier('10000000-0000-4000-8000-000000000001', 'pro', 'sub_acl_forged', 0)" \
+  "legacy updater remained executable after postdeploy cutover"
+
+# Exact replay stays owner-only, and a later direct hostile grant is converged
+# away without damaging either replacement authority.
+psql_cmd -f "$CLEANUP_MIGRATION"
+psql_cmd -c \
+  "GRANT EXECUTE ON FUNCTION public.update_user_api_tier(uuid,text,text,integer) TO hostile_role WITH GRANT OPTION"
+psql_cmd -f "$CLEANUP_MIGRATION"
+expect_failure \
+  "SET ROLE hostile_role; SELECT public.update_user_api_tier('10000000-0000-4000-8000-000000000001', 'pro', 'sub_hostile_cutover', 0)" \
+  "hostile legacy updater grant survived cleanup replay"
+
 psql_cmd <<'SQL'
 DO $final_catalog_proof$
 DECLARE
@@ -2997,25 +3015,7 @@ BEGIN
       )
     ) AS acl_entry
     WHERE routine.oid = v_old_rpc
-      AND acl_entry.grantee NOT IN (v_postgres, v_service)
-  ) OR (
-    SELECT pg_catalog.count(*)
-    FROM pg_catalog.pg_proc AS routine
-    CROSS JOIN LATERAL pg_catalog.aclexplode(
-      COALESCE(
-        routine.proacl,
-        pg_catalog.acldefault('f', routine.proowner)
-      )
-    ) AS acl_entry
-    WHERE routine.oid = v_old_rpc
-      AND acl_entry.grantee = v_service
-      AND acl_entry.privilege_type = 'EXECUTE'
-      AND NOT acl_entry.is_grantable
-      AND acl_entry.grantor = v_postgres
-  ) <> 1 OR NOT pg_catalog.has_function_privilege(
-    'service_role',
-    v_old_rpc,
-    'EXECUTE'
+      AND acl_entry.grantee <> v_postgres
   ) OR EXISTS (
     SELECT 1
     FROM pg_catalog.pg_class AS relation

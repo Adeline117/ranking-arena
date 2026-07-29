@@ -5,6 +5,10 @@ const migration = readFileSync(
   join(process.cwd(), 'supabase/migrations/20260729020000_api_tier_cancellation_identity.sql'),
   'utf8'
 )
+const cleanupMigration = readFileSync(
+  join(process.cwd(), 'supabase/migrations/20260729021000_disable_legacy_api_tier_writer.sql'),
+  'utf8'
+)
 const pg17Proof = readFileSync(
   join(process.cwd(), 'supabase/migrations/__tests__/api-tier-cancellation-identity.pg17.sh'),
   'utf8'
@@ -176,11 +180,16 @@ describe('API tier Stripe event ledger contract', () => {
     expect(migration).toContain(
       'legacy API tier compatibility updater is not exact service-only EXECUTE'
     )
+    expect(cleanupMigration).toContain(
+      'legacy API tier writer remained executable after postdeploy cutover'
+    )
     expect(migration).toContain('API tier Stripe event ledger is not owner-only')
     expect(pg17Proof).toContain('PUBLIC EXECUTE survived migration replay')
     expect(pg17Proof).toContain(
       'legacy compatibility updater was unavailable during additive rollout'
     )
+    expect(pg17Proof).toContain('legacy updater remained executable after postdeploy cutover')
+    expect(pg17Proof).toContain('hostile legacy updater grant survived cleanup replay')
     expect(pg17Proof).toContain('PUBLIC reservation authority EXECUTE survived migration replay')
     expect(pg17Proof).toContain('hostile reservation table grant survived migration replay')
     expect(pg17Proof).toContain('reservation authority overload was accepted')

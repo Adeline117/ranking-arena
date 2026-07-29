@@ -144,10 +144,14 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
+  const additiveApiTierMigration = '20260729020000_api_tier_cancellation_identity.sql'
+  const legacyApiTierCleanupMigration = '20260729021000_disable_legacy_api_tier_writer.sql'
+
   assert.equal(predeploy.length, 94)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
+    legacyApiTierCleanupMigration,
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   assert.deepEqual(recoveryPrerequisites, [
@@ -226,7 +230,19 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 106)
+  assert.equal(new Set(all).size, 107)
+  assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
+  assert.equal(
+    postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
+    1
+  )
+  assert.ok(!predeploy.includes(legacyApiTierCleanupMigration))
+  assert.ok(!postdeploy.includes(additiveApiTierMigration))
+  assert.ok(!recoveryPrerequisites.includes(legacyApiTierCleanupMigration))
+  assert.ok(!concurrentRecovery.includes(legacyApiTierCleanupMigration))
+  assert.ok(!recovery.includes(legacyApiTierCleanupMigration))
+  assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
+  assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
   assert.deepEqual(predeploy.slice(-53), [
     '20260718120000_leaderboard_source_freshness.sql',
