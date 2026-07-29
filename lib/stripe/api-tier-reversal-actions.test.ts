@@ -3,10 +3,16 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
 
 const mockParseApiTierSubscriptionAuthority = jest.fn()
+const mockParseRecurringProCheckoutMetadata = jest.fn()
 
 jest.mock('@/app/api/stripe/webhook/handlers/subscription', () => ({
   parseApiTierSubscriptionAuthority: (...args: unknown[]) =>
     mockParseApiTierSubscriptionAuthority(...args),
+}))
+
+jest.mock('@/lib/stripe/recurring-pro-checkout', () => ({
+  parseRecurringProCheckoutMetadata: (...args: unknown[]) =>
+    mockParseRecurringProCheckoutMetadata(...args),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -34,7 +40,7 @@ function subscription(status: Stripe.Subscription.Status = 'active'): Stripe.Sub
   } as Stripe.Subscription
 }
 
-function action(leaseToken: string, attempts = 1) {
+function action(leaseToken: string, attempts = 1, productKind?: 'api_tier' | 'pro_entitlement') {
   return {
     id: ACTION_ID,
     ownership_id: OWNERSHIP_ID,
@@ -44,11 +50,13 @@ function action(leaseToken: string, attempts = 1) {
     stripe_subscription_id: SUBSCRIPTION_ID,
     attempts,
     lease_token: leaseToken,
+    ...(productKind ? { product_kind: productKind } : {}),
   }
 }
 
 function harness(options: {
   attempts?: number
+  productKind?: 'api_tier' | 'pro_entitlement'
   retrieve?: jest.Mock
   cancel?: jest.Mock
   finish?: (args: Record<string, unknown>, invocation: number) => Promise<unknown>
@@ -59,7 +67,7 @@ function harness(options: {
   const rpc = jest.fn(async (name: string, args: Record<string, unknown>) => {
     if (name === 'claim_api_tier_reversal_actions_atomic') {
       return {
-        data: [action(String(args.p_worker_token), options.attempts)],
+        data: [action(String(args.p_worker_token), options.attempts, options.productKind)],
         error: null,
       }
     }
@@ -92,6 +100,10 @@ describe('API tier reversal action outbox', () => {
       userId: USER_ID,
       stripeCustomerId: CUSTOMER_ID,
     })
+    mockParseRecurringProCheckoutMetadata.mockReturnValue({
+      userId: USER_ID,
+      customerId: CUSTOMER_ID,
+    })
   })
 
   afterAll(() => {
@@ -119,6 +131,35 @@ describe('API tier reversal action outbox', () => {
         p_retry_after_seconds: null,
       })
     )
+  })
+
+  it('cancels an exact ordinary Pro dispute action without API metadata', async () => {
+    const test = harness({ productKind: 'pro_entitlement' })
+
+    await expect(
+      drainApiTierReversalActions({
+        stripe: test.stripe,
+        supabase: test.supabase,
+        limit: 1,
+      })
+    ).resolves.toEqual({ claimed: 1, completed: 1, retried: 0 })
+
+    expect(mockParseApiTierSubscriptionAuthority).not.toHaveBeenCalled()
+    expect(mockParseRecurringProCheckoutMetadata).toHaveBeenCalledTimes(1)
+    expect(test.cancel).toHaveBeenCalledWith(SUBSCRIPTION_ID)
+  })
+
+  it('keeps legacy action rows backward compatible as API tier actions', async () => {
+    const test = harness({})
+
+    await drainApiTierReversalActions({
+      stripe: test.stripe,
+      supabase: test.supabase,
+      limit: 1,
+    })
+
+    expect(mockParseApiTierSubscriptionAuthority).toHaveBeenCalledTimes(1)
+    expect(mockParseRecurringProCheckoutMetadata).not.toHaveBeenCalled()
   })
 
   it('schedules exponential retry when Stripe cancellation is transiently unavailable', async () => {
