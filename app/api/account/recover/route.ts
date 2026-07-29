@@ -52,6 +52,16 @@ async function recoveryRpc(
   return (await Reflect.apply(admin.rpc, admin, [functionName, args])) as RecoveryRpcResult
 }
 
+async function resolveRecoveryAuthSubject(email: string): Promise<string | null> {
+  const { data, error } = await recoveryRpc('resolve_account_recovery_auth_subject', {
+    p_email: email,
+  })
+  if (error || (data !== null && (typeof data !== 'string' || data.length === 0))) {
+    throw new Error(error?.message ?? 'Recovery Auth subject returned an invalid acknowledgement')
+  }
+  return data
+}
+
 async function claimRecoveryAdmission(params: {
   userId: string
   recoveryTokenHash: string | null
@@ -330,12 +340,37 @@ export const POST = withPublic(
       userId = tokenRow.user_id
     } else {
       const { email, password } = body
-      if (!email || !password) return badRequest('Email and password are required')
+      if (
+        typeof email !== 'string' ||
+        email.trim().length === 0 ||
+        email.length > 320 ||
+        typeof password !== 'string' ||
+        password.length === 0 ||
+        password.length > 4096
+      ) {
+        return badRequest('Email and password are required')
+      }
+
+      const verifiedEmail = email.trim()
+      try {
+        userId = await resolveRecoveryAuthSubject(verifiedEmail)
+      } catch (error) {
+        logger.error('Failed to resolve account recovery Auth subject', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+        return NextResponse.json(
+          { success: false, error: 'Recovery is temporarily unavailable. Please try again.' },
+          { status: 503 }
+        )
+      }
+      if (!userId) {
+        return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
+      }
 
       const { data: profile, error } = await admin
         .from('user_profiles')
-        .select('id, deletion_scheduled_at')
-        .eq('email', email)
+        .select('deletion_scheduled_at')
+        .eq('id', userId)
         .not('deleted_at', 'is', null)
         .maybeSingle()
 
@@ -352,7 +387,7 @@ export const POST = withPublic(
         )
       }
 
-      userId = profile.id
+      body.email = verifiedEmail
     }
 
     if (!userId) {

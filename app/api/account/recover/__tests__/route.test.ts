@@ -8,6 +8,11 @@ const mockSubscriptionUpdateEq = jest.fn()
 const mockResumeStripeSubscriptionRenewals = jest.fn()
 const mockStopStripeSubscriptionRenewals = jest.fn()
 const mockDiscoverStripeSubscriptionBilling = jest.fn()
+const mockDeletedProfileEq = jest.fn(() => ({
+  not: jest.fn(() => ({
+    maybeSingle: jest.fn().mockImplementation(async () => profileResult),
+  })),
+}))
 const mockStripeClient = { marker: 'stripe-client' }
 let tokenResult: { data: Record<string, unknown> | null; error: unknown }
 let profileResult: { data: Record<string, unknown> | null; error: unknown }
@@ -47,11 +52,7 @@ const mockFrom = jest.fn((table: string) => {
           }
         }
         return {
-          eq: jest.fn(() => ({
-            not: jest.fn(() => ({
-              maybeSingle: jest.fn().mockImplementation(async () => profileResult),
-            })),
-          })),
+          eq: mockDeletedProfileEq,
         }
       }),
     }
@@ -159,6 +160,9 @@ describe('account recovery', () => {
       error: null,
     }
     mockRpc.mockImplementation(async (functionName: string) => {
+      if (functionName === 'resolve_account_recovery_auth_subject') {
+        return { data: 'user-1', error: null }
+      }
       if (functionName === 'claim_account_recovery_admission_atomic') {
         return { data: 'claimed', error: null }
       }
@@ -286,6 +290,10 @@ describe('account recovery', () => {
     const response = await POST(request({ email: 'user@example.com', password: 'wrong' }))
 
     expect(response.status).toBe(401)
+    expect(mockRpc).toHaveBeenCalledWith('resolve_account_recovery_auth_subject', {
+      p_email: 'user@example.com',
+    })
+    expect(mockDeletedProfileEq).toHaveBeenCalledWith('id', 'user-1')
     expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(1, 'user-1', {
       ban_duration: 'none',
     })
@@ -313,7 +321,7 @@ describe('account recovery', () => {
     expect(mockResumeStripeSubscriptionRenewals).not.toHaveBeenCalled()
   })
 
-  it('never lets credentials for a reused profile email recover another Auth subject', async () => {
+  it('never lets a mismatched sign-in subject recover the resolved Auth subject', async () => {
     mockPasswordSignIn.mockResolvedValue({
       data: {
         user: { id: 'user-2' },
@@ -344,6 +352,9 @@ describe('account recovery', () => {
 
   it('keeps billing untouched when the atomic finish rejects verified recovery', async () => {
     mockRpc.mockImplementation(async (functionName: string) => {
+      if (functionName === 'resolve_account_recovery_auth_subject') {
+        return { data: 'user-1', error: null }
+      }
       if (functionName === 'claim_account_recovery_admission_atomic') {
         return { data: 'claimed', error: null }
       }
@@ -367,6 +378,64 @@ describe('account recovery', () => {
     expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', {
       ban_duration: '720h',
     })
+  })
+
+  it('fails a missing Auth email closed before every Auth, admission, and billing mutation', async () => {
+    mockRpc.mockImplementation(async (functionName: string) => {
+      if (functionName === 'resolve_account_recovery_auth_subject') {
+        return { data: null, error: null }
+      }
+      throw new Error(`Unexpected RPC: ${functionName}`)
+    })
+
+    const response = await POST(
+      request({ email: 'current-auth@example.com', password: 'correct-password' })
+    )
+
+    expect(response.status).toBe(401)
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockResumeStripeSubscriptionRenewals).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [{ message: 'Auth database unavailable' }, null],
+    [null, { unexpected: 'shape' }],
+  ])('fails an unavailable or malformed Auth email resolution closed', async (error, data) => {
+    mockRpc.mockImplementation(async (functionName: string) => {
+      if (functionName === 'resolve_account_recovery_auth_subject') {
+        return { data, error }
+      }
+      throw new Error(`Unexpected RPC: ${functionName}`)
+    })
+
+    const response = await POST(
+      request({ email: 'current-auth@example.com', password: 'correct-password' })
+    )
+
+    expect(response.status).toBe(503)
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockResumeStripeSubscriptionRenewals).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [{}, 'password'],
+    ['user@example.com', {}],
+    [' '.repeat(3), 'password'],
+    [`${'a'.repeat(309)}@example.com`, 'password'],
+  ])('rejects non-scalar or oversized password recovery credentials', async (email, password) => {
+    const response = await POST(request({ email, password }))
+
+    expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
   })
 
   it('never consumes the recovery credential when Auth cannot be prepared first', async () => {

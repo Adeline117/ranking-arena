@@ -157,6 +157,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729075100_atomic_exchange_oauth_state_claim.sql
   20260729075300_account_hard_delete_recovery_barrier.sql
   20260729075400_verified_auth_profile_email.sql
+  20260729075500_account_recovery_auth_email_authority.sql
   20260729075550_preserve_stripe_event_idempotency.sql
 )
 
