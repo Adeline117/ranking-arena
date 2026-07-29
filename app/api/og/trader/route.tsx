@@ -11,6 +11,8 @@ import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { BASE_URL } from '@/lib/constants/urls'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readEdgePublicTraderRanking } from '@/lib/rankings/read-edge-public-trader-ranking'
+import { SealedRankingSourceOutsideAuthorityError } from '@/lib/rankings/read-sealed-ranking-generation'
 import {
   publicRankingResponseCacheHeaders,
   publicRankingResponseRejectionHeaders,
@@ -26,21 +28,6 @@ export const runtime = 'edge'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
-/** Edge-safe Supabase REST GET → first row or null. */
-async function restSelect(table: string, query: string): Promise<Record<string, unknown> | null> {
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}&limit=1`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      signal: AbortSignal.timeout(4000),
-    })
-    if (!res.ok) return null
-    const rows = (await res.json()) as Record<string, unknown>[]
-    return rows[0] ?? null
-  } catch {
-    return null
-  }
-}
 
 const C = {
   bgTop: '#0A0A0F',
@@ -136,48 +123,6 @@ function formatRoi(roi: number): string {
   return sign + abs.toFixed(1) + '%'
 }
 
-async function fetchTrader(handle: string) {
-  // Edge REST equivalents of the prior Supabase-js lookups. `ilike` → `ilike.*`,
-  // exact → `eq.`. PostgREST URL-encodes values in the query string.
-  const enc = encodeURIComponent
-  const decoded = decodeURIComponent(handle)
-  const cols = 'handle,avatar_url,source,source_trader_id'
-
-  const source =
-    (await restSelect('trader_sources', `select=${cols}&handle=ilike.${enc(handle)}`)) ??
-    (await restSelect('trader_sources', `select=${cols}&source_trader_id=eq.${enc(decoded)}`)) ??
-    (await restSelect(
-      'leaderboard_ranks',
-      `select=${cols}&source_trader_id=eq.${enc(decoded)}&season_id=eq.90D`
-    ))
-
-  if (!source) return null
-  const srcName = source.source as string
-  const srcTraderId = source.source_trader_id as string
-  if (!isPublicRankingSourceAllowed(srcName)) return null
-
-  // Cascade through season_ids: 90D → 30D → 7D
-  let rankData: Record<string, unknown> | null = null
-  let usedSeason = '90D'
-  for (const season of ['90D', '30D', '7D']) {
-    const data = await restSelect(
-      'leaderboard_ranks',
-      `select=roi,pnl,win_rate,max_drawdown,arena_score,rank&source=eq.${enc(srcName)}&source_trader_id=eq.${enc(srcTraderId)}&season_id=eq.${season}`
-    )
-    if (data) {
-      rankData = data
-      usedSeason = season
-      break
-    }
-  }
-
-  // Note: the legacy trader_snapshots fallback was removed — that table was
-  // dropped from prod (phase1_drop_dead_tables). leaderboard_ranks cascade
-  // above is the only data source; missing traders render the no-stats card.
-
-  return { ...source, platform: srcName, season: usedSeason, ...(rankData || {}) }
-}
-
 export async function GET(request: NextRequest) {
   try {
     // OG 路由不限流(与工作的 rank/homepage/compare edge OG 一致,CDN s-maxage 缓存)。
@@ -202,20 +147,47 @@ export async function GET(request: NextRequest) {
     const epochRedirect = redirectToPublicRankingResponseCacheEpoch(request)
     if (epochRedirect) return epochRedirect
 
-    const trader = (await fetchTrader(handle)) as Record<string, unknown> | null
-    const num = (v: unknown): number | null => (typeof v === 'number' ? v : null)
-    const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
+    let trader
+    try {
+      trader = await readEdgePublicTraderRanking(
+        {
+          supabaseUrl: SUPABASE_URL,
+          serviceRoleKey: SUPABASE_KEY,
+        },
+        {
+          handle,
+          ...(overrideSource ? { source: overrideSource } : {}),
+        }
+      )
+    } catch (error) {
+      if (error instanceof SealedRankingSourceOutsideAuthorityError) {
+        return new Response('Unknown or unavailable ranking source', {
+          status: 404,
+          headers: publicRankingResponseRejectionHeaders(),
+        })
+      }
+      throw error
+    }
+    if (trader) {
+      const srcName = trader.source
+      if (!isPublicRankingSourceAllowed(srcName)) {
+        return new Response('Unknown or unavailable ranking source', {
+          status: 404,
+          headers: publicRankingResponseRejectionHeaders(),
+        })
+      }
+    }
 
-    const displayName = str(trader?.display_name) || str(trader?.handle) || handle
-    const roi = num(trader?.roi)
-    const score = num(trader?.arena_score)
-    const rank = num(trader?.rank)
-    const winRate = num(trader?.win_rate)
-    const mdd = num(trader?.max_drawdown)
-    const platform = overrideSource || str(trader?.platform) || ''
-    const avatarUrl = str(trader?.avatar_url)
-    const season = str(trader?.season) ?? '90D'
-    const seasonLabel = season === 'latest' ? 'Latest' : season
+    const displayName = trader?.handle || handle
+    const roi = trader?.roi ?? null
+    const score = trader?.arenaScore ?? null
+    const rank = trader?.rank ?? null
+    const winRate = trader?.winRate ?? null
+    const mdd = trader?.maxDrawdown ?? null
+    const platform = trader?.source || ''
+    const avatarUrl = trader?.avatarUrl ?? null
+    const season = trader?.season ?? '90D'
+    const seasonLabel = season
 
     const roiValid = roi != null
     const roiColor = roiValid && roi >= 0 ? C.success : C.error

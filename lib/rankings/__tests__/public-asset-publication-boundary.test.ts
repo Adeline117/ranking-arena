@@ -39,4 +39,14 @@ describe('public ranking asset publication boundary', () => {
     expect(text).not.toContain('/rest/v1/leaderboard_ranks')
     expect(text).not.toContain('rank_publication_id=eq.')
   })
+
+  it('binds the trader OG source hint to the sealed data read and resolved label', () => {
+    const text = source('app/api/og/trader/route.tsx')
+    expect(text).toContain("export const runtime = 'edge'")
+    expect(text).toContain('readEdgePublicTraderRanking')
+    expect(text).toContain('...(overrideSource ? { source: overrideSource } : {})')
+    expect(text).toContain("const platform = trader?.source || ''")
+    expect(text).not.toContain('overrideSource ||')
+    expect(text).not.toContain('/rest/v1/leaderboard_ranks')
+  })
 })
