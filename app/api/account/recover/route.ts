@@ -50,7 +50,16 @@ async function resumeSubscription(userId: string): Promise<BillingRecoveryState>
     .from('subscriptions')
     .select('stripe_subscription_id, status, plan, cancel_at_period_end')
     .eq('user_id', userId)
-    .in('status', ['active', 'trialing', 'past_due', 'incomplete', 'unpaid', 'paused'])
+    .in('status', [
+      'active',
+      'trialing',
+      'past_due',
+      'incomplete',
+      'unpaid',
+      'paused',
+      'canceled',
+      'incomplete_expired',
+    ])
     .limit(1)
     .maybeSingle()
   if (error) throw error
@@ -92,14 +101,14 @@ async function resumeSubscription(userId: string): Promise<BillingRecoveryState>
       .eq('stripe_subscription_id', consumerSubscriptionId)
       .eq('user_id', userId)
     if (updateError) {
-      await restoreDeletionBillingPause(userId, recovery)
+      await restoreDeletionBillingShutdown(userId, recovery)
       throw updateError
     }
   }
   return recovery
 }
 
-async function restoreDeletionBillingPause(
+async function restoreDeletionBillingShutdown(
   userId: string,
   recovery: BillingRecoveryState
 ): Promise<void> {
@@ -109,8 +118,7 @@ async function restoreDeletionBillingPause(
     stripeClient: getStripe(),
     subscriptionIds: recovery.resumedSubscriptionIds,
     expectedCustomerId: recovery.customerId,
-    deletionMode: 'recoverable',
-    pauseMarker: userId,
+    deletionMode: 'permanent',
     includeCustomerSubscriptions: true,
   })
   if (
@@ -119,7 +127,7 @@ async function restoreDeletionBillingPause(
   ) {
     const { error } = await admin
       .from('subscriptions')
-      .update({ cancel_at_period_end: true })
+      .update({ status: 'canceled', cancel_at_period_end: false })
       .eq('stripe_subscription_id', recovery.consumerSubscriptionId)
       .eq('user_id', userId)
     if (error) throw error
@@ -249,7 +257,7 @@ export const POST = withPublic(
 
     if (restoreError || !restoredUserId) {
       try {
-        await restoreDeletionBillingPause(userId, billingRecovery)
+        await restoreDeletionBillingShutdown(userId, billingRecovery)
       } catch (error) {
         logger.error('Failed to restore billing pause after account recovery rollback', {
           userId,

@@ -43,6 +43,7 @@ function assertOwnedByCustomer(
 
 export interface StopSubscriptionRenewalsResult {
   customerId: string | null
+  observedSubscriptionIds: string[]
   changedSubscriptionIds: string[]
 }
 
@@ -87,6 +88,7 @@ async function loadStripeSubscriptions(params: {
             'Stripe subscription pagination returned a duplicate or missing subscription ID'
           )
         }
+        assertSubscriptionId(subscription.id)
         seenRemoteIds.add(subscription.id)
         assertOwnedByCustomer(subscription, customerId)
         subscriptionsById.set(subscription.id, subscription)
@@ -172,6 +174,7 @@ export async function stopStripeSubscriptionRenewals(params: {
     expectedCustomerId: params.expectedCustomerId,
     includeCustomerSubscriptions: params.includeCustomerSubscriptions ?? true,
   })
+  const observedSubscriptionIds = subscriptions.map(({ id }) => id).sort()
 
   const changedSubscriptionIds: string[] = []
   for (const subscription of subscriptions) {
@@ -242,7 +245,7 @@ export async function stopStripeSubscriptionRenewals(params: {
     changedSubscriptionIds.push(subscription.id)
   }
 
-  return { customerId, changedSubscriptionIds }
+  return { customerId, observedSubscriptionIds, changedSubscriptionIds }
 }
 
 /**
@@ -264,6 +267,7 @@ export async function resumeStripeSubscriptionRenewals(params: {
     expectedCustomerId: params.expectedCustomerId,
     includeCustomerSubscriptions: params.includeCustomerSubscriptions ?? false,
   })
+  const observedSubscriptionIds = subscriptions.map(({ id }) => id).sort()
   const changedSubscriptionIds: string[] = []
   const terminalMarkedSubscriptionIds: string[] = []
   const explicitlyLinkedIds = new Set(params.subscriptionIds)
@@ -311,8 +315,7 @@ export async function resumeStripeSubscriptionRenewals(params: {
         stripeClient: params.stripeClient,
         subscriptionIds: params.subscriptionIds,
         expectedCustomerId: customerId,
-        deletionMode: 'recoverable',
-        pauseMarker: params.pauseMarker,
+        deletionMode: 'permanent',
         includeCustomerSubscriptions: true,
       })
     } catch (compensationError) {
@@ -323,7 +326,12 @@ export async function resumeStripeSubscriptionRenewals(params: {
     }
     throw error
   }
-  return { customerId, changedSubscriptionIds, terminalMarkedSubscriptionIds }
+  return {
+    customerId,
+    observedSubscriptionIds,
+    changedSubscriptionIds,
+    terminalMarkedSubscriptionIds,
+  }
 }
 
 export interface ExpireOpenCheckoutsResult {

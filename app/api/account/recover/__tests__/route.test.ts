@@ -160,11 +160,13 @@ describe('account recovery', () => {
     mockPasswordSignIn.mockResolvedValue({ error: null })
     mockResumeStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_123', 'sub_api'],
       changedSubscriptionIds: ['sub_123', 'sub_api'],
       terminalMarkedSubscriptionIds: [],
     })
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_123', 'sub_api'],
       changedSubscriptionIds: ['sub_123', 'sub_api'],
     })
   })
@@ -248,15 +250,15 @@ describe('account recovery', () => {
       stripeClient: mockStripeClient,
       subscriptionIds: ['sub_123', 'sub_api'],
       expectedCustomerId: 'cus_owner',
-      deletionMode: 'recoverable',
-      pauseMarker: 'user-1',
+      deletionMode: 'permanent',
       includeCustomerSubscriptions: true,
     })
     expect(mockSubscriptionUpdate).toHaveBeenNthCalledWith(1, {
       cancel_at_period_end: false,
     })
     expect(mockSubscriptionUpdate).toHaveBeenNthCalledWith(2, {
-      cancel_at_period_end: true,
+      status: 'canceled',
+      cancel_at_period_end: false,
     })
     expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', {
       ban_duration: '720h',
@@ -281,6 +283,7 @@ describe('account recovery', () => {
     subscriptionResult = { data: null, error: null }
     mockResumeStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_api'],
       changedSubscriptionIds: ['sub_api'],
       terminalMarkedSubscriptionIds: [],
     })
@@ -302,6 +305,7 @@ describe('account recovery', () => {
     subscriptionResult = { data: null, error: null }
     mockResumeStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_api_ended'],
       changedSubscriptionIds: [],
       terminalMarkedSubscriptionIds: ['sub_api_ended'],
     })

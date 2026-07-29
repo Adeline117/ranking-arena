@@ -99,6 +99,7 @@ describe('account deletion Stripe shutdown', () => {
       })
     ).resolves.toEqual({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_api', 'sub_consumer'],
       changedSubscriptionIds: ['sub_consumer', 'sub_api'],
     })
 
@@ -138,6 +139,7 @@ describe('account deletion Stripe shutdown', () => {
       })
     ).resolves.toEqual({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_deletion_paused', 'sub_paused', 'sub_terminal'],
       changedSubscriptionIds: ['sub_paused', 'sub_deletion_paused'],
     })
     expect(mockUpdateSubscription).toHaveBeenCalledTimes(1)
@@ -147,6 +149,30 @@ describe('account deletion Stripe shutdown', () => {
       },
     })
     expect(mockCancelSubscription).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports terminal and live subscriptions that were explicitly retrieved', async () => {
+    mockRetrieveSubscription.mockImplementation(async (id: string) =>
+      subscription(id, { status: id === 'sub_terminal' ? 'canceled' : 'active' })
+    )
+
+    await expect(
+      stopStripeSubscriptionRenewals({
+        stripeClient,
+        subscriptionIds: ['sub_terminal', 'sub_live'],
+        deletionMode: 'permanent',
+        includeCustomerSubscriptions: false,
+      })
+    ).resolves.toEqual({
+      customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_live', 'sub_terminal'],
+      changedSubscriptionIds: ['sub_live'],
+    })
+    expect(mockCancelSubscription).toHaveBeenCalledTimes(1)
+    expect(mockCancelSubscription).toHaveBeenCalledWith('sub_live', {
+      invoice_now: false,
+      prorate: false,
+    })
   })
 
   it('validates every discovered subscription owner before changing billing', async () => {
@@ -180,6 +206,7 @@ describe('account deletion Stripe shutdown', () => {
         })
       ).resolves.toEqual({
         customerId: 'cus_owner',
+        observedSubscriptionIds: ['sub_unpaid'],
         changedSubscriptionIds: ['sub_unpaid'],
       })
 
@@ -239,8 +266,30 @@ describe('account deletion Stripe shutdown', () => {
       })
     ).resolves.toEqual({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_past_due'],
       changedSubscriptionIds: ['sub_past_due'],
     })
+  })
+
+  it('fails closed when ambiguous cancellation still resolves to a live subscription', async () => {
+    mockListSubscriptions.mockResolvedValue(page([subscription('sub_still_live')]))
+    mockCancelSubscription.mockRejectedValue(new Error('connection reset after write'))
+    mockRetrieveSubscription.mockResolvedValue(
+      subscription('sub_still_live', {
+        status: 'past_due',
+        metadata: { [ACCOUNT_DELETION_PAUSE_METADATA_KEY]: PAUSE_MARKER },
+      })
+    )
+
+    await expect(
+      stopStripeSubscriptionRenewals({
+        stripeClient,
+        subscriptionIds: ['sub_still_live'],
+        expectedCustomerId: 'cus_owner',
+        deletionMode: 'recoverable',
+        pauseMarker: PAUSE_MARKER,
+      })
+    ).rejects.toThrow('was not canceled')
   })
 
   it('immediately cancels every live remote subscription before hard deletion', async () => {
@@ -260,6 +309,7 @@ describe('account deletion Stripe shutdown', () => {
       })
     ).resolves.toEqual({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_api', 'sub_consumer'],
       changedSubscriptionIds: ['sub_consumer', 'sub_api'],
     })
     expect(mockCancelSubscription).toHaveBeenCalledTimes(2)
@@ -386,6 +436,7 @@ describe('account deletion Stripe shutdown', () => {
       })
     ).resolves.toEqual({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_resume', 'sub_terminal'],
       changedSubscriptionIds: ['sub_resume'],
       terminalMarkedSubscriptionIds: ['sub_terminal'],
     })
@@ -426,6 +477,7 @@ describe('account deletion Stripe shutdown', () => {
       })
     ).resolves.toEqual({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_api', 'sub_user_cancelled'],
       changedSubscriptionIds: ['sub_api'],
       terminalMarkedSubscriptionIds: [],
     })

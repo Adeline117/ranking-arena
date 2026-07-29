@@ -85,6 +85,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     jest.clearAllMocks()
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_api', 'sub_recurring'],
       changedSubscriptionIds: ['sub_recurring', 'sub_api'],
     })
     mockExpireOpenSubscriptionCheckouts.mockResolvedValue({
@@ -194,6 +195,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     )
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_api'],
       changedSubscriptionIds: ['sub_api'],
     })
 
@@ -231,6 +233,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     })
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
+      observedSubscriptionIds: [],
       changedSubscriptionIds: [],
     })
     mockRpc.mockResolvedValue({ data: purgedResult(), error: null })
@@ -295,6 +298,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     })
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_checkout_race'],
       changedSubscriptionIds: ['sub_checkout_race'],
     })
 
@@ -331,6 +335,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     })
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
+      observedSubscriptionIds: [],
       changedSubscriptionIds: [],
     })
 
@@ -369,6 +374,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     )
     mockStopStripeSubscriptionRenewals.mockResolvedValueOnce({
       customerId: 'cus_owner',
+      observedSubscriptionIds: [],
       changedSubscriptionIds: [],
     })
     mockExpireOpenSubscriptionCheckouts.mockResolvedValue({
