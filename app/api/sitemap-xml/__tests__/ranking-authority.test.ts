@@ -5,10 +5,9 @@ const route = readFileSync(join(process.cwd(), 'app/api/sitemap-xml/route.ts'), 
 
 describe('trader sitemap ranking authority', () => {
   it('binds trader URLs to one sealed public generation', () => {
-    expect(route).toContain('filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)')
-    expect(route.match(/readSealedRankingGeneration\(/g)).toHaveLength(2)
-    expect(route).toContain("{ season: '90D', sources: SITEMAP_RANKING_SOURCES }")
-    expect(route).toContain(".in('source', SITEMAP_RANKING_SOURCES)")
+    expect(route.match(/readSealedRankingAuthorityGeneration\(/g)).toHaveLength(2)
+    expect(route).toContain('const authoritySources = publication.proofs.map')
+    expect(route).toContain(".in('source', authoritySources)")
     expect(route).toContain(".filter('rank_publication_id', 'eq', publication.scoreCohortId)")
   })
 

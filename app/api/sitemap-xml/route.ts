@@ -18,12 +18,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import { ARTICLES } from '@/app/(app)/learn/articles'
 
 export const dynamic = 'force-dynamic'
@@ -32,9 +28,6 @@ export const maxDuration = 60
 const BASE_URL = 'https://www.arenafi.org'
 const TRADERS_PER_SHARD = 5000
 const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply'] as const
-const SITEMAP_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 const CACHEABLE_SITEMAP_HEADERS = {
   'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
@@ -240,14 +233,15 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
   // Shard 1..N: trader pages
   const supabase = getSupabase()
   const offset = (shardId - 1) * TRADERS_PER_SHARD
-  const sealedRead = await readSealedRankingGeneration(
+  const sealedRead = await readSealedRankingAuthorityGeneration(
     supabase,
-    { season: '90D', sources: SITEMAP_RANKING_SOURCES },
+    '90D',
     async (publication) => {
+      const authoritySources = publication.proofs.map((proof) => proof.source)
       const { data, error } = await supabase
         .from('leaderboard_ranks')
         .select('handle, source_trader_id, source, computed_at')
-        .in('source', SITEMAP_RANKING_SOURCES)
+        .in('source', authoritySources)
         .eq('season_id', '90D')
         .filter('rank_publication_id', 'eq', publication.scoreCohortId)
         .not('handle', 'is', null)
@@ -298,9 +292,9 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
 
 async function getTraderCount(): Promise<number> {
   const supabase = getSupabase()
-  const sealedRead = await readSealedRankingGeneration(
+  const sealedRead = await readSealedRankingAuthorityGeneration(
     supabase,
-    { season: '90D', sources: SITEMAP_RANKING_SOURCES },
+    '90D',
     async (publication) =>
       publication.proofs.reduce((total, proof) => total + proof.published_rank_count, 0),
     { timeoutMs: 10_000 }
