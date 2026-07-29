@@ -166,4 +166,14 @@ describe('coreModulesFromTierC', () => {
   it('returns null when the payload has no stats rows', () => {
     expect(coreModulesFromTierC('bitget_futures', 30, { stats: [], series: [] })).toBeNull()
   })
+
+  it('does not relabel an inception row as a missing requested window', () => {
+    const cumulativeOnly = {
+      ...payload,
+      stats: [{ timeframe: 0, roi: 999, pnl: 123_456 }],
+      series: [],
+    }
+
+    expect(coreModulesFromTierC('bitget_bots_futures', 30, cumulativeOnly)).toBeNull()
+  })
 })

@@ -188,7 +188,11 @@ export function coreModulesFromTierC(
   payload: Record<string, unknown>
 ): TraderCoreModules | null {
   const statsList = Array.isArray(payload.stats) ? (payload.stats as Record<string, unknown>[]) : []
-  const statsRow = statsList.find((s) => Number(s.timeframe) === timeframe) ?? statsList[0]
+  // Never relabel a different window as the one the caller requested. This is
+  // especially important for profiles that also carry a cumulative
+  // (timeframe=0) row: an incomplete upstream payload must fail closed rather
+  // than render inception ROI/PnL as 7D/30D/90D performance.
+  const statsRow = statsList.find((s) => Number(s.timeframe) === timeframe)
   if (!statsRow) return null
 
   const stats: Record<string, number | string | null> = {}

@@ -231,6 +231,8 @@ async function upsertTraders(
        wallet_address    = COALESCE(EXCLUDED.wallet_address, arena.traders.wallet_address),
        meta              = arena.traders.meta || EXCLUDED.meta,
        last_seen_at      = now()
+     WHERE arena.traders.trader_kind IS NOT DISTINCT FROM EXCLUDED.trader_kind
+       AND arena.traders.bot_strategy IS NOT DISTINCT FROM EXCLUDED.bot_strategy
      RETURNING id, exchange_trader_id`,
     [
       sourceId,
@@ -247,6 +249,11 @@ async function upsertTraders(
       ),
     ]
   )
+  if (out.length !== rows.length) {
+    throw new Error(
+      `[publish] trader identity conflict: expected=${rows.length}, matched=${out.length}`
+    )
+  }
   for (const row of out) map.set(row.exchange_trader_id, row.id)
   return map
 }

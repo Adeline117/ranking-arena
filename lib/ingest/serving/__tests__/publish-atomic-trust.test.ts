@@ -118,6 +118,7 @@ interface HarnessOptions {
   entryRowCount?: number
   databaseNow?: string
   latestPassedAt?: string
+  traderRows?: Array<{ exchange_trader_id: string; id: number }>
 }
 
 function clientHarness(options: HarnessOptions = {}) {
@@ -157,7 +158,8 @@ function clientHarness(options: HarnessOptions = {}) {
       }
     }
     if (sql.includes('INSERT INTO arena.traders')) {
-      return { rows: [{ id: 1_001, exchange_trader_id: row.exchangeTraderId }], rowCount: 1 }
+      const rows = options.traderRows ?? [{ id: 1_001, exchange_trader_id: row.exchangeTraderId }]
+      return { rows, rowCount: rows.length }
     }
     if (sql.includes('INSERT INTO arena.leaderboard_entries')) {
       return { rows: [], rowCount: options.entryRowCount ?? 1 }
@@ -422,6 +424,29 @@ describe('atomic trusted leaderboard publication', () => {
 
     expect(mockWriteTrust).not.toHaveBeenCalled()
     expect(harness.query.mock.calls.map(([sql]) => String(sql))).toContain('ROLLBACK')
+  })
+
+  it('rolls back the snapshot when ON CONFLICT finds a null or wrong trader identity', async () => {
+    const harness = clientHarness({ traderRows: [] })
+    mockConnect.mockResolvedValue(harness.client)
+    mockPrepareTrust.mockReturnValue(preparedV3)
+
+    await expect(publishTrustedLeaderboardSnapshot(trustedInput())).rejects.toThrow(
+      'trader identity conflict: expected=1, matched=0'
+    )
+
+    const statements = harness.query.mock.calls.map(([sql]) => String(sql))
+    const traderUpsert = statements.find((sql) => sql.includes('INSERT INTO arena.traders'))
+    expect(traderUpsert).toMatch(
+      /traders\.trader_kind IS NOT DISTINCT FROM EXCLUDED\.trader_kind[\s\S]+traders\.bot_strategy IS NOT DISTINCT FROM EXCLUDED\.bot_strategy/
+    )
+    expect(statements).toContain('ROLLBACK')
+    expect(statements).not.toContain('COMMIT')
+    expect(statements.some((sql) => sql.includes('INSERT INTO arena.leaderboard_entries'))).toBe(
+      false
+    )
+    expect(mockWriteTrust).not.toHaveBeenCalled()
+    expect(mockFenceCommit).not.toHaveBeenCalled()
   })
 
   it('rejects an older capture under the source lock before it can overwrite latest stats', async () => {

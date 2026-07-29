@@ -844,7 +844,10 @@ export interface ReplayPagedOptions {
   /** Build the request for a 1-based page index (mutate page/cursor params). */
   buildRequest: (pageIndex: number) => ReplayRequestTemplate
   /** Extract row count + source-reported total from a payload. */
-  extractMeta: (payload: unknown) => { rowCount: number; reportedTotal: number | null }
+  extractMeta: (
+    payload: unknown,
+    requestPageIndex: number
+  ) => { rowCount: number; reportedTotal: number | null }
   /** Expected page size (sources.page_size); null = stop only on empty page. */
   pageSize: number | null
   /** Degenerate-page predicate (spec §5.6 XT rule). */
@@ -884,7 +887,7 @@ export async function* replayPaged(opts: ReplayPagedOptions): AsyncGenerator<Raw
     const payload = await replayJson(session, fetcher, template)
 
     pagesFetched += 1
-    const meta = extractMeta(payload)
+    const meta = extractMeta(payload, pageIndex)
     if (meta.reportedTotal !== null) reportedTotal = meta.reportedTotal
     lastPageRowCount = meta.rowCount
 
