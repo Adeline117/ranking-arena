@@ -231,11 +231,11 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 
   const parts = [rankStr, roiStr, topStr].filter(Boolean)
   const title = `${name} Rank Card`
-  // "across all tracked exchanges", NOT "on {platform}": leaderboard_ranks.rank is
-  // a GLOBAL cross-exchange rank, so "on Binance" falsely implies a per-exchange
+  // "across current public source boards", NOT "on {platform}": leaderboard_ranks.rank is
+  // a GLOBAL cross-source-board rank, so "on Binance" falsely implies a per-platform
   // ranking (mirrors the fix already applied to share/rank/[trader_key]).
   const description = parts.length
-    ? `${parts.join(' | ')} across all tracked exchanges on Arena`
+    ? `${parts.join(' | ')} across Arena's current public source boards`
     : `${name}'s trading performance card on Arena`
 
   // Build OG image URL — pass all params so the image can render without DB access

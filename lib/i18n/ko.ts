@@ -173,7 +173,7 @@ const ko = {
   // Leaderboard
   source: '출처',
   allExchanges: '전체',
-  tradersAcrossExchanges: '{exchanges}개 거래소에서 {count}명의 트레이더',
+  tradersAcrossExchanges: '{exchanges}개 소스 보드에서 {count}명의 트레이더',
   labelTraders: '트레이더',
   labelAvgScore: '평균 점수',
   labelAvgRoi: '평균 ROI',
@@ -5304,7 +5304,8 @@ const ko = {
   topPercentOn: '{platform} 상위 {pct}%',
   // 거래소 통합 백분위 —— 종합 순위 / 전체 추적 수에서 도출
   topPercentOverall: '전체 상위 {pct}%',
-  beatsTradersAcrossExchanges: '모든 거래소에서 순위가 매겨진 {total}명 중 {pct}%를 앞섭니다',
+  beatsTradersAcrossExchanges:
+    '현재 공개 소스 보드에서 순위가 매겨진 {total}명 중 {pct}%를 앞섭니다',
   riskReward: '위험/보상',
   riskRewardTooltip: '평균 수익 / 평균 손실 비율. 1.5 이상이면 양호.',
   profit: '수익',

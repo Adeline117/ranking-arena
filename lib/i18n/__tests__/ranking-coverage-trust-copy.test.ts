@@ -43,9 +43,13 @@ describe('ranking coverage trust copy', () => {
       expect(dictionary.methodologyFaqA2).toContain('2')
       expect(dictionary.methodologySec1List).not.toMatch(/dYdX|Drift|Vertex|Aevo|Kwenta/)
       expect(dictionary.aboutStatSourceBoards).toBe('{boards}')
-      expect(dictionary.aboutStatSourceBoardsLabel).toMatch(
-        /board|来源板|ソースボード|소스 보드/i
+      expect(dictionary.aboutStatSourceBoardsLabel).toMatch(/board|来源板|ソースボード|소스 보드/i)
+      expect(dictionary.tradersAcrossExchanges).toMatch(/board|来源板|ソースボード|소스 보드/i)
+      expect(dictionary.beatsTradersAcrossExchanges).toMatch(/board|来源板|ソースボード|소스 보드/i)
+      expect(dictionary.tradersAcrossExchanges.replace('{exchanges}', '')).not.toMatch(
+        /exchange|交易所|取引所|거래소/i
       )
+      expect(dictionary.beatsTradersAcrossExchanges).not.toMatch(/exchange|交易所|取引所|거래소/i)
     }
   )
 
@@ -59,6 +63,9 @@ describe('ranking coverage trust copy', () => {
       'app/(app)/rankings/tokens/[token]/page.tsx',
       'app/(app)/rankings/exchanges/page.tsx',
       'app/(app)/methodology/page.tsx',
+      'app/(app)/share/rank/[trader_key]/page.tsx',
+      'app/(app)/wrapped/[handle]/page.tsx',
+      'app/(app)/wrapped/[handle]/WrappedCardClient.tsx',
       'app/api/email/welcome/route.ts',
       'app/api/og/exchange/route.tsx',
       'lib/services/twitter-bot.ts',
@@ -68,6 +75,7 @@ describe('ranking coverage trust copy', () => {
 
     expect(copy).not.toMatch(/(?:18|22|25|26|27|30|44|45)\s*\+\s*(?:exchange|source)/i)
     expect(copy).not.toMatch(/real[- ]?time crypto trader leaderboard|live leaderboard data/i)
+    expect(copy).not.toMatch(/(?:tracked|all)\s+exchanges/i)
     expect(copy).toContain('source boards')
   })
 })

@@ -168,7 +168,7 @@ const ja = {
   livePositions: 'ライブポジション',
   source: 'ソース',
   allExchanges: 'すべて',
-  tradersAcrossExchanges: '{exchanges}取引所で{count}人のトレーダー',
+  tradersAcrossExchanges: '{exchanges}のソースボードで{count}人のトレーダー',
   labelTraders: 'トレーダー',
   labelAvgScore: '平均スコア',
   labelAvgRoi: '平均ROI',
@@ -5061,7 +5061,8 @@ const ja = {
   topPercentOn: '{platform} 上位 {pct}%',
   // 取引所横断のパーセンタイル —— 総合順位 / 追跡総数から算出
   topPercentOverall: '全体で上位 {pct}%',
-  beatsTradersAcrossExchanges: '全取引所の {total} 人のトレーダーのうち {pct}% を上回る',
+  beatsTradersAcrossExchanges:
+    '現在公開中のソースボードで順位付けされた {total} 人のうち {pct}% を上回る',
   riskReward: 'リスク/リワード',
   riskRewardTooltip: '平均利益 / 平均損失の比率。1.5以上が良好。',
   profit: '利益',

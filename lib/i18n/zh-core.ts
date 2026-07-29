@@ -302,7 +302,7 @@ const zhCore = {
   traderLeaderboard: '交易员排行榜',
   traderNotFound: '交易员不存在',
   traders: '交易员',
-  tradersAcrossExchanges: '{count} 位交易员，覆盖 {exchanges} 个交易所',
+  tradersAcrossExchanges: '{count} 位交易员，覆盖 {exchanges} 个来源板',
   tryAgain: '请重试',
   unfollow: '取消关注',
   unknown: '未知',

@@ -170,7 +170,7 @@ const zh = {
   // 排行榜
   source: '来源',
   allExchanges: '全部',
-  tradersAcrossExchanges: '{count} 位交易员，覆盖 {exchanges} 个交易所',
+  tradersAcrossExchanges: '{count} 位交易员，覆盖 {exchanges} 个来源板',
   labelTraders: '交易员',
   labelAvgScore: '平均评分',
   labelAvgRoi: '平均收益率',
@@ -5326,7 +5326,7 @@ const zh = {
   topPercentOn: '{platform} 前 {pct}%',
   // 跨交易所百分位 —— 由总排名 / 全站追踪总数推导
   topPercentOverall: '总榜前 {pct}%',
-  beatsTradersAcrossExchanges: '超越全交易所 {total} 位交易员中的 {pct}%',
+  beatsTradersAcrossExchanges: '超越当前公开来源板 {total} 位已排名交易员中的 {pct}%',
 
   // Risk/Reward
   riskReward: '盈亏比',

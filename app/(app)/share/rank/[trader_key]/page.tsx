@@ -150,10 +150,10 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const parts = [rankStr, roiStr, topStr].filter(Boolean)
 
   const title = `${name} Rank Card`
-  // `rank`/`Top X%` are GLOBAL cross-exchange positions, so frame them as such —
-  // not "on {platform}" (which falsely implied a per-exchange ranking).
+  // `rank`/`Top X%` are GLOBAL cross-source-board positions, so frame them as such —
+  // not "on {platform}" (which falsely implied a per-platform ranking).
   const description = parts.length
-    ? `${parts.join(' | ')} across all tracked exchanges on Arena`
+    ? `${parts.join(' | ')} across Arena's current public source boards`
     : `${name}'s trading performance card on Arena`
 
   const ogParams = new URLSearchParams({

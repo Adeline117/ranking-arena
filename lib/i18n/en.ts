@@ -174,7 +174,7 @@ const en = {
   // Leaderboard
   source: 'Source',
   allExchanges: 'All',
-  tradersAcrossExchanges: '{count} traders across {exchanges} exchanges',
+  tradersAcrossExchanges: '{count} traders across {exchanges} source boards',
   labelTraders: 'Traders',
   labelAvgScore: 'Avg Score',
   labelAvgRoi: 'Avg ROI',
@@ -5466,7 +5466,8 @@ const en = {
   topPercentOn: 'Top {pct}% on {platform}',
   // Cross-exchange percentile — derived from overall rank / total tracked count
   topPercentOverall: 'Top {pct}% overall',
-  beatsTradersAcrossExchanges: 'Beats {pct}% of {total} traders ranked across every exchange',
+  beatsTradersAcrossExchanges:
+    'Beats {pct}% of {total} traders ranked across current public source boards',
 
   // Risk/Reward Ratio
   riskReward: 'Risk/Reward',

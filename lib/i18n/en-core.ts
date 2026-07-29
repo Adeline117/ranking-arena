@@ -195,7 +195,7 @@ const enCore = {
   source: 'Source',
   allExchanges: 'All',
   exchange: 'Exchange',
-  tradersAcrossExchanges: '{count} traders across {exchanges} exchanges',
+  tradersAcrossExchanges: '{count} traders across {exchanges} source boards',
   labelTraders: 'Traders',
   labelAvgScore: 'Avg Score',
   labelAvgRoi: 'Avg ROI',

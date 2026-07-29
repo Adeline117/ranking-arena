@@ -91,7 +91,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
       : `https://www.arenafi.org/wrapped/${encodeURIComponent(data.handle)}`
 
   const shareText = [
-    `My Arena rank: ${rankDisplay} across all tracked exchanges`,
+    `My Arena rank: ${rankDisplay} across Arena's current public source boards`,
     roiValid ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI in ${windowLabel}` : null,
     topPct ? `${topPct} Trader` : null,
     '',
@@ -395,7 +395,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
                 </span>
                 {totalDisplay && (
                   <span style={{ fontSize: 14, color: C.dim }}>
-                    / {totalDisplay} traders across all exchanges
+                    / {totalDisplay} traders across current public source boards
                   </span>
                 )}
               </div>
