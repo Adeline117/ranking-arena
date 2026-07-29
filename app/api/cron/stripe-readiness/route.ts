@@ -53,6 +53,9 @@ const ENTITLEMENT_READINESS_METRIC_KEYS = [
   'stripe_payment_mode_anomalies',
   'refund_mode_anomalies',
   'group_payment_mode_anomalies',
+  'unprojected_charge_disputes',
+  'charge_dispute_identity_anomalies',
+  'charge_dispute_authority_drift',
 ] as const
 
 const ENTITLEMENT_READINESS_BLOCKING_KEYS = ENTITLEMENT_READINESS_METRIC_KEYS.filter(
@@ -143,6 +146,9 @@ function parseStripePaidReadiness(value: unknown): StripePaidReadiness | null {
     stripe_payment_mode_anomalies: record.stripe_payment_mode_anomalies as number,
     refund_mode_anomalies: record.refund_mode_anomalies as number,
     group_payment_mode_anomalies: record.group_payment_mode_anomalies as number,
+    unprojected_charge_disputes: record.unprojected_charge_disputes as number,
+    charge_dispute_identity_anomalies: record.charge_dispute_identity_anomalies as number,
+    charge_dispute_authority_drift: record.charge_dispute_authority_drift as number,
   }
 }
 

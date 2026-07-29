@@ -7,6 +7,9 @@ const mockRetrieveRefund = jest.fn()
 const mockListRefunds = jest.fn()
 const mockRetrievePaymentIntent = jest.fn()
 const mockRetrieveSubscription = jest.fn()
+const mockRetrieveDispute = jest.fn()
+const mockDrainApiTierReversalActions = jest.fn()
+const mockSendAlert = jest.fn()
 const mockLoggerInfo = jest.fn()
 const mockLoggerWarn = jest.fn()
 
@@ -34,10 +37,22 @@ jest.mock('@/lib/stripe', () => ({
     subscriptions: {
       retrieve: (...args: unknown[]) => mockRetrieveSubscription(...args),
     },
+    disputes: {
+      retrieve: (...args: unknown[]) => mockRetrieveDispute(...args),
+    },
   }),
 }))
 
+jest.mock('@/lib/stripe/api-tier-reversal-actions', () => ({
+  drainApiTierReversalActions: (...args: unknown[]) => mockDrainApiTierReversalActions(...args),
+}))
+
+jest.mock('@/lib/alerts/send-alert', () => ({
+  sendAlert: (...args: unknown[]) => mockSendAlert(...args),
+}))
+
 import {
+  handleChargeDisputeCreated,
   handleChargeRefunded,
   handleRefundLifecycle,
   type StripeRefundEventContext,
@@ -105,6 +120,20 @@ function refundObject(overrides: Partial<Stripe.Refund> = {}): Stripe.Refund {
     transfer_reversal: null,
     ...overrides,
   } as Stripe.Refund
+}
+
+function disputeObject(overrides: Partial<Stripe.Dispute> = {}): Stripe.Dispute {
+  return {
+    id: 'dp_generic',
+    object: 'dispute',
+    amount: 2500,
+    charge: 'ch_refunded',
+    currency: 'usd',
+    livemode: true,
+    reason: 'fraudulent',
+    status: 'warning_needs_response',
+    ...overrides,
+  } as Stripe.Dispute
 }
 
 function refundPage(data: Stripe.Refund[], hasMore = false) {
@@ -258,6 +287,9 @@ describe('refund webhook product ownership routing', () => {
     mockListRefunds.mockReset()
     mockRetrievePaymentIntent.mockReset()
     mockRetrieveSubscription.mockReset()
+    mockRetrieveDispute.mockReset()
+    mockDrainApiTierReversalActions.mockReset()
+    mockSendAlert.mockReset()
 
     mockRetrieveCharge.mockResolvedValue(refundedCharge())
     mockRetrieveRefund.mockResolvedValue(refundObject())
@@ -281,6 +313,9 @@ describe('refund webhook product ownership routing', () => {
       livemode: true,
       status: 'active',
     })
+    mockRetrieveDispute.mockResolvedValue(disputeObject())
+    mockDrainApiTierReversalActions.mockResolvedValue(undefined)
+    mockSendAlert.mockResolvedValue(undefined)
     configureRpc()
   })
 
@@ -843,6 +878,54 @@ describe('refund webhook product ownership routing', () => {
     expect(mockRpc).toHaveBeenCalledWith(
       'record_stripe_manual_review_atomic',
       expect.objectContaining({ p_reason_key: 'invalid_refund_event_identity' })
+    )
+  })
+
+  it('drains generic dispute cancellation actions even when compatibility status is not_api', async () => {
+    const dispute = disputeObject()
+    mockRetrieveCharge.mockResolvedValueOnce(
+      refundedCharge({
+        amount_refunded: 0,
+        refunded: false,
+      })
+    )
+    mockRpc.mockResolvedValueOnce({
+      data: { status: 'not_api' },
+      error: null,
+    })
+
+    await handleChargeDisputeCreated(dispute, {
+      eventId: 'evt_dispute_generic',
+      eventCreatedAt: 1_700_000_000,
+      livemode: true,
+    })
+
+    expect(mockRetrieveDispute).toHaveBeenCalledWith('dp_generic')
+    expect(mockRetrieveCharge).toHaveBeenCalledWith('ch_refunded')
+    expect(mockRpc).toHaveBeenCalledWith('record_api_tier_dispute_reversal_atomic', {
+      p_livemode: true,
+      p_stripe_event_id: 'evt_dispute_generic',
+      p_stripe_event_created: 1_700_000_000,
+      p_stripe_dispute_id: 'dp_generic',
+      p_dispute_status: 'warning_needs_response',
+      p_dispute_reason: 'fraudulent',
+      p_dispute_amount: 2500,
+      p_currency: 'usd',
+      p_stripe_customer_id: 'cus_owner',
+      p_stripe_payment_intent_id: 'pi_refunded',
+      p_stripe_charge_id: 'ch_refunded',
+      p_captured_amount: 2500,
+    })
+    expect(mockDrainApiTierReversalActions).toHaveBeenCalledWith({ limit: 1 })
+    expect(mockSendAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'critical',
+        source: 'stripe',
+        details: expect.objectContaining({
+          disputeId: 'dp_generic',
+          apiTierStatus: 'not_api',
+        }),
+      })
     )
   })
 })
