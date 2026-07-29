@@ -22,9 +22,17 @@ import {
   assertSourceMatchesConsumedRegion,
   type AuthorizedConsumedRegionContext,
 } from './consumed-region-context'
+import {
+  assertTierAExecutionClaimedWrite,
+  SOURCE_JOB_EXECUTION_CONTRACT,
+  type SourceJobExecutionAuthority,
+  type TierAExecutionClaimedWrite,
+} from './source-job-execution-authority'
 
 export type TierAPublicationFenceErrorCode =
   | 'authority_identity_mismatch'
+  | 'execution_authority_mismatch'
+  | 'execution_transaction_unauthorized'
   | 'source_configuration_mismatch'
   | 'source_identity_mismatch'
   | 'source_inactive'
@@ -191,6 +199,63 @@ function assertAuthorityIdentity(context: AuthorizedConsumedRegionContext): void
     !context.authority.isActive()
   ) {
     throw publicationFenceError('authority_identity_mismatch')
+  }
+}
+
+function assertExecutionAuthorityBinding(
+  src: TierAPublicationSourceContract,
+  context: AuthorizedConsumedRegionContext,
+  execution: SourceJobExecutionAuthority
+): void {
+  try {
+    const proof = execution.proof
+    const regionProof = context.authority.proof
+    if (
+      !Object.isFrozen(execution) ||
+      !Object.isFrozen(proof) ||
+      proof.contract !== SOURCE_JOB_EXECUTION_CONTRACT ||
+      proof.phase !== 'active' ||
+      proof.sourceId !== src.id ||
+      proof.executionRegion !== context.executionRegion ||
+      proof.executionRegion !== context.consumedRegion ||
+      proof.authorityScope !== regionProof.authorityScope ||
+      proof.authorityScope !== `region:${context.consumedRegion}` ||
+      proof.authorityEpoch !== regionProof.databaseEpoch ||
+      proof.workerInstanceId !== regionProof.instanceId ||
+      proof.workerNodeId !== regionProof.nodeId ||
+      proof.workerRegion !== regionProof.region ||
+      proof.workerRegion !== context.consumedRegion ||
+      proof.controlEpoch !== regionProof.controlEpoch ||
+      execution.signal === undefined ||
+      !(execution.signal instanceof AbortSignal) ||
+      typeof execution.assertActive !== 'function' ||
+      typeof execution.withClaimedWrite !== 'function'
+    ) {
+      throw publicationFenceError('execution_authority_mismatch')
+    }
+  } catch (error) {
+    if (error instanceof TierAPublicationFenceError) throw error
+    throw publicationFenceError('execution_authority_mismatch')
+  }
+
+  // Preserve the execution authority's sticky ownership error. Callers use
+  // that classification to close a lost claim as revoked rather than failed.
+  execution.assertActive()
+}
+
+function assertClaimedPublicationTransaction(
+  transaction: unknown,
+  expected: TierAExecutionClaimedWrite,
+  execution: SourceJobExecutionAuthority
+): asserts transaction is TierAExecutionClaimedWrite {
+  try {
+    assertTierAExecutionClaimedWrite(transaction)
+    if (transaction !== expected || transaction.signal !== execution.signal) {
+      throw publicationFenceError('execution_transaction_unauthorized')
+    }
+  } catch (error) {
+    if (error instanceof TierAPublicationFenceError) throw error
+    throw publicationFenceError('execution_transaction_unauthorized')
   }
 }
 
@@ -381,6 +446,74 @@ async function withFencedTierAPublication<T>(
   })
 }
 
+/**
+ * Run publication inside the execution claim's callback-scoped transaction.
+ *
+ * This is the production path for claimed Tier-A work. It deliberately never
+ * calls the region authority's withFencedWrite: SourceJobExecutionAuthority
+ * owns the one PostgreSQL transaction and performs the durable claim assertion
+ * before exposing the runtime-branded executor.
+ */
+async function withClaimedTierAPublication<T>(
+  src: SourceRow,
+  publicationTimeframes: readonly number[],
+  traderIdentities: readonly ParsedLeaderboardRow[],
+  context: AuthorizedConsumedRegionContext,
+  execution: SourceJobExecutionAuthority,
+  publish: (
+    transaction: TierAExecutionClaimedWrite,
+    sourceAuthorityGuard: (transaction: IngestQueryExecutor) => Promise<void>
+  ) => Promise<T>,
+  signal?: AbortSignal
+): Promise<T> {
+  throwIfPublicationCancelled(signal)
+  assertSourceMatchesConsumedRegion(src, context)
+  assertAuthorityIdentity(context)
+  const sourceContract = snapshotSourceContract(src)
+  const guardedTimeframes = snapshotPublicationTimeframes(publicationTimeframes)
+  const expectedTraderIdentities = snapshotTraderIdentities(traderIdentities)
+  assertExecutionAuthorityBinding(sourceContract, context, execution)
+  throwIfPublicationCancelled(execution.signal)
+
+  return execution.withClaimedWrite(async (transaction) => {
+    assertClaimedPublicationTransaction(transaction, transaction, execution)
+    throwIfPublicationCancelled(signal)
+    throwIfPublicationCancelled(execution.signal)
+    let sourceAuthorityGuarded = false
+    const result = await publish(transaction, async (lockedTransaction) => {
+      assertClaimedPublicationTransaction(lockedTransaction, transaction, execution)
+      throwIfPublicationCancelled(signal)
+      throwIfPublicationCancelled(execution.signal)
+      await lockAndAssertLiveSourceAuthority(
+        transaction,
+        sourceContract,
+        guardedTimeframes,
+        context
+      )
+      assertClaimedPublicationTransaction(transaction, transaction, execution)
+      throwIfPublicationCancelled(signal)
+      throwIfPublicationCancelled(execution.signal)
+      await lockAndAssertExistingTraderIdentities(
+        transaction,
+        sourceContract.id,
+        expectedTraderIdentities
+      )
+      assertClaimedPublicationTransaction(transaction, transaction, execution)
+      throwIfPublicationCancelled(signal)
+      throwIfPublicationCancelled(execution.signal)
+      sourceAuthorityGuarded = true
+    })
+    if (!sourceAuthorityGuarded) {
+      throw publicationFenceError('source_registry_contract_violation')
+    }
+    assertClaimedPublicationTransaction(transaction, transaction, execution)
+    throwIfPublicationCancelled(signal)
+    throwIfPublicationCancelled(execution.signal)
+    execution.assertActive()
+    return result
+  })
+}
+
 function reportCommittedBaselineShift(
   input: Pick<PublishSnapshotInput, 'src' | 'timeframe' | 'rows'>,
   result: PublishSnapshotResult
@@ -459,6 +592,30 @@ export async function publishFencedLeaderboardSnapshot(
   return result
 }
 
+/** Claimed Tier-A snapshot publication; never falls back to a region-only transaction. */
+export async function publishClaimedLeaderboardSnapshot(
+  input: PublishSnapshotInput,
+  context: AuthorizedConsumedRegionContext,
+  execution: SourceJobExecutionAuthority,
+  signal?: AbortSignal
+): Promise<PublishSnapshotResult> {
+  if (input.isDerived === true) {
+    throw publicationFenceError('source_timeframe_not_native')
+  }
+  const result = await withClaimedTierAPublication(
+    input.src,
+    [input.timeframe],
+    input.rows,
+    context,
+    execution,
+    (transaction, sourceAuthorityGuard) =>
+      publishLeaderboardSnapshotInTransaction(transaction, input, sourceAuthorityGuard),
+    signal
+  )
+  reportCommittedBaselineShift(input, result)
+  return result
+}
+
 export async function publishFencedTrustedLeaderboardSnapshot(
   input: PublishTrustedSnapshotInput,
   context: AuthorizedConsumedRegionContext,
@@ -469,6 +626,27 @@ export async function publishFencedTrustedLeaderboardSnapshot(
     [input.timeframe],
     input.rows,
     context,
+    (transaction, sourceAuthorityGuard) =>
+      publishTrustedLeaderboardSnapshotInTransaction(transaction, input, sourceAuthorityGuard),
+    signal
+  )
+  reportCommittedBaselineShift(input, result)
+  return result
+}
+
+/** Claimed Tier-A trusted snapshot publication; no region-only compatibility fallback. */
+export async function publishClaimedTrustedLeaderboardSnapshot(
+  input: PublishTrustedSnapshotInput,
+  context: AuthorizedConsumedRegionContext,
+  execution: SourceJobExecutionAuthority,
+  signal?: AbortSignal
+): Promise<PublishSnapshotResult> {
+  const result = await withClaimedTierAPublication(
+    input.src,
+    [input.timeframe],
+    input.rows,
+    context,
+    execution,
     (transaction, sourceAuthorityGuard) =>
       publishTrustedLeaderboardSnapshotInTransaction(transaction, input, sourceAuthorityGuard),
     signal
@@ -537,6 +715,64 @@ export async function publishFencedAttemptBoundLeaderboardSnapshot(
   return result
 }
 
+/**
+ * Claimed V4 publication keeps snapshot DML, evidence binding, and the terminal
+ * attempt/RAW fence in the execution claim's one PostgreSQL transaction.
+ */
+export async function publishClaimedAttemptBoundLeaderboardSnapshot(
+  input: PublishAttemptBoundLeaderboardSnapshotInput,
+  context: AuthorizedConsumedRegionContext,
+  execution: SourceJobExecutionAuthority,
+  signal?: AbortSignal
+): Promise<PublishSnapshotResult> {
+  const rejects = snapshotLeaderboardTrustValue(input.rejects)
+  const prepared = prepareLeaderboardAttemptBoundV4Evidence({
+    src: input.src,
+    timeframe: input.timeframe,
+    rows: input.rows,
+    rejectedRowCount: rejects.length,
+    bundle: input.attemptEvidence,
+  })
+  const cycleId = input.observationCycleId?.trim() || null
+  if (cycleId !== prepared.manifest.observation_cycle_id) {
+    throw new Error(
+      '[ingest-worker] observation cycle does not match the canonical capture manifest'
+    )
+  }
+
+  const publicationInput: PublishSnapshotInput = {
+    src: prepared.src,
+    timeframe: prepared.timeframe,
+    rows: prepared.rows,
+    rejects,
+    rawObjectId: prepared.artifacts.sourcePayload.id,
+    isDerived: false,
+    expectedCountOverride: input.expectedCountOverride,
+    countBaselineGeneration: input.countBaselineGeneration,
+    observationCycleId: cycleId ?? undefined,
+  }
+  const result = await withClaimedTierAPublication(
+    prepared.src,
+    [prepared.timeframe],
+    prepared.rows,
+    context,
+    execution,
+    async (transaction, sourceAuthorityGuard) => {
+      const published = await publishLeaderboardSnapshotInTransaction(
+        transaction,
+        publicationInput,
+        sourceAuthorityGuard
+      )
+      await bindSnapshotToAttemptEvidence(transaction, published, prepared)
+      await fenceAttemptBoundLeaderboardEvidencePublicationCommit(transaction, prepared)
+      return published
+    },
+    signal
+  )
+  reportCommittedBaselineShift(publicationInput, result)
+  return result
+}
+
 export async function publishFencedBoardSeries(
   src: SourceRow,
   seriesByTrader: Map<string, BoardSeriesBlock[]>,
@@ -555,6 +791,33 @@ export async function publishFencedBoardSeries(
     guardedTimeframes,
     [],
     context,
+    (transaction, sourceAuthorityGuard) =>
+      publishBoardSeriesInTransaction(transaction, prepared, sourceAuthorityGuard),
+    signal
+  )
+}
+
+/** Claimed Tier-A board-series publication; no region-only transaction fallback. */
+export async function publishClaimedBoardSeries(
+  src: SourceRow,
+  seriesByTrader: Map<string, BoardSeriesBlock[]>,
+  traderIds: Map<string, number>,
+  context: AuthorizedConsumedRegionContext,
+  execution: SourceJobExecutionAuthority,
+  options: PublishBoardSeriesOptions,
+  signal?: AbortSignal
+): Promise<{ traders: number; points: number }> {
+  const prepared = prepareBoardSeriesPublication(src, seriesByTrader, traderIds, options)
+  if (prepared.rows.length === 0) return { traders: 0, points: 0 }
+  const guardedTimeframes = prepared.expectedLatestSnapshots.map(
+    (expectation) => expectation.timeframe
+  )
+  return withClaimedTierAPublication(
+    src,
+    guardedTimeframes,
+    [],
+    context,
+    execution,
     (transaction, sourceAuthorityGuard) =>
       publishBoardSeriesInTransaction(transaction, prepared, sourceAuthorityGuard),
     signal
