@@ -5,7 +5,11 @@
  */
 
 import { logger } from '@/lib/logger'
-import { resolveExchangeUid, type UidResolveResult } from './exchange-uid-resolver'
+import {
+  resolveExchangeReadOnlyAccess,
+  resolveExchangeUid,
+  type UidResolveResult,
+} from './exchange-uid-resolver'
 
 export interface ApiKeyValidationResult {
   isValid: boolean
@@ -20,6 +24,15 @@ export interface ExchangeCredentials {
   apiKey: string
   apiSecret: string
   passphrase?: string // For OKX, Bitget
+}
+
+/** API-key platforms whose own permission endpoint can prove the key is read-only. */
+export const READ_ONLY_ACCESS_PLATFORMS = ['binance', 'bybit', 'okx', 'bitget'] as const
+
+export function supportsReadOnlyAccessVerification(platform: string): boolean {
+  return READ_ONLY_ACCESS_PLATFORMS.includes(
+    platform.toLowerCase() as (typeof READ_ONLY_ACCESS_PLATFORMS)[number]
+  )
 }
 
 function validatedReadOnlyResult(
@@ -41,6 +54,53 @@ function validatedReadOnlyResult(
     traderId: result.uid,
     nickname: result.nickname,
     permissions: result.permissions || ['read'],
+  }
+}
+
+/**
+ * Prove a credential is valid and read-only before any encrypted copy is
+ * persisted. Unlike identity claiming, this path does not require an account
+ * UID, because Binance exposes permissions independently from account identity.
+ */
+export async function validateExchangeReadOnlyAccess(
+  platform: string,
+  credentials: ExchangeCredentials
+): Promise<ApiKeyValidationResult> {
+  const normalized = platform.toLowerCase()
+  if (!supportsReadOnlyAccessVerification(normalized)) {
+    return {
+      isValid: false,
+      error: `Read-only permission verification is not available for ${platform}`,
+    }
+  }
+
+  if ((normalized === 'okx' || normalized === 'bitget') && !credentials.passphrase) {
+    return {
+      isValid: false,
+      error: `Passphrase is required for ${normalized === 'okx' ? 'OKX' : 'Bitget'}`,
+    }
+  }
+
+  try {
+    const result = await resolveExchangeReadOnlyAccess(normalized, credentials)
+    if (!result.success) {
+      return { isValid: false, error: result.error || 'Could not verify API key permissions' }
+    }
+    if (result.isReadOnly !== true) {
+      return {
+        isValid: false,
+        error:
+          'API key must be read-only. Disable trading, withdrawal, and transfer permissions before connecting it.',
+      }
+    }
+    return { isValid: true, permissions: result.permissions || ['read'] }
+  } catch (error) {
+    logger.error(
+      '[Validator] API key permission validation failed',
+      { platform: normalized },
+      error as Error
+    )
+    return { isValid: false, error: 'Failed to verify API key permissions' }
   }
 }
 

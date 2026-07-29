@@ -34,6 +34,15 @@ export interface UidResolveResult {
   error?: string
 }
 
+export interface ReadOnlyAccessResult {
+  success: boolean
+  /** Permission names reported by the exchange, never inferred by Arena. */
+  permissions?: string[]
+  /** True only when the exchange response proves every granted capability is read-only. */
+  isReadOnly?: boolean
+  error?: string
+}
+
 function enabledPermissionNames(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String)
   if (!value || typeof value !== 'object') return []
@@ -46,7 +55,7 @@ function enabledPermissionNames(value: unknown): string[] {
 
 async function resolveBinancePermissions(
   credentials: ExchangeCredentials
-): Promise<Pick<UidResolveResult, 'permissions' | 'isReadOnly'>> {
+): Promise<ReadOnlyAccessResult> {
   try {
     const timestamp = Date.now()
     const queryString = `timestamp=${timestamp}`
@@ -58,27 +67,52 @@ async function resolveBinancePermissions(
         signal: AbortSignal.timeout(10000),
       }
     )
-    if (!response.ok) return { permissions: [], isReadOnly: false }
+    if (!response.ok) {
+      return {
+        success: false,
+        permissions: [],
+        isReadOnly: false,
+        error: 'Could not verify Binance API key permissions',
+      }
+    }
 
     const data = (await response.json()) as Record<string, unknown>
     const permissions = Object.entries(data)
-      .filter(([, enabled]) => enabled === true)
+      .filter(
+        ([name, enabled]) => enabled === true && (/^enable/i.test(name) || /^permits/i.test(name))
+      )
       .map(([name]) => name)
-    const writeFlags = [
-      'enableSpotAndMarginTrading',
-      'enableWithdrawals',
-      'enableInternalTransfer',
-      'enableMargin',
-      'enableFutures',
-      'permitsUniversalTransfer',
-      'enableVanillaOptions',
-    ]
+    const safeEnabledFlags = new Set(['enableReading', 'enableFixReadOnly'])
+    // Fail closed for both today's documented write flags and any future
+    // enable*/permits* capability that Binance adds. Only explicit read flags
+    // may be true on a credential Arena stores.
+    const writeCapabilityEnabled = Object.entries(data).some(
+      ([name, enabled]) =>
+        enabled === true &&
+        (/^enable/i.test(name) || /^permits/i.test(name)) &&
+        !safeEnabledFlags.has(name)
+    )
     return {
+      success: true,
       permissions,
-      isReadOnly: data.enableReading === true && writeFlags.every((flag) => data[flag] !== true),
+      isReadOnly: data.enableReading === true && !writeCapabilityEnabled,
     }
   } catch {
-    return { permissions: [], isReadOnly: false }
+    return {
+      success: false,
+      permissions: [],
+      isReadOnly: false,
+      error: 'Could not verify Binance API key permissions',
+    }
+  }
+}
+
+function uidPermissionState(
+  result: ReadOnlyAccessResult
+): Pick<UidResolveResult, 'permissions' | 'isReadOnly'> {
+  return {
+    permissions: result.permissions || [],
+    isReadOnly: result.success && result.isReadOnly === true,
   }
 }
 
@@ -108,7 +142,7 @@ async function resolveBinanceUid(credentials: ExchangeCredentials): Promise<UidR
       const data = await response.json()
       // Futures account returns uid directly
       if (data.uid) {
-        const permissionState = await resolveBinancePermissions(credentials)
+        const permissionState = uidPermissionState(await resolveBinancePermissions(credentials))
         return { success: true, uid: String(data.uid), ...permissionState }
       }
     }
@@ -133,7 +167,7 @@ async function resolveBinanceUid(credentials: ExchangeCredentials): Promise<UidR
     if (response.ok) {
       const data = await response.json()
       if (data.uid) {
-        const permissionState = await resolveBinancePermissions(credentials)
+        const permissionState = uidPermissionState(await resolveBinancePermissions(credentials))
         return { success: true, uid: String(data.uid), ...permissionState }
       }
     }
@@ -158,7 +192,7 @@ async function resolveBinanceUid(credentials: ExchangeCredentials): Promise<UidR
     if (response.ok) {
       const data = await response.json()
       if (data.uid) {
-        const permissionState = await resolveBinancePermissions(credentials)
+        const permissionState = uidPermissionState(await resolveBinancePermissions(credentials))
         return { success: true, uid: String(data.uid), ...permissionState }
       }
       // If no uid, the API key is valid but we can't extract uid
@@ -331,13 +365,20 @@ async function resolveBitgetUid(credentials: ExchangeCredentials): Promise<UidRe
     }
 
     const permissions = enabledPermissionNames(data.data?.authorities)
+    const isClassicReadAuthority = (permission: string) =>
+      /r$/i.test(permission) || /^read(?:[_-]|$)/i.test(permission)
+    const isWriteAuthority = (permission: string) =>
+      /w$/i.test(permission) ||
+      /(?:^|[_-])(write|trade|withdraw|transfer)(?:[_-]|$)/i.test(permission)
     return {
       success: true,
       uid: String(userId),
       permissions,
       isReadOnly:
-        permissions.some((permission) => /^read/i.test(permission)) &&
-        !permissions.some((permission) => /trade|withdraw|transfer/i.test(permission)),
+        permissions.length > 0 &&
+        permissions.every(
+          (permission) => isClassicReadAuthority(permission) && !isWriteAuthority(permission)
+        ),
     }
   } catch (error) {
     logger.error('[UidResolver] Bitget resolve failed', {}, error as Error)
@@ -457,6 +498,38 @@ export async function resolveExchangeUid(
   }
 
   return { success: false, error: `Unsupported platform for UID resolution: ${platform}` }
+}
+
+/**
+ * Validate credential scope without requiring the exchange account UID.
+ * Portfolio and connection flows need a permission proof before persisting a
+ * secret, but Binance's read-only permission endpoint does not return a UID.
+ */
+export async function resolveExchangeReadOnlyAccess(
+  platform: string,
+  credentials: ExchangeCredentials
+): Promise<ReadOnlyAccessResult> {
+  const normalized = platform.trim().toLowerCase()
+
+  if (normalized === 'binance') {
+    return resolveBinancePermissions(credentials)
+  }
+
+  if (!['bybit', 'okx', 'bitget'].includes(normalized)) {
+    return {
+      success: false,
+      isReadOnly: false,
+      error: `Unsupported platform for read-only permission verification: ${platform}`,
+    }
+  }
+
+  const result = await resolveExchangeUid(normalized, credentials)
+  return {
+    success: result.success,
+    permissions: result.permissions,
+    isReadOnly: result.isReadOnly === true,
+    error: result.error,
+  }
 }
 
 /**

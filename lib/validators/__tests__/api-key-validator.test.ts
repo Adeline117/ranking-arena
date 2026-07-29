@@ -2,11 +2,14 @@ jest.mock('@/lib/logger', () => ({
   logger: { error: jest.fn(), info: jest.fn(), warn: jest.fn() },
 }))
 const mockResolve = jest.fn()
+const mockResolveReadOnly = jest.fn()
 jest.mock('../exchange-uid-resolver', () => ({
   resolveExchangeUid: (...args: unknown[]) => mockResolve(...args),
+  resolveExchangeReadOnlyAccess: (...args: unknown[]) => mockResolveReadOnly(...args),
 }))
 
 import {
+  validateExchangeReadOnlyAccess,
   validateExchangeApiKey,
   hasRequiredPermissions,
   type ApiKeyValidationResult,
@@ -17,6 +20,57 @@ const credsWithPass = { ...creds, passphrase: 'p' }
 
 beforeEach(() => {
   mockResolve.mockReset()
+  mockResolveReadOnly.mockReset()
+})
+
+describe('validateExchangeReadOnlyAccess — persistence gate', () => {
+  it('accepts an exchange permission proof without requiring an account UID', async () => {
+    mockResolveReadOnly.mockResolvedValue({
+      success: true,
+      isReadOnly: true,
+      permissions: ['enableReading'],
+    })
+
+    await expect(validateExchangeReadOnlyAccess('binance', creds)).resolves.toEqual({
+      isValid: true,
+      permissions: ['enableReading'],
+    })
+  })
+
+  it('rejects a valid key when the exchange reports any write scope', async () => {
+    mockResolveReadOnly.mockResolvedValue({
+      success: true,
+      isReadOnly: false,
+      permissions: ['read', 'trade'],
+    })
+
+    const result = await validateExchangeReadOnlyAccess('bybit', creds)
+
+    expect(result.isValid).toBe(false)
+    expect(result.error).toContain('must be read-only')
+  })
+
+  it('fails closed when permission verification is unsupported or unavailable', async () => {
+    await expect(validateExchangeReadOnlyAccess('mexc', creds)).resolves.toMatchObject({
+      isValid: false,
+    })
+    expect(mockResolveReadOnly).not.toHaveBeenCalled()
+
+    mockResolveReadOnly.mockResolvedValue({ success: false })
+    await expect(validateExchangeReadOnlyAccess('binance', creds)).resolves.toMatchObject({
+      isValid: false,
+    })
+  })
+
+  it('requires passphrases before calling OKX or Bitget', async () => {
+    await expect(validateExchangeReadOnlyAccess('okx', creds)).resolves.toMatchObject({
+      isValid: false,
+    })
+    await expect(validateExchangeReadOnlyAccess('bitget', creds)).resolves.toMatchObject({
+      isValid: false,
+    })
+    expect(mockResolveReadOnly).not.toHaveBeenCalled()
+  })
 })
 
 describe('validateExchangeApiKey — 路由', () => {

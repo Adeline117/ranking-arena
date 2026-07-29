@@ -91,14 +91,18 @@ jest.mock('@/lib/supabase/server', () => ({
   getUserProfile: jest.fn(),
 }))
 
-const mockValidateCredentials = jest.fn()
+const mockValidateReadOnlyAccess = jest.fn()
 jest.mock('@/lib/exchange', () => ({
-  validateExchangeCredentials: (...args: unknown[]) => mockValidateCredentials(...args),
-  SUPPORTED_EXCHANGES: ['binance', 'bybit', 'okx', 'bitget'] as const,
+  SUPPORTED_EXCHANGES: ['binance', 'bybit', 'bitget'] as const,
 }))
 
+jest.mock('@/lib/validators/api-key-validator', () => ({
+  validateExchangeReadOnlyAccess: (...args: unknown[]) => mockValidateReadOnlyAccess(...args),
+}))
+
+const mockEncrypt = jest.fn((val: string) => `encrypted_${val}`)
 jest.mock('@/lib/exchange/encryption', () => ({
-  encrypt: jest.fn((val: string) => `encrypted_${val}`),
+  encrypt: (val: string) => mockEncrypt(val),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -129,7 +133,7 @@ describe('POST /api/exchange/connect', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockRequireAuth.mockResolvedValue(mockUser)
-    mockValidateCredentials.mockResolvedValue(true)
+    mockValidateReadOnlyAccess.mockResolvedValue({ isValid: true, permissions: ['read'] })
     mockSupabaseFrom.mockReturnValue(createMockSupabase())
   })
 
@@ -218,7 +222,10 @@ describe('POST /api/exchange/connect', () => {
   // --- Credential Validation ---
 
   it('returns 400 when credentials are invalid', async () => {
-    mockValidateCredentials.mockResolvedValue(false)
+    mockValidateReadOnlyAccess.mockResolvedValue({
+      isValid: false,
+      error: 'API key must be read-only.',
+    })
 
     const req = new NextRequest('http://localhost/api/exchange/connect', {
       method: 'POST',
@@ -229,12 +236,35 @@ describe('POST /api/exchange/connect', () => {
 
     expect(res.status).toBeGreaterThanOrEqual(400)
     expect(body.success).not.toBe(true)
+    expect(mockEncrypt).not.toHaveBeenCalled()
+    expect(mockSupabaseFrom).not.toHaveBeenCalled()
+  })
+
+  it('does not encrypt or persist a key when the exchange cannot prove read-only scope', async () => {
+    mockValidateReadOnlyAccess.mockResolvedValue({
+      isValid: false,
+      error: 'Could not verify API key permissions',
+    })
+
+    const req = new NextRequest('http://localhost/api/exchange/connect', {
+      method: 'POST',
+      body: {
+        exchange: 'binance',
+        apiKey: 'unproven-key-12345',
+        apiSecret: 'unproven-secret-12345',
+      },
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(400)
+    expect(mockEncrypt).not.toHaveBeenCalled()
+    expect(mockSupabaseFrom).not.toHaveBeenCalled()
   })
 
   // --- Success ---
 
   it('connects exchange successfully with valid credentials', async () => {
-    mockValidateCredentials.mockResolvedValue(true)
+    mockValidateReadOnlyAccess.mockResolvedValue({ isValid: true, permissions: ['read'] })
     mockSupabaseFrom.mockReturnValue(createMockSupabase())
 
     const req = new NextRequest('http://localhost/api/exchange/connect', {
@@ -255,13 +285,14 @@ describe('POST /api/exchange/connect', () => {
         exchange: 'binance',
         api_key_encrypted: 'encrypted_valid-api-key-12345',
         api_secret_encrypted: 'encrypted_valid-secret-12345',
+        scope_permissions: ['read'],
       }),
       { onConflict: 'user_id,exchange' }
     )
   })
 
   it('uses the same atomic authority for reconnecting an existing exchange', async () => {
-    mockValidateCredentials.mockResolvedValue(true)
+    mockValidateReadOnlyAccess.mockResolvedValue({ isValid: true, permissions: ['read'] })
     const existingChain = createMockSupabase({ user_id: mockUser.id, exchange: 'binance' })
     mockSupabaseFrom.mockReturnValue(existingChain)
 
@@ -278,7 +309,7 @@ describe('POST /api/exchange/connect', () => {
   })
 
   it('fails instead of acknowledging a missing or mismatched persisted row', async () => {
-    mockValidateCredentials.mockResolvedValue(true)
+    mockValidateReadOnlyAccess.mockResolvedValue({ isValid: true, permissions: ['read'] })
     mockSupabaseFrom.mockReturnValue(
       createMockSupabase({ user_id: 'other-user', exchange: 'binance' })
     )

@@ -7,10 +7,11 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest } from '@/lib/api/response'
-import { validateExchangeCredentials, SUPPORTED_EXCHANGES, type Exchange } from '@/lib/exchange'
+import { SUPPORTED_EXCHANGES, type Exchange } from '@/lib/exchange'
 import { encrypt } from '@/lib/exchange/encryption'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import { validateExchangeReadOnlyAccess } from '@/lib/validators/api-key-validator'
 
 const logger = createLogger('exchange-connect')
 
@@ -49,21 +50,25 @@ export const POST = withAuth(
       return badRequest('Bitget requires a passphrase')
     }
 
-    // 验证 API 凭证
+    // The exchange itself must prove this exact key has no write capability
+    // before Arena stores any encrypted copy of it.
+    let verifiedPermissions: string[]
     try {
-      const isValid = await validateExchangeCredentials(exchange as Exchange, {
+      const validation = await validateExchangeReadOnlyAccess(exchange, {
         apiKey,
         apiSecret,
         passphrase: passphrase ?? undefined,
       })
 
-      if (!isValid) {
-        return badRequest('Invalid API Key or Secret. Please check your credentials.')
+      if (!validation.isValid) {
+        return badRequest(
+          validation.error || 'Could not verify that this API key is valid and read-only.'
+        )
       }
+      verifiedPermissions = validation.permissions || ['read']
     } catch (err: unknown) {
       logger.error('验证凭证失败', { error: err, exchange, userId: user.id })
-      const message = err instanceof Error ? err.message : 'API credential verification failed'
-      return badRequest(message)
+      return badRequest('Could not verify that this API key is valid and read-only.')
     }
 
     // 加密存储凭证
@@ -79,6 +84,8 @@ export const POST = withAuth(
       api_secret_encrypted: encryptedSecret,
       is_active: true,
       last_sync_status: 'pending',
+      last_verified_at: new Date().toISOString(),
+      scope_permissions: verifiedPermissions,
       updated_at: new Date().toISOString(),
       ...(encryptedPassphrase ? { passphrase_encrypted: encryptedPassphrase } : {}),
     }

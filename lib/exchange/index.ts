@@ -9,7 +9,17 @@ export * from './mexc'
 export * from './coinex'
 export * from './encryption'
 
-export type Exchange = 'binance' | 'bybit' | 'bitget' | 'mexc' | 'htx' | 'weex' | 'coinex' | 'okx' | 'kucoin' | 'gate'
+export type Exchange =
+  | 'binance'
+  | 'bybit'
+  | 'bitget'
+  | 'mexc'
+  | 'htx'
+  | 'weex'
+  | 'coinex'
+  | 'okx'
+  | 'kucoin'
+  | 'gate'
 
 export interface ExchangeConnection {
   id: string
@@ -48,12 +58,7 @@ export interface AccountInfo {
   unrealizedPnl?: number
 }
 
-// 导入各交易所验证函数
-import { validateBinanceCredentials } from './binance'
-import { validateBybitCredentials } from './bybit'
-import { validateBitgetCredentials, type BitgetConfig } from './bitget'
-import { validateMexcCredentials } from './mexc'
-import { validateCoinexCredentials } from './coinex'
+import { validateExchangeReadOnlyAccess } from '@/lib/validators/api-key-validator'
 
 /**
  * 统一验证交易所凭证
@@ -62,45 +67,8 @@ export async function validateExchangeCredentials(
   exchange: Exchange,
   credentials: ExchangeCredentials
 ): Promise<boolean> {
-  switch (exchange) {
-    case 'binance':
-      return validateBinanceCredentials({
-        apiKey: credentials.apiKey,
-        apiSecret: credentials.apiSecret,
-      })
-    case 'bybit':
-      return validateBybitCredentials({
-        apiKey: credentials.apiKey,
-        apiSecret: credentials.apiSecret,
-      })
-    case 'bitget':
-      return validateBitgetCredentials({
-        apiKey: credentials.apiKey,
-        apiSecret: credentials.apiSecret,
-        passphrase: credentials.passphrase,
-      } as BitgetConfig)
-    case 'mexc':
-      return validateMexcCredentials({
-        apiKey: credentials.apiKey,
-        apiSecret: credentials.apiSecret,
-      })
-    case 'coinex':
-      return validateCoinexCredentials({
-        apiKey: credentials.apiKey,
-        apiSecret: credentials.apiSecret,
-      })
-    case 'htx':
-    case 'weex':
-    case 'okx':
-    case 'kucoin':
-    case 'gate':
-      // Credential format validation only -- no API call verification available yet
-      if (!credentials.apiKey || !credentials.apiSecret) return false
-      if (credentials.apiKey.length < 10 || credentials.apiSecret.length < 10) return false
-      return true
-    default:
-      throw new Error(`未知交易所: ${exchange}`)
-  }
+  const result = await validateExchangeReadOnlyAccess(exchange, credentials)
+  return result.isValid
 }
 
 /**
@@ -120,7 +88,12 @@ export function getExchangeName(exchange: Exchange): string {
     gate: 'Gate.io',
   }
   return names[exchange] || exchange
-}/**
+}
+
+/**
  * 支持的交易所列表
  */
-export const SUPPORTED_EXCHANGES: Exchange[] = ['binance', 'bybit', 'bitget', 'mexc', 'htx', 'weex', 'coinex']
+// API-key connections are accepted only where the exchange exposes a permission
+// endpoint and the existing sync adapter can consume the credential. Expanding
+// this list requires both capabilities; format-only validation is unsafe.
+export const SUPPORTED_EXCHANGES: Exchange[] = ['binance', 'bybit', 'bitget']

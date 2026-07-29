@@ -2,7 +2,7 @@ jest.mock('@/lib/logger', () => ({
   logger: { error: jest.fn(), info: jest.fn(), warn: jest.fn() },
 }))
 
-import { resolveExchangeUid } from '../exchange-uid-resolver'
+import { resolveExchangeReadOnlyAccess, resolveExchangeUid } from '../exchange-uid-resolver'
 
 function jsonResponse(body: unknown, ok = true): Response {
   return { ok, json: async () => body, status: ok ? 200 : 400 } as Response
@@ -65,6 +65,24 @@ describe('exchange-reported read-only permissions', () => {
     expect(result).toMatchObject({ isReadOnly: true, permissions: ['read'] })
   })
 
+  it('recognizes Bitget classic read codes and rejects write codes', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ code: '00000', data: { userId: '8', authorities: ['cpor', 'coor'] } })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ code: '00000', data: { userId: '8', authorities: ['cpor', 'coow'] } })
+      )
+
+    await expect(
+      resolveExchangeUid('bitget', { apiKey: 'k', apiSecret: 's', passphrase: 'p' })
+    ).resolves.toMatchObject({ isReadOnly: true })
+    await expect(
+      resolveExchangeUid('bitget', { apiKey: 'k', apiSecret: 's', passphrase: 'p' })
+    ).resolves.toMatchObject({ isReadOnly: false })
+  })
+
   it('rejects Binance keys when any write capability is enabled', async () => {
     global.fetch = jest
       .fn()
@@ -79,5 +97,46 @@ describe('exchange-reported read-only permissions', () => {
     const result = await resolveExchangeUid('binance', { apiKey: 'k', apiSecret: 's' })
     expect(result.isReadOnly).toBe(false)
     expect(result.permissions).toContain('enableSpotAndMarginTrading')
+  })
+
+  it('rejects current and future Binance write capabilities without requiring a UID', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          enableReading: true,
+          enableFixReadOnly: true,
+          enableFixApiTrade: true,
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          enableReading: true,
+          enableFutureTradingCapability: true,
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          enableReading: true,
+          enableFixReadOnly: true,
+        })
+      )
+
+    await expect(
+      resolveExchangeReadOnlyAccess('binance', { apiKey: 'k', apiSecret: 's' })
+    ).resolves.toMatchObject({ success: true, isReadOnly: false })
+    await expect(
+      resolveExchangeReadOnlyAccess('binance', { apiKey: 'k', apiSecret: 's' })
+    ).resolves.toMatchObject({ success: true, isReadOnly: false })
+    await expect(
+      resolveExchangeReadOnlyAccess('binance', { apiKey: 'k', apiSecret: 's' })
+    ).resolves.toMatchObject({ success: true, isReadOnly: true })
+  })
+
+  it('fails closed when an exchange has no permission-proof integration', async () => {
+    await expect(
+      resolveExchangeReadOnlyAccess('mexc', { apiKey: 'k', apiSecret: 's' })
+    ).resolves.toMatchObject({ success: false, isReadOnly: false })
+    expect(global.fetch).toBe(originalFetch)
   })
 })
