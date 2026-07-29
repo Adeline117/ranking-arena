@@ -165,6 +165,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729074000_recurring_payment_history_success_authority.sql'
   const leaderboardRankDirectWriteClosureMigration =
     '20260729152000_close_leaderboard_rank_direct_writes.sql'
+  const legacyLeaderboardRankWriterClosureMigration =
+    '20260729153000_close_legacy_leaderboard_rank_writer_rpcs.sql'
   const accountHardDeleteRecoveryBarrierMigration =
     '20260729075300_account_hard_delete_recovery_barrier.sql'
   const verifiedAuthProfileEmailMigration = '20260729075400_verified_auth_profile_email.sql'
@@ -207,6 +209,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     stripeDisputeWithdrawalMigration,
     recurringPaymentHistorySuccessMigration,
     leaderboardRankDirectWriteClosureMigration,
+    legacyLeaderboardRankWriterClosureMigration,
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   assert.deepEqual(recoveryPrerequisites, [
@@ -324,7 +327,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 160)
+  assert.equal(new Set(all).size, 161)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,

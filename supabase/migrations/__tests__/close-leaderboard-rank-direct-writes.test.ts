@@ -33,7 +33,10 @@ describe('leaderboard rank direct-write postdeploy closure', () => {
     const quarantined = migrationNames('QUARANTINED_PREDEPLOY_MIGRATIONS')
     const superseded = migrationNames('SUPERSEDED_MIGRATIONS')
 
-    expect(postdeploy.at(-1)).toBe(migrationName)
+    expect(postdeploy.indexOf(migrationName)).toBeGreaterThanOrEqual(0)
+    expect(postdeploy[postdeploy.indexOf(migrationName) + 1]).toBe(
+      '20260729153000_close_legacy_leaderboard_rank_writer_rpcs.sql'
+    )
     expect(postdeploy.filter((name) => name === migrationName)).toHaveLength(1)
     for (const phase of [predeploy, recoveryPrerequisites, recovery, quarantined, superseded]) {
       expect(phase).not.toContain(migrationName)
