@@ -10,7 +10,6 @@ const mockPasswordSignIn = jest.fn()
 const mockRpc = jest.fn()
 const mockAdminUpdateUser = jest.fn()
 const mockAdminSignOut = jest.fn()
-const mockInvalidateUserAccountStatusCache = jest.fn()
 const mockLocalSubscriptionUpdate = jest.fn()
 const mockLocalSubscriptionUpdateEq = jest.fn()
 const mockStopStripeSubscriptionRenewals = jest.fn()
@@ -83,8 +82,6 @@ jest.mock('@/lib/supabase/server', () => ({
       admin: { updateUserById: mockAdminUpdateUser, signOut: mockAdminSignOut },
     },
   })),
-  invalidateUserAccountStatusCache: (...args: unknown[]) =>
-    mockInvalidateUserAccountStatusCache(...args),
 }))
 
 jest.mock('@/lib/stripe', () => ({
@@ -282,7 +279,6 @@ describe('account deletion scheduling', () => {
     )
     expect(mockLocalSubscriptionUpdate).not.toHaveBeenCalled()
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '876000h' })
-    expect(mockInvalidateUserAccountStatusCache).toHaveBeenCalledWith('user-1')
     expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
     expect(mockFrom).toHaveBeenCalledTimes(2)
   })
@@ -346,7 +342,6 @@ describe('account deletion scheduling', () => {
     expect(mockPersistOneTimeSettlementScan).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
     expect(mockAdminUpdateUser).not.toHaveBeenCalled()
-    expect(mockInvalidateUserAccountStatusCache).not.toHaveBeenCalled()
     expect(mockAdminSignOut).not.toHaveBeenCalled()
   })
 

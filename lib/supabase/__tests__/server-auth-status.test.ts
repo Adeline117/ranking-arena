@@ -15,7 +15,6 @@ jest.mock('@supabase/supabase-js', () => ({
 
 import {
   getActiveAppUserFromToken,
-  invalidateUserAccountStatusCache,
   getProvisioningUserFromToken,
   getUserAccountStatus,
   getUserFromToken,
@@ -66,37 +65,22 @@ describe('server auth application-account status', () => {
     expect(mockRpc).toHaveBeenCalledTimes(2)
   })
 
-  it('caches only an existing active profile', async () => {
-    authenticateAs('active-cache-user')
-    mockRpc.mockResolvedValue({ data: 'active', error: null })
-
-    await expect(getActiveAppUserFromToken('token')).resolves.toMatchObject({
-      id: 'active-cache-user',
-    })
-    await expect(getActiveAppUserFromToken('token')).resolves.toMatchObject({
-      id: 'active-cache-user',
-    })
-
-    expect(mockRpc).toHaveBeenCalledTimes(1)
-    expect(mockRpc).toHaveBeenCalledWith('admit_verified_auth_profile_atomic', {
-      p_user_id: 'active-cache-user',
-      p_verified_email: 'active-cache-user@example.com',
-    })
-  })
-
-  it('invalidates a locally cached active admission after an account lifecycle write', async () => {
-    authenticateAs('locally-invalidated-user')
+  it('rechecks an active profile on every request and observes a remote deletion immediately', async () => {
+    authenticateAs('cross-instance-deletion-user')
     mockRpc
       .mockResolvedValueOnce({ data: 'active', error: null })
       .mockResolvedValueOnce({ data: 'suspended', error: null })
 
     await expect(getActiveAppUserFromToken('token')).resolves.toMatchObject({
-      id: 'locally-invalidated-user',
+      id: 'cross-instance-deletion-user',
     })
-    invalidateUserAccountStatusCache('locally-invalidated-user')
     await expect(getActiveAppUserFromToken('token')).resolves.toBeNull()
 
     expect(mockRpc).toHaveBeenCalledTimes(2)
+    expect(mockRpc).toHaveBeenLastCalledWith('admit_verified_auth_profile_atomic', {
+      p_user_id: 'cross-instance-deletion-user',
+      p_verified_email: 'cross-instance-deletion-user@example.com',
+    })
   })
 
   it.each([
@@ -118,19 +102,6 @@ describe('server auth application-account status', () => {
     mockRpc.mockRejectedValue(new Error('network failure'))
 
     await expect(getUserFromToken('token')).resolves.toBeNull()
-  })
-
-  it('rechecks an active profile after the clean-status TTL', async () => {
-    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000)
-    authenticateAs('ttl-user')
-    mockRpc.mockResolvedValue({ data: 'active', error: null })
-
-    await getActiveAppUserFromToken('token')
-    now.mockReturnValue(11_001)
-    await getActiveAppUserFromToken('token')
-
-    expect(mockRpc).toHaveBeenCalledTimes(2)
-    now.mockRestore()
   })
 
   it('bypasses a clean cache when Auth reports a newly confirmed email', async () => {

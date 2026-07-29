@@ -98,25 +98,6 @@ export function getSupabaseAdmin(): SupabaseClient<Database> {
  * 从 JWT Token 获取用户信息
  * @param token Bearer Token（不含 "Bearer " 前缀）
  */
-// In-memory ban status cache — used ONLY for the "not banned" fast path, with a
-// short TTL so bans propagate promptly across already-warm serverless instances.
-// SECURITY: banned users are NEVER cached (banned=true always re-queries). This
-// caps the worst-case delay for a ban to take effect at CLEAN_TTL seconds on
-// any single instance that had previously seen the user, while still avoiding
-// a DB hit on every authed request for the common clean case.
-const banStatusCache = new Map<string, { ts: number; email: string | null }>()
-const CLEAN_STATUS_TTL_MS = 10_000 // 10 seconds — bans take effect within 10s
-
-/**
- * Drop a known-stale clean-status entry after this process commits an account
- * lifecycle transition. Other instances still rely on the short TTL and Auth
- * ban, but the writer instance must never knowingly reuse its pre-mutation
- * admission result.
- */
-export function invalidateUserAccountStatusCache(userId: string): void {
-  banStatusCache.delete(userId)
-}
-
 export type UserAccountStatus = 'active' | 'suspended' | 'missing' | 'unavailable'
 
 type VerifiedAuthIdentity = Readonly<{ verifiedEmail: string | null }>
@@ -159,36 +140,17 @@ async function admitVerifiedAuthProfile(
 /**
  * Resolve the application-account status for an already verified auth user.
  *
- * Only a real, clean profile row may enter the short-lived fast-path cache.
- * Missing profiles are a temporary legacy/provisioning state, while query
- * failures are security-sensitive outages; neither may be cached as clean.
+ * Every request rechecks the database authority. A process-local active cache
+ * lets a second warm serverless instance continue admitting a user after
+ * deletion or moderation commits elsewhere, so no positive admission result
+ * is reusable across requests.
  */
 export async function getUserAccountStatus(
   userId: string,
   verifiedIdentity?: VerifiedAuthIdentity
 ): Promise<UserAccountStatus> {
-  const cached = banStatusCache.get(userId)
-  const now = Date.now()
-  if (
-    cached &&
-    now - cached.ts < CLEAN_STATUS_TTL_MS &&
-    (verifiedIdentity === undefined || cached.email === verifiedIdentity.verifiedEmail)
-  ) {
-    return 'active'
-  }
-  if (cached) {
-    banStatusCache.delete(userId)
-  }
-
   if (verifiedIdentity !== undefined) {
-    const status = await admitVerifiedAuthProfile(userId, verifiedIdentity.verifiedEmail)
-    if (status !== 'active') return status
-
-    if (banStatusCache.size > 5000) {
-      banStatusCache.clear()
-    }
-    banStatusCache.set(userId, { ts: now, email: verifiedIdentity.verifiedEmail })
-    return 'active'
+    return admitVerifiedAuthProfile(userId, verifiedIdentity.verifiedEmail)
   }
 
   try {
@@ -218,14 +180,6 @@ export async function getUserAccountStatus(
       return 'suspended'
     }
 
-    // Prevent unbounded growth: clear the whole short-lived map when oversized.
-    if (banStatusCache.size > 5000) {
-      banStatusCache.clear()
-    }
-    banStatusCache.set(userId, {
-      ts: now,
-      email: typeof profile.email === 'string' ? profile.email : null,
-    })
     return 'active'
   } catch (error) {
     logger.error('[supabase/server] account status check failed', { userId, error })

@@ -9,7 +9,7 @@ import { createClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, forbidden } from '@/lib/api/response'
 import { env } from '@/lib/env'
-import { getSupabaseAdmin, invalidateUserAccountStatusCache } from '@/lib/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { getStripe } from '@/lib/stripe'
 import {
@@ -354,8 +354,6 @@ export const POST = withAuth(
         { status: 503 }
       )
     }
-
-    invalidateUserAccountStatusCache(user.id)
 
     // The tombstone is now durable. Auth invalidation and every Stripe write
     // may fail independently without making the account active again.
