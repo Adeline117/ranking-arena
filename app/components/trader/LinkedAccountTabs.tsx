@@ -42,9 +42,25 @@ export default function LinkedAccountTabs({
   const { t } = useLanguage()
   const queryClient = useQueryClient()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const dropdownTriggerRef = useRef<HTMLButtonElement>(null)
+  const dropdownOptionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const [isMobileDropdown, setIsMobileDropdown] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownId = useId()
+
+  const closeDropdown = useCallback((restoreFocus = false) => {
+    setDropdownOpen(false)
+    if (restoreFocus) requestAnimationFrame(() => dropdownTriggerRef.current?.focus())
+  }, [])
+
+  const focusDropdownOption = useCallback((index: number) => {
+    const options = dropdownOptionRefs.current.filter(
+      (option): option is HTMLButtonElement => option !== null
+    )
+    if (options.length === 0) return
+    const normalized = (index + options.length) % options.length
+    options[normalized]?.focus()
+  }, [])
 
   // Detect mobile for dropdown mode (4+ accounts)
   useEffect(() => {
@@ -95,7 +111,14 @@ export default function LinkedAccountTabs({
     return () => document.removeEventListener('mousedown', handler)
   }, [dropdownOpen])
 
-  // #27: Arrow key navigation between tabs (WAI-ARIA tabs pattern)
+  useEffect(() => {
+    if (!dropdownOpen || !isMobileDropdown) return
+    const keys = ['all', ...accounts.map((account) => `${account.platform}:${account.traderKey}`)]
+    const activeIndex = Math.max(0, keys.indexOf(activeAccount))
+    requestAnimationFrame(() => focusDropdownOption(activeIndex))
+  }, [accounts, activeAccount, dropdownOpen, focusDropdownOption, isMobileDropdown])
+
+  // Arrow-key navigation for the desktop single-select radio group.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const keys = ['all', ...accounts.map((a) => `${a.platform}:${a.traderKey}`)]
@@ -105,7 +128,7 @@ export default function LinkedAccountTabs({
         const next = idx < keys.length - 1 ? idx + 1 : 0
         onAccountChange(keys[next])
         requestAnimationFrame(() => {
-          const tabs = scrollRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []
+          const tabs = scrollRef.current?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []
           Array.from(tabs)
             .find((tab) => tab.dataset.accountKey === keys[next])
             ?.focus()
@@ -115,7 +138,7 @@ export default function LinkedAccountTabs({
         const prev = idx > 0 ? idx - 1 : keys.length - 1
         onAccountChange(keys[prev])
         requestAnimationFrame(() => {
-          const tabs = scrollRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []
+          const tabs = scrollRef.current?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []
           Array.from(tabs)
             .find((tab) => tab.dataset.accountKey === keys[prev])
             ?.focus()
@@ -158,6 +181,7 @@ export default function LinkedAccountTabs({
       >
         <button
           type="button"
+          ref={dropdownTriggerRef}
           aria-expanded={dropdownOpen}
           aria-controls={dropdownId}
           aria-haspopup="menu"
@@ -175,10 +199,16 @@ export default function LinkedAccountTabs({
           }}
           onClick={(e) => {
             e.stopPropagation()
-            setDropdownOpen(!dropdownOpen)
+            setDropdownOpen((open) => !open)
           }}
           onKeyDown={(event) => {
-            if (event.key === 'Escape') setDropdownOpen(false)
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault()
+              setDropdownOpen(true)
+            } else if (event.key === 'Escape') {
+              event.preventDefault()
+              closeDropdown(true)
+            }
           }}
         >
           <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -225,6 +255,31 @@ export default function LinkedAccountTabs({
           <Box
             id={dropdownId}
             role="menu"
+            aria-label={t('linkedAccounts')}
+            onKeyDown={(event: React.KeyboardEvent) => {
+              const options = dropdownOptionRefs.current.filter(
+                (option): option is HTMLButtonElement => option !== null
+              )
+              const currentIndex = options.findIndex((option) => option === document.activeElement)
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                focusDropdownOption(currentIndex + 1)
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                focusDropdownOption(currentIndex - 1)
+              } else if (event.key === 'Home') {
+                event.preventDefault()
+                focusDropdownOption(0)
+              } else if (event.key === 'End') {
+                event.preventDefault()
+                focusDropdownOption(options.length - 1)
+              } else if (event.key === 'Escape') {
+                event.preventDefault()
+                closeDropdown(true)
+              } else if (event.key === 'Tab') {
+                closeDropdown(false)
+              }
+            }}
             style={{
               position: 'absolute',
               top: '100%',
@@ -243,6 +298,10 @@ export default function LinkedAccountTabs({
             <button
               type="button"
               role="menuitemradio"
+              ref={(element) => {
+                dropdownOptionRefs.current[0] = element
+              }}
+              tabIndex={-1}
               aria-checked={activeAccount === 'all'}
               style={{
                 display: 'flex',
@@ -259,7 +318,7 @@ export default function LinkedAccountTabs({
               }}
               onClick={() => {
                 onAccountChange('all')
-                setDropdownOpen(false)
+                closeDropdown(true)
               }}
             >
               <svg
@@ -297,7 +356,7 @@ export default function LinkedAccountTabs({
               </Text>
             </button>
 
-            {accounts.map((account) => {
+            {accounts.map((account, index) => {
               const key = `${account.platform}:${account.traderKey}`
               const isActive = activeAccount === key
               const label = linkedAccountDisplayLabel(account, accounts)
@@ -308,6 +367,10 @@ export default function LinkedAccountTabs({
                   key={key}
                   type="button"
                   role="menuitemradio"
+                  ref={(element) => {
+                    dropdownOptionRefs.current[index + 1] = element
+                  }}
+                  tabIndex={-1}
                   aria-checked={isActive}
                   style={{
                     display: 'flex',
@@ -324,8 +387,9 @@ export default function LinkedAccountTabs({
                   }}
                   onClick={() => {
                     onAccountChange(key)
-                    setDropdownOpen(false)
+                    closeDropdown(true)
                   }}
+                  onMouseEnter={() => prefetchAccount(account)}
                 >
                   <ExchangeLogo exchange={account.platform} size={18} />
                   <Text
@@ -371,11 +435,12 @@ export default function LinkedAccountTabs({
     )
   }
 
-  // Desktop: horizontal scroll tabs
+  // Desktop: horizontal, single-select account radio group.
   return (
     <Box
       ref={scrollRef}
-      role="tablist"
+      role="radiogroup"
+      aria-label={t('linkedAccounts')}
       data-testid="linked-account-selector"
       onKeyDown={handleKeyDown}
       style={{
@@ -391,9 +456,10 @@ export default function LinkedAccountTabs({
     >
       {/* All tab */}
       <button
-        role="tab"
+        type="button"
+        role="radio"
         tabIndex={activeAccount === 'all' ? 0 : -1}
-        aria-selected={activeAccount === 'all'}
+        aria-checked={activeAccount === 'all'}
         style={tabStyle(activeAccount === 'all')}
         onClick={() => onAccountChange('all')}
         data-active={activeAccount === 'all'}
@@ -450,9 +516,10 @@ export default function LinkedAccountTabs({
         return (
           <button
             key={key}
-            role="tab"
+            type="button"
+            role="radio"
             tabIndex={isActive ? 0 : -1}
-            aria-selected={isActive}
+            aria-checked={isActive}
             style={tabStyle(isActive)}
             onClick={() => onAccountChange(key)}
             onMouseEnter={() => prefetchAccount(account)}

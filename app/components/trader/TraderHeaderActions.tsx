@@ -22,6 +22,8 @@ interface TraderHeaderActionsProps {
   /** Canonical user_profiles.id for a claimed/registered trader. */
   registeredUserId?: string
   handle: string
+  /** Canonical route identity; display handles may be ambiguous. */
+  routeKey?: string
   source?: string
   displayName?: string
   effectiveAvatarUrl?: string
@@ -130,6 +132,7 @@ export function TraderHeaderActions({
   traderId,
   registeredUserId,
   handle,
+  routeKey,
   source,
   displayName,
   effectiveAvatarUrl,
@@ -147,7 +150,7 @@ export function TraderHeaderActions({
   const actionsRef = useRef<HTMLDivElement>(null)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
   const secondaryActionsId = useId()
-  const loginReturnPath = `/trader/${encodeURIComponent(handle)}${
+  const loginReturnPath = `/trader/${encodeURIComponent(routeKey || handle)}${
     source ? `?platform=${encodeURIComponent(source)}` : ''
   }`
 
@@ -296,6 +299,7 @@ export function TraderHeaderActions({
             sharer's referral code auto-appended when logged in. */}
         <TraderShareActions
           handle={handle}
+          routeKey={routeKey}
           displayName={resolvedDisplayName}
           platform={source}
           rank={rank}

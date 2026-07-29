@@ -13,6 +13,8 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
           traderShareBtn: 'Share rank',
           traderSharePanelTitle: 'Share trader',
           traderShareSaveCard: 'Save card',
+          copyShareLink: 'Copy link',
+          linkCopied: 'Link copied',
           quizDownloadFailed: 'Download failed',
         }) as Record<string, string>
       )[key] ?? key,
@@ -109,5 +111,30 @@ describe('TraderShareActions rank-card download', () => {
     expect(mockShowToast).not.toHaveBeenCalled()
 
     clickSpy.mockRestore()
+  })
+
+  it('shares the canonical account route while keeping the nickname for display', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    render(
+      <TraderShareActions
+        handle="Duplicate Nickname"
+        routeKey="exact-account-key"
+        displayName="Duplicate Nickname"
+        platform="binance"
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share rank' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link' }))
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        'http://localhost/share/rank/exact-account-key?platform=binance&window=90d'
+      )
+    )
   })
 })

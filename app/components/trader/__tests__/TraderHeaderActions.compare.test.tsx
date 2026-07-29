@@ -148,6 +148,7 @@ describe('TraderHeaderActions', () => {
         traderId="exchange-account-id"
         registeredUserId="11111111-1111-4111-8111-111111111111"
         handle="Trader One"
+        routeKey="exact-exchange-account-id"
         source="binance"
         isOwnProfile={false}
         isRegistered
@@ -168,7 +169,7 @@ describe('TraderHeaderActions', () => {
       expect.objectContaining({
         targetUserId: '11111111-1111-4111-8111-111111111111',
         currentUserId: '22222222-2222-4222-8222-222222222222',
-        loginReturnPath: '/trader/Trader%20One?platform=binance',
+        loginReturnPath: '/trader/exact-exchange-account-id?platform=binance',
       })
     )
     expect(mockMessageButton).not.toHaveBeenCalledWith(
@@ -295,6 +296,7 @@ describe('TraderHeaderActions', () => {
         traderId="exchange-account-id"
         registeredUserId="11111111-1111-4111-8111-111111111111"
         handle="Trader One"
+        routeKey="exact-exchange-account-id"
         source="binance"
         isOwnProfile={false}
         isRegistered
@@ -306,7 +308,17 @@ describe('TraderHeaderActions', () => {
       expect.objectContaining({
         targetUserId: '11111111-1111-4111-8111-111111111111',
         currentUserId: null,
-        loginReturnPath: '/trader/Trader%20One?platform=binance',
+        loginReturnPath: '/trader/exact-exchange-account-id?platform=binance',
+      })
+    )
+    expect(mockUserFollowButton).toHaveBeenCalledWith(
+      expect.objectContaining({
+        loginReturnPath: '/trader/exact-exchange-account-id?platform=binance',
+      })
+    )
+    expect(mockWatchlistToggleButton).toHaveBeenCalledWith(
+      expect.objectContaining({
+        loginReturnPath: '/trader/exact-exchange-account-id?platform=binance',
       })
     )
   })

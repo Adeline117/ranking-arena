@@ -99,11 +99,11 @@ describe('LinkedAccountTabs interactions', () => {
     setMobile(false)
     const accounts = [account('bybit', 'desk-one', true), account('bybit', 'desk-two')]
     const { onAccountChange } = renderTabs(accounts)
-    const tablist = screen.getByRole('tablist')
-    const all = within(tablist).getByRole('tab', { name: /All accounts/ })
+    const tablist = screen.getByRole('radiogroup')
+    const all = within(tablist).getByRole('radio', { name: /All accounts/ })
 
-    expect(within(tablist).getByRole('tab', { name: /Bybit · desk-one/ })).toBeVisible()
-    expect(within(tablist).getByRole('tab', { name: /Bybit · desk-two/ })).toBeVisible()
+    expect(within(tablist).getByRole('radio', { name: /Bybit · desk-one/ })).toBeVisible()
+    expect(within(tablist).getByRole('radio', { name: /Bybit · desk-two/ })).toBeVisible()
 
     all.focus()
     fireEvent.keyDown(all, { key: 'ArrowRight' })
@@ -134,6 +134,31 @@ describe('LinkedAccountTabs interactions', () => {
 
     expect(onAccountChange).toHaveBeenCalledWith('okx:second')
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).toHaveFocus()
+  })
+
+  it('supports the complete mobile menu keyboard loop and restores trigger focus', () => {
+    setMobile(true)
+    renderTabs([
+      account('bybit', 'primary', true),
+      account('okx', 'second'),
+      account('bitget', 'third'),
+      account('gmx', 'fourth'),
+    ])
+    const trigger = screen.getByRole('button', { name: /All accounts 4/ })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+
+    const options = screen.getAllByRole('menuitemradio')
+    expect(options[0]).toHaveFocus()
+    fireEvent.keyDown(options[0], { key: 'ArrowDown' })
+    expect(options[1]).toHaveFocus()
+    fireEvent.keyDown(options[1], { key: 'End' })
+    expect(options.at(-1)).toHaveFocus()
+    fireEvent.keyDown(options.at(-1)!, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
   })
 
   it('closes the mobile dropdown on an outside pointer action', () => {
