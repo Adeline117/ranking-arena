@@ -84,8 +84,8 @@ describe('SSR leaderboard source freshness', () => {
 
   it('epochs both SSR cache keys together', () => {
     expect(homeInitialTradersCacheKeys('90D', 2)).toEqual({
-      cacheKey: 'public-rank-policy-v4:home-initial-traders-v4:90D:p2',
-      fallbackKey: 'public-rank-policy-v4:home-initial-traders-fallback-v4:90D:p2',
+      cacheKey: 'public-rank-policy-v4:home-initial-traders-sealed-v5:90D:p2',
+      fallbackKey: 'public-rank-policy-v4:home-initial-traders-sealed-fallback-v5:90D:p2',
     })
   })
 })

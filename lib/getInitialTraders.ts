@@ -34,6 +34,15 @@ import {
   publicRankingCountFromCache,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
+import {
+  readSealedRankingGeneration,
+  type SealedRankingGenerationRead,
+} from '@/lib/rankings/read-sealed-ranking-generation'
+import type { SealedLeaderboardPublicationProofSet } from '@/lib/rankings/read-publication-proofs'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 /** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface InitialTrader {
@@ -135,11 +144,15 @@ function staleCacheResult(
  * entries (without the new fields) don't serve arrow-less rows for hours.
  * v4 (2026-07-18): lastUpdated is the oldest live source-data watermark,
  * never leaderboard_ranks.computed_at.
+ * v5 (2026-07-29): only proof-fenced cohorts may populate the dedicated
+ * sealed-ranking-cache@1 envelope; generic legacy values are rejected.
  */
 export function homeInitialTradersCacheKeys(timeRange: Period, page: number) {
   return {
-    cacheKey: publicRankingCacheKey(`home-initial-traders-v4:${timeRange}:p${page}`),
-    fallbackKey: publicRankingCacheKey(`home-initial-traders-fallback-v4:${timeRange}:p${page}`),
+    cacheKey: publicRankingCacheKey(`home-initial-traders-sealed-v5:${timeRange}:p${page}`),
+    fallbackKey: publicRankingCacheKey(
+      `home-initial-traders-sealed-fallback-v5:${timeRange}:p${page}`
+    ),
   }
 }
 
@@ -153,12 +166,14 @@ export async function refreshHomeInitialTradersCache(
   timeRange: Period = '90D',
   limit = 50
 ): Promise<number> {
-  const result = await fetchLeaderboardFromDB(timeRange, limit, 0)
+  const sealedRead = await fetchSealedLeaderboardFromDB(timeRange, limit, 0)
+  const result = sealedRead.value
   if (result.traders.length === 0) return 0
   const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, 0)
+  const cacheEntry = createSealedRankingCacheEntry(sealedRead)
   await Promise.all([
-    cache.set(cacheKey, result, { ttl: 7200 }),
-    cache.set(fallbackKey, result, { ttl: 14400 }),
+    cache.set(cacheKey, cacheEntry, { ttl: 7200 }),
+    cache.set(fallbackKey, cacheEntry, { ttl: 14400 }),
   ])
   return result.traders.length
 }
@@ -187,14 +202,22 @@ export async function getInitialTraders(
   let cached: InitialTradersResult | null = null
   let fallbackCached: InitialTradersResult | null = null
   try {
-    cached = await cache.get<InitialTradersResult>(cacheKey)
-    if (cached && cached.traders && cached.traders.length > 0) {
+    const cachedEntry = parseSealedRankingCacheEntry<InitialTradersResult>(
+      await cache.get<unknown>(cacheKey),
+      timeRange
+    )
+    cached = cachedEntry?.value ?? null
+    if (cached?.traders && cached.traders.length > 0) {
       const safeCached = sanitizePublicRankingSourcePayload(cached)
       if (safeCached.traders.length > 0) return safeCached
       cached = safeCached
     }
     // Primary cache miss — try fallback (longer TTL, may be stale but better than empty)
-    fallbackCached = await cache.get<InitialTradersResult>(fallbackKey)
+    const fallbackEntry = parseSealedRankingCacheEntry<InitialTradersResult>(
+      await cache.get<unknown>(fallbackKey),
+      timeRange
+    )
+    fallbackCached = fallbackEntry?.value ?? null
     if (fallbackCached) {
       fallbackCached = sanitizePublicRankingSourcePayload(fallbackCached)
       const stale = staleCacheResult(fallbackCached)
@@ -208,13 +231,12 @@ export async function getInitialTraders(
   // Supabase requests. Do not race it with a second timer here: that used to
   // abandon still-running PostgREST requests whenever the outer race won.
   try {
-    const result = sanitizePublicRankingSourcePayload(
-      await fetchLeaderboardFromDB(timeRange, limit, page)
-    )
+    const sealedRead = await fetchSealedLeaderboardFromDB(timeRange, limit, page)
+    const result = sanitizePublicRankingSourcePayload(sealedRead.value)
 
-    // Defensive fallback for DB errors/timeouts that are normalized to an
-    // empty result by fetchLeaderboardFromDB. In normal serving, a non-empty
-    // fallback already returned above without starting the DB request.
+    // Defensive fallback for an authorized but unexpectedly empty result. In
+    // normal serving, a non-empty last-good fallback already returned above
+    // without starting the DB request.
     if (result.traders.length === 0) {
       return staleCacheResult(cached, fallbackCached) ?? result
     }
@@ -223,10 +245,11 @@ export async function getInitialTraders(
     // warm-cache cron refreshes every 30 min, so data is always reasonably fresh.
     // Fallback cache has 4h TTL as safety net for DB outages.
     if (result.traders.length > 0) {
+      const cacheEntry = createSealedRankingCacheEntry({ ...sealedRead, value: result })
       fireAndForget(
         Promise.all([
-          cache.set(cacheKey, result, { ttl: 7200 }),
-          cache.set(fallbackKey, result, { ttl: 14400 }),
+          cache.set(cacheKey, cacheEntry, { ttl: 7200 }),
+          cache.set(fallbackKey, cacheEntry, { ttl: 14400 }),
         ]),
         'cache-set-initial-traders'
       )
@@ -275,8 +298,25 @@ export async function fetchLeaderboardFromDB(
   limit: number = 20,
   page: number = 0
 ): Promise<InitialTradersResult> {
+  try {
+    return (await fetchSealedLeaderboardFromDB(timeRange, limit, page)).value
+  } catch {
+    return {
+      traders: [],
+      lastUpdated: null,
+      isStale: true,
+      totalCount: 0,
+      categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 },
+    }
+  }
+}
+
+async function fetchSealedLeaderboardFromDB(
+  timeRange: Period,
+  limit: number,
+  page: number
+): Promise<SealedRankingGenerationRead<InitialTradersResult>> {
   const supabase = getSupabaseAdmin()
-  const emptyCounts: CategoryCounts = { all: 0, futures: 0, spot: 0, onchain: 0 }
 
   // 5s timeout — paginated queries with OFFSET can be slower than page 0 RPC
   const controller = new AbortController()
@@ -284,44 +324,63 @@ export async function fetchLeaderboardFromDB(
   const { signal } = controller
 
   try {
-    let tradersPromise: Promise<{ traders: InitialTrader[]; lastUpdated: string | null }>
-    if (page > 0) {
-      tradersPromise = fetchPaginatedFromDB(supabase, timeRange, limit, page, signal)
-    } else {
-      // The diverse RPC applies LIMIT internally and cannot receive the exact
-      // active-source contract. Use the direct reader so both the active
-      // allowlist and publication quarantine execute before LIMIT.
-      tradersPromise = fetchLeaderboardLegacy(supabase, timeRange, limit, signal)
-    }
+    const proofSources = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+    return await readSealedRankingGeneration(
+      supabase,
+      { season: timeRange, sources: proofSources },
+      async (publication) => {
+        let tradersPromise: Promise<{ traders: InitialTrader[]; lastUpdated: string | null }>
+        if (page > 0) {
+          tradersPromise = fetchPaginatedFromDB(
+            supabase,
+            timeRange,
+            limit,
+            page,
+            publication.scoreCohortId,
+            signal
+          )
+        } else {
+          // The diverse RPC applies LIMIT internally and cannot receive the exact
+          // active-source contract. Use the direct reader so both the active
+          // allowlist and publication quarantine execute before LIMIT.
+          tradersPromise = fetchLeaderboardLegacy(
+            supabase,
+            timeRange,
+            limit,
+            publication.scoreCohortId,
+            signal
+          )
+        }
 
-    // Fetch traders + category counts in parallel. Every top-level PostgREST
-    // request shares this deadline (the diverse RPC derives a shorter child
-    // deadline), so timeout cancels DB work instead of abandoning a race loser.
-    const [tradersResult, rawCounts, freshnessRows] = await Promise.all([
-      tradersPromise,
-      fetchCategoryCounts(supabase, timeRange, signal),
-      fetchInitialFreshnessRows(supabase, timeRange, signal),
-    ])
-    if (signal.aborted) throw signal.reason
+        const tradersResult = await tradersPromise
+        if (signal.aborted) throw signal.reason
 
-    // Prefer our own CDN mirror over the exchange-CDN proxy (no 429 cold-burst).
-    // Fail-open: missing mirrors leave avatar_url untouched (origin proxy still works).
-    const enrichedTraders = await attachAvatarMirrors(supabase, tradersResult.traders, signal)
-    if (signal.aborted) throw signal.reason
-    const counts = publicInitialCategoryCounts(freshnessRows.countRows, enrichedTraders, rawCounts)
-    const freshness = summarizeInitialTraderFreshness({
-      countRows: freshnessRows.countRows,
-      watermarkRows: freshnessRows.watermarkRows,
-      observedSources: enrichedTraders.map((trader) => trader.source),
-    })
-    return sanitizePublicRankingSourcePayload({
-      ...tradersResult,
-      traders: enrichedTraders,
-      lastUpdated: freshness.asOf,
-      isStale: freshness.isStale,
-      totalCount: counts.all,
-      categoryCounts: counts,
-    })
+        // Prefer our own CDN mirror over the exchange-CDN proxy (no 429 cold-burst).
+        // Fail-open: missing mirrors leave avatar_url untouched (origin proxy still works).
+        const enrichedTraders = await attachAvatarMirrors(supabase, tradersResult.traders, signal)
+        if (signal.aborted) throw signal.reason
+        const counts = categoryCountsFromPublication(publication)
+        const publishedWatermarks = publication.proofs
+          .filter((proof) => proof.published_rank_count > 0)
+          .map((proof) => proof.source_as_of)
+        const lastUpdated =
+          publishedWatermarks.length > 0
+            ? publishedWatermarks.reduce((oldest, timestamp) =>
+                timestamp < oldest ? timestamp : oldest
+              )
+            : null
+        return sanitizePublicRankingSourcePayload({
+          ...tradersResult,
+          traders: enrichedTraders,
+          lastUpdated,
+          // The strict proof reader already rejects any stale source.
+          isStale: false,
+          totalCount: counts.all,
+          categoryCounts: counts,
+        })
+      },
+      { timeoutMs: 4_500, signal }
+    )
   } catch (err: unknown) {
     const isTimeout =
       err instanceof Error && (err.name === 'AbortError' || err.message.includes('timeout'))
@@ -332,48 +391,9 @@ export async function fetchLeaderboardFromDB(
     } else {
       logger.error('[getInitialTraders] Error:', err)
     }
-    return {
-      traders: [],
-      lastUpdated: null,
-      isStale: true,
-      totalCount: 0,
-      categoryCounts: emptyCounts,
-    }
+    throw err
   } finally {
     clearTimeout(timer)
-  }
-}
-
-async function fetchInitialFreshnessRows(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  timeRange: Period,
-  signal: AbortSignal
-): Promise<{
-  countRows: LeaderboardCountCacheRow[]
-  watermarkRows: SourceFreshnessRow[]
-}> {
-  let watermarkQuery = supabase
-    .from('leaderboard_source_freshness')
-    .select('source,source_as_of')
-    .eq('season_id', timeRange)
-    .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
-  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-    watermarkQuery = watermarkQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-  }
-
-  const [countResult, watermarkResult] = await Promise.all([
-    supabase
-      .from('leaderboard_count_cache')
-      .select('source,total_count,updated_at')
-      .eq('season_id', timeRange)
-      .like('source', '%_gt0')
-      .abortSignal(signal),
-    watermarkQuery.abortSignal(signal),
-  ])
-
-  return {
-    countRows: (countResult.data || []) as LeaderboardCountCacheRow[],
-    watermarkRows: (watermarkResult.data || []) as SourceFreshnessRow[],
   }
 }
 
@@ -433,41 +453,21 @@ export function publicInitialCategoryCounts(
   )
 }
 
-/**
- * Fetch category counts from leaderboard_ranks using a single aggregation query.
- */
-async function fetchCategoryCounts(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  timeRange: Period,
-  signal: AbortSignal
-): Promise<CategoryCounts> {
-  const { data, error } = await supabase
-    .rpc('get_leaderboard_category_counts', {
-      p_season_id: timeRange,
-    })
-    .abortSignal(signal)
-
-  if (!error && data && Array.isArray(data)) {
-    const counts: CategoryCounts = { all: 0, futures: 0, spot: 0, onchain: 0 }
-    for (const row of data as Array<{ source_type: string; count: number }>) {
-      const ct = Number(row.count)
-      counts.all += ct
-      if (row.source_type === 'futures') counts.futures = ct
-      else if (row.source_type === 'spot') counts.spot = ct
-      else if (row.source_type === 'web3') counts.onchain = ct
-    }
-    return counts
-  }
-
-  // Fallback: return estimated counts instead of exact (exact takes 25s+ per query)
-  if (error) {
-    logger.warn(
-      '[getInitialTraders] RPC get_leaderboard_category_counts unavailable, using estimates:',
-      error.message
-    )
-  }
-  // Use pg_class estimate via a single fast query instead of 4 parallel count(exact)
-  return { all: 12000, futures: 5000, spot: 1500, onchain: 5500 }
+/** Exact public totals carried by the same sealed proof set as the rank rows. */
+export function categoryCountsFromPublication(
+  publication: SealedLeaderboardPublicationProofSet
+): CategoryCounts {
+  return publication.proofs.reduce<CategoryCounts>(
+    (counts, proof) => {
+      counts.all += proof.published_rank_count
+      const sourceType = SOURCE_TYPE_MAP[proof.source] || 'futures'
+      if (sourceType === 'spot') counts.spot += proof.published_rank_count
+      else if (sourceType === 'web3') counts.onchain += proof.published_rank_count
+      else counts.futures += proof.published_rank_count
+      return counts
+    },
+    { all: 0, futures: 0, spot: 0, onchain: 0 }
+  )
 }
 
 /**
@@ -479,6 +479,7 @@ async function fetchPaginatedFromDB(
   timeRange: Period,
   limit: number,
   page: number,
+  scoreCohortId: string,
   signal: AbortSignal
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const offset = page * limit
@@ -492,6 +493,7 @@ async function fetchPaginatedFromDB(
     .from('leaderboard_ranks')
     .select(SSR_COLS)
     .eq('season_id', timeRange)
+    .filter('rank_publication_id', 'eq', scoreCohortId)
     .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
     .gt('arena_score', 0)
     .or('is_outlier.is.null,is_outlier.eq.false')
@@ -530,6 +532,7 @@ async function fetchLeaderboardLegacy(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   timeRange: Period,
   limit: number,
+  scoreCohortId: string,
   signal: AbortSignal
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const { traders: unifiedTraders } = await getLeaderboard(supabase, {
@@ -538,6 +541,7 @@ async function fetchLeaderboardLegacy(
     minScore: 10,
     excludeOutliers: true,
     sortBy: 'arena_score',
+    scoreCohortId,
     allowedSources: PUBLIC_ACTIVE_RANKING_SOURCES,
     excludeSources: PUBLIC_RANKING_QUARANTINED_SOURCES,
     signal,

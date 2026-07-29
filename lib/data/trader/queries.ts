@@ -110,6 +110,8 @@ export async function getLeaderboard(
     minScore?: number
     excludeOutliers?: boolean
     sortBy?: 'rank' | 'arena_score' | 'roi' | 'pnl'
+    /** Immutable sealed generation that every returned rank row must match. */
+    scoreCohortId?: string
     /** Optional SQL allowlist applied before finite pagination. */
     allowedSources?: readonly string[]
     /** Optional source quarantine for ranking callers. */
@@ -128,6 +130,7 @@ export async function getLeaderboard(
     minScore,
     excludeOutliers = true,
     sortBy = 'rank',
+    scoreCohortId,
     allowedSources = [],
     excludeSources = [],
     signal,
@@ -191,6 +194,10 @@ export async function getLeaderboard(
        trader_type, is_outlier, ${LR.season_id}`
     )
     .eq(LR.season_id, period)
+
+  if (scoreCohortId) {
+    query = query.filter('rank_publication_id', 'eq', scoreCohortId)
+  }
 
   if (allowedSources.length > 0) {
     query = query.in(LR.source, [...new Set(allowedSources)])
