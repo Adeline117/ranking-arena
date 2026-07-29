@@ -5,17 +5,26 @@ jest.mock('../db', () => ({
 }))
 
 import {
+  LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+  LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
   buildLeaderboardAcquisitionManifest,
   buildLeaderboardAcquisitionManifestV3,
+  buildLeaderboardAcquisitionManifestV4,
+  projectPartitionedNumericParserPage,
+  type BuildLeaderboardAcquisitionManifestV4Input,
 } from '../acquisition-manifest'
 import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V3_CONTRACT,
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+  findRegisteredAttemptBoundLeaderboardAcquisitionContract,
   finishLeaderboardAcquisitionAttempt,
   hasRegisteredAttemptBoundLeaderboardAcquisitionContract,
   LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
   LEGACY_LEADERBOARD_ACQUISITION_CONTRACT,
   projectLeaderboardManifestOutcome,
   projectLeaderboardManifestV3Outcome,
+  projectLeaderboardManifestV4Outcome,
   startLeaderboardAcquisitionAttempt,
   VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT,
   type LeaderboardAcquisitionAttempt,
@@ -194,6 +203,137 @@ function builtManifestV3(
   })
 }
 
+function builtManifestV4(
+  acquisitionAttempt: BuildLeaderboardAcquisitionManifestV4Input['acquisition_attempt'] = {
+    binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+    attempt_id: attemptId,
+    attempt_seq: 41,
+  }
+) {
+  const sourcePages: BuildLeaderboardAcquisitionManifestV4Input['source_pages'] = [
+    {
+      raw_page: {
+        pageIndex: 1,
+        payload: { data: [{ id: 'grid-1' }], total: 1 },
+        url: 'https://example.test/leaderboard?partition=grid&page=1',
+        fetchedAt: '2026-07-22T03:00:01.000Z',
+      },
+      source_row_count: 1,
+      request_sha256: 'b'.repeat(64),
+      http_status: 200,
+      pagination_position: {
+        kind: 'partitioned_page_index',
+        partition_ordinal: 1,
+        partition_id: 'futures_grid',
+        request_page_index: 1,
+      },
+      source_reports: sourceReports(1, null, 20),
+    },
+    {
+      raw_page: {
+        pageIndex: 2,
+        payload: { data: [{ id: 'martingale-1' }], total: 1 },
+        url: 'https://example.test/leaderboard?partition=martingale&page=1',
+        fetchedAt: '2026-07-22T03:00:02.000Z',
+      },
+      source_row_count: 1,
+      request_sha256: 'c'.repeat(64),
+      http_status: 200,
+      pagination_position: {
+        kind: 'partitioned_page_index',
+        partition_ordinal: 2,
+        partition_id: 'futures_martingale',
+        request_page_index: 1,
+      },
+      source_reports: sourceReports(1, null, 20),
+    },
+  ]
+  const parserTransformation: BuildLeaderboardAcquisitionManifestV4Input['parser_transformation'] =
+    {
+      kind: 'partitioned_numeric_projection',
+      source_page_ordinals: [1, 2],
+      algorithm_contract: LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+      page_bindings: [
+        {
+          source_page_ordinal: 1,
+          partition_ordinal: 1,
+          partition_id: 'futures_grid',
+          request_page_index: 1,
+          request_page_size: 20,
+        },
+        {
+          source_page_ordinal: 2,
+          partition_ordinal: 2,
+          partition_id: 'futures_martingale',
+          request_page_index: 1,
+          request_page_size: 20,
+        },
+      ],
+    }
+
+  return buildLeaderboardAcquisitionManifestV4({
+    source: {
+      id: 13,
+      slug: 'bitget_bots_futures',
+      adapter_slug: 'bitget_bots',
+      configured_page_size: 20,
+      configured_pagination_kind: 'numeric',
+      configured_partition_ids: ['futures_grid', 'futures_martingale'],
+    },
+    surface: 'tier_a_leaderboard',
+    timeframe: 30,
+    started_at: startedAt,
+    completed_at: completedAt,
+    runner_git_sha: 'a'.repeat(40),
+    observation_cycle_id: 'tier-a:bitget_bots_futures:job-1:1000',
+    capture_evidence_state: 'verified',
+    termination_reason: 'reported_population_reached',
+    capture_config: { caller_page_cap: null, safety_page_cap: 10_000 },
+    source_pages: sourcePages,
+    parse_pages: sourcePages.map((page, index) =>
+      projectPartitionedNumericParserPage(page.raw_page, parserTransformation.page_bindings[index]!)
+    ),
+    parser_transformation: parserTransformation,
+    accepted_population: 2,
+    rejected_row_count: 0,
+    acquisition_attempt: acquisitionAttempt,
+    pagination_topology: {
+      kind: 'partitioned_numeric',
+      aggregation_contract: LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+      rank_scope: 'partition_local_concatenated_for_storage',
+      partitions: [
+        {
+          partition_id: 'futures_grid',
+          source_page_ordinals: [1],
+          parser_page_ordinals: [1],
+          termination_reason: 'reported_population_reached',
+          capture_config: { caller_page_cap: null, safety_page_cap: 5_000 },
+        },
+        {
+          partition_id: 'futures_martingale',
+          source_page_ordinals: [2],
+          parser_page_ordinals: [2],
+          termination_reason: 'reported_population_reached',
+          capture_config: { caller_page_cap: null, safety_page_cap: 5_000 },
+        },
+      ],
+    },
+  })
+}
+
+function v4Attempt(
+  overrides: Partial<LeaderboardAcquisitionAttempt> = {}
+): LeaderboardAcquisitionAttempt {
+  return attempt({
+    sourceId: 13,
+    sourceSlug: 'bitget_bots_futures',
+    adapterSlug: 'bitget_bots',
+    observationCycleId: 'tier-a:bitget_bots_futures:job-1:1000',
+    captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+    ...overrides,
+  })
+}
+
 describe('leaderboard acquisition attempt client', () => {
   beforeEach(() => jest.clearAllMocks())
 
@@ -220,6 +360,82 @@ describe('leaderboard acquisition attempt client', () => {
     expect(String(sql)).toContain('FROM arena.leaderboard_capture_contracts')
     expect(String(sql)).toContain('source_id = $1::smallint')
     expect(params).toEqual([1, ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT])
+  })
+
+  it('retains the existing attempt-bound contract as the v3 compatibility alias', () => {
+    expect(ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT).toBe(
+      ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V3_CONTRACT
+    )
+  })
+
+  it('returns only the exact requested v4 capability registration', async () => {
+    const client = enqueueQuery({
+      rows: [
+        {
+          capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+          adapter_slug: 'bitget_bots',
+          attempt_binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+          requires_runner_git_sha: true,
+        },
+      ],
+    })
+
+    await expect(
+      findRegisteredAttemptBoundLeaderboardAcquisitionContract({
+        sourceId: 13,
+        adapterSlug: 'bitget_bots',
+        captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+      })
+    ).resolves.toBe(ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT)
+
+    expect(client.query.mock.calls[0][1]).toEqual([
+      13,
+      ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+    ])
+  })
+
+  it('returns null instead of substituting another attempt-bound contract', async () => {
+    enqueueQuery({ rows: [] })
+
+    await expect(
+      findRegisteredAttemptBoundLeaderboardAcquisitionContract({
+        sourceId: 13,
+        adapterSlug: 'bitget_bots',
+        captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+      })
+    ).resolves.toBeNull()
+  })
+
+  it('rejects registry rows for a different attempt-bound contract', async () => {
+    enqueueQuery({
+      rows: [
+        {
+          capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V3_CONTRACT,
+          adapter_slug: 'bitget_bots',
+          attempt_binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+          requires_runner_git_sha: true,
+        },
+      ],
+    })
+
+    await expect(
+      findRegisteredAttemptBoundLeaderboardAcquisitionContract({
+        sourceId: 13,
+        adapterSlug: 'bitget_bots',
+        captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+      })
+    ).rejects.toThrow(/inconsistent/)
+  })
+
+  it('rejects an unsupported exact contract before capability registry I/O', async () => {
+    await expect(
+      findRegisteredAttemptBoundLeaderboardAcquisitionContract({
+        sourceId: 13,
+        adapterSlug: 'bitget_bots',
+        captureContract: 'arena.ingest.leaderboard-acquisition-manifest@5',
+      } as Parameters<typeof findRegisteredAttemptBoundLeaderboardAcquisitionContract>[0])
+    ).rejects.toThrow(/capture contract is invalid/)
+    expect(mockConnect).not.toHaveBeenCalled()
   })
 
   it('keeps an unregistered source off the @3 path', async () => {
@@ -344,6 +560,21 @@ describe('leaderboard acquisition attempt client', () => {
         captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
       })
     ).resolves.toEqual(attempt({ captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT }))
+  })
+
+  it('starts an exact attempt-bound v4 acquisition', async () => {
+    enqueueQuery({
+      rows: [attemptRow({ capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT })],
+    })
+
+    await expect(
+      startLeaderboardAcquisitionAttempt({
+        ...startInput(),
+        captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+      })
+    ).resolves.toEqual(
+      attempt({ captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT })
+    )
   })
 
   it.each([
@@ -497,6 +728,41 @@ describe('leaderboard acquisition attempt client', () => {
     })
   })
 
+  it('projects a frozen v4 outcome only when the canonical body binds the exact attempt', () => {
+    const projection = projectLeaderboardManifestV4Outcome(v4Attempt(), builtManifestV4())
+
+    expect(Object.isFrozen(projection)).toBe(true)
+    expect(Object.isFrozen(projection.binding)).toBe(true)
+    expect(projection).toMatchObject({
+      terminalState: 'complete',
+      populationState: 'verified',
+      observedPopulation: 2,
+      acceptedPopulation: 2,
+      reasonCode: null,
+      binding: {
+        bindingContract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+        attemptId,
+        attemptSeq: 41,
+        captureStartedAt: startedAt,
+        captureCompletedAt: completedAt,
+        runnerGitSha: 'a'.repeat(40),
+      },
+    })
+  })
+
+  it('rejects v4 evidence bound to a foreign durable attempt identity', () => {
+    expect(() =>
+      projectLeaderboardManifestV4Outcome(
+        v4Attempt(),
+        builtManifestV4({
+          binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+          attempt_id: '00000000-0000-4000-8000-000000000002',
+          attempt_seq: 41,
+        })
+      )
+    ).toThrow('does not bind the durable attempt identity')
+  })
+
   it.each([
     [
       'attempt id',
@@ -523,7 +789,7 @@ describe('leaderboard acquisition attempt client', () => {
     ).toThrow('does not bind the durable attempt identity')
   })
 
-  it('keeps v2 and v3 projection contracts isolated', () => {
+  it('keeps v2, v3, and v4 projection contracts isolated', () => {
     expect(() =>
       projectLeaderboardManifestV3Outcome(attempt(), builtManifestV3('complete'))
     ).toThrow('only an attempt-bound v3 attempt')
@@ -533,6 +799,15 @@ describe('leaderboard acquisition attempt client', () => {
         builtManifest('complete')
       )
     ).toThrow('only a v2 attempt')
+    expect(() =>
+      projectLeaderboardManifestV4Outcome(
+        v4Attempt({ captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V3_CONTRACT }),
+        builtManifestV4()
+      )
+    ).toThrow('only an attempt-bound v4 attempt')
+    expect(() =>
+      projectLeaderboardManifestV3Outcome(v4Attempt(), builtManifestV3('complete'))
+    ).toThrow('only an attempt-bound v3 attempt')
   })
 
   it('rejects v3 evidence whose DB start belongs to another attempt', () => {
