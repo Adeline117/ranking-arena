@@ -12152,6 +12152,15 @@ export type Database = {
           post_id: string
         }[]
       }
+      moderate_group_comment_atomic: {
+        Args: {
+          p_actor_id: string
+          p_comment_id: string
+          p_group_id: string
+          p_reason: string
+        }
+        Returns: Json
+      }
       moderate_group_member_atomic: {
         Args: {
           p_action: string
