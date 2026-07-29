@@ -6722,6 +6722,9 @@ export type Database = {
           event_type: string
           id: string
           last_error: string | null
+          lease_expires_at: string | null
+          lease_token: string | null
+          livemode: boolean | null
           payload: Json | null
           processed_at: string | null
           started_at: string | null
@@ -6734,6 +6737,9 @@ export type Database = {
           event_type: string
           id?: string
           last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          livemode?: boolean | null
           payload?: Json | null
           processed_at?: string | null
           started_at?: string | null
@@ -6746,6 +6752,9 @@ export type Database = {
           event_type?: string
           id?: string
           last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          livemode?: boolean | null
           payload?: Json | null
           processed_at?: string | null
           started_at?: string | null
@@ -11020,6 +11029,15 @@ export type Database = {
         }
         Returns: string
       }
+      claim_stripe_event_v2: {
+        Args: {
+          p_event_id: string
+          p_event_type: string
+          p_lease_duration?: string
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
       claim_stripe_payment_ownership_atomic: {
         Args: { p_stripe_charge_id: string; p_stripe_payment_intent_id: string | null }
         Returns: Json
@@ -11310,6 +11328,17 @@ export type Database = {
       finish_stripe_event: {
         Args: { p_error?: string; p_event_id: string; p_succeeded: boolean }
         Returns: boolean
+      }
+      finish_stripe_event_v2: {
+        Args: {
+          p_error?: string
+          p_event_id: string
+          p_event_type: string
+          p_lease_token: string
+          p_livemode: boolean
+          p_succeeded: boolean
+        }
+        Returns: Json
       }
       fix_snapshot_violations: {
         Args: { batch_size?: number }

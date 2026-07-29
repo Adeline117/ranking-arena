@@ -89,6 +89,7 @@
     "qa:migrations": "node scripts/qa/check-migration-ledger.mjs",
     "qa:migration-history-shape": "node scripts/qa/migration-history-shape.mjs",
     "qa:launch-migration-runner": "node --test scripts/maintenance/apply-launch-migrations.test.mjs",
+    "qa:stripe-webhook-event-leases-pg17": "bash scripts/qa/stripe-webhook-event-leases.pg17.sh",
     "qa:ranking-primary-authority": "node --test scripts/maintenance/check-ranking-primary-authority.test.mjs",
     "qa:ranking-primary-authority-env": "node scripts/maintenance/check-ranking-primary-authority.mjs",
     "qa:api-tier-cutover": "node --test scripts/maintenance/api-tier-cutover.test.mjs",
