@@ -180,8 +180,8 @@ export const GET = withPublic(
       `v2-rankings:sealed-v4:${platform}:${window}:${marketType}:${sort}:${offset}:${limit}:${tradingStyle || ''}:${minAlpha ?? ''}:${minRoi ?? ''}:${minPnl ?? ''}:${minWinRate ?? ''}:${maxDrawdown ?? ''}:${minScore ?? ''}:${minSortino ?? ''}`
     )
 
+    const supabase = getReadReplica()
     const fetchSealedEntry = async () => {
-      const supabase = getReadReplica()
       const sealedRead = await readSealedRankingGeneration(
         supabase,
         { season: seasonId, sources: [platform] },
@@ -372,12 +372,28 @@ export const GET = withPublic(
       return createSealedRankingCacheEntry(sealedRead)
     }
 
-    let cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, { ttl: 120 })
-    let sealedCache = parseSealedRankingCacheEntry<RankingsResponse>(cached, seasonId, [platform])
+    const readAuthorizedCache = async () => {
+      const cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, { ttl: 120 })
+      const sealedCache = parseSealedRankingCacheEntry<RankingsResponse>(cached, seasonId, [
+        platform,
+      ])
+      if (!sealedCache) return null
+
+      const currentGeneration = await readSealedRankingGeneration(
+        supabase,
+        { season: seasonId, sources: [platform] },
+        async () => null,
+        { timeoutMs: 10_000 }
+      )
+      return currentGeneration.publicationIdentity === sealedCache.publicationIdentity
+        ? sealedCache
+        : null
+    }
+
+    let sealedCache = await readAuthorizedCache()
     if (!sealedCache) {
       await del(cacheKey)
-      cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, { ttl: 120 })
-      sealedCache = parseSealedRankingCacheEntry<RankingsResponse>(cached, seasonId, [platform])
+      sealedCache = await readAuthorizedCache()
     }
     if (!sealedCache) {
       throw new Error('Ranking cache did not satisfy the sealed publication contract')

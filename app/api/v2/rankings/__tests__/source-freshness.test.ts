@@ -49,22 +49,23 @@ jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
 }))
 
 const SCORE_COHORT_ID = '11111111-1111-4111-8111-111111111111'
+let currentCohortId = SCORE_COHORT_ID
 const EXPECTED_SOURCE_AS_OF = '2026-07-16T09:00:00.000Z'
 let mockSourceAsOf = '2026-07-16T09:00:00.000000Z'
 let mockPublishedRankCount = 1
 
-function sealedPublication(season: string, source: string) {
+function sealedPublication(season: string, source: string, scoreCohortId = currentCohortId) {
   return {
     state: 'sealed' as const,
     season,
-    scoreCohortId: SCORE_COHORT_ID,
+    scoreCohortId,
     proofs: [
       {
         season_id: season,
         source,
         source_as_of: mockSourceAsOf,
         recorded_at: '2026-07-18T11:59:30.000000Z',
-        score_cohort_id: SCORE_COHORT_ID,
+        score_cohort_id: scoreCohortId,
         rank_mutation_seq: 7,
         current_mutation_seq: 7,
         published_rank_count: mockPublishedRankCount,
@@ -72,6 +73,18 @@ function sealedPublication(season: string, source: string) {
         is_sealed: true as const,
       },
     ],
+  }
+}
+
+function sealedCacheEntry(value: unknown, scoreCohortId = currentCohortId) {
+  const publication = sealedPublication('90D', 'binance_futures', scoreCohortId)
+  return {
+    contract: 'sealed-ranking-cache@1',
+    season: '90D',
+    publicationIdentity: JSON.stringify(publication),
+    publication,
+    cachedAt: '2026-07-18T11:59:40.000Z',
+    value,
   }
 }
 
@@ -105,6 +118,7 @@ import { PUBLIC_RANKING_QUARANTINED_SOURCES } from '@/lib/rankings/publication-p
 describe('GET /api/v2/rankings source freshness', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    currentCohortId = SCORE_COHORT_ID
     mockSourceAsOf = '2026-07-16T09:00:00.000000Z'
     mockPublishedRankCount = 1
     mockDel.mockResolvedValue(true)
@@ -270,6 +284,37 @@ describe('GET /api/v2/rankings source freshness', () => {
         age_seconds: 51 * 3600,
       },
     ])
+  })
+
+  it('evicts a sealed page after the platform authority advances to another cohort', async () => {
+    const cachedValue = {
+      traders: [{ platform: 'binance_futures', trader_key: 'old-cache-row' }],
+      meta: {
+        platform: 'binance_futures',
+        market_type: 'futures',
+        window: '90d',
+        total_count: 1,
+        updated_at: EXPECTED_SOURCE_AS_OF,
+        staleness_seconds: 0,
+        is_stale: false,
+        source_freshness: [],
+      },
+    }
+    mockGetOrSetWithLock
+      .mockResolvedValueOnce(sealedCacheEntry(cachedValue, '22222222-2222-4222-8222-222222222222'))
+      .mockImplementation(async (_key: string, fetcher: () => Promise<unknown>) => fetcher())
+    mockFrom.mockReturnValue(queryResult([]))
+
+    const response = await GET({
+      url: 'http://localhost/api/v2/rankings?window=90d&platform=binance_futures',
+    } as never)
+    const body = await response.json()
+
+    expect(body.traders).toEqual([])
+    expect(JSON.stringify(body)).not.toContain('old-cache-row')
+    expect(mockDel).toHaveBeenCalledWith(expect.stringContaining('v2-rankings:sealed-v4:'))
+    expect(mockGetOrSetWithLock).toHaveBeenCalledTimes(2)
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(3)
   })
 
   it('applies a zero-valued alpha proxy filter and returns its exact cohort-bound count', async () => {
