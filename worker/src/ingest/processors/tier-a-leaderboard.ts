@@ -63,6 +63,7 @@ import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
 import {
   hasRegisteredLeaderboardMetricTrust,
+  type LeaderboardAttemptBoundV4Bundle,
   type LeaderboardMetricTrustBundle,
 } from '@/lib/ingest/serving/metric-trust-publish'
 import type { TierJobData } from '../queues'
@@ -73,6 +74,7 @@ import {
   type AuthorizedConsumedRegionContext,
 } from '../consumed-region-context'
 import {
+  publishFencedAttemptBoundLeaderboardSnapshot,
   publishFencedBoardSeries,
   publishFencedLeaderboardSnapshot,
   publishFencedTrustedLeaderboardSnapshot,
@@ -914,6 +916,7 @@ export async function processTierA(
             : acquisition.capture.sourcePages.map((sourcePage) => sourcePage.rawPage)
         let rawObjectId: number | null = null
         let metricTrust: LeaderboardMetricTrustBundle | null = null
+        let attemptBoundV4: LeaderboardAttemptBoundV4Bundle | null = null
 
         // Legacy adapters retain the existing RAW-first path. Capture-aware
         // adapters atomically persist source payload + manifest after the
@@ -1068,6 +1071,12 @@ export async function processTierA(
               manifest: attemptBoundBuilt.built.manifest,
               artifacts: artifactSet,
             }
+          } else {
+            attemptBoundV4 = {
+              sourceRunId: attemptBoundBuilt.built.sourceRunId,
+              manifest: attemptBoundBuilt.built.manifest,
+              artifacts: artifactSet,
+            }
           }
 
           attemptLifecycle = 'finalizing'
@@ -1142,14 +1151,6 @@ export async function processTierA(
           throw new Error('capture evidence completed without a source RAW pointer')
         }
 
-        if (
-          acquisitionAttempt?.captureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT
-        ) {
-          throw new Error(
-            `[tier-a] ${src.slug} ${timeframe}d v4 evidence is terminal but its publication fence is not installed`
-          )
-        }
-
         // Series are additive serving material, not population evidence.
         // Parse them only after the capture pair passed its trust gate so a
         // series-specific bug cannot erase an otherwise truthful manifest.
@@ -1165,30 +1166,51 @@ export async function processTierA(
             `[tier-a] ${src.slug} ${timeframe}d attempt-bound capture has no reviewed metric trust contract`
           )
         }
+        if (
+          acquisitionAttempt?.captureContract ===
+            ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT &&
+          attemptBoundV4 === null
+        ) {
+          throw new Error(
+            `[tier-a] ${src.slug} ${timeframe}d v4 capture has no attempt-bound publication evidence`
+          )
+        }
         const trustedBundle = registeredMetricTrust ? metricTrust : null
-        const result = trustedBundle
-          ? await publishFencedTrustedLeaderboardSnapshot(
+        const result = attemptBoundV4
+          ? await publishFencedAttemptBoundLeaderboardSnapshot(
               {
                 src,
                 timeframe,
                 rows: valid,
                 rejects,
                 observationCycleId: cycleId ?? undefined,
-                trust: trustedBundle,
+                attemptEvidence: attemptBoundV4,
               },
               context
             )
-          : await publishFencedLeaderboardSnapshot(
-              {
-                src,
-                timeframe,
-                rows: valid,
-                rejects,
-                rawObjectId,
-                observationCycleId: cycleId ?? undefined,
-              },
-              context
-            )
+          : trustedBundle
+            ? await publishFencedTrustedLeaderboardSnapshot(
+                {
+                  src,
+                  timeframe,
+                  rows: valid,
+                  rejects,
+                  observationCycleId: cycleId ?? undefined,
+                  trust: trustedBundle,
+                },
+                context
+              )
+            : await publishFencedLeaderboardSnapshot(
+                {
+                  src,
+                  timeframe,
+                  rows: valid,
+                  rejects,
+                  rawObjectId,
+                  observationCycleId: cycleId ?? undefined,
+                },
+                context
+              )
 
         const status = result.published ? 'PUBLISHED' : 'GATED'
         console.log(
