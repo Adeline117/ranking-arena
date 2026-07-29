@@ -19,7 +19,14 @@ import {
 } from '@/lib/rankings/sealed-ranking-cache'
 
 export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 const SIDEBAR_SEASON = '90D' as const
+const RANKING_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 export const GET = withPublic(
   async () => {
@@ -119,9 +126,9 @@ export const GET = withPublic(
       throw new Error('sidebar cache did not satisfy the sealed publication contract')
     }
 
-    const response = NextResponse.json(sanitizePublicRankingSourcePayload(sealedCache.value))
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
-    return response
+    return NextResponse.json(sanitizePublicRankingSourcePayload(sealedCache.value), {
+      headers: RANKING_NO_STORE_HEADERS,
+    })
   },
   { name: 'sidebar-top-traders', rateLimit: 'read' }
 )

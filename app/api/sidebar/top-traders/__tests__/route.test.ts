@@ -2,18 +2,19 @@ jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
-    headers = new Headers()
+    headers: Headers
 
-    constructor(body?: unknown, init: { status?: number } = {}) {
+    constructor(body?: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this._body = body
       this.status = init.status ?? 200
+      this.headers = new Headers(init.headers)
     }
 
     async json() {
       return this._body
     }
 
-    static json(data: unknown, init?: { status?: number }) {
+    static json(data: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(data, init)
     }
   }
@@ -135,6 +136,9 @@ describe('GET /api/sidebar/top-traders', () => {
     const response = await GET()
 
     await expect(response.json()).resolves.toEqual({ traders: [] })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
   })
 
   it('propagates a leaderboard read failure instead of caching it as empty', async () => {
