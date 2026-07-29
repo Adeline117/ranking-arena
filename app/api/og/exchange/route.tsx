@@ -10,6 +10,7 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { BASE_URL } from '@/lib/constants/urls'
+import { fetchOgAvatarDataUrl } from '@/lib/og/avatar-data-url'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import { readOgExchangeRanking } from '@/lib/rankings/read-og-exchange'
 import {
@@ -24,9 +25,6 @@ export const runtime = 'edge'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024
-const SAFE_EMBEDDED_AVATAR_PATTERN = /^data:image\/(?:png|jpeg|jpg);base64,[A-Za-z0-9+/]+={0,2}$/
-
 const C = {
   bgTop: '#0A0A0F',
   bgMid: '#1a1525',
@@ -154,32 +152,11 @@ export async function GET(request: NextRequest) {
     // runtime to the Node.js avatar proxy are unreliable and produce
     // "Can't load <url>" errors in the OG image renderer.
     const avatarDataUrls: (string | null)[] = await Promise.all(
-      traders.map(async (trader) => {
-        if (!trader.avatar_url) return null
-        if (trader.avatar_url.startsWith('data:')) {
-          return SAFE_EMBEDDED_AVATAR_PATTERN.test(trader.avatar_url) ? trader.avatar_url : null
-        }
-        try {
-          const proxyUrl = `${BASE_URL}/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`
-          const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) })
-          if (!res.ok) return null
-          const ct = res.headers.get('content-type') || 'image/png'
-          // Satori supports PNG/JPEG reliably. WebP/GIF/SVG data URLs can
-          // trigger a deferred renderer failure after this handler returns.
-          if (ct !== 'image/png' && ct !== 'image/jpeg' && ct !== 'image/jpg') return null
-          const contentLength = Number(res.headers.get('content-length'))
-          if (Number.isFinite(contentLength) && contentLength > MAX_AVATAR_BYTES) return null
-          const bytes = new Uint8Array(await res.arrayBuffer())
-          if (bytes.byteLength > MAX_AVATAR_BYTES) return null
-          let binary = ''
-          for (let index = 0; index < bytes.length; index += 1) {
-            binary += String.fromCharCode(bytes[index])
-          }
-          return `data:${ct};base64,${btoa(binary)}`
-        } catch {
-          return null
-        }
-      })
+      traders.map((trader) =>
+        fetchOgAvatarDataUrl(trader.avatar_url, {
+          proxyBaseUrl: BASE_URL,
+        })
+      )
     )
 
     return new ImageResponse(

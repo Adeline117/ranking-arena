@@ -60,4 +60,15 @@ describe('public ranking asset publication boundary', () => {
     expect(text).not.toContain('Buffer.from')
     expect(text).not.toContain(".from('leaderboard_ranks')")
   })
+
+  it.each(['app/api/og/route.tsx', 'app/api/og/trader/route.tsx', 'app/api/og/exchange/route.tsx'])(
+    '%s validates avatars through the shared Edge-safe boundary',
+    (route) => {
+      const text = source(route)
+      expect(text).toContain('fetchOgAvatarDataUrl')
+      expect(text).not.toContain('Buffer.from')
+      expect(text).not.toContain('avatarRes.arrayBuffer')
+      expect(text).not.toContain('res.arrayBuffer')
+    }
+  )
 })

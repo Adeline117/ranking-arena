@@ -10,6 +10,7 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { BASE_URL } from '@/lib/constants/urls'
+import { fetchOgAvatarDataUrl } from '@/lib/og/avatar-data-url'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import { readEdgePublicTraderRanking } from '@/lib/rankings/read-edge-public-trader-ranking'
 import { SealedRankingSourceOutsideAuthorityError } from '@/lib/rankings/read-sealed-ranking-generation'
@@ -201,40 +202,12 @@ export async function GET(request: NextRequest) {
     // Count visible optional cards for flex sizing
     const optionalCardCount = (showWinRate ? 1 : 0) + (showMdd ? 1 : 0)
 
-    // Pre-fetch avatar as base64 data URL so Satori (next/og) doesn't have to
-    // make a network request itself — self-referential proxy calls from Edge
-    // runtime to the Node.js avatar proxy are unreliable and produce
-    // "Can't load <url>" errors in the OG image renderer.
-    let avatarSrc: string | null = null
-    if (avatarUrl) {
-      if (avatarUrl.startsWith('data:')) {
-        avatarSrc = avatarUrl
-      } else {
-        try {
-          const proxyUrl = `${BASE_URL}/api/avatar?url=${encodeURIComponent(avatarUrl)}`
-          const avatarRes = await fetch(proxyUrl, {
-            signal: AbortSignal.timeout(4000),
-          })
-          if (avatarRes.ok) {
-            const ct = avatarRes.headers.get('content-type') || 'image/png'
-            // 关键(2026-07-11 真因):Satori/next/og 只能解 PNG/JPEG。avatar 代理
-            // 常返回 image/webp(实测 bitunix 头像),嵌 webp data URI → 渲染惰性抛
-            // "not iterable" → 500(try/catch 够不着)。故仅嵌 PNG/JPEG,其余(webp
-            // /gif/svg)跳过走首字母占位 —— 宁可无头像也永不 500。
-            if (ct === 'image/png' || ct === 'image/jpeg' || ct === 'image/jpg') {
-              // edge-safe base64(无 Buffer):Uint8Array → binary string → btoa。
-              const bytes = new Uint8Array(await avatarRes.arrayBuffer())
-              let binary = ''
-              for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-              avatarSrc = `data:${ct};base64,${btoa(binary)}`
-            }
-          }
-        } catch {
-          // Avatar failed to load — fall back to initials placeholder below
-          avatarSrc = null
-        }
-      }
-    }
+    // Satori supports PNG/JPEG reliably. The shared Edge boundary rejects
+    // oversized, mislabeled, malformed, WebP/GIF/SVG, and unsafe data URLs
+    // before next/og starts its deferred render.
+    const avatarSrc = await fetchOgAvatarDataUrl(avatarUrl, {
+      proxyBaseUrl: BASE_URL,
+    })
 
     return new ImageResponse(
       <div
