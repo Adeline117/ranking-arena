@@ -15,32 +15,38 @@ supabase db remote sql --sql "SELECT 1"
 ## 关键表结构
 
 ### trader_sources
-- **主键**: `(source, source_trader_id)` 
+
+- **主键**: `(source, source_trader_id)`
 - **用途**: 存储交易员基础信息
 - **注意**: `handle` 可为 NULL（数字 only handle 设为 NULL）
 
 ### trader_snapshots
+
 - **主键**: `id` (auto)
 - **唯一约束**: `(source, source_trader_id, season_id, captured_at)`
 - **关键字段**: `roi`, `pnl`, `win_rate`, `max_drawdown`, `sharpe_ratio`, `sortino_ratio`
 - **坑**: `captured_at` 必须每次更新
 
 ### trader_daily_snapshots
+
 - **用途**: 存储每日快照用于计算 Sharpe/Sortino
 - **唯一约束**: `(platform, trader_key, date)`
 - **当前状态**: 26,137 rows（2026-02-23 backfill）
 
 ### leaderboard_ranks
+
 - **用途**: 排行榜预计算结果
 - **关键字段**: `rank`, `score`, `source`, `period`
-- **刷新**: VPS cron 每小时跑 `compute-leaderboard-local.mjs`
+- **刷新**: VPS 可运行 `compute-leaderboard-local.mjs`，但该脚本只用 `CRON_SECRET`
+  调用 `/api/cron/compute-leaderboard`；禁止用 service-role 直接 INSERT/UPDATE/DELETE。
+- **发布边界**: 仅正式 cron 可执行整代暂存、证明校验和 PostgreSQL 单事务发布。
 
 ## 常见操作
 
 ### 1. 检查 null 统计
 
 ```sql
-SELECT 
+SELECT
   source,
   COUNT(*) as total,
   COUNT(win_rate) as has_wr,
@@ -54,7 +60,7 @@ ORDER BY total DESC;
 ### 2. 查找 stale 数据
 
 ```sql
-SELECT 
+SELECT
   source,
   MAX(captured_at) as last_update,
   NOW() - MAX(captured_at) as age
@@ -69,19 +75,18 @@ ORDER BY age DESC;
 ```sql
 INSERT INTO trader_snapshots (source, source_trader_id, season_id, roi, captured_at)
 VALUES ($1, $2, $3, $4, NOW())
-ON CONFLICT (source, source_trader_id, season_id, captured_at) 
-DO UPDATE SET 
+ON CONFLICT (source, source_trader_id, season_id, captured_at)
+DO UPDATE SET
   roi = EXCLUDED.roi,
   captured_at = NOW();
 ```
 
 **Supabase JS:**
+
 ```javascript
-const { error } = await supabase
-  .from('trader_snapshots')
-  .upsert(rows, { 
-    onConflict: 'source,source_trader_id,season_id,captured_at' 
-  })
+const { error } = await supabase.from('trader_snapshots').upsert(rows, {
+  onConflict: 'source,source_trader_id,season_id,captured_at',
+})
 ```
 
 ### 4. 批量更新（分批避免超时）
@@ -90,9 +95,7 @@ const { error } = await supabase
 const BATCH = 50
 for (let i = 0; i < rows.length; i += BATCH) {
   const batch = rows.slice(i, i + BATCH)
-  const { error } = await supabase
-    .from('trader_snapshots')
-    .upsert(batch, { onConflict: '...' })
+  const { error } = await supabase.from('trader_snapshots').upsert(batch, { onConflict: '...' })
   if (error) console.error(`Batch ${i}:`, error.message)
   await sleep(100)
 }
@@ -107,9 +110,10 @@ Arena 使用 Supabase RLS（Row Level Security）。关键策略：
 - `service_role`：绕过 RLS（仅服务端）
 
 **检查 RLS:**
+
 ```sql
-SELECT tablename, rowsecurity 
-FROM pg_tables 
+SELECT tablename, rowsecurity
+FROM pg_tables
 WHERE schemaname = 'public';
 ```
 
@@ -119,14 +123,14 @@ WHERE schemaname = 'public';
 
 ```sql
 -- trader_snapshots 常用查询索引
-CREATE INDEX IF NOT EXISTS idx_snapshots_source_season 
+CREATE INDEX IF NOT EXISTS idx_snapshots_source_season
 ON trader_snapshots(source, season_id);
 
-CREATE INDEX IF NOT EXISTS idx_snapshots_captured 
+CREATE INDEX IF NOT EXISTS idx_snapshots_captured
 ON trader_snapshots(captured_at DESC);
 
 -- leaderboard_ranks
-CREATE INDEX IF NOT EXISTS idx_ranks_source_period_rank 
+CREATE INDEX IF NOT EXISTS idx_ranks_source_period_rank
 ON leaderboard_ranks(source, period, rank);
 ```
 
@@ -134,18 +138,15 @@ ON leaderboard_ranks(source, period, rank);
 
 ```javascript
 // 使用 range 而不是 offset/limit
-const { data } = await supabase
-  .from('trader_snapshots')
-  .select('*')
-  .range(0, 99)  // 第一页 100 条
+const { data } = await supabase.from('trader_snapshots').select('*').range(0, 99) // 第一页 100 条
 ```
 
 ## 迁移记录
 
-| 日期 | 内容 | Commit |
-|------|------|--------|
-| 2026-02-22 | 添加 monitoring RPC | - |
-| 2026-02-22 | season_id 索引 | - |
+| 日期       | 内容                | Commit |
+| ---------- | ------------------- | ------ |
+| 2026-02-22 | 添加 monitoring RPC | -      |
+| 2026-02-22 | season_id 索引      | -      |
 
 ## 更新日志
 

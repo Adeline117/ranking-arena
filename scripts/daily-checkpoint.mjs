@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * daily-checkpoint.mjs — Atomic Import + Enrich Daily Snapshot
+ * daily-checkpoint.mjs — Import + Enrich Raw Daily Snapshot
  *
  * Root cause fix: stop the "import first, enrich later" gap.
- * This script fetches leaderboard data AND stats in the same API pass,
- * then writes them atomically. No trader is ever saved without its metrics.
+ * This script fetches source-board data and metrics in the same API pass, then
+ * persists identity and raw snapshot inputs. Public leaderboard publication is
+ * exclusively owned by the authenticated compute-leaderboard application cron.
  *
  * Runs once per day at UTC 00:00 via launchd.
  *
@@ -23,10 +24,9 @@
  *   ⏭  aevo             — requires wallet authentication
  *   ⏭  mexc             — requires Puppeteer
  *
- * DB writes per trader (atomic — all fields set before first INSERT):
+ * DB writes per trader:
  *   1. trader_sources        — upsert (source, source_trader_id), set last_seen_at
- *   2. leaderboard_ranks     — upsert (season_id, source, source_trader_id)
- *   3. trader_snapshots      — upsert (source, source_trader_id, snapshot_date)
+ *   2. trader_snapshots      — upsert (source, source_trader_id, snapshot_date)
  *
  * Usage:
  *   node scripts/daily-checkpoint.mjs
@@ -51,23 +51,29 @@ try {
     const m = line.match(/^([^#=\s]+)\s*=\s*["']?(.+?)["']?\s*$/)
     if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
   }
-} catch { /* .env.local not required if env vars already set */ }
+} catch {
+  /* .env.local not required if env vars already set */
+}
 
 const LOG_FILE = '/tmp/daily-checkpoint.log'
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`
   console.log(line)
-  try { appendFileSync(LOG_FILE, line + '\n') } catch {}
+  try {
+    appendFileSync(LOG_FILE, line + '\n')
+  } catch {}
 }
 
 // ─────────────────────────────────────────────
 // CLI args
 // ─────────────────────────────────────────────
 
-const DRY_RUN    = process.argv.includes('--dry-run')
-const TARGET_SRC = process.argv.find(a => a.startsWith('--source='))?.split('=')[1] ?? null
-const PERIOD     = (process.argv.find(a => a.startsWith('--period='))?.split('=')[1] ?? '30D').toUpperCase()
-const TODAY      = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+const DRY_RUN = process.argv.includes('--dry-run')
+const TARGET_SRC = process.argv.find((a) => a.startsWith('--source='))?.split('=')[1] ?? null
+const PERIOD = (
+  process.argv.find((a) => a.startsWith('--period='))?.split('=')[1] ?? '30D'
+).toUpperCase()
+const TODAY = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
 
 // ─────────────────────────────────────────────
 // Supabase client
@@ -82,14 +88,14 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false }
+  auth: { persistSession: false, autoRefreshToken: false },
 })
 
 // ─────────────────────────────────────────────
 // Utilities
 // ─────────────────────────────────────────────
 
-const sleep = ms => new Promise(r => setTimeout(r, ms))
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function fetchJSON(url, opts = {}) {
   const res = await fetch(url, { signal: AbortSignal.timeout(20000), ...opts })
@@ -100,14 +106,14 @@ async function fetchJSON(url, opts = {}) {
 /** Inline Arena Score v2 (mirrors lib/shared.mjs) */
 function calcArenaScore(roi, pnl, mdd, winRate, period = PERIOD) {
   const PARAMS = {
-    '7D':  { tanhCoeff: 0.08, roiExp: 1.8, mddThresh: 15,  wrCap: 62 },
-    '30D': { tanhCoeff: 0.15, roiExp: 1.6, mddThresh: 30,  wrCap: 68 },
-    '90D': { tanhCoeff: 0.18, roiExp: 1.6, mddThresh: 40,  wrCap: 70 },
+    '7D': { tanhCoeff: 0.08, roiExp: 1.8, mddThresh: 15, wrCap: 62 },
+    '30D': { tanhCoeff: 0.15, roiExp: 1.6, mddThresh: 30, wrCap: 68 },
+    '90D': { tanhCoeff: 0.18, roiExp: 1.6, mddThresh: 40, wrCap: 70 },
   }
   const PNL_PARAMS = {
-    '7D':  { base: 500,  coeff: 0.40 },
+    '7D': { base: 500, coeff: 0.4 },
     '30D': { base: 2000, coeff: 0.35 },
-    '90D': { base: 5000, coeff: 0.30 },
+    '90D': { base: 5000, coeff: 0.3 },
   }
   const clip = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
   const p = PARAMS[period] || PARAMS['30D']
@@ -128,20 +134,17 @@ function calcArenaScore(roi, pnl, mdd, winRate, period = PERIOD) {
   }
 
   // Drawdown score (0–8)
-  const drawdownScore = mdd != null
-    ? clip(8 * clip(1 - Math.abs(mdd) / p.mddThresh, 0, 1), 0, 8)
-    : 4
+  const drawdownScore =
+    mdd != null ? clip(8 * clip(1 - Math.abs(mdd) / p.mddThresh, 0, 1), 0, 8) : 4
 
   // Stability / win-rate score (0–7)
-  const stabilityScore = wr != null
-    ? clip(7 * clip((wr - 45) / (p.wrCap - 45), 0, 1), 0, 7)
-    : 3.5
+  const stabilityScore = wr != null ? clip(7 * clip((wr - 45) / (p.wrCap - 45), 0, 1), 0, 7) : 3.5
 
   return Math.round((returnScore + pnlScore + drawdownScore + stabilityScore) * 100) / 100
 }
 
 // ─────────────────────────────────────────────
-// DB: atomic upsert for one source
+// DB: raw checkpoint upsert for one source
 // ─────────────────────────────────────────────
 
 /**
@@ -159,93 +162,74 @@ function calcArenaScore(roi, pnl, mdd, winRate, period = PERIOD) {
  */
 
 /**
- * Write a full set of traders for one source atomically.
- * All three tables get written before we move to the next batch.
+ * Write a full raw checkpoint for one source. This never mutates the public
+ * leaderboard; the canonical application cron publishes a complete generation.
  *
  * @param {string}          source
  * @param {TraderRecord[]}  traders  - already enriched
  */
 async function writeCheckpoint(source, traders) {
-  if (traders.length === 0) { log(`  [${source}] No traders to write`); return }
+  if (traders.length === 0) {
+    log(`  [${source}] No traders to write`)
+    return
+  }
   if (DRY_RUN) {
     log(`  [${source}] DRY-RUN — would write ${traders.length} traders`)
     return
   }
 
-  const now   = new Date().toISOString()
+  const now = new Date().toISOString()
   const BATCH = 100
 
   // 1. trader_sources
-  let srcOk = 0, srcErr = 0
+  let srcOk = 0,
+    srcErr = 0
   for (let i = 0; i < traders.length; i += BATCH) {
-    const batch = traders.slice(i, i + BATCH).map(t => ({
+    const batch = traders.slice(i, i + BATCH).map((t) => ({
       source,
       source_trader_id: t.id,
-      handle:      t.handle  || null,
-      avatar_url:  t.avatar  || null,
-      is_active:   true,
+      handle: t.handle || null,
+      avatar_url: t.avatar || null,
+      is_active: true,
       last_seen_at: now,
     }))
     const { error } = await supabase
       .from('trader_sources')
       .upsert(batch, { onConflict: 'source,source_trader_id' })
-    if (error) { srcErr += batch.length; log(`  [${source}] trader_sources err: ${error.message}`) }
-    else srcOk += batch.length
+    if (error) {
+      srcErr += batch.length
+      log(`  [${source}] trader_sources err: ${error.message}`)
+    } else srcOk += batch.length
     await sleep(100)
   }
   log(`  [${source}] trader_sources: ok=${srcOk} err=${srcErr}`)
 
-  // 2. leaderboard_ranks (upsert on season_id, source, source_trader_id)
-  let lrOk = 0, lrErr = 0
+  // 2. trader_snapshots with snapshot_date = TODAY
+  let snOk = 0,
+    snErr = 0
   for (let i = 0; i < traders.length; i += BATCH) {
-    const batch = traders.slice(i, i + BATCH).map(t => ({
+    const batch = traders.slice(i, i + BATCH).map((t) => ({
       source,
       source_trader_id: t.id,
-      season_id:    PERIOD,
-      rank:         t.rank,
-      handle:       t.handle       || null,
-      avatar_url:   t.avatar       || null,
-      roi:          t.roi          ?? null,
-      pnl:          t.pnl          ?? null,
-      win_rate:     t.win_rate     ?? null,
+      season_id: PERIOD,
+      snapshot_date: TODAY,
+      captured_at: now,
+      rank: t.rank,
+      roi: t.roi ?? null,
+      pnl: t.pnl ?? null,
+      win_rate: t.win_rate ?? null,
       max_drawdown: t.max_drawdown ?? null,
       trades_count: t.trades_count ?? null,
-      followers:    t.followers    ?? null,
-      arena_score:  calcArenaScore(t.roi ?? 0, t.pnl, t.max_drawdown, t.win_rate),
-      updated_at:   now,
-    }))
-    const { error } = await supabase
-      .from('leaderboard_ranks')
-      .upsert(batch, { onConflict: 'season_id,source,source_trader_id' })
-    if (error) { lrErr += batch.length; log(`  [${source}] leaderboard_ranks err: ${error.message}`) }
-    else lrOk += batch.length
-    await sleep(100)
-  }
-  log(`  [${source}] leaderboard_ranks: ok=${lrOk} err=${lrErr}`)
-
-  // 3. trader_snapshots with snapshot_date = TODAY
-  let snOk = 0, snErr = 0
-  for (let i = 0; i < traders.length; i += BATCH) {
-    const batch = traders.slice(i, i + BATCH).map(t => ({
-      source,
-      source_trader_id: t.id,
-      season_id:     PERIOD,
-      snapshot_date: TODAY,
-      captured_at:   now,
-      rank:          t.rank,
-      roi:           t.roi          ?? null,
-      pnl:           t.pnl          ?? null,
-      win_rate:      t.win_rate     ?? null,
-      max_drawdown:  t.max_drawdown ?? null,
-      trades_count:  t.trades_count ?? null,
-      followers:     t.followers    ?? null,
-      arena_score:   calcArenaScore(t.roi ?? 0, t.pnl, t.max_drawdown, t.win_rate),
+      followers: t.followers ?? null,
+      arena_score: calcArenaScore(t.roi ?? 0, t.pnl, t.max_drawdown, t.win_rate),
     }))
     const { error } = await supabase
       .from('trader_snapshots')
       .upsert(batch, { onConflict: 'source,source_trader_id,season_id' })
-    if (error) { snErr += batch.length; log(`  [${source}] trader_snapshots err: ${error.message}`) }
-    else snOk += batch.length
+    if (error) {
+      snErr += batch.length
+      log(`  [${source}] trader_snapshots err: ${error.message}`)
+    } else snOk += batch.length
     await sleep(100)
   }
   log(`  [${source}] trader_snapshots: ok=${snOk} err=${snErr}`)
@@ -257,15 +241,18 @@ async function writeCheckpoint(source, traders) {
 // Falls back to CLOUDFLARE_PROXY_URL if direct fetch returns 451/403.
 // ─────────────────────────────────────────────
 
-const BNF_LIST_API   = 'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list'
-const BNF_DETAIL_API = 'https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/performance'
-const BNF_CF_PROXY   = process.env.CLOUDFLARE_PROXY_URL || null   // e.g. https://my-worker.workers.dev
+const BNF_LIST_API =
+  'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list'
+const BNF_DETAIL_API =
+  'https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/performance'
+const BNF_CF_PROXY = process.env.CLOUDFLARE_PROXY_URL || null // e.g. https://my-worker.workers.dev
 const BNF_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'application/json',
+  'User-Agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'application/json',
   'Content-Type': 'application/json',
-  'Origin': 'https://www.binance.com',
-  'Referer': 'https://www.binance.com/en/copy-trading',
+  Origin: 'https://www.binance.com',
+  Referer: 'https://www.binance.com/en/copy-trading',
 }
 
 /** Proxy-aware POST/GET for Binance (bypasses geo-451 via CF Worker) */
@@ -276,14 +263,16 @@ async function bnfFetch(url, opts = {}) {
     if ((res.status === 451 || res.status === 403) && BNF_CF_PROXY) {
       log(`  binance: direct ${res.status}, retrying via proxy...`)
       return fetch(`${BNF_CF_PROXY}/proxy?url=${encodeURIComponent(url)}`, {
-        ...opts, signal: AbortSignal.timeout(20000),
+        ...opts,
+        signal: AbortSignal.timeout(20000),
       })
     }
     return res
   } catch (e) {
     if (BNF_CF_PROXY) {
       return fetch(`${BNF_CF_PROXY}/proxy?url=${encodeURIComponent(url)}`, {
-        ...opts, signal: AbortSignal.timeout(20000),
+        ...opts,
+        signal: AbortSignal.timeout(20000),
       })
     }
     throw e
@@ -304,10 +293,10 @@ async function fetchBinanceFutures() {
         headers: BNF_HEADERS,
         body: JSON.stringify({
           pageNumber: page,
-          pageSize:   PAGE_SIZE,
-          timeRange:  PERIOD === '7D' ? 'WEEKLY' : PERIOD === '90D' ? 'QUARTERLY' : 'MONTHLY',
-          dataType:   'ROI',
-          order:      'DESC',
+          pageSize: PAGE_SIZE,
+          timeRange: PERIOD === '7D' ? 'WEEKLY' : PERIOD === '90D' ? 'QUARTERLY' : 'MONTHLY',
+          dataType: 'ROI',
+          order: 'DESC',
         }),
       })
       if (!res.ok) {
@@ -324,14 +313,14 @@ async function fetchBinanceFutures() {
         const pid = String(item.leadPortfolioId || item.portfolioId || item.encryptedUid || '')
         if (!pid || portfolioIds.has(pid)) continue
         const roi = parseFloat(item.roi ?? 0)
-        if (Math.abs(roi) > 50000) continue  // skip anomalous
+        if (Math.abs(roi) > 50000) continue // skip anomalous
         portfolioIds.set(pid, {
           nickname: item.nickName || null,
-          avatar:   item.userPhoto || null,
+          avatar: item.userPhoto || null,
           roi,
-          pnl:       parseFloat(item.pnl ?? 0),
-          winRate:   parseFloat(item.winRate ?? 0),
-          mdd:       parseFloat(item.mdd ?? 0),
+          pnl: parseFloat(item.pnl ?? 0),
+          winRate: parseFloat(item.winRate ?? 0),
+          mdd: parseFloat(item.mdd ?? 0),
           followers: parseInt(item.copierCount ?? 0),
         })
       }
@@ -347,9 +336,9 @@ async function fetchBinanceFutures() {
 
   // Concurrently fetch detail (WR, MDD, trades from detail API)
   const CONCURRENCY = 8
-  const ids    = [...portfolioIds.keys()]
+  const ids = [...portfolioIds.keys()]
   const traders = []
-  const queue  = ids.map((pid, idx) => ({ pid, idx }))
+  const queue = ids.map((pid, idx) => ({ pid, idx }))
 
   async function fetchDetailWorker(items) {
     for (const { pid, idx } of items) {
@@ -361,31 +350,36 @@ async function fetchBinanceFutures() {
         const d = json?.data
         const base = portfolioIds.get(pid)
         traders.push({
-          id:           pid,
-          rank:         idx + 1,
-          handle:       base.nickname,
-          avatar:       base.avatar,
-          roi:          d?.roi     != null ? parseFloat(d.roi) * 100 : base.roi,
-          pnl:          d?.pnl     != null ? parseFloat(d.pnl)       : base.pnl,
-          win_rate:     d?.winRate != null ? parseFloat(d.winRate) * 100 : (base.winRate > 1 ? base.winRate : base.winRate * 100),
-          max_drawdown: d?.mdd     != null ? parseFloat(d.mdd) * 100 : base.mdd,
+          id: pid,
+          rank: idx + 1,
+          handle: base.nickname,
+          avatar: base.avatar,
+          roi: d?.roi != null ? parseFloat(d.roi) * 100 : base.roi,
+          pnl: d?.pnl != null ? parseFloat(d.pnl) : base.pnl,
+          win_rate:
+            d?.winRate != null
+              ? parseFloat(d.winRate) * 100
+              : base.winRate > 1
+                ? base.winRate
+                : base.winRate * 100,
+          max_drawdown: d?.mdd != null ? parseFloat(d.mdd) * 100 : base.mdd,
           trades_count: d?.totalOrder != null ? parseInt(d.totalOrder) : null,
-          followers:    base.followers,
+          followers: base.followers,
         })
       } catch {
         // fallback to list data (no detail available)
         const base = portfolioIds.get(pid)
         traders.push({
-          id:           pid,
-          rank:         ids.indexOf(pid) + 1,
-          handle:       base.nickname,
-          avatar:       base.avatar,
-          roi:          base.roi,
-          pnl:          base.pnl,
-          win_rate:     base.winRate > 1 ? base.winRate : base.winRate * 100,
+          id: pid,
+          rank: ids.indexOf(pid) + 1,
+          handle: base.nickname,
+          avatar: base.avatar,
+          roi: base.roi,
+          pnl: base.pnl,
+          win_rate: base.winRate > 1 ? base.winRate : base.winRate * 100,
           max_drawdown: base.mdd,
           trades_count: null,
-          followers:    base.followers,
+          followers: base.followers,
         })
       }
       await sleep(150)
@@ -394,13 +388,15 @@ async function fetchBinanceFutures() {
 
   // Split into CONCURRENCY workers
   const chunkSize = Math.ceil(queue.length / CONCURRENCY)
-  const chunks    = []
+  const chunks = []
   for (let i = 0; i < queue.length; i += chunkSize) chunks.push(queue.slice(i, i + chunkSize))
   await Promise.all(chunks.map(fetchDetailWorker))
 
   // Sort by roi desc, re-assign rank
   traders.sort((a, b) => (b.roi ?? -Infinity) - (a.roi ?? -Infinity))
-  traders.forEach((t, i) => { t.rank = i + 1 })
+  traders.forEach((t, i) => {
+    t.rank = i + 1
+  })
 
   log(`  binance_futures: ${traders.length} traders fully enriched`)
   return traders
@@ -419,21 +415,25 @@ function computeOkxMetrics(pnlRatios, period) {
   const DAYS = { '7D': 7, '30D': 30, '90D': 90 }
   const days = DAYS[period] || 30
   const sorted = [...pnlRatios].sort((a, b) => +a.beginTs - +b.beginTs)
-  const slice  = sorted.slice(-days)
+  const slice = sorted.slice(-days)
   if (slice.length < 2) return { roi: null, maxDrawdown: null }
 
   const firstR = parseFloat(slice[0].pnlRatio)
-  const lastR  = parseFloat(slice[slice.length - 1].pnlRatio)
-  const roi    = ((1 + lastR) / (1 + firstR) - 1) * 100
+  const lastR = parseFloat(slice[slice.length - 1].pnlRatio)
+  const roi = ((1 + lastR) / (1 + firstR) - 1) * 100
 
-  const equity = slice.map(r => 1 + parseFloat(r.pnlRatio))
-  let peak = equity[0], maxDD = 0
+  const equity = slice.map((r) => 1 + parseFloat(r.pnlRatio))
+  let peak = equity[0],
+    maxDD = 0
   for (const eq of equity) {
     if (eq > peak) peak = eq
-    if (peak > 0) { const dd = ((peak - eq) / peak) * 100; if (dd > maxDD) maxDD = dd }
+    if (peak > 0) {
+      const dd = ((peak - eq) / peak) * 100
+      if (dd > maxDD) maxDD = dd
+    }
   }
   return {
-    roi:         isFinite(roi) ? roi : null,
+    roi: isFinite(roi) ? roi : null,
     maxDrawdown: maxDD > 0.01 && maxDD < 100 ? maxDD : null,
   }
 }
@@ -461,16 +461,16 @@ async function fetchOkxFutures() {
         const metrics = computeOkxMetrics(t.pnlRatios, PERIOD)
         const globalRoi = parseFloat(t.pnlRatio ?? 0) * 100
         traders.push({
-          id:           t.uniqueCode,
-          rank:         traders.length + 1,
-          handle:       t.nickName || null,
-          avatar:       t.portLink || null,
-          roi:          metrics.roi      ?? globalRoi,
-          pnl:          parseFloat(t.pnl ?? 0),
-          win_rate:     t.winRatio != null ? parseFloat(t.winRatio) * 100 : null,
+          id: t.uniqueCode,
+          rank: traders.length + 1,
+          handle: t.nickName || null,
+          avatar: t.portLink || null,
+          roi: metrics.roi ?? globalRoi,
+          pnl: parseFloat(t.pnl ?? 0),
+          win_rate: t.winRatio != null ? parseFloat(t.winRatio) * 100 : null,
           max_drawdown: metrics.maxDrawdown,
           trades_count: null,
-          followers:    parseInt(t.copyTraderNum ?? 0),
+          followers: parseInt(t.copyTraderNum ?? 0),
         })
       }
       log(`  page ${page}/${totalPages}: +${(item.ranks || []).length}, total=${traders.length}`)
@@ -482,7 +482,9 @@ async function fetchOkxFutures() {
   }
 
   traders.sort((a, b) => (b.roi ?? -Infinity) - (a.roi ?? -Infinity))
-  traders.forEach((t, i) => { t.rank = i + 1 })
+  traders.forEach((t, i) => {
+    t.rank = i + 1
+  })
   log(`  okx_futures: ${traders.length} traders with WR + MDD from listing`)
   return traders
 }
@@ -494,8 +496,8 @@ async function fetchOkxFutures() {
 
 const GAINS_CHAINS = [
   { name: 'arbitrum', base: 'https://backend-arbitrum.gains.trade' },
-  { name: 'polygon',  base: 'https://backend-polygon.gains.trade'  },
-  { name: 'base',     base: 'https://backend-base.gains.trade'     },
+  { name: 'polygon', base: 'https://backend-polygon.gains.trade' },
+  { name: 'base', base: 'https://backend-base.gains.trade' },
 ]
 // Map our PERIOD → gains period key inside /leaderboard/all response
 const GAINS_KEY_MAP = { '7D': '7', '30D': '30', '90D': '90' }
@@ -509,17 +511,20 @@ async function fetchGains() {
       const data = await fetchJSON(`${chain.base}/leaderboard/all`, {
         headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' },
       })
-      if (!data || typeof data !== 'object') { log(`  gains/${chain.name}: empty response`); continue }
+      if (!data || typeof data !== 'object') {
+        log(`  gains/${chain.name}: empty response`)
+        continue
+      }
 
       const periodKey = GAINS_KEY_MAP[PERIOD] || '30'
-      const list      = data[periodKey] || data['30'] || data['7'] || []
+      const list = data[periodKey] || data['30'] || data['7'] || []
       log(`  gains/${chain.name}: ${list.length} traders (period=${periodKey})`)
 
       for (const t of list) {
         const addr = (t.address || '').toLowerCase()
         if (!addr) continue
-        const pnl    = parseFloat(t.total_pnl_usd || t.total_pnl || 0)
-        const wins   = parseInt(t.count_win  || 0)
+        const pnl = parseFloat(t.total_pnl_usd || t.total_pnl || 0)
+        const wins = parseInt(t.count_win || 0)
         const losses = parseInt(t.count_loss || 0)
         const trades = parseInt(t.count || 0)
         const existing = byAddress.get(addr)
@@ -538,20 +543,20 @@ async function fetchGains() {
     .map((t, i) => {
       const winRate = t.trades > 0 ? (t.wins / t.trades) * 100 : null
       // Rough ROI estimate (Gains doesn't expose account equity directly)
-      const avgPos   = t.trades > 0 ? Math.abs(t.pnl) / t.trades : 0
-      const capital  = avgPos > 0 ? avgPos * t.trades : Math.abs(t.pnl)
-      const roi      = capital > 0 ? (t.pnl / capital) * 100 : 0
+      const avgPos = t.trades > 0 ? Math.abs(t.pnl) / t.trades : 0
+      const capital = avgPos > 0 ? avgPos * t.trades : Math.abs(t.pnl)
+      const roi = capital > 0 ? (t.pnl / capital) * 100 : 0
       return {
-        id:           t.addr,
-        rank:         i + 1,
-        handle:       null,
-        avatar:       null,
+        id: t.addr,
+        rank: i + 1,
+        handle: null,
+        avatar: null,
         roi,
-        pnl:          t.pnl,
-        win_rate:     winRate,
-        max_drawdown: null,    // Gains API doesn't expose MDD in bulk listing
+        pnl: t.pnl,
+        win_rate: winRate,
+        max_drawdown: null, // Gains API doesn't expose MDD in bulk listing
         trades_count: t.trades,
-        followers:    null,
+        followers: null,
       }
     })
 
@@ -578,10 +583,16 @@ async function hlPost(body) {
         signal: AbortSignal.timeout(25000),
       })
       if (res.status === 200) return res.json()
-      if (res.status === 429) { await sleep(3000 * (attempt + 1)); continue }
+      if (res.status === 429) {
+        await sleep(3000 * (attempt + 1))
+        continue
+      }
       return null
     } catch (e) {
-      if (attempt < 3) { await sleep(2000 * (attempt + 1)); continue }
+      if (attempt < 3) {
+        await sleep(2000 * (attempt + 1))
+        continue
+      }
       return null
     }
   }
@@ -592,7 +603,10 @@ async function fetchHyperliquid() {
   log('\n══ hyperliquid — fetching leaderboard...')
 
   const lb = await hlPost({ type: 'leaderboard' })
-  if (!lb?.leaderboardRows) { log('  hyperliquid: leaderboard empty'); return [] }
+  if (!lb?.leaderboardRows) {
+    log('  hyperliquid: leaderboard empty')
+    return []
+  }
 
   const rows = lb.leaderboardRows
   log(`  hyperliquid: ${rows.length} traders in leaderboard`)
@@ -603,43 +617,44 @@ async function fetchHyperliquid() {
   const wIdx = WINDOW_IDX[PERIOD] ?? 1
 
   const baseTraders = rows
-    .map(r => {
+    .map((r) => {
       const perf = r.windowPerformances?.[wIdx]?.[1]
       return {
         addr: (r.ethAddress || '').toLowerCase(),
-        pnl:  perf?.pnl  != null ? parseFloat(perf.pnl)  : null,
-        roi:  perf?.roi   != null ? parseFloat(perf.roi) * 100 : null,  // HL roi is decimal
-        vlm:  perf?.vlm  != null ? parseFloat(perf.vlm)  : null,
+        pnl: perf?.pnl != null ? parseFloat(perf.pnl) : null,
+        roi: perf?.roi != null ? parseFloat(perf.roi) * 100 : null, // HL roi is decimal
+        vlm: perf?.vlm != null ? parseFloat(perf.vlm) : null,
       }
     })
-    .filter(r => r.addr)
+    .filter((r) => r.addr)
     .sort((a, b) => (b.pnl ?? -Infinity) - (a.pnl ?? -Infinity))
 
   // Enrich top 200 traders with WR (userFills) + MDD (portfolio)
   // Beyond 200, write PnL/rank only (WR/MDD stay null for now)
   const ENRICH_LIMIT = 200
-  const toEnrich     = baseTraders.slice(0, ENRICH_LIMIT)
+  const toEnrich = baseTraders.slice(0, ENRICH_LIMIT)
   log(`  Enriching top ${toEnrich.length} traders for WR + MDD (rate-limited)...`)
 
   const enriched = []
   for (const t of toEnrich) {
-    let winRate = null, maxDrawdown = null
+    let winRate = null,
+      maxDrawdown = null
 
     // WR from fills
     try {
       const fills = await hlPost({ type: 'userFills', user: t.addr })
       if (Array.isArray(fills) && fills.length > 0) {
-        const DAYS  = { '7D': 7, '30D': 30, '90D': 90 }
-        const days  = DAYS[PERIOD] || 30
+        const DAYS = { '7D': 7, '30D': 30, '90D': 90 }
+        const days = DAYS[PERIOD] || 30
         const cutoff = Date.now() - days * 24 * 3600 * 1000
-        const closed = fills.filter(f => f.time >= cutoff && parseFloat(f.closedPnl || 0) !== 0)
+        const closed = fills.filter((f) => f.time >= cutoff && parseFloat(f.closedPnl || 0) !== 0)
         if (closed.length >= 3) {
-          const wins = closed.filter(f => parseFloat(f.closedPnl) > 0).length
+          const wins = closed.filter((f) => parseFloat(f.closedPnl) > 0).length
           winRate = (wins / closed.length) * 100
         }
       }
     } catch {}
-    await sleep(600)   // HL rate limit
+    await sleep(600) // HL rate limit
 
     // MDD from portfolio
     try {
@@ -649,10 +664,10 @@ async function fetchHyperliquid() {
         const periodData = portfolio.find(([k]) => k === pKey)?.[1]
         if (periodData?.pnlHistory?.length) {
           const avh = periodData.accountValueHistory || []
-          const ph  = periodData.pnlHistory
+          const ph = periodData.pnlHistory
           let mdd = 0
           for (let i = 0; i < ph.length; i++) {
-            const startAV  = parseFloat(avh[i]?.[1] || 0)
+            const startAV = parseFloat(avh[i]?.[1] || 0)
             const startPnl = parseFloat(ph[i][1])
             if (startAV <= 0) continue
             for (let j = i + 1; j < ph.length; j++) {
@@ -664,27 +679,29 @@ async function fetchHyperliquid() {
         }
       }
     } catch {}
-    await sleep(600)   // HL rate limit
+    await sleep(600) // HL rate limit
 
     enriched.push({ ...t, win_rate: winRate, max_drawdown: maxDrawdown })
   }
 
   // Remainder — no WR/MDD (faster)
-  const remainder = baseTraders.slice(ENRICH_LIMIT).map(t => ({
-    ...t, win_rate: null, max_drawdown: null,
+  const remainder = baseTraders.slice(ENRICH_LIMIT).map((t) => ({
+    ...t,
+    win_rate: null,
+    max_drawdown: null,
   }))
 
   const traders = [...enriched, ...remainder].map((t, i) => ({
-    id:           t.addr,
-    rank:         i + 1,
-    handle:       null,
-    avatar:       null,
-    roi:          t.roi,
-    pnl:          t.pnl,
-    win_rate:     t.win_rate,
+    id: t.addr,
+    rank: i + 1,
+    handle: null,
+    avatar: null,
+    roi: t.roi,
+    pnl: t.pnl,
+    win_rate: t.win_rate,
     max_drawdown: t.max_drawdown,
     trades_count: null,
-    followers:    null,
+    followers: null,
   }))
 
   log(`  hyperliquid: ${traders.length} traders (${toEnrich.length} fully enriched)`)
@@ -698,7 +715,7 @@ async function fetchHyperliquid() {
 /**
  * Mark traders active today vs stale (30+ days unseen).
  * We simply update last_seen_at for traders we JUST wrote.
- * The leaderboard_ranks already gets updated in writeCheckpoint.
+ * Public ranks are intentionally untouched here.
  * This function logs the count of stale traders per source.
  */
 async function logStaleTraders(source, activeIds) {
@@ -722,9 +739,9 @@ async function logStaleTraders(source, activeIds) {
 
 const SOURCES = {
   binance_futures: fetchBinanceFutures,
-  okx_futures:     fetchOkxFutures,
-  gains:           fetchGains,
-  hyperliquid:     fetchHyperliquid,
+  okx_futures: fetchOkxFutures,
+  gains: fetchGains,
+  hyperliquid: fetchHyperliquid,
 }
 
 // ─────────────────────────────────────────────
@@ -737,9 +754,7 @@ async function main() {
   log(DRY_RUN ? 'Mode: DRY-RUN (no writes)' : 'Mode: LIVE')
   log('═'.repeat(64))
 
-  const toRun = TARGET_SRC
-    ? [TARGET_SRC]
-    : Object.keys(SOURCES)
+  const toRun = TARGET_SRC ? [TARGET_SRC] : Object.keys(SOURCES)
 
   log(`\nSources: ${toRun.join(', ')}`)
   log(`Skipped (need browser/auth): bybit, bingx, bitget_futures, kucoin, phemex, aevo, mexc\n`)
@@ -749,13 +764,19 @@ async function main() {
 
   for (const src of toRun) {
     const fetcher = SOURCES[src]
-    if (!fetcher) { log(`[${src}] No fetcher registered — skipping`); continue }
+    if (!fetcher) {
+      log(`[${src}] No fetcher registered — skipping`)
+      continue
+    }
 
     const t1 = Date.now()
     try {
       const traders = await fetcher()
       await writeCheckpoint(src, traders)
-      await logStaleTraders(src, traders.map(t => t.id))
+      await logStaleTraders(
+        src,
+        traders.map((t) => t.id)
+      )
       const elapsed = ((Date.now() - t1) / 1000).toFixed(1)
       summary.push({ src, count: traders.length, elapsed, status: '✅' })
       log(`  [${src}] done in ${elapsed}s — ${traders.length} traders`)
@@ -778,7 +799,7 @@ async function main() {
   log('═'.repeat(64))
 }
 
-main().catch(e => {
+main().catch((e) => {
   log(`FATAL: ${e.message}\n${e.stack}`)
   process.exit(1)
 })
