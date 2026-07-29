@@ -18,8 +18,14 @@ describe('hot recommendation ranking authority', () => {
     expect(source).not.toContain('HOT_RANKING_SOURCES')
   })
 
-  it('invalidates legacy unsealed recommendation cache entries', () => {
-    expect(route).toContain("publicRankingCacheKey('recommendations:hot:sealed-v2')")
+  it('keys every candidate cache by current authority and prevents edge bypass', () => {
+    expect(route).toContain("publicRankingCacheKey('recommendations:hot:sealed-v3')")
     expect(route).not.toContain("publicRankingCacheKey('recommendations:hot')")
+    expect(route).toContain('readSealedRankingAuthorityGeneration(')
+    expect(route).toContain('sealedRankingPublicationIdentity(publication)')
+    expect(route).toContain('`${CACHE_KEY_PREFIX}:${publicationFingerprint}`')
+    expect(route).toContain("'Cache-Control': 'private, no-store, max-age=0'")
+    expect(route).toContain("'CDN-Cache-Control': 'no-store'")
+    expect(route).toContain("'Vercel-CDN-Cache-Control': 'no-store'")
   })
 })
