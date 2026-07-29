@@ -16,6 +16,9 @@ import WrappedCardClient from './WrappedCardClient'
 import WrappedEmptyState from './WrappedEmptyState'
 import WrappedUnavailableState from './WrappedUnavailableState'
 import { BASE_URL } from '@/lib/constants/urls'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 // This route only reads public ranking data. Its searchParams prop keeps each
 // platform/window variant request-rendered; leave the segment on Next's
@@ -78,6 +81,7 @@ interface Props {
 // for 30+ seconds. Race against this timeout so users get a fast, retryable
 // unavailable state (NOT a 404 — the trader may well exist).
 const SSR_TIMEOUT_MS = 3000
+const WRAPPED_PROOF_SOURCES = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
 
 // Discriminated result so the page can tell "no matching snapshot" (→ empty
 // state) apart from transient timeouts / DB errors (→ retryable unavailable
@@ -88,6 +92,7 @@ type WrappedFetchResult =
   | { ok: false; reason: 'not_found' | 'timeout' | 'error' }
 
 const RESOLVE_TIMEOUT = Symbol('resolve-timeout')
+const SEALED_READ_TIMEOUT = Symbol('sealed-read-timeout')
 
 async function fetchWrappedDataUncached(
   handle: string,
@@ -98,7 +103,7 @@ async function fetchWrappedDataUncached(
     const supabase = getSupabaseAdmin()
 
     // Map UI window param to season_id used in the DB
-    const seasonMap: Record<string, string> = {
+    const seasonMap: Record<string, '7D' | '30D' | '90D'> = {
       '7d': '7D',
       '30d': '30D',
       '90d': '90D',
@@ -124,52 +129,50 @@ async function fetchWrappedDataUncached(
       return { ok: false, reason: 'timeout' }
     }
     if (!resolved) return { ok: false, reason: 'not_found' }
+    const [publicPlatform] = filterPublicRankingSources([resolved.platform])
+    if (!publicPlatform) return { ok: false, reason: 'not_found' }
 
-    const effectivePlatform = platform || resolved.platform
+    const effectivePlatform = publicPlatform
     const platformLabel =
       PLATFORM_LABELS[effectivePlatform] ??
       effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
-    // Fetch leaderboard rank for this trader + window
-    const { data: lr } = await Promise.race([
-      supabase
-        .from('leaderboard_ranks')
-        .select('rank, rank_change, roi, win_rate, arena_score, max_drawdown, season_id')
-        .eq('source', resolved.platform)
-        .eq('source_trader_id', resolved.traderKey)
-        .eq('season_id', seasonId)
-        .maybeSingle(),
-      new Promise<{ data: null }>((resolve) =>
-        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
+    const sealedRead = await Promise.race([
+      readSealedRankingGeneration(
+        supabase,
+        { season: seasonId, sources: WRAPPED_PROOF_SOURCES },
+        async (publication) => {
+          const rankResult = await supabase
+            .from('leaderboard_ranks')
+            .select('rank, rank_change, roi, win_rate, arena_score, max_drawdown, season_id')
+            .eq('source', publicPlatform)
+            .eq('source_trader_id', resolved.traderKey)
+            .eq('season_id', seasonId)
+            .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+            .maybeSingle()
+          if (rankResult.error) {
+            throw new Error(`wrapped rank query failed: ${rankResult.error.message}`)
+          }
+          return {
+            rank: rankResult.data,
+            total: publication.proofs.reduce((sum, proof) => sum + proof.published_rank_count, 0),
+          }
+        },
+        { timeoutMs: SSR_TIMEOUT_MS }
+      ),
+      new Promise<typeof SEALED_READ_TIMEOUT>((resolve) =>
+        setTimeout(() => resolve(SEALED_READ_TIMEOUT), SSR_TIMEOUT_MS)
       ),
     ])
-
-    // Total population for the percentile. `leaderboard_ranks.rank` is a GLOBAL
-    // cross-exchange rank (ROW_NUMBER OVER ORDER BY arena_score, NO partition by
-    // source), so the denominator must be the GLOBAL population, not this one
-    // platform's — dividing a global rank by a per-platform count fabricated a
-    // wrong "on {platform}" percentile. Use the GLOBAL MAX(rank) in the season:
-    // it equals the total ranked count by construction and guarantees
-    // total >= rank. The card is framed as cross-exchange accordingly.
-    const { data: maxRankRow } = await Promise.race([
-      supabase
-        .from('leaderboard_ranks')
-        .select('rank')
-        .eq('season_id', seasonId)
-        .order('rank', { ascending: false, nullsFirst: false })
-        .limit(1)
-        .maybeSingle(),
-      new Promise<{ data: null }>((resolve) =>
-        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
-      ),
-    ])
-    const total = maxRankRow?.rank ?? null
+    if (sealedRead === SEALED_READ_TIMEOUT) {
+      return { ok: false, reason: 'timeout' }
+    }
+    const lr = sealedRead.value.rank
+    const total = sealedRead.value.total
     const verifiedKeys = await getVerifiedTraderKeys(supabase)
-    const isVerifiedData = verifiedKeys.has(
-      verifiedTraderKey(resolved.platform, resolved.traderKey)
-    )
+    const isVerifiedData = verifiedKeys.has(verifiedTraderKey(publicPlatform, resolved.traderKey))
     const verifiedDataProof = isVerifiedData
-      ? await createOgVerificationProof(resolved.platform, resolved.traderKey)
+      ? await createOgVerificationProof(publicPlatform, resolved.traderKey)
       : null
 
     return {
@@ -183,7 +186,7 @@ async function fetchWrappedDataUncached(
         rankChange: lr?.rank_change ?? null,
         isVerifiedData,
         verifiedDataProof,
-        verificationSource: resolved.platform,
+        verificationSource: publicPlatform,
         verificationTraderId: resolved.traderKey,
         total,
         roi: lr?.roi ?? null,
