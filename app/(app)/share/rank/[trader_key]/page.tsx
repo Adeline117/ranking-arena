@@ -19,6 +19,9 @@ import type { WrappedTraderData } from '@/app/(app)/wrapped/[handle]/page'
 import { BASE_URL } from '@/lib/constants/urls'
 import { platformLabel } from '@/lib/constants/platform-labels'
 import { createLogger } from '@/lib/utils/logger'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const logger = createLogger('share-rank')
 
@@ -27,6 +30,7 @@ export const revalidate = 300
 // SSR timeout: during cron contention, resolveTrader can block on row locks
 // for 30+ seconds. Race against this timeout so users see a fast 404 instead.
 const SSR_TIMEOUT_MS = 3000
+const WRAPPED_PROOF_SOURCES = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
 
 interface Props {
   params: Promise<{ trader_key: string }>
@@ -58,40 +62,39 @@ async function resolveTraderForWrapped(
     ])
 
     if (!resolved) return { handle: null, data: null }
+    const [publicPlatform] = filterPublicRankingSources([resolved.platform])
+    if (!publicPlatform) return { handle: null, data: null }
 
-    const effectivePlatform = platform || resolved.platform
-    const platLabel = platformLabel(effectivePlatform)
+    const effectivePlatform = publicPlatform
+    const platLabel = platformLabel(publicPlatform)
 
-    const { data: lr } = await Promise.race([
-      supabase
-        .from('leaderboard_ranks')
-        .select('rank, rank_change, roi, win_rate, arena_score, max_drawdown, season_id')
-        .eq('source', resolved.platform)
-        .eq('source_trader_id', resolved.traderKey)
-        .eq('season_id', seasonId)
-        .maybeSingle(),
-      new Promise<{ data: null }>((resolve) =>
-        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
+    const sealedRead = await Promise.race([
+      readSealedRankingGeneration(
+        supabase,
+        { season: seasonId as '7D' | '30D' | '90D', sources: WRAPPED_PROOF_SOURCES },
+        async (publication) => {
+          const rankResult = await supabase
+            .from('leaderboard_ranks')
+            .select('rank, rank_change, roi, win_rate, arena_score, max_drawdown, season_id')
+            .eq('source', publicPlatform)
+            .eq('source_trader_id', resolved.traderKey)
+            .eq('season_id', seasonId)
+            .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+            .maybeSingle()
+          if (rankResult.error) {
+            throw new Error(`share rank query failed: ${rankResult.error.message}`)
+          }
+          return {
+            rank: rankResult.data,
+            total: publication.proofs.reduce((sum, proof) => sum + proof.published_rank_count, 0),
+          }
+        },
+        { timeoutMs: SSR_TIMEOUT_MS }
       ),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_TIMEOUT_MS)),
     ])
-
-    // `leaderboard_ranks.rank` is a GLOBAL cross-exchange rank (no partition by
-    // source), so the denominator must be the GLOBAL population — not this one
-    // platform's count. Use the GLOBAL MAX(rank) in the season: it equals the
-    // total ranked count by construction and guarantees total >= rank. The card
-    // is framed as cross-exchange accordingly.
-    const { data: maxRankRow } = await Promise.race([
-      supabase
-        .from('leaderboard_ranks')
-        .select('rank')
-        .eq('season_id', seasonId)
-        .order('rank', { ascending: false, nullsFirst: false })
-        .limit(1)
-        .maybeSingle(),
-      new Promise<{ data: null }>((resolve) =>
-        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
-      ),
-    ])
+    if (!sealedRead) return { handle: null, data: null }
+    const lr = sealedRead.value.rank
 
     const verifiedKeys = await getVerifiedTraderKeys(supabase)
     const isVerifiedData = verifiedKeys.has(
@@ -110,7 +113,7 @@ async function resolveTraderForWrapped(
         : null,
       verificationSource: resolved.platform,
       verificationTraderId: resolved.traderKey,
-      total: maxRankRow?.rank ?? null,
+      total: sealedRead.value.total,
       roi: lr?.roi ?? null,
       winRate: lr?.win_rate ?? null,
       score: lr?.arena_score ?? null,
