@@ -19,6 +19,15 @@ import type { TraderRow } from './trader-row'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { hasConcretePublicRankingMetrics } from '@/lib/rankings/publication-policy'
+import {
+  isRankEligiblePnl,
+  isRankEligibleRoi,
+  normalizeRankDrawdown,
+  normalizeRankProfitFactor,
+  normalizeRankSharpe,
+  normalizeRankTradesCount,
+  normalizeRankWinRate,
+} from '@/lib/rankings/metric-eligibility'
 
 const logger = createLogger('compute-leaderboard')
 
@@ -56,8 +65,10 @@ export interface ScoredTrader {
   is_outlier?: boolean
 }
 
-function hasRankEligiblePnl(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
+type RankEligibleTrader = TraderRow & { roi: number; pnl: number }
+
+function hasRankEligibleMetrics(trader: TraderRow, season: Period): trader is RankEligibleTrader {
+  return isRankEligibleRoi(trader.roi, season) && isRankEligiblePnl(trader.pnl, trader.source)
 }
 
 /**
@@ -72,46 +83,46 @@ export async function scoreTraders(
   supabase: SupabaseClient<Database>
 ): Promise<{ scored: ScoredTrader[]; scoredFiltered: ScoredTrader[] }> {
   // Defense in depth: callers other than the arena reader can still construct
-  // TraderRows directly. PnL is mandatory for ranking, so reject missing,
-  // malformed-at-runtime, and non-finite values before either score formula or
-  // the percentile cohort sees them. Finite zero and losses remain eligible.
-  const rankEligibleTraders = uniqueTraders.filter((trader) => hasRankEligiblePnl(trader.pnl))
-  const excludedForPnl = uniqueTraders.length - rankEligibleTraders.length
-  if (excludedForPnl > 0) {
+  // TraderRows directly. ROI and PnL are both mandatory for ranking, so reject
+  // missing, malformed-at-runtime, and non-finite values before either score
+  // formula or the percentile cohort sees them. Finite zero/losses remain
+  // eligible at this boundary; route-level product filters remain separate.
+  const rankEligibleTraders = uniqueTraders.filter((trader): trader is RankEligibleTrader =>
+    hasRankEligibleMetrics(trader, season)
+  )
+  const excludedForCoreMetrics = uniqueTraders.length - rankEligibleTraders.length
+  if (excludedForCoreMetrics > 0) {
     logger.warn(
-      `[${season}] Excluded ${excludedForPnl} trader(s) from scoring: PnL missing, malformed, or non-finite`
+      `[${season}] Excluded ${excludedForCoreMetrics} trader(s) from scoring: ROI or PnL missing, malformed, non-finite, or out of bounds`
     )
   }
 
   const scored = rankEligibleTraders.map((t) => {
-    // Win rate normalization: clamp to 0-100, convert decimal if needed
-    let normalizedWinRate: number | null = null
-    if (t.win_rate != null && !isNaN(t.win_rate)) {
-      const wr = t.win_rate > 0 && t.win_rate <= 1 ? t.win_rate * 100 : t.win_rate
-      normalizedWinRate = Math.max(0, Math.min(100, wr))
-    }
+    const normalizedWinRate = normalizeRankWinRate(t.win_rate)
+    const normalizedMaxDrawdown = normalizeRankDrawdown(t.max_drawdown)
+    const normalizedSharpe = normalizeRankSharpe(t.sharpe_ratio)
+    const normalizedProfitFactor = normalizeRankProfitFactor(t.profit_factor)
+    const normalizedTradesCount = normalizeRankTradesCount(t.trades_count)
 
     const scoreResult = calculateArenaScore(
       {
-        roi: t.roi!,
-        pnl: t.pnl ?? null,
-        maxDrawdown: t.max_drawdown,
+        roi: t.roi,
+        pnl: t.pnl,
+        maxDrawdown: normalizedMaxDrawdown,
         winRate: normalizedWinRate,
       },
       season
     )
 
-    // Confidence: V3 scores ROI + PnL only
-    const hasRoi = t.roi != null
-    const hasPnl = hasRankEligiblePnl(t.pnl)
-    const confidenceMultiplier = hasRoi && hasPnl ? 1.0 : hasRoi ? 0.85 : 0.5
+    // ROI + PnL completeness is enforced before scoring. Optional risk and
+    // execution metrics remain represented separately by score_completeness.
     const estimationPenalty = t.metrics_estimated ? 0.92 : 1.0
 
     // Low trade count penalty: 1 trade → 0.64x, 10+ → 1.0x
     // trades_count=0 means "unknown" (API doesn't provide) — skip penalty (same as null)
     let tradeCountPenalty = 1.0
-    if (t.trades_count != null && t.trades_count > 0 && t.trades_count < 10) {
-      tradeCountPenalty = 0.6 + 0.04 * t.trades_count
+    if (normalizedTradesCount != null && normalizedTradesCount > 0 && normalizedTradesCount < 10) {
+      tradeCountPenalty = 0.6 + 0.04 * normalizedTradesCount
     }
 
     const rawSubScores =
@@ -121,10 +132,7 @@ export async function scoreTraders(
       scoreResult.stabilityScore
     const rawFinalScore =
       Math.round(
-        Math.max(
-          0,
-          Math.min(100, rawSubScores * confidenceMultiplier * estimationPenalty * tradeCountPenalty)
-        ) * 100
+        Math.max(0, Math.min(100, rawSubScores * estimationPenalty * tradeCountPenalty)) * 100
       ) / 100
     // A legitimate zero score is still a computed score. Converting it to
     // null used to remove zero/losing traders from the v4 percentile cohort.
@@ -147,13 +155,13 @@ export async function scoreTraders(
       arena_score_v3: finalScore, // rollback + serving-population gate (real ROI/PnL present)
       arena_score_v4: null as number | null, // = arena_score, filled below
       score_factors: null as ArenaScoreV4Result['factors'] | null,
-      roi: t.roi ?? 0,
+      roi: t.roi,
       pnl: t.pnl,
       win_rate: normalizedWinRate,
-      max_drawdown: t.max_drawdown,
+      max_drawdown: normalizedMaxDrawdown,
       followers: t.followers ?? 0,
       copiers: t.copiers ?? null,
-      trades_count: t.trades_count,
+      trades_count: normalizedTradesCount,
       handle: displayHandle,
       avatar_url: canonicalizeLocalExchangeLogoPath(
         info.avatar_url || getExchangeLogoUrl(t.source)
@@ -161,25 +169,25 @@ export async function scoreTraders(
       profitability_score: Math.round(scoreResult.returnScore * 100) / 100,
       risk_control_score: Math.round(scoreResult.pnlScore * 100) / 100,
       execution_score: null as number | null,
-      score_completeness: (t.max_drawdown != null && t.win_rate != null
+      score_completeness: (normalizedMaxDrawdown != null && normalizedWinRate != null
         ? 'full'
-        : t.max_drawdown != null || t.win_rate != null
+        : normalizedMaxDrawdown != null || normalizedWinRate != null
           ? 'partial'
           : 'minimal') as 'full' | 'partial' | 'minimal',
       trading_style: t.trading_style,
       avg_holding_hours: t.avg_holding_hours,
       style_confidence: t.style_confidence,
-      sharpe_ratio: t.sharpe_ratio,
+      sharpe_ratio: normalizedSharpe,
       sortino_ratio: t.sortino_ratio ?? null,
-      profit_factor: t.profit_factor ?? null,
+      profit_factor: normalizedProfitFactor,
       calmar_ratio: t.calmar_ratio ?? null,
       trader_type: detectTraderType(
         t.source,
         t.source_trader_id,
-        t.trades_count,
+        normalizedTradesCount,
         t.trader_type,
         t.avg_holding_hours,
-        t.win_rate,
+        normalizedWinRate,
         contractAddresses.has(t.source_trader_id) || undefined
       ),
       metrics_estimated: t.metrics_estimated || false,

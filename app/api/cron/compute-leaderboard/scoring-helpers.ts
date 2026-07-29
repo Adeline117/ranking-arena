@@ -14,6 +14,7 @@ import type { Period } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
 import type { Database } from '@/lib/supabase/database.types'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { isRankEligiblePnl } from '@/lib/rankings/metric-eligibility'
 import type { TraderRow } from './trader-row'
 
 const logger = createLogger('compute-leaderboard')
@@ -132,7 +133,7 @@ export interface ScoredRowForOutlier {
  *
  * Heuristics:
  *   • |ROI| >= 10,000%                           → corruption (clamp ceiling = ROI_CAP)
- *   • |PnL| > $100M from non-whale source        → bad equity proxy
+ *   • PnL outside the source-aware USD envelope  → bad equity proxy
  *   • PnL/ROI sign mismatch (>$500 vs >50% ROI)  → field-mapping bug
  *   • |ROI| > 500% with PnL == 0 or null         → equity-proxy mismatch
  */
@@ -146,9 +147,10 @@ export function markOutliers<T extends ScoredRowForOutlier>(scored: T[]): number
     // let every clamped row through un-flagged onto the public board (0-trade, no-name,
     // 10000% "traders" reaching the 90D flagship). Clamp ceiling reached = true ROI unknown.
     if (Math.abs(t.roi) >= 10000) isOutlier = true
-    // PnL > $100M from non-whale sources
-    if (t.pnl != null && Math.abs(t.pnl) > 100_000_000 && !['hyperliquid'].includes(t.source))
-      isOutlier = true
+    // Reuse the source-aware ranking envelope. In particular, all reviewed
+    // DEX whale sources share the $1B upper bound; maintaining a second local
+    // allowlist here previously re-rejected valid GMX/dYdX/Drift rows.
+    if (t.pnl != null && !isRankEligiblePnl(t.pnl, t.source)) isOutlier = true
     // ROI and PnL sign mismatch — positive ROI with significant negative PnL or vice versa
     // Lowered from 1000/1000 threshold: audit found ROI=6086% with PnL=-$8K passing through
     if (t.pnl != null && t.pnl > 500 && t.roi < -50) isOutlier = true
