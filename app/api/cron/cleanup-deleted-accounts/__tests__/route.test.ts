@@ -144,6 +144,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     'grace_period_active',
     'not_scheduled',
     'not_found',
+    'billing_settlement_in_progress',
   ])('defers %s before any billing, edge, Auth, or profile mutation', async (status) => {
     queueDatabaseResults({
       data: [
@@ -646,6 +647,59 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     await expect(GET({} as never)).rejects.toThrow('Group edge purge failed: lock timeout')
 
     expect(mockDeleteUser).not.toHaveBeenCalled()
+    expect(mockFrom).toHaveBeenCalledTimes(2)
+  })
+
+  it('converges after Auth deletion commits but its first response is lost', async () => {
+    const account = {
+      id: 'user-auth-response-loss',
+      original_email: null,
+      stripe_customer_id: null,
+      api_stripe_subscription_id: null,
+    }
+    queueDatabaseResults({ data: [account], error: null }, { data: null, error: null })
+    mockDeleteUser.mockResolvedValueOnce({
+      error: { code: 'request_timeout', status: 504, message: 'upstream response lost' },
+    })
+
+    await expect(GET({} as never)).rejects.toThrow('Auth delete failed: upstream response lost')
+
+    queueDatabaseResults(
+      { data: [account], error: null },
+      { data: null, error: null },
+      { data: null, error: null }
+    )
+    mockDeleteUser.mockResolvedValueOnce({
+      error: { code: 'user_not_found', status: 404, message: 'User not found' },
+    })
+
+    await expect(GET({} as never)).resolves.toEqual({ count: 1, total: 1 })
+    expect(mockDeleteUser).toHaveBeenCalledTimes(2)
+    expect(mockFrom).toHaveBeenCalledTimes(5)
+  })
+
+  it('does not treat an ambiguous Auth 404 as proof that the user was deleted', async () => {
+    queueDatabaseResults(
+      {
+        data: [
+          {
+            id: 'user-auth-ambiguous',
+            original_email: null,
+            stripe_customer_id: null,
+            api_stripe_subscription_id: null,
+          },
+        ],
+        error: null,
+      },
+      { data: null, error: null }
+    )
+    mockDeleteUser.mockResolvedValueOnce({
+      error: { status: 404, message: 'Auth service route not found' },
+    })
+
+    await expect(GET({} as never)).rejects.toThrow(
+      'Auth delete failed: Auth service route not found'
+    )
     expect(mockFrom).toHaveBeenCalledTimes(2)
   })
 

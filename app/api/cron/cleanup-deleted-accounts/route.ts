@@ -40,6 +40,7 @@ type HardDeleteAdmissionStatus =
   | 'not_scheduled'
   | 'grace_period_active'
   | 'recovery_in_progress'
+  | 'billing_settlement_in_progress'
 
 interface HardDeleteAdmissionResult {
   status: HardDeleteAdmissionStatus
@@ -60,7 +61,20 @@ function isExactHardDeleteAdmissionResult(
       result.status === 'account_active' ||
       result.status === 'not_scheduled' ||
       result.status === 'grace_period_active' ||
-      result.status === 'recovery_in_progress')
+      result.status === 'recovery_in_progress' ||
+      result.status === 'billing_settlement_in_progress')
+  )
+}
+
+function isAuthUserAlreadyAbsent(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || Array.isArray(error)) return false
+  const candidate = error as Record<string, unknown>
+  if (candidate.code === 'user_not_found') return true
+
+  return (
+    candidate.status === 404 &&
+    typeof candidate.message === 'string' &&
+    /^user not found\.?$/i.test(candidate.message.trim())
   )
 }
 
@@ -262,7 +276,11 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
 
         // Hard delete from auth
         const { error: deleteError } = await supabase.auth.admin.deleteUser(account.id)
-        if (deleteError) {
+        // GoTrue deletion can commit while its response is lost. On a retry,
+        // an exact user-not-found result proves the destructive Auth step is
+        // already complete; legacy profiles that did not cascade can still be
+        // removed below. Every other Auth error remains retryable/fail-closed.
+        if (deleteError && !isAuthUserAlreadyAbsent(deleteError)) {
           throw new Error(`Auth delete failed: ${deleteError.message}`)
         }
 
