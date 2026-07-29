@@ -15,6 +15,7 @@ jest.mock('@supabase/supabase-js', () => ({
 
 import {
   getActiveAppUserFromToken,
+  invalidateUserAccountStatusCache,
   getProvisioningUserFromToken,
   getUserAccountStatus,
   getUserFromToken,
@@ -81,6 +82,21 @@ describe('server auth application-account status', () => {
       p_user_id: 'active-cache-user',
       p_verified_email: 'active-cache-user@example.com',
     })
+  })
+
+  it('invalidates a locally cached active admission after an account lifecycle write', async () => {
+    authenticateAs('locally-invalidated-user')
+    mockRpc
+      .mockResolvedValueOnce({ data: 'active', error: null })
+      .mockResolvedValueOnce({ data: 'suspended', error: null })
+
+    await expect(getActiveAppUserFromToken('token')).resolves.toMatchObject({
+      id: 'locally-invalidated-user',
+    })
+    invalidateUserAccountStatusCache('locally-invalidated-user')
+    await expect(getActiveAppUserFromToken('token')).resolves.toBeNull()
+
+    expect(mockRpc).toHaveBeenCalledTimes(2)
   })
 
   it.each([

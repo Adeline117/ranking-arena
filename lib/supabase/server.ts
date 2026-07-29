@@ -107,6 +107,16 @@ export function getSupabaseAdmin(): SupabaseClient<Database> {
 const banStatusCache = new Map<string, { ts: number; email: string | null }>()
 const CLEAN_STATUS_TTL_MS = 10_000 // 10 seconds — bans take effect within 10s
 
+/**
+ * Drop a known-stale clean-status entry after this process commits an account
+ * lifecycle transition. Other instances still rely on the short TTL and Auth
+ * ban, but the writer instance must never knowingly reuse its pre-mutation
+ * admission result.
+ */
+export function invalidateUserAccountStatusCache(userId: string): void {
+  banStatusCache.delete(userId)
+}
+
 export type UserAccountStatus = 'active' | 'suspended' | 'missing' | 'unavailable'
 
 type VerifiedAuthIdentity = Readonly<{ verifiedEmail: string | null }>
