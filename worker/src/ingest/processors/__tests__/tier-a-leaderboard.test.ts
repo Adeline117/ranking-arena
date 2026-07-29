@@ -2530,6 +2530,71 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
+  it('fails before source lookup when its execution signal is already aborted', async () => {
+    const controller = new AbortController()
+    const cancellation = new Error('authority already lost')
+    controller.abort(cancellation)
+
+    await expect(
+      processTierAInRegion(job, createAuthorizedTestContext('local', 'local'), controller.signal)
+    ).rejects.toBe(cancellation)
+
+    expect(mockGetSourceBySlug).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockFinishLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('preserves the normal successful path with a live execution signal', async () => {
+    const controller = new AbortController()
+
+    await expect(
+      processTierAInRegion(job, createAuthorizedTestContext('local', 'local'), controller.signal)
+    ).resolves.toHaveLength(1)
+
+    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ src, timeframe: 30 }),
+      expect.objectContaining({ consumedRegion: 'local' }),
+      controller.signal
+    )
+    expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves an open attempt and closes its session when authority is lost during capture', async () => {
+    const captureStarted = deferred()
+    const finishCapture = deferred()
+    const captureLeaderboard = jest.fn(async () => {
+      captureStarted.resolve()
+      await finishCapture.promise
+      return capturedLeaderboard()
+    })
+    configureAttemptBoundSource([30], captureLeaderboard)
+    const controller = new AbortController()
+    const cancellation = new Error('regional authority lost')
+
+    const run = processTierAInRegion(
+      job,
+      createAuthorizedTestContext('vps_sg', 'vps_sg'),
+      controller.signal
+    )
+    await captureStarted.promise
+    controller.abort(cancellation)
+    await Promise.resolve()
+
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+    finishCapture.resolve()
+    await expect(run).rejects.toBe(cancellation)
+    expect(mockStartLeaderboardAcquisitionAttempt).toHaveBeenCalledTimes(1)
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockFinishLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+  })
+
   it('terminally records first-session failure without beginning a later window', async () => {
     configureAttemptBoundSource([7, 30])
     mockOpenSession.mockRejectedValue(new Error('browser unavailable'))

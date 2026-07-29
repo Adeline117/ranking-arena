@@ -103,13 +103,14 @@ async function acquireLeaderboard(
   adapter: SourceAdapter,
   session: Parameters<SourceAdapter['listLeaderboard']>[0],
   src: Parameters<SourceAdapter['listLeaderboard']>[1],
-  timeframe: RankingTimeframe
+  timeframe: RankingTimeframe,
+  signal?: AbortSignal
 ): Promise<TierAAcquisition> {
   if (adapter.captureLeaderboard) {
     try {
       return {
         kind: 'capture',
-        capture: await adapter.captureLeaderboard(session, src, timeframe),
+        capture: await adapter.captureLeaderboard(session, src, timeframe, { signal }),
       }
     } catch (cause) {
       if (cause instanceof LeaderboardCaptureUpstreamError) {
@@ -120,7 +121,10 @@ async function acquireLeaderboard(
   }
 
   const pages: RawPage[] = []
-  for await (const page of adapter.listLeaderboard(session, src, timeframe)) pages.push(page)
+  for await (const page of adapter.listLeaderboard(session, src, timeframe)) {
+    throwIfTierACancelled(signal)
+    pages.push(page)
+  }
   return { kind: 'legacy', pages }
 }
 
@@ -213,6 +217,12 @@ class TierAAttemptFinalizationError extends AggregateError {
     )
     this.name = 'TierAAttemptFinalizationError'
   }
+}
+
+function throwIfTierACancelled(signal?: AbortSignal): void {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  throw reason instanceof Error ? reason : new Error('[tier-a] execution cancelled')
 }
 
 type AttemptLifecycle = 'not_started' | 'open' | 'finalizing' | 'terminal'
@@ -810,9 +820,12 @@ async function persistCompletedTimeframe(
 
 export async function processTierA(
   job: Job<TierJobData>,
-  context: AuthorizedConsumedRegionContext
+  context: AuthorizedConsumedRegionContext,
+  signal?: AbortSignal
 ): Promise<TierAResult[]> {
+  throwIfTierACancelled(signal)
   const src = await getSourceBySlug(job.data.sourceSlug)
+  throwIfTierACancelled(signal)
   assertSourceMatchesConsumedRegion(src, context)
   if (src.status !== 'active') {
     console.log(`[tier-a] ${src.slug} is ${src.status} — skipping`)
@@ -854,6 +867,7 @@ export async function processTierA(
         captureContract: desiredCaptureContract,
       })
     : null
+  throwIfTierACancelled(signal)
   if (registeredCaptureContract !== null && registeredCaptureContract !== desiredCaptureContract) {
     throw new Error(`[tier-a] ${src.slug} registry returned a conflicting capture contract`)
   }
@@ -890,13 +904,24 @@ export async function processTierA(
   let terminalFailure: { error: unknown } | null = null
   let sessionCloseFailure: Error | null = null
   let persistedJobData: TierJobData = { ...job.data }
+  const publicationSignalArgs: [] | [AbortSignal] = signal ? [signal] : []
   // Unregistered sources retain their existing session/capture path. A
   // registered source opens lazily only after the first pending window has a
   // durable attempt, so session-open failure is itself terminal evidence.
-  let session = attemptBoundCapture ? null : await openSession(src)
+  let session: Awaited<ReturnType<typeof openSession>> | null = null
+  const closeSessionOnAbort = () => {
+    if (session !== null) void session.close().catch(() => undefined)
+  }
+  signal?.addEventListener('abort', closeSessionOnAbort, { once: true })
 
   try {
+    if (!attemptBoundCapture) {
+      throwIfTierACancelled(signal)
+      session = await openSession(src)
+      throwIfTierACancelled(signal)
+    }
     for (const timeframe of pendingTimeframes) {
+      throwIfTierACancelled(signal)
       let acquisitionAttempt: LeaderboardAcquisitionAttempt | null = null
       let attemptLifecycle: AttemptLifecycle = 'not_started'
       let failureStage: LeaderboardAcquisitionFailureStage = 'upstream_fetch'
@@ -906,6 +931,7 @@ export async function processTierA(
       let finalizationPriorFailures: readonly unknown[] = []
       try {
         if (attemptBoundCapture) {
+          throwIfTierACancelled(signal)
           acquisitionAttempt = await startLeaderboardAcquisitionAttempt({
             sourceId: src.id,
             timeframe,
@@ -916,10 +942,14 @@ export async function processTierA(
             runnerGitSha,
             workerRegion,
           })
+          throwIfTierACancelled(signal)
           attemptLifecycle = 'open'
           failureStage = 'session_open'
           failureReason = 'upstream_unavailable'
-          if (session === null) session = await openSession(src)
+          if (session === null) {
+            session = await openSession(src)
+            throwIfTierACancelled(signal)
+          }
         }
         if (session === null) {
           throw new Error('source session was not opened')
@@ -928,7 +958,8 @@ export async function processTierA(
         const scrapedAt = acquisitionAttempt?.recordedStartedAt ?? new Date().toISOString()
         failureStage = 'upstream_fetch'
         failureReason = 'unknown_failure'
-        const acquisition = await acquireLeaderboard(adapter, session, src, timeframe)
+        const acquisition = await acquireLeaderboard(adapter, session, src, timeframe, signal)
+        throwIfTierACancelled(signal)
         const capture = acquisition.kind === 'legacy' ? null : acquisition.capture
         // This is the acquisition boundary, not a parser/runtime duration.
         captureCompletedAt = capture ? new Date().toISOString() : null
@@ -947,6 +978,7 @@ export async function processTierA(
         // adapters atomically persist source payload + manifest after the
         // parser has produced honest accepted/rejected counts below.
         if (acquisition.kind === 'legacy') {
+          throwIfTierACancelled(signal)
           const rawReceipt = await writeRawObject({
             sourceId: src.id,
             sourceSlug: src.slug,
@@ -958,6 +990,7 @@ export async function processTierA(
               ...(cycleId ? { observation_cycle_id: cycleId } : {}),
             },
           })
+          throwIfTierACancelled(signal)
           rawObjectId = rawReceipt.id
         }
 
@@ -966,6 +999,7 @@ export async function processTierA(
         // best-effort, but track it through processor drain so regional
         // authority cannot be released while its database write is detached.
         if (pages.length > 0) {
+          throwIfTierACancelled(signal)
           pendingFieldInventory.push(
             recordFieldInventory(src.id, 'tier_a', pages[0].payload).catch(() => undefined)
           )
@@ -1044,6 +1078,7 @@ export async function processTierA(
               : [processingCause]
             failureStage = 'raw_persistence'
             failureReason = 'raw_persistence_failed'
+            throwIfTierACancelled(signal)
             const diagnostic = await persistUnprocessedCaptureRaw({
               src,
               timeframe,
@@ -1054,6 +1089,7 @@ export async function processTierA(
               priorFailures,
               attempt: acquisitionAttempt,
             })
+            throwIfTierACancelled(signal)
             diagnosticRawObjectId = diagnostic.id
             failureStage = 'parse_validate_manifest'
             failureReason = processingReason
@@ -1069,6 +1105,7 @@ export async function processTierA(
           failureStage = 'raw_persistence'
           failureReason = 'raw_persistence_failed'
           try {
+            throwIfTierACancelled(signal)
             artifactSet =
               attemptBoundBuilt.kind === 'v3'
                 ? await writeAttemptBoundLeaderboardRawArtifactSet({
@@ -1081,6 +1118,7 @@ export async function processTierA(
                     built: attemptBoundBuilt.built,
                     sourcePages: rawPages,
                   })
+            throwIfTierACancelled(signal)
           } catch (persistenceCause) {
             throw new TierAEvidencePersistenceError(
               src.slug,
@@ -1108,6 +1146,7 @@ export async function processTierA(
           finalizationPriorFailures = capturedError ? [capturedError] : []
           failureStage = 'attempt_finalize'
           failureReason = 'attempt_finalize_failed'
+          throwIfTierACancelled(signal)
           await finishLeaderboardAcquisitionAttempt({
             kind: 'manifest',
             attempt: acquisitionAttempt,
@@ -1115,6 +1154,7 @@ export async function processTierA(
             sourcePayloadRawObjectId: artifactSet.sourcePayload.id,
             manifestRawObjectId: artifactSet.populationManifest.id,
           })
+          throwIfTierACancelled(signal)
           attemptLifecycle = 'terminal'
 
           // The failed/partial response is now durable and terminal. Preserve
@@ -1131,6 +1171,7 @@ export async function processTierA(
         } else if (capture && built) {
           let artifactSet
           try {
+            throwIfTierACancelled(signal)
             artifactSet = await writeLeaderboardRawArtifactSet({
               sourceId: src.id,
               sourceSlug: src.slug,
@@ -1140,6 +1181,7 @@ export async function processTierA(
               manifest: built.manifest,
               observationCycleId: cycleId,
             })
+            throwIfTierACancelled(signal)
           } catch (persistenceCause) {
             throw new TierAEvidencePersistenceError(
               src.slug,
@@ -1211,7 +1253,8 @@ export async function processTierA(
                 observationCycleId: cycleId ?? undefined,
                 attemptEvidence: attemptBoundV4,
               },
-              context
+              context,
+              ...publicationSignalArgs
             )
           : trustedBundle
             ? await publishFencedTrustedLeaderboardSnapshot(
@@ -1223,7 +1266,8 @@ export async function processTierA(
                   observationCycleId: cycleId ?? undefined,
                   trust: trustedBundle,
                 },
-                context
+                context,
+                ...publicationSignalArgs
               )
             : await publishFencedLeaderboardSnapshot(
                 {
@@ -1234,8 +1278,10 @@ export async function processTierA(
                   rawObjectId,
                   observationCycleId: cycleId ?? undefined,
                 },
-                context
+                context,
+                ...publicationSignalArgs
               )
+        throwIfTierACancelled(signal)
 
         const status = result.published ? 'PUBLISHED' : 'GATED'
         console.log(
@@ -1274,8 +1320,10 @@ export async function processTierA(
                   },
                 ],
               ]),
-            }
+            },
+            ...publicationSignalArgs
           )
+          throwIfTierACancelled(signal)
           console.log(
             `[tier-a] ${src.slug} ${timeframe}d board series: ` +
               `${seriesOut.points} pts for ${seriesOut.traders} traders`
@@ -1293,6 +1341,7 @@ export async function processTierA(
         // part of the fenced traders upsert above; no second serving projection
         // is allowed after that commit. Persist after every window so a worker
         // restart loses at most the in-flight TF.
+        throwIfTierACancelled(signal)
         persistedJobData = await persistCompletedTimeframe(
           job,
           persistedJobData,
@@ -1300,6 +1349,7 @@ export async function processTierA(
           timeframe,
           src.slug
         )
+        throwIfTierACancelled(signal)
         completedTimeframes.add(timeframe)
 
         results.push({
@@ -1311,6 +1361,7 @@ export async function processTierA(
           snapshotId: result.snapshotId,
         })
       } catch (cause) {
+        if (signal?.aborted) throwIfTierACancelled(signal)
         if (attemptBoundCapture) {
           if (acquisitionAttempt === null || attemptLifecycle === 'not_started') {
             const detail = cause instanceof Error ? cause.message : String(cause)
@@ -1327,6 +1378,7 @@ export async function processTierA(
             )
           }
           if (attemptLifecycle === 'open') {
+            throwIfTierACancelled(signal)
             attemptLifecycle = 'finalizing'
             try {
               await finishLeaderboardAcquisitionAttempt({
@@ -1337,6 +1389,7 @@ export async function processTierA(
                 failureStage,
                 reasonCode: failureReason,
               })
+              throwIfTierACancelled(signal)
               attemptLifecycle = 'terminal'
             } catch (finalizationCause) {
               throw new TierAAttemptFinalizationError(
@@ -1385,6 +1438,7 @@ export async function processTierA(
         })
       }
     }
+    signal?.removeEventListener('abort', closeSessionOnAbort)
   }
 
   if (terminalFailure !== null) {
@@ -1414,5 +1468,6 @@ export async function processTierA(
 
   if (sessionCloseFailure !== null) throw sessionCloseFailure
 
+  throwIfTierACancelled(signal)
   return results
 }

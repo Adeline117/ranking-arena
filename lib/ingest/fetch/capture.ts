@@ -415,6 +415,7 @@ export interface NumericLeaderboardPageMeta {
 export interface CaptureNumericLeaderboardOptions {
   session: FetchSession
   fetcher: JsonFetcher
+  signal?: AbortSignal
   /** Actual request, which may contain credentials and is never persisted. */
   buildRequest: (pageIndex: number) => ReplayRequestTemplate
   /**
@@ -441,7 +442,7 @@ export interface CaptureNumericLeaderboardOptions {
 
 export type CapturePartitionedNumericLeaderboardPartition = Omit<
   CaptureNumericLeaderboardOptions,
-  'session' | 'fetcher' | 'now' | 'pageSize'
+  'session' | 'fetcher' | 'now' | 'pageSize' | 'signal'
 > & {
   partitionId: string
   /** V4 parser bindings require one positive page size shared by every partition. */
@@ -451,6 +452,7 @@ export type CapturePartitionedNumericLeaderboardPartition = Omit<
 export interface CapturePartitionedNumericLeaderboardOptions {
   session: FetchSession
   fetcher: JsonFetcher
+  signal?: AbortSignal
   /** Declaration order is canonical storage and partition-local rank order. */
   partitions: readonly CapturePartitionedNumericLeaderboardPartition[]
   /** Test hook; shared so timestamps remain one monotonic capture sequence. */
@@ -464,6 +466,12 @@ function assertSafeInteger(value: number, label: string, minimum: number): void 
       `[ingest] ${label} must be a ${qualifier} safe integer and not negative zero`
     )
   }
+}
+
+function throwIfCaptureCancelled(signal?: AbortSignal): void {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  throw reason instanceof Error ? reason : new Error('[ingest] leaderboard capture cancelled')
 }
 
 function assertOptionalReport(value: number | null, label: string): void {
@@ -748,6 +756,7 @@ export async function captureNumericLeaderboard(
     }) as NumericLeaderboardCapture
 
   for (let pageIndex = 1; pageIndex <= safetyPageCap; pageIndex += 1) {
+    throwIfCaptureCancelled(opts.signal)
     const template = canonicalRequestTemplate(buildRequest(pageIndex))
     const publicRequest = leaderboardPublicRequestProjection(
       projectPublicRequest(template, pageIndex),
@@ -771,9 +780,11 @@ export async function captureNumericLeaderboard(
     }
     try {
       const response = await session.paced(async () => {
+        throwIfCaptureCancelled(opts.signal)
         let fetched: JsonResponse
         try {
           fetched = await fetcher(template)
+          throwIfCaptureCancelled(opts.signal)
         } catch (cause) {
           // Remember the exact rejected value without wrapping it inside the
           // paced callback. Rate/circuit accounting must observe the original
@@ -799,9 +810,11 @@ export async function captureNumericLeaderboard(
         }
         return { status: fetched.status, payload: responseJson }
       })
+      throwIfCaptureCancelled(opts.signal)
       status = response.status
       payload = response.payload
     } catch (error) {
+      throwIfCaptureCancelled(opts.signal)
       const failure = capturedHttpFailure(error)
       if (!failure) {
         const fetcherRejected = fetcherFailure.caught && error === fetcherFailure.cause
@@ -1276,6 +1289,7 @@ export async function capturePartitionedNumericLeaderboard(
     }) as PartitionedNumericLeaderboardCapture
 
   for (const [partitionIndex, partition] of prepared.partitions.entries()) {
+    throwIfCaptureCancelled(opts.signal)
     const { partitionId: _partitionId, ...partitionInput } = partition.input
     try {
       const capture = await captureNumericLeaderboard({
@@ -1283,9 +1297,12 @@ export async function capturePartitionedNumericLeaderboard(
         session: opts.session,
         fetcher: opts.fetcher,
         now: opts.now,
+        signal: opts.signal,
       })
+      throwIfCaptureCancelled(opts.signal)
       appendPartitionCapture(state, partition, partitionIndex, capture)
     } catch (cause) {
+      throwIfCaptureCancelled(opts.signal)
       if (!(cause instanceof LeaderboardCaptureUpstreamError)) throw cause
       appendPartitionCapture(state, partition, partitionIndex, cause.capture)
       for (const unattempted of prepared.partitions.slice(partitionIndex + 1)) {

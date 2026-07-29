@@ -7,6 +7,7 @@ import {
   SOURCE_JOB_LEASE_LANES,
 } from '../source-job-routing'
 import type { SourceJobRedis } from '../source-job-lease'
+import { SOURCE_JOB_LEASE_RENEW_MS } from '../source-job-lease'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -76,6 +77,72 @@ describe('source job routing leases', () => {
 
     ownerFinish.resolve('owner-finished')
     await expect(owner).resolves.toBe('owner-finished')
+  })
+
+  it('fails a Tier-A route when its source lease is lost', async () => {
+    jest.useFakeTimers()
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const redis = redisMock(['OK'])
+      ;(redis.eval as jest.Mock).mockResolvedValue(0)
+      const run = jest.fn(
+        (signal: AbortSignal) =>
+          new Promise<never>((_resolve, reject) => {
+            const cancel = () => reject(signal.reason)
+            signal.addEventListener('abort', cancel, { once: true })
+            if (signal.aborted) cancel()
+          })
+      )
+      const routed = routeJobWithSourceLease({
+        redis,
+        job: {
+          id: 'repeat:tiera:binance_futures',
+          name: INGEST_JOB.TIER_A,
+          data: { sourceSlug: 'binance_futures' },
+        },
+        run,
+      })
+      await Promise.resolve()
+      const rejected = expect(routed).rejects.toThrow('source-job lease ownership lost')
+
+      await jest.advanceTimersByTimeAsync(SOURCE_JOB_LEASE_RENEW_MS)
+
+      await rejected
+      expect(run.mock.calls[0]?.[0].aborted).toBe(true)
+    } finally {
+      errorSpy.mockRestore()
+      jest.useRealTimers()
+    }
+  })
+
+  it('keeps Tier-B behavior unchanged when its advisory lease is lost', async () => {
+    jest.useFakeTimers()
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const redis = redisMock(['OK'])
+      ;(redis.eval as jest.Mock).mockResolvedValue(0)
+      const finish = deferred<string>()
+      const run = jest.fn(async (_signal: AbortSignal) => finish.promise)
+      const routed = routeJobWithSourceLease({
+        redis,
+        job: {
+          id: 'repeat:tierb:binance_futures',
+          name: INGEST_JOB.TIER_B,
+          data: { sourceSlug: 'binance_futures' },
+        },
+        run,
+      })
+      await Promise.resolve()
+
+      await jest.advanceTimersByTimeAsync(SOURCE_JOB_LEASE_RENEW_MS)
+      finish.resolve('tier-b-finished')
+
+      await expect(routed).resolves.toBe('tier-b-finished')
+      expect(run.mock.calls[0]?.[0].aborted).toBe(true)
+    } finally {
+      errorSpy.mockRestore()
+      jest.useRealTimers()
+    }
   })
 
   it('passes non-source maintenance jobs through without touching Redis', async () => {
@@ -201,6 +268,7 @@ describe('source job routing leases', () => {
         run: runB,
       }),
     ])
+    await Promise.resolve()
     await Promise.resolve()
 
     expect(runA).toHaveBeenCalledTimes(1)

@@ -57,15 +57,17 @@ export async function routeJobWithSourceLease<T>({
   redis,
   job,
   run,
+  signal,
   log = console.log,
 }: {
   redis: SourceJobRedis
   job: SourceJobLike
-  run: () => Promise<T>
+  run: (signal: AbortSignal) => Promise<T>
+  signal?: AbortSignal
   log?: (message: string) => void
 }): Promise<T | CoalescedSourceJob> {
   const lane = sourceJobLeaseLane(job.name)
-  if (!lane) return run()
+  if (!lane) return run(signal ?? new AbortController().signal)
 
   const isGlobalJob = Object.prototype.hasOwnProperty.call(GLOBAL_JOB_LEASE_LANES, job.name)
   const isAuthorizationJob = Object.prototype.hasOwnProperty.call(
@@ -82,7 +84,14 @@ export async function routeJobWithSourceLease<T>({
     throw new Error(`[ingest-worker] ${job.name} job is missing ${scopeName}`)
   }
 
-  const result = await withSourceJobLease({ redis, lane, sourceSlug: scopeId, run })
+  const result = await withSourceJobLease({
+    redis,
+    lane,
+    sourceSlug: scopeId,
+    run,
+    signal,
+    failClosedOnLeaseLoss: job.name === INGEST_JOB.TIER_A,
+  })
   if (!result.coalesced) return result.value as T
 
   log(

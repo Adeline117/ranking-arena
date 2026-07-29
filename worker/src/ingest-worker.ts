@@ -83,11 +83,15 @@ const FAST_CONCURRENCY = 3
 const RECONCILE_INTERVAL_MS = 60 * 60_000
 const NATIVE_AUTHORITY_READY_TOKEN = '[ingest-worker] native regional authority ready'
 
-async function runJob(job: Job, context: AuthorizedConsumedRegionContext): Promise<unknown> {
+async function runJob(
+  job: Job,
+  context: AuthorizedConsumedRegionContext,
+  signal: AbortSignal
+): Promise<unknown> {
   switch (job.name) {
     case INGEST_JOB.TIER_A: {
       const { processTierA } = await import('./ingest/processors/tier-a-leaderboard')
-      return processTierA(job, context)
+      return processTierA(job, context, signal)
     }
     case INGEST_JOB.TIER_B: {
       const { processTierB } = await import('./ingest/processors/tier-b-profiles')
@@ -137,17 +141,22 @@ async function runJob(job: Job, context: AuthorizedConsumedRegionContext): Promi
   }
 }
 
-async function route(job: Job, context: AuthorizedConsumedRegionContext): Promise<unknown> {
+async function route(
+  job: Job,
+  context: AuthorizedConsumedRegionContext,
+  signal?: AbortSignal
+): Promise<unknown> {
   return routeJobWithSourceLease({
     redis: getConnection(),
     job,
-    run: async () => {
+    signal,
+    run: async (runSignal) => {
       await assertSourceJobMatchesConsumedRegion(
         job,
         context,
         async (sourceSlug) => (await getSourceBySlug(sourceSlug)).fetch_region
       )
-      return runJob(job, context)
+      return runJob(job, context, runSignal)
     },
   })
 }

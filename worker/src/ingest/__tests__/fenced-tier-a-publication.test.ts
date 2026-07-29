@@ -413,6 +413,32 @@ describe('fenced Tier-A publication', () => {
     expect(mockPublicationWrite).toHaveBeenCalledTimes(1)
   })
 
+  it('rolls back when cancellation arrives inside the publication transaction', async () => {
+    const controller = new AbortController()
+    const cancellation = new Error('source lease lost')
+    const onCommit = jest.fn()
+    const { context } = harness({ onCommit })
+    mockPublishSnapshot.mockImplementationOnce(
+      async (
+        transaction: WorkerDbFencedWrite,
+        _input: PublishSnapshotInput,
+        sourceAuthorityGuard: (candidate: WorkerDbFencedWrite) => Promise<void>
+      ) => {
+        await sourceAuthorityGuard(transaction)
+        mockPublicationWrite()
+        controller.abort(cancellation)
+        return { snapshotId: 77 }
+      }
+    )
+
+    await expect(
+      publishFencedLeaderboardSnapshot(snapshotInput(), context, controller.signal)
+    ).rejects.toBe(cancellation)
+
+    expect(mockPublicationWrite).toHaveBeenCalledTimes(1)
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
   it('uses the same mandatory source lock and fenced transaction for trusted publication', async () => {
     const input = trustedInput()
     const { context, query, transaction, withFencedWrite } = harness()
