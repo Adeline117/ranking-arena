@@ -278,6 +278,19 @@ test('does not duplicate the detailed smoke rollback alert', () => {
 })
 
 test('skips duplicate Next type validation only for a CI-attested candidate', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+  assert.equal(
+    packageJson.scripts['qa:ranking-primary-authority'],
+    'node --test scripts/maintenance/check-ranking-primary-authority.test.mjs'
+  )
+  assert.equal(
+    packageJson.scripts['qa:ranking-primary-authority-env'],
+    'node scripts/maintenance/check-ranking-primary-authority.mjs'
+  )
+  assert.match(
+    ciWorkflow,
+    /- name: Ranking primary authority deployment gate contract\n        run: npm run qa:ranking-primary-authority/
+  )
   assert.match(nextConfig, /ignoreBuildErrors: process\.env\.ARENA_CI_TYPES_ATTESTED === '1'/)
   assert.equal(deployGate.match(/--build-env ARENA_CI_TYPES_ATTESTED=1/g)?.length, 1)
   assert.doesNotMatch(deployGate, /--env ARENA_CI_TYPES_ATTESTED=/)

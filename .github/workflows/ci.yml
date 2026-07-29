@@ -187,6 +187,8 @@ jobs:
         run: npm run qa:migration-history-shape
       - name: Launch migration runner fail-closed contract
         run: npm run qa:launch-migration-runner
+      - name: Ranking primary authority deployment gate contract
+        run: npm run qa:ranking-primary-authority
       - name: Backup pipeline fail-closed contract
         run: node --test scripts/maintenance/backup-to-r2.test.mjs
       - name: Restore pipeline fail-closed contract
