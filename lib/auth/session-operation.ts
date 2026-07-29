@@ -35,9 +35,16 @@ type StoredSession = {
   user?: { id?: unknown }
 }
 
+type PendingPasswordRecoveryRedirect = Readonly<{
+  accessToken: string
+  refreshToken: string
+  navigationKey: string
+}>
+
 let memoryLease: AuthOperationLease | null = null
 let activeWriter: AuthOperationLease | null = null
 let redirectAcquisitionReceipt: AuthRedirectAcquisitionReceipt | null = null
+let pendingPasswordRecoveryRedirect: PendingPasswordRecoveryRedirect | null = null
 let leaseSequence = 0
 
 const TRANSIENT_REDIRECT_PARAMS = new Set([
@@ -91,6 +98,47 @@ export function getAuthRedirectNavigationKey(): string | null {
   } catch {
     return null
   }
+}
+
+function navigationKeyFromUrl(url: URL): string {
+  const normalized = new URL(url.toString())
+  for (const param of TRANSIENT_REDIRECT_PARAMS) normalized.searchParams.delete(param)
+  normalized.searchParams.sort()
+  const query = normalized.searchParams.toString()
+  return `${normalized.pathname}${query ? `?${query}` : ''}`
+}
+
+/**
+ * Supabase clears an implicit-grant hash before it persists the acquired
+ * session. Capture the exact recovery credentials at its detectSessionInUrl
+ * boundary, then require the later storage write to match both tokens.
+ */
+export function detectAuthSessionInUrl(url: URL, params: Record<string, string>): boolean {
+  pendingPasswordRecoveryRedirect = null
+
+  if (url.pathname === '/reset-password') {
+    const hash = new URLSearchParams(url.hash.startsWith('#') ? url.hash.slice(1) : url.hash)
+    const accessToken = hash.get('access_token')
+    const refreshToken = hash.get('refresh_token')
+    if (
+      hash.get('type') === 'recovery' &&
+      accessToken &&
+      refreshToken &&
+      params.type === 'recovery' &&
+      params.access_token === accessToken &&
+      params.refresh_token === refreshToken
+    ) {
+      pendingPasswordRecoveryRedirect = {
+        accessToken,
+        refreshToken,
+        navigationKey: navigationKeyFromUrl(url),
+      }
+    }
+  }
+
+  // Preserve GoTrue's default implicit-grant detection semantics for OAuth,
+  // magic links, recovery errors, and every non-recovery route.
+  return Boolean(params.access_token || params.error_description)
 }
 
 export function getAuthRedirectAcquisitionReceipt(): AuthRedirectAcquisitionReceipt | null {
@@ -248,24 +296,30 @@ export async function withAuthSessionWriter<T>(
   }
 }
 
-function sessionUserId(value: string): string | null {
+function parseStoredSession(value: string): StoredSession | null {
   try {
-    const parsed = JSON.parse(value) as StoredSession
-    return typeof parsed.user?.id === 'string' ? parsed.user.id : null
+    return JSON.parse(value) as StoredSession
   } catch {
     return null
   }
 }
 
-function getAuthRedirectPurpose(): AuthRedirectAcquisitionReceipt['purpose'] | null {
+function getAuthRedirectPurpose(
+  session: StoredSession
+): AuthRedirectAcquisitionReceipt['purpose'] | null {
   if (typeof window === 'undefined') return null
   if (window.location.pathname === '/auth/callback') return 'oauth-callback'
-  if (window.location.pathname === '/reset-password') return 'password-recovery'
+  const recovery = pendingPasswordRecoveryRedirect
+  if (
+    window.location.pathname === '/reset-password' &&
+    recovery &&
+    recovery.navigationKey === getAuthRedirectNavigationKey() &&
+    session.access_token === recovery.accessToken &&
+    session.refresh_token === recovery.refreshToken
+  ) {
+    return 'password-recovery'
+  }
   return null
-}
-
-function isAuthRedirectAcquisition(): boolean {
-  return getAuthRedirectPurpose() !== null
 }
 
 /**
@@ -289,7 +343,8 @@ export const guardedAuthStorage = {
       return
     }
 
-    const userId = sessionUserId(value)
+    const session = parseStoredSession(value)
+    const userId = typeof session?.user?.id === 'string' ? session.user.id : null
     if (!userId) return
 
     // OAuth URL detection is performed internally by Supabase rather than by
@@ -297,8 +352,13 @@ export const guardedAuthStorage = {
     // operation, which also invalidates old refreshes in other tabs.
     let writer = activeWriter
     const internalRedirectWriter = !writer
+    const redirectPurpose = session ? getAuthRedirectPurpose(session) : null
     if (!writer) {
-      if (!isAuthRedirectAcquisition()) return
+      if (!redirectPurpose) {
+        pendingPasswordRecoveryRedirect = null
+        return
+      }
+      if (redirectPurpose === 'password-recovery') pendingPasswordRecoveryRedirect = null
       writer = beginAuthIdentityOperation(userId)
     }
 
@@ -317,13 +377,12 @@ export const guardedAuthStorage = {
     if (internalRedirectWriter) {
       const completed = completeAuthIdentityOperation(bound, userId)
       const navigationKey = getAuthRedirectNavigationKey()
-      const purpose = getAuthRedirectPurpose()
-      if (completed && navigationKey && purpose) {
+      if (completed && navigationKey && redirectPurpose) {
         redirectAcquisitionReceipt = {
           operationId: completed.id,
           userId,
           navigationKey,
-          purpose,
+          purpose: redirectPurpose,
         }
       }
     }
@@ -368,6 +427,7 @@ export function __resetAuthOperationsForTests(): void {
   memoryLease = null
   activeWriter = null
   redirectAcquisitionReceipt = null
+  pendingPasswordRecoveryRedirect = null
   leaseSequence = 0
   const authStorage = storage()
   try {

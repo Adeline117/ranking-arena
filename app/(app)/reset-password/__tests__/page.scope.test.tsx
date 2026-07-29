@@ -5,6 +5,7 @@ import {
   __resetAuthOperationsForTests,
   beginAuthIdentityOperation,
   completeAuthIdentityOperation,
+  detectAuthSessionInUrl,
   guardedAuthStorage,
 } from '@/lib/auth/session-operation'
 import { __resetViewerScopeForTests, synchronizeViewerScope } from '@/lib/auth/viewer-scope'
@@ -103,6 +104,9 @@ function makeRecoverySession(value: Session): number {
     '',
     `/reset-password#access_token=${value.access_token}&refresh_token=${value.refresh_token}&type=recovery`
   )
+  const url = new URL(window.location.href)
+  detectAuthSessionInUrl(url, Object.fromEntries(new URLSearchParams(url.hash.slice(1))))
+  window.history.replaceState({}, '', '/reset-password')
   guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(value))
   return synchronizeViewerScope(true, value.user.id).sessionGeneration
 }

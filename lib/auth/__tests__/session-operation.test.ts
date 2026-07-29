@@ -4,6 +4,7 @@ import {
   beginAuthIdentityOperation,
   clearAuthRedirectAcquisitionReceipt,
   clearAuthStorage,
+  detectAuthSessionInUrl,
   getAuthRedirectAcquisitionReceipt,
   getAuthRedirectNavigationKey,
   getCurrentAuthOperation,
@@ -25,6 +26,12 @@ function storedSession(userId: string, accessToken: string): string {
     refresh_token: `refresh-${userId}`,
     user: { id: userId },
   })
+}
+
+function detectCurrentRedirect(): boolean {
+  const url = new URL(window.location.href)
+  const hash = Object.fromEntries(new URLSearchParams(url.hash.slice(1)))
+  return detectAuthSessionInUrl(url, hash)
 }
 
 describe('guarded auth session storage', () => {
@@ -103,8 +110,11 @@ describe('guarded auth session storage', () => {
     window.history.pushState(
       {},
       '',
-      '/reset-password#access_token=recovery-token&refresh_token=refresh&type=recovery'
+      '/reset-password#access_token=recovery-token&refresh_token=refresh-recovery-user&type=recovery'
     )
+    expect(detectCurrentRedirect()).toBe(true)
+    // GoTrue clears the hash in _getSessionFromURL before _saveSession writes.
+    window.history.replaceState({}, '', '/reset-password')
     guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('recovery-user', 'recovery-token'))
 
     const operation = getCurrentAuthOperation()
@@ -117,6 +127,60 @@ describe('guarded auth session storage', () => {
     })
     window.history.pushState({}, '', '/')
   })
+
+  it.each([
+    ['/reset-password', 'ordinary reset page'],
+    [
+      '/reset-password#access_token=token-b&refresh_token=refresh-user-b&type=signup',
+      'non-recovery type',
+    ],
+    ['/reset-password#access_token=token-b&type=recovery', 'missing refresh token'],
+    ['/reset-password#refresh_token=refresh-user-b&type=recovery', 'missing access token'],
+  ])('rejects an unscoped B session write for %s (%s)', (path) => {
+    window.history.pushState({}, '', path)
+    detectCurrentRedirect()
+    guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('user-b', 'token-b'))
+
+    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+    expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
+    expect(getCurrentAuthOperation()).toBeNull()
+    window.history.pushState({}, '', '/')
+  })
+
+  it.each([
+    ['different-access', 'refresh-user-b'],
+    ['token-b', 'different-refresh'],
+  ])(
+    'rejects a recovery intent whose stored token pair is %s / %s',
+    (storedAccessToken, storedRefreshToken) => {
+      window.history.pushState(
+        {},
+        '',
+        '/reset-password#access_token=token-b&refresh_token=refresh-user-b&type=recovery'
+      )
+      expect(detectCurrentRedirect()).toBe(true)
+      window.history.replaceState({}, '', '/reset-password')
+      guardedAuthStorage.setItem(
+        AUTH_STORAGE_KEY,
+        JSON.stringify({
+          access_token: storedAccessToken,
+          refresh_token: storedRefreshToken,
+          user: { id: 'user-b' },
+        })
+      )
+
+      expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+      expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
+      expect(getCurrentAuthOperation()).toBeNull()
+
+      // A mismatched write consumes the one-shot intent; a later replay cannot
+      // wait for the URL hash to disappear and then upgrade a normal session.
+      guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('user-b', 'token-b'))
+      expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+      expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
+      window.history.pushState({}, '', '/')
+    }
+  )
 
   it('does not issue a redirect receipt for a coordinator-owned session writer', async () => {
     window.history.pushState({}, '', '/auth/callback?code=oauth-code')
