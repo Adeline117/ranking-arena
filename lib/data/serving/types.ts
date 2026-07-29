@@ -57,6 +57,8 @@ export interface TraderFirstScreen {
  *  server component cannot read searchParams and resolves without a platform
  *  hint; the client validates + re-fetches the requested account here). */
 export interface TraderFirstScreenResponse {
+  /** Exact request identity; platform preserves the caller's accepted alias. */
+  subject: { platform: string; traderKey: string }
   firstScreen: TraderFirstScreen
   capability: SourceCapability | null
   /** Active read-only API authorization: account data is first-party verified. */

@@ -125,6 +125,7 @@ export async function GET(
 
       return apiSuccess<TraderFirstScreenResponse>(
         {
+          subject: { platform: source, traderKey: resolved.exchangeTraderId },
           firstScreen,
           capability: capabilities[resolved.source] ?? null,
           is_verified_data: verifiedKeys.has(
