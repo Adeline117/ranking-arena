@@ -181,6 +181,7 @@ function abortablePendingQuery() {
 }
 
 import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import { PUBLIC_RANKING_QUARANTINED_SOURCES } from '@/lib/rankings/publication-policy'
 import { fetchLeaderboardFromDB, getInitialTraders } from '../getInitialTraders'
 
 describe('SSR public ranking source quarantine', () => {
@@ -627,7 +628,12 @@ describe('SSR public ranking source quarantine', () => {
     }
     const sealedFallback = await readThroughSealedGeneration(
       {},
-      { season: '90D', sources: ['binance_futures'] },
+      {
+        season: '90D',
+        sources: PUBLIC_ACTIVE_RANKING_SOURCES.filter(
+          (source) => !PUBLIC_RANKING_QUARANTINED_SOURCES.includes(source)
+        ),
+      },
       async () => fallback
     )
     mockCacheGet.mockResolvedValueOnce(null).mockResolvedValueOnce({
@@ -709,6 +715,25 @@ describe('SSR public ranking source quarantine', () => {
     expect(mockAttachAvatarMirrors).toHaveBeenCalledWith(expect.anything(), result.traders, signal)
     expect(signal.aborted).toBe(false)
     expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('treats a resolved cohort query error as a failed sealed read', async () => {
+    const rankingQuery = queryResult([], { message: 'rank query unavailable' })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') return rankingQuery
+      throw new Error(`unexpected table ${table}`)
+    })
+
+    await expect(fetchLeaderboardFromDB('90D', 20, 1)).resolves.toEqual({
+      traders: [],
+      lastUpdated: null,
+      isStale: true,
+      totalCount: 0,
+      categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 },
+    })
+
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(1)
+    expect(mockAttachAvatarMirrors).not.toHaveBeenCalled()
   })
 
   it('uses one timeout to abort the underlying query instead of racing abandoned work', async () => {

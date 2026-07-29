@@ -129,6 +129,10 @@ export interface InitialTradersResult {
   categoryCounts: CategoryCounts
 }
 
+const HOME_RANKING_PROOF_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
+
 function staleCacheResult(
   ...candidates: Array<InitialTradersResult | null>
 ): InitialTradersResult | null {
@@ -204,7 +208,8 @@ export async function getInitialTraders(
   try {
     const cachedEntry = parseSealedRankingCacheEntry<InitialTradersResult>(
       await cache.get<unknown>(cacheKey),
-      timeRange
+      timeRange,
+      HOME_RANKING_PROOF_SOURCES
     )
     cached = cachedEntry?.value ?? null
     if (cached?.traders && cached.traders.length > 0) {
@@ -215,7 +220,8 @@ export async function getInitialTraders(
     // Primary cache miss — try fallback (longer TTL, may be stale but better than empty)
     const fallbackEntry = parseSealedRankingCacheEntry<InitialTradersResult>(
       await cache.get<unknown>(fallbackKey),
-      timeRange
+      timeRange,
+      HOME_RANKING_PROOF_SOURCES
     )
     fallbackCached = fallbackEntry?.value ?? null
     if (fallbackCached) {
@@ -324,10 +330,9 @@ async function fetchSealedLeaderboardFromDB(
   const { signal } = controller
 
   try {
-    const proofSources = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
     return await readSealedRankingGeneration(
       supabase,
-      { season: timeRange, sources: proofSources },
+      { season: timeRange, sources: HOME_RANKING_PROOF_SOURCES },
       async (publication) => {
         let tradersPromise: Promise<{ traders: InitialTrader[]; lastUpdated: string | null }>
         if (page > 0) {
@@ -508,8 +513,9 @@ async function fetchPaginatedFromDB(
     .abortSignal(signal)
 
   if (error || !data) {
-    logger.error('[fetchPaginatedFromDB] Error:', error?.message)
-    return { traders: [], lastUpdated: null }
+    throw new Error(
+      `[fetchPaginatedFromDB] cohort-bound leaderboard query failed: ${error?.message ?? 'null result'}`
+    )
   }
 
   // Filter on the raw DB source before mapUnifiedToInitial can rewrite legacy
