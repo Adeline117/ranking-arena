@@ -109,6 +109,46 @@ describe('generatePortfolioSuggestion — aggressive（不限门槛，按 ROI �
     // ROI 最高的应入选（不被 MDD 刷掉）
     expect(p.traders.some((tr) => tr.trader_id === 't1')).toBe(true)
   })
+
+  it('保留可信的零胜率和零回撤，且配比始终为有限数', () => {
+    const pool = [
+      t({ roi: 30, max_drawdown: 0, win_rate: 0, arena_score: 60, source: 'a' }),
+      t({ roi: 20, max_drawdown: 0, win_rate: 0, arena_score: 50, source: 'b' }),
+      t({ roi: 10, max_drawdown: 0, win_rate: 0, arena_score: 40, source: 'c' }),
+    ]
+
+    const p = generatePortfolioSuggestion(pool, 'aggressive')!
+    expect(p).not.toBeNull()
+    expect(p.traders).toHaveLength(3)
+    expect(p.expected_metrics.max_drawdown).toBe(0)
+    for (const trader of p.traders) {
+      expect(Number.isFinite(trader.allocation_pct)).toBe(true)
+      expect(trader.allocation_pct).toBeGreaterThan(0)
+    }
+  })
+
+  it.each([
+    ['unknown win rate', { win_rate: null }],
+    ['unknown drawdown', { max_drawdown: null }],
+    ['zero score', { arena_score: 0 }],
+    ['NaN ROI', { roi: Number.NaN }],
+    ['infinite score', { arena_score: Number.POSITIVE_INFINITY }],
+    ['100 percent drawdown cap', { max_drawdown: 100 }],
+  ])('排除 %s，不将 unknown 伪装成零', (_label, invalidMetrics) => {
+    const pool = [t({ source: 'a' }), t({ source: 'b' }), t({ source: 'c', ...invalidMetrics })]
+
+    expect(generatePortfolioSuggestion(pool, 'aggressive')).toBeNull()
+  })
+
+  it('全零 score 不会产生 NaN 组合', () => {
+    const pool = [
+      t({ arena_score: 0, source: 'a' }),
+      t({ arena_score: 0, source: 'b' }),
+      t({ arena_score: 0, source: 'c' }),
+    ]
+
+    expect(generatePortfolioSuggestion(pool, 'aggressive')).toBeNull()
+  })
 })
 
 describe('generateAllPortfolioSuggestions', () => {
