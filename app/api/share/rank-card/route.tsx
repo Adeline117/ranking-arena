@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 import { resolveTrader } from '@/lib/data/unified'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import type { LeaderboardPublicationSeason } from '@/lib/rankings/read-publication-proofs'
 import {
@@ -105,6 +106,12 @@ export async function GET(request: NextRequest) {
   if (!resolved) {
     return NextResponse.json(
       { error: 'Not found' },
+      { status: 404, headers: publicRankingResponseRejectionHeaders() }
+    )
+  }
+  if (!isPublicRankingSourceAllowed(resolved.platform)) {
+    return NextResponse.json(
+      { error: 'Unknown or unavailable ranking source' },
       { status: 404, headers: publicRankingResponseRejectionHeaders() }
     )
   }

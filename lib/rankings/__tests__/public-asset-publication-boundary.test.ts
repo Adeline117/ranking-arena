@@ -29,6 +29,8 @@ describe('public ranking asset publication boundary', () => {
     'app/api/share/rank-card/route.tsx',
   ])('%s gates the resolved database source before publishing ranking metrics', (route) => {
     const text = source(route)
-    expect(text).toMatch(/if \(!isPublicRankingSourceAllowed\((?:srcName|exchange|tr\.source)\)\)/)
+    expect(text).toMatch(
+      /if \(!isPublicRankingSourceAllowed\((?:srcName|exchange|tr\.source|resolved\.platform)\)\)/
+    )
   })
 })

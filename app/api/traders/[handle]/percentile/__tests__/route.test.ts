@@ -31,7 +31,11 @@ jest.mock('@/lib/data/unified', () => ({
 
 jest.mock('@/lib/types/premium', () => ({
   hasFeatureAccess: () => true,
-  normalizeSubscriptionTier: (tier: unknown) => (tier === 'pro' ? 'pro' : 'free'),
+}))
+
+const mockGetCanonicalSubscriptionTier = jest.fn()
+jest.mock('@/lib/premium/server-entitlement', () => ({
+  getCanonicalSubscriptionTier: (...args: unknown[]) => mockGetCanonicalSubscriptionTier(...args),
 }))
 
 const mockReadSealedRankingGeneration = jest.fn()
@@ -73,6 +77,7 @@ describe('GET /api/traders/[handle]/percentile sealed category cohort', () => {
     jest.clearAllMocks()
     mockCheckRateLimit.mockResolvedValue(null)
     mockRequireAuth.mockResolvedValue({ id: 'user-1' })
+    mockGetCanonicalSubscriptionTier.mockResolvedValue('pro')
     mockResolveTrader.mockResolvedValue({
       platform: 'bybit',
       traderKey: 'trader-1',
@@ -101,7 +106,6 @@ describe('GET /api/traders/[handle]/percentile sealed category cohort', () => {
   })
 
   it('uses the central futures mapping and binds every count to one cohort', async () => {
-    const subscription = queryResult({ data: { tier: 'pro' }, error: null }, true)
     const trader = queryResult(
       {
         data: {
@@ -118,7 +122,6 @@ describe('GET /api/traders/[handle]/percentile sealed category cohort', () => {
     const counts = countValues.map((count) => queryResult({ data: null, count, error: null }))
     let leaderboardReads = 0
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'subscriptions') return subscription.proxy
       if (table === 'leaderboard_ranks') {
         leaderboardReads += 1
         return leaderboardReads === 1 ? trader.proxy : counts[leaderboardReads - 2].proxy
