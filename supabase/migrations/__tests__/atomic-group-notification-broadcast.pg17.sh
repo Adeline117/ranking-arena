@@ -82,6 +82,15 @@ $function$;
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION auth.role() TO anon, authenticated, service_role;
 
+CREATE FUNCTION public.install_active_authenticated_subject_mutation_barriers()
+RETURNS integer
+LANGUAGE sql
+AS $function$ SELECT 1 $function$;
+CREATE FUNCTION public.assert_active_authenticated_subject_mutation_barriers()
+RETURNS integer
+LANGUAGE sql
+AS $function$ SELECT 1 $function$;
+
 CREATE TYPE public.member_role AS ENUM ('owner', 'admin', 'member');
 
 CREATE TABLE auth.users (

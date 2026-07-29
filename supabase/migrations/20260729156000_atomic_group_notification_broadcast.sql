@@ -69,6 +69,12 @@ BEGIN
      OR pg_catalog.to_regclass('public.blocked_users') IS NULL
      OR pg_catalog.to_regclass('public.user_follows') IS NULL
      OR pg_catalog.to_regtype('public.member_role') IS NULL
+     OR pg_catalog.to_regprocedure(
+       'public.install_active_authenticated_subject_mutation_barriers()'
+     ) IS NULL
+     OR pg_catalog.to_regprocedure(
+       'public.assert_active_authenticated_subject_mutation_barriers()'
+     ) IS NULL
      OR v_send_function IS NULL
   THEN
     RAISE EXCEPTION
@@ -1011,6 +1017,12 @@ BEGIN
   END IF;
 END
 $postflight$;
+
+-- This migration creates a new public relation after the global inactive-user
+-- mutation barrier. Converge and attest that statement guard before exposing
+-- the RPC so there is no deployment window between ordered migrations.
+SELECT public.install_active_authenticated_subject_mutation_barriers();
+SELECT public.assert_active_authenticated_subject_mutation_barriers();
 
 NOTIFY pgrst, 'reload schema';
 

@@ -20,6 +20,12 @@ describe('atomic group notification broadcast authority', () => {
     expect(migration).toContain('DO $ledger_attestation$')
     expect(migration).toContain('DO $converge_acl_and_attest$')
     expect(migration).toContain('DO $postflight$')
+    expect(migration).toContain(
+      'SELECT public.install_active_authenticated_subject_mutation_barriers()'
+    )
+    expect(migration).toContain(
+      'SELECT public.assert_active_authenticated_subject_mutation_barriers()'
+    )
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)
   })

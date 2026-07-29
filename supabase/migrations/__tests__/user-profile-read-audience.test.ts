@@ -55,7 +55,10 @@ describe('user profile read audience migration', () => {
       serverHelpers.indexOf('async function getUserFromTokenWithProfilePolicy')
     )
     expect(statusHelper).toContain('getSupabaseAdmin()')
-    expect(statusHelper).toContain(".select('banned_at, deleted_at')")
+    expect(statusHelper).toContain(
+      ".select('banned_at, ban_expires_at, deleted_at, email, is_banned')"
+    )
+    expect(statusHelper).toContain('hasActiveLegacyBan(profile)')
     expect(recoveryRoute).toContain('const admin = getSupabaseAdmin()')
     expect(recoveryRoute).toContain(".from('user_profiles')")
   })
