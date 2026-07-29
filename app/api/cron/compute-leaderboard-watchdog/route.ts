@@ -21,6 +21,11 @@ import { NextRequest } from 'next/server'
 import { withCron } from '@/lib/api/with-cron'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
+import {
+  parseSeasonFreshnessPayload,
+  triggerSeasonCompute,
+  type ComputeTriggerResult,
+} from './recovery-trigger'
 
 export const dynamic = 'force-dynamic'
 // Each stale season is deliberately kicked in sequence with a 60s request
@@ -38,6 +43,9 @@ const SEASONS = ['90D', '30D', '7D'] as const
 export const GET = withCron(
   'compute-leaderboard-watchdog',
   async (_request: NextRequest, { supabase }) => {
+    const workSignal = AbortSignal.timeout(205_000)
+    const freshnessSignal = AbortSignal.any([workSignal, AbortSignal.timeout(15_000)])
+
     // Freshness MUST be checked per-season, not globally. Seasons compute
     // independently; a single global-newest `computed_at` is dominated by
     // whichever season last succeeded, so if only 90D silently stalls while 7D
@@ -52,21 +60,15 @@ export const GET = withCron(
           .eq('season_id', season)
           .order('computed_at', { ascending: false })
           .limit(1)
-        if (error) return { season, error: error.message, ageMs: null as number | null, ageMin: -1 }
-        const iso = data?.[0]?.computed_at as string | undefined
-        const ageMs = iso ? Date.now() - new Date(iso).getTime() : Infinity
-        const ageMin = Number.isFinite(ageMs) ? Math.round(ageMs / 60_000) : -1
-        return { season, error: null as string | null, ageMs, ageMin }
+          .abortSignal(freshnessSignal)
+        if (error) {
+          throw new Error(`Leaderboard freshness query failed for ${season}: ${error.message}`)
+        }
+        return { season, ...parseSeasonFreshnessPayload(data, Date.now()) }
       })
     )
 
-    const queryErr = freshness.find((f) => f.error)
-    if (queryErr) {
-      logger.error('[compute-watchdog] freshness query failed:', queryErr.error)
-      return { checked: false, error: queryErr.error }
-    }
-
-    const staleSeasons = freshness.filter((f) => f.ageMs == null || (f.ageMs ?? 0) > STALE_MS)
+    const staleSeasons = freshness.filter((f) => f.ageMs > STALE_MS)
     if (staleSeasons.length === 0) {
       return { stale: false, ages: freshness.map((f) => ({ [f.season]: f.ageMin })) }
     }
@@ -74,41 +76,41 @@ export const GET = withCron(
     // One or more seasons stalled > 3h — the worker-triggered chain missed them.
     // Fire each stale season's compute ourselves. The compute endpoint's Redis
     // idempotency lock dedups against any concurrent worker trigger, so a
-    // double-fire is a no-op. Timeout/abort is expected (compute is long-running
-    // and continues on its own invocation) — treat "kicked" as triggered.
+    // double-fire is a no-op. A transport timeout is not proof that the server
+    // accepted the request; only an explicit 2xx acknowledgement counts.
     const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
     const secret = process.env.CRON_SECRET
-    const triggers: Array<{ season: string; triggered: boolean; note: string }> = []
+    const triggers: ComputeTriggerResult[] = []
     for (const s of staleSeasons) {
       if (!secret) {
         triggers.push({ season: s.season, triggered: false, note: 'CRON_SECRET missing' })
         continue
       }
-      try {
-        const resp = await fetch(`${base}/api/cron/compute-leaderboard?season=${s.season}`, {
-          headers: { Authorization: `Bearer ${secret}` },
-          signal: AbortSignal.timeout(60_000),
-        })
-        triggers.push({ season: s.season, triggered: true, note: `HTTP ${resp.status}` })
-      } catch (e) {
-        triggers.push({
-          season: s.season,
-          triggered: true,
-          note:
-            e instanceof Error && e.name === 'TimeoutError'
-              ? 'kicked (still running)'
-              : `err ${String(e)}`,
-        })
-      }
+      triggers.push(await triggerSeasonCompute(base, secret, s.season, { signal: workSignal }))
     }
 
+    const failedTriggers = triggers.filter((trigger) => !trigger.triggered)
     const staleDesc = staleSeasons.map((s) => `${s.season} ${s.ageMin}min`).join(', ')
-    await sendAlert({
+    const allAcknowledged = failedTriggers.length === 0
+    const alertResult = await sendAlert({
       level: 'critical',
-      title: 'compute-leaderboard 看门狗触发',
-      message: `服务层 leaderboard 部分 season 已 >3h 未重算(${staleDesc})——Mac Mini worker 触发链可能已死。看门狗已兜底触发这些 season。请检查 worker。`,
+      title: allAcknowledged
+        ? 'compute-leaderboard 看门狗触发已确认'
+        : 'compute-leaderboard 看门狗触发失败',
+      message: allAcknowledged
+        ? `服务层 leaderboard 部分 season 已 >3h 未重算(${staleDesc})——Mac Mini worker 触发链可能已死。兜底请求已被 compute endpoint 明确认领。请检查 worker。`
+        : `服务层 leaderboard 部分 season 已 >3h 未重算(${staleDesc})，且 ${failedTriggers.map((trigger) => trigger.season).join(', ')} 的兜底请求未获明确成功回执。不得视为已兜底，请立即检查 worker 与 compute endpoint。`,
       details: { staleSeasons: staleSeasons.map((s) => ({ [s.season]: s.ageMin })), triggers },
-    }).catch((e) => logger.error('[compute-watchdog] alert failed:', e))
+    })
+    if (!alertResult.sent) {
+      logger.error('[compute-watchdog] critical watchdog alert was not delivered')
+    }
+
+    if (!allAcknowledged) {
+      throw new Error(
+        `Leaderboard recovery trigger failed for: ${failedTriggers.map((trigger) => trigger.season).join(', ')}`
+      )
+    }
 
     return { stale: true, staleSeasons: staleSeasons.map((s) => s.season), triggers }
   },
