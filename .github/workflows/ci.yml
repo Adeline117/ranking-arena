@@ -192,7 +192,12 @@ jobs:
       - name: Restore pipeline fail-closed contract
         run: node --test scripts/maintenance/restore-from-r2.test.mjs
       - run: npm run lint
-      - run: npx tsc --noEmit
+      - name: Type-check application
+        env:
+          # The generated Database surface plus App Router graph now exceeds
+          # V8's ~2 GiB default old-space limit on ubuntu-latest.
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npx tsc --noEmit
       - name: Lint ingest worker
         run: npm run lint:ingest-worker
       - name: Type-check ingest worker and ownership control plane
