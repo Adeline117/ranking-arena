@@ -120,6 +120,7 @@ export async function GET(request: NextRequest) {
   const stats = { seasons: {} as Record<string, number> }
   const warnings: string[] = []
   const rolledBack: string[] = []
+  const emptyPublications: string[] = []
   let plog: Awaited<ReturnType<typeof PipelineLogger.start>>
   try {
     plog = await PipelineLogger.start(`compute-leaderboard${lockSuffix}`)
@@ -193,31 +194,14 @@ export async function GET(request: NextRequest) {
         warnings.push(msg)
         rolledBack.push(season)
         stats.seasons[season] = previousCounts[season] // Keep old count in stats
-      }
-    }
-
-    // POST-COMPUTE ASSERTION: verify leaderboard_ranks is not empty.
-    // ROOT CAUSE FIX for 12-day empty homepage (2026-05-19): missing DEFAULT nextval()
-    // on partition id column caused silent upsert failures. This assertion catches any
-    // future scenario where compute "succeeds" but writes 0 rows.
-    const totalRankedAllSeasons = results.reduce((sum, r) => sum + Math.max(0, r.count), 0)
-    if (totalRankedAllSeasons === 0 && results.every((r) => !r.error)) {
-      const assertionMsg = `CRITICAL: compute-leaderboard completed but ranked 0 traders across all seasons. Likely silent upsert failure (check DB constraints, partition defaults).`
-      logger.error(assertionMsg)
-      warnings.push(assertionMsg)
-      try {
-        const { count: dbCount } = await supabase
-          .from('leaderboard_ranks')
-          .select('id', { count: 'exact', head: true })
-          .eq('season_id', targetSeasons[0])
-          .not('arena_score', 'is', null)
-        if (dbCount === 0) {
-          warnings.push(
-            `DB CONFIRM: leaderboard_ranks has 0 rows for ${targetSeasons[0]}. Data pipeline is broken.`
-          )
-        }
-      } catch {
-        // Non-critical — the assertion warning above is sufficient
+      } else if (count === 0) {
+        // A whole leaderboard season is a core publication, not an optional
+        // source. Never ACK a zero-row result: callers and watchdogs must retry
+        // instead of recording a successful run for an unusable board.
+        const msg = `CRITICAL: ${season} leaderboard publication completed with 0 ranked traders`
+        logger.error(msg)
+        warnings.push(msg)
+        emptyPublications.push(season)
       }
     }
 
@@ -307,7 +291,11 @@ export async function GET(request: NextRequest) {
     const hasRealFailures = hasComputeFailures(results)
     if (hasRealFailures) {
       // Real computation failure — report as error
-      await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })
+      await plog.error(new Error(warnings.join('; ')), {
+        stats,
+        rolledBack,
+        emptyPublications,
+      })
     } else if (warnings.length > 0) {
       // Only degradation skips — report as partial success (auto-recovers next run)
       await plog.success(totalRanked, {
@@ -332,6 +320,7 @@ export async function GET(request: NextRequest) {
         previous_counts: previousCounts,
         warnings: warnings.length > 0 ? warnings : undefined,
         rolled_back: rolledBack.length > 0 ? rolledBack : undefined,
+        empty_publications: emptyPublications.length > 0 ? emptyPublications : undefined,
       },
       { status: hasRealFailures ? 500 : 200 }
     )

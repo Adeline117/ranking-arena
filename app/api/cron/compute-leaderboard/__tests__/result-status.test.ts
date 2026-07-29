@@ -15,6 +15,18 @@ describe('compute leaderboard result status', () => {
     expect(hasComputeFailures(results)).toBe(false)
   })
 
+  test('treats a successful zero-row publication as a fatal compute failure', () => {
+    const results: ComputeResult[] = [{ season: '90D', count: 0, error: null }]
+
+    expect(hasComputeFailures(results)).toBe(true)
+  })
+
+  test('accepts a positive sealed publication', () => {
+    const results: ComputeResult[] = [{ season: '7D', count: 6_000, error: null }]
+
+    expect(hasComputeFailures(results)).toBe(false)
+  })
+
   test('fails the aggregate when any season throws', () => {
     const results: ComputeResult[] = [
       { season: '7D', count: 6_000, error: null },

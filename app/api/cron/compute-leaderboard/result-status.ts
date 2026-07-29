@@ -5,10 +5,11 @@ export interface ComputeResult {
 }
 
 /**
- * A count of -1 is overloaded by the compute loop: it can mean either a
- * degradation skip or a thrown computation failure. The error field is the
- * only authoritative discriminator.
+ * A count of -1 is a degradation skip when no error accompanies it. A
+ * successful zero-row result is never healthy for a whole leaderboard season:
+ * accepting it would let an empty public cohort be reported as a successful
+ * core ranking run.
  */
 export function hasComputeFailures(results: readonly ComputeResult[]): boolean {
-  return results.some((result) => result.error != null)
+  return results.some((result) => result.error != null || result.count === 0)
 }
