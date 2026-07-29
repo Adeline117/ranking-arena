@@ -11,7 +11,12 @@ import ErrorState from '@/app/components/ui/ErrorState'
 import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
 import { trackEvent } from '@/lib/analytics/track'
-import { apiRequest } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 import { type MembershipInfo, type PlanType } from './membership-config'
 import CurrentPlanCard from './CurrentPlanCard'
 import UpgradeSection from './UpgradeSection'
@@ -22,11 +27,45 @@ import UsageStatsCard from './UsageStatsCard'
 import FaqSection from './FaqSection'
 import SubscriptionManagement from './SubscriptionManagement'
 
-export default function MembershipContent() {
+type MembershipContentProps = {
+  /** Test seam for the irreversible browser navigation to Stripe Checkout. */
+  redirectToCheckout?: (url: string) => void
+}
+
+type CheckoutOperation = {
+  id: number
+  viewer: SettingsViewerSnapshot
+  controller: AbortController
+}
+
+type CheckoutUiOwner = Pick<SettingsViewerSnapshot, 'viewerKey' | 'sessionGeneration' | 'userId'>
+
+function sameCheckoutViewer(
+  left: CheckoutUiOwner | null,
+  right: SettingsViewerSnapshot | null
+): boolean {
+  return (
+    left !== null &&
+    right !== null &&
+    left.viewerKey === right.viewerKey &&
+    left.sessionGeneration === right.sessionGeneration &&
+    left.userId === right.userId
+  )
+}
+
+function defaultCheckoutRedirect(url: string): void {
+  window.location.href = url
+}
+
+export default function MembershipContent({
+  redirectToCheckout = defaultCheckoutRedirect,
+}: MembershipContentProps = {}) {
   const { t, language } = useLanguage()
   const router = useRouter()
   const { showToast } = useToast()
   const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
   const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
   const authScopeRef = useRef({
     viewerKey: auth.viewerKey,
@@ -47,10 +86,31 @@ export default function MembershipContent() {
   const info = infoOwnerScopeKeyRef.current === scopeKey ? infoState : null
   const loading = infoOwnerScopeKeyRef.current === scopeKey ? loadingState : true
   const loadError = infoOwnerScopeKeyRef.current === scopeKey ? loadErrorState : false
-  const [selectedPlan, setSelectedPlan] = useState<PlanType>('yearly')
-  const [subscribing, setSubscribing] = useState(false)
-  const submittingRef = useRef(false)
+  const [selectedPlanState, setSelectedPlanState] = useState<PlanType>('yearly')
+  const [planOwner, setPlanOwner] = useState<CheckoutUiOwner | null>(null)
+  const [subscribingState, setSubscribing] = useState(false)
+  const [checkoutUiOwner, setCheckoutUiOwner] = useState<CheckoutUiOwner | null>(null)
+  const checkoutOperationRef = useRef<CheckoutOperation | null>(null)
+  const nextCheckoutOperationIdRef = useRef(0)
+  const mountedRef = useRef(false)
   const recurringOperationIdsRef = useRef(new Map<string, string>())
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      checkoutOperationRef.current?.controller.abort()
+      checkoutOperationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const operation = checkoutOperationRef.current
+    if (operation && !isSettingsViewerCurrent(operation.viewer, authRef.current)) {
+      operation.controller.abort()
+      checkoutOperationRef.current = null
+    }
+  }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId, auth.viewerKey])
 
   useEffect(() => {
     if (!auth.authChecked) return
@@ -158,41 +218,55 @@ export default function MembershipContent() {
     void fetchMembershipInfo(capturedScope)
   }
 
+  const currentViewer = captureSettingsViewer(auth)
+  const selectedPlan = sameCheckoutViewer(planOwner, currentViewer) ? selectedPlanState : 'yearly'
+  const subscribing = sameCheckoutViewer(checkoutUiOwner, currentViewer) ? subscribingState : false
+
+  const selectPlan = (plan: PlanType) => {
+    const viewer = captureSettingsViewer(authRef.current)
+    if (!viewer) return
+    setPlanOwner(viewer)
+    setSelectedPlanState(plan)
+  }
+
   const handleSubscribe = async () => {
-    // Ref-based guard: synchronous check prevents duplicate Stripe checkout
-    // sessions even when React batches the setState(subscribing) update.
-    if (submittingRef.current) return
-    submittingRef.current = true
+    const viewer = captureSettingsViewer(authRef.current)
+    if (!viewer) {
+      if (authRef.current.authChecked && !authRef.current.loading && !authRef.current.userId) {
+        router.push(`/login?redirect=${encodeURIComponent('/user-center?tab=membership')}`)
+      }
+      return
+    }
+
+    const activeOperation = checkoutOperationRef.current
+    if (activeOperation && isSettingsViewerCurrent(activeOperation.viewer, authRef.current)) {
+      return
+    }
+    activeOperation?.controller.abort()
+
+    const operation: CheckoutOperation = {
+      id: ++nextCheckoutOperationIdRef.current,
+      viewer,
+      controller: new AbortController(),
+    }
+    checkoutOperationRef.current = operation
+    setCheckoutUiOwner(viewer)
     setSubscribing(true)
+    const operationIsCurrent = () =>
+      mountedRef.current &&
+      checkoutOperationRef.current?.id === operation.id &&
+      isSettingsViewerCurrent(viewer, authRef.current)
+
     // Funnel event #2: user clicked the subscribe button. CEO review
     // 2026-04-09 flagged that there's no visibility between view_pricing and
     // pro_subscribe (the success page) — start_checkout closes that gap.
     trackEvent('start_checkout', { plan: selectedPlan })
+    let navigating = false
     try {
-      const capturedScope = {
-        viewerKey: auth.viewerKey,
-        sessionGeneration: auth.sessionGeneration,
-        userId: auth.userId,
-      }
-      const scopeIsCurrent = () => {
-        const current = authScopeRef.current
-        return (
-          current.viewerKey === capturedScope.viewerKey &&
-          current.sessionGeneration === capturedScope.sessionGeneration &&
-          current.userId === capturedScope.userId
-        )
-      }
-      const accessToken = await auth.getToken()
-      if (!scopeIsCurrent()) return
-      if (!accessToken) {
-        showToast(t('pleaseLoginAgain'), 'error')
-        router.push('/login?redirect=/user-center?tab=membership')
-        return
-      }
       const operationKey =
         selectedPlan === 'lifetime'
           ? null
-          : `${capturedScope.userId || 'unknown'}:${selectedPlan}:paid`
+          : `${viewer.viewerKey}:${viewer.sessionGeneration}:${selectedPlan}:paid`
       let operationId: string | undefined
       if (operationKey) {
         operationId = recurringOperationIdsRef.current.get(operationKey)
@@ -202,47 +276,62 @@ export default function MembershipContent() {
         }
       }
 
-      const result = await apiRequest<{ url?: string; error?: string }>(
+      const result = await authedFetch<{ url?: unknown; error?: unknown }>(
         '/api/stripe/create-checkout',
+        'POST',
+        viewer.accessToken,
         {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
-          body: {
-            plan: selectedPlan,
-            operationId,
-            successUrl: `${window.location.origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancelUrl: `${window.location.origin}/user-center?tab=membership`,
-          },
-          timeoutMs: 20_000,
+          plan: selectedPlan,
+          operationId,
+          successUrl: `${window.location.origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancelUrl: `${window.location.origin}/user-center?tab=membership`,
+        },
+        20_000,
+        {
+          expectedUserId: viewer.userId,
+          expectedSessionGeneration: viewer.sessionGeneration,
+          signal: operation.controller.signal,
         }
       )
-      if (!scopeIsCurrent()) return
+      if (!operationIsCurrent() || result.stale) return
 
-      if (!result.success) {
+      if (!result.ok) {
+        if (result.status === 401) {
+          showToast(t('pleaseLoginAgain'), 'error')
+          if (!operationIsCurrent()) return
+          router.push(`/login?redirect=${encodeURIComponent('/user-center?tab=membership')}`)
+          return
+        }
         const errorMsg =
-          result.error?.code === 'TIMEOUT'
-            ? t('requestTimeout')
-            : result.error?.message || t('createCheckoutFailed')
+          typeof result.data?.error === 'string'
+            ? result.data.error
+            : result.status === 0
+              ? t('requestTimeout')
+              : t('createCheckoutFailed')
         showToast(errorMsg, 'error')
         return
       }
 
-      if (result.data?.url) {
-        // Don't re-enable the button — we're navigating away to Stripe
-        window.location.href = result.data.url
+      if (typeof result.data?.url === 'string' && result.data.url.startsWith('https://')) {
+        // Last CAS immediately before the irreversible browser navigation.
+        if (!operationIsCurrent()) return
+        navigating = true
+        redirectToCheckout(result.data.url)
         return
-      } else if (result.data?.error) {
+      } else if (typeof result.data?.error === 'string') {
         showToast(result.data.error, 'error')
       } else {
         showToast(t('getPaymentLinkFailed'), 'error')
       }
     } catch {
-      showToast(t('subscriptionFailed'), 'error')
+      if (operationIsCurrent()) showToast(t('subscriptionFailed'), 'error')
     } finally {
-      // Only reset on error paths — successful checkout navigates away to
-      // Stripe, so we keep the guard active to prevent duplicate sessions.
-      setSubscribing(false)
-      submittingRef.current = false
+      // Keep the synchronous guard active after a successful redirect. Browser
+      // navigation is not guaranteed to unload before another input event.
+      if (!navigating && operationIsCurrent()) {
+        setSubscribing(false)
+        checkoutOperationRef.current = null
+      }
     }
   }
 
@@ -304,7 +393,7 @@ export default function MembershipContent() {
       {!isPro && (
         <UpgradeSection
           selectedPlan={selectedPlan}
-          setSelectedPlan={setSelectedPlan}
+          setSelectedPlan={selectPlan}
           subscribing={subscribing}
           onSubscribe={handleSubscribe}
           cardStyle={cardStyle}
