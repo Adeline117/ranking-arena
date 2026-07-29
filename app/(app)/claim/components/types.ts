@@ -13,6 +13,7 @@ export interface SearchResult {
 
 export interface LinkedTrader {
   id: string
+  user_id: string
   trader_id: string
   source: string
   label: string | null
@@ -20,6 +21,8 @@ export interface LinkedTrader {
   display_order: number
   verified_at: string
   verification_method: string
+  created_at: string
+  updated_at: string
   stats?: {
     arena_score?: number
     roi?: number

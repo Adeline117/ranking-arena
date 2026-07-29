@@ -11,11 +11,9 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { User } from '@supabase/supabase-js'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { supabase } from '@/lib/supabase/client'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
@@ -30,6 +28,75 @@ import { DexVerifyForm } from './components/DexVerifyForm'
 import { LinkedAccountsSidebar } from './components/LinkedAccountsSidebar'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
+import { authedFetch } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
+
+type LinkedTraderOperation = {
+  controller: AbortController
+  id: number
+  viewer: SettingsViewerSnapshot
+}
+
+function isNullableFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isFinite(value))
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string'
+}
+
+function isLinkedTraderStats(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const stats = value as Record<string, unknown>
+  return (
+    isNullableFiniteNumber(stats.arena_score) &&
+    isNullableFiniteNumber(stats.roi) &&
+    isNullableFiniteNumber(stats.pnl) &&
+    isNullableFiniteNumber(stats.rank) &&
+    isNullableString(stats.handle) &&
+    isNullableString(stats.avatar_url)
+  )
+}
+
+function isLinkedTraderForViewer(value: unknown, userId: string): value is LinkedTrader {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const trader = value as Record<string, unknown>
+  return (
+    typeof trader.id === 'string' &&
+    !!trader.id &&
+    trader.user_id === userId &&
+    typeof trader.trader_id === 'string' &&
+    !!trader.trader_id &&
+    typeof trader.source === 'string' &&
+    !!trader.source &&
+    (trader.label === null || typeof trader.label === 'string') &&
+    typeof trader.is_primary === 'boolean' &&
+    typeof trader.display_order === 'number' &&
+    Number.isFinite(trader.display_order) &&
+    typeof trader.verified_at === 'string' &&
+    typeof trader.verification_method === 'string' &&
+    typeof trader.created_at === 'string' &&
+    typeof trader.updated_at === 'string' &&
+    (trader.stats === null || isLinkedTraderStats(trader.stats))
+  )
+}
+
+function readLinkedTraders(value: unknown, userId: string): LinkedTrader[] | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const response = value as Record<string, unknown>
+  if (response.success !== true || !response.data || typeof response.data !== 'object') return null
+  const rows = (response.data as Record<string, unknown>).linked_traders
+  if (!Array.isArray(rows) || !rows.every((row) => isLinkedTraderForViewer(row, userId))) {
+    return null
+  }
+  return rows
+}
 
 // ============================================
 // Main Page Component
@@ -40,42 +107,98 @@ export default function ClaimPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { showToast } = useToast()
-
-  const [user, setUser] = useState<User | null>(null)
-  const [authChecked, setAuthChecked] = useState(false)
-  const authLookupRef = useRef<Promise<User | null> | null>(null)
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const currentViewer = captureSettingsViewer(auth)
+  const linkedScopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  const authPending = !currentViewer && (!auth.authChecked || auth.loading || Boolean(auth.userId))
   const [selectedTrader, setSelectedTrader] = useState<SearchResult | null>(null)
+  const selectedTraderRef = useRef(selectedTrader)
+  selectedTraderRef.current = selectedTrader
   const [step, setStep] = useState<'search' | 'verify' | 'done'>('search')
-  const [linkedTraders, setLinkedTraders] = useState<LinkedTrader[]>([])
+  const stepRef = useRef(step)
+  stepRef.current = step
+  const [pendingTrader, setPendingTrader] = useState<SearchResult | null>(null)
+  const [linkedTraders, setLinkedTraders] = useViewerOwnedState<LinkedTrader[]>(
+    [],
+    () => [],
+    linkedScopeKey
+  )
+  const mountedRef = useRef(false)
+  const nextLinkedOperationIdRef = useRef(0)
+  const linkedOperationRef = useRef<LinkedTraderOperation | null>(null)
+  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Fetch linked traders for the user
-  const fetchLinkedTraders = useCallback(async () => {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) return
-
-      const res = await fetch('/api/traders/linked', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setLinkedTraders(data.linked_traders || data.data?.linked_traders || [])
+  const fetchLinkedTraders = useCallback(
+    async (expectedViewer?: SettingsViewerSnapshot) => {
+      const viewer = expectedViewer ?? captureSettingsViewer(authRef.current)
+      if (!viewer || !isSettingsViewerCurrent(viewer, authRef.current)) return
+      linkedOperationRef.current?.controller.abort()
+      const operation: LinkedTraderOperation = {
+        controller: new AbortController(),
+        id: ++nextLinkedOperationIdRef.current,
+        viewer,
       }
-    } catch {
-      // Silent fail
-    }
+      linkedOperationRef.current = operation
+      const operationIsCurrent = () =>
+        mountedRef.current &&
+        linkedOperationRef.current?.id === operation.id &&
+        isSettingsViewerCurrent(operation.viewer, authRef.current)
+
+      try {
+        const result = await authedFetch<unknown>(
+          '/api/traders/linked',
+          'GET',
+          operation.viewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: operation.controller.signal,
+          }
+        )
+        if (!operationIsCurrent() || result.stale || !result.ok) return
+        const rows = readLinkedTraders(result.data, operation.viewer.userId)
+        if (rows) setLinkedTraders(rows)
+      } catch {
+        // Silent fail
+      } finally {
+        if (operationIsCurrent()) linkedOperationRef.current = null
+      }
+    },
+    [setLinkedTraders]
+  )
+
+  const redirectSelectionToLogin = useCallback(
+    (result: SearchResult) => {
+      showToast(t('pleaseLoginFirst'), 'warning')
+      router.push(
+        buildTraderClaimLoginHref({
+          traderId: result.source_trader_id,
+          source: result.source,
+          handle: result.handle,
+        })
+      )
+    },
+    [router, showToast, t]
+  )
+
+  const enterVerification = useCallback((result: SearchResult) => {
+    setSelectedTrader(result)
+    setStep('verify')
   }, [])
 
-  const getAuthUser = useCallback((): Promise<User | null> => {
-    if (!authLookupRef.current) {
-      authLookupRef.current = supabase.auth
-        .getUser()
-        .then(({ data }) => data.user)
-        .catch(() => null)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      linkedOperationRef.current?.controller.abort()
+      linkedOperationRef.current = null
+      if (redirectTimeoutRef.current) clearTimeout(redirectTimeoutRef.current)
     }
-    return authLookupRef.current
   }, [])
 
   // Check URL params for direct link
@@ -97,52 +220,70 @@ export default function ClaimPage() {
     }
   }, [searchParams])
 
-  // Check auth + fetch linked traders
+  // A principal transition synchronously renders linked-trader state empty.
+  // This effect owns cancellation/reload and prevents an old success redirect
+  // from carrying into the replacement account.
   useEffect(() => {
-    let alive = true
-    void getAuthUser().then((resolvedUser) => {
-      if (!alive) return
-      setUser(resolvedUser)
-      setAuthChecked(true)
-      if (resolvedUser) {
-        void fetchLinkedTraders()
-      }
-    })
+    linkedOperationRef.current?.controller.abort()
+    linkedOperationRef.current = null
+    setLinkedTraders([])
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current)
+      redirectTimeoutRef.current = null
+    }
+    if (stepRef.current === 'done') {
+      setStep(selectedTraderRef.current ? 'verify' : 'search')
+    }
+    const viewer = captureSettingsViewer(authRef.current)
+    if (viewer) void fetchLinkedTraders(viewer)
     return () => {
-      alive = false
+      linkedOperationRef.current?.controller.abort()
     }
-  }, [fetchLinkedTraders, getAuthUser])
+  }, [fetchLinkedTraders, linkedScopeKey, setLinkedTraders])
 
-  const handleTraderSelect = async (result: SearchResult) => {
-    const activeUser = authChecked ? user : await getAuthUser()
-    if (!authChecked) {
-      setUser(activeUser)
-      setAuthChecked(true)
-    }
-    if (!activeUser) {
-      showToast(t('pleaseLoginFirst'), 'warning')
-      router.push(
-        buildTraderClaimLoginHref({
-          traderId: result.source_trader_id,
-          source: result.source,
-          handle: result.handle,
-        })
-      )
+  useEffect(() => {
+    if (!pendingTrader || authPending) return
+    if (currentViewer) {
+      const result = pendingTrader
+      setPendingTrader(null)
+      enterVerification(result)
       return
     }
-    setSelectedTrader(result)
-    setStep('verify')
+    setPendingTrader(null)
+    redirectSelectionToLogin(pendingTrader)
+  }, [authPending, currentViewer, enterVerification, pendingTrader, redirectSelectionToLogin])
+
+  const handleTraderSelect = (result: SearchResult) => {
+    const viewer = captureSettingsViewer(authRef.current)
+    if (viewer) {
+      enterVerification(result)
+      return
+    }
+    if (
+      !authRef.current.authChecked ||
+      authRef.current.loading ||
+      Boolean(authRef.current.userId)
+    ) {
+      setPendingTrader(result)
+      return
+    }
+    redirectSelectionToLogin(result)
   }
 
   const handleClaimSuccess = () => {
+    const viewer = captureSettingsViewer(authRef.current)
+    const trader = selectedTraderRef.current
+    if (!viewer || !trader) return
     setStep('done')
-    fetchLinkedTraders()
-    setTimeout(() => {
-      if (selectedTrader) {
+    void fetchLinkedTraders(viewer)
+    if (redirectTimeoutRef.current) clearTimeout(redirectTimeoutRef.current)
+    redirectTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current && isSettingsViewerCurrent(viewer, authRef.current)) {
         router.push(
-          `/trader/${encodeURIComponent(selectedTrader.source_trader_id)}?platform=${encodeURIComponent(selectedTrader.source)}`
+          `/trader/${encodeURIComponent(trader.source_trader_id)}?platform=${encodeURIComponent(trader.source)}`
         )
       }
+      redirectTimeoutRef.current = null
     }, 2000)
   }
 
@@ -175,7 +316,7 @@ export default function ClaimPage() {
                   <Text
                     style={{
                       fontSize: tokens.typography.fontSize.lg,
-                      fontWeight: 700,
+                      fontWeight: tokens.typography.fontWeight.bold,
                       color: tokens.colors.text.primary,
                     }}
                   >
@@ -227,7 +368,9 @@ export default function ClaimPage() {
                 />
               )}
               <Box>
-                <Text style={{ fontWeight: 700 }}>{selectedTrader.handle}</Text>
+                <Text style={{ fontWeight: tokens.typography.fontWeight.bold }}>
+                  {selectedTrader.handle}
+                </Text>
                 <Text
                   style={{
                     fontSize: tokens.typography.fontSize.sm,
@@ -256,11 +399,11 @@ export default function ClaimPage() {
             </Box>
 
             {/* Verification form */}
-            {!authChecked ? (
+            {authPending ? (
               <Box style={{ textAlign: 'center' }}>
                 <Text>{t('loading')}</Text>
               </Box>
-            ) : !user ? (
+            ) : !currentViewer ? (
               <Box style={{ textAlign: 'center' }}>
                 <Text style={{ marginBottom: tokens.spacing[3] }}>{t('pleaseLoginFirst')}</Text>
                 <button
@@ -319,7 +462,7 @@ export default function ClaimPage() {
             <h2
               style={{
                 fontSize: tokens.typography.fontSize['2xl'],
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
                 marginBottom: tokens.spacing[3],
                 color: tokens.colors.accent.success,
               }}
