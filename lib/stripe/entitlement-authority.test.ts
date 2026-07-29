@@ -38,11 +38,12 @@ type Scenario = {
   sessionLines: Record<string, Stripe.LineItem[]>
 }
 
-function customer(userId = USER_ID): Stripe.Customer {
+function customer(userId = USER_ID, overrides: Partial<Stripe.Customer> = {}): Stripe.Customer {
   return {
     id: CUSTOMER_ID,
     object: 'customer',
     metadata: { userId, supabase_user_id: userId },
+    ...overrides,
   } as unknown as Stripe.Customer
 }
 
@@ -722,6 +723,33 @@ describe('Stripe entitlement authority', () => {
         options
       ),
       'identity_conflict'
+    )
+  })
+
+  it('rejects a signed state snapshot whose livemode disagrees with the event', async () => {
+    const scenario = baseScenario()
+
+    await expectAuthorityError(
+      resolveSubscriptionEventStateAuthority(
+        clientFor(scenario),
+        subscription('in_failed', { status: 'past_due', livemode: false }),
+        { ...options, expectedLivemode: true }
+      ),
+      'object_mismatch'
+    )
+  })
+
+  it('rejects a signed state snapshot whose Customer livemode disagrees with the event', async () => {
+    const scenario = baseScenario()
+    scenario.customers[CUSTOMER_ID] = customer(USER_ID, { livemode: false })
+
+    await expectAuthorityError(
+      resolveSubscriptionEventStateAuthority(
+        clientFor(scenario),
+        subscription('in_failed', { status: 'past_due' }),
+        { ...options, expectedLivemode: true }
+      ),
+      'object_mismatch'
     )
   })
 

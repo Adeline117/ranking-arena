@@ -1320,6 +1320,14 @@ export async function resolveSubscriptionEventStateAuthority(
   }
 
   const customer = await retrieveCustomer(client, customerId, objectIds)
+  assertLivemode(
+    subscription,
+    options.expectedLivemode,
+    'subscription',
+    'Subscription event snapshot',
+    objectIds
+  )
+  assertLivemode(customer, options.expectedLivemode, 'customer', 'Customer', objectIds)
   const currency = assertCurrencies(
     [
       { source: 'subscription.currency', value: subscription.currency },
