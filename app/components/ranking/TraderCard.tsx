@@ -28,6 +28,7 @@ import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import type { CompareAccountRef } from '@/lib/compare/identity'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { formatDrawdown, NULL_DISPLAY } from '@/lib/utils/format'
 
 export interface TraderCardProps {
   trader: Trader
@@ -64,6 +65,10 @@ export const TraderCard = memo(
     const traderSource = trader.source || source || ''
     const sourceInfo = parseSourceInfo(traderSource)
     const compareAccount: CompareAccountRef = { id: trader.id, source: traderSource }
+    const parsedDrawdown = trader.max_drawdown == null ? null : Number(trader.max_drawdown)
+    const drawdownDisplay = formatDrawdown(parsedDrawdown)
+    const hasDrawdown = drawdownDisplay !== NULL_DISPLAY
+    const drawdownValue = hasDrawdown ? -Math.abs(parsedDrawdown ?? 0) : null
 
     const isSelected = useComparisonStore(
       useCallback(
@@ -369,23 +374,20 @@ export const TraderCard = memo(
             <MetricStat
               label="MDD"
               value={
-                trader.max_drawdown != null ? (
+                hasDrawdown ? (
                   <Metric
-                    value={-Math.abs(Number(trader.max_drawdown))}
+                    value={drawdownValue}
                     format="percent"
-                    display={
-                      Math.abs(Number(trader.max_drawdown)) < 0.05
-                        ? '< 0.1%'
-                        : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}%`
-                    }
+                    display={`${trader.metrics_estimated ? '~' : ''}${drawdownDisplay}`}
                     size="sm"
                     as="span"
                     showArrow
+                    title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}
                   />
                 ) : undefined
               }
               nullTooltip={
-                trader.max_drawdown == null
+                !hasDrawdown
                   ? getPlatformNote(trader.source || source || '') ||
                     `Not available for ${EXCHANGE_NAMES[trader.source || source || ''] || (trader.source || source || '').replace('_', ' ')}`
                   : undefined
