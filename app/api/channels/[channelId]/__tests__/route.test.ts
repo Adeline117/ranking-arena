@@ -38,7 +38,7 @@ jest.mock('@/lib/utils/logger', () => ({
   }),
 }))
 
-import { DELETE, PATCH } from '../route'
+import { DELETE, GET, PATCH } from '../route'
 
 const actorId = '11111111-1111-4111-8111-111111111111'
 const channelId = '22222222-2222-4222-8222-222222222222'
@@ -57,6 +57,72 @@ function patchRequest(body: unknown, malformed = false) {
       ? jest.fn().mockRejectedValue(new SyntaxError('invalid JSON'))
       : jest.fn().mockResolvedValue(body),
   } as never
+}
+
+function getRequest(before?: string) {
+  const nextUrl = new URL(`https://example.com/api/channels/${channelId}`)
+  if (before !== undefined) nextUrl.searchParams.set('before', before)
+  return { nextUrl } as never
+}
+
+const pageChannel = {
+  id: channelId,
+  name: 'proof group',
+  avatar_url: null,
+  description: 'private',
+  type: 'group',
+  created_by: actorId,
+  created_at: '2026-07-28T19:00:00.000Z',
+  updated_at: '2026-07-29T20:00:00.000Z',
+}
+
+const pageMember = {
+  user_id: actorId,
+  role: 'member',
+  nickname: null,
+  joined_at: '2026-07-28T19:00:00.000Z',
+  handle: 'reader',
+  avatar_url: null,
+}
+
+const pageMessage = {
+  id: '33333333-3333-4333-8333-333333333333',
+  sender_id: actorId,
+  content: 'hello',
+  media_url: null,
+  media_type: null,
+  media_name: null,
+  created_at: '2026-07-29T19:00:00.000Z',
+  reply_to_id: null,
+  reply_preview: null,
+  reactions: [{ emoji: '🔥', count: 1, mine: true }],
+}
+
+function pageAcknowledgement(
+  overrides: Partial<{
+    actor_id: unknown
+    channel_id: unknown
+    channel: unknown
+    members: unknown
+    messages: unknown
+    has_more: unknown
+    my_role: unknown
+    read_at: unknown
+    success: unknown
+  }> = {}
+) {
+  return {
+    success: true,
+    actor_id: actorId,
+    channel_id: channelId,
+    channel: pageChannel,
+    members: [pageMember],
+    messages: [pageMessage],
+    has_more: false,
+    my_role: 'member',
+    read_at: '2026-07-29T20:00:01.000Z',
+    ...overrides,
+  }
 }
 
 const updatedChannel = {
@@ -91,6 +157,199 @@ function metadataAcknowledgement(
     ...overrides,
   }
 }
+
+describe('GET /api/channels/[channelId]', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetAuthUser.mockResolvedValue({ id: actorId })
+    mockFrom.mockImplementation(() => {
+      throw new Error('GET must not issue direct table queries')
+    })
+    mockGetSupabaseAdmin.mockReturnValue({ rpc: mockRpc, from: mockFrom })
+    rpcResult(pageAcknowledgement())
+  })
+
+  afterEach(() => {
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('returns the exact bound atomic page without leaking authority metadata', async () => {
+    const response = await GET(getRequest(), context(channelId.toUpperCase()))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      channel: pageChannel,
+      members: [pageMember],
+      messages: [pageMessage],
+      has_more: false,
+      my_role: 'member',
+    })
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenCalledWith('get_group_channel_page_atomic', {
+      p_actor_id: actorId,
+      p_channel_id: channelId,
+      p_before: null,
+      p_limit: 50,
+    })
+  })
+
+  it('binds a valid offset cursor into the one atomic RPC', async () => {
+    const before = '2026-07-29T20:00:00+01:00'
+    rpcResult(pageAcknowledgement({ messages: [] }))
+
+    const response = await GET(getRequest(before), context())
+
+    expect(response.status).toBe(200)
+    expect(mockRpc).toHaveBeenCalledWith('get_group_channel_page_atomic', {
+      p_actor_id: actorId,
+      p_channel_id: channelId,
+      p_before: before,
+      p_limit: 50,
+    })
+  })
+
+  it('requires authentication before parsing or executing the RPC', async () => {
+    mockGetAuthUser.mockResolvedValue(null)
+
+    const response = await GET(getRequest('not-a-timestamp'), context('not-a-uuid'))
+
+    expect(response.status).toBe(401)
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid channel id before the atomic RPC', async () => {
+    const response = await GET(getRequest(), context('not-a-uuid'))
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid channel id' })
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each(['not-a-timestamp', '2026-07-29T20:00:00', '2026-13-29T20:00:00Z'])(
+    'rejects invalid or offset-free cursor %s before the atomic RPC',
+    async (before) => {
+      const response = await GET(getRequest(before), context())
+
+      expect(response.status).toBe(400)
+      await expect(response.json()).resolves.toEqual({ error: 'Invalid message cursor' })
+      expect(mockRpc).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    ['INVALID', 400, 'Invalid channel request'],
+    ['ACTOR_UNAVAILABLE', 403, 'Account cannot access this channel'],
+    ['CHANNEL_NOT_FOUND', 404, 'Channel not found'],
+    ['CHANNEL_NOT_GROUP', 400, 'Channel is not a group'],
+    ['MEMBERSHIP_NOT_FOUND', 403, 'Not a member'],
+  ])('maps the exact %s denial without fallback reads', async (reason, status, error) => {
+    rpcResult({ success: false, reason })
+
+    const response = await GET(getRequest(), context())
+
+    expect(response.status).toBe(status)
+    await expect(response.json()).resolves.toEqual({ error })
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed when the atomic RPC errors', async () => {
+    rpcResult(null, { message: 'serialization failure' })
+
+    const response = await GET(getRequest(), context())
+
+    expect(response.status).toBe(500)
+    expect(mockLoggerError).toHaveBeenCalledWith('Atomic group channel page read failed', {
+      error: 'serialization failure',
+    })
+  })
+
+  it.each([
+    null,
+    [],
+    { success: false, reason: 'UNKNOWN' },
+    { success: false, reason: 'MEMBERSHIP_NOT_FOUND', extra: true },
+    pageAcknowledgement({ success: 'yes' }),
+    { ...pageAcknowledgement(), extra: true },
+    pageAcknowledgement({ channel: { ...pageChannel, extra: true } }),
+    pageAcknowledgement({ channel: { ...pageChannel, type: 'direct' } }),
+    pageAcknowledgement({ members: [] }),
+    pageAcknowledgement({ members: [pageMember, pageMember] }),
+    pageAcknowledgement({ my_role: 'owner' }),
+    pageAcknowledgement({ messages: [pageMessage, pageMessage] }),
+    pageAcknowledgement({
+      messages: [
+        pageMessage,
+        {
+          ...pageMessage,
+          id: '44444444-4444-4444-8444-444444444444',
+          created_at: '2026-07-29T18:00:00.000Z',
+        },
+      ],
+    }),
+    pageAcknowledgement({
+      messages: [{ ...pageMessage, reactions: [{ emoji: '🔥', count: 0, mine: true }] }],
+    }),
+    pageAcknowledgement({
+      messages: [
+        {
+          ...pageMessage,
+          reactions: [
+            { emoji: '🔥', count: 1, mine: true },
+            { emoji: '🔥', count: 1, mine: false },
+          ],
+        },
+      ],
+    }),
+    pageAcknowledgement({ has_more: true }),
+    pageAcknowledgement({ read_at: 'not-a-timestamp' }),
+  ])('rejects malformed, non-exact, or internally inconsistent page evidence %#', async (ack) => {
+    rpcResult(ack)
+
+    const response = await GET(getRequest(), context())
+
+    expect(response.status).toBe(500)
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      'Atomic group channel page read returned an invalid acknowledgement'
+    )
+  })
+
+  it.each([
+    pageAcknowledgement({
+      actor_id: '44444444-4444-4444-8444-444444444444',
+      members: [
+        {
+          ...pageMember,
+          user_id: '44444444-4444-4444-8444-444444444444',
+        },
+      ],
+    }),
+    pageAcknowledgement({ channel_id: '44444444-4444-4444-8444-444444444444' }),
+    pageAcknowledgement({
+      channel: { ...pageChannel, id: '44444444-4444-4444-8444-444444444444' },
+    }),
+  ])('rejects page evidence bound to another actor or channel %#', async (ack) => {
+    rpcResult(ack)
+
+    const response = await GET(getRequest(), context())
+
+    expect(response.status).toBe(500)
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      'Atomic group channel page acknowledgement did not match its request'
+    )
+  })
+
+  it('rejects a message at or beyond the requested cursor', async () => {
+    const before = '2026-07-29T19:00:00.000Z'
+    rpcResult(pageAcknowledgement())
+
+    const response = await GET(getRequest(before), context())
+
+    expect(response.status).toBe(500)
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      'Atomic group channel page acknowledgement did not match its request'
+    )
+  })
+})
 
 describe('DELETE /api/channels/[channelId]', () => {
   beforeEach(() => {

@@ -7,9 +7,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import { z } from 'zod'
 import { channelIdSchema, updateGroupChannelInputSchema } from '../contracts'
 
 const logger = createLogger('api:channels:channelId')
@@ -22,6 +22,89 @@ const metadataFailureReasons = new Set([
   'CHANNEL_NOT_GROUP',
   'PERMISSION_DENIED',
 ])
+
+const groupChannelPageFailureSchema = z
+  .object({
+    success: z.literal(false),
+    reason: z.enum([
+      'INVALID',
+      'ACTOR_UNAVAILABLE',
+      'CHANNEL_NOT_FOUND',
+      'CHANNEL_NOT_GROUP',
+      'MEMBERSHIP_NOT_FOUND',
+    ]),
+  })
+  .strict()
+
+const timestampSchema = z.string().datetime({ offset: true })
+const nullableTimestampSchema = timestampSchema.nullable()
+const groupChannelPageSchema = z
+  .object({
+    success: z.literal(true),
+    actor_id: channelIdSchema,
+    channel_id: channelIdSchema,
+    channel: z
+      .object({
+        id: channelIdSchema,
+        name: z.string().nullable(),
+        avatar_url: z.string().nullable(),
+        description: z.string().nullable(),
+        type: z.literal('group'),
+        created_by: channelIdSchema.nullable(),
+        created_at: nullableTimestampSchema,
+        updated_at: nullableTimestampSchema,
+      })
+      .strict(),
+    members: z.array(
+      z
+        .object({
+          user_id: channelIdSchema,
+          role: z.enum(['owner', 'admin', 'member']),
+          nickname: z.string().nullable(),
+          joined_at: nullableTimestampSchema,
+          handle: z.string().nullable(),
+          avatar_url: z.string().nullable(),
+        })
+        .strict()
+    ),
+    messages: z
+      .array(
+        z
+          .object({
+            id: channelIdSchema,
+            sender_id: channelIdSchema,
+            content: z.string(),
+            media_url: z.string().nullable(),
+            media_type: z.enum(['image', 'video', 'file']).nullable(),
+            media_name: z.string().nullable(),
+            created_at: nullableTimestampSchema,
+            reply_to_id: channelIdSchema.nullable(),
+            reply_preview: z
+              .object({ sender_id: channelIdSchema, content: z.string().max(120) })
+              .strict()
+              .nullable(),
+            reactions: z.array(
+              z
+                .object({
+                  emoji: z.string().min(1).max(10),
+                  count: z.number().int().positive(),
+                  mine: z.boolean(),
+                })
+                .strict()
+            ),
+          })
+          .strict()
+      )
+      .max(50),
+    has_more: z.boolean(),
+    my_role: z.enum(['owner', 'admin', 'member']),
+    read_at: timestampSchema,
+  })
+  .strict()
+
+type GroupChannelPageAcknowledgement =
+  | z.infer<typeof groupChannelPageFailureSchema>
+  | z.infer<typeof groupChannelPageSchema>
 
 const metadataFields = ['name', 'avatar_url', 'description'] as const
 type MetadataField = (typeof metadataFields)[number]
@@ -61,6 +144,58 @@ function hasExactKeys(value: Record<string, unknown>, expected: string[]): boole
 
 function isTimestamp(value: unknown): value is string {
   return typeof value === 'string' && Number.isFinite(Date.parse(value))
+}
+
+function readGroupChannelPageAcknowledgement(
+  value: unknown
+): GroupChannelPageAcknowledgement | null {
+  const failure = groupChannelPageFailureSchema.safeParse(value)
+  if (failure.success) return failure.data
+
+  const success = groupChannelPageSchema.safeParse(value)
+  if (!success.success) return null
+
+  const acknowledgement = success.data
+  const memberIds = acknowledgement.members.map((member) => member.user_id)
+  if (new Set(memberIds).size !== memberIds.length) return null
+
+  const actorMemberships = acknowledgement.members.filter(
+    (member) => member.user_id === acknowledgement.actor_id
+  )
+  if (
+    actorMemberships.length !== 1 ||
+    actorMemberships[0]?.role !== acknowledgement.my_role ||
+    (acknowledgement.has_more && acknowledgement.messages.length !== 50)
+  ) {
+    return null
+  }
+
+  const messageIds = acknowledgement.messages.map((message) => message.id)
+  if (new Set(messageIds).size !== messageIds.length) return null
+
+  for (let index = 0; index < acknowledgement.messages.length; index += 1) {
+    const message = acknowledgement.messages[index]
+    if (!message) return null
+
+    const emojis = message.reactions.map((reaction) => reaction.emoji)
+    if (new Set(emojis).size !== emojis.length) return null
+
+    const previous = acknowledgement.messages[index - 1]
+    if (!previous) continue
+    if (previous.created_at === null && message.created_at !== null) return null
+    if (previous.created_at !== null && message.created_at !== null) {
+      const previousTime = Date.parse(previous.created_at)
+      const messageTime = Date.parse(message.created_at)
+      if (
+        previousTime > messageTime ||
+        (previousTime === messageTime && previous.id > message.id)
+      ) {
+        return null
+      }
+    }
+  }
+
+  return acknowledgement
 }
 
 function readUpdatedGroupChannel(value: unknown): UpdatedGroupChannel | null {
@@ -214,133 +349,74 @@ export async function GET(
     const user = await getAuthUser(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { channelId } = await params
-    // Cast: channel_message_reactions + channel_messages.reply_to_id are not yet in
-    // the generated DB types (new migration). Mirrors the messages route pattern.
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
-    // Verify membership
-    const { data: membership } = await supabase
-      .from('channel_members')
-      .select('role')
-      .eq('channel_id', channelId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Not a member' }, { status: 403 })
+    const parsedChannelId = channelIdSchema.safeParse((await params).channelId)
+    if (!parsedChannelId.success) {
+      return NextResponse.json({ error: 'Invalid channel id' }, { status: 400 })
     }
 
-    // Get channel info
-    const { data: channel } = await supabase
-      .from('chat_channels')
-      .select('id, name, avatar_url, description, type, created_by, created_at, updated_at')
-      .eq('id', channelId)
-      .single()
-
-    // Get members with profiles
-    const { data: members } = await supabase
-      .from('channel_members')
-      .select('user_id, role, nickname, joined_at')
-      .eq('channel_id', channelId)
-
-    // Get member profiles
-    const memberIds = members?.map((m) => m.user_id) || []
-    const { data: profiles } = await supabase
-      .from('user_profiles')
-      .select('id, handle, avatar_url')
-      .in('id', memberIds)
-
-    const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
-
-    const membersWithProfiles = (members || []).map((m) => ({
-      ...m,
-      handle: profileMap.get(m.user_id)?.handle || null,
-      avatar_url: profileMap.get(m.user_id)?.avatar_url || null,
-    }))
-
-    // Get messages (latest 50)
     const before = request.nextUrl.searchParams.get('before')
-    let msgQuery = supabase
-      .from('channel_messages')
-      .select('id, sender_id, content, media_url, media_type, media_name, created_at, reply_to_id')
-      .eq('channel_id', channelId)
-      .order('created_at', { ascending: false })
-      .limit(51)
-
-    if (before) {
-      msgQuery = msgQuery.lt('created_at', before)
+    if (before !== null && !timestampSchema.safeParse(before).success) {
+      return NextResponse.json({ error: 'Invalid message cursor' }, { status: 400 })
     }
 
-    const { data: messages } = await msgQuery
-    const hasMore = (messages?.length || 0) > 50
-    const baseMessages = (messages || []).slice(0, 50).reverse()
-
-    // Enrich with reply previews (parent snippet) + emoji reactions — batched (no N+1)
-    const replyIds = Array.from(
-      new Set(baseMessages.map((m) => m.reply_to_id).filter(Boolean))
-    ) as string[]
-    const replyPreviewMap = new Map<string, { sender_id: string; content: string }>()
-    if (replyIds.length > 0) {
-      const { data: parents } = await supabase
-        .from('channel_messages')
-        .select('id, sender_id, content')
-        .in('id', replyIds)
-      for (const p of parents || []) {
-        replyPreviewMap.set(p.id, {
-          sender_id: p.sender_id,
-          content: (p.content || '').slice(0, 120),
-        })
-      }
-    }
-
-    const messageIds = baseMessages.map((m) => m.id)
-    const reactionMap = new Map<string, Record<string, { count: number; mine: boolean }>>()
-    if (messageIds.length > 0) {
-      const { data: reactionRows } = await supabase
-        .from('channel_message_reactions')
-        .select('message_id, emoji, user_id')
-        .in('message_id', messageIds)
-      for (const r of reactionRows || []) {
-        let byEmoji = reactionMap.get(r.message_id)
-        if (!byEmoji) {
-          byEmoji = {}
-          reactionMap.set(r.message_id, byEmoji)
-        }
-        const entry = byEmoji[r.emoji] || { count: 0, mine: false }
-        entry.count += 1
-        if (r.user_id === user.id) entry.mine = true
-        byEmoji[r.emoji] = entry
-      }
-    }
-
-    const resultMessages = baseMessages.map((m) => ({
-      ...m,
-      reply_preview: m.reply_to_id ? replyPreviewMap.get(m.reply_to_id) || null : null,
-      reactions: (() => {
-        const byEmoji = reactionMap.get(m.id)
-        if (!byEmoji) return []
-        return Object.entries(byEmoji).map(([emoji, v]) => ({
-          emoji,
-          count: v.count,
-          mine: v.mine,
-        }))
-      })(),
-    }))
-
-    // Update read status
-    await supabase.from('channel_message_reads').upsert({
-      channel_id: channelId,
-      user_id: user.id,
-      last_read_at: new Date().toISOString(),
+    const channelId = parsedChannelId.data
+    const actorId = user.id.toLowerCase()
+    const { data, error } = await getSupabaseAdmin().rpc('get_group_channel_page_atomic', {
+      p_actor_id: actorId,
+      p_channel_id: channelId,
+      p_before: before,
+      p_limit: 50,
     })
 
+    if (error) {
+      logger.error('Atomic group channel page read failed', { error: error.message })
+      return NextResponse.json({ error: 'Failed to load channel' }, { status: 500 })
+    }
+
+    const acknowledgement = readGroupChannelPageAcknowledgement(data)
+    if (!acknowledgement) {
+      logger.error('Atomic group channel page read returned an invalid acknowledgement')
+      return NextResponse.json({ error: 'Failed to load channel' }, { status: 500 })
+    }
+
+    if (!acknowledgement.success) {
+      switch (acknowledgement.reason) {
+        case 'INVALID':
+          return NextResponse.json({ error: 'Invalid channel request' }, { status: 400 })
+        case 'ACTOR_UNAVAILABLE':
+          return NextResponse.json({ error: 'Account cannot access this channel' }, { status: 403 })
+        case 'CHANNEL_NOT_FOUND':
+          return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
+        case 'CHANNEL_NOT_GROUP':
+          return NextResponse.json({ error: 'Channel is not a group' }, { status: 400 })
+        case 'MEMBERSHIP_NOT_FOUND':
+          return NextResponse.json({ error: 'Not a member' }, { status: 403 })
+        default:
+          logger.error('Atomic group channel page read returned an unknown denial')
+          return NextResponse.json({ error: 'Failed to load channel' }, { status: 500 })
+      }
+    }
+
+    if (
+      acknowledgement.actor_id !== actorId ||
+      acknowledgement.channel_id !== channelId ||
+      acknowledgement.channel.id !== channelId ||
+      (before !== null &&
+        acknowledgement.messages.some(
+          (message) =>
+            message.created_at === null || Date.parse(message.created_at) >= Date.parse(before)
+        ))
+    ) {
+      logger.error('Atomic group channel page acknowledgement did not match its request')
+      return NextResponse.json({ error: 'Failed to load channel' }, { status: 500 })
+    }
+
     return NextResponse.json({
-      channel,
-      members: membersWithProfiles,
-      messages: resultMessages,
-      has_more: hasMore,
-      my_role: membership.role,
+      channel: acknowledgement.channel,
+      members: acknowledgement.members,
+      messages: acknowledgement.messages,
+      has_more: acknowledgement.has_more,
+      my_role: acknowledgement.my_role,
     })
   } catch (error) {
     logger.error('GET_CHANNEL failed', {

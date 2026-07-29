@@ -215,7 +215,7 @@ describe('channel membership server boundary migration', () => {
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
   })
 
-  it('proves every current channel storage query/write is already on the admin client', () => {
+  it('proves remaining channel storage access uses the admin client or atomic authorities', () => {
     const appDirectory = join(process.cwd(), 'app')
     const baseTableSources = sourceFilesBelow(appDirectory)
       .filter((path) => {
@@ -228,17 +228,22 @@ describe('channel membership server boundary migration', () => {
       .sort()
 
     expect(baseTableSources).toEqual(
-      [
-        'app/api/channels/[channelId]/read/route.ts',
-        'app/api/channels/[channelId]/route.ts',
-        'app/api/channels/route.ts',
-      ].sort()
+      ['app/api/channels/[channelId]/read/route.ts', 'app/api/channels/route.ts'].sort()
     )
 
     for (const path of baseTableSources) {
       expect(path).toMatch(/^app\/api\//)
       expect(readFileSync(join(process.cwd(), path), 'utf8')).toMatch(/getSupabaseAdmin\(\)/)
     }
+
+    const pageRoute = readFileSync(
+      join(process.cwd(), 'app/api/channels/[channelId]/route.ts'),
+      'utf8'
+    )
+    expect(pageRoute).toContain("'get_group_channel_page_atomic'")
+    expect(pageRoute).not.toMatch(
+      /\.from\(\s*['"](?:chat_channels|channel_members|channel_messages|channel_message_reactions|channel_message_reads)['"]\s*\)/
+    )
 
     const sendRoute = readFileSync(
       join(process.cwd(), 'app/api/channels/[channelId]/messages/route.ts'),
