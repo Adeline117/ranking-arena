@@ -6,15 +6,44 @@ import { calculateBadges, type EarnedBadge } from '@/lib/badges'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 import {
+  filterPublicRankingSources,
   isPublicRankingSourceAllowed,
   publicRankingCacheKey,
 } from '@/lib/rankings/publication-policy'
+import {
+  readSealedRankingGeneration,
+  sealedRankingPublicationIdentity,
+} from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 /**
  * GET /api/traders/[handle]/badges
  *
  * Returns all badges earned by a trader based on their current stats.
  */
+function isBadgeResponse(value: unknown): value is { badges: EarnedBadge[] } {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const badges = Reflect.get(value, 'badges')
+  if (!Array.isArray(badges) || badges.length > 1) return false
+  return badges.every((badge) => {
+    if (
+      badge === null ||
+      typeof badge !== 'object' ||
+      Array.isArray(badge) ||
+      Reflect.get(badge, 'id') !== 'top10'
+    ) {
+      return false
+    }
+    const metadata = Reflect.get(badge, 'metadata')
+    const rank =
+      metadata !== null && typeof metadata === 'object' ? Reflect.get(metadata, 'rank') : null
+    return Number.isSafeInteger(rank) && Number(rank) >= 1 && Number(rank) <= 10
+  })
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
@@ -29,13 +58,6 @@ export async function GET(
 
   const cacheHeaders = { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
 
-  // Check cache first
-  const cacheKey = publicRankingCacheKey(`badges:${handle}`)
-  const { data: cached } = await tieredGet<{ badges: EarnedBadge[] }>(cacheKey, 'warm')
-  if (cached) {
-    return NextResponse.json(cached, { headers: cacheHeaders })
-  }
-
   const supabase = getSupabaseAdmin()
 
   // Resolve trader via unified layer
@@ -46,61 +68,80 @@ export async function GET(
   if (!isPublicRankingSourceAllowed(resolved.platform)) {
     return NextResponse.json({ badges: [] }, { headers: cacheHeaders })
   }
+  const proofSources = filterPublicRankingSources([resolved.platform])
+  if (proofSources.length !== 1) {
+    return NextResponse.json({ badges: [] }, { headers: cacheHeaders })
+  }
 
-  // Fetch trader data from leaderboard_ranks (precomputed, fast)
-  const { data: rankData, error } = await supabase
-    .from('leaderboard_ranks')
-    .select(
-      'source_trader_id, roi, pnl, win_rate, max_drawdown, followers, arena_score, rank, source, computed_at'
+  const cacheKey = publicRankingCacheKey(
+    `badges:sealed-v2:${resolved.platform}:${encodeURIComponent(resolved.traderKey)}`
+  )
+  let cached: unknown = null
+  try {
+    cached = (await tieredGet<unknown>(cacheKey, 'warm')).data
+  } catch (cacheError) {
+    logger.warn(
+      '[badges] cache read failed:',
+      cacheError instanceof Error ? cacheError.message : String(cacheError)
     )
-    .eq('source', resolved.platform)
-    .eq('source_trader_id', resolved.traderKey)
-    .eq('season_id', '90D')
-    .maybeSingle()
-
-  // A query error (schema drift, 42703) is NOT the same as "trader has no rank
-  // row" — surface it so a broken badges board doesn't silently blank out.
-  if (error) {
-    logger.warn('[badges] leaderboard_ranks query error (drift?):', error.message)
-  }
-  if (error || !rankData) {
-    return NextResponse.json({ badges: [] })
   }
 
-  const rank = rankData.rank ?? 999999
+  let reusedCache = false
+  const sealedRead = await readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: proofSources },
+    async (publication) => {
+      const cachedEntry = parseSealedRankingCacheEntry<{ badges: EarnedBadge[] }>(
+        cached,
+        '90D',
+        proofSources
+      )
+      if (
+        cachedEntry &&
+        cachedEntry.publicationIdentity === sealedRankingPublicationIdentity(publication) &&
+        isBadgeResponse(cachedEntry.value)
+      ) {
+        reusedCache = true
+        return cachedEntry.value
+      }
 
-  // Check for on-chain attestation (table not yet created)
-  const _attestation = null
+      const { data: rankData, error } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id, rank, source, season_id')
+        .eq('source', resolved.platform)
+        .eq('source_trader_id', resolved.traderKey)
+        .eq('season_id', '90D')
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .maybeSingle()
+      if (error) throw new Error(`badge rank query failed: ${error.message}`)
+      if (!rankData) return { badges: [] }
+      if (
+        rankData.source !== resolved.platform ||
+        rankData.source_trader_id !== resolved.traderKey ||
+        rankData.season_id !== '90D'
+      ) {
+        throw new Error('badge rank query escaped its identity scope')
+      }
 
-  // Check for NFT (via linked user profile)
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('wallet_address')
-    .eq('handle', handle)
-    .not('wallet_address', 'is', null)
-    .maybeSingle()
+      return {
+        badges: calculateBadges({
+          handle: rankData.source_trader_id,
+          rank: rankData.rank ?? 999999,
+        }),
+      }
+    },
+    { timeoutMs: 10_000 }
+  )
 
-  let _hasNft = false
-  if (profile?.wallet_address) {
-    // Check NFT balance
+  if (!reusedCache) {
     try {
-      const { checkNFTMembership } = await import('@/lib/web3/nft')
-      _hasNft = await checkNFTMembership(profile.wallet_address)
-    } catch {
-      // NFT check failed, assume no NFT
+      await tieredSet(cacheKey, createSealedRankingCacheEntry(sealedRead), 'warm')
+    } catch (cacheError) {
+      logger.warn(
+        '[badges] cache write failed:',
+        cacheError instanceof Error ? cacheError.message : String(cacheError)
+      )
     }
   }
-
-  // Calculate badges
-  const badges: EarnedBadge[] = calculateBadges({
-    handle: rankData.source_trader_id,
-    rank,
-  })
-
-  const response = { badges }
-
-  // Cache for 5 minutes (warm tier)
-  await tieredSet(cacheKey, response, 'warm')
-
-  return NextResponse.json(response, { headers: cacheHeaders })
+  return NextResponse.json(sealedRead.value, { headers: cacheHeaders })
 }
