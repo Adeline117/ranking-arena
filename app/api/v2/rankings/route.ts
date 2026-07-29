@@ -38,14 +38,14 @@ import {
   TRADING_STYLE_LEGACY_MAP,
   type TradingStyle,
 } from '@/lib/utils/trading-style'
-import { WINDOWS } from '@/lib/types/leaderboard'
+import { MARKET_TYPES, WINDOWS } from '@/lib/types/leaderboard'
 import {
   SOURCE_TYPE_MAP,
   parsePublicActiveRankingSource,
   type TraderSource,
 } from '@/lib/constants/exchanges'
 import { withPublic } from '@/lib/api/middleware'
-import { getOrSetWithLock } from '@/lib/cache'
+import { del, getOrSetWithLock } from '@/lib/cache'
 import { summarizeSourceFreshness, type SourceFreshnessRow } from '@/lib/rankings/source-freshness'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
@@ -53,6 +53,16 @@ import {
   publicRankingCacheKey,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
+import { getReadReplica } from '@/lib/supabase/read-replica'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import type {
+  LeaderboardPublicationSeason,
+  SealedLeaderboardPublicationProofSet,
+} from '@/lib/rankings/read-publication-proofs'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 // Removed force-dynamic — it contradicted revalidate and prevented CDN caching.
 // With Redis cache + CDN s-maxage headers, this route is fast and scalable.
@@ -65,7 +75,7 @@ const v2RankingsSchema = z.object({
     (value) => parsePublicActiveRankingSource(value) !== null,
     'Invalid platform'
   ),
-  market_type: z.string().default('futures'),
+  market_type: z.enum(MARKET_TYPES).default('futures'),
   limit: z.coerce.number().int().min(1).max(500).catch(100),
   offset: z.coerce.number().int().min(0).catch(0),
   sort: z
@@ -82,7 +92,7 @@ const v2RankingsSchema = z.object({
 })
 
 export const GET = withPublic(
-  async ({ supabase, request }) => {
+  async ({ request }) => {
     const { searchParams } = new URL(request.url)
     const rawParams = Object.fromEntries(searchParams)
     const parsed = v2RankingsSchema.safeParse(rawParams)
@@ -131,7 +141,7 @@ export const GET = withPublic(
 
     const platform = requestedPlatform as LeaderboardPlatform
     const tradingStyle = parsed.data.trading_style || null
-    const _minAlpha = parsed.data.min_alpha ?? null
+    const minAlpha = parsed.data.min_alpha ?? null
     const minSortino = parsed.data.min_sortino ?? null
     const minRoi = parsed.data.min_roi ?? null
     const minPnl = parsed.data.min_pnl ?? null
@@ -153,195 +163,227 @@ export const GET = withPublic(
         (tradingStyle as TradingStyle)
       : null
 
-    // Redis cache — 120s TTL (data refreshes via cron every 30 min, 2-min cache is safe)
+    const seasonId = window.toUpperCase() as LeaderboardPublicationSeason
+    const hasResultFilters =
+      normalizedStyle !== null ||
+      minAlpha !== null ||
+      minSortino !== null ||
+      minRoi !== null ||
+      minPnl !== null ||
+      minWinRate !== null ||
+      maxDrawdown !== null ||
+      minScore !== null
+
+    // Redis cache — only proof-sealed envelopes are accepted. Every
+    // response-shaping request parameter participates in the key.
     const cacheKey = publicRankingCacheKey(
-      `v2-rankings:v3:${platform}:${window}:${sort}:${offset}:${limit}:${tradingStyle || ''}:${minRoi ?? ''}:${minPnl ?? ''}:${minWinRate ?? ''}:${maxDrawdown ?? ''}:${minScore ?? ''}:${minSortino ?? ''}`
+      `v2-rankings:sealed-v4:${platform}:${window}:${marketType}:${sort}:${offset}:${limit}:${tradingStyle || ''}:${minAlpha ?? ''}:${minRoi ?? ''}:${minPnl ?? ''}:${minWinRate ?? ''}:${maxDrawdown ?? ''}:${minScore ?? ''}:${minSortino ?? ''}`
     )
 
-    const cached = await getOrSetWithLock<RankingsResponse>(
-      cacheKey,
-      async () => {
-        // Database query — use leaderboard_ranks (precomputed, unified source of truth)
-        // instead of trader_snapshots v1 which has stale/inconsistent data
+    const fetchSealedEntry = async () => {
+      const supabase = getReadReplica()
+      const sealedRead = await readSealedRankingGeneration(
+        supabase,
+        { season: seasonId, sources: [platform] },
+        async (publication) => {
+          // Database query — use leaderboard_ranks (precomputed, unified source of truth)
+          // instead of trader_snapshots v1 which has stale/inconsistent data
 
-        // Map window to season_id format used in leaderboard_ranks (uppercase)
-        const seasonId = window.toUpperCase()
-
-        let query = supabase
-          .from('leaderboard_ranks')
-          .select(
-            `source, source_trader_id, handle, avatar_url, source_type,
+          let query = supabase
+            .from('leaderboard_ranks')
+            .select(
+              `source, source_trader_id, handle, avatar_url, source_type,
        roi, pnl, win_rate, max_drawdown, trades_count, followers,
        arena_score, rank, computed_at, season_id,
        sharpe_ratio,
        profitability_score, risk_control_score, execution_score, score_completeness,
-       trading_style, avg_holding_hours, trader_type`
-          )
-          .eq('source', platform)
-          .eq('season_id', seasonId)
-          .not('arena_score', 'is', null)
-          .or('is_outlier.is.null,is_outlier.eq.false')
+       trading_style, avg_holding_hours, trader_type`,
+              hasResultFilters ? { count: 'exact' } : undefined
+            )
+            .eq('source', platform)
+            .eq('season_id', seasonId)
+            .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+            .in(
+              'source',
+              publication.proofs.map((proof) => proof.source)
+            )
+            .not('arena_score', 'is', null)
+            .or('is_outlier.is.null,is_outlier.eq.false')
 
-        if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-          query = query.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-        }
+          if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+            query = query.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+          }
 
-        // V3 Filters
-        if (normalizedStyle) {
-          query = query.eq('trading_style', normalizedStyle)
-        }
-        if (minSortino !== null) {
-          query = query.gte('sharpe_ratio', minSortino) // sortino not in leaderboard_ranks, use sharpe as proxy
-        }
-        if (minRoi !== null) {
-          query = query.gte('roi', minRoi)
-        }
-        if (minPnl !== null) {
-          query = query.gte('pnl', minPnl)
-        }
-        if (minWinRate !== null) {
-          query = query.gte('win_rate', minWinRate)
-        }
-        if (maxDrawdown !== null) {
-          query = query.lte('max_drawdown', maxDrawdown)
-        }
-        if (minScore !== null) {
-          query = query.gte('arena_score', minScore)
-        }
+          // V3 Filters
+          if (normalizedStyle) {
+            query = query.eq('trading_style', normalizedStyle)
+          }
+          if (minAlpha !== null) {
+            // The legacy v2 contract documents alpha although the canonical table
+            // only stores arena_score. Keep the documented proxy, but do not
+            // silently ignore the filter.
+            query = query.gte('arena_score', minAlpha)
+          }
+          if (minSortino !== null) {
+            query = query.gte('sharpe_ratio', minSortino) // sortino not in leaderboard_ranks, use sharpe as proxy
+          }
+          if (minRoi !== null) {
+            query = query.gte('roi', minRoi)
+          }
+          if (minPnl !== null) {
+            query = query.gte('pnl', minPnl)
+          }
+          if (minWinRate !== null) {
+            query = query.gte('win_rate', minWinRate)
+          }
+          if (maxDrawdown !== null) {
+            query = query.lte('max_drawdown', maxDrawdown)
+          }
+          if (minScore !== null) {
+            query = query.gte('arena_score', minScore)
+          }
 
-        // Sort — leaderboard_ranks doesn't have alpha/arena_score_v3 columns,
-        // fall back to arena_score for those sorts
-        switch (sort) {
-          case 'roi':
-            query = query.order('roi', { ascending: false, nullsFirst: false })
-            break
-          case 'pnl':
-            query = query.order('pnl', { ascending: false, nullsFirst: false })
-            break
-          case 'sortino':
-            query = query.order('sharpe_ratio', { ascending: false, nullsFirst: false }) // sortino not in leaderboard_ranks
-            break
-          case 'calmar':
-            query = query.order('arena_score', { ascending: false, nullsFirst: false }) // calmar not in leaderboard_ranks
-            break
-          case 'arena_score_v3':
-          case 'alpha':
-          default:
-            query = query.order('arena_score', { ascending: false, nullsFirst: false })
-        }
+          // Sort — leaderboard_ranks doesn't have alpha/arena_score_v3 columns,
+          // fall back to arena_score for those sorts
+          switch (sort) {
+            case 'roi':
+              query = query.order('roi', { ascending: false, nullsFirst: false })
+              break
+            case 'pnl':
+              query = query.order('pnl', { ascending: false, nullsFirst: false })
+              break
+            case 'sortino':
+              query = query.order('sharpe_ratio', { ascending: false, nullsFirst: false }) // sortino not in leaderboard_ranks
+              break
+            case 'calmar':
+              query = query.order('arena_score', { ascending: false, nullsFirst: false }) // calmar not in leaderboard_ranks
+              break
+            case 'arena_score_v3':
+            case 'alpha':
+            default:
+              query = query.order('arena_score', { ascending: false, nullsFirst: false })
+          }
 
-        query = query.range(offset, offset + limit - 1)
+          query = query
+            .order('source_trader_id', { ascending: true })
+            .range(offset, offset + limit - 1)
 
-        const {
-          data: rows,
-          count,
-          error,
-        } = (await query) as {
-          data: Record<string, unknown>[] | null
-          count: number | null
-          error: { message: string } | null
-        }
+          const {
+            data: rows,
+            count,
+            error,
+          } = (await query) as {
+            data: Record<string, unknown>[] | null
+            count: number | null
+            error: { message: string } | null
+          }
 
-        if (error) {
-          throw new Error('Database query failed')
-        }
+          if (error) {
+            throw new Error(`Database query failed: ${error.message}`)
+          }
+          if (rows === null) {
+            throw new Error('Database query returned no row payload')
+          }
+          if (hasResultFilters && (!Number.isSafeInteger(count) || (count as number) < 0)) {
+            throw new Error('Filtered database query returned no exact count')
+          }
 
-        // leaderboard_ranks already has handle + avatar_url — no need for separate
-        // trader_profiles / trader_sources joins (eliminated 2 extra DB queries)
+          // Watermark, membership and row count come from the exact proof set
+          // that authorized this cohort, never from mutable aggregate tables.
+          const freshnessSummary = summarizePublicationFreshness(publication, platform)
 
-        let freshnessQuery = supabase
-          .from('leaderboard_source_freshness')
-          .select('source,source_as_of')
-          .eq('season_id', seasonId)
-          .eq('source', platform)
-        if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-          freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-        }
-        const { data: sourceWatermarkRows } = await freshnessQuery
-        const freshnessSummary = summarizeSourceFreshness(
-          (sourceWatermarkRows || []) as SourceFreshnessRow[],
-          [platform]
-        )
+          // Build response — maintain exact same response format for frontend consumers
+          const traders: RankingEntry[] = rows.map((r) => {
+            const sourceType =
+              (r.source_type as string) || SOURCE_TYPE_MAP[String(r.source)] || marketType
+            const baseEntry = {
+              platform: r.source as LeaderboardPlatform,
+              market_type: sourceType,
+              trader_key: String(r.source_trader_id),
+              display_name: (r.handle as string) || null,
+              avatar_url: (r.avatar_url as string) || null,
+              window: window as Window,
+              metrics: {
+                roi: r.roi != null ? Number(r.roi) : null,
+                pnl: r.pnl != null ? Number(r.pnl) : null,
+                win_rate: r.win_rate != null ? Number(r.win_rate) : null,
+                max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
+                sharpe_ratio: r.sharpe_ratio != null ? Number(r.sharpe_ratio) : null,
+                sortino_ratio: null, // not in leaderboard_ranks
+                trades_count: r.trades_count != null ? Number(r.trades_count) : null,
+                followers: r.followers != null ? Number(r.followers) : null,
+                copiers: null as number | null,
+                aum: null as number | null,
+                platform_rank: r.rank != null ? Number(r.rank) : null,
+                arena_score: r.arena_score != null ? Number(r.arena_score) : null,
+                return_score: null as number | null,
+                drawdown_score: null as number | null,
+                stability_score: null as number | null,
+                volatility_pct: null as number | null,
+                avg_holding_hours: r.avg_holding_hours != null ? Number(r.avg_holding_hours) : null,
+                profit_factor: null, // not in leaderboard_ranks
+              },
+              quality_flags: {
+                missing_fields: [] as string[],
+                non_standard_fields: {} as Record<string, string>,
+                window_native: true,
+                notes: [] as string[],
+              },
+              updated_at: freshnessSummary.asOf,
+              is_stale: freshnessSummary.isStale,
+              computed_at: String(r.computed_at || '') || null,
+            }
 
-        // Build response — maintain exact same response format for frontend consumers
-        const traders: RankingEntry[] = (rows || []).map((r) => {
-          const sourceType =
-            (r.source_type as string) || SOURCE_TYPE_MAP[String(r.source)] || marketType
-          const baseEntry = {
-            platform: r.source as LeaderboardPlatform,
-            market_type: sourceType,
-            trader_key: String(r.source_trader_id),
-            display_name: (r.handle as string) || null,
-            avatar_url: (r.avatar_url as string) || null,
-            window: window as Window,
-            metrics: {
-              roi: r.roi != null ? Number(r.roi) : null,
-              pnl: r.pnl != null ? Number(r.pnl) : null,
-              win_rate: r.win_rate != null ? Number(r.win_rate) : null,
-              max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
-              sharpe_ratio: r.sharpe_ratio != null ? Number(r.sharpe_ratio) : null,
+            return {
+              ...baseEntry,
+              // V3 extended fields
+              arena_score_v3: null,
               sortino_ratio: null, // not in leaderboard_ranks
-              trades_count: r.trades_count != null ? Number(r.trades_count) : null,
-              followers: r.followers != null ? Number(r.followers) : null,
-              copiers: null as number | null,
-              aum: null as number | null,
-              platform_rank: r.rank != null ? Number(r.rank) : null,
-              arena_score: r.arena_score != null ? Number(r.arena_score) : null,
-              return_score: null as number | null,
-              drawdown_score: null as number | null,
-              stability_score: null as number | null,
-              volatility_pct: null as number | null,
-              avg_holding_hours: r.avg_holding_hours != null ? Number(r.avg_holding_hours) : null,
-              profit_factor: null, // not in leaderboard_ranks
+              calmar_ratio: null, // not in leaderboard_ranks
+              alpha: null,
+              trading_style: (r.trading_style as string) || null,
+            } as RankingEntry & {
+              arena_score_v3: number | null
+              sortino_ratio: number | null
+              calmar_ratio: number | null
+              alpha: number | null
+              trading_style: string | null
+            }
+          })
+
+          return sanitizePublicRankingSourcePayload({
+            traders,
+            meta: {
+              platform,
+              market_type: marketType as RankingsResponse['meta']['market_type'],
+              window: window as Window,
+              total_count: hasResultFilters
+                ? (count as number)
+                : publication.proofs[0].published_rank_count,
+              updated_at: freshnessSummary.asOf,
+              staleness_seconds: freshnessSummary.ageSeconds,
+              is_stale: freshnessSummary.isStale,
+              source_freshness: freshnessSummary.sources,
             },
-            quality_flags: {
-              missing_fields: [] as string[],
-              non_standard_fields: {} as Record<string, string>,
-              window_native: true,
-              notes: [] as string[],
-            },
-            updated_at: freshnessSummary.asOf,
-            is_stale: freshnessSummary.isStale,
-            computed_at: String(r.computed_at || '') || null,
-          }
+          }) as RankingsResponse
+        },
+        { timeoutMs: 10_000 }
+      )
+      return createSealedRankingCacheEntry(sealedRead)
+    }
 
-          return {
-            ...baseEntry,
-            // V3 extended fields
-            arena_score_v3: null,
-            sortino_ratio: null, // not in leaderboard_ranks
-            calmar_ratio: null, // not in leaderboard_ranks
-            alpha: null,
-            trading_style: (r.trading_style as string) || null,
-          } as RankingEntry & {
-            arena_score_v3: number | null
-            sortino_ratio: number | null
-            calmar_ratio: number | null
-            alpha: number | null
-            trading_style: string | null
-          }
-        })
+    let cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, { ttl: 120 })
+    let sealedCache = parseSealedRankingCacheEntry<RankingsResponse>(cached, seasonId, [platform])
+    if (!sealedCache) {
+      await del(cacheKey)
+      cached = await getOrSetWithLock<unknown>(cacheKey, fetchSealedEntry, { ttl: 120 })
+      sealedCache = parseSealedRankingCacheEntry<RankingsResponse>(cached, seasonId, [platform])
+    }
+    if (!sealedCache) {
+      throw new Error('Ranking cache did not satisfy the sealed publication contract')
+    }
 
-        return sanitizePublicRankingSourcePayload({
-          traders,
-          meta: {
-            platform,
-            market_type: marketType as 'futures',
-            window: window as Window,
-            total_count: count || 0,
-            updated_at: freshnessSummary.asOf,
-            staleness_seconds: freshnessSummary.ageSeconds,
-            is_stale: freshnessSummary.isStale,
-            source_freshness: freshnessSummary.sources,
-          },
-        }) as RankingsResponse
-      }, // end fetcher
-      { ttl: 120 }
-    ) // end getOrSetWithLock
-
-    const safeCached = sanitizePublicRankingSourcePayload(cached)
-
-    return NextResponse.json(safeCached, {
+    return NextResponse.json(sanitizePublicRankingSourcePayload(sealedCache.value), {
       headers: {
         'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
       },
@@ -349,3 +391,18 @@ export const GET = withPublic(
   },
   { name: 'v2-rankings' }
 )
+
+function summarizePublicationFreshness(
+  publication: SealedLeaderboardPublicationProofSet,
+  platform: LeaderboardPlatform
+) {
+  return summarizeSourceFreshness(
+    publication.proofs.map(
+      (proof): SourceFreshnessRow => ({
+        source: proof.source,
+        source_as_of: proof.source_as_of,
+      })
+    ),
+    [platform]
+  )
+}

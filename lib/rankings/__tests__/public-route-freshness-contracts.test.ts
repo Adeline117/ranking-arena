@@ -10,11 +10,11 @@ describe('public ranking freshness route contracts', () => {
     'app/api/rankings/route.ts',
     'app/api/traders/route.ts',
     'app/api/v2/rankings/route.ts',
-  ])('%s reads source watermarks and uses the shared fail-closed summary', (path) => {
+  ])('%s binds rows and metadata to a sealed publication generation', (path) => {
     const route = source(path)
-    expect(route).toContain("from('leaderboard_source_freshness')")
-    expect(route).toContain("select('source,source_as_of')")
-    expect(route).toContain('summarizeSourceFreshness(')
+    expect(route).toContain('readSealedRankingGeneration')
+    expect(route).toContain('rank_publication_id')
+    expect(route).not.toContain("from('leaderboard_source_freshness')")
   })
 
   it('the main and v2 endpoints do not derive public freshness from score compute time', () => {
@@ -39,10 +39,11 @@ describe('public ranking freshness route contracts', () => {
   it('SSR derives its timestamp from the complete live source generation', () => {
     const ssr = source('lib/getInitialTraders.ts')
 
-    expect(ssr).toContain('summarizeInitialTraderFreshness({')
-    expect(ssr).toContain('currentScoredSources(params.countRows)')
-    expect(ssr).toContain('lastUpdated: freshness.asOf')
-    expect(ssr).toContain('home-initial-traders-v4')
+    expect(ssr).toContain('readSealedRankingGeneration(')
+    expect(ssr).toContain('publication.scoreCohortId')
+    expect(ssr).toContain('publication.proofs')
+    expect(ssr).toContain('categoryCountsFromPublication(publication)')
+    expect(ssr).toContain('home-initial-traders-sealed-v5')
   })
 
   it('homepage carries the SSR stale flag into the interactive freshness state', () => {
