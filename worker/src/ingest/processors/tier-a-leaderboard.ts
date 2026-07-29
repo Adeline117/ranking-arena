@@ -48,7 +48,6 @@ import {
 import { STRICT_CANONICAL_JSON_CONTRACT } from '@/lib/ingest/strict-canonical-json'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
-import { publishBoardSeries } from '@/lib/ingest/serving/publish'
 import {
   hasRegisteredLeaderboardMetricTrust,
   type LeaderboardMetricTrustBundle,
@@ -61,6 +60,7 @@ import {
   type AuthorizedConsumedRegionContext,
 } from '../consumed-region-context'
 import {
+  publishFencedBoardSeries,
   publishFencedLeaderboardSnapshot,
   publishFencedTrustedLeaderboardSnapshot,
 } from '../fenced-tier-a-publication'
@@ -396,6 +396,9 @@ function parseLeaderboardSeriesWindow(input: {
       input.timeframe
     )
     for (const [traderId, blocks] of pageSeries) {
+      if (blocks.some((block) => block.timeframe !== input.timeframe)) {
+        throw new TypeError('[tier-a] board series block crossed its snapshot timeframe')
+      }
       const existing = boardSeries.get(traderId)
       if (existing) existing.push(...blocks)
       else boardSeries.set(traderId, blocks)
@@ -855,18 +858,24 @@ export async function processTierA(
         // chart with no extra fetch — closes the long-tail series gap that
         // otherwise waits on Tier-B topN / on-demand Tier-C.
         if (boardSeries.size > 0) {
-          const seriesOut = await publishBoardSeries(src, boardSeries, result.traderIds, {
-            expectedLatestSnapshots: new Map([
-              [
-                timeframe,
-                {
-                  id: result.snapshotId,
-                  rawObjectId,
-                  scrapedAt: new Date(result.scrapedAt).toISOString(),
-                },
-              ],
-            ]),
-          })
+          const seriesOut = await publishFencedBoardSeries(
+            src,
+            boardSeries,
+            result.traderIds,
+            context,
+            {
+              expectedLatestSnapshots: new Map([
+                [
+                  timeframe,
+                  {
+                    id: result.snapshotId,
+                    rawObjectId,
+                    scrapedAt: new Date(result.scrapedAt).toISOString(),
+                  },
+                ],
+              ]),
+            }
+          )
           console.log(
             `[tier-a] ${src.slug} ${timeframe}d board series: ` +
               `${seriesOut.points} pts for ${seriesOut.traders} traders`

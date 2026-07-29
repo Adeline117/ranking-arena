@@ -8,10 +8,10 @@
  * next Tier-A crawl and without a worker restart (pure re-parse of payloads
  * already on disk). Subsequent Tier-A crawls keep it warm automatically.
  *
- * Default is read-only. Applying writes requires both --apply and at least one
- * explicit adapter slug, for example:
+ * This command is read-only. Direct --apply is deliberately rejected: serving
+ * writes must be routed through the region-authorized Tier-A worker rather than
+ * bypassing its database fence. Example dry-run:
  *   npx tsx scripts/ingest-backfill-board-series.mts binance_web3
- *   npx tsx scripts/ingest-backfill-board-series.mts --apply binance_web3
  */
 import { config } from 'dotenv'
 import { resolve } from 'node:path'
@@ -20,7 +20,7 @@ import { getSourceBySlug, nativeRankingTimeframes } from '../lib/ingest/sources'
 import { getAdapter } from '../lib/ingest/core/adapter'
 import '../lib/ingest/adapters/register'
 import { readRawObject } from '../lib/ingest/raw'
-import { prepareBoardSeriesRows, publishBoardSeries } from '../lib/ingest/serving/publish'
+import { prepareBoardSeriesRows } from '../lib/ingest/serving/publish'
 import { validateLeaderboardRows } from '../lib/ingest/staging/validate'
 import type {
   BoardSeriesBlock,
@@ -119,11 +119,13 @@ async function main() {
   const unknownFlags = args.filter((arg) => arg.startsWith('--') && arg !== '--apply')
   if (unknownFlags.length > 0) throw new Error(`unknown flags: ${unknownFlags.join(', ')}`)
   const argSlugs = args.filter((arg) => !arg.startsWith('--'))
-  if (apply && argSlugs.length === 0) {
-    throw new Error('--apply requires at least one explicit adapter slug')
+  if (apply) {
+    throw new Error(
+      '--apply is disabled: a region-authorized Tier-A backfill route is required for serving publication'
+    )
   }
   const adapterSlugs = argSlugs.length > 0 ? argSlugs : SERIES_SLUGS
-  console.log(`[mode] ${apply ? 'APPLY' : 'DRY-RUN'} adapters=${adapterSlugs.join(',')}`)
+  console.warn(`[mode] DRY-RUN adapters=${adapterSlugs.join(',')}`)
 
   for (const adapterSlug of adapterSlugs) {
     const adapter = getAdapter(adapterSlug)
@@ -238,7 +240,7 @@ async function main() {
         }
         totalPts += prepared.rows.length
         totalTraders += prepared.traders
-        console.log(
+        console.warn(
           `[${slug}] ${timeframe}d snapshot=${snap.id} raw=${snap.rawObjectId} ` +
             `scraped=${snap.scrapedAt} pages=${pageArr.length} rows=${snap.actualCount}: ` +
             `${prepared.rows.length} pts / ${prepared.traders} traders (preflight)`
@@ -250,30 +252,8 @@ async function main() {
           `[${slug}] combined key mismatch: per-tf=${totalPts}, combined=${combined.rows.length}`
         )
       }
-      if (apply) {
-        const written = await publishBoardSeries(src, allSeries, traderIds, {
-          expectedLatestSnapshots: new Map(
-            nativeTfs.map((timeframe) => {
-              const snap = snapsByTf.get(timeframe)!
-              return [
-                timeframe,
-                {
-                  id: snap.id,
-                  rawObjectId: snap.rawObjectId!,
-                  scrapedAt: snap.scrapedAt,
-                },
-              ]
-            })
-          ),
-        })
-        if (written.points !== combined.rows.length || written.traders !== combined.traders) {
-          throw new Error(
-            `[${slug}] post-write mismatch: expected=${combined.rows.length}/${combined.traders}, actual=${written.points}/${written.traders}`
-          )
-        }
-      }
-      console.log(
-        `[${slug}] ${apply ? 'APPLIED' : 'DRY-RUN PASS'}: ${totalPts} pts across ${totalTraders} trader-TFs (${combined.traders} unique traders)`
+      console.warn(
+        `[${slug}] DRY-RUN PASS: ${totalPts} pts across ${totalTraders} trader-TFs (${combined.traders} unique traders)`
       )
     }
   }
