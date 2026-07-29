@@ -5,7 +5,7 @@ const route = readFileSync(join(process.cwd(), 'app/api/cron/daily-digest/route.
 
 describe('daily operational digest authority', () => {
   it('uses the canonical registry, visibility, and watermark freshness report', () => {
-    expect(route).toContain('buildFreshnessReport(AbortSignal.timeout(30_000))')
+    expect(route).toContain('buildFreshnessReport(freshnessSignal)')
     expect(route).not.toContain(".from('leaderboard_ranks')")
     expect(route).not.toContain("select('computed_at')")
   })
@@ -18,10 +18,20 @@ describe('daily operational digest authority', () => {
   })
 
   it('fails closed on every input or Telegram delivery failure', () => {
-    expect(route).toContain('if (logsError || logs === null)')
-    expect(route).toContain('if (snapshotCount24hError)')
-    expect(route).toContain('if (snapshotCountYesterdayError)')
-    expect(route).toContain('if (errorLogsError || errorLogs === null)')
+    expect(route).toContain('if (logsError || !Array.isArray(logs))')
+    expect(route).toContain("typeof snapshotCount24h !== 'number'")
+    expect(route).toContain('!Number.isSafeInteger(snapshotCount24h)')
+    expect(route).toContain("typeof snapshotCountYesterday !== 'number'")
+    expect(route).toContain('!Number.isSafeInteger(snapshotCountYesterday)')
+    expect(route).toContain('if (errorLogsError || !Array.isArray(errorLogs))')
     expect(route).toContain("throw new Error('Daily digest delivery failed')")
+  })
+
+  it('reads all independent inputs concurrently under one bounded signal', () => {
+    expect(route).toContain('const dataSignal = AbortSignal.timeout(40_000)')
+    expect(route).toContain('const freshnessSignal = AbortSignal.any')
+    expect(route.match(/\.abortSignal\(dataSignal\)/g)).toHaveLength(4)
+    expect(route).toContain('] = await Promise.all([')
+    expect(route).toContain('{ safetyTimeoutMs: 115_000 }')
   })
 })
