@@ -1,0 +1,528 @@
+\set ON_ERROR_STOP on
+
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+SELECT pg_catalog.set_config(
+  'arena.stripe_livemode',
+  'true',
+  false
+);
+
+INSERT INTO auth.users(id) VALUES
+  ('e7300000-0000-4000-8000-000000000001'),
+  ('e7300000-0000-4000-8000-000000000002'),
+  ('e7300000-0000-4000-8000-000000000003');
+
+INSERT INTO public.user_profiles(
+  id,
+  handle,
+  stripe_customer_id
+) VALUES
+  (
+    'e7300000-0000-4000-8000-000000000001',
+    'withdrawal_payment_first',
+    'cus_withdrawal_payment_first'
+  ),
+  (
+    'e7300000-0000-4000-8000-000000000002',
+    'withdrawal_recipient',
+    NULL
+  ),
+  (
+    'e7300000-0000-4000-8000-000000000003',
+    'withdrawal_event_first',
+    'cus_withdrawal_event_first'
+  );
+
+INSERT INTO public.posts(id, author_id, title, content) VALUES
+  (
+    'e7310000-0000-4000-8000-000000000001',
+    'e7300000-0000-4000-8000-000000000002',
+    'withdrawal payment first',
+    'withdrawal payment first'
+  ),
+  (
+    'e7310000-0000-4000-8000-000000000002',
+    'e7300000-0000-4000-8000-000000000002',
+    'withdrawal event first',
+    'withdrawal event first'
+  );
+
+DO $reject_warning_inquiry$
+BEGIN
+  BEGIN
+    PERFORM public.record_api_tier_dispute_reversal_atomic(
+      true,
+      'evt_withdrawal_warning',
+      1900000300,
+      'dp_withdrawal_warning',
+      'warning_needs_response',
+      'fraudulent',
+      500,
+      'usd',
+      'cus_withdrawal_payment_first',
+      'pi_withdrawal_warning',
+      'ch_withdrawal_warning',
+      500
+    );
+    RAISE EXCEPTION
+      'warning inquiry was accepted as financial reversal authority';
+  EXCEPTION
+    WHEN SQLSTATE '22023' THEN
+      NULL;
+  END;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.stripe_charge_dispute_events AS dispute
+    WHERE dispute.stripe_dispute_id =
+      'dp_withdrawal_warning'
+  ) THEN
+    RAISE EXCEPTION
+      'warning inquiry reached the immutable dispute ledger';
+  END IF;
+END
+$reject_warning_inquiry$;
+
+INSERT INTO public.tips(
+  id,
+  post_id,
+  from_user_id,
+  to_user_id,
+  amount_cents,
+  status,
+  stripe_checkout_session_id
+) VALUES (
+  'e7320000-0000-4000-8000-000000000001',
+  'e7310000-0000-4000-8000-000000000001',
+  'e7300000-0000-4000-8000-000000000001',
+  'e7300000-0000-4000-8000-000000000002',
+  500,
+  'pending',
+  'cs_withdrawal_payment_first'
+);
+
+SELECT public.complete_tip_with_stripe_ownership_atomic(
+  'e7320000-0000-4000-8000-000000000001',
+  'cus_withdrawal_payment_first',
+  'pi_withdrawal_payment_first',
+  'ch_withdrawal_payment_first',
+  'cs_withdrawal_payment_first',
+  500,
+  'usd',
+  pg_catalog.clock_timestamp()
+);
+
+DO $created_then_withdrawn_replays$
+DECLARE
+  v_result jsonb;
+  v_ownership_id uuid;
+BEGIN
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_withdrawal_created_first',
+    1900000301,
+    'dp_withdrawal_first',
+    'needs_response',
+    'fraudulent',
+    500,
+    'usd',
+    'cus_withdrawal_payment_first',
+    'pi_withdrawal_payment_first',
+    'ch_withdrawal_payment_first',
+    500
+  );
+  IF v_result IS DISTINCT FROM '{"status":"not_api"}'::jsonb THEN
+    RAISE EXCEPTION
+      'first active dispute did not project exactly: %',
+      v_result;
+  END IF;
+
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_withdrawal_funds_second',
+    1900000302,
+    'dp_withdrawal_first',
+    'under_review',
+    'fraudulent',
+    500,
+    'usd',
+    'cus_withdrawal_payment_first',
+    'pi_withdrawal_payment_first',
+    'ch_withdrawal_payment_first',
+    500
+  );
+  IF v_result IS DISTINCT FROM
+      '{"status":"already_withdrawn"}'::jsonb
+  THEN
+    RAISE EXCEPTION
+      'funds_withdrawn replay was not acknowledged exactly: %',
+      v_result;
+  END IF;
+
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_withdrawal_created_third',
+    1900000303,
+    'dp_withdrawal_first',
+    'lost',
+    'fraudulent',
+    500,
+    'usd',
+    'cus_withdrawal_payment_first',
+    'pi_withdrawal_payment_first',
+    'ch_withdrawal_payment_first',
+    500
+  );
+  IF v_result IS DISTINCT FROM
+      '{"status":"already_withdrawn"}'::jsonb
+  THEN
+    RAISE EXCEPTION
+      'created replay after funds withdrawal did not converge: %',
+      v_result;
+  END IF;
+
+  SELECT ownership.id
+  INTO STRICT v_ownership_id
+  FROM public.stripe_payment_ownerships AS ownership
+  WHERE ownership.stripe_charge_id =
+    'ch_withdrawal_payment_first';
+
+  IF (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_charge_dispute_events AS dispute
+      WHERE dispute.stripe_dispute_id =
+        'dp_withdrawal_first'
+    ) <> 1
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_charge_dispute_projections AS projection
+      WHERE projection.ownership_id = v_ownership_id
+        AND projection.stripe_event_id =
+          'evt_withdrawal_created_first'
+    ) <> 1
+    OR NOT public.stripe_payment_ownership_has_active_dispute_v3(
+      v_ownership_id
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id =
+          'e7320000-0000-4000-8000-000000000001'
+        AND tip.status = 'refunded'
+    )
+  THEN
+    RAISE EXCEPTION
+      'created/funds_withdrawn replay duplicated or lost reversal authority';
+  END IF;
+END
+$created_then_withdrawn_replays$;
+
+-- A second active dispute on the same payment must remain independent. Winning
+-- only the first dispute cannot restore access; winning the final dispute can.
+DO $multiple_disputes_remain_independent$
+DECLARE
+  v_result jsonb;
+  v_ownership_id uuid;
+BEGIN
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_withdrawal_second_dispute',
+    1900000304,
+    'dp_withdrawal_second',
+    'needs_response',
+    'duplicate',
+    500,
+    'usd',
+    'cus_withdrawal_payment_first',
+    'pi_withdrawal_payment_first',
+    'ch_withdrawal_payment_first',
+    500
+  );
+  IF v_result IS DISTINCT FROM '{"status":"not_api"}'::jsonb THEN
+    RAISE EXCEPTION
+      'second active dispute did not project exactly: %',
+      v_result;
+  END IF;
+
+  v_result :=
+    public.record_stripe_charge_dispute_reinstatement_atomic(
+      true,
+      'evt_withdrawal_first_won',
+      1900000305,
+      'dp_withdrawal_first',
+      'won',
+      'fraudulent',
+      500,
+      'usd',
+      'cus_withdrawal_payment_first',
+      'pi_withdrawal_payment_first',
+      'ch_withdrawal_payment_first',
+      500,
+      0
+    );
+  IF v_result IS DISTINCT FROM
+      '{"status":"refund_preserved"}'::jsonb
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_charge_dispute_reinstatement_projections
+        AS projection
+      WHERE projection.stripe_event_id =
+          'evt_withdrawal_first_won'
+        AND projection.result ->> 'reason' =
+          'other_dispute_active'
+        AND projection.result ->> 'access_restored' =
+          'false'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id =
+          'e7320000-0000-4000-8000-000000000001'
+        AND tip.status = 'refunded'
+    )
+  THEN
+    RAISE EXCEPTION
+      'winning one of multiple disputes restored paid access: %',
+      v_result;
+  END IF;
+
+  v_result :=
+    public.record_stripe_charge_dispute_reinstatement_atomic(
+      true,
+      'evt_withdrawal_second_won',
+      1900000306,
+      'dp_withdrawal_second',
+      'won',
+      'duplicate',
+      500,
+      'usd',
+      'cus_withdrawal_payment_first',
+      'pi_withdrawal_payment_first',
+      'ch_withdrawal_payment_first',
+      500,
+      0
+    );
+  IF v_result IS DISTINCT FROM '{"status":"restored"}'::jsonb
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id =
+          'e7320000-0000-4000-8000-000000000001'
+        AND tip.status = 'completed'
+    )
+  THEN
+    RAISE EXCEPTION
+      'final won dispute did not restore exact paid access: %',
+      v_result;
+  END IF;
+
+  SELECT ownership.id
+  INTO STRICT v_ownership_id
+  FROM public.stripe_payment_ownerships AS ownership
+  WHERE ownership.stripe_charge_id =
+    'ch_withdrawal_payment_first';
+  IF public.stripe_payment_ownership_has_active_dispute_v3(
+    v_ownership_id
+  ) THEN
+    RAISE EXCEPTION
+      'fully reinstated payment retained active dispute authority';
+  END IF;
+END
+$multiple_disputes_remain_independent$;
+
+INSERT INTO public.tips(
+  id,
+  post_id,
+  from_user_id,
+  to_user_id,
+  amount_cents,
+  status,
+  stripe_checkout_session_id
+) VALUES (
+  'e7320000-0000-4000-8000-000000000002',
+  'e7310000-0000-4000-8000-000000000002',
+  'e7300000-0000-4000-8000-000000000003',
+  'e7300000-0000-4000-8000-000000000002',
+  700,
+  'pending',
+  'cs_withdrawal_event_first'
+);
+
+DO $funds_withdrawn_before_created_and_payment$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_withdrawal_event_first',
+    1900000310,
+    'dp_withdrawal_event_first',
+    'under_review',
+    'fraudulent',
+    700,
+    'usd',
+    'cus_withdrawal_event_first',
+    'pi_withdrawal_event_first',
+    'ch_withdrawal_event_first',
+    700
+  );
+  IF v_result IS DISTINCT FROM '{"status":"not_api"}'::jsonb THEN
+    RAISE EXCEPTION
+      'funds-withdrawn-first event was not persisted: %',
+      v_result;
+  END IF;
+
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_withdrawal_created_late',
+    1900000311,
+    'dp_withdrawal_event_first',
+    'needs_response',
+    'fraudulent',
+    700,
+    'usd',
+    'cus_withdrawal_event_first',
+    'pi_withdrawal_event_first',
+    'ch_withdrawal_event_first',
+    700
+  );
+  IF v_result IS DISTINCT FROM
+      '{"status":"already_withdrawn"}'::jsonb
+  THEN
+    RAISE EXCEPTION
+      'late created event did not converge on withdrawn funds: %',
+      v_result;
+  END IF;
+END
+$funds_withdrawn_before_created_and_payment$;
+
+SELECT public.complete_tip_with_stripe_ownership_atomic(
+  'e7320000-0000-4000-8000-000000000002',
+  'cus_withdrawal_event_first',
+  'pi_withdrawal_event_first',
+  'ch_withdrawal_event_first',
+  'cs_withdrawal_event_first',
+  700,
+  'usd',
+  pg_catalog.clock_timestamp()
+);
+
+DO $prove_deferred_projection_and_readiness$
+DECLARE
+  v_readiness jsonb;
+BEGIN
+  IF NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id =
+          'e7320000-0000-4000-8000-000000000002'
+        AND tip.status = 'refunded'
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_charge_dispute_events AS dispute
+      WHERE dispute.stripe_dispute_id =
+        'dp_withdrawal_event_first'
+    ) <> 1
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_charge_dispute_projections AS projection
+      WHERE projection.stripe_event_id =
+        'evt_withdrawal_event_first'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION
+      'funds-withdrawn-first deferred projection did not converge';
+  END IF;
+
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  IF COALESCE(
+      (v_readiness ->> 'unprojected_charge_disputes')::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'charge_dispute_identity_anomalies'
+      )::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'charge_dispute_authority_drift'
+      )::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'unprojected_dispute_reinstatements'
+      )::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'dispute_reinstatement_identity_anomalies'
+      )::integer,
+      -1
+    ) <> 0
+    OR COALESCE(
+      (
+        v_readiness
+          ->> 'dispute_reinstatement_authority_drift'
+      )::integer,
+      -1
+    ) <> 0
+  THEN
+    RAISE EXCEPTION
+      'funds-withdrawal readiness did not converge: %',
+      v_readiness;
+  END IF;
+END
+$prove_deferred_projection_and_readiness$;
+
+DO $conflicting_replay_enters_manual_review$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_withdrawal_conflict',
+    1900000312,
+    'dp_withdrawal_event_first',
+    'lost',
+    'duplicate',
+    700,
+    'usd',
+    'cus_withdrawal_event_first',
+    'pi_withdrawal_event_first',
+    'ch_withdrawal_event_first',
+    700
+  );
+  IF v_result IS DISTINCT FROM
+      '{"status":"identity_conflict"}'::jsonb
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'dispute'
+        AND review.object_id =
+          'dp_withdrawal_event_first'
+        AND review.reason_key =
+          'stripe_dispute_withdrawal_identity_conflict'
+        AND review.state = 'open'
+    )
+  THEN
+    RAISE EXCEPTION
+      'conflicting withdrawal replay escaped manual review: %',
+      v_result;
+  END IF;
+END
+$conflicting_replay_enters_manual_review$;
+
+\echo 'Stripe dispute funds-withdrawal authority fixture passed'

@@ -179,6 +179,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260729065000_stripe_entitlement_livemode_authority.sql
   20260729066000_stripe_charge_dispute_authority.sql
   20260729069000_stripe_dispute_funds_reinstatement.sql
+  20260729073000_stripe_dispute_funds_withdrawal_authority.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover
