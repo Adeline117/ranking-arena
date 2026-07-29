@@ -6,6 +6,7 @@
 import { timingSafeEqual } from 'crypto'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { isProfileSuspended } from '@/lib/auth/profile-suspension'
 
 export type AdminAuthResult =
   | { status: 'authorized' }
@@ -125,13 +126,13 @@ export async function verifyAdminAuthResult(
 
       const profileQuery = getSupabaseAdmin()
         .from('user_profiles')
-        .select('role, banned_at, deleted_at')
+        .select('role, banned_at, deleted_at, is_banned, ban_expires_at')
         .eq('id', user.id)
       const { data: profile, error: profileError } = await (
         options.signal ? profileQuery.abortSignal(options.signal) : profileQuery
       ).maybeSingle()
       if (profileError) return { status: 'unavailable', error: profileError }
-      if (!profile || profile.banned_at || profile.deleted_at) return { status: 'invalid' }
+      if (!profile || isProfileSuspended(profile)) return { status: 'invalid' }
       const isAdminByRole = profile?.role === 'admin'
       if (!isAdminByRole) return { status: 'invalid' }
 

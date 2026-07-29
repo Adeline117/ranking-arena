@@ -202,6 +202,26 @@ describe('verifyAdminAuth', () => {
   test.each([
     [{ role: 'admin', banned_at: '2026-07-15T00:00:00.000Z', deleted_at: null }, null],
     [{ role: 'admin', banned_at: null, deleted_at: '2026-07-15T00:00:00.000Z' }, null],
+    [
+      {
+        role: 'admin',
+        banned_at: null,
+        deleted_at: null,
+        is_banned: true,
+        ban_expires_at: null,
+      },
+      null,
+    ],
+    [
+      {
+        role: 'admin',
+        banned_at: null,
+        deleted_at: null,
+        is_banned: true,
+        ban_expires_at: '2999-01-01T00:00:00.000Z',
+      },
+      null,
+    ],
     [null, { message: 'profile lookup failed' }],
   ])('rejects non-active human admin JWT status', async (profile, profileError) => {
     mockGetUser.mockResolvedValueOnce({
@@ -212,6 +232,27 @@ describe('verifyAdminAuth', () => {
 
     const req = makeRequest({ authorization: 'Bearer valid-admin-jwt-token' })
     expect(await verifyAdminAuth(req)).toBe(false)
+  })
+
+  test('authorizes an expired legacy admin ban without persistent markers', async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'admin@example.com' } },
+      error: null,
+    })
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: {
+        role: 'admin',
+        banned_at: null,
+        deleted_at: null,
+        is_banned: true,
+        ban_expires_at: '2000-01-01T00:00:00.000Z',
+      },
+      error: null,
+    })
+
+    await expect(
+      verifyAdminAuth(makeRequest({ authorization: 'Bearer valid-admin-jwt-token' }))
+    ).resolves.toBe(true)
   })
 
   test('invalid JWT (getUser error) returns false', async () => {

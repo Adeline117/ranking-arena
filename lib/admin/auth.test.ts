@@ -262,6 +262,26 @@ describe('verifyAdmin', () => {
   test.each([
     [{ role: 'admin', banned_at: '2026-07-15T00:00:00.000Z', deleted_at: null }, null],
     [{ role: 'admin', banned_at: null, deleted_at: '2026-07-15T00:00:00.000Z' }, null],
+    [
+      {
+        role: 'admin',
+        banned_at: null,
+        deleted_at: null,
+        is_banned: true,
+        ban_expires_at: null,
+      },
+      null,
+    ],
+    [
+      {
+        role: 'admin',
+        banned_at: null,
+        deleted_at: null,
+        is_banned: true,
+        ban_expires_at: '2999-01-01T00:00:00.000Z',
+      },
+      null,
+    ],
     [null, { message: 'profile lookup failed' }],
   ])('fails closed when privileged account status is not active', async (profile, profileError) => {
     const mockSupabase = {
@@ -280,6 +300,34 @@ describe('verifyAdmin', () => {
     await expect(
       verifyAdmin(mockSupabase as unknown as SupabaseClient<Database>, 'Bearer validtoken')
     ).resolves.toBeNull()
+  })
+
+  test('allows an expired legacy ban when no persistent suspension marker remains', async () => {
+    const mockSupabase = {
+      auth: {
+        getUser: jest.fn().mockResolvedValue({
+          data: { user: { id: 'admin-user', email: 'admin@example.com' } },
+          error: null,
+        }),
+      },
+      from: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: {
+          role: 'admin',
+          banned_at: null,
+          deleted_at: null,
+          is_banned: true,
+          ban_expires_at: '2000-01-01T00:00:00.000Z',
+        },
+        error: null,
+      }),
+    }
+
+    await expect(
+      verifyAdmin(mockSupabase as unknown as SupabaseClient<Database>, 'Bearer validtoken')
+    ).resolves.toEqual({ id: 'admin-user', email: 'admin@example.com' })
   })
 
   test('rejects a suspended moderator before applying role authorization', async () => {

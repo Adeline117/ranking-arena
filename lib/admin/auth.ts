@@ -5,6 +5,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { isProfileSuspended } from '@/lib/auth/profile-suspension'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('admin-auth')
@@ -54,14 +55,14 @@ export async function verifyAdmin(
   // 方法2: 数据库角色（仅 dev/staging 可作为备用）
   const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('role, banned_at, deleted_at')
+    .select('role, banned_at, deleted_at, is_banned, ban_expires_at')
     .eq('id', user.id)
     .maybeSingle()
 
   // Human admin JWTs remain subject to the same account lifecycle as every
   // other user. The profile lookup is deliberately uncached and fail-closed so
   // a new suspension takes effect immediately for privileged operations.
-  if (profileError || !profile || profile.banned_at || profile.deleted_at) {
+  if (profileError || !profile || isProfileSuspended(profile)) {
     return null
   }
 
@@ -106,11 +107,11 @@ export async function verifyModeratorOrAdmin(
   // 方法2: 数据库角色
   const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('role, banned_at, deleted_at')
+    .select('role, banned_at, deleted_at, is_banned, ban_expires_at')
     .eq('id', user.id)
     .maybeSingle()
 
-  if (profileError || !profile || profile.banned_at || profile.deleted_at) {
+  if (profileError || !profile || isProfileSuspended(profile)) {
     return null
   }
 
