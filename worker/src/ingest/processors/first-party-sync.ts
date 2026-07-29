@@ -74,6 +74,7 @@ interface FirstPartyExchangeContract {
 // closed: neither balance.total nor ledger/history semantics are portable.
 const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchangeContract>> = {
   binance: {
+    balanceSource: 'binance_margin_balance',
     balanceSemantics: 'total_includes_unrealized',
     realizedPnlSource: 'income_ledger',
     transferLedgerContract: {

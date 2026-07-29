@@ -209,6 +209,7 @@ describe('first-party sync processor', () => {
       expect(mockFetchAccount).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
+          balanceSource: 'binance_margin_balance',
           balanceSemantics: 'total_includes_unrealized',
           realizedPnlSource: 'income_ledger',
           transferLedgerContract: expect.objectContaining({

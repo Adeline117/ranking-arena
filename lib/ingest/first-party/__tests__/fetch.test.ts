@@ -108,6 +108,33 @@ describe('first-party account equity evidence', () => {
     })
   })
 
+  it('uses Binance total margin balance in multi-assets mode', async () => {
+    const result = await fetchFirstPartyAccount(
+      client({
+        fetchBalance: jest.fn().mockResolvedValue({
+          total: { USDT: 23.72469206 },
+          info: {
+            multiAssetsMargin: true,
+            totalWalletBalance: '126.72469206',
+            totalUnrealizedProfit: '5',
+            totalMarginBalance: '131.72469206',
+          },
+        }),
+      }),
+      {
+        nowMs: NOW,
+        balanceSource: 'binance_margin_balance',
+        balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
+      }
+    )
+
+    expect(result).toMatchObject({
+      balanceNow: 131.72469206,
+      equityNow: 131.72469206,
+    })
+  })
+
   it('rejects a response with no finite stablecoin balance evidence', async () => {
     const missingBalance = client({
       fetchBalance: jest.fn().mockResolvedValue({ total: {} }),
