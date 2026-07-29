@@ -28,6 +28,8 @@ export interface RealizedEvent {
   pnl: number
   /** true when the event is a per-position close (exact win rate basis). */
   positionLevel: boolean
+  /** Fees/funding affect PnL but are not standalone wins or losses. */
+  winRateEligible?: boolean
 }
 
 export interface EquitySnapshotRow {
@@ -92,9 +94,10 @@ export function computeFirstParty(input: FirstPartyComputeInput): FirstPartyResu
     const startMs = nowMs - tf * DAY_MS
     const inWindow = events.filter((e) => e.ts >= startMs && e.ts <= nowMs)
     const pnl = inWindow.reduce((s, e) => s + e.pnl, 0)
-    const positionLevel = inWindow.length > 0 && inWindow.every((e) => e.positionLevel)
-    const wins = inWindow.filter((e) => e.pnl > 0).length
-    const total = inWindow.length
+    const winEvents = inWindow.filter((event) => event.winRateEligible !== false)
+    const positionLevel = winEvents.length > 0 && winEvents.every((e) => e.positionLevel)
+    const wins = winEvents.filter((e) => e.pnl > 0).length
+    const total = winEvents.length
     const netIn = input.netTransfersIn[tf]
 
     // ROI denominator: earliest snapshot INSIDE the window if snapshot history

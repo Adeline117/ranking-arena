@@ -116,6 +116,30 @@ describe('computeFirstParty', () => {
     expect(s7.extras.win_rate_basis).toBe('income_events')
   })
 
+  it('includes fees and funding in PnL without counting them as wins or losses', () => {
+    const r = computeFirstParty({
+      nowMs: NOW,
+      currency: 'USDT',
+      equityNow: 1095,
+      balanceNow: null,
+      unrealizedNow: null,
+      events: [
+        ev(1, 100, false),
+        { ...ev(1, -2, false), winRateEligible: false },
+        { ...ev(1, -3, false), winRateEligible: false },
+      ],
+      netTransfersIn: { 7: 0 },
+      netTransfersSinceLast: 0,
+      snapshots: [],
+    })
+
+    const s7 = r.stats.find((s) => s.timeframe === 7)!
+    expect(s7.pnl).toBe(95)
+    expect(s7.winRate).toBe(100)
+    expect(s7.winPositions).toBe(1)
+    expect(s7.totalPositions).toBe(1)
+  })
+
   it('keeps reconstructed ROI and cumulative transfers null when transfer evidence is unknown', () => {
     const r = computeFirstParty({
       nowMs: NOW,

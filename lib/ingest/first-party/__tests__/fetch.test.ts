@@ -248,16 +248,30 @@ describe('first-party account equity evidence', () => {
   })
 
   it('preserves the loss sign from a normalized CCXT Binance ledger entry', async () => {
-    const fetchLedger = jest.fn().mockResolvedValue([
-      {
-        timestamp: NOW - 1_000,
-        amount: 25,
-        direction: 'out',
-        type: 'trade',
-        currency: 'USDT',
-        info: { incomeType: 'REALIZED_PNL', income: '-25', asset: 'USDT' },
-      },
-    ])
+    const fetchLedger = jest
+      .fn()
+      .mockImplementation(
+        (
+          _code: string | undefined,
+          _since: number,
+          _limit: number,
+          params: Record<string, unknown>
+        ) =>
+          Promise.resolve(
+            params.incomeType === 'REALIZED_PNL'
+              ? [
+                  {
+                    timestamp: NOW - 1_000,
+                    amount: 25,
+                    direction: 'out',
+                    type: 'trade',
+                    currency: 'USDT',
+                    info: { incomeType: 'REALIZED_PNL', income: '-25', asset: 'USDT' },
+                  },
+                ]
+              : []
+          )
+      )
 
     const result = await fetchFirstPartyAccount(
       client({
@@ -277,6 +291,63 @@ describe('first-party account equity evidence', () => {
       incomeType: 'REALIZED_PNL',
       until: NOW,
     })
+    expect(fetchLedger).toHaveBeenCalledWith(undefined, NOW - 90 * DAY, 1000, {
+      incomeType: 'COMMISSION',
+      until: NOW,
+    })
+    expect(fetchLedger).toHaveBeenCalledWith(undefined, NOW - 90 * DAY, 1000, {
+      incomeType: 'FUNDING_FEE',
+      until: NOW,
+    })
+  })
+
+  it('includes Binance commissions and funding in net PnL without making them win events', async () => {
+    const entries = {
+      REALIZED_PNL: {
+        timestamp: NOW - 3_000,
+        amount: 100,
+        direction: 'in',
+        currency: 'USDT',
+        info: { incomeType: 'REALIZED_PNL', income: '100', asset: 'USDT' },
+      },
+      COMMISSION: {
+        timestamp: NOW - 2_000,
+        amount: 2,
+        direction: 'out',
+        currency: 'USDT',
+        info: { incomeType: 'COMMISSION', income: '-2', asset: 'USDT' },
+      },
+      FUNDING_FEE: {
+        timestamp: NOW - 1_000,
+        amount: 3,
+        direction: 'out',
+        currency: 'USDT',
+        info: { incomeType: 'FUNDING_FEE', income: '-3', asset: 'USDT' },
+      },
+    }
+    const fetchLedger = jest
+      .fn()
+      .mockImplementation(
+        (
+          _code: string | undefined,
+          _since: number,
+          _limit: number,
+          params: Record<string, unknown>
+        ) => Promise.resolve([entries[params.incomeType as keyof typeof entries]])
+      )
+
+    const result = await fetchFirstPartyAccount(client({ fetchLedger }), {
+      nowMs: NOW,
+      balanceSemantics: 'total_includes_unrealized',
+      realizedPnlSource: 'income_ledger',
+      requireStablePnlCurrency: true,
+    })
+
+    expect(result.events).toEqual([
+      { ts: NOW - 3_000, pnl: 100, positionLevel: false },
+      { ts: NOW - 2_000, pnl: -2, positionLevel: false, winRateEligible: false },
+      { ts: NOW - 1_000, pnl: -3, positionLevel: false, winRateEligible: false },
+    ])
   })
 
   it('time-partitions a saturated realized-PnL ledger instead of publishing a partial page', async () => {
@@ -290,6 +361,7 @@ describe('first-party account equity evidence', () => {
     }))
     const fetchLedger = jest
       .fn()
+      .mockResolvedValue([])
       .mockResolvedValueOnce(saturated)
       .mockResolvedValueOnce([
         {

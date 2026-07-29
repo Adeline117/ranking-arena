@@ -76,6 +76,7 @@ const USD_STABLES = new Set(['USDT', 'USDC', 'USD', 'BUSD', 'FDUSD'])
 const POSITION_HISTORY_LIMIT = 100
 const LEDGER_LIMIT = 1000
 const MAX_EVIDENCE_REQUESTS = 128
+const NET_PNL_INCOME_TYPES = ['REALIZED_PNL', 'COMMISSION', 'FUNDING_FEE'] as const
 
 function num(v: unknown): number | null {
   if (v === null || v === undefined) return null
@@ -252,13 +253,17 @@ async function eventsFromLedger(
   const out: RealizedEvent[] = []
   let requests = 0
 
-  const fetchRange = async (rangeStart: number, rangeEnd: number): Promise<void> => {
+  const fetchRange = async (
+    rangeStart: number,
+    rangeEnd: number,
+    requestedIncomeType: (typeof NET_PNL_INCOME_TYPES)[number]
+  ): Promise<void> => {
     requests += 1
     if (requests > MAX_EVIDENCE_REQUESTS) {
       throw new Error('[first-party] realized PnL ledger evidence is truncated')
     }
     const rows = await fetchLedger(undefined, rangeStart, LEDGER_LIMIT, {
-      incomeType: 'REALIZED_PNL',
+      incomeType: requestedIncomeType,
       until: rangeEnd,
     })
     if (rows.length >= LEDGER_LIMIT) {
@@ -266,8 +271,8 @@ async function eventsFromLedger(
         throw new Error('[first-party] realized PnL ledger evidence is truncated')
       }
       const midpoint = Math.floor((rangeStart + rangeEnd) / 2)
-      await fetchRange(rangeStart, midpoint)
-      await fetchRange(midpoint + 1, rangeEnd)
+      await fetchRange(rangeStart, midpoint, requestedIncomeType)
+      await fetchRange(midpoint + 1, rangeEnd, requestedIncomeType)
       return
     }
     for (const r of rows) {
@@ -275,7 +280,7 @@ async function eventsFromLedger(
       const incomeType = String(
         (r.info as { incomeType?: unknown })?.incomeType ?? r.type ?? ''
       ).toUpperCase()
-      if (incomeType === 'REALIZED_PNL') {
+      if (incomeType === requestedIncomeType) {
         // CCXT ledger entries normalize amount to an absolute value and carry
         // the sign in `direction`; Binance's raw income remains signed.
         const rawIncome = num((r.info as { income?: unknown })?.income)
@@ -296,12 +301,21 @@ async function eventsFromLedger(
         if (requireStableCurrency && (currency === null || !USD_STABLES.has(currency))) {
           throw new Error('[first-party] realized PnL ledger currency evidence is invalid')
         }
-        out.push({ ts, pnl: amt, positionLevel: false })
+        out.push({
+          ts,
+          pnl: amt,
+          positionLevel: false,
+          ...(incomeType === 'REALIZED_PNL' ? {} : { winRateEligible: false }),
+        })
+      } else {
+        throw new Error('[first-party] realized PnL ledger evidence is invalid')
       }
     }
   }
 
-  await fetchRange(sinceMs, untilMs)
+  for (const incomeType of NET_PNL_INCOME_TYPES) {
+    await fetchRange(sinceMs, untilMs, incomeType)
+  }
   return out.sort((a, b) => a.ts - b.ts)
 }
 
