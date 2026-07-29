@@ -1133,6 +1133,10 @@ export async function resolveTrader(
         handle: decodedHandle,
         error: candidatesError.message,
       })
+      throw new Error(`trader identity lookup failed: ${candidatesError.message}`)
+    }
+    if (!Array.isArray(rawCandidates)) {
+      throw new Error('trader identity lookup returned an ambiguous null result')
     }
     // Never resolve to a retired or quarantined source. One exchange_trader_id can collide
     // across sources (e.g. okx_web3 RETIRED + okx_futures live). Filtering in
@@ -1202,10 +1206,13 @@ export async function resolveTrader(
             ) || data
         }
       } catch (error) {
-        logger.warn('[resolveTrader] sealed candidate ranking unavailable', {
+        logger.error('[resolveTrader] sealed candidate ranking unavailable', {
           handle: decodedHandle,
           error: error instanceof Error ? error.message : String(error),
         })
+        throw error instanceof Error
+          ? error
+          : new Error('sealed candidate ranking failed with an unknown error')
       }
     }
     if (data) {
@@ -1244,9 +1251,16 @@ export async function resolveTrader(
         handle: decodedHandle,
         profileError: profileResult.error?.message,
       })
+      throw new Error(`trader profile lookup failed: ${profileResult.error.message}`)
+    }
+    if (profileResult.data === undefined) {
+      throw new Error('trader profile lookup returned an ambiguous result')
     }
 
     if (profileResult.data) {
+      if (!isPublicRankingSourceAllowed(profileResult.data.platform)) {
+        throw new Error('trader profile lookup escaped the public source fence')
+      }
       return {
         platform: profileResult.data.platform,
         traderKey: profileResult.data.trader_key,
@@ -1300,7 +1314,9 @@ export async function resolveTrader(
             season,
             error: error instanceof Error ? error.message : String(error),
           })
-          break
+          throw error instanceof Error
+            ? error
+            : new Error('sealed leaderboard fallback failed with an unknown error')
         }
       }
     }

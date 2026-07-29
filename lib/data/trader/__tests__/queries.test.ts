@@ -372,4 +372,112 @@ describe('resolveTrader sealed candidate ranking', () => {
       avatarUrl: null,
     })
   })
+
+  it.each([
+    {
+      name: 'database error',
+      result: { data: null, error: { message: 'directory unavailable' } },
+      expected: 'trader identity lookup failed: directory unavailable',
+    },
+    {
+      name: 'ambiguous null',
+      result: { data: null, error: null },
+      expected: 'trader identity lookup returned an ambiguous null result',
+    },
+  ])('fails closed on trader_sources $name', async ({ result, expected }) => {
+    const candidateQuery: Record<string, jest.Mock> = {}
+    for (const method of ['select', 'or', 'eq', 'in', 'order']) {
+      candidateQuery[method] = jest.fn(() => candidateQuery)
+    }
+    candidateQuery.limit = jest.fn().mockResolvedValue(result)
+    const from = jest.fn((table: string) => {
+      if (table === 'trader_sources') return candidateQuery
+      throw new Error(`unexpected fallback table: ${table}`)
+    })
+
+    await expect(resolveTrader({ from } as never, { handle: 'shared' })).rejects.toThrow(expected)
+    expect(from).toHaveBeenCalledTimes(1)
+    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
+  })
+
+  it('fails closed on profile authority error instead of falling through to leaderboard', async () => {
+    const candidateQuery: Record<string, jest.Mock> = {}
+    for (const method of ['select', 'or', 'eq', 'in', 'order']) {
+      candidateQuery[method] = jest.fn(() => candidateQuery)
+    }
+    candidateQuery.limit = jest.fn().mockResolvedValue({ data: [], error: null })
+
+    const profileQuery: Record<string, jest.Mock> = {}
+    for (const method of ['select', 'or', 'eq', 'in', 'order', 'limit']) {
+      profileQuery[method] = jest.fn(() => profileQuery)
+    }
+    profileQuery.maybeSingle = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'profile authority unavailable' },
+    })
+    const from = jest.fn((table: string) => {
+      if (table === 'trader_sources') return candidateQuery
+      if (table === 'trader_profiles_v2') return profileQuery
+      throw new Error(`unexpected fallback table: ${table}`)
+    })
+
+    await expect(resolveTrader({ from } as never, { handle: 'shared' })).rejects.toThrow(
+      'trader profile lookup failed: profile authority unavailable'
+    )
+    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
+  })
+
+  it('continues to sealed fallback only after an explicit successful empty profile result', async () => {
+    const candidateQuery: Record<string, jest.Mock> = {}
+    for (const method of ['select', 'or', 'eq', 'in', 'order']) {
+      candidateQuery[method] = jest.fn(() => candidateQuery)
+    }
+    candidateQuery.limit = jest.fn().mockResolvedValue({ data: [], error: null })
+
+    const profileQuery: Record<string, jest.Mock> = {}
+    for (const method of ['select', 'or', 'eq', 'in', 'order', 'limit']) {
+      profileQuery[method] = jest.fn(() => profileQuery)
+    }
+    profileQuery.maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null })
+    const from = jest.fn((table: string) => {
+      if (table === 'trader_sources') return candidateQuery
+      if (table === 'trader_profiles_v2') return profileQuery
+      throw new Error(`unexpected table before proof authorization: ${table}`)
+    })
+    mockReadSealedRankingGeneration.mockRejectedValue(new Error('sealed fallback reached'))
+
+    await expect(resolveTrader({ from } as never, { handle: 'shared' })).rejects.toThrow(
+      'sealed fallback reached'
+    )
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not choose an arbitrary same-handle candidate when sealed ranking proof fails', async () => {
+    const candidateQuery: Record<string, jest.Mock> = {}
+    for (const method of ['select', 'or', 'eq', 'in', 'order']) {
+      candidateQuery[method] = jest.fn(() => candidateQuery)
+    }
+    candidateQuery.limit = jest.fn().mockResolvedValue({
+      data: [
+        {
+          source: 'binance_futures',
+          source_trader_id: 'id-a',
+          handle: 'shared',
+          avatar_url: null,
+        },
+        {
+          source: 'hyperliquid',
+          source_trader_id: 'id-b',
+          handle: 'shared',
+          avatar_url: null,
+        },
+      ],
+      error: null,
+    })
+    mockReadSealedRankingGeneration.mockRejectedValue(new Error('publication proof unavailable'))
+
+    await expect(
+      resolveTrader({ from: jest.fn(() => candidateQuery) } as never, { handle: 'shared' })
+    ).rejects.toThrow('publication proof unavailable')
+  })
 })
