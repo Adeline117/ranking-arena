@@ -16,6 +16,12 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
 import { withCron } from '@/lib/api/with-cron'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 const log = createLogger('cron:auto-post-market-summary')
 
@@ -29,6 +35,9 @@ export const maxDuration = 60
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
 const SYSTEM_HANDLE = 'arena_bot'
 const SYSTEM_DISPLAY_NAME = 'Arena Bot'
+const MARKET_POST_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 interface MarketPrice {
   symbol: string
@@ -53,15 +62,19 @@ const handler = withCron('auto-post-market-summary', async (_request: NextReques
 
   // Check if we already posted today (prevent duplicates)
   const today = new Date().toISOString().split('T')[0]
-  const { data: existingPost } = await supabase
+  const { data: existingPost, error: existingPostError } = await supabase
     .from('posts')
     .select('id')
     .eq('author_id', SYSTEM_USER_ID)
+    .ilike('title', 'Daily Market Pulse -%')
     .gte('created_at', `${today}T00:00:00Z`)
     .lt('created_at', `${today}T23:59:59Z`)
     .limit(1)
     .maybeSingle()
 
+  if (existingPostError) {
+    throw new Error(`Daily market post deduplication failed: ${existingPostError.message}`)
+  }
   if (existingPost) {
     return { count: 0, skipped: true, reason: 'already posted today' }
   }
@@ -142,13 +155,14 @@ async function fetchMarketPrices(supabase: AnySupabase): Promise<MarketPrice[]> 
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
 
   // Try today first, fall back to yesterday
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('market_benchmarks')
     .select('symbol, close_price, daily_return_pct')
     .in('symbol', ['BTC', 'ETH'])
     .in('date', [today, yesterday])
     .order('date', { ascending: false })
 
+  if (error) throw new Error(`Market benchmark query failed: ${error.message}`)
   if (!data || data.length === 0) return []
 
   // Deduplicate: keep latest per symbol
@@ -168,36 +182,50 @@ async function fetchMarketPrices(supabase: AnySupabase): Promise<MarketPrice[]> 
 }
 
 async function fetchTopPerformers(supabase: AnySupabase): Promise<TopTrader[]> {
-  // leaderboard_ranks 有 handle/roi（无 display_name/roi_pct——旧 select 会 400→空段）
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('handle, source, source_trader_id, arena_score, roi')
-    .eq('season_id', '7D')
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('arena_score', { ascending: false })
-    .limit(3)
-
-  return (data || []).map((row) => ({
-    display_name: null,
-    handle: row.handle,
-    source: row.source,
-    source_trader_id: row.source_trader_id,
-    arena_score: Number(row.arena_score ?? 0),
-    roi_pct: row.roi != null ? Number(row.roi) : null,
-  }))
+  return fetchSealedRankedTraders(supabase, '7D', 0)
 }
 
 async function fetchTrendingTraders(supabase: AnySupabase): Promise<TopTrader[]> {
-  // Trending = highest view count from trader_details in last 24h, or fallback to top by followers
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('handle, source, source_trader_id, arena_score, roi')
-    .eq('season_id', '30D')
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('arena_score', { ascending: false })
-    .range(3, 5) // offset to get different traders from top performers
+  // Trending = the next three sealed 30D leaders when view data is unavailable.
+  return fetchSealedRankedTraders(supabase, '30D', 3)
+}
 
-  return (data || []).map((row) => ({
+async function fetchSealedRankedTraders(
+  supabase: AnySupabase,
+  season: '7D' | '30D',
+  offset: number
+): Promise<TopTrader[]> {
+  const sealedRead = await readSealedRankingGeneration(
+    supabase,
+    { season, sources: MARKET_POST_RANKING_SOURCES },
+    async (publication) => {
+      const { data, error } = await supabase
+        .from('leaderboard_ranks')
+        .select('handle, source, source_trader_id, arena_score, roi')
+        .in('source', MARKET_POST_RANKING_SOURCES)
+        .eq('season_id', season)
+        .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+        .gt('arena_score', 0)
+        .or('is_outlier.is.null,is_outlier.eq.false')
+        .order('arena_score', { ascending: false })
+        .order('source', { ascending: true })
+        .order('source_trader_id', { ascending: true })
+        .range(offset, offset + 2)
+
+      if (error || data === null) {
+        throw new Error(
+          `Daily market ranking query failed (${season}): ${error?.message ?? 'null payload'}`
+        )
+      }
+      if (data.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+        throw new Error('Daily market ranking query crossed the public source boundary')
+      }
+      return data
+    },
+    { timeoutMs: 10_000 }
+  )
+
+  return sealedRead.value.map((row) => ({
     display_name: null,
     handle: row.handle,
     source: row.source,
