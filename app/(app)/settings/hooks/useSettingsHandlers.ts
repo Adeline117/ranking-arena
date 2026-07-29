@@ -401,6 +401,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       bio !== initial.bio ||
       avatarFile !== null ||
       coverFile !== null ||
+      coverUrl !== initial.coverUrl ||
       notifyFollow !== initial.notifyFollow ||
       notifyLike !== initial.notifyLike ||
       notifyComment !== initial.notifyComment ||
@@ -417,6 +418,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     bio,
     avatarFile,
     coverFile,
+    coverUrl,
     notifyFollow,
     notifyLike,
     notifyComment,

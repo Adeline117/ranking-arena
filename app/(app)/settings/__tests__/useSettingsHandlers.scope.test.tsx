@@ -383,6 +383,49 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(showToast).toHaveBeenCalledWith('settingsSaved', 'success')
   })
 
+  it('keeps a removed cover as an unsaved change until the null URL is persisted', async () => {
+    const profileWithCover = {
+      ...publicProfile('alpha'),
+      data: {
+        ...publicProfile('alpha').data,
+        cover_url: 'https://cdn.example.com/cover.jpg',
+      },
+    }
+    mockPublicMaybeSingle
+      .mockResolvedValueOnce(profileWithCover)
+      .mockResolvedValueOnce({
+        data: { avatar_url: null, cover_url: profileWithCover.data.cover_url },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: { id: 'user-a' }, error: null })
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.coverUrl).toBe(profileWithCover.data.cover_url))
+    expect(hook.result.current.hasUnsavedChanges()).toBe(false)
+
+    act(() => hook.result.current.handleRemoveCover())
+
+    expect(hook.result.current.coverUrl).toBeNull()
+    expect(hook.result.current.hasUnsavedChanges()).toBe(true)
+
+    await act(async () => {
+      await hook.result.current.handleSaveProfile()
+    })
+
+    expect(mockPublicQuery.update).toHaveBeenCalledWith(
+      expect.objectContaining({ cover_url: null })
+    )
+    expect(hook.result.current.hasUnsavedChanges()).toBe(false)
+  })
+
   it('writes a changed canonical CJK handle as a non-null string', async () => {
     mockPublicMaybeSingle
       .mockResolvedValueOnce(publicProfile('alpha'))
