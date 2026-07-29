@@ -72,8 +72,8 @@ describe('user profile wallet authority migration', () => {
 
   it('matches SIWE lowercase and delegates verification binding to its atomic authority', () => {
     expect(linkRoute).toContain('const walletAddress = fields.address.toLowerCase()')
-    expect(linkRoute).toContain("updateError?.code === '23505'")
-    expect(linkRoute).toContain('This wallet is already linked to another account')
+    expect(linkRoute).toContain("'bind_siwe_wallet_for_active_profile_atomic'")
+    expect(linkRoute).not.toMatch(/\.update\(\{ wallet_address: walletAddress \}\)/)
     expect(verifyRoute).toContain('const walletAddress = fields.address.toLowerCase()')
     expect(verifyRoute).toContain("'bind_siwe_wallet_for_active_profile_atomic'")
     expect(verifyRoute).not.toMatch(/\.update\(\{ wallet_address: walletAddress \}\)/)

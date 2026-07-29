@@ -41,21 +41,7 @@ jest.mock('siwe', () => ({
   SiweMessage: jest.fn().mockImplementation(() => ({ verify: mockVerify })),
 }))
 
-const mockFrom = jest.fn()
-const mockSelect = jest.fn()
-const mockEq = jest.fn()
-const mockNeq = jest.fn()
-const mockIs = jest.fn()
-const mockUpdate = jest.fn()
-const mockMaybeSingle = jest.fn()
-const query = {
-  select: mockSelect,
-  eq: mockEq,
-  neq: mockNeq,
-  is: mockIs,
-  update: mockUpdate,
-  maybeSingle: mockMaybeSingle,
-}
+const mockRpc = jest.fn()
 
 const mockGetAuthUser = jest.fn()
 const mockGetSupabaseAdmin = jest.fn()
@@ -98,6 +84,21 @@ function validFields(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function walletBinding(status = 'active') {
+  return {
+    data: [
+      {
+        status,
+        result_user_id: status === 'active' ? MOCK_USER.id : null,
+        result_handle: status === 'active' ? 'test' : null,
+        result_email: status === 'active' ? MOCK_USER.email : null,
+        result_wallet_address: status === 'active' ? VALID_ADDRESS : null,
+      },
+    ],
+    error: null,
+  }
+}
+
 describe('POST /api/auth/siwe/link', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -106,21 +107,8 @@ describe('POST /api/auth/siwe/link', () => {
     mockGetAuthUser.mockResolvedValue(MOCK_USER)
     mockGetCookie.mockReturnValue({ value: STORED_NONCE })
     mockVerify.mockResolvedValue({ success: true, error: null, data: validFields() })
-    mockFrom.mockReturnValue(query)
-    mockSelect.mockReturnValue(query)
-    mockEq.mockReturnValue(query)
-    mockNeq.mockReturnValue(query)
-    mockIs.mockReturnValue(query)
-    mockUpdate.mockReturnValue(query)
-    mockMaybeSingle.mockReset()
-    mockMaybeSingle
-      .mockResolvedValueOnce({ data: { id: MOCK_USER.id, wallet_address: null }, error: null })
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({
-        data: { id: MOCK_USER.id, wallet_address: VALID_ADDRESS },
-        error: null,
-      })
-    mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom })
+    mockRpc.mockResolvedValue(walletBinding())
+    mockGetSupabaseAdmin.mockReturnValue({ rpc: mockRpc })
   })
 
   it('requires authentication before reading the request or database', async () => {
@@ -175,22 +163,6 @@ describe('POST /api/auth/siwe/link', () => {
     ).toBe(400)
   })
 
-  it('fails closed when the trigger-provisioned profile is missing or errors', async () => {
-    mockMaybeSingle.mockReset().mockResolvedValueOnce({ data: null, error: null })
-    expect(
-      (await POST(makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' }))).status
-    ).toBe(503)
-    expect(mockUpdate).not.toHaveBeenCalled()
-
-    mockMaybeSingle.mockReset().mockResolvedValueOnce({
-      data: null,
-      error: { code: 'XX001', message: 'read failed' },
-    })
-    expect(
-      (await POST(makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' }))).status
-    ).toBe(503)
-  })
-
   it('rejects a replayed server-side nonce before every wallet mutation', async () => {
     mockConsumeSiweNonce.mockResolvedValue(false)
 
@@ -202,112 +174,88 @@ describe('POST /api/auth/siwe/link', () => {
     expect(mockConsumeSiweNonce).toHaveBeenCalledWith(STORED_NONCE)
     expect(mockDeleteCookie).toHaveBeenCalledWith('siwe-nonce')
     expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
-    expect(mockUpdate).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  it('fails closed when wallet ownership lookup errors', async () => {
-    mockMaybeSingle
-      .mockReset()
-      .mockResolvedValueOnce({ data: { id: MOCK_USER.id, wallet_address: null }, error: null })
-      .mockResolvedValueOnce({
-        data: null,
-        error: { code: 'XX002', message: 'wallet lookup failed' },
-      })
-
-    const response = await POST(
-      makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' })
-    )
-
-    expect(response.status).toBe(503)
-    expect(mockUpdate).not.toHaveBeenCalled()
-  })
-
-  it('rejects a wallet owned by another user', async () => {
-    mockMaybeSingle
-      .mockReset()
-      .mockResolvedValueOnce({ data: { id: MOCK_USER.id, wallet_address: null }, error: null })
-      .mockResolvedValueOnce({ data: { id: 'other-user' }, error: null })
-
-    const response = await POST(
-      makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' })
-    )
-
-    expect(response.status).toBe(409)
-    expect(mockUpdate).not.toHaveBeenCalled()
-  })
-
-  it('rejects replacing an already-linked different wallet', async () => {
-    mockMaybeSingle.mockReset().mockResolvedValueOnce({
-      data: { id: MOCK_USER.id, wallet_address: OTHER_ADDRESS },
-      error: null,
+  it('fails closed when atomic wallet admission errors', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: 'XX002', message: 'wallet admission failed' },
     })
 
     const response = await POST(
       makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' })
     )
 
+    expect(response.status).toBe(503)
+  })
+
+  it('rejects an atomic wallet or account ownership conflict', async () => {
+    mockRpc.mockResolvedValue(walletBinding('conflict'))
+
+    const response = await POST(
+      makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' })
+    )
+
     expect(response.status).toBe(409)
-    expect(mockUpdate).not.toHaveBeenCalled()
-    expect(mockNeq).not.toHaveBeenCalled()
   })
 
-  it('returns idempotent success for the same existing wallet without writing', async () => {
-    mockMaybeSingle
-      .mockReset()
-      .mockResolvedValueOnce({
-        data: { id: MOCK_USER.id, wallet_address: VALID_ADDRESS },
-        error: null,
-      })
-      .mockResolvedValueOnce({ data: null, error: null })
+  it('rejects a lifecycle suspension that wins after bearer admission', async () => {
+    mockRpc.mockResolvedValue(walletBinding('suspended'))
 
     const response = await POST(
       makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' })
     )
 
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ success: true, walletAddress: VALID_ADDRESS })
-    expect(mockUpdate).not.toHaveBeenCalled()
-  })
-
-  it('binds only the authenticated existing profile and verifies the returned row', async () => {
-    const response = await POST(
-      makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' })
-    )
-
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ success: true, walletAddress: VALID_ADDRESS })
-    expect(mockUpdate).toHaveBeenCalledWith({ wallet_address: VALID_ADDRESS })
-    expect(mockEq).toHaveBeenCalledWith('id', MOCK_USER.id)
-    expect(mockIs).toHaveBeenCalledWith('wallet_address', null)
-    expect(mockSelect).toHaveBeenCalledWith('id, wallet_address')
-    expect(mockDeleteCookie).toHaveBeenCalledWith('siwe-nonce')
+    expect(response.status).toBe(403)
   })
 
   it.each([
-    [{ data: null, error: { code: 'XX003', message: 'write failed' } }, 503],
-    [{ data: null, error: null }, 503],
-    [{ data: { id: MOCK_USER.id, wallet_address: OTHER_ADDRESS }, error: null }, 503],
-    [{ data: null, error: { code: '23505', message: 'duplicate wallet' } }, 409],
-  ])(
-    'does not report success for an unconfirmed wallet update (%s)',
-    async (updateResult, status) => {
-      mockMaybeSingle
-        .mockReset()
-        .mockResolvedValueOnce({ data: { id: MOCK_USER.id, wallet_address: null }, error: null })
-        .mockResolvedValueOnce({ data: null, error: null })
-        .mockResolvedValueOnce(updateResult)
+    [{ data: [], error: null }, 'empty acknowledgement'],
+    [{ data: [walletBinding().data[0], walletBinding().data[0]], error: null }, 'multiple rows'],
+    [
+      {
+        data: [{ ...walletBinding().data[0], result_user_id: 'other-user' }],
+        error: null,
+      },
+      'wrong subject',
+    ],
+    [
+      {
+        data: [{ ...walletBinding().data[0], result_wallet_address: OTHER_ADDRESS }],
+        error: null,
+      },
+      'wrong wallet',
+    ],
+    [walletBinding('missing'), 'missing profile'],
+  ])('fails closed for an invalid atomic acknowledgement (%s: %s)', async (result) => {
+    mockRpc.mockResolvedValue(result)
 
-      const response = await POST(
-        makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' })
-      )
+    const response = await POST(
+      makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' })
+    )
 
-      expect(response.status).toBe(status)
-    }
-  )
+    expect(response.status).toBe(503)
+  })
+
+  it('links through the exact active-profile atomic authority', async () => {
+    const response = await POST(
+      makeRequest({ message: 'hello', signature: '0xabc' }, { token: 'token' })
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ success: true, walletAddress: VALID_ADDRESS })
+    expect(mockRpc).toHaveBeenCalledWith('bind_siwe_wallet_for_active_profile_atomic', {
+      p_user_id: MOCK_USER.id,
+      p_wallet_address: VALID_ADDRESS,
+    })
+    expect(mockDeleteCookie).toHaveBeenCalledWith('siwe-nonce')
+  })
 
   it('contains no client-derived profile provisioner', () => {
     const source = readFileSync(join(process.cwd(), 'app/api/auth/siwe/link/route.ts'), 'utf8')
     expect(source).not.toContain('.insert(')
     expect(source).not.toContain('.upsert(')
+    expect(source).not.toMatch(/\.update\(\{ wallet_address: walletAddress \}\)/)
   })
 })

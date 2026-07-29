@@ -105,78 +105,44 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    // The auth trigger is the only profile provisioner. Linking cannot repair a
-    // missing profile from bearer-token or SIWE metadata.
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('id, wallet_address')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (profileError || !profile) {
-      logger.error('[SIWE link] Required profile lookup failed', {
+    // Authentication admission and this mutation are separate requests. The
+    // RPC rechecks lifecycle state while holding the same subject lock as
+    // moderation/deletion, and serializes ownership of the signed wallet.
+    const { data, error: bindingError } = await supabase.rpc(
+      'bind_siwe_wallet_for_active_profile_atomic',
+      {
+        p_user_id: user.id,
+        p_wallet_address: walletAddress,
+      }
+    )
+    if (bindingError) {
+      logger.error('[SIWE link] Atomic wallet admission failed', {
         userId: user.id,
-        code: profileError?.code,
+        code: bindingError.code,
+      })
+      return NextResponse.json({ error: 'Failed to link wallet' }, { status: 503 })
+    }
+
+    const acknowledgement = Array.isArray(data) && data.length === 1 ? data[0] : null
+    if (acknowledgement?.status === 'suspended') {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
+    }
+    if (acknowledgement?.status === 'conflict') {
+      return NextResponse.json(
+        { error: 'This wallet or account is already linked' },
+        { status: 409 }
+      )
+    }
+    if (
+      acknowledgement?.status !== 'active' ||
+      acknowledgement.result_user_id !== user.id ||
+      acknowledgement.result_wallet_address?.toLowerCase() !== walletAddress
+    ) {
+      logger.error('[SIWE link] Invalid atomic wallet acknowledgement', {
+        userId: user.id,
+        status: acknowledgement?.status,
       })
       return NextResponse.json({ error: 'Profile provisioning is incomplete' }, { status: 503 })
-    }
-
-    const currentWallet = profile.wallet_address?.toLowerCase() || null
-    if (currentWallet && currentWallet !== walletAddress) {
-      return NextResponse.json(
-        { error: 'This account is already linked to a different wallet' },
-        { status: 409 }
-      )
-    }
-
-    // Check if another user already has this wallet. Query failures must never
-    // be treated as an available wallet.
-    const { data: existing, error: existingError } = await supabase
-      .from('user_profiles')
-      .select('id')
-      .eq('wallet_address', walletAddress)
-      .neq('id', user.id)
-      .maybeSingle()
-
-    if (existingError) {
-      logger.error('[SIWE link] Wallet ownership lookup failed', {
-        userId: user.id,
-        code: existingError.code,
-      })
-      return NextResponse.json({ error: 'Wallet lookup failed' }, { status: 503 })
-    }
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'This wallet is already linked to another account' },
-        { status: 409 }
-      )
-    }
-
-    if (!currentWallet) {
-      // Bind only an unbound row. A concurrent mutation cannot be overwritten,
-      // and a zero-row result is a hard failure rather than fake success.
-      const { data: updatedProfile, error: updateError } = await supabase
-        .from('user_profiles')
-        .update({ wallet_address: walletAddress })
-        .eq('id', user.id)
-        .is('wallet_address', null)
-        .select('id, wallet_address')
-        .maybeSingle()
-
-      if (updateError || updatedProfile?.wallet_address?.toLowerCase() !== walletAddress) {
-        logger.error('[SIWE link] Wallet update failed', {
-          userId: user.id,
-          code: updateError?.code,
-        })
-        if (updateError?.code === '23505') {
-          return NextResponse.json(
-            { error: 'This wallet is already linked to another account' },
-            { status: 409 }
-          )
-        }
-        return NextResponse.json({ error: 'Failed to link wallet' }, { status: 503 })
-      }
     }
 
     return NextResponse.json({
