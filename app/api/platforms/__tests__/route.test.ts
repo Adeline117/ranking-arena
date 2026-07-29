@@ -32,7 +32,7 @@ describe('GET /api/platforms', () => {
   it('labels configured data sources as boards and exposes publication eligibility', async () => {
     const response = await GET()
     const body = (await response.json()) as {
-      platforms: Array<{ id: string; rankingEligible: boolean }>
+      platforms: Array<{ id: string; publicRankingInputAllowed: boolean }>
       total: number
       countUnit: string
       scope: string
@@ -43,10 +43,13 @@ describe('GET /api/platforms', () => {
     expect(body.total).toBe(body.platforms.length)
     expect(new Set(body.platforms.map(({ id }) => id)).size).toBe(body.total)
     expect(body.platforms).toContainEqual(
-      expect.objectContaining({ id: 'binance_futures', rankingEligible: true })
+      expect.objectContaining({ id: 'binance_futures', publicRankingInputAllowed: true })
     )
     expect(body.platforms).toContainEqual(
-      expect.objectContaining({ id: 'bitget_bots_futures', rankingEligible: false })
+      expect.objectContaining({
+        id: 'bitget_bots_futures',
+        publicRankingInputAllowed: false,
+      })
     )
   })
 })

@@ -27,7 +27,9 @@ export async function GET() {
           name: config?.name || source,
           type: config?.sourceType || 'futures',
           reliability: config?.reliability || 0,
-          rankingEligible: isPublicRankingSourceAllowed(source),
+          // Static input-policy status only. Actual publication additionally
+          // requires an active serving registry row and rankable live data.
+          publicRankingInputAllowed: isPublicRankingSourceAllowed(source),
         }
       })
 
