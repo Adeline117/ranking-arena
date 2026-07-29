@@ -272,7 +272,10 @@ test('skips duplicate Next type validation only for a CI-attested candidate', ()
   assert.equal(deployGate.match(/--build-env ARENA_CI_TYPES_ATTESTED=1/g)?.length, 1)
   assert.doesNotMatch(deployGate, /--env ARENA_CI_TYPES_ATTESTED=/)
   assert.match(deployGate, /"Lint & Type Check"/)
-  assert.match(ciWorkflow, /- run: npx tsc --noEmit/)
+  assert.match(
+    ciWorkflow,
+    /- name: Type-check application[\s\S]*?NODE_OPTIONS: --max-old-space-size=4096[\s\S]*?run: npx tsc --noEmit/
+  )
 })
 
 test('makes every deploy-gate Telegram failure observable without blocking the gate', () => {
