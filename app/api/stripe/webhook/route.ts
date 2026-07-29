@@ -155,7 +155,12 @@ export async function POST(request: NextRequest) {
             break
 
           case 'invoice.payment_failed':
-            await handlePaymentFailed(event.data.object as Stripe.Invoice)
+            await handlePaymentFailed(event.data.object as Stripe.Invoice, {
+              id: event.id,
+              created: event.created,
+              livemode: event.livemode,
+              type: 'invoice.payment_failed',
+            })
             break
 
           case 'invoice.payment_action_required':

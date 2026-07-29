@@ -2,7 +2,9 @@ import type Stripe from 'stripe'
 import { StripeAuthorityError } from '@/lib/stripe/entitlement-authority'
 
 const mockFrom = jest.fn()
+const mockRpc = jest.fn()
 const mockRetrieveSubscription = jest.fn()
+const mockRetrieveCustomer = jest.fn()
 const mockActivateRecurringInvoiceEntitlement = jest.fn()
 const mockResolveApiTierInvoicePaymentAuthority = jest.fn()
 const mockRecordApiTierInvoicePayment = jest.fn()
@@ -10,7 +12,7 @@ const mockRecordStripeCheckoutManualReview = jest.fn()
 const mockDrainApiTierReversalActions = jest.fn()
 
 jest.mock('../shared', () => ({
-  getSupabase: () => ({ from: mockFrom }),
+  getSupabase: () => ({ from: mockFrom, rpc: mockRpc }),
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
 
@@ -27,6 +29,9 @@ jest.mock('@/lib/stripe', () => ({
   getStripe: () => ({
     subscriptions: {
       retrieve: (...args: unknown[]) => mockRetrieveSubscription(...args),
+    },
+    customers: {
+      retrieve: (...args: unknown[]) => mockRetrieveCustomer(...args),
     },
   }),
   stripe: {
@@ -69,6 +74,15 @@ const EVENT = {
   created: 1_800_000_100,
   livemode: true,
 }
+const FAILED_EVENT = {
+  id: 'evt_invoice_failed',
+  type: 'invoice.payment_failed' as const,
+  created: 1_800_000_100,
+  livemode: true,
+}
+const RESERVATION_ID = '22222222-2222-4222-8222-222222222222'
+const OPERATION_ID = '33333333-3333-4333-8333-333333333333'
+const NONCE = '44444444-4444-4444-8444-444444444444'
 const RECURRING_AUTHORITY = {
   kind: 'recurring_payment' as const,
   userId: USER_ID,
@@ -121,16 +135,19 @@ function lookupQuery(data: unknown, error: DbError | null = null) {
 function mutationQuery(error: DbError | null = null) {
   const result = { error }
   const query: {
+    insert: jest.Mock
     upsert: jest.Mock
     update: jest.Mock
     eq: jest.Mock
     then: Promise<typeof result>['then']
   } = {
+    insert: jest.fn(),
     upsert: jest.fn(),
     update: jest.fn(),
     eq: jest.fn(),
     then: Promise.resolve(result).then.bind(Promise.resolve(result)),
   }
+  query.insert.mockReturnValue(query)
   query.upsert.mockReturnValue(query)
   query.update.mockReturnValue(query)
   query.eq.mockReturnValue(query)
@@ -176,6 +193,68 @@ function ordinarySubscription(overrides: Partial<Stripe.Subscription> = {}): Str
   } as Stripe.Subscription
 }
 
+function recurringMetadata() {
+  return {
+    plan: 'monthly',
+    pro_checkout_nonce: NONCE,
+    pro_checkout_operation_id: OPERATION_ID,
+    pro_checkout_reservation_id: RESERVATION_ID,
+    stripe_customer_id: 'cus_owner',
+    stripe_price_id: 'price_pro_monthly',
+    supabase_user_id: USER_ID,
+    trial_requested: 'false',
+    type: 'pro_subscription',
+    userId: USER_ID,
+  }
+}
+
+function exactFailedSubscription(
+  overrides: Partial<Stripe.Subscription> = {}
+): Stripe.Subscription {
+  return ordinarySubscription({
+    created: 1_700_000_000,
+    currency: 'usd',
+    latest_invoice: 'in_test',
+    status: 'past_due',
+    cancel_at_period_end: false,
+    canceled_at: null,
+    metadata: recurringMetadata(),
+    items: {
+      data: [
+        {
+          id: 'si_current',
+          subscription: 'sub_current',
+          quantity: 1,
+          current_period_start: 1_800_000_000,
+          current_period_end: 1_802_592_000,
+          price: {
+            id: 'price_pro_monthly',
+            currency: 'usd',
+          },
+        },
+      ],
+    } as Stripe.ApiList<Stripe.SubscriptionItem>,
+    ...overrides,
+  })
+}
+
+function failedInvoice(overrides: Partial<Stripe.Invoice> = {}): Stripe.Invoice {
+  return invoice({
+    status: 'open',
+    amount_paid: 0,
+    amount_due: 499,
+    amount_remaining: 499,
+    parent: {
+      type: 'subscription_details',
+      subscription_details: {
+        subscription: 'sub_current',
+        metadata: recurringMetadata(),
+      },
+    },
+    ...overrides,
+  })
+}
+
 function apiSubscription(overrides: Partial<Stripe.Subscription> = {}): Stripe.Subscription {
   return ordinarySubscription({
     metadata: {
@@ -193,7 +272,15 @@ describe('invoice webhook persistence', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockFrom.mockReset()
+    mockRpc.mockReset()
     mockRetrieveSubscription.mockResolvedValue(ordinarySubscription())
+    mockRetrieveCustomer.mockResolvedValue({
+      id: 'cus_owner',
+      object: 'customer',
+      livemode: true,
+      metadata: { userId: USER_ID },
+    })
+    mockRpc.mockResolvedValue({ data: 'completed', error: null })
     mockActivateRecurringInvoiceEntitlement.mockResolvedValue({
       status: 'activated',
       authority: RECURRING_AUTHORITY,
@@ -435,7 +522,7 @@ describe('invoice webhook persistence', () => {
       })
     )
 
-    await expect(handlePaymentFailed(invoice())).resolves.toBeUndefined()
+    await expect(handlePaymentFailed(failedInvoice(), FAILED_EVENT)).resolves.toBeUndefined()
 
     expect(mockFrom).not.toHaveBeenCalled()
   })
@@ -450,36 +537,76 @@ describe('invoice webhook persistence', () => {
       })
     )
 
-    await expect(handlePaymentFailed(invoice())).rejects.toThrow(
-      'Invoice in_test subscription is not an exact ordinary Pro subscription'
+    await expect(handlePaymentFailed(failedInvoice(), FAILED_EVENT)).rejects.toThrow(
+      'Failed Invoice in_test recurring Pro identity is invalid'
     )
 
     expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        objectType: 'invoice_event',
+        sessionId: 'evt_invoice_failed',
+        reasonKey: 'failed_invoice_recurring_identity_invalid',
+      })
+    )
   })
 
   it('keeps a failed payment retryable when history persistence fails', async () => {
+    mockRetrieveSubscription.mockResolvedValue(exactFailedSubscription())
     mockFrom
-      .mockImplementationOnce(() => lookupQuery({ id: USER_ID, subscription_tier: 'pro' }))
+      .mockImplementationOnce(() => lookupQuery({ id: USER_ID, stripe_customer_id: 'cus_owner' }))
+      .mockImplementationOnce(() => lookupQuery(null))
       .mockImplementationOnce(() => mutationQuery({ message: 'failure history unavailable' }))
 
-    await expect(handlePaymentFailed(invoice())).rejects.toThrow(
+    await expect(handlePaymentFailed(failedInvoice(), FAILED_EVENT)).rejects.toThrow(
       'Failed to record payment failure: failure history unavailable'
+    )
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({ reasonKey: 'failed_invoice_authority_conflict' })
     )
   })
 
-  it('keeps a past-due transition retryable when subscription persistence fails', async () => {
-    mockRetrieveSubscription.mockResolvedValue(
-      ordinarySubscription({
-        status: 'past_due',
+  it('records exact failure and never mutates the subscription projection', async () => {
+    mockRetrieveSubscription.mockResolvedValue(exactFailedSubscription())
+    mockFrom
+      .mockImplementationOnce(() => lookupQuery({ id: USER_ID, stripe_customer_id: 'cus_owner' }))
+      .mockImplementationOnce(() => lookupQuery(null))
+      .mockImplementationOnce(() => mutationQuery())
+
+    await expect(handlePaymentFailed(failedInvoice(), FAILED_EVENT)).resolves.toBeUndefined()
+
+    const tables = mockFrom.mock.calls.map(([table]) => table)
+    expect(tables).toEqual(['user_profiles', 'payment_history', 'payment_history'])
+    expect(mockRpc).toHaveBeenCalledWith(
+      'assert_recurring_pro_checkout_completed_atomic',
+      expect.objectContaining({
+        p_user_id: USER_ID,
+        p_stripe_subscription_id: 'sub_current',
+        p_reservation_id: RESERVATION_ID,
       })
     )
-    mockFrom
-      .mockImplementationOnce(() => lookupQuery({ id: USER_ID, subscription_tier: 'pro' }))
-      .mockImplementationOnce(() => mutationQuery())
-      .mockImplementationOnce(() => mutationQuery({ message: 'status write unavailable' }))
+  })
 
-    await expect(handlePaymentFailed(invoice())).rejects.toThrow(
-      'Failed to mark subscription past due: status write unavailable'
+  it('never overwrites a succeeded payment history row with failure', async () => {
+    mockRetrieveSubscription.mockResolvedValue(exactFailedSubscription())
+    mockFrom
+      .mockImplementationOnce(() => lookupQuery({ id: USER_ID, stripe_customer_id: 'cus_owner' }))
+      .mockImplementationOnce(() =>
+        lookupQuery({
+          user_id: USER_ID,
+          stripe_invoice_id: 'in_test',
+          amount: 499,
+          currency: 'usd',
+          status: 'succeeded',
+        })
+      )
+
+    await expect(handlePaymentFailed(failedInvoice(), FAILED_EVENT)).rejects.toThrow(
+      'conflicts with durable payment history'
+    )
+    expect(mockFrom).toHaveBeenCalledTimes(2)
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({ reasonKey: 'failed_invoice_authority_conflict' })
     )
   })
 })

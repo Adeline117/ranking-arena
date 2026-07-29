@@ -318,6 +318,14 @@ describe('POST /api/stripe/webhook', () => {
         type,
       })
     }
+    if (type === 'invoice.payment_failed') {
+      expect(handler).toHaveBeenCalledWith(expect.anything(), {
+        id: 'evt_test_retryable',
+        created: 1_800_000_000,
+        livemode: true,
+        type: 'invoice.payment_failed',
+      })
+    }
     if (type === 'charge.dispute.created') {
       expect(handler).toHaveBeenCalledWith(expect.anything(), {
         eventId: 'evt_test_retryable',

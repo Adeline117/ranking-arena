@@ -1,10 +1,12 @@
 import Stripe from 'stripe'
-import { getStripe, stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 import { getSupabase, logger, type StripeWebhookEventContext } from './shared'
 import { sendNotification } from '@/lib/data/notifications'
 import { carriesApiTierSubscriptionIdentity } from './api-tier-identity'
-import { getProPlanFromPriceId } from './stripe-price-identity'
-import { StripeAuthorityError } from '@/lib/stripe/entitlement-authority'
+import {
+  resolveSubscriptionEventStateAuthority,
+  StripeAuthorityError,
+} from '@/lib/stripe/entitlement-authority'
 import {
   recordApiTierInvoicePayment,
   resolveApiTierInvoicePaymentAuthority,
@@ -13,36 +15,21 @@ import { activateRecurringInvoiceEntitlement } from '@/lib/stripe/recurring-enti
 import { recordStripeCheckoutManualReview } from '@/lib/stripe/lifetime-entitlement'
 import { drainApiTierReversalActions } from '@/lib/stripe/api-tier-reversal-actions'
 import type { Json } from '@/lib/supabase/database.types'
+import {
+  assertRecurringProCheckoutCompleted,
+  carriesRecurringProCheckoutMarker,
+  parseRecurringProCheckoutMetadata,
+} from '@/lib/stripe/recurring-pro-checkout'
+import { stripeEntitlementAuthorityOptions } from '@/lib/stripe/entitlement-runtime'
 
 export type StripePaidInvoiceEventContext = StripeWebhookEventContext & {
   type: 'invoice.paid' | 'invoice.payment_succeeded'
 }
+export type StripeFailedInvoiceEventContext = StripeWebhookEventContext & {
+  type: 'invoice.payment_failed'
+}
 
 const MAX_STRIPE_UNIX_SECONDS = 253_402_300_799
-
-function exactOrdinaryProInvoiceCustomer(
-  invoice: Stripe.Invoice,
-  subscription: Stripe.Subscription
-): string {
-  const invoiceCustomer =
-    typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id || ''
-  const subscriptionCustomer =
-    typeof subscription.customer === 'string'
-      ? subscription.customer
-      : subscription.customer?.id || ''
-  const item = subscription.items.data.length === 1 ? subscription.items.data[0] : null
-  const plan = item?.quantity === 1 ? getProPlanFromPriceId(item.price.id) : null
-  if (
-    !invoiceCustomer ||
-    invoiceCustomer !== subscriptionCustomer ||
-    !item ||
-    item.quantity !== 1 ||
-    (plan !== 'monthly' && plan !== 'yearly')
-  ) {
-    throw new Error(`Invoice ${invoice.id} subscription is not an exact ordinary Pro subscription`)
-  }
-  return invoiceCustomer
-}
 
 function candidateInvoiceUserId(invoice: Stripe.Invoice): string | null {
   const metadata = invoice.parent?.subscription_details?.metadata
@@ -91,6 +78,46 @@ async function recordPaidInvoiceReview(params: {
   })
 }
 
+async function recordFailedInvoiceReview(params: {
+  invoice: Stripe.Invoice
+  event: StripeFailedInvoiceEventContext
+  reasonKey: string
+  reason: string
+  userId?: string | null
+  context?: Record<string, unknown>
+}): Promise<void> {
+  await recordStripeCheckoutManualReview({
+    supabase: getSupabase(),
+    objectType: 'invoice_event',
+    sessionId: params.event.id,
+    userId: params.userId ?? candidateInvoiceUserId(params.invoice),
+    reasonKey: params.reasonKey,
+    reason: params.reason,
+    context: reviewJson({
+      invoice_id: params.invoice.id,
+      invoice_created: params.invoice.created,
+      invoice_status: params.invoice.status,
+      invoice_amount_paid: params.invoice.amount_paid,
+      invoice_amount_due: params.invoice.amount_due,
+      invoice_currency: params.invoice.currency,
+      invoice_livemode: params.invoice.livemode,
+      customer_id:
+        typeof params.invoice.customer === 'string'
+          ? params.invoice.customer
+          : (params.invoice.customer?.id ?? null),
+      subscription_id:
+        typeof params.invoice.parent?.subscription_details?.subscription === 'string'
+          ? params.invoice.parent.subscription_details.subscription
+          : (params.invoice.parent?.subscription_details?.subscription?.id ?? null),
+      event_id: params.event.id,
+      event_type: params.event.type,
+      event_created: params.event.created,
+      event_livemode: params.event.livemode,
+      ...(params.context ?? {}),
+    }),
+  })
+}
+
 function exactPaidEventContext(
   invoice: Stripe.Invoice,
   event: StripePaidInvoiceEventContext
@@ -109,6 +136,34 @@ function exactPaidEventContext(
     event.created <= MAX_STRIPE_UNIX_SECONDS &&
     typeof event.livemode === 'boolean' &&
     invoice.livemode === event.livemode
+  )
+}
+
+function exactFailedEventContext(
+  invoice: Stripe.Invoice,
+  event: StripeFailedInvoiceEventContext
+): boolean {
+  return (
+    /^in_[A-Za-z0-9_]+$/.test(invoice.id) &&
+    invoice.id.length <= 255 &&
+    /^evt_[A-Za-z0-9_]+$/.test(event.id) &&
+    event.id.length <= 255 &&
+    event.type === 'invoice.payment_failed' &&
+    Number.isSafeInteger(invoice.created) &&
+    invoice.created > 0 &&
+    invoice.created <= event.created &&
+    Number.isSafeInteger(event.created) &&
+    event.created > 0 &&
+    event.created <= MAX_STRIPE_UNIX_SECONDS &&
+    typeof event.livemode === 'boolean' &&
+    invoice.livemode === event.livemode &&
+    Number.isSafeInteger(invoice.amount_paid) &&
+    invoice.amount_paid === 0 &&
+    Number.isSafeInteger(invoice.amount_due) &&
+    invoice.amount_due > 0 &&
+    Number.isSafeInteger(invoice.amount_remaining) &&
+    invoice.amount_remaining === invoice.amount_due &&
+    invoice.currency === 'usd'
   )
 }
 
@@ -298,13 +353,36 @@ export async function handlePaymentSucceeded(
   })
 }
 
-export async function handlePaymentFailed(invoice: Stripe.Invoice) {
+export async function handlePaymentFailed(
+  invoice: Stripe.Invoice,
+  event: StripeFailedInvoiceEventContext
+) {
+  if (!exactFailedEventContext(invoice, event)) {
+    await recordFailedInvoiceReview({
+      invoice,
+      event,
+      reasonKey: 'failed_invoice_event_context_invalid',
+      reason: 'A failed Invoice webhook has malformed or mismatched signed event context.',
+    })
+    throw new Error(`Failed Invoice ${invoice.id} event context is invalid`)
+  }
+
   const subscriptionData = invoice.parent?.subscription_details?.subscription
   const subscriptionId =
     typeof subscriptionData === 'string' ? subscriptionData : subscriptionData?.id || null
-  const subscription = subscriptionId ? await stripe.subscriptions.retrieve(subscriptionId) : null
 
-  if (!subscriptionId || !subscription) return
+  if (!subscriptionId) {
+    await recordFailedInvoiceReview({
+      invoice,
+      event,
+      reasonKey: 'failed_invoice_subscription_missing',
+      reason: 'A failed recurring Invoice has no exact Subscription identity.',
+    })
+    throw new Error(`Failed Invoice ${invoice.id} subscription identity is missing`)
+  }
+
+  const stripeClient = getStripe()
+  const subscription = await stripeClient.subscriptions.retrieve(subscriptionId)
 
   if (carriesApiTierSubscriptionIdentity(subscription)) {
     // API tier retry/grace/revocation is handled by customer.subscription.*
@@ -316,85 +394,144 @@ export async function handlePaymentFailed(invoice: Stripe.Invoice) {
     return
   }
 
-  const customerId = exactOrdinaryProInvoiceCustomer(invoice, subscription)
-
-  const { data: profile, error: profileError } = await getSupabase()
-    .from('user_profiles')
-    .select('id, subscription_tier')
-    .eq('stripe_customer_id', customerId)
-    .maybeSingle()
-
-  if (profileError) {
-    throw new Error(`Failed to find failed payment owner: ${profileError.message}`)
-  }
-  if (!profile) {
-    logger.warn(`Payment failed but no user found for customer`, { customerId })
-    return
-  }
-
-  const { error: historyErr } = await getSupabase().from('payment_history').upsert(
-    {
-      user_id: profile.id,
-      stripe_invoice_id: invoice.id,
-      amount: invoice.amount_due,
-      currency: invoice.currency,
-      status: 'failed',
-      created_at: new Date().toISOString(),
-    },
-    { onConflict: 'stripe_invoice_id' }
+  const identity = parseRecurringProCheckoutMetadata(subscription.metadata)
+  const invoiceIdentity = parseRecurringProCheckoutMetadata(
+    invoice.parent?.subscription_details?.metadata
   )
-  if (historyErr) {
-    logger.error('Failed to record payment failure', { error: historyErr })
-    throw new Error(`Failed to record payment failure: ${historyErr.message}`)
+  if (
+    !carriesRecurringProCheckoutMarker(subscription.metadata) ||
+    !identity ||
+    !invoiceIdentity ||
+    JSON.stringify(identity) !== JSON.stringify(invoiceIdentity)
+  ) {
+    await recordFailedInvoiceReview({
+      invoice,
+      event,
+      reasonKey: 'failed_invoice_recurring_identity_invalid',
+      reason:
+        'A failed recurring Pro Invoice has legacy, malformed, or conflicting Checkout identity.',
+      userId: identity?.userId ?? invoiceIdentity?.userId ?? null,
+    })
+    throw new Error(`Failed Invoice ${invoice.id} recurring Pro identity is invalid`)
   }
 
-  if (subscriptionId) {
-    try {
-      if (subscription.status === 'past_due') {
-        // 2026-07-11:只标 past_due,不再立即降级。此前首次扣款失败即
-        // profile→free,而 Stripe smart-retries 常在几天内恢复(handlePaymentSucceeded
-        // 会复权),期间用户无解释失去 Pro、也不知该换卡。真正的降级由
-        // handleSubscriptionCanceled 在 Stripe 耗尽重试真取消时执行。这里给宽限期 +
-        // 通知用户更新支付方式。
-        const { error: statusError } = await getSupabase()
-          .from('subscriptions')
-          .update({
-            status: 'past_due',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('stripe_subscription_id', subscriptionId)
-        if (statusError) {
-          throw new Error(`Failed to mark subscription past due: ${statusError.message}`)
-        }
-
-        const willRetry = !!invoice.next_payment_attempt
-        sendNotification(
-          getSupabase(),
-          {
-            user_id: profile.id,
-            type: 'subscription_expiring',
-            title: willRetry ? 'Payment failed — please update your card' : 'Pro payment failed',
-            message: willRetry
-              ? 'We could not charge your card. We will retry automatically over the next few days — update your payment method in Settings to keep your Pro access.'
-              : 'Your Pro payment failed and retries are exhausted. Update your payment method in Settings to restore Pro.',
-            reference_id: `payment_failed_${invoice.id}`,
-          },
-          'stripe-payment-failed'
-        )
-
-        logger.info(`Marked past_due (grace, no downgrade) + notified user`, {
-          customerId,
-          subscriptionId,
-          willRetry,
-        })
-      }
-    } catch (err: unknown) {
-      logger.error('Failed to update subscription status on payment failure', { error: err })
-      throw err
+  try {
+    const authority = await resolveSubscriptionEventStateAuthority(stripeClient, subscription, {
+      ...stripeEntitlementAuthorityOptions(identity.userId),
+      expectedLivemode: event.livemode,
+    })
+    const invoiceCustomer =
+      typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id || null
+    if (
+      authority.subscriptionStatus !== 'past_due' ||
+      authority.currentInvoiceId !== invoice.id ||
+      authority.subscriptionId !== subscriptionId ||
+      authority.customerId !== invoiceCustomer ||
+      authority.customerId !== identity.customerId ||
+      authority.userId !== identity.userId ||
+      authority.plan !== identity.plan ||
+      authority.priceId !== identity.priceId
+    ) {
+      throw new Error(`Failed Invoice ${invoice.id} does not match exact subscription state`)
     }
-  }
 
-  logger.info(`Payment failed for user ${profile.id}`, { invoiceId: invoice.id })
+    await assertRecurringProCheckoutCompleted({
+      supabase: getSupabase(),
+      identity,
+      livemode: event.livemode,
+      subscriptionId,
+    })
+
+    const { data: profile, error: profileError } = await getSupabase()
+      .from('user_profiles')
+      .select('id, stripe_customer_id')
+      .eq('id', authority.userId)
+      .maybeSingle()
+
+    if (profileError) {
+      throw new Error(`Failed to find failed payment owner: ${profileError.message}`)
+    }
+    if (
+      !profile ||
+      profile.id !== authority.userId ||
+      profile.stripe_customer_id !== authority.customerId
+    ) {
+      throw new Error(`Failed Invoice ${invoice.id} owner identity does not match`)
+    }
+
+    const { data: existingFailure, error: existingFailureError } = await getSupabase()
+      .from('payment_history')
+      .select('user_id, stripe_invoice_id, amount, currency, status')
+      .eq('stripe_invoice_id', invoice.id)
+      .maybeSingle()
+    if (existingFailureError) {
+      throw new Error(`Failed to inspect payment failure history: ${existingFailureError.message}`)
+    }
+
+    if (existingFailure) {
+      if (
+        existingFailure.user_id !== authority.userId ||
+        existingFailure.stripe_invoice_id !== invoice.id ||
+        existingFailure.amount !== invoice.amount_due ||
+        existingFailure.currency !== invoice.currency ||
+        existingFailure.status !== 'failed'
+      ) {
+        throw new Error(`Failed Invoice ${invoice.id} conflicts with durable payment history`)
+      }
+    } else {
+      const { error: historyErr } = await getSupabase()
+        .from('payment_history')
+        .insert({
+          user_id: authority.userId,
+          stripe_invoice_id: invoice.id,
+          amount: invoice.amount_due,
+          currency: invoice.currency,
+          status: 'failed',
+          created_at: new Date(event.created * 1000).toISOString(),
+        })
+      if (historyErr) {
+        logger.error('Failed to record payment failure', { error: historyErr })
+        throw new Error(`Failed to record payment failure: ${historyErr.message}`)
+      }
+    }
+
+    const willRetry = !!invoice.next_payment_attempt
+    sendNotification(
+      getSupabase(),
+      {
+        user_id: profile.id,
+        type: 'subscription_expiring',
+        title: willRetry ? 'Payment failed — please update your card' : 'Pro payment failed',
+        message: willRetry
+          ? 'We could not charge your card. We will retry automatically over the next few days — update your payment method in Settings to keep your Pro access.'
+          : 'Your Pro payment failed and retries are exhausted. Update your payment method in Settings to restore Pro.',
+        reference_id: `payment_failed_${invoice.id}`,
+      },
+      'stripe-payment-failed'
+    )
+
+    logger.info(`Exact payment failure recorded for user ${profile.id}`, {
+      invoiceId: invoice.id,
+      subscriptionId,
+      eventId: event.id,
+    })
+  } catch (error) {
+    await recordFailedInvoiceReview({
+      invoice,
+      event,
+      reasonKey:
+        error instanceof StripeAuthorityError
+          ? `failed_invoice_authority_${error.code}`
+          : 'failed_invoice_authority_conflict',
+      reason: error instanceof Error ? error.message : 'Failed Invoice authority is uncertain.',
+      userId: identity.userId,
+      context:
+        error instanceof StripeAuthorityError
+          ? { authority_error: error.toReviewPayload() }
+          : { error: error instanceof Error ? error.message : String(error) },
+    })
+    throw error
+  }
 }
 
 export async function handlePaymentActionRequired(invoice: Stripe.Invoice) {
