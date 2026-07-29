@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 const root = process.cwd()
 const migrationName = '20260729065000_stripe_entitlement_livemode_authority.sql'
 const migration = readFileSync(resolve(root, 'supabase/migrations', migrationName), 'utf8')
+const runner = readFileSync(resolve(root, 'scripts/maintenance/apply-launch-migrations.sh'), 'utf8')
 const pg17 = readFileSync(
   resolve(root, 'supabase/migrations/__tests__/stripe-entitlement-livemode-authority.pg17.sh'),
   'utf8'
@@ -92,5 +93,13 @@ describe('Stripe entitlement livemode authority', () => {
     expect(pg17).toContain('atomic-stripe-entitlement-identity.pg17.sh')
     expect(fixture).toContain("'test_mode_non_entitling'")
     expect(fixture).toContain('direct ledger insert without livemode context succeeded')
+  })
+
+  it('runs only after the mode-aware application has been deployed', () => {
+    const predeploy = runner.match(/PREDEPLOY_MIGRATIONS=\(([\s\S]*?)\n\)/)?.[1] ?? ''
+    const postdeploy = runner.match(/POSTDEPLOY_MIGRATIONS=\(([\s\S]*?)\n\)/)?.[1] ?? ''
+
+    expect(predeploy).not.toContain(migrationName)
+    expect(postdeploy).toContain(migrationName)
   })
 })

@@ -167,6 +167,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
   20260729021000_disable_legacy_api_tier_writer.sql
+  20260729065000_stripe_entitlement_livemode_authority.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover
