@@ -2553,7 +2553,7 @@ const ko = {
     '이 플랫폼의 데이터를 일시적으로 사용할 수 없습니다. 아래 표시된 기록 데이터가 오래되었을 수 있습니다.',
   rankTrend: '순위 추이 (7일)',
   drawdownChart: '드로다운',
-  dailyReturnsDistribution: '일별 수익률 분포',
+  dailyReturnsDistribution: '누적 ROI 일간 변화(퍼센트포인트)',
   estimatedFromRoi: 'ROI 기반 추정',
 
   // PortfolioTable
@@ -5150,12 +5150,23 @@ const ko = {
   traderTradingStyleLabel: '트레이딩 스타일',
   traderAccumulatingData: '데이터 수집 중...',
   traderFullscreen: '전체 화면',
+  traderLinkedAccountEvidence: '연결 계정 근거',
   traderCombinedPerformance: '종합 성과',
   traderAccountsCount: '개 계정',
   traderCombinedPnl: '합산 손익',
   traderBestRoi: '최고 ROI',
   traderWeightedScore: '가중 점수',
-  traderWeightedScoreTooltip: '절대 손익 기준 가중 평균. 거래량이 큰 계정일수록 가중치가 높습니다.',
+  traderWeightedScoreTooltip:
+    '모든 연결 계정에 신뢰할 수 있고 비교 가능한 점수와 공통 가중 기준이 있을 때만 제공됩니다.',
+  traderAggregateUnavailable:
+    '모든 계정에 완전하고 비교 가능한 근거가 갖춰질 때까지 계정 간 합계는 알 수 없음으로 표시됩니다.',
+  traderAccountMetricsPartial:
+    '계정별 값은 최신성·완전성을 알 수 없는 부분적인 90일 스냅샷입니다. 참고용이며 합산 점수와 순위에서 제외됩니다.',
+  traderAccountPnlUnavailable: '검증된 결제 통화와 원가 기준이 없어 계정 손익을 합산하지 않습니다.',
+  linkedAccountsChecking: '연결 계정 확인 중…',
+  linkedAccountsUnavailable: '연결 계정 상태를 일시적으로 확인할 수 없습니다',
+  traderAccountDataChecking: '이 계정의 상세 정보를 확인하고 있습니다…',
+  traderAccountDataUnavailable: '이 계정의 검증된 상세 정보를 일시적으로 사용할 수 없습니다.',
   traderCompareAccounts: '계정 비교',
   traderPrimaryAccount: '메인 계정',
   traderMetric: '지표',
@@ -5239,7 +5250,7 @@ const ko = {
   popularSearches: '인기 검색어',
   recentSearches: '검색 기록',
   clearButton: '지우기',
-  linkedAccountAll: '전체',
+  linkedAccountAll: '전체 계정',
   winRatePercent: '승률',
   radarProfit: '수익',
   radarRisk: '리스크',
@@ -5504,7 +5515,7 @@ const ko = {
   // ProGate 업셀 — 가격 앵커 + 기능별 기본 혜택
   proPriceAnchor: '{price}/월부터 · 7일 무료 체험',
   gateBenefitLinkedMultiAccount: '거래소 계정 무제한 연결',
-  gateBenefitLinkedUnifiedPnl: '모든 계정 통합 손익',
+  gateBenefitLinkedUnifiedPnl: '연결 계정 전환 및 계정별 근거',
   gateBenefitLinkedAutoSync: '잔액 및 포지션 자동 동기화',
   gateBenefitGroupExclusive: 'Pro 전용 그룹 이용',
   gateBenefitGroupSignals: '실시간 매매 시그널',

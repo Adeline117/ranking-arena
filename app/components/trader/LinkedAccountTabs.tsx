@@ -1,15 +1,14 @@
 'use client'
 
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState, useCallback, useId } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { formatROI } from '@/lib/utils/format'
-import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
+import { linkedAccountDisplayLabel } from './linked-account-view'
 
 export interface LinkedAccount {
   id: string
@@ -29,6 +28,12 @@ interface LinkedAccountTabsProps {
   onAccountChange: (account: string) => void
 }
 
+function trustedLinkedRoi(value: number | null): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= -10_000 && value <= 10_000
+    ? value
+    : null
+}
+
 export default function LinkedAccountTabs({
   accounts,
   activeAccount,
@@ -39,6 +44,7 @@ export default function LinkedAccountTabs({
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isMobileDropdown, setIsMobileDropdown] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownId = useId()
 
   // Detect mobile for dropdown mode (4+ accounts)
   useEffect(() => {
@@ -63,15 +69,16 @@ export default function LinkedAccountTabs({
     }
   }, [activeAccount, isMobileDropdown])
 
-  // Prefetch trader data on tab hover (desktop) for instant account switching
+  // Probe the same exact first-screen boundary used by the selection state
+  // machine. Mixed serving/legacy relations cannot inherit the route account's
+  // data mode; legacy accounts naturally 404 here and fall back after click.
   const prefetchAccount = useCallback(
     (account: LinkedAccount) => {
-      const handle = account.handle || account.traderKey
-      const url = `/api/traders/${encodeURIComponent(handle)}?source=${encodeURIComponent(account.platform)}`
+      const url = `/api/traders/${encodeURIComponent(account.traderKey)}/first-screen?source=${encodeURIComponent(account.platform)}`
       queryClient.prefetchQuery({
-        queryKey: ['trader-profile', url],
+        queryKey: ['linked-trader-first-screen', account.platform, account.traderKey],
         queryFn: () => traderFetcher(url),
-        staleTime: STALE_STANDARD,
+        staleTime: 0,
       })
     },
     [queryClient]
@@ -80,7 +87,10 @@ export default function LinkedAccountTabs({
   // #32: Close dropdown on outside mousedown (faster than click)
   useEffect(() => {
     if (!dropdownOpen) return
-    const handler = () => setDropdownOpen(false)
+    const handler = (event: MouseEvent) => {
+      if (scrollRef.current?.contains(event.target as Node)) return
+      setDropdownOpen(false)
+    }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [dropdownOpen])
@@ -94,10 +104,22 @@ export default function LinkedAccountTabs({
         e.preventDefault()
         const next = idx < keys.length - 1 ? idx + 1 : 0
         onAccountChange(keys[next])
+        requestAnimationFrame(() => {
+          const tabs = scrollRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []
+          Array.from(tabs)
+            .find((tab) => tab.dataset.accountKey === keys[next])
+            ?.focus()
+        })
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault()
         const prev = idx > 0 ? idx - 1 : keys.length - 1
         onAccountChange(keys[prev])
+        requestAnimationFrame(() => {
+          const tabs = scrollRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []
+          Array.from(tabs)
+            .find((tab) => tab.dataset.accountKey === keys[prev])
+            ?.focus()
+        })
       }
     },
     [accounts, activeAccount, onAccountChange]
@@ -123,14 +145,22 @@ export default function LinkedAccountTabs({
     if (activeAccount === 'all') return t('linkedAccountAll')
     const acc = accounts.find((a) => `${a.platform}:${a.traderKey}` === activeAccount)
     if (!acc) return t('linkedAccountAll')
-    return acc.label || EXCHANGE_NAMES[acc.platform] || acc.platform
+    return linkedAccountDisplayLabel(acc, accounts)
   }
 
   // Mobile dropdown mode
   if (isMobileDropdown) {
     return (
-      <Box style={{ position: 'relative', marginBottom: tokens.spacing[4] }}>
+      <Box
+        ref={scrollRef}
+        data-testid="linked-account-selector"
+        style={{ position: 'relative', marginBottom: tokens.spacing[4] }}
+      >
         <button
+          type="button"
+          aria-expanded={dropdownOpen}
+          aria-controls={dropdownId}
+          aria-haspopup="menu"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -146,6 +176,9 @@ export default function LinkedAccountTabs({
           onClick={(e) => {
             e.stopPropagation()
             setDropdownOpen(!dropdownOpen)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setDropdownOpen(false)
           }}
         >
           <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -190,6 +223,8 @@ export default function LinkedAccountTabs({
 
         {dropdownOpen && (
           <Box
+            id={dropdownId}
+            role="menu"
             style={{
               position: 'absolute',
               top: '100%',
@@ -206,6 +241,9 @@ export default function LinkedAccountTabs({
           >
             {/* All option */}
             <button
+              type="button"
+              role="menuitemradio"
+              aria-checked={activeAccount === 'all'}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -262,11 +300,15 @@ export default function LinkedAccountTabs({
             {accounts.map((account) => {
               const key = `${account.platform}:${account.traderKey}`
               const isActive = activeAccount === key
-              const label = account.label || EXCHANGE_NAMES[account.platform] || account.platform
+              const label = linkedAccountDisplayLabel(account, accounts)
+              const roi = trustedLinkedRoi(account.roi)
 
               return (
                 <button
                   key={key}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={isActive}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -298,24 +340,26 @@ export default function LinkedAccountTabs({
                     {label}
                   </Text>
                   {account.isPrimary && (
-                    <Text size="xs" style={{ color: tokens.colors.accent.warning, fontSize: 10 }}>
-                      ★
+                    <Text
+                      size="xs"
+                      aria-label={t('traderPrimaryAccount')}
+                      style={{ color: tokens.colors.accent.warning, fontSize: 10 }}
+                    >
+                      <span aria-hidden="true">★</span>
                     </Text>
                   )}
-                  {account.roi != null && (
+                  {roi != null && (
                     <Text
                       size="xs"
                       weight="bold"
+                      title={t('traderAccountMetricsPartial')}
                       style={{
-                        color:
-                          account.roi >= 0
-                            ? tokens.colors.accent.success
-                            : tokens.colors.accent.error,
+                        color: roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
                         fontSize: 11,
                       }}
                     >
-                      {formatROI(account.roi)}
+                      {formatROI(roi)} · 90D · {t('dataPartial')}
                     </Text>
                   )}
                 </button>
@@ -332,6 +376,7 @@ export default function LinkedAccountTabs({
     <Box
       ref={scrollRef}
       role="tablist"
+      data-testid="linked-account-selector"
       onKeyDown={handleKeyDown}
       style={{
         display: 'flex',
@@ -352,6 +397,7 @@ export default function LinkedAccountTabs({
         style={tabStyle(activeAccount === 'all')}
         onClick={() => onAccountChange('all')}
         data-active={activeAccount === 'all'}
+        data-account-key="all"
       >
         <svg
           width="14"
@@ -398,7 +444,8 @@ export default function LinkedAccountTabs({
       {accounts.map((account) => {
         const key = `${account.platform}:${account.traderKey}`
         const isActive = activeAccount === key
-        const displayLabel = account.label || EXCHANGE_NAMES[account.platform] || account.platform
+        const displayLabel = linkedAccountDisplayLabel(account, accounts)
+        const roi = trustedLinkedRoi(account.roi)
 
         return (
           <button
@@ -410,6 +457,7 @@ export default function LinkedAccountTabs({
             onClick={() => onAccountChange(key)}
             onMouseEnter={() => prefetchAccount(account)}
             data-active={isActive}
+            data-account-key={key}
           >
             <ExchangeLogo exchange={account.platform} size={16} />
             <Text
@@ -424,25 +472,26 @@ export default function LinkedAccountTabs({
             {account.isPrimary && (
               <Text
                 size="xs"
+                aria-label={t('traderPrimaryAccount')}
                 style={{ color: tokens.colors.accent.warning, fontSize: 11, lineHeight: 1 }}
                 title={t('traderPrimaryAccount')}
               >
-                ★
+                <span aria-hidden="true">★</span>
               </Text>
             )}
-            {account.roi != null && (
+            {roi != null && (
               <Text
                 size="xs"
                 weight="bold"
+                title={t('traderAccountMetricsPartial')}
                 style={{
-                  color:
-                    account.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                  color: roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                   fontFamily: tokens.typography.fontFamily.mono.join(', '),
                   fontSize: 11,
                   letterSpacing: '-0.02em',
                 }}
               >
-                {formatROI(account.roi)}
+                {formatROI(roi)} · 90D · {t('dataPartial')}
               </Text>
             )}
           </button>
