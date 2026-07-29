@@ -12220,6 +12220,16 @@ export type Database = {
           strike_type: string | null
         }[]
       }
+      mutate_channel_member_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_channel_id: string
+          p_role?: string | null
+          p_target_id: string
+        }
+        Returns: Json
+      }
       mutate_collection_item_atomic: {
         Args: {
           p_action: string
