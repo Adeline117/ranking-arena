@@ -14,19 +14,42 @@
 
 jest.mock('@/lib/ingest/db', () => require('./test-db').mockDbModule())
 
-import { publishLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
+import {
+  publishLeaderboardSnapshotInTransaction,
+  type PublishSnapshotInput,
+} from '@/lib/ingest/serving/publish'
 import {
   TEST_SCHEMA,
   countRows,
   createTestSchema,
   dropTestSchema,
   getRawPool,
+  getWrappedPool,
   insertSourceRow,
   makeRows,
   makeSource,
   resetTables,
   seedSnapshot,
 } from './test-db'
+
+async function publishLeaderboardSnapshot(input: PublishSnapshotInput) {
+  const transaction = await getWrappedPool().connect()
+  try {
+    await transaction.query('BEGIN')
+    const result = await publishLeaderboardSnapshotInTransaction(
+      transaction,
+      input,
+      async () => undefined
+    )
+    await transaction.query('COMMIT')
+    return result
+  } catch (error) {
+    await transaction.query('ROLLBACK')
+    throw error
+  } finally {
+    transaction.release()
+  }
+}
 
 describe('publishLeaderboardSnapshot — count-check gate', () => {
   beforeAll(async () => {

@@ -5,7 +5,7 @@ import type { TierJobData } from '../../queues'
 const mockDbQuery = jest.fn()
 const mockGetSourceBySlug = jest.fn()
 const mockGetLatestPassedNativeCohort = jest.fn()
-const mockPublishLeaderboardSnapshot = jest.fn()
+const mockPublishDerivedLeaderboardSnapshot = jest.fn()
 
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: () => ({ query: (...args: unknown[]) => mockDbQuery(...args) }),
@@ -17,7 +17,8 @@ jest.mock('@/lib/ingest/native-cohort', () => ({
   getLatestPassedNativeCohort: (...args: unknown[]) => mockGetLatestPassedNativeCohort(...args),
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
-  publishLeaderboardSnapshot: (...args: unknown[]) => mockPublishLeaderboardSnapshot(...args),
+  publishDerivedLeaderboardSnapshot: (...args: unknown[]) =>
+    mockPublishDerivedLeaderboardSnapshot(...args),
 }))
 
 import {
@@ -93,7 +94,7 @@ describe('derived-board deterministic eligibility and coverage gate', () => {
     jest.clearAllMocks()
     consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined)
     mockGetSourceBySlug.mockResolvedValue(src)
-    mockPublishLeaderboardSnapshot.mockResolvedValue({
+    mockPublishDerivedLeaderboardSnapshot.mockResolvedValue({
       snapshotId: 44,
       verdict: { passed: true, baselineUsed: 300, deviationPct: 10 },
     })
@@ -111,7 +112,7 @@ describe('derived-board deterministic eligibility and coverage gate', () => {
     )
     expect(mockGetLatestPassedNativeCohort).not.toHaveBeenCalled()
     expect(mockDbQuery).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishDerivedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('publishes at the 90% boundary using the shared native top-N eligibility', async () => {
@@ -128,17 +129,18 @@ describe('derived-board deterministic eligibility and coverage gate', () => {
     expect(statsParams).toEqual([src.id, cohortTraders(300).map((row) => row.id), 30, 48])
     expect(statsParams[1]).not.toContain(9_999) // incidental Tier-C long tail is ineligible
 
-    const publishInput = mockPublishLeaderboardSnapshot.mock.calls[0][0]
+    const publishInput = mockPublishDerivedLeaderboardSnapshot.mock.calls[0][0]
     expect(publishInput).toEqual(
       expect.objectContaining({
         src,
         timeframe: 30,
-        isDerived: true,
         expectedCountOverride: 300,
         countBaselineGeneration: DERIVED_COUNT_BASELINE_GENERATION,
         observationCycleId: `derive:${src.slug}:${job.id}:${job.timestamp}`,
       })
     )
+    expect(publishInput).not.toHaveProperty('rawObjectId')
+    expect(publishInput).not.toHaveProperty('isDerived')
     expect(publishInput.rows).toHaveLength(270)
     expect(DERIVED_MIN_FRESH_COVERAGE_PCT).toBe(90)
     expect(consoleError).not.toHaveBeenCalled()
@@ -149,7 +151,7 @@ describe('derived-board deterministic eligibility and coverage gate', () => {
 
     await expect(processDeriveBoards(job)).resolves.toEqual([])
 
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishDerivedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(consoleError).toHaveBeenCalledWith(
       expect.stringContaining(
         'P0 coverage gate mexc_futures 30d: fresh=269/300 (89.7%, required>=90%); keeping last good'
@@ -163,7 +165,7 @@ describe('derived-board deterministic eligibility and coverage gate', () => {
     await expect(processDeriveBoards(job)).resolves.toEqual([])
 
     expect(mockDbQuery).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishDerivedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(consoleError).toHaveBeenCalledWith(
       expect.stringContaining(
         'no eligible traders from latest PASSED native board; keeping last good'
@@ -195,7 +197,7 @@ describe('derived-board deterministic eligibility and coverage gate', () => {
     ).resolves.toEqual([])
 
     expect(mockDbQuery).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishDerivedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(consoleError).toHaveBeenCalledWith(
       expect.stringContaining(
         'missing latest PASSED native board(s) [30d]; required=[7d,30d]; keeping last good'

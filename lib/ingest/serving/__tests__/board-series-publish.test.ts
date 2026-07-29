@@ -1,21 +1,16 @@
 import type { BoardSeriesBlock, SourceRow } from '../../core/types'
 import type { IngestQueryExecutor } from '../../db'
 
-const query = jest.fn()
-const release = jest.fn()
-
 jest.mock('../../db', () => ({
-  ingestClientConnect: jest.fn(async () => ({ query, release })),
+  ingestClientConnect: jest.fn(() => {
+    throw new Error('board-series transaction body must not open a connection')
+  }),
   getIngestPool: jest.fn(),
 }))
 
 import { validateWorkerDbFencedWriteStatement } from '@/worker/src/ingest/worker-db-fence'
 
-import {
-  prepareBoardSeriesPublication,
-  publishBoardSeries,
-  publishBoardSeriesInTransaction,
-} from '../publish'
+import { prepareBoardSeriesPublication, publishBoardSeriesInTransaction } from '../publish'
 
 const src = {
   id: 29,
@@ -438,173 +433,5 @@ describe('board-series fenced transaction body', () => {
         ]),
       })
     ).toThrow('[board-series] snapshot guard has unrelated timeframe for binance_web3_bsc: 30d')
-  })
-})
-
-describe('publishBoardSeries legacy transaction boundary', () => {
-  beforeEach(() => {
-    query.mockReset()
-    release.mockReset()
-  })
-
-  it('locks the source and commits only after the exact snapshot and insert count', async () => {
-    query.mockImplementation(async (sql: string, params?: readonly unknown[]) =>
-      successfulQueryResult(sql, params)
-    )
-
-    await expect(publishBoardSeries(src, series, traderIds, exactGuard)).resolves.toEqual({
-      traders: 1,
-      points: 1,
-    })
-    expect(statementHeads(query.mock.calls)).toEqual([
-      'BEGIN',
-      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      'SELECT DISTINCT ON (timeframe)',
-      'SELECT expected.exchange_trader_id, expected.trader_id,',
-      'INSERT INTO arena.trader_series (trader_id, timeframe, metric, ts, value, currency)',
-      'COMMIT',
-    ])
-    expect(release).toHaveBeenCalledTimes(1)
-    expect(release).toHaveBeenCalledWith(false)
-  })
-
-  it('rolls back the full source batch on a chunk count mismatch', async () => {
-    query.mockImplementation(async (sql: string, params?: readonly unknown[]) => {
-      const result = successfulQueryResult(sql, params)
-      return sql.includes('INSERT INTO arena.trader_series') ? { ...result, rowCount: 0 } : result
-    })
-
-    await expect(publishBoardSeries(src, series, traderIds, exactGuard)).rejects.toThrow(
-      'write count mismatch'
-    )
-    expect(query.mock.calls.map(([sql]) => String(sql).trim())).toContain('ROLLBACK')
-    expect(query.mock.calls.map(([sql]) => String(sql).trim())).not.toContain('COMMIT')
-    expect(release).toHaveBeenCalledWith(false)
-  })
-
-  it('preserves a begin failure without attempting a rollback', async () => {
-    query.mockRejectedValueOnce(new Error('begin failed'))
-
-    await expect(publishBoardSeries(src, series, traderIds, exactGuard)).rejects.toThrow(
-      'begin failed'
-    )
-    expect(query).toHaveBeenCalledTimes(1)
-    expect(query).toHaveBeenCalledWith('BEGIN')
-    expect(release).toHaveBeenCalledWith(true)
-  })
-
-  it('fails closed before opening a transaction when any published timeframe lacks a guard', async () => {
-    await expect(
-      publishBoardSeries(src, replacementSeries, traderIds, {
-        expectedLatestSnapshots: new Map(),
-      })
-    ).rejects.toThrow('snapshot guard missing')
-    expect(query).not.toHaveBeenCalled()
-    expect(release).not.toHaveBeenCalled()
-  })
-
-  it('rolls back before writing when a newer snapshot supersedes the prepared batch', async () => {
-    query.mockImplementation(async (sql: string, params?: readonly unknown[]) => {
-      if (sql.includes('SELECT DISTINCT ON (timeframe)')) {
-        return {
-          rows: [
-            {
-              timeframe: 90,
-              id: 778,
-              raw_object_id: 9002,
-              scraped_at: '2026-07-16 00:00:00+00',
-            },
-          ],
-          rowCount: 1,
-        }
-      }
-      return successfulQueryResult(sql, params)
-    })
-
-    await expect(publishBoardSeries(src, replacementSeries, traderIds, exactGuard)).rejects.toThrow(
-      'snapshot superseded'
-    )
-    expect(
-      query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO arena.trader_series'))
-    ).toBe(false)
-    expect(query.mock.calls.some(([sql]) => String(sql).includes('DELETE FROM'))).toBe(false)
-    expect(query.mock.calls.map(([sql]) => String(sql).trim())).toContain('ROLLBACK')
-    expect(release).toHaveBeenCalledWith(false)
-  })
-
-  it('deletes weekly then daily and writes when the guarded replacement is exact', async () => {
-    query.mockImplementation(async (sql: string, params?: readonly unknown[]) =>
-      successfulQueryResult(sql, params)
-    )
-
-    await expect(
-      publishBoardSeries(src, replacementSeries, traderIds, exactGuard)
-    ).resolves.toEqual({ traders: 1, points: 1 })
-    expect(statementHeads(query.mock.calls)).toEqual([
-      'BEGIN',
-      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      'SELECT DISTINCT ON (timeframe)',
-      'SELECT expected.exchange_trader_id, expected.trader_id,',
-      'DELETE FROM arena.trader_series_weekly AS series',
-      'DELETE FROM arena.trader_series AS series',
-      'INSERT INTO arena.trader_series (trader_id, timeframe, metric, ts, value, currency)',
-      'COMMIT',
-    ])
-    const deleteParams = query.mock.calls
-      .filter(([sql]) => String(sql).includes('DELETE FROM arena.trader_series'))
-      .map(([, params]) => params)
-    expect(deleteParams).toEqual([
-      [JSON.stringify([{ trader_id: 42, timeframe: 90, metric: 'pnl_daily' }])],
-      [JSON.stringify([{ trader_id: 42, timeframe: 90, metric: 'pnl_daily' }])],
-    ])
-  })
-
-  it('rolls back replacement deletes when the subsequent insert count mismatches', async () => {
-    query.mockImplementation(async (sql: string, params?: readonly unknown[]) => {
-      const result = successfulQueryResult(sql, params)
-      return sql.includes('INSERT INTO arena.trader_series') ? { ...result, rowCount: 0 } : result
-    })
-
-    await expect(publishBoardSeries(src, replacementSeries, traderIds, exactGuard)).rejects.toThrow(
-      'write count mismatch'
-    )
-    expect(query.mock.calls.filter(([sql]) => String(sql).includes('DELETE FROM'))).toHaveLength(2)
-    expect(query.mock.calls.map(([sql]) => String(sql).trim())).toContain('ROLLBACK')
-    expect(query.mock.calls.map(([sql]) => String(sql).trim())).not.toContain('COMMIT')
-  })
-
-  it('does not roll back an uncertain COMMIT and destroys the client', async () => {
-    const commitError = new Error('commit outcome unknown')
-    query.mockImplementation(async (sql: string, params?: readonly unknown[]) => {
-      if (sql === 'COMMIT') throw commitError
-      return successfulQueryResult(sql, params)
-    })
-
-    await expect(publishBoardSeries(src, series, traderIds, exactGuard)).rejects.toBe(commitError)
-    expect(query.mock.calls.map(([sql]) => String(sql).trim())).toContain('COMMIT')
-    expect(query.mock.calls.map(([sql]) => String(sql).trim())).not.toContain('ROLLBACK')
-    expect(release).toHaveBeenCalledWith(true)
-  })
-
-  it('surfaces both publication and rollback failures and destroys the client', async () => {
-    const publicationError = new Error('series insert failed')
-    const rollbackError = new Error('rollback failed')
-    query.mockImplementation(async (sql: string, params?: readonly unknown[]) => {
-      if (sql.includes('INSERT INTO arena.trader_series')) throw publicationError
-      if (sql === 'ROLLBACK') throw rollbackError
-      return successfulQueryResult(sql, params)
-    })
-
-    const failure = await publishBoardSeries(src, series, traderIds, exactGuard).catch(
-      (error: unknown) => error
-    )
-
-    expect(failure).toBeInstanceOf(AggregateError)
-    expect((failure as AggregateError).message).toBe(
-      '[board-series] publication and rollback both failed'
-    )
-    expect((failure as AggregateError).errors).toEqual([publicationError, rollbackError])
-    expect(query.mock.calls.map(([sql]) => String(sql).trim())).not.toContain('COMMIT')
-    expect(release).toHaveBeenCalledWith(true)
   })
 })

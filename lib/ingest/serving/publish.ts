@@ -9,7 +9,6 @@
  * WORKER-ONLY MODULE (direct PG).
  */
 
-import type { PoolClient } from 'pg'
 import { getIngestPool, ingestClientConnect, type IngestQueryExecutor } from '../db'
 import type {
   BoardSeriesBlock,
@@ -95,6 +94,9 @@ export interface PublishTrustedSnapshotInput extends Omit<
 > {
   trust: LeaderboardMetricTrustBundle
 }
+
+/** Direct publication is reserved for boards derived from our own database. */
+export type PublishDerivedSnapshotInput = Omit<PublishSnapshotInput, 'rawObjectId' | 'isDerived'>
 
 export interface PublishSnapshotResult {
   snapshotId: number
@@ -270,76 +272,6 @@ function verdictFromStored(
       baselineUsed === null || baselineUsed <= 0
         ? null
         : (Math.abs(actualCount - baselineUsed) / baselineUsed) * 100,
-  }
-}
-
-async function reconcileCommittedTrustedPublication(
-  prepared: PreparedLeaderboardMetricTrust,
-  expectedCount: number | null,
-  commitError: unknown
-): Promise<PublishSnapshotResult> {
-  const commitCause = commitError instanceof Error ? commitError : new Error(String(commitError))
-  let client: PoolClient
-  try {
-    client = await ingestClientConnect()
-  } catch (cause) {
-    throw new AggregateError(
-      [commitCause, cause instanceof Error ? cause : new Error(String(cause))],
-      '[publish] COMMIT outcome and trusted publication reconciliation both failed'
-    )
-  }
-  let transactionOpen = false
-  let commitAttempted = false
-  let destroyClient = false
-  try {
-    await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-    transactionOpen = true
-    const existing = await reconcileLeaderboardMetricTrust(client, prepared)
-    if (!existing) {
-      throw new Error('[publish] fresh reconciliation found no committed trusted publication')
-    }
-    if (existing.expectedCount !== expectedCount) {
-      throw new Error('[publish] reconciled snapshot expected_count does not match retry input')
-    }
-    const result: PublishSnapshotResult = {
-      snapshotId: existing.snapshotId,
-      scrapedAt: existing.scrapedAt,
-      verdict: verdictFromStored(existing.actualCount, existing.baselineUsed, true),
-      published: true,
-      traderIds: existing.traderIds,
-      trust: existing.trust,
-    }
-    commitAttempted = true
-    await client.query('COMMIT')
-    transactionOpen = false
-    return result
-  } catch (cause) {
-    let reconciliationCause = cause instanceof Error ? cause : new Error(String(cause))
-    if (transactionOpen && !commitAttempted) {
-      try {
-        await client.query('ROLLBACK')
-        transactionOpen = false
-      } catch (rollbackCause) {
-        destroyClient = true
-        reconciliationCause = new AggregateError(
-          [
-            reconciliationCause,
-            rollbackCause instanceof Error ? rollbackCause : new Error(String(rollbackCause)),
-          ],
-          '[publish] trusted reconciliation and rollback both failed'
-        )
-      }
-    } else if (commitAttempted) {
-      // The reconciliation transaction is read-only, but its connection is no
-      // longer safe to pool when the COMMIT response is uncertain.
-      destroyClient = true
-    }
-    throw new AggregateError(
-      [commitCause, reconciliationCause],
-      '[publish] COMMIT outcome is not an exact trusted publication'
-    )
-  } finally {
-    client.release(destroyClient)
   }
 }
 
@@ -652,11 +584,12 @@ function reportCommittedBaselineShift(
   }
 }
 
-async function publishLeaderboardSnapshotInternal(
+async function publishDerivedLeaderboardSnapshotInternal(
   input: InternalPublishSnapshotInput
 ): Promise<PublishSnapshotResult> {
-  const { preparedTrust } = input
-  const expectedCount = expectedLeaderboardCount(input)
+  if (input.isDerived !== true || input.rawObjectId !== null || input.preparedTrust !== null) {
+    throw new TypeError('[publish] direct leaderboard publication must be derived')
+  }
   const client = await ingestClientConnect()
   let transactionOpen = false
   let commitAttempted = false
@@ -664,16 +597,7 @@ async function publishLeaderboardSnapshotInternal(
   try {
     await client.query('BEGIN')
     transactionOpen = true
-    const result = await publishLeaderboardSnapshotTransactionInternal(
-      client,
-      input,
-      undefined,
-      preparedTrust?.manifest.data_contract === LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT
-        ? async (transaction) => {
-            await transaction.query(`SET LOCAL lock_timeout = '5s'`)
-          }
-        : undefined
-    )
+    const result = await publishLeaderboardSnapshotTransactionInternal(client, input)
     commitAttempted = true
     await client.query('COMMIT')
     transactionOpen = false
@@ -681,13 +605,9 @@ async function publishLeaderboardSnapshotInternal(
     return result
   } catch (cause) {
     if (commitAttempted) {
-      // The server may have committed even when the connection lost the COMMIT
-      // response. Never issue ROLLBACK on an ambiguous connection; destroy it
-      // and verify the immutable run through a fresh connection instead.
+      // Never issue ROLLBACK on an ambiguous connection. Derived publication
+      // retries are source-locked and cycle-deduplicated by the count gate.
       destroyClient = true
-      if (preparedTrust) {
-        return reconcileCommittedTrustedPublication(preparedTrust, expectedCount, cause)
-      }
       throw cause
     }
 
@@ -779,16 +699,23 @@ export async function publishTrustedLeaderboardSnapshotInTransaction(
   )
 }
 
-export async function publishLeaderboardSnapshot(
-  input: PublishSnapshotInput
+export async function publishDerivedLeaderboardSnapshot(
+  input: PublishDerivedSnapshotInput
 ): Promise<PublishSnapshotResult> {
-  return publishLeaderboardSnapshotInternal({ ...input, preparedTrust: null })
-}
-
-export async function publishTrustedLeaderboardSnapshot(
-  input: PublishTrustedSnapshotInput
-): Promise<PublishSnapshotResult> {
-  return publishLeaderboardSnapshotInternal(prepareTrustedSnapshotInput(input))
+  if (
+    !input.src.timeframes_derived.includes(input.timeframe) ||
+    input.src.timeframes_native.includes(input.timeframe)
+  ) {
+    throw new TypeError(
+      '[publish] direct leaderboard publication requires a declared derived-only timeframe'
+    )
+  }
+  return publishDerivedLeaderboardSnapshotInternal({
+    ...input,
+    rawObjectId: null,
+    isDerived: true,
+    preparedTrust: null,
+  })
 }
 
 /** Resolve (or create) a single trader id — Tier-C path for long-tail views. */
@@ -1558,58 +1485,6 @@ export async function publishBoardSeriesInTransaction(
     throw new Error('[board-series] fenced publication requires a source authority guard')
   }
   return publishPreparedBoardSeriesTransactionInternal(transaction, prepared, sourceAuthorityGuard)
-}
-
-export async function publishBoardSeries(
-  src: SourceRow,
-  seriesByTrader: Map<string, BoardSeriesBlock[]>,
-  traderIds: Map<string, number>,
-  options: PublishBoardSeriesOptions
-): Promise<{ traders: number; points: number }> {
-  const prepared = prepareBoardSeriesPublication(src, seriesByTrader, traderIds, options)
-  if (prepared.rows.length === 0) return { traders: 0, points: 0 }
-
-  const client = await ingestClientConnect()
-  let transactionStarted = false
-  let commitAttempted = false
-  let destroyClient = false
-  try {
-    await client.query('BEGIN')
-    transactionStarted = true
-    const result = await publishPreparedBoardSeriesTransactionInternal(client, prepared)
-    commitAttempted = true
-    await client.query('COMMIT')
-    transactionStarted = false
-    return result
-  } catch (err) {
-    let failure: unknown = err
-    if (transactionStarted && !commitAttempted) {
-      try {
-        await client.query('ROLLBACK')
-        transactionStarted = false
-      } catch (rollbackCause) {
-        destroyClient = true
-        failure = new AggregateError(
-          [
-            err instanceof Error ? err : new Error(String(err)),
-            rollbackCause instanceof Error ? rollbackCause : new Error(String(rollbackCause)),
-          ],
-          '[board-series] publication and rollback both failed'
-        )
-      }
-    } else if (commitAttempted) {
-      // Never reuse a connection whose COMMIT outcome is ambiguous. Board
-      // writes are exact-snapshot guarded and idempotent, so a retry is safe.
-      destroyClient = true
-    } else {
-      // A rejected BEGIN/query timeout does not prove the backend stayed out
-      // of a transaction. Do not return that connection to the shared pool.
-      destroyClient = true
-    }
-    throw failure
-  } finally {
-    client.release(destroyClient)
-  }
 }
 
 /**

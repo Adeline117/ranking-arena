@@ -11,13 +11,18 @@ jest.mock('../../db', () => ({
   ingestClientConnect: jest.fn(async () => ({ query: clientQuery, release })),
 }))
 
-import { publishLeaderboardSnapshot, publishLeaderboardSnapshotInTransaction } from '../publish'
+import {
+  publishDerivedLeaderboardSnapshot,
+  publishLeaderboardSnapshotInTransaction,
+} from '../publish'
 
 const src = {
   id: 19,
   slug: 'mexc_futures',
   currency: 'USDT',
   expected_count: 2_212,
+  timeframes_native: [7],
+  timeframes_derived: [30],
 } as SourceRow
 
 describe('publishLeaderboardSnapshot count baseline generation', () => {
@@ -38,13 +43,11 @@ describe('publishLeaderboardSnapshot count baseline generation', () => {
   it('resets to the new eligible-count bootstrap and persists its generation', async () => {
     const generation = 'derived-native-eligibility-v1'
 
-    const result = await publishLeaderboardSnapshot({
+    const result = await publishDerivedLeaderboardSnapshot({
       src,
       timeframe: 30,
       rows: [],
       rejects: [],
-      rawObjectId: null,
-      isDerived: true,
       expectedCountOverride: 300,
       countBaselineGeneration: generation,
     })
@@ -71,6 +74,20 @@ describe('publishLeaderboardSnapshot count baseline generation', () => {
       count_baseline_generation: generation,
     })
     expect(release).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects direct publication for a native or undeclared timeframe before DB I/O', async () => {
+    await expect(
+      publishDerivedLeaderboardSnapshot({
+        src,
+        timeframe: 7,
+        rows: [],
+        rejects: [],
+      })
+    ).rejects.toThrow('requires a declared derived-only timeframe')
+
+    expect(clientQuery).not.toHaveBeenCalled()
+    expect(release).not.toHaveBeenCalled()
   })
 
   it('runs the required source guard after the publication lock without transaction control', async () => {

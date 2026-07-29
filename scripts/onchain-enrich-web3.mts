@@ -67,7 +67,7 @@ async function main() {
           [slug, onlyWallets]
         )
       : await pool.query(
-      `SELECT t.exchange_trader_id AS wallet, ts.pnl
+          `SELECT t.exchange_trader_id AS wallet, ts.pnl
          FROM arena.trader_stats ts
          JOIN arena.traders t ON t.id = ts.trader_id
          JOIN arena.sources s ON s.id = t.source_id
@@ -85,8 +85,8 @@ async function main() {
                  lr.rank ASC NULLS LAST,
                  ts.pnl DESC
         LIMIT $2`,
-      [slug, topN]
-    )
+          [slug, topN]
+        )
     console.log(`\n=== ${slug} (${chain}) — sweep batch ${rows.length} wallets ×${concurrency} ===`)
     let ok = 0
     let failed = 0
@@ -113,7 +113,7 @@ async function main() {
             [slug, wallet, JSON.stringify(extras), scoreEligibleWinRate(e)]
           )
           // 链上自算 pnl_daily 序列(BSC-only,见 enrichmentSeries 注释)——
-          // 与 publishBoardSeries 同款 (trader,tf,metric,ts) upsert,后到覆盖。
+          // 与 board-series 写入同款 (trader,tf,metric,ts) upsert，后到覆盖。
           let seriesPts = 0
           const blocks = enrichmentSeries(e, Date.now())
           if (blocks.length > 0) {

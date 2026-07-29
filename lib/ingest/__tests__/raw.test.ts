@@ -108,6 +108,32 @@ describe('writeRawObject storage retries', () => {
     expect(mockQuery).not.toHaveBeenCalled()
   })
 
+  it('rejects every Tier-A raw job type without a claimed runner before Storage I/O', async () => {
+    const unsafeWriteRawObject = writeRawObject as unknown as (value: unknown) => Promise<unknown>
+
+    for (const jobType of ['tier_a', 'tier_a_manifest', 'tier_a_failure']) {
+      await expect(unsafeWriteRawObject({ ...input, jobType })).rejects.toThrow(
+        'requires a claimed transaction runner'
+      )
+    }
+
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockQuery).not.toHaveBeenCalled()
+  })
+
+  it.each(['tier_b', 'tier_b_series', 'tier_c', 'tier_d', 'bots', 'history:trades'] as const)(
+    'keeps direct RAW compatibility for %s',
+    async (jobType) => {
+      mockUpload.mockResolvedValueOnce({ error: null })
+
+      await expect(writeRawObject({ ...input, jobType })).resolves.toEqual(
+        expect.objectContaining({ id: 42 })
+      )
+
+      expect(mockQuery).toHaveBeenCalledTimes(1)
+    }
+  )
+
   it('does not repeat or fall back when the caller transaction rejects after pointer SQL', async () => {
     mockUpload.mockResolvedValueOnce({ error: null })
     const executorQuery = jest.fn(async () => ({ rows: [{ id: 84 }] }))
