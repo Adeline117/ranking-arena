@@ -169,6 +169,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729145000_atomic_group_comment_moderation.sql
   20260729150500_atomic_group_post_moderation.sql
   20260729152500_atomic_group_channel_page.sql
+  20260729153000_atomic_group_audit_log_page.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
