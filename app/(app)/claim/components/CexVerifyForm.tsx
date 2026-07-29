@@ -1,28 +1,110 @@
 'use client'
 import PasswordInput from '@/app/components/ui/PasswordInput'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '@/app/components/base'
 import { trackEvent } from '@/lib/analytics/track'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { SearchResult, CEX_PLATFORMS } from './types'
 import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
-export function CexVerifyForm({
-  trader,
-  onSuccess,
-}: {
+type CexVerifyFormProps = {
   trader: SearchResult
   onSuccess: () => void
+}
+
+type ClaimOperation = {
+  controller: AbortController
+  viewer: SettingsViewerSnapshot
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function responseMessage(value: unknown, fallback: string): string {
+  if (!isRecord(value)) return fallback
+  if (typeof value.message === 'string' && value.message.trim()) return value.message.trim()
+  if (typeof value.error === 'string' && value.error.trim()) return value.error.trim()
+  if (
+    isRecord(value.error) &&
+    typeof value.error.message === 'string' &&
+    value.error.message.trim()
+  ) {
+    return value.error.message.trim()
+  }
+  return fallback
+}
+
+function readVerifiedUid(value: unknown): string | null {
+  if (
+    !isRecord(value) ||
+    value.success !== true ||
+    value.verified !== true ||
+    typeof value.uid !== 'string' ||
+    !value.uid.trim()
+  ) {
+    return null
+  }
+  return value.uid.trim()
+}
+
+function isClaimAcknowledgement(
+  value: unknown,
+  expected: {
+    source: string
+    traderId: string
+    userId: string
+  }
+): boolean {
+  if (!isRecord(value) || value.success !== true || !isRecord(value.data)) return false
+  const claim = value.data.claim
+  return (
+    isRecord(claim) &&
+    claim.user_id === expected.userId &&
+    claim.trader_id === expected.traderId &&
+    claim.source === expected.source.toLowerCase() &&
+    claim.status === 'reviewing' &&
+    claim.verification_method === 'api_key' &&
+    value.data.auto_approved === false
+  )
+}
+
+export function CexVerifyForm(props: CexVerifyFormProps) {
+  const auth = useAuthSession()
+  const viewer = captureSettingsViewer(auth)
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${props.trader.source}\u0000${props.trader.source_trader_id}`
+
+  return <ViewerScopedCexVerifyForm key={scopeKey} {...props} viewer={viewer} />
+}
+
+function ViewerScopedCexVerifyForm({
+  trader,
+  onSuccess,
+  viewer,
+}: CexVerifyFormProps & {
+  viewer: SettingsViewerSnapshot | null
 }) {
   const { t } = useLanguage()
   const { showToast } = useToast()
   const router = useRouter()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const viewerRef = useRef(viewer)
+  viewerRef.current = viewer
+  const mountedRef = useRef(false)
+  const operationRef = useRef<ClaimOperation | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
   const [passphrase, setPassphrase] = useState('')
@@ -31,6 +113,20 @@ export function CexVerifyForm({
 
   const platform = CEX_PLATFORMS.find((p) => trader.source.startsWith(p.value.split('_')[0]))
   const needsPassphrase = platform?.requiresPassphrase ?? false
+  const operationIsCurrent = (operation: ClaimOperation): boolean =>
+    mountedRef.current &&
+    operationRef.current === operation &&
+    isSettingsViewerCurrent(operation.viewer, authRef.current)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      operationRef.current?.controller.abort()
+      operationRef.current = null
+    }
+  }, [])
+
   const redirectToLogin = () => {
     showToast(t('loginExpiredPleaseRelogin'), 'error')
     router.push(
@@ -49,88 +145,100 @@ export function CexVerifyForm({
       return
     }
 
+    const operationViewer = viewerRef.current
+    if (!operationViewer || !isSettingsViewerCurrent(operationViewer, authRef.current)) {
+      if (authRef.current.authChecked && !authRef.current.loading && !authRef.current.userId) {
+        redirectToLogin()
+      }
+      return
+    }
+
+    const operation: ClaimOperation = {
+      controller: new AbortController(),
+      viewer: operationViewer,
+    }
+    operationRef.current = operation
     setLoading(true)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) {
-        redirectToLogin()
-        return
-      }
-
       // Step 1: Verify ownership (skip if already verified)
       let uid = verifiedUid
       if (!uid) {
-        const verifyRes = await fetch('/api/exchange/verify-ownership', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({
+        const verifyResult = await authedFetch<unknown>(
+          '/api/exchange/verify-ownership',
+          'POST',
+          operation.viewer.accessToken,
+          {
             exchange: trader.source,
             traderId: trader.source_trader_id,
             source: trader.source,
             apiKey: apiKey.trim(),
             apiSecret: apiSecret.trim(),
             passphrase: passphrase.trim() || undefined,
-          }),
-        })
-
-        const verifyData: { verified?: boolean; message?: string; uid?: string } = await verifyRes
-          .json()
-          .catch(() => ({}))
-
-        if (verifyRes.status === 401) {
+          },
+          45_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: operation.controller.signal,
+          }
+        )
+        if (verifyResult.stale || !operationIsCurrent(operation)) return
+        if (verifyResult.status === 401) {
           redirectToLogin()
           return
         }
 
-        if (!verifyRes.ok || !verifyData.verified || !verifyData.uid) {
+        const acknowledgedUid = verifyResult.ok ? readVerifiedUid(verifyResult.data) : null
+        if (!acknowledgedUid) {
           // The exchange's raw (English) error is passed through — prefix it with
           // a localized "Exchange returned:" so a zh/ja/ko user knows the message
           // is upstream, not a mistranslation. Fall back to our own mismatch copy.
+          const message = responseMessage(verifyResult.data, '')
           showToast(
-            verifyData.message
-              ? `${t('claimExchangeErrorPrefix')} ${verifyData.message}`
-              : t('claimApiKeyMismatch'),
+            message ? `${t('claimExchangeErrorPrefix')} ${message}` : t('claimApiKeyMismatch'),
             'error'
           )
           return
         }
 
-        uid = verifyData.uid
+        uid = acknowledgedUid
         setVerifiedUid(uid)
       }
 
       // Step 2: Submit the verified claim for owner review
-      const claimRes = await fetch('/api/traders/claim', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({
+      const claimResult = await authedFetch<unknown>(
+        '/api/traders/claim',
+        'POST',
+        operation.viewer.accessToken,
+        {
           trader_id: trader.source_trader_id,
           source: trader.source,
           verification_method: 'api_key',
           verification_data: {
             verified_uid: uid,
           },
-        }),
-      })
-
-      const claimData: { error?: string } = await claimRes.json().catch(() => ({}))
-
-      if (!claimRes.ok) {
-        if (claimRes.status === 401) {
-          redirectToLogin()
-          return
+        },
+        30_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
         }
-        showToast(claimData.error || t('claimFailed'), 'error')
+      )
+      if (claimResult.stale || !operationIsCurrent(operation)) return
+      if (claimResult.status === 401) {
+        redirectToLogin()
+        return
+      }
+      if (
+        !claimResult.ok ||
+        !isClaimAcknowledgement(claimResult.data, {
+          source: trader.source,
+          traderId: trader.source_trader_id,
+          userId: operation.viewer.userId,
+        })
+      ) {
+        showToast(responseMessage(claimResult.data, t('claimFailed')), 'error')
         return
       }
 
@@ -138,11 +246,16 @@ export function CexVerifyForm({
       showToast(t('claimSubmitted'), 'success')
       onSuccess()
     } catch (_error) {
-      showToast(t('claimFailed'), 'error')
+      if (operationIsCurrent(operation)) showToast(t('claimFailed'), 'error')
     } finally {
-      setLoading(false)
+      if (operationRef.current === operation) operationRef.current = null
+      if (mountedRef.current && isSettingsViewerCurrent(operation.viewer, authRef.current)) {
+        setLoading(false)
+      }
     }
   }
+
+  const authPending = !viewer && (!auth.authChecked || auth.loading || Boolean(auth.userId))
 
   return (
     <Box style={{ maxWidth: '500px', margin: '0 auto' }}>
@@ -171,7 +284,7 @@ export function CexVerifyForm({
             fontSize: tokens.typography.fontSize.xs,
             color: tokens.colors.text.secondary,
             lineHeight: 1.5,
-            fontWeight: 600,
+            fontWeight: tokens.typography.fontWeight.semibold,
           }}
         >
           {t('claimReadOnlyWarning')}
@@ -183,7 +296,7 @@ export function CexVerifyForm({
           style={{
             display: 'block',
             marginBottom: tokens.spacing[1],
-            fontWeight: 500,
+            fontWeight: tokens.typography.fontWeight.medium,
             fontSize: tokens.typography.fontSize.sm,
           }}
         >
@@ -210,7 +323,7 @@ export function CexVerifyForm({
           style={{
             display: 'block',
             marginBottom: tokens.spacing[1],
-            fontWeight: 500,
+            fontWeight: tokens.typography.fontWeight.medium,
             fontSize: tokens.typography.fontSize.sm,
           }}
         >
@@ -237,7 +350,7 @@ export function CexVerifyForm({
             style={{
               display: 'block',
               marginBottom: tokens.spacing[1],
-              fontWeight: 500,
+              fontWeight: tokens.typography.fontWeight.medium,
               fontSize: tokens.typography.fontSize.sm,
             }}
           >
@@ -281,18 +394,19 @@ export function CexVerifyForm({
 
       <button
         onClick={handleVerify}
-        disabled={loading}
+        disabled={loading || authPending}
         style={{
           width: '100%',
           padding: tokens.spacing[3],
           fontSize: tokens.typography.fontSize.md,
-          fontWeight: 600,
+          fontWeight: tokens.typography.fontWeight.semibold,
           borderRadius: tokens.radius.md,
           border: 'none',
-          backgroundColor: loading ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
-          color: '#fff',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          opacity: loading ? 0.6 : 1,
+          backgroundColor:
+            loading || authPending ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
+          color: tokens.colors.white,
+          cursor: loading || authPending ? 'not-allowed' : 'pointer',
+          opacity: loading || authPending ? 0.6 : 1,
         }}
       >
         {loading ? t('verifying') : t('claimVerifyAndClaim')}
