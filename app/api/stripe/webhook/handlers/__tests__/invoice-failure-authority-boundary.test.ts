@@ -15,7 +15,7 @@ describe('failed recurring Invoice authority boundary', () => {
   })
 
   it('never upserts a failure over an existing succeeded Invoice record', () => {
-    expect(handler).toContain(".from('payment_history').insert({")
+    expect(handler).toMatch(/\.from\(\s*['"]payment_history['"]\s*\)\s*\.insert\(\{/s)
     expect(handler).not.toMatch(/\.from\(\s*['"]payment_history['"]\s*\)\.upsert\(/s)
     expect(handler).toContain("existingFailure.status !== 'failed'")
   })
