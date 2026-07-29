@@ -8,6 +8,7 @@ import { withPublic } from '@/lib/api/middleware'
 import { del, getOrSetWithLock } from '@/lib/cache'
 import {
   filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
   publicRankingCacheKey,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
@@ -51,6 +52,9 @@ export const GET = withPublic(
 
           if (snapErr || snapData === null) {
             throw new Error(`sidebar cohort query failed: ${snapErr?.message ?? 'null payload'}`)
+          }
+          if (snapData.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+            throw new Error('sidebar ranking query crossed the public source boundary')
           }
           if (
             snapData.length === 0 &&
