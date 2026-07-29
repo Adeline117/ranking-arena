@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useRouter, useParams, useSearchParams } from 'next/navigation'
+import { useRouter, useParams, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
@@ -14,7 +14,7 @@ import { useQuery } from '@tanstack/react-query'
 import { STALE_STANDARD, STALE_RELAXED } from '@/lib/hooks/cache-presets'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
 import { fetcher } from '@/lib/hooks/fetchers'
-import type { TraderFirstScreen, TraderFirstScreenResponse } from '@/lib/data/serving/types'
+import type { TraderFirstScreen } from '@/lib/data/serving/types'
 import type { ApiSuccessResponse } from '@/lib/types/index'
 import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { HOLDER_CHIP_STYLE } from '@/app/components/ranking/TraderRowStyles'
@@ -23,7 +23,6 @@ import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
 import { useSourceCapabilities } from '@/lib/hooks/useSourceCapabilities'
-import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { trackEvent } from '@/lib/analytics/track'
 import {
   claimedTraderCanonicalHref,
@@ -35,6 +34,16 @@ import { Box, Text } from '@/app/components/base'
 // (was pulled into this client bundle unnecessarily before).
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
+import LinkedAccountStatus from '@/app/components/trader/LinkedAccountStatus'
+import {
+  isExactSourceNotServingError,
+  parseExactTraderFirstScreenResponse,
+  parseExactRankHistory,
+  resolveLinkedAccountViewScope,
+  resolveTraderHeaderAccountMetrics,
+  traderDetailMatchesLinkedAccount,
+  traderDetailMatchesRequestedRoute,
+} from '@/app/components/trader/linked-account-view'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import DataProvenanceBadge from '@/app/components/trader/DataProvenanceBadge'
 import { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
@@ -178,11 +187,16 @@ import { useOnchainEnrichTrigger } from './hooks/useOnchainEnrichTrigger'
 import { TraderProfileError } from './components/TraderProfileError'
 import { TraderStaleBanner, TraderPlatformDeadBanner } from './components/TraderStatusBanners'
 import { resolveTraderProfileOwnership } from './profile-ownership'
-import { resolveTraderClaimSources, type ExactTraderClaimData } from './profile-claim-source'
+import {
+  parseExactTraderClaimEnvelope,
+  resolveTraderClaimSources,
+  type ExactTraderClaimData,
+} from './profile-claim-source'
 
 // NO_PORTFOLIO_PLATFORMS removed — Portfolio tab shown for ALL platforms
 // When no position data exists, the Portfolio component shows an empty state
 type TraderPageData = import('@/app/(app)/u/[handle]/components/types').TraderPageData
+const EMPTY_SIMILAR_TRADERS: NonNullable<TraderPageData['similarTraders']> = []
 
 // #31: traderFetcher extracted to lib/hooks/traderFetcher.ts (shared with useUserProfile)
 
@@ -281,6 +295,7 @@ export default function TraderProfileClient({
   // the belt-and-suspenders: even a null first-screen keeps us out of legacy mode.
   const isServing = dataMode === 'serving'
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const routeParams = useParams<{ handle: string }>()
   const { t, language: _language } = useLanguage()
@@ -295,11 +310,19 @@ export default function TraderProfileClient({
   // and okx_spot share the same exchange_trader_id) the server may have
   // resolved the WRONG account — the header then shows "OKX Spot / $0" for an
   // okx_futures leaderboard link. Detect the mismatch here, VALIDATE the URL
-  // platform against the serving resolver (a stale/forged ?platform= must
-  // never break a good page → 404 keeps the server's account), then switch
+  // platform against the serving resolver. A stale/forged selector is removed
+  // before the server account can render under the wrong requested URL; then switch
   // the WHOLE page — header numbers, capability, and every /core + /records
   // fetch — onto the requested account.
-  const urlPlatform = searchParams?.get('platform') ?? null
+  const platformValues = searchParams.getAll('platform')
+  const platformSelectorInvalid =
+    platformValues.length > 1 ||
+    (platformValues.length === 1 &&
+      (platformValues[0].length === 0 ||
+        platformValues[0].length > 64 ||
+        platformValues[0] !== platformValues[0].trim()))
+  const urlPlatform =
+    platformValues.length === 1 && !platformSelectorInvalid ? platformValues[0] : null
   const rawUrlHandle = typeof routeParams?.handle === 'string' ? routeParams.handle : ''
   const urlHandle = (() => {
     try {
@@ -310,26 +333,26 @@ export default function TraderProfileClient({
       return rawUrlHandle
     }
   })()
-  const platformMismatch =
-    isServing && !!urlPlatform && !!urlHandle && urlPlatform !== serverData.source
-  const { data: accountOverride } = useQuery<TraderFirstScreenResponse | null>({
+  const platformMismatch = !!urlPlatform && !!urlHandle && urlPlatform !== serverData.source
+  const {
+    data: accountOverride,
+    error: accountOverrideError,
+    isFetchedAfterMount: accountOverrideFetchedAfterMount,
+    isFetching: accountOverrideFetching,
+    fetchStatus: accountOverrideFetchStatus,
+  } = useQuery<unknown>({
     queryKey: ['trader-first-screen', urlHandle, urlPlatform],
     queryFn: async () => {
-      try {
-        const res = await fetcher<ApiSuccessResponse<TraderFirstScreenResponse>>(
-          `/api/traders/${encodeURIComponent(urlHandle)}/first-screen?source=${encodeURIComponent(urlPlatform ?? '')}`
-        )
-        return res.data
-      } catch (err) {
-        // 404 = the handle does not exist on the requested platform (stale or
-        // forged link) → null keeps the server-resolved account rendering.
-        if ((err as Error & { status?: number }).status === 404) return null
-        throw err
-      }
+      const res = await fetcher<ApiSuccessResponse<unknown>>(
+        `/api/traders/${encodeURIComponent(urlHandle)}/first-screen?source=${encodeURIComponent(urlPlatform ?? '')}`
+      )
+      return res.data
     },
     enabled: platformMismatch,
-    staleTime: STALE_STANDARD,
-    refetchOnWindowFocus: false,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
     retry: (failureCount, error) => {
       if ((error as Error & { status?: number }).status === 404) return false
       return failureCount < 2
@@ -345,50 +368,181 @@ export default function TraderProfileClient({
   // is the alias the search href uses (e.g. 'bitunix'), and that mismatch was
   // silently dropping the override so ?platform= disambiguation fell back to
   // the (possibly wrong) server-resolved account on bitunix/xt/blofin/btcc.
-  const override = platformMismatch && accountOverride ? accountOverride : null
-  const servingFirstScreen = override ? override.firstScreen : serverFirstScreen
+  const accountOverrideStatus = (accountOverrideError as (Error & { status?: number }) | null)
+    ?.status
+  const accountOverrideSettledAfterMount =
+    accountOverrideFetchedAfterMount &&
+    accountOverrideFetchStatus === 'idle' &&
+    !accountOverrideFetching
+  const exactRouteOverrideRequest =
+    urlPlatform && urlHandle
+      ? ({ kind: 'route', platform: urlPlatform, handle: urlHandle } as const)
+      : null
+  const parsedAccountOverride = exactRouteOverrideRequest
+    ? parseExactTraderFirstScreenResponse(accountOverride, exactRouteOverrideRequest)
+    : null
+  const accountOverrideMatchesRequest = Boolean(
+    platformMismatch &&
+    accountOverrideSettledAfterMount &&
+    !accountOverrideError &&
+    parsedAccountOverride
+  )
+  const override = accountOverrideMatchesRequest ? parsedAccountOverride : null
+  const accountOverrideAllowsLegacy = Boolean(
+    exactRouteOverrideRequest &&
+    accountOverrideSettledAfterMount &&
+    isExactSourceNotServingError(accountOverrideError, exactRouteOverrideRequest)
+  )
+  const accountOverrideServingNotFound = Boolean(
+    accountOverrideSettledAfterMount &&
+    accountOverrideStatus === 404 &&
+    !accountOverrideAllowsLegacy
+  )
+  const legacyPlatformOverrideUrl =
+    platformMismatch && accountOverrideAllowsLegacy && urlPlatform
+      ? `/api/traders/${encodeURIComponent(urlHandle)}?source=${encodeURIComponent(urlPlatform)}`
+      : null
+  const {
+    data: legacyPlatformOverrideResponse,
+    error: legacyPlatformOverrideError,
+    isFetchedAfterMount: legacyPlatformOverrideFetchedAfterMount,
+    isFetching: legacyPlatformOverrideFetching,
+    fetchStatus: legacyPlatformOverrideFetchStatus,
+  } = useQuery<TraderPageData>({
+    queryKey: ['trader-platform-legacy-override', urlHandle, urlPlatform],
+    queryFn: () => traderFetcher<TraderPageData>(legacyPlatformOverrideUrl!),
+    enabled: Boolean(legacyPlatformOverrideUrl),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    retry: (failureCount, error) => {
+      if ((error as Error & { status?: number }).status === 404) return false
+      return failureCount < 2
+    },
+  })
+  const legacyPlatformOverrideMatchesRequest = Boolean(
+    accountOverrideAllowsLegacy &&
+    legacyPlatformOverrideResponse &&
+    legacyPlatformOverrideFetchedAfterMount &&
+    legacyPlatformOverrideFetchStatus === 'idle' &&
+    !legacyPlatformOverrideFetching &&
+    !legacyPlatformOverrideError &&
+    urlPlatform &&
+    traderDetailMatchesRequestedRoute(legacyPlatformOverrideResponse, urlPlatform, urlHandle)
+  )
+  const legacyPlatformOverride = legacyPlatformOverrideMatchesRequest
+    ? legacyPlatformOverrideResponse
+    : null
+  const baseIdentityReady =
+    (!platformMismatch && !platformSelectorInvalid) ||
+    Boolean(override) ||
+    Boolean(legacyPlatformOverride)
+  const firstScreenMalformed = Boolean(
+    platformMismatch &&
+    accountOverrideSettledAfterMount &&
+    !accountOverrideError &&
+    (!accountOverride || !accountOverrideMatchesRequest)
+  )
+  const legacyPlatformOverrideStatus = (
+    legacyPlatformOverrideError as (Error & { status?: number }) | null
+  )?.status
+  const legacyPlatformOverrideRejected = Boolean(
+    accountOverrideAllowsLegacy &&
+    legacyPlatformOverrideFetchedAfterMount &&
+    legacyPlatformOverrideFetchStatus === 'idle' &&
+    !legacyPlatformOverrideFetching &&
+    !legacyPlatformOverrideMatchesRequest &&
+    (!legacyPlatformOverrideError || legacyPlatformOverrideStatus === 404)
+  )
+  const platformOverrideRejected = Boolean(
+    platformSelectorInvalid ||
+    firstScreenMalformed ||
+    accountOverrideServingNotFound ||
+    legacyPlatformOverrideRejected
+  )
+
+  // A stale/forged ?platform= must never render the ISR account under the
+  // requested platform URL. Withdraw the mismatched account immediately, then
+  // remove only the rejected selector so the exact server route can recover.
+  useEffect(() => {
+    if (!platformOverrideRejected) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('platform')
+    const query = params.toString()
+    router.replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false })
+  }, [pathname, platformOverrideRejected, router, searchParams])
+
+  const servingFirstScreen = override
+    ? override.firstScreen
+    : legacyPlatformOverride
+      ? null
+      : baseIdentityReady
+        ? serverFirstScreen
+        : null
   const isVerifiedData = override
     ? override.is_verified_data
-    : (serverData.is_verified_data ?? false)
-  const data = useMemo<UnregisteredTraderData>(
-    () =>
-      override
-        ? firstScreenToTraderData(override.firstScreen, urlHandle, override.is_verified_data)
-        : serverData,
-    [override, serverData, urlHandle]
-  )
+    : legacyPlatformOverride
+      ? false
+      : baseIdentityReady
+        ? (serverData.is_verified_data ?? false)
+        : false
+  const data: UnregisteredTraderData = (() => {
+    if (override) {
+      return firstScreenToTraderData(override.firstScreen, urlHandle, override.is_verified_data)
+    }
+    if (legacyPlatformOverride?.profile) {
+      const profile = legacyPlatformOverride.profile
+      const performance = legacyPlatformOverride.performance as ExtendedPerformance | null
+      return {
+        handle: profile.handle || urlHandle,
+        avatar_url: profile.avatar_url ?? null,
+        profile_url: profile.profile_url ?? null,
+        source: profile.source || urlPlatform || '',
+        source_trader_id: profile.trader_key || profile.id,
+        rank: null,
+        arena_score: performance?.arena_score_90d ?? performance?.arena_score ?? null,
+        roi: performance?.roi_90d ?? null,
+        pnl: performance?.pnl ?? null,
+        win_rate: performance?.win_rate ?? null,
+        max_drawdown: performance?.max_drawdown ?? null,
+        is_verified_data: false,
+      }
+    }
+    return baseIdentityReady
+      ? serverData
+      : {
+          handle: urlHandle,
+          source: urlPlatform ?? '',
+          source_trader_id: urlHandle,
+          rank: null,
+          arena_score: null,
+          roi: null,
+          pnl: null,
+          win_rate: null,
+          max_drawdown: null,
+          is_verified_data: false,
+        }
+  })()
+  // Claimed/social props were resolved for the ISR subject. They cannot be
+  // reused for a platform override, even after its first-screen identity is
+  // valid, because the response carries no matching social subject proof.
+  const routeClaimedUser =
+    override || legacyPlatformOverride || !baseIdentityReady ? null : claimedUser
 
   // Claimed profiles use /u/... as their canonical route, but the ISR server
   // cannot safely redirect because it cannot see ?platform=. Wait until the
   // browser has either matched the exact server source or validated a differing
   // source/alias through /first-screen, then compare the full account identity.
-  const claimedCanonicalHref = claimedTraderCanonicalHref({
+  const routeClaimedCanonicalHref = claimedTraderCanonicalHref({
     claimedIdentity: claimedTraderIdentity,
     visibleIdentity: {
       source: data.source,
       traderId: data.source_trader_id,
     },
     requestedPlatform: urlPlatform,
-    requestedPlatformValidated: Boolean(override),
+    requestedPlatformValidated: Boolean(override || legacyPlatformOverride),
   })
-  useEffect(() => {
-    if (claimedCanonicalHref) router.replace(claimedCanonicalHref)
-  }, [claimedCanonicalHref, router])
-
-  // ROOT-CAUSE FIX (2026-07-02): the page is ISR-static, and the server's
-  // cachedCapabilities() races a 2s timeout → {} — a slow render bakes
-  // servingCapability:null INTO the cached HTML for the whole revalidate
-  // window. Null capability permanently disables every /records fetch in
-  // useServingTabData (capability?.surfaces?.positions is false), so the
-  // Portfolio tab rendered "No portfolio data available" while
-  // /api/traders/:id/records returned rows. Fall back to the client-fetched
-  // near-static capability matrix ONLY when the server prop is missing.
-  const serverOrOverrideCapability = override ? override.capability : serverCapability
-  const { capabilities: clientCapabilities } = useSourceCapabilities(
-    isServing && !serverOrOverrideCapability
-  )
-  const servingCapability = serverOrOverrideCapability ?? clientCapabilities?.[data.source] ?? null
-
   // Period URL ↔ store sync extracted into hook (see ./hooks/useTraderPeriodSync)
   const selectedPeriod = useTraderPeriodSync()
 
@@ -405,10 +559,130 @@ export default function TraderProfileClient({
   // Active account state machine extracted into hook (./hooks/useTraderActiveAccount).
   // Owns: activeAccount string, parsed activeAccountRaw, change handler. Critical
   // invariant: parses platform:traderKey inline without needing linkedAccounts.
-  const { activeAccount, activeAccountRaw, handleAccountChange } = useTraderActiveAccount()
+  const { activeAccount, activeAccountRaw, isAccountParamInvalid, handleAccountChange } =
+    useTraderActiveAccount()
 
-  const displayName = formatDisplayName(data.handle, data.source)
-  const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
+  const {
+    linkedAccounts,
+    aggregatedData,
+    hasMultipleAccounts,
+    isLoading: linkedAccountsLoading,
+    authoritativeReady: linkedAccountsReady,
+    error: linkedAccountsError,
+  } = useLinkedAccounts(
+    baseIdentityReady ? data.source : undefined,
+    baseIdentityReady ? data.source_trader_id : undefined
+  )
+  const linkedMembershipSubject = baseIdentityReady
+    ? JSON.stringify([data.source, data.source_trader_id])
+    : null
+  const [aggregateIntentSubject, setAggregateIntentSubject] = useState<string | null>(null)
+  const preserveAggregateIntent =
+    linkedMembershipSubject !== null && aggregateIntentSubject === linkedMembershipSubject
+  const linkedAccountScope = resolveLinkedAccountViewScope({
+    selectionEnabled: true,
+    requestedAccount: activeAccountRaw,
+    malformedSelection: isAccountParamInvalid,
+    authoritativeReady: linkedAccountsReady,
+    accounts: linkedAccounts,
+    preserveAggregateIntent,
+  })
+  useEffect(() => {
+    if (!linkedAccountsReady || !linkedMembershipSubject) return
+    setAggregateIntentSubject((current) => {
+      if (hasMultipleAccounts) return linkedMembershipSubject
+      return current === linkedMembershipSubject ? null : current
+    })
+  }, [hasMultipleAccounts, linkedAccountsReady, linkedMembershipSubject])
+  const validatedActiveAccount = linkedAccountScope.selectedAccount
+  const isPrimaryAccount = linkedAccountScope.mode === 'primary'
+  // The server-resolved social identity belongs only to the unambiguous route
+  // account. Aggregate, unresolved and explicitly selected scopes must not
+  // inherit its owner, posts or registered-user actions. A selected account can
+  // regain those surfaces only after an exact subject-bound social read exists.
+  const visibleClaimedUser = isPrimaryAccount ? routeClaimedUser : null
+  const suppressAccountMetrics = linkedAccountScope.suppressAccountMetrics || !baseIdentityReady
+
+  // Canonicalize only after live membership proves this is one unambiguous
+  // route account. Never discard an explicit linked-account deep link, and do
+  // not race a still-pending relation that may resolve to the aggregate scope.
+  const claimedCanonicalHref =
+    linkedAccountsReady && isPrimaryAccount && searchParams.getAll('account').length === 0
+      ? routeClaimedCanonicalHref
+      : null
+  useEffect(() => {
+    if (claimedCanonicalHref) router.replace(claimedCanonicalHref)
+  }, [claimedCanonicalHref, router])
+
+  // Probe the serving first-screen boundary for every linked subject. Only a
+  // fresh, request-bound `source_not_serving` proof enables the legacy detail
+  // fallback; a missing trader on a cut-over source remains closed. Cached
+  // responses stay hidden until this mount revalidates.
+  const selectedServingUrl = validatedActiveAccount
+    ? `/api/traders/${encodeURIComponent(validatedActiveAccount.traderKey)}/first-screen?source=${encodeURIComponent(validatedActiveAccount.platform)}`
+    : null
+  const {
+    data: selectedServingResponse,
+    error: selectedServingError,
+    isLoading: selectedServingLoading,
+    isFetchedAfterMount: selectedServingFetchedAfterMount,
+    isFetching: selectedServingFetching,
+    fetchStatus: selectedServingFetchStatus,
+  } = useQuery<unknown>({
+    queryKey: [
+      'linked-trader-first-screen',
+      validatedActiveAccount?.platform,
+      validatedActiveAccount?.traderKey,
+    ],
+    queryFn: async () => {
+      const response = await fetcher<ApiSuccessResponse<unknown>>(selectedServingUrl!)
+      return response.data
+    },
+    enabled: !!selectedServingUrl,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    retry: (failureCount, error) => {
+      if ((error as Error & { status?: number }).status === 404) return false
+      return failureCount < 2
+    },
+  })
+  const exactSelectedFirstScreenRequest = validatedActiveAccount
+    ? ({
+        kind: 'linked',
+        platform: validatedActiveAccount.platform,
+        traderKey: validatedActiveAccount.traderKey,
+      } as const)
+    : null
+  const parsedSelectedServingResponse = exactSelectedFirstScreenRequest
+    ? parseExactTraderFirstScreenResponse(selectedServingResponse, exactSelectedFirstScreenRequest)
+    : null
+  const selectedServingSettledAfterMount =
+    selectedServingFetchedAfterMount &&
+    selectedServingFetchStatus === 'idle' &&
+    !selectedServingFetching
+  const selectedServingReady = Boolean(
+    validatedActiveAccount &&
+    selectedServingSettledAfterMount &&
+    !selectedServingError &&
+    parsedSelectedServingResponse
+  )
+  const selectedServingFirstScreen = selectedServingReady
+    ? (parsedSelectedServingResponse?.firstScreen ?? null)
+    : null
+  const selectedServingNotFound = Boolean(
+    exactSelectedFirstScreenRequest &&
+    selectedServingSettledAfterMount &&
+    isExactSourceNotServingError(selectedServingError, exactSelectedFirstScreenRequest)
+  )
+  const selectedServingData = selectedServingFirstScreen
+    ? firstScreenToTraderData(
+        selectedServingFirstScreen,
+        validatedActiveAccount?.handle || validatedActiveAccount?.traderKey || urlHandle,
+        parsedSelectedServingResponse?.is_verified_data ?? false
+      )
+    : null
 
   // Sticky mini header on mobile — appears when scrolled past main header
   const headerRef = useRef<HTMLDivElement>(null)
@@ -425,7 +699,7 @@ export default function TraderProfileClient({
 
   // Tabs state extracted into hook (./hooks/useTraderTabs). Owns tabKeys list,
   // active tab, visited-tab tracking (for lazy mount), and URL change handler.
-  const { tabKeys, activeTab, visitedTabs, handleTabChange } = useTraderTabs(claimedUser)
+  const { tabKeys, activeTab, visitedTabs, handleTabChange } = useTraderTabs(visibleClaimedUser)
 
   // Stable callback for pricing redirect — avoids creating new closure on every render
   // which would defeat React.memo in StatsTab / PortfolioTab.
@@ -440,36 +714,62 @@ export default function TraderProfileClient({
 
   // SWR for full trader data — switches URL when account tab changes
   // Bundle non-membership extras only for the primary account.
-  const effectivePlatform =
-    activeAccountRaw?.platform || searchParams?.get('platform') || data.source || ''
-  const effectiveHandle = activeAccountRaw?.traderKey || data.handle || data.source_trader_id
-  const isPrimaryAccount = !activeAccountRaw
-  const traderApiUrl = useMemo(() => {
+  const effectivePlatform = validatedActiveAccount
+    ? validatedActiveAccount.platform
+    : !activeAccountRaw
+      ? searchParams?.get('platform') || data.source || ''
+      : ''
+  const effectiveRouteKey = validatedActiveAccount
+    ? validatedActiveAccount.traderKey
+    : !activeAccountRaw
+      ? data.handle || data.source_trader_id
+      : ''
+  const effectiveTraderKey = validatedActiveAccount
+    ? validatedActiveAccount.traderKey
+    : !activeAccountRaw
+      ? data.source_trader_id
+      : ''
+  const primaryUsesServerDetail =
+    isPrimaryAccount && baseIdentityReady && !override && !legacyPlatformOverride
+  const traderApiUrl = (() => {
+    if (!isPrimaryAccount && !validatedActiveAccount) return null
     const base = effectivePlatform
-      ? `/api/traders/${encodeURIComponent(effectiveHandle)}?source=${encodeURIComponent(effectivePlatform)}`
-      : `/api/traders/${encodeURIComponent(effectiveHandle)}`
+      ? `/api/traders/${encodeURIComponent(effectiveRouteKey)}?source=${encodeURIComponent(effectivePlatform)}`
+      : `/api/traders/${encodeURIComponent(effectiveRouteKey)}`
     // Only bundle extras for the primary account (not when switching linked accounts)
-    if (isPrimaryAccount) {
+    if (primaryUsesServerDetail) {
       const separator = base.includes('?') ? '&' : '?'
       return `${base}${separator}include=claim,rank_history`
     }
     return base
-  }, [effectivePlatform, effectiveHandle, isPrimaryAccount])
+  })()
+  const shouldFetchLegacyTrader =
+    (primaryUsesServerDetail && !isServing) ||
+    Boolean(validatedActiveAccount && selectedServingNotFound)
   type TraderDataWithExtras = TraderPageData & {
     claim_status?: ExactTraderClaimData
-    rank_history?: { history: { date: string; rank: number; arena_score: number }[] }
+    rank_history?: {
+      history: { date: string; rank: number; arena_score: number }[]
+      platform?: string
+      trader_key?: string
+      period?: string
+      _error?: string
+    }
   }
   const {
     data: traderData,
     error: traderError,
     isLoading: traderLoading,
     isPlaceholderData: traderDataIsPlaceholder,
+    isFetchedAfterMount: traderDataFetchedAfterMount,
+    fetchStatus: traderFetchStatus,
+    isFetching: traderDataFetching,
   } = useQuery<TraderDataWithExtras>({
     queryKey: ['trader-profile', traderApiUrl],
-    queryFn: () => traderFetcher<TraderDataWithExtras>(traderApiUrl),
-    // Serving mode never touches the legacy detail endpoint — core modules
-    // and records come from /core and /records via ServingProfilePanel.
-    enabled: !isServing,
+    queryFn: () => traderFetcher<TraderDataWithExtras>(traderApiUrl!),
+    // The route's serving account never touches the legacy endpoint. A linked
+    // subject may do so only after its exact first-screen probe proves a 404.
+    enabled: shouldFetchLegacyTrader && !!traderApiUrl,
     refetchOnWindowFocus: false,
     // Pause auto-refresh when the tab is hidden to save bandwidth/CPU/battery
     refetchInterval: () =>
@@ -477,69 +777,145 @@ export default function TraderProfileClient({
         ? false
         : 5 * 60 * 1000,
     refetchIntervalInBackground: false,
-    staleTime: STALE_STANDARD,
+    staleTime: primaryUsesServerDetail ? STALE_STANDARD : 0,
+    gcTime: primaryUsesServerDetail ? 5 * 60 * 1000 : 0,
     // Don't retry 404s — trader definitively doesn't exist. Retry transient errors.
     retry: (failureCount, error) => {
       if ((error as Error & { status?: number }).status === 404) return false
       return failureCount < 2
     },
-    initialData: isPrimaryAccount
+    initialData: primaryUsesServerDetail
       ? ((serverTraderData as TraderDataWithExtras) ?? undefined)
       : undefined,
-    placeholderData: (prev) => prev,
     // #30: Skip refetch on mount when serverTraderData is provided (ISR freshness)
-    refetchOnMount: isPrimaryAccount && serverTraderData ? false : true,
+    refetchOnMount: primaryUsesServerDetail && serverTraderData ? false : 'always',
   })
 
-  // P7: Extract bundled data from merged response
-  const bundledClaimData = traderData?.claim_status
-  const bundledRankHistory = traderData?.rank_history
+  const legacySelectedDetailReady = Boolean(
+    validatedActiveAccount &&
+    selectedServingNotFound &&
+    traderDataFetchedAfterMount &&
+    traderFetchStatus === 'idle' &&
+    !traderDataFetching &&
+    !traderError &&
+    !traderDataIsPlaceholder &&
+    traderDetailMatchesLinkedAccount(traderData, validatedActiveAccount)
+  )
+  const selectedDetailReady = selectedServingReady || legacySelectedDetailReady
+  const scopedTraderData = legacyPlatformOverride
+    ? legacyPlatformOverride
+    : primaryUsesServerDetail
+      ? traderData
+      : legacySelectedDetailReady
+        ? traderData
+        : undefined
+  const suppressAccountContent =
+    suppressAccountMetrics || (linkedAccountScope.mode === 'selected' && !selectedDetailReady)
+  const accountContentStatus: 'checking' | 'unavailable' =
+    (!baseIdentityReady &&
+      (accountOverrideFetching ||
+        legacyPlatformOverrideFetching ||
+        (accountOverrideAllowsLegacy && !legacyPlatformOverrideFetchedAfterMount))) ||
+    linkedAccountsLoading ||
+    (linkedAccountScope.mode === 'selected' &&
+      (selectedServingLoading ||
+        selectedServingFetching ||
+        (selectedServingNotFound && traderLoading)))
+      ? 'checking'
+      : 'unavailable'
+
+  // P7: Extract bundled data only for an exact primary response.
+  const bundledClaimData = primaryUsesServerDetail ? traderData?.claim_status : undefined
+  const rawBundledRankHistory = primaryUsesServerDetail ? traderData?.rank_history : undefined
+  const parsedBundledRankHistory =
+    !traderDataIsPlaceholder && rawBundledRankHistory?._error === undefined
+      ? parseExactRankHistory(rawBundledRankHistory, data.source, data.source_trader_id)
+      : null
+  const bundledRankHistory = parsedBundledRankHistory
+    ? { history: parsedBundledRankHistory }
+    : undefined
 
   // U3-1c: A 404 from the supplementary /api/traders fetch must NOT blank an
   // already-SSR-rendered page. Reaching this client means the server DID resolve
   // the trader (else generateMetadata would have 404'd before streaming) and
   // shipped identity/scores in `serverData`. The supplementary fetch only ADDS
-  // claim/aggregate/rank_history — a 404 means those extras are unavailable, not
+  // claim/rank_history — a 404 means those extras are unavailable, not
   // that the trader is missing. Warn once so the degradation stays observable.
   useEffect(() => {
     const status = (traderError as (Error & { status?: number }) | null)?.status
-    if (traderError && status === 404 && (serverData?.source_trader_id || serverData?.handle)) {
+    if (
+      primaryUsesServerDetail &&
+      traderError &&
+      status === 404 &&
+      (serverData?.source_trader_id || serverData?.handle)
+    ) {
       console.warn(
-        '[trader] supplementary /api/traders 404 — keeping SSR-rendered data (claim/aggregate/rank_history unavailable)',
+        '[trader] supplementary /api/traders 404 — keeping SSR-rendered data (claim/rank_history unavailable)',
         { handle: serverData?.handle, source: serverData?.source }
       )
     }
-  }, [traderError, serverData?.source_trader_id, serverData?.handle, serverData?.source])
+  }, [
+    primaryUsesServerDetail,
+    traderError,
+    serverData?.source_trader_id,
+    serverData?.handle,
+    serverData?.source,
+  ])
 
   // Membership is a live privacy boundary. It is never authorized from the
   // longer-lived trader-profile query or its React Query cache.
-  const { linkedAccounts, aggregatedData, hasMultipleAccounts } = useLinkedAccounts(
-    data.source,
-    data.source_trader_id
-  )
+  // Reclaim malformed, unsupported serving, and authoritatively unlinked URL
+  // selections. The render above has already failed closed, so this cleanup
+  // cannot leak a frame or trigger an untrusted detail request.
+  useEffect(() => {
+    if (linkedAccountScope.shouldResetSelection) handleAccountChange('all')
+  }, [handleAccountChange, linkedAccountScope.shouldResetSelection])
+
+  // Any aggregate/unresolved/loading subject has no truthful single-account
+  // Stats or Portfolio scope. Return to Overview until exact detail is ready.
+  useEffect(() => {
+    if (suppressAccountContent && (activeTab === 'stats' || activeTab === 'portfolio')) {
+      handleTabChange('overview')
+    }
+  }, [activeTab, handleTabChange, suppressAccountContent])
 
   // Anonymous visitors can use an exact, non-placeholder bundle for the public
   // badge. Signed-in ownership/editor controls always require the no-store exact
   // probe so a cached bundle can never authorize or hydrate another identity.
+  const claimSubject =
+    isPrimaryAccount && baseIdentityReady
+      ? { traderId: data.source_trader_id, source: data.source }
+      : validatedActiveAccount
+        ? {
+            traderId:
+              parsedSelectedServingResponse?.subject.traderKey ??
+              (legacySelectedDetailReady
+                ? (traderData?.profile?.trader_key ?? traderData?.profile?.id)
+                : null) ??
+              validatedActiveAccount.traderKey,
+            source:
+              selectedServingFirstScreen?.source ??
+              (legacySelectedDetailReady ? traderData?.profile?.source : null) ??
+              validatedActiveAccount.platform,
+          }
+        : null
   const bundledClaimMatchesVisibleIdentity =
+    primaryUsesServerDetail &&
     !traderDataIsPlaceholder &&
     bundledClaimData?.trader_id === data.source_trader_id &&
     bundledClaimData.source === data.source
   const claimUrl =
-    (Boolean(currentUserId) || !bundledClaimMatchesVisibleIdentity) &&
-    data.source_trader_id &&
-    data.source
-      ? `/api/traders/claim/status?trader_id=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}`
+    claimSubject && (Boolean(currentUserId) || !bundledClaimMatchesVisibleIdentity)
+      ? `/api/traders/claim/status?trader_id=${encodeURIComponent(claimSubject.traderId)}&source=${encodeURIComponent(claimSubject.source)}`
       : null
   const {
-    data: claimData,
+    data: claimResponse,
     error: claimDataError,
     isFetchedAfterMount: claimDataFetchedAfterMount,
-  } = useQuery<{
-    success: boolean
-    data: ExactTraderClaimData
-  }>({
-    queryKey: ['trader-claim-status', data.source_trader_id, data.source],
+    fetchStatus: claimFetchStatus,
+    isFetching: claimIsFetching,
+  } = useQuery<unknown>({
+    queryKey: ['trader-claim-status', claimSubject?.traderId, claimSubject?.source],
     queryFn: () => fetcher(claimUrl!),
     enabled: !!claimUrl,
     refetchOnWindowFocus: true,
@@ -549,21 +925,28 @@ export default function TraderProfileClient({
     // only predates the current observer mount or whose refresh has failed.
     staleTime: 0,
   })
-  const freshExactClaim = claimDataFetchedAfterMount && !claimDataError ? claimData?.data : null
+  const freshExactClaim =
+    claimDataFetchedAfterMount && claimFetchStatus === 'idle' && !claimIsFetching && !claimDataError
+      ? parseExactTraderClaimEnvelope(claimResponse)
+      : null
 
   // Keep public badge data separate from owner authorization/editor data.
-  const { publicClaimSource, authorizationClaimSource } = resolveTraderClaimSources({
-    traderId: data.source_trader_id,
-    source: data.source,
-    bundledClaim: bundledClaimData,
-    bundledIsPlaceholder: traderDataIsPlaceholder,
-    exactClaim: freshExactClaim,
-    requireExactAuthorization: Boolean(currentUserId),
-  })
+  const claimSources = claimSubject
+    ? resolveTraderClaimSources({
+        traderId: claimSubject.traderId,
+        source: claimSubject.source,
+        bundledClaim: bundledClaimData,
+        bundledIsPlaceholder: traderDataIsPlaceholder,
+        exactClaim: freshExactClaim,
+        requireExactAuthorization: Boolean(currentUserId),
+      })
+    : null
+  const publicClaimSource = claimSources?.publicClaimSource ?? null
+  const authorizationClaimSource = claimSources?.authorizationClaimSource ?? null
   const isVerifiedTrader = !!publicClaimSource?.is_verified
   const { isProfileOwner, isVerifiedClaimOwner } = resolveTraderProfileOwnership({
     currentUserId,
-    claimedUserId: claimedUser?.id,
+    claimedUserId: visibleClaimedUser?.id,
     isVerifiedClaim: !!authorizationClaimSource?.is_verified,
     claimOwnerId: authorizationClaimSource?.owner_id,
   })
@@ -571,46 +954,154 @@ export default function TraderProfileClient({
 
   // Rank history for sparkline (7-day trajectory)
   // P7: Skip separate fetch when bundled data is available from the merged endpoint
+  const accountDetailReady = (isPrimaryAccount && baseIdentityReady) || selectedDetailReady
+  const rankHistoryPlatform =
+    selectedServingFirstScreen?.source ?? override?.firstScreen.source ?? effectivePlatform
+  const rankHistoryTraderKey =
+    parsedSelectedServingResponse?.subject.traderKey ??
+    (legacySelectedDetailReady
+      ? (traderData?.profile?.trader_key ?? traderData?.profile?.id)
+      : null) ??
+    effectiveTraderKey
   const rankHistoryUrl =
-    !bundledRankHistory && effectivePlatform && effectiveHandle
-      ? `/api/trader/rank-history?platform=${encodeURIComponent(effectivePlatform)}&trader_key=${encodeURIComponent(data.source_trader_id)}&period=90D&days=7`
+    accountDetailReady &&
+    !suppressAccountMetrics &&
+    !bundledRankHistory &&
+    rankHistoryPlatform &&
+    rankHistoryTraderKey
+      ? `/api/trader/rank-history?platform=${encodeURIComponent(rankHistoryPlatform)}&trader_key=${encodeURIComponent(rankHistoryTraderKey)}&period=90D&days=7`
       : null
-  const { data: rankHistoryData } = useQuery<{
+  const { data: rankHistoryResponse } = useQuery<{
     history: { date: string; rank: number; arena_score: number }[]
+    platform: string
+    trader_key: string
+    period: string
   }>({
-    queryKey: ['trader-rank-history', effectivePlatform, data.source_trader_id],
+    queryKey: ['trader-rank-history', rankHistoryPlatform, rankHistoryTraderKey],
     queryFn: () => traderFetcher(rankHistoryUrl!),
     enabled: !!rankHistoryUrl,
     refetchOnWindowFocus: false,
     staleTime: STALE_RELAXED,
     retry: 1,
   })
+  const exactRankHistory =
+    rankHistoryPlatform && rankHistoryTraderKey
+      ? parseExactRankHistory(rankHistoryResponse, rankHistoryPlatform, rankHistoryTraderKey)
+      : null
   const rankSparklineData =
-    (bundledRankHistory?.history ?? rankHistoryData?.history)?.map((h) => ({ rank: h.rank })) ?? []
+    suppressAccountMetrics || !accountDetailReady
+      ? []
+      : ((bundledRankHistory?.history ?? exactRankHistory)?.map((h) => ({
+          rank: h.rank,
+        })) ?? [])
 
   // Stable references for derived SWR data — memoize so child components
   // wrapped in React.memo can bail out of re-render when traderData
   // identity changes but the underlying field hasn't.
-  const traderProfile = useMemo(() => traderData?.profile ?? null, [traderData?.profile])
+  const traderProfile = useMemo(
+    () => scopedTraderData?.profile ?? null,
+    [scopedTraderData?.profile]
+  )
   const traderPerformance = useMemo(
-    () => traderData?.performance ?? null,
-    [traderData?.performance]
+    () => scopedTraderData?.performance ?? null,
+    [scopedTraderData?.performance]
   )
-  const traderStats = useMemo(() => traderData?.stats ?? null, [traderData?.stats])
-  const traderPortfolio = useMemo(() => traderData?.portfolio ?? [], [traderData?.portfolio])
+  const traderStats = useMemo(() => scopedTraderData?.stats ?? null, [scopedTraderData?.stats])
+  const traderPortfolio = useMemo(
+    () => scopedTraderData?.portfolio ?? [],
+    [scopedTraderData?.portfolio]
+  )
   const traderPositionHistory = useMemo(
-    () => traderData?.positionHistory ?? [],
-    [traderData?.positionHistory]
+    () => scopedTraderData?.positionHistory ?? [],
+    [scopedTraderData?.positionHistory]
   )
-  const traderEquityCurve = useMemo(() => traderData?.equityCurve, [traderData?.equityCurve])
+  const traderEquityCurve = useMemo(
+    () => scopedTraderData?.equityCurve,
+    [scopedTraderData?.equityCurve]
+  )
   const traderAssetBreakdown = useMemo(
-    () => traderData?.assetBreakdown,
-    [traderData?.assetBreakdown]
+    () => scopedTraderData?.assetBreakdown,
+    [scopedTraderData?.assetBreakdown]
   )
   const traderSimilar = useMemo(
-    () => traderData?.similarTraders ?? [],
-    [traderData?.similarTraders]
+    () => scopedTraderData?.similarTraders ?? [],
+    [scopedTraderData?.similarTraders]
   )
+  const unresolvedRequestedAccount =
+    activeAccountRaw && !validatedActiveAccount ? activeAccountRaw : null
+  const visibleSource = validatedActiveAccount
+    ? selectedServingData?.source || traderProfile?.source || validatedActiveAccount.platform
+    : unresolvedRequestedAccount?.platform || data.source
+  const visibleTraderKey = validatedActiveAccount
+    ? parsedSelectedServingResponse?.subject.traderKey ||
+      traderProfile?.trader_key ||
+      traderProfile?.id ||
+      validatedActiveAccount.traderKey
+    : unresolvedRequestedAccount?.traderKey || data.source_trader_id
+  const visibleHandle = validatedActiveAccount
+    ? selectedServingData?.handle ||
+      traderProfile?.handle ||
+      validatedActiveAccount.handle ||
+      validatedActiveAccount.traderKey
+    : unresolvedRequestedAccount?.traderKey || traderProfile?.handle || data.handle
+  const visibleDisplayName = formatDisplayName(visibleHandle, visibleSource)
+  const visibleAvatarUrl = validatedActiveAccount
+    ? selectedServingData?.avatar_url || traderProfile?.avatar_url || undefined
+    : unresolvedRequestedAccount
+      ? undefined
+      : traderProfile?.avatar_url || data.avatar_url || undefined
+  const exactPerformance = traderPerformance as ExtendedPerformance | null
+  const exactPerformanceRecord = traderPerformance as Record<string, unknown> | null
+  const visibleData: UnregisteredTraderData = isPrimaryAccount
+    ? data
+    : (selectedServingData ?? {
+        handle: visibleHandle,
+        avatar_url: visibleAvatarUrl ?? null,
+        source: visibleSource,
+        source_trader_id: visibleTraderKey,
+        rank: null,
+        arena_score: exactPerformance?.arena_score_90d ?? exactPerformance?.arena_score ?? null,
+        roi: exactPerformance?.roi_90d ?? null,
+        pnl: exactPerformance?.pnl ?? null,
+        win_rate: exactPerformance?.win_rate ?? null,
+        max_drawdown: exactPerformance?.max_drawdown ?? null,
+        sharpe_ratio: (exactPerformanceRecord?.sharpe_ratio as number | null) ?? null,
+        sortino_ratio: (exactPerformanceRecord?.sortino_ratio as number | null) ?? null,
+        profit_factor: (exactPerformanceRecord?.profit_factor as number | null) ?? null,
+        calmar_ratio: (exactPerformanceRecord?.calmar_ratio as number | null) ?? null,
+        avg_holding_hours:
+          (exactPerformanceRecord?.avg_holding_time_hours as number | null) ?? null,
+        profitability_score: exactPerformance?.profitability_score ?? null,
+        risk_control_score: exactPerformance?.risk_control_score ?? null,
+        execution_score: exactPerformance?.execution_score ?? null,
+        is_verified_data: false,
+      })
+  const visibleIsVerifiedData = isPrimaryAccount
+    ? isVerifiedData
+    : Boolean(selectedServingReady && parsedSelectedServingResponse?.is_verified_data)
+  const headerAccountMetrics = resolveTraderHeaderAccountMetrics(suppressAccountContent, {
+    roi90d:
+      exactPerformance?.roi_90d ??
+      (accountDetailReady && visibleData.roi != null ? visibleData.roi : undefined),
+    arenaScore:
+      exactPerformance?.arena_score_90d ??
+      exactPerformance?.arena_score ??
+      (accountDetailReady ? (visibleData.arena_score ?? null) : null),
+    scoreConfidence: exactPerformance?.score_confidence ?? null,
+    tradesCount: exactPerformance?.trades_count ?? null,
+    rank: accountDetailReady ? (visibleData.rank ?? null) : null,
+    platform: accountDetailReady ? visibleSource : effectivePlatform || undefined,
+    traderKey: accountDetailReady ? visibleTraderKey : undefined,
+    tradingStyle:
+      (exactPerformanceRecord?.tradingStyle as string) ?? exactPerformance?.trading_style ?? null,
+    lastUpdated:
+      scopedTraderData?.lastUpdated ??
+      scopedTraderData?.trackedSince ??
+      (validatedActiveAccount ? selectedServingFirstScreen : servingFirstScreen)?.entries.find(
+        (entry) => entry.timeframe === 90
+      )?.provenance.asOf,
+    isBot: visibleSource === 'web3_bot',
+  })
 
   // P4 three-tab unification (spec §4): every serving source renders the SAME
   // Overview/Stats/Portfolio tabs as legacy (fed via legacy-adapter), instead of
@@ -619,30 +1110,58 @@ export default function TraderProfileClient({
   // ?threetab=0 or NEXT_PUBLIC_SERVING_THREE_TAB=0 falls back to the panel (kept
   // for instant rollback until the panel code is retired). The hook is called
   // unconditionally (hooks rule); `enabled` gates every fetch off for legacy.
+  const visibleIsServing = validatedActiveAccount
+    ? selectedServingReady
+    : override
+      ? true
+      : legacyPlatformOverride
+        ? false
+        : isServing
   const useThreeTab =
-    isServing &&
+    visibleIsServing &&
     searchParams.get('threetab') !== '0' &&
     process.env.NEXT_PUBLIC_SERVING_THREE_TAB !== '0'
+  const servingViewFirstScreen = validatedActiveAccount
+    ? selectedServingFirstScreen
+    : servingFirstScreen
+  const exactFirstScreenCapability = validatedActiveAccount
+    ? (parsedSelectedServingResponse?.capability ?? null)
+    : override
+      ? override.capability
+      : legacyPlatformOverride
+        ? null
+        : baseIdentityReady
+          ? serverCapability
+          : null
+  // The route's capability RPC is intentionally bounded by a 2s cold-start
+  // race. Refill a missing matrix for the exact visible serving subject,
+  // including legacy-ISR → serving override and linked-account switches.
+  const capabilitySource = servingViewFirstScreen?.source ?? visibleData.source
+  const { capabilities: clientCapabilities } = useSourceCapabilities(
+    visibleIsServing && !exactFirstScreenCapability
+  )
+  const servingViewCapability =
+    exactFirstScreenCapability ?? clientCapabilities?.[capabilitySource] ?? null
   const servingTab = useServingTabData(
     {
-      source: data.source,
-      exchangeTraderId: data.source_trader_id,
-      nickname: servingFirstScreen?.nickname ?? data.handle ?? null,
-      avatarSrc: servingFirstScreen?.avatarSrc ?? null,
-      entries: servingFirstScreen?.entries,
-      scores: servingScores,
+      source: visibleData.source,
+      exchangeTraderId: visibleData.source_trader_id,
+      nickname: servingViewFirstScreen?.nickname ?? visibleData.handle ?? null,
+      avatarSrc: servingViewFirstScreen?.avatarSrc ?? null,
+      entries: servingViewFirstScreen?.entries,
+      scores: validatedActiveAccount || override ? undefined : servingScores,
     },
-    servingCapability ?? null,
-    useThreeTab
+    servingViewCapability ?? null,
+    useThreeTab && !suppressAccountContent
   )
   // 即看即算: for a web3 wallet with no on-chain data yet, compute it on demand
   // (bounded) instead of waiting for the 12h rotation, then refetch.
   const onchainEnrichmentState = useOnchainEnrichTrigger({
-    source: data.source,
-    exchangeTraderId: data.source_trader_id,
+    source: visibleData.source,
+    exchangeTraderId: visibleData.source_trader_id,
     extras: servingTab.metaExtras,
-    enabled: useThreeTab,
-    loaded: useThreeTab && !servingTab.loading,
+    enabled: useThreeTab && !suppressAccountContent,
+    loaded: useThreeTab && !suppressAccountContent && !servingTab.loading,
   })
 
   // Effective tab props: serving-derived under the flag, legacy otherwise.
@@ -657,13 +1176,14 @@ export default function TraderProfileClient({
   // omits them) → OverviewTab's `traderSimilar.length > 0` guard hid the module.
   // Under three-tab (serving default) use the server-computed list; legacy keeps
   // its React-Query-derived traderSimilar untouched.
-  const effSimilar = useMemo(
-    () => (useThreeTab ? (serverSimilarTraders ?? []) : traderSimilar),
-    [useThreeTab, serverSimilarTraders, traderSimilar]
-  )
+  const effSimilar = useThreeTab
+    ? validatedActiveAccount || override
+      ? EMPTY_SIMILAR_TRADERS
+      : (serverSimilarTraders ?? EMPTY_SIMILAR_TRADERS)
+    : traderSimilar
 
   // Loading state: only when SWR is loading AND no server fallback
-  const isInitialLoading = traderLoading && !serverTraderData
+  const isInitialLoading = isPrimaryAccount && traderLoading && !serverTraderData
   if (isInitialLoading) {
     return (
       <Box
@@ -684,7 +1204,7 @@ export default function TraderProfileClient({
   // Distinct from transient errors — only shows when the server confirms the trader is missing.
   // U3-1c: NEVER show a full-page 404 when the server already resolved this trader
   // and shipped identity in `serverData`. A supplementary /api/traders 404 in that
-  // case means only the claim/aggregate/rank_history extras are unavailable — the
+  // case means only the claim/rank_history extras are unavailable — the
   // page must degrade to the SSR-rendered content, not dead-end (this was 92% of
   // search clicks). The genuine "trader does not exist" case is 404'd server-side
   // in generateMetadata, before this client ever renders.
@@ -788,7 +1308,7 @@ export default function TraderProfileClient({
   // #24: Stale data banner — show when SWR errored but cached/stale (or SSR) data
   // is still available. Also covers the U3-1c degrade path (traderData null but
   // serverData identity present).
-  const showStaleBanner = !!traderError && (!!traderData || hasServerIdentity)
+  const showStaleBanner = isPrimaryAccount && !!traderError && (!!traderData || hasServerIdentity)
 
   return (
     <Box
@@ -815,20 +1335,27 @@ export default function TraderProfileClient({
         }}
       >
         <Breadcrumb
-          items={[{ label: t('leaderboardBreadcrumb'), href: '/rankings' }, { label: displayName }]}
+          items={[
+            { label: t('leaderboardBreadcrumb'), href: '/rankings' },
+            { label: visibleDisplayName },
+          ]}
         />
 
         <TraderStaleBanner show={showStaleBanner} t={t} />
-        <TraderPlatformDeadBanner show={!!data.is_platform_dead} source={data.source} t={t} />
+        <TraderPlatformDeadBanner
+          show={isPrimaryAccount && !!data.is_platform_dead}
+          source={visibleSource}
+          t={t}
+        />
 
         {/* Sticky mini header for mobile */}
         <div className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}>
           <div
             className="mini-avatar"
             style={{
-              background: data.avatar_url
+              background: visibleAvatarUrl
                 ? 'var(--color-bg-tertiary)'
-                : getAvatarGradient(data.source_trader_id),
+                : getAvatarGradient(visibleTraderKey),
               display: 'grid',
               placeItems: 'center',
               fontSize: 12,
@@ -836,28 +1363,31 @@ export default function TraderProfileClient({
               color: '#fff',
             }}
           >
-            {data.avatar_url ? (
+            {visibleAvatarUrl ? (
               <Image
-                src={avatarSrc(data.avatar_url)}
-                alt={displayName}
+                src={avatarSrc(visibleAvatarUrl)}
+                alt={visibleDisplayName}
                 width={28}
                 height={28}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 unoptimized
               />
             ) : (
-              displayName.charAt(0).toUpperCase()
+              visibleDisplayName.charAt(0).toUpperCase()
             )}
           </div>
-          <span className="mini-name">{displayName}</span>
-          {data.roi != null && (
+          <span className="mini-name">{visibleDisplayName}</span>
+          {headerAccountMetrics.roi90d != null && (
             <span
               className="mini-roi"
               style={{
-                color: data.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                color:
+                  headerAccountMetrics.roi90d >= 0
+                    ? tokens.colors.accent.success
+                    : tokens.colors.accent.error,
               }}
             >
-              {formatROI(data.roi)}
+              {formatROI(headerAccountMetrics.roi90d)}
             </span>
           )}
         </div>
@@ -865,51 +1395,40 @@ export default function TraderProfileClient({
         {/* Trader Header */}
         <div ref={headerRef}>
           <TraderHeader
-            handle={traderProfile?.handle || data.handle}
-            displayName={displayName}
-            traderId={traderProfile?.id || data.source_trader_id}
-            registeredUserId={claimedUser?.id}
-            avatarUrl={traderProfile?.avatar_url || data.avatar_url || undefined}
-            isRegistered={!!claimedUser}
+            key={`${linkedAccountScope.mode}:${visibleSource}:${visibleTraderKey}`}
+            handle={visibleHandle}
+            displayName={visibleDisplayName}
+            traderId={traderProfile?.id || visibleTraderKey}
+            registeredUserId={visibleClaimedUser?.id}
+            avatarUrl={visibleAvatarUrl}
+            isRegistered={!!visibleClaimedUser}
             isOwnProfile={isProfilePageOwner}
             followers={traderProfile?.followers ?? undefined}
-            source={traderProfile?.source || data.source}
-            roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi : undefined)}
-            arenaScore={
-              hasMultipleAccounts && activeAccount === 'all' && aggregatedData
-                ? aggregatedData.weightedScore
-                : ((traderPerformance as ExtendedPerformance | null)?.arena_score_90d ??
-                  data.arena_score ??
-                  null)
-            }
-            scoreConfidence={
-              ((traderPerformance as ExtendedPerformance | null)?.score_confidence as string) ??
-              null
-            }
-            tradesCount={
-              ((traderPerformance as ExtendedPerformance | null)?.trades_count as number) ?? null
-            }
-            rank={data.rank ?? null}
+            source={visibleSource}
+            roi90d={headerAccountMetrics.roi90d}
+            arenaScore={headerAccountMetrics.arenaScore}
+            scoreConfidence={headerAccountMetrics.scoreConfidence}
+            tradesCount={headerAccountMetrics.tradesCount}
+            rank={headerAccountMetrics.rank}
             currentUserId={currentUserId}
             isVerifiedTrader={isVerifiedTrader}
-            isBot={data.source === 'web3_bot'}
-            lastUpdated={traderData?.lastUpdated ?? traderData?.trackedSince}
+            isBot={headerAccountMetrics.isBot}
+            lastUpdated={headerAccountMetrics.lastUpdated}
             claimedBio={
-              claimedUser?.bio ||
+              (validatedActiveAccount || override ? null : visibleClaimedUser?.bio) ||
               ((traderProfile as Record<string, unknown> | null)?.bio as string | undefined)
             }
-            claimedAvatarUrl={claimedUser?.avatar_url}
+            claimedAvatarUrl={
+              validatedActiveAccount || override ? undefined : visibleClaimedUser?.avatar_url
+            }
             linkedAccountCount={hasMultipleAccounts ? linkedAccounts.length : undefined}
             linkedPlatforms={
               hasMultipleAccounts ? linkedAccounts.map((a) => a.platform) : undefined
             }
-            platform={effectivePlatform}
-            traderKey={data.source_trader_id}
-            tradingStyle={
-              ((traderPerformance as Record<string, unknown> | null)?.tradingStyle as string) ??
-              (traderPerformance as ExtendedPerformance | null)?.trading_style ??
-              null
-            }
+            platform={headerAccountMetrics.platform}
+            traderKey={headerAccountMetrics.traderKey}
+            tradingStyle={headerAccountMetrics.tradingStyle}
+            isAggregateView={suppressAccountContent}
           />
         </div>
 
@@ -919,29 +1438,32 @@ export default function TraderProfileClient({
             tabs/profile-grid 整体下推 ~34px(两次 grid shift 合计 0.098)。
             服务端已知 rank(data.rank)时首帧即预留固定高度,数据到了往里填——
             无 rank 的交易员照旧不渲染,不留空洞。 */}
-        {(rankSparklineData.length >= 2 || data.rank != null) && (
-          <Box
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: tokens.spacing[2],
-              marginTop: tokens.spacing[2],
-              marginBottom: tokens.spacing[1],
-              minHeight: 24,
-            }}
-          >
-            {rankSparklineData.length >= 2 && (
-              <>
-                <Text size="xs" color="tertiary">
-                  {t('rankTrend')}
-                </Text>
-                <RankSparkline data={rankSparklineData} width={80} height={24} />
-              </>
-            )}
-          </Box>
-        )}
+        {!suppressAccountMetrics &&
+          (rankSparklineData.length >= 2 || headerAccountMetrics.rank != null) && (
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[2],
+                marginTop: tokens.spacing[2],
+                marginBottom: tokens.spacing[1],
+                minHeight: 24,
+              }}
+            >
+              {rankSparklineData.length >= 2 && (
+                <>
+                  <Text size="xs" color="tertiary">
+                    {t('rankTrend')}
+                  </Text>
+                  <RankSparkline data={rankSparklineData} width={80} height={24} />
+                </>
+              )}
+            </Box>
+          )}
 
-        {/* Multi-account tabs (only shown when user has 2+ linked accounts) */}
+        <LinkedAccountStatus isLoading={linkedAccountsLoading} error={linkedAccountsError} />
+
+        {/* Multi-account tabs (only shown after exact live membership succeeds) */}
         {hasMultipleAccounts && (
           <LinkedAccountTabs
             accounts={linkedAccounts}
@@ -951,32 +1473,38 @@ export default function TraderProfileClient({
         )}
 
         {/* Exchange links — copy-trade / DEX view per exchange, below header */}
-        <ExchangeLinksBar
-          primary={{ platform: data.source, traderKey: data.source_trader_id, handle: data.handle }}
-          linkedAccounts={
-            hasMultipleAccounts
-              ? linkedAccounts.map((a) => ({
-                  platform: a.platform,
-                  traderKey: a.traderKey,
-                  handle: a.handle,
-                }))
-              : undefined
-          }
-          activeAccount={activeAccount}
-          isOwnProfile={isProfilePageOwner}
-        />
+        {baseIdentityReady && !suppressAccountContent && (
+          <ExchangeLinksBar
+            primary={{
+              platform: data.source,
+              traderKey: data.source_trader_id,
+              handle: data.handle,
+            }}
+            linkedAccounts={
+              hasMultipleAccounts
+                ? linkedAccounts.map((a) => ({
+                    platform: a.platform,
+                    traderKey: a.traderKey,
+                    handle: a.handle,
+                  }))
+                : undefined
+            }
+            activeAccount={validatedActiveAccount ? activeAccount : 'all'}
+            isOwnProfile={isProfilePageOwner}
+          />
+        )}
 
         {/* Serving mode (spec §2.4): the body below the header reads from
             arena.* via /core + /records — legacy tabs are not rendered. */}
-        {isServing && !useThreeTab && servingFirstScreen && (
+        {visibleIsServing && !useThreeTab && !suppressAccountContent && servingViewFirstScreen && (
           <ServingProfilePanel
-            firstScreen={servingFirstScreen}
-            capability={servingCapability ?? null}
+            firstScreen={servingViewFirstScreen}
+            capability={servingViewCapability ?? null}
           />
         )}
 
         {/* Tabs — legacy sources always; serving sources under the P4 flag */}
-        {(!isServing || useThreeTab) && (
+        {(!visibleIsServing || useThreeTab || suppressAccountContent) && (
           <TraderTabs
             activeTab={activeTab}
             onTabChange={handleTabChange}
@@ -987,8 +1515,8 @@ export default function TraderProfileClient({
               trackEvent('paywall_blocked', { source: 'trader_detail_tab' })
               setProUpsellOpen(true)
             }}
-            extraTabs={claimedUser ? ['posts'] : undefined}
-            hideTabs={undefined}
+            extraTabs={visibleClaimedUser ? ['posts'] : undefined}
+            hideTabs={suppressAccountContent ? ['stats', 'portfolio'] : undefined}
           />
         )}
         <ProUpsellModal
@@ -998,7 +1526,7 @@ export default function TraderProfileClient({
         />
 
         {/* Tab Content — dims while loading account switch */}
-        {(!isServing || useThreeTab) && (
+        {(!visibleIsServing || useThreeTab || suppressAccountContent) && (
           <div
             style={{
               opacity: traderLoading && !isPrimaryAccount ? 0.5 : 1,
@@ -1009,7 +1537,13 @@ export default function TraderProfileClient({
             <div id="trader-tab-content">
               <SwipeableView
                 activeIndex={tabKeys.indexOf(activeTab)}
-                onIndexChange={(i) => handleTabChange(tabKeys[i])}
+                onIndexChange={(i) => {
+                  const nextTab = tabKeys[i]
+                  if (suppressAccountContent && (nextTab === 'stats' || nextTab === 'portfolio')) {
+                    return
+                  }
+                  handleTabChange(nextTab)
+                }}
               >
                 {/* Overview Tab — always mounted (primary tab, avoids skeleton flash on swipe-back) */}
                 <Box
@@ -1022,25 +1556,27 @@ export default function TraderProfileClient({
                   {/* A1 data-authenticity provenance (Myfxbook model). The
                       verification value is sourced from the active read-only
                       API authorization for the account currently on screen. */}
-                  <Box style={{ marginBottom: tokens.spacing[3] }}>
-                    <DataProvenanceBadge
-                      verified={isVerifiedData}
-                      // Tracked chip doubles as the verify-upgrade entry (A1
-                      // adoption pull) — same URL shape as ClaimTraderButton.
-                      claimHref={
-                        isVerifiedData
-                          ? undefined
-                          : buildTraderClaimReturnPath({
-                              traderId: data.source_trader_id,
-                              source: data.source,
-                              handle: data.handle,
-                            })
-                      }
-                    />
-                  </Box>
+                  {!suppressAccountContent && (
+                    <Box style={{ marginBottom: tokens.spacing[3] }}>
+                      <DataProvenanceBadge
+                        verified={visibleIsVerifiedData}
+                        // Tracked chip doubles as the verify-upgrade entry (A1
+                        // adoption pull) — same URL shape as ClaimTraderButton.
+                        claimHref={
+                          visibleIsVerifiedData
+                            ? undefined
+                            : buildTraderClaimReturnPath({
+                                traderId: visibleData.source_trader_id,
+                                source: visibleData.source,
+                                handle: visibleData.handle,
+                              })
+                        }
+                      />
+                    </Box>
+                  )}
                   {/* §2.3 lead-meta strip — serving only; NULL-collapses to
                       null when no meta fields resolve (legacy renders nothing). */}
-                  {useThreeTab && (
+                  {useThreeTab && !suppressAccountContent && (
                     <Box style={{ marginBottom: tokens.spacing[3] }}>
                       <TraderMetaStrip
                         extras={servingTab.metaExtras}
@@ -1049,7 +1585,7 @@ export default function TraderProfileClient({
                       {/* M1: risk rating / style tags / last-liquidation chips +
                           MEXC ability radar — surfaced on the default path. Both
                           NULL-collapse when the source lacks the extras. */}
-                      <SignalChips source={data.source} extras={servingTab.metaExtras} />
+                      <SignalChips source={visibleData.source} extras={servingTab.metaExtras} />
                       {/* M2-2a: eToro Copiers-Card — the "should I copy" commercial
                           facts, grouped instead of dumped into the metric grid. */}
                       <Box style={{ marginTop: tokens.spacing[3] }}>
@@ -1063,14 +1599,14 @@ export default function TraderProfileClient({
                           Overview 加最近成交预览(共享 React Query 缓存,零重复网络;
                           能力关/无数据整卡 NULL-collapse)。 */}
                       <RecentActivityCard
-                        source={data.source}
-                        exchangeTraderId={data.source_trader_id}
-                        enabled={useThreeTab && Boolean(servingCapability?.surfaces?.orders)}
+                        source={visibleData.source}
+                        exchangeTraderId={visibleData.source_trader_id}
+                        enabled={useThreeTab && Boolean(servingViewCapability?.surfaces?.orders)}
                       />
                     </Box>
                   )}
                   <OverviewTab
-                    data={data}
+                    data={visibleData}
                     traderProfile={effProfile}
                     traderPerformance={effPerformance}
                     traderEquityCurve={
@@ -1080,7 +1616,7 @@ export default function TraderProfileClient({
                     }
                     traderSimilar={effSimilar}
                     positionSummary={
-                      traderData?.positionSummary as
+                      scopedTraderData?.positionSummary as
                         | {
                             avgLeverage: number | null
                             longPositions: number | null
@@ -1090,15 +1626,19 @@ export default function TraderProfileClient({
                         | undefined
                     }
                     selectedPeriod={selectedPeriod}
-                    hasMultipleAccounts={hasMultipleAccounts}
+                    hasMultipleAccounts={
+                      hasMultipleAccounts || linkedAccountScope.mode === 'aggregate'
+                    }
                     activeAccount={activeAccount}
                     aggregatedData={aggregatedData}
                     linkedAccounts={linkedAccounts}
+                    suppressAccountContent={suppressAccountContent}
+                    accountContentStatus={accountContentStatus}
                     currentUserId={currentUserId}
                     isVerifiedClaimOwner={isVerifiedClaimOwner}
                     isVerifiedTrader={isVerifiedTrader}
                     verifiedTraderProfile={authorizationClaimSource?.profile ?? null}
-                    claimedUser={claimedUser}
+                    claimedUser={visibleClaimedUser}
                   />
                 </Box>
 
@@ -1110,7 +1650,7 @@ export default function TraderProfileClient({
                   style={{ minHeight: 200 }}
                   className="tab-pane-enter"
                 >
-                  {visitedTabs.has('stats') ? (
+                  {!suppressAccountContent && visitedTabs.has('stats') ? (
                     <Box
                       style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}
                     >
@@ -1157,18 +1697,18 @@ export default function TraderProfileClient({
                           not just the ?threetab=0 escape hatch. NULL-collapses. */}
                       {useThreeTab && (
                         <ServingRecordsSection
-                          source={data.source}
-                          exchangeTraderId={data.source_trader_id}
-                          capability={servingCapability ?? null}
+                          source={visibleData.source}
+                          exchangeTraderId={visibleData.source_trader_id}
+                          capability={servingViewCapability ?? null}
                           tf={90}
-                          exchangeName={servingCapability?.exchangeName}
+                          exchangeName={servingViewCapability?.exchangeName}
                           excludeKinds={['positions', 'position_history']}
                         />
                       )}
                       <StatsTab
                         visited
                         stats={effStats}
-                        traderHandle={effProfile?.handle || data.handle}
+                        traderHandle={effProfile?.handle || visibleData.handle}
                         assetBreakdown={effAssetBreakdown}
                         equityCurve={effEquityCurve}
                         positionHistory={effPositionHistory}
@@ -1187,12 +1727,12 @@ export default function TraderProfileClient({
                   style={{ minHeight: 200 }}
                   className="tab-pane-enter"
                 >
-                  {visitedTabs.has('portfolio') ? (
+                  {!suppressAccountContent && visitedTabs.has('portfolio') ? (
                     <PortfolioTab
                       visited
                       portfolio={effPortfolio}
                       positionHistory={effPositionHistory}
-                      source={data.source}
+                      source={visibleData.source}
                       isPro={isPro}
                       onUnlock={handlePricingRedirect}
                     />
@@ -1200,7 +1740,7 @@ export default function TraderProfileClient({
                 </Box>
 
                 {/* Posts Tab (only for claimed traders) — lazy mount on first visit */}
-                {claimedUser && (
+                {visibleClaimedUser && (
                   <Box
                     id="panel-posts"
                     role="tabpanel"
@@ -1229,7 +1769,7 @@ export default function TraderProfileClient({
                           </Text>
                         </Box>
                         <PostFeed
-                          authorHandle={claimedUser.handle}
+                          authorHandle={visibleClaimedUser.handle}
                           variant="compact"
                           showSortButtons
                         />

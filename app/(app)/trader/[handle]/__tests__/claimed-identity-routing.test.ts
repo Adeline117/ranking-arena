@@ -26,7 +26,10 @@ describe('claimed trader routing contract', () => {
     expect(client).toContain('claim_status?: ExactTraderClaimData')
     expect(client).toContain('verifiedTraderProfile={authorizationClaimSource?.profile ?? null}')
     expect(client).toContain('isFetchedAfterMount: claimDataFetchedAfterMount')
-    expect(client).toContain('claimDataFetchedAfterMount && !claimDataError')
+    expect(client).toContain("claimFetchStatus === 'idle'")
+    expect(client).toContain('!claimIsFetching')
+    expect(client).toContain('!claimDataError')
+    expect(client).toContain('parseExactTraderClaimEnvelope(claimResponse)')
     expect(client).toContain('staleTime: 0')
     expect(client).toContain('retry: false')
     expect(client).toContain('exactClaim: freshExactClaim')
@@ -48,14 +51,32 @@ describe('claimed trader routing contract', () => {
   it('does not issue an ISR server redirect that can discard an explicit platform variant', () => {
     expect(page).not.toMatch(/\bredirect\s*\(/)
     expect(client).toContain('claimedTraderCanonicalHref({')
-    expect(client).toContain('requestedPlatformValidated: Boolean(override)')
+    expect(client).toContain(
+      'requestedPlatformValidated: Boolean(override || legacyPlatformOverride)'
+    )
+    expect(client).toContain('linkedAccountsReady &&')
+    expect(client).toContain("searchParams.getAll('account').length === 0")
+  })
+
+  it('keeps every legacy fallback bound to a fresh source-authority proof', () => {
+    expect(client).toMatch(
+      /const legacyPlatformOverrideMatchesRequest = Boolean\(\s*accountOverrideAllowsLegacy &&/
+    )
+    expect(client).toContain('selectedServingSettledAfterMount &&')
+    expect(client).toContain(
+      'isExactSourceNotServingError(selectedServingError, exactSelectedFirstScreenRequest)'
+    )
+    expect(client).not.toContain('selectedServingError as (Error & { status?: number })')
   })
 
   it('wires the claimed user identity into serving profile social actions and ownership', () => {
     expect(client).toContain('const { userId: currentUserId } = useAuthSession()')
-    expect(client).toContain('registeredUserId={claimedUser?.id}')
+    expect(client).toContain(
+      'const visibleClaimedUser = isPrimaryAccount ? routeClaimedUser : null'
+    )
+    expect(client).toContain('registeredUserId={visibleClaimedUser?.id}')
     expect(client).toContain('resolveTraderProfileOwnership({')
-    expect(client).toContain('claimedUserId: claimedUser?.id')
+    expect(client).toContain('claimedUserId: visibleClaimedUser?.id')
     expect(client).toContain('isVerifiedClaim: !!authorizationClaimSource?.is_verified')
     expect(client).toContain('claimOwnerId: authorizationClaimSource?.owner_id')
     expect(client).toContain('isOwnProfile={isProfilePageOwner}')
