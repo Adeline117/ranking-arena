@@ -1,183 +1,228 @@
 import { NextResponse } from 'next/server'
-import { createNotification } from '@/lib/data/notifications'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 import logger from '@/lib/logger'
 import { withAuth } from '@/lib/api/middleware'
 import { socialFeatureGuard } from '@/lib/features'
+import type { Database } from '@/lib/supabase/database.types'
 
-/** Extract group id from URL path */
-function extractGroupId(url: string): string {
-  const pathParts = new URL(url).pathname.split('/')
-  const idx = pathParts.indexOf('groups')
-  return pathParts[idx + 1]
+const PRIVATE_NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' }
+const MAX_RECIPIENTS = 500
+const CanonicalUuidSchema = z
+  .string()
+  .uuid()
+  .transform((value) => value.toLowerCase())
+const NormalizedTitleSchema = z
+  .string()
+  .transform((value) => value.normalize('NFC').trim())
+  .refine((value) => value.length <= 50)
+const NormalizedMessageSchema = z
+  .string()
+  .transform((value) => value.normalize('NFC').trim())
+  .refine((value) => value.length >= 1 && value.length <= 500)
+const BroadcastInputSchema = z
+  .object({
+    operation_id: CanonicalUuidSchema,
+    title: NormalizedTitleSchema.optional(),
+    message: NormalizedMessageSchema,
+    target_user_ids: z.array(CanonicalUuidSchema).min(1).max(MAX_RECIPIENTS).optional(),
+  })
+  .strict()
+const SkipReasonsSchema = z.record(z.string().min(1).max(64), z.number().int().positive())
+const BroadcastSuccessSchema = z
+  .object({
+    success: z.literal(true),
+    operation_id: CanonicalUuidSchema,
+    actor_id: CanonicalUuidSchema,
+    group_id: CanonicalUuidSchema,
+    target_scope: z.enum(['all', 'explicit']),
+    notified: z.number().int().min(1).max(MAX_RECIPIENTS),
+    total: z.number().int().min(1).max(MAX_RECIPIENTS),
+    failed: z.literal(0),
+    dm_delivered: z.number().int().min(0).max(MAX_RECIPIENTS),
+    dm_skipped: z.number().int().min(0).max(MAX_RECIPIENTS),
+    dm_skip_reasons: SkipReasonsSchema,
+    applied: z.boolean(),
+  })
+  .strict()
+const BroadcastFailureSchema = z
+  .object({
+    success: z.literal(false),
+    reason: z.enum([
+      'INVALID',
+      'INVALID_TARGETS',
+      'ACTOR_UNAVAILABLE',
+      'GROUP_NOT_FOUND',
+      'GROUP_DISSOLVED',
+      'PERMISSION_DENIED',
+      'NO_RECIPIENTS',
+      'TOO_MANY_RECIPIENTS',
+      'OPERATION_CONFLICT',
+    ]),
+  })
+  .strict()
+const BroadcastResultSchema = z.discriminatedUnion('success', [
+  BroadcastSuccessSchema,
+  BroadcastFailureSchema,
+])
+
+type BroadcastInput = z.infer<typeof BroadcastInputSchema>
+type BroadcastSuccess = z.infer<typeof BroadcastSuccessSchema>
+type BroadcastFailure = z.infer<typeof BroadcastFailureSchema>
+
+function privateJson(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: PRIVATE_NO_STORE_HEADERS })
 }
 
-// 管理员/组长向成员发送通知
+function extractGroupId(url: string): string | null {
+  const pathParts = new URL(url).pathname.split('/')
+  const index = pathParts.indexOf('groups')
+  return index >= 0 ? (pathParts[index + 1] ?? null) : null
+}
+
+function canonicalTargets(input: BroadcastInput, actorId: string): string[] | null {
+  if (!input.target_user_ids) return null
+  const sorted = [...input.target_user_ids].sort()
+  if (sorted.includes(actorId)) return null
+  for (let index = 1; index < sorted.length; index += 1) {
+    if (sorted[index] === sorted[index - 1]) return null
+  }
+  return sorted
+}
+
+function matchesSuccess(
+  result: BroadcastSuccess,
+  request: {
+    actorId: string
+    groupId: string
+    operationId: string
+    targetScope: 'all' | 'explicit'
+  }
+): boolean {
+  const skippedByReason = Object.values(result.dm_skip_reasons).reduce(
+    (sum, count) => sum + count,
+    0
+  )
+  return (
+    result.actor_id === request.actorId &&
+    result.group_id === request.groupId &&
+    result.operation_id === request.operationId &&
+    result.target_scope === request.targetScope &&
+    result.total === result.notified &&
+    result.dm_delivered + result.dm_skipped === result.notified &&
+    skippedByReason === result.dm_skipped
+  )
+}
+
+function failureResponse(result: BroadcastFailure) {
+  switch (result.reason) {
+    case 'INVALID':
+    case 'INVALID_TARGETS':
+      return privateJson({ error: 'Invalid notification request' }, 400)
+    case 'ACTOR_UNAVAILABLE':
+    case 'PERMISSION_DENIED':
+      return privateJson({ error: 'Permission denied' }, 403)
+    case 'GROUP_NOT_FOUND':
+      return privateJson({ error: 'Group not found' }, 404)
+    case 'GROUP_DISSOLVED':
+      return privateJson({ error: 'The group has been dissolved' }, 409)
+    case 'NO_RECIPIENTS':
+      return privateJson({ error: 'No members to notify' }, 400)
+    case 'TOO_MANY_RECIPIENTS':
+      return privateJson({ error: 'Too many members to notify at once' }, 409)
+    case 'OPERATION_CONFLICT':
+      return privateJson({ error: 'Operation id conflicts with another request' }, 409)
+  }
+}
+
+// Group owners/admins notify members through one authorization + effects
+// transaction. The RPC owns recipient eligibility, DM policy and replay.
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
     const guard = socialFeatureGuard()
     if (guard) return guard
 
-    const groupId = extractGroupId(request.url)
-
-    // 检查操作者权限
-    const { data: operatorMember } = await supabase
-      .from('group_members')
-      .select('role')
-      .eq('group_id', groupId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    const operatorRole = operatorMember?.role as string | null
-    if (!operatorRole || operatorRole === 'member') {
-      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+    const parsedGroupId = CanonicalUuidSchema.safeParse(extractGroupId(request.url))
+    const parsedActorId = CanonicalUuidSchema.safeParse(user.id)
+    if (!parsedGroupId.success || !parsedActorId.success) {
+      return privateJson({ error: 'Invalid group id' }, 400)
     }
+    const groupId = parsedGroupId.data
+    const actorId = parsedActorId.data
 
-    let body: Record<string, unknown>
+    let rawBody: unknown
     try {
-      body = await request.json()
+      rawBody = await request.json()
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+      return privateJson({ error: 'Invalid JSON body' }, 400)
     }
 
-    const { title, message, target_user_ids } = body as {
-      title?: string
-      message: string
-      target_user_ids?: string[]
+    const parsedInput = BroadcastInputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return privateJson({ error: 'Invalid notification request' }, 400)
+    }
+    const input = parsedInput.data
+    const targetIds = canonicalTargets(input, actorId)
+    if (input.target_user_ids && !targetIds) {
+      return privateJson({ error: 'Invalid notification recipients' }, 400)
     }
 
-    if (!message || message.trim().length === 0) {
-      return NextResponse.json({ error: 'Notification content cannot be empty' }, { status: 400 })
+    const sb: SupabaseClient<Database> = supabase
+    const { data, error } = await sb.rpc('broadcast_group_notification_atomic', {
+      p_operation_id: input.operation_id,
+      p_actor_id: actorId,
+      p_group_id: groupId,
+      p_title: input.title || null,
+      p_message: input.message,
+      p_target_user_ids: targetIds,
+    })
+
+    if (error) {
+      logger.error('Atomic group notification broadcast failed', {
+        code: error.code,
+        actorId,
+        groupId,
+        operationId: input.operation_id,
+      })
+      return privateJson({ error: 'Failed to send notification' }, 500)
     }
 
-    if (message.length > 500) {
-      return NextResponse.json(
-        { error: 'Notification content cannot exceed 500 characters' },
-        { status: 400 }
-      )
+    const parsedResult = BroadcastResultSchema.safeParse(data)
+    if (!parsedResult.success) {
+      logger.error('Atomic group notification broadcast returned an invalid result', {
+        actorId,
+        groupId,
+        operationId: input.operation_id,
+      })
+      return privateJson({ error: 'Failed to send notification' }, 500)
     }
 
-    // 获取小组名称
-    const { data: groupData } = await supabase
-      .from('groups')
-      .select('name')
-      .eq('id', groupId)
-      .single()
-
-    const groupName = groupData?.name || 'Group'
-
-    // 获取目标成员列表
-    let memberIds: string[] = []
-
-    if (target_user_ids && target_user_ids.length > 0) {
-      // 发送给指定成员 —— 必须与本群真实成员求交集,绝不信任客户端传入的 id。
-      // (安全审计 2026-07-07 P2:否则群管理员可借 target_user_ids 向平台上任意用户
-      //  发 DM+通知,绕过对方的 DM 关闭/拉黑/非互关限制。)同样尊重成员自静音。
-      const { data: verifiedMembers } = await supabase
-        .from('group_members')
-        .select('user_id')
-        .eq('group_id', groupId)
-        .neq('user_id', user.id)
-        .in('user_id', target_user_ids)
-        .or('self_notify_muted.is.null,self_notify_muted.eq.false')
-      memberIds = (verifiedMembers || []).map((m: { user_id: string }) => m.user_id)
-    } else {
-      // 发送给所有成员（排除操作者自己 + 自行静音了本群广播的成员）。
-      // self_notify_muted 是成员自控偏好（默认 false = 仍接收管理员广播），
-      // 见 app/api/groups/[id]/prefs。.or 兼容历史 null 行（列现为 NOT NULL default false）。
-      const { data: allMembers } = await supabase
-        .from('group_members')
-        .select('user_id')
-        .eq('group_id', groupId)
-        .neq('user_id', user.id)
-        .or('self_notify_muted.is.null,self_notify_muted.eq.false')
-
-      memberIds = (allMembers || []).map((m: { user_id: string }) => m.user_id)
+    const result = parsedResult.data
+    if (!result.success) return failureResponse(result)
+    if (
+      !matchesSuccess(result, {
+        actorId,
+        groupId,
+        operationId: input.operation_id,
+        targetScope: targetIds ? 'explicit' : 'all',
+      })
+    ) {
+      logger.error('Atomic group notification acknowledgement mismatched its request', {
+        actorId,
+        groupId,
+        operationId: input.operation_id,
+      })
+      return privateJson({ error: 'Failed to send notification' }, 500)
     }
 
-    if (memberIds.length === 0) {
-      return NextResponse.json({ error: 'No members to notify' }, { status: 400 })
-    }
-
-    const notifyTitle = title?.trim() || `${groupName} admin notification`
-    const notifyMessage = message.trim()
-
-    // Batch notify: was N+1 (3-5 DB ops per member × N members = up to 250+ queries for 50 members)
-    // Now: 3 batch queries total regardless of member count
-    let successCount = 0
-    const errors: string[] = []
-    const dmContent = `[${notifyTitle}] ${notifyMessage}`
-
-    // 1. Batch create notifications (fire-and-forget with dedup)
-    const { sendNotifications } = await import('@/lib/data/notifications')
-    sendNotifications(
-      supabase,
-      memberIds.map((memberId) => ({
-        user_id: memberId,
-        type: 'system' as const,
-        title: notifyTitle,
-        message: notifyMessage,
-        link: `/groups/${groupId}`,
-        actor_id: user.id,
-        reference_id: groupId,
-      })),
-      'group-notify'
-    )
-
-    // 2. Pre-fetch all existing conversations in one query
-    const convPairs = memberIds.map((memberId) => ({
-      user1: user.id < memberId ? user.id : memberId,
-      user2: user.id < memberId ? memberId : user.id,
-      memberId,
-    }))
-    const allUser1s = [...new Set(convPairs.map((p) => p.user1))]
-    const allUser2s = [...new Set(convPairs.map((p) => p.user2))]
-    const { data: existingConvs } = await supabase
-      .from('conversations')
-      .select('id, user1_id, user2_id')
-      .in('user1_id', allUser1s)
-      .in('user2_id', allUser2s)
-    const convMap = new Map<string, string>()
-    for (const c of existingConvs || []) {
-      convMap.set(`${c.user1_id}:${c.user2_id}`, c.id)
-    }
-
-    // 3. Create missing conversations + send DMs
-    const now = new Date().toISOString()
-    for (const pair of convPairs) {
-      try {
-        let convId = convMap.get(`${pair.user1}:${pair.user2}`)
-        if (!convId) {
-          const { data: newConv } = await supabase
-            .from('conversations')
-            .insert({ user1_id: pair.user1, user2_id: pair.user2 })
-            .select('id')
-            .single()
-          convId = newConv?.id || null
-        }
-        if (convId) {
-          await supabase.from('direct_messages').insert({
-            conversation_id: convId,
-            sender_id: user.id,
-            receiver_id: pair.memberId,
-            content: dmContent.slice(0, 2000),
-          })
-          await supabase
-            .from('conversations')
-            .update({ last_message_at: now, last_message_preview: dmContent.slice(0, 100) })
-            .eq('id', convId)
-        }
-        successCount++
-      } catch (err: unknown) {
-        logger.error(`Failed to notify member ${pair.memberId}:`, err)
-        errors.push(pair.memberId)
-      }
-    }
-
-    return NextResponse.json({
+    return privateJson({
       success: true,
-      notified: successCount,
-      failed: errors.length,
-      total: memberIds.length,
+      notified: result.notified,
+      failed: 0,
+      total: result.total,
+      dm_delivered: result.dm_delivered,
+      dm_skipped: result.dm_skipped,
+      replayed: !result.applied,
     })
   },
   { name: 'groups/notify', rateLimit: 'write' }

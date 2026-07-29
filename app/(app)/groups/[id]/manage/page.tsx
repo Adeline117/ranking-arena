@@ -53,6 +53,7 @@ import {
   isGroupManageViewerCurrent,
   type GroupManageOwnerScope,
 } from './manage-viewer-scope'
+import { GroupNotificationOperationLedger } from './group-notification-operation'
 import {
   GROUP_AUDIT_PAGE_LIMIT,
   loadGroupAuditActivities,
@@ -395,6 +396,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [notifyTitle, setNotifyTitle] = useViewerSlotState(manageStateOwnerKey, '')
   const [notifyMessage, setNotifyMessage] = useViewerSlotState(manageStateOwnerKey, '')
   const [notifySending, setNotifySending] = useViewerSlotState(manageStateOwnerKey, false)
+  const notificationOperationsRef = useRef(new GroupNotificationOperationLedger())
   const profileEditSubmitOperationIdRef = useRef<Record<string, string>>({})
   const profileEditContextRef = useRef({
     accessToken,
@@ -832,14 +834,28 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const handleNotify = async () => {
     const requestScope = manageOwnerScope
     const requestToken = accessToken
+    const requestActorId = requestScope.userId
     const requestGroupId = requestScope.groupId
     const requestTitle = notifyTitle.trim()
     const requestMessage = notifyMessage.trim()
     const requestIsCurrent = () => isManageScopeCurrent(requestScope)
-    if (!requestToken || !requestGroupId || !canManage || !requestMessage || !requestIsCurrent())
+    if (
+      !requestToken ||
+      !requestActorId ||
+      !requestGroupId ||
+      !canManage ||
+      !requestMessage ||
+      !requestIsCurrent()
+    )
       return
     setNotifySending(true)
     try {
+      const notificationOperation = await notificationOperationsRef.current.acquire({
+        actorId: requestActorId,
+        groupId: requestGroupId,
+        title: requestTitle,
+        message: requestMessage,
+      })
       const res = await fetch(`/api/groups/${requestGroupId}/notify`, {
         method: 'POST',
         headers: {
@@ -848,13 +864,14 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
+          operation_id: notificationOperation.operationId,
           title: requestTitle || undefined,
           message: requestMessage,
         }),
       })
-      if (!requestIsCurrent()) return
       if (res.ok) {
         const data = await res.json()
+        notificationOperationsRef.current.complete(notificationOperation)
         if (!requestIsCurrent()) return
         setShowNotifyModal(false)
         setNotifyTitle('')
@@ -867,6 +884,11 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         const data = res.headers.get('content-type')?.includes('application/json')
           ? await res.json()
           : null
+        // A 5xx can be an uncertain response after commit. Retain the same
+        // operation id so a retry is a durable replay, not a second broadcast.
+        if (res.status < 500) {
+          notificationOperationsRef.current.complete(notificationOperation)
+        }
         if (!requestIsCurrent()) return
         showToast(data?.error || t('sendFailed'), 'error')
       }
