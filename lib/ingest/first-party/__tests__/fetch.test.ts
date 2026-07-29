@@ -79,6 +79,35 @@ describe('first-party account equity evidence', () => {
     ).rejects.toThrow('account equity evidence is unavailable')
   })
 
+  it('uses OKX total USD equity instead of adding unlike currency units', async () => {
+    const result = await fetchFirstPartyAccount(
+      client({
+        fetchBalance: jest.fn().mockResolvedValue({
+          total: { USDT: 100, USDC: 50 },
+          info: {
+            data: [
+              {
+                totalEq: '1918.55678',
+                details: [{ ccy: 'BTC', eq: '0.049', eqUsd: '1918.55678' }],
+              },
+            ],
+          },
+        }),
+      }),
+      {
+        nowMs: NOW,
+        balanceSource: 'okx_total_equity',
+        balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
+      }
+    )
+
+    expect(result).toMatchObject({
+      balanceNow: 1918.55678,
+      equityNow: 1918.55678,
+    })
+  })
+
   it('rejects a response with no finite stablecoin balance evidence', async () => {
     const missingBalance = client({
       fetchBalance: jest.fn().mockResolvedValue({ total: {} }),

@@ -54,7 +54,7 @@ export interface CcxtLike {
 }
 
 export type FirstPartyBalanceSemantics = 'total_includes_unrealized' | 'wallet_excludes_unrealized'
-export type FirstPartyBalanceSource = 'stable_totals' | 'bybit_total_equity'
+export type FirstPartyBalanceSource = 'stable_totals' | 'bybit_total_equity' | 'okx_total_equity'
 export type FirstPartyRealizedPnlSource = 'positions_history' | 'income_ledger'
 export interface FirstPartyTransferLedgerContract {
   maxRangeDays: number
@@ -86,6 +86,12 @@ function balanceEvidence(
       result?: { list?: Array<{ totalEquity?: unknown }> }
     }
     return num(info?.result?.list?.[0]?.totalEquity)
+  }
+  if (source === 'okx_total_equity') {
+    const info = balance.info as {
+      data?: Array<{ totalEq?: unknown }>
+    }
+    return num(info?.data?.[0]?.totalEq)
   }
 
   let total: number | null = null

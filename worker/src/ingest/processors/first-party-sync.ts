@@ -106,6 +106,7 @@ const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchange
     positionHistoryMaxRangeDays: 90,
   },
   okx: {
+    balanceSource: 'okx_total_equity',
     balanceSemantics: 'total_includes_unrealized',
     realizedPnlSource: 'positions_history',
   },
