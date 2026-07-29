@@ -287,9 +287,10 @@ describe('atomic direct-message delete migration', () => {
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
   })
 
-  it('does not switch the application delete route in this SQL-first batch', () => {
+  it('keeps the deployed delete authority connected to the application route', () => {
     const route = readFileSync(join(process.cwd(), 'app/api/messages/[messageId]/route.ts'), 'utf8')
-    expect(route).not.toContain('delete_direct_message_atomic')
-    expect(route).toContain('.update({ deleted_at: new Date().toISOString() })')
+    expect(route).toContain("'delete_direct_message_atomic'")
+    expect(route).not.toContain(".from('direct_messages')")
+    expect(route).not.toContain('.update({ deleted_at: new Date().toISOString() })')
   })
 })

@@ -176,6 +176,39 @@ function readSendAcknowledgement(
   return { message }
 }
 
+function readDeleteAcknowledgement(
+  value: unknown,
+  expected: { conversationId: string; messageId: string }
+): boolean {
+  if (!isRecord(value)) return false
+  const keys = Object.keys(value).sort()
+  const expectedKeys = [
+    'already_deleted',
+    'conversation_id',
+    'deleted',
+    'deleted_at',
+    'last_message_at',
+    'last_message_preview',
+    'message_id',
+    'success',
+  ]
+  return (
+    keys.length === expectedKeys.length &&
+    keys.every((key, index) => key === expectedKeys[index]) &&
+    value.success === true &&
+    value.message_id === expected.messageId &&
+    value.conversation_id === expected.conversationId &&
+    typeof value.deleted === 'boolean' &&
+    typeof value.already_deleted === 'boolean' &&
+    value.deleted !== value.already_deleted &&
+    typeof value.deleted_at === 'string' &&
+    Number.isFinite(Date.parse(value.deleted_at)) &&
+    typeof value.last_message_at === 'string' &&
+    Number.isFinite(Date.parse(value.last_message_at)) &&
+    (value.last_message_preview === null || typeof value.last_message_preview === 'string')
+  )
+}
+
 function readReactionAcknowledgement(
   value: unknown,
   expectedEmoji: string
@@ -1000,7 +1033,13 @@ export function useConversationMessages({
           }
         )
         if (result.stale || !operationIsCurrent(operation)) return
-        if (!result.ok || !isRecord(result.data) || result.data.success !== true) {
+        if (
+          !result.ok ||
+          !readDeleteAcknowledgement(result.data, {
+            conversationId: operation.conversationId,
+            messageId: msgId,
+          })
+        ) {
           setMessages((previous) =>
             previous.some((message) => message.id === target.id)
               ? previous

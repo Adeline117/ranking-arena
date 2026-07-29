@@ -315,7 +315,16 @@ describe('useConversationMessages viewer scope', () => {
         status: 200,
       })
       .mockResolvedValueOnce({
-        data: { success: true },
+        data: {
+          success: true,
+          deleted: true,
+          already_deleted: false,
+          message_id: MESSAGE_FROM_VIEWER,
+          conversation_id: CONVERSATION_ID,
+          deleted_at: '2026-07-29T12:02:00+00:00',
+          last_message_at: '2026-07-29T12:01:00+00:00',
+          last_message_preview: 'hello',
+        },
         ok: true,
         status: 200,
       })
@@ -338,6 +347,33 @@ describe('useConversationMessages viewer scope', () => {
       result.current.messages.find((item) => item.id === MESSAGE_FROM_OTHER)?.reactions
     ).toEqual([{ count: 1, emoji: '👍', mine: true }])
     expect(result.current.messages.some((item) => item.id === MESSAGE_FROM_VIEWER)).toBe(false)
+  })
+
+  it('restores an optimistic delete when the server acknowledges another resource', async () => {
+    const { result } = renderConversation()
+    await loadConversation(result)
+    mockAuthedFetch.mockReset()
+    mockAuthedFetch.mockResolvedValueOnce({
+      data: {
+        success: true,
+        deleted: true,
+        already_deleted: false,
+        message_id: MESSAGE_FROM_OTHER,
+        conversation_id: CONVERSATION_ID,
+        deleted_at: '2026-07-29T12:02:00+00:00',
+        last_message_at: '2026-07-29T12:01:00+00:00',
+        last_message_preview: 'hello',
+      },
+      ok: true,
+      status: 200,
+    })
+
+    await act(async () => {
+      await result.current.handleDeleteMessage(MESSAGE_FROM_VIEWER)
+    })
+
+    expect(result.current.messages.some((item) => item.id === MESSAGE_FROM_VIEWER)).toBe(true)
+    expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error')
   })
 
   it('uses the captured viewer for retry and voice sends', async () => {
