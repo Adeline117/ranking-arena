@@ -10,6 +10,10 @@ import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { getStripe } from '@/lib/stripe'
+import {
+  resumeStripeSubscriptionRenewals,
+  stopStripeSubscriptionRenewals,
+} from '@/lib/stripe/account-deletion'
 
 const logger = createLogger('account-recover')
 const INVALID_RECOVERY = 'Invalid credentials or no pending deletion'
@@ -25,35 +29,100 @@ async function reban(userId: string): Promise<void> {
     logger.error('Failed to restore deletion ban after recovery failure', { userId, error })
 }
 
-async function resumeSubscription(userId: string): Promise<boolean> {
+interface BillingRecoveryState {
+  customerId: string | null
+  consumerSubscriptionId: string | null
+  resumedSubscriptionIds: string[]
+  terminalSubscriptionIds: string[]
+}
+
+async function resumeSubscription(userId: string): Promise<BillingRecoveryState> {
   const admin = getSupabaseAdmin()
-  try {
-    const { data: subscription, error } = await admin
-      .from('subscriptions')
-      .select('stripe_subscription_id, status, plan, cancel_at_period_end')
-      .eq('user_id', userId)
-      .in('status', ['active', 'trialing'])
-      .limit(1)
-      .maybeSingle()
-    if (error) throw error
+  const { data: billingProfile, error: billingProfileError } = await admin
+    .from('user_profiles')
+    .select('stripe_customer_id, api_stripe_subscription_id')
+    .eq('id', userId)
+    .maybeSingle()
+  if (billingProfileError) throw billingProfileError
+  if (!billingProfile) throw new Error('Billing profile not found')
 
-    const subscriptionId = subscription?.stripe_subscription_id ?? null
-    const isLifetime = subscription?.plan === 'lifetime' || subscriptionId?.startsWith('lifetime_')
-    if (!subscription?.cancel_at_period_end || !subscriptionId || isLifetime) return true
+  const { data: subscription, error } = await admin
+    .from('subscriptions')
+    .select('stripe_subscription_id, status, plan, cancel_at_period_end')
+    .eq('user_id', userId)
+    .in('status', ['active', 'trialing', 'past_due', 'incomplete', 'unpaid', 'paused'])
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
 
-    await getStripe().subscriptions.update(subscriptionId, { cancel_at_period_end: false })
+  const subscriptionId = subscription?.stripe_subscription_id ?? null
+  const isLifetime = subscription?.plan === 'lifetime' || subscriptionId?.startsWith('lifetime_')
+  const consumerSubscriptionId = subscriptionId && !isLifetime ? subscriptionId : null
+  const subscriptionIds = [
+    consumerSubscriptionId,
+    billingProfile.api_stripe_subscription_id,
+  ].filter((id): id is string => !!id)
+  const hasStripeBillingSurface = !!billingProfile.stripe_customer_id || subscriptionIds.length > 0
+  if (!hasStripeBillingSurface) {
+    return {
+      customerId: null,
+      consumerSubscriptionId,
+      resumedSubscriptionIds: [],
+      terminalSubscriptionIds: [],
+    }
+  }
+
+  const resumed = await resumeStripeSubscriptionRenewals({
+    stripeClient: getStripe(),
+    subscriptionIds,
+    expectedCustomerId: billingProfile.stripe_customer_id,
+    includeCustomerSubscriptions: true,
+    pauseMarker: userId,
+  })
+  const recovery = {
+    customerId: resumed.customerId,
+    consumerSubscriptionId,
+    resumedSubscriptionIds: resumed.changedSubscriptionIds,
+    terminalSubscriptionIds: resumed.terminalMarkedSubscriptionIds,
+  }
+  if (consumerSubscriptionId && resumed.changedSubscriptionIds.includes(consumerSubscriptionId)) {
     const { error: updateError } = await admin
       .from('subscriptions')
       .update({ cancel_at_period_end: false })
+      .eq('stripe_subscription_id', consumerSubscriptionId)
       .eq('user_id', userId)
-    if (updateError) throw updateError
-    return true
-  } catch (error) {
-    logger.error('Account restored but subscription renewal could not be resumed', {
-      userId,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return false
+    if (updateError) {
+      await restoreDeletionBillingPause(userId, recovery)
+      throw updateError
+    }
+  }
+  return recovery
+}
+
+async function restoreDeletionBillingPause(
+  userId: string,
+  recovery: BillingRecoveryState
+): Promise<void> {
+  if (recovery.resumedSubscriptionIds.length === 0) return
+  const admin = getSupabaseAdmin()
+  await stopStripeSubscriptionRenewals({
+    stripeClient: getStripe(),
+    subscriptionIds: recovery.resumedSubscriptionIds,
+    expectedCustomerId: recovery.customerId,
+    deletionMode: 'recoverable',
+    pauseMarker: userId,
+    includeCustomerSubscriptions: true,
+  })
+  if (
+    recovery.consumerSubscriptionId &&
+    recovery.resumedSubscriptionIds.includes(recovery.consumerSubscriptionId)
+  ) {
+    const { error } = await admin
+      .from('subscriptions')
+      .update({ cancel_at_period_end: true })
+      .eq('stripe_subscription_id', recovery.consumerSubscriptionId)
+      .eq('user_id', userId)
+    if (error) throw error
   }
 }
 
@@ -155,6 +224,21 @@ export const POST = withPublic(
       }
     }
 
+    let billingRecovery: BillingRecoveryState
+    try {
+      billingRecovery = await resumeSubscription(userId)
+    } catch (error) {
+      await reban(userId)
+      logger.error('Subscription renewal could not be resumed; account remains pending deletion', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return NextResponse.json(
+        { success: false, error: 'Recovery is temporarily unavailable. Please try again.' },
+        { status: 503 }
+      )
+    }
+
     const { data: restoredUserId, error: restoreError } = await admin.rpc(
       'restore_pending_account',
       {
@@ -164,6 +248,14 @@ export const POST = withPublic(
     )
 
     if (restoreError || !restoredUserId) {
+      try {
+        await restoreDeletionBillingPause(userId, billingRecovery)
+      } catch (error) {
+        logger.error('Failed to restore billing pause after account recovery rollback', {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
       await reban(userId)
       logger.error('Failed to restore pending account', {
         userId,
@@ -172,13 +264,16 @@ export const POST = withPublic(
       return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
     }
 
-    const subscriptionResumed = await resumeSubscription(userId)
     logger.info('Account recovered successfully', { userId })
+    const subscriptionResumed = billingRecovery.terminalSubscriptionIds.length === 0
 
     return NextResponse.json({
       success: true,
       subscription_resumed: subscriptionResumed,
-      message: 'Account and retained data recovered successfully. You can now log in.',
+      billing_reactivation_required: !subscriptionResumed,
+      message: subscriptionResumed
+        ? 'Account and retained data recovered successfully. You can now log in.'
+        : 'Account recovered, but one or more subscriptions ended during deletion and must be reactivated.',
     })
   },
   { name: 'account-recover', rateLimit: 'sensitive', skipCsrf: true }

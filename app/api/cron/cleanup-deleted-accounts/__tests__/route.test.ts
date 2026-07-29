@@ -3,7 +3,9 @@
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 const mockDeleteUser = jest.fn()
-const mockCancelSubscription = jest.fn()
+const mockStopStripeSubscriptionRenewals = jest.fn()
+const mockExpireOpenSubscriptionCheckouts = jest.fn()
+const mockStripeClient = { marker: 'stripe-client' }
 
 const mockSupabase = {
   from: mockFrom,
@@ -20,9 +22,14 @@ jest.mock('@/lib/supabase/server', () => ({
 }))
 
 jest.mock('@/lib/stripe', () => ({
-  getStripe: () => ({
-    subscriptions: { cancel: mockCancelSubscription },
-  }),
+  getStripe: () => mockStripeClient,
+}))
+
+jest.mock('@/lib/stripe/account-deletion', () => ({
+  stopStripeSubscriptionRenewals: (...args: unknown[]) =>
+    mockStopStripeSubscriptionRenewals(...args),
+  expireOpenSubscriptionCheckouts: (...args: unknown[]) =>
+    mockExpireOpenSubscriptionCheckouts(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -76,14 +83,29 @@ function purgedResult(overrides: Record<string, unknown> = {}) {
 describe('GET /api/cron/cleanup-deleted-accounts', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockCancelSubscription.mockResolvedValue({ id: 'sub_recurring', status: 'canceled' })
+    mockStopStripeSubscriptionRenewals.mockResolvedValue({
+      customerId: 'cus_owner',
+      changedSubscriptionIds: ['sub_recurring', 'sub_api'],
+    })
+    mockExpireOpenSubscriptionCheckouts.mockResolvedValue({
+      expiredSessionIds: ['cs_api_open'],
+      racedSubscriptionIds: [],
+      racedOneTimeSessionIds: [],
+    })
     mockDeleteUser.mockResolvedValue({ error: null })
   })
 
-  it('cancels recurring billing, purges group edges, then deletes Auth and profile', async () => {
+  it('closes consumer, API, and open Checkout billing then defers hard deletion', async () => {
     queueDatabaseResults(
       {
-        data: [{ id: 'user-expired', original_email: 'deleted@example.com' }],
+        data: [
+          {
+            id: 'user-expired',
+            original_email: 'deleted@example.com',
+            stripe_customer_id: 'cus_owner',
+            api_stripe_subscription_id: 'sub_api',
+          },
+        ],
         error: null,
       },
       {
@@ -93,29 +115,41 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
           plan: 'monthly',
         },
         error: null,
-      },
-      { data: null, error: null }
+      }
     )
-    mockRpc.mockResolvedValue({ data: purgedResult(), error: null })
 
-    await expect(GET({} as never)).resolves.toEqual({ count: 1, total: 1 })
+    await expect(GET({} as never)).resolves.toEqual({ count: 0, total: 1 })
 
-    expect(mockCancelSubscription).toHaveBeenCalledWith('sub_recurring')
-    expect(mockRpc).toHaveBeenCalledWith('purge_deleted_account_group_edges', {
-      p_user_id: 'user-expired',
+    expect(mockExpireOpenSubscriptionCheckouts).toHaveBeenCalledWith({
+      stripeClient: mockStripeClient,
+      customerId: 'cus_owner',
     })
-    expect(mockDeleteUser).toHaveBeenCalledWith('user-expired')
-    expect(mockCancelSubscription.mock.invocationCallOrder[0]).toBeLessThan(
-      mockRpc.mock.invocationCallOrder[0]
-    )
-    expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(
-      mockDeleteUser.mock.invocationCallOrder[0]
+    expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledWith({
+      stripeClient: mockStripeClient,
+      subscriptionIds: ['sub_recurring', 'sub_api'],
+      expectedCustomerId: 'cus_owner',
+      deletionMode: 'permanent',
+    })
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+    expect(mockExpireOpenSubscriptionCheckouts.mock.invocationCallOrder[0]).toBeLessThan(
+      mockStopStripeSubscriptionRenewals.mock.invocationCallOrder[0]
     )
   })
 
   it('purges lifetime-account edges without calling Stripe cancellation', async () => {
     queueDatabaseResults(
-      { data: [{ id: 'user-lifetime', original_email: null }], error: null },
+      {
+        data: [
+          {
+            id: 'user-lifetime',
+            original_email: null,
+            stripe_customer_id: null,
+            api_stripe_subscription_id: null,
+          },
+        ],
+        error: null,
+      },
       {
         data: {
           stripe_subscription_id: 'lifetime_user-lifetime',
@@ -137,14 +171,230 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
 
     await expect(GET({} as never)).resolves.toEqual({ count: 1, total: 1 })
 
-    expect(mockCancelSubscription).not.toHaveBeenCalled()
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
+    expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
     expect(mockRpc).toHaveBeenCalledTimes(1)
     expect(mockDeleteUser).toHaveBeenCalledTimes(1)
   })
 
+  it('cancels an API-only subscription before hard deletion', async () => {
+    queueDatabaseResults(
+      {
+        data: [
+          {
+            id: 'user-api',
+            original_email: null,
+            stripe_customer_id: 'cus_owner',
+            api_stripe_subscription_id: 'sub_api',
+          },
+        ],
+        error: null,
+      },
+      { data: null, error: null }
+    )
+    mockStopStripeSubscriptionRenewals.mockResolvedValue({
+      customerId: 'cus_owner',
+      changedSubscriptionIds: ['sub_api'],
+    })
+
+    await expect(GET({} as never)).resolves.toEqual({ count: 0, total: 1 })
+
+    expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subscriptionIds: [null, 'sub_api'],
+        deletionMode: 'permanent',
+      })
+    )
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+
+  it('hard-deletes on a later pass only after billing links and remote work converge', async () => {
+    queueDatabaseResults(
+      {
+        data: [
+          {
+            id: 'user-converged',
+            original_email: null,
+            stripe_customer_id: 'cus_owner',
+            api_stripe_subscription_id: null,
+          },
+        ],
+        error: null,
+      },
+      { data: null, error: null },
+      { data: null, error: null }
+    )
+    mockExpireOpenSubscriptionCheckouts.mockResolvedValue({
+      expiredSessionIds: [],
+      racedSubscriptionIds: [],
+      racedOneTimeSessionIds: [],
+    })
+    mockStopStripeSubscriptionRenewals.mockResolvedValue({
+      customerId: 'cus_owner',
+      changedSubscriptionIds: [],
+    })
+    mockRpc.mockResolvedValue({ data: purgedResult(), error: null })
+
+    await expect(GET({} as never)).resolves.toEqual({ count: 1, total: 1 })
+
+    expect(mockRpc).toHaveBeenCalledWith('purge_deleted_account_group_edges', {
+      p_user_id: 'user-converged',
+    })
+    expect(mockDeleteUser).toHaveBeenCalledWith('user-converged')
+    expect(mockStopStripeSubscriptionRenewals.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRpc.mock.invocationCallOrder[0]
+    )
+    expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDeleteUser.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('fails closed before purge/Auth deletion when an open Checkout remains payable', async () => {
+    queueDatabaseResults(
+      {
+        data: [
+          {
+            id: 'user-expired',
+            original_email: null,
+            stripe_customer_id: 'cus_owner',
+            api_stripe_subscription_id: 'sub_api',
+          },
+        ],
+        error: null,
+      },
+      { data: null, error: null }
+    )
+    mockExpireOpenSubscriptionCheckouts.mockRejectedValue(new Error('Checkout remains payable'))
+
+    await expect(GET({} as never)).rejects.toThrow('Checkout remains payable')
+
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+
+  it('immediately cancels a subscription that completes while hard cleanup expires Checkout', async () => {
+    queueDatabaseResults(
+      {
+        data: [
+          {
+            id: 'user-raced',
+            original_email: null,
+            stripe_customer_id: 'cus_owner',
+            api_stripe_subscription_id: null,
+          },
+        ],
+        error: null,
+      },
+      { data: null, error: null }
+    )
+    mockExpireOpenSubscriptionCheckouts.mockResolvedValue({
+      expiredSessionIds: [],
+      racedSubscriptionIds: ['sub_checkout_race'],
+      racedOneTimeSessionIds: [],
+    })
+    mockStopStripeSubscriptionRenewals.mockResolvedValue({
+      customerId: 'cus_owner',
+      changedSubscriptionIds: ['sub_checkout_race'],
+    })
+
+    await expect(GET({} as never)).resolves.toEqual({ count: 0, total: 1 })
+
+    expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subscriptionIds: [null, null, 'sub_checkout_race'],
+        deletionMode: 'permanent',
+      })
+    )
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+
+  it('defers hard deletion when a one-time Checkout completes during expiry', async () => {
+    queueDatabaseResults(
+      {
+        data: [
+          {
+            id: 'user-payment-raced',
+            original_email: null,
+            stripe_customer_id: 'cus_owner',
+            api_stripe_subscription_id: null,
+          },
+        ],
+        error: null,
+      },
+      { data: null, error: null }
+    )
+    mockExpireOpenSubscriptionCheckouts.mockResolvedValue({
+      expiredSessionIds: [],
+      racedSubscriptionIds: [],
+      racedOneTimeSessionIds: ['cs_tip_race'],
+    })
+    mockStopStripeSubscriptionRenewals.mockResolvedValue({
+      customerId: 'cus_owner',
+      changedSubscriptionIds: [],
+    })
+
+    await expect(GET({} as never)).resolves.toEqual({ count: 0, total: 1 })
+
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+
+  it('leaves the account pending and succeeds on retry after remote cancellation recovers', async () => {
+    const linkedAccount = {
+      id: 'user-retry',
+      original_email: null,
+      stripe_customer_id: 'cus_owner',
+      api_stripe_subscription_id: 'sub_api',
+    }
+    queueDatabaseResults({ data: [linkedAccount], error: null }, { data: null, error: null })
+    mockStopStripeSubscriptionRenewals.mockRejectedValueOnce(new Error('Stripe unavailable'))
+
+    await expect(GET({} as never)).rejects.toThrow('Stripe unavailable')
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+
+    queueDatabaseResults(
+      {
+        data: [
+          {
+            ...linkedAccount,
+            api_stripe_subscription_id: null,
+          },
+        ],
+        error: null,
+      },
+      { data: null, error: null },
+      { data: null, error: null }
+    )
+    mockStopStripeSubscriptionRenewals.mockResolvedValueOnce({
+      customerId: 'cus_owner',
+      changedSubscriptionIds: [],
+    })
+    mockExpireOpenSubscriptionCheckouts.mockResolvedValue({
+      expiredSessionIds: [],
+      racedSubscriptionIds: [],
+      racedOneTimeSessionIds: [],
+    })
+    mockRpc.mockResolvedValueOnce({ data: purgedResult(), error: null })
+
+    await expect(GET({} as never)).resolves.toEqual({ count: 1, total: 1 })
+    expect(mockDeleteUser).toHaveBeenCalledWith('user-retry')
+  })
+
   it('fails closed before Auth deletion when the group purge RPC errors', async () => {
     queueDatabaseResults(
-      { data: [{ id: 'user-expired', original_email: null }], error: null },
+      {
+        data: [
+          {
+            id: 'user-expired',
+            original_email: null,
+            stripe_customer_id: null,
+            api_stripe_subscription_id: null,
+          },
+        ],
+        error: null,
+      },
       { data: null, error: null }
     )
     mockRpc.mockResolvedValue({ data: null, error: { message: 'lock timeout' } })
@@ -163,7 +413,17 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     purgedResult({ owner_memberships_removed: 3 }),
   ])('rejects an incomplete or invalid purge result before Auth deletion', async (data) => {
     queueDatabaseResults(
-      { data: [{ id: 'user-expired', original_email: null }], error: null },
+      {
+        data: [
+          {
+            id: 'user-expired',
+            original_email: null,
+            stripe_customer_id: null,
+            api_stripe_subscription_id: null,
+          },
+        ],
+        error: null,
+      },
       { data: null, error: null }
     )
     mockRpc.mockResolvedValue({ data, error: null })

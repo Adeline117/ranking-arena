@@ -12,6 +12,10 @@ import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { getStripe } from '@/lib/stripe'
+import {
+  expireOpenSubscriptionCheckouts,
+  stopStripeSubscriptionRenewals,
+} from '@/lib/stripe/account-deletion'
 
 const logger = createLogger('account-delete')
 
@@ -53,15 +57,25 @@ export const POST = withAuth(
     const recoveryToken = randomBytes(32).toString('base64url')
     const recoveryTokenHash = createHash('sha256').update(recoveryToken).digest('hex')
 
-    // Stop renewal without destroying a subscription that can still be resumed
-    // during the grace period. Lifetime purchases have no Stripe subscription.
-    let stripeSubscriptionId: string | null = null
+    // Stop every recurring billing surface before writing the deletion
+    // tombstone. API-tier billing is stored on user_profiles, independently of
+    // the consumer Pro row in subscriptions. Open subscription Checkout
+    // Sessions must also be expired or they can create a first charge later.
+    let recurringSubscriptionId: string | null = null
     try {
+      const { data: billingProfile, error: billingProfileError } = await adminSupabase
+        .from('user_profiles')
+        .select('stripe_customer_id, api_stripe_subscription_id')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (billingProfileError) throw billingProfileError
+      if (!billingProfile) throw new Error('Billing profile not found')
+
       const { data: subscription, error: subscriptionError } = await adminSupabase
         .from('subscriptions')
         .select('stripe_subscription_id, status, plan')
         .eq('user_id', user.id)
-        .in('status', ['active', 'trialing', 'past_due'])
+        .in('status', ['active', 'trialing', 'past_due', 'incomplete', 'unpaid', 'paused'])
         .limit(1)
         .maybeSingle()
       if (subscriptionError) throw subscriptionError
@@ -69,8 +83,46 @@ export const POST = withAuth(
       const candidateId = subscription?.stripe_subscription_id ?? null
       const isLifetime = subscription?.plan === 'lifetime' || candidateId?.startsWith('lifetime_')
       if (candidateId && !isLifetime) {
-        stripeSubscriptionId = candidateId
-        await getStripe().subscriptions.update(candidateId, { cancel_at_period_end: true })
+        recurringSubscriptionId = candidateId
+      }
+
+      const subscriptionIds = [recurringSubscriptionId, billingProfile.api_stripe_subscription_id]
+      const hasStripeBillingSurface =
+        !!billingProfile.stripe_customer_id || subscriptionIds.some(Boolean)
+
+      if (hasStripeBillingSurface) {
+        const stripeClient = getStripe()
+        if (billingProfile.stripe_customer_id) {
+          const checkoutResult = await expireOpenSubscriptionCheckouts({
+            stripeClient,
+            customerId: billingProfile.stripe_customer_id,
+          })
+          subscriptionIds.push(...checkoutResult.racedSubscriptionIds)
+        }
+
+        const stopped = await stopStripeSubscriptionRenewals({
+          stripeClient,
+          subscriptionIds,
+          expectedCustomerId: billingProfile.stripe_customer_id,
+          deletionMode: 'recoverable',
+          pauseMarker: user.id,
+        })
+
+        if (!billingProfile.stripe_customer_id && stopped.customerId) {
+          const checkoutResult = await expireOpenSubscriptionCheckouts({
+            stripeClient,
+            customerId: stopped.customerId,
+          })
+          if (checkoutResult.racedSubscriptionIds.length > 0) {
+            await stopStripeSubscriptionRenewals({
+              stripeClient,
+              subscriptionIds: checkoutResult.racedSubscriptionIds,
+              expectedCustomerId: stopped.customerId,
+              deletionMode: 'recoverable',
+              pauseMarker: user.id,
+            })
+          }
+        }
       }
     } catch (error) {
       logger.error('Failed to stop subscription renewal; deletion not scheduled', {
@@ -91,20 +143,8 @@ export const POST = withAuth(
     })
 
     if (scheduleError) {
-      // Compensate the reversible Stripe change when the database transaction
-      // fails, so a failed deletion attempt has no billing side effect.
-      if (stripeSubscriptionId) {
-        try {
-          await getStripe().subscriptions.update(stripeSubscriptionId, {
-            cancel_at_period_end: false,
-          })
-        } catch (error) {
-          logger.error('Failed to resume subscription after deletion rollback', {
-            userId: user.id,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-      }
+      // Immediate Stripe cancellation is deliberately irreversible: reviving
+      // it here could restart Smart Retries while deletion state is uncertain.
       logger.error('Account deletion transaction failed', {
         userId: user.id,
         error: scheduleError.message,
@@ -115,11 +155,18 @@ export const POST = withAuth(
       )
     }
 
-    if (stripeSubscriptionId) {
-      await adminSupabase
+    if (recurringSubscriptionId) {
+      const { error: localSubscriptionError } = await adminSupabase
         .from('subscriptions')
-        .update({ cancel_at_period_end: true })
+        .update({ status: 'canceled', cancel_at_period_end: false })
+        .eq('stripe_subscription_id', recurringSubscriptionId)
         .eq('user_id', user.id)
+      if (localSubscriptionError) {
+        logger.error('Remote subscription canceled but local projection update failed', {
+          userId: user.id,
+          error: localSubscriptionError.message,
+        })
+      }
     }
 
     const { error: banError } = await adminSupabase.auth.admin.updateUserById(user.id, {

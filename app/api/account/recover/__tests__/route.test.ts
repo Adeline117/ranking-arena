@@ -3,10 +3,14 @@
 const mockRpc = jest.fn()
 const mockAdminUpdateUser = jest.fn()
 const mockPasswordSignIn = jest.fn()
-const mockStripeUpdate = jest.fn()
 const mockSubscriptionUpdate = jest.fn()
+const mockSubscriptionUpdateEq = jest.fn()
+const mockResumeStripeSubscriptionRenewals = jest.fn()
+const mockStopStripeSubscriptionRenewals = jest.fn()
+const mockStripeClient = { marker: 'stripe-client' }
 let tokenResult: { data: Record<string, unknown> | null; error: unknown }
 let profileResult: { data: Record<string, unknown> | null; error: unknown }
+let billingProfileResult: { data: Record<string, unknown> | null; error: unknown }
 let subscriptionResult: { data: Record<string, unknown> | null; error: unknown }
 
 jest.mock('@/lib/api/middleware', () => ({
@@ -33,13 +37,22 @@ const mockFrom = jest.fn((table: string) => {
   }
   if (table === 'user_profiles') {
     return {
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          not: jest.fn(() => ({
-            maybeSingle: jest.fn().mockImplementation(async () => profileResult),
+      select: jest.fn((columns: string) => {
+        if (columns === 'stripe_customer_id, api_stripe_subscription_id') {
+          return {
+            eq: jest.fn(() => ({
+              maybeSingle: jest.fn().mockImplementation(async () => billingProfileResult),
+            })),
+          }
+        }
+        return {
+          eq: jest.fn(() => ({
+            not: jest.fn(() => ({
+              maybeSingle: jest.fn().mockImplementation(async () => profileResult),
+            })),
           })),
-        })),
-      })),
+        }
+      }),
     }
   }
   if (table === 'subscriptions') {
@@ -55,7 +68,17 @@ const mockFrom = jest.fn((table: string) => {
       })),
       update: (...args: unknown[]) => {
         mockSubscriptionUpdate(...args)
-        return { eq: jest.fn().mockResolvedValue({ error: null }) }
+        return {
+          eq: (...firstEq: unknown[]) => {
+            mockSubscriptionUpdateEq(...firstEq)
+            return {
+              eq: (...secondEq: unknown[]) => {
+                mockSubscriptionUpdateEq(...secondEq)
+                return Promise.resolve({ error: null })
+              },
+            }
+          },
+        }
       },
     }
   }
@@ -71,7 +94,14 @@ jest.mock('@/lib/supabase/server', () => ({
 }))
 
 jest.mock('@/lib/stripe', () => ({
-  getStripe: jest.fn(() => ({ subscriptions: { update: mockStripeUpdate } })),
+  getStripe: jest.fn(() => mockStripeClient),
+}))
+
+jest.mock('@/lib/stripe/account-deletion', () => ({
+  resumeStripeSubscriptionRenewals: (...args: unknown[]) =>
+    mockResumeStripeSubscriptionRenewals(...args),
+  stopStripeSubscriptionRenewals: (...args: unknown[]) =>
+    mockStopStripeSubscriptionRenewals(...args),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -109,6 +139,13 @@ describe('account recovery', () => {
       },
       error: null,
     }
+    billingProfileResult = {
+      data: {
+        stripe_customer_id: 'cus_owner',
+        api_stripe_subscription_id: 'sub_api',
+      },
+      error: null,
+    }
     subscriptionResult = {
       data: {
         stripe_subscription_id: 'sub_123',
@@ -121,7 +158,15 @@ describe('account recovery', () => {
     mockRpc.mockResolvedValue({ data: 'user-1', error: null })
     mockAdminUpdateUser.mockResolvedValue({ error: null })
     mockPasswordSignIn.mockResolvedValue({ error: null })
-    mockStripeUpdate.mockResolvedValue({ status: 'active' })
+    mockResumeStripeSubscriptionRenewals.mockResolvedValue({
+      customerId: 'cus_owner',
+      changedSubscriptionIds: ['sub_123', 'sub_api'],
+      terminalMarkedSubscriptionIds: [],
+    })
+    mockStopStripeSubscriptionRenewals.mockResolvedValue({
+      customerId: 'cus_owner',
+      changedSubscriptionIds: ['sub_123', 'sub_api'],
+    })
   })
 
   it('restores a passwordless account with its one-time token and resumes renewal', async () => {
@@ -135,8 +180,19 @@ describe('account recovery', () => {
       p_recovery_token_hash: createHash('sha256').update(RECOVERY_TOKEN).digest('hex'),
     })
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: 'none' })
-    expect(mockStripeUpdate).toHaveBeenCalledWith('sub_123', { cancel_at_period_end: false })
+    expect(mockResumeStripeSubscriptionRenewals).toHaveBeenCalledWith({
+      stripeClient: mockStripeClient,
+      subscriptionIds: ['sub_123', 'sub_api'],
+      expectedCustomerId: 'cus_owner',
+      includeCustomerSubscriptions: true,
+      pauseMarker: 'user-1',
+    })
     expect(mockSubscriptionUpdate).toHaveBeenCalledWith({ cancel_at_period_end: false })
+    expect(mockSubscriptionUpdateEq).toHaveBeenNthCalledWith(1, 'stripe_subscription_id', 'sub_123')
+    expect(mockSubscriptionUpdateEq).toHaveBeenNthCalledWith(2, 'user_id', 'user-1')
+    expect(mockResumeStripeSubscriptionRenewals.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRpc.mock.invocationCallOrder[0]
+    )
   })
 
   it('does not unban or reveal account details for an invalid token', async () => {
@@ -188,8 +244,76 @@ describe('account recovery', () => {
     )
 
     expect(response.status).toBe(500)
+    expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledWith({
+      stripeClient: mockStripeClient,
+      subscriptionIds: ['sub_123', 'sub_api'],
+      expectedCustomerId: 'cus_owner',
+      deletionMode: 'recoverable',
+      pauseMarker: 'user-1',
+      includeCustomerSubscriptions: true,
+    })
+    expect(mockSubscriptionUpdate).toHaveBeenNthCalledWith(1, {
+      cancel_at_period_end: false,
+    })
+    expect(mockSubscriptionUpdate).toHaveBeenNthCalledWith(2, {
+      cancel_at_period_end: true,
+    })
     expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', {
       ban_duration: '720h',
+    })
+  })
+
+  it('keeps the deletion tombstone and re-bans when API renewal recovery fails', async () => {
+    mockResumeStripeSubscriptionRenewals.mockRejectedValue(new Error('Stripe unavailable'))
+
+    const response = await POST(request({ recovery_token: RECOVERY_TOKEN }))
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ success: false })
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockSubscriptionUpdate).not.toHaveBeenCalled()
+    expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', {
+      ban_duration: '720h',
+    })
+  })
+
+  it('restores an API-only deletion pause without mutating the consumer table', async () => {
+    subscriptionResult = { data: null, error: null }
+    mockResumeStripeSubscriptionRenewals.mockResolvedValue({
+      customerId: 'cus_owner',
+      changedSubscriptionIds: ['sub_api'],
+      terminalMarkedSubscriptionIds: [],
+    })
+
+    const response = await POST(request({ recovery_token: RECOVERY_TOKEN }))
+
+    expect(response.status).toBe(200)
+    expect(mockResumeStripeSubscriptionRenewals).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subscriptionIds: ['sub_api'],
+        includeCustomerSubscriptions: true,
+        pauseMarker: 'user-1',
+      })
+    )
+    expect(mockSubscriptionUpdate).not.toHaveBeenCalled()
+  })
+
+  it('explicitly reports when a deletion-paused subscription ended before recovery', async () => {
+    subscriptionResult = { data: null, error: null }
+    mockResumeStripeSubscriptionRenewals.mockResolvedValue({
+      customerId: 'cus_owner',
+      changedSubscriptionIds: [],
+      terminalMarkedSubscriptionIds: ['sub_api_ended'],
+    })
+
+    const response = await POST(request({ recovery_token: RECOVERY_TOKEN }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      success: true,
+      subscription_resumed: false,
+      billing_reactivation_required: true,
     })
   })
 })

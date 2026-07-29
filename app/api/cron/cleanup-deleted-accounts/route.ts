@@ -10,6 +10,10 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { withCron } from '@/lib/api/with-cron'
 import { getStripe } from '@/lib/stripe'
+import {
+  expireOpenSubscriptionCheckouts,
+  stopStripeSubscriptionRenewals,
+} from '@/lib/stripe/account-deletion'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -45,7 +49,7 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
   // Find users whose deletion grace period has passed
   const { data: expiredAccounts, error } = await supabase
     .from('user_profiles')
-    .select('id, original_email')
+    .select('id, original_email, stripe_customer_id, api_stripe_subscription_id')
     .not('deleted_at', 'is', null)
     .lt('deletion_scheduled_at', new Date().toISOString())
     .limit(100)
@@ -76,7 +80,7 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
           .from('subscriptions')
           .select('stripe_subscription_id, status, plan')
           .eq('user_id', account.id)
-          .in('status', ['active', 'trialing', 'past_due'])
+          .in('status', ['active', 'trialing', 'past_due', 'incomplete', 'unpaid', 'paused'])
           .limit(1)
           .maybeSingle()
         if (subscriptionError) throw subscriptionError
@@ -84,11 +88,78 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
         const subscriptionId = subscription?.stripe_subscription_id ?? null
         const isLifetime =
           subscription?.plan === 'lifetime' || subscriptionId?.startsWith('lifetime_')
-        if (subscriptionId && !isLifetime) {
-          await getStripe().subscriptions.cancel(subscriptionId)
+        const recurringSubscriptionId = subscriptionId && !isLifetime ? subscriptionId : null
+        const subscriptionIds = [recurringSubscriptionId, account.api_stripe_subscription_id]
+        const hasStripeBillingSurface =
+          !!account.stripe_customer_id || subscriptionIds.some(Boolean)
+        let closedCheckoutCount = 0
+        const changedRemoteSubscriptionIds = new Set<string>()
+
+        if (hasStripeBillingSurface) {
+          const stripeClient = getStripe()
+          if (account.stripe_customer_id) {
+            const checkoutResult = await expireOpenSubscriptionCheckouts({
+              stripeClient,
+              customerId: account.stripe_customer_id,
+            })
+            closedCheckoutCount =
+              checkoutResult.expiredSessionIds.length +
+              checkoutResult.racedSubscriptionIds.length +
+              checkoutResult.racedOneTimeSessionIds.length
+            subscriptionIds.push(...checkoutResult.racedSubscriptionIds)
+          }
+
+          const stopped = await stopStripeSubscriptionRenewals({
+            stripeClient,
+            subscriptionIds,
+            expectedCustomerId: account.stripe_customer_id,
+            deletionMode: 'permanent',
+          })
+          stopped.changedSubscriptionIds.forEach((id) => changedRemoteSubscriptionIds.add(id))
+          if (!account.stripe_customer_id && stopped.customerId) {
+            const checkoutResult = await expireOpenSubscriptionCheckouts({
+              stripeClient,
+              customerId: stopped.customerId,
+            })
+            closedCheckoutCount =
+              checkoutResult.expiredSessionIds.length +
+              checkoutResult.racedSubscriptionIds.length +
+              checkoutResult.racedOneTimeSessionIds.length
+            if (checkoutResult.racedSubscriptionIds.length > 0) {
+              const racedStopped = await stopStripeSubscriptionRenewals({
+                stripeClient,
+                subscriptionIds: checkoutResult.racedSubscriptionIds,
+                expectedCustomerId: stopped.customerId,
+                deletionMode: 'permanent',
+              })
+              racedStopped.changedSubscriptionIds.forEach((id) =>
+                changedRemoteSubscriptionIds.add(id)
+              )
+            }
+          }
+          if (changedRemoteSubscriptionIds.size > 0) {
+            logger.info(
+              `[cleanup-deleted-accounts] Cancelled ${changedRemoteSubscriptionIds.size} Stripe subscription(s) for user ${account.id}`
+            )
+          }
+        }
+
+        // Cancellation and Checkout-expiry webhooks update the local ledgers
+        // asynchronously. Keep the profile tombstone for another cron pass
+        // whenever this pass observed a linked subscription or closed a remote
+        // billing surface. The next pass may hard-delete only after those
+        // local links have converged, so a late signed event never loses its
+        // owner row halfway through processing.
+        if (
+          recurringSubscriptionId ||
+          account.api_stripe_subscription_id ||
+          changedRemoteSubscriptionIds.size > 0 ||
+          closedCheckoutCount > 0
+        ) {
           logger.info(
-            `[cleanup-deleted-accounts] Cancelled Stripe subscription ${subscriptionId} for user ${account.id}`
+            `[cleanup-deleted-accounts] Billing settlement pending for user ${account.id}; hard deletion deferred`
           )
+          return { id: account.id, deleted: false }
         }
 
         // Auth deletes the parent row first and then cascades group edges. The
@@ -121,14 +192,14 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
           throw new Error(`Profile delete failed: ${profileError.message}`)
         }
 
-        return account.id
+        return { id: account.id, deleted: true }
       })
     )
 
     for (let j = 0; j < results.length; j++) {
       const result = results[j]
       if (result.status === 'fulfilled') {
-        deleted++
+        if (result.value.deleted) deleted++
       } else {
         errors.push(`Failed to delete ${batch[j].id}: ${result.reason}`)
       }
