@@ -300,8 +300,21 @@ describe('GET /api/following', () => {
     })
 
     const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
 
     expect(response.status).toBe(200)
+    expect(body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'trader-1',
+          roi: 10,
+          pnl: null,
+          win_rate: null,
+          followers: null,
+          arena_score: 60,
+        }),
+      ])
+    )
     expect(mockTieredSet).toHaveBeenCalledWith(
       'following:v4:candidates:user-123',
       {
@@ -319,6 +332,48 @@ describe('GET /api/following', () => {
     )
     expect(JSON.stringify(mockTieredSet.mock.calls)).not.toContain('Mutable bio')
     expect(JSON.stringify(mockTieredSet.mock.calls)).not.toContain('Current trader')
+  })
+
+  it('preserves measured zero trader metrics instead of treating them as missing', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    mockTieredGet.mockResolvedValue({
+      data: { traders: [{ traderId: 'zero-trader', source: 'bybit' }], users: [] },
+    })
+    mockQueryResults.set('leaderboard_ranks', {
+      data: [
+        {
+          source_trader_id: 'zero-trader',
+          source: 'bybit',
+          handle: 'Measured Zero',
+          avatar_url: null,
+          roi: 0,
+          pnl: 0,
+          win_rate: 0,
+          followers: 0,
+          arena_score: 50,
+        },
+      ],
+      error: null,
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
+
+    expect(body.items).toEqual([
+      expect.objectContaining({
+        id: 'zero-trader',
+        roi: 0,
+        pnl: 0,
+        win_rate: 0,
+        followers: 0,
+        arena_score: 50,
+      }),
+    ])
+    expect(mockQueryCalls).toContainEqual({
+      table: 'leaderboard_ranks',
+      method: 'gt',
+      args: ['arena_score', 0],
+    })
   })
 
   it('uses cached edges but re-materializes current trader fields', async () => {

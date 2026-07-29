@@ -186,4 +186,58 @@ describe('FollowingPageClient load errors', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getAllByText('Alice').length).toBeGreaterThan(0)
   })
+
+  it('renders measured zero metrics and does not dilute ROI averages with unknown values', async () => {
+    mockFetch.mockResolvedValueOnce(
+      response({
+        items: [
+          {
+            ...alice,
+            handle: 'Measured Zero',
+            roi: 0,
+            win_rate: 0,
+            followers: 0,
+            arena_score: 0,
+          },
+          {
+            ...alice,
+            id: 'unknown-roi',
+            identity_key: 'okx:unknown-roi',
+            handle: 'Unknown ROI',
+            source: 'okx_web3',
+            platform: 'okx_web3',
+            roi: null,
+          },
+          {
+            ...alice,
+            id: 'known-negative',
+            identity_key: 'bybit:known-negative',
+            handle: 'Known Negative',
+            source: 'bybit',
+            platform: 'bybit',
+            roi: -10,
+          },
+        ],
+        hasMore: false,
+      })
+    )
+
+    const { container } = render(<FollowingPageClient />)
+
+    expect((await screen.findAllByText('Measured Zero')).length).toBeGreaterThan(0)
+    expect(container).toHaveTextContent(/ROI:\s*\+0\.00%/)
+    expect(container).toHaveTextContent(/Score:\s*0\.0/)
+    expect(container).toHaveTextContent(/winRate:\s*0\.0%/)
+    expect(container).toHaveTextContent(/copiers:\s*0/)
+    expect(container).toHaveTextContent('-5.00%')
+    expect(container).not.toHaveTextContent('-3.33%')
+
+    fireEvent.click(screen.getByRole('button', { name: 'sortByRoi' }))
+    await waitFor(() => {
+      const rendered = container.textContent ?? ''
+      expect(rendered.lastIndexOf('Known Negative')).toBeLessThan(
+        rendered.lastIndexOf('Unknown ROI')
+      )
+    })
+  })
 })
