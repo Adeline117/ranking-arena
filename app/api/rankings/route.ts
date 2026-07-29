@@ -28,13 +28,14 @@
 import type {
   RankingWindow,
   TradingCategory,
+  GranularPlatform,
   Platform,
   RankingsQuery,
 } from '@/lib/types/leaderboard'
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { TradingPeriod } from '@/lib/types/unified-trader'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
-import { ApiError } from '@/lib/api/errors'
+import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { withPublic } from '@/lib/api/middleware'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
@@ -57,6 +58,10 @@ import {
   createSealedRankingCacheEntry,
   parseSealedRankingCacheEntry,
 } from '@/lib/rankings/sealed-ranking-cache'
+import {
+  parseSealedCompositeCacheEntry,
+  type SealedCompositePublications,
+} from '@/lib/rankings/sealed-composite-cache'
 
 const logger = createLogger('rankings-api')
 
@@ -87,6 +92,282 @@ const VALID_SORT_BY = [
 
 // Data quality: ROI values above this threshold are considered anomalous
 const ROI_ANOMALY_THRESHOLD = 50000 // 50000% = 500x — only filter extreme data errors, not legitimate high performers
+const COMPOSITE_CACHE_VERSION = 'v3'
+
+interface CompositeRankingPayload {
+  readonly traders: readonly Record<string, unknown>[]
+  readonly window: 'COMPOSITE'
+  readonly totalCount: number
+  readonly totalcount: number
+  readonly total_count: number
+  readonly as_of: string | null
+  readonly is_stale: boolean
+  readonly source_freshness: readonly unknown[]
+  readonly availableSources: readonly string[]
+  readonly next_cursor: null
+  readonly precomputed: true
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function parseCompositeRankingPayload(
+  value: unknown,
+  publications: SealedCompositePublications
+): CompositeRankingPayload | null {
+  if (!isRecord(value) || value.window !== 'COMPOSITE' || value.precomputed !== true) return null
+  if (
+    !Array.isArray(value.traders) ||
+    !Array.isArray(value.availableSources) ||
+    !Array.isArray(value.source_freshness) ||
+    typeof value.is_stale !== 'boolean' ||
+    (value.as_of !== null &&
+      (typeof value.as_of !== 'string' || !Number.isFinite(Date.parse(value.as_of))))
+  ) {
+    return null
+  }
+
+  const provedSources = new Set(
+    Object.values(publications).flatMap((publication) =>
+      publication.proofs.map((proof) => proof.source)
+    )
+  )
+  const availableSources: string[] = []
+  for (const source of value.availableSources) {
+    if (
+      typeof source !== 'string' ||
+      !provedSources.has(source) ||
+      availableSources.includes(source)
+    ) {
+      return null
+    }
+    availableSources.push(source)
+  }
+
+  const traders: Record<string, unknown>[] = []
+  const identities = new Set<string>()
+  let priorScore = Number.POSITIVE_INFINITY
+  for (const [index, trader] of value.traders.entries()) {
+    if (!isRecord(trader)) return null
+    const platform = trader.platform
+    const traderKey = trader.trader_key
+    const arenaScore = trader.arena_score
+    const rank = trader.rank
+    if (
+      typeof platform !== 'string' ||
+      !provedSources.has(platform) ||
+      !availableSources.includes(platform) ||
+      typeof traderKey !== 'string' ||
+      traderKey.length === 0 ||
+      typeof arenaScore !== 'number' ||
+      !Number.isFinite(arenaScore) ||
+      arenaScore < 0 ||
+      arenaScore > 100 ||
+      !Number.isSafeInteger(rank) ||
+      rank !== index + 1 ||
+      arenaScore > priorScore
+    ) {
+      return null
+    }
+    for (const key of [
+      'roi',
+      'pnl',
+      'win_rate',
+      'max_drawdown',
+      'sharpe_ratio',
+      'sortino_ratio',
+      'trades_count',
+      'followers',
+      'copiers',
+      'profitability_score',
+      'risk_control_score',
+      'execution_score',
+      'avg_holding_hours',
+    ] as const) {
+      const metric = trader[key]
+      if (metric !== null && metric !== undefined) {
+        if (typeof metric !== 'number' || !Number.isFinite(metric)) return null
+        if (
+          (key === 'trades_count' || key === 'followers' || key === 'copiers') &&
+          (!Number.isSafeInteger(metric) || metric < 0)
+        ) {
+          return null
+        }
+      }
+    }
+    const identity = `${platform}:${traderKey}`
+    if (identities.has(identity)) return null
+    identities.add(identity)
+    priorScore = arenaScore
+    traders.push({ ...trader })
+  }
+
+  const freshnessSources = new Set<string>()
+  for (const freshness of value.source_freshness) {
+    if (!isRecord(freshness)) return null
+    const source = freshness.source
+    const updatedAt = freshness.updated_at
+    const ageSeconds = freshness.age_seconds
+    if (
+      typeof source !== 'string' ||
+      !availableSources.includes(source) ||
+      freshnessSources.has(source) ||
+      typeof freshness.is_stale !== 'boolean' ||
+      (updatedAt !== null &&
+        (typeof updatedAt !== 'string' || !Number.isFinite(Date.parse(updatedAt)))) ||
+      (ageSeconds !== null && (!Number.isSafeInteger(ageSeconds) || (ageSeconds as number) < 0))
+    ) {
+      return null
+    }
+    freshnessSources.add(source)
+  }
+  if (
+    freshnessSources.size !== availableSources.length ||
+    availableSources.some((source) => !freshnessSources.has(source))
+  ) {
+    return null
+  }
+
+  const countFields = [value.totalCount, value.totalcount, value.total_count]
+  if (
+    countFields.some(
+      (count) => !Number.isSafeInteger(count) || (count as number) !== traders.length
+    )
+  ) {
+    return null
+  }
+
+  return {
+    traders,
+    window: 'COMPOSITE',
+    totalCount: traders.length,
+    totalcount: traders.length,
+    total_count: traders.length,
+    as_of: value.as_of,
+    is_stale: value.is_stale,
+    source_freshness: value.source_freshness,
+    availableSources,
+    next_cursor: null,
+    precomputed: true,
+  }
+}
+
+function nullableSortValue(row: Record<string, unknown>, sortBy: (typeof VALID_SORT_BY)[number]) {
+  const key = sortBy === 'drawdown' ? 'max_drawdown' : sortBy
+  const value = row[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function compareCompositeRows(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+  sortBy: (typeof VALID_SORT_BY)[number],
+  sortDir: 'asc' | 'desc'
+): number {
+  const leftValue = nullableSortValue(left, sortBy)
+  const rightValue = nullableSortValue(right, sortBy)
+  if (leftValue === null && rightValue !== null) return 1
+  if (leftValue !== null && rightValue === null) return -1
+  if (leftValue !== null && rightValue !== null && leftValue !== rightValue) {
+    return sortDir === 'asc' ? leftValue - rightValue : rightValue - leftValue
+  }
+  return (
+    Number(left.rank ?? Number.MAX_SAFE_INTEGER) - Number(right.rank ?? Number.MAX_SAFE_INTEGER) ||
+    String(left.platform).localeCompare(String(right.platform)) ||
+    String(left.trader_key).localeCompare(String(right.trader_key))
+  )
+}
+
+async function readCompositeRankings(input: {
+  category: TradingCategory | null
+  platform: string | null
+  sortBy: (typeof VALID_SORT_BY)[number]
+  sortDir: 'asc' | 'desc'
+  limit: number
+  offset: number
+  minPnl: number | undefined
+  minTrades: number | undefined
+  traderType: 'human' | 'bot' | null
+}): Promise<CompositeRankingPayload> {
+  const scope = input.platform ? `platform:${input.platform}` : input.category || 'all'
+  const cacheKey = publicRankingCacheKey(
+    `precomputed:composite:${scope}:${COMPOSITE_CACHE_VERSION}`
+  )
+  const entry = parseSealedCompositeCacheEntry<unknown>(
+    (await tieredGet<unknown>(cacheKey, 'hot')).data
+  )
+  const payload = entry ? parseCompositeRankingPayload(entry.value, entry.publications) : null
+  if (!payload) {
+    throw new ApiError('Composite rankings are temporarily unavailable', {
+      code: ErrorCode.SERVICE_UNAVAILABLE,
+    })
+  }
+
+  const cacheScopeMatches = payload.traders.every((trader) => {
+    const source = String(trader.platform)
+    if (input.platform) return source === input.platform
+    if (input.category) {
+      return (PLATFORM_CATEGORY[source as GranularPlatform] || 'futures') === input.category
+    }
+    return true
+  })
+  const metadataScopeMatches = payload.availableSources.every((source) => {
+    if (input.platform) return source === input.platform
+    if (input.category) {
+      return (PLATFORM_CATEGORY[source as GranularPlatform] || 'futures') === input.category
+    }
+    return true
+  })
+  if (!cacheScopeMatches || !metadataScopeMatches) {
+    throw new ApiError('Composite ranking cache scope is invalid', {
+      code: ErrorCode.SERVICE_UNAVAILABLE,
+    })
+  }
+
+  const filtered = payload.traders.filter((trader) => {
+    if (
+      input.minPnl !== undefined &&
+      (typeof trader.pnl !== 'number' || trader.pnl < input.minPnl)
+    ) {
+      return false
+    }
+    if (
+      input.minTrades !== undefined &&
+      (typeof trader.trades_count !== 'number' || trader.trades_count < input.minTrades)
+    ) {
+      return false
+    }
+    if (input.traderType === 'bot') {
+      return (
+        trader.is_bot === true ||
+        trader.trader_type === 'bot' ||
+        trader.trader_type === 'suspected_bot'
+      )
+    }
+    if (input.traderType === 'human') {
+      return (
+        trader.is_bot !== true &&
+        trader.trader_type !== 'bot' &&
+        trader.trader_type !== 'suspected_bot'
+      )
+    }
+    return true
+  })
+  filtered.sort((left, right) => compareCompositeRows(left, right, input.sortBy, input.sortDir))
+  const page = filtered.slice(input.offset, input.offset + input.limit).map((trader, index) => ({
+    ...trader,
+    rank: input.offset + index + 1,
+  }))
+
+  return {
+    ...payload,
+    traders: page,
+    totalCount: filtered.length,
+    totalcount: filtered.length,
+    total_count: filtered.length,
+  }
+}
 
 export const GET = withPublic(
   async ({ request }) => {
@@ -118,16 +399,37 @@ export const GET = withPublic(
       throw ApiError.validation(`Invalid sort_by. Must be one of: ${VALID_SORT_BY.join(', ')}`)
     }
 
-    const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc'
+    const requestedSortDir = searchParams.get('sort_dir') || 'desc'
+    if (requestedSortDir !== 'asc' && requestedSortDir !== 'desc') {
+      throw ApiError.validation('Invalid sort_dir. Must be one of: asc, desc')
+    }
+    const sortDir = requestedSortDir
 
     const limit = parseLimit(searchParams.get('limit'), 100, 500)
     const offset = parseOffset(searchParams.get('offset'))
     const cursor = searchParams.get('cursor') || undefined // format: "score:id" for keyset pagination
-    const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined
-    const minTrades = searchParams.get('min_trades')
-      ? Number(searchParams.get('min_trades'))
-      : undefined
-    const traderType = searchParams.get('trader_type') as 'human' | 'bot' | null
+    if (cursor) {
+      throw ApiError.validation('cursor pagination is not implemented; use offset')
+    }
+    const requestedMinPnl = searchParams.get('min_pnl')
+    const minPnl = requestedMinPnl === null ? undefined : Number(requestedMinPnl)
+    if (minPnl !== undefined && !Number.isFinite(minPnl)) {
+      throw ApiError.validation('Invalid min_pnl. Must be a finite number')
+    }
+    const requestedMinTrades = searchParams.get('min_trades')
+    const minTrades = requestedMinTrades === null ? undefined : Number(requestedMinTrades)
+    if (minTrades !== undefined && (!Number.isSafeInteger(minTrades) || minTrades < 0)) {
+      throw ApiError.validation('Invalid min_trades. Must be a non-negative integer')
+    }
+    const requestedTraderType = searchParams.get('trader_type')
+    if (
+      requestedTraderType !== null &&
+      requestedTraderType !== 'human' &&
+      requestedTraderType !== 'bot'
+    ) {
+      throw ApiError.validation('Invalid trader_type. Must be one of: human, bot')
+    }
+    const traderType = requestedTraderType
 
     if (isPublicRankingSourceQuarantined(platform)) {
       return withCache(
@@ -150,6 +452,24 @@ export const GET = withPublic(
       )
     }
 
+    if (normalizedWindow === 'composite') {
+      const composite = await readCompositeRankings({
+        category,
+        platform,
+        sortBy,
+        sortDir,
+        limit,
+        offset,
+        minPnl,
+        minTrades,
+        traderType,
+      })
+      return withCache(apiSuccess(sanitizePublicRankingSourcePayload(composite)), {
+        maxAge: 60,
+        staleWhileRevalidate: 300,
+      })
+    }
+
     // Only cache "hot" default queries (no filters, default sort, first page)
     // Filtered/paginated queries skip cache to avoid key explosion (thousands of permutations)
     const isDefaultQuery =
@@ -168,7 +488,7 @@ export const GET = withPublic(
       : null // skip cache for filtered queries
 
     const query: RankingsQuery = {
-      window: normalizedWindow === 'composite' ? '90d' : normalizedWindow,
+      window: normalizedWindow,
       category: category || undefined,
       platform: (platform || undefined) as Platform | undefined,
       limit,
@@ -196,11 +516,7 @@ export const GET = withPublic(
         result = cachedEntry.value
       } else {
         const sealedRead = await getRankingsFallback(query, cursor)
-        const safeValue = sanitizePublicRankingSourcePayload(
-          normalizedWindow === 'composite'
-            ? { ...sealedRead.value, window: 'COMPOSITE' as const }
-            : sealedRead.value
-        )
+        const safeValue = sanitizePublicRankingSourcePayload(sealedRead.value)
         const safeRead = { ...sealedRead, value: safeValue }
         if (cacheKey) {
           await tieredSet(cacheKey, createSealedRankingCacheEntry(safeRead), 'hot', ['rankings'])
