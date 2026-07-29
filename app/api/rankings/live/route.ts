@@ -16,7 +16,13 @@ import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  PUBLIC_RANKING_POSTGREST_EXCLUSION,
+  filterPublicRankingRows,
+  publicRankingCacheKey,
+  sanitizePublicRankingSourcePayload,
+} from '@/lib/rankings/publication-policy'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -55,7 +61,9 @@ export async function GET(request: NextRequest) {
     const cacheKey = publicRankingCacheKey(`rankings:live:${period}:${limit}:${offset}`)
     const cached = await tieredGet<Record<string, unknown>>(cacheKey, 'hot')
     if (cached.data) {
-      const response = NextResponse.json(cached.data)
+      // A policy-epoch rotation prevents older entries from being read, while
+      // source sanitation also fails closed if the current epoch is polluted.
+      const response = NextResponse.json(sanitizePublicRankingSourcePayload(cached.data))
       // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
       // the Vercel CDN instead of every client invoking the function. The data is
       // already Redis-cached ~30s, so a 15s edge TTL + SWR keeps staleness bounded
@@ -144,14 +152,14 @@ export async function GET(request: NextRequest) {
           }
         })
 
-        const responseBody = {
+        const responseBody = sanitizePublicRankingSourcePayload({
           traders: enrichedTraders,
           total: sortedSetSize,
           totalCount: sortedSetSize,
           period,
           source: 'redis',
           hasMore: offset + limit < sortedSetSize,
-        }
+        })
 
         // Cache the response for subsequent requests (hot tier = 60s memory, 300s Redis)
         tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch((err) =>
@@ -177,13 +185,20 @@ export async function GET(request: NextRequest) {
     logger.info(`[rankings-live] Redis sorted set empty for ${period}, falling back to DB`)
     const supabase = getSupabaseAdmin()
 
-    const { data, count, error } = await supabase
+    let fallbackQuery = supabase
       .from('leaderboard_ranks')
       .select(
         'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type',
         { count: 'estimated' }
       )
       .eq('season_id', period)
+      .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+
+    if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+      fallbackQuery = fallbackQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+    }
+
+    const { data, count, error } = await fallbackQuery
       .gt('arena_score', 0)
       .or('is_outlier.is.null,is_outlier.eq.false')
       .order('rank', { ascending: true })
@@ -194,7 +209,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Query failed' }, { status: 500 })
     }
 
-    const traders = (data || []).map((row: Record<string, unknown>) => ({
+    // Filter the database-native source before mapping. This prevents a legacy
+    // aggregator identity from being relabelled as an active canonical source.
+    const rawRows = (data || []) as Array<Record<string, unknown>>
+    const publicRows = filterPublicRankingRows(rawRows, (row) => row.source)
+    const removedNonPublicRows = publicRows.length !== rawRows.length
+    const traders = publicRows.map((row) => ({
       id: row.source_trader_id as string,
       handle: (row.handle as string) || null,
       source: row.source as string,
@@ -220,15 +240,18 @@ export async function GET(request: NextRequest) {
         row.trader_type === 'suspected_bot',
     }))
 
-    const totalCount = count ?? 0
-    const responseBody = {
+    // Under a correctly behaving PostgREST response, count already reflects
+    // the pre-range allowlist. If a proxy violates that filter, fail closed to
+    // the finite safe page rather than publishing an untrusted aggregate.
+    const totalCount = removedNonPublicRows ? traders.length : (count ?? 0)
+    const responseBody = sanitizePublicRankingSourcePayload({
       traders,
       total: totalCount,
       totalCount,
       period,
       source: 'database',
-      hasMore: offset + limit < totalCount,
-    }
+      hasMore: !removedNonPublicRows && offset + limit < totalCount,
+    })
 
     // Cache the DB fallback response too
     tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch((err) => {

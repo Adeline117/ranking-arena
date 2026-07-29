@@ -35,6 +35,7 @@ describe('public ranking cache epoch boundary', () => {
 
   it.each([
     'lib/realtime/ranking-store.ts',
+    'app/api/rankings/live/route.ts',
     'app/api/rankings/movers/route.ts',
     'app/api/rankings/platform-stats/route.ts',
     'app/api/sidebar/top-traders/route.ts',
