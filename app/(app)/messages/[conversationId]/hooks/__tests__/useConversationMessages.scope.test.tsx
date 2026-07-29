@@ -1,14 +1,18 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
+import { webcrypto } from 'node:crypto'
 
 const mockAuthedFetch = jest.fn()
 const mockPush = jest.fn()
 const mockShowToast = jest.fn()
+const mockRandomUuid = jest.fn()
 const VIEWER_A = '11111111-1111-4111-8111-111111111111'
 const VIEWER_B = '22222222-2222-4222-8222-222222222222'
 const OTHER_USER = '33333333-3333-4333-8333-333333333333'
 const CONVERSATION_ID = '44444444-4444-4444-8444-444444444444'
 const MESSAGE_FROM_OTHER = '55555555-5555-4555-8555-555555555555'
 const MESSAGE_FROM_VIEWER = '66666666-6666-4666-8666-666666666666'
+const REACTION_OPERATION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const NEXT_REACTION_OPERATION_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 
 type MockAuth = {
   accessToken: string | null
@@ -113,6 +117,21 @@ function sendAcknowledgement(
   }
 }
 
+function reactionAcknowledgement(operationId: string, action: 'added' | 'removed' = 'added') {
+  return {
+    success: true,
+    data: {
+      action,
+      counts: action === 'added' ? { '👍': 1 } : {},
+      emoji: '👍',
+      messageId: MESSAGE_FROM_OTHER,
+      operationId,
+      replayed: false,
+      userEmojis: action === 'added' ? ['👍'] : [],
+    },
+  }
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((resolvePromise) => {
@@ -184,9 +203,21 @@ async function loadConversation(result: ReturnType<typeof renderConversation>['r
 }
 
 describe('useConversationMessages viewer scope', () => {
+  beforeAll(() => {
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: {
+        randomUUID: () => mockRandomUuid(),
+        subtle: webcrypto.subtle,
+      },
+    })
+  })
+
   beforeEach(() => {
     jest.clearAllMocks()
+    mockRandomUuid.mockReturnValue(REACTION_OPERATION_ID)
     mockAuth = signedIn(VIEWER_A, 'access-token-a', 1)
+    window.localStorage.clear()
   })
 
   it('loads only messages for the captured viewer and counterparty', async () => {
@@ -307,6 +338,9 @@ describe('useConversationMessages viewer scope', () => {
             action: 'added',
             counts: { '👍': 1 },
             emoji: '👍',
+            messageId: MESSAGE_FROM_OTHER,
+            operationId: REACTION_OPERATION_ID,
+            replayed: false,
             userEmojis: ['👍'],
           },
           success: true,
@@ -343,6 +377,10 @@ describe('useConversationMessages viewer scope', () => {
         signal: expect.any(AbortSignal),
       })
     }
+    expect(mockAuthedFetch.mock.calls[1]?.[3]).toEqual({
+      emoji: '👍',
+      operation_id: REACTION_OPERATION_ID,
+    })
     expect(
       result.current.messages.find((item) => item.id === MESSAGE_FROM_OTHER)?.reactions
     ).toEqual([{ count: 1, emoji: '👍', mine: true }])
@@ -374,6 +412,59 @@ describe('useConversationMessages viewer scope', () => {
 
     expect(result.current.messages.some((item) => item.id === MESSAGE_FROM_VIEWER)).toBe(true)
     expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error')
+  })
+
+  it('replays an uncertain reaction id and allocates a new id only after a valid ACK', async () => {
+    mockRandomUuid
+      .mockReset()
+      .mockReturnValueOnce(REACTION_OPERATION_ID)
+      .mockReturnValueOnce(NEXT_REACTION_OPERATION_ID)
+    const { result } = renderConversation()
+    await loadConversation(result)
+    mockAuthedFetch.mockReset()
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        data: { success: true, data: { malformed: true } },
+        ok: true,
+        status: 200,
+      })
+      .mockResolvedValueOnce({
+        data: reactionAcknowledgement(REACTION_OPERATION_ID),
+        ok: true,
+        status: 200,
+      })
+      .mockResolvedValueOnce({
+        data: reactionAcknowledgement(NEXT_REACTION_OPERATION_ID, 'removed'),
+        ok: true,
+        status: 200,
+      })
+
+    await act(async () => {
+      await result.current.handleToggleReaction(MESSAGE_FROM_OTHER, '👍')
+    })
+    expect(
+      result.current.messages.find((item) => item.id === MESSAGE_FROM_OTHER)?.reactions
+    ).toEqual([])
+
+    await act(async () => {
+      await result.current.handleToggleReaction(MESSAGE_FROM_OTHER, '👍')
+    })
+    expect(
+      result.current.messages.find((item) => item.id === MESSAGE_FROM_OTHER)?.reactions
+    ).toEqual([{ count: 1, emoji: '👍', mine: true }])
+
+    await act(async () => {
+      await result.current.handleToggleReaction(MESSAGE_FROM_OTHER, '👍')
+    })
+    expect(
+      result.current.messages.find((item) => item.id === MESSAGE_FROM_OTHER)?.reactions
+    ).toEqual([])
+
+    expect(mockAuthedFetch.mock.calls.map((call) => call[3]?.operation_id)).toEqual([
+      REACTION_OPERATION_ID,
+      REACTION_OPERATION_ID,
+      NEXT_REACTION_OPERATION_ID,
+    ])
   })
 
   it('uses the captured viewer for retry and voice sends', async () => {

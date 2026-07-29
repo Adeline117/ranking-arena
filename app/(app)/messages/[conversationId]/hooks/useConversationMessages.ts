@@ -29,6 +29,7 @@ import type {
 } from '../components/types'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { buildConversationLoginHref } from '../login-intent'
+import { DirectMessageReactionOperationLedger } from './direct-message-reaction-operation'
 
 interface UseConversationMessagesOptions {
   conversationId: string
@@ -211,23 +212,46 @@ function readDeleteAcknowledgement(
 
 function readReactionAcknowledgement(
   value: unknown,
-  expectedEmoji: string
+  expected: { emoji: string; messageId: string; operationId: string }
 ): MessageReaction[] | null {
-  if (!isRecord(value) || value.success !== true || !isRecord(value.data)) return null
-  const data = value.data
   if (
+    !isRecord(value) ||
+    Object.keys(value).sort().join(',') !== 'data,success' ||
+    value.success !== true ||
+    !isRecord(value.data)
+  ) {
+    return null
+  }
+  const data = value.data
+  const expectedKeys = [
+    'action',
+    'counts',
+    'emoji',
+    'messageId',
+    'operationId',
+    'replayed',
+    'userEmojis',
+  ]
+  if (
+    Object.keys(data).sort().join(',') !== expectedKeys.sort().join(',') ||
     (data.action !== 'added' && data.action !== 'removed') ||
-    data.emoji !== expectedEmoji ||
+    data.emoji !== expected.emoji ||
+    data.messageId !== expected.messageId ||
+    data.operationId !== expected.operationId ||
+    typeof data.replayed !== 'boolean' ||
     !isRecord(data.counts) ||
     !Array.isArray(data.userEmojis) ||
-    data.userEmojis.some((emoji) => typeof emoji !== 'string')
+    data.userEmojis.some(
+      (emoji) => typeof emoji !== 'string' || !DM_REACTION_EMOJIS.includes(emoji)
+    )
   ) {
     return null
   }
   const userEmojis = new Set(data.userEmojis as string[])
   if (
-    (data.action === 'added' && !userEmojis.has(expectedEmoji)) ||
-    (data.action === 'removed' && userEmojis.has(expectedEmoji))
+    userEmojis.size !== data.userEmojis.length ||
+    (data.action === 'added' && !userEmojis.has(expected.emoji)) ||
+    (data.action === 'removed' && userEmojis.has(expected.emoji))
   ) {
     return null
   }
@@ -237,11 +261,14 @@ function readReactionAcknowledgement(
       !DM_REACTION_EMOJIS.includes(emoji) ||
       typeof count !== 'number' ||
       !Number.isInteger(count) ||
-      count < 0
+      count <= 0
     ) {
       return null
     }
-    if (count > 0) reactions.push({ emoji, count, mine: userEmojis.has(emoji) })
+    reactions.push({ emoji, count, mine: userEmojis.has(emoji) })
+  }
+  if (data.action === 'added' && !reactions.some((reaction) => reaction.emoji === expected.emoji)) {
+    return null
   }
   return reactions
 }
@@ -294,6 +321,7 @@ export function useConversationMessages({
   const mountedRef = useRef(true)
   const operationsRef = useRef(new Set<ConversationOperation>())
   const latestOperationByKeyRef = useRef(new Map<string, ConversationOperation>())
+  const reactionOperationsRef = useRef(new DirectMessageReactionOperationLedger())
   // Maps reaction row id -> {messageId, emoji, userId} so DELETE events (which only
   // carry the PK under default replica identity) can be resolved back to a message.
   const reactionRowMapRef = useRef<
@@ -1085,22 +1113,39 @@ export function useConversationMessages({
       if (!operation || operation.viewer.userId !== userId) return
 
       const wasMine = !!target.reactions?.find((reaction) => reaction.emoji === emoji)?.mine
-      setMessages((prev) =>
-        prev.map((m) => {
-          if (m.id !== messageId) return m
-          return {
-            ...m,
-            reactions: applyReactionDelta(m.reactions, emoji, wasMine ? -1 : 1, !wasMine),
-          }
-        })
-      )
+      let optimisticApplied = false
 
       try {
+        const acquired = await reactionOperationsRef.current.acquire({
+          actorId: operation.viewer.userId,
+          conversationId: operation.conversationId,
+          messageId,
+          emoji,
+        })
+        const reactionRequest = acquired.operation
+        if (!operationIsCurrent(operation)) return
+
+        // A reused operation is a transport replay, not a second user toggle.
+        // Keep the current state until the durable server acknowledgement
+        // arrives instead of applying the optimistic delta twice.
+        if (!acquired.reused) {
+          optimisticApplied = true
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== messageId) return m
+              return {
+                ...m,
+                reactions: applyReactionDelta(m.reactions, emoji, wasMine ? -1 : 1, !wasMine),
+              }
+            })
+          )
+        }
+
         const result = await authedFetch<unknown>(
           `/api/messages/${encodeURIComponent(messageId)}/react`,
           'POST',
           operation.viewer.accessToken,
-          { emoji },
+          { emoji, operation_id: reactionRequest.operationId },
           15_000,
           {
             expectedUserId: operation.viewer.userId,
@@ -1109,24 +1154,39 @@ export function useConversationMessages({
           }
         )
         if (result.stale || !operationIsCurrent(operation)) return
-        const reactions = result.ok ? readReactionAcknowledgement(result.data, emoji) : null
+        const reactions = result.ok
+          ? readReactionAcknowledgement(result.data, {
+              emoji,
+              messageId,
+              operationId: reactionRequest.operationId,
+            })
+          : null
         if (reactions) {
+          reactionOperationsRef.current.complete(reactionRequest)
           setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, reactions } : m)))
         } else {
+          // A 4xx is a definitive rejection and cannot have committed this
+          // operation. A 5xx or malformed success is uncertain, so retain the
+          // operation id for a safe replay.
+          if (!result.ok && result.status >= 400 && result.status < 500) {
+            reactionOperationsRef.current.complete(reactionRequest)
+          }
           throw new Error('react failed')
         }
       } catch {
-        // Rollback the optimistic delta
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === messageId
-              ? {
-                  ...m,
-                  reactions: applyReactionDelta(m.reactions, emoji, wasMine ? 1 : -1, wasMine),
-                }
-              : m
+        if (!operationIsCurrent(operation)) return
+        if (optimisticApplied) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === messageId
+                ? {
+                    ...m,
+                    reactions: applyReactionDelta(m.reactions, emoji, wasMine ? 1 : -1, wasMine),
+                  }
+                : m
+            )
           )
-        )
+        }
         showToast(t('operationFailed'), 'error')
       } finally {
         finishOperation(operation)
