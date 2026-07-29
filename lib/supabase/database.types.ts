@@ -6126,29 +6126,7 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: 'stripe_entitlement_payments_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: false
-            referencedRelation: 'public_user_profiles'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'stripe_entitlement_payments_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: false
-            referencedRelation: 'user_follow_counts'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'stripe_entitlement_payments_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: false
-            referencedRelation: 'user_profiles'
-            referencedColumns: ['id']
-          },
-        ]
+        Relationships: []
       }
       stripe_entitlement_refund_events: {
         Row: {

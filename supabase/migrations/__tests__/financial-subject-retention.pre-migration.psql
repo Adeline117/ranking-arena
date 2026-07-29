@@ -1,0 +1,76 @@
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+
+-- Reproduce the historical ON DELETE SET NULL damage before the retention
+-- migration runs. The immutable ownership row is the only safe repair source.
+INSERT INTO auth.users (id)
+VALUES ('f2300000-0000-4000-8000-000000000001');
+
+INSERT INTO public.user_profiles (id, stripe_customer_id)
+VALUES (
+  'f2300000-0000-4000-8000-000000000001',
+  'cus_financial_repair'
+);
+
+DO $create_preexisting_entitlement_payment$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.activate_recurring_entitlement_payment_atomic(
+    'f2300000-0000-4000-8000-000000000001',
+    'cus_financial_repair',
+    'sub_financial_repair',
+    'in_financial_repair',
+    'pi_financial_repair',
+    'ch_financial_repair',
+    'monthly',
+    1100,
+    'usd',
+    '2036-01-01 00:00:00+00',
+    '2036-02-01 00:00:00+00',
+    'paid',
+    'active'
+  );
+
+  IF v_result ->> 'status' <> 'activated'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_payment_ownerships AS ownership
+      WHERE ownership.product_kind = 'pro_entitlement'
+        AND ownership.owner_user_id =
+          'f2300000-0000-4000-8000-000000000001'
+        AND public.stripe_payment_ownership_is_exact_v2(ownership.id)
+    )
+  THEN
+    RAISE EXCEPTION
+      'preexisting exact entitlement payment setup failed: %',
+      v_result;
+  END IF;
+END
+$create_preexisting_entitlement_payment$;
+
+DELETE FROM auth.users
+WHERE id = 'f2300000-0000-4000-8000-000000000001';
+
+DO $prove_historical_set_null_damage$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.stripe_entitlement_payments AS payment
+    JOIN public.stripe_payment_ownerships AS ownership
+      ON ownership.product_kind = 'pro_entitlement'
+      AND ownership.ledger_id = payment.id
+    WHERE payment.stripe_charge_id = 'ch_financial_repair'
+      AND payment.user_id IS NULL
+      AND ownership.owner_user_id =
+        'f2300000-0000-4000-8000-000000000001'
+      AND NOT public.stripe_payment_ownership_is_exact_v2(ownership.id)
+  ) THEN
+    RAISE EXCEPTION
+      'historical entitlement owner SET NULL damage was not reproduced';
+  END IF;
+END
+$prove_historical_set_null_damage$;
