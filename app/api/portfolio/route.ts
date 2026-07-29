@@ -15,27 +15,16 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { encryptApiKey } from '@/lib/exchange/secure-encryption'
+import {
+  READ_ONLY_ACCESS_PLATFORMS,
+  validateExchangeReadOnlyAccess,
+} from '@/lib/validators/api-key-validator'
 
 export const dynamic = 'force-dynamic'
 
-// Exchanges the connect UI offers (mirror of AddExchangeModal's list). Stored
-// values are validated against this so only known exchange ids get persisted.
-const ALLOWED_EXCHANGES = new Set([
-  'binance',
-  'bybit',
-  'okx',
-  'bitget',
-  'mexc',
-  'kucoin',
-  'gateio',
-  'htx',
-  'phemex',
-  'dydx',
-  'hyperliquid',
-  'blofin',
-  'coinex',
-  'bitmart',
-])
+// Never persist a credential based on format or exchange name alone. Each
+// platform here has an exchange-owned permission endpoint used below.
+const ALLOWED_EXCHANGES = new Set<string>(READ_ONLY_ACCESS_PLATFORMS)
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
@@ -68,16 +57,40 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     const { exchange, api_key, api_secret, api_passphrase, label } = body
-    if (!exchange || !api_key || !api_secret) {
+    if (
+      typeof exchange !== 'string' ||
+      !exchange.trim() ||
+      typeof api_key !== 'string' ||
+      !api_key.trim() ||
+      typeof api_secret !== 'string' ||
+      !api_secret.trim()
+    ) {
       return NextResponse.json(
         { error: 'Missing required fields: exchange, api_key, api_secret' },
         { status: 400 }
       )
     }
-    // Validate exchange against the allowlist at storage time (defense-in-depth;
-    // sync also allowlists). Prevents persisting arbitrary/garbage exchange ids.
-    if (typeof exchange !== 'string' || !ALLOWED_EXCHANGES.has(exchange.toLowerCase())) {
+    const normalizedExchange = exchange.trim().toLowerCase()
+    if (!ALLOWED_EXCHANGES.has(normalizedExchange)) {
       return NextResponse.json({ error: 'Unsupported exchange' }, { status: 400 })
+    }
+
+    const normalizedPassphrase =
+      typeof api_passphrase === 'string' && api_passphrase.trim()
+        ? api_passphrase.trim()
+        : undefined
+    const validation = await validateExchangeReadOnlyAccess(normalizedExchange, {
+      apiKey: api_key,
+      apiSecret: api_secret,
+      passphrase: normalizedPassphrase,
+    })
+    if (!validation.isValid) {
+      return NextResponse.json(
+        {
+          error: validation.error || 'Could not verify that this API key is valid and read-only.',
+        },
+        { status: 400 }
+      )
     }
 
     const supabase = getSupabaseAdmin()
@@ -86,14 +99,13 @@ export async function POST(request: NextRequest) {
       .from('user_portfolios')
       .insert({
         user_id: user.id,
-        exchange: exchange.toLowerCase(),
+        exchange: normalizedExchange,
         api_key_encrypted: encryptApiKey(api_key, user.id),
         api_secret_encrypted: encryptApiKey(api_secret, user.id),
-        api_passphrase_encrypted:
-          typeof api_passphrase === 'string' && api_passphrase.trim()
-            ? encryptApiKey(api_passphrase.trim(), user.id)
-            : null,
-        label: label || exchange,
+        api_passphrase_encrypted: normalizedPassphrase
+          ? encryptApiKey(normalizedPassphrase, user.id)
+          : null,
+        label: typeof label === 'string' && label.trim() ? label.trim() : normalizedExchange,
       })
       .select('id, exchange, label, created_at')
       .single()

@@ -41,6 +41,7 @@ const mockCheckRateLimit = jest.fn()
 const mockGetSupabaseAdmin = jest.fn()
 const mockFrom = jest.fn()
 const mockEncryptApiKey = jest.fn((value: string, userId: string) => `${userId}:${value}`)
+const mockValidateReadOnlyAccess = jest.fn()
 
 jest.mock('@/lib/api', () => {
   const { NextResponse } = require('next/server')
@@ -56,6 +57,11 @@ jest.mock('@/lib/api', () => {
 
 jest.mock('@/lib/exchange/secure-encryption', () => ({
   encryptApiKey: (...args: [string, string]) => mockEncryptApiKey(...args),
+}))
+
+jest.mock('@/lib/validators/api-key-validator', () => ({
+  READ_ONLY_ACCESS_PLATFORMS: ['binance', 'bybit', 'okx', 'bitget'],
+  validateExchangeReadOnlyAccess: (...args: unknown[]) => mockValidateReadOnlyAccess(...args),
 }))
 
 import { NextRequest } from 'next/server'
@@ -97,6 +103,7 @@ describe('portfolio destructive ownership and identity ACKs', () => {
     mockCheckRateLimit.mockResolvedValue(null)
     mockRequireAuth.mockResolvedValue({ id: USER_ID })
     mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom })
+    mockValidateReadOnlyAccess.mockResolvedValue({ isValid: true, permissions: ['read'] })
   })
 
   it('deletes through one statement constrained by both id and authenticated owner', async () => {
@@ -139,6 +146,11 @@ describe('portfolio destructive ownership and identity ACKs', () => {
     const response = await POST(request)
 
     expect(response.status).toBe(201)
+    expect(mockValidateReadOnlyAccess).toHaveBeenCalledWith('binance', {
+      apiKey: 'key',
+      apiSecret: 'secret',
+      passphrase: undefined,
+    })
     expect(query.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         api_key_encrypted: `${USER_ID}:key`,
@@ -148,5 +160,43 @@ describe('portfolio destructive ownership and identity ACKs', () => {
       })
     )
     expect(await response.json()).toEqual({ data: { ...stored, viewer_id: USER_ID } })
+  })
+
+  it('does not encrypt or persist a credential without an exchange read-only proof', async () => {
+    mockValidateReadOnlyAccess.mockResolvedValue({
+      isValid: false,
+      error: 'API key must be read-only.',
+    })
+    const request = new NextRequest('http://localhost/api/portfolio', {
+      body: {
+        exchange: 'bybit',
+        api_key: 'write-capable-key',
+        api_secret: 'write-capable-secret',
+      },
+    })
+
+    const response = await POST(request)
+
+    expect(response.status).toBe(400)
+    expect(mockEncryptApiKey).not.toHaveBeenCalled()
+    expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('rejects exchanges whose permission scope cannot be proven before validation', async () => {
+    const request = new NextRequest('http://localhost/api/portfolio', {
+      body: {
+        exchange: 'mexc',
+        api_key: 'unverifiable-key',
+        api_secret: 'unverifiable-secret',
+      },
+    })
+
+    const response = await POST(request)
+
+    expect(response.status).toBe(400)
+    expect(mockValidateReadOnlyAccess).not.toHaveBeenCalled()
+    expect(mockEncryptApiKey).not.toHaveBeenCalled()
+    expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
   })
 })
