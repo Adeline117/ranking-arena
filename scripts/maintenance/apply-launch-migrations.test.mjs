@@ -144,7 +144,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 95)
+  assert.equal(predeploy.length, 96)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -209,6 +209,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260729010000_api_keys_server_authority.sql',
           '20260729011000_leaderboard_rank_manifest_attestation_substrate.sql',
           '20260729012000_partitioned_bot_acquisition_manifest_v4.sql',
+          '20260729013000_bitget_bot_attempt_health_contract.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -227,9 +228,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 107)
+  assert.equal(new Set(all).size, 108)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-54), [
+  assert.deepEqual(predeploy.slice(-55), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -284,6 +285,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729010000_api_keys_server_authority.sql',
     '20260729011000_leaderboard_rank_manifest_attestation_substrate.sql',
     '20260729012000_partitioned_bot_acquisition_manifest_v4.sql',
+    '20260729013000_bitget_bot_attempt_health_contract.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -339,6 +341,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     predeploy.includes('20260729011000_leaderboard_rank_manifest_attestation_substrate.sql')
   )
   assert.ok(predeploy.includes('20260729012000_partitioned_bot_acquisition_manifest_v4.sql'))
+  assert.ok(predeploy.includes('20260729013000_bitget_bot_attempt_health_contract.sql'))
   assert.ok(
     predeploy.includes('20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql')
   )
@@ -404,6 +407,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   )
   assert.ok(
     !recoveryPrerequisites.includes('20260729012000_partitioned_bot_acquisition_manifest_v4.sql')
+  )
+  assert.ok(
+    !recoveryPrerequisites.includes('20260729013000_bitget_bot_attempt_health_contract.sql')
   )
   assert.ok(!predeploy.includes('20260722054000_metric_trust_source_page_lineage.sql'))
   assert.ok(!postdeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
