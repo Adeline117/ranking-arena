@@ -146,7 +146,12 @@ export async function POST(request: NextRequest) {
 
           case 'invoice.paid':
           case 'invoice.payment_succeeded':
-            await handlePaymentSucceeded(event.data.object as Stripe.Invoice)
+            await handlePaymentSucceeded(event.data.object as Stripe.Invoice, {
+              id: event.id,
+              created: event.created,
+              livemode: event.livemode,
+              type: event.type,
+            })
             break
 
           case 'invoice.payment_failed':
@@ -167,6 +172,7 @@ export async function POST(request: NextRequest) {
             await handleRefundLifecycle(event.data.object as Stripe.Refund, {
               eventId: event.id,
               eventCreatedAt: event.created,
+              livemode: event.livemode,
             })
             break
 
@@ -175,6 +181,7 @@ export async function POST(request: NextRequest) {
             await handleChargeRefunded(event.data.object as Stripe.Charge, {
               eventId: event.id,
               eventCreatedAt: event.created,
+              livemode: event.livemode,
             })
             break
 
@@ -182,6 +189,7 @@ export async function POST(request: NextRequest) {
             await handleRefundLifecycle(event.data.object as Stripe.Refund, {
               eventId: event.id,
               eventCreatedAt: event.created,
+              livemode: event.livemode,
             })
             break
 
@@ -190,7 +198,11 @@ export async function POST(request: NextRequest) {
             break
 
           case 'charge.dispute.created':
-            await handleChargeDisputeCreated(event.data.object as Stripe.Dispute)
+            await handleChargeDisputeCreated(event.data.object as Stripe.Dispute, {
+              eventId: event.id,
+              eventCreatedAt: event.created,
+              livemode: event.livemode,
+            })
             break
 
           default:

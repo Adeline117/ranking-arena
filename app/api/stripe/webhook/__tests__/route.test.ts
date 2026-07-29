@@ -310,6 +310,21 @@ describe('POST /api/stripe/webhook', () => {
         livemode: true,
       })
     }
+    if (type === 'invoice.payment_succeeded' || type === 'invoice.paid') {
+      expect(handler).toHaveBeenCalledWith(expect.anything(), {
+        id: 'evt_test_retryable',
+        created: 1_800_000_000,
+        livemode: true,
+        type,
+      })
+    }
+    if (type === 'charge.dispute.created') {
+      expect(handler).toHaveBeenCalledWith(expect.anything(), {
+        eventId: 'evt_test_retryable',
+        eventCreatedAt: 1_800_000_000,
+        livemode: true,
+      })
+    }
   })
 
   it.each(['refund.created', 'refund.updated', 'refund.failed'])(
@@ -325,6 +340,7 @@ describe('POST /api/stripe/webhook', () => {
       expect(mockHandleRefundLifecycle).toHaveBeenCalledWith(stripeEvent.data.object, {
         eventId: 'evt_test_retryable',
         eventCreatedAt: 1_800_000_000,
+        livemode: true,
       })
       expect(mockHandleChargeRefunded).not.toHaveBeenCalled()
     }
@@ -346,6 +362,7 @@ describe('POST /api/stripe/webhook', () => {
       expect(handler).toHaveBeenCalledWith(stripeEvent.data.object, {
         eventId: 'evt_test_retryable',
         eventCreatedAt: 1_800_000_000,
+        livemode: true,
       })
       expect(otherRefundHandler).not.toHaveBeenCalled()
     }
