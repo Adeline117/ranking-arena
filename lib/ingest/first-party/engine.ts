@@ -69,6 +69,7 @@ export interface FirstPartyResult {
 
 const WINDOWS: Array<7 | 30 | 90> = [7, 30, 90]
 const DAY_MS = 86_400_000
+const SNAPSHOT_COVERAGE_TOLERANCE_MS = 60 * 60_000
 
 /** Max peak-to-trough drawdown (%) over an equity path. */
 export function maxDrawdownPct(equities: number[]): number | null {
@@ -100,14 +101,27 @@ export function computeFirstParty(input: FirstPartyComputeInput): FirstPartyResu
     const total = winEvents.length
     const netIn = input.netTransfersIn[tf]
 
-    // ROI denominator: earliest snapshot INSIDE the window if snapshot history
-    // reaches back to (or beyond) the window start; else reconstruct.
-    const windowSnaps = snapshots.filter((s) => Date.parse(s.ts) >= startMs)
-    const coversWindow = snapshots.length > 0 && Date.parse(snapshots[0].ts) <= startMs + DAY_MS // 1d slack
+    // ROI denominator: the durable snapshot nearest the exact window start.
+    // A much older row must not make a post-outage snapshot six days late
+    // look like valid 7d coverage.
+    const windowSnaps = snapshots.filter((s) => {
+      const ts = Date.parse(s.ts)
+      return ts >= startMs && ts <= nowMs
+    })
+    const beforeStart = [...snapshots].reverse().find((s) => Date.parse(s.ts) <= startMs)
+    const afterStart = windowSnaps[0]
+    const baseline = [beforeStart, afterStart]
+      .filter((snapshot): snapshot is EquitySnapshotRow => snapshot !== undefined)
+      .sort(
+        (a, b) => Math.abs(Date.parse(a.ts) - startMs) - Math.abs(Date.parse(b.ts) - startMs)
+      )[0]
+    const coversWindow =
+      baseline !== undefined &&
+      Math.abs(Date.parse(baseline.ts) - startMs) <= SNAPSHOT_COVERAGE_TOLERANCE_MS
     let startEquity: number | null = null
     let roiMethod: 'snapshot' | 'reconstructed' | 'unavailable' = 'unavailable'
-    if (coversWindow && windowSnaps.length > 0) {
-      startEquity = windowSnaps[0].equity
+    if (coversWindow) {
+      startEquity = baseline.equity
       roiMethod = 'snapshot'
     } else if (netIn !== undefined) {
       const recon = equityNow - pnl - netIn
@@ -121,7 +135,9 @@ export function computeFirstParty(input: FirstPartyComputeInput): FirstPartyResu
 
     // Remove deposits/withdrawals from the equity path before measuring MDD.
     // One unknown cumulative-transfer interval invalidates the whole window.
-    const baseTransferCum = windowSnaps[0]?.net_transfer_cum
+    const mddSnaps =
+      coversWindow && Date.parse(baseline.ts) < startMs ? [baseline, ...windowSnaps] : windowSnaps
+    const baseTransferCum = mddSnaps[0]?.net_transfer_cum
     const priorTransferCum = snapshots[snapshots.length - 1]?.net_transfer_cum
     const currentTransferCum =
       priorTransferCum !== null &&
@@ -134,10 +150,10 @@ export function computeFirstParty(input: FirstPartyComputeInput): FirstPartyResu
       baseTransferCum !== null &&
       baseTransferCum !== undefined &&
       currentTransferCum !== null &&
-      windowSnaps.every((snapshot) => snapshot.net_transfer_cum !== null)
+      mddSnaps.every((snapshot) => snapshot.net_transfer_cum !== null)
     const mdd = transferPathComplete
       ? maxDrawdownPct([
-          ...windowSnaps.map(
+          ...mddSnaps.map(
             (snapshot) => snapshot.equity - (snapshot.net_transfer_cum! - baseTransferCum)
           ),
           equityNow - (currentTransferCum - baseTransferCum),

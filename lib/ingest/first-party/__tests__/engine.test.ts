@@ -69,7 +69,7 @@ describe('computeFirstParty', () => {
       netTransfersIn: {},
       netTransfersSinceLast: 0,
       snapshots: [
-        { ts: new Date(NOW - 8 * DAY).toISOString(), equity: 1000, net_transfer_cum: 0 },
+        { ts: new Date(NOW - 7 * DAY).toISOString(), equity: 1000, net_transfer_cum: 0 },
         { ts: new Date(NOW - 4 * DAY).toISOString(), equity: 1200, net_transfer_cum: 0 },
         { ts: new Date(NOW - 1 * DAY).toISOString(), equity: 1050, net_transfer_cum: 0 },
       ],
@@ -78,6 +78,28 @@ describe('computeFirstParty', () => {
     expect(c7.extras.roi_method).toBe('snapshot')
     expect(c7.mdd).toBeCloseTo(12.5) // 1200→1050
     expect(c7.extras.mdd_basis).toBe('snapshots')
+  })
+
+  it('does not call a far-late post-outage snapshot valid window coverage', () => {
+    const r = computeFirstParty({
+      nowMs: NOW,
+      currency: 'USDT',
+      equityNow: 1100,
+      balanceNow: null,
+      unrealizedNow: null,
+      events: [ev(6, 100)],
+      netTransfersIn: {},
+      netTransfersSinceLast: 0,
+      snapshots: [
+        { ts: new Date(NOW - 8 * DAY).toISOString(), equity: 900, net_transfer_cum: 0 },
+        { ts: new Date(NOW - DAY).toISOString(), equity: 1000, net_transfer_cum: 0 },
+      ],
+    })
+
+    const s7 = r.stats.find((s) => s.timeframe === 7)!
+    expect(s7.roi).toBeNull()
+    expect(s7.extras.roi_method).toBe('unavailable')
+    expect(s7.mdd).toBeNull()
   })
 
   it('transfers adjust reconstructed denominator and cum counter (no window double-count)', () => {
@@ -194,7 +216,7 @@ describe('computeFirstParty', () => {
       netTransfersIn: { 7: -60 },
       netTransfersSinceLast: 0,
       snapshots: [
-        { ts: new Date(NOW - 8 * DAY).toISOString(), equity: 100, net_transfer_cum: 0 },
+        { ts: new Date(NOW - 7 * DAY).toISOString(), equity: 100, net_transfer_cum: 0 },
         { ts: new Date(NOW - 4 * DAY).toISOString(), equity: 120, net_transfer_cum: 0 },
         { ts: new Date(NOW - 1 * DAY).toISOString(), equity: 60, net_transfer_cum: -60 },
       ],
