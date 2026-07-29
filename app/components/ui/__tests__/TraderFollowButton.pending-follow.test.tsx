@@ -3,9 +3,17 @@ import { render, screen, waitFor } from '@testing-library/react'
 const mockBroadcast = jest.fn()
 const mockOn = jest.fn(() => jest.fn())
 const mockShowToast = jest.fn()
-const mockGetAuthHeadersAsync = jest.fn().mockResolvedValue({
-  Authorization: 'Bearer access-token',
-})
+const mockAuthedFetch = jest.fn()
+const USER_ID = '11111111-1111-4111-8111-111111111111'
+const mockAuth = {
+  accessToken: 'access-token',
+  authChecked: true,
+  email: null,
+  loading: false,
+  sessionGeneration: 1,
+  userId: USER_ID,
+  viewerKey: `user:${USER_ID}` as const,
+}
 jest.mock('@/lib/hooks/useBroadcastSync', () => ({
   useFollowSync: () => ({
     broadcast: mockBroadcast,
@@ -14,9 +22,25 @@ jest.mock('@/lib/hooks/useBroadcastSync', () => ({
 }))
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
-  useAuthSession: () => ({
-    getAuthHeadersAsync: mockGetAuthHeadersAsync,
+  useAuthSession: () => mockAuth,
+}))
+
+jest.mock('@/app/(app)/settings/hooks/settings-viewer-scope', () => ({
+  captureSettingsViewer: () => ({
+    accessToken: mockAuth.accessToken,
+    email: null,
+    sessionGeneration: mockAuth.sessionGeneration,
+    userId: mockAuth.userId,
+    viewerKey: mockAuth.viewerKey,
   }),
+  isSettingsViewerCurrent: (viewer: {
+    sessionGeneration: number
+    userId: string
+    viewerKey: string
+  }) =>
+    viewer.userId === mockAuth.userId &&
+    viewer.viewerKey === mockAuth.viewerKey &&
+    viewer.sessionGeneration === mockAuth.sessionGeneration,
 }))
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -28,7 +52,7 @@ jest.mock('@/app/components/ui/Toast', () => ({
 }))
 
 jest.mock('@/lib/api/client', () => ({
-  getCsrfHeaders: () => ({ 'X-CSRF-Token': 'csrf-token' }),
+  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
 }))
 
 jest.mock('@/lib/hooks/useLoginModal', () => ({
@@ -47,14 +71,12 @@ jest.mock('@/lib/utils/haptics', () => ({
 
 import TraderFollowButton from '../TraderFollowButton'
 
-const originalFetch = global.fetch
-
-function response(body: unknown, status = 200): Response {
+function response(data: unknown, status = 200) {
   return {
+    data,
     ok: status >= 200 && status < 300,
     status,
-    json: jest.fn().mockResolvedValue(body),
-  } as unknown as Response
+  }
 }
 
 function queuePendingFollow() {
@@ -65,7 +87,7 @@ function queuePendingFollow() {
 }
 
 function renderLoggedInButton() {
-  return render(<TraderFollowButton traderId="trader-1" source="binance" userId="user-1" />)
+  return render(<TraderFollowButton traderId="trader-1" source="binance" userId={USER_ID} />)
 }
 
 describe('TraderFollowButton legacy pending-login follow', () => {
@@ -74,23 +96,27 @@ describe('TraderFollowButton legacy pending-login follow', () => {
     sessionStorage.clear()
   })
 
-  afterAll(() => {
-    global.fetch = originalFetch
-  })
-
   it('clears a stale legacy record without executing its mutation', async () => {
-    global.fetch = jest.fn().mockResolvedValue(response({ following: false }))
+    mockAuthedFetch.mockResolvedValue(response({ data: { following: false }, success: true }))
     queuePendingFollow()
 
     renderLoggedInButton()
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalled())
     expect(mockBroadcast).not.toHaveBeenCalled()
     expect(sessionStorage.getItem('pendingFollow')).toBeNull()
-    expect(global.fetch).toHaveBeenCalledTimes(1)
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
       '/api/follow?traderId=trader-1&source=binance',
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
+      'GET',
+      'access-token',
+      undefined,
+      15_000,
+      expect.objectContaining({
+        expectedSessionGeneration: 1,
+        expectedUserId: USER_ID,
+        signal: expect.any(AbortSignal),
+      })
     )
     expect(screen.getByRole('button', { name: 'followTrader' })).toHaveAttribute(
       'aria-pressed',

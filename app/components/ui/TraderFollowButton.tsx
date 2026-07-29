@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { ButtonSpinner } from './LoadingSpinner'
 import { tokens } from '@/lib/design-tokens'
 import { useFollowSync, type FollowChangePayload } from '@/lib/hooks/useBroadcastSync'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import { haptic } from '@/lib/utils/haptics'
@@ -18,6 +18,11 @@ import {
   queueProfileActionLogin,
   type ProfileActionIntent,
 } from '@/lib/auth/profile-action-login'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
 type TraderFollowButtonProps = {
   traderId: string
@@ -29,11 +34,39 @@ type TraderFollowButtonProps = {
   onFollowChange?: (following: boolean) => void
 }
 
-type _FollowResponse = {
-  following: boolean
-  success?: boolean
-  tableNotFound?: boolean
-  error?: string
+type FollowResponse = {
+  data?: unknown
+  error?: unknown
+  following?: unknown
+  success?: unknown
+  tableNotFound?: unknown
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function followResponseData(value: FollowResponse | null): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null
+  const nested =
+    value.data && typeof value.data === 'object' && !Array.isArray(value.data)
+      ? (value.data as Record<string, unknown>)
+      : null
+  return nested ?? (value as Record<string, unknown>)
+}
+
+function readFollowing(value: FollowResponse | null): boolean | null {
+  const data = followResponseData(value)
+  return typeof data?.following === 'boolean' ? data.following : null
+}
+
+function isFollowAcknowledgement(
+  value: FollowResponse | null,
+  expectedFollowing: boolean
+): boolean {
+  return (
+    value?.success === true && isRecord(value.data) && value.data.following === expectedFollowing
+  )
 }
 
 /**
@@ -53,9 +86,25 @@ export default function TraderFollowButton({
   const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
-  const { getAuthHeadersAsync } = useAuthSession()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const exactRenderViewer = useMemo(() => {
+    const viewer = captureSettingsViewer(auth)
+    return viewer?.userId === userId ? viewer : null
+  }, [auth, userId])
+  const resourceScopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${userId ?? 'anonymous'}\u0000${source ?? ''}\u0000${traderId}`
+  const resourceScopeKeyRef = useRef(resourceScopeKey)
+  resourceScopeKeyRef.current = resourceScopeKey
   const [following, setFollowing] = useState(initialFollowing)
   const [featureDisabled, setFeatureDisabled] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [showPulse, setShowPulse] = useState(false)
+  const activeMutationRef = useRef<{
+    controller: AbortController
+    resourceScopeKey: string
+    viewer: SettingsViewerSnapshot
+  } | null>(null)
 
   // 防止重复点击的锁
   const pendingRef = useRef(false)
@@ -63,17 +112,44 @@ export default function TraderFollowButton({
   const expectedStateRef = useRef<boolean | null>(null)
   // 超时保护计时器
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
-  // Network error retry counter (max 2 retries)
-  const retryCountRef = useRef(0)
+  const captureExactViewer = useCallback((): SettingsViewerSnapshot | null => {
+    const viewer = captureSettingsViewer(authRef.current)
+    return viewer?.userId === userId && resourceScopeKeyRef.current === resourceScopeKey
+      ? viewer
+      : null
+  }, [resourceScopeKey, userId])
+
+  const viewerIsCurrent = useCallback(
+    (viewer: SettingsViewerSnapshot): boolean =>
+      resourceScopeKeyRef.current === resourceScopeKey &&
+      viewer.userId === userId &&
+      isSettingsViewerCurrent(viewer, authRef.current),
+    [resourceScopeKey, userId]
+  )
 
   // 清理超时计时器
   useEffect(() => {
     return () => {
+      activeMutationRef.current?.controller.abort()
+      activeMutationRef.current = null
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
       }
     }
   }, [])
+
+  useEffect(() => {
+    const mutation = activeMutationRef.current
+    if (mutation && mutation.resourceScopeKey !== resourceScopeKey) {
+      mutation.controller.abort()
+      activeMutationRef.current = null
+    }
+    pendingRef.current = false
+    expectedStateRef.current = null
+    setIsLoading(false)
+    setFollowing(initialFollowing)
+    setFeatureDisabled(false)
+  }, [initialFollowing, resourceScopeKey])
 
   // 多窗口同步
   const { broadcast, on } = useFollowSync()
@@ -94,10 +170,6 @@ export default function TraderFollowButton({
     return unsubscribe
   }, [traderId, source, userId, on, onFollowChange])
 
-  // Loading state for follow action
-  const [isLoading, setIsLoading] = useState(false)
-  // Pulse animation on follow state change
-  const [showPulse, setShowPulse] = useState(false)
   const redirectToLogin = useCallback(
     (action: ProfileActionIntent) => {
       if (!source) {
@@ -119,33 +191,49 @@ export default function TraderFollowButton({
   // 刷新关注状态（从服务器获取真实状态）
   const refreshFollowState = useCallback(async () => {
     if (!userId || !source) return
+    const viewer = captureExactViewer()
+    if (!viewer) return
 
     try {
-      const authHeaders = await getAuthHeadersAsync()
       const query = new URLSearchParams({ traderId })
       if (source) query.set('source', source)
-      const response = await fetch(`/api/follow?${query.toString()}`, {
-        headers: authHeaders,
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const actualFollowing = data.following ?? data.data?.following
-        if (typeof actualFollowing === 'boolean') {
-          setFollowing(actualFollowing)
-          onFollowChange?.(actualFollowing)
+      const result = await authedFetch<FollowResponse>(
+        `/api/follow?${query.toString()}`,
+        'GET',
+        viewer.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: viewer.userId,
+          expectedSessionGeneration: viewer.sessionGeneration,
         }
+      )
+      if (result.stale || !viewerIsCurrent(viewer) || !result.ok) return
+      const actualFollowing = readFollowing(result.data)
+      if (actualFollowing !== null) {
+        setFollowing(actualFollowing)
+        onFollowChange?.(actualFollowing)
       }
     } catch {
       // Intentionally swallowed: follow state refresh failed, UI uses cached/optimistic value
     }
-  }, [userId, traderId, source, getAuthHeadersAsync, onFollowChange])
+  }, [captureExactViewer, onFollowChange, source, traderId, userId, viewerIsCurrent])
 
   // 执行关注/取消关注操作
   const executeFollow = useCallback(
     async (action: 'follow' | 'unfollow'): Promise<boolean> => {
-      setIsLoading(true)
+      if (!source || activeMutationRef.current) return false
+      const viewer = captureExactViewer()
+      if (!viewer) return false
+
       const abortController = new AbortController()
+      const operation = {
+        controller: abortController,
+        resourceScopeKey,
+        viewer,
+      }
+      activeMutationRef.current = operation
+      setIsLoading(true)
       let timedOut = false
 
       if (timeoutRef.current) {
@@ -162,22 +250,19 @@ export default function TraderFollowButton({
       })
 
       try {
-        if (!source) throw new Error('Trader source is unavailable')
-        const response = await Promise.race([
-          (async () => {
-            const authHeaders = await getAuthHeadersAsync()
-            const csrfHeaders = getCsrfHeaders()
-            return fetch('/api/follow', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...authHeaders,
-                ...csrfHeaders,
-              },
-              body: JSON.stringify({ traderId, source, action }),
+        const result = await Promise.race([
+          authedFetch<FollowResponse>(
+            '/api/follow',
+            'POST',
+            operation.viewer.accessToken,
+            { traderId, source, action },
+            15_000,
+            {
+              expectedUserId: operation.viewer.userId,
+              expectedSessionGeneration: operation.viewer.sessionGeneration,
               signal: abortController.signal,
-            })
-          })(),
+            }
+          ),
           timeout,
         ])
 
@@ -187,7 +272,15 @@ export default function TraderFollowButton({
           timeoutRef.current = null
         }
 
-        if (response.status === 401) {
+        if (
+          result.stale ||
+          activeMutationRef.current !== operation ||
+          !viewerIsCurrent(operation.viewer)
+        ) {
+          return false
+        }
+
+        if (result.status === 401) {
           pendingRef.current = false
           if (expectedStateRef.current !== null) {
             setFollowing(!expectedStateRef.current)
@@ -198,8 +291,7 @@ export default function TraderFollowButton({
           return false
         }
 
-        const result = await response.json()
-        const data = result.data || result // Handle wrapped or unwrapped response
+        const data = followResponseData(result.data)
 
         pendingRef.current = false
         // NOTE: do NOT clear expectedStateRef here — the catch block relies on
@@ -207,47 +299,54 @@ export default function TraderFollowButton({
         // (Previously it was nulled before the response.ok check, so a 500 left
         // the button stuck in the optimistic "Following" state.)
 
-        if (data.tableNotFound) {
+        if (data?.tableNotFound === true) {
           expectedStateRef.current = null
           setFeatureDisabled(true)
           showToast(t('followFeatureComingSoon'), 'info')
           return false
         }
 
-        if (!response.ok) {
+        if (!result.ok) {
           // API error payload may be a string or { code, message } object
-          const apiErr = data.error
-          const apiErrMsg = typeof apiErr === 'string' ? apiErr : apiErr?.message
+          const apiErr = data?.error
+          const apiErrMsg =
+            typeof apiErr === 'string'
+              ? apiErr
+              : isRecord(apiErr) && typeof apiErr.message === 'string'
+                ? apiErr.message
+                : ''
           throw new Error(apiErrMsg || t('operationFailed'))
         }
-        if (typeof data.following !== 'boolean') {
+        const expectedFollowing = action === 'follow'
+        if (!isFollowAcknowledgement(result.data, expectedFollowing)) {
           throw new Error(t('operationFailed'))
         }
 
         expectedStateRef.current = null
-        setFollowing(data.following)
-        onFollowChange?.(data.following)
-        retryCountRef.current = 0
+        setFollowing(expectedFollowing)
+        onFollowChange?.(expectedFollowing)
 
         // Trigger pulse animation
         setShowPulse(true)
-        setTimeout(() => setShowPulse(false), 600)
+        setTimeout(() => {
+          if (viewerIsCurrent(operation.viewer)) setShowPulse(false)
+        }, 600)
 
         // Analytics tracking
-        if (data.following) {
+        if (expectedFollowing) {
           trackEvent('follow_trader', { trader_id: traderId })
         }
 
         // Haptic feedback + success toast
         haptic('success')
-        showToast(data.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
+        showToast(expectedFollowing ? t('followSuccess') : t('unfollowSuccess'), 'success')
 
         // 广播状态变化到其他窗口
         if (userId) {
           broadcast('FOLLOW_CHANGED', {
             traderId,
             source,
-            following: data.following,
+            following: expectedFollowing,
             userId,
           })
         }
@@ -258,8 +357,10 @@ export default function TraderFollowButton({
           clearTimeout(timeoutRef.current)
           timeoutRef.current = null
         }
+        if (activeMutationRef.current !== operation || !viewerIsCurrent(operation.viewer)) {
+          return false
+        }
         pendingRef.current = false
-        const failedAction = action
         // 回滚乐观更新
         if (expectedStateRef.current !== null) {
           setFollowing(!expectedStateRef.current)
@@ -275,13 +376,8 @@ export default function TraderFollowButton({
           setFeatureDisabled(true)
           showToast(t('followFeatureComingSoon'), 'info')
         } else {
-          // #22: Show retry hint on network error (max 2 auto-retries)
           const isNetworkError = error instanceof TypeError && error.message.includes('fetch')
           showToast(isNetworkError ? `${errorMsg} — ${t('tapToRetry')}` : errorMsg, 'error')
-          if (isNetworkError && retryCountRef.current < 2) {
-            retryCountRef.current++
-            setTimeout(() => executeFollow(failedAction), 2000)
-          }
         }
         return false
       } finally {
@@ -289,21 +385,26 @@ export default function TraderFollowButton({
           clearTimeout(timeoutRef.current)
           timeoutRef.current = null
         }
-        pendingRef.current = false
-        setIsLoading(false)
+        if (activeMutationRef.current === operation) {
+          activeMutationRef.current = null
+          pendingRef.current = false
+          if (viewerIsCurrent(operation.viewer)) setIsLoading(false)
+        }
       }
     },
     [
-      traderId,
-      source,
-      userId,
-      getAuthHeadersAsync,
-      showToast,
       broadcast,
+      captureExactViewer,
       onFollowChange,
-      t,
       redirectToLogin,
       refreshFollowState,
+      resourceScopeKey,
+      showToast,
+      source,
+      t,
+      traderId,
+      userId,
+      viewerIsCurrent,
     ]
   )
 
@@ -311,7 +412,7 @@ export default function TraderFollowButton({
   // an unbounded `pendingFollow` record; clear it without executing so a stale
   // tab can never follow someone days later.
   useEffect(() => {
-    if (!userId || !traderId || !source) return
+    if (!exactRenderViewer || !userId || !traderId || !source) return
     try {
       sessionStorage.removeItem('pendingFollow')
     } catch {
@@ -328,34 +429,40 @@ export default function TraderFollowButton({
       void executeFollow(action === 'follow-trader' ? 'follow' : 'unfollow')
       return
     }
-  }, [userId, traderId, source]) // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only resume pending follow when account identity changes; executeFollow and onFollowChange are stable refs
+  }, [exactRenderViewer, userId, traderId, source]) // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only resume pending follow when account identity changes; executeFollow and onFollowChange are stable refs
 
   useEffect(() => {
     // The pending-login effect above may already be resuming a follow. Do not
     // start a concurrent pre-mutation status read that can land after the POST.
-    if (!userId || !source || pendingRef.current) return
+    if (!exactRenderViewer || !userId || !source || pendingRef.current) return
+    const viewer = exactRenderViewer
 
     const abortController = new AbortController()
 
     ;(async () => {
       try {
-        const authHeaders = await getAuthHeadersAsync()
         const query = new URLSearchParams({ traderId })
         if (source) query.set('source', source)
-        const response = await fetch(`/api/follow?${query.toString()}`, {
-          signal: abortController.signal,
-          headers: authHeaders,
-        })
-        if (response.ok) {
-          const data = await response.json()
-          // 只有在没有待处理操作时才更新状态
-          const actualFollowing = data.following ?? data.data?.following
-          if (!pendingRef.current && typeof actualFollowing === 'boolean') {
-            setFollowing(actualFollowing)
+        const result = await authedFetch<FollowResponse>(
+          `/api/follow?${query.toString()}`,
+          'GET',
+          viewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: viewer.userId,
+            expectedSessionGeneration: viewer.sessionGeneration,
+            signal: abortController.signal,
           }
+        )
+        if (result.stale || !viewerIsCurrent(viewer) || !result.ok) return
+        const actualFollowing = readFollowing(result.data)
+        // 只有在没有待处理操作时才更新状态
+        if (!pendingRef.current && actualFollowing !== null) {
+          setFollowing(actualFollowing)
         }
       } catch (error) {
-        if ((error as Error).name !== 'AbortError') {
+        if (viewerIsCurrent(viewer) && (error as Error).name !== 'AbortError') {
           logger.error('Check following error:', error)
         }
       }
@@ -364,7 +471,7 @@ export default function TraderFollowButton({
     return () => {
       abortController.abort()
     }
-  }, [userId, traderId, source, getAuthHeadersAsync])
+  }, [exactRenderViewer, source, traderId, userId, viewerIsCurrent])
 
   const handleToggle = useCallback(() => {
     if (!userId) {
@@ -373,6 +480,12 @@ export default function TraderFollowButton({
     }
     if (!source) {
       showToast(t('operationFailed'), 'error')
+      return
+    }
+    if (!captureExactViewer()) {
+      if (authRef.current.authChecked && !authRef.current.loading && !authRef.current.userId) {
+        redirectToLogin('follow-trader')
+      }
       return
     }
 
@@ -389,7 +502,17 @@ export default function TraderFollowButton({
     setFollowing(newState)
 
     executeFollow(newState ? 'follow' : 'unfollow')
-  }, [userId, source, following, isLoading, executeFollow, showToast, t, redirectToLogin])
+  }, [
+    captureExactViewer,
+    executeFollow,
+    following,
+    isLoading,
+    redirectToLogin,
+    showToast,
+    source,
+    t,
+    userId,
+  ])
 
   // 功能未开放时显示禁用状态
   if (featureDisabled) {
@@ -404,7 +527,7 @@ export default function TraderFollowButton({
           border: tokens.glass.border.light,
           background: tokens.glass.bg.light,
           color: tokens.colors.text.tertiary,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
           fontSize: tokens.typography.fontSize.base,
           cursor: 'not-allowed',
           opacity: 0.5,
@@ -427,7 +550,7 @@ export default function TraderFollowButton({
           border: tokens.glass.border.light,
           background: tokens.glass.bg.light,
           color: tokens.colors.text.primary,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
           fontSize: tokens.typography.fontSize.sm,
           cursor: 'pointer',
         }}
@@ -437,10 +560,14 @@ export default function TraderFollowButton({
     )
   }
 
+  const authPending =
+    !exactRenderViewer && (!auth.authChecked || auth.loading || Boolean(auth.userId))
+  const buttonDisabled = isLoading || authPending
+
   return (
     <button
       onClick={handleToggle}
-      disabled={isLoading}
+      disabled={buttonDisabled}
       aria-label={following ? t('unfollowTrader') : t('followTrader')}
       aria-pressed={following}
       aria-busy={isLoading}
@@ -454,10 +581,10 @@ export default function TraderFollowButton({
         // following bg is the theme-aware glass tint (light theme ≈ near-white), so
         // hard white text went invisible there. Use theme-aware text in that state.
         color: following ? 'var(--color-text-primary)' : tokens.colors.white,
-        fontWeight: 900,
+        fontWeight: tokens.typography.fontWeight.black,
         fontSize: tokens.typography.fontSize.base,
-        cursor: isLoading ? 'not-allowed' : 'pointer',
-        opacity: isLoading ? 0.6 : 1,
+        cursor: buttonDisabled ? 'not-allowed' : 'pointer',
+        opacity: buttonDisabled ? 0.6 : 1,
         transition: tokens.transition.base,
         display: 'flex',
         alignItems: 'center',
@@ -465,10 +592,10 @@ export default function TraderFollowButton({
         gap: tokens.spacing[2],
       }}
       onMouseEnter={(e) => {
-        if (!isLoading) e.currentTarget.style.opacity = '0.85'
+        if (!buttonDisabled) e.currentTarget.style.opacity = '0.85'
       }}
       onMouseLeave={(e) => {
-        if (!isLoading) e.currentTarget.style.opacity = '1'
+        if (!buttonDisabled) e.currentTarget.style.opacity = '1'
       }}
     >
       {isLoading && <ButtonSpinner size="xs" />}

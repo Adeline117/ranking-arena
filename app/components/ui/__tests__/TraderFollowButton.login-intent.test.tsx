@@ -5,9 +5,33 @@ const mockPush = jest.fn()
 const mockShowToast = jest.fn()
 const mockBroadcast = jest.fn()
 const mockOn = jest.fn(() => jest.fn())
-const mockGetAuthHeadersAsync = jest.fn().mockResolvedValue({
-  Authorization: 'Bearer access-token',
-})
+const mockAuthedFetch = jest.fn()
+const VIEWER_A = '11111111-1111-4111-8111-111111111111'
+const VIEWER_B = '22222222-2222-4222-8222-222222222222'
+
+type MockAuth = {
+  accessToken: string | null
+  authChecked: boolean
+  email: string | null
+  loading: boolean
+  sessionGeneration: number
+  userId: string | null
+  viewerKey: 'anon' | `user:${string}`
+}
+
+function signedIn(userId: string, token: string, generation: number): MockAuth {
+  return {
+    accessToken: token,
+    authChecked: true,
+    email: null,
+    loading: false,
+    sessionGeneration: generation,
+    userId,
+    viewerKey: `user:${userId}`,
+  }
+}
+
+let mockAuth: MockAuth = signedIn(VIEWER_A, 'access-token-a', 1)
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -18,7 +42,37 @@ jest.mock('@/lib/hooks/useBroadcastSync', () => ({
 }))
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
-  useAuthSession: () => ({ getAuthHeadersAsync: mockGetAuthHeadersAsync }),
+  useAuthSession: () => mockAuth,
+}))
+
+jest.mock('@/app/(app)/settings/hooks/settings-viewer-scope', () => ({
+  captureSettingsViewer: (auth: MockAuth) => {
+    if (
+      auth.loading ||
+      !auth.authChecked ||
+      !auth.userId ||
+      !auth.accessToken ||
+      auth.viewerKey !== `user:${auth.userId}`
+    ) {
+      return null
+    }
+    return {
+      accessToken: auth.accessToken,
+      email: auth.email,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+      viewerKey: auth.viewerKey,
+    }
+  },
+  isSettingsViewerCurrent: (
+    viewer: { sessionGeneration: number; userId: string; viewerKey: string },
+    auth: MockAuth
+  ) =>
+    auth.authChecked &&
+    !auth.loading &&
+    auth.userId === viewer.userId &&
+    auth.viewerKey === viewer.viewerKey &&
+    auth.sessionGeneration === viewer.sessionGeneration,
 }))
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -30,7 +84,7 @@ jest.mock('@/app/components/ui/Toast', () => ({
 }))
 
 jest.mock('@/lib/api/client', () => ({
-  getCsrfHeaders: () => ({ 'X-CSRF-Token': 'csrf-token' }),
+  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
 }))
 
 jest.mock('@/lib/analytics/track', () => ({ trackEvent: jest.fn() }))
@@ -38,14 +92,12 @@ jest.mock('@/lib/utils/haptics', () => ({ haptic: jest.fn() }))
 
 import TraderFollowButton from '../TraderFollowButton'
 
-const originalFetch = global.fetch
-
-function response(body: unknown, status = 200): Response {
+function response(data: unknown, status = 200) {
   return {
+    data,
     ok: status >= 200 && status < 300,
     status,
-    json: jest.fn().mockResolvedValue(body),
-  } as unknown as Response
+  }
 }
 
 describe('TraderFollowButton login intent', () => {
@@ -53,10 +105,11 @@ describe('TraderFollowButton login intent', () => {
     jest.clearAllMocks()
     window.sessionStorage.clear()
     window.history.replaceState({}, '', '/trader/alice?platform=binance&tab=stats')
+    mockAuth = signedIn(VIEWER_A, 'access-token-a', 1)
   })
 
-  afterAll(() => {
-    global.fetch = originalFetch
+  afterEach(() => {
+    jest.useRealTimers()
   })
 
   it('preserves the exact trader route for an anonymous follow', () => {
@@ -77,16 +130,15 @@ describe('TraderFollowButton login intent', () => {
   })
 
   it('rolls back and re-authenticates an expired follow request', async () => {
-    global.fetch = jest
-      .fn()
-      .mockResolvedValueOnce(response({ following: false }))
-      .mockResolvedValueOnce(response({ error: 'Unauthorized' }, 401)) as typeof fetch
+    mockAuthedFetch
+      .mockResolvedValueOnce(response({ success: true, data: { following: false } }))
+      .mockResolvedValueOnce(response({ error: 'Unauthorized' }, 401))
 
     render(
       <TraderFollowButton
         traderId="trader-1"
         source="binance"
-        userId="viewer-1"
+        userId={VIEWER_A}
         loginReturnPath="/trader/alice?platform=binance"
       />
     )
@@ -106,16 +158,15 @@ describe('TraderFollowButton login intent', () => {
   })
 
   it('retains an expired unfollow as an unfollow intent', async () => {
-    global.fetch = jest
-      .fn()
-      .mockResolvedValueOnce(response({ following: true }))
-      .mockResolvedValueOnce(response({ error: 'Unauthorized' }, 401)) as typeof fetch
+    mockAuthedFetch
+      .mockResolvedValueOnce(response({ success: true, data: { following: true } }))
+      .mockResolvedValueOnce(response({ error: 'Unauthorized' }, 401))
 
     render(
       <TraderFollowButton
         traderId="trader-1"
         source="binance"
-        userId="viewer-1"
+        userId={VIEWER_A}
         initialFollowing
         loginReturnPath="/trader/alice?platform=binance"
       />
@@ -145,15 +196,13 @@ describe('TraderFollowButton login intent', () => {
       '',
       new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
     )
-    global.fetch = jest
-      .fn()
-      .mockResolvedValue(response({ data: { following: true, success: true } })) as typeof fetch
+    mockAuthedFetch.mockResolvedValue(response({ data: { following: true }, success: true }))
 
     render(
       <TraderFollowButton
         traderId="trader-1"
         source="binance"
-        userId="viewer-1"
+        userId={VIEWER_A}
         loginReturnPath="/trader/alice?platform=binance"
       />
     )
@@ -164,7 +213,7 @@ describe('TraderFollowButton login intent', () => {
         'true'
       )
     )
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
     expect(`${window.location.pathname}${window.location.search}`).toBe(
       '/trader/alice?platform=binance&tab=stats'
     )
@@ -182,13 +231,13 @@ describe('TraderFollowButton login intent', () => {
       '',
       new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
     )
-    global.fetch = jest.fn(() => new Promise<Response>(() => {})) as typeof fetch
+    mockAuthedFetch.mockImplementation(() => new Promise(() => {}))
 
     render(
       <TraderFollowButton
         traderId="trader-1"
         source="binance"
-        userId="viewer-1"
+        userId={VIEWER_A}
         loginReturnPath="/trader/alice?platform=binance"
       />
     )
@@ -204,6 +253,58 @@ describe('TraderFollowButton login intent', () => {
       'aria-busy',
       'false'
     )
-    jest.useRealTimers()
+  })
+
+  it('never replays an old trader follow as a newly selected account', async () => {
+    let resolveMutation:
+      | ((value: { data: Record<string, unknown>; ok: boolean; status: number }) => void)
+      | undefined
+    mockAuthedFetch.mockImplementation((_url: string, method: string) => {
+      if (method === 'POST') {
+        return new Promise((resolve) => {
+          resolveMutation = resolve
+        })
+      }
+      return Promise.resolve(response({ data: { following: false }, success: true }))
+    })
+
+    const { rerender } = render(
+      <TraderFollowButton traderId="trader-1" source="binance" userId={VIEWER_A} />
+    )
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'followTrader' }))
+
+    await waitFor(() =>
+      expect(mockAuthedFetch).toHaveBeenCalledWith(
+        '/api/follow',
+        'POST',
+        'access-token-a',
+        { action: 'follow', source: 'binance', traderId: 'trader-1' },
+        15_000,
+        expect.objectContaining({
+          expectedSessionGeneration: 1,
+          expectedUserId: VIEWER_A,
+          signal: expect.any(AbortSignal),
+        })
+      )
+    )
+
+    mockAuth = signedIn(VIEWER_B, 'access-token-b', 2)
+    rerender(<TraderFollowButton traderId="trader-1" source="binance" userId={VIEWER_B} />)
+    resolveMutation?.({
+      data: { data: { following: true }, success: true },
+      ok: true,
+      status: 200,
+    })
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'followTrader' })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      )
+    )
+    expect(mockBroadcast).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalledWith('followSuccess', 'success')
+    expect(mockAuthedFetch.mock.calls.filter((call) => call[1] === 'POST')).toHaveLength(1)
   })
 })
