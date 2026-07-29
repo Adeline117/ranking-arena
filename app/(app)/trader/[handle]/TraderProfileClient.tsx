@@ -431,17 +431,15 @@ export default function TraderProfileClient({
   // which would defeat React.memo in StatsTab / PortfolioTab.
   const handlePricingRedirect = useCallback(() => router.push('/pricing'), [router])
 
-  // ── P7: Merged trader detail fetch (bundles claim + aggregate + rank_history) ──
-  // Fetch order: primary trader detail → then linked accounts (with bundled aggregate).
-  // This breaks the prior waterfall: the old code read a ref that wasn't populated
-  // until after useLinkedAccounts had already fired its own duplicate fetch.
+  // ── P7: Merged trader detail fetch (bundles claim + rank_history) ──
+  // Linked membership intentionally uses its own exact, no-store live request.
   //
   // The URL only depends on `data` + `activeAccount` (parsed inline, no lookup),
   // so it doesn't need linkedAccounts. handle-vs-traderKey is resolved separately
   // below for display purposes.
 
   // SWR for full trader data — switches URL when account tab changes
-  // P7: When fetching primary account, bundle claim/aggregate/rank_history via include param (4→1 API call)
+  // Bundle non-membership extras only for the primary account.
   const effectivePlatform =
     activeAccountRaw?.platform || searchParams?.get('platform') || data.source || ''
   const effectiveHandle = activeAccountRaw?.traderKey || data.handle || data.source_trader_id
@@ -453,13 +451,12 @@ export default function TraderProfileClient({
     // Only bundle extras for the primary account (not when switching linked accounts)
     if (isPrimaryAccount) {
       const separator = base.includes('?') ? '&' : '?'
-      return `${base}${separator}include=claim,aggregate,rank_history`
+      return `${base}${separator}include=claim,rank_history`
     }
     return base
   }, [effectivePlatform, effectiveHandle, isPrimaryAccount])
   type TraderDataWithExtras = TraderPageData & {
     claim_status?: ExactTraderClaimData
-    aggregate?: { aggregated: unknown; accounts: unknown[]; totalAccounts: number }
     rank_history?: { history: { date: string; rank: number; arena_score: number }[] }
   }
   const {
@@ -514,15 +511,11 @@ export default function TraderProfileClient({
     }
   }, [traderError, serverData?.source_trader_id, serverData?.handle, serverData?.source])
 
-  // Now safe to call useLinkedAccounts — bundled aggregate is passed directly,
-  // no ref gymnastics. On first render (before SWR resolves), undefined → hook
-  // fires its own fetch. After SWR resolves, bundled data suppresses duplicate fetch.
-  // The key improvement vs the old ref-based code: the suppression happens on the
-  // first render where bundled data is available (not the render AFTER that).
+  // Membership is a live privacy boundary. It is never authorized from the
+  // longer-lived trader-profile query or its React Query cache.
   const { linkedAccounts, aggregatedData, hasMultipleAccounts } = useLinkedAccounts(
     data.source,
-    data.source_trader_id,
-    traderData?.aggregate
+    data.source_trader_id
   )
 
   // Anonymous visitors can use an exact, non-placeholder bundle for the public

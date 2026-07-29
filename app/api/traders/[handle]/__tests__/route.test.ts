@@ -149,9 +149,11 @@ jest.mock('@/lib/constants/exchanges', () => ({
   ALL_SOURCES: ['binance_futures', 'bybit', 'okx_futures', 'hyperliquid'],
 }))
 
+const mockGetAggregatedStats = jest.fn().mockResolvedValue(null)
+const mockFindUserByTrader = jest.fn().mockResolvedValue(null)
 jest.mock('@/lib/data/linked-traders', () => ({
-  getAggregatedStats: jest.fn().mockResolvedValue(null),
-  findUserByTrader: jest.fn().mockResolvedValue(null),
+  getAggregatedStats: (...args: unknown[]) => mockGetAggregatedStats(...args),
+  findUserByTrader: (...args: unknown[]) => mockFindUserByTrader(...args),
 }))
 
 const mockVerifyCronSecret = jest.fn().mockReturnValue(false)
@@ -188,6 +190,8 @@ describe('GET /api/traders/[handle]', () => {
     mockGetServerCache.mockReturnValue(null)
     mockResolveTrader.mockResolvedValue(null)
     mockGetTraderDetail.mockResolvedValue(null)
+    mockGetAggregatedStats.mockResolvedValue(null)
+    mockFindUserByTrader.mockResolvedValue(null)
     mockVerifyCronSecret.mockReturnValue(false)
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
@@ -294,6 +298,109 @@ describe('GET /api/traders/[handle]', () => {
     expect(res.headers.get('X-Arena-Consistency-Proof')).toBeNull()
   })
 
+  it('serializes include=aggregate through the subject-bound public DTO', async () => {
+    mockTieredGetOrSet.mockResolvedValueOnce({
+      pageData: { performance: { roi: 42.5 }, profile: { handle: 'LinkedTrader' } },
+      resolved: { platform: 'bybit', traderKey: 'account-42' },
+    })
+    mockFindUserByTrader.mockResolvedValueOnce('private-user-id')
+    mockGetAggregatedStats.mockResolvedValueOnce({
+      accounts: [
+        {
+          id: 'internal-1',
+          userId: 'private-user-id',
+          linkedAt: '2026-07-01T00:00:00Z',
+          platform: 'bybit',
+          traderKey: 'account-42',
+          handle: 'Primary',
+          label: 'Owner private label',
+          isPrimary: true,
+          roi: 10,
+          pnl: 50000,
+          arenaScore: 88,
+          winRate: 60,
+          maxDrawdown: -12,
+          rank: 5,
+        },
+        {
+          id: 'internal-2',
+          userId: 'private-user-id',
+          linkedAt: '2026-07-02T00:00:00Z',
+          platform: 'okx',
+          traderKey: 'account-2',
+          handle: 'Secondary',
+          label: 'Another private label',
+          isPrimary: false,
+          roi: 5,
+          pnl: 25000,
+          arenaScore: 70,
+          winRate: 55,
+          maxDrawdown: 8,
+          rank: 20,
+        },
+      ],
+      totalAccounts: 2,
+      combinedPnl: 75000,
+      bestRoi: { value: 10, platform: 'bybit', traderKey: 'account-42' },
+      weightedScore: 82,
+    })
+
+    const request = mockReq(
+      'http://localhost/api/traders/LinkedTrader?source=bybit&include=aggregate'
+    )
+    const response = await GET(request as any, {
+      params: Promise.resolve({ handle: 'LinkedTrader' }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+    expect(body.data.aggregate).toMatchObject({
+      subject: { platform: 'bybit', traderKey: 'account-42' },
+      aggregated: { combinedPnl: null, bestRoi: null, weightedScore: null },
+      totalAccounts: 2,
+      accounts: [
+        expect.objectContaining({
+          id: 'bybit:account-42',
+          label: null,
+          pnl: null,
+          arenaScore: null,
+          rank: null,
+        }),
+        expect.any(Object),
+      ],
+    })
+    expect(JSON.stringify(body.data.aggregate)).not.toMatch(
+      /private-user-id|Owner private label|Another private label|50000|75000/
+    )
+  })
+
+  it('keeps aggregate fixture output allowlisted and no-store', async () => {
+    const request = mockReq(
+      'http://localhost/api/traders/e2e_trader_fixture?e2e_fixture=linked_accounts'
+    )
+    const response = await GET(request as any, {
+      params: Promise.resolve({ handle: 'e2e_trader_fixture' }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+    expect(body.data.aggregate).toMatchObject({
+      subject: { platform: 'binance_futures', traderKey: 'e2e-primary-key' },
+      aggregated: { combinedPnl: null, bestRoi: null, weightedScore: null },
+      accounts: [
+        expect.objectContaining({ label: null, pnl: null, arenaScore: null, rank: null }),
+        expect.objectContaining({ label: null, pnl: null, arenaScore: null, rank: null }),
+      ],
+    })
+    expect(JSON.stringify(body.data.aggregate)).not.toMatch(/e2e-private-owner|Private .* label/)
+  })
+
   it('bypasses both cache tiers only for an authenticated consistency probe', async () => {
     mockVerifyCronSecret.mockReturnValue(true)
     mockResolveTrader.mockResolvedValueOnce({
@@ -362,6 +469,19 @@ describe('GET /api/traders/[handle]', () => {
     const res = await GET(request as any, { params })
 
     expect(res.status).toBe(500)
+  })
+
+  it('marks base lookup errors no-store when include=aggregate was requested', async () => {
+    mockResolveTrader.mockRejectedValueOnce(new Error('DB connection lost'))
+
+    const request = mockReq('http://localhost/api/traders/crasher?source=bybit&include=aggregate')
+    const res = await GET(request as any, { params: Promise.resolve({ handle: 'crasher' }) })
+
+    expect(res.status).toBe(500)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+    expect(res.headers.get('Pragma')).toBe('no-cache')
   })
 
   it('throws when params promise rejects (unhandled before middleware)', async () => {

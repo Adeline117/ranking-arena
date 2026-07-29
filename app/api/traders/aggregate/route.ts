@@ -1,100 +1,88 @@
 /**
- * GET /api/traders/aggregate?user_id=xxx or ?handle=xxx
+ * GET /api/traders/aggregate?contract=2&platform=...&trader_key=...
  *
- * Returns aggregated stats across all linked trader accounts for a user.
- * Public endpoint — used by trader profile pages to show multi-account data.
+ * Public, subject-bound projection of live linked membership. Internal user IDs,
+ * owner-private labels, unproven scores/ranks and currency-less PnL never cross
+ * this boundary.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin, handleError, checkRateLimit, RateLimitPresets } from '@/lib/api'
 import {
-  getAggregatedStats,
-  findUserByTrader,
-  linkedTraderRouteAggregateCacheKey,
-} from '@/lib/data/linked-traders'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+  getSupabaseAdmin,
+  handleError,
+  badRequest,
+  checkRateLimit,
+  RateLimitPresets,
+} from '@/lib/api'
+import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
+import {
+  emptyPublicLinkedAggregate,
+  serializePublicLinkedAggregate,
+  type PublicLinkedSubject,
+} from '@/lib/data/linked-trader-public'
 
-// Shape is inferred from buildResponse so we don't duplicate getAggregatedStats's types.
-type AggregatedResponse = Awaited<ReturnType<typeof buildResponse>>
+export const dynamic = 'force-dynamic'
 
-async function buildResponse(supabase: ReturnType<typeof getSupabaseAdmin>, userId: string) {
-  const stats = await getAggregatedStats(supabase, userId)
-  if (!stats) {
-    return {
-      aggregated: null,
-      accounts: [] as NonNullable<Awaited<ReturnType<typeof getAggregatedStats>>>['accounts'],
-      totalAccounts: 0,
-    }
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function noStore<T extends NextResponse>(response: T): T {
+  for (const [name, value] of Object.entries(NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
   }
-  return {
-    aggregated: {
-      combinedPnl: stats.combinedPnl,
-      bestRoi: stats.bestRoi,
-      weightedScore: stats.weightedScore,
-    },
-    accounts: stats.accounts,
-    totalAccounts: stats.totalAccounts,
-  }
+  return response
 }
 
-const EMPTY_RESPONSE: AggregatedResponse = {
-  aggregated: null,
-  accounts: [],
-  totalAccounts: 0,
+function exactSelector(value: string | null, maxLength: number): value is string {
+  return !!value && value.length <= maxLength && value === value.trim()
 }
 
-// Cache headers: edge CDN 5min + SWR 10min. Data only changes when a user
-// links/unlinks a trader account (rare) or trader snapshots refresh (~5min).
-const CACHE_HEADERS = {
-  'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+function readSubject(searchParams: URLSearchParams): PublicLinkedSubject | null {
+  const allowed = new Set(['contract', 'platform', 'trader_key'])
+  if ([...searchParams.keys()].some((key) => !allowed.has(key))) return null
+  if (
+    searchParams.getAll('contract').length !== 1 ||
+    searchParams.getAll('platform').length !== 1 ||
+    searchParams.getAll('trader_key').length !== 1
+  ) {
+    return null
+  }
+  if (searchParams.get('contract') !== '2') return null
+
+  const platform = searchParams.get('platform')
+  const traderKey = searchParams.get('trader_key')
+  if (!exactSelector(platform, 64) || !exactSelector(traderKey, 512)) return null
+  return { platform, traderKey }
 }
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return noStore(rateLimitResponse)
 
   try {
-    const { searchParams } = new URL(request.url)
-    let userId = searchParams.get('user_id')
-    const handle = searchParams.get('handle')
-    const platform = searchParams.get('platform')
-    const traderKey = searchParams.get('trader_key')
+    const subject = readSubject(new URL(request.url).searchParams)
+    if (!subject) {
+      return noStore(
+        badRequest('contract=2, platform, and trader_key are required public selectors')
+      )
+    }
 
     const supabase = getSupabaseAdmin()
-
-    // Resolve user_id from handle if not provided directly
-    if (!userId && handle) {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('handle', handle)
-        .maybeSingle()
-
-      if (profile?.id) {
-        userId = String(profile.id)
-      }
-    }
-
-    // Resolve user_id from trader platform+key
-    if (!userId && platform && traderKey) {
-      userId = await findUserByTrader(supabase, platform, traderKey)
-    }
-
+    const userId = await findUserByTrader(supabase, subject.platform, subject.traderKey)
     if (!userId) {
-      return NextResponse.json({ success: true, data: EMPTY_RESPONSE }, { headers: CACHE_HEADERS })
+      return noStore(
+        NextResponse.json({ success: true, data: emptyPublicLinkedAggregate(subject) })
+      )
     }
 
-    // Redis-cached: stampede-protected, warm tier (15min Redis, 2min memory)
-    const cacheKey = linkedTraderRouteAggregateCacheKey(userId)
-    const data = await tieredGetOrSet<AggregatedResponse>(
-      cacheKey,
-      () => buildResponse(supabase, userId!),
-      'warm',
-      ['aggregate', `user:${userId}`]
-    )
-
-    return NextResponse.json({ success: true, data }, { headers: CACHE_HEADERS })
+    const stats = await getAggregatedStats(supabase, userId)
+    const data = serializePublicLinkedAggregate(stats, subject)
+    return noStore(NextResponse.json({ success: true, data }))
   } catch (error: unknown) {
-    return handleError(error, 'traders/aggregate GET')
+    return noStore(handleError(error, 'traders/aggregate GET'))
   }
 }
