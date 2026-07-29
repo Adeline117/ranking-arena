@@ -417,8 +417,13 @@ export const POST = withPublic(
         return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
       }
 
-      const anon = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-      const { error: signInError } = await anon.auth.signInWithPassword({ email, password })
+      const anon = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      })
+      const { data: signInData, error: signInError } = await anon.auth.signInWithPassword({
+        email,
+        password,
+      })
       const banRestored = await reban(userId)
       if (!banRestored) {
         await recordRecoveryAuthManualReview({
@@ -429,7 +434,11 @@ export const POST = withPublic(
         await abortRecoveryAdmissionBestEffort({ userId, operationId })
         return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
       }
-      if (signInError) {
+      if (signInError || signInData.user?.id !== userId || signInData.session?.user.id !== userId) {
+        // user_profiles.email is not an authentication identity boundary. It
+        // can lag a confirmed Auth email change and later be reused by another
+        // account. Only credentials that resolve back to the exact claimed
+        // deletion subject may finish recovery.
         await abortRecoveryAdmissionBestEffort({ userId, operationId })
         return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
       }
@@ -525,6 +534,7 @@ export const POST = withPublic(
       })
       return NextResponse.json({
         success: true,
+        user_id: userId,
         subscription_resumed: false,
         billing_reactivation_required: true,
         message:
@@ -537,6 +547,7 @@ export const POST = withPublic(
 
     return NextResponse.json({
       success: true,
+      user_id: userId,
       subscription_resumed: subscriptionResumed,
       billing_reactivation_required: !subscriptionResumed,
       message: subscriptionResumed

@@ -174,7 +174,13 @@ describe('account recovery', () => {
       throw new Error(`Unexpected RPC: ${functionName}`)
     })
     mockAdminUpdateUser.mockResolvedValue({ error: null })
-    mockPasswordSignIn.mockResolvedValue({ error: null })
+    mockPasswordSignIn.mockResolvedValue({
+      data: {
+        user: { id: 'user-1' },
+        session: { user: { id: 'user-1' } },
+      },
+      error: null,
+    })
     mockResumeStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
       observedSubscriptionIds: ['sub_123', 'sub_api'],
@@ -197,7 +203,11 @@ describe('account recovery', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body).toMatchObject({ success: true, subscription_resumed: true })
+    expect(body).toMatchObject({
+      success: true,
+      user_id: 'user-1',
+      subscription_resumed: true,
+    })
     expect(mockRpc).toHaveBeenCalledWith('claim_account_recovery_admission_atomic', {
       p_user_id: 'user-1',
       p_recovery_token_hash: createHash('sha256').update(RECOVERY_TOKEN).digest('hex'),
@@ -268,7 +278,10 @@ describe('account recovery', () => {
   })
 
   it('re-bans a password account when credential verification fails', async () => {
-    mockPasswordSignIn.mockResolvedValue({ error: { message: 'invalid' } })
+    mockPasswordSignIn.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: 'invalid' },
+    })
 
     const response = await POST(request({ email: 'user@example.com', password: 'wrong' }))
 
@@ -297,6 +310,35 @@ describe('account recovery', () => {
         )
       ]
     ).toBeLessThan(mockAdminUpdateUser.mock.invocationCallOrder[0])
+    expect(mockResumeStripeSubscriptionRenewals).not.toHaveBeenCalled()
+  })
+
+  it('never lets credentials for a reused profile email recover another Auth subject', async () => {
+    mockPasswordSignIn.mockResolvedValue({
+      data: {
+        user: { id: 'user-2' },
+        session: { user: { id: 'user-2' } },
+      },
+      error: null,
+    })
+
+    const response = await POST(request({ email: 'user@example.com', password: 'user-2-password' }))
+
+    expect(response.status).toBe(401)
+    expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(1, 'user-1', {
+      ban_duration: 'none',
+    })
+    expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(2, 'user-1', {
+      ban_duration: '720h',
+    })
+    expect(mockRpc).toHaveBeenCalledWith(
+      'abort_account_recovery_admission_atomic',
+      expect.objectContaining({ p_user_id: 'user-1' })
+    )
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'finish_account_recovery_admission_atomic',
+      expect.any(Object)
+    )
     expect(mockResumeStripeSubscriptionRenewals).not.toHaveBeenCalled()
   })
 
