@@ -78,10 +78,11 @@ function chainable(result: { count: number | null; error: null | { message: stri
   return handler()
 }
 
-function queueEventHealth(failed = 0, stale = 0) {
+function queueEventHealth(failed = 0, stale = 0, workerHeartbeats = 1) {
   const results = [
     { count: failed, error: null },
     { count: stale, error: null },
+    { count: workerHeartbeats, error: null },
   ]
   mockFrom.mockImplementation(() => chainable(results.shift()!))
 }
@@ -133,6 +134,7 @@ describe('GET /api/cron/stripe-readiness', () => {
       mode: 'test',
       promoEnabled: true,
       entitlementReadiness: readyEntitlementAuthority,
+      entitlementEffectWorkerRecent: true,
     })
     expect(Object.keys(body.entitlementReadiness).sort()).toEqual(
       [...STRIPE_PAID_READINESS_KEYS].sort()
@@ -413,6 +415,19 @@ describe('GET /api/cron/stripe-readiness', () => {
 
     expect(body.failures).toContain('2 Stripe webhook event(s) are failed')
     expect(mockSendAlert).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed when the entitlement effect worker has no recent success', async () => {
+    queueEventHealth(0, 0, 0)
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.entitlementEffectWorkerRecent).toBe(false)
+    expect(body.healthy).toBe(false)
+    expect(body.paidLaunchReady).toBe(false)
+    expect(body.failures).toContain('Stripe entitlement effect worker has no recent successful run')
+    expect(mockFrom).toHaveBeenCalledWith('pipeline_logs')
   })
 
   it('requires live keys before the production paywall can be enabled', async () => {
