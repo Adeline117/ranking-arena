@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const migration = readFileSync(
-  join(process.cwd(), 'supabase/migrations/20260729075500_preserve_stripe_event_idempotency.sql'),
+  join(process.cwd(), 'supabase/migrations/20260729075550_preserve_stripe_event_idempotency.sql'),
   'utf8'
 )
 const cleanupRoute = readFileSync(join(process.cwd(), 'app/api/cron/cleanup-data/route.ts'), 'utf8')

@@ -167,7 +167,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729075300_account_hard_delete_recovery_barrier.sql'
   const verifiedAuthProfileEmailMigration = '20260729075400_verified_auth_profile_email.sql'
   const preserveStripeEventIdempotencyMigration =
-    '20260729075500_preserve_stripe_event_idempotency.sql'
+    '20260729075550_preserve_stripe_event_idempotency.sql'
 
   assert.equal(predeploy.length, 129)
   assert.ok(predeploy.includes(accountHardDeleteRecoveryBarrierMigration))
