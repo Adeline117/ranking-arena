@@ -116,26 +116,14 @@ const _CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
 }
 
-// Per-endpoint cache policies:
-//   rankings → 5 min fresh, 10 min stale (data refreshes every ~5 min via cron)
-//   trader   → 5 min fresh, 10 min stale (same cadence as rankings)
-//   search   → 1 min fresh, 5 min stale  (needs fresher results for new traders)
-const CACHE_POLICY: Record<string, string> = {
-  rankings: 'public, s-maxage=300, stale-while-revalidate=600',
-  trader: 'public, s-maxage=300, stale-while-revalidate=600',
-  search: 'public, s-maxage=60, stale-while-revalidate=300',
-  platforms: 'public, s-maxage=3600, stale-while-revalidate=7200',
-  history: 'public, s-maxage=300, stale-while-revalidate=600',
-  bulk: 'public, s-maxage=300, stale-while-revalidate=600',
-}
+// Every response carries request-specific API-key / quota metadata. A shared
+// CDN cache would both expose another caller's allowance and bypass the
+// per-request quota increment, so the complete v3 surface must remain private.
+const PRIVATE_API_CACHE_CONTROL = 'private, no-store, max-age=0'
 
 function jsonResponse(data: unknown, meta: Record<string, unknown>, status = 200) {
-  const endpoint = (meta.endpoint as string) || ''
   const res = apiSuccess(data, meta, status)
-  res.headers.set(
-    'Cache-Control',
-    CACHE_POLICY[endpoint] || 'public, s-maxage=60, stale-while-revalidate=120'
-  )
+  res.headers.set('Cache-Control', PRIVATE_API_CACHE_CONTROL)
   res.headers.set('Access-Control-Allow-Origin', '*')
   res.headers.set('Access-Control-Allow-Credentials', 'false')
   return res
@@ -143,6 +131,7 @@ function jsonResponse(data: unknown, meta: Record<string, unknown>, status = 200
 
 function errorResponse(message: string, status: number) {
   const res = apiError('API_ERROR', message, status)
+  res.headers.set('Cache-Control', PRIVATE_API_CACHE_CONTROL)
   res.headers.set('Access-Control-Allow-Origin', '*')
   res.headers.set('Access-Control-Allow-Credentials', 'false')
   return res
@@ -453,7 +442,11 @@ export async function GET(request: NextRequest) {
         },
         {
           status: 429,
-          headers: { 'Access-Control-Allow-Origin': '*', 'Retry-After': '86400' },
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': PRIVATE_API_CACHE_CONTROL,
+            'Retry-After': '86400',
+          },
         }
       )
     }
@@ -479,7 +472,11 @@ export async function GET(request: NextRequest) {
         },
         {
           status: 429,
-          headers: { 'Access-Control-Allow-Origin': '*', 'Retry-After': '86400' },
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': PRIVATE_API_CACHE_CONTROL,
+            'Retry-After': '86400',
+          },
         }
       )
     }
@@ -537,8 +534,7 @@ export async function GET(request: NextRequest) {
         headers: {
           'Content-Type': 'text/csv; charset=utf-8',
           'Content-Disposition': `attachment; filename="arena-${endpoint}.csv"`,
-          'Cache-Control':
-            CACHE_POLICY[endpoint] || 'public, s-maxage=60, stale-while-revalidate=120',
+          'Cache-Control': PRIVATE_API_CACHE_CONTROL,
           'Access-Control-Allow-Origin': '*',
         },
       })
