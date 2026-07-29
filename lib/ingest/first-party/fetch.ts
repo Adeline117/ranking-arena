@@ -185,14 +185,27 @@ async function netTransfers(
     for (const r of rows ?? []) {
       const ts = num(r.timestamp)
       const amt = num(r.amount)
-      const type = String(
-        (r.info as { incomeType?: unknown })?.incomeType ?? r.type ?? ''
-      ).toUpperCase()
-      if (ts === null || amt === null) continue
-      if (type === 'TRANSFER' || type === 'DEPOSIT' || type === 'WITHDRAWAL') {
-        const sign = r.direction === 'out' || type === 'WITHDRAWAL' ? -1 : 1
-        out.push({ ts, amount: sign * Math.abs(amt) })
+      const info = r.info as {
+        incomeType?: unknown
+        type?: unknown
+        businessType?: unknown
       }
+      const rawType = String(
+        info?.incomeType ?? info?.type ?? info?.businessType ?? ''
+      ).toUpperCase()
+      const unifiedType = String(r.type ?? '').toUpperCase()
+      const isTransfer =
+        unifiedType === 'TRANSFER' ||
+        unifiedType === 'DEPOSIT' ||
+        unifiedType === 'WITHDRAWAL' ||
+        rawType.includes('TRANSFER') ||
+        rawType.includes('DEPOSIT') ||
+        rawType.includes('WITHDRAW')
+      if (!isTransfer) continue
+      if (ts === null || amt === null) return null
+      const sign =
+        r.direction === 'out' || rawType.includes('OUT') || rawType.includes('WITHDRAW') ? -1 : 1
+      out.push({ ts, amount: sign * Math.abs(amt) })
     }
   } catch {
     // Missing transfer evidence is unknown, never zero. The compute layer

@@ -203,4 +203,30 @@ describe('first-party account equity evidence', () => {
     expect(result.netTransfersIn).toEqual({})
     expect(result.netTransfersSinceLast).toBeNull()
   })
+
+  it('recognizes Bybit transfer directions from the raw transaction type', async () => {
+    const transferAt = NOW - 1_000
+    const result = await fetchFirstPartyAccount(
+      client({
+        fetchLedger: jest.fn().mockResolvedValue([
+          {
+            timestamp: transferAt,
+            amount: 40,
+            direction: 'out',
+            type: 'transaction',
+            info: { type: 'TRANSFER_OUT' },
+          },
+        ]),
+      }),
+      {
+        nowMs: NOW,
+        balanceSemantics: 'wallet_excludes_unrealized',
+        realizedPnlSource: 'positions_history',
+        lastSyncMs: NOW - DAY,
+      }
+    )
+
+    expect(result.netTransfersIn).toEqual({ 7: -40, 30: -40, 90: -40 })
+    expect(result.netTransfersSinceLast).toBe(-40)
+  })
 })
