@@ -4042,6 +4042,8 @@ export type Database = {
       }
       oauth_states: {
         Row: {
+          claim_expires_at: string | null
+          claim_token: string | null
           code_verifier: string | null
           created_at: string | null
           exchange: string
@@ -4051,6 +4053,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          claim_expires_at?: string | null
+          claim_token?: string | null
           code_verifier?: string | null
           created_at?: string | null
           exchange: string
@@ -4060,6 +4064,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          claim_expires_at?: string | null
+          claim_token?: string | null
           code_verifier?: string | null
           created_at?: string | null
           exchange?: string
@@ -10253,6 +10259,15 @@ export type Database = {
         }
         Returns: Json
       }
+      claim_exchange_oauth_state_atomic: {
+        Args: {
+          p_exchange: string
+          p_lease_seconds?: number
+          p_state: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       claim_portfolio_sync_generation_atomic: {
         Args: { p_actor_id: string; p_portfolio_id: string }
         Returns: Json
@@ -10294,6 +10309,16 @@ export type Database = {
           p_succeeded: boolean
         }
         Returns: string
+      }
+      finish_exchange_oauth_state_claim_atomic: {
+        Args: {
+          p_claim_token: string
+          p_exchange: string
+          p_state: string
+          p_succeeded: boolean
+          p_user_id: string
+        }
+        Returns: Json
       }
       project_api_tier_financial_reversal_atomic: {
         Args: { p_ownership_id: string; p_should_revoke: boolean }

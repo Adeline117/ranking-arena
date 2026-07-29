@@ -154,6 +154,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729071757_sealed_composite_rankings_rpc.sql
   20260729072000_stripe_refund_retry_authority.sql
   20260729075000_stripe_webhook_event_lease_authority.sql
+  20260729075100_atomic_exchange_oauth_state_claim.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055

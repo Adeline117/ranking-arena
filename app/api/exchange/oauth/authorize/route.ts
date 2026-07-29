@@ -8,13 +8,16 @@ import { env } from '@/lib/env'
 const logger = createLogger('exchange-oauth-authorize')
 
 // OAuth 配置（根据 Binance 官方文档）
-const OAUTH_CONFIG: Record<string, {
-  clientId: string
-  redirectUri: string
-  authUrl: string
-  scope: string
-  supportsPKCE?: boolean
-}> = {
+const OAUTH_CONFIG: Record<
+  string,
+  {
+    clientId: string
+    redirectUri: string
+    authUrl: string
+    scope: string
+    supportsPKCE?: boolean
+  }
+> = {
   binance: {
     clientId: process.env.BINANCE_OAUTH_CLIENT_ID || '',
     redirectUri: `${env.NEXT_PUBLIC_APP_URL}/exchange/auth/callback`,
@@ -47,10 +50,7 @@ function generateCodeVerifier(): string {
 function generateCodeChallenge(codeVerifier: string): string {
   const hash = crypto.createHash('sha256').update(codeVerifier).digest()
   // Base64 URL 编码：替换 + 为 -，/ 为 _，去掉末尾 =
-  return hash.toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
+  return hash.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 export async function GET(request: NextRequest) {
@@ -81,11 +81,11 @@ export async function GET(request: NextRequest) {
 
     // 生成 state（用于防止 CSRF 攻击）
     const state = crypto.randomBytes(20).toString('hex')
-    
+
     // PKCE 相关参数
     let codeVerifier: string | null = null
     let codeChallenge: string | null = null
-    
+
     if (usePKCE && config.supportsPKCE) {
       codeVerifier = generateCodeVerifier()
       codeChallenge = generateCodeChallenge(codeVerifier)
@@ -93,15 +93,13 @@ export async function GET(request: NextRequest) {
 
     // 存储 state 到数据库（关联 userId）
     const supabase = getSupabaseAdmin()
-    const { error: insertError } = await supabase
-      .from('oauth_states')
-      .insert({
-        user_id: userId,
-        exchange,
-        state,
-        code_verifier: codeVerifier, // 存储 code_verifier 用于后续验证
-        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10分钟过期
-      })
+    const { error: insertError } = await supabase.from('oauth_states').insert({
+      user_id: userId,
+      exchange,
+      state,
+      code_verifier: codeVerifier, // 存储 code_verifier 用于后续验证
+      expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10分钟过期
+    })
 
     if (insertError) {
       logger.error('Error storing OAuth state', { error: insertError, userId, exchange })
@@ -125,10 +123,20 @@ export async function GET(request: NextRequest) {
 
     const authUrl = `${config.authUrl}?${new URLSearchParams(params).toString()}`
 
-    return NextResponse.json({ 
-      authUrl, 
+    return NextResponse.json({
+      // Keep the legacy top-level fields during the rolling deploy. New
+      // clients require the viewer-bound envelope before navigating away.
+      authUrl,
       state,
       usePKCE: !!codeChallenge,
+      success: true,
+      data: {
+        viewerId: userId,
+        exchange,
+        authUrl,
+        state,
+        usePKCE: !!codeChallenge,
+      },
     })
   } catch (error: unknown) {
     logger.error('Error generating OAuth URL', { error })
