@@ -16,15 +16,17 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getLeaderboard, searchTraders } from '@/lib/data/unified'
-import { EXCHANGE_CONFIG, PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
 import { botMessages, type BotLang } from '@/lib/i18n/bot'
 import { BASE_URL } from '@/lib/constants/urls'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readLeaderboardPublicationAuthority } from '@/lib/rankings/read-publication-authority'
 import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+  readSealedRankingAuthorityGeneration,
+  readSealedRankingGeneration,
+} from '@/lib/rankings/read-sealed-ranking-generation'
+import type { SealedLeaderboardPublicationProofSet } from '@/lib/rankings/read-publication-proofs'
 
 // ============================================
 // Types
@@ -56,9 +58,6 @@ interface TelegramSendMessageParams {
 // ============================================
 
 const TELEGRAM_API = 'https://api.telegram.org/bot'
-const TELEGRAM_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 
 function getBotToken(): string {
   const token = process.env.TELEGRAM_BOT_TOKEN
@@ -146,6 +145,10 @@ async function handleRank(chatId: number, args: string, lang: BotLang): Promise<
 
 async function handleTop(chatId: number, args: string, lang: BotLang): Promise<void> {
   const exchangeArg = args.trim().toLowerCase()
+  const supabase = getSupabaseAdmin()
+  const authoritySources = await readLeaderboardPublicationAuthority(supabase, '90D', {
+    timeoutMs: 10_000,
+  })
 
   // Resolve exchange name to source key
   let platform: string | undefined
@@ -153,25 +156,25 @@ async function handleTop(chatId: number, args: string, lang: BotLang): Promise<v
     // Try exact match first
     if (
       EXCHANGE_CONFIG[exchangeArg as keyof typeof EXCHANGE_CONFIG] &&
-      isPublicRankingSourceAllowed(exchangeArg)
+      isPublicRankingSourceAllowed(exchangeArg) &&
+      authoritySources.includes(exchangeArg)
     ) {
       platform = exchangeArg
     } else {
       // Fuzzy match by display name
-      const entry = TELEGRAM_RANKING_SOURCES.map(
-        (source) => [source, EXCHANGE_CONFIG[source as keyof typeof EXCHANGE_CONFIG]] as const
-      ).find(
-        ([key, config]) =>
-          (config && config.name.toLowerCase() === exchangeArg) ||
-          key.replace(/_/g, '').includes(exchangeArg.replace(/[_\s.-]/g, ''))
-      )
+      const entry = authoritySources
+        .map((source) => [source, EXCHANGE_CONFIG[source as keyof typeof EXCHANGE_CONFIG]] as const)
+        .find(
+          ([key, config]) =>
+            (config && config.name.toLowerCase() === exchangeArg) ||
+            key.replace(/_/g, '').includes(exchangeArg.replace(/[_\s.-]/g, ''))
+        )
       if (entry) platform = entry[0]
     }
 
     if (!platform || !isPublicRankingSourceAllowed(platform)) {
-      const exchanges = TELEGRAM_RANKING_SOURCES.map(
-        (source) => [source, EXCHANGE_CONFIG[source as keyof typeof EXCHANGE_CONFIG]] as const
-      )
+      const exchanges = authoritySources
+        .map((source) => [source, EXCHANGE_CONFIG[source as keyof typeof EXCHANGE_CONFIG]] as const)
         .flatMap(([source, config]) =>
           config && config.reliability >= 60 ? [`  <code>${source}</code> — ${config.name}`] : []
         )
@@ -185,30 +188,34 @@ async function handleTop(chatId: number, args: string, lang: BotLang): Promise<v
     }
   }
 
-  const supabase = getSupabaseAdmin()
-  const proofSources = platform ? [platform] : TELEGRAM_RANKING_SOURCES
-  const sealedLeaderboard = await readSealedRankingGeneration(
-    supabase,
-    { season: '90D', sources: proofSources },
-    async (publication) => {
-      const result = await getLeaderboard(supabase, {
-        platform,
-        period: '90D',
-        limit: 10,
-        sortBy: 'rank',
-        scoreCohortId: publication.scoreCohortId,
-        allowedSources: proofSources,
+  const readPublication = async (publication: SealedLeaderboardPublicationProofSet) => {
+    const proofSources = publication.proofs.map((proof) => proof.source)
+    const result = await getLeaderboard(supabase, {
+      platform,
+      period: '90D',
+      limit: 10,
+      sortBy: 'rank',
+      scoreCohortId: publication.scoreCohortId,
+      allowedSources: proofSources,
+    })
+    if (result.error) {
+      throw new Error(`Telegram leaderboard query failed: ${result.error}`)
+    }
+    if (result.traders.some((trader) => !isPublicRankingSourceAllowed(trader.platform))) {
+      throw new Error('Telegram leaderboard crossed the public source boundary')
+    }
+    return result.traders
+  }
+  const sealedLeaderboard = platform
+    ? await readSealedRankingGeneration(
+        supabase,
+        { season: '90D', sources: [platform] },
+        readPublication,
+        { timeoutMs: 10_000 }
+      )
+    : await readSealedRankingAuthorityGeneration(supabase, '90D', readPublication, {
+        timeoutMs: 10_000,
       })
-      if (result.error) {
-        throw new Error(`Telegram leaderboard query failed: ${result.error}`)
-      }
-      if (result.traders.some((trader) => !isPublicRankingSourceAllowed(trader.platform))) {
-        throw new Error('Telegram leaderboard crossed the public source boundary')
-      }
-      return result.traders
-    },
-    { timeoutMs: 10_000 }
-  )
   const traders = sealedLeaderboard.value
 
   if (!traders || traders.length === 0) {
@@ -417,9 +424,9 @@ async function handleStats(chatId: number, lang: BotLang): Promise<void> {
   // set twice prevents /stats from mixing generations or counting quarantined
   // and draft rows from the mutable leaderboard table. These are source boards,
   // not a count of distinct exchange companies.
-  const sealedStats = await readSealedRankingGeneration(
+  const sealedStats = await readSealedRankingAuthorityGeneration(
     supabase,
-    { season: '90D', sources: TELEGRAM_RANKING_SOURCES },
+    '90D',
     async (publication) => ({
       rankedTraderCount: publication.proofs.reduce(
         (total, proof) => total + proof.published_rank_count,
