@@ -228,7 +228,8 @@ function unwrap(payload: unknown, url: string): RankingData {
 async function captureOkxWeb3Leaderboard(
   session: FetchSession,
   src: SourceRow,
-  timeframe: RankingTimeframe
+  timeframe: RankingTimeframe,
+  options?: { signal?: AbortSignal }
 ) {
   chainId(src)
   const pageSize = configuredPageSize(src.page_size)
@@ -253,6 +254,7 @@ async function captureOkxWeb3Leaderboard(
     extractMeta: (payload, requestPageIndex) =>
       okxWeb3LeaderboardMeta(payload, requestPageIndex, pageSize, timeframe),
     pageSize,
+    signal: options?.signal,
     callerPageCap,
   })
 }

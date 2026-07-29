@@ -164,6 +164,17 @@ describe('parseBitgetBotsBoardPage (live-captured fixtures, 2026-06-11)', () => 
         ctx
       )
     ).toThrow('data contract is unsupported')
+
+    for (const request_page_index of ['1', 0, -1, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => parseBitgetBotsBoardPage({ ...envelope, request_page_index }, ctx)).toThrow(
+        'request_page_index must be a positive safe-integer number'
+      )
+    }
+    for (const request_page_size of ['20', 0, -1, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => parseBitgetBotsBoardPage({ ...envelope, request_page_size }, ctx)).toThrow(
+        'request_page_size must be a positive safe-integer number'
+      )
+    }
   })
 
   it('fails closed instead of silently swallowing cards without exact board identity', () => {
@@ -245,6 +256,31 @@ describe('assertBitgetBotsLeaderboardPublication', () => {
     expect(() =>
       assertBitgetBotsLeaderboardPublication(publicationResult(gridOnly), source(), 30)
     ).toThrow('both configured strategy partitions')
+  })
+
+  it('validates partial upstream-error evidence without claiming a complete publication', () => {
+    const gridOnly = fullFuturesRows().filter((row) => row.botStrategy === 'grid')
+    expect(() =>
+      assertBitgetBotsLeaderboardPublication(publicationResult(gridOnly), source(), 30, {
+        purpose: 'evidence_only',
+      })
+    ).not.toThrow()
+    expect(() =>
+      assertBitgetBotsLeaderboardPublication(
+        { parsedRows: [], validRows: [], rejectedRowCount: 0 },
+        source(),
+        30,
+        { purpose: 'evidence_only' }
+      )
+    ).not.toThrow()
+    expect(() =>
+      assertBitgetBotsLeaderboardPublication(
+        { parsedRows: gridOnly, validRows: gridOnly.slice(1), rejectedRowCount: 0 },
+        source(),
+        30,
+        { purpose: 'evidence_only' }
+      )
+    ).toThrow('changed the board population')
   })
 
   it('rejects malformed or crossed bot metadata before publication', () => {

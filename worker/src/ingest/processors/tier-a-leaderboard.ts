@@ -24,17 +24,27 @@ import {
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import {
   LeaderboardCaptureUpstreamError,
+  isPartitionedNumericLeaderboardCapture,
+  type AnyLeaderboardCapture,
   type LeaderboardCapture,
+  type PartitionedNumericLeaderboardCapture,
 } from '@/lib/ingest/fetch/capture'
 import {
   buildLeaderboardAcquisitionManifest,
   buildLeaderboardAcquisitionManifestV3,
+  buildLeaderboardAcquisitionManifestV4,
+  LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+  projectPartitionedNumericParserPage,
+  type BuildLeaderboardAcquisitionManifestInput,
+  type BuildLeaderboardAcquisitionManifestV4Input,
 } from '@/lib/ingest/acquisition-manifest'
 import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+  findRegisteredAttemptBoundLeaderboardAcquisitionContract,
   finishLeaderboardAcquisitionAttempt,
-  hasRegisteredAttemptBoundLeaderboardAcquisitionContract,
   startLeaderboardAcquisitionAttempt,
+  type AttemptBoundLeaderboardAcquisitionContract,
   type LeaderboardAcquisitionAttempt,
   type LeaderboardAcquisitionFailureStage,
   type LeaderboardAcquisitionReasonCode,
@@ -45,11 +55,16 @@ import {
   writeRawObject,
   type RawObjectReceipt,
 } from '@/lib/ingest/raw'
-import { STRICT_CANONICAL_JSON_CONTRACT } from '@/lib/ingest/strict-canonical-json'
+import {
+  STRICT_CANONICAL_JSON_CONTRACT,
+  strictCanonicalJson,
+  strictCanonicalSha256,
+} from '@/lib/ingest/strict-canonical-json'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
 import {
   hasRegisteredLeaderboardMetricTrust,
+  type LeaderboardAttemptBoundV4Bundle,
   type LeaderboardMetricTrustBundle,
 } from '@/lib/ingest/serving/metric-trust-publish'
 import type { TierJobData } from '../queues'
@@ -60,6 +75,7 @@ import {
   type AuthorizedConsumedRegionContext,
 } from '../consumed-region-context'
 import {
+  publishFencedAttemptBoundLeaderboardSnapshot,
   publishFencedBoardSeries,
   publishFencedLeaderboardSnapshot,
   publishFencedTrustedLeaderboardSnapshot,
@@ -75,10 +91,10 @@ export interface TierAResult {
 }
 
 type TierAAcquisition =
-  | { kind: 'capture'; capture: LeaderboardCapture }
+  | { kind: 'capture'; capture: AnyLeaderboardCapture }
   | {
       kind: 'captured_error'
-      capture: LeaderboardCapture
+      capture: AnyLeaderboardCapture
       error: LeaderboardCaptureUpstreamError
     }
   | { kind: 'legacy'; pages: RawPage[] }
@@ -87,13 +103,14 @@ async function acquireLeaderboard(
   adapter: SourceAdapter,
   session: Parameters<SourceAdapter['listLeaderboard']>[0],
   src: Parameters<SourceAdapter['listLeaderboard']>[1],
-  timeframe: RankingTimeframe
+  timeframe: RankingTimeframe,
+  signal?: AbortSignal
 ): Promise<TierAAcquisition> {
   if (adapter.captureLeaderboard) {
     try {
       return {
         kind: 'capture',
-        capture: await adapter.captureLeaderboard(session, src, timeframe),
+        capture: await adapter.captureLeaderboard(session, src, timeframe, { signal }),
       }
     } catch (cause) {
       if (cause instanceof LeaderboardCaptureUpstreamError) {
@@ -104,7 +121,10 @@ async function acquireLeaderboard(
   }
 
   const pages: RawPage[] = []
-  for await (const page of adapter.listLeaderboard(session, src, timeframe)) pages.push(page)
+  for await (const page of adapter.listLeaderboard(session, src, timeframe)) {
+    throwIfTierACancelled(signal)
+    pages.push(page)
+  }
   return { kind: 'legacy', pages }
 }
 
@@ -115,6 +135,30 @@ function verifiedRunnerGitSha(): string | null {
 
 function attemptBoundCaptureEnabled(): boolean {
   return process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED === 'true'
+}
+
+function authoritativePartitionIds(
+  adapter: SourceAdapter,
+  src: SourceRow,
+  timeframe: RankingTimeframe
+): readonly string[] {
+  if (!adapter.leaderboardPartitionIds) {
+    throw new TypeError(
+      `[tier-a] ${src.slug} v4 capture requires authoritative adapter partition ids`
+    )
+  }
+  const partitionIds = [...adapter.leaderboardPartitionIds(src, timeframe)]
+  if (
+    partitionIds.length < 2 ||
+    new Set(partitionIds).size !== partitionIds.length ||
+    partitionIds.some(
+      (partitionId) =>
+        typeof partitionId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(partitionId)
+    )
+  ) {
+    throw new TypeError(`[tier-a] ${src.slug} v4 partition ids are not canonical and unique`)
+  }
+  return Object.freeze(partitionIds)
 }
 
 function completedTimeframesFrom(value: unknown): RankingTimeframe[] {
@@ -175,6 +219,12 @@ class TierAAttemptFinalizationError extends AggregateError {
   }
 }
 
+function throwIfTierACancelled(signal?: AbortSignal): void {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  throw reason instanceof Error ? reason : new Error('[tier-a] execution cancelled')
+}
+
 type AttemptLifecycle = 'not_started' | 'open' | 'finalizing' | 'terminal'
 type ProcessingFailureReason = Exclude<
   LeaderboardAcquisitionReasonCode,
@@ -188,15 +238,15 @@ interface CaptureManifestInput {
   completedAt: string
   runnerGitSha: string | null
   cycleId: string | null
-  capture: LeaderboardCapture
+  capture: AnyLeaderboardCapture
   capturedFailure: boolean
   acceptedPopulation: number
   rejectedRowCount: number
 }
 
 function captureManifestInput(
-  input: CaptureManifestInput
-): Parameters<typeof buildLeaderboardAcquisitionManifest>[0] {
+  input: CaptureManifestInput & { capture: LeaderboardCapture }
+): BuildLeaderboardAcquisitionManifestInput {
   const { src, capture } = input
   const unavailableCapture = input.capturedFailure && capture.sourcePages.length === 0
   if (
@@ -246,20 +296,112 @@ function captureManifestInput(
 }
 
 function buildCaptureManifest(input: CaptureManifestInput) {
-  return buildLeaderboardAcquisitionManifest(captureManifestInput(input))
+  if (isPartitionedNumericLeaderboardCapture(input.capture)) {
+    throw new TypeError('[tier-a] partitioned capture requires an attempt-bound v4 contract')
+  }
+  return buildLeaderboardAcquisitionManifest(
+    captureManifestInput({ ...input, capture: input.capture })
+  )
 }
 
 function buildAttemptBoundCaptureManifest(
-  input: CaptureManifestInput & { attempt: LeaderboardAcquisitionAttempt }
+  input: CaptureManifestInput & {
+    attempt: LeaderboardAcquisitionAttempt
+    configuredPartitionIds: readonly string[] | null
+  }
 ) {
-  return buildLeaderboardAcquisitionManifestV3({
-    ...captureManifestInput(input),
-    acquisition_attempt: {
-      binding_contract: input.attempt.attemptBindingContract,
-      attempt_id: input.attempt.attemptId,
-      attempt_seq: input.attempt.attemptSeq,
+  const unavailableCapture = input.capturedFailure && input.capture.sourcePages.length === 0
+  if (
+    unavailableCapture &&
+    (input.capture.parsePages.length !== 0 ||
+      input.capture.parserTransformation.source_page_ordinals.length !== 0)
+  ) {
+    throw new TypeError('[tier-a] unavailable capture cannot contain parser pages')
+  }
+  if (
+    input.capturedFailure &&
+    !unavailableCapture &&
+    input.capture.terminationReason !== 'upstream_error'
+  ) {
+    throw new TypeError('[tier-a] captured upstream evidence must terminate as upstream_error')
+  }
+  const acquisitionAttempt = {
+    binding_contract: input.attempt.attemptBindingContract,
+    attempt_id: input.attempt.attemptId,
+    attempt_seq: input.attempt.attemptSeq,
+  }
+  if (input.attempt.captureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT) {
+    if (isPartitionedNumericLeaderboardCapture(input.capture)) {
+      throw new TypeError('[tier-a] attempt-bound v3 requires an identity capture')
+    }
+    return {
+      kind: 'v3' as const,
+      built: buildLeaderboardAcquisitionManifestV3({
+        ...captureManifestInput({ ...input, capture: input.capture }),
+        acquisition_attempt: acquisitionAttempt,
+      }),
+    }
+  }
+  if (input.attempt.captureContract !== ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT) {
+    throw new TypeError('[tier-a] attempt-bound capture contract is unsupported')
+  }
+  if (!isPartitionedNumericLeaderboardCapture(input.capture)) {
+    throw new TypeError('[tier-a] attempt-bound v4 requires a partitioned numeric capture')
+  }
+  if (input.configuredPartitionIds === null) {
+    throw new TypeError('[tier-a] attempt-bound v4 requires authoritative partition ids')
+  }
+  const expectedPartitionIds = input.capture.paginationTopology.expected_partition_ids
+  if (
+    expectedPartitionIds.length !== input.configuredPartitionIds.length ||
+    expectedPartitionIds.some(
+      (partitionId, index) => partitionId !== input.configuredPartitionIds![index]
+    )
+  ) {
+    throw new TypeError(
+      '[tier-a] captured partition topology does not match authoritative source configuration'
+    )
+  }
+  const { expected_partition_ids: _capturedExpectedIds, ...paginationTopology } =
+    input.capture.paginationTopology
+  const manifestInput: BuildLeaderboardAcquisitionManifestV4Input = {
+    source: {
+      id: input.src.id,
+      slug: input.src.slug,
+      adapter_slug: input.src.adapter_slug,
+      configured_page_size: input.src.page_size,
+      configured_pagination_kind: input.src.pagination_kind,
+      configured_partition_ids: [...input.configuredPartitionIds],
     },
-  })
+    surface: 'tier_a_leaderboard',
+    timeframe: input.timeframe,
+    started_at: input.startedAt,
+    completed_at: input.completedAt,
+    runner_git_sha: input.runnerGitSha,
+    observation_cycle_id: input.cycleId,
+    capture_evidence_state:
+      input.capturedFailure && input.capture.sourcePages.length === 0 ? 'unavailable' : 'verified',
+    termination_reason:
+      input.capturedFailure && input.capture.sourcePages.length === 0
+        ? 'unknown'
+        : input.capture.terminationReason,
+    capture_config: input.capture.captureConfig,
+    source_pages: input.capture.sourcePages.map((sourcePage) => ({
+      raw_page: sourcePage.rawPage,
+      source_row_count: sourcePage.sourceRowCount,
+      request_sha256: sourcePage.requestSha256,
+      http_status: sourcePage.httpStatus,
+      pagination_position: sourcePage.paginationPosition,
+      source_reports: sourcePage.sourceReports,
+    })),
+    parse_pages: input.capture.parsePages,
+    parser_transformation: input.capture.parserTransformation,
+    accepted_population: input.acceptedPopulation,
+    rejected_row_count: input.rejectedRowCount,
+    acquisition_attempt: acquisitionAttempt,
+    pagination_topology: paginationTopology,
+  }
+  return { kind: 'v4' as const, built: buildLeaderboardAcquisitionManifestV4(manifestInput) }
 }
 
 interface CapturedPageRankAnchor {
@@ -268,7 +410,7 @@ interface CapturedPageRankAnchor {
   sourceRowCount: number
 }
 
-function capturedPageRankAnchors(capture: LeaderboardCapture): CapturedPageRankAnchor[] {
+function capturedIdentityPageRankAnchors(capture: LeaderboardCapture): CapturedPageRankAnchor[] {
   const ordinals = capture.parserTransformation.source_page_ordinals
   if (ordinals.length !== capture.parsePages.length) {
     throw new TypeError('[tier-a] parser pages require one source-page ordinal each')
@@ -316,6 +458,172 @@ function capturedPageRankAnchors(capture: LeaderboardCapture): CapturedPageRankA
     }
     return anchor
   })
+}
+
+function assertDenseOrdinals(
+  ordinals: readonly number[],
+  expectedCount: number,
+  label: string
+): void {
+  if (
+    ordinals.length !== expectedCount ||
+    ordinals.some((ordinal, index) => ordinal !== index + 1)
+  ) {
+    throw new TypeError(`[tier-a] ${label} must form one dense ordered cover`)
+  }
+}
+
+function capturedPartitionedPageRankAnchors(
+  capture: PartitionedNumericLeaderboardCapture,
+  configuredPageSize: number | null
+): CapturedPageRankAnchor[] {
+  const topology = capture.paginationTopology
+  const transformation = capture.parserTransformation
+  if (
+    transformation.algorithm_contract !== LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT ||
+    configuredPageSize === null ||
+    !Number.isSafeInteger(configuredPageSize) ||
+    Object.is(configuredPageSize, -0) ||
+    configuredPageSize < 1
+  ) {
+    throw new TypeError(
+      '[tier-a] partitioned parser projection requires its exact algorithm and page size'
+    )
+  }
+  if (
+    topology.expected_partition_ids.length !== topology.partitions.length ||
+    topology.partitions.some(
+      (partition, index) => partition.partition_id !== topology.expected_partition_ids[index]
+    ) ||
+    new Set(topology.expected_partition_ids).size !== topology.expected_partition_ids.length
+  ) {
+    throw new TypeError('[tier-a] captured partitions must exactly match expected ids and order')
+  }
+  if (
+    transformation.source_page_ordinals.length !== capture.parsePages.length ||
+    transformation.page_bindings.length !== capture.parsePages.length
+  ) {
+    throw new TypeError('[tier-a] partitioned parser pages require one exact binding each')
+  }
+
+  const topologySourceOrdinals = topology.partitions.flatMap(
+    (partition) => partition.source_page_ordinals
+  )
+  const topologyParserOrdinals = topology.partitions.flatMap(
+    (partition) => partition.parser_page_ordinals
+  )
+  assertDenseOrdinals(
+    topologySourceOrdinals,
+    capture.sourcePages.length,
+    'partition source-page ordinals'
+  )
+  assertDenseOrdinals(
+    topologyParserOrdinals,
+    capture.parsePages.length,
+    'partition parser-page ordinals'
+  )
+
+  const parserPartitionByOrdinal = new Map<
+    number,
+    { partitionId: string; partitionOrdinal: number }
+  >()
+
+  for (const [partitionIndex, partition] of topology.partitions.entries()) {
+    for (const parserPageOrdinal of partition.parser_page_ordinals) {
+      parserPartitionByOrdinal.set(parserPageOrdinal, {
+        partitionId: partition.partition_id,
+        partitionOrdinal: partitionIndex + 1,
+      })
+    }
+    const positiveSourceOrdinals: number[] = []
+    for (const [localPageIndex, sourcePageOrdinal] of partition.source_page_ordinals.entries()) {
+      const sourcePage = capture.sourcePages[sourcePageOrdinal - 1]
+      const position = sourcePage?.paginationPosition
+      if (
+        !sourcePage ||
+        sourcePage.rawPage.pageIndex !== sourcePageOrdinal ||
+        position?.kind !== 'partitioned_page_index' ||
+        position.partition_ordinal !== partitionIndex + 1 ||
+        position.partition_id !== partition.partition_id ||
+        position.request_page_index !== localPageIndex + 1
+      ) {
+        throw new TypeError(
+          '[tier-a] partition source pages must bind their exact ordered topology'
+        )
+      }
+      if (
+        !Number.isSafeInteger(sourcePage.sourceRowCount) ||
+        Object.is(sourcePage.sourceRowCount, -0) ||
+        sourcePage.sourceRowCount < 0
+      ) {
+        throw new TypeError('[tier-a] partition source row count must be non-negative')
+      }
+      if (sourcePage.sourceRowCount > 0) positiveSourceOrdinals.push(sourcePageOrdinal)
+    }
+    const boundSourceOrdinals = partition.parser_page_ordinals.map(
+      (parserPageOrdinal) => transformation.source_page_ordinals[parserPageOrdinal - 1]
+    )
+    if (
+      boundSourceOrdinals.length !== positiveSourceOrdinals.length ||
+      boundSourceOrdinals.some(
+        (sourcePageOrdinal, index) => sourcePageOrdinal !== positiveSourceOrdinals[index]
+      )
+    ) {
+      throw new TypeError(
+        '[tier-a] partition parser pages must exactly cover positive source pages'
+      )
+    }
+  }
+
+  let rankBase = 0
+  return capture.parsePages.map((parsePage, pageOffset) => {
+    const sourcePageOrdinal = transformation.source_page_ordinals[pageOffset]
+    const binding = transformation.page_bindings[pageOffset]
+    const sourcePage = capture.sourcePages[sourcePageOrdinal - 1]
+    const position = sourcePage?.paginationPosition
+    const topologyPartition = parserPartitionByOrdinal.get(pageOffset + 1)
+    if (
+      !sourcePage ||
+      !binding ||
+      !topologyPartition ||
+      binding.source_page_ordinal !== sourcePageOrdinal ||
+      position?.kind !== 'partitioned_page_index' ||
+      binding.partition_ordinal !== topologyPartition.partitionOrdinal ||
+      binding.partition_id !== topologyPartition.partitionId ||
+      binding.partition_ordinal !== position.partition_ordinal ||
+      binding.partition_id !== position.partition_id ||
+      binding.request_page_index !== position.request_page_index ||
+      binding.request_page_size !== configuredPageSize ||
+      strictCanonicalJson(projectPartitionedNumericParserPage(sourcePage.rawPage, binding)) !==
+        strictCanonicalJson(parsePage)
+    ) {
+      throw new TypeError(
+        '[tier-a] partitioned parser projection is not canonically bound to its source page'
+      )
+    }
+    if (
+      !Number.isSafeInteger(sourcePage.sourceRowCount) ||
+      Object.is(sourcePage.sourceRowCount, -0) ||
+      sourcePage.sourceRowCount < 1
+    ) {
+      throw new TypeError('[tier-a] partitioned parser page must have a positive source row count')
+    }
+    const anchor = { sourcePageOrdinal, rankBase, sourceRowCount: sourcePage.sourceRowCount }
+    rankBase += sourcePage.sourceRowCount
+    if (!Number.isSafeInteger(rankBase)) {
+      throw new TypeError('[tier-a] captured rank base exceeds the safe integer range')
+    }
+    return anchor
+  })
+}
+
+function capturedPageRankAnchors(
+  capture: AnyLeaderboardCapture,
+  configuredPageSize: number | null
+): CapturedPageRankAnchor[] {
+  return isPartitionedNumericLeaderboardCapture(capture)
+    ? capturedPartitionedPageRankAnchors(capture, configuredPageSize)
+    : capturedIdentityPageRankAnchors(capture)
 }
 
 function parseLeaderboardRows(input: {
@@ -413,10 +721,32 @@ async function persistUnprocessedCaptureRaw(input: {
   cycleId: string | null
   startedAt: string
   completedAt: string
-  capture: LeaderboardCapture
+  capture: AnyLeaderboardCapture
   priorFailures: readonly unknown[]
   attempt?: LeaderboardAcquisitionAttempt | null
 }): Promise<RawObjectReceipt> {
+  const captureEvidence = {
+    mode: isPartitionedNumericLeaderboardCapture(input.capture)
+      ? ('partitioned_numeric' as const)
+      : ('identity' as const),
+    capture_config: input.capture.captureConfig,
+    parser_transformation: input.capture.parserTransformation,
+    source_pages: input.capture.sourcePages.map((sourcePage, index) => ({
+      ordinal: index + 1,
+      stored_page_index: sourcePage.rawPage.pageIndex,
+      url: sourcePage.rawPage.url,
+      fetched_at: sourcePage.rawPage.fetchedAt,
+      payload_sha256: strictCanonicalSha256(sourcePage.rawPage.payload),
+      source_row_count: sourcePage.sourceRowCount,
+      request_sha256: sourcePage.requestSha256,
+      http_status: sourcePage.httpStatus,
+      pagination_position: sourcePage.paginationPosition,
+      source_reports: sourcePage.sourceReports,
+    })),
+    ...(isPartitionedNumericLeaderboardCapture(input.capture)
+      ? { pagination_topology: input.capture.paginationTopology }
+      : {}),
+  }
   try {
     return await writeRawObject({
       sourceId: input.src.id,
@@ -434,6 +764,7 @@ async function persistUnprocessedCaptureRaw(input: {
                 binding_contract: input.attempt.attemptBindingContract,
                 attempt_id: input.attempt.attemptId,
                 attempt_seq: input.attempt.attemptSeq,
+                capture_contract: input.attempt.captureContract,
                 runner_git_sha: input.attempt.runnerGitSha,
                 capture_started_at: input.attempt.recordedStartedAt,
                 capture_completed_at: input.completedAt,
@@ -448,6 +779,7 @@ async function persistUnprocessedCaptureRaw(input: {
           capture_started_at: input.startedAt,
           capture_completed_at: input.completedAt,
         },
+        capture_evidence: captureEvidence,
       },
     })
   } catch (persistenceCause) {
@@ -488,9 +820,12 @@ async function persistCompletedTimeframe(
 
 export async function processTierA(
   job: Job<TierJobData>,
-  context: AuthorizedConsumedRegionContext
+  context: AuthorizedConsumedRegionContext,
+  signal?: AbortSignal
 ): Promise<TierAResult[]> {
+  throwIfTierACancelled(signal)
   const src = await getSourceBySlug(job.data.sourceSlug)
+  throwIfTierACancelled(signal)
   assertSourceMatchesConsumedRegion(src, context)
   if (src.status !== 'active') {
     console.log(`[tier-a] ${src.slug} is ${src.status} — skipping`)
@@ -514,15 +849,35 @@ export async function processTierA(
 
   const adapter = getAdapter(src.adapter_slug)
   const cycleId = observationCycleId(job, 'tier-a', src.slug)
-  // A registered contract means the database can understand v3 evidence; it
-  // is not rollout approval. Keep acquisition on v2 until an operator enables
-  // the worker only after the v3 database authority and canaries are live.
-  const attemptBoundCapture =
-    attemptBoundCaptureEnabled() &&
-    (await hasRegisteredAttemptBoundLeaderboardAcquisitionContract({
-      sourceId: src.id,
-      adapterSlug: src.adapter_slug,
-    }))
+  const desiredCaptureContract: AttemptBoundLeaderboardAcquisitionContract =
+    adapter.leaderboardAcquisitionContract ?? ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT
+  const rolloutEnabled = attemptBoundCaptureEnabled()
+  if (
+    desiredCaptureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT &&
+    !rolloutEnabled
+  ) {
+    throw new Error(`[tier-a] ${src.slug} v4 capture rollout is not enabled`)
+  }
+  // Registry selection is exact and happens before any upstream session. A
+  // V4 adapter can never borrow a V3 registration or fall back to legacy/V2.
+  const registeredCaptureContract = rolloutEnabled
+    ? await findRegisteredAttemptBoundLeaderboardAcquisitionContract({
+        sourceId: src.id,
+        adapterSlug: src.adapter_slug,
+        captureContract: desiredCaptureContract,
+      })
+    : null
+  throwIfTierACancelled(signal)
+  if (registeredCaptureContract !== null && registeredCaptureContract !== desiredCaptureContract) {
+    throw new Error(`[tier-a] ${src.slug} registry returned a conflicting capture contract`)
+  }
+  if (
+    desiredCaptureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT &&
+    registeredCaptureContract === null
+  ) {
+    throw new Error(`[tier-a] ${src.slug} v4 capture contract is not exactly registered`)
+  }
+  const attemptBoundCapture = registeredCaptureContract !== null
   const workerRegion = context.executionRegion
   // Freeze provenance before the first upstream request. A long-running crawl
   // must not bind later timeframes to a different checkout/deployment SHA.
@@ -537,19 +892,36 @@ export async function processTierA(
       `[tier-a] ${src.slug} attempt-bound capture requires an exact deployed runner SHA`
     )
   }
+  const partitionIdsByTimeframe = new Map<RankingTimeframe, readonly string[]>()
+  if (desiredCaptureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT) {
+    for (const timeframe of pendingTimeframes) {
+      partitionIdsByTimeframe.set(timeframe, authoritativePartitionIds(adapter, src, timeframe))
+    }
+  }
   const results: TierAResult[] = []
   const failures: Array<{ timeframe: number; error: Error }> = []
   const pendingFieldInventory: Promise<void>[] = []
   let terminalFailure: { error: unknown } | null = null
   let sessionCloseFailure: Error | null = null
   let persistedJobData: TierJobData = { ...job.data }
+  const publicationSignalArgs: [] | [AbortSignal] = signal ? [signal] : []
   // Unregistered sources retain their existing session/capture path. A
   // registered source opens lazily only after the first pending window has a
   // durable attempt, so session-open failure is itself terminal evidence.
-  let session = attemptBoundCapture ? null : await openSession(src)
+  let session: Awaited<ReturnType<typeof openSession>> | null = null
+  const closeSessionOnAbort = () => {
+    if (session !== null) void session.close().catch(() => undefined)
+  }
+  signal?.addEventListener('abort', closeSessionOnAbort, { once: true })
 
   try {
+    if (!attemptBoundCapture) {
+      throwIfTierACancelled(signal)
+      session = await openSession(src)
+      throwIfTierACancelled(signal)
+    }
     for (const timeframe of pendingTimeframes) {
+      throwIfTierACancelled(signal)
       let acquisitionAttempt: LeaderboardAcquisitionAttempt | null = null
       let attemptLifecycle: AttemptLifecycle = 'not_started'
       let failureStage: LeaderboardAcquisitionFailureStage = 'upstream_fetch'
@@ -559,20 +931,25 @@ export async function processTierA(
       let finalizationPriorFailures: readonly unknown[] = []
       try {
         if (attemptBoundCapture) {
+          throwIfTierACancelled(signal)
           acquisitionAttempt = await startLeaderboardAcquisitionAttempt({
             sourceId: src.id,
             timeframe,
             observationCycleId: cycleId,
             queueJobId: job.id === undefined ? null : String(job.id),
             queueAttempt: job.attemptsMade,
-            captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+            captureContract: registeredCaptureContract!,
             runnerGitSha,
             workerRegion,
           })
+          throwIfTierACancelled(signal)
           attemptLifecycle = 'open'
           failureStage = 'session_open'
           failureReason = 'upstream_unavailable'
-          if (session === null) session = await openSession(src)
+          if (session === null) {
+            session = await openSession(src)
+            throwIfTierACancelled(signal)
+          }
         }
         if (session === null) {
           throw new Error('source session was not opened')
@@ -581,7 +958,8 @@ export async function processTierA(
         const scrapedAt = acquisitionAttempt?.recordedStartedAt ?? new Date().toISOString()
         failureStage = 'upstream_fetch'
         failureReason = 'unknown_failure'
-        const acquisition = await acquireLeaderboard(adapter, session, src, timeframe)
+        const acquisition = await acquireLeaderboard(adapter, session, src, timeframe, signal)
+        throwIfTierACancelled(signal)
         const capture = acquisition.kind === 'legacy' ? null : acquisition.capture
         // This is the acquisition boundary, not a parser/runtime duration.
         captureCompletedAt = capture ? new Date().toISOString() : null
@@ -594,11 +972,13 @@ export async function processTierA(
             : acquisition.capture.sourcePages.map((sourcePage) => sourcePage.rawPage)
         let rawObjectId: number | null = null
         let metricTrust: LeaderboardMetricTrustBundle | null = null
+        let attemptBoundV4: LeaderboardAttemptBoundV4Bundle | null = null
 
         // Legacy adapters retain the existing RAW-first path. Capture-aware
         // adapters atomically persist source payload + manifest after the
         // parser has produced honest accepted/rejected counts below.
         if (acquisition.kind === 'legacy') {
+          throwIfTierACancelled(signal)
           const rawReceipt = await writeRawObject({
             sourceId: src.id,
             sourceSlug: src.slug,
@@ -610,6 +990,7 @@ export async function processTierA(
               ...(cycleId ? { observation_cycle_id: cycleId } : {}),
             },
           })
+          throwIfTierACancelled(signal)
           rawObjectId = rawReceipt.id
         }
 
@@ -618,6 +999,7 @@ export async function processTierA(
         // best-effort, but track it through processor drain so regional
         // authority cannot be released while its database write is detached.
         if (pages.length > 0) {
+          throwIfTierACancelled(signal)
           pendingFieldInventory.push(
             recordFieldInventory(src.id, 'tier_a', pages[0].payload).catch(() => undefined)
           )
@@ -642,7 +1024,9 @@ export async function processTierA(
         failureStage = 'parse_validate_manifest'
         failureReason = 'parse_failed'
         try {
-          const captureRankAnchors = capture ? capturedPageRankAnchors(capture) : undefined
+          const captureRankAnchors = capture
+            ? capturedPageRankAnchors(capture, src.page_size)
+            : undefined
           rows = parseLeaderboardRows({
             adapter,
             pages,
@@ -659,7 +1043,8 @@ export async function processTierA(
               rejectedRowCount: validated.rejects.length,
             },
             src,
-            timeframe
+            timeframe,
+            { purpose: capturedError ? 'evidence_only' : 'publication' }
           )
           failureReason = 'manifest_failed'
           const manifestInput = capture
@@ -681,6 +1066,7 @@ export async function processTierA(
               ? buildAttemptBoundCaptureManifest({
                   ...manifestInput,
                   attempt: acquisitionAttempt,
+                  configuredPartitionIds: partitionIdsByTimeframe.get(timeframe) ?? null,
                 })
               : null
           built = manifestInput && !acquisitionAttempt ? buildCaptureManifest(manifestInput) : null
@@ -692,6 +1078,7 @@ export async function processTierA(
               : [processingCause]
             failureStage = 'raw_persistence'
             failureReason = 'raw_persistence_failed'
+            throwIfTierACancelled(signal)
             const diagnostic = await persistUnprocessedCaptureRaw({
               src,
               timeframe,
@@ -702,6 +1089,7 @@ export async function processTierA(
               priorFailures,
               attempt: acquisitionAttempt,
             })
+            throwIfTierACancelled(signal)
             diagnosticRawObjectId = diagnostic.id
             failureStage = 'parse_validate_manifest'
             failureReason = processingReason
@@ -717,11 +1105,20 @@ export async function processTierA(
           failureStage = 'raw_persistence'
           failureReason = 'raw_persistence_failed'
           try {
-            artifactSet = await writeAttemptBoundLeaderboardRawArtifactSet({
-              attempt: acquisitionAttempt,
-              built: attemptBoundBuilt,
-              sourcePages: rawPages,
-            })
+            throwIfTierACancelled(signal)
+            artifactSet =
+              attemptBoundBuilt.kind === 'v3'
+                ? await writeAttemptBoundLeaderboardRawArtifactSet({
+                    attempt: acquisitionAttempt,
+                    built: attemptBoundBuilt.built,
+                    sourcePages: rawPages,
+                  })
+                : await writeAttemptBoundLeaderboardRawArtifactSet({
+                    attempt: acquisitionAttempt,
+                    built: attemptBoundBuilt.built,
+                    sourcePages: rawPages,
+                  })
+            throwIfTierACancelled(signal)
           } catch (persistenceCause) {
             throw new TierAEvidencePersistenceError(
               src.slug,
@@ -731,16 +1128,25 @@ export async function processTierA(
             )
           }
           rawObjectId = artifactSet.sourcePayload.id
-          metricTrust = {
-            sourceRunId: attemptBoundBuilt.sourceRunId,
-            manifest: attemptBoundBuilt.manifest,
-            artifacts: artifactSet,
+          if (attemptBoundBuilt.kind === 'v3') {
+            metricTrust = {
+              sourceRunId: attemptBoundBuilt.built.sourceRunId,
+              manifest: attemptBoundBuilt.built.manifest,
+              artifacts: artifactSet,
+            }
+          } else {
+            attemptBoundV4 = {
+              sourceRunId: attemptBoundBuilt.built.sourceRunId,
+              manifest: attemptBoundBuilt.built.manifest,
+              artifacts: artifactSet,
+            }
           }
 
           attemptLifecycle = 'finalizing'
           finalizationPriorFailures = capturedError ? [capturedError] : []
           failureStage = 'attempt_finalize'
           failureReason = 'attempt_finalize_failed'
+          throwIfTierACancelled(signal)
           await finishLeaderboardAcquisitionAttempt({
             kind: 'manifest',
             attempt: acquisitionAttempt,
@@ -748,6 +1154,7 @@ export async function processTierA(
             sourcePayloadRawObjectId: artifactSet.sourcePayload.id,
             manifestRawObjectId: artifactSet.populationManifest.id,
           })
+          throwIfTierACancelled(signal)
           attemptLifecycle = 'terminal'
 
           // The failed/partial response is now durable and terminal. Preserve
@@ -764,6 +1171,7 @@ export async function processTierA(
         } else if (capture && built) {
           let artifactSet
           try {
+            throwIfTierACancelled(signal)
             artifactSet = await writeLeaderboardRawArtifactSet({
               sourceId: src.id,
               sourceSlug: src.slug,
@@ -773,6 +1181,7 @@ export async function processTierA(
               manifest: built.manifest,
               observationCycleId: cycleId,
             })
+            throwIfTierACancelled(signal)
           } catch (persistenceCause) {
             throw new TierAEvidencePersistenceError(
               src.slug,
@@ -816,35 +1225,63 @@ export async function processTierA(
 
         const registeredMetricTrust =
           metricTrust !== null && hasRegisteredLeaderboardMetricTrust(src, timeframe)
-        if (acquisitionAttempt && !registeredMetricTrust) {
+        if (
+          acquisitionAttempt?.captureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT &&
+          !registeredMetricTrust
+        ) {
           throw new Error(
             `[tier-a] ${src.slug} ${timeframe}d attempt-bound capture has no reviewed metric trust contract`
           )
         }
+        if (
+          acquisitionAttempt?.captureContract ===
+            ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT &&
+          attemptBoundV4 === null
+        ) {
+          throw new Error(
+            `[tier-a] ${src.slug} ${timeframe}d v4 capture has no attempt-bound publication evidence`
+          )
+        }
         const trustedBundle = registeredMetricTrust ? metricTrust : null
-        const result = trustedBundle
-          ? await publishFencedTrustedLeaderboardSnapshot(
+        const result = attemptBoundV4
+          ? await publishFencedAttemptBoundLeaderboardSnapshot(
               {
                 src,
                 timeframe,
                 rows: valid,
                 rejects,
                 observationCycleId: cycleId ?? undefined,
-                trust: trustedBundle,
+                attemptEvidence: attemptBoundV4,
               },
-              context
+              context,
+              ...publicationSignalArgs
             )
-          : await publishFencedLeaderboardSnapshot(
-              {
-                src,
-                timeframe,
-                rows: valid,
-                rejects,
-                rawObjectId,
-                observationCycleId: cycleId ?? undefined,
-              },
-              context
-            )
+          : trustedBundle
+            ? await publishFencedTrustedLeaderboardSnapshot(
+                {
+                  src,
+                  timeframe,
+                  rows: valid,
+                  rejects,
+                  observationCycleId: cycleId ?? undefined,
+                  trust: trustedBundle,
+                },
+                context,
+                ...publicationSignalArgs
+              )
+            : await publishFencedLeaderboardSnapshot(
+                {
+                  src,
+                  timeframe,
+                  rows: valid,
+                  rejects,
+                  rawObjectId,
+                  observationCycleId: cycleId ?? undefined,
+                },
+                context,
+                ...publicationSignalArgs
+              )
+        throwIfTierACancelled(signal)
 
         const status = result.published ? 'PUBLISHED' : 'GATED'
         console.log(
@@ -883,8 +1320,10 @@ export async function processTierA(
                   },
                 ],
               ]),
-            }
+            },
+            ...publicationSignalArgs
           )
+          throwIfTierACancelled(signal)
           console.log(
             `[tier-a] ${src.slug} ${timeframe}d board series: ` +
               `${seriesOut.points} pts for ${seriesOut.traders} traders`
@@ -902,6 +1341,7 @@ export async function processTierA(
         // part of the fenced traders upsert above; no second serving projection
         // is allowed after that commit. Persist after every window so a worker
         // restart loses at most the in-flight TF.
+        throwIfTierACancelled(signal)
         persistedJobData = await persistCompletedTimeframe(
           job,
           persistedJobData,
@@ -909,6 +1349,7 @@ export async function processTierA(
           timeframe,
           src.slug
         )
+        throwIfTierACancelled(signal)
         completedTimeframes.add(timeframe)
 
         results.push({
@@ -920,6 +1361,7 @@ export async function processTierA(
           snapshotId: result.snapshotId,
         })
       } catch (cause) {
+        if (signal?.aborted) throwIfTierACancelled(signal)
         if (attemptBoundCapture) {
           if (acquisitionAttempt === null || attemptLifecycle === 'not_started') {
             const detail = cause instanceof Error ? cause.message : String(cause)
@@ -936,6 +1378,7 @@ export async function processTierA(
             )
           }
           if (attemptLifecycle === 'open') {
+            throwIfTierACancelled(signal)
             attemptLifecycle = 'finalizing'
             try {
               await finishLeaderboardAcquisitionAttempt({
@@ -946,6 +1389,7 @@ export async function processTierA(
                 failureStage,
                 reasonCode: failureReason,
               })
+              throwIfTierACancelled(signal)
               attemptLifecycle = 'terminal'
             } catch (finalizationCause) {
               throw new TierAAttemptFinalizationError(
@@ -994,6 +1438,7 @@ export async function processTierA(
         })
       }
     }
+    signal?.removeEventListener('abort', closeSessionOnAbort)
   }
 
   if (terminalFailure !== null) {
@@ -1023,5 +1468,6 @@ export async function processTierA(
 
   if (sessionCloseFailure !== null) throw sessionCloseFailure
 
+  throwIfTierACancelled(signal)
   return results
 }

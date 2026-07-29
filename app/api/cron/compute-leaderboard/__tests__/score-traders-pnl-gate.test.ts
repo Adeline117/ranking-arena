@@ -49,7 +49,7 @@ import type { TraderRow } from '../trader-row'
 
 function trader(id: string, pnl: number | null, roi = 10): TraderRow {
   return {
-    source: 'source',
+    source: 'binance_futures',
     source_trader_id: id,
     roi,
     pnl,

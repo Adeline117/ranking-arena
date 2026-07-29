@@ -21,17 +21,26 @@ jest.mock('@/lib/ingest/db', () => ({
 import {
   buildLeaderboardAcquisitionManifest,
   buildLeaderboardAcquisitionManifestV3,
+  buildLeaderboardAcquisitionManifestV4,
   LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+  LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
+  LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+  LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+  projectPartitionedNumericParserPage,
+  type BuildLeaderboardAcquisitionManifestV4Input,
 } from '@/lib/ingest/acquisition-manifest'
 import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
   type LeaderboardAcquisitionAttempt,
 } from '@/lib/ingest/acquisition-attempts'
 import {
+  type IngestTransactionRunner,
   writeAttemptBoundLeaderboardRawArtifactSet,
   writeLeaderboardRawArtifactSet,
 } from '@/lib/ingest/raw'
 import type { RawPage } from '@/lib/ingest/core/types'
+import type { IngestQueryExecutor } from '@/lib/ingest/db'
 import { strictCanonicalJson, strictCanonicalSha256 } from '@/lib/ingest/strict-canonical-json'
 
 interface PointerRow {
@@ -189,6 +198,153 @@ function attemptBoundArtifactInput(
     },
   })
   return { attempt, built, sourcePages: sourcePages.map((page) => ({ ...page })) }
+}
+
+function attemptBoundV4ArtifactInput() {
+  const attempt = acquisitionAttempt({
+    attemptSeq: 44,
+    attemptId: '00000000-0000-4000-8000-000000000004',
+    sourceId: 13,
+    sourceSlug: 'bitget_bots_futures',
+    adapterSlug: 'bitget_bots',
+    observationCycleId: 'tier-a:bitget_bots_futures:job-1:1784628000000',
+    captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+  })
+  const rawSourcePages: RawPage[] = [
+    {
+      pageIndex: 1,
+      payload: {
+        code: '00000',
+        data: {
+          list: [{ strategyId: 'grid-1' }, { strategyId: 'grid-2' }],
+          totalRecord: '2',
+        },
+      },
+      url: 'https://api.bitget.com/api/v2/copy/mix-broker/query-bots',
+      fetchedAt: '2026-07-21T10:00:01.000Z',
+    },
+    {
+      pageIndex: 2,
+      payload: {
+        code: '00000',
+        data: { list: [{ strategyId: 'martingale-1' }], totalRecord: '1' },
+      },
+      url: 'https://api.bitget.com/api/v2/copy/mix-broker/query-bots',
+      fetchedAt: '2026-07-21T10:00:02.000Z',
+    },
+  ]
+  const parserTransformation: BuildLeaderboardAcquisitionManifestV4Input['parser_transformation'] =
+    {
+      kind: 'partitioned_numeric_projection',
+      source_page_ordinals: [1, 2],
+      algorithm_contract: LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+      page_bindings: [
+        {
+          source_page_ordinal: 1,
+          partition_ordinal: 1,
+          partition_id: 'futures_grid',
+          request_page_index: 1,
+          request_page_size: 20,
+        },
+        {
+          source_page_ordinal: 2,
+          partition_ordinal: 2,
+          partition_id: 'futures_martingale',
+          request_page_index: 1,
+          request_page_size: 20,
+        },
+      ],
+    }
+  const sourceReports = (population: number) => ({
+    population: { state: 'reported' as const, value: population },
+    page_count: { state: 'not_reported' as const },
+    current_page: { state: 'reported' as const, value: 1 },
+    page_size: { state: 'reported' as const, value: 20 },
+  })
+  const buildInput: BuildLeaderboardAcquisitionManifestV4Input = {
+    source: {
+      id: attempt.sourceId,
+      slug: attempt.sourceSlug,
+      adapter_slug: attempt.adapterSlug,
+      configured_page_size: 20,
+      configured_pagination_kind: 'numeric',
+      configured_partition_ids: ['futures_grid', 'futures_martingale'],
+    },
+    surface: 'tier_a_leaderboard',
+    timeframe: attempt.timeframe,
+    started_at: attempt.recordedStartedAt,
+    completed_at: captureCompletedAt,
+    runner_git_sha: attempt.runnerGitSha,
+    observation_cycle_id: attempt.observationCycleId,
+    capture_evidence_state: 'verified',
+    termination_reason: 'reported_population_reached',
+    capture_config: { caller_page_cap: null, safety_page_cap: 10_000 },
+    source_pages: [
+      {
+        raw_page: rawSourcePages[0]!,
+        source_row_count: 2,
+        request_sha256: 'b'.repeat(64),
+        http_status: 200,
+        pagination_position: {
+          kind: 'partitioned_page_index',
+          partition_ordinal: 1,
+          partition_id: 'futures_grid',
+          request_page_index: 1,
+        },
+        source_reports: sourceReports(2),
+      },
+      {
+        raw_page: rawSourcePages[1]!,
+        source_row_count: 1,
+        request_sha256: 'c'.repeat(64),
+        http_status: 200,
+        pagination_position: {
+          kind: 'partitioned_page_index',
+          partition_ordinal: 2,
+          partition_id: 'futures_martingale',
+          request_page_index: 1,
+        },
+        source_reports: sourceReports(1),
+      },
+    ],
+    parse_pages: rawSourcePages.map((page, index) =>
+      projectPartitionedNumericParserPage(page, parserTransformation.page_bindings[index]!)
+    ),
+    parser_transformation: parserTransformation,
+    accepted_population: 3,
+    rejected_row_count: 0,
+    acquisition_attempt: {
+      binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+      attempt_id: attempt.attemptId,
+      attempt_seq: attempt.attemptSeq,
+    },
+    pagination_topology: {
+      kind: 'partitioned_numeric',
+      aggregation_contract: LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+      rank_scope: 'partition_local_concatenated_for_storage',
+      partitions: [
+        {
+          partition_id: 'futures_grid',
+          source_page_ordinals: [1],
+          parser_page_ordinals: [1],
+          termination_reason: 'reported_population_reached',
+          capture_config: { caller_page_cap: null, safety_page_cap: 5_000 },
+        },
+        {
+          partition_id: 'futures_martingale',
+          source_page_ordinals: [2],
+          parser_page_ordinals: [2],
+          termination_reason: 'reported_population_reached',
+          capture_config: { caller_page_cap: null, safety_page_cap: 5_000 },
+        },
+      ],
+    },
+  }
+  return {
+    attempt,
+    built: buildLeaderboardAcquisitionManifestV4(buildInput),
+    sourcePages: rawSourcePages.map((page) => ({ ...page })),
+  }
 }
 
 function downloadBody(payload: Buffer) {
@@ -398,6 +554,46 @@ describe('writeLeaderboardRawArtifactSet', () => {
     expect(insertSql[0]).toContain("job_type = 'tier_a'")
     expect(insertSql[0]).toContain('trader_id IS NULL')
     expect(insertSql[1]).toContain("trust_artifact_role = 'population_manifest'")
+    expect(mockConnect).toHaveBeenCalledTimes(2)
+    expect(database.query.mock.calls.filter(([sql]) => sql === 'BEGIN')).toHaveLength(2)
+    expect(database.query.mock.calls.filter(([sql]) => sql === 'COMMIT')).toHaveLength(2)
+  })
+
+  it('runs the pointer pair on one caller transaction only after both Storage uploads', async () => {
+    const database = makeDatabaseHarness()
+    const events: string[] = []
+    mockUpload.mockImplementation(async (path: string, payload: Buffer) => {
+      events.push(`upload:${events.length + 1}`)
+      storage.set(path, Buffer.from(payload))
+      return { error: null }
+    })
+    const executorQuery = jest.fn((sql: string, values?: readonly unknown[]) =>
+      database.query(sql, values ? [...values] : [])
+    )
+    const transaction = { query: executorQuery } as unknown as IngestQueryExecutor
+    const runTransaction: IngestTransactionRunner = async (operation) => {
+      events.push('runner')
+      return operation(transaction)
+    }
+
+    await expect(writeLeaderboardRawArtifactSet(artifactInput(), runTransaction)).resolves.toEqual({
+      sourcePayload: expect.objectContaining({ id: 101 }),
+      populationManifest: expect.objectContaining({ id: 102 }),
+    })
+
+    expect(events).toEqual(['upload:1', 'upload:2', 'runner'])
+    expect(mockConnect).not.toHaveBeenCalled()
+    expect(executorQuery).toHaveBeenCalledTimes(database.query.mock.calls.length)
+    expect(executorQuery.mock.calls.map(([sql]) => String(sql))).toEqual([
+      expect.stringContaining('pg_advisory_xact_lock'),
+      expect.stringMatching(/^SELECT id, source_id/),
+      expect.stringMatching(/^INSERT INTO arena\.raw_objects/),
+      expect.stringMatching(/^INSERT INTO arena\.raw_objects/),
+      expect.stringMatching(/^SELECT id, source_id/),
+    ])
+    expect(executorQuery.mock.calls.map(([sql]) => String(sql))).not.toEqual(
+      expect.arrayContaining(['BEGIN', 'COMMIT', 'ROLLBACK'])
+    )
   })
 
   it('writes one attempt-bound pair with the same complete identity summary on both RAW objects', async () => {
@@ -467,6 +663,142 @@ describe('writeLeaderboardRawArtifactSet', () => {
     })
     expect(mockUpload).toHaveBeenCalledTimes(4)
     expect(mockDownload).toHaveBeenCalledTimes(2)
+  })
+
+  it('runs an attempt-bound pointer pair through the supplied transaction capability', async () => {
+    const database = makeDatabaseHarness()
+    const executorQuery = jest.fn((sql: string, values?: readonly unknown[]) =>
+      database.query(sql, values ? [...values] : [])
+    )
+    const transaction = { query: executorQuery } as unknown as IngestQueryExecutor
+    const runTransaction = jest.fn(
+      async <T>(operation: (executor: IngestQueryExecutor) => Promise<T>): Promise<T> =>
+        operation(transaction)
+    ) as IngestTransactionRunner
+
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet(attemptBoundArtifactInput(), runTransaction)
+    ).resolves.toMatchObject({
+      sourcePayload: { id: 101 },
+      populationManifest: { id: 102 },
+      projection: { terminalState: 'complete' },
+    })
+
+    expect(runTransaction).toHaveBeenCalledTimes(1)
+    expect(mockConnect).not.toHaveBeenCalled()
+    expect(database.pointers).toHaveLength(2)
+    expect(
+      executorQuery.mock.calls.every(([sql]) => !/^(?:BEGIN|COMMIT|ROLLBACK)$/.test(sql))
+    ).toBe(true)
+  })
+
+  it('does not retry or fall back when the caller transaction fails after its callback', async () => {
+    const database = makeDatabaseHarness()
+    const transaction = { query: database.query } as unknown as IngestQueryExecutor
+    const failure = new Error('caller transaction commit failed')
+    let operationCalls = 0
+    const runTransaction: IngestTransactionRunner = async (operation) => {
+      operationCalls += 1
+      await operation(transaction)
+      throw failure
+    }
+
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet(attemptBoundArtifactInput(), runTransaction)
+    ).rejects.toBe(failure)
+
+    expect(operationCalls).toBe(1)
+    expect(mockConnect).not.toHaveBeenCalled()
+    expect(
+      database.query.mock.calls.filter(([sql]) =>
+        String(sql).startsWith('INSERT INTO arena.raw_objects')
+      )
+    ).toHaveLength(2)
+  })
+
+  it('writes exact V4 source RAW and reconstructs its partitioned parser projection', async () => {
+    const database = makeDatabaseHarness()
+    mockConnect.mockResolvedValue(database.client)
+    const input = attemptBoundV4ArtifactInput()
+
+    const first = await writeAttemptBoundLeaderboardRawArtifactSet(input)
+    const second = await writeAttemptBoundLeaderboardRawArtifactSet(input)
+
+    expect(second).toEqual(first)
+    expect(first.projection).toMatchObject({
+      terminalState: 'complete',
+      sourceRunId: input.built.sourceRunId,
+      observedPopulation: 3,
+      acceptedPopulation: 3,
+    })
+    expect(first).not.toHaveProperty('dataContract')
+    expect(database.pointers).toHaveLength(2)
+    const persistedSourcePages = JSON.parse(
+      gunzipSync(mockUpload.mock.calls[0][1] as Buffer).toString('utf8')
+    ) as RawPage[]
+    expect(persistedSourcePages).toStrictEqual(input.sourcePages)
+    expect(persistedSourcePages[0]!.payload).not.toHaveProperty('data_contract')
+    expect(persistedSourcePages[0]!.payload).not.toHaveProperty('partition_id')
+
+    const sourcePointer = database.pointers.find(
+      (pointer) => pointer.trust_artifact_role === 'source_payload'
+    )!
+    const manifestPointer = database.pointers.find(
+      (pointer) => pointer.trust_artifact_role === 'population_manifest'
+    )!
+    expect(sourcePointer.meta).toMatchObject({
+      pageCount: 2,
+      parserPageCount: 2,
+      parserSourcePageOrdinals: [1, 2],
+      acquisition_attempt: {
+        attempt_id: input.attempt.attemptId,
+        attempt_seq: input.attempt.attemptSeq,
+        reported_population: 3,
+        accepted_population: 3,
+      },
+    })
+    expect(manifestPointer.meta).toMatchObject({
+      data_contract: LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
+    })
+  })
+
+  it('rejects V4 parser digests that cannot be rebuilt from exact source RAW and bindings', async () => {
+    const input = attemptBoundV4ArtifactInput()
+    const forgedManifest: typeof input.built.manifest = {
+      ...input.built.manifest,
+      parser_input: {
+        ...input.built.manifest.parser_input,
+        sha256: 'f'.repeat(64),
+      },
+    }
+    const canonicalJson = strictCanonicalJson(forgedManifest)
+    const forgedBuilt: typeof input.built = {
+      manifest: forgedManifest,
+      canonicalJson,
+      sourceRunId: strictCanonicalSha256(forgedManifest),
+    }
+
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet({ ...input, built: forgedBuilt })
+    ).rejects.toThrow('parser input digest does not match the persisted source pages')
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('rejects a V4 built artifact bound to a non-V4 attempt before I/O', async () => {
+    const input = attemptBoundV4ArtifactInput()
+
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet({
+        ...input,
+        attempt: {
+          ...input.attempt,
+          captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+        },
+      })
+    ).rejects.toThrow('only an attempt-bound v4 attempt can project v4 manifest evidence')
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockConnect).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -660,13 +992,15 @@ describe('writeLeaderboardRawArtifactSet', () => {
   })
 
   it('does not open a database transaction when the second upload fails', async () => {
+    const runTransaction = jest.fn() as unknown as IngestTransactionRunner
     mockUpload
       .mockResolvedValueOnce({ error: null })
       .mockResolvedValueOnce({ error: { message: 'bucket unavailable', statusCode: 400 } })
 
-    await expect(writeLeaderboardRawArtifactSet(artifactInput())).rejects.toThrow(
+    await expect(writeLeaderboardRawArtifactSet(artifactInput(), runTransaction)).rejects.toThrow(
       'bucket unavailable'
     )
+    expect(runTransaction).not.toHaveBeenCalled()
     expect(mockConnect).not.toHaveBeenCalled()
     expect(mockDownload).not.toHaveBeenCalled()
   })

@@ -4,11 +4,12 @@ import {
   LeaderboardCaptureUpstreamError,
   captureNumericLeaderboard,
   capturePartitionedNumericLeaderboard,
+  leaderboardCaptureMode,
   leaderboardPublicRequestProjection,
   leaderboardPublicRequestSha256,
   replayPaged,
 } from '../capture'
-import type { JsonFetcher } from '../capture'
+import type { AnyLeaderboardCapture, JsonFetcher } from '../capture'
 import type { FetchSession, ReplayRequestTemplate } from '../types'
 import {
   LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
@@ -173,6 +174,44 @@ function partitionedCaptureOptions(
 }
 
 describe('captureNumericLeaderboard', () => {
+  it('rejects an already-cancelled capture before its first request', async () => {
+    const controller = new AbortController()
+    const cancellation = new Error('source lease already lost')
+    controller.abort(cancellation)
+    const fetcher = jest.fn(makeCaptureFetcher([{ rows: ['one'], total: 1 }]))
+
+    await expect(
+      captureNumericLeaderboard(captureOptions(fetcher, { signal: controller.signal }))
+    ).rejects.toBe(cancellation)
+
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('checks cancellation between pages before another request can start', async () => {
+    const controller = new AbortController()
+    const cancellation = new Error('source lease lost after page one')
+    const fetcher = jest.fn(
+      makeCaptureFetcher([
+        { rows: ['one', 'two'], total: 4 },
+        { rows: ['three', 'four'], total: 4 },
+      ])
+    )
+    const base = captureOptions(fetcher, { signal: controller.signal })
+
+    await expect(
+      captureNumericLeaderboard({
+        ...base,
+        extractMeta: (payload, requestPageIndex) => {
+          const meta = base.extractMeta(payload, requestPageIndex)
+          controller.abort(cancellation)
+          return meta
+        },
+      })
+    ).rejects.toBe(cancellation)
+
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
   it('hashes the fixed caller-declared public projection and binds POST page bodies', () => {
     const first = {
       url: 'https://x.test/board',
@@ -1366,6 +1405,69 @@ describe('capturePartitionedNumericLeaderboard', () => {
       capture.paginationTopology.partitions.map((partition) => partition.termination_reason)
     ).toEqual(['empty_page', 'empty_page'])
     expect(capture.terminationReason).toBe('reported_population_reached')
+  })
+})
+
+describe('leaderboardCaptureMode', () => {
+  it('routes only exact identity and partitioned evidence shapes', async () => {
+    const identity = await captureNumericLeaderboard(
+      captureOptions(makeCaptureFetcher([{ rows: ['one'], total: 1 }]))
+    )
+    const partitioned = await capturePartitionedNumericLeaderboard(
+      partitionedCaptureOptions(async (template) => ({
+        status: 200,
+        json: {
+          data: {
+            list: [(template.body as { strategyType: string }).strategyType],
+            totalRecord: 1,
+            currentPage: 1,
+            pageSize: 2,
+          },
+        },
+      }))
+    )
+
+    expect(leaderboardCaptureMode(identity)).toBe('identity')
+    expect(leaderboardCaptureMode(partitioned)).toBe('partitioned_numeric')
+
+    expect(() =>
+      leaderboardCaptureMode({
+        ...identity,
+        paginationTopology: partitioned.paginationTopology,
+      } as unknown as AnyLeaderboardCapture)
+    ).toThrow('identity leaderboard capture cannot declare partition topology')
+
+    const { paginationTopology: _omitted, ...partitionedWithoutTopology } = partitioned
+    expect(() =>
+      leaderboardCaptureMode(partitionedWithoutTopology as unknown as AnyLeaderboardCapture)
+    ).toThrow('requires its exact pagination topology')
+
+    expect(() =>
+      leaderboardCaptureMode({
+        ...partitioned,
+        parserTransformation: {
+          ...partitioned.parserTransformation,
+          algorithm_contract: 'arena.ingest.partitioned-numeric-parser-page@2',
+        },
+      } as unknown as AnyLeaderboardCapture)
+    ).toThrow('parser contract is unsupported')
+
+    expect(() =>
+      leaderboardCaptureMode({
+        ...partitioned,
+        paginationTopology: { ...partitioned.paginationTopology, extra: true },
+      } as unknown as AnyLeaderboardCapture)
+    ).toThrow('topology shape is unsupported')
+
+    expect(() =>
+      leaderboardCaptureMode({
+        ...partitioned,
+        paginationTopology: {
+          ...partitioned.paginationTopology,
+          rank_scope: 'unreviewed_global_rank',
+        },
+      } as unknown as AnyLeaderboardCapture)
+    ).toThrow('topology contract is unsupported')
   })
 })
 

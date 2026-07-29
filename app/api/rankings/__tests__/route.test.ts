@@ -100,6 +100,9 @@ jest.mock('@/lib/api/versioning', () => ({
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
+import { EXCHANGE_SLUG_ALIASES, PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import { RETIRED_SOURCES } from '@/lib/constants/retired-sources'
+import { PUBLIC_RANKING_QUARANTINED_SOURCES } from '@/lib/rankings/publication-policy'
 
 /** Build a thenable chainable Supabase mock */
 function makeChainableQuery(result = { data: [], error: null, count: 0 }) {
@@ -176,6 +179,46 @@ describe('GET /api/rankings', () => {
     expect(res.status).toBe(400)
     expect(body.error).toMatch(/platform/i)
   })
+
+  it.each(PUBLIC_ACTIVE_RANKING_SOURCES)(
+    'accepts canonical active platform %s at the public API boundary',
+    async (platform) => {
+      const req = new NextRequest(
+        `http://localhost/api/rankings?window=90d&platform=${platform}&sort_by=roi`
+      )
+      const res = await GET(req)
+
+      expect(res.status).toBe(200)
+    }
+  )
+
+  it.each([...RETIRED_SOURCES])(
+    'rejects retired platform %s before cache or database access',
+    async (platform) => {
+      const req = new NextRequest(`http://localhost/api/rankings?window=90d&platform=${platform}`)
+      const res = await GET(req)
+
+      expect(res.status).toBe(400)
+      expect(mockTieredGetOrSet).not.toHaveBeenCalled()
+      expect(mockTieredGet).not.toHaveBeenCalled()
+      expect(mockSupabaseQuery).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(Object.keys(EXCHANGE_SLUG_ALIASES))(
+    'rejects non-canonical platform alias %s consistently',
+    async (platform) => {
+      const req = new NextRequest(
+        `http://localhost/api/rankings?window=90d&platform=${encodeURIComponent(platform)}`
+      )
+      const res = await GET(req)
+
+      expect(res.status).toBe(400)
+      expect(mockTieredGetOrSet).not.toHaveBeenCalled()
+      expect(mockTieredGet).not.toHaveBeenCalled()
+      expect(mockSupabaseQuery).not.toHaveBeenCalled()
+    }
+  )
 
   // --- Successful Responses ---
 
@@ -378,6 +421,8 @@ describe('GET /api/rankings', () => {
         'in',
         '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
       )
+      expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+      expect(freshnessQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
     } finally {
       jest.useRealTimers()
     }
@@ -470,7 +515,7 @@ describe('GET /api/rankings', () => {
 
     expect(res.status).toBe(200)
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v3:precomputed:composite:all:v2',
+      'public-rank-policy-v4:precomputed:composite:all:v2',
       'hot'
     )
   })
@@ -502,7 +547,7 @@ describe('GET /api/rankings', () => {
     const data = body.data ?? body
 
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v3:precomputed:composite:all:v2',
+      'public-rank-policy-v4:precomputed:composite:all:v2',
       'hot'
     )
     expect(data.traders).toEqual([first, last])
@@ -547,7 +592,7 @@ describe('GET /api/rankings', () => {
     const data = body.data ?? body
 
     expect(mockTieredGetOrSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v3:api:rankings:v3:/),
+      expect.stringMatching(/^public-rank-policy-v4:api:rankings:v3:/),
       expect.any(Function),
       'hot',
       ['rankings']
@@ -571,20 +616,23 @@ describe('GET /api/rankings', () => {
     ])
   })
 
-  it('returns 200 empty for an explicitly quarantined platform without cache or DB access', async () => {
-    const req = new NextRequest('http://localhost/api/rankings?window=90d&platform=okx_web3_solana')
-    const res = await GET(req)
-    const body = await res.json()
-    const data = body.data ?? body
+  it.each(PUBLIC_RANKING_QUARANTINED_SOURCES)(
+    'returns 200 empty for quarantined platform %s without cache or DB access',
+    async (platform) => {
+      const req = new NextRequest(`http://localhost/api/rankings?window=90d&platform=${platform}`)
+      const res = await GET(req)
+      const body = await res.json()
+      const data = body.data ?? body
 
-    expect(res.status).toBe(200)
-    expect(data).toEqual(
-      expect.objectContaining({ traders: [], totalCount: 0, availableSources: [] })
-    )
-    expect(mockTieredGetOrSet).not.toHaveBeenCalled()
-    expect(mockTieredGet).not.toHaveBeenCalled()
-    expect(mockSupabaseQuery).not.toHaveBeenCalled()
-  })
+      expect(res.status).toBe(200)
+      expect(data).toEqual(
+        expect.objectContaining({ traders: [], totalCount: 0, availableSources: [] })
+      )
+      expect(mockTieredGetOrSet).not.toHaveBeenCalled()
+      expect(mockTieredGet).not.toHaveBeenCalled()
+      expect(mockSupabaseQuery).not.toHaveBeenCalled()
+    }
+  )
 
   // --- Error Handling ---
 

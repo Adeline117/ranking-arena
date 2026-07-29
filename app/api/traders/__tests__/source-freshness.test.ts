@@ -213,7 +213,7 @@ describe('GET /api/traders source freshness', () => {
     const body = await response.json()
 
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v3:leaderboard:v3:/),
+      expect.stringMatching(/^public-rank-policy-v4:leaderboard:v3:/),
       expect.any(Function),
       expect.any(Object)
     )

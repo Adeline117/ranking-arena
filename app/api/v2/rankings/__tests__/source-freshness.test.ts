@@ -59,6 +59,9 @@ function queryResult(data: unknown[], error: unknown = null, count: number | nul
 }
 
 import { GET } from '../route'
+import { EXCHANGE_SLUG_ALIASES, PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import { RETIRED_SOURCES } from '@/lib/constants/retired-sources'
+import { PUBLIC_RANKING_QUARANTINED_SOURCES } from '@/lib/rankings/publication-policy'
 
 describe('GET /api/v2/rankings source freshness', () => {
   beforeEach(() => {
@@ -167,7 +170,7 @@ describe('GET /api/v2/rankings source freshness', () => {
     const body = await response.json()
 
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v3:v2-rankings:v3:/),
+      expect.stringMatching(/^public-rank-policy-v4:v2-rankings:v3:/),
       expect.any(Function),
       expect.any(Object)
     )
@@ -179,20 +182,60 @@ describe('GET /api/v2/rankings source freshness', () => {
     expect(body.meta.source_freshness).toEqual([{ source: 'binance_futures', updated_at: 'safe' }])
   })
 
-  it('returns 200 empty for an explicitly quarantined platform without DB or cache access', async () => {
-    const response = await GET({
-      url: 'http://localhost/api/v2/rankings?window=90d&platform=okx_web3_solana',
-    } as never)
-    const body = await response.json()
+  it.each(PUBLIC_ACTIVE_RANKING_SOURCES)(
+    'accepts canonical active platform %s at the v2 public API boundary',
+    async (platform) => {
+      mockFrom.mockImplementation(() => queryResult([]))
 
-    expect(response.status).toBe(200)
-    expect(body.traders).toEqual([])
-    expect(body.meta).toEqual(
-      expect.objectContaining({ platform: 'okx_web3_solana', total_count: 0 })
-    )
-    expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
-    expect(mockFrom).not.toHaveBeenCalled()
-  })
+      const response = await GET({
+        url: `http://localhost/api/v2/rankings?window=90d&platform=${platform}`,
+      } as never)
+
+      expect(response.status).toBe(200)
+    }
+  )
+
+  it.each(PUBLIC_RANKING_QUARANTINED_SOURCES)(
+    'returns 200 empty for quarantined platform %s without DB or cache access',
+    async (platform) => {
+      const response = await GET({
+        url: `http://localhost/api/v2/rankings?window=90d&platform=${platform}`,
+      } as never)
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body.traders).toEqual([])
+      expect(body.meta).toEqual(expect.objectContaining({ platform, total_count: 0 }))
+      expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([...RETIRED_SOURCES])(
+    'rejects retired platform %s before cache or database access',
+    async (platform) => {
+      const response = await GET({
+        url: `http://localhost/api/v2/rankings?window=90d&platform=${platform}`,
+      } as never)
+
+      expect(response.status).toBe(400)
+      expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(Object.keys(EXCHANGE_SLUG_ALIASES))(
+    'rejects non-canonical platform alias %s consistently',
+    async (platform) => {
+      const response = await GET({
+        url: `http://localhost/api/v2/rankings?window=90d&platform=${encodeURIComponent(platform)}`,
+      } as never)
+
+      expect(response.status).toBe(400)
+      expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
 
   it('continues to reject unknown platforms', async () => {
     const response = await GET({

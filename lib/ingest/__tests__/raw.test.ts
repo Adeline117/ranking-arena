@@ -25,11 +25,13 @@ jest.mock('@/lib/ingest/db', () => ({
 }))
 
 import {
+  type IngestTransactionRunner,
   RAW_JSON_STRINGIFY_CONTRACT,
   cleanupRawObjects,
   readRawObject,
   writeRawObject,
 } from '@/lib/ingest/raw'
+import type { IngestQueryExecutor } from '@/lib/ingest/db'
 import { STRICT_CANONICAL_JSON_CONTRACT } from '@/lib/ingest/strict-canonical-json'
 
 const input = {
@@ -76,6 +78,55 @@ describe('writeRawObject storage retries', () => {
     expect(mockQuery).toHaveBeenCalledTimes(1)
   })
 
+  it('uploads before invoking one caller transaction and uses only its executor', async () => {
+    const events: string[] = []
+    mockUpload.mockImplementationOnce(async () => {
+      events.push('upload')
+      return { error: null }
+    })
+    const executorQuery = jest.fn(async () => {
+      events.push('pointer')
+      return { rows: [{ id: 84 }] }
+    })
+    const transaction = { query: executorQuery } as unknown as IngestQueryExecutor
+    const runTransaction = jest.fn(
+      async <T>(operation: (executor: IngestQueryExecutor) => Promise<T>): Promise<T> => {
+        events.push('runner')
+        return operation(transaction)
+      }
+    ) as IngestTransactionRunner
+
+    await expect(writeRawObject(input, runTransaction)).resolves.toEqual({
+      id: 84,
+      storagePath: expect.stringMatching(/\.json\.gz$/),
+      contentHash: 'f2d0bb204039f952e467902406c9f5d82f6a1567c329df3be83af227a4fb76f0',
+    })
+
+    expect(events).toEqual(['upload', 'runner', 'pointer'])
+    expect(runTransaction).toHaveBeenCalledTimes(1)
+    expect(executorQuery).toHaveBeenCalledTimes(1)
+    expect(mockQuery).not.toHaveBeenCalled()
+  })
+
+  it('does not repeat or fall back when the caller transaction rejects after pointer SQL', async () => {
+    mockUpload.mockResolvedValueOnce({ error: null })
+    const executorQuery = jest.fn(async () => ({ rows: [{ id: 84 }] }))
+    const transaction = { query: executorQuery } as unknown as IngestQueryExecutor
+    const failure = new Error('caller transaction failed')
+    let operationCalls = 0
+    const runTransaction: IngestTransactionRunner = async (operation) => {
+      operationCalls += 1
+      await operation(transaction)
+      throw failure
+    }
+
+    await expect(writeRawObject(input, runTransaction)).rejects.toBe(failure)
+
+    expect(operationCalls).toBe(1)
+    expect(executorQuery).toHaveBeenCalledTimes(1)
+    expect(mockQuery).not.toHaveBeenCalled()
+  })
+
   it('treats an already-exists response after a timeout as an idempotent success', async () => {
     mockUpload
       .mockResolvedValueOnce({ error: { message: 'Gateway timeout', statusCode: 504 } })
@@ -94,12 +145,14 @@ describe('writeRawObject storage retries', () => {
   })
 
   it('fails immediately for a permanent Storage rejection', async () => {
+    const runTransaction = jest.fn() as unknown as IngestTransactionRunner
     mockUpload.mockResolvedValueOnce({
       error: { message: 'Invalid bucket', statusCode: 400 },
     })
 
-    await expect(writeRawObject(input)).rejects.toThrow('Invalid bucket')
+    await expect(writeRawObject(input, runTransaction)).rejects.toThrow('Invalid bucket')
     expect(mockUpload).toHaveBeenCalledTimes(1)
+    expect(runTransaction).not.toHaveBeenCalled()
     expect(mockQuery).not.toHaveBeenCalled()
   })
 

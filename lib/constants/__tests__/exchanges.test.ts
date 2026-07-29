@@ -1,11 +1,16 @@
 import {
   ALL_SOURCES,
   EXCHANGE_CONFIG,
+  EXCHANGE_SLUG_ALIASES,
   PRIORITY_SOURCES,
+  PUBLIC_ACTIVE_RANKING_SOURCES,
+  SOURCE_TYPE_MAP,
   SOURCES_WITH_DATA,
+  parsePublicActiveRankingSource,
   validateExchangeConfig,
 } from '../exchanges'
 import { RETIRED_SOURCES } from '../retired-sources'
+import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '../../types/leaderboard'
 
 describe('exchange lifecycle boundaries', () => {
   it.each([
@@ -47,5 +52,40 @@ describe('exchange lifecycle boundaries', () => {
   it('keeps the active source lists backed by exchange metadata', () => {
     expect(SOURCES_WITH_DATA.filter((source) => !ALL_SOURCES.includes(source))).toEqual([])
     expect(validateExchangeConfig()).toEqual([])
+  })
+
+  it('keeps every queryable source represented and correctly classified', () => {
+    const granular = new Set<string>(GRANULAR_PLATFORMS)
+    const expectedCategory = {
+      futures: 'futures',
+      spot: 'spot',
+      web3: 'onchain',
+    } as const
+
+    expect(ALL_SOURCES.filter((source) => !granular.has(source))).toEqual([])
+    for (const source of ALL_SOURCES) {
+      expect(PLATFORM_CATEGORY[source]).toBe(expectedCategory[SOURCE_TYPE_MAP[source]])
+    }
+  })
+
+  it('keeps the public ranking input boundary canonical, active, and alias-free', () => {
+    expect(PUBLIC_ACTIVE_RANKING_SOURCES).toEqual(ALL_SOURCES)
+    expect(PUBLIC_ACTIVE_RANKING_SOURCES.filter((source) => RETIRED_SOURCES.has(source))).toEqual(
+      []
+    )
+
+    for (const source of PUBLIC_ACTIVE_RANKING_SOURCES) {
+      expect(parsePublicActiveRankingSource(source)).toBe(source)
+    }
+    for (const source of RETIRED_SOURCES) {
+      expect(parsePublicActiveRankingSource(source)).toBeNull()
+    }
+    for (const alias of Object.keys(EXCHANGE_SLUG_ALIASES)) {
+      expect(parsePublicActiveRankingSource(alias)).toBeNull()
+    }
+
+    expect(parsePublicActiveRankingSource(' OKX_FUTURES ')).toBeNull()
+    expect(parsePublicActiveRankingSource('OKX_FUTURES')).toBeNull()
+    expect(parsePublicActiveRankingSource(null)).toBeNull()
   })
 })

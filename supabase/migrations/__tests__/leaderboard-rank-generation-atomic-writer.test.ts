@@ -351,7 +351,7 @@ describe('leaderboard rank generation atomic batch writer', () => {
     expect(migration).not.toMatch(/__[A-Z0-9_]+__/)
     expect(migration).not.toMatch(/(?:TODO|TBD|PLACEHOLDER)[_: -]*[A-Z0-9_]*/i)
     expect(pg17Proof).toContain("EXPECTED_DEPENDENCY_DIGESTS=$'acl|13|")
-    expect(pg17Proof).toContain('catalog|12|84c34d0b')
+    expect(pg17Proof).toContain('catalog|12|cbd7e49f')
     expect(pg17Proof).toContain("printf 'writer-body|%s\\n'")
   })
 

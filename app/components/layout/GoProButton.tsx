@@ -3,18 +3,29 @@
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { useIsPremium } from '@/lib/premium/hooks'
+import { useIsPremium, usePremiumProviderPresent } from '@/lib/premium/hooks'
 import { trackEvent } from '@/lib/analytics/track'
+
+function hasPaidTierHint() {
+  if (typeof document === 'undefined') return false
+  const tier = document.cookie.match(/(?:^|;\s*)arena_tier=(\w+)/)?.[1]
+  return tier === 'pro' || tier === 'elite'
+}
 
 export default function GoProButton() {
   const { t } = useLanguage()
   const { isPremium, isLoading } = useIsPremium()
+  const hasPremiumProvider = usePremiumProviderPresent()
 
-  if (isLoading || isPremium) return null
+  // The provider-light homepage renders TopNav outside Providers for LCP. In
+  // that scope the safe premium default stays loading forever, so use the same
+  // tier hint cookie that Providers consumes instead of dropping the CTA.
+  if (isPremium || (hasPremiumProvider ? isLoading : hasPaidTierHint())) return null
 
   return (
     <Link
       href="/pricing"
+      data-testid="top-nav-pro-button"
       onClick={() => trackEvent('click_go_pro_nav')}
       className="btn-press touch-target"
       style={{
@@ -29,6 +40,7 @@ export default function GoProButton() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        width: '100%',
         height: 30,
         whiteSpace: 'nowrap',
         border: 'none',

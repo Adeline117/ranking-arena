@@ -3,6 +3,7 @@ import type { Job } from 'bullmq'
 import { isIngestRegion, type IngestRegion } from '@/lib/ingest/core/regions'
 
 import { SOURCE_JOB_LEASE_LANES } from './source-job-routing'
+import { createManagedBullJobAuthority, type BullJobAuthority } from './job-provenance'
 import type { RegionAuthorityFence, RegionAuthorityLifecycle } from './region-authority-lifecycle'
 import { isManagedRegionAuthorityLifecycle } from './region-authority-lifecycle'
 
@@ -55,17 +56,17 @@ function isAuthorizedConsumedRegionContext(
 
 async function returnJobToWaitOrReject<TJob>(
   job: TJob,
-  token: string | undefined,
+  processorToken: string | undefined,
   message: string
 ): Promise<never> {
   const candidate = job as { moveToWait?: (token?: string) => Promise<unknown> }
   if (
-    typeof token === 'string' &&
-    token.length > 0 &&
+    typeof processorToken === 'string' &&
+    processorToken.length > 0 &&
     typeof candidate?.moveToWait === 'function'
   ) {
     try {
-      await candidate.moveToWait.call(job, token)
+      await candidate.moveToWait.call(job, processorToken)
     } catch {
       throw new Error(`${message} and could not return to wait`)
     }
@@ -154,6 +155,7 @@ export function bindAuthorizedConsumedRegion<TJob, TResult>(
   route: (
     job: TJob,
     context: AuthorizedConsumedRegionContext,
+    bullJob: BullJobAuthority,
     signal?: AbortSignal
   ) => Promise<TResult>
 ): (job: TJob, token?: string, signal?: AbortSignal) => Promise<TResult> {
@@ -163,13 +165,13 @@ export function bindAuthorizedConsumedRegion<TJob, TResult>(
   // BullMQ 5.77 enables job cancellation only when the processor declares all
   // three parameters. Keep this explicit signature; a rest/default parameter
   // would reduce Function.length and silently disable cancelAllJobs().
-  return async (job, _token, signal) => {
+  return async (job, processorToken, signal) => {
     try {
       context.assertCanConsume()
     } catch {
       return returnJobToWaitOrReject(
         job,
-        _token,
+        processorToken,
         `[ingest-worker] ${context.consumedRegion} consumer admission is closed`
       )
     }
@@ -179,16 +181,17 @@ export function bindAuthorizedConsumedRegion<TJob, TResult>(
     if (jobSignal.aborted) {
       return returnJobToWaitOrReject(
         job,
-        _token,
+        processorToken,
         `[ingest-worker] ${context.consumedRegion} consumer job was cancelled`
       )
     }
+    const managedBullJob = createManagedBullJobAuthority(job as object, processorToken, jobSignal)
     try {
-      const result = await route(job, context, jobSignal)
+      const result = await route(job, context, managedBullJob.authority, jobSignal)
       if (jobSignal.aborted) {
         return returnJobToWaitOrReject(
           job,
-          _token,
+          processorToken,
           `[ingest-worker] ${context.consumedRegion} consumer job was cancelled`
         )
       }
@@ -197,11 +200,13 @@ export function bindAuthorizedConsumedRegion<TJob, TResult>(
       if (jobSignal.aborted) {
         return returnJobToWaitOrReject(
           job,
-          _token,
+          processorToken,
           `[ingest-worker] ${context.consumedRegion} consumer job was cancelled`
         )
       }
       throw error
+    } finally {
+      managedBullJob.close()
     }
   }
 }

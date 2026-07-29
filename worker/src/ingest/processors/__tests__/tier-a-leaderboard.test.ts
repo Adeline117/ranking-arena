@@ -4,6 +4,7 @@ import {
   LeaderboardCaptureUpstreamError,
   captureNumericLeaderboard,
   type LeaderboardCapture,
+  type PartitionedNumericLeaderboardCapture,
 } from '@/lib/ingest/fetch/capture'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import {
@@ -11,11 +12,19 @@ import {
   strictCanonicalSha256,
 } from '@/lib/ingest/strict-canonical-json'
 import {
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
   LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
   projectLeaderboardManifestV3Outcome,
+  projectLeaderboardManifestV4Outcome,
   type LeaderboardAcquisitionAttempt,
   type StartLeaderboardAcquisitionAttemptInput,
 } from '@/lib/ingest/acquisition-attempts'
+import {
+  LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+  LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+  projectPartitionedNumericParserPage,
+} from '@/lib/ingest/acquisition-manifest'
 import type { TierJobData } from '../../queues'
 
 const mockGetSourceBySlug = jest.fn()
@@ -26,13 +35,14 @@ const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
 const mockWriteLeaderboardRawArtifactSet = jest.fn()
 const mockWriteAttemptBoundLeaderboardRawArtifactSet = jest.fn()
-const mockHasRegisteredAttemptBoundContract = jest.fn()
+const mockFindRegisteredAttemptBoundContract = jest.fn()
 const mockStartLeaderboardAcquisitionAttempt = jest.fn()
 const mockFinishLeaderboardAcquisitionAttempt = jest.fn()
 const mockRecordFieldInventory = jest.fn()
 const mockValidateLeaderboardRows = jest.fn()
 const mockPublishLeaderboardSnapshot = jest.fn()
 const mockPublishTrustedLeaderboardSnapshot = jest.fn()
+const mockPublishAttemptBoundLeaderboardSnapshot = jest.fn()
 const mockHasRegisteredLeaderboardMetricTrust = jest.fn()
 const mockPublishFencedBoardSeries = jest.fn()
 const mockJobUpdateData = jest.fn()
@@ -59,8 +69,8 @@ jest.mock('@/lib/ingest/acquisition-attempts', () => {
   const actual = jest.requireActual('@/lib/ingest/acquisition-attempts')
   return {
     ...actual,
-    hasRegisteredAttemptBoundLeaderboardAcquisitionContract: (...args: unknown[]) =>
-      mockHasRegisteredAttemptBoundContract(...args),
+    findRegisteredAttemptBoundLeaderboardAcquisitionContract: (...args: unknown[]) =>
+      mockFindRegisteredAttemptBoundContract(...args),
     startLeaderboardAcquisitionAttempt: (...args: unknown[]) =>
       mockStartLeaderboardAcquisitionAttempt(...args),
     finishLeaderboardAcquisitionAttempt: (...args: unknown[]) =>
@@ -78,6 +88,8 @@ jest.mock('@/worker/src/ingest/fenced-tier-a-publication', () => ({
   publishFencedLeaderboardSnapshot: (...args: unknown[]) => mockPublishLeaderboardSnapshot(...args),
   publishFencedTrustedLeaderboardSnapshot: (...args: unknown[]) =>
     mockPublishTrustedLeaderboardSnapshot(...args),
+  publishFencedAttemptBoundLeaderboardSnapshot: (...args: unknown[]) =>
+    mockPublishAttemptBoundLeaderboardSnapshot(...args),
 }))
 jest.mock('@/lib/ingest/serving/metric-trust-publish', () => ({
   hasRegisteredLeaderboardMetricTrust: (...args: unknown[]) =>
@@ -130,6 +142,18 @@ const binanceSrc = {
   adapter_slug: 'binance',
   fetch_region: 'vps_sg',
   serving_mode: 'serving',
+} as SourceRow
+
+const bitgetBotsSrc = {
+  ...src,
+  id: 27,
+  slug: 'bitget_bots_spot',
+  adapter_slug: 'bitget_bots',
+  product_type: 'spot',
+  page_size: 20,
+  trader_kind_scope: 'bot',
+  serving_mode: 'serving',
+  meta: { boards: ['spot_grid', 'spot_martingale'] },
 } as SourceRow
 
 const page: RawPage = {
@@ -234,6 +258,98 @@ function capturedLeaderboardWithPageRows(pageRows: string[][]): LeaderboardCaptu
   })
 }
 
+function partitionedLeaderboardCapture(pageSize = 20): PartitionedNumericLeaderboardCapture {
+  const fetchedAt = new Date().toISOString()
+  const partitionIds = ['spot_grid', 'spot_martingale']
+  const pageRows = [['grid-1', 'grid-2'], [], ['martingale-1'], []]
+  const partitionPositions = [
+    { partitionOrdinal: 1, partitionId: 'spot_grid', requestPageIndex: 1 },
+    { partitionOrdinal: 1, partitionId: 'spot_grid', requestPageIndex: 2 },
+    { partitionOrdinal: 2, partitionId: 'spot_martingale', requestPageIndex: 1 },
+    { partitionOrdinal: 2, partitionId: 'spot_martingale', requestPageIndex: 2 },
+  ] as const
+  const sourcePages = pageRows.map((ids, index) => {
+    const position = partitionPositions[index]
+    const rawPage: RawPage = {
+      pageIndex: index + 1,
+      payload: { items: ids },
+      url: `https://bitget.test/${position.partitionId}?page=${position.requestPageIndex}`,
+      fetchedAt,
+    }
+    return {
+      rawPage,
+      sourceRowCount: ids.length,
+      requestSha256: String(index + 1).repeat(64),
+      httpStatus: 200,
+      paginationPosition: {
+        kind: 'partitioned_page_index' as const,
+        partition_ordinal: position.partitionOrdinal,
+        partition_id: position.partitionId,
+        request_page_index: position.requestPageIndex,
+      },
+      sourceReports: {
+        population: {
+          state: 'reported' as const,
+          value: position.partitionId === 'spot_grid' ? 2 : 1,
+        },
+        page_count: { state: 'not_reported' as const },
+        current_page: { state: 'reported' as const, value: position.requestPageIndex },
+        page_size: { state: 'not_reported' as const },
+      },
+    }
+  })
+  const parserSourceOrdinals = [1, 3]
+  const pageBindings = parserSourceOrdinals.map((sourcePageOrdinal) => {
+    const position = sourcePages[sourcePageOrdinal - 1].paginationPosition
+    return {
+      source_page_ordinal: sourcePageOrdinal,
+      partition_ordinal: position.partition_ordinal,
+      partition_id: position.partition_id,
+      request_page_index: position.request_page_index,
+      request_page_size: pageSize,
+    }
+  })
+  return {
+    sourcePages,
+    parsePages: parserSourceOrdinals.map((sourcePageOrdinal, index) =>
+      projectPartitionedNumericParserPage(
+        sourcePages[sourcePageOrdinal - 1].rawPage,
+        pageBindings[index]
+      )
+    ),
+    terminationReason: 'reported_population_reached',
+    captureConfig: { caller_page_cap: null, safety_page_cap: 10 },
+    parserTransformation: {
+      kind: 'partitioned_numeric_projection',
+      source_page_ordinals: parserSourceOrdinals,
+      algorithm_contract: LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+      page_bindings: pageBindings,
+    },
+    paginationTopology: {
+      kind: 'partitioned_numeric',
+      aggregation_contract: LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+      rank_scope: 'partition_local_concatenated_for_storage',
+      expected_partition_ids: partitionIds,
+      partitions: [
+        {
+          partition_id: 'spot_grid',
+          source_page_ordinals: [1, 2],
+          parser_page_ordinals: [1],
+          termination_reason: 'reported_population_reached',
+          capture_config: { caller_page_cap: null, safety_page_cap: 5 },
+        },
+        {
+          partition_id: 'spot_martingale',
+          source_page_ordinals: [3, 4],
+          parser_page_ordinals: [2],
+          termination_reason: 'reported_population_reached',
+          capture_config: { caller_page_cap: null, safety_page_cap: 5 },
+        },
+      ],
+    },
+  }
+}
+
 function makeJob(data: TierJobData = { sourceSlug: src.slug }): Job<TierJobData> {
   const testJob = {
     id: 'repeat:tiera:xt_futures:1784361600000',
@@ -323,7 +439,7 @@ describe('Tier-A board-series publication guard', () => {
     job = makeJob()
     expectedCycleId = `tier-a:${src.slug}:${job.id}:${job.timestamp}`
     mockResolveDeployedSha.mockReturnValue('c'.repeat(40))
-    mockHasRegisteredAttemptBoundContract.mockResolvedValue(false)
+    mockFindRegisteredAttemptBoundContract.mockResolvedValue(null)
     let nextAttemptSequence = 41
     mockStartLeaderboardAcquisitionAttempt.mockImplementation(
       async (input: StartLeaderboardAcquisitionAttemptInput) =>
@@ -415,6 +531,17 @@ describe('Tier-A board-series publication guard', () => {
         replayed: false,
       },
     })
+    mockPublishAttemptBoundLeaderboardSnapshot.mockResolvedValue({
+      snapshotId: 778,
+      scrapedAt: '2026-07-16 00:01:02.123456+00',
+      verdict: { passed: true, baselineUsed: 3, deviationPct: 0 },
+      published: true,
+      traderIds: new Map([
+        ['grid-1', 43],
+        ['grid-2', 44],
+        ['martingale-1', 45],
+      ]),
+    })
     mockPublishFencedBoardSeries.mockResolvedValue({ traders: 1, points: 1 })
   })
 
@@ -437,13 +564,70 @@ describe('Tier-A board-series publication guard', () => {
     expectedCycleId = `tier-a:${binanceSrc.slug}:${job.id}:${job.timestamp}`
     mockGetSourceBySlug.mockResolvedValue(binanceSrc)
     mockNativeRankingTimeframes.mockReturnValue(timeframes)
-    mockHasRegisteredAttemptBoundContract.mockResolvedValue(true)
+    mockFindRegisteredAttemptBoundContract.mockResolvedValue(
+      ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT
+    )
     mockGetAdapter.mockReturnValue({
       captureLeaderboard,
       listLeaderboard: async function* () {
         throw new Error('registered source must not use the legacy stream')
       },
       parseLeaderboard: () => ({ rows: parsedRows, reportedTotal: parsedRows.length }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+    return captureLeaderboard
+  }
+
+  function configureV4Source(
+    captureLeaderboard: jest.Mock = jest.fn(async () => partitionedLeaderboardCapture())
+  ) {
+    job = makeJob({ sourceSlug: bitgetBotsSrc.slug })
+    expectedCycleId = `tier-a:${bitgetBotsSrc.slug}:${job.id}:${job.timestamp}`
+    mockGetSourceBySlug.mockResolvedValue(bitgetBotsSrc)
+    mockNativeRankingTimeframes.mockReturnValue([30])
+    mockFindRegisteredAttemptBoundContract.mockResolvedValue(
+      ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT
+    )
+    mockStartLeaderboardAcquisitionAttempt.mockImplementation(
+      async (input: StartLeaderboardAcquisitionAttemptInput) =>
+        attemptFromStart(input, 81, bitgetBotsSrc)
+    )
+    mockWriteAttemptBoundLeaderboardRawArtifactSet.mockImplementation(
+      async (input: {
+        attempt: LeaderboardAcquisitionAttempt
+        built: Parameters<typeof projectLeaderboardManifestV4Outcome>[1]
+      }) => ({
+        sourcePayload: {
+          id: 9_501,
+          storagePath: `${bitgetBotsSrc.slug}/tier_a_trust/source-v4.json.gz`,
+          contentHash: 'd'.repeat(64),
+        },
+        populationManifest: {
+          id: 9_502,
+          storagePath: `${bitgetBotsSrc.slug}/tier_a_trust/manifest-v4.json.gz`,
+          contentHash: input.built.sourceRunId,
+        },
+        projection: projectLeaderboardManifestV4Outcome(input.attempt, input.built),
+      })
+    )
+    mockGetAdapter.mockReturnValue({
+      leaderboardAcquisitionContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+      leaderboardPartitionIds: () => ['spot_grid', 'spot_martingale'],
+      captureLeaderboard,
+      listLeaderboard: async function* () {
+        throw new Error('v4 capture must not use the legacy stream')
+      },
+      parseLeaderboard: (raw: unknown) => {
+        const envelope = raw as { payload: { items: string[] } }
+        return {
+          rows: envelope.payload.items.map((exchangeTraderId, index) => ({
+            ...row,
+            exchangeTraderId,
+            rank: index + 1,
+          })),
+          reportedTotal: envelope.payload.items.length,
+        }
+      },
       parseLeaderboardSeries: () => new Map(),
     })
     return captureLeaderboard
@@ -491,15 +675,334 @@ describe('Tier-A board-series publication guard', () => {
 
   it('keeps a registered v3 contract inert without explicit rollout approval', async () => {
     delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
-    mockHasRegisteredAttemptBoundContract.mockResolvedValue(true)
+    mockFindRegisteredAttemptBoundContract.mockResolvedValue(
+      ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT
+    )
 
     await expect(processTierA(job)).resolves.toEqual([
       expect.objectContaining({ timeframe: 30, snapshotId: 777, passed: true }),
     ])
 
-    expect(mockHasRegisteredAttemptBoundContract).not.toHaveBeenCalled()
+    expect(mockFindRegisteredAttemptBoundContract).not.toHaveBeenCalled()
     expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
     expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+  })
+
+  it('fails an explicit v4 rollout before registry lookup, session, or capture when disabled', async () => {
+    const captureLeaderboard = configureV4Source()
+    delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+
+    await expect(processTierA(job)).rejects.toThrow('v4 capture rollout is not enabled')
+
+    expect(mockFindRegisteredAttemptBoundContract).not.toHaveBeenCalled()
+    expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(captureLeaderboard).not.toHaveBeenCalled()
+  })
+
+  it('fails an explicit v4 adapter when its exact registry contract is absent', async () => {
+    const captureLeaderboard = configureV4Source()
+    mockFindRegisteredAttemptBoundContract.mockResolvedValue(null)
+
+    await expect(processTierA(job)).rejects.toThrow('v4 capture contract is not exactly registered')
+
+    expect(mockFindRegisteredAttemptBoundContract).toHaveBeenCalledWith({
+      sourceId: bitgetBotsSrc.id,
+      adapterSlug: bitgetBotsSrc.adapter_slug,
+      captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+    })
+    expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(captureLeaderboard).not.toHaveBeenCalled()
+  })
+
+  it('publishes terminal-gap v4 evidence only through its exact attempt fence', async () => {
+    configureV4Source()
+    await expect(processTierA(job)).resolves.toEqual([
+      expect.objectContaining({ timeframe: 30, snapshotId: 778, passed: true }),
+    ])
+
+    expect(mockStartLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: bitgetBotsSrc.id,
+        captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+      })
+    )
+    expect(mockValidateLeaderboardRows.mock.calls[0][0]).toEqual([
+      expect.objectContaining({ exchangeTraderId: 'grid-1', rank: 1 }),
+      expect.objectContaining({ exchangeTraderId: 'grid-2', rank: 2 }),
+      expect.objectContaining({ exchangeTraderId: 'martingale-1', rank: 3 }),
+    ])
+    const artifactInput = mockWriteAttemptBoundLeaderboardRawArtifactSet.mock.calls[0][0]
+    expect(artifactInput.built.manifest).toMatchObject({
+      data_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+      source: { configured_partition_ids: ['spot_grid', 'spot_martingale'] },
+      parser_input: {
+        page_count: 2,
+        transformation: { source_page_ordinals: [1, 3] },
+      },
+      pagination_topology: {
+        expected_partition_ids: ['spot_grid', 'spot_martingale'],
+        partitions: [
+          { source_page_ordinals: [1, 2], parser_page_ordinals: [1] },
+          { source_page_ordinals: [3, 4], parser_page_ordinals: [2] },
+        ],
+      },
+      population: { observed_row_count: 3, accepted_population: 3 },
+    })
+    expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'manifest',
+        projection: expect.objectContaining({ terminalState: 'complete' }),
+      })
+    )
+    expect(mockPublishAttemptBoundLeaderboardSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        src: bitgetBotsSrc,
+        timeframe: 30,
+        rows: expect.arrayContaining([
+          expect.objectContaining({ exchangeTraderId: 'grid-1', rank: 1 }),
+          expect.objectContaining({ exchangeTraderId: 'martingale-1', rank: 3 }),
+        ]),
+        rejects: [],
+        observationCycleId: expectedCycleId,
+        attemptEvidence: expect.objectContaining({
+          sourceRunId: artifactInput.built.sourceRunId,
+          manifest: artifactInput.built.manifest,
+          artifacts: expect.objectContaining({
+            sourcePayload: expect.objectContaining({ id: 9_501 }),
+            populationManifest: expect.objectContaining({ id: 9_502 }),
+          }),
+        }),
+      }),
+      expect.any(Object)
+    )
+    expect(mockHasRegisteredLeaderboardMetricTrust).not.toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs the v4 terminal fence even for a gated snapshot and leaves its checkpoint open', async () => {
+    configureV4Source()
+    mockPublishAttemptBoundLeaderboardSnapshot.mockResolvedValue({
+      snapshotId: 779,
+      scrapedAt: '2026-07-16 00:01:02.123456+00',
+      verdict: { passed: false, baselineUsed: 20, deviationPct: 85 },
+      published: false,
+      traderIds: new Map(),
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toBeInstanceOf(AggregateError)
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'manifest',
+        projection: expect.objectContaining({ terminalState: 'complete' }),
+      })
+    )
+    expect(mockPublishAttemptBoundLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+  })
+
+  it('terminally records a v4/identity capture mismatch without publishing or downgrading', async () => {
+    configureV4Source(jest.fn(async () => capturedLeaderboard()))
+    const adapter = mockGetAdapter()
+    adapter.parseLeaderboard = () => ({ rows: [row], reportedTotal: 1 })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toThrow(
+        'capture processing failed after RAW fallback'
+      )
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'tier_a_failure',
+        meta: expect.objectContaining({
+          acquisition_attempt: expect.objectContaining({
+            capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+          }),
+          capture_evidence: expect.objectContaining({
+            mode: 'identity',
+            capture_config: expect.any(Object),
+            parser_transformation: expect.any(Object),
+            source_pages: expect.arrayContaining([
+              expect.objectContaining({
+                ordinal: 1,
+                stored_page_index: 1,
+                payload_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+                source_row_count: 1,
+                request_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+                pagination_position: expect.any(Object),
+              }),
+            ]),
+          }),
+        }),
+      })
+    )
+    expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'processing_failed',
+        failureStage: 'parse_validate_manifest',
+        reasonCode: 'manifest_failed',
+      })
+    )
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('preserves exact partition bindings when authoritative topology drift is rejected', async () => {
+    configureV4Source()
+    const adapter = mockGetAdapter()
+    adapter.leaderboardPartitionIds = () => ['spot_martingale', 'spot_grid']
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toThrow(
+        'capture processing failed after RAW fallback'
+      )
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'tier_a_failure',
+        meta: expect.objectContaining({
+          acquisition_attempt: expect.objectContaining({
+            capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+          }),
+          capture_evidence: expect.objectContaining({
+            mode: 'partitioned_numeric',
+            parser_transformation: expect.objectContaining({
+              kind: 'partitioned_numeric_projection',
+              source_page_ordinals: [1, 3],
+              page_bindings: expect.arrayContaining([
+                expect.objectContaining({
+                  partition_id: 'spot_grid',
+                  source_page_ordinal: 1,
+                  request_page_index: 1,
+                  request_page_size: 20,
+                }),
+              ]),
+            }),
+            pagination_topology: expect.objectContaining({
+              expected_partition_ids: ['spot_grid', 'spot_martingale'],
+            }),
+            source_pages: expect.arrayContaining([
+              expect.objectContaining({
+                ordinal: 3,
+                source_row_count: 1,
+                pagination_position: expect.objectContaining({
+                  partition_id: 'spot_martingale',
+                  request_page_index: 1,
+                }),
+              }),
+            ]),
+          }),
+        }),
+      })
+    )
+    expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'processing_failed',
+        diagnosticRawObjectId: 9001,
+        failureStage: 'parse_validate_manifest',
+        reasonCode: 'manifest_failed',
+      })
+    )
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockPublishAttemptBoundLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('terminally records a v3/partitioned capture mismatch without publishing or upgrading', async () => {
+    configureAttemptBoundSource(
+      [30],
+      jest.fn(async () => partitionedLeaderboardCapture(100))
+    )
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toThrow(
+        'capture processing failed after RAW fallback'
+      )
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'processing_failed',
+        failureStage: 'parse_validate_manifest',
+        reasonCode: 'manifest_failed',
+      })
+    )
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('uses evidence-only validation and durably terminates captured v4 upstream evidence', async () => {
+    configureV4Source(
+      jest.fn(async () => {
+        const failedCapture = partitionedLeaderboardCapture()
+        failedCapture.terminationReason = 'upstream_error'
+        failedCapture.paginationTopology.partitions[1].termination_reason = 'upstream_error'
+        throw new LeaderboardCaptureUpstreamError(
+          null,
+          'https://bitget.test/spot_martingale?page=3',
+          failedCapture,
+          new Error('connection reset')
+        )
+      })
+    )
+    const validateLeaderboard = jest.fn()
+    const adapter = mockGetAdapter()
+    adapter.validateLeaderboard = validateLeaderboard
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toBeInstanceOf(AggregateError)
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(validateLeaderboard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parsedRows: expect.any(Array),
+        validRows: expect.any(Array),
+        rejectedRowCount: 0,
+      }),
+      bitgetBotsSrc,
+      30,
+      { purpose: 'evidence_only' }
+    )
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).toHaveBeenCalledTimes(1)
+    expect(mockWriteRawObject).not.toHaveBeenCalledWith(
+      expect.objectContaining({ jobType: 'tier_a_failure' })
+    )
+    expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'manifest',
+        projection: expect.objectContaining({ terminalState: 'unknown' }),
+      })
+    )
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('passes the exact live snapshot identity before publishing replacement series', async () => {
@@ -620,7 +1123,8 @@ describe('Tier-A board-series publication guard', () => {
     expect(validateLeaderboard).toHaveBeenCalledWith(
       { parsedRows: [row], validRows: [row], rejectedRowCount: 0 },
       src,
-      30
+      30,
+      { purpose: 'publication' }
     )
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
     expect(parseLeaderboardSeries).not.toHaveBeenCalled()
@@ -1508,7 +2012,7 @@ describe('Tier-A board-series publication guard', () => {
       timeframe: 30,
       payload: (capture as LeaderboardCapture).sourcePages.map((sourcePage) => sourcePage.rawPage),
       serialization: STRICT_CANONICAL_JSON_CONTRACT,
-      meta: {
+      meta: expect.objectContaining({
         pageCount: 2,
         observation_cycle_id: expectedCycleId,
         trust_evidence: {
@@ -1519,7 +2023,16 @@ describe('Tier-A board-series publication guard', () => {
           capture_started_at: expect.any(String),
           capture_completed_at: expect.any(String),
         },
-      },
+        capture_evidence: expect.objectContaining({
+          mode: 'identity',
+          source_pages: expect.arrayContaining([
+            expect.objectContaining({
+              payload_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+              request_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+            }),
+          ]),
+        }),
+      }),
     })
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
@@ -2017,6 +2530,71 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
+  it('fails before source lookup when its execution signal is already aborted', async () => {
+    const controller = new AbortController()
+    const cancellation = new Error('authority already lost')
+    controller.abort(cancellation)
+
+    await expect(
+      processTierAInRegion(job, createAuthorizedTestContext('local', 'local'), controller.signal)
+    ).rejects.toBe(cancellation)
+
+    expect(mockGetSourceBySlug).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockFinishLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('preserves the normal successful path with a live execution signal', async () => {
+    const controller = new AbortController()
+
+    await expect(
+      processTierAInRegion(job, createAuthorizedTestContext('local', 'local'), controller.signal)
+    ).resolves.toHaveLength(1)
+
+    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ src, timeframe: 30 }),
+      expect.objectContaining({ consumedRegion: 'local' }),
+      controller.signal
+    )
+    expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves an open attempt and closes its session when authority is lost during capture', async () => {
+    const captureStarted = deferred()
+    const finishCapture = deferred()
+    const captureLeaderboard = jest.fn(async () => {
+      captureStarted.resolve()
+      await finishCapture.promise
+      return capturedLeaderboard()
+    })
+    configureAttemptBoundSource([30], captureLeaderboard)
+    const controller = new AbortController()
+    const cancellation = new Error('regional authority lost')
+
+    const run = processTierAInRegion(
+      job,
+      createAuthorizedTestContext('vps_sg', 'vps_sg'),
+      controller.signal
+    )
+    await captureStarted.promise
+    controller.abort(cancellation)
+    await Promise.resolve()
+
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+    finishCapture.resolve()
+    await expect(run).rejects.toBe(cancellation)
+    expect(mockStartLeaderboardAcquisitionAttempt).toHaveBeenCalledTimes(1)
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockFinishLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+  })
+
   it('terminally records first-session failure without beginning a later window', async () => {
     configureAttemptBoundSource([7, 30])
     mockOpenSession.mockRejectedValue(new Error('browser unavailable'))
@@ -2257,7 +2835,7 @@ describe('Tier-A board-series publication guard', () => {
 
     const [diagnosticInput] = mockWriteRawObject.mock.calls[0]
     const [finishInput] = mockFinishLeaderboardAcquisitionAttempt.mock.calls[0]
-    expect(diagnosticInput).toStrictEqual({
+    expect(diagnosticInput).toMatchObject({
       sourceId: binanceSrc.id,
       sourceSlug: binanceSrc.slug,
       jobType: 'tier_a_failure',
@@ -2271,6 +2849,7 @@ describe('Tier-A board-series publication guard', () => {
           binding_contract: finishInput.attempt.attemptBindingContract,
           attempt_id: finishInput.attempt.attemptId,
           attempt_seq: finishInput.attempt.attemptSeq,
+          capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
           runner_git_sha: 'c'.repeat(40),
           capture_started_at: finishInput.attempt.recordedStartedAt,
           capture_completed_at: finishInput.captureCompletedAt,
@@ -2284,6 +2863,22 @@ describe('Tier-A board-series publication guard', () => {
           capture_completed_at: finishInput.captureCompletedAt,
         },
       },
+    })
+    expect(diagnosticInput.meta.capture_evidence).toMatchObject({
+      mode: 'identity',
+      capture_config: parserCapture.captureConfig,
+      parser_transformation: parserCapture.parserTransformation,
+    })
+    expect(diagnosticInput.meta.capture_evidence.source_pages).toHaveLength(
+      parserCapture.sourcePages.length
+    )
+    expect(diagnosticInput.meta.capture_evidence.source_pages[0]).toMatchObject({
+      ordinal: 1,
+      stored_page_index: parserCapture.sourcePages[0].rawPage.pageIndex,
+      payload_sha256: strictCanonicalSha256(parserCapture.sourcePages[0].rawPage.payload),
+      request_sha256: parserCapture.sourcePages[0].requestSha256,
+      pagination_position: parserCapture.sourcePages[0].paginationPosition,
+      source_reports: parserCapture.sourcePages[0].sourceReports,
     })
     expect(finishInput).toMatchObject({
       kind: 'processing_failed',
@@ -2315,7 +2910,7 @@ describe('Tier-A board-series publication guard', () => {
     const spotSrc = { ...binanceSrc, id: 2, slug: 'binance_spot' } as SourceRow
     job = makeJob({ sourceSlug: spotSrc.slug })
     mockGetSourceBySlug.mockResolvedValue(spotSrc)
-    mockHasRegisteredAttemptBoundContract.mockResolvedValue(false)
+    mockFindRegisteredAttemptBoundContract.mockResolvedValue(null)
     mockGetAdapter.mockReturnValue({
       captureLeaderboard: async () => capturedLeaderboard(),
       listLeaderboard: async function* () {
@@ -2327,9 +2922,10 @@ describe('Tier-A board-series publication guard', () => {
 
     await expect(processTierA(job)).resolves.toHaveLength(1)
 
-    expect(mockHasRegisteredAttemptBoundContract).toHaveBeenCalledWith({
+    expect(mockFindRegisteredAttemptBoundContract).toHaveBeenCalledWith({
       sourceId: spotSrc.id,
       adapterSlug: 'binance',
+      captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
     })
     expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
     expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
@@ -2591,7 +3187,9 @@ describe('Tier-A board-series publication guard', () => {
   it('hard-fails registry/code drift before begin or session acquisition', async () => {
     job = makeJob({ sourceSlug: binanceSrc.slug })
     mockGetSourceBySlug.mockResolvedValue(binanceSrc)
-    mockHasRegisteredAttemptBoundContract.mockResolvedValue(true)
+    mockFindRegisteredAttemptBoundContract.mockResolvedValue(
+      ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT
+    )
     mockGetAdapter.mockReturnValue({
       listLeaderboard: async function* () {
         yield page

@@ -22,6 +22,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import type { LeaderboardValidationOptions } from '../../core/adapter'
 
 type Dict = Record<string, unknown>
 
@@ -184,6 +185,18 @@ function canonicalNonNegativeInteger(value: unknown, label: string): number {
   return numeric
 }
 
+function canonicalPositiveSafeNumber(value: unknown, label: string): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    Object.is(value, -0)
+  ) {
+    return publicationContractError(`${label} must be a positive safe-integer number`)
+  }
+  return value
+}
+
 export function assertCanonicalBitgetBotsSource(
   src: SourceRow,
   timeframe: RankingTimeframe
@@ -226,13 +239,17 @@ export function assertBitgetBotsLeaderboardPublication(
     rejectedRowCount: number
   }>,
   src: SourceRow,
-  timeframe: RankingTimeframe
+  timeframe: RankingTimeframe,
+  options: LeaderboardValidationOptions = { purpose: 'publication' }
 ): void {
+  if (options.purpose !== 'publication' && options.purpose !== 'evidence_only') {
+    publicationContractError('leaderboard validation purpose is unsupported')
+  }
   const contract = assertCanonicalBitgetBotsSource(src, timeframe)
   if (!Number.isSafeInteger(result.rejectedRowCount) || result.rejectedRowCount !== 0) {
     publicationContractError('the complete board must have zero rejected rows')
   }
-  if (result.parsedRows.length === 0) {
+  if (options.purpose === 'publication' && result.parsedRows.length === 0) {
     publicationContractError('the complete board cannot be empty')
   }
   if (result.parsedRows.length !== result.validRows.length) {
@@ -354,7 +371,10 @@ export function assertBitgetBotsLeaderboardPublication(
       publicationContractError(`row ${exchangeId} raw status mismatch`)
     }
   }
-  if (!strategies.has('grid') || !strategies.has('martingale')) {
+  if (
+    options.purpose === 'publication' &&
+    (!strategies.has('grid') || !strategies.has('martingale'))
+  ) {
     publicationContractError('the complete board must include both configured strategy partitions')
   }
 }
@@ -404,11 +424,11 @@ function decodeBitgetBotsBoardPage(raw: unknown): DecodedBitgetBotsBoardPage {
       publicationContractError('partitioned board page data contract is unsupported')
     }
     board = canonicalRequiredString(wrapper.partition_id, 'board page wrapper.partition_id')
-    requestPageIndex = canonicalNonNegativeInteger(
+    requestPageIndex = canonicalPositiveSafeNumber(
       wrapper.request_page_index,
       'board page request_page_index'
     )
-    requestPageSize = canonicalNonNegativeInteger(
+    requestPageSize = canonicalPositiveSafeNumber(
       wrapper.request_page_size,
       'board page request_page_size'
     )

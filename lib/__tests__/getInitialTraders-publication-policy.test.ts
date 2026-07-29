@@ -1,6 +1,7 @@
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 const mockCacheGet = jest.fn()
+const mockCacheSet = jest.fn()
 const mockAttachAvatarMirrors = jest.fn(async (_supabase: unknown, traders: unknown[]) => traders)
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -13,7 +14,7 @@ jest.mock('@/lib/data/avatar-mirrors', () => ({
 
 jest.mock('@/lib/cache', () => ({
   get: (...args: unknown[]) => mockCacheGet(...args),
-  set: jest.fn(),
+  set: (...args: unknown[]) => mockCacheSet(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -35,6 +36,64 @@ function queryResult(data: unknown[], error: unknown = null) {
           ) => Promise.resolve(result).then(resolve, reject)
         }
         const key = String(property)
+        methods[key] ??= jest.fn(() => proxy)
+        return methods[key]
+      },
+    }
+  )
+  return proxy
+}
+
+/**
+ * Emulate PostgREST's source filters and RANGE order. A retired row ahead of a
+ * page boundary therefore consumes a slot unless `.in('source', active)` was
+ * applied before `.range(...)`.
+ */
+function sourceFilteredPageQuery(data: Array<Record<string, unknown>>, error: unknown = null) {
+  let allowedSources: Set<unknown> | null = null
+  let excludedSources = new Set<string>()
+  let range: [number, number] | null = null
+  const methods: Record<string, jest.Mock> = {}
+  const proxy = new Proxy<Record<string, unknown>>(
+    {},
+    {
+      get(_target, property) {
+        if (property === 'then') {
+          const filtered = data
+            .filter((row) => allowedSources === null || allowedSources.has(row.source))
+            .filter((row) => typeof row.source !== 'string' || !excludedSources.has(row.source))
+          const page = range ? filtered.slice(range[0], range[1] + 1) : filtered
+          const result = { data: page, error }
+          return (
+            resolve: (value: typeof result) => unknown,
+            reject: (reason: unknown) => unknown
+          ) => Promise.resolve(result).then(resolve, reject)
+        }
+
+        const key = String(property)
+        if (key === 'in') {
+          methods.in ??= jest.fn((column: string, values: unknown[]) => {
+            if (column === 'source') allowedSources = new Set(values)
+            return proxy
+          })
+          return methods.in
+        }
+        if (key === 'not') {
+          methods.not ??= jest.fn((column: string, operator: string, value: string) => {
+            if (column === 'source' && operator === 'in') {
+              excludedSources = new Set(value.replace(/^\(|\)$/g, '').split(','))
+            }
+            return proxy
+          })
+          return methods.not
+        }
+        if (key === 'range') {
+          methods.range ??= jest.fn((from: number, to: number) => {
+            range = [from, to]
+            return proxy
+          })
+          return methods.range
+        }
         methods[key] ??= jest.fn(() => proxy)
         return methods[key]
       },
@@ -77,12 +136,14 @@ function abortablePendingQuery() {
   return proxy
 }
 
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import { fetchLeaderboardFromDB, getInitialTraders } from '../getInitialTraders'
 
 describe('SSR public ranking source quarantine', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCacheGet.mockResolvedValue(null)
+    mockCacheSet.mockResolvedValue(undefined)
     jest.useFakeTimers().setSystemTime(new Date('2026-07-24T12:00:00.000Z'))
   })
 
@@ -90,15 +151,15 @@ describe('SSR public ranking source quarantine', () => {
     jest.useRealTimers()
   })
 
-  it('keeps safe rows after a quarantined row on a finite DB page and excludes it in SQL', async () => {
+  it('applies the active allowlist before a deep-page range so retired rows cannot consume slots', async () => {
     const generation = '2026-07-24T11:59:00.000Z'
-    let rankingQuery: ReturnType<typeof queryResult> | undefined
+    let rankingQuery: ReturnType<typeof sourceFilteredPageQuery> | undefined
     let freshnessQuery: ReturnType<typeof queryResult> | undefined
 
     mockRpc.mockImplementation((name: string) => {
       if (name === 'get_leaderboard_category_counts') {
         return queryResult([
-          { source_type: 'futures', count: 1 },
+          { source_type: 'futures', count: 4 },
           { source_type: 'web3', count: 2 },
         ])
       }
@@ -107,29 +168,53 @@ describe('SSR public ranking source quarantine', () => {
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'leaderboard_ranks') {
-        rankingQuery = queryResult([
+        rankingQuery = sourceFilteredPageQuery([
           {
             source: 'binance_futures',
-            source_trader_id: 'first-safe',
+            source_trader_id: 'page-0-safe-1',
             source_type: 'futures',
-            handle: 'First',
+            handle: 'Page 0 Safe 1',
+            arena_score: 100,
+            computed_at: '2026-07-24T11:55:00.000Z',
+          },
+          {
+            source: 'bybit',
+            source_trader_id: 'page-0-safe-2',
+            source_type: 'futures',
+            handle: 'Page 0 Safe 2',
+            arena_score: 95,
+            computed_at: '2026-07-24T11:55:00.000Z',
+          },
+          {
+            source: 'copin',
+            source_trader_id: 'hyperliquid:0xretired-slot',
+            source_type: 'web3',
+            handle: 'Retired Copin Slot',
             arena_score: 90,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
-            source: 'okx_web3_solana',
-            source_trader_id: 'blocked',
-            source_type: 'web3',
-            handle: 'Blocked',
+            source: 'toobit',
+            source_trader_id: 'retired-toobit-slot',
+            source_type: 'futures',
+            handle: 'Retired Toobit Slot',
             arena_score: 85,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
             source: 'hyperliquid',
-            source_trader_id: 'last-safe',
+            source_trader_id: 'page-1-safe-1',
             source_type: 'web3',
-            handle: 'Last',
+            handle: 'Page 1 Safe 1',
             arena_score: 80,
+            computed_at: '2026-07-24T11:55:00.000Z',
+          },
+          {
+            source: 'gmx',
+            source_trader_id: 'page-1-safe-2',
+            source_type: 'web3',
+            handle: 'Page 1 Safe 2',
+            arena_score: 75,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
         ])
@@ -137,35 +222,45 @@ describe('SSR public ranking source quarantine', () => {
       }
       if (table === 'leaderboard_count_cache') {
         return queryResult([
-          { source: '_all_gt0', total_count: 3, updated_at: generation },
+          { source: '_all_gt0', total_count: 6, updated_at: generation },
           { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
-          { source: 'okx_web3_solana_gt0', total_count: 1, updated_at: generation },
+          { source: 'bybit_gt0', total_count: 1, updated_at: generation },
+          { source: 'copin_gt0', total_count: 1, updated_at: generation },
+          { source: 'toobit_gt0', total_count: 1, updated_at: generation },
           { source: 'hyperliquid_gt0', total_count: 1, updated_at: generation },
+          { source: 'gmx_gt0', total_count: 1, updated_at: generation },
         ])
       }
       if (table === 'leaderboard_source_freshness') {
         freshnessQuery = queryResult([
           { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
-          { source: 'okx_web3_solana', source_as_of: '2026-07-01T00:00:00.000Z' },
+          { source: 'bybit', source_as_of: '2026-07-24T10:30:00.000Z' },
+          { source: 'copin', source_as_of: '2026-07-01T00:00:00.000Z' },
+          { source: 'toobit', source_as_of: '2026-07-01T00:00:00.000Z' },
           { source: 'hyperliquid', source_as_of: '2026-07-24T10:00:00.000Z' },
+          { source: 'gmx', source_as_of: '2026-07-24T09:30:00.000Z' },
         ])
         return freshnessQuery
       }
       throw new Error(`unexpected table ${table}`)
     })
 
-    const result = await fetchLeaderboardFromDB('90D', 3, 1)
+    const result = await fetchLeaderboardFromDB('90D', 2, 1)
 
-    expect(result.traders.map(({ id }) => id)).toEqual(['first-safe', 'last-safe'])
-    expect(result.totalCount).toBe(2)
-    expect(result.categoryCounts).toEqual({ all: 2, futures: 1, spot: 0, onchain: 1 })
-    expect(result.lastUpdated).toBeNull()
-    expect(result.isStale).toBe(true)
+    expect(result.traders.map(({ id }) => id)).toEqual(['page-1-safe-1', 'page-1-safe-2'])
+    expect(result.totalCount).toBe(4)
+    expect(result.categoryCounts).toEqual({ all: 4, futures: 2, spot: 0, onchain: 2 })
+    expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
       '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
     )
+    expect(rankingQuery?.range).toHaveBeenCalledWith(2, 3)
+    expect((rankingQuery?.in as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      (rankingQuery?.range as jest.Mock).mock.invocationCallOrder[0]
+    )
+    expect(freshnessQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
     expect(freshnessQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
@@ -173,9 +268,9 @@ describe('SSR public ranking source quarantine', () => {
     )
   })
 
-  it('fills SSR page zero from a DB query that excludes quarantine before LIMIT', async () => {
+  it('fills page zero after active allowlist and quarantine filters run before LIMIT', async () => {
     const generation = '2026-07-24T11:59:00.000Z'
-    let rankingQuery: ReturnType<typeof queryResult> | undefined
+    let rankingQuery: ReturnType<typeof sourceFilteredPageQuery> | undefined
 
     mockRpc.mockImplementation((name: string) => {
       if (name === 'get_leaderboard_category_counts') {
@@ -189,9 +284,28 @@ describe('SSR public ranking source quarantine', () => {
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'leaderboard_ranks') {
-        // Represents the first three rows after PostgREST applies source NOT IN;
-        // quarantined leaders cannot consume any of these LIMIT slots.
-        rankingQuery = queryResult([
+        rankingQuery = sourceFilteredPageQuery([
+          {
+            source: 'copin',
+            source_trader_id: 'hyperliquid:0xretired-page-zero',
+            handle: 'Retired Copin',
+            arena_score: 110,
+            computed_at: '2026-07-24T11:55:00.000Z',
+          },
+          {
+            source: 'toobit',
+            source_trader_id: 'retired-toobit-page-zero',
+            handle: 'Retired Toobit',
+            arena_score: 105,
+            computed_at: '2026-07-24T11:55:00.000Z',
+          },
+          {
+            source: 'okx_web3_solana',
+            source_trader_id: 'quarantined-page-zero',
+            handle: 'Quarantined',
+            arena_score: 100,
+            computed_at: '2026-07-24T11:55:00.000Z',
+          },
           {
             source: 'binance_futures',
             source_trader_id: 'safe-1',
@@ -218,7 +332,9 @@ describe('SSR public ranking source quarantine', () => {
       }
       if (table === 'leaderboard_count_cache') {
         return queryResult([
-          { source: '_all_gt0', total_count: 4, updated_at: generation },
+          { source: '_all_gt0', total_count: 6, updated_at: generation },
+          { source: 'copin_gt0', total_count: 1, updated_at: generation },
+          { source: 'toobit_gt0', total_count: 1, updated_at: generation },
           { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
           { source: 'bybit_gt0', total_count: 1, updated_at: generation },
           { source: 'hyperliquid_gt0', total_count: 1, updated_at: generation },
@@ -239,16 +355,86 @@ describe('SSR public ranking source quarantine', () => {
 
     expect(result.traders.map(({ id }) => id)).toEqual(['safe-1', 'safe-2', 'safe-3'])
     expect(result.totalCount).toBe(3)
+    expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
       '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
     )
     expect(rankingQuery?.range).toHaveBeenCalledWith(0, 2)
+    expect((rankingQuery?.in as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      (rankingQuery?.range as jest.Mock).mock.invocationCallOrder[0]
+    )
     expect((rankingQuery?.not as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
       (rankingQuery?.range as jest.Mock).mock.invocationCallOrder[0]
     )
     expect(mockRpc.mock.calls.map(([name]) => name)).toEqual(['get_leaderboard_category_counts'])
+  })
+
+  it('rejects copin:hyperliquid pollution before mapping can relabel it as active', async () => {
+    const generation = '2026-07-24T11:59:00.000Z'
+    let rankingQuery: ReturnType<typeof queryResult> | undefined
+
+    mockRpc.mockImplementation((name: string) => {
+      if (name === 'get_leaderboard_category_counts') {
+        return queryResult([
+          { source_type: 'futures', count: 1 },
+          { source_type: 'web3', count: 1 },
+        ])
+      }
+      throw new Error(`unexpected RPC ${name}`)
+    })
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') {
+        // Deliberately emulate a misbehaving DB/proxy that returns a row despite
+        // the SQL allowlist. Raw-source filtering must still run before mapping.
+        rankingQuery = queryResult([
+          {
+            source: 'copin',
+            source_trader_id: 'hyperliquid:0xpoison',
+            source_type: 'web3',
+            handle: 'Retired Copin',
+            arena_score: 100,
+            computed_at: '2026-07-24T11:55:00.000Z',
+          },
+          {
+            source: 'binance_futures',
+            source_trader_id: 'safe-after-copin',
+            source_type: 'futures',
+            handle: 'Safe',
+            arena_score: 90,
+            computed_at: '2026-07-24T11:55:00.000Z',
+          },
+        ])
+        return rankingQuery
+      }
+      if (table === 'leaderboard_count_cache') {
+        return queryResult([
+          { source: '_all_gt0', total_count: 2, updated_at: generation },
+          { source: 'copin_gt0', total_count: 1, updated_at: generation },
+          { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
+        ])
+      }
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'copin', source_as_of: '2026-07-01T00:00:00.000Z' },
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected table ${table}`)
+    })
+
+    const result = await fetchLeaderboardFromDB('90D', 2, 1)
+
+    expect(result.traders.map(({ id, source }) => ({ id, source }))).toEqual([
+      { id: 'safe-after-copin', source: 'binance_futures' },
+    ])
+    expect(result.traders).not.toContainEqual(
+      expect.objectContaining({ id: '0xpoison', source: 'hyperliquid' })
+    )
+    expect(result.totalCount).toBe(1)
+    expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
   })
 
   it('sanitizes an old SSR cache page without invoking strict row proof or the DB', async () => {
@@ -265,13 +451,89 @@ describe('SSR public ranking source quarantine', () => {
     const result = await getInitialTraders('90D', 3, 1)
 
     expect(mockCacheGet).toHaveBeenCalledWith(
-      'public-rank-policy-v3:home-initial-traders-v4:90D:p1'
+      'public-rank-policy-v4:home-initial-traders-v4:90D:p1'
     )
     expect(result.traders).toEqual([first, last])
     expect(result.totalCount).toBe(2)
     expect(result.categoryCounts).toEqual({ all: 2, futures: 1, spot: 0, onchain: 1 })
     expect(result.lastUpdated).toBeNull()
     expect(result.isStale).toBe(true)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('never reads transformed Copin data from v3 and uses v4 for normal cache writes and reads', async () => {
+    const oldV3Key = 'public-rank-policy-v3:home-initial-traders-v4:90D:p1'
+    const newV4Key = 'public-rank-policy-v4:home-initial-traders-v4:90D:p1'
+    const newV4FallbackKey = 'public-rank-policy-v4:home-initial-traders-fallback-v4:90D:p1'
+    const transformedCopin = {
+      traders: [
+        {
+          source: 'hyperliquid',
+          source_type: 'web3',
+          id: '0xlegacy-copin',
+          handle: 'Transformed Copin',
+        },
+      ],
+      lastUpdated: '2026-07-24T10:00:00.000Z',
+      isStale: false,
+      totalCount: 1,
+      categoryCounts: { all: 1, futures: 0, spot: 0, onchain: 1 },
+    }
+    const cacheEntries = new Map<string, unknown>([[oldV3Key, transformedCopin]])
+    mockCacheGet.mockImplementation(async (key: string) => cacheEntries.get(key) ?? null)
+    mockCacheSet.mockImplementation(async (key: string, value: unknown) => {
+      cacheEntries.set(key, value)
+    })
+
+    const generation = '2026-07-24T11:59:00.000Z'
+    const rankingQuery = queryResult([
+      {
+        source: 'binance_futures',
+        source_trader_id: 'fresh-v4',
+        source_type: 'futures',
+        handle: 'Fresh V4',
+        arena_score: 90,
+        computed_at: '2026-07-24T11:55:00.000Z',
+      },
+    ])
+    mockRpc.mockImplementation((name: string) => {
+      if (name === 'get_leaderboard_category_counts') {
+        return queryResult([{ source_type: 'futures', count: 1 }])
+      }
+      throw new Error(`unexpected RPC ${name}`)
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') return rankingQuery
+      if (table === 'leaderboard_count_cache') {
+        return queryResult([
+          { source: '_all_gt0', total_count: 1, updated_at: generation },
+          { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
+        ])
+      }
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected table ${table}`)
+    })
+
+    const first = await getInitialTraders('90D', 1, 1)
+
+    expect(first.traders.map(({ id }) => id)).toEqual(['fresh-v4'])
+    expect(mockCacheGet).not.toHaveBeenCalledWith(oldV3Key)
+    expect(mockCacheGet).toHaveBeenNthCalledWith(1, newV4Key)
+    expect(mockCacheGet).toHaveBeenNthCalledWith(2, newV4FallbackKey)
+    expect(mockCacheSet).toHaveBeenCalledWith(newV4Key, first, { ttl: 7200 })
+    expect(mockCacheSet).toHaveBeenCalledWith(newV4FallbackKey, first, { ttl: 14400 })
+    expect(cacheEntries.get(oldV3Key)).toBe(transformedCopin)
+
+    mockFrom.mockClear()
+    mockRpc.mockClear()
+    const second = await getInitialTraders('90D', 1, 1)
+
+    expect(second).toEqual(first)
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
   })
@@ -293,11 +555,11 @@ describe('SSR public ranking source quarantine', () => {
 
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       1,
-      'public-rank-policy-v3:home-initial-traders-v4:90D:p0'
+      'public-rank-policy-v4:home-initial-traders-v4:90D:p0'
     )
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       2,
-      'public-rank-policy-v3:home-initial-traders-fallback-v4:90D:p0'
+      'public-rank-policy-v4:home-initial-traders-fallback-v4:90D:p0'
     )
     expect(result).toEqual({ ...fallback, isStale: true })
     expect(mockFrom).not.toHaveBeenCalled()

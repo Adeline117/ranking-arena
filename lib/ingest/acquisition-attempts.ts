@@ -12,12 +12,16 @@ import {
   LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
   LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT,
   LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
+  LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
   parseLeaderboardAcquisitionManifest,
   parseLeaderboardAcquisitionManifestV3,
+  parseLeaderboardAcquisitionManifestV4,
   type BuiltLeaderboardAcquisitionManifest,
   type BuiltLeaderboardAcquisitionManifestV3,
+  type BuiltLeaderboardAcquisitionManifestV4,
   type LeaderboardAcquisitionManifest,
   type LeaderboardAcquisitionManifestV3,
+  type LeaderboardAcquisitionManifestV4,
 } from './acquisition-manifest'
 import type { RankingTimeframe } from './core/types'
 import { ingestClientConnect } from './db'
@@ -25,8 +29,13 @@ import { strictCanonicalJson, strictCanonicalSha256 } from './strict-canonical-j
 
 export { LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT } from './acquisition-manifest'
 export const VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT = LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT
-export const ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT =
+export const ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V3_CONTRACT =
   LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT
+export const ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT =
+  LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT
+/** Backward-compatible alias for the existing v3 worker path. */
+export const ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT =
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V3_CONTRACT
 export const LEGACY_LEADERBOARD_ACQUISITION_CONTRACT = 'legacy_unverified' as const
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
@@ -35,9 +44,12 @@ const SHA256 = /^[0-9a-f]{64}$/
 const WORKER_REGION = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const MANIFEST_PROJECTION_BRAND: unique symbol = Symbol('leaderboard-manifest-outcome')
 
+export type AttemptBoundLeaderboardAcquisitionContract =
+  | typeof ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V3_CONTRACT
+  | typeof ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT
 export type LeaderboardAcquisitionContract =
   | typeof VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT
-  | typeof ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT
+  | AttemptBoundLeaderboardAcquisitionContract
   | typeof LEGACY_LEADERBOARD_ACQUISITION_CONTRACT
 export type LeaderboardAcquisitionTerminalState =
   | 'complete'
@@ -57,6 +69,7 @@ export type LeaderboardAggregateReportState =
 type LeaderboardAcquisitionManifestLike =
   | LeaderboardAcquisitionManifest
   | LeaderboardAcquisitionManifestV3
+  | LeaderboardAcquisitionManifestV4
 export type LeaderboardAcquisitionFailureStage =
   | 'session_open'
   | 'request_build'
@@ -452,6 +465,15 @@ function assertDigest(value: string, pattern: RegExp, length: number, label: str
   }
 }
 
+function isAttemptBoundLeaderboardAcquisitionContract(
+  value: unknown
+): value is AttemptBoundLeaderboardAcquisitionContract {
+  return (
+    value === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V3_CONTRACT ||
+    value === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT
+  )
+}
+
 function assertStartInput(
   input: Required<Pick<StartLeaderboardAcquisitionAttemptInput, 'attemptId'>> &
     Omit<StartLeaderboardAcquisitionAttemptInput, 'attemptId'>
@@ -466,7 +488,7 @@ function assertStartInput(
   assertSafeInteger(input.queueAttempt, 'queue attempt', 0)
   if (
     input.captureContract !== VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT &&
-    input.captureContract !== ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT &&
+    !isAttemptBoundLeaderboardAcquisitionContract(input.captureContract) &&
     input.captureContract !== LEGACY_LEADERBOARD_ACQUISITION_CONTRACT
   ) {
     throw new TypeError('[ingest] leaderboard acquisition capture contract is invalid')
@@ -588,15 +610,20 @@ function assertAttemptShape(attempt: LeaderboardAcquisitionAttempt): void {
   assertCanonicalTimestamp(attempt.recordedStartedAt, 'recorded start')
 }
 
-/**
- * Read the immutable database capability registry before choosing the @3
- * worker path. Adapter methods are shared by some source rows and therefore
- * are not sufficient evidence that a source contract was reviewed.
- */
-export async function hasRegisteredAttemptBoundLeaderboardAcquisitionContract(input: {
+export interface FindRegisteredAttemptBoundLeaderboardAcquisitionContractInput {
   sourceId: number
   adapterSlug: string
-}): Promise<boolean> {
+  captureContract: AttemptBoundLeaderboardAcquisitionContract
+}
+
+/**
+ * Resolve one exact attempt-bound contract from the immutable database
+ * capability registry. Callers must name the contract so a v4-capable adapter
+ * cannot silently fall back to a registered v3 contract (or vice versa).
+ */
+export async function findRegisteredAttemptBoundLeaderboardAcquisitionContract(
+  input: FindRegisteredAttemptBoundLeaderboardAcquisitionContractInput
+): Promise<AttemptBoundLeaderboardAcquisitionContract | null> {
   assertSafeInteger(input.sourceId, 'source id', 1)
   if (input.sourceId > 32_767) {
     throw new TypeError('[ingest] leaderboard acquisition source id is invalid')
@@ -609,24 +636,43 @@ export async function hasRegisteredAttemptBoundLeaderboardAcquisitionContract(in
   ) {
     throw new TypeError('[ingest] leaderboard acquisition adapter slug is invalid')
   }
+  if (!isAttemptBoundLeaderboardAcquisitionContract(input.captureContract)) {
+    throw new TypeError('[ingest] attempt-bound leaderboard capture contract is invalid')
+  }
   const rows = await queryOnce<CaptureContractRow>(ATTEMPT_BOUND_CAPTURE_CONTRACT_SQL, [
     input.sourceId,
-    ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+    input.captureContract,
   ])
-  if (rows.length === 0) return false
+  if (rows.length === 0) return null
   if (rows.length !== 1) {
     throw new Error('[ingest] attempt-bound leaderboard capture registry is ambiguous')
   }
   const [row] = rows
   if (
-    row.capture_contract !== ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT ||
+    row.capture_contract !== input.captureContract ||
     row.adapter_slug !== input.adapterSlug ||
     row.attempt_binding_contract !== LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT ||
     row.requires_runner_git_sha !== true
   ) {
     throw new Error('[ingest] attempt-bound leaderboard capture registry is inconsistent')
   }
-  return true
+  return input.captureContract
+}
+
+/**
+ * Backward-compatible boolean capability check for the existing v3 worker
+ * path. New callers should request their exact contract through `find...`.
+ */
+export async function hasRegisteredAttemptBoundLeaderboardAcquisitionContract(input: {
+  sourceId: number
+  adapterSlug: string
+}): Promise<boolean> {
+  return (
+    (await findRegisteredAttemptBoundLeaderboardAcquisitionContract({
+      ...input,
+      captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V3_CONTRACT,
+    })) !== null
+  )
 }
 
 function reasonCodeForManifest(
@@ -675,7 +721,10 @@ function terminalStateForManifest(
 
 function projectParsedLeaderboardManifestOutcome(
   attempt: LeaderboardAcquisitionAttempt,
-  built: BuiltLeaderboardAcquisitionManifest | BuiltLeaderboardAcquisitionManifestV3,
+  built:
+    | BuiltLeaderboardAcquisitionManifest
+    | BuiltLeaderboardAcquisitionManifestV3
+    | BuiltLeaderboardAcquisitionManifestV4,
   manifest: LeaderboardAcquisitionManifestLike
 ): LeaderboardManifestOutcomeProjection {
   const canonicalJson = strictCanonicalJson(manifest)
@@ -760,6 +809,27 @@ export function projectLeaderboardManifestV3Outcome(
     )
   }
   const manifest = parseLeaderboardAcquisitionManifestV3(built.manifest)
+  if (
+    manifest.acquisition_attempt.binding_contract !== attempt.attemptBindingContract ||
+    manifest.acquisition_attempt.attempt_id !== attempt.attemptId ||
+    manifest.acquisition_attempt.attempt_seq !== attempt.attemptSeq
+  ) {
+    throw new TypeError('[ingest] acquisition manifest does not bind the durable attempt identity')
+  }
+  return projectParsedLeaderboardManifestOutcome(attempt, built, manifest)
+}
+
+export function projectLeaderboardManifestV4Outcome(
+  attempt: LeaderboardAcquisitionAttempt,
+  built: BuiltLeaderboardAcquisitionManifestV4
+): LeaderboardManifestOutcomeProjection {
+  assertAttemptShape(attempt)
+  if (attempt.captureContract !== ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT) {
+    throw new TypeError(
+      '[ingest] only an attempt-bound v4 attempt can project v4 manifest evidence'
+    )
+  }
+  const manifest = parseLeaderboardAcquisitionManifestV4(built.manifest)
   if (
     manifest.acquisition_attempt.binding_contract !== attempt.attemptBindingContract ||
     manifest.acquisition_attempt.attempt_id !== attempt.attemptId ||

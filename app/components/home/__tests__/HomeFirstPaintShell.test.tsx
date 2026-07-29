@@ -15,6 +15,11 @@ describe('HomeFirstPaintShell', () => {
     expect(layout).toHaveClass('three-col-layout')
     expect(layout).not.toHaveClass('three-col-no-left')
     expect(layout).not.toHaveClass('three-col-no-right')
+    expect(container.querySelector('#ssr-home-content-shell')).toHaveClass(
+      'container-padding',
+      'has-mobile-nav',
+      'home-page-container'
+    )
 
     const directRegions = Array.from(layout?.children ?? [])
     expect(directRegions.map((region) => region.className)).toEqual(

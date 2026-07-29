@@ -10,6 +10,13 @@ import {
   type PublishSnapshotResult,
   type PublishTrustedSnapshotInput,
 } from '@/lib/ingest/serving/publish'
+import {
+  fenceAttemptBoundLeaderboardEvidencePublicationCommit,
+  prepareLeaderboardAttemptBoundV4Evidence,
+  snapshotLeaderboardTrustValue,
+  type LeaderboardAttemptBoundV4Bundle,
+  type PreparedLeaderboardAttemptBoundV4Evidence,
+} from '@/lib/ingest/serving/metric-trust-publish'
 
 import {
   assertSourceMatchesConsumedRegion,
@@ -187,6 +194,12 @@ function assertAuthorityIdentity(context: AuthorizedConsumedRegionContext): void
   }
 }
 
+function throwIfPublicationCancelled(signal?: AbortSignal): void {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  throw reason instanceof Error ? reason : new Error('[ingest-worker] Tier-A publication cancelled')
+}
+
 async function lockAndAssertLiveSourceAuthority(
   transaction: IngestQueryExecutor,
   src: TierAPublicationSourceContract,
@@ -333,28 +346,39 @@ async function withFencedTierAPublication<T>(
   publish: (
     transaction: IngestQueryExecutor,
     sourceAuthorityGuard: (transaction: IngestQueryExecutor) => Promise<void>
-  ) => Promise<T>
+  ) => Promise<T>,
+  signal?: AbortSignal
 ): Promise<T> {
+  throwIfPublicationCancelled(signal)
   assertSourceMatchesConsumedRegion(src, context)
   assertAuthorityIdentity(context)
   const sourceContract = snapshotSourceContract(src)
   const guardedTimeframes = snapshotPublicationTimeframes(publicationTimeframes)
   const expectedTraderIdentities = snapshotTraderIdentities(traderIdentities)
-  return context.authority.withFencedWrite((transaction) =>
-    publish(transaction, async (lockedTransaction) => {
+  return context.authority.withFencedWrite(async (transaction) => {
+    throwIfPublicationCancelled(signal)
+    const result = await publish(transaction, async (lockedTransaction) => {
+      throwIfPublicationCancelled(signal)
       await lockAndAssertLiveSourceAuthority(
         lockedTransaction,
         sourceContract,
         guardedTimeframes,
         context
       )
+      throwIfPublicationCancelled(signal)
       await lockAndAssertExistingTraderIdentities(
         lockedTransaction,
         sourceContract.id,
         expectedTraderIdentities
       )
+      throwIfPublicationCancelled(signal)
     })
-  )
+    // Throwing inside withFencedWrite rolls every mutation in this publication
+    // back before its transaction can commit, even if cancellation arrived
+    // while an individual SQL statement was in flight.
+    throwIfPublicationCancelled(signal)
+    return result
+  })
 }
 
 function reportCommittedBaselineShift(
@@ -374,9 +398,50 @@ function reportCommittedBaselineShift(
   }
 }
 
+export interface PublishAttemptBoundLeaderboardSnapshotInput extends Omit<
+  PublishSnapshotInput,
+  'rawObjectId' | 'isDerived'
+> {
+  /** Complete V4 capture proof. It grants snapshot authority, never metric authority. */
+  attemptEvidence: LeaderboardAttemptBoundV4Bundle
+}
+
+async function bindSnapshotToAttemptEvidence(
+  transaction: IngestQueryExecutor,
+  result: PublishSnapshotResult,
+  prepared: PreparedLeaderboardAttemptBoundV4Evidence
+): Promise<void> {
+  const receipt = await transaction.query(
+    `UPDATE arena.leaderboard_snapshots
+        SET meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb
+      WHERE id = $1::bigint
+        AND source_id = $3::smallint
+        AND timeframe = $4::smallint
+        AND scraped_at = $5::timestamptz
+        AND raw_object_id = $6::bigint`,
+    [
+      result.snapshotId,
+      JSON.stringify({
+        source_run_id: prepared.sourceRunId,
+        source_payload_raw_object_id: prepared.artifacts.sourcePayload.id,
+        manifest_raw_object_id: prepared.artifacts.populationManifest.id,
+        acquisition_contract: prepared.manifest.data_contract,
+      }),
+      prepared.src.id,
+      prepared.timeframe,
+      result.scrapedAt,
+      prepared.artifacts.sourcePayload.id,
+    ]
+  )
+  if (receipt.rowCount !== 1) {
+    throw new Error('[ingest-worker] attempt-bound snapshot evidence binding count mismatch')
+  }
+}
+
 export async function publishFencedLeaderboardSnapshot(
   input: PublishSnapshotInput,
-  context: AuthorizedConsumedRegionContext
+  context: AuthorizedConsumedRegionContext,
+  signal?: AbortSignal
 ): Promise<PublishSnapshotResult> {
   if (input.isDerived === true) {
     throw publicationFenceError('source_timeframe_not_native')
@@ -387,7 +452,8 @@ export async function publishFencedLeaderboardSnapshot(
     input.rows,
     context,
     (transaction, sourceAuthorityGuard) =>
-      publishLeaderboardSnapshotInTransaction(transaction, input, sourceAuthorityGuard)
+      publishLeaderboardSnapshotInTransaction(transaction, input, sourceAuthorityGuard),
+    signal
   )
   reportCommittedBaselineShift(input, result)
   return result
@@ -395,7 +461,8 @@ export async function publishFencedLeaderboardSnapshot(
 
 export async function publishFencedTrustedLeaderboardSnapshot(
   input: PublishTrustedSnapshotInput,
-  context: AuthorizedConsumedRegionContext
+  context: AuthorizedConsumedRegionContext,
+  signal?: AbortSignal
 ): Promise<PublishSnapshotResult> {
   const result = await withFencedTierAPublication(
     input.src,
@@ -403,9 +470,70 @@ export async function publishFencedTrustedLeaderboardSnapshot(
     input.rows,
     context,
     (transaction, sourceAuthorityGuard) =>
-      publishTrustedLeaderboardSnapshotInTransaction(transaction, input, sourceAuthorityGuard)
+      publishTrustedLeaderboardSnapshotInTransaction(transaction, input, sourceAuthorityGuard),
+    signal
   )
   reportCommittedBaselineShift(input, result)
+  return result
+}
+
+/**
+ * Publish a canonical, non-metric-authoritative V4 board.
+ *
+ * The query-only snapshot body, immutable snapshot metadata, acquisition
+ * source/window lock, and exact latest-terminal comparison all share the
+ * region-authority transaction. No mutable statement follows the terminal
+ * fence, so a changed attempt or RAW pointer rolls every snapshot write back.
+ */
+export async function publishFencedAttemptBoundLeaderboardSnapshot(
+  input: PublishAttemptBoundLeaderboardSnapshotInput,
+  context: AuthorizedConsumedRegionContext,
+  signal?: AbortSignal
+): Promise<PublishSnapshotResult> {
+  const rejects = snapshotLeaderboardTrustValue(input.rejects)
+  const prepared = prepareLeaderboardAttemptBoundV4Evidence({
+    src: input.src,
+    timeframe: input.timeframe,
+    rows: input.rows,
+    rejectedRowCount: rejects.length,
+    bundle: input.attemptEvidence,
+  })
+  const cycleId = input.observationCycleId?.trim() || null
+  if (cycleId !== prepared.manifest.observation_cycle_id) {
+    throw new Error(
+      '[ingest-worker] observation cycle does not match the canonical capture manifest'
+    )
+  }
+
+  const publicationInput: PublishSnapshotInput = {
+    src: prepared.src,
+    timeframe: prepared.timeframe,
+    rows: prepared.rows,
+    rejects,
+    rawObjectId: prepared.artifacts.sourcePayload.id,
+    isDerived: false,
+    expectedCountOverride: input.expectedCountOverride,
+    countBaselineGeneration: input.countBaselineGeneration,
+    observationCycleId: cycleId ?? undefined,
+  }
+  const result = await withFencedTierAPublication(
+    prepared.src,
+    [prepared.timeframe],
+    prepared.rows,
+    context,
+    async (transaction, sourceAuthorityGuard) => {
+      const published = await publishLeaderboardSnapshotInTransaction(
+        transaction,
+        publicationInput,
+        sourceAuthorityGuard
+      )
+      await bindSnapshotToAttemptEvidence(transaction, published, prepared)
+      await fenceAttemptBoundLeaderboardEvidencePublicationCommit(transaction, prepared)
+      return published
+    },
+    signal
+  )
+  reportCommittedBaselineShift(publicationInput, result)
   return result
 }
 
@@ -414,7 +542,8 @@ export async function publishFencedBoardSeries(
   seriesByTrader: Map<string, BoardSeriesBlock[]>,
   traderIds: Map<string, number>,
   context: AuthorizedConsumedRegionContext,
-  options: PublishBoardSeriesOptions
+  options: PublishBoardSeriesOptions,
+  signal?: AbortSignal
 ): Promise<{ traders: number; points: number }> {
   const prepared = prepareBoardSeriesPublication(src, seriesByTrader, traderIds, options)
   if (prepared.rows.length === 0) return { traders: 0, points: 0 }
@@ -427,6 +556,7 @@ export async function publishFencedBoardSeries(
     [],
     context,
     (transaction, sourceAuthorityGuard) =>
-      publishBoardSeriesInTransaction(transaction, prepared, sourceAuthorityGuard)
+      publishBoardSeriesInTransaction(transaction, prepared, sourceAuthorityGuard),
+    signal
   )
 }

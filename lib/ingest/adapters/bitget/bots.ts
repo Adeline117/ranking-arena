@@ -33,14 +33,18 @@ import type {
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { ProfileQualityReject } from '../../core/profile-quality'
-import type { FetchSession } from '../../fetch/types'
+import type { FetchSession, ReplayRequestTemplate } from '../../fetch/types'
 import {
   capturePartitionedNumericLeaderboard,
   pageFetcher,
   replayJson,
   replayPaged,
+  type LeaderboardPublicRequestProjectionInput,
 } from '../../fetch/capture'
-import { LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT } from '../../acquisition-manifest'
+import {
+  LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
+  LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+} from '../../acquisition-manifest'
 import {
   assertCanonicalBitgetBotsSource,
   assertBitgetBotsLeaderboardPublication,
@@ -218,20 +222,100 @@ function configuredCallerPageCap(value: unknown): number | null {
   return value
 }
 
+const BITGET_BOT_LIST_BODY_FIELDS = ['strategyType', 'orderType', 'pageNo', 'pageSize'] as const
+
+export function projectBitgetBotsLeaderboardRequest(
+  actualRequest: ReplayRequestTemplate,
+  expected: Readonly<{
+    url: string
+    strategyType: number
+    pageIndex: number
+    pageSize: number
+  }>
+): LeaderboardPublicRequestProjectionInput {
+  let actualUrl: URL
+  let expectedUrl: URL
+  try {
+    actualUrl = new URL(actualRequest.url)
+    expectedUrl = new URL(expected.url)
+  } catch {
+    throw new TypeError('[bitget_bots] leaderboard request URL must be absolute')
+  }
+  if (
+    actualRequest.method !== 'POST' ||
+    actualUrl.href !== expectedUrl.href ||
+    actualUrl.search !== '' ||
+    actualUrl.hash !== '' ||
+    actualUrl.username !== '' ||
+    actualUrl.password !== ''
+  ) {
+    throw new TypeError('[bitget_bots] leaderboard request method or URL drifted')
+  }
+  if (!isRecord(actualRequest.body)) {
+    throw new TypeError('[bitget_bots] leaderboard request body must be an exact JSON object')
+  }
+  const bodyKeys = Object.keys(actualRequest.body)
+  if (
+    bodyKeys.length !== BITGET_BOT_LIST_BODY_FIELDS.length ||
+    bodyKeys.some(
+      (field) =>
+        !BITGET_BOT_LIST_BODY_FIELDS.includes(field as (typeof BITGET_BOT_LIST_BODY_FIELDS)[number])
+    )
+  ) {
+    throw new TypeError('[bitget_bots] leaderboard request body fields drifted')
+  }
+  const body = actualRequest.body
+  if (
+    body.strategyType !== expected.strategyType ||
+    body.orderType !== 3 ||
+    body.pageNo !== expected.pageIndex ||
+    body.pageSize !== expected.pageSize ||
+    !Number.isSafeInteger(body.strategyType) ||
+    !Number.isSafeInteger(body.pageNo) ||
+    !Number.isSafeInteger(body.pageSize) ||
+    body.pageNo < 1 ||
+    body.pageSize < 1 ||
+    Object.is(body.pageNo, -0) ||
+    Object.is(body.pageSize, -0)
+  ) {
+    throw new TypeError('[bitget_bots] leaderboard request body values drifted')
+  }
+  return {
+    url: actualUrl.href,
+    method: 'POST',
+    body: {
+      strategyType: body.strategyType,
+      orderType: body.orderType,
+      pageNo: body.pageNo,
+      pageSize: body.pageSize,
+    },
+  }
+}
+
 export async function captureBitgetBotsLeaderboard(
   session: FetchSession,
   src: SourceRow,
-  timeframe: RankingTimeframe
+  timeframe: RankingTimeframe,
+  options?: { signal?: AbortSignal }
 ) {
   const contract = assertCanonicalBitgetBotsSource(src, timeframe)
-  const listUrl = endpoint(src, 'list', `${S_BASE}/traceRanks`)
+  const canonicalListUrl = `${S_BASE}/traceRanks`
+  const listUrl = endpoint(src, 'list', canonicalListUrl)
+  if (listUrl !== canonicalListUrl) {
+    throw new TypeError(
+      '[bitget_bots] leaderboard publication contract failed: list endpoint drifted'
+    )
+  }
   const pageSize = src.page_size!
   const callerPageCap = configuredCallerPageCap(src.meta.max_pages)
+  options?.signal?.throwIfAborted()
   await warmSession(session, src)
+  options?.signal?.throwIfAborted()
 
   return capturePartitionedNumericLeaderboard({
     session,
     fetcher: pageFetcher(session),
+    signal: options?.signal,
     partitions: contract.boards.map((board) => {
       const strategyType = BOT_BOARD_STRATEGY_TYPE[board]
       if (strategyType === undefined) {
@@ -246,11 +330,13 @@ export async function captureBitgetBotsLeaderboard(
           headers: HEADERS,
           body: { strategyType, orderType: 3, pageNo: pageIndex, pageSize },
         }),
-        projectPublicRequest: (_actualRequest: unknown, pageIndex: number) => ({
-          url: listUrl,
-          method: 'POST' as const,
-          body: { strategyType, orderType: 3, pageNo: pageIndex, pageSize },
-        }),
+        projectPublicRequest: (actualRequest: ReplayRequestTemplate, pageIndex: number) =>
+          projectBitgetBotsLeaderboardRequest(actualRequest, {
+            url: listUrl,
+            strategyType,
+            pageIndex,
+            pageSize,
+          }),
         pageBinding: { location: 'body' as const, path: ['pageNo'] },
         extractMeta: (payload: unknown, requestPageIndex: number) => {
           const decoded = inspectBitgetBotsBoardPage({
@@ -301,6 +387,11 @@ async function cachedStrategyInfo(
 
 const bitgetBotsAdapter: SourceAdapter = {
   slug: 'bitget_bots',
+  leaderboardAcquisitionContract: LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
+  leaderboardPartitionIds: (src, timeframe) => [
+    ...assertCanonicalBitgetBotsSource(src, timeframe).boards,
+  ],
+  captureLeaderboard: captureBitgetBotsLeaderboard,
   capabilities: {
     profile: true, // tradeStrategyInfo {strategyId}
     positions: false,

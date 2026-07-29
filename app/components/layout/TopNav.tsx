@@ -61,6 +61,7 @@ export default function TopNav() {
                 style={{ flexShrink: 0, borderRadius: 4, objectFit: 'contain' }}
               />
               <div
+                className="top-nav-logo-word"
                 style={{
                   fontSize: '20px',
                   fontWeight: 700,

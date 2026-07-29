@@ -11,6 +11,12 @@ import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { verifyOgVerificationProof } from '@/lib/utils/og-verification-proof'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import {
+  publicRankingResponseCacheHeaders,
+  publicRankingResponseRejectionHeaders,
+  redirectToPublicRankingResponseCacheEpoch,
+} from '@/lib/rankings/public-response-cache'
 
 export const runtime = 'edge'
 
@@ -132,6 +138,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const name = searchParams.get('name') || searchParams.get('handle') || 'Trader'
+    const platform = searchParams.get('platform') || ''
+    if (!isPublicRankingSourceAllowed(platform)) {
+      return new Response('Unknown or unavailable ranking source', {
+        status: 404,
+        headers: publicRankingResponseRejectionHeaders(),
+      })
+    }
+
+    const epochRedirect = redirectToPublicRankingResponseCacheEpoch(request)
+    if (epochRedirect) return epochRedirect
+
     const rank = safeParseInt(searchParams.get('rank'), 0)
     // Positive = climbed (same convention as leaderboard_ranks.rank_change).
     const rankChange = safeParseInt(searchParams.get('rankChange'), 0)
@@ -148,7 +165,6 @@ export async function GET(request: NextRequest) {
     const winRate = parseFloat(searchParams.get('winRate') || 'NaN')
     const score = parseFloat(searchParams.get('score') || 'NaN')
     const pnl = parseFloat(searchParams.get('pnl') || 'NaN')
-    const platform = searchParams.get('platform') || ''
     const windowParam = searchParams.get('window') || '7d'
 
     const roiValid = !isNaN(roi)
@@ -596,9 +612,9 @@ export async function GET(request: NextRequest) {
       {
         width: 1200,
         height: 630,
-        headers: {
-          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
-        },
+        headers: publicRankingResponseCacheHeaders(
+          'public, s-maxage=300, stale-while-revalidate=3600'
+        ),
       }
     )
   } catch {
@@ -633,11 +649,16 @@ export async function GET(request: NextRequest) {
         {
           width: 1200,
           height: 630,
-          headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
+          headers: publicRankingResponseCacheHeaders(
+            'public, s-maxage=60, stale-while-revalidate=300'
+          ),
         }
       )
     } catch {
-      return new Response('Failed to generate image', { status: 500 })
+      return new Response('Failed to generate image', {
+        status: 500,
+        headers: publicRankingResponseRejectionHeaders(),
+      })
     }
   }
 }

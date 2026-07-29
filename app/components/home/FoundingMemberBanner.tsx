@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
+import { FOUNDING_MEMBER_BANNER_HEIGHT } from './founding-member-layout'
 
 const DISMISS_KEY = 'founding-banner-dismissed'
 
@@ -36,41 +37,71 @@ export default function FoundingMemberBanner() {
   return (
     <div
       className="founding-member-banner"
+      data-testid="founding-member-banner"
       style={{
         display: 'flex',
         alignItems: 'center',
-        flexWrap: 'wrap',
+        flexWrap: 'nowrap',
         gap: 6,
         padding: `4px ${tokens.spacing[3]}`,
+        height: FOUNDING_MEMBER_BANNER_HEIGHT,
         borderRadius: tokens.radius.md,
         background: 'var(--color-founding-accent-muted)',
         border: '1px solid var(--color-founding-accent-border)',
         fontSize: tokens.typography.fontSize.xs,
         lineHeight: 1.4,
         flexShrink: 0,
+        minWidth: 0,
+        overflow: 'hidden',
+        boxSizing: 'border-box',
       }}
     >
       {/* Star icon instead of emoji */}
       <span
+        data-testid="founding-member-star"
+        aria-hidden="true"
         style={{
           color: 'var(--color-founding-accent)',
           fontWeight: 900,
           fontSize: 14,
           letterSpacing: 0.5,
+          flexShrink: 0,
         }}
       >
         ★
       </span>
-      <span style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>{text}</span>
+      <span
+        className="fm-text"
+        data-testid="founding-member-text"
+        title={text}
+        style={{
+          color: 'var(--color-text-secondary)',
+          fontWeight: 500,
+          flex: '1 1 0%',
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {text}
+      </span>
       <span
         className="fm-sub"
-        style={{ color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.xs }}
+        style={{
+          color: 'var(--color-text-tertiary)',
+          fontSize: tokens.typography.fontSize.xs,
+          flexShrink: 0,
+        }}
       >
         {t('foundingMemberFirst200')}
       </span>
       <Link
         href="/pricing#lifetime"
         prefetch={false}
+        className="fm-cta"
+        data-testid="founding-member-cta"
+        title={cta}
         style={{
           padding: `2px ${tokens.spacing[3]}`,
           borderRadius: tokens.radius.md,
@@ -80,6 +111,12 @@ export default function FoundingMemberBanner() {
           fontSize: tokens.typography.fontSize.xs,
           fontWeight: 700,
           whiteSpace: 'nowrap',
+          flex: '0 0 auto',
+          minWidth: 0,
+          maxWidth: '40%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          boxSizing: 'border-box',
           transition: 'opacity 0.15s ease',
         }}
         onMouseEnter={(e) => {
@@ -92,6 +129,8 @@ export default function FoundingMemberBanner() {
         {cta}
       </Link>
       <button
+        type="button"
+        data-testid="founding-member-dismiss"
         onClick={() => {
           setDismissed(true)
           try {
@@ -100,17 +139,23 @@ export default function FoundingMemberBanner() {
             /* ignore */
           }
         }}
-        aria-label="Dismiss"
+        aria-label={t('dismiss')}
         style={{
           marginLeft: 'auto',
           background: 'none',
           border: 'none',
           color: 'var(--color-text-tertiary)',
           cursor: 'pointer',
-          padding: '2px 4px',
+          padding: 0,
+          width: 22,
+          height: 22,
           fontSize: 14,
           lineHeight: 1,
           opacity: 0.6,
+          flexShrink: 0,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
         ✕

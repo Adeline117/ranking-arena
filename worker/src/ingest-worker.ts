@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url'
 import { config } from 'dotenv'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-config({ path: resolve(__dirname, '..', '.env') })
+const workerEnvironment = config({ path: resolve(__dirname, '..', '.env') })
 
 import { Worker, type Job } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
@@ -36,6 +36,11 @@ import {
   startHeartbeat,
 } from './ingest/heartbeat'
 import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readiness'
+import {
+  assertAttemptBoundCaptureEnvironmentFile,
+  assertAttemptBoundCaptureRuntimeEnabled,
+} from './ingest/attempt-bound-capture-runtime'
+import { assertPartitionedV4WorkerReadiness } from './ingest/attempt-bound-capture-readiness'
 import { startNativeIngestServing } from './ingest/startup-gate'
 import { routeJobWithSourceLease } from './ingest/source-job-routing'
 import { routeTierCJobRegion } from './ingest/tier-c-region-router'
@@ -50,6 +55,9 @@ import { resolveNativeRegionConfig } from './ingest/native-region-config'
 import { acquireRegionAuthorityLifecycleWithRetry } from './ingest/region-authority-acquisition'
 import { prepareRegionConsumerRuntime } from './ingest/region-consumer-runtime'
 import { createNativeProcessCoordinator } from './ingest/native-process-coordinator'
+import { startBitgetBotAttemptHealthWatchdog } from './ingest/attempt-health-watchdog'
+import type { BullJobAuthority } from './ingest/job-provenance'
+import type { SourceJobRunProvenance } from './ingest/source-job-routing'
 
 // Per-region worker concurrency. Bumped 3→5 (2026-06-12): at 3 the drain
 // rate (~12-18 jobs/h, dragged by giant crawls like bybit_mt5's 29k rows)
@@ -77,11 +85,19 @@ const FAST_CONCURRENCY = 3
 const RECONCILE_INTERVAL_MS = 60 * 60_000
 const NATIVE_AUTHORITY_READY_TOKEN = '[ingest-worker] native regional authority ready'
 
-async function runJob(job: Job, context: AuthorizedConsumedRegionContext): Promise<unknown> {
+async function runJob(
+  job: Job,
+  context: AuthorizedConsumedRegionContext,
+  provenance: SourceJobRunProvenance,
+  signal: AbortSignal
+): Promise<unknown> {
+  // Safe hand-off point for a future queue/source claim coordinator. Only
+  // one-way token digests and the public lease proof can cross this boundary.
+  void provenance
   switch (job.name) {
     case INGEST_JOB.TIER_A: {
       const { processTierA } = await import('./ingest/processors/tier-a-leaderboard')
-      return processTierA(job, context)
+      return processTierA(job, context, signal)
     }
     case INGEST_JOB.TIER_B: {
       const { processTierB } = await import('./ingest/processors/tier-b-profiles')
@@ -131,24 +147,33 @@ async function runJob(job: Job, context: AuthorizedConsumedRegionContext): Promi
   }
 }
 
-async function route(job: Job, context: AuthorizedConsumedRegionContext): Promise<unknown> {
+async function route(
+  job: Job,
+  context: AuthorizedConsumedRegionContext,
+  bullJob: BullJobAuthority,
+  signal?: AbortSignal
+): Promise<unknown> {
   return routeJobWithSourceLease({
     redis: getConnection(),
     job,
-    run: async () => {
+    bullJob,
+    signal,
+    run: async (provenance, runSignal) => {
       await assertSourceJobMatchesConsumedRegion(
         job,
         context,
         async (sourceSlug) => (await getSourceBySlug(sourceSlug)).fetch_region
       )
-      return runJob(job, context)
+      return runJob(job, context, provenance, runSignal)
     },
   })
 }
 
 async function routeTierC(
   job: Job<TierCJobData>,
-  context: AuthorizedConsumedRegionContext
+  context: AuthorizedConsumedRegionContext,
+  _bullJob: BullJobAuthority,
+  _signal?: AbortSignal
 ): Promise<unknown> {
   const decision = await routeTierCJobRegion(job, context.consumedRegion)
   if (decision.action === 'rerouted') {
@@ -205,11 +230,20 @@ async function main(): Promise<void> {
   console.log('[ingest-worker] starting…')
 
   try {
+    // The box-local file is the rollout authority. Prove both its literal value
+    // and the effective process value so inherited PM2/shell state cannot mask
+    // a missing or disabled release flag.
+    assertAttemptBoundCaptureEnvironmentFile(workerEnvironment)
+    assertAttemptBoundCaptureRuntimeEnabled(process.env)
+
     // No scheduler, BullMQ consumer, heartbeat, or authority attempt may start
     // until the production database proves the exact source-lineage contract.
     await assertMetricTrustWorkerReadiness()
     processCoordinator.assertStartupOpen()
     console.log('[ingest-worker] metric-trust database release contract ready')
+    await assertPartitionedV4WorkerReadiness()
+    processCoordinator.assertStartupOpen()
+    console.log('[ingest-worker] partitioned V4 database release contract ready')
 
     // Register adapters (side-effect imports add them to the registry).
     await import('@/lib/ingest/adapters/register')
@@ -376,9 +410,26 @@ async function main(): Promise<void> {
       },
     })
     processCoordinator.assertStartupOpen()
-  } catch {
+
+    const attemptHealthWatchdog = startBitgetBotAttemptHealthWatchdog({
+      redis,
+      track: (operation) => processCoordinator.trackReconcile(operation),
+    })
+    try {
+      processCoordinator.bindAttemptHealthTimer(attemptHealthWatchdog.stop)
+      processCoordinator.assertStartupOpen()
+    } catch (error) {
+      attemptHealthWatchdog.stop()
+      throw error
+    }
+  } catch (error) {
     if (processCoordinator.shutdownReason === undefined) {
-      console.error('[ingest-worker] startup failed')
+      const message = error instanceof Error ? error.message : ''
+      console.error(
+        message.startsWith('[ingest-worker] partitioned V4 startup gate failed closed:')
+          ? message
+          : '[ingest-worker] startup failed'
+      )
     }
     void processCoordinator.requestShutdown(processCoordinator.shutdownReason ?? 'startup_failed')
   } finally {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -14,6 +15,7 @@ import {
   acquireRegionAuthorityLifecycle,
   type RegionAuthorityLifecycle,
 } from '../region-authority-lifecycle'
+import { BULL_JOB_PROVENANCE_CONTRACT, type BullJobAuthority } from '../job-provenance'
 
 function authorityHarness(region: 'local' | 'vps_sg' = 'local') {
   const controller = new AbortController()
@@ -203,6 +205,44 @@ describe('consumed queue region context', () => {
     await lifecycle.stopAfterDrain(async () => undefined)
   })
 
+  it('forwards frozen Bull provenance without exposing the processor token', async () => {
+    const { lifecycle } = await lifecycleHarness()
+    const admission = createConsumedRegionAdmission(lifecycle, 'local')
+    const processorToken = 'bullmq-private-lock-token'
+    let authority: BullJobAuthority | undefined
+    const route = jest.fn(
+      async (_job: unknown, _context: typeof admission.context, bullJob: BullJobAuthority) => {
+        authority = bullJob
+        return 'ran'
+      }
+    )
+    const consume = bindAuthorizedConsumedRegion(admission.context, route)
+    const job = {
+      attemptsMade: 2,
+      attemptsStarted: 3,
+      id: 'repeat:tiera:binance_futures',
+      name: 'tiera:leaderboard',
+      queueName: 'arena:ingest:local',
+    }
+    admission.open()
+
+    await expect(consume(job, processorToken)).resolves.toBe('ran')
+
+    expect(authority?.proof).toEqual({
+      contract: BULL_JOB_PROVENANCE_CONTRACT,
+      queueName: 'arena:ingest:local',
+      jobId: 'repeat:tiera:binance_futures',
+      jobName: 'tiera:leaderboard',
+      attemptsMade: 2,
+      attemptsStarted: 3,
+      processorTokenSha256: createHash('sha256').update(processorToken, 'utf8').digest('hex'),
+    })
+    expect(Object.isFrozen(authority)).toBe(true)
+    expect(Object.isFrozen(authority?.proof)).toBe(true)
+    expect(JSON.stringify(authority)).not.toContain(processorToken)
+    await lifecycle.stopAfterDrain(async () => undefined)
+  })
+
   it('returns a prefetched BullMQ job to wait when admission has closed', async () => {
     const { lifecycle } = await lifecycleHarness()
     const admission = createConsumedRegionAdmission(lifecycle, 'local')
@@ -252,7 +292,12 @@ describe('consumed queue region context', () => {
     const admission = createConsumedRegionAdmission(lifecycle, 'local')
     let routedSignal: AbortSignal | undefined
     const route = jest.fn(
-      async (_job: string, _context: typeof admission.context, signal?: AbortSignal) => {
+      async (
+        _job: string,
+        _context: typeof admission.context,
+        _bullJob: unknown,
+        signal?: AbortSignal
+      ) => {
         routedSignal = signal
         return 'ran'
       }

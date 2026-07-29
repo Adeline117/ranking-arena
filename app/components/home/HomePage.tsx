@@ -17,6 +17,8 @@ import DeferredMount from '../utils/DeferredMount'
 import { features } from '@/lib/features'
 import enFull from '@/lib/i18n/en'
 import { registerFullDict } from '@/lib/i18n'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
+import { FOUNDING_MEMBER_BANNER_HEIGHT } from './founding-member-layout'
 // Lazy-load sidebar widgets
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
@@ -73,7 +75,17 @@ export default function HomePage({
           {/* Phase 2 hero REMOVED — SSR hero stays visible permanently as LCP element.
             Rendering a Phase 2 hero would paint a new large element at ~10s on slow 4G,
             resetting LCP from 1.2s to 10s. SSR hero is identical visual content. */}
-          <div className="contain-content">
+          <div
+            className="contain-content"
+            data-testid="interactive-founding-member-slot"
+            style={
+              PRO_FREE_PROMO
+                ? undefined
+                : {
+                    height: FOUNDING_MEMBER_BANNER_HEIGHT,
+                  }
+            }
+          >
             <Suspense fallback={null}>
               <FoundingMemberBanner />
             </Suspense>

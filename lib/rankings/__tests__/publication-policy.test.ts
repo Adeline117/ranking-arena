@@ -36,7 +36,7 @@ function eligibleRow(overrides: Record<string, unknown> = {}) {
 
 describe('public ranking publication policy', () => {
   it('binds the cache epoch to the current ranking-authority contract', () => {
-    expect(PUBLIC_RANKING_CACHE_EPOCH).toBe('public-rank-policy-v3')
+    expect(PUBLIC_RANKING_CACHE_EPOCH).toBe('public-rank-policy-v4')
     expect(PUBLIC_RANKING_MAX_COMPUTED_AGE_MS).toBe(48 * 60 * 60 * 1000)
     expect(PUBLIC_RANKING_FUTURE_TOLERANCE_MS).toBe(5 * 60 * 1000)
     expect(PUBLIC_RANKING_SOURCE_QUARANTINES).toEqual([
@@ -76,6 +76,10 @@ describe('public ranking publication policy', () => {
     expect(isPublicRankingSourceQuarantined('bitget_bots_spot')).toBe(true)
     expect(isPublicRankingSourceAllowed('okx_web3_solana')).toBe(false)
     expect(isPublicRankingSourceAllowed('binance_futures')).toBe(true)
+    expect(isPublicRankingSourceAllowed(' BINANCE_FUTURES ')).toBe(false)
+    expect(isPublicRankingSourceAllowed('BINANCE_FUTURES')).toBe(false)
+    expect(isPublicRankingSourceAllowed('toobit')).toBe(false)
+    expect(isPublicRankingSourceAllowed('okx')).toBe(false)
     expect(isPublicRankingSourceAllowed('')).toBe(false)
     expect(isPublicRankingSourceAllowed(null)).toBe(false)
   })
@@ -101,6 +105,8 @@ describe('public ranking publication policy', () => {
         'binance_futures',
         'hyperliquid',
         ' HYPERLIQUID ',
+        'toobit',
+        'okx',
         null,
       ])
     ).toEqual(['binance_futures', 'hyperliquid'])
@@ -170,6 +176,31 @@ describe('public ranking publication policy', () => {
     expect(sanitizePublicRankingSourcePayload(payload)).toBe(payload)
   })
 
+  it('source-only sanitation removes retired rows and metadata from cached pages', () => {
+    const safe = { source: 'binance_futures', id: 'safe' }
+    const payload = {
+      traders: [safe, { source: 'toobit', id: 'retired' }],
+      totalCount: 2,
+      hasMore: true,
+      availableSources: ['binance_futures', 'toobit'],
+      source_freshness: [
+        { source: 'binance_futures', updated_at: 'safe' },
+        { source: 'toobit', updated_at: 'retired' },
+      ],
+    }
+
+    expect(sanitizePublicRankingSourcePayload(payload)).toEqual(
+      expect.objectContaining({
+        traders: [safe],
+        totalCount: 1,
+        hasMore: false,
+        availableSources: ['binance_futures'],
+        source_freshness: [{ source: 'binance_futures', updated_at: 'safe' }],
+        ranking_visibility_reasons: ['inactive_source_removed'],
+      })
+    )
+  })
+
   it('filters quarantined cached metadata without clearing correct page totals or cursors', () => {
     const safeTrader = { source: 'binance_futures', id: 'safe-without-proof' }
     const payload = {
@@ -227,7 +258,7 @@ describe('public ranking publication policy', () => {
     ])
   })
 
-  it('uses only the active atomic generation for source-quarantine counts', () => {
+  it('uses only active public sources from the atomic count generation', () => {
     const generation = '2026-07-24T12:00:00.000Z'
     const rows = [
       { source: '_all_gt0', total_count: 18, updated_at: generation },
@@ -239,6 +270,7 @@ describe('public ranking publication policy', () => {
     expect(publicRankingCountFromCache(rows)).toBe(15)
     expect(publicRankingCountFromCache(rows, { source: 'binance_futures' })).toBe(10)
     expect(publicRankingCountFromCache(rows, { source: 'okx_web3_solana' })).toBe(0)
+    expect(publicRankingCountFromCache(rows, { source: 'toobit' })).toBe(0)
     expect(publicRankingCountFromCache(rows, { sources: ['binance_futures', 'hyperliquid'] })).toBe(
       15
     )
@@ -251,7 +283,7 @@ describe('public ranking publication policy', () => {
           updated_at: 'stale-generation',
         },
       ])
-    ).toBe(18)
+    ).toBe(15)
     expect(
       publicRankingCountFromCache([
         ...rows.slice(0, 3),
@@ -261,13 +293,21 @@ describe('public ranking publication policy', () => {
           updated_at: generation,
         },
       ])
+    ).toBe(15)
+    expect(
+      publicRankingCountFromCache([
+        rows[0],
+        rows[1],
+        { ...rows[2], total_count: Number.NaN },
+        rows[3],
+      ])
     ).toBeNull()
     expect(publicRankingCountFromCache(rows.slice(1))).toBeNull()
   })
 
   it('epochs ordinary public ranking cache keys', () => {
     expect(publicRankingCacheKey('leaderboard:v3:90D')).toBe(
-      'public-rank-policy-v3:leaderboard:v3:90D'
+      'public-rank-policy-v4:leaderboard:v3:90D'
     )
   })
 

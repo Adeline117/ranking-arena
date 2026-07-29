@@ -3177,6 +3177,16 @@ input[type='search']::-webkit-search-cancel-button:hover {
   align-items: center;
   justify-content: space-between;
 }
+@media (max-width: 400px) {
+  .top-nav-theme-action {
+    display: none !important;
+  }
+}
+@media (max-width: 360px) {
+  .top-nav-logo-word {
+    display: none !important;
+  }
+}
 .top-nav-header {
   position: sticky;
   top: 0;

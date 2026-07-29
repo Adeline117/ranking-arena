@@ -122,8 +122,15 @@ PREDEPLOY_MIGRATIONS=(
   20260728123000_arena_bot_header_canonical_snapshot.sql
   20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql
   20260729010000_api_keys_server_authority.sql
+  20260729011000_leaderboard_rank_manifest_attestation_substrate.sql
+  20260729012000_partitioned_bot_acquisition_manifest_v4.sql
+  20260729013000_bitget_bot_attempt_health_contract.sql
+  20260729014000_bitget_bot_copier_aggregate_authority.sql
+  20260729014500_leaderboard_rank_generation_canonical_batches.sql
+  20260729015000_leaderboard_rank_generation_attested_batch_writer.sql
   20260729020000_api_tier_cancellation_identity.sql
   20260729023000_preserve_financial_owner_after_account_deletion.sql
+  20260729054400_leaderboard_rank_generation_private_staging.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055

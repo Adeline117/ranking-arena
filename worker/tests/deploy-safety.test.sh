@@ -1254,6 +1254,10 @@ test_rollback_capture_policy_is_preflighted() {
   entrypoint="$(<"$SG_ENTRYPOINT")"
   assert_contains "$preflight" "INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED !== 'true'" \
     'SG preflight must reject an explicitly disabled capture environment'
+  assert_contains "$preflight" 'assertAttemptBoundCaptureEnvironmentFile(loaded)' \
+    'SG preflight must prove the box-local worker environment file itself'
+  assert_contains "$preflight" 'await assertPartitionedV4WorkerReadiness()' \
+    'SG preflight must prove the exact partitioned V4 database contract'
   assert_contains "$entrypoint" "config({ path: resolve(__dirname, '..', '.env') })" \
     'the worker entrypoint itself must load the box-local worker/.env'
   assert_contains "$deploy" "cp -a '\$REMOTE_DIR' '\$STAGING_DIR'" \
@@ -1264,7 +1268,7 @@ test_rollback_capture_policy_is_preflighted() {
   stop_line="$(grep -n '^RECOVERY_REQUIRED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
   [ "$preflight_line" -lt "$stop_line" ] || \
     fail 'capture-enabled rollback environment must be proven before the old worker stops'
-  env_load_line="$(grep -n "^config({ path: resolve(__dirname, '..', '.env') })$" "$SG_ENTRYPOINT" | cut -d: -f1)"
+  env_load_line="$(grep -n "^const workerEnvironment = config({ path: resolve(__dirname, '..', '.env') })$" "$SG_ENTRYPOINT" | cut -d: -f1)"
   concurrency_line="$(grep -n '^const INGEST_CONCURRENCY = ' "$SG_ENTRYPOINT" | cut -d: -f1)"
   regions_line="$(grep -n 'const regions = consumedRegions()' "$SG_ENTRYPOINT" | cut -d: -f1)"
   consumer_line="$(grep -n 'new Worker(' "$SG_ENTRYPOINT" | head -1 | cut -d: -f1)"
