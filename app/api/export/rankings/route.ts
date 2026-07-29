@@ -5,10 +5,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { verifyEdgeCronSecret } from '@/lib/auth/edge-cron-auth'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
+import { readRankingExportRows } from '@/lib/rankings/read-ranking-export'
+import type { LeaderboardPublicationSeason } from '@/lib/rankings/read-publication-proofs'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -30,43 +32,36 @@ export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url)
     const format = url.searchParams.get('format') || 'csv'
-    const exchange = url.searchParams.get('exchange') || ''
+    const requestedExchange = url.searchParams.get('exchange') || ''
+    const exchange =
+      requestedExchange && requestedExchange !== 'all'
+        ? parsePublicActiveRankingSource(requestedExchange)
+        : null
+    const timeRange = (url.searchParams.get('timeRange') || '90D').toUpperCase()
     const limitParam = Number(url.searchParams.get('limit') || '500')
     const limit = Math.min(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 500, 2000)
 
     if (!['csv', 'json'].includes(format)) {
       return NextResponse.json({ error: 'Invalid format. Use csv or json.' }, { status: 400 })
     }
-
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
-    let query = supabase
-      .from('leaderboard_ranks')
-      .select(
-        'rank, trader_id:source_trader_id, handle, source, arena_score, roi, pnl, win_rate, max_drawdown, followers, trades_count'
-      )
-      .or('is_outlier.is.null,is_outlier.eq.false')
-      .order('rank', { ascending: true })
-      .limit(limit)
-
-    if (exchange && exchange !== 'all') {
-      query = query.eq('source', exchange)
+    if (requestedExchange && requestedExchange !== 'all' && !exchange) {
+      return NextResponse.json({ error: 'Invalid exchange' }, { status: 400 })
+    }
+    if (!['7D', '30D', '90D'].includes(timeRange)) {
+      return NextResponse.json({ error: 'Invalid timeRange. Use 7D, 30D or 90D.' }, { status: 400 })
     }
 
-    const { data, error } = await query
-
-    if (error) {
-      logger.error('[export/rankings] Supabase error:', error.message)
-      return NextResponse.json({ error: 'Failed to fetch rankings' }, { status: 500 })
-    }
-
-    const rows = data || []
+    const rows = await readRankingExportRows(getSupabaseAdmin(), {
+      exchange: exchange || undefined,
+      season: timeRange as LeaderboardPublicationSeason,
+      limit,
+    })
 
     if (format === 'json') {
       return new Response(JSON.stringify(rows, null, 2), {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          'Content-Disposition': `attachment; filename="rankings-${exchange || 'all'}.json"`,
+          'Content-Disposition': `attachment; filename="rankings-${exchange || 'all'}-${timeRange}.json"`,
           'Cache-Control': 'no-store',
         },
       })
@@ -95,7 +90,7 @@ export async function GET(request: NextRequest) {
     return new Response('\uFEFF' + csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="rankings-${exchange || 'all'}.csv"`,
+        'Content-Disposition': `attachment; filename="rankings-${exchange || 'all'}-${timeRange}.csv"`,
         'Cache-Control': 'no-store',
       },
     })
