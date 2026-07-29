@@ -17,6 +17,12 @@ jest.mock('@/lib/cache', () => ({
 }))
 jest.mock('@/lib/logger', () => ({ logger: { warn: jest.fn(), error: jest.fn() } }))
 
+const mockReadSealedRankingGeneration = jest.fn()
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  ...jest.requireActual('@/lib/rankings/read-sealed-ranking-generation'),
+  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+}))
+
 import {
   getLinkedTraders,
   getAggregatedStats,
@@ -32,7 +38,7 @@ function queueClient(queues: Record<string, Array<{ data?: unknown; error?: unkn
     const resp = q.length > 1 ? q.shift()! : (q[0] ?? { data: null })
     const p = Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null })
     const obj: Record<string, unknown> = {}
-    for (const m of ['select', 'eq', 'in', 'order', 'limit']) obj[m] = () => obj
+    for (const m of ['select', 'eq', 'in', 'filter', 'order', 'limit']) obj[m] = () => obj
     obj.maybeSingle = () => p
     obj.then = (...args: Parameters<Promise<unknown>['then']>) => p.then(...args)
     return obj
@@ -65,7 +71,45 @@ function rankRow(traderId: string, roi: number, pnl: number, score: number) {
   }
 }
 
-beforeEach(() => mockCacheStore.clear())
+beforeEach(() => {
+  mockCacheStore.clear()
+  mockReadSealedRankingGeneration.mockImplementation(
+    async (
+      _supabase: unknown,
+      input: { season: '90D'; sources: string[] },
+      reader: (publication: {
+        state: 'sealed'
+        season: '90D'
+        scoreCohortId: string
+        proofs: unknown[]
+      }) => Promise<unknown>
+    ) => {
+      const scoreCohortId = '11111111-1111-4111-8111-111111111111'
+      const publication = {
+        state: 'sealed' as const,
+        season: input.season,
+        scoreCohortId,
+        proofs: [...input.sources].sort().map((source) => ({
+          season_id: input.season,
+          source,
+          source_as_of: '2026-07-29T10:00:00.000000Z',
+          recorded_at: '2026-07-29T10:01:00.000000Z',
+          score_cohort_id: scoreCohortId,
+          rank_mutation_seq: 9,
+          current_mutation_seq: 9,
+          published_rank_count: 1,
+          published_identity_sha256: 'a'.repeat(64),
+          is_sealed: true,
+        })),
+      }
+      return {
+        value: await reader(publication),
+        publication,
+        publicationIdentity: JSON.stringify(publication),
+      }
+    }
+  )
+})
 
 describe('getLinkedTraders', () => {
   it('主表有数据 → 映射 + 用 leaderboard_ranks 补 stats', async () => {
@@ -82,6 +126,27 @@ describe('getLinkedTraders', () => {
       roi: 50,
       pnl: 1000,
     })
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      { season: '90D', sources: ['bybit'] },
+      expect.any(Function),
+      { timeoutMs: 10_000 }
+    )
+    expect(mockCacheStore.get('linked-traders:sealed-v2:u1')).toEqual(
+      expect.objectContaining({ contract: 'sealed-ranking-cache@1', season: '90D' })
+    )
+  })
+
+  it('排行批次查询失败时拒绝部分聚合且不写缓存', async () => {
+    const { client } = queueClient({
+      user_linked_traders: [{ data: [ultRow('t1', true)] }],
+      leaderboard_ranks: [{ error: { message: 'rank batch unavailable' } }],
+    })
+
+    await expect(getLinkedTraders(client, 'u1')).rejects.toThrow(
+      'linked trader aggregation query failed: rank batch unavailable'
+    )
+    expect(mockCacheStore.has('linked-traders:sealed-v2:u1')).toBe(false)
   })
 
   it('主表空 → 回退 trader_links,首个为 primary', async () => {

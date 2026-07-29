@@ -10,6 +10,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import * as cache from '@/lib/cache'
+import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -45,11 +51,15 @@ export interface AggregatedStats {
 const CACHE_TTL = 300 // 5 minutes
 
 function linkedCacheKey(userId: string): string {
-  return `linked-traders:${userId}`
+  return `linked-traders:sealed-v2:${userId}`
 }
 
 function aggCacheKey(userId: string): string {
   return `linked-traders-agg:${userId}`
+}
+
+function legacyLinkedCacheKey(userId: string): string {
+  return `linked-traders:${userId}`
 }
 
 /**
@@ -70,9 +80,21 @@ export async function getLinkedTraders(
   supabase: SupabaseClient,
   userId: string
 ): Promise<LinkedTraderAccount[]> {
-  // Check cache first
-  const cached = await cache.get<LinkedTraderAccount[]>(linkedCacheKey(userId))
-  if (cached) return cached
+  // A linked-account cache may outlive a publication cutover, so accept only
+  // the dedicated proof envelope whose source scope matches its own accounts.
+  const cached = await cache.get<unknown>(linkedCacheKey(userId))
+  const cachedEntry = parseSealedRankingCacheEntry<LinkedTraderAccount[]>(cached, '90D')
+  if (cachedEntry && Array.isArray(cachedEntry.value)) {
+    const expectedSources = filterPublicRankingSources(
+      cachedEntry.value.map((account) => account?.platform)
+    )
+    if (
+      expectedSources.length > 0 &&
+      parseSealedRankingCacheEntry<LinkedTraderAccount[]>(cached, '90D', expectedSources)
+    ) {
+      return cachedEntry.value
+    }
+  }
 
   let links: LinkedTraderAccount[] = []
 
@@ -136,56 +158,64 @@ export async function getLinkedTraders(
 
   // Enrich with latest snapshot stats — batch query instead of N+1
   // Group links by platform for efficient .in() queries
+  const proofSources = filterPublicRankingSources(links.map((link) => link.platform))
+  if (proofSources.length === 0) return links
+  const proofSourceSet = new Set(proofSources)
   const byPlatform = new Map<string, string[]>()
   for (const link of links) {
+    if (!proofSourceSet.has(link.platform)) continue
     const keys = byPlatform.get(link.platform) || []
     keys.push(link.traderKey)
     byPlatform.set(link.platform, keys)
   }
 
-  // Parallel batch fetch per platform from leaderboard_ranks (precomputed, has correct columns)
-  // Previously queried trader_snapshots_v2 with wrong column names (roi→roi_pct, pnl→pnl_usd,
-  // rank doesn't exist), causing null values for linked account stats.
-  const snapshotMap = new Map<string, Record<string, unknown>>()
-  await Promise.all(
-    [...byPlatform.entries()].map(async ([platform, traderKeys]) => {
-      const { data: snapshots, error: snapshotsError } = await supabase
-        .from('leaderboard_ranks')
-        .select('source, source_trader_id, roi, pnl, arena_score, win_rate, max_drawdown, rank')
-        .eq('source', platform)
-        .in('source_trader_id', traderKeys)
-        .eq('season_id', '90D')
-      if (snapshotsError)
-        logger.warn(
-          '[getLinkedTraders] leaderboard_ranks query error (drift?):',
-          snapshotsError.message
-        )
+  const sealedRead = await readSealedRankingGeneration(
+    supabase,
+    { season: '90D', sources: proofSources },
+    async (publication) => {
+      const batches = await Promise.all(
+        [...byPlatform.entries()].map(async ([platform, traderKeys]) => {
+          const result = await supabase
+            .from('leaderboard_ranks')
+            .select('source, source_trader_id, roi, pnl, arena_score, win_rate, max_drawdown, rank')
+            .eq('source', platform)
+            .in('source_trader_id', traderKeys)
+            .eq('season_id', '90D')
+            .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+          if (result.error) {
+            throw new Error(`linked trader aggregation query failed: ${result.error.message}`)
+          }
+          return (result.data ?? []) as Record<string, unknown>[]
+        })
+      )
 
-      if (snapshots) {
-        for (const s of snapshots) {
-          snapshotMap.set(`${s.source}:${s.source_trader_id}`, s)
-        }
+      const snapshotMap = new Map<string, Record<string, unknown>>()
+      for (const snapshot of batches.flat()) {
+        snapshotMap.set(`${snapshot.source}:${snapshot.source_trader_id}`, snapshot)
       }
-    })
+
+      return links.map((link) => {
+        const snapshot = snapshotMap.get(`${link.platform}:${link.traderKey}`)
+        if (!snapshot) return link
+        return {
+          ...link,
+          roi: snapshot.roi as number | null,
+          pnl: snapshot.pnl as number | null,
+          arenaScore: snapshot.arena_score as number | null,
+          winRate: snapshot.win_rate as number | null,
+          maxDrawdown: snapshot.max_drawdown as number | null,
+          rank: snapshot.rank as number | null,
+        }
+      })
+    },
+    { timeoutMs: 10_000 }
   )
 
-  // Apply snapshot data to links
-  for (const link of links) {
-    const snapshot = snapshotMap.get(`${link.platform}:${link.traderKey}`)
-    if (snapshot) {
-      link.roi = snapshot.roi as number | null
-      link.pnl = snapshot.pnl as number | null
-      link.arenaScore = snapshot.arena_score as number | null
-      link.winRate = snapshot.win_rate as number | null
-      link.maxDrawdown = snapshot.max_drawdown as number | null
-      link.rank = snapshot.rank as number | null
-    }
-  }
+  await cache.set(linkedCacheKey(userId), createSealedRankingCacheEntry(sealedRead), {
+    ttl: CACHE_TTL,
+  })
 
-  // Cache results
-  await cache.set(linkedCacheKey(userId), links, { ttl: CACHE_TTL })
-
-  return links
+  return sealedRead.value
 }
 
 /**
@@ -200,10 +230,6 @@ export async function getAggregatedStats(
   supabase: SupabaseClient,
   userId: string
 ): Promise<AggregatedStats | null> {
-  // Check cache first
-  const cached = await cache.get<AggregatedStats>(aggCacheKey(userId))
-  if (cached) return cached
-
   const accounts = await getLinkedTraders(supabase, userId)
   if (accounts.length < 2) return null // No aggregation for single accounts
 
@@ -247,9 +273,6 @@ export async function getAggregatedStats(
     totalAccounts: accounts.length,
     accounts,
   }
-
-  // Cache results
-  await cache.set(aggCacheKey(userId), result, { ttl: CACHE_TTL })
 
   return result
 }
@@ -300,6 +323,7 @@ export async function invalidateLinkedTraderCache(userId: string): Promise<void>
   try {
     await Promise.all([
       cache.del(linkedCacheKey(userId)),
+      cache.del(legacyLinkedCacheKey(userId)),
       cache.del(aggCacheKey(userId)),
       cache.del(linkedTraderRouteAggregateCacheKey(userId)),
     ])
