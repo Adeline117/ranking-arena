@@ -1407,6 +1407,23 @@ describe('leaderboardCaptureMode', () => {
     expect(() =>
       leaderboardCaptureMode({
         ...partitioned,
+        parserTransformation: {
+          ...partitioned.parserTransformation,
+          algorithm_contract: 'arena.ingest.partitioned-numeric-parser-page@2',
+        },
+      } as unknown as AnyLeaderboardCapture)
+    ).toThrow('parser contract is unsupported')
+
+    expect(() =>
+      leaderboardCaptureMode({
+        ...partitioned,
+        paginationTopology: { ...partitioned.paginationTopology, extra: true },
+      } as unknown as AnyLeaderboardCapture)
+    ).toThrow('topology shape is unsupported')
+
+    expect(() =>
+      leaderboardCaptureMode({
+        ...partitioned,
         paginationTopology: {
           ...partitioned.paginationTopology,
           rank_scope: 'unreviewed_global_rank',
