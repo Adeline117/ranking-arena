@@ -1,10 +1,10 @@
 /**
  * Portfolio snapshot series helpers.
  *
- * A manual sync and the daily rollup can both write a snapshot for the same
- * portfolio on the same UTC day. The read model must use the newest one for
- * that account/day, then aggregate accounts — summing every write turns a
- * second sync into a fictitious second portfolio.
+ * Multiple authoritative syncs can write a snapshot for the same portfolio on
+ * the same UTC day. The read model must use the newest one for that account/day,
+ * then aggregate accounts — summing every write turns a second sync into a
+ * fictitious second portfolio.
  */
 
 export interface PortfolioSnapshotRow {

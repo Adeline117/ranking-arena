@@ -629,5 +629,5 @@ Redis is non-critical — all Redis consumers fail-open:
 | **VPS Japan**        | `149.28.27.242` (proxy port 3001)                    |
 | **CF Worker**        | `ranking-arena-proxy.broosbook.workers.dev`          |
 | **Live Site**        | `https://www.arenafi.org`                            |
-| **Cron Schedule**    | 55 endpoints / 46 Vercel schedules, staggered        |
+| **Cron Schedule**    | 55 endpoints / 43 Vercel schedules, staggered        |
 | **Scraper PM2 name** | `arena-scraper`                                      |

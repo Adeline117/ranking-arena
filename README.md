@@ -7,7 +7,7 @@
 [![Production](https://img.shields.io/badge/production-live-brightgreen)](https://www.arenafi.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![Ingest adapters](https://img.shields.io/badge/ingest_adapters-26-blue)]()
-[![Vercel schedules](https://img.shields.io/badge/Vercel_schedules-46-orange)]()
+[![Vercel schedules](https://img.shields.io/badge/Vercel_schedules-43-orange)]()
 
 [Live Site](https://www.arenafi.org) · [Data API](#data-api) · [Features](#features) · [Architecture](#architecture) · [Data Pipeline](#data-pipeline) · [Getting Started](#getting-started)
 
@@ -30,7 +30,7 @@ Full documentation and API keys: [arenafi.org/api-docs](https://www.arenafi.org/
 
 ## Overview
 
-Arena aggregates, normalizes, and ranks public traders from centralized and decentralized sources selected by the active-serving database registry. Arena Score v4 combines profitability, drawdown, risk-adjusted return, consistency, and sample confidence on a 0-100 peer-relative scale. The system has 55 cron/worker endpoints: 46 are production Vercel schedules, while database-driven ingest also runs on external workers. Its 26 registered ingest adapters collect leaderboard and profile surfaces, then the Next.js 16 frontend serves normalized results with ISR and edge caching.
+Arena aggregates, normalizes, and ranks public traders from centralized and decentralized sources selected by the active-serving database registry. Arena Score v4 combines profitability, drawdown, risk-adjusted return, consistency, and sample confidence on a 0-100 peer-relative scale. The system has 55 cron/worker endpoints: 43 are production Vercel schedules, while database-driven ingest also runs on external workers. Its 26 registered ingest adapters collect leaderboard and profile surfaces, then the Next.js 16 frontend serves normalized results with ISR and edge caching.
 
 Beyond rankings, Arena provides an educational library (books, research papers, whitepapers), market data via TradingView WebSocket, community features (groups, posts, comments, reputation-gated access), on-chain attestation via EAS, and a Pro membership tier. The platform supports 4 languages (English, Chinese, Japanese, Korean) and runs on both web and native mobile (iOS/Android via Capacitor).
 
@@ -197,7 +197,7 @@ Each trader profile includes:
 
 ## Data Pipeline
 
-The data pipeline combines 46 production schedules declared in `vercel.json` with external database-driven ingest workers. The repository has 55 cron/worker route implementations, but an endpoint's existence is not proof that Vercel schedules it. `vercel.json` is the only source of truth for Vercel cadence; the database registry and worker scheduler are the sources of truth for first-party ingest.
+The data pipeline combines 43 production schedules declared in `vercel.json` with external database-driven ingest workers. The repository has 55 cron/worker route implementations, but an endpoint's existence is not proof that Vercel schedules it. `vercel.json` is the only source of truth for Vercel cadence; the database registry and worker scheduler are the sources of truth for first-party ingest.
 
 This README intentionally does not duplicate all 46 schedule rows. Inspect the deployed declarations directly:
 

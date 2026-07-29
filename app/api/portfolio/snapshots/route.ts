@@ -5,8 +5,9 @@
  * Returns one net-worth series for the logged-in user: snapshot rows are summed
  * across all of the user's connected exchanges per day bucket, ascending by time,
  * so the equity curve plots a single aggregate line (not interleaved per-exchange
- * points). Source rows are written by the daily rollup cron
- * (`/api/cron/aggregate-portfolio-snapshots`) from `user_positions`.
+ * points). Source rows are written atomically by `/api/portfolio/sync` from
+ * exchange-reported account equity; position notional is never treated as net
+ * worth.
  */
 
 import { NextRequest } from 'next/server'
