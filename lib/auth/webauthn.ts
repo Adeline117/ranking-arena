@@ -45,25 +45,35 @@ const PROD_ORIGINS: Record<string, string> = {
 const PROD_RP_ID = 'arenafi.org'
 
 export function getWebAuthnConfig(request: NextRequest): WebAuthnConfig {
-  const headerOrigin = request.headers.get('origin') || ''
-  let host = ''
+  const headerOrigin = request.headers.get('origin')
+  const headerHost = request.headers.get('host')
+  if (!headerOrigin || !headerHost) {
+    throw new Error('Unrecognized WebAuthn origin')
+  }
+
+  let originUrl: URL
   try {
-    host = headerOrigin
-      ? new URL(headerOrigin).hostname
-      : request.headers.get('host')?.split(':')[0] || ''
+    originUrl = new URL(headerOrigin)
   } catch {
-    host = ''
+    throw new Error('Unrecognized WebAuthn origin')
+  }
+  if (originUrl.origin !== headerOrigin || originUrl.host !== headerHost) {
+    throw new Error('Unrecognized WebAuthn origin')
   }
 
   // Production: strict allowlist, constant rpID across www/apex.
-  if (PROD_ORIGINS[host]) {
-    return { rpID: PROD_RP_ID, origin: PROD_ORIGINS[host], rpName: RP_NAME }
+  const productionOrigin = PROD_ORIGINS[headerHost]
+  if (productionOrigin && productionOrigin === headerOrigin) {
+    return { rpID: PROD_RP_ID, origin: productionOrigin, rpName: RP_NAME }
   }
 
   // Dev only: localhost/127.0.0.1 (any port) — not a phishing boundary.
-  if (host === 'localhost' || host === '127.0.0.1') {
-    const origin = headerOrigin || `http://${host}:3000`
-    return { rpID: host, origin, rpName: RP_NAME }
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    (originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1') &&
+    (originUrl.protocol === 'http:' || originUrl.protocol === 'https:')
+  ) {
+    return { rpID: originUrl.hostname, origin: headerOrigin, rpName: RP_NAME }
   }
 
   // Unrecognized origin — refuse rather than echo an attacker-controlled host.
