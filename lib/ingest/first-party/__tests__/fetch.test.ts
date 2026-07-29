@@ -490,7 +490,8 @@ describe('first-party account equity evidence', () => {
             amount: 40,
             direction: 'out',
             type: 'transaction',
-            info: { type: 'TRANSFER_OUT' },
+            currency: 'USDT',
+            info: { type: 'TRANSFER_OUT', currency: 'USDT' },
           },
         ]),
       }),
@@ -510,6 +511,38 @@ describe('first-party account equity evidence', () => {
 
     expect(result.netTransfersIn).toEqual({ 7: -40, 30: -40, 90: -40 })
     expect(result.netTransfersSinceLast).toBe(-40)
+  })
+
+  it('rejects non-stable transfer units instead of treating coin amounts as USDT', async () => {
+    const result = await fetchFirstPartyAccount(
+      client({
+        fetchLedger: jest.fn().mockResolvedValue([
+          {
+            timestamp: NOW - 1_000,
+            amount: 1,
+            direction: 'in',
+            type: 'transaction',
+            currency: 'BTC',
+            info: { type: 'TRANSFER_IN', currency: 'BTC' },
+          },
+        ]),
+      }),
+      {
+        nowMs: NOW,
+        balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
+        lastSyncMs: NOW - DAY,
+        transferLedgerContract: {
+          maxRangeDays: 90,
+          pageLimit: 50,
+          untilParam: 'endTime',
+          queries: [{ type: 'TRANSFER_IN' }],
+        },
+      }
+    )
+
+    expect(result.netTransfersIn).toEqual({})
+    expect(result.netTransfersSinceLast).toBeNull()
   })
 
   it('queries the complete Bybit transfer window in bounded IN/OUT ranges', async () => {

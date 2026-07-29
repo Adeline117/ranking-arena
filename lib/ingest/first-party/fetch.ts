@@ -21,6 +21,15 @@ interface CcxtPositionHistoryRow {
   info?: unknown
 }
 
+interface CcxtLedgerRow {
+  timestamp?: number | null
+  amount?: number | null
+  direction?: string | null
+  type?: string | null
+  currency?: string | null
+  info?: unknown
+}
+
 /** Minimal structural CCXT surface we rely on (no `as any`, spec 接地纪律). */
 export interface CcxtLike {
   has?: Record<string, boolean | 'emulated' | undefined>
@@ -42,15 +51,7 @@ export interface CcxtLike {
     since?: number,
     limit?: number,
     params?: Record<string, unknown>
-  ): Promise<
-    Array<{
-      timestamp?: number | null
-      amount?: number | null
-      direction?: string | null
-      type?: string | null
-      info?: unknown
-    }>
-  >
+  ): Promise<CcxtLedgerRow[]>
 }
 
 export type FirstPartyBalanceSemantics = 'total_includes_unrealized' | 'wallet_excludes_unrealized'
@@ -70,6 +71,7 @@ export interface FirstPartyTransferLedgerContract {
 
 const DAY_MS = 86_400_000
 const STABLES = ['USDT', 'USD', 'USDC']
+const USD_STABLES = new Set(['USDT', 'USDC', 'USD', 'BUSD', 'FDUSD'])
 const POSITION_HISTORY_LIMIT = 100
 const LEDGER_LIMIT = 1000
 const MAX_EVIDENCE_REQUESTS = 128
@@ -80,6 +82,13 @@ function num(v: unknown): number | null {
   if (typeof v === 'string' && v.trim() === '') return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
+}
+
+function ledgerCurrency(row: CcxtLedgerRow): string | null {
+  const info = row.info as { asset?: unknown; currency?: unknown; coin?: unknown }
+  const value = row.currency ?? info?.asset ?? info?.currency ?? info?.coin
+  if (typeof value !== 'string' || value.trim() === '') return null
+  return value.trim().toUpperCase()
 }
 
 function balanceEvidence(
@@ -303,6 +312,8 @@ async function netTransfers(
             rawType.includes('WITHDRAW')
           if (!isTransfer) continue
           if (amt === null) return null
+          const currency = ledgerCurrency(r)
+          if (currency === null || !USD_STABLES.has(currency)) return null
           const sign =
             r.direction === 'out' || rawType.includes('OUT') || rawType.includes('WITHDRAW')
               ? -1
