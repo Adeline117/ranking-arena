@@ -170,6 +170,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729150500_atomic_group_post_moderation.sql
   20260729152500_atomic_group_channel_page.sql
   20260729153000_atomic_group_audit_log_page.sql
+  20260729154500_inactive_auth_subject_mutation_barrier.sql
   20260729155000_atomic_group_edit_application_page.sql
 )
 

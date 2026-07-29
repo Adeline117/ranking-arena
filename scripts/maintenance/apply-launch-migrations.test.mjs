@@ -178,7 +178,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729075500_account_recovery_auth_email_authority.sql'
   const verifiedAuthProfileBanMigration = '20260729075600_verified_auth_profile_ban_authority.sql'
   const accountDeletionBillingIntentMigration = '20260729075700_account_deletion_billing_intent.sql'
-  const atomicSocialAuthorityMigrations = [
+  const latestMutationAuthorityMigrations = [
     '20260729131858_atomic_channel_member_mutation.sql',
     '20260729133904_atomic_channel_metadata_mutation.sql',
     '20260729135645_atomic_channel_message_send.sql',
@@ -188,10 +188,13 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729150500_atomic_group_post_moderation.sql',
     '20260729152500_atomic_group_channel_page.sql',
     '20260729153000_atomic_group_audit_log_page.sql',
+    '20260729154500_inactive_auth_subject_mutation_barrier.sql',
     '20260729155000_atomic_group_edit_application_page.sql',
   ]
+  const inactiveAuthSubjectMutationBarrierMigration =
+    '20260729154500_inactive_auth_subject_mutation_barrier.sql'
 
-  assert.equal(predeploy.length, 142)
+  assert.equal(predeploy.length, 143)
   assert.ok(predeploy.includes(accountHardDeleteRecoveryBarrierMigration))
   assert.ok(predeploy.includes(verifiedAuthProfileEmailMigration))
   assert.ok(predeploy.includes(accountRecoveryAuthEmailMigration))
@@ -199,9 +202,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes(verifiedAuthProfileBanMigration))
   assert.ok(predeploy.includes(accountDeletionBillingIntentMigration))
   assert.deepEqual(
-    predeploy.slice(-atomicSocialAuthorityMigrations.length),
-    atomicSocialAuthorityMigrations
+    predeploy.slice(-latestMutationAuthorityMigrations.length),
+    latestMutationAuthorityMigrations
   )
+  assert.ok(predeploy.includes(inactiveAuthSubjectMutationBarrierMigration))
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -313,7 +317,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           accountRecoveryAuthEmailMigration,
           verifiedAuthProfileBanMigration,
           accountDeletionBillingIntentMigration,
-          ...atomicSocialAuthorityMigrations,
+          ...latestMutationAuthorityMigrations,
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -332,7 +336,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 164)
+  assert.equal(new Set(all).size, 165)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -474,7 +478,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-101), [
+  assert.deepEqual(predeploy.slice(-102), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -566,7 +570,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     preserveStripeEventIdempotencyMigration,
     verifiedAuthProfileBanMigration,
     accountDeletionBillingIntentMigration,
-    ...atomicSocialAuthorityMigrations,
+    ...latestMutationAuthorityMigrations,
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -666,7 +670,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     predeploy.indexOf(exchangeOAuthStateClaimMigration) >
       predeploy.indexOf(stripeWebhookLeaseMigration)
   )
-  assert.deepEqual(predeploy.slice(-30), [
+  assert.deepEqual(predeploy.slice(-31), [
     '20260729059000_atomic_referral_attribution.sql',
     '20260729060000_retryable_referral_qualification.sql',
     '20260729061000_source_legacy_platform_alias_contract.sql',
@@ -687,7 +691,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     preserveStripeEventIdempotencyMigration,
     verifiedAuthProfileBanMigration,
     accountDeletionBillingIntentMigration,
-    ...atomicSocialAuthorityMigrations,
+    ...latestMutationAuthorityMigrations,
   ])
   assert.ok(
     predeploy.includes('20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql')
