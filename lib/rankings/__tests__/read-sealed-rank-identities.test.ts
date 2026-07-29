@@ -1,7 +1,8 @@
-const mockReadSealedRankingGeneration = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
-  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
 }))
 
 import { readSealedRankIdentities } from '@/lib/rankings/read-sealed-rank-identities'
@@ -36,15 +37,23 @@ function queryClient(result: { data: unknown; error: unknown }) {
 describe('readSealedRankIdentities', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockReadSealedRankingGeneration.mockImplementation(
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(
       async (
         _client,
-        _input,
-        reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+        season,
+        reader: (publication: {
+          scoreCohortId: string
+          proofs: Array<{ source: string }>
+        }) => Promise<unknown>
       ) => ({
-        value: await reader({ scoreCohortId: 'cohort-1' }),
+        value: await reader({
+          scoreCohortId: 'cohort-1',
+          proofs: [{ source: 'binance_futures' }],
+        }),
         publication: { state: 'sealed' },
         publicationIdentity: 'proof',
+        authoritySources: ['binance_futures'],
+        season,
       })
     )
   })
@@ -66,13 +75,14 @@ describe('readSealedRankIdentities', () => {
 
     const result = await readSealedRankIdentities(client as never, '90D', [
       { source: 'binance_futures', sourceTraderId: 'shared-id' },
+      { source: 'bybit', sourceTraderId: 'not-in-live-authority' },
       { source: 'okx_web3_solana', sourceTraderId: 'quarantined' },
       { source: 'not_a_source', sourceTraderId: 'private' },
     ])
 
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledWith(
       client,
-      { season: '90D', sources: ['binance_futures'] },
+      '90D',
       expect.any(Function),
       { timeoutMs: 10_000 }
     )
@@ -84,6 +94,7 @@ describe('readSealedRankIdentities', () => {
         { method: 'filter', args: ['rank_publication_id', 'eq', 'cohort-1'] },
       ])
     )
+    expect(calls).not.toContainEqual({ method: 'eq', args: ['source', 'bybit'] })
     expect(result?.value).toEqual([row])
   })
 
@@ -97,7 +108,19 @@ describe('readSealedRankIdentities', () => {
       ])
     ).resolves.toBeNull()
 
-    expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
+    expect(mockReadSealedRankingAuthorityGeneration).not.toHaveBeenCalled()
+    expect(client.from).not.toHaveBeenCalled()
+  })
+
+  it('returns an empty sealed enrichment when code-public identities left live authority', async () => {
+    const { client } = queryClient({ data: [], error: null })
+
+    const result = await readSealedRankIdentities(client as never, '90D', [
+      { source: 'bybit', sourceTraderId: 'retired-live-id' },
+    ])
+
+    expect(result?.value).toEqual([])
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
     expect(client.from).not.toHaveBeenCalled()
   })
 

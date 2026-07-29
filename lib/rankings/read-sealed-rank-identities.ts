@@ -1,7 +1,7 @@
 import type { getSupabaseAdmin } from '@/lib/api'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import {
-  readSealedRankingGeneration,
+  readSealedRankingAuthorityGeneration,
   type SealedRankingGenerationRead,
 } from '@/lib/rankings/read-sealed-ranking-generation'
 import type { LeaderboardPublicationSeason } from '@/lib/rankings/read-publication-proofs'
@@ -91,13 +91,16 @@ export async function readSealedRankIdentities(
     idsBySource.set(identity.source, sourceIds)
   }
 
-  const sources = [...idsBySource.keys()].sort()
-  if (sources.length === 0) return null
+  if (idsBySource.size === 0) return null
 
-  return readSealedRankingGeneration(
+  return readSealedRankingAuthorityGeneration(
     supabase,
-    { season, sources },
+    season,
     async (publication) => {
+      const authoritySources = new Set(publication.proofs.map((proof) => proof.source))
+      const sources = [...idsBySource.keys()]
+        .filter((source) => authoritySources.has(source))
+        .sort()
       const jobs: Array<{ source: string; ids: string[] }> = []
       for (const source of sources) {
         const ids = [...(idsBySource.get(source) ?? [])].sort()
