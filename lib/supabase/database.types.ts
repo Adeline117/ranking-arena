@@ -11543,6 +11543,15 @@ export type Database = {
         }
         Returns: Json
       }
+      get_group_channel_page_atomic: {
+        Args: {
+          p_actor_id: string
+          p_before: string | null
+          p_channel_id: string
+          p_limit: number
+        }
+        Returns: Json
+      }
       get_hero_stats: {
         Args: never
         Returns: {
