@@ -8,11 +8,16 @@
  * - Replay 在 Sentry init 后 5s 延迟加载
  */
 
+import {
+  sanitizeSentryEvent,
+  sanitizeSentryReplayRecordingEvent,
+} from '@/lib/telemetry/sentry-sanitizer'
+
 /**
  * Initialize Sentry with all configuration.
  * Called after the page is idle to avoid blocking FCP/LCP.
  */
-async function initSentry() {
+export async function initSentry() {
   const Sentry = await import('@sentry/nextjs')
 
   const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN
@@ -79,6 +84,7 @@ async function initSentry() {
     },
 
     beforeSend(event, hint) {
+      sanitizeSentryEvent(event)
       if (event.user) delete event.user.ip_address
 
       // Drop HTTP 4xx errors (auth expiry, not-found, etc.)
@@ -105,7 +111,7 @@ async function initSentry() {
         transaction.timestamp && transaction.start_timestamp
           ? (transaction.timestamp - transaction.start_timestamp) * 1000
           : 0
-      return duration < 10 ? null : transaction
+      return duration < 10 ? null : sanitizeSentryEvent(transaction)
     },
 
     initialScope: {
@@ -130,6 +136,7 @@ async function initSentry() {
             maskAllText: false,
             maskAllInputs: true,
             blockAllMedia: true,
+            beforeAddRecordingEvent: sanitizeSentryReplayRecordingEvent,
           })
         )
       }

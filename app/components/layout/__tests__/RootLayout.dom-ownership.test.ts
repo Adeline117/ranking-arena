@@ -17,4 +17,20 @@ describe('RootLayout DOM ownership', () => {
     expect(rootLayoutSource).not.toContain('Node.prototype.insertBefore=')
     expect(rootLayoutSource).not.toContain('Node.prototype.removeChild=')
   })
+
+  it('keeps the recovery scrubber before every other author-owned root-layout script', () => {
+    const headStart = rootLayoutSource.indexOf('<head>')
+    const firstScript = rootLayoutSource.indexOf('<script', headStart)
+    const recoveryBootstrap = rootLayoutSource.indexOf(
+      'getAccountRecoveryBootstrapScript()',
+      headStart
+    )
+    const firstUnrelatedScript = rootLayoutSource.indexOf('<script', firstScript + 1)
+
+    expect(headStart).toBeGreaterThan(-1)
+    expect(firstScript).toBeGreaterThan(headStart)
+    expect(recoveryBootstrap).toBeGreaterThan(headStart)
+    expect(recoveryBootstrap).toBeGreaterThan(firstScript)
+    expect(firstUnrelatedScript).toBeGreaterThan(recoveryBootstrap)
+  })
 })

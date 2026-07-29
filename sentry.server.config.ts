@@ -12,6 +12,7 @@
  */
 
 import * as Sentry from '@sentry/nextjs'
+import { sanitizeSentryEvent } from './lib/telemetry/sentry-sanitizer'
 
 const SENTRY_DSN = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN
 
@@ -39,7 +40,7 @@ Sentry.init({
 
   // 禁用调试模式（避免潜在的渲染问题）
   debug: false,
-  
+
   // 过滤已知的非关键错误
   ignoreErrors: [
     // 网络错误（用户侧/上游不可用）
@@ -72,9 +73,11 @@ Sentry.init({
     // Disk space — transient Vercel Lambda issue
     'no space left on device',
   ],
-  
+
   // 在发送前处理事件
   beforeSend(event, hint) {
+    sanitizeSentryEvent(event)
+
     // 脱敏处理
     if (event.user) {
       delete event.user.ip_address
@@ -88,8 +91,9 @@ Sentry.init({
     }
 
     // 不上报 4xx 客户端错误（401/403/404 等）
-    const statusCode = (hint?.originalException as { statusCode?: number })?.statusCode
-      ?? (hint?.originalException as { status?: number })?.status
+    const statusCode =
+      (hint?.originalException as { statusCode?: number })?.statusCode ??
+      (hint?.originalException as { status?: number })?.status
     if (statusCode && statusCode >= 400 && statusCode < 500) {
       return null
     }
@@ -104,7 +108,9 @@ Sentry.init({
     // Group exchange connector errors by exchange name so "binance timeout" and
     // "binance rate limit" create 1 issue instead of N. Same for enrichment/pipeline.
     const errorMsg = message.toLowerCase()
-    const exchangeMatch = errorMsg.match(/\b(binance|bybit|okx|bitget|mexc|kucoin|htx|coinex|hyperliquid|gmx|dydx|gateio|bingx)\b/)
+    const exchangeMatch = errorMsg.match(
+      /\b(binance|bybit|okx|bitget|mexc|kucoin|htx|coinex|hyperliquid|gmx|dydx|gateio|bingx)\b/
+    )
     if (exchangeMatch) {
       const exchange = exchangeMatch[1]
       const isTimeout = /timeout|timed out|ETIMEDOUT/.test(errorMsg)
@@ -114,14 +120,20 @@ Sentry.init({
     }
 
     // Group pipeline/cron errors by job name
-    const cronMatch = errorMsg.match(/\b(batch-fetch|batch-enrich|compute-leaderboard|fetch-details|aggregate)/i)
+    const cronMatch = errorMsg.match(
+      /\b(batch-fetch|batch-enrich|compute-leaderboard|fetch-details|aggregate)/i
+    )
     if (cronMatch) {
       event.fingerprint = ['pipeline', cronMatch[1].toLowerCase()]
     }
 
     return event
   },
-  
+
+  beforeSendTransaction(transaction) {
+    return sanitizeSentryEvent(transaction)
+  },
+
   // 设置标签
   initialScope: {
     tags: {

@@ -81,6 +81,8 @@ jest.mock('@/lib/utils/logger', () => ({
 import { createHash } from 'node:crypto'
 import { POST } from '../route'
 
+const RECOVERY_TOKEN = 'A'.repeat(43)
+
 function request(body: Record<string, unknown>): Request {
   return new Request('https://www.arenafi.org/api/account/recover', {
     method: 'POST',
@@ -123,14 +125,14 @@ describe('account recovery', () => {
   })
 
   it('restores a passwordless account with its one-time token and resumes renewal', async () => {
-    const response = await POST(request({ recovery_token: 'plain-recovery-token' }))
+    const response = await POST(request({ recovery_token: RECOVERY_TOKEN }))
     const body = await response.json()
 
     expect(response.status).toBe(200)
     expect(body).toMatchObject({ success: true, subscription_resumed: true })
     expect(mockRpc).toHaveBeenCalledWith('restore_pending_account', {
       p_user_id: 'user-1',
-      p_recovery_token_hash: createHash('sha256').update('plain-recovery-token').digest('hex'),
+      p_recovery_token_hash: createHash('sha256').update(RECOVERY_TOKEN).digest('hex'),
     })
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: 'none' })
     expect(mockStripeUpdate).toHaveBeenCalledWith('sub_123', { cancel_at_period_end: false })
@@ -140,9 +142,25 @@ describe('account recovery', () => {
   it('does not unban or reveal account details for an invalid token', async () => {
     tokenResult = { data: null, error: null }
 
-    const response = await POST(request({ recovery_token: 'wrong' }))
+    const response = await POST(request({ recovery_token: 'Q'.repeat(43) }))
 
     expect(response.status).toBe(401)
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['too short', 'A'.repeat(39)],
+    ['impossible encoded length', 'A'.repeat(41)],
+    ['too long', 'A'.repeat(129)],
+    ['padding', `${'A'.repeat(42)}=`],
+    ['non-canonical trailing bits', `${'A'.repeat(42)}B`],
+    ['surrounding whitespace', ` ${RECOVERY_TOKEN}`],
+  ])('fails malformed token input closed before querying storage: %s', async (_label, token) => {
+    const response = await POST(request({ recovery_token: token }))
+
+    expect(response.status).toBe(401)
+    expect(mockFrom).not.toHaveBeenCalled()
     expect(mockAdminUpdateUser).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
   })
