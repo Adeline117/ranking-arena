@@ -27,10 +27,19 @@ import {
 } from '@/lib/constants/trader-events'
 import { loadBroadcastEventPreferences, loadBroadcastEventRows } from './event-data'
 import { traderEventLink, traderEventReference } from './notification-identity'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 120
+const EVENT_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 interface TraderEvent {
   title: string
@@ -57,44 +66,52 @@ export async function GET(request: NextRequest) {
     // Read every input page before producing any event. The filtered datasets
     // also chunk trader ids so a large follow graph cannot overflow the
     // PostgREST URL. Any page failure rejects the complete input set.
-    const {
-      follows,
-      currentRanks: lr,
-      rankHistory: rh,
-      dailySnapshots: ds,
-    } = await loadBroadcastEventRows({
-      follows: (from, to) =>
-        supabase
-          .from('trader_follows')
-          .select('user_id, trader_id, source')
-          .order('id', { ascending: true })
-          .range(from, to),
-      currentRanks: (traderIds, from, to) =>
-        supabase
-          .from('leaderboard_ranks')
-          .select('source_trader_id, source, rank, roi, pnl')
-          .in('source_trader_id', traderIds)
-          .eq('season_id', '90D')
-          .order('id', { ascending: true })
-          .range(from, to),
-      rankHistory: (traderIds, from, to) =>
-        supabase
-          .from('rank_history')
-          .select('trader_key, platform, rank')
-          .in('trader_key', traderIds)
-          .eq('period', '90D')
-          .eq('snapshot_date', yStr)
-          .order('id', { ascending: true })
-          .range(from, to),
-      dailySnapshots: (traderIds, from, to) =>
-        supabase
-          .from('trader_daily_snapshots')
-          .select('trader_key, platform, roi, pnl')
-          .in('trader_key', traderIds)
-          .eq('date', yStr)
-          .order('id', { ascending: true })
-          .range(from, to),
-    })
+    const sealedEventRows = await readSealedRankingGeneration(
+      supabase,
+      { season: '90D', sources: EVENT_RANKING_SOURCES },
+      async (publication) =>
+        loadBroadcastEventRows({
+          follows: (from, to) =>
+            supabase
+              .from('trader_follows')
+              .select('user_id, trader_id, source')
+              .order('id', { ascending: true })
+              .range(from, to),
+          currentRanks: (traderIds, from, to) =>
+            supabase
+              .from('leaderboard_ranks')
+              .select('source_trader_id, source, rank, roi, pnl')
+              .in('source', EVENT_RANKING_SOURCES)
+              .in('source_trader_id', traderIds)
+              .eq('season_id', '90D')
+              .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+              .order('source', { ascending: true })
+              .order('source_trader_id', { ascending: true })
+              .range(from, to),
+          rankHistory: (traderIds, from, to) =>
+            supabase
+              .from('rank_history')
+              .select('trader_key, platform, rank')
+              .in('trader_key', traderIds)
+              .eq('period', '90D')
+              .eq('snapshot_date', yStr)
+              .order('id', { ascending: true })
+              .range(from, to),
+          dailySnapshots: (traderIds, from, to) =>
+            supabase
+              .from('trader_daily_snapshots')
+              .select('trader_key, platform, roi, pnl')
+              .in('trader_key', traderIds)
+              .eq('date', yStr)
+              .order('id', { ascending: true })
+              .range(from, to),
+        }),
+      { timeoutMs: 15_000 }
+    )
+    const { follows, currentRanks: lr, rankHistory: rh, dailySnapshots: ds } = sealedEventRows.value
+    if (lr.some((row) => !isPublicRankingSourceAllowed(row.source))) {
+      throw new Error('broadcast ranking query crossed the public source boundary')
+    }
 
     if (follows.length === 0) {
       await plog.success(0, { message: 'no trader follows' })

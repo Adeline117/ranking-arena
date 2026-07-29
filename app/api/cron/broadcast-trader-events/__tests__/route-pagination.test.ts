@@ -40,7 +40,7 @@ const mockRowByTable: Record<string, Record<string, unknown>> = {
 
 function mockQueryFor(table: string) {
   const query: Record<string, jest.Mock> = {}
-  for (const method of ['select', 'order', 'eq']) {
+  for (const method of ['select', 'order', 'eq', 'filter']) {
     query[method] = jest.fn(() => query)
   }
   let filteredIds: string[] = []
@@ -122,6 +122,20 @@ jest.mock('@/lib/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   },
+}))
+
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  readSealedRankingGeneration: jest.fn(
+    async (
+      _client: unknown,
+      _input: unknown,
+      reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+    ) => ({
+      value: await reader({ scoreCohortId: 'sealed-cohort' }),
+      publication: {},
+      publicationIdentity: 'sealed-publication',
+    })
+  ),
 }))
 
 import { GET } from '../route'
