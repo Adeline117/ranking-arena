@@ -7,7 +7,7 @@
  * activeAccount string lives in URL `?account=platform:traderKey` form
  * for deep-link support. This hook owns:
  *
- *  - The state value (initialized from URL on mount)
+ *  - The state value (kept in sync with the URL)
  *  - Derived `activeAccountRaw` (parsed `{platform, traderKey}` or null)
  *  - The change handler that writes back to URL
  *
@@ -17,12 +17,72 @@
  * the URL/SWR-key chain doesn't depend on linkedAccounts being loaded.
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+
+const MAX_PLATFORM_LENGTH = 64
+const MAX_TRADER_KEY_LENGTH = 512
 
 export interface ActiveAccountRaw {
   platform: string
   traderKey: string
+}
+
+export type TraderActiveAccountParam =
+  | {
+      kind: 'all'
+      activeAccount: 'all'
+      activeAccountRaw: null
+    }
+  | {
+      kind: 'account'
+      activeAccount: string
+      activeAccountRaw: ActiveAccountRaw
+    }
+  | {
+      kind: 'invalid'
+      activeAccount: 'all'
+      activeAccountRaw: null
+    }
+
+const ALL_ACCOUNTS: TraderActiveAccountParam = {
+  kind: 'all',
+  activeAccount: 'all',
+  activeAccountRaw: null,
+}
+
+const INVALID_ACCOUNT: TraderActiveAccountParam = {
+  kind: 'invalid',
+  activeAccount: 'all',
+  activeAccountRaw: null,
+}
+
+/**
+ * Parse the canonical `platform:traderKey` URL value. The first colon is the
+ * separator; subsequent colons are part of the trader key.
+ */
+export function parseTraderActiveAccountParam(value: string | null): TraderActiveAccountParam {
+  if (value === null || value === 'all') return ALL_ACCOUNTS
+
+  const separatorIndex = value.indexOf(':')
+  if (separatorIndex <= 0) return INVALID_ACCOUNT
+
+  const platform = value.slice(0, separatorIndex)
+  const traderKey = value.slice(separatorIndex + 1)
+  const isValid =
+    platform.length <= MAX_PLATFORM_LENGTH &&
+    traderKey.length > 0 &&
+    traderKey.length <= MAX_TRADER_KEY_LENGTH &&
+    platform === platform.trim() &&
+    traderKey === traderKey.trim()
+
+  if (!isValid) return INVALID_ACCOUNT
+
+  return {
+    kind: 'account',
+    activeAccount: value,
+    activeAccountRaw: { platform, traderKey },
+  }
 }
 
 export interface UseTraderActiveAccountResult {
@@ -30,38 +90,82 @@ export interface UseTraderActiveAccountResult {
   activeAccount: string
   /** Parsed form, null when "all" */
   activeAccountRaw: ActiveAccountRaw | null
+  /** True while a malformed URL account parameter is being removed. */
+  isAccountParamInvalid: boolean
   /** Setter that also writes back to URL */
   handleAccountChange: (account: string) => void
 }
 
+interface PendingAccountSelection {
+  /** Search snapshot against which the navigation was requested. */
+  sourceSearchParams: string
+  selection: TraderActiveAccountParam
+}
+
 export function useTraderActiveAccount(): UseTraderActiveAccountResult {
-  const router = useRouter()
+  const { replace } = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const searchParamsString = searchParams.toString()
 
-  // Initialize from URL on mount for deep-link support
-  const urlAccount = searchParams.get('account')
-  const [activeAccount, setActiveAccount] = useState<string>(urlAccount || 'all')
+  const urlAccount = useMemo<TraderActiveAccountParam>(() => {
+    const params = new URLSearchParams(searchParamsString)
+    const accountValues = params.getAll('account')
+    if (accountValues.length > 1) return INVALID_ACCOUNT
+    return parseTraderActiveAccountParam(accountValues[0] ?? null)
+  }, [searchParamsString])
 
-  // Parse "platform:traderKey" inline — NO linkedAccounts lookup.
-  // Breaking the cycle here is what makes the SWR fetch order safe.
-  const activeAccountRaw = useMemo<ActiveAccountRaw | null>(() => {
-    if (activeAccount === 'all' || !activeAccount.includes(':')) return null
-    const [platform, ...rest] = activeAccount.split(':')
-    return { platform, traderKey: rest.join(':') }
-  }, [activeAccount])
+  const [pendingSelection, setPendingSelection] = useState<PendingAccountSelection | null>(null)
 
-  const handleAccountChange = useCallback((account: string) => {
-    setActiveAccount(account)
-    const params = new URLSearchParams(searchParams.toString())
-    if (account === 'all') {
-      params.delete('account')
-    } else {
-      params.set('account', account)
-    }
-    const qs = params.toString()
-    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
-  }, [searchParams, pathname, router])
+  useEffect(() => {
+    // Once navigation changes the search snapshot, the URL is authoritative.
+    // Clearing the optimistic selection also prevents it from resurfacing if
+    // the user later navigates back to the same query string.
+    setPendingSelection(null)
 
-  return { activeAccount, activeAccountRaw, handleAccountChange }
+    if (urlAccount.kind !== 'invalid') return
+
+    const params = new URLSearchParams(searchParamsString)
+    params.delete('account')
+    const query = params.toString()
+    replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false })
+  }, [pathname, replace, searchParamsString, urlAccount])
+
+  // A malformed URL is never exposed, including during the render before the
+  // cleanup effect removes it. A pending control selection is used only while
+  // the URL still matches the snapshot from which that navigation began.
+  const exposedSelection =
+    urlAccount.kind !== 'invalid' && pendingSelection?.sourceSearchParams === searchParamsString
+      ? pendingSelection.selection
+      : urlAccount.kind === 'invalid'
+        ? ALL_ACCOUNTS
+        : urlAccount
+
+  const handleAccountChange = useCallback(
+    (account: string) => {
+      const nextSelection = parseTraderActiveAccountParam(account)
+      const canonicalSelection = nextSelection.kind === 'invalid' ? ALL_ACCOUNTS : nextSelection
+      setPendingSelection({
+        sourceSearchParams: searchParamsString,
+        selection: canonicalSelection,
+      })
+
+      const params = new URLSearchParams(searchParamsString)
+      if (canonicalSelection.kind === 'all') {
+        params.delete('account')
+      } else {
+        params.set('account', canonicalSelection.activeAccount)
+      }
+      const query = params.toString()
+      replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false })
+    },
+    [pathname, replace, searchParamsString]
+  )
+
+  return {
+    activeAccount: exposedSelection.activeAccount,
+    activeAccountRaw: exposedSelection.activeAccountRaw,
+    isAccountParamInvalid: urlAccount.kind === 'invalid',
+    handleAccountChange,
+  }
 }

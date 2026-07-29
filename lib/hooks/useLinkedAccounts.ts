@@ -69,15 +69,21 @@ export function useLinkedAccounts(platform: string | undefined, traderKey: strin
     retry: 1,
   })
 
-  const canPublishQueryData =
-    shouldFetch && isFetchedAfterMount && fetchStatus === 'idle' && !isFetching && !error
-  const data = canPublishQueryData ? queryData : undefined
+  const authoritativeReady =
+    shouldFetch &&
+    isFetchedAfterMount &&
+    fetchStatus === 'idle' &&
+    !isFetching &&
+    !error &&
+    queryData !== undefined
+  const data = authoritativeReady ? queryData : undefined
 
   return {
     linkedAccounts: data?.accounts ?? [],
     aggregatedData: data?.aggregated ?? null,
     hasMultipleAccounts: (data?.accounts.length ?? 0) >= 2,
     isLoading: shouldFetch && (!isFetchedAfterMount || fetchStatus !== 'idle' || isFetching),
+    authoritativeReady,
     error,
   }
 }

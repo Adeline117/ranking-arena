@@ -1,5 +1,9 @@
 import { resolveTraderProfileOwnership } from '../profile-ownership'
-import { resolveTraderClaimSources, type ExactTraderClaimData } from '../profile-claim-source'
+import {
+  parseExactTraderClaimEnvelope,
+  resolveTraderClaimSources,
+  type ExactTraderClaimData,
+} from '../profile-claim-source'
 
 function verifiedClaim(
   traderId: string,
@@ -17,6 +21,24 @@ function verifiedClaim(
 }
 
 describe('exact trader claim source selection', () => {
+  it('accepts only a successful, typed claim envelope at the authorization boundary', () => {
+    const claim = verifiedClaim('account-99', 'bybit', 'owner-b', 'Fresh B')
+    expect(parseExactTraderClaimEnvelope({ success: true, data: claim })).toEqual(claim)
+    expect(parseExactTraderClaimEnvelope({ success: false, data: claim })).toBeNull()
+    expect(
+      parseExactTraderClaimEnvelope({
+        success: true,
+        data: { ...claim, is_verified: 'true' },
+      })
+    ).toBeNull()
+    expect(
+      parseExactTraderClaimEnvelope({
+        success: true,
+        data: { ...claim, owner_id: ' owner-b' },
+      })
+    ).toBeNull()
+  })
+
   it('rejects the old A placeholder when visible identity has switched to B', () => {
     const sources = resolveTraderClaimSources({
       traderId: 'account-99',
