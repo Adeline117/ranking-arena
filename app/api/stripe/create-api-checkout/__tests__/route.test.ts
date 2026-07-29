@@ -48,9 +48,11 @@ jest.mock('next/server', () => {
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
 })
 
-const mockEnv: Record<string, string | undefined> = {
+const mockEnv: Record<string, unknown> = {
   STRIPE_SECRET_KEY: 'sk_test_123',
   NEXT_PUBLIC_APP_URL: 'https://app.test.com',
+  API_TIER_CHECKOUT_WRITER_MODE: 'sealed',
+  isProduction: undefined,
 }
 jest.mock('@/lib/env', () => ({
   env: new Proxy(
@@ -208,6 +210,11 @@ describe('POST /api/stripe/create-api-checkout', () => {
     jest.clearAllMocks()
     mockEnv.STRIPE_SECRET_KEY = 'sk_test_123'
     mockEnv.NEXT_PUBLIC_APP_URL = 'https://app.test.com'
+    mockEnv.API_TIER_CHECKOUT_WRITER_MODE = 'sealed'
+    mockEnv.API_TIER_CHECKOUT_WRITER_SHA = undefined
+    mockEnv.isProduction = undefined
+    delete process.env.VERCEL_GIT_COMMIT_SHA
+    delete process.env.ARENA_RELEASE_SHA
     mockCheckRateLimit.mockResolvedValue(null)
     mockExtractUser.mockResolvedValue({ user: validUser, error: null })
     mockProfileMaybeSingle.mockResolvedValue({
@@ -235,6 +242,51 @@ describe('POST /api/stripe/create-api-checkout', () => {
       body: JSON.stringify({ plan }),
     })
   }
+
+  it('closes before every dependency while the API writer cutover gate is paused', async () => {
+    mockEnv.API_TIER_CHECKOUT_WRITER_MODE = 'closed'
+
+    const res = await POST(request())
+
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({
+      error: 'API checkout is temporarily paused for a billing upgrade. Please retry shortly.',
+      code: 'API_CHECKOUT_WRITER_CLOSED',
+    })
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockExtractUser).not.toHaveBeenCalled()
+    expect(mockProfileMaybeSingle).not.toHaveBeenCalled()
+    expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('keeps a production writer closed unless its full release SHA is exact', async () => {
+    mockEnv.isProduction = true
+    mockEnv.API_TIER_CHECKOUT_WRITER_SHA = 'a'.repeat(40)
+    process.env.VERCEL_GIT_COMMIT_SHA = 'b'.repeat(40)
+
+    const res = await POST(request())
+
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual(
+      expect.objectContaining({ code: 'API_CHECKOUT_WRITER_CLOSED' })
+    )
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('opens a production writer only for its exact full release SHA', async () => {
+    const releaseSha = 'a'.repeat(40)
+    mockEnv.isProduction = true
+    mockEnv.API_TIER_CHECKOUT_WRITER_SHA = releaseSha
+    process.env.VERCEL_GIT_COMMIT_SHA = releaseSha
+
+    const res = await POST(request())
+
+    expect(res.status).toBe(200)
+    expect(mockCreateCheckoutSession).toHaveBeenCalledTimes(1)
+  })
 
   it('fails closed before Stripe work when the billing profile is missing', async () => {
     mockProfileMaybeSingle.mockResolvedValue({ data: null, error: null })

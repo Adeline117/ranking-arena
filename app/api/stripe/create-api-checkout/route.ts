@@ -22,6 +22,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const STRIPE_CUSTOMER_ID_PATTERN = /^cus_[A-Za-z0-9_]+$/
 const STRIPE_SESSION_ID_PATTERN = /^cs_[A-Za-z0-9_]+$/
 const STRIPE_PRICE_ID_PATTERN = /^price_[A-Za-z0-9_]+$/
+const FULL_GIT_SHA_PATTERN = /^[0-9a-f]{40}$/
 const MAX_STRIPE_UNIX_SECONDS = 253_402_300_799
 const API_CHECKOUT_METADATA_KEYS = [
   'api_plan',
@@ -122,6 +123,38 @@ function serviceUnavailable(message = 'Unable to prepare API checkout. Please re
       headers: {
         'Cache-Control': 'no-store',
         'Retry-After': '30',
+      },
+    }
+  )
+}
+
+function apiTierCheckoutWriterIsOpen(): boolean {
+  if (env.API_TIER_CHECKOUT_WRITER_MODE !== 'sealed') return false
+  if (!env.isProduction) return true
+
+  const expectedSha = env.API_TIER_CHECKOUT_WRITER_SHA?.trim().toLowerCase() ?? ''
+  const runtimeSha = (process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.ARENA_RELEASE_SHA ?? '')
+    .trim()
+    .toLowerCase()
+  return (
+    FULL_GIT_SHA_PATTERN.test(expectedSha) &&
+    FULL_GIT_SHA_PATTERN.test(runtimeSha) &&
+    expectedSha === runtimeSha
+  )
+}
+
+function checkoutWriterClosed() {
+  return NextResponse.json(
+    {
+      error: 'API checkout is temporarily paused for a billing upgrade. Please retry shortly.',
+      code: 'API_CHECKOUT_WRITER_CLOSED',
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': '60',
+        'X-Arena-API-Checkout-Writer': 'closed',
       },
     }
   )
@@ -269,6 +302,13 @@ async function expireCheckoutSessionBestEffort(sessionId: unknown, context: stri
 }
 
 export async function POST(request: NextRequest) {
+  // This gate is intentionally before rate limiting, authentication, database
+  // reads, Customer creation, and Checkout reservation. A cutover release can
+  // therefore prove that every old writer has drained without creating any
+  // new four-key legacy Session. Production re-opening is bound to one exact
+  // release SHA so a stale instance cannot become a paid writer.
+  if (!apiTierCheckoutWriterIsOpen()) return checkoutWriterClosed()
+
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
   if (rateLimitResponse) return rateLimitResponse
 
