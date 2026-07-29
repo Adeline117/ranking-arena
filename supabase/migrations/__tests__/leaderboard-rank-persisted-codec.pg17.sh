@@ -955,6 +955,17 @@ if [[ "$FUNCTION_STATE_BEFORE" != "$FUNCTION_STATE_AFTER" \
   exit 1
 fi
 
+# The typed-batch proof reuses this exact persisted-row fixture and clean
+# replay point. It is opt-in so the persisted codec proof also remains an
+# independently runnable test with no downstream migration dependency.
+if [[ "${LEADERBOARD_TYPED_BATCH_PG17_EXTENSION:-}" == '1' ]]; then
+  # shellcheck source=/dev/null
+  (
+    source \
+      "$ROOT_DIR/supabase/migrations/__tests__/leaderboard-rank-typed-batch-contract.pg17.sh"
+  )
+fi
+
 # Replay detects hostile catalog mutations and never silently repairs them.
 psql_cmd -q -c \
   'GRANT EXECUTE ON FUNCTION arena.encode_leaderboard_rank_row_v1(public.leaderboard_ranks) TO service_role'
