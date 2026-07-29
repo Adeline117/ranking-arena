@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getPool } from '@/lib/db'
 import type { Database } from '@/lib/supabase/database.types'
 import type { SealedCompositeRankingPublicationSet } from '@/lib/rankings/read-sealed-composite-ranking-generation'
 
 export const SEALED_COMPOSITE_RANKINGS_RPC_CONTRACT = 'sealed-composite-rankings-rpc@1'
+export const COMPOSITE_RANKING_STATEMENT_TIMEOUT_MS = 12_000
 
 const SOURCE_PATTERN = /^[a-z0-9]+(?:_[a-z0-9]+)*$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
@@ -301,10 +303,7 @@ function requireInput(input: CompositeRankingPageInput) {
   return scopeSources
 }
 
-export async function readCompositeRankingPage(
-  supabase: SupabaseClient<Database>,
-  input: CompositeRankingPageInput
-): Promise<CompositeRankingPage> {
+function prepareCompositeRankingRead(input: CompositeRankingPageInput) {
   const scopeSources = requireInput(input)
   const [publication7d, publication30d, publication90d] = input.publication.publications
   const publications = [publication7d, publication30d, publication90d] as const
@@ -315,27 +314,33 @@ export async function readCompositeRankingPage(
     throw new TypeError('composite ranking scope exceeds the sealed authority')
   }
 
-  let query = supabase.rpc('arena_read_composite_rankings_v1', {
-    p_7d_cohort_id: publication7d.scoreCohortId,
-    p_30d_cohort_id: publication30d.scoreCohortId,
-    p_90d_cohort_id: publication90d.scoreCohortId,
-    p_7d_sources: publication7d.proofs.map((proof) => proof.source),
-    p_30d_sources: publication30d.proofs.map((proof) => proof.source),
-    p_90d_sources: publication90d.proofs.map((proof) => proof.source),
-    p_scope_sources: [...scopeSources],
-    p_limit: input.limit,
-    p_offset: input.offset,
-    p_sort_by: input.sortBy,
-    p_sort_dir: input.sortDir,
-    p_min_pnl: input.minPnl ?? null,
-    p_min_trades: input.minTrades ?? null,
-    p_trader_type: input.traderType ?? null,
-  })
-  if (input.signal) query = query.abortSignal(input.signal)
-  const { data, error } = await query
-  if (error || data === null) {
-    throw new Error(`Composite rankings query failed: ${error?.message ?? 'null payload'}`)
+  return {
+    scopeSources,
+    publications,
+    args: {
+      p_7d_cohort_id: publication7d.scoreCohortId,
+      p_30d_cohort_id: publication30d.scoreCohortId,
+      p_90d_cohort_id: publication90d.scoreCohortId,
+      p_7d_sources: publication7d.proofs.map((proof) => proof.source),
+      p_30d_sources: publication30d.proofs.map((proof) => proof.source),
+      p_90d_sources: publication90d.proofs.map((proof) => proof.source),
+      p_scope_sources: [...scopeSources],
+      p_limit: input.limit,
+      p_offset: input.offset,
+      p_sort_by: input.sortBy,
+      p_sort_dir: input.sortDir,
+      p_min_pnl: input.minPnl ?? null,
+      p_min_trades: input.minTrades ?? null,
+      p_trader_type: input.traderType ?? null,
+    },
   }
+}
+
+function parseCompositeRankingPage(
+  data: unknown,
+  input: CompositeRankingPageInput,
+  prepared: ReturnType<typeof prepareCompositeRankingRead>
+): CompositeRankingPage {
   if (
     !isRecord(data) ||
     !hasExactKeys(data, ['contract', 'rows', 'total_count']) ||
@@ -349,9 +354,9 @@ export async function readCompositeRankingPage(
   }
 
   const publicationIds = new Map(
-    publications.map((publication) => [publication.season, publication.scoreCohortId])
+    prepared.publications.map((publication) => [publication.season, publication.scoreCohortId])
   )
-  const scopeSet = new Set(scopeSources)
+  const scopeSet = new Set(prepared.scopeSources)
   const seen = new Set<string>()
   const rows = data.rows.map((value) => {
     const row = parseRow(value, scopeSet, publicationIds)
@@ -365,7 +370,7 @@ export async function readCompositeRankingPage(
     seen.add(identity)
     return row
   })
-  if (scopeSources.length === 0 && (rows.length !== 0 || data.total_count !== 0)) {
+  if (prepared.scopeSources.length === 0 && (rows.length !== 0 || data.total_count !== 0)) {
     throw new Error('composite rankings RPC returned data for an empty scope')
   }
 
@@ -373,4 +378,89 @@ export async function readCompositeRankingPage(
     rows: Object.freeze(rows),
     totalCount: Number(data.total_count),
   })
+}
+
+export async function readCompositeRankingPage(
+  supabase: SupabaseClient<Database>,
+  input: CompositeRankingPageInput
+): Promise<CompositeRankingPage> {
+  const prepared = prepareCompositeRankingRead(input)
+  let query = supabase.rpc('arena_read_composite_rankings_v1', prepared.args)
+  if (input.signal) query = query.abortSignal(input.signal)
+  const { data, error } = await query
+  if (error || data === null) {
+    throw new Error(`Composite rankings query failed: ${error?.message ?? 'null payload'}`)
+  }
+  return parseCompositeRankingPage(data, input, prepared)
+}
+
+/**
+ * Execute the composite RPC in its own read-only transaction.
+ *
+ * PostgreSQL arms statement_timeout when a top-level statement starts. A
+ * function-level SET therefore cannot bound the already-running RPC command.
+ * Setting it in a separate transaction command before SELECT makes the
+ * database deadline real and releases the pool connection on every outcome.
+ */
+export async function readCompositeRankingPageWithDatabaseTimeout(
+  input: CompositeRankingPageInput
+): Promise<CompositeRankingPage> {
+  const prepared = prepareCompositeRankingRead(input)
+  const { args } = prepared
+  const client = await getPool().connect()
+  let transactionOpen = false
+  try {
+    await client.query('BEGIN TRANSACTION READ ONLY')
+    transactionOpen = true
+    await client.query(
+      `SET LOCAL statement_timeout = '${COMPOSITE_RANKING_STATEMENT_TIMEOUT_MS}ms'`
+    )
+    const result = await client.query<{ payload: unknown }>(
+      `SELECT public.arena_read_composite_rankings_v1(
+         $1::uuid,
+         $2::uuid,
+         $3::uuid,
+         $4::text[],
+         $5::text[],
+         $6::text[],
+         $7::text[],
+         $8::integer,
+         $9::integer,
+         $10::text,
+         $11::text,
+         $12::numeric,
+         $13::bigint,
+         $14::text
+       ) AS payload`,
+      [
+        args.p_7d_cohort_id,
+        args.p_30d_cohort_id,
+        args.p_90d_cohort_id,
+        args.p_7d_sources,
+        args.p_30d_sources,
+        args.p_90d_sources,
+        args.p_scope_sources,
+        args.p_limit,
+        args.p_offset,
+        args.p_sort_by,
+        args.p_sort_dir,
+        args.p_min_pnl,
+        args.p_min_trades,
+        args.p_trader_type,
+      ]
+    )
+    if (result.rowCount !== 1 || result.rows.length !== 1) {
+      throw new Error('Composite rankings query returned an invalid row count')
+    }
+    await client.query('COMMIT')
+    transactionOpen = false
+    return parseCompositeRankingPage(result.rows[0].payload, input, prepared)
+  } catch (error) {
+    if (transactionOpen) {
+      await client.query('ROLLBACK').catch(() => undefined)
+    }
+    throw error
+  } finally {
+    client.release()
+  }
 }

@@ -62,7 +62,7 @@ import {
   type SealedCompositeRankingPublicationSet,
 } from '@/lib/rankings/read-sealed-composite-ranking-generation'
 import {
-  readCompositeRankingPage,
+  readCompositeRankingPageWithDatabaseTimeout,
   type CompositeRankingRow,
   type CompositeRankingSortBy,
 } from '@/lib/rankings/read-composite-ranking-page'
@@ -485,15 +485,18 @@ function compositeResponseRow(
 }
 
 async function getCompositeRankings(rankingsQuery: RankingsQuery) {
-  const { getReadReplica } = await import('@/lib/supabase/read-replica')
-  const supabase = getReadReplica()
+  // The bounded SQL transaction uses the primary database pool. Read the
+  // opening/closing proofs from that same primary authority so replica lag
+  // cannot authorize cohort A while the page transaction already sees B.
+  const { getSupabaseAdmin } = await import('@/lib/supabase/server')
+  const supabase = getSupabaseAdmin()
   const signal = AbortSignal.timeout(20_000)
 
   return readSealedCompositeRankingGeneration(
     supabase,
     async (publication) => {
       const scopeSources = compositeRankingScopeSources(rankingsQuery, publication)
-      const page = await readCompositeRankingPage(supabase, {
+      const page = await readCompositeRankingPageWithDatabaseTimeout({
         publication,
         scopeSources,
         limit: rankingsQuery.limit ?? 100,
@@ -503,7 +506,6 @@ async function getCompositeRankings(rankingsQuery: RankingsQuery) {
         minPnl: rankingsQuery.min_pnl,
         minTrades: rankingsQuery.min_trades,
         traderType: rankingsQuery.trader_type,
-        signal,
       })
       const freshness = compositeSourceFreshness(publication, scopeSources)
       const freshnessBySource = new Map(

@@ -51,11 +51,13 @@ LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp
-SET statement_timeout = '25s'
 AS $function$
 DECLARE
   v_receipt_sources text[];
   v_all_authority_sources text[];
+  v_duplicate_season text;
+  v_duplicate_source text;
+  v_duplicate_identity text;
 BEGIN
   IF p_7d_cohort_id IS NULL
      OR p_30d_cohort_id IS NULL
@@ -189,42 +191,113 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  RETURN (
-    WITH season_rows AS MATERIALIZED (
+  -- A wallet address is one public identity regardless of hexadecimal case.
+  -- The physical uniqueness constraint is byte-sensitive, so a corrupted or
+  -- privileged publication can otherwise seal both 0xAbC and 0xabc. Never
+  -- reinterpret such an immutable receipt by silently selecting one score.
+  SELECT
+    duplicate_identity.season_id,
+    duplicate_identity.source,
+    duplicate_identity.identity_key
+  INTO
+    v_duplicate_season,
+    v_duplicate_source,
+    v_duplicate_identity
+  FROM (
+    SELECT
+      receipt_identity.season_id,
+      receipt_identity.source,
+      receipt_identity.identity_key
+    FROM (
       SELECT
-        ranks.id,
         ranks.season_id,
-        ranks.source,
+        ranks.source COLLATE "C" AS source,
         CASE
           WHEN ranks.source_trader_id LIKE '0x%'
             THEN pg_catalog.lower(ranks.source_trader_id)
           ELSE ranks.source_trader_id
-        END AS identity_key,
-        ranks.source_trader_id,
-        ranks.handle,
-        ranks.source_type,
-        ranks.roi,
-        ranks.pnl,
-        ranks.win_rate,
-        ranks.max_drawdown,
-        ranks.trades_count,
-        ranks.followers,
-        ranks.copiers,
-        LEAST(ranks.arena_score, 100::numeric) AS season_score,
-        ranks.avatar_url,
-        ranks.computed_at,
-        ranks.profitability_score,
-        ranks.risk_control_score,
-        ranks.execution_score,
-        ranks.score_completeness,
-        ranks.trading_style,
-        ranks.avg_holding_hours,
-        ranks.sharpe_ratio,
-        ranks.sortino_ratio,
-        ranks.calmar_ratio,
-        ranks.profit_factor,
-        ranks.trader_type,
-        ranks.rank_publication_id
+        END COLLATE "C" AS identity_key
+      FROM public.leaderboard_ranks AS ranks
+      WHERE ranks.season_id = '7D'
+        AND ranks.rank_publication_id = p_7d_cohort_id
+        AND ranks.source = ANY (p_7d_sources)
+        AND ranks.arena_score > 0
+        AND ranks.roi BETWEEN -50000 AND 50000
+        AND (ranks.is_outlier IS NULL OR ranks.is_outlier = false)
+
+      UNION ALL
+
+      SELECT
+        ranks.season_id,
+        ranks.source COLLATE "C",
+        CASE
+          WHEN ranks.source_trader_id LIKE '0x%'
+            THEN pg_catalog.lower(ranks.source_trader_id)
+          ELSE ranks.source_trader_id
+        END COLLATE "C"
+      FROM public.leaderboard_ranks AS ranks
+      WHERE ranks.season_id = '30D'
+        AND ranks.rank_publication_id = p_30d_cohort_id
+        AND ranks.source = ANY (p_30d_sources)
+        AND ranks.arena_score > 0
+        AND ranks.roi BETWEEN -50000 AND 50000
+        AND (ranks.is_outlier IS NULL OR ranks.is_outlier = false)
+
+      UNION ALL
+
+      SELECT
+        ranks.season_id,
+        ranks.source COLLATE "C",
+        CASE
+          WHEN ranks.source_trader_id LIKE '0x%'
+            THEN pg_catalog.lower(ranks.source_trader_id)
+          ELSE ranks.source_trader_id
+        END COLLATE "C"
+      FROM public.leaderboard_ranks AS ranks
+      WHERE ranks.season_id = '90D'
+        AND ranks.rank_publication_id = p_90d_cohort_id
+        AND ranks.source = ANY (p_90d_sources)
+        AND ranks.arena_score > 0
+        AND ranks.roi BETWEEN -50000 AND 50000
+        AND (ranks.is_outlier IS NULL OR ranks.is_outlier = false)
+    ) AS receipt_identity
+    GROUP BY
+      receipt_identity.season_id,
+      receipt_identity.source,
+      receipt_identity.identity_key
+    HAVING pg_catalog.count(*) > 1
+  ) AS duplicate_identity
+  ORDER BY
+    duplicate_identity.season_id COLLATE "C",
+    duplicate_identity.source COLLATE "C",
+    duplicate_identity.identity_key COLLATE "C"
+  LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION
+      'sealed composite publication contains duplicate canonical identity: season=%, source=%, identity=%',
+      v_duplicate_season,
+      v_duplicate_source,
+      v_duplicate_identity
+      USING ERRCODE = '22000';
+  END IF;
+
+  RETURN (
+    -- Keep every population-wide phase narrow. The old implementation carried
+    -- more than thirty display columns through repeated MATERIALIZED window
+    -- sorts and joined two unindexed CTEs. Only the selected page is allowed to
+    -- rejoin the wide physical row.
+    WITH season_scores AS MATERIALIZED (
+      SELECT
+        ranks.id,
+        ranks.season_id,
+        ranks.source COLLATE "C" AS source,
+        CASE
+          WHEN ranks.source_trader_id LIKE '0x%'
+            THEN pg_catalog.lower(ranks.source_trader_id)
+          ELSE ranks.source_trader_id
+        END COLLATE "C" AS identity_key,
+        LEAST(ranks.arena_score, 100::numeric) AS season_score
       FROM public.leaderboard_ranks AS ranks
       WHERE ranks.season_id = '7D'
         AND ranks.rank_publication_id = p_7d_cohort_id
@@ -239,37 +312,13 @@ BEGIN
       SELECT
         ranks.id,
         ranks.season_id,
-        ranks.source,
+        ranks.source COLLATE "C",
         CASE
           WHEN ranks.source_trader_id LIKE '0x%'
             THEN pg_catalog.lower(ranks.source_trader_id)
           ELSE ranks.source_trader_id
-        END,
-        ranks.source_trader_id,
-        ranks.handle,
-        ranks.source_type,
-        ranks.roi,
-        ranks.pnl,
-        ranks.win_rate,
-        ranks.max_drawdown,
-        ranks.trades_count,
-        ranks.followers,
-        ranks.copiers,
-        LEAST(ranks.arena_score, 100::numeric),
-        ranks.avatar_url,
-        ranks.computed_at,
-        ranks.profitability_score,
-        ranks.risk_control_score,
-        ranks.execution_score,
-        ranks.score_completeness,
-        ranks.trading_style,
-        ranks.avg_holding_hours,
-        ranks.sharpe_ratio,
-        ranks.sortino_ratio,
-        ranks.calmar_ratio,
-        ranks.profit_factor,
-        ranks.trader_type,
-        ranks.rank_publication_id
+        END COLLATE "C",
+        LEAST(ranks.arena_score, 100::numeric)
       FROM public.leaderboard_ranks AS ranks
       WHERE ranks.season_id = '30D'
         AND ranks.rank_publication_id = p_30d_cohort_id
@@ -284,37 +333,13 @@ BEGIN
       SELECT
         ranks.id,
         ranks.season_id,
-        ranks.source,
+        ranks.source COLLATE "C",
         CASE
           WHEN ranks.source_trader_id LIKE '0x%'
             THEN pg_catalog.lower(ranks.source_trader_id)
           ELSE ranks.source_trader_id
-        END,
-        ranks.source_trader_id,
-        ranks.handle,
-        ranks.source_type,
-        ranks.roi,
-        ranks.pnl,
-        ranks.win_rate,
-        ranks.max_drawdown,
-        ranks.trades_count,
-        ranks.followers,
-        ranks.copiers,
-        LEAST(ranks.arena_score, 100::numeric),
-        ranks.avatar_url,
-        ranks.computed_at,
-        ranks.profitability_score,
-        ranks.risk_control_score,
-        ranks.execution_score,
-        ranks.score_completeness,
-        ranks.trading_style,
-        ranks.avg_holding_hours,
-        ranks.sharpe_ratio,
-        ranks.sortino_ratio,
-        ranks.calmar_ratio,
-        ranks.profit_factor,
-        ranks.trader_type,
-        ranks.rank_publication_id
+        END COLLATE "C",
+        LEAST(ranks.arena_score, 100::numeric)
       FROM public.leaderboard_ranks AS ranks
       WHERE ranks.season_id = '90D'
         AND ranks.rank_publication_id = p_90d_cohort_id
@@ -324,32 +349,29 @@ BEGIN
         AND ranks.roi BETWEEN -50000 AND 50000
         AND (ranks.is_outlier IS NULL OR ranks.is_outlier = false)
     ),
-    canonical_season_rows AS MATERIALIZED (
-      SELECT deduplicated.*
-      FROM (
-        SELECT
-          season_rows.*,
-          pg_catalog.row_number() OVER (
-            PARTITION BY season_id, source, identity_key
-            ORDER BY season_score DESC, id
-          ) AS identity_copy
-        FROM season_rows
-      ) AS deduplicated
-      WHERE deduplicated.identity_copy = 1
-    ),
-    score_pivot AS MATERIALIZED (
+    identity_scores AS MATERIALIZED (
       SELECT
         source,
         identity_key,
+        COALESCE(
+          pg_catalog.max(id) FILTER (WHERE season_id = '90D'),
+          pg_catalog.max(id) FILTER (WHERE season_id = '30D'),
+          pg_catalog.max(id) FILTER (WHERE season_id = '7D')
+        ) AS primary_id,
+        CASE
+          WHEN pg_catalog.count(*) FILTER (WHERE season_id = '90D') = 1 THEN '90D'
+          WHEN pg_catalog.count(*) FILTER (WHERE season_id = '30D') = 1 THEN '30D'
+          ELSE '7D'
+        END AS primary_season,
         pg_catalog.max(season_score) FILTER (WHERE season_id = '7D') AS score_7d,
         pg_catalog.max(season_score) FILTER (WHERE season_id = '30D') AS score_30d,
         pg_catalog.max(season_score) FILTER (WHERE season_id = '90D') AS score_90d
-      FROM canonical_season_rows
+      FROM season_scores
       GROUP BY source, identity_key
     ),
     composite_scores AS MATERIALIZED (
       SELECT
-        score_pivot.*,
+        identity_scores.*,
         GREATEST(
           0::numeric,
           LEAST(
@@ -365,68 +387,70 @@ BEGIN
               0
             )
           )
-        ) AS composite_score
-      FROM score_pivot
+        ) AS unrounded_score
+      FROM identity_scores
     ),
-    primary_rows AS MATERIALIZED (
-      SELECT ranked_primary.*
-      FROM (
-        SELECT
-          canonical_season_rows.*,
-          pg_catalog.row_number() OVER (
-            PARTITION BY source, identity_key
-            ORDER BY
-              CASE season_id WHEN '90D' THEN 1 WHEN '30D' THEN 2 ELSE 3 END,
-              id
-          ) AS primary_order
-        FROM canonical_season_rows
-      ) AS ranked_primary
-      WHERE ranked_primary.primary_order = 1
-    ),
-    ranked AS MATERIALIZED (
+    ranked_keys AS MATERIALIZED (
       SELECT
-        primary_rows.*,
-        composite_scores.score_7d,
-        composite_scores.score_30d,
-        composite_scores.score_90d,
-        pg_catalog.round(composite_scores.composite_score, 1) AS composite_score,
+        composite_scores.*,
+        pg_catalog.round(composite_scores.unrounded_score, 1) AS composite_score,
         pg_catalog.row_number() OVER (
           ORDER BY
-            composite_scores.composite_score DESC,
-            primary_rows.source,
-            primary_rows.identity_key
+            composite_scores.unrounded_score DESC,
+            composite_scores.source COLLATE "C",
+            composite_scores.identity_key COLLATE "C"
         ) AS composite_rank
       FROM composite_scores
-      JOIN primary_rows USING (source, identity_key)
     ),
-    filtered AS MATERIALIZED (
-      SELECT *
-      FROM ranked
-      WHERE (p_min_pnl IS NULL OR ranked.pnl >= p_min_pnl)
-        AND (p_min_trades IS NULL OR ranked.trades_count >= p_min_trades)
+    filtered_keys AS MATERIALIZED (
+      SELECT
+        ranked_keys.*,
+        primary_rank.roi,
+        primary_rank.pnl,
+        primary_rank.max_drawdown,
+        primary_rank.copiers,
+        primary_rank.win_rate,
+        primary_rank.sharpe_ratio,
+        primary_rank.trades_count,
+        primary_rank.trader_type
+      FROM ranked_keys
+      JOIN public.leaderboard_ranks AS primary_rank
+        ON primary_rank.id = ranked_keys.primary_id
+       AND primary_rank.season_id = ranked_keys.primary_season
+       AND primary_rank.source = ranked_keys.source
+       AND primary_rank.rank_publication_id = CASE ranked_keys.primary_season
+         WHEN '90D' THEN p_90d_cohort_id
+         WHEN '30D' THEN p_30d_cohort_id
+         ELSE p_7d_cohort_id
+       END
+      WHERE (p_min_pnl IS NULL OR primary_rank.pnl >= p_min_pnl)
+        AND (p_min_trades IS NULL OR primary_rank.trades_count >= p_min_trades)
         AND (
           p_trader_type IS NULL
           OR (
             p_trader_type = 'bot'
             AND (
-              ranked.source = 'web3_bot'
-              OR ranked.trader_type IN ('bot', 'suspected_bot')
+              primary_rank.source = 'web3_bot'
+              OR primary_rank.trader_type IN ('bot', 'suspected_bot')
             )
           )
           OR (
             p_trader_type = 'suspected_bot'
-            AND ranked.trader_type = 'suspected_bot'
+            AND primary_rank.trader_type = 'suspected_bot'
           )
           OR (
             p_trader_type = 'human'
-            AND ranked.source <> 'web3_bot'
-            AND (ranked.trader_type IS NULL OR ranked.trader_type = 'human')
+            AND primary_rank.source <> 'web3_bot'
+            AND (
+              primary_rank.trader_type IS NULL
+              OR primary_rank.trader_type = 'human'
+            )
           )
         )
     ),
-    ordered AS MATERIALIZED (
+    ordered_keys AS MATERIALIZED (
       SELECT
-        filtered.*,
+        filtered_keys.*,
         pg_catalog.row_number() OVER (
           ORDER BY
             CASE
@@ -483,18 +507,33 @@ BEGIN
             END DESC NULLS LAST,
             composite_rank
         ) AS response_order
-      FROM filtered
+      FROM filtered_keys
     ),
-    page AS MATERIALIZED (
+    page_keys AS MATERIALIZED (
       SELECT *
-      FROM ordered
+      FROM ordered_keys
       ORDER BY response_order
       OFFSET p_offset
       LIMIT p_limit
+    ),
+    page AS MATERIALIZED (
+      SELECT
+        page_keys.response_order,
+        page_keys.score_7d,
+        page_keys.score_30d,
+        page_keys.score_90d,
+        page_keys.composite_score,
+        page_keys.composite_rank,
+        primary_rank.*
+      FROM page_keys
+      JOIN public.leaderboard_ranks AS primary_rank
+        ON primary_rank.id = page_keys.primary_id
+       AND primary_rank.season_id = page_keys.primary_season
+       AND primary_rank.source = page_keys.source
     )
     SELECT pg_catalog.jsonb_build_object(
       'contract', 'sealed-composite-rankings-rpc@1',
-      'total_count', (SELECT pg_catalog.count(*) FROM filtered),
+      'total_count', (SELECT pg_catalog.count(*) FROM filtered_keys),
       'rows', COALESCE(
         (
           SELECT pg_catalog.jsonb_agg(

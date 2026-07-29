@@ -48,6 +48,23 @@ describe('sealed composite rankings RPC', () => {
     expect(migration).toContain("'score_90d', page.score_90d")
   })
 
+  it('fails closed on canonical wallet duplicates instead of selecting a higher score', () => {
+    expect(migration).toContain('HAVING pg_catalog.count(*) > 1')
+    expect(migration).toContain(
+      'sealed composite publication contains duplicate canonical identity'
+    )
+    expect(migration).not.toContain('identity_copy = 1')
+  })
+
+  it('keeps population-wide sorts narrow and rejoins display fields only after pagination', () => {
+    expect(migration).toContain('WITH season_scores AS MATERIALIZED')
+    expect(migration).toContain('page_keys AS MATERIALIZED')
+    expect(migration).toMatch(
+      /page_keys AS MATERIALIZED[\s\S]*?OFFSET p_offset[\s\S]*?LIMIT p_limit[\s\S]*?page AS MATERIALIZED[\s\S]*?JOIN public\.leaderboard_ranks AS primary_rank/
+    )
+    expect(migration).not.toContain('canonical_season_rows')
+  })
+
   it('is server-only and executes with a fixed safe search path', () => {
     expect(migration).toContain('SECURITY DEFINER')
     expect(migration).toContain('SET search_path = pg_catalog, pg_temp')

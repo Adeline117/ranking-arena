@@ -33,7 +33,7 @@ describe('public ranking freshness route contracts', () => {
     const rpc = source('lib/rankings/read-composite-ranking-page.ts')
 
     expect(route).toContain('readSealedCompositeRankingGeneration(')
-    expect(route).toContain('readCompositeRankingPage(')
+    expect(route).toContain('readCompositeRankingPageWithDatabaseTimeout(')
     expect(route).not.toContain("? { ...sealedRead.value, window: 'COMPOSITE'")
     expect(reader).toContain("['7D', '30D', '90D']")
     expect(reader).toContain('readLeaderboardPublicationAuthority')
@@ -41,6 +41,8 @@ describe('public ranking freshness route contracts', () => {
     expect(rpc).toContain('p_7d_cohort_id: publication7d.scoreCohortId')
     expect(rpc).toContain('p_30d_cohort_id: publication30d.scoreCohortId')
     expect(rpc).toContain('p_90d_cohort_id: publication90d.scoreCohortId')
+    expect(rpc).toContain('BEGIN TRANSACTION READ ONLY')
+    expect(rpc).toContain('SET LOCAL statement_timeout')
   })
 
   it('the retired composite writer cannot read or cache unsealed rank rows', () => {

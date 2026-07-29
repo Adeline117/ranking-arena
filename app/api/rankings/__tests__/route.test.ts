@@ -81,7 +81,8 @@ jest.mock('@/lib/rankings/read-sealed-composite-ranking-generation', () => ({
 const mockReadCompositeRankingPage = jest.fn()
 jest.mock('@/lib/rankings/read-composite-ranking-page', () => ({
   ...jest.requireActual('@/lib/rankings/read-composite-ranking-page'),
-  readCompositeRankingPage: (...args: unknown[]) => mockReadCompositeRankingPage(...args),
+  readCompositeRankingPageWithDatabaseTimeout: (...args: unknown[]) =>
+    mockReadCompositeRankingPage(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -768,7 +769,6 @@ describe('GET /api/rankings', () => {
     expect(mockReadSealedRankingGeneration).not.toHaveBeenCalled()
     expect(mockReadSealedCompositeRankingGeneration).toHaveBeenCalledTimes(1)
     expect(mockReadCompositeRankingPage).toHaveBeenCalledWith(
-      expect.anything(),
       expect.objectContaining({
         scopeSources: ['binance_futures', 'hyperliquid'],
         limit: 100,
