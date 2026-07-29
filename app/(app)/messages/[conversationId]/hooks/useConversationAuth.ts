@@ -1,83 +1,53 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
-import { getAuthSession, refreshAuthToken } from '@/lib/auth'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { fireAndForget } from '@/lib/utils/logger'
 import { buildConversationLoginHref } from '../login-intent'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { captureSettingsViewer } from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
 export function useConversationAuth(conversationId: string) {
   const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
-  const [email, setEmail] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [authChecked, setAuthChecked] = useState(false)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    getAuthSession()
-      .then((auth) => {
-        if (cancelled) return
-        if (auth) {
-          setUserId(auth.userId)
-          setAccessToken(auth.accessToken)
-          fireAndForget(
-            supabase.auth.getSession().then(({ data }) => {
-              if (cancelled) return
-              setEmail(data.session?.user?.email ?? null)
-            }),
-            'conversation-auth-email'
-          )
-        } else {
-          setUserId(null)
-          setAccessToken(null)
-        }
-      })
-      .catch(() => {
-        if (cancelled) return
-        setUserId(null)
-        setEmail(null)
-        setAccessToken(null)
-      })
-      .finally(() => {
-        if (!cancelled) setAuthChecked(true)
-      })
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setUserId(session.user.id)
-        setEmail(session.user.email ?? null)
-        setAccessToken(session.access_token)
-      } else {
-        setUserId(null)
-        setEmail(null)
-        setAccessToken(null)
-      }
-    })
-    return () => {
-      cancelled = true
-      subscription.unsubscribe()
-    }
-  }, [])
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const viewer = captureSettingsViewer(auth)
+  const authChecked = auth.authChecked && !auth.loading && (viewer !== null || auth.userId === null)
 
   const ensureAuth = useCallback(async (): Promise<{
     userId: string
     accessToken: string
   } | null> => {
-    const auth = await getAuthSession()
-    if (auth) return auth
-    const refreshed = await refreshAuthToken()
-    if (refreshed) return refreshed
+    const currentViewer = captureSettingsViewer(authRef.current)
+    if (currentViewer) {
+      return {
+        userId: currentViewer.userId,
+        accessToken: currentViewer.accessToken,
+      }
+    }
+    // A principal transition is neither authenticated nor signed out. Do not
+    // redirect while another account is still being restored.
+    if (
+      !authRef.current.authChecked ||
+      authRef.current.loading ||
+      Boolean(authRef.current.userId)
+    ) {
+      return null
+    }
     showToast(t('loginExpiredPleaseRelogin'), 'error')
     router.push(buildConversationLoginHref(conversationId))
     return null
   }, [conversationId, showToast, t, router])
 
-  return { email, userId, authChecked, accessToken, ensureAuth }
+  return {
+    email: viewer?.email ?? null,
+    userId: viewer?.userId ?? null,
+    authChecked,
+    accessToken: viewer?.accessToken ?? null,
+    ensureAuth,
+  }
 }
