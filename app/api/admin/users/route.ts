@@ -8,6 +8,7 @@ import { successWithPagination } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
 import { parsePage, parseLimit } from '@/lib/utils/safe-parse'
+import { isProfileBanned } from '@/lib/auth/profile-suspension'
 
 const logger = createLogger('admin-users')
 
@@ -33,6 +34,8 @@ export const GET = withAdminAuth(
     const filter = searchParams.get('filter') || 'all' // all, banned, active
 
     const offset = (page - 1) * limit
+    const statusNowMs = Date.now()
+    const statusBoundary = new Date(statusNowMs).toISOString()
 
     // KEEP 'exact' — powers admin user-browser pagination ("Showing X-Y of Z
     // users"). user_profiles is relatively small and the admin needs to know
@@ -40,7 +43,7 @@ export const GET = withAdminAuth(
     let query = supabase
       .from('user_profiles')
       .select(
-        'id, handle, email, avatar_url, bio, follower_count, following_count, role, banned_at, banned_reason, banned_by, created_at, updated_at',
+        'id, handle, email, avatar_url, bio, follower_count, following_count, role, banned_at, banned_reason, banned_by, is_banned, ban_expires_at, created_at, updated_at',
         { count: 'exact' }
       )
 
@@ -76,9 +79,13 @@ export const GET = withAdminAuth(
 
     // Apply status filter
     if (filter === 'banned') {
-      query = query.not('banned_at', 'is', null)
+      query = query.or(
+        `banned_at.not.is.null,and(is_banned.eq.true,ban_expires_at.is.null),and(is_banned.eq.true,ban_expires_at.gt.${statusBoundary})`
+      )
     } else if (filter === 'active') {
-      query = query.is('banned_at', null)
+      query = query
+        .is('banned_at', null)
+        .or(`is_banned.eq.false,and(is_banned.eq.true,ban_expires_at.lte.${statusBoundary})`)
     }
 
     // Apply pagination and ordering
@@ -97,6 +104,14 @@ export const GET = withAdminAuth(
     const maskedUsers = (users || []).map((user: Record<string, unknown>) => ({
       ...user,
       email: maskEmail(user.email as string | null),
+      is_effectively_banned: isProfileBanned(
+        {
+          banned_at: user.banned_at as string | null,
+          is_banned: user.is_banned as boolean | null,
+          ban_expires_at: user.ban_expires_at as string | null,
+        },
+        statusNowMs
+      ),
     }))
 
     return successWithPagination(maskedUsers, {

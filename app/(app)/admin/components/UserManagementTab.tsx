@@ -266,7 +266,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                       </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[3], textAlign: 'center' }}>
-                      {user.banned_at ? (
+                      {user.is_effectively_banned ? (
                         <Box
                           style={{
                             display: 'inline-block',
@@ -303,7 +303,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                       </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
-                      {user.banned_at ? (
+                      {user.is_effectively_banned ? (
                         <Button
                           variant="secondary"
                           size="sm"

@@ -19,6 +19,9 @@ export interface AdminUser {
   banned_at: string | null
   banned_reason: string | null
   banned_by: string | null
+  is_banned: boolean
+  ban_expires_at: string | null
+  is_effectively_banned: boolean
   created_at: string
   updated_at: string
 }
@@ -108,7 +111,14 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
           setUsers((prev) =>
             prev.map((u) =>
               u.id === userId
-                ? { ...u, banned_at: new Date().toISOString(), banned_reason: reason || null }
+                ? {
+                    ...u,
+                    banned_at: new Date().toISOString(),
+                    banned_reason: reason || null,
+                    is_banned: true,
+                    ban_expires_at: null,
+                    is_effectively_banned: true,
+                  }
                 : u
             )
           )
@@ -124,7 +134,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         setActionLoading((prev) => ({ ...prev, [userId]: false }))
       }
     },
-    [accessToken, showToast]
+    [accessToken, showToast, t]
   )
 
   const unbanUser = useCallback(
@@ -147,7 +157,17 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
           // Update local state
           setUsers((prev) =>
             prev.map((u) =>
-              u.id === userId ? { ...u, banned_at: null, banned_reason: null, banned_by: null } : u
+              u.id === userId
+                ? {
+                    ...u,
+                    banned_at: null,
+                    banned_reason: null,
+                    banned_by: null,
+                    is_banned: false,
+                    ban_expires_at: null,
+                    is_effectively_banned: false,
+                  }
+                : u
             )
           )
           return true
@@ -162,7 +182,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         setActionLoading((prev) => ({ ...prev, [userId]: false }))
       }
     },
-    [accessToken, showToast]
+    [accessToken, showToast, t]
   )
 
   return {
