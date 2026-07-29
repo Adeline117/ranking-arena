@@ -22,9 +22,11 @@ import { SSR_HEAVY_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
 import { type DataResult, success, failure } from '@/lib/types/result'
 import {
   PUBLIC_RANKING_QUARANTINED_SOURCES,
+  filterPublicRankingSources,
   filterPublicRankingRows,
   isPublicRankingSourceAllowed,
 } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 // ============================================================
 // INTERNAL: Safe query helper
@@ -90,6 +92,55 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // ============================================================
 // PUBLIC API
 // ============================================================
+
+const TRADER_DETAIL_SEASONS: readonly TradingPeriod[] = ['90D', '30D', '7D']
+
+async function readSealedTraderRankRows(
+  supabase: SupabaseClient,
+  params: {
+    platform: string
+    traderKey: string
+    signal: AbortSignal
+  }
+): Promise<{ data: Record<string, unknown>[]; error: null }> {
+  const proofSources = filterPublicRankingSources([params.platform])
+  if (proofSources.length !== 1) {
+    throw new Error('trader detail source is not public')
+  }
+
+  const reads = await Promise.all(
+    TRADER_DETAIL_SEASONS.map((season) =>
+      readSealedRankingGeneration(
+        supabase,
+        { season, sources: proofSources },
+        async (publication) => {
+          const result = await supabase
+            .from('leaderboard_ranks')
+            .select(
+              `${LR.source_trader_id}, ${LR.handle}, ${LR.source}, source_type, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown,
+               trades_count, followers, ${LR.arena_score}, ${LR.avatar_url}, ${LR.rank}, computed_at,
+               profitability_score, risk_control_score, execution_score, score_completeness,
+               trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor,
+               calmar_ratio, trader_type, is_outlier, ${LR.season_id}`
+            )
+            .eq(LR.source, params.platform)
+            .eq(LR.source_trader_id, params.traderKey)
+            .eq(LR.season_id, season)
+            .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+            .limit(1)
+            .abortSignal(params.signal)
+          if (result.error) {
+            throw new Error(`trader detail rank query failed: ${result.error.message}`)
+          }
+          return (result.data ?? []) as Record<string, unknown>[]
+        },
+        { timeoutMs: SSR_HEAVY_QUERY_TIMEOUT_MS, signal: params.signal }
+      )
+    )
+  )
+
+  return { data: reads.flatMap((read) => read.value), error: null }
+}
 
 /**
  * Get ranked traders for leaderboard display.
@@ -331,19 +382,11 @@ export async function getTraderDetail(
       // render via the arena read path (page.tsx); this legacy branch only ever
       // serves shadow/legacy-mode sources, whose ranked traders are in LR.
       safeQuery(() =>
-        supabase
-          .from('leaderboard_ranks')
-          .select(
-            `${LR.source_trader_id}, ${LR.handle}, ${LR.source}, source_type, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown,
-                   trades_count, followers, ${LR.arena_score}, ${LR.avatar_url}, ${LR.rank}, computed_at,
-                   profitability_score, risk_control_score, execution_score, score_completeness,
-                   trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor,
-                   calmar_ratio, trader_type, is_outlier, ${LR.season_id}`
-          )
-          .eq(LR.source, platform)
-          .eq(LR.source_trader_id, traderKey)
-          .limit(5)
-          .abortSignal(phase1Signal)
+        readSealedTraderRankRows(supabase, {
+          platform,
+          traderKey,
+          signal: phase1Signal,
+        })
       ),
       // Profile from trader_sources table
       safeQuery(() =>
