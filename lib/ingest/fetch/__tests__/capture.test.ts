@@ -3,13 +3,18 @@ import {
   LEADERBOARD_PUBLIC_REQUEST_PROJECTION_CONTRACT,
   LeaderboardCaptureUpstreamError,
   captureNumericLeaderboard,
+  capturePartitionedNumericLeaderboard,
   leaderboardPublicRequestProjection,
   leaderboardPublicRequestSha256,
   replayPaged,
 } from '../capture'
 import type { JsonFetcher } from '../capture'
 import type { FetchSession, ReplayRequestTemplate } from '../types'
-import { buildLeaderboardAcquisitionManifest } from '../../acquisition-manifest'
+import {
+  LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+  buildLeaderboardAcquisitionManifest,
+} from '../../acquisition-manifest'
+import { strictCanonicalSha256 } from '../../strict-canonical-json'
 import { BlockedUpstreamError } from '../rate-limiter'
 import { CircuitOpenError } from '../circuit'
 
@@ -113,6 +118,57 @@ function captureOptions(
     safetyPageCap: 10,
     now: () => '2026-07-21T12:00:00.000Z',
     ...overrides,
+  }
+}
+
+function partitionedCaptureOptions(
+  fetcher: JsonFetcher,
+  partitionIds: readonly string[] = ['futures_grid', 'futures_martingale']
+): Parameters<typeof capturePartitionedNumericLeaderboard>[0] {
+  let timestampOffset = 0
+  return {
+    session,
+    fetcher,
+    now: () => new Date(Date.UTC(2026, 6, 21, 12, 0, timestampOffset++)).toISOString(),
+    partitions: partitionIds.map((partitionId) => ({
+      partitionId,
+      buildRequest: (pageIndex: number) => ({
+        url: 'https://x.test/partitioned-board',
+        method: 'POST' as const,
+        headers: {},
+        body: {
+          strategyType: partitionId,
+          orderType: 3,
+          pageNo: pageIndex,
+          pageSize: 2,
+        },
+      }),
+      projectPublicRequest: (template: ReplayRequestTemplate) => ({
+        url: template.url,
+        method: template.method,
+        body: template.body,
+      }),
+      pageBinding: { location: 'body' as const, path: ['pageNo'] },
+      extractMeta: (payload: unknown) => {
+        const page = payload as {
+          data: {
+            list: unknown[]
+            totalRecord: number | null
+            currentPage: number | null
+            pageSize: number | null
+          }
+        }
+        return {
+          rowCount: page.data.list.length,
+          reportedPopulation: page.data.totalRecord,
+          reportedPageCount: null,
+          reportedCurrentPage: page.data.currentPage,
+          reportedPageSize: page.data.pageSize,
+        }
+      },
+      pageSize: 2,
+      safetyPageCap: 10,
+    })),
   }
 }
 
@@ -1000,6 +1056,316 @@ describe('captureNumericLeaderboard', () => {
         )
       ).rejects.toThrow(/safe integer|negative zero/)
     }
+  })
+})
+
+describe('capturePartitionedNumericLeaderboard', () => {
+  it('keeps global storage order separate from each partition-local request sequence', async () => {
+    const requests: Array<{ strategyType: string; pageNo: number }> = []
+    const upstreamPayloads = {
+      futures_grid: [
+        {
+          code: '00000',
+          data: { list: ['grid-1', 'grid-2'], totalRecord: 3, currentPage: 1, pageSize: 2 },
+        },
+        {
+          code: '00000',
+          data: { list: ['grid-3'], totalRecord: 3, currentPage: 2, pageSize: 2 },
+        },
+      ],
+      futures_martingale: [
+        {
+          code: '00000',
+          data: { list: ['martingale-1'], totalRecord: 1, currentPage: 1, pageSize: 2 },
+        },
+      ],
+    }
+    const capture = await capturePartitionedNumericLeaderboard(
+      partitionedCaptureOptions(async (template) => {
+        const body = template.body as {
+          strategyType: keyof typeof upstreamPayloads
+          pageNo: number
+        }
+        requests.push({ strategyType: body.strategyType, pageNo: body.pageNo })
+        return { status: 200, json: upstreamPayloads[body.strategyType][body.pageNo - 1] }
+      })
+    )
+
+    expect(requests).toEqual([
+      { strategyType: 'futures_grid', pageNo: 1 },
+      { strategyType: 'futures_grid', pageNo: 2 },
+      { strategyType: 'futures_martingale', pageNo: 1 },
+    ])
+    expect(capture.terminationReason).toBe('reported_population_reached')
+    expect(capture.captureConfig).toEqual({ caller_page_cap: null, safety_page_cap: 20 })
+    expect(capture.sourcePages.map((page) => page.rawPage.pageIndex)).toEqual([1, 2, 3])
+    expect(
+      capture.sourcePages.map((page) => [
+        page.paginationPosition.partition_id,
+        page.paginationPosition.request_page_index,
+      ])
+    ).toEqual([
+      ['futures_grid', 1],
+      ['futures_grid', 2],
+      ['futures_martingale', 1],
+    ])
+    expect(capture.paginationTopology).toMatchObject({
+      expected_partition_ids: ['futures_grid', 'futures_martingale'],
+      partitions: [
+        {
+          partition_id: 'futures_grid',
+          source_page_ordinals: [1, 2],
+          parser_page_ordinals: [1, 2],
+        },
+        {
+          partition_id: 'futures_martingale',
+          source_page_ordinals: [3],
+          parser_page_ordinals: [3],
+        },
+      ],
+    })
+    expect(capture.parserTransformation).toMatchObject({
+      kind: 'partitioned_numeric_projection',
+      source_page_ordinals: [1, 2, 3],
+      page_bindings: [
+        { source_page_ordinal: 1, partition_id: 'futures_grid', request_page_index: 1 },
+        { source_page_ordinal: 2, partition_id: 'futures_grid', request_page_index: 2 },
+        {
+          source_page_ordinal: 3,
+          partition_id: 'futures_martingale',
+          request_page_index: 1,
+        },
+      ],
+    })
+    expect(capture.sourcePages[0]!.rawPage.payload).toEqual(upstreamPayloads.futures_grid[0])
+    expect(capture.sourcePages[0]!.rawPage.payload).not.toHaveProperty('data_contract')
+    expect(capture.parsePages[0]!.payload).toEqual({
+      data_contract: LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+      partition_id: 'futures_grid',
+      request_page_index: 1,
+      request_page_size: 2,
+      payload: upstreamPayloads.futures_grid[0],
+    })
+    expect(capture.parsePages[0]).toMatchObject({
+      pageIndex: 1,
+      url: capture.sourcePages[0]!.rawPage.url,
+      fetchedAt: capture.sourcePages[0]!.rawPage.fetchedAt,
+    })
+    expect(strictCanonicalSha256(capture.sourcePages[0]!.rawPage.payload)).toBe(
+      strictCanonicalSha256(upstreamPayloads.futures_grid[0])
+    )
+    expect(capture.sourcePages[0]!.requestSha256).not.toBe(capture.sourcePages[2]!.requestSha256)
+    expect(Object.isFrozen(capture)).toBe(true)
+    expect(Object.isFrozen(capture.paginationTopology.partitions)).toBe(true)
+    expect(Object.isFrozen(capture.parsePages[0]!.payload)).toBe(true)
+  })
+
+  it('allows zero-row terminal source evidence without losing later parser-page bindings', async () => {
+    const payloads = {
+      futures_grid: [
+        {
+          data: { list: ['grid-1', 'grid-2'], totalRecord: null, currentPage: 1, pageSize: 2 },
+        },
+        { data: { list: [], totalRecord: null, currentPage: 2, pageSize: 2 } },
+      ],
+      futures_martingale: [
+        {
+          data: { list: ['martingale-1'], totalRecord: 1, currentPage: 1, pageSize: 2 },
+        },
+      ],
+    }
+    const capture = await capturePartitionedNumericLeaderboard(
+      partitionedCaptureOptions(async (template) => {
+        const body = template.body as { strategyType: keyof typeof payloads; pageNo: number }
+        return { status: 200, json: payloads[body.strategyType][body.pageNo - 1] }
+      })
+    )
+
+    expect(capture.sourcePages.map((page) => page.sourceRowCount)).toEqual([2, 0, 1])
+    expect(capture.parserTransformation.source_page_ordinals).toEqual([1, 3])
+    expect(
+      capture.paginationTopology.partitions.map((partition) => partition.parser_page_ordinals)
+    ).toEqual([[1], [2]])
+    expect(capture.parsePages.map((page) => page.pageIndex)).toEqual([1, 3])
+    expect(capture.terminationReason).toBe('unknown')
+  })
+
+  it('retains all successful and failing RAW when a later partition page returns non-2xx', async () => {
+    const requests: string[] = []
+    let thrown: unknown
+    try {
+      await capturePartitionedNumericLeaderboard(
+        partitionedCaptureOptions(async (template) => {
+          const body = template.body as { strategyType: string; pageNo: number }
+          requests.push(`${body.strategyType}:${body.pageNo}`)
+          if (body.strategyType === 'futures_grid') {
+            return {
+              status: 200,
+              json: {
+                data: { list: ['grid-1'], totalRecord: 1, currentPage: 1, pageSize: 2 },
+              },
+            }
+          }
+          if (body.pageNo === 1) {
+            return {
+              status: 200,
+              json: {
+                data: {
+                  list: ['martingale-1', 'martingale-2'],
+                  totalRecord: 4,
+                  currentPage: 1,
+                  pageSize: 2,
+                },
+              },
+            }
+          }
+          return { status: 503, json: { code: 'temporarily_unavailable' } }
+        })
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(requests).toEqual(['futures_grid:1', 'futures_martingale:1', 'futures_martingale:2'])
+    expect(thrown).toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    expect(thrown).toMatchObject({ status: 503, publicUrl: 'https://x.test/partitioned-board' })
+    const capture = (
+      thrown as LeaderboardCaptureUpstreamError<
+        Awaited<ReturnType<typeof capturePartitionedNumericLeaderboard>>
+      >
+    ).capture
+    expect(capture.terminationReason).toBe('upstream_error')
+    expect(capture.sourcePages.map((page) => page.rawPage.pageIndex)).toEqual([1, 2, 3])
+    expect(
+      capture.sourcePages.map((page) => [
+        page.paginationPosition.partition_id,
+        page.paginationPosition.request_page_index,
+        page.httpStatus,
+      ])
+    ).toEqual([
+      ['futures_grid', 1, 200],
+      ['futures_martingale', 1, 200],
+      ['futures_martingale', 2, 503],
+    ])
+    expect(capture.sourcePages[2]!.rawPage.payload).toEqual({
+      code: 'temporarily_unavailable',
+    })
+    expect(capture.parserTransformation.source_page_ordinals).toEqual([1, 2])
+    expect(capture.paginationTopology.partitions[1]).toMatchObject({
+      source_page_ordinals: [2, 3],
+      parser_page_ordinals: [2],
+      termination_reason: 'upstream_error',
+    })
+  })
+
+  it('records unattempted topology and preserves the transport cause after partition failure', async () => {
+    const transportError = new Error('partition transport reset')
+    const fetcher = jest.fn(async (template: ReplayRequestTemplate) => {
+      const body = template.body as { strategyType: string }
+      if (body.strategyType === 'second') throw transportError
+      return {
+        status: 200,
+        json: { data: { list: [body.strategyType], totalRecord: 1, currentPage: 1, pageSize: 2 } },
+      }
+    })
+
+    let thrown: unknown
+    try {
+      await capturePartitionedNumericLeaderboard(
+        partitionedCaptureOptions(fetcher, ['first', 'second', 'third'])
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    const error = thrown as LeaderboardCaptureUpstreamError<
+      Awaited<ReturnType<typeof capturePartitionedNumericLeaderboard>>
+    >
+    expect(error.status).toBeNull()
+    expect(error.cause).toBe(transportError)
+    expect(error.capture.sourcePages).toHaveLength(1)
+    expect(error.capture.captureConfig).toEqual({ caller_page_cap: null, safety_page_cap: 30 })
+    expect(error.capture.paginationTopology.partitions).toEqual([
+      expect.objectContaining({
+        partition_id: 'first',
+        source_page_ordinals: [1],
+        parser_page_ordinals: [1],
+        termination_reason: 'reported_population_reached',
+      }),
+      expect.objectContaining({
+        partition_id: 'second',
+        source_page_ordinals: [],
+        parser_page_ordinals: [],
+        termination_reason: 'upstream_error',
+      }),
+      expect.objectContaining({
+        partition_id: 'third',
+        source_page_ordinals: [],
+        parser_page_ordinals: [],
+        termination_reason: 'unknown',
+      }),
+    ])
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(Object.isFrozen(error.capture)).toBe(true)
+  })
+
+  it('preflights every partition before the first network request', async () => {
+    const fetcher = jest.fn(async () => ({
+      status: 200,
+      json: { data: { list: [], totalRecord: 0, currentPage: 1, pageSize: 2 } },
+    }))
+    const valid = partitionedCaptureOptions(fetcher)
+    const invalidInputs: Parameters<typeof capturePartitionedNumericLeaderboard>[0][] = [
+      { ...valid, partitions: valid.partitions.slice(0, 1) },
+      {
+        ...valid,
+        partitions: [
+          valid.partitions[0]!,
+          { ...valid.partitions[1]!, partitionId: 'futures_grid' },
+        ],
+      },
+      {
+        ...valid,
+        partitions: [valid.partitions[0]!, { ...valid.partitions[1]!, partitionId: 'Bad id' }],
+      },
+      {
+        ...valid,
+        partitions: [valid.partitions[0]!, { ...valid.partitions[1]!, pageSize: 3 }],
+      },
+      {
+        ...valid,
+        partitions: [valid.partitions[0]!, { ...valid.partitions[1]!, safetyPageCap: -0 }],
+      },
+      {
+        ...valid,
+        partitions: [
+          { ...valid.partitions[0]!, safetyPageCap: Number.MAX_SAFE_INTEGER },
+          { ...valid.partitions[1]!, safetyPageCap: 1 },
+        ],
+      },
+    ]
+
+    for (const invalid of invalidInputs) {
+      await expect(capturePartitionedNumericLeaderboard(invalid)).rejects.toThrow()
+    }
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('derives reported population completion for explicit zero-total partitions', async () => {
+    const capture = await capturePartitionedNumericLeaderboard(
+      partitionedCaptureOptions(async () => ({
+        status: 200,
+        json: { data: { list: [], totalRecord: 0, currentPage: 1, pageSize: 2 } },
+      }))
+    )
+
+    expect(capture.sourcePages.map((page) => page.sourceRowCount)).toEqual([0, 0])
+    expect(capture.parsePages).toEqual([])
+    expect(
+      capture.paginationTopology.partitions.map((partition) => partition.termination_reason)
+    ).toEqual(['empty_page', 'empty_page'])
+    expect(capture.terminationReason).toBe('reported_population_reached')
   })
 })
 

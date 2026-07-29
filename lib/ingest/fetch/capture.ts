@@ -16,11 +16,18 @@
  */
 
 import type { APIRequestContext } from 'playwright'
-import type {
-  BuildLeaderboardAcquisitionManifestInput,
-  LeaderboardAcquisitionPaginationPosition,
-  LeaderboardAcquisitionParserTransformation,
-  LeaderboardAcquisitionReportEvidence,
+import {
+  LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+  LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+  projectPartitionedNumericParserPage,
+  type BuildLeaderboardAcquisitionManifestV4Input,
+  type BuildLeaderboardAcquisitionManifestInput,
+  type LeaderboardAcquisitionPaginationPosition,
+  type LeaderboardAcquisitionParserTransformation,
+  type LeaderboardAcquisitionReportEvidence,
+  type LeaderboardPartitionedNumericPaginationPosition,
+  type LeaderboardPartitionedNumericParserPageBinding,
+  type LeaderboardPartitionedNumericParserTransformation,
 } from '../acquisition-manifest'
 import type { FetchSession, ReplayRequestTemplate } from './types'
 import type { RawPage } from '../core/types'
@@ -259,20 +266,28 @@ type NumericPaginationPosition = Extract<
   LeaderboardAcquisitionPaginationPosition,
   { kind: 'page_index' }
 >
+type PartitionedNumericPaginationPosition = LeaderboardPartitionedNumericPaginationPosition
 
-export interface CapturedLeaderboardSourcePage {
+interface CapturedLeaderboardSourcePageBase {
   rawPage: RawPage
   /** Rows in the upstream collection before parser validation or dedupe. */
   sourceRowCount: number
   requestSha256: string
   httpStatus: number
-  paginationPosition: NumericPaginationPosition
   sourceReports: {
     population: LeaderboardAcquisitionReportEvidence
     page_count: LeaderboardAcquisitionReportEvidence
     current_page: LeaderboardAcquisitionReportEvidence
     page_size: LeaderboardAcquisitionReportEvidence
   }
+}
+
+export interface CapturedLeaderboardSourcePage extends CapturedLeaderboardSourcePageBase {
+  paginationPosition: NumericPaginationPosition
+}
+
+export interface CapturedPartitionedNumericLeaderboardSourcePage extends CapturedLeaderboardSourcePageBase {
+  paginationPosition: PartitionedNumericPaginationPosition
 }
 
 export interface LeaderboardCapture {
@@ -289,17 +304,37 @@ export interface LeaderboardCapture {
   >
 }
 
+export type NumericLeaderboardCapture = LeaderboardCapture
+
+export type LeaderboardPartitionedNumericCaptureTopology =
+  BuildLeaderboardAcquisitionManifestV4Input['pagination_topology'] & {
+    expected_partition_ids: string[]
+  }
+
+export interface PartitionedNumericLeaderboardCapture {
+  sourcePages: CapturedPartitionedNumericLeaderboardSourcePage[]
+  parsePages: RawPage[]
+  terminationReason: NumericLeaderboardTerminationReason | 'unknown'
+  captureConfig: BuildLeaderboardAcquisitionManifestInput['capture_config']
+  parserTransformation: LeaderboardPartitionedNumericParserTransformation
+  paginationTopology: LeaderboardPartitionedNumericCaptureTopology
+}
+
+export type AnyLeaderboardCapture = LeaderboardCapture | PartitionedNumericLeaderboardCapture
+
 /**
  * An upstream transport, HTTP, or response-validation failure is both durable
  * evidence and a failed job attempt. A null status means no canonical HTTP
  * response was available. The caller persists `capture` in its failed-run
  * transaction, then rethrows so the queue retry policy remains active.
  */
-export class LeaderboardCaptureUpstreamError extends Error {
+export class LeaderboardCaptureUpstreamError<
+  TCapture extends AnyLeaderboardCapture = LeaderboardCapture,
+> extends Error {
   constructor(
     public readonly status: number | null,
     public readonly publicUrl: string,
-    public readonly capture: LeaderboardCapture,
+    public readonly capture: TCapture,
     public readonly cause: Error
   ) {
     super(
@@ -344,6 +379,24 @@ export interface CaptureNumericLeaderboardOptions {
   /** Absolute loop guard, independent of source configuration. */
   safetyPageCap?: number
   /** Test hook; production uses canonical UTC timestamps from Date. */
+  now?: () => string
+}
+
+export type CapturePartitionedNumericLeaderboardPartition = Omit<
+  CaptureNumericLeaderboardOptions,
+  'session' | 'fetcher' | 'now' | 'pageSize'
+> & {
+  partitionId: string
+  /** V4 parser bindings require one positive page size shared by every partition. */
+  pageSize: number
+}
+
+export interface CapturePartitionedNumericLeaderboardOptions {
+  session: FetchSession
+  fetcher: JsonFetcher
+  /** Declaration order is canonical storage and partition-local rank order. */
+  partitions: readonly CapturePartitionedNumericLeaderboardPartition[]
+  /** Test hook; shared so timestamps remain one monotonic capture sequence. */
   now?: () => string
 }
 
@@ -597,7 +650,7 @@ function addReport(report: ConsistentReport, value: number | null): void {
  */
 export async function captureNumericLeaderboard(
   opts: CaptureNumericLeaderboardOptions
-): Promise<LeaderboardCapture> {
+): Promise<NumericLeaderboardCapture> {
   const { session, fetcher, buildRequest, projectPublicRequest, extractMeta, isDegenerate } = opts
   const safetyPageCap = opts.safetyPageCap ?? 5_000
   const callerPageCap = opts.callerPageCap ?? null
@@ -620,7 +673,9 @@ export async function captureNumericLeaderboard(
   const populationReport: ConsistentReport = { value: null, conflicting: false }
   const pageCountReport: ConsistentReport = { value: null, conflicting: false }
   let rowsSeen = 0
-  const finish = (terminationReason: NumericLeaderboardTerminationReason): LeaderboardCapture =>
+  const finish = (
+    terminationReason: NumericLeaderboardTerminationReason
+  ): NumericLeaderboardCapture =>
     deepFreezeJson({
       sourcePages: [...sourcePages],
       parsePages: [...parsePages],
@@ -633,7 +688,7 @@ export async function captureNumericLeaderboard(
         kind: 'identity_projection',
         source_page_ordinals: [...parseSourceOrdinals],
       },
-    }) as LeaderboardCapture
+    }) as NumericLeaderboardCapture
 
   for (let pageIndex = 1; pageIndex <= safetyPageCap; pageIndex += 1) {
     const template = canonicalRequestTemplate(buildRequest(pageIndex))
@@ -836,6 +891,365 @@ export async function captureNumericLeaderboard(
   }
 
   throw new Error('[ingest] numeric leaderboard capture exited without a termination reason')
+}
+
+interface PreparedPartitionedNumericCapture {
+  partitionId: string
+  pageSize: number
+  captureConfig: BuildLeaderboardAcquisitionManifestInput['capture_config']
+  input: CapturePartitionedNumericLeaderboardPartition
+}
+
+interface PartitionReportAggregate {
+  state: 'consistent' | 'conflicting' | 'unknown'
+  value: number | null
+}
+
+interface PartitionedCaptureState {
+  sourcePages: CapturedPartitionedNumericLeaderboardSourcePage[]
+  parsePages: RawPage[]
+  parserSourceOrdinals: number[]
+  parserPageBindings: LeaderboardPartitionedNumericParserPageBinding[]
+  topologyPartitions: LeaderboardPartitionedNumericCaptureTopology['partitions']
+  completed: Array<{ capture: NumericLeaderboardCapture; pageSize: number }>
+}
+
+const CANONICAL_PARTITION_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/
+
+function safeCaptureSum(values: readonly number[], label: string): number {
+  let total = 0
+  for (const value of values) {
+    total += value
+    assertSafeInteger(total, label, 0)
+  }
+  return total
+}
+
+function preparePartitionedNumericCapture(opts: CapturePartitionedNumericLeaderboardOptions): {
+  partitions: PreparedPartitionedNumericCapture[]
+  captureConfig: BuildLeaderboardAcquisitionManifestInput['capture_config']
+} {
+  if (!Array.isArray(opts.partitions) || opts.partitions.length < 2) {
+    throw new TypeError('[ingest] partitioned numeric capture requires at least two partitions')
+  }
+
+  const ids = new Set<string>()
+  let sharedPageSize: number | null = null
+  const partitions = opts.partitions.map((input, index) => {
+    if (!CANONICAL_PARTITION_ID.test(input.partitionId)) {
+      throw new TypeError(`[ingest] partition ${index + 1} id must be canonical`)
+    }
+    if (ids.has(input.partitionId)) {
+      throw new TypeError(`[ingest] duplicate partition id ${input.partitionId}`)
+    }
+    ids.add(input.partitionId)
+
+    assertSafeInteger(input.pageSize, `partition ${input.partitionId} page size`, 1)
+    if (sharedPageSize === null) sharedPageSize = input.pageSize
+    else if (input.pageSize !== sharedPageSize) {
+      throw new TypeError('[ingest] partitioned numeric capture requires one shared page size')
+    }
+
+    const safetyPageCap = input.safetyPageCap ?? 5_000
+    const callerPageCap = input.callerPageCap ?? null
+    assertSafeInteger(safetyPageCap, `partition ${input.partitionId} safety page cap`, 1)
+    if (callerPageCap !== null) {
+      assertSafeInteger(callerPageCap, `partition ${input.partitionId} caller page cap`, 1)
+    }
+    if (
+      input.pageBinding.location === 'query_offset' &&
+      input.pageBinding.page_size !== input.pageSize
+    ) {
+      throw new TypeError(
+        '[ingest] public request page offset binding page size must match capture page size'
+      )
+    }
+
+    return {
+      partitionId: input.partitionId,
+      pageSize: input.pageSize,
+      captureConfig: {
+        caller_page_cap: callerPageCap,
+        safety_page_cap: safetyPageCap,
+      },
+      input,
+    }
+  })
+
+  const callerCaps = partitions.map((partition) => partition.captureConfig.caller_page_cap)
+  return {
+    partitions,
+    captureConfig: {
+      caller_page_cap: callerCaps.every((cap) => cap !== null)
+        ? safeCaptureSum(callerCaps as number[], 'partitioned caller page cap')
+        : null,
+      safety_page_cap: safeCaptureSum(
+        partitions.map((partition) => partition.captureConfig.safety_page_cap),
+        'partitioned safety page cap'
+      ),
+    },
+  }
+}
+
+function aggregatePartitionReport(
+  capture: NumericLeaderboardCapture,
+  field: 'population' | 'page_count'
+): PartitionReportAggregate {
+  const values = capture.sourcePages.flatMap((page) => {
+    const report = page.sourceReports[field]
+    return report.state === 'reported' ? [report.value] : []
+  })
+  if (values.length === 0) return { state: 'unknown', value: null }
+  if (new Set(values).size !== 1) return { state: 'conflicting', value: null }
+  return { state: 'consistent', value: values[0]! }
+}
+
+function partitionCaptureIsComplete(capture: NumericLeaderboardCapture, pageSize: number): boolean {
+  const pages = capture.sourcePages
+  const lastPage = pages.at(-1)
+  if (
+    !lastPage ||
+    pages.some(
+      (page, index) =>
+        page.httpStatus < 200 ||
+        page.httpStatus > 299 ||
+        page.paginationPosition.request_page_index !== index + 1
+    )
+  ) {
+    return false
+  }
+
+  const observed = safeCaptureSum(
+    pages.map((page) => page.sourceRowCount),
+    'partition observed row count'
+  )
+  const population = aggregatePartitionReport(capture, 'population')
+  const pageCount = aggregatePartitionReport(capture, 'page_count')
+  const localPageIndex = lastPage.paginationPosition.request_page_index
+  const populationMatches =
+    population.state === 'unknown' ||
+    (population.state === 'consistent' && observed >= population.value!)
+  const pageCountMatches =
+    pageCount.state === 'unknown' ||
+    (pageCount.state === 'consistent' &&
+      (localPageIndex === pageCount.value ||
+        (capture.terminationReason === 'empty_page' && localPageIndex === pageCount.value! + 1)))
+
+  switch (capture.terminationReason) {
+    case 'reported_population_reached':
+      return population.state === 'consistent' && populationMatches && pageCountMatches
+    case 'reported_page_count_reached':
+      return pageCount.state === 'consistent' && pageCountMatches && populationMatches
+    case 'short_page':
+      return (
+        lastPage.sourceRowCount > 0 &&
+        lastPage.sourceRowCount < pageSize &&
+        populationMatches &&
+        pageCountMatches
+      )
+    case 'empty_page':
+      return lastPage.sourceRowCount === 0 && populationMatches && pageCountMatches
+    case 'degenerate_page':
+    case 'caller_limit':
+    case 'safety_limit':
+    case 'upstream_error':
+      return false
+  }
+}
+
+function derivePartitionedCaptureTermination(
+  completed: PartitionedCaptureState['completed']
+): PartitionedNumericLeaderboardCapture['terminationReason'] {
+  const reasons = completed.map(({ capture }) => capture.terminationReason)
+  if (reasons.includes('upstream_error')) return 'upstream_error'
+  if (reasons.includes('safety_limit')) return 'safety_limit'
+  if (reasons.includes('caller_limit')) return 'caller_limit'
+  if (reasons.includes('degenerate_page')) return 'degenerate_page'
+
+  const populationReports = completed.map(({ capture }) =>
+    aggregatePartitionReport(capture, 'population')
+  )
+  if (
+    completed.length > 0 &&
+    completed.every(({ capture, pageSize }) => partitionCaptureIsComplete(capture, pageSize)) &&
+    populationReports.every((report) => report.state === 'consistent' && report.value !== null)
+  ) {
+    safeCaptureSum(
+      populationReports.map((report) => report.value!),
+      'partitioned population report sum'
+    )
+    return 'reported_population_reached'
+  }
+
+  const first = reasons[0]
+  return first && reasons.every((reason) => reason === first) ? first : 'unknown'
+}
+
+function appendPartitionCapture(
+  state: PartitionedCaptureState,
+  partition: PreparedPartitionedNumericCapture,
+  partitionIndex: number,
+  capture: NumericLeaderboardCapture
+): void {
+  if (strictCanonicalJson(capture.captureConfig) !== strictCanonicalJson(partition.captureConfig)) {
+    throw new TypeError('[ingest] partition capture config changed after preflight')
+  }
+
+  const sourceStart = state.sourcePages.length
+  const partitionSourceOrdinals: number[] = []
+  for (const [localIndex, page] of capture.sourcePages.entries()) {
+    if (
+      page.rawPage.pageIndex !== localIndex + 1 ||
+      page.paginationPosition.request_page_index !== localIndex + 1
+    ) {
+      throw new TypeError('[ingest] numeric partition source pages must be contiguous from one')
+    }
+    const globalOrdinal = state.sourcePages.length + 1
+    const rawPage: RawPage = Object.freeze({
+      pageIndex: globalOrdinal,
+      payload: page.rawPage.payload,
+      url: page.rawPage.url,
+      fetchedAt: page.rawPage.fetchedAt,
+    })
+    state.sourcePages.push({
+      rawPage,
+      sourceRowCount: page.sourceRowCount,
+      requestSha256: page.requestSha256,
+      httpStatus: page.httpStatus,
+      paginationPosition: {
+        kind: 'partitioned_page_index',
+        partition_ordinal: partitionIndex + 1,
+        partition_id: partition.partitionId,
+        request_page_index: localIndex + 1,
+      },
+      sourceReports: page.sourceReports,
+    })
+    partitionSourceOrdinals.push(globalOrdinal)
+  }
+
+  if (capture.parserTransformation.source_page_ordinals.length !== capture.parsePages.length) {
+    throw new TypeError('[ingest] numeric partition parser pages require exact source bindings')
+  }
+  const partitionParserOrdinals: number[] = []
+  let previousLocalSourceOrdinal = 0
+  for (const [
+    parserIndex,
+    localSourceOrdinal,
+  ] of capture.parserTransformation.source_page_ordinals.entries()) {
+    const localSourcePage = capture.sourcePages[localSourceOrdinal - 1]
+    const parsePage = capture.parsePages[parserIndex]
+    if (
+      localSourceOrdinal <= previousLocalSourceOrdinal ||
+      !localSourcePage ||
+      !parsePage ||
+      strictCanonicalJson(localSourcePage.rawPage) !== strictCanonicalJson(parsePage)
+    ) {
+      throw new TypeError('[ingest] numeric partition parser projection is not canonical')
+    }
+    previousLocalSourceOrdinal = localSourceOrdinal
+
+    const sourcePageOrdinal = sourceStart + localSourceOrdinal
+    const sourcePage = state.sourcePages[sourcePageOrdinal - 1]
+    if (!sourcePage) {
+      throw new TypeError('[ingest] numeric partition parser source ordinal is out of range')
+    }
+    const binding: LeaderboardPartitionedNumericParserPageBinding = {
+      source_page_ordinal: sourcePageOrdinal,
+      partition_ordinal: partitionIndex + 1,
+      partition_id: partition.partitionId,
+      request_page_index: localSourcePage.paginationPosition.request_page_index,
+      request_page_size: partition.pageSize,
+    }
+    state.parserSourceOrdinals.push(sourcePageOrdinal)
+    state.parserPageBindings.push(binding)
+    state.parsePages.push(projectPartitionedNumericParserPage(sourcePage.rawPage, binding))
+    partitionParserOrdinals.push(state.parsePages.length)
+  }
+
+  state.topologyPartitions.push({
+    partition_id: partition.partitionId,
+    source_page_ordinals: partitionSourceOrdinals,
+    parser_page_ordinals: partitionParserOrdinals,
+    termination_reason: capture.terminationReason,
+    capture_config: partition.captureConfig,
+  })
+  state.completed.push({ capture, pageSize: partition.pageSize })
+}
+
+/**
+ * Capture independent numeric partitions in canonical declaration order. The
+ * source payload remains the exact upstream JSON; only RawPage.pageIndex is
+ * reassigned for storage, while deterministic parser envelopes carry the
+ * partition-local request identity.
+ */
+export async function capturePartitionedNumericLeaderboard(
+  opts: CapturePartitionedNumericLeaderboardOptions
+): Promise<PartitionedNumericLeaderboardCapture> {
+  const prepared = preparePartitionedNumericCapture(opts)
+  const state: PartitionedCaptureState = {
+    sourcePages: [],
+    parsePages: [],
+    parserSourceOrdinals: [],
+    parserPageBindings: [],
+    topologyPartitions: [],
+    completed: [],
+  }
+
+  const finish = (
+    terminationReason = derivePartitionedCaptureTermination(state.completed)
+  ): PartitionedNumericLeaderboardCapture =>
+    deepFreezeJson({
+      sourcePages: [...state.sourcePages],
+      parsePages: [...state.parsePages],
+      terminationReason,
+      captureConfig: prepared.captureConfig,
+      parserTransformation: {
+        kind: 'partitioned_numeric_projection',
+        source_page_ordinals: [...state.parserSourceOrdinals],
+        algorithm_contract: LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+        page_bindings: [...state.parserPageBindings],
+      },
+      paginationTopology: {
+        kind: 'partitioned_numeric',
+        aggregation_contract: LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+        rank_scope: 'partition_local_concatenated_for_storage',
+        expected_partition_ids: prepared.partitions.map((partition) => partition.partitionId),
+        partitions: [...state.topologyPartitions],
+      },
+    }) as PartitionedNumericLeaderboardCapture
+
+  for (const [partitionIndex, partition] of prepared.partitions.entries()) {
+    const { partitionId: _partitionId, ...partitionInput } = partition.input
+    try {
+      const capture = await captureNumericLeaderboard({
+        ...partitionInput,
+        session: opts.session,
+        fetcher: opts.fetcher,
+        now: opts.now,
+      })
+      appendPartitionCapture(state, partition, partitionIndex, capture)
+    } catch (cause) {
+      if (!(cause instanceof LeaderboardCaptureUpstreamError)) throw cause
+      appendPartitionCapture(state, partition, partitionIndex, cause.capture)
+      for (const unattempted of prepared.partitions.slice(partitionIndex + 1)) {
+        state.topologyPartitions.push({
+          partition_id: unattempted.partitionId,
+          source_page_ordinals: [],
+          parser_page_ordinals: [],
+          termination_reason: 'unknown',
+          capture_config: unattempted.captureConfig,
+        })
+      }
+      throw new LeaderboardCaptureUpstreamError<PartitionedNumericLeaderboardCapture>(
+        cause.status,
+        cause.publicUrl,
+        finish('upstream_error'),
+        cause.cause
+      )
+    }
+  }
+
+  return finish()
 }
 
 export interface ReplayPagedOptions {

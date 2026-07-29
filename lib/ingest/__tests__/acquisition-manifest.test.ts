@@ -4,20 +4,29 @@ import {
   LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
   LEADERBOARD_ACQUISITION_MANIFEST_CONTRACT,
   LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
+  LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
+  LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+  LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
   buildLeaderboardAcquisitionManifest,
   buildLeaderboardAcquisitionManifestV3,
+  buildLeaderboardAcquisitionManifestV4,
   parseLeaderboardAcquisitionManifest,
   parseLeaderboardAcquisitionManifestV3,
+  parseLeaderboardAcquisitionManifestV4,
+  projectPartitionedNumericParserPage,
   type BuildLeaderboardAcquisitionManifestInput,
   type BuildLeaderboardAcquisitionManifestV3Input,
+  type BuildLeaderboardAcquisitionManifestV4Input,
   type LeaderboardAcquisitionReportEvidence,
 } from '@/lib/ingest/acquisition-manifest'
+import { strictCanonicalSha256 } from '@/lib/ingest/strict-canonical-json'
 
 const GIT_SHA = 'a'.repeat(40)
 const REQUEST_SHA_1 = 'b'.repeat(64)
 const REQUEST_SHA_2 = 'c'.repeat(64)
 const CURSOR_SHA_1 = 'd'.repeat(64)
 const CURSOR_SHA_2 = 'e'.repeat(64)
+const REQUEST_SHA_3 = 'f'.repeat(64)
 
 const reported = (value: number): LeaderboardAcquisitionReportEvidence => ({
   state: 'reported',
@@ -123,6 +132,169 @@ function v3Input(
       binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
       attempt_id: '00000000-0000-4000-8000-000000000001',
       attempt_seq: 41,
+    },
+    ...overrides,
+  }
+}
+
+function v4Input(
+  overrides: Partial<BuildLeaderboardAcquisitionManifestV4Input> = {}
+): BuildLeaderboardAcquisitionManifestV4Input {
+  const sourcePages: BuildLeaderboardAcquisitionManifestV4Input['source_pages'] = [
+    {
+      raw_page: {
+        pageIndex: 1,
+        payload: {
+          code: '00000',
+          data: {
+            list: Array.from({ length: 20 }, (_, index) => ({ strategyId: `grid-${index + 1}` })),
+            totalRecord: '21',
+          },
+        },
+        url: 'https://api.bitget.com/api/v2/copy/mix-broker/query-bots',
+        fetchedAt: '2026-07-21T10:00:01.000Z',
+      },
+      source_row_count: 20,
+      request_sha256: REQUEST_SHA_1,
+      http_status: 200,
+      pagination_position: {
+        kind: 'partitioned_page_index',
+        partition_ordinal: 1,
+        partition_id: 'futures_grid',
+        request_page_index: 1,
+      },
+      source_reports: reports(reported(21), notReported(), reported(1), reported(20)),
+    },
+    {
+      raw_page: {
+        pageIndex: 2,
+        payload: {
+          code: '00000',
+          data: { list: [{ strategyId: 'grid-21' }], totalRecord: '21' },
+        },
+        url: 'https://api.bitget.com/api/v2/copy/mix-broker/query-bots',
+        fetchedAt: '2026-07-21T10:00:02.000Z',
+      },
+      source_row_count: 1,
+      request_sha256: REQUEST_SHA_2,
+      http_status: 200,
+      pagination_position: {
+        kind: 'partitioned_page_index',
+        partition_ordinal: 1,
+        partition_id: 'futures_grid',
+        request_page_index: 2,
+      },
+      source_reports: reports(reported(21), notReported(), reported(2), reported(20)),
+    },
+    {
+      raw_page: {
+        pageIndex: 3,
+        payload: {
+          code: '00000',
+          data: {
+            list: [
+              { strategyId: 'martingale-1' },
+              { strategyId: 'martingale-2' },
+              { strategyId: 'martingale-3' },
+            ],
+            totalRecord: '3',
+          },
+        },
+        url: 'https://api.bitget.com/api/v2/copy/mix-broker/query-bots',
+        fetchedAt: '2026-07-21T10:00:03.000Z',
+      },
+      source_row_count: 3,
+      request_sha256: REQUEST_SHA_3,
+      http_status: 200,
+      pagination_position: {
+        kind: 'partitioned_page_index',
+        partition_ordinal: 2,
+        partition_id: 'futures_martingale',
+        request_page_index: 1,
+      },
+      source_reports: reports(reported(3), notReported(), reported(1), reported(20)),
+    },
+  ]
+  const parserTransformation: BuildLeaderboardAcquisitionManifestV4Input['parser_transformation'] =
+    {
+      kind: 'partitioned_numeric_projection',
+      source_page_ordinals: [1, 2, 3],
+      algorithm_contract: LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+      page_bindings: [
+        {
+          source_page_ordinal: 1,
+          partition_ordinal: 1,
+          partition_id: 'futures_grid',
+          request_page_index: 1,
+          request_page_size: 20,
+        },
+        {
+          source_page_ordinal: 2,
+          partition_ordinal: 1,
+          partition_id: 'futures_grid',
+          request_page_index: 2,
+          request_page_size: 20,
+        },
+        {
+          source_page_ordinal: 3,
+          partition_ordinal: 2,
+          partition_id: 'futures_martingale',
+          request_page_index: 1,
+          request_page_size: 20,
+        },
+      ],
+    }
+
+  return {
+    source: {
+      id: 13,
+      slug: 'bitget_bots_futures',
+      adapter_slug: 'bitget_bots',
+      configured_page_size: 20,
+      configured_pagination_kind: 'numeric',
+      configured_partition_ids: ['futures_grid', 'futures_martingale'],
+    },
+    surface: 'tier_a_leaderboard',
+    timeframe: 30,
+    started_at: '2026-07-21T10:00:00.000Z',
+    completed_at: '2026-07-21T10:00:04.000Z',
+    runner_git_sha: GIT_SHA,
+    observation_cycle_id: 'tier-a:bitget_bots_futures:job-1:1784628000000',
+    capture_evidence_state: 'verified',
+    termination_reason: 'reported_population_reached',
+    capture_config: { caller_page_cap: null, safety_page_cap: 10_000 },
+    source_pages: sourcePages,
+    parse_pages: sourcePages.map((page, index) =>
+      projectPartitionedNumericParserPage(page.raw_page, parserTransformation.page_bindings[index]!)
+    ),
+    parser_transformation: parserTransformation,
+    accepted_population: 24,
+    rejected_row_count: 0,
+    acquisition_attempt: {
+      binding_contract: LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
+      attempt_id: '00000000-0000-4000-8000-000000000004',
+      attempt_seq: 44,
+    },
+    pagination_topology: {
+      kind: 'partitioned_numeric',
+      aggregation_contract: LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+      rank_scope: 'partition_local_concatenated_for_storage',
+      partitions: [
+        {
+          partition_id: 'futures_grid',
+          source_page_ordinals: [1, 2],
+          parser_page_ordinals: [1, 2],
+          termination_reason: 'reported_population_reached',
+          capture_config: { caller_page_cap: null, safety_page_cap: 5_000 },
+        },
+        {
+          partition_id: 'futures_martingale',
+          source_page_ordinals: [3],
+          parser_page_ordinals: [3],
+          termination_reason: 'reported_population_reached',
+          capture_config: { caller_page_cap: null, safety_page_cap: 5_000 },
+        },
+      ],
     },
     ...overrides,
   }
@@ -875,11 +1047,262 @@ describe('leaderboard acquisition manifest', () => {
   it('keeps v2 and v3 parsing explicit at trust boundaries', () => {
     const v2 = buildLeaderboardAcquisitionManifest(input()).manifest
     const v3 = buildLeaderboardAcquisitionManifestV3(v3Input()).manifest
+    const v4 = buildLeaderboardAcquisitionManifestV4(v4Input()).manifest
 
     expect(parseLeaderboardAcquisitionManifest(v2)).toEqual(v2)
     expect(parseLeaderboardAcquisitionManifestV3(v3)).toEqual(v3)
+    expect(parseLeaderboardAcquisitionManifestV4(v4)).toEqual(v4)
     expect(() => parseLeaderboardAcquisitionManifest(v3)).toThrow()
+    expect(() => parseLeaderboardAcquisitionManifest(v4)).toThrow()
     expect(() => parseLeaderboardAcquisitionManifestV3(v2)).toThrow()
+    expect(() => parseLeaderboardAcquisitionManifestV3(v4)).toThrow()
+    expect(() => parseLeaderboardAcquisitionManifestV4(v2)).toThrow()
+    expect(() => parseLeaderboardAcquisitionManifestV4(v3)).toThrow()
+  })
+
+  it('builds exact two-partition numeric evidence without inventing a global upstream rank', () => {
+    const candidate = v4Input()
+    const built = buildLeaderboardAcquisitionManifestV4(candidate)
+
+    expect(built.manifest).toMatchObject({
+      data_contract: LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
+      termination_reason: 'reported_population_reached',
+      population: {
+        observed_row_count: 24,
+        accepted_population: 24,
+        rejected_row_count: 0,
+        deduplicated_row_count: 0,
+        reports: {
+          population: { state: 'consistent', value: 24 },
+          page_count: { state: 'unknown', value: null },
+        },
+      },
+      assessment: { acquisition_state: 'complete', population_state: 'verified' },
+      pagination_topology: {
+        kind: 'partitioned_numeric',
+        aggregation_contract: LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT,
+        rank_scope: 'partition_local_concatenated_for_storage',
+        expected_partition_ids: ['futures_grid', 'futures_martingale'],
+      },
+    })
+    expect(
+      built.manifest.source_pages.map((page) => ({
+        stored_page_index: page.stored_page_index,
+        pagination_position: page.pagination_position,
+      }))
+    ).toEqual([
+      {
+        stored_page_index: 1,
+        pagination_position: {
+          kind: 'partitioned_page_index',
+          partition_ordinal: 1,
+          partition_id: 'futures_grid',
+          request_page_index: 1,
+        },
+      },
+      {
+        stored_page_index: 2,
+        pagination_position: {
+          kind: 'partitioned_page_index',
+          partition_ordinal: 1,
+          partition_id: 'futures_grid',
+          request_page_index: 2,
+        },
+      },
+      {
+        stored_page_index: 3,
+        pagination_position: {
+          kind: 'partitioned_page_index',
+          partition_ordinal: 2,
+          partition_id: 'futures_martingale',
+          request_page_index: 1,
+        },
+      },
+    ])
+    expect(
+      built.manifest.pagination_topology.partitions.map((partition) => ({
+        partition_id: partition.partition_id,
+        observed_row_count: partition.observed_row_count,
+        population: partition.reports.population,
+        assessment: partition.assessment,
+      }))
+    ).toEqual([
+      {
+        partition_id: 'futures_grid',
+        observed_row_count: 21,
+        population: { state: 'consistent', value: 21 },
+        assessment: { acquisition_state: 'complete', population_state: 'verified' },
+      },
+      {
+        partition_id: 'futures_martingale',
+        observed_row_count: 3,
+        population: { state: 'consistent', value: 3 },
+        assessment: { acquisition_state: 'complete', population_state: 'verified' },
+      },
+    ])
+    expect(candidate.source_pages[0]!.raw_page.payload).not.toHaveProperty('data_contract')
+    expect(candidate.parse_pages[0]!.payload).toMatchObject({
+      data_contract: LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+      partition_id: 'futures_grid',
+      request_page_index: 1,
+      request_page_size: 20,
+      payload: candidate.source_pages[0]!.raw_page.payload,
+    })
+    expect(built.manifest.parser_input.sha256).toBe(strictCanonicalSha256(candidate.parse_pages))
+    expect(JSON.parse(built.canonicalJson)).toEqual(built.manifest)
+    expect(createHash('sha256').update(built.canonicalJson, 'utf8').digest('hex')).toBe(
+      built.sourceRunId
+    )
+  })
+
+  it('rejects partitioned parser pages that cannot be reconstructed from exact source bytes', () => {
+    const candidate = v4Input()
+    candidate.parse_pages[2] = {
+      ...candidate.parse_pages[2]!,
+      payload: {
+        ...(candidate.parse_pages[2]!.payload as Record<string, unknown>),
+        partition_id: 'futures_grid',
+      },
+    }
+
+    expect(() => buildLeaderboardAcquisitionManifestV4(candidate)).toThrow(
+      'partitioned projection parser page does not match its exact source-page binding'
+    )
+  })
+
+  it('rejects incomplete, reordered, or overlapping partition topology', () => {
+    const missing = v4Input()
+    missing.pagination_topology.partitions.pop()
+
+    const reordered = v4Input()
+    reordered.source.configured_partition_ids.reverse()
+
+    const overlapping = v4Input()
+    overlapping.pagination_topology.partitions[1]!.source_page_ordinals = [2, 3]
+
+    const interleaved = v4Input()
+    interleaved.pagination_topology.partitions[0]!.source_page_ordinals = [1, 3]
+    interleaved.pagination_topology.partitions[1]!.source_page_ordinals = [2]
+
+    for (const candidate of [missing, reordered, overlapping, interleaved]) {
+      expect(() => buildLeaderboardAcquisitionManifestV4(candidate)).toThrow()
+    }
+  })
+
+  it('rejects a parser projection that omits any source page containing rows', () => {
+    const candidate = v4Input()
+    candidate.parser_transformation.source_page_ordinals = [1, 3]
+    candidate.parser_transformation.page_bindings = [
+      candidate.parser_transformation.page_bindings[0]!,
+      candidate.parser_transformation.page_bindings[2]!,
+    ]
+    candidate.parse_pages = [candidate.parse_pages[0]!, candidate.parse_pages[2]!]
+    candidate.pagination_topology.partitions[0]!.parser_page_ordinals = [1]
+    candidate.pagination_topology.partitions[1]!.parser_page_ordinals = [2]
+
+    expect(() => buildLeaderboardAcquisitionManifestV4(candidate)).toThrow(
+      'partitioned projection must include every source page that contains rows'
+    )
+  })
+
+  it('rejects local page, partition identity, report-sum, and rank-scope forgeries', () => {
+    const manifest = buildLeaderboardAcquisitionManifestV4(v4Input()).manifest
+    type Forgery = {
+      source_pages: Array<{ pagination_position: { request_page_index: number } }>
+      parser_input: {
+        transformation: { page_bindings: Array<{ partition_id: string }> }
+      }
+      population: { reports: { population: { value: number | null } } }
+      pagination_topology: {
+        rank_scope: string
+        partitions: Array<{ parser_page_ordinals: number[] }>
+      }
+      source: { configured_partition_ids: string[] }
+    }
+    const clone = () => JSON.parse(JSON.stringify(manifest)) as Forgery
+    const forgeries: unknown[] = []
+
+    const localPage = clone()
+    localPage.source_pages[2].pagination_position.request_page_index = 2
+    forgeries.push(localPage)
+
+    const partitionIdentity = clone()
+    partitionIdentity.parser_input.transformation.page_bindings[2].partition_id = 'futures_grid'
+    forgeries.push(partitionIdentity)
+
+    const reportSum = clone()
+    reportSum.population.reports.population.value = 21
+    forgeries.push(reportSum)
+
+    const rankScope = clone()
+    rankScope.pagination_topology.rank_scope = 'global_rank'
+    forgeries.push(rankScope)
+
+    const parserOrdinal = clone()
+    parserOrdinal.pagination_topology.partitions[1].parser_page_ordinals = [2]
+    forgeries.push(parserOrdinal)
+
+    const sourceConfiguration = clone()
+    sourceConfiguration.source.configured_partition_ids = [
+      'futures_grid',
+      'futures_grid_martingale_renamed',
+    ]
+    forgeries.push(sourceConfiguration)
+
+    for (const forgery of forgeries) {
+      expect(() => parseLeaderboardAcquisitionManifestV4(forgery)).toThrow()
+    }
+  })
+
+  it('requires zero rejection and deduplication and derives top-level termination', () => {
+    expect(() =>
+      buildLeaderboardAcquisitionManifestV4(
+        v4Input({ accepted_population: 23, rejected_row_count: 1 })
+      )
+    ).toThrow('requires zero rejected and deduplicated source rows')
+    expect(() =>
+      buildLeaderboardAcquisitionManifestV4(v4Input({ accepted_population: 23 }))
+    ).toThrow('requires zero rejected and deduplicated source rows')
+    expect(() =>
+      buildLeaderboardAcquisitionManifestV4(v4Input({ termination_reason: 'caller_limit' }))
+    ).toThrow('partitioned termination reason conflicts with its partition evidence')
+  })
+
+  it('reports partition aggregate overflow as a validation error', () => {
+    const manifest = JSON.parse(
+      JSON.stringify(buildLeaderboardAcquisitionManifestV4(v4Input()).manifest)
+    ) as {
+      pagination_topology: {
+        partitions: Array<{ reports: { population: { value: number | null } } }>
+      }
+    }
+    for (const partition of manifest.pagination_topology.partitions) {
+      partition.reports.population.value = Number.MAX_SAFE_INTEGER
+    }
+
+    let thrown: unknown
+    try {
+      parseLeaderboardAcquisitionManifestV4(manifest)
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toMatchObject({ name: 'ZodError' })
+  })
+
+  it('includes the partition contract and attempt in deterministic v4 source-run identity', () => {
+    const first = buildLeaderboardAcquisitionManifestV4(v4Input())
+    const same = buildLeaderboardAcquisitionManifestV4(v4Input())
+    const nextAttempt = buildLeaderboardAcquisitionManifestV4(
+      v4Input({
+        acquisition_attempt: {
+          ...v4Input().acquisition_attempt,
+          attempt_seq: 45,
+        },
+      })
+    )
+
+    expect(same.sourceRunId).toBe(first.sourceRunId)
+    expect(nextAttempt.sourceRunId).not.toBe(first.sourceRunId)
   })
 
   it('pins the complete v3 attempt-bound contract to a golden sourceRunId', () => {
