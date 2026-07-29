@@ -160,6 +160,12 @@ PREDEPLOY_MIGRATIONS=(
   20260729075500_account_recovery_auth_email_authority.sql
   20260729075550_preserve_stripe_event_idempotency.sql
   20260729075600_verified_auth_profile_ban_authority.sql
+  20260729131858_atomic_channel_member_mutation.sql
+  20260729133904_atomic_channel_metadata_mutation.sql
+  20260729135645_atomic_channel_message_send.sql
+  20260729141050_atomic_channel_message_reaction_toggle.sql
+  20260729142149_atomic_group_member_role_change.sql
+  20260729145000_atomic_group_comment_moderation.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
