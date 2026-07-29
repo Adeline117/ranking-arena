@@ -92,6 +92,7 @@
     "qa:launch-migration-runner": "node --test scripts/maintenance/apply-launch-migrations.test.mjs",
     "qa:rank-staging-xid-pg17": "bash supabase/migrations/__tests__/leaderboard-rank-generation-staging-only-writer.pg17.sh && bash supabase/migrations/__tests__/leaderboard-rank-generation-staging-full-xid-epoch.pg17.sh && bash supabase/migrations/__tests__/leaderboard-rank-generation-staging-only-writer-legacy-replay.pg17.sh",
     "qa:rank-publication-plan-pg17": "bash supabase/migrations/__tests__/leaderboard-rank-generation-publication-plan.pg17.sh",
+    "qa:score-alias-pg17": "bash supabase/migrations/__tests__/bitget-bot-rank-authority-quarantine.pg17.sh",
     "qa:buttons": "node scripts/qa/button-sweep.mjs",
     "qa:auth-e2e": "playwright test --config=playwright.authenticated.config.ts",
     "qa:controlled-write": "node scripts/qa/controlled-write-sweep.mjs",
