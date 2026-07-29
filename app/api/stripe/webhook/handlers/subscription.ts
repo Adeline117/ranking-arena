@@ -69,6 +69,7 @@ const RECURRING_PRO_STATE_SUCCESS = new Set([
   'grace_applied',
   'grace_expired',
   'grant_protected',
+  'manual_review',
   'reconciled',
   'revoked',
   'stale_event',

@@ -442,7 +442,7 @@ describe('subscription webhook persistence', () => {
     expect(mockLeaveProOfficialGroup).not.toHaveBeenCalled()
   })
 
-  it('keeps an unsafe atomic state outcome retryable after durable review', async () => {
+  it('ACKs a durable manual-review outcome without direct projection writes', async () => {
     mockRpc.mockImplementation((name: string) => {
       if (name === 'assert_recurring_pro_checkout_completed_atomic') {
         return Promise.resolve({ data: 'completed', error: null, status: 200 })
@@ -458,16 +458,9 @@ describe('subscription webhook persistence', () => {
         recurringSubscription(false, { status: 'past_due', latest_invoice: 'in_failed' }),
         stripeEvent
       )
-    ).rejects.toThrow(
-      'reconcile_recurring_subscription_state_atomic returned unsafe status manual_review'
-    )
-    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
-      expect.objectContaining({
-        objectType: 'subscription_event',
-        sessionId: 'evt_current',
-        reasonKey: 'recurring_subscription_state_manual_review',
-      })
-    )
+    ).resolves.toBeUndefined()
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('keeps a projection RPC failure retryable and has no direct-table fallback', async () => {
@@ -514,32 +507,48 @@ describe('subscription webhook persistence', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('routes an exact deleted subscription through the atomic state ledger', async () => {
-    await expect(
-      handleSubscriptionCanceled(
-        recurringSubscription(false, {
-          status: 'canceled',
-          latest_invoice: 'in_paid',
-          canceled_at: stripeEvent.created - 10,
-        }),
-        stripeEvent
-      )
-    ).resolves.toBeUndefined()
-
-    expect(mockRpc).toHaveBeenCalledWith(
-      'reconcile_recurring_subscription_state_atomic',
-      expect.objectContaining({
-        p_user_id: recurringUserId,
-        p_stripe_subscription_id: 'sub_recurring_exact',
-        p_current_invoice_id: 'in_paid',
-        p_stripe_status: 'canceled',
-        p_grace_expires_at: null,
-        p_event_id: 'evt_current',
+  it.each(['revoked', 'grant_protected', 'stale_event', 'manual_review'])(
+    'ACKs exact deleted subscription state %s without direct projection writes',
+    async (stateStatus) => {
+      mockRpc.mockImplementation((name: string) => {
+        if (name === 'apply_user_api_tier_persisted_non_grant_event') {
+          return Promise.resolve(mockPersistedRpcResult)
+        }
+        if (name === 'assert_recurring_pro_checkout_completed_atomic') {
+          return Promise.resolve({ data: 'completed', error: null, status: 200 })
+        }
+        if (name === 'reconcile_recurring_subscription_state_atomic') {
+          return Promise.resolve({ data: { status: stateStatus }, error: null })
+        }
+        throw new Error(`Unexpected RPC: ${name}`)
       })
-    )
-    expect(mockFrom).not.toHaveBeenCalled()
-    expect(mockLeaveProOfficialGroup).not.toHaveBeenCalled()
-  })
+
+      await expect(
+        handleSubscriptionCanceled(
+          recurringSubscription(false, {
+            status: 'canceled',
+            latest_invoice: 'in_paid',
+            canceled_at: stripeEvent.created - 10,
+          }),
+          stripeEvent
+        )
+      ).resolves.toBeUndefined()
+
+      expect(mockRpc).toHaveBeenCalledWith(
+        'reconcile_recurring_subscription_state_atomic',
+        expect.objectContaining({
+          p_user_id: recurringUserId,
+          p_stripe_subscription_id: 'sub_recurring_exact',
+          p_current_invoice_id: 'in_paid',
+          p_stripe_status: 'canceled',
+          p_grace_expires_at: null,
+          p_event_id: 'evt_current',
+        })
+      )
+      expect(mockFrom).not.toHaveBeenCalled()
+      expect(mockLeaveProOfficialGroup).not.toHaveBeenCalled()
+    }
+  )
 
   it('projects an active API subscription through the ordered Stripe-event RPC', async () => {
     mockFrom.mockReturnValueOnce(lookupQuery(apiProfile()))
