@@ -61,21 +61,19 @@ export async function enrichFromStatsDetail(
             'source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, copiers_count, aum, period'
           )
           .eq('source', source)
+          .eq('period', season)
           .in('source_trader_id', chunk)
           .order('captured_at', { ascending: false })
           .limit(1000)
         if (!statsRows) continue
 
-        // Dedup: keep the best row per trader (prefer matching season, then most recent)
+        // Rows are already isolated to this season and ordered newest-first.
         const bestPerTrader = new Map<string, (typeof statsRows)[0]>()
         for (const sr of statsRows) {
           const tid = sr.source_trader_id.startsWith('0x')
             ? sr.source_trader_id.toLowerCase()
             : sr.source_trader_id
-          const existing = bestPerTrader.get(tid)
-          if (!existing || (sr.period === season && existing.period !== season)) {
-            bestPerTrader.set(tid, sr)
-          }
+          if (!bestPerTrader.has(tid)) bestPerTrader.set(tid, sr)
         }
 
         for (const [tid, sr] of bestPerTrader) {

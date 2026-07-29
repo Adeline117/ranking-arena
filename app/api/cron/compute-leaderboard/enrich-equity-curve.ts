@@ -27,6 +27,7 @@ const periodDaysFor = (season: Period): number => (season === '7D' ? 7 : season 
 export async function deriveWrMddFromEquityCurve(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   traderMap: Map<string, TraderRow>,
+  season: Period,
   isOutOfTime: (minMs?: number) => boolean
 ): Promise<number> {
   const stillNeedingData = Array.from(traderMap.values()).filter(
@@ -44,7 +45,7 @@ export async function deriveWrMddFromEquityCurve(
   let derived = 0
   await Promise.all(
     Array.from(eqBySource.entries()).map(async ([source, traderIds]) => {
-      // Query equity curves for these traders (all periods, prefer 90D)
+      // A 7D/30D/90D curve is a different metric input; never mix periods.
       for (let i = 0; i < traderIds.length; i += 50) {
         if (isOutOfTime(60_000)) break
         const chunk = traderIds.slice(i, i + 50)
@@ -52,6 +53,7 @@ export async function deriveWrMddFromEquityCurve(
           .from('trader_equity_curve')
           .select('source_trader_id, pnl_usd, roi_pct, data_date')
           .eq('source', source)
+          .eq('period', season)
           .in('source_trader_id', chunk)
           .order('data_date', { ascending: true })
           .limit(1000)
@@ -161,6 +163,7 @@ export async function deriveAdvancedFromEquityCurve(
           .from('trader_equity_curve')
           .select('source_trader_id, roi_pct, pnl_usd, data_date')
           .eq('source', source)
+          .eq('period', season)
           .in('source_trader_id', chunk)
           .order('data_date', { ascending: true })
           .limit(1000)

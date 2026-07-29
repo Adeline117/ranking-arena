@@ -470,7 +470,7 @@ async function computeSeason(
       `[${season}] SKIPPING Phase 4 (equity_curve WR/MDD derivation) — only ${Math.round(timeLeftMs() / 1000)}s left`
     )
   } else {
-    const derived = await deriveWrMddFromEquityCurve(supabase, traderMap, isOutOfTime)
+    const derived = await deriveWrMddFromEquityCurve(supabase, traderMap, season, isOutOfTime)
     if (derived > 0) {
       logger.info(`[${season}] Derived ${derived} WR/MDD values from equity curves`)
     }
