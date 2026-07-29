@@ -19,6 +19,8 @@ import type { TraderFirstScreen } from '@/lib/data/serving/types'
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import { isPublicProfileActive } from '@/lib/profile/public-audience'
+import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 // Account moderation/deletion state is a request-time public audience boundary.
 // Do not let an ISR payload keep serving a profile after that state changes.
@@ -59,18 +61,33 @@ export async function generateMetadata({
 
     // If user claimed a trader, fetch their trading stats for meta description
     if (publicData?.verified_trader_source && publicData?.verified_trader_id) {
-      const { data: lr } = await Promise.race([
-        supabase
-          .from('leaderboard_ranks')
-          .select('roi, arena_score, source')
-          .eq('source', publicData.verified_trader_source)
-          .eq('source_trader_id', publicData.verified_trader_id)
-          .eq('season_id', '90D')
-          .maybeSingle(),
-        new Promise<{ data: null }>((resolve) =>
-          setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
-        ),
-      ])
+      const [publicSource] = filterPublicRankingSources([publicData.verified_trader_source])
+      const verifiedTraderId = publicData.verified_trader_id
+      const sealedRead = publicSource
+        ? await Promise.race([
+            readSealedRankingGeneration(
+              supabase,
+              { season: '90D', sources: [publicSource] },
+              async (publication) => {
+                const result = await supabase
+                  .from('leaderboard_ranks')
+                  .select('roi, arena_score, source')
+                  .eq('source', publicSource)
+                  .eq('source_trader_id', verifiedTraderId)
+                  .eq('season_id', '90D')
+                  .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+                  .maybeSingle()
+                if (result.error) {
+                  throw new Error(`profile ranking metadata query failed: ${result.error.message}`)
+                }
+                return result.data
+              },
+              { timeoutMs: SSR_TIMEOUT_MS }
+            ),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_TIMEOUT_MS)),
+          ])
+        : null
+      const lr = sealedRead?.value ?? null
       if (lr) {
         traderMeta = {
           roi: lr.roi ?? undefined,
@@ -79,8 +96,11 @@ export async function generateMetadata({
         }
       }
     }
-  } catch {
-    /* use default */
+  } catch (error) {
+    logger.warn(
+      '[u/profile] ranking metadata unavailable:',
+      error instanceof Error ? error.message : String(error)
+    )
   }
 
   const title = `@${decoded} — Arena Profile`
