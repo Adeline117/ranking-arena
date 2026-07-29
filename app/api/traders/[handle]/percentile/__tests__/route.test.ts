@@ -38,9 +38,10 @@ jest.mock('@/lib/premium/server-entitlement', () => ({
   getCanonicalSubscriptionTier: (...args: unknown[]) => mockGetCanonicalSubscriptionTier(...args),
 }))
 
-const mockReadSealedRankingGeneration = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
-  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
 }))
 
 function queryResult(result: Record<string, unknown>, maybeSingle = false) {
@@ -69,8 +70,8 @@ function queryResult(result: Record<string, unknown>, maybeSingle = false) {
 }
 
 import { GET } from '../route'
-import { PUBLIC_ACTIVE_RANKING_SOURCES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
-import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
+
+const TEST_AUTHORITY_SOURCES = ['binance_futures', 'binance_spot', 'bybit', 'hyperliquid']
 
 describe('GET /api/traders/[handle]/percentile sealed category cohort', () => {
   beforeEach(() => {
@@ -84,17 +85,17 @@ describe('GET /api/traders/[handle]/percentile sealed category cohort', () => {
       handle: 'Trader',
       avatarUrl: null,
     })
-    mockReadSealedRankingGeneration.mockImplementation(
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(
       async (
         _supabase: unknown,
-        input: { season: '90D'; sources: string[] },
+        season: '90D',
         reader: (publication: { scoreCohortId: string }) => Promise<unknown>
       ) => {
         const publication = {
           state: 'sealed' as const,
-          season: input.season,
+          season,
           scoreCohortId: '11111111-1111-4111-8111-111111111111',
-          proofs: [],
+          proofs: TEST_AUTHORITY_SOURCES.map((source) => ({ source })),
         }
         return {
           value: await reader(publication),
@@ -133,13 +134,11 @@ describe('GET /api/traders/[handle]/percentile sealed category cohort', () => {
       params: Promise.resolve({ handle: 'Trader' }),
     })
     const body = await response.json()
-    const futuresSources = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES).filter(
-      (source) => (SOURCE_TYPE_MAP[source] || 'futures') === 'futures'
-    )
+    const futuresSources = ['binance_futures', 'bybit']
 
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledWith(
       expect.anything(),
-      { season: '90D', sources: futuresSources },
+      '90D',
       expect.any(Function),
       { timeoutMs: 20_000 }
     )

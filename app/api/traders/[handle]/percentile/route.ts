@@ -15,9 +15,8 @@ import {
 } from '@/lib/api'
 import { resolveTrader } from '@/lib/data/unified'
 import { hasFeatureAccess } from '@/lib/types/premium'
-import { PUBLIC_ACTIVE_RANKING_SOURCES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
-import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import { getCanonicalSubscriptionTier } from '@/lib/premium/server-entitlement'
 
 export const runtime = 'nodejs'
@@ -31,18 +30,6 @@ interface PercentileData {
 }
 
 type PercentileCategory = 'futures' | 'spot' | 'web3'
-
-const CATEGORY_SOURCES: Readonly<Record<PercentileCategory, readonly string[]>> = {
-  futures: filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES).filter(
-    (source) => (SOURCE_TYPE_MAP[source] || 'futures') === 'futures'
-  ),
-  spot: filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES).filter(
-    (source) => SOURCE_TYPE_MAP[source] === 'spot'
-  ),
-  web3: filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES).filter(
-    (source) => SOURCE_TYPE_MAP[source] === 'web3'
-  ),
-}
 
 /**
  * Calculate percentile using COUNT queries instead of fetching all rows.
@@ -128,15 +115,20 @@ export async function GET(
     const sourceType = SOURCE_TYPE_MAP[resolved.platform] || 'futures'
     const category: PercentileCategory =
       sourceType === 'spot' ? 'spot' : sourceType === 'web3' ? 'web3' : 'futures'
-    const categorySources = CATEGORY_SOURCES[category]
-    if (categorySources.length === 0 || !categorySources.includes(resolved.platform)) {
-      throw new Error('percentile source is outside its public category authority')
-    }
-
-    const sealedRead = await readSealedRankingGeneration(
+    const sealedRead = await readSealedRankingAuthorityGeneration(
       supabase,
-      { season: '90D', sources: categorySources },
+      '90D',
       async (publication) => {
+        const categorySources = publication.proofs
+          .map((proof) => proof.source)
+          .filter((source) => {
+            const authorityType = SOURCE_TYPE_MAP[source] || 'futures'
+            return authorityType === category
+          })
+        if (categorySources.length === 0 || !categorySources.includes(resolved.platform)) {
+          throw new Error('percentile source is outside its public category authority')
+        }
+
         const { data: traderScores, error: traderError } = await supabase
           .from('leaderboard_ranks')
           // 三支柱模型 profitability/risk_control/execution = 旧命名 return/drawdown/stability
