@@ -148,8 +148,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const legacyApiTierCleanupMigration = '20260729021000_disable_legacy_api_tier_writer.sql'
   const stripeDisputeAuthorityMigration = '20260729066000_stripe_charge_dispute_authority.sql'
   const claimRevocationMigration = '20260729067000_atomic_trader_claim_revocation.sql'
+  const profileSettingsRevisionMigration = '20260729068000_atomic_profile_settings_revision.sql'
 
-  assert.equal(predeploy.length, 118)
+  assert.equal(predeploy.length, 119)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -241,6 +242,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260729062000_atomic_trader_follow_limit.sql',
           '20260729064000_public_token_trader_rankings_authority.sql',
           claimRevocationMigration,
+          profileSettingsRevisionMigration,
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -259,7 +261,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 134)
+  assert.equal(new Set(all).size, 135)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -286,6 +288,16 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!recovery.includes(claimRevocationMigration))
   assert.ok(!quarantined.includes(claimRevocationMigration))
   assert.ok(!superseded.includes(claimRevocationMigration))
+  assert.equal(
+    predeploy.filter((migration) => migration === profileSettingsRevisionMigration).length,
+    1
+  )
+  assert.ok(!postdeploy.includes(profileSettingsRevisionMigration))
+  assert.ok(!recoveryPrerequisites.includes(profileSettingsRevisionMigration))
+  assert.ok(!concurrentRecovery.includes(profileSettingsRevisionMigration))
+  assert.ok(!recovery.includes(profileSettingsRevisionMigration))
+  assert.ok(!quarantined.includes(profileSettingsRevisionMigration))
+  assert.ok(!superseded.includes(profileSettingsRevisionMigration))
   assert.ok(!predeploy.includes(legacyApiTierCleanupMigration))
   assert.ok(!postdeploy.includes(additiveApiTierMigration))
   assert.ok(!recoveryPrerequisites.includes(legacyApiTierCleanupMigration))
@@ -294,7 +306,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-77), [
+  assert.deepEqual(predeploy.slice(-78), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -372,6 +384,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729062000_atomic_trader_follow_limit.sql',
     '20260729064000_public_token_trader_rankings_authority.sql',
     claimRevocationMigration,
+    profileSettingsRevisionMigration,
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -453,7 +466,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729062000_atomic_trader_follow_limit.sql'))
   assert.ok(predeploy.includes('20260729064000_public_token_trader_rankings_authority.sql'))
   assert.ok(predeploy.includes(claimRevocationMigration))
-  assert.deepEqual(predeploy.slice(-7), [
+  assert.ok(predeploy.includes(profileSettingsRevisionMigration))
+  assert.deepEqual(predeploy.slice(-8), [
     '20260729058000_source_registry_runtime_contract.sql',
     '20260729059000_atomic_referral_attribution.sql',
     '20260729060000_retryable_referral_qualification.sql',
@@ -461,6 +475,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729062000_atomic_trader_follow_limit.sql',
     '20260729064000_public_token_trader_rankings_authority.sql',
     claimRevocationMigration,
+    profileSettingsRevisionMigration,
   ])
   assert.ok(
     predeploy.includes('20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql')
@@ -586,6 +601,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     !recoveryPrerequisites.includes('20260729064000_public_token_trader_rankings_authority.sql')
   )
   assert.ok(!recoveryPrerequisites.includes(claimRevocationMigration))
+  assert.ok(!recoveryPrerequisites.includes(profileSettingsRevisionMigration))
   assert.ok(!recoveryPrerequisites.includes('20260729063000_close_trader_follow_direct_writes.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260729024000_api_tier_payment_reversals.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260729025000_recurring_pro_checkout_admission.sql'))
