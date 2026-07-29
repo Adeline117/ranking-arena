@@ -136,6 +136,29 @@ describe('computeFirstParty', () => {
     expect(r.snapshot.netTransferCum).toBeNull()
   })
 
+  it('re-anchors cumulative transfers after a prior evidence outage', () => {
+    const r = computeFirstParty({
+      nowMs: NOW,
+      currency: 'USDT',
+      equityNow: 1025,
+      balanceNow: null,
+      unrealizedNow: null,
+      events: [],
+      netTransfersIn: { 7: 25 },
+      netTransfersSinceLast: 25,
+      snapshots: [
+        {
+          ts: new Date(NOW - DAY).toISOString(),
+          equity: 1000,
+          net_transfer_cum: null,
+        },
+      ],
+    })
+
+    expect(r.snapshot.netTransferCum).toBe(25)
+    expect(r.stats.find((s) => s.timeframe === 7)?.mdd).toBeNull()
+  })
+
   it('removes withdrawals from the equity path before calculating drawdown', () => {
     const r = computeFirstParty({
       nowMs: NOW,

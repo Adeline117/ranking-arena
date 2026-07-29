@@ -190,12 +190,13 @@ export function computeFirstParty(input: FirstPartyComputeInput): FirstPartyResu
 
   const lastCum = snapshots[snapshots.length - 1]?.net_transfer_cum
   const netTransferCum =
-    snapshots.length === 0
-      ? input.netTransfersSinceLast === null
-        ? null
-        : input.netTransfersSinceLast
-      : lastCum === null || lastCum === undefined || input.netTransfersSinceLast === null
-        ? null
+    input.netTransfersSinceLast === null
+      ? null
+      : lastCum === null || lastCum === undefined
+        ? // Re-anchor at the latest durable snapshot after a prior evidence
+          // outage. Old NULL rows keep their windows untrusted, while new
+          // snapshots can become complete instead of remaining NULL forever.
+          input.netTransfersSinceLast
         : lastCum + input.netTransfersSinceLast
   return {
     stats,
