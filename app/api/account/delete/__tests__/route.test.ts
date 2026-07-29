@@ -3,6 +3,7 @@
 const mockUser = {
   id: 'user-1',
   email: 'user@example.com',
+  app_metadata: { provider: 'email', providers: ['email'] } as Record<string, unknown>,
   identities: [{ provider: 'email' }],
 }
 const mockPasswordSignIn = jest.fn()
@@ -121,6 +122,7 @@ describe('account deletion scheduling', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockUser.email = 'user@example.com'
+    mockUser.app_metadata = { provider: 'email', providers: ['email'] }
     mockUser.identities = [{ provider: 'email' }]
     subscriptionResult = {
       data: {
@@ -319,6 +321,34 @@ describe('account deletion scheduling', () => {
       expect(mockRpc).not.toHaveBeenCalled()
     }
   )
+
+  it('never downgrades missing Auth provider evidence to typed deletion', async () => {
+    mockUser.app_metadata = {}
+    mockUser.identities = []
+
+    const response = await POST(request({ confirm: 'DELETE' }))
+
+    expect(response.status).toBe(403)
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
+    expect(mockPersistOneTimeSettlementScan).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockAdminSignOut).not.toHaveBeenCalled()
+  })
+
+  it('uses protected Auth metadata when the optional identities array is absent', async () => {
+    mockUser.identities = []
+
+    const response = await POST(request({ confirm: 'DELETE' }))
+
+    expect(response.status).toBe(400)
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
 
   it('never revives canceled billing when database scheduling fails', async () => {
     mockRpc.mockResolvedValue({ data: null, error: { message: 'database unavailable' } })

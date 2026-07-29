@@ -128,6 +128,7 @@ function authFor(userId: string, sessionGeneration: number): AuthSessionReturn {
     user: {
       id: userId,
       email: `${userId}@example.com`,
+      app_metadata: { provider: 'google', providers: ['google'] },
       identities: [],
     },
     userId,

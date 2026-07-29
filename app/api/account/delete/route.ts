@@ -132,9 +132,31 @@ export const POST = withAuth(
     if (!isAccountRecoveryToken(recoveryToken)) {
       return badRequest('Invalid recovery credential')
     }
-    const providers = (user.identities ?? []).map((identity) => identity.provider)
+    const providers = new Set(
+      (user.identities ?? [])
+        .map((identity) => identity.provider)
+        .filter(
+          (provider): provider is string => typeof provider === 'string' && provider.length > 0
+        )
+    )
+    const metadataProvider = user.app_metadata?.provider
+    if (typeof metadataProvider === 'string' && metadataProvider.length > 0) {
+      providers.add(metadataProvider)
+    }
+    const metadataProviders = user.app_metadata?.providers
+    if (Array.isArray(metadataProviders)) {
+      for (const provider of metadataProviders) {
+        if (typeof provider === 'string' && provider.length > 0) providers.add(provider)
+      }
+    }
     const isWalletEmail = (user.email ?? '').endsWith('@wallet.arena')
-    const hasPassword = !isWalletEmail && providers.includes('email')
+    const hasPassword = !isWalletEmail && providers.has('email')
+
+    // `identities` is optional in the Auth user shape. Missing provider data
+    // must not silently downgrade a password account to typed confirmation.
+    if (!isWalletEmail && providers.size === 0) {
+      return forbidden('Unable to verify account authentication method')
+    }
 
     if (hasPassword) {
       if (typeof password !== 'string' || password.length === 0 || password.length > 4096) {

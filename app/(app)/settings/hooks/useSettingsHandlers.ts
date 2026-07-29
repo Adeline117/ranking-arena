@@ -1699,9 +1699,27 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     if (!showDeleteAccountModal) return
     const scope = captureViewer()
     if (!scope || auth.user?.id !== scope.userId) return
-    const providers = (auth.user.identities ?? []).map((identity) => identity.provider)
+    const providers = new Set(
+      (auth.user.identities ?? [])
+        .map((identity) => identity.provider)
+        .filter(
+          (provider): provider is string => typeof provider === 'string' && provider.length > 0
+        )
+    )
+    const metadataProvider = auth.user.app_metadata?.provider
+    if (typeof metadataProvider === 'string' && metadataProvider.length > 0) {
+      providers.add(metadataProvider)
+    }
+    const metadataProviders = auth.user.app_metadata?.providers
+    if (Array.isArray(metadataProviders)) {
+      for (const provider of metadataProviders) {
+        if (typeof provider === 'string' && provider.length > 0) providers.add(provider)
+      }
+    }
     const isWalletEmail = (auth.user.email ?? '').endsWith('@wallet.arena')
-    setDeleteHasPassword(!isWalletEmail && providers.includes('email'))
+    // Unknown provider state stays on the stronger password UI. The server
+    // independently fails that state closed instead of accepting typed DELETE.
+    setDeleteHasPassword(!isWalletEmail && (providers.has('email') || providers.size === 0))
   }, [auth.sessionGeneration, auth.user, captureViewer, showDeleteAccountModal])
 
   const handleDeleteAccount = async () => {
