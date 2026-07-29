@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, serverError } from '@/lib/api/response'
+import { twoFactorDisableResultSchema } from '@/lib/security/two-factor-credentials'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('2fa-disable')
@@ -49,44 +50,28 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Invalid password' }, { status: 403 })
     }
 
-    // Check that 2FA is currently enabled.
-    // maybeSingle: auth users without a user_profiles row yet are a legitimate
-    // state — no profile row means 2FA was never enabled.
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('totp_enabled')
-      .eq('id', user.id)
-      .maybeSingle()
+    const { data, error } = await supabase.rpc('disable_two_factor_credentials_atomic', {
+      p_user_id: user.id,
+    })
 
-    if (profileError) {
-      logger.error('[2FA Disable] Profile fetch error:', profileError)
-      return serverError('Failed to fetch user profile')
-    }
-
-    if (!profile?.totp_enabled) {
-      return badRequest('2FA is not enabled')
-    }
-
-    // Disable 2FA: set enabled to false and delete secret from secure table
-    const [{ error: updateError }] = await Promise.all([
-      supabase.from('user_profiles').update({ totp_enabled: false }).eq('id', user.id),
-      supabase.from('user_2fa_secrets').delete().eq('user_id', user.id),
-    ])
-
-    if (updateError) {
-      logger.error('[2FA Disable] Update error:', updateError)
+    if (error) {
+      logger.error('[2FA Disable] Disablement RPC failed:', error)
       return serverError('Failed to disable 2FA')
     }
 
-    // Delete all backup codes for this user
-    const { error: deleteError } = await supabase
-      .from('backup_codes')
-      .delete()
-      .eq('user_id', user.id)
-
-    if (deleteError) {
-      logger.error('[2FA Disable] Backup codes deletion error:', deleteError)
-      // Non-critical: 2FA is already disabled
+    const parsed = twoFactorDisableResultSchema.safeParse(data)
+    if (!parsed.success) {
+      logger.error('[2FA Disable] Disablement RPC returned an invalid response')
+      return serverError('Failed to disable 2FA')
+    }
+    if (parsed.data.status === 'not_enabled') {
+      return badRequest('2FA is not enabled')
+    }
+    if (parsed.data.status !== 'disabled') {
+      logger.error('[2FA Disable] Disablement was rejected', {
+        status: parsed.data.status,
+      })
+      return serverError('Failed to disable 2FA')
     }
 
     return NextResponse.json({ success: true })

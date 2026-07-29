@@ -8,6 +8,7 @@ import { toDataURL } from 'qrcode'
 import { generateTotpSecret } from '@/lib/services/totp'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, serverError } from '@/lib/api/response'
+import { twoFactorEnrollmentStageResultSchema } from '@/lib/security/two-factor-credentials'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('2fa-setup')
@@ -16,38 +17,37 @@ export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
   async ({ user, supabase }) => {
-    // Check if 2FA is already enabled.
-    // maybeSingle: auth users without a user_profiles row yet are a legitimate
-    // state — .single() errors (PGRST116) on 0 rows and turned this into a 500.
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('totp_enabled')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (profileError) {
-      logger.error('[2FA Setup] Profile fetch error:', profileError)
-      return serverError('Failed to fetch user profile')
-    }
-
-    if (profile?.totp_enabled) {
-      return badRequest('2FA is already enabled. Disable it first to reconfigure.')
-    }
-
-    // Generate TOTP secret
     const userEmail = user.email ?? user.id
     const { secret, uri } = generateTotpSecret(userEmail)
 
-    // Generate QR code as data URL
     const qrCode = await toDataURL(uri)
 
-    // Store the secret in secure table (service_role only, not accessible by client)
-    const { error: updateError } = await supabase
-      .from('user_2fa_secrets')
-      .upsert({ user_id: user.id, totp_secret: secret, updated_at: new Date().toISOString() })
+    const { data, error } = await supabase.rpc('stage_two_factor_enrollment_secret_atomic', {
+      p_user_id: user.id,
+      p_totp_secret: secret,
+    })
 
-    if (updateError) {
-      logger.error('[2FA Setup] Secret storage error:', updateError)
+    if (error) {
+      logger.error('[2FA Setup] Enrollment staging RPC failed:', error)
+      return serverError('Failed to store TOTP secret')
+    }
+
+    const parsed = twoFactorEnrollmentStageResultSchema.safeParse(data)
+    if (!parsed.success) {
+      logger.error('[2FA Setup] Enrollment staging RPC returned an invalid response')
+      return serverError('Failed to store TOTP secret')
+    }
+
+    if (parsed.data.status === 'already_enabled') {
+      return badRequest('2FA is already enabled. Disable it first to reconfigure.')
+    }
+    if (parsed.data.status === 'profile_not_found') {
+      return badRequest('User profile not found. Complete your profile before enabling 2FA.')
+    }
+    if (parsed.data.status !== 'staged') {
+      logger.error('[2FA Setup] Enrollment staging was rejected', {
+        status: parsed.data.status,
+      })
       return serverError('Failed to store TOTP secret')
     }
 

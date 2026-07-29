@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server'
 import { generateBackupCodes, hashBackupCode } from '@/lib/services/totp'
 import { withAuth } from '@/lib/api/middleware'
 import { serverError } from '@/lib/api/response'
+import { twoFactorBackupCodeRotationResultSchema } from '@/lib/security/two-factor-credentials'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('2fa-backup-codes')
@@ -16,49 +17,33 @@ export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
   async ({ user, supabase }) => {
-    // Check that 2FA is enabled.
-    // maybeSingle: auth users without a user_profiles row yet are a legitimate
-    // state — no profile row means 2FA was never enabled.
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('totp_enabled')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (profileError) {
-      logger.error('[2FA Backup Codes] Profile fetch error:', profileError)
-      return serverError('Failed to fetch user profile')
-    }
-
-    if (!profile?.totp_enabled) {
-      return NextResponse.json({ error: '2FA is not enabled. Enable 2FA first.' }, { status: 400 })
-    }
-
-    // Generate new backup codes
     const backupCodes = generateBackupCodes(8)
-    const hashedCodes = backupCodes.map((plainCode: string) => ({
-      user_id: user.id,
-      code_hash: hashBackupCode(plainCode),
-      used: false,
-    }))
+    const codeHashes = backupCodes.map((plainCode: string) => hashBackupCode(plainCode))
 
-    // Delete old backup codes for this user
-    const { error: deleteError } = await supabase
-      .from('backup_codes')
-      .delete()
-      .eq('user_id', user.id)
+    const { data, error } = await supabase.rpc('rotate_two_factor_backup_codes_atomic', {
+      p_user_id: user.id,
+      p_code_hashes: codeHashes,
+    })
 
-    if (deleteError) {
-      logger.error('[2FA Backup Codes] Delete old codes error:', deleteError)
+    if (error) {
+      logger.error('[2FA Backup Codes] Rotation RPC failed:', error)
       return serverError('Failed to regenerate backup codes')
     }
 
-    // Insert new hashed codes
-    const { error: insertError } = await supabase.from('backup_codes').insert(hashedCodes)
+    const parsed = twoFactorBackupCodeRotationResultSchema.safeParse(data)
+    if (!parsed.success) {
+      logger.error('[2FA Backup Codes] Rotation RPC returned an invalid response')
+      return serverError('Failed to regenerate backup codes')
+    }
 
-    if (insertError) {
-      logger.error('[2FA Backup Codes] Insert error:', insertError)
-      return serverError('Failed to store new backup codes')
+    if (parsed.data.status === 'not_enabled') {
+      return NextResponse.json({ error: '2FA is not enabled. Enable 2FA first.' }, { status: 400 })
+    }
+    if (parsed.data.status !== 'rotated') {
+      logger.error('[2FA Backup Codes] Rotation was rejected', {
+        status: parsed.data.status,
+      })
+      return serverError('Failed to regenerate backup codes')
     }
 
     return NextResponse.json({

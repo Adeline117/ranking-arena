@@ -60,40 +60,16 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 
 const mockGetAuthUser = jest.fn()
 
-// Supabase mock: supports chained .from().select().eq().maybeSingle() and .from().upsert()
-const mockProfileResult: {
-  data: { totp_enabled: boolean } | null
+const mockRpcResult: {
+  data: Record<string, unknown> | null
   error: { message: string; code: string } | null
 } = {
-  data: { totp_enabled: false },
+  data: { status: 'staged' },
   error: null,
 }
-const mockUpsertResult: { error: { message: string; code: string } | null } = { error: null }
 
 const mockSupabase = {
-  from: jest.fn((table: string) => {
-    if (table === 'user_profiles') {
-      return {
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            maybeSingle: jest.fn().mockResolvedValue(mockProfileResult),
-          }),
-        }),
-      }
-    }
-    if (table === 'user_2fa_secrets') {
-      return {
-        upsert: jest.fn().mockResolvedValue(mockUpsertResult),
-      }
-    }
-    return {
-      select: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
-      single: jest.fn().mockResolvedValue({ data: null, error: null }),
-      upsert: jest.fn().mockResolvedValue({ error: null }),
-    }
-  }),
+  rpc: jest.fn().mockImplementation(async () => mockRpcResult),
 }
 
 jest.mock('@/lib/api/middleware', () => ({
@@ -164,10 +140,8 @@ describe('POST /api/settings/2fa/setup', () => {
       uri: 'otpauth://totp/RankingArena:test@test.com?secret=JBSWY3DPEHPK3PXP&issuer=RankingArena',
     })
     mockToDataURL.mockResolvedValue('data:image/png;base64,iVBORw0KGgoAAAA...')
-    // Reset Supabase mock results
-    mockProfileResult.data = { totp_enabled: false }
-    mockProfileResult.error = null
-    mockUpsertResult.error = null
+    mockRpcResult.data = { status: 'staged' }
+    mockRpcResult.error = null
   })
 
   // --- Authentication ---
@@ -188,7 +162,7 @@ describe('POST /api/settings/2fa/setup', () => {
   // --- Already Enabled Guard ---
 
   it('returns 400 when 2FA is already enabled', async () => {
-    mockProfileResult.data = { totp_enabled: true }
+    mockRpcResult.data = { status: 'already_enabled' }
 
     const req = new NextRequest('http://localhost/api/settings/2fa/setup', {
       method: 'POST',
@@ -228,20 +202,21 @@ describe('POST /api/settings/2fa/setup', () => {
     expect(mockGenerateTotpSecret).toHaveBeenCalledWith('user-456')
   })
 
-  it('stores TOTP secret in user_2fa_secrets table', async () => {
+  it('stages the exact TOTP secret through the atomic RPC', async () => {
     const req = new NextRequest('http://localhost/api/settings/2fa/setup', {
       method: 'POST',
     })
     const res = await POST(req)
 
     expect(res.status).toBe(200)
-    expect(mockSupabase.from).toHaveBeenCalledWith('user_2fa_secrets')
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('stage_two_factor_enrollment_secret_atomic', {
+      p_user_id: 'user-123',
+      p_totp_secret: 'JBSWY3DPEHPK3PXP',
+    })
   })
 
-  it('proceeds with setup when no profile row exists (new auth user)', async () => {
-    // maybeSingle returns data: null, error: null for 0 rows — must not 500
-    mockProfileResult.data = null
-    mockProfileResult.error = null
+  it('fails without staging when no profile row exists', async () => {
+    mockRpcResult.data = { status: 'profile_not_found' }
 
     const req = new NextRequest('http://localhost/api/settings/2fa/setup', {
       method: 'POST',
@@ -249,15 +224,14 @@ describe('POST /api/settings/2fa/setup', () => {
     const res = await POST(req)
     const body = await res.json()
 
-    expect(res.status).toBe(200)
-    expect(body.secret).toBe('JBSWY3DPEHPK3PXP')
+    expect(res.status).toBe(400)
+    expect(body.error?.message ?? body.error).toMatch(/profile/i)
   })
 
   // --- Error Handling ---
 
-  it('returns 500 when profile fetch fails', async () => {
-    mockProfileResult.data = null
-    mockProfileResult.error = { message: 'DB error', code: '500' }
+  it('returns 500 when the staging RPC returns no row', async () => {
+    mockRpcResult.data = null
 
     const req = new NextRequest('http://localhost/api/settings/2fa/setup', {
       method: 'POST',
@@ -266,11 +240,11 @@ describe('POST /api/settings/2fa/setup', () => {
     const body = await res.json()
 
     expect(res.status).toBe(500)
-    expect(body.error?.message ?? body.error).toMatch(/Failed to fetch|server/i)
+    expect(body.error?.message ?? body.error).toMatch(/Failed to store|server/i)
   })
 
   it('returns 500 when secret storage fails', async () => {
-    mockUpsertResult.error = { message: 'Insert error', code: '500' }
+    mockRpcResult.error = { message: 'Insert error', code: '500' }
 
     const req = new NextRequest('http://localhost/api/settings/2fa/setup', {
       method: 'POST',

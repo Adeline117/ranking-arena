@@ -8,6 +8,10 @@ import { z } from 'zod'
 import { verifyTotpCode, generateBackupCodes, hashBackupCode } from '@/lib/services/totp'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest } from '@/lib/api/response'
+import {
+  twoFactorEnableResultSchema,
+  twoFactorEnrollmentReadResultSchema,
+} from '@/lib/security/two-factor-credentials'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('2fa-verify')
@@ -41,75 +45,83 @@ export const POST = withAuth(
     }
     const { code } = parsed.data
 
-    // Check if already enabled (maybeSingle: profile row may not exist yet)
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('totp_enabled')
-      .eq('id', user.id)
-      .maybeSingle()
+    const { data: enrollmentData, error: enrollmentError } = await supabase.rpc(
+      'read_two_factor_enrollment_secret',
+      { p_user_id: user.id }
+    )
 
-    if (profile?.totp_enabled) {
+    if (enrollmentError) {
+      logger.error('[2FA Verify] Enrollment read RPC failed:', enrollmentError)
+      return NextResponse.json({ error: 'Failed to verify 2FA setup' }, { status: 500 })
+    }
+
+    const enrollment = twoFactorEnrollmentReadResultSchema.safeParse(enrollmentData)
+    if (!enrollment.success) {
+      logger.error('[2FA Verify] Enrollment read RPC returned an invalid response')
+      return NextResponse.json({ error: 'Failed to verify 2FA setup' }, { status: 500 })
+    }
+    if (enrollment.data.status === 'already_enabled') {
       return badRequest('2FA is already enabled')
     }
-
-    // Get the stored TOTP secret from secure table
-    const { data: secretRow, error: secretError } = await supabase
-      .from('user_2fa_secrets')
-      .select('totp_secret')
-      .eq('user_id', user.id)
-      .single()
-
-    if (secretError || !secretRow?.totp_secret) {
+    if (enrollment.data.status === 'profile_not_found') {
+      return badRequest('User profile not found. Complete your profile before enabling 2FA.')
+    }
+    if (enrollment.data.status === 'secret_not_found') {
       return badRequest('No TOTP secret found. Please run setup first.')
     }
+    if (enrollment.data.status !== 'ready') {
+      logger.error('[2FA Verify] Enrollment read was rejected', {
+        status: enrollment.data.status,
+      })
+      return NextResponse.json({ error: 'Failed to verify 2FA setup' }, { status: 500 })
+    }
 
-    // Verify the code
-    const isValid = verifyTotpCode(secretRow.totp_secret, code)
+    const isValid = verifyTotpCode(enrollment.data.totp_secret, code)
     if (!isValid) {
       return badRequest('Invalid verification code')
     }
 
-    // Enable 2FA. select('id') so a missing profile row (0 rows updated) is
-    // detected instead of silently reporting success without enabling 2FA.
-    const { data: updatedRows, error: updateError } = await supabase
-      .from('user_profiles')
-      .update({ totp_enabled: true })
-      .eq('id', user.id)
-      .select('id')
+    const backupCodes = generateBackupCodes(8)
+    const codeHashes = backupCodes.map((plainCode: string) => hashBackupCode(plainCode))
+    const { data: enableData, error: enableError } = await supabase.rpc(
+      'enable_two_factor_credentials_atomic',
+      {
+        p_user_id: user.id,
+        p_expected_totp_secret: enrollment.data.totp_secret,
+        p_code_hashes: codeHashes,
+      }
+    )
 
-    if (updateError) {
-      logger.error('[2FA Verify] Enable error:', updateError)
+    if (enableError) {
+      logger.error('[2FA Verify] Enablement RPC failed:', enableError)
       return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
     }
 
-    if (!updatedRows || updatedRows.length === 0) {
-      // Auth user without a user_profiles row — there is nowhere to persist the
-      // 2FA flag yet. Fail explicitly rather than pretending 2FA is on.
+    const enablement = twoFactorEnableResultSchema.safeParse(enableData)
+    if (!enablement.success) {
+      logger.error('[2FA Verify] Enablement RPC returned an invalid response')
+      return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
+    }
+    if (enablement.data.status === 'already_enabled') {
+      return badRequest('2FA is already enabled')
+    }
+    if (enablement.data.status === 'profile_not_found') {
       return badRequest('User profile not found. Complete your profile before enabling 2FA.')
     }
-
-    // Generate backup codes
-    const backupCodes = generateBackupCodes(8)
-    const hashedCodes = backupCodes.map((plainCode: string) => ({
-      user_id: user.id,
-      code_hash: hashBackupCode(plainCode),
-      used: false,
-    }))
-
-    // Delete any existing backup codes for this user
-    await supabase.from('backup_codes').delete().eq('user_id', user.id)
-
-    // Store hashed backup codes
-    const { error: insertError } = await supabase.from('backup_codes').insert(hashedCodes)
-
-    if (insertError) {
-      logger.error('[2FA Verify] Backup codes insert error:', insertError)
-      // 2FA is already enabled, but backup codes failed - log but don't fail
-      return NextResponse.json({
-        success: true,
-        backupCodes: [],
-        warning: 'Backup codes could not be generated. Please regenerate them.',
+    if (enablement.data.status === 'secret_not_found') {
+      return badRequest('No TOTP secret found. Please run setup first.')
+    }
+    if (enablement.data.status === 'secret_changed') {
+      return NextResponse.json(
+        { error: '2FA setup changed. Verify the latest QR code and try again.' },
+        { status: 409 }
+      )
+    }
+    if (enablement.data.status !== 'enabled') {
+      logger.error('[2FA Verify] Enablement was rejected', {
+        status: enablement.data.status,
       })
+      return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
     }
 
     return NextResponse.json({
