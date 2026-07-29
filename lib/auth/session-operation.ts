@@ -26,6 +26,7 @@ export type AuthRedirectAcquisitionReceipt = Readonly<{
   operationId: string
   userId: string
   navigationKey: string
+  purpose: 'oauth-callback' | 'password-recovery'
 }>
 
 type StoredSession = {
@@ -108,7 +109,8 @@ export function clearAuthRedirectAcquisitionReceipt(
     !current ||
     current.operationId !== expected.operationId ||
     current.userId !== expected.userId ||
-    current.navigationKey !== expected.navigationKey
+    current.navigationKey !== expected.navigationKey ||
+    current.purpose !== expected.purpose
   ) {
     return false
   }
@@ -255,13 +257,15 @@ function sessionUserId(value: string): string | null {
   }
 }
 
-function isOAuthCallbackAcquisition(): boolean {
-  return typeof window !== 'undefined' && window.location.pathname === '/auth/callback'
+function getAuthRedirectPurpose(): AuthRedirectAcquisitionReceipt['purpose'] | null {
+  if (typeof window === 'undefined') return null
+  if (window.location.pathname === '/auth/callback') return 'oauth-callback'
+  if (window.location.pathname === '/reset-password') return 'password-recovery'
+  return null
 }
 
 function isAuthRedirectAcquisition(): boolean {
-  if (typeof window === 'undefined') return false
-  return isOAuthCallbackAcquisition() || window.location.pathname === '/reset-password'
+  return getAuthRedirectPurpose() !== null
 }
 
 /**
@@ -312,12 +316,14 @@ export const guardedAuthStorage = {
     }
     if (internalRedirectWriter) {
       const completed = completeAuthIdentityOperation(bound, userId)
-      const navigationKey = isOAuthCallbackAcquisition() ? getAuthRedirectNavigationKey() : null
-      if (completed && navigationKey) {
+      const navigationKey = getAuthRedirectNavigationKey()
+      const purpose = getAuthRedirectPurpose()
+      if (completed && navigationKey && purpose) {
         redirectAcquisitionReceipt = {
           operationId: completed.id,
           userId,
           navigationKey,
+          purpose,
         }
       }
     }

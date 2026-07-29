@@ -69,6 +69,7 @@ function AuthCallbackContent() {
       const currentOperation = getCurrentAuthOperation()
       if (
         !receipt ||
+        receipt.purpose !== 'oauth-callback' ||
         receipt.navigationKey !== getAuthRedirectNavigationKey() ||
         !currentOperation ||
         currentOperation.id !== receipt.operationId ||
@@ -94,6 +95,7 @@ function AuthCallbackContent() {
       if (!receipt) return isCallbackBoundaryCurrent(boundary)
 
       if (
+        receipt.purpose !== 'oauth-callback' ||
         receipt.userId !== candidateSession.user.id ||
         getCurrentCallbackAcquisitionReceipt()?.operationId !== receipt.operationId
       ) {

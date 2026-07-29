@@ -348,7 +348,8 @@ function initializeAuth() {
         } else if (
           event === 'SIGNED_IN' ||
           event === 'TOKEN_REFRESHED' ||
-          event === 'INITIAL_SESSION'
+          event === 'INITIAL_SESSION' ||
+          event === 'PASSWORD_RECOVERY'
         ) {
           if (!isSessionAllowedForCurrentAuthOperation(session?.user.id ?? null)) return
           if (!isExpectedTransitionSession(session?.user.id ?? null)) return

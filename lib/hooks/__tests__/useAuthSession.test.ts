@@ -83,6 +83,25 @@ describe('useAuthSession', () => {
     expect(result.current.userId).toBeNull()
   })
 
+  it('commits the exact PASSWORD_RECOVERY session as the canonical viewer', async () => {
+    const { result } = renderHook(() => useAuthSession())
+    await waitFor(() => expect(mockAuthStateCallback).toBeDefined())
+    act(() => {
+      const generation = tokenRefreshCoordinator.beginIdentityTransition('recovery-user')
+      tokenRefreshCoordinator.completeIdentityTransition(generation, 'recovery-user')
+      mockAuthStateCallback?.('PASSWORD_RECOVERY', {
+        user: { id: 'recovery-user', email: 'recovery@example.test' },
+        access_token: 'recovery-access',
+        refresh_token: 'recovery-refresh',
+      })
+    })
+
+    await waitFor(() => expect(result.current.userId).toBe('recovery-user'))
+    expect(result.current.viewerKey).toBe('user:recovery-user')
+    expect(result.current.accessToken).toBe('recovery-access')
+    await act(async () => tokenRefreshCoordinator.signOut())
+  })
+
   it('resolves a cross-tab identity lease only when the matching session storage event arrives', async () => {
     const { result } = renderHook(() => useAuthSession())
     await waitFor(() => expect(mockAuthStateCallback).toBeDefined())

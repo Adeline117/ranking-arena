@@ -94,6 +94,26 @@ describe('guarded auth session storage', () => {
       operationId: operation?.id,
       userId: 'oauth-user',
       navigationKey: '/auth/callback?returnUrl=%2Ffeed',
+      purpose: 'oauth-callback',
+    })
+    window.history.pushState({}, '', '/')
+  })
+
+  it('issues a distinct receipt for a password-recovery redirect acquisition', () => {
+    window.history.pushState(
+      {},
+      '',
+      '/reset-password#access_token=recovery-token&refresh_token=refresh&type=recovery'
+    )
+    guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('recovery-user', 'recovery-token'))
+
+    const operation = getCurrentAuthOperation()
+    expect(getAuthRedirectNavigationKey()).toBe('/reset-password')
+    expect(getAuthRedirectAcquisitionReceipt()).toEqual({
+      operationId: operation?.id,
+      userId: 'recovery-user',
+      navigationKey: '/reset-password',
+      purpose: 'password-recovery',
     })
     window.history.pushState({}, '', '/')
   })

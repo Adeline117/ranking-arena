@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense, useRef } from 'react'
+import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -8,10 +9,43 @@ import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getPasswordStrength, validateEmail } from '../login/components/loginHelpers'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  isVerifiedSessionSnapshotCurrent,
+  verifySessionSnapshot,
+  type VerifiedSessionSnapshot,
+} from '@/lib/auth/verified-session'
+import {
+  clearAuthRedirectAcquisitionReceipt,
+  getAuthRedirectAcquisitionReceipt,
+  getAuthRedirectNavigationKey,
+  getCurrentAuthOperation,
+  type AuthRedirectAcquisitionReceipt,
+} from '@/lib/auth/session-operation'
 
 // Password floor: minimum 8 chars AND strength at least "fair" (level >= 2),
 // matching the login/register flow. The strength meter is the real gate.
 const PASSWORD_MIN_LENGTH = 8
+
+function getCurrentPasswordRecoveryReceipt(
+  session?: Pick<Session, 'user'> | null
+): AuthRedirectAcquisitionReceipt | null {
+  const receipt = getAuthRedirectAcquisitionReceipt()
+  const operation = getCurrentAuthOperation()
+  if (
+    !receipt ||
+    receipt.purpose !== 'password-recovery' ||
+    receipt.navigationKey !== getAuthRedirectNavigationKey() ||
+    !operation ||
+    operation.id !== receipt.operationId ||
+    !operation.targetKnown ||
+    operation.expectedUserId !== receipt.userId ||
+    (session && session.user.id !== receipt.userId)
+  ) {
+    return null
+  }
+  return receipt
+}
 
 // CSS keyframe animations
 const injectStyles = () => {
@@ -193,6 +227,7 @@ const injectStyles = () => {
 
 function ResetPasswordContent() {
   const { language: lang, setLanguage: setLang, t } = useLanguage()
+  const auth = useAuthSession()
   const [email, setEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -202,11 +237,17 @@ function ResetPasswordContent() {
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [countdown, setCountdown] = useState(0)
-  const [isResetMode, setIsResetMode] = useState(false)
+  const [recoverySession, setRecoverySession] = useState<Session | null>(null)
+  const [verifiedRecovery, setVerifiedRecovery] = useState<VerifiedSessionSnapshot | null>(null)
   const [mounted, setMounted] = useState(false)
   const errorRef = useRef<HTMLDivElement>(null)
+  const passwordSubmissionRef = useRef(0)
+  const activePasswordSubmissionRef = useRef<number | null>(null)
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const router = useRouter()
   const _searchParams = useSearchParams()
+
+  const isResetMode = verifiedRecovery !== null
 
   const passwordStrength = getPasswordStrength(newPassword)
   const passwordMeetsFloor =
@@ -219,26 +260,93 @@ function ResetPasswordContent() {
   }, [])
 
   useEffect(() => {
-    const hashParams = new URLSearchParams(window.location.hash.substring(1))
-    const accessToken = hashParams.get('access_token')
-    const type = hashParams.get('type')
-
-    if (accessToken && type === 'recovery') {
-      setIsResetMode(true)
+    let cancelled = false
+    const adoptRecoverySession = (session: Session | null) => {
+      if (cancelled || !session || !getCurrentPasswordRecoveryReceipt(session)) return
+      setRecoverySession(session)
     }
-
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, _session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsResetMode(true)
-      }
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // The event is necessary evidence that GoTrue accepted a recovery link;
+      // a user-controlled hash alone is never authorization to update a password.
+      if (event === 'PASSWORD_RECOVERY') adoptRecoverySession(session)
     })
 
+    // GoTrue can emit PASSWORD_RECOVERY before React subscribes. Its guarded
+    // storage write leaves a tab-local receipt, so only that exact acquisition
+    // may bootstrap from getSession. Never fall back to an unrelated current B.
+    if (getCurrentPasswordRecoveryReceipt()) {
+      void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+        if (!sessionError) adoptRecoverySession(data.session)
+      })
+    }
+
     return () => {
+      cancelled = true
       subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const receipt = recoverySession && getCurrentPasswordRecoveryReceipt(recoverySession)
+
+    if (
+      !recoverySession ||
+      !receipt ||
+      !auth.authChecked ||
+      !auth.isLoggedIn ||
+      auth.userId !== recoverySession.user.id ||
+      auth.accessToken !== recoverySession.access_token
+    ) {
+      if (recoverySession) {
+        passwordSubmissionRef.current += 1
+        activePasswordSubmissionRef.current = null
+        setVerifiedRecovery(null)
+        setLoading(false)
+        setSuccess(null)
+      }
+      if (recoverySession && !receipt) setRecoverySession(null)
+      return
+    }
+
+    void verifySessionSnapshot(supabase, recoverySession)
+      .then((snapshot) => {
+        if (
+          cancelled ||
+          !snapshot.viewerScope ||
+          !isVerifiedSessionSnapshotCurrent(snapshot) ||
+          !getCurrentPasswordRecoveryReceipt(snapshot.session)
+        ) {
+          return
+        }
+        setVerifiedRecovery(snapshot)
+      })
+      .catch(() => {
+        if (!cancelled) setVerifiedRecovery(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    auth.accessToken,
+    auth.authChecked,
+    auth.isLoggedIn,
+    auth.sessionGeneration,
+    auth.userId,
+    recoverySession,
+  ])
+
+  useEffect(
+    () => () => {
+      passwordSubmissionRef.current += 1
+      activePasswordSubmissionRef.current = null
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current)
+    },
+    []
+  )
 
   useEffect(() => {
     if (countdown > 0) {
@@ -317,6 +425,21 @@ function ResetPasswordContent() {
   }
 
   const handleResetPassword = async () => {
+    const snapshot = verifiedRecovery
+    const receipt = snapshot && getCurrentPasswordRecoveryReceipt(snapshot.session)
+    if (
+      !snapshot ||
+      !snapshot.viewerScope ||
+      !receipt ||
+      !isVerifiedSessionSnapshotCurrent(snapshot) ||
+      auth.userId !== snapshot.user.id ||
+      auth.accessToken !== snapshot.session.access_token
+    ) {
+      setError(t('loginResetFailed'))
+      return
+    }
+    if (activePasswordSubmissionRef.current !== null) return
+
     if (!newPassword) {
       setError(t('resetPasswordPasswordRequired'))
       return
@@ -340,26 +463,64 @@ function ResetPasswordContent() {
     setError(null)
     setSuccess(null)
     setLoading(true)
+    const submission = ++passwordSubmissionRef.current
+    activePasswordSubmissionRef.current = submission
 
     try {
-      const { error: updateError } = await tokenRefreshCoordinator.updateUser({
-        password: newPassword,
-      })
+      const { data, error: updateError } = await tokenRefreshCoordinator.updateUserWithSession(
+        { password: newPassword },
+        {
+          expectedUserId: snapshot.user.id,
+          sessionGeneration: snapshot.viewerScope.sessionGeneration,
+        }
+      )
 
-      if (updateError) {
-        setError(updateError.message)
+      if (
+        submission !== passwordSubmissionRef.current ||
+        !isVerifiedSessionSnapshotCurrent(snapshot) ||
+        !getCurrentPasswordRecoveryReceipt(snapshot.session)
+      ) {
         return
       }
 
+      if (
+        updateError ||
+        !data.user ||
+        !data.session ||
+        data.user.id !== snapshot.user.id ||
+        data.session.user.id !== snapshot.user.id
+      ) {
+        setError(updateError?.message || t('loginResetFailed'))
+        return
+      }
+
+      clearAuthRedirectAcquisitionReceipt(receipt)
+
       setSuccess(t('resetPasswordSuccess'))
 
-      setTimeout(() => {
-        router.push('/login')
+      redirectTimerRef.current = setTimeout(() => {
+        if (
+          submission === passwordSubmissionRef.current &&
+          isVerifiedSessionSnapshotCurrent(snapshot)
+        ) {
+          router.push('/login')
+        }
       }, 3000)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('loginResetFailed'))
+      if (
+        submission === passwordSubmissionRef.current &&
+        isVerifiedSessionSnapshotCurrent(snapshot)
+      ) {
+        setError(err instanceof Error ? err.message : t('loginResetFailed'))
+      }
     } finally {
-      setLoading(false)
+      if (
+        submission === passwordSubmissionRef.current &&
+        activePasswordSubmissionRef.current === submission
+      ) {
+        activePasswordSubmissionRef.current = null
+        setLoading(false)
+      }
     }
   }
 
