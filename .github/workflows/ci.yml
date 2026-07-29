@@ -296,8 +296,11 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci --ignore-scripts
-      - run: npm run build
+      - name: Build application
         env:
+          # The production webpack graph exceeds V8's ~2 GiB default
+          # old-space limit on ubuntu-latest.
+          NODE_OPTIONS: --max-old-space-size=4096
           NODE_ENV: production
           # build 时 next 收集页面数据会评估路由模块，@/lib/env 对 CRON_SECRET /
           # SUPABASE_* 做 fail-fast 校验（NODE_ENV=production 时硬抛）。Vercel build
@@ -309,6 +312,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ci-build-service-placeholder
           # CriticalEnvSchema 要求 CRON_SECRET ≥32 字符，dummy 兜底须够长。
           CRON_SECRET: ci-build-placeholder-cron-secret-0000000000
+        run: npm run build
 
       - name: Bundle size check
         run: |
