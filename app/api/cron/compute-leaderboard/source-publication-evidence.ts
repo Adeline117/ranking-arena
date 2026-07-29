@@ -74,7 +74,8 @@ const scoreInputPublishBundleSchema = z
 
 export type PublicationWindow = z.infer<typeof publicationWindowSchema>
 export type SourcePublicationScoreRow = z.infer<typeof scoreRowSchema>
-type PhysicalBoardRow = z.infer<typeof physicalBoardSchema>
+export type SourcePublicationPhysicalBoard = z.infer<typeof physicalBoardSchema>
+type PhysicalBoardRow = SourcePublicationPhysicalBoard
 type PhysicalEvidenceStatus = PhysicalBoardRow['evidence_status']
 
 export type SourcePublicationRetainReason =
@@ -162,6 +163,7 @@ export type SourceAliasPublicationEvidence =
 export interface ParsedSourcePublicationEvidence {
   window: PublicationWindow
   scoreRows: SourcePublicationScoreRow[]
+  physicalBoards: SourcePublicationPhysicalBoard[]
   freshScoreRows: SourcePublicationScoreRow[]
   aliases: SourceAliasPublicationEvidence[]
   freshAliases: FreshSourcePublicationEvidence[]
@@ -694,6 +696,10 @@ export function parseSourcePublicationEvidence(
   return {
     window: windowResult.data,
     scoreRows: parsedBundle.data.scoreRows,
+    // Zod returns a normalized clone. Retaining the exact validated physical
+    // rows lets the publication manifest bind both halves of this one RPC
+    // attempt without rereading mutable source tables.
+    physicalBoards: parsedBundle.data.physicalBoards,
     freshScoreRows: parsedBundle.data.scoreRows.filter((row) => freshSources.has(row.platform)),
     aliases: finalAliases,
     freshAliases,

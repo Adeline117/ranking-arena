@@ -11,7 +11,10 @@
 
 import { getSupabaseAdmin } from '@/lib/api'
 import type { Period } from '@/lib/utils/arena-score'
-import { fetchPhase1FromArena } from './fetch-phase1-arena'
+import {
+  readSourcePublicationBundle,
+  type ReadSourcePublicationBundleResult,
+} from './read-source-publication-bundle'
 import { type TraderRow } from './trader-row'
 
 export type Phase1ReadSource = 'arena'
@@ -27,6 +30,8 @@ export async function runPhase1(
   season: Period,
   _traderMap: Map<string, TraderRow>,
   addToTraderMap: (row: TraderRow) => void
-): Promise<void> {
-  await fetchPhase1FromArena(supabase, season, addToTraderMap)
+): Promise<ReadSourcePublicationBundleResult> {
+  const publication = await readSourcePublicationBundle(supabase, season)
+  for (const row of publication.traderRows) addToTraderMap(row)
+  return publication
 }

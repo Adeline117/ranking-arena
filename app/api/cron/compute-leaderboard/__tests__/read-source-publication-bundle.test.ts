@@ -151,6 +151,7 @@ describe('readSourcePublicationBundle', () => {
       p_max_age_hours: 48,
     })
     expect(result.evidence.scoreRows).toHaveLength(3)
+    expect(result.evidence.physicalBoards).toHaveLength(4)
     expect(result.evidence.freshScoreRows.map((row) => row.platform)).toEqual(['shared', 'shared'])
     expect(result.evidence.retainedAliases.map((alias) => alias.source)).toEqual(['retained'])
     expect(result.evidence.freshAliases).toEqual([
