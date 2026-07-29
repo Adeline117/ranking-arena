@@ -33,7 +33,7 @@ import type {
 } from '@/lib/types/leaderboard'
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { TradingPeriod } from '@/lib/types/unified-trader'
-import { tieredGetOrSet, tieredGet } from '@/lib/cache/redis-layer'
+import { tieredGetOrSet, tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { withPublic } from '@/lib/api/middleware'
@@ -60,6 +60,11 @@ import {
   PUBLIC_ACTIVE_RANKING_SOURCES,
   parsePublicActiveRankingSource,
 } from '@/lib/constants/exchanges'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 const logger = createLogger('rankings-api')
 
@@ -187,114 +192,71 @@ export const GET = withPublic(
       !cursor &&
       offset === 0
     const cacheKey = isDefaultQuery
-      ? publicRankingCacheKey(`api:rankings:v3:${normalizedWindow}:${category || 'all'}:${limit}`)
+      ? publicRankingCacheKey(
+          `api:rankings:sealed-v4:${normalizedWindow}:${category || 'all'}:${limit}`
+        )
       : null // skip cache for filtered queries
 
     let result: unknown
 
     try {
-      if (normalizedWindow === 'composite') {
-        // Try precomputed composite first (written by /api/cron/precompute-composite)
-        const precomputedKey = category
-          ? `precomputed:composite:${category}`
-          : 'precomputed:composite:all'
-        const { data: precomputed } = await (
-          await import('@/lib/cache/redis-layer')
-        ).tieredGet<{
-          traders: unknown[]
-          totalcount: number
-          total_count: number
-          as_of: string | null
-          is_stale: boolean
-          availableSources: string[]
-          source_freshness?: Array<{
-            source: string
-            updated_at: string | null
-            is_stale: boolean
-            age_seconds: number | null
-          }>
-        }>(publicRankingCacheKey(`${precomputedKey}:v2`), 'hot')
+      const query: RankingsQuery = {
+        window: normalizedWindow === 'composite' ? '90d' : normalizedWindow,
+        category: category || undefined,
+        platform: (platform || undefined) as Platform | undefined,
+        limit,
+        offset,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+        min_pnl: minPnl,
+        min_trades: minTrades,
+        trader_type: traderType || undefined,
+      }
+      const cacheSeason = query.window.toUpperCase() as TradingPeriod
+      const cachedEntry = cacheKey
+        ? parseSealedRankingCacheEntry<unknown>(
+            (await tieredGet<unknown>(cacheKey, 'hot')).data,
+            cacheSeason
+          )
+        : null
 
-        if (
-          precomputed &&
-          !platform &&
-          !minPnl &&
-          !minTrades &&
-          sortBy === 'arena_score' &&
-          sortDir === 'desc'
-        ) {
-          // Quarantine the complete cached set before slicing so a hidden row
-          // never consumes a page slot or truncates later safe rows.
-          const publicPrecomputed = sanitizePublicRankingSourcePayload(precomputed)
-          const publicTraders = publicPrecomputed.traders
-          const totalCount = publicTraders.length
-          const traders = publicTraders.slice(offset, offset + limit)
-          result = {
-            ...publicPrecomputed,
-            traders,
-            window: 'COMPOSITE',
-            totalCount,
-            totalcount: totalCount,
-            total_count: totalCount,
-            hasMore: offset + traders.length < totalCount,
-            next_cursor: null,
-          }
-        } else {
-          // Fall back to real-time compute for filtered/sorted queries
-          const compositeFetcher = async () =>
-            sanitizePublicRankingSourcePayload(
-              await getCompositeRankings({
-                category: category || undefined,
-                platform: (platform || undefined) as Platform | undefined,
-                limit,
-                offset,
-                sort_by: sortBy,
-                sort_dir: sortDir,
-                min_pnl: minPnl,
-                min_trades: minTrades,
-              })
-            )
-          result = cacheKey
-            ? await tieredGetOrSet(cacheKey, compositeFetcher, 'hot', ['rankings'])
-            : await compositeFetcher()
-        }
+      if (cachedEntry) {
+        result = cachedEntry.value
       } else {
-        const query: RankingsQuery = {
-          window: normalizedWindow,
-          category: category || undefined,
-          platform: (platform || undefined) as Platform | undefined,
-          limit,
-          offset,
-          sort_by: sortBy,
-          sort_dir: sortDir,
-          min_pnl: minPnl,
-          min_trades: minTrades,
-          trader_type: traderType || undefined,
+        const sealedRead = await getRankingsFallback(query, cursor)
+        const safeValue = sanitizePublicRankingSourcePayload(
+          normalizedWindow === 'composite'
+            ? { ...sealedRead.value, window: 'COMPOSITE' as const }
+            : sealedRead.value
+        )
+        const safeRead = { ...sealedRead, value: safeValue }
+        if (cacheKey) {
+          await tieredSet(cacheKey, createSealedRankingCacheEntry(safeRead), 'hot', ['rankings'])
         }
-        const rankingsFetcher = async () =>
-          sanitizePublicRankingSourcePayload(await getRankingsFallback(query, cursor))
-        result = cacheKey
-          ? await tieredGetOrSet(cacheKey, rankingsFetcher, 'hot', ['rankings'])
-          : await rankingsFetcher()
+        result = safeValue
       }
     } catch (fetchError) {
       // DB query failed — try to serve last-known-good cached data instead of returning 500.
       // Only attempt fallback for default (cacheable) queries; filtered queries have no cache.
       if (cacheKey) {
-        const { data: staleData } = await tieredGet(cacheKey, 'hot')
-        if (staleData) {
+        const cacheSeason =
+          normalizedWindow === 'composite'
+            ? '90D'
+            : (normalizedWindow.toUpperCase() as TradingPeriod)
+        const staleEntry = parseSealedRankingCacheEntry<Record<string, unknown>>(
+          (await tieredGet<unknown>(cacheKey, 'hot')).data,
+          cacheSeason
+        )
+        if (staleEntry) {
           logger.warn(
             `Rankings DB query failed, serving stale cache for ${cacheKey}:`,
             fetchError instanceof Error ? fetchError.message : String(fetchError)
           )
-          result =
-            typeof staleData === 'object' && staleData !== null
-              ? {
-                  ...(staleData as Record<string, unknown>),
-                  is_stale: true,
-                  stale_reason: 'db_fallback',
-                }
-              : staleData
+          result = {
+            ...staleEntry.value,
+            is_stale: true,
+            stale_reason: 'db_fallback',
+          }
         } else {
           // No cache either — re-throw to let the error handler respond
           throw fetchError
@@ -315,7 +277,35 @@ export const GET = withPublic(
  * Fetch rankings via unified data layer (leaderboard_ranks).
  * Returns the same response shape as the legacy getRankingsFallback.
  */
-async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: string) {
+async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string) {
+  const { getReadReplica } = await import('@/lib/supabase/read-replica')
+  const supabase = getReadReplica()
+  const season = rankingsQuery.window.toUpperCase() as TradingPeriod
+  const proofSources = rankingsQuery.platform
+    ? [rankingsQuery.platform]
+    : filterPublicRankingSources(
+        rankingsQuery.category
+          ? PUBLIC_ACTIVE_RANKING_SOURCES.filter(
+              (source) => PLATFORM_CATEGORY[source] === rankingsQuery.category
+            )
+          : PUBLIC_ACTIVE_RANKING_SOURCES
+      )
+
+  return readSealedRankingGeneration(
+    supabase,
+    { season, sources: proofSources },
+    (publication) =>
+      getRankingsFallbackForCohort(rankingsQuery, cursor, supabase, publication.scoreCohortId),
+    { timeoutMs: 10_000 }
+  )
+}
+
+async function getRankingsFallbackForCohort(
+  rankingsQuery: RankingsQuery,
+  _cursor: string | undefined,
+  supabase: ReturnType<typeof import('@/lib/supabase/read-replica').getReadReplica>,
+  scoreCohortId: string
+) {
   const {
     window,
     category,
@@ -329,9 +319,6 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     trader_type,
   } = rankingsQuery
 
-  // Use read replica for ranking reads (falls back to primary if no replica configured)
-  const { getReadReplica } = await import('@/lib/supabase/read-replica')
-  const supabase = getReadReplica()
   // Cap at 1000: limit=5000 triggers 5 parallel chunk queries on a 314k-row
   // table under the CHUNK_SIZE pagination logic, saturating the Supabase
   // connection pool with little user benefit. Nobody actually needs 5000
@@ -378,6 +365,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       .from('leaderboard_ranks')
       .select(SELECT_COLS, opts ? { count: opts.count } : undefined)
       .eq('season_id', seasonId)
+      .filter('rank_publication_id', 'eq', scoreCohortId)
       // >0 (not just non-null): excluded/zeroed traders are set to arena_score=0
       // by zeroOutExcluded; live board + Redis sync already use >0, so align the
       // main board's tail & counts with them (was .not(null) → leaked 0-score rows).
@@ -644,51 +632,5 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     source_freshness: freshnessSummary.sources,
     availableSources,
     next_cursor: null,
-  }
-}
-
-/**
- * Composite rankings: uses 90D arena_score directly.
- *
- * compute-leaderboard already computes a weighted composite score
- * (90D x 0.70 + 30D x 0.25 + 7D x 0.05) and stores it as arena_score in 90D.
- * So instead of fetching 3 seasons and merging in JS, we just query 90D.
- * This reduces DB load from 3 queries to 1 and eliminates in-memory merge.
- */
-async function getCompositeRankings(params: {
-  category?: TradingCategory
-  platform?: Platform
-  limit: number
-  offset: number
-  sort_by: string
-  sort_dir: 'asc' | 'desc'
-  min_pnl?: number
-  min_trades?: number
-}) {
-  // Composite = 90D (which already contains the weighted composite arena_score)
-  // Delegate to getRankingsFallback with window='90d' and relabel as COMPOSITE
-  const result = await getRankingsFallback({
-    window: '90d' as RankingWindow,
-    category: params.category,
-    platform: params.platform,
-    limit: params.limit,
-    offset: params.offset,
-    sort_by: params.sort_by as
-      | 'arena_score'
-      | 'roi'
-      | 'pnl'
-      | 'drawdown'
-      | 'copiers'
-      | 'win_rate'
-      | 'sharpe_ratio'
-      | 'trades_count',
-    sort_dir: params.sort_dir,
-    min_pnl: params.min_pnl,
-    min_trades: params.min_trades,
-  })
-
-  return {
-    ...result,
-    window: 'COMPOSITE' as const,
   }
 }

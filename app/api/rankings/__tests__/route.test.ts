@@ -52,9 +52,17 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 
 const mockTieredGetOrSet = jest.fn()
 const mockTieredGet = jest.fn()
+const mockTieredSet = jest.fn()
 jest.mock('@/lib/cache/redis-layer', () => ({
   tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
   tieredGet: (...args: unknown[]) => mockTieredGet(...args),
+  tieredSet: (...args: unknown[]) => mockTieredSet(...args),
+}))
+
+const mockReadSealedRankingGeneration = jest.fn()
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  ...jest.requireActual('@/lib/rankings/read-sealed-ranking-generation'),
+  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -104,6 +112,43 @@ import { EXCHANGE_SLUG_ALIASES, PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/cons
 import { RETIRED_SOURCES } from '@/lib/constants/retired-sources'
 import { PUBLIC_RANKING_QUARANTINED_SOURCES } from '@/lib/rankings/publication-policy'
 
+const TEST_COHORT_ID = '11111111-1111-4111-8111-111111111111'
+
+async function readThroughSealedGeneration(
+  _supabase: unknown,
+  input: { season: '7D' | '30D' | '90D'; sources: string[] },
+  reader: (publication: {
+    state: 'sealed'
+    season: '7D' | '30D' | '90D'
+    scoreCohortId: string
+    proofs: unknown[]
+  }) => Promise<unknown>
+) {
+  const publication = {
+    state: 'sealed' as const,
+    season: input.season,
+    scoreCohortId: TEST_COHORT_ID,
+    proofs: [...input.sources].sort().map((source) => ({
+      season_id: input.season,
+      source,
+      source_as_of: '2026-07-29T10:00:00.000000Z',
+      recorded_at: '2026-07-29T10:01:00.000000Z',
+      score_cohort_id: TEST_COHORT_ID,
+      rank_mutation_seq: 9,
+      current_mutation_seq: 9,
+      published_rank_count: 1,
+      published_identity_sha256: 'a'.repeat(64),
+      is_sealed: true,
+    })),
+  }
+  const value = await reader(publication)
+  return {
+    value,
+    publication,
+    publicationIdentity: JSON.stringify(publication),
+  }
+}
+
 /** Build a thenable chainable Supabase mock */
 function makeChainableQuery(result = { data: [], error: null, count: 0 }) {
   const storage: Record<string, jest.Mock> = {}
@@ -129,6 +174,8 @@ describe('GET /api/rankings', () => {
     jest.clearAllMocks()
     mockTieredGetOrSet.mockImplementation(async (_key: string, fn: () => Promise<unknown>) => fn())
     mockTieredGet.mockResolvedValue({ data: null })
+    mockTieredSet.mockResolvedValue(true)
+    mockReadSealedRankingGeneration.mockImplementation(readThroughSealedGeneration)
     // Default: Supabase query returns empty results
     mockSupabaseQuery.mockReturnValue(makeChainableQuery())
   })
@@ -416,6 +463,7 @@ describe('GET /api/rankings', () => {
         'in',
         '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
       )
+      expect(rankingQuery?.filter).toHaveBeenCalledWith('rank_publication_id', 'eq', TEST_COHORT_ID)
       expect(freshnessQuery?.not).toHaveBeenCalledWith(
         'source',
         'in',
@@ -515,12 +563,18 @@ describe('GET /api/rankings', () => {
 
     expect(res.status).toBe(200)
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:precomputed:composite:all:v2',
+      'public-rank-policy-v4:api:rankings:sealed-v4:composite:all:100',
       'hot'
+    )
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ season: '90D' }),
+      expect.any(Function),
+      { timeoutMs: 10_000 }
     )
   })
 
-  it('keeps the composite writer key aligned while sanitizing its cached payload', async () => {
+  it('rejects an unsealed legacy composite cache payload', async () => {
     const first = { platform: 'binance_futures', trader_key: 'first' }
     const last = { platform: 'hyperliquid', trader_key: 'last' }
     const nextPage = { platform: 'bybit', trader_key: 'next-page' }
@@ -547,43 +601,29 @@ describe('GET /api/rankings', () => {
     const data = body.data ?? body
 
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:precomputed:composite:all:v2',
+      'public-rank-policy-v4:api:rankings:sealed-v4:composite:all:2',
       'hot'
     )
-    expect(data.traders).toEqual([first, last])
-    expect(data.totalCount).toBe(3)
-    expect(data.totalcount).toBe(3)
-    expect(data.total_count).toBe(3)
-    expect(data.hasMore).toBe(true)
-    expect(data.as_of).toBeNull()
-    expect(data.is_stale).toBe(true)
-    expect(data.availableSources).toEqual(['binance_futures', 'hyperliquid', 'bybit'])
-    expect(data.source_freshness.map((row: { source: string }) => row.source)).toEqual([
-      'binance_futures',
-      'hyperliquid',
-      'bybit',
-    ])
+    expect(data.traders).toEqual([])
+    expect(data.traders).not.toContainEqual(first)
+    expect(data.traders).not.toContainEqual(last)
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(1)
+    expect(mockTieredSet).toHaveBeenCalledWith(
+      'public-rank-policy-v4:api:rankings:sealed-v4:composite:all:2',
+      expect.objectContaining({ contract: 'sealed-ranking-cache@1', season: '90D' }),
+      'hot',
+      ['rankings']
+    )
   })
 
-  it('sanitizes a polluted hot-cache page without dropping safe rows after it', async () => {
+  it('rejects a polluted generic hot-cache page', async () => {
     const first = { platform: 'binance_futures', trader_key: 'first' }
     const last = { platform: 'hyperliquid', trader_key: 'last' }
-    mockTieredGetOrSet.mockResolvedValue({
-      traders: [first, { platform: 'okx_web3_solana', trader_key: 'blocked' }, last],
-      window: '90D',
-      totalCount: 999,
-      totalcount: 999,
-      total_count: 999,
-      hasMore: true,
-      next_cursor: 'blocked-cursor',
-      as_of: 'blocked-aggregate-watermark',
-      is_stale: false,
-      availableSources: ['binance_futures', 'okx_web3_solana', 'hyperliquid'],
-      source_freshness: [
-        { source: 'binance_futures', updated_at: 'safe' },
-        { source: 'okx_web3_solana', updated_at: 'blocked' },
-        { source: 'hyperliquid', updated_at: 'safe' },
-      ],
+    mockTieredGet.mockResolvedValue({
+      data: {
+        traders: [first, { platform: 'okx_web3_solana', trader_key: 'blocked' }, last],
+        window: '90D',
+      },
     })
 
     const req = new NextRequest('http://localhost/api/rankings?window=90d')
@@ -591,29 +631,19 @@ describe('GET /api/rankings', () => {
     const body = await res.json()
     const data = body.data ?? body
 
-    expect(mockTieredGetOrSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v4:api:rankings:v3:/),
-      expect.any(Function),
+    expect(mockTieredGet).toHaveBeenCalledWith(
+      'public-rank-policy-v4:api:rankings:sealed-v4:90d:all:100',
+      'hot'
+    )
+    expect(mockTieredSet).toHaveBeenCalledWith(
+      'public-rank-policy-v4:api:rankings:sealed-v4:90d:all:100',
+      expect.objectContaining({ contract: 'sealed-ranking-cache@1', season: '90D' }),
       'hot',
       ['rankings']
     )
-    expect(data.traders).toEqual([first, last])
-    expect(data).toEqual(
-      expect.objectContaining({
-        totalCount: 2,
-        totalcount: 2,
-        total_count: 2,
-        hasMore: false,
-        next_cursor: null,
-        as_of: null,
-        is_stale: true,
-      })
-    )
-    expect(data.availableSources).toEqual(['binance_futures', 'hyperliquid'])
-    expect(data.source_freshness.map((row: { source: string }) => row.source)).toEqual([
-      'binance_futures',
-      'hyperliquid',
-    ])
+    expect(data.traders).toEqual([])
+    expect(data.traders).not.toContainEqual(first)
+    expect(data.traders).not.toContainEqual(last)
   })
 
   it.each(PUBLIC_RANKING_QUARANTINED_SOURCES)(
