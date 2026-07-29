@@ -144,6 +144,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729059000_atomic_referral_attribution.sql
   20260729060000_retryable_referral_qualification.sql
   20260729061000_source_legacy_platform_alias_contract.sql
+  20260729062000_atomic_trader_follow_limit.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
@@ -166,6 +167,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
   20260729021000_disable_legacy_api_tier_writer.sql
+  20260729063000_close_trader_follow_direct_writes.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover
