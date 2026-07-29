@@ -11,6 +11,7 @@ import type { CSSProperties } from 'react'
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { getScoreColorInfo } from '@/lib/utils/score-colors'
+import { formatDrawdown } from '@/lib/utils/format'
 import Metric from '@/app/components/ui/Metric'
 import ScoreMiniBar from '@/app/components/ranking/ScoreMiniBar'
 import { getStaticTranslation } from '@/lib/i18n/server'
@@ -26,11 +27,6 @@ function getSourceTypeLabel(sourceType: InitialTrader['source_type']): string {
   if (sourceType === 'web3') return 'On-chain'
   if (sourceType === 'futures') return 'Futures'
   return 'Spot'
-}
-
-function getDrawdownDisplay(value: number | null): string {
-  if (value == null) return '—'
-  return Math.abs(value) < 0.05 ? '< 0.1%' : `-${Math.abs(value).toFixed(1)}%`
 }
 
 function RankBadge({ rank }: { rank: number }) {
@@ -86,7 +82,13 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
               : trader.trades_count === 0
                 ? t('holderBadge')
                 : '—'
-          const drawdownDisplay = getDrawdownDisplay(trader.max_drawdown)
+          const drawdownMagnitude =
+            trader.max_drawdown != null &&
+            Number.isFinite(trader.max_drawdown) &&
+            Math.abs(trader.max_drawdown) <= 100
+              ? Math.abs(trader.max_drawdown)
+              : null
+          const drawdownDisplay = formatDrawdown(trader.max_drawdown)
           const href = `/trader/${encodeURIComponent(trader.id)}?platform=${encodeURIComponent(trader.source)}`
 
           return (
@@ -175,7 +177,7 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                 <div className="ssr-metric-cell ssr-mdd-cell">
                   <span className="ssr-mobile-metric-label">MDD</span>
                   <Metric
-                    value={trader.max_drawdown != null ? -Math.abs(trader.max_drawdown) : null}
+                    value={drawdownMagnitude == null ? null : -drawdownMagnitude}
                     format="percent"
                     display={drawdownDisplay}
                     size="sm"
