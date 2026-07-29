@@ -10,6 +10,7 @@ import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { withCron } from '@/lib/api/with-cron'
+import { parseFollowRecountAcknowledgement } from './acknowledgement'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -29,15 +30,7 @@ export const GET = withCron('recount-follow-counts', async (_request: NextReques
     throw error
   }
 
-  const updatedCount = Number(data?.[0]?.updated_count)
-  if (
-    !Array.isArray(data) ||
-    data.length !== 1 ||
-    !Number.isSafeInteger(updatedCount) ||
-    updatedCount < 0
-  ) {
-    throw new Error('Follow-count recount returned an invalid acknowledgement')
-  }
+  const updatedCount = parseFollowRecountAcknowledgement(data)
   logger.info(`[recount-follow-counts] Fixed ${updatedCount} user profiles`)
 
   return { count: updatedCount }
