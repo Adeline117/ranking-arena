@@ -795,6 +795,7 @@ export async function searchTraders(
   const { query, limit = 10, platform } = params
 
   if (!query || query.length < 1) return []
+  if (platform && !isPublicRankingSourceAllowed(platform)) return []
 
   // 8s timeout — search should be fast; prevents UI hang on degraded Supabase
   return withTimeout(searchTradersInner(supabase, { query: query, limit, platform }), 8_000).catch(

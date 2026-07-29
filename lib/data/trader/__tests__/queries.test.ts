@@ -30,13 +30,18 @@ jest.mock('@/lib/utils/logger', () => ({
 }))
 
 const mockReadSealedRankingGeneration = jest.fn()
+const mockReadSealedRankIdentities = jest.fn()
 
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
   ...jest.requireActual('@/lib/rankings/read-sealed-ranking-generation'),
   readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
 }))
 
-import { getLeaderboard, resolveTrader, safeQuery, withTimeout } from '../queries'
+jest.mock('@/lib/rankings/read-sealed-rank-identities', () => ({
+  readSealedRankIdentities: (...args: unknown[]) => mockReadSealedRankIdentities(...args),
+}))
+
+import { getLeaderboard, resolveTrader, safeQuery, searchTraders, withTimeout } from '../queries'
 
 function chainableQuery() {
   const query: Record<string, jest.Mock> = {}
@@ -479,5 +484,122 @@ describe('resolveTrader sealed candidate ranking', () => {
     await expect(
       resolveTrader({ from: jest.fn(() => candidateQuery) } as never, { handle: 'shared' })
     ).rejects.toThrow('publication proof unavailable')
+  })
+})
+
+describe('searchTraders public ranking policy', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockReadSealedRankIdentities.mockImplementation(
+      async (
+        _supabase: unknown,
+        _season: string,
+        identities: Array<{ source: string; sourceTraderId: string }>
+      ) => ({
+        value: identities.map((identity, index) => ({
+          source: identity.source,
+          source_trader_id: identity.sourceTraderId,
+          handle: 'same-trader',
+          avatar_url: null,
+          roi: 20,
+          pnl: 100,
+          win_rate: 55,
+          followers: 10,
+          arena_score: 80 - index,
+          rank: index + 1,
+        })),
+      })
+    )
+  })
+
+  it.each(['okx_web3_solana', 'bitget_bots_futures', 'bitget_bots_spot'])(
+    'does not query quarantined platform %s',
+    async (platform) => {
+      const supabase = { rpc: jest.fn(), from: jest.fn() }
+
+      await expect(
+        searchTraders(supabase as never, { query: 'trader', platform })
+      ).resolves.toEqual([])
+      expect(supabase.rpc).not.toHaveBeenCalled()
+      expect(supabase.from).not.toHaveBeenCalled()
+    }
+  )
+
+  it('removes quarantined ranked results returned by the fuzzy RPC', async () => {
+    const supabase = {
+      rpc: jest.fn().mockResolvedValue({
+        data: [
+          {
+            source_trader_id: 'public-id',
+            handle: 'same-trader',
+            source: 'binance_futures',
+            avatar_url: null,
+            relevance_score: 10_000,
+            arena_score: 80,
+            roi: 20,
+            pnl: 100,
+            rank: 1,
+          },
+          {
+            source_trader_id: 'quarantined-id',
+            handle: 'same-trader',
+            source: 'okx_web3_solana',
+            avatar_url: null,
+            relevance_score: 20_000,
+            arena_score: 99,
+            roi: 40,
+            pnl: 200,
+            rank: 1,
+          },
+        ],
+        error: null,
+      }),
+    }
+
+    const result = await searchTraders(supabase as never, { query: 'same-trader' })
+
+    expect(mockReadSealedRankIdentities).toHaveBeenCalledWith(supabase, '90D', [
+      { source: 'binance_futures', sourceTraderId: 'public-id' },
+    ])
+    expect(result.map(({ platform }) => platform)).toEqual(['binance_futures'])
+  })
+
+  it('filters fallback identities before requesting their sealed ranks', async () => {
+    const sourceQuery: Record<string, jest.Mock> = {}
+    for (const method of ['select', 'or', 'eq']) {
+      sourceQuery[method] = jest.fn(() => sourceQuery)
+    }
+    sourceQuery.limit = jest.fn().mockResolvedValue({
+      data: [
+        {
+          source_trader_id: 'public-id',
+          handle: 'same-trader',
+          source: 'binance_futures',
+          avatar_url: null,
+        },
+        {
+          source_trader_id: 'quarantined-id',
+          handle: 'same-trader',
+          source: 'bitget_bots_futures',
+          avatar_url: null,
+        },
+      ],
+      error: null,
+    })
+
+    const supabase = {
+      rpc: jest.fn().mockResolvedValue({ data: null, error: { message: 'unavailable' } }),
+      from: jest.fn((table: string) => {
+        if (table !== 'trader_sources') throw new Error(`unexpected table: ${table}`)
+        return sourceQuery
+      }),
+    }
+
+    const result = await searchTraders(supabase as never, { query: 'same-trader' })
+
+    expect(mockReadSealedRankIdentities).toHaveBeenCalledWith(supabase, '90D', [
+      { source: 'binance_futures', sourceTraderId: 'public-id' },
+    ])
+    expect(result.map(({ platform }) => platform)).toEqual(['binance_futures'])
   })
 })
