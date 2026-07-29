@@ -1,7 +1,7 @@
 /**
- * Shared referral-program constants — single source of truth so the server-side
- * grant logic (`app/api/referral/apply/route.ts`) and the UI copy / progress
- * indicators (`/referral`, profile ReferralCard) can never drift apart.
+ * Shared referral-program constants — single source of truth so the atomic
+ * qualification worker (`app/api/cron/qualify-referrals/route.ts`) and the UI
+ * copy / progress indicators (`/referral`, profile ReferralCard) cannot drift.
  *
  * COST-SENSITIVE: these values directly control free Pro grants and therefore
  * real billing exposure. Any change here is a cost decision — review carefully.
@@ -18,8 +18,8 @@ export const REFERRAL_ADVOCATE_PRO_DAYS = 30
  * (the double-sided reward). This is a PER-SIGNUP cost.
  *
  * KILL SWITCH: set to 0 to disable the friend-side reward entirely. The grant
- * is idempotent (it only fires inside the one-time `/api/referral/apply`
- * success path, which rejects a second apply once `referred_by` is set).
+ * is idempotent through the attribution's durable `friend:<id>` entitlement
+ * identity; qualification retries cannot extend it twice.
  */
 export const REFERRED_FRIEND_TRIAL_DAYS = 7
 
