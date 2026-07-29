@@ -104,10 +104,37 @@ export function getSupabaseAdmin(): SupabaseClient<Database> {
 // caps the worst-case delay for a ban to take effect at CLEAN_TTL seconds on
 // any single instance that had previously seen the user, while still avoiding
 // a DB hit on every authed request for the common clean case.
-const banStatusCache = new Map<string, { ts: number }>()
+const banStatusCache = new Map<string, { ts: number; email: string | null }>()
 const CLEAN_STATUS_TTL_MS = 10_000 // 10 seconds — bans take effect within 10s
 
 export type UserAccountStatus = 'active' | 'suspended' | 'missing' | 'unavailable'
+
+type VerifiedAuthIdentity = Readonly<{ verifiedEmail: string | null }>
+
+async function admitVerifiedAuthProfile(
+  userId: string,
+  verifiedEmail: string | null
+): Promise<UserAccountStatus> {
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data, error } = (await Reflect.apply(supabase.rpc, supabase, [
+      'admit_verified_auth_profile_atomic',
+      { p_user_id: userId, p_verified_email: verifiedEmail },
+    ])) as { data: unknown; error: { message?: string } | null }
+
+    if (error || (data !== 'active' && data !== 'suspended' && data !== 'missing')) {
+      logger.error('[supabase/server] verified profile admission failed', {
+        userId,
+        error: error?.message ?? `invalid acknowledgement: ${String(data)}`,
+      })
+      return 'unavailable'
+    }
+    return data
+  } catch (error) {
+    logger.error('[supabase/server] verified profile admission threw', { userId, error })
+    return 'unavailable'
+  }
+}
 
 /**
  * Resolve the application-account status for an already verified auth user.
@@ -116,21 +143,39 @@ export type UserAccountStatus = 'active' | 'suspended' | 'missing' | 'unavailabl
  * Missing profiles are a temporary legacy/provisioning state, while query
  * failures are security-sensitive outages; neither may be cached as clean.
  */
-export async function getUserAccountStatus(userId: string): Promise<UserAccountStatus> {
+export async function getUserAccountStatus(
+  userId: string,
+  verifiedIdentity?: VerifiedAuthIdentity
+): Promise<UserAccountStatus> {
   const cached = banStatusCache.get(userId)
   const now = Date.now()
-  if (cached && now - cached.ts < CLEAN_STATUS_TTL_MS) {
+  if (
+    cached &&
+    now - cached.ts < CLEAN_STATUS_TTL_MS &&
+    (verifiedIdentity === undefined || cached.email === verifiedIdentity.verifiedEmail)
+  ) {
     return 'active'
   }
   if (cached) {
     banStatusCache.delete(userId)
   }
 
+  if (verifiedIdentity !== undefined) {
+    const status = await admitVerifiedAuthProfile(userId, verifiedIdentity.verifiedEmail)
+    if (status !== 'active') return status
+
+    if (banStatusCache.size > 5000) {
+      banStatusCache.clear()
+    }
+    banStatusCache.set(userId, { ts: now, email: verifiedIdentity.verifiedEmail })
+    return 'active'
+  }
+
   try {
     const supabase = getSupabaseAdmin()
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('banned_at, deleted_at')
+      .select('banned_at, deleted_at, email')
       .eq('id', userId)
       .maybeSingle()
 
@@ -157,7 +202,10 @@ export async function getUserAccountStatus(userId: string): Promise<UserAccountS
     if (banStatusCache.size > 5000) {
       banStatusCache.clear()
     }
-    banStatusCache.set(userId, { ts: now })
+    banStatusCache.set(userId, {
+      ts: now,
+      email: typeof profile.email === 'string' ? profile.email : null,
+    })
     return 'active'
   } catch (error) {
     logger.error('[supabase/server] account status check failed', { userId, error })
@@ -180,7 +228,9 @@ async function getUserFromTokenWithProfilePolicy(
 
     if (error || !user) return null
 
-    const status = await getUserAccountStatus(user.id)
+    const status = await getUserAccountStatus(user.id, {
+      verifiedEmail: user.email ?? null,
+    })
     if (status === 'active' || (allowMissingProfile && status === 'missing')) {
       return user
     }

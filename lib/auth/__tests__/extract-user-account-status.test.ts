@@ -16,7 +16,10 @@ import { extractUserFromRequest } from '../extract-user'
 const originalEnv = process.env
 
 function authResult(userId: string) {
-  return { data: { user: { id: userId, aud: 'authenticated' } }, error: null }
+  return {
+    data: { user: { id: userId, email: `${userId}@example.com`, aud: 'authenticated' } },
+    error: null,
+  }
 }
 
 describe('extractUserFromRequest application-account status', () => {
@@ -45,7 +48,9 @@ describe('extractUserFromRequest application-account status', () => {
 
     expect(result.user).toMatchObject({ id: 'bearer-user' })
     expect(result.error).toBeNull()
-    expect(mockGetUserAccountStatus).toHaveBeenCalledWith('bearer-user')
+    expect(mockGetUserAccountStatus).toHaveBeenCalledWith('bearer-user', {
+      verifiedEmail: 'bearer-user@example.com',
+    })
   })
 
   it.each([
@@ -76,7 +81,9 @@ describe('extractUserFromRequest application-account status', () => {
     )
 
     expect(result).toEqual({ user: null, error: 'Account suspended' })
-    expect(mockGetUserAccountStatus).toHaveBeenCalledWith('cookie-user')
+    expect(mockGetUserAccountStatus).toHaveBeenCalledWith('cookie-user', {
+      verifiedEmail: 'cookie-user@example.com',
+    })
   })
 
   it('returns an active cookie-authenticated user', async () => {

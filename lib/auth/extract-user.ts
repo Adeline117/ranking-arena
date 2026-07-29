@@ -109,7 +109,9 @@ async function requireActiveAppProfile(user: User): Promise<{
   user: User | null
   error: string | null
 }> {
-  const status = await getUserAccountStatus(user.id)
+  const status = await getUserAccountStatus(user.id, {
+    verifiedEmail: user.email ?? null,
+  })
   if (status === 'active') return { user, error: null }
   if (status === 'suspended') return { user: null, error: 'Account suspended' }
 
