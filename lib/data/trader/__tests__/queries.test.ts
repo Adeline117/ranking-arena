@@ -29,7 +29,14 @@ jest.mock('@/lib/utils/logger', () => ({
   },
 }))
 
-import { getLeaderboard, safeQuery, withTimeout } from '../queries'
+const mockReadSealedRankingGeneration = jest.fn()
+
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  ...jest.requireActual('@/lib/rankings/read-sealed-ranking-generation'),
+  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+}))
+
+import { getLeaderboard, resolveTrader, safeQuery, withTimeout } from '../queries'
 
 function chainableQuery() {
   const query: Record<string, jest.Mock> = {}
@@ -262,5 +269,95 @@ describe('getLeaderboard source exclusion', () => {
     expect(from).not.toHaveBeenCalledWith('leaderboard_count_cache')
     expect(result.traders).toHaveLength(2)
     expect(result.total).toBe(13)
+  })
+})
+
+describe('resolveTrader sealed candidate ranking', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockReadSealedRankingGeneration.mockImplementation(
+      async (
+        _supabase: unknown,
+        _input: unknown,
+        reader: (publication: { scoreCohortId: string }) => Promise<unknown>
+      ) => {
+        const publication = {
+          state: 'sealed' as const,
+          season: '90D' as const,
+          scoreCohortId: '11111111-1111-4111-8111-111111111111',
+          proofs: [],
+        }
+        return {
+          value: await reader(publication),
+          publication,
+          publicationIdentity: JSON.stringify(publication),
+        }
+      }
+    )
+  })
+
+  it('uses an exact source+trader pair from the sealed cohort to break handle ties', async () => {
+    const candidateQuery: Record<string, jest.Mock> = {}
+    for (const method of ['select', 'or', 'eq', 'in', 'order']) {
+      candidateQuery[method] = jest.fn(() => candidateQuery)
+    }
+    candidateQuery.limit = jest.fn().mockResolvedValue({
+      data: [
+        {
+          source: 'hyperliquid',
+          source_trader_id: 'id-b',
+          handle: 'shared',
+          avatar_url: null,
+        },
+        {
+          source: 'binance_futures',
+          source_trader_id: 'id-a',
+          handle: 'shared',
+          avatar_url: null,
+        },
+      ],
+      error: null,
+    })
+
+    const rankQuery: Record<string, jest.Mock> = {}
+    for (const method of ['select', 'in', 'eq', 'filter', 'not', 'order']) {
+      rankQuery[method] = jest.fn(() => rankQuery)
+    }
+    rankQuery.limit = jest.fn().mockResolvedValue({
+      data: [
+        // Cartesian false positive: this exact source+ID pair is not a candidate.
+        { source: 'binance_futures', source_trader_id: 'id-b', arena_score: 99 },
+        { source: 'binance_futures', source_trader_id: 'id-a', arena_score: 80 },
+        { source: 'hyperliquid', source_trader_id: 'id-b', arena_score: 70 },
+      ],
+      error: null,
+    })
+
+    const supabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'trader_sources') return candidateQuery
+        if (table === 'leaderboard_ranks') return rankQuery
+        throw new Error(`unexpected table: ${table}`)
+      }),
+    }
+
+    const result = await resolveTrader(supabase as never, { handle: 'shared' })
+
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+      supabase,
+      { season: '90D', sources: ['binance_futures', 'hyperliquid'] },
+      expect.any(Function)
+    )
+    expect(rankQuery.filter).toHaveBeenCalledWith(
+      'rank_publication_id',
+      'eq',
+      '11111111-1111-4111-8111-111111111111'
+    )
+    expect(result).toEqual({
+      platform: 'binance_futures',
+      traderKey: 'id-a',
+      handle: 'shared',
+      avatarUrl: null,
+    })
   })
 })
