@@ -140,6 +140,35 @@ describe('first-party account equity evidence', () => {
     expect(result.events).toEqual([{ ts: closedInsideWindow, pnl: 12, positionLevel: true }])
   })
 
+  it('uses net closed-position profit when the exchange exposes fee-adjusted evidence', async () => {
+    const closedInsideWindow = NOW - 1_000
+    const result = await fetchFirstPartyAccount(
+      client({
+        fetchPositionsHistory: jest.fn().mockResolvedValue([
+          {
+            lastUpdateTimestamp: closedInsideWindow,
+            realizedPnl: -0.0007,
+            info: {
+              netProfit: '-0.0454261',
+              openFee: '-0.02236326',
+              closeFee: '-0.02236284',
+              totalFunding: '0',
+            },
+          },
+        ]),
+      }),
+      {
+        nowMs: NOW,
+        balanceSemantics: 'total_includes_unrealized',
+        realizedPnlSource: 'positions_history',
+      }
+    )
+
+    expect(result.events).toEqual([
+      { ts: closedInsideWindow, pnl: -0.0454261, positionLevel: true },
+    ])
+  })
+
   it('splits position history into exchange-bounded time ranges', async () => {
     const firstClose = NOW - 7.5 * DAY
     const secondClose = NOW - 0.5 * DAY

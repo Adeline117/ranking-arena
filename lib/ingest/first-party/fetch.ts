@@ -119,7 +119,11 @@ async function eventsFromPositionsHistory(
       // CCXT's unified `timestamp` is commonly the position open/create time.
       // Realized PnL belongs to the close/update window.
       const ts = positionCloseTimestamp(r)
-      const pnl = num(r.realizedPnl ?? (r.info as { closedPnl?: unknown })?.closedPnl)
+      const info = r.info as { netProfit?: unknown; closedPnl?: unknown }
+      // Bitget's unified `realizedPnl` is the gross price PnL. Its raw
+      // `netProfit` also includes open/close fees and funding, which is the
+      // amount that actually changed account equity.
+      const pnl = num(info?.netProfit ?? r.realizedPnl ?? info?.closedPnl)
       if (ts === null || pnl === null || ts < rangeStart || ts > rangeEnd) {
         throw new Error('[first-party] position history evidence is invalid')
       }
