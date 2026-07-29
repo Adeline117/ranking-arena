@@ -8,6 +8,7 @@ import {
   consumeAccountRecoveryToken,
   isAccountRecoveryToken,
   persistAccountRecoveryToken,
+  persistAccountRecoveryTokenForRetry,
   replaceDocumentForAccountRecovery,
   retainAccountRecoveryTokenLease,
 } from '../account-recovery-token'
@@ -98,6 +99,25 @@ describe('account recovery token handoff', () => {
     })
     expect(buildAccountRecoveryLoginPath()).toBe(ACCOUNT_RECOVERY_LOGIN_PATH)
     expect(replaceDocumentForAccountRecovery(CURRENT_TOKEN, replace)).toBe(true)
+    expect(replace).toHaveBeenCalledWith(
+      `${ACCOUNT_RECOVERY_LOGIN_PATH}#recovery_token=${CURRENT_TOKEN}`
+    )
+
+    setItem.mockRestore()
+  })
+
+  it('automatically uses the parser-first fallback when retry storage is unavailable', () => {
+    const setItem = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage blocked', 'SecurityError')
+    })
+    const replace = jest.fn()
+
+    expect(persistAccountRecoveryTokenForRetry(CURRENT_TOKEN, replace)).toEqual({
+      status: 'memory',
+      localStorage: false,
+      sessionStorage: false,
+      documentReplaced: true,
+    })
     expect(replace).toHaveBeenCalledWith(
       `${ACCOUNT_RECOVERY_LOGIN_PATH}#recovery_token=${CURRENT_TOKEN}`
     )

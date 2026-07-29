@@ -20,6 +20,9 @@ export type AccountRecoveryTokenPersistence = Readonly<{
   sessionStorage: boolean
 }>
 
+export type AccountRecoveryTokenRetryPersistence = AccountRecoveryTokenPersistence &
+  Readonly<{ documentReplaced: boolean }>
+
 declare global {
   interface Window {
     __arenaAccountRecoveryHandoff?: MemoryRecoveryTokenHandoff
@@ -344,6 +347,24 @@ export function replaceDocumentForAccountRecovery(
   const navigate = replace ?? ((target: string) => window.location.replace(target))
   navigate(`${ACCOUNT_RECOVERY_LOGIN_PATH}#recovery_token=${encodeURIComponent(token)}`)
   return true
+}
+
+/**
+ * Re-stage a credential after a non-terminal recovery outcome.
+ *
+ * If neither Storage lane is durable, immediately repeat the parser-first
+ * full-document handoff. The bootstrap strips the fragment before telemetry
+ * or hydration, while a crash/reload can no longer erase the only credential.
+ */
+export function persistAccountRecoveryTokenForRetry(
+  token: string,
+  replace?: (target: string) => void
+): AccountRecoveryTokenRetryPersistence {
+  const persistence = persistAccountRecoveryToken(token)
+  const documentReplaced =
+    (persistence.status === 'memory' || persistence.status === 'unavailable') &&
+    replaceDocumentForAccountRecovery(token, replace)
+  return { ...persistence, documentReplaced }
 }
 
 /**

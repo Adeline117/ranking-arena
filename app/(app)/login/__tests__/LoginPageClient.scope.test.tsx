@@ -301,8 +301,10 @@ describe('LoginPageClient exact identity boundary', () => {
       )
     )
     expect(window.location.hash).toBe('')
-    expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull()
-    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBeNull()
+    await waitFor(() =>
+      expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBe(recoveryToken)
+    )
+    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBe(recoveryToken)
   })
 
   it('reclaims the in-memory handoff after a real same-URL subtree remount', async () => {
@@ -366,7 +368,46 @@ describe('LoginPageClient exact identity boundary', () => {
     expect(window.location.hash).toBe('')
   })
 
-  it('leaves no credential behind when an in-flight recovery is cancelled by unmount', async () => {
+  it('restages the exact credential after a retryable recovery failure', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    mockSearchParams = new URLSearchParams('recover=1')
+    window.localStorage.setItem(ACCOUNT_RECOVERY_TOKEN_KEY, recoveryToken)
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: false, error: 'temporarily unavailable' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      })
+    )
+
+    await renderLogin()
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+    await screen.findByText('temporarily unavailable')
+
+    expect(window.location.hash).toBe('')
+    await waitFor(() =>
+      expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBe(recoveryToken)
+    )
+    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBe(recoveryToken)
+  })
+
+  it('restages the exact credential after an unknown transport outcome', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    mockSearchParams = new URLSearchParams('recover=1')
+    window.sessionStorage.setItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY, recoveryToken)
+    global.fetch = jest.fn().mockRejectedValue(new TypeError('network unavailable'))
+
+    await renderLogin()
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+    await screen.findByText('networkErrorRetry')
+
+    expect(window.location.hash).toBe('')
+    await waitFor(() =>
+      expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBe(recoveryToken)
+    )
+    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBe(recoveryToken)
+  })
+
+  it('preserves the credential when an in-flight response is unobservable after unmount', async () => {
     const recoveryToken = 'A'.repeat(43)
     const recovery = deferred<Response>()
     mockSearchParams = new URLSearchParams('recover=1')
@@ -389,7 +430,10 @@ describe('LoginPageClient exact identity boundary', () => {
       )
     })
 
-    expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull()
+    await waitFor(() =>
+      expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBe(recoveryToken)
+    )
+    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBe(recoveryToken)
     expect(window.location.hash).toBe('')
   })
 

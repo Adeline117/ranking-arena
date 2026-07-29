@@ -37,6 +37,7 @@ import { safeInternalReturnPath } from '@/lib/auth/safe-return-path'
 import {
   clearAccountRecoveryToken,
   consumeAccountRecoveryToken,
+  persistAccountRecoveryTokenForRetry,
   retainAccountRecoveryTokenLease,
 } from '@/lib/auth/account-recovery-token'
 import { StaleVerifiedSessionError } from '@/lib/auth/verified-session'
@@ -223,6 +224,7 @@ export default function LoginPageClient() {
   const verifyingOtpRef = useRef(false)
   const otpAttemptsRef = useRef(0)
   const mountedRef = useRef(false)
+  const recoveryHandoffConsumedRef = useRef(false)
   const attemptGenerationRef = useRef(0)
   const activeAttemptRef = useRef<LoginAttempt | null>(null)
   const registrationIdentityRef = useRef<ExactLoginIdentity | null>(null)
@@ -493,11 +495,19 @@ export default function LoginPageClient() {
       // Generic error from OAuth callback or other redirects (e.g. provider cancelled)
       setError(decodeURIComponent(errorParam))
     }
-    if (
+    const recoveryRequested =
       searchParams.get('account_deleted') === '1' ||
       // Backward compatibility for links created before the clean handoff.
       searchParams.get('recover') === '1'
-    ) {
+    if (!recoveryRequested) {
+      recoveryHandoffConsumedRef.current = false
+      return
+    }
+    // Translation/provider rerenders must not immediately consume a token
+    // that a failed attempt just restaged for crash/reload recovery.
+    if (recoveryHandoffConsumedRef.current) return
+    recoveryHandoffConsumedRef.current = true
+    {
       const handoff = consumeAccountRecoveryToken()
       if (handoff.status === 'valid') {
         // The helper synchronously removes the fragment/storage before
@@ -1127,6 +1137,7 @@ export default function LoginPageClient() {
     const attempt = beginAttempt()
     let establishedSession: Session | null = null
     let completionCommitted = false
+    let preserveRecoveryToken = recoveryToken !== null
     // Raw URL/storage lanes were already removed. Keep the module remount lease
     // until this attempt reaches success, failure, cancellation or reset.
     setRecovering(true)
@@ -1144,6 +1155,7 @@ export default function LoginPageClient() {
       const data = await res.json()
       assertAttemptAuthBoundaryCurrent(attempt)
       if (res.ok && data.success) {
+        preserveRecoveryToken = false
         setShowRecoveryPrompt(false)
         showToast(t('loginAccountRecovered'), 'success')
         if (recoveryToken) {
@@ -1170,6 +1182,14 @@ export default function LoginPageClient() {
           completionCommitted = true
         }
       } else {
+        // 401/410 are the only terminal token outcomes. Busy, server errors,
+        // malformed responses, and transport failures may leave the atomic
+        // recovery untouched or ambiguously committed; preserve the exact
+        // credential so a passwordless user can safely retry after a reload.
+        if (recoveryToken && (res.status === 401 || res.status === 410)) {
+          preserveRecoveryToken = false
+          setAccountRecoveryToken(null)
+        }
         setError(data.error || t('loginRecoveryFailed'))
       }
     } catch (err) {
@@ -1181,7 +1201,11 @@ export default function LoginPageClient() {
         setError(t('networkErrorRetry'))
       }
     } finally {
-      clearAccountRecoveryToken()
+      if (recoveryToken && preserveRecoveryToken) {
+        persistAccountRecoveryTokenForRetry(recoveryToken)
+      } else {
+        clearAccountRecoveryToken()
+      }
       if (isAttemptCurrent(attempt)) {
         setRecovering(false)
         submittingRef.current = false
