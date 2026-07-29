@@ -144,7 +144,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 90)
+  assert.equal(predeploy.length, 93)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -203,6 +203,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260725017000_leaderboard_rank_typed_batch_contract.sql',
           '20260725017250_normalize_leaderboard_rank_max_drawdown.sql',
           '20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql',
+          '20260728122000_bitget_bots_canonical_timeframe.sql',
+          '20260728123000_arena_bot_header_canonical_snapshot.sql',
+          '20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql',
           '20260729010000_api_keys_server_authority.sql',
         ].includes(migration)
     ),
@@ -222,9 +225,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 102)
+  assert.equal(new Set(all).size, 105)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-49), [
+  assert.deepEqual(predeploy.slice(-52), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -273,6 +276,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260725017000_leaderboard_rank_typed_batch_contract.sql',
     '20260725017250_normalize_leaderboard_rank_max_drawdown.sql',
     '20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql',
+    '20260728122000_bitget_bots_canonical_timeframe.sql',
+    '20260728123000_arena_bot_header_canonical_snapshot.sql',
+    '20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql',
     '20260729010000_api_keys_server_authority.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
@@ -319,6 +325,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260725016500_leaderboard_rank_persisted_codec.sql'))
   assert.ok(predeploy.includes('20260725017000_leaderboard_rank_typed_batch_contract.sql'))
   assert.ok(predeploy.includes('20260725017250_normalize_leaderboard_rank_max_drawdown.sql'))
+  assert.ok(predeploy.includes('20260728122000_bitget_bots_canonical_timeframe.sql'))
+  assert.ok(predeploy.includes('20260728123000_arena_bot_header_canonical_snapshot.sql'))
+  assert.ok(
+    predeploy.includes('20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql')
+  )
   assert.ok(predeploy.includes('20260729010000_api_keys_server_authority.sql'))
   assert.ok(
     predeploy.includes('20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql')
@@ -366,6 +377,15 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(
     !recoveryPrerequisites.includes(
       '20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql'
+    )
+  )
+  assert.ok(!recoveryPrerequisites.includes('20260728122000_bitget_bots_canonical_timeframe.sql'))
+  assert.ok(
+    !recoveryPrerequisites.includes('20260728123000_arena_bot_header_canonical_snapshot.sql')
+  )
+  assert.ok(
+    !recoveryPrerequisites.includes(
+      '20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql'
     )
   )
   assert.ok(!recoveryPrerequisites.includes('20260729010000_api_keys_server_authority.sql'))

@@ -118,6 +118,9 @@ PREDEPLOY_MIGRATIONS=(
   20260725017000_leaderboard_rank_typed_batch_contract.sql
   20260725017250_normalize_leaderboard_rank_max_drawdown.sql
   20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql
+  20260728122000_bitget_bots_canonical_timeframe.sql
+  20260728123000_arena_bot_header_canonical_snapshot.sql
+  20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql
   20260729010000_api_keys_server_authority.sql
 )
 
