@@ -19,6 +19,7 @@ import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
   findRegisteredAttemptBoundLeaderboardAcquisitionContract,
   finishLeaderboardAcquisitionAttempt,
+  finishLeaderboardAcquisitionAttemptInTransaction,
   hasRegisteredAttemptBoundLeaderboardAcquisitionContract,
   LEADERBOARD_ACQUISITION_ATTEMPT_BINDING_CONTRACT,
   LEGACY_LEADERBOARD_ACQUISITION_CONTRACT,
@@ -26,12 +27,17 @@ import {
   projectLeaderboardManifestV3Outcome,
   projectLeaderboardManifestV4Outcome,
   startLeaderboardAcquisitionAttempt,
+  startLeaderboardAcquisitionAttemptInTransaction,
   VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT,
+  type ClaimedLeaderboardAcquisitionAttempt,
   type LeaderboardAcquisitionAttempt,
+  type LeaderboardAcquisitionExecutionBinding,
   type StartLeaderboardAcquisitionAttemptInput,
 } from '../acquisition-attempts'
+import type { IngestQueryExecutor } from '../db'
 
 const attemptId = '00000000-0000-4000-8000-000000000001'
+const executionClaimId = '00000000-0000-4000-8000-000000000099'
 const startedAt = '2026-07-22T03:00:00.123Z'
 const completedAt = '2026-07-22T03:00:02.456Z'
 
@@ -97,6 +103,28 @@ function attempt(
     sourceFetchRegion: 'vps_sg',
     recordedStartedAt: startedAt,
     replayed: false,
+    ...overrides,
+  }
+}
+
+function executionBinding(
+  overrides: Partial<LeaderboardAcquisitionExecutionBinding> = {}
+): LeaderboardAcquisitionExecutionBinding {
+  return Object.freeze({
+    claimId: executionClaimId,
+    generationSeq: 7,
+    sourceId: 1,
+    ...overrides,
+  })
+}
+
+function claimedAttempt(
+  overrides: Partial<ClaimedLeaderboardAcquisitionAttempt> = {}
+): ClaimedLeaderboardAcquisitionAttempt {
+  return {
+    ...attempt(),
+    executionClaimId,
+    executionGenerationSeq: 7,
     ...overrides,
   }
 }
@@ -549,6 +577,81 @@ describe('leaderboard acquisition attempt client', () => {
     ])
   })
 
+  it('starts a claimed attempt once on the caller-owned transaction', async () => {
+    const query = jest.fn(async () => ({
+      rows: [
+        attemptRow({
+          execution_claim_id: executionClaimId,
+          execution_generation_seq: '7',
+        }),
+      ],
+    }))
+    const transaction = { query } as unknown as IngestQueryExecutor
+
+    await expect(
+      startLeaderboardAcquisitionAttemptInTransaction(transaction, executionBinding(), startInput())
+    ).resolves.toEqual(claimedAttempt())
+
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(mockConnect).not.toHaveBeenCalled()
+    const [sql, params] = query.mock.calls[0]
+    expect(String(sql)).toContain('p_execution_claim_id => $10::uuid')
+    expect(String(sql)).toContain('p_execution_generation_seq => $11::bigint')
+    expect(Object.isFrozen(params)).toBe(true)
+    expect(params).toEqual([
+      attemptId,
+      1,
+      30,
+      'tier-a:binance_futures:job-1:1000',
+      'job-1',
+      2,
+      VERIFIED_LEADERBOARD_ACQUISITION_CONTRACT,
+      'a'.repeat(40),
+      'vps_sg',
+      executionClaimId,
+      7,
+    ])
+  })
+
+  it('never reconnects or replays a failed claimed start query', async () => {
+    const failure = Object.assign(new Error('connection outcome unknown'), { code: '08006' })
+    const query = jest.fn(async () => Promise.reject(failure))
+    const transaction = { query } as unknown as IngestQueryExecutor
+
+    await expect(
+      startLeaderboardAcquisitionAttemptInTransaction(transaction, executionBinding(), startInput())
+    ).rejects.toBe(failure)
+
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('rejects a claimed start binding conflict and invalid source before fallback I/O', async () => {
+    const query = jest.fn(async () => ({
+      rows: [
+        attemptRow({
+          execution_claim_id: '00000000-0000-4000-8000-000000000098',
+          execution_generation_seq: '7',
+        }),
+      ],
+    }))
+    const transaction = { query } as unknown as IngestQueryExecutor
+
+    await expect(
+      startLeaderboardAcquisitionAttemptInTransaction(transaction, executionBinding(), startInput())
+    ).rejects.toThrow('conflicting execution')
+    await expect(
+      startLeaderboardAcquisitionAttemptInTransaction(
+        transaction,
+        executionBinding({ sourceId: 2 }),
+        startInput()
+      )
+    ).rejects.toThrow('execution source is invalid')
+
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
   it('starts an attempt-bound v3 acquisition without weakening the v2 contract', async () => {
     enqueueQuery({
       rows: [attemptRow({ capture_contract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT })],
@@ -946,6 +1049,86 @@ describe('leaderboard acquisition attempt client', () => {
       null,
       null,
     ])
+  })
+
+  it('finishes a claimed attempt once on the caller-owned transaction', async () => {
+    const boundAttempt = claimedAttempt()
+    const projection = projectLeaderboardManifestOutcome(boundAttempt, builtManifest('complete'))
+    const query = jest.fn(async () => ({
+      rows: [
+        {
+          attempt_seq: '41',
+          terminal_state: 'complete',
+          recorded_completed_at: '2026-07-22 03:00:03.789+00',
+        },
+      ],
+    }))
+    const transaction = { query } as unknown as IngestQueryExecutor
+
+    await expect(
+      finishLeaderboardAcquisitionAttemptInTransaction(transaction, executionBinding(), {
+        kind: 'manifest',
+        attempt: boundAttempt,
+        projection,
+        sourcePayloadRawObjectId: 101,
+        manifestRawObjectId: 102,
+      })
+    ).resolves.toEqual({
+      attemptSeq: 41,
+      terminalState: 'complete',
+      recordedCompletedAt: '2026-07-22T03:00:03.789Z',
+      replayed: false,
+    })
+
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(mockConnect).not.toHaveBeenCalled()
+    const [sql, params] = query.mock.calls[0]
+    expect(String(sql)).toContain('p_execution_claim_id => $26::uuid')
+    expect(String(sql)).toContain('p_execution_generation_seq => $27::bigint')
+    expect(Object.isFrozen(params)).toBe(true)
+    expect(params).toHaveLength(27)
+    expect(params.slice(-2)).toEqual([executionClaimId, 7])
+  })
+
+  it('never reconnects or replays a failed claimed finish query', async () => {
+    const failure = Object.assign(new Error('connection outcome unknown'), { code: '08006' })
+    const query = jest.fn(async () => Promise.reject(failure))
+    const transaction = { query } as unknown as IngestQueryExecutor
+    const boundAttempt = claimedAttempt()
+
+    await expect(
+      finishLeaderboardAcquisitionAttemptInTransaction(transaction, executionBinding(), {
+        kind: 'manifest',
+        attempt: boundAttempt,
+        projection: projectLeaderboardManifestOutcome(boundAttempt, builtManifest('complete')),
+        sourcePayloadRawObjectId: 101,
+        manifestRawObjectId: 102,
+      })
+    ).rejects.toBe(failure)
+
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('rejects a claimed finish whose attempt belongs to another execution', async () => {
+    const query = jest.fn()
+    const transaction = { query } as unknown as IngestQueryExecutor
+    const foreignAttempt = claimedAttempt({
+      executionClaimId: '00000000-0000-4000-8000-000000000098',
+    })
+
+    await expect(
+      finishLeaderboardAcquisitionAttemptInTransaction(transaction, executionBinding(), {
+        kind: 'processing_failed',
+        attempt: foreignAttempt,
+        captureCompletedAt: null,
+        failureStage: 'session_open',
+        reasonCode: 'upstream_unavailable',
+      })
+    ).rejects.toThrow('execution binding conflicts')
+
+    expect(query).not.toHaveBeenCalled()
+    expect(mockConnect).not.toHaveBeenCalled()
   })
 
   it('replays an uncertain finish on a fresh client without recomputing arguments', async () => {
