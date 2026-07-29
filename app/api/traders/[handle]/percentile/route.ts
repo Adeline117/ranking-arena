@@ -13,11 +13,11 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveTrader } from '@/lib/data/unified'
-import { hasFeatureAccess } from '@/lib/types/premium'
-import _logger from '@/lib/logger'
-import { escapeLikePattern } from '@/lib/sanitize'
+import { hasFeatureAccess, normalizeSubscriptionTier } from '@/lib/types/premium'
+import { PUBLIC_ACTIVE_RANKING_SOURCES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 export const runtime = 'nodejs'
 
@@ -29,6 +29,20 @@ interface PercentileData {
   totalInCategory: number // 同类交易员总数
 }
 
+type PercentileCategory = 'futures' | 'spot' | 'web3'
+
+const CATEGORY_SOURCES: Readonly<Record<PercentileCategory, readonly string[]>> = {
+  futures: filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES).filter(
+    (source) => (SOURCE_TYPE_MAP[source] || 'futures') === 'futures'
+  ),
+  spot: filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES).filter(
+    (source) => SOURCE_TYPE_MAP[source] === 'spot'
+  ),
+  web3: filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES).filter(
+    (source) => SOURCE_TYPE_MAP[source] === 'web3'
+  ),
+}
+
 /**
  * Calculate percentile using COUNT queries instead of fetching all rows.
  * Returns the percentage of traders with a lower score.
@@ -37,34 +51,46 @@ async function calculatePercentileSQL(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   column: string,
   myScore: number | null,
-  categoryFilter: string
-): Promise<number> {
-  if (myScore == null) return 50
+  categorySources: readonly string[],
+  scoreCohortId: string
+): Promise<{ percentile: number; total: number | null }> {
+  if (myScore == null) return { percentile: 50, total: null }
 
-  // Count traders with score below mine
-  // Estimated is fine — the final display is a rounded whole-number
-  // percentile (e.g. "Top 12%"), not an exact rank. Running 2 exact
-  // counts × 4 score columns = 8 serial scans of leaderboard_ranks
-  // (~300k rows) per profile view previously blew through the 30s
-  // budget under cron load.
-  const { count: belowCount } = await supabase
+  const belowQuery = supabase
     .from('leaderboard_ranks')
     .select('id', { count: 'estimated', head: true })
     .eq('season_id', '90D')
-    .ilike('source', `%${escapeLikePattern(categoryFilter)}%`)
+    .in('source', [...categorySources])
+    .filter('rank_publication_id', 'eq', scoreCohortId)
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .not(column, 'is', null)
     .lt(column, myScore)
-
-  // Count total traders with this score (estimated — same rationale)
-  const { count: totalCount } = await supabase
+  const totalQuery = supabase
     .from('leaderboard_ranks')
     .select('id', { count: 'estimated', head: true })
     .eq('season_id', '90D')
-    .ilike('source', `%${escapeLikePattern(categoryFilter)}%`)
+    .in('source', [...categorySources])
+    .filter('rank_publication_id', 'eq', scoreCohortId)
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .not(column, 'is', null)
 
-  if (!totalCount || totalCount === 0) return 50
-  return Math.round(((belowCount ?? 0) / totalCount) * 100)
+  // Estimated counts are sufficient for a rounded percentile, but both counts
+  // must still come from the same sealed cohort.
+  const [{ count: belowCount, error: belowError }, { count: totalCount, error: totalError }] =
+    await Promise.all([belowQuery, totalQuery])
+  if (belowError || totalError) {
+    throw new Error(
+      `percentile count failed: ${belowError?.message ?? totalError?.message ?? 'unknown error'}`
+    )
+  }
+  if (belowCount === null || totalCount === null) {
+    throw new Error('percentile count returned ambiguous null authority')
+  }
+  if (totalCount === 0) return { percentile: 50, total: 0 }
+  return {
+    percentile: Math.round((belowCount / totalCount) * 100),
+    total: totalCount,
+  }
 }
 
 /**
@@ -79,16 +105,19 @@ export async function GET(
 
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSupabaseAdmin()
 
     // 获取用户订阅等级
-    const { data: subscription } = await supabase
+    const { data: subscription, error: subscriptionError } = await supabase
       .from('subscriptions')
       .select('tier')
       .eq('user_id', user.id)
       .maybeSingle()
+    if (subscriptionError) {
+      throw new Error(`subscription authority lookup failed: ${subscriptionError.message}`)
+    }
 
-    const tier = subscription?.tier || 'free'
+    const tier = normalizeSubscriptionTier(subscription?.tier)
 
     // 检查是否有权限
     if (!hasFeatureAccess(tier, 'score_breakdown')) {
@@ -105,88 +134,81 @@ export async function GET(
       return error('Trader not found', 404)
     }
 
-    // Get trader scores from leaderboard_ranks
-    const { data: traderScores, error: traderError } = await supabase
-      .from('leaderboard_ranks')
-      // 三支柱模型 profitability/risk_control/execution = 旧命名 return/drawdown/stability
-      // (storage.ts:173 confirmed profitability_score←return_score)。别名保持返回 key。
-      .select(
-        'arena_score, return_score:profitability_score, drawdown_score:risk_control_score, stability_score:execution_score'
-      )
-      .eq('source', resolved.platform)
-      .eq('source_trader_id', resolved.traderKey)
-      .eq('season_id', '90D')
-      .maybeSingle()
-
-    if (traderError || !traderScores) {
-      return error('Trader not found', 404)
+    const sourceType = SOURCE_TYPE_MAP[resolved.platform] || 'futures'
+    const category: PercentileCategory =
+      sourceType === 'spot' ? 'spot' : sourceType === 'web3' ? 'web3' : 'futures'
+    const categorySources = CATEGORY_SOURCES[category]
+    if (categorySources.length === 0 || !categorySources.includes(resolved.platform)) {
+      throw new Error('percentile source is outside its public category authority')
     }
 
-    // 确定同类类型（futures/spot/web3）
-    let categoryFilter: string
-    if (resolved.platform.includes('web3')) {
-      categoryFilter = 'web3'
-    } else if (resolved.platform.includes('spot')) {
-      categoryFilter = 'spot'
-    } else {
-      categoryFilter = 'futures'
-    }
+    const sealedRead = await readSealedRankingGeneration(
+      supabase,
+      { season: '90D', sources: categorySources },
+      async (publication) => {
+        const { data: traderScores, error: traderError } = await supabase
+          .from('leaderboard_ranks')
+          // 三支柱模型 profitability/risk_control/execution = 旧命名 return/drawdown/stability
+          .select(
+            'arena_score, return_score:profitability_score, drawdown_score:risk_control_score, stability_score:execution_score'
+          )
+          .eq('source', resolved.platform)
+          .eq('source_trader_id', resolved.traderKey)
+          .eq('season_id', '90D')
+          .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+          .or('is_outlier.is.null,is_outlier.eq.false')
+          .not('arena_score', 'is', null)
+          .maybeSingle()
+        if (traderError) {
+          throw new Error(`trader percentile score lookup failed: ${traderError.message}`)
+        }
+        if (!traderScores) return null
 
-    // Get total count in category — estimated (see comment in
-    // calculatePercentileSQL above; this is the "you're ranked X out of
-    // ~N futures traders" display, approximate N is fine)
-    const { count: totalInCategory } = await supabase
-      .from('leaderboard_ranks')
-      .select('id', { count: 'estimated', head: true })
-      .eq('season_id', '90D')
-      .ilike('source', `%${escapeLikePattern(categoryFilter)}%`)
-      .not('arena_score', 'is', null)
+        const [overall, returnPct, drawdown, stability] = await Promise.all([
+          calculatePercentileSQL(
+            supabase,
+            'arena_score',
+            traderScores.arena_score,
+            categorySources,
+            publication.scoreCohortId
+          ),
+          calculatePercentileSQL(
+            supabase,
+            'profitability_score',
+            traderScores.return_score,
+            categorySources,
+            publication.scoreCohortId
+          ),
+          calculatePercentileSQL(
+            supabase,
+            'risk_control_score',
+            traderScores.drawdown_score,
+            categorySources,
+            publication.scoreCohortId
+          ),
+          calculatePercentileSQL(
+            supabase,
+            'execution_score',
+            traderScores.stability_score,
+            categorySources,
+            publication.scoreCohortId
+          ),
+        ])
 
-    if (!totalInCategory || totalInCategory === 0) {
-      return success({
-        percentile: {
-          overall: 50,
-          return: 50,
-          drawdown: 50,
-          stability: 50,
-          totalInCategory: 0,
-        },
-      })
-    }
+        const percentile: PercentileData = {
+          overall: overall.percentile,
+          return: returnPct.percentile,
+          drawdown: drawdown.percentile,
+          stability: stability.percentile,
+          totalInCategory: overall.total ?? 0,
+        }
+        return percentile
+      },
+      { timeoutMs: 20_000 }
+    )
 
-    // Calculate all percentiles in parallel using COUNT queries (not fetching all rows)
-    const [overall, returnPct, drawdown, stability] = await Promise.all([
-      calculatePercentileSQL(supabase, 'arena_score', traderScores.arena_score, categoryFilter),
-      // 列名传真实列(profitability/risk_control/execution)；值经上面别名取到
-      calculatePercentileSQL(
-        supabase,
-        'profitability_score',
-        traderScores.return_score,
-        categoryFilter
-      ),
-      calculatePercentileSQL(
-        supabase,
-        'risk_control_score',
-        traderScores.drawdown_score,
-        categoryFilter
-      ),
-      calculatePercentileSQL(
-        supabase,
-        'execution_score',
-        traderScores.stability_score,
-        categoryFilter
-      ),
-    ])
-
-    const percentile: PercentileData = {
-      overall,
-      return: returnPct,
-      drawdown,
-      stability,
-      totalInCategory,
-    }
-
-    return success({ percentile, category: categoryFilter })
+    if (!sealedRead.value) return error('Trader not found', 404)
+    return success({ percentile: sealedRead.value, category })
   } catch (err: unknown) {
     return handleError(err)
   }
