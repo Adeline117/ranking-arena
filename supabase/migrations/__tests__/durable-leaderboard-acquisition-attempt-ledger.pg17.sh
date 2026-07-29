@@ -5,6 +5,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260722030000_durable_leaderboard_acquisition_attempt_ledger.sql"
 COMPAT_MIGRATION="$ROOT_DIR/supabase/migrations/20260722040000_leaderboard_acquisition_manifest_v3_compat.sql"
+V4_MIGRATION="$ROOT_DIR/supabase/migrations/20260729011000_partitioned_bot_acquisition_manifest_v4.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -1518,6 +1519,234 @@ BEGIN
            attempt.attempt_seq
   ) THEN
     RAISE EXCEPTION 'manifest v3 complete RAW/finish proof failed';
+  END IF;
+END
+$test$;
+SQL
+
+# Install the two exact canonical Bitget bot sources only after all v2/v3
+# compatibility proofs above. The production source table already has these
+# columns; this focused fixture adds just the fields required by the V4
+# source-authority preflight.
+psql_cmd -q <<'SQL'
+ALTER TABLE arena.sources
+  ADD COLUMN product_type text,
+  ADD COLUMN trader_kind_scope text,
+  ADD COLUMN timeframes_derived integer[] NOT NULL DEFAULT '{}',
+  ADD COLUMN page_size integer,
+  ADD COLUMN pagination_kind text,
+  ADD COLUMN meta jsonb NOT NULL DEFAULT '{}';
+
+INSERT INTO arena.sources (
+  id,
+  slug,
+  adapter_slug,
+  timeframes_native,
+  status,
+  serving_mode,
+  currency,
+  fetch_region,
+  product_type,
+  trader_kind_scope,
+  timeframes_derived,
+  page_size,
+  pagination_kind,
+  meta
+) VALUES
+  (
+    5,
+    'bitget_bots_futures',
+    'bitget_bots',
+    ARRAY[30]::integer[],
+    'active',
+    'serving',
+    'USDT',
+    'local',
+    'futures',
+    'bot',
+    ARRAY[]::integer[],
+    20,
+    'numeric',
+    '{"boards":["futures_grid","futures_martingale"]}'::jsonb
+  ),
+  (
+    6,
+    'bitget_bots_spot',
+    'bitget_bots',
+    ARRAY[30]::integer[],
+    'active',
+    'serving',
+    'USDT',
+    'local',
+    'spot',
+    'bot',
+    ARRAY[]::integer[],
+    20,
+    'numeric',
+    '{"boards":["spot_grid","spot_martingale"]}'::jsonb
+  );
+SQL
+
+psql_cmd -q -f "$V4_MIGRATION"
+
+# V3 must not silently stand in for V4 on either newly registered partitioned
+# source. Contract selection is an exact (source_id, contract) lookup.
+expect_failure \
+  "partitioned source v3 fallback" \
+  "SET ROLE service_role; SELECT attempt_seq FROM arena.start_leaderboard_acquisition_attempt('00000000-0000-0000-0000-000000000092', 5, 30, 'tier-a:bitget_bots_futures:job-92:92000', 'job-92', 0, 'arena.ingest.leaderboard-acquisition-manifest@3', repeat('1', 40), 'local')" \
+  "is not registered for source bitget_bots_futures"
+
+# Exercise a complete V4 begin -> exact RAW pair -> terminal outcome chain.
+psql_cmd -q <<'SQL'
+SET ROLE service_role;
+SELECT attempt_seq FROM arena.start_leaderboard_acquisition_attempt(
+  '00000000-0000-0000-0000-000000000093', 5, 30,
+  'tier-a:bitget_bots_futures:job-93:93000', 'job-93', 0,
+  'arena.ingest.leaderboard-acquisition-manifest@4', repeat('1', 40), 'local'
+);
+RESET ROLE;
+
+SELECT public.make_ledger_test_pair(
+  '00000000-0000-0000-0000-000000000093', 5, 'manifest-v4-complete',
+  'manifest-v4-complete'
+);
+
+SELECT outcome.attempt_seq
+FROM public.ledger_test_pairs AS pair
+CROSS JOIN LATERAL arena.finish_leaderboard_acquisition_attempt(
+  pair.attempt_id,
+  'complete', 'complete', 'verified', 'verified',
+  'reported_population_reached',
+  pair.capture_started_at, pair.capture_completed_at,
+  pair.source_run_id, pair.payload_id, pair.manifest_id, NULL,
+  1, 'consistent', 1, 1, 'consistent',
+  1, 1, 0, 0, false, false, NULL, NULL
+) AS outcome
+WHERE pair.attempt_id = '00000000-0000-0000-0000-000000000093';
+
+DO $test$
+DECLARE
+  v_capture_constraint text;
+  v_attempt_constraint text;
+BEGIN
+  SELECT pg_catalog.pg_get_constraintdef(constraint_row.oid)
+    INTO STRICT v_capture_constraint
+    FROM pg_catalog.pg_constraint AS constraint_row
+   WHERE constraint_row.conrelid =
+         'arena.leaderboard_capture_contracts'::pg_catalog.regclass
+     AND constraint_row.conname =
+         'leaderboard_capture_contracts_capture_contract_check'
+     AND constraint_row.contype = 'c'
+     AND constraint_row.convalidated;
+
+  SELECT pg_catalog.pg_get_constraintdef(constraint_row.oid)
+    INTO STRICT v_attempt_constraint
+    FROM pg_catalog.pg_constraint AS constraint_row
+   WHERE constraint_row.conrelid =
+         'arena.leaderboard_acquisition_attempts'::pg_catalog.regclass
+     AND constraint_row.conname =
+         'leaderboard_acquisition_attempts_capture_contract_check'
+     AND constraint_row.contype = 'c'
+     AND constraint_row.convalidated;
+
+  IF v_capture_constraint NOT LIKE '%leaderboard-acquisition-manifest@2%'
+     OR v_capture_constraint NOT LIKE '%leaderboard-acquisition-manifest@3%'
+     OR v_capture_constraint NOT LIKE '%leaderboard-acquisition-manifest@4%'
+     OR v_attempt_constraint NOT LIKE '%leaderboard-acquisition-manifest@2%'
+     OR v_attempt_constraint NOT LIKE '%leaderboard-acquisition-manifest@3%'
+     OR v_attempt_constraint NOT LIKE '%leaderboard-acquisition-manifest@4%'
+     OR v_attempt_constraint NOT LIKE '%legacy_unverified%' THEN
+    RAISE EXCEPTION 'V4 acquisition constraints are incomplete';
+  END IF;
+
+  IF (
+       SELECT pg_catalog.count(*)
+         FROM arena.leaderboard_capture_contracts AS capture
+         JOIN arena.sources AS source_row ON source_row.id = capture.source_id
+        WHERE capture.capture_contract =
+              'arena.ingest.leaderboard-acquisition-manifest@4'
+          AND capture.adapter_slug = 'bitget_bots'
+          AND capture.attempt_binding_contract =
+              'arena.ingest.leaderboard-acquisition-attempt-binding@1'
+          AND capture.requires_runner_git_sha
+          AND source_row.slug IN ('bitget_bots_futures', 'bitget_bots_spot')
+     ) <> 2
+     OR (
+       SELECT pg_catalog.count(*)
+         FROM arena.leaderboard_capture_contracts
+        WHERE capture_contract =
+              'arena.ingest.leaderboard-acquisition-manifest@4'
+     ) <> 2 THEN
+    RAISE EXCEPTION 'V4 registry is not exactly the two Bitget bot sources';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM arena.leaderboard_acquisition_attempts AS attempt
+      JOIN arena.leaderboard_acquisition_outcomes AS outcome
+        ON outcome.attempt_seq = attempt.attempt_seq
+      JOIN public.ledger_test_pairs AS pair
+        ON pair.attempt_id = attempt.attempt_id
+      JOIN arena.raw_objects AS payload
+        ON payload.id = outcome.source_payload_raw_object_id
+      JOIN arena.raw_objects AS manifest
+        ON manifest.id = outcome.manifest_raw_object_id
+     WHERE attempt.attempt_id =
+           '00000000-0000-0000-0000-000000000093'::uuid
+       AND attempt.source_id = 5
+       AND attempt.capture_contract =
+           'arena.ingest.leaderboard-acquisition-manifest@4'
+       AND attempt.runner_git_sha = pg_catalog.repeat('1', 40)
+       AND outcome.terminal_state = 'complete'
+       AND outcome.acquisition_state = 'complete'
+       AND outcome.population_state = 'verified'
+       AND outcome.source_run_id = pair.source_run_id
+       AND outcome.source_payload_content_hash = payload.content_hash
+       AND outcome.source_payload_storage_path = payload.storage_path
+       AND outcome.manifest_content_hash = manifest.content_hash
+       AND outcome.manifest_storage_path = manifest.storage_path
+       AND manifest.content_hash = pair.source_run_id
+       AND manifest.meta->>'data_contract' =
+           'arena.ingest.leaderboard-acquisition-manifest@4'
+       AND manifest.meta->'acquisition_attempt'->>'attempt_id' =
+           attempt.attempt_id::text
+       AND (manifest.meta->'acquisition_attempt'->>'attempt_seq')::bigint =
+           attempt.attempt_seq
+  ) THEN
+    RAISE EXCEPTION 'manifest V4 complete RAW/finish proof failed';
+  END IF;
+
+  IF NOT pg_catalog.has_function_privilege(
+       'service_role',
+       'arena.start_leaderboard_acquisition_attempt(uuid,integer,integer,text,text,integer,text,text,text)',
+       'EXECUTE'
+     )
+     OR NOT pg_catalog.has_function_privilege(
+       'service_role',
+       'arena.finish_leaderboard_acquisition_attempt(uuid,text,text,text,text,text,timestamp with time zone,timestamp with time zone,text,bigint,bigint,bigint,integer,text,integer,integer,text,integer,integer,integer,integer,boolean,boolean,text,text)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'anon',
+       'arena.start_leaderboard_acquisition_attempt(uuid,integer,integer,text,text,integer,text,text,text)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'anon',
+       'arena.finish_leaderboard_acquisition_attempt(uuid,text,text,text,text,text,timestamp with time zone,timestamp with time zone,text,bigint,bigint,bigint,integer,text,integer,integer,text,integer,integer,integer,integer,boolean,boolean,text,text)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'authenticated',
+       'arena.start_leaderboard_acquisition_attempt(uuid,integer,integer,text,text,integer,text,text,text)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'authenticated',
+       'arena.finish_leaderboard_acquisition_attempt(uuid,text,text,text,text,text,timestamp with time zone,timestamp with time zone,text,bigint,bigint,bigint,integer,text,integer,integer,text,integer,integer,integer,integer,boolean,boolean,text,text)',
+       'EXECUTE'
+     ) THEN
+    RAISE EXCEPTION 'V4 acquisition RPC ACL proof failed';
   END IF;
 END
 $test$;
