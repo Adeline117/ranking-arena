@@ -24,15 +24,19 @@
 import type {
   HistoryKind,
   ParseCtx,
+  ParsedProfile,
   RankingTimeframe,
   RawBundle,
   RawPage,
   SourceRow,
+  Timeframe,
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
+import type { ProfileQualityReject } from '../../core/profile-quality'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
 import {
+  assertBitgetBotsLeaderboardPublication,
   parseBitgetBotsBoardPage,
   parseBitgetBotsCopiers,
   parseBitgetBotsProfile,
@@ -52,6 +56,125 @@ const HEADERS = {
   language: 'zh_CN',
   locale: 'zh_CN',
   terminaltype: '1',
+}
+
+const REVIEWED_PROFILE_TIMEFRAMES = new Set<number>([7, 30, 90])
+const REQUESTABLE_PROFILE_TIMEFRAMES = new Set<number>([0, 7, 30, 90])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * The parser deliberately keeps the top-level cumulative values as
+ * timeframe=0 and ignores unknown performanceType values. Validate the RAW
+ * envelope as well as the parsed projection so a missing/duplicated/malformed
+ * requested window cannot be hidden by that tolerant parsing behaviour.
+ *
+ * Both Tier-B and Tier-C call this only after their immutable RAW write.
+ */
+function validateBitgetBotsProfile(
+  profile: ParsedProfile,
+  ctx: ParseCtx,
+  requestedTimeframe: Timeframe,
+  raw: unknown
+): ProfileQualityReject[] {
+  const blockingReasons: string[] = []
+  const rawCounts = new Map<number, number>()
+  const parsedCounts = new Map<number, number>()
+
+  if (!REQUESTABLE_PROFILE_TIMEFRAMES.has(requestedTimeframe)) {
+    blockingReasons.push('profile_requested_timeframe_unreviewed')
+  }
+
+  const wrapper = isRecord(raw) ? raw : null
+  if (!wrapper) {
+    blockingReasons.push('profile_payload_invalid')
+  } else if (wrapper.timeframe !== requestedTimeframe) {
+    blockingReasons.push('profile_requested_timeframe_mismatch')
+  }
+
+  const response = wrapper && isRecord(wrapper.strategyInfo) ? wrapper.strategyInfo : null
+  if (!response || response.code !== '200') {
+    blockingReasons.push('profile_response_invalid')
+  }
+
+  const info = response && isRecord(response.data) ? response.data : null
+  if (!info) blockingReasons.push('profile_data_invalid')
+
+  const performances = info?.performances
+  if (!Array.isArray(performances)) {
+    blockingReasons.push('profile_performances_invalid')
+  } else {
+    for (const performance of performances) {
+      if (!isRecord(performance)) {
+        blockingReasons.push('profile_performance_malformed')
+        continue
+      }
+      const performanceType = performance.performanceType
+      if (typeof performanceType !== 'number' || !Number.isInteger(performanceType)) {
+        blockingReasons.push('profile_performance_type_malformed')
+        continue
+      }
+      if (!REVIEWED_PROFILE_TIMEFRAMES.has(performanceType)) {
+        blockingReasons.push('profile_performance_type_unreviewed')
+        continue
+      }
+      rawCounts.set(performanceType, (rawCounts.get(performanceType) ?? 0) + 1)
+    }
+  }
+
+  for (const count of rawCounts.values()) {
+    if (count > 1) blockingReasons.push('profile_performance_type_duplicate')
+  }
+
+  for (const stat of profile.stats) {
+    if (!REQUESTABLE_PROFILE_TIMEFRAMES.has(stat.timeframe)) {
+      blockingReasons.push('profile_parsed_timeframe_unreviewed')
+      continue
+    }
+    parsedCounts.set(stat.timeframe, (parsedCounts.get(stat.timeframe) ?? 0) + 1)
+  }
+  for (const count of parsedCounts.values()) {
+    if (count > 1) blockingReasons.push('profile_parsed_timeframe_duplicate')
+  }
+
+  // timeframe=0 comes from the separately reviewed top-level cumulative
+  // fields; ranking windows must each be backed by exactly one performances[]
+  // row. In both cases the parsed result must contain exactly one requested
+  // block before it is publishable or renderable.
+  if (
+    (requestedTimeframe !== 0 && rawCounts.get(requestedTimeframe) !== 1) ||
+    parsedCounts.get(requestedTimeframe) !== 1
+  ) {
+    blockingReasons.push('profile_requested_timeframe_count_invalid')
+  }
+
+  // Prove every reviewed RAW window survived parsing exactly once. This
+  // catches future parser drift without requiring unrelated windows to be
+  // present in a response for the requested one.
+  for (const timeframe of REVIEWED_PROFILE_TIMEFRAMES) {
+    if ((rawCounts.get(timeframe) ?? 0) !== (parsedCounts.get(timeframe) ?? 0)) {
+      blockingReasons.push('profile_window_projection_mismatch')
+    }
+  }
+
+  const uniqueReasons = [...new Set(blockingReasons)]
+  if (uniqueReasons.length === 0) return []
+
+  return [
+    {
+      reason: uniqueReasons[0],
+      payload: {
+        requested_timeframe: requestedTimeframe,
+        payload_timeframe: wrapper?.timeframe ?? null,
+        source_slug: ctx.sourceSlug,
+        blocking_reasons: uniqueReasons,
+        raw_performance_counts: Object.fromEntries(rawCounts),
+        parsed_stats_counts: Object.fromEntries(parsedCounts),
+      },
+    },
+  ]
 }
 
 function endpoint(src: SourceRow, key: string, fallback: string): string {
@@ -128,6 +251,7 @@ const bitgetBotsAdapter: SourceAdapter = {
         throw new Error(`[bitget_bots] unknown board "${board}" in src.meta.boards`)
       }
       let pagesThisBoard = 0
+      let reportedTotalForBoard: number | null = null
       const inner = replayPaged({
         session,
         fetcher,
@@ -137,8 +261,15 @@ const bitgetBotsAdapter: SourceAdapter = {
           headers: HEADERS,
           body: { strategyType, orderType: 3, pageNo: pageIndex, pageSize },
         }),
-        extractMeta: (payload) => {
-          const page = parseBitgetBotsBoardPage({ board, payload }, dummyCtx(src))
+        extractMeta: (payload, requestPageIndex) => {
+          const page = parseBitgetBotsBoardPage(
+            { board, requestPageIndex, requestPageSize: pageSize, payload },
+            dummyCtx(src)
+          )
+          if (reportedTotalForBoard === null) reportedTotalForBoard = page.reportedTotal
+          else if (page.reportedTotal !== reportedTotalForBoard) {
+            throw new TypeError(`[bitget_bots] ${board} totalRecord changed within one crawl`)
+          }
           return { rowCount: page.rows.length, reportedTotal: page.reportedTotal }
         },
         pageSize,
@@ -149,7 +280,12 @@ const bitgetBotsAdapter: SourceAdapter = {
         yield {
           ...page,
           pageIndex: page.pageIndex + pageOffset,
-          payload: { board, payload: page.payload },
+          payload: {
+            board,
+            requestPageIndex: page.pageIndex,
+            requestPageSize: pageSize,
+            payload: page.payload,
+          },
         }
       }
       pageOffset += pagesThisBoard
@@ -208,7 +344,9 @@ const bitgetBotsAdapter: SourceAdapter = {
   },
 
   parseLeaderboard: parseBitgetBotsBoardPage,
+  validateLeaderboard: assertBitgetBotsLeaderboardPublication,
   parseProfile: parseBitgetBotsProfile,
+  validateProfile: validateBitgetBotsProfile,
 
   parsePositions(): never {
     throw new Error('[bitget_bots] positions parser not supported')

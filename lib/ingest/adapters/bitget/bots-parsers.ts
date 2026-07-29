@@ -17,6 +17,8 @@ import type {
   ParsedLeaderboardRow,
   ParsedProfile,
   ParsedStats,
+  RankingTimeframe,
+  SourceRow,
   Timeframe,
 } from '../../core/types'
 
@@ -46,12 +48,313 @@ function botsHash(...fields: unknown[]): string {
 
 const BOARD_FIELDS: Record<
   string,
-  { strategy: 'grid' | 'martingale'; product: 'spot' | 'futures' }
+  { strategy: 'grid' | 'martingale'; product: 'spot' | 'futures'; strategyType: number }
 > = {
-  spot_grid: { strategy: 'grid', product: 'spot' },
-  futures_grid: { strategy: 'grid', product: 'futures' },
-  spot_martingale: { strategy: 'martingale', product: 'spot' },
-  futures_martingale: { strategy: 'martingale', product: 'futures' },
+  spot_grid: { strategy: 'grid', product: 'spot', strategyType: 1 },
+  futures_grid: { strategy: 'grid', product: 'futures', strategyType: 2 },
+  spot_martingale: { strategy: 'martingale', product: 'spot', strategyType: 3 },
+  futures_martingale: { strategy: 'martingale', product: 'futures', strategyType: 4 },
+}
+
+const BOT_SOURCE_CONTRACT = {
+  bitget_bots_futures: {
+    product: 'futures',
+    boards: ['futures_grid', 'futures_martingale'],
+  },
+  bitget_bots_spot: {
+    product: 'spot',
+    boards: ['spot_grid', 'spot_martingale'],
+  },
+} as const
+
+const BOT_META_FIELDS = [
+  'exchange_bot_id',
+  'product_id',
+  'owner_account_id',
+  'owner_name',
+  'pair',
+  'product_type',
+  'strategy',
+  'direction',
+  'created_at_origin',
+  'runtime_days',
+  'profit_share_rate',
+  'status',
+] as const
+
+const BOT_ENTRY_RAW_FIELDS = [
+  'strategyId',
+  'strategyType',
+  'productId',
+  'strAccountId',
+  'status',
+] as const
+
+function publicationContractError(reason: string): never {
+  throw new TypeError(`[bitget_bots] leaderboard publication contract failed: ${reason}`)
+}
+
+function dataRecord(value: unknown, label: string): Dict {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return publicationContractError(`${label} must be a plain data object`)
+  }
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) {
+    return publicationContractError(`${label} must be a plain data object`)
+  }
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string') {
+      return publicationContractError(`${label} cannot contain symbol properties`)
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    if (!descriptor || !('value' in descriptor) || !descriptor.enumerable) {
+      return publicationContractError(`${label}.${key} must be an enumerable data property`)
+    }
+  }
+  return value as Dict
+}
+
+function exactDataFields(value: Dict, fields: readonly string[], label: string): void {
+  const actual = Object.keys(value).sort()
+  const expected = [...fields].sort()
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
+    publicationContractError(`${label} fields must match the reviewed contract exactly`)
+  }
+}
+
+function exactArray(value: unknown, expected: readonly unknown[], label: string): void {
+  if (!Array.isArray(value) || value.length !== expected.length) {
+    publicationContractError(`${label} must match the reviewed contract exactly`)
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value)
+  const enumerableKeys = Object.keys(value)
+  if (
+    enumerableKeys.length !== expected.length ||
+    enumerableKeys.some((key, index) => key !== String(index))
+  ) {
+    publicationContractError(`${label} must be a dense data array`)
+  }
+  for (const [index, expectedValue] of expected.entries()) {
+    const descriptor = descriptors[String(index)]
+    if (!descriptor || !('value' in descriptor) || descriptor.value !== expectedValue) {
+      publicationContractError(`${label} must match the reviewed contract exactly`)
+    }
+  }
+}
+
+function canonicalRequiredString(value: unknown, label: string): string {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.trim() !== value ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) {
+    return publicationContractError(`${label} must be a non-empty canonical string`)
+  }
+  return value
+}
+
+function canonicalNullableString(value: unknown, label: string): string | null {
+  if (value === null) return null
+  return canonicalRequiredString(value, label)
+}
+
+function canonicalIsoOrNull(value: unknown, label: string): string | null {
+  if (value === null) return null
+  const text = canonicalRequiredString(value, label)
+  const millis = Date.parse(text)
+  if (!Number.isFinite(millis) || new Date(millis).toISOString() !== text) {
+    publicationContractError(`${label} must be a canonical ISO timestamp or null`)
+  }
+  return text
+}
+
+function canonicalNonNegativeInteger(value: unknown, label: string): number {
+  const numeric =
+    typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value) ? Number(value) : value
+  if (
+    typeof numeric !== 'number' ||
+    !Number.isSafeInteger(numeric) ||
+    numeric < 0 ||
+    Object.is(numeric, -0)
+  ) {
+    return publicationContractError(`${label} must be a non-negative canonical integer`)
+  }
+  return numeric
+}
+
+function assertCanonicalSource(
+  src: SourceRow,
+  timeframe: RankingTimeframe
+): {
+  product: 'spot' | 'futures'
+} {
+  const contract = BOT_SOURCE_CONTRACT[src.slug as keyof typeof BOT_SOURCE_CONTRACT]
+  if (!contract) publicationContractError(`unexpected source slug ${src.slug}`)
+  if (
+    src.status !== 'active' ||
+    src.adapter_slug !== 'bitget_bots' ||
+    src.trader_kind_scope !== 'bot' ||
+    src.product_type !== contract.product ||
+    src.currency !== 'USDT' ||
+    src.serving_mode !== 'serving' ||
+    src.page_size !== 20 ||
+    src.pagination_kind !== 'numeric' ||
+    timeframe !== 30
+  ) {
+    publicationContractError(`source ${src.slug} is outside the canonical 30D bot contract`)
+  }
+  exactArray(src.timeframes_native, [30], 'source.timeframes_native')
+  exactArray(src.timeframes_derived, [], 'source.timeframes_derived')
+  const meta = dataRecord(src.meta, 'source.meta')
+  exactArray(meta.boards, contract.boards, 'source.meta.boards')
+  return contract
+}
+
+/**
+ * Bitget bot cards carry the only durable metadata used by the bot header.
+ * Generic staging intentionally does not schema-check traderMeta and silently
+ * deduplicates repeated identities, so this whole-board gate must reject any
+ * partial/malformed window before RAW trust or serving publication can pass.
+ */
+export function assertBitgetBotsLeaderboardPublication(
+  result: Readonly<{
+    parsedRows: readonly ParsedLeaderboardRow[]
+    validRows: readonly ParsedLeaderboardRow[]
+    rejectedRowCount: number
+  }>,
+  src: SourceRow,
+  timeframe: RankingTimeframe
+): void {
+  const contract = assertCanonicalSource(src, timeframe)
+  if (!Number.isSafeInteger(result.rejectedRowCount) || result.rejectedRowCount !== 0) {
+    publicationContractError('the complete board must have zero rejected rows')
+  }
+  if (result.parsedRows.length === 0) {
+    publicationContractError('the complete board cannot be empty')
+  }
+  if (result.parsedRows.length !== result.validRows.length) {
+    publicationContractError('generic validation or deduplication changed the board population')
+  }
+
+  const exchangeIds = new Set<string>()
+  const ranks = new Set<number>()
+  const strategies = new Set<'grid' | 'martingale'>()
+  for (const row of result.validRows) {
+    const exchangeId = canonicalRequiredString(row.exchangeTraderId, 'exchange_trader_id')
+    if (!/^[0-9]+$/.test(exchangeId)) {
+      publicationContractError('exchange_trader_id must be a decimal Bitget strategy id')
+    }
+    if (exchangeIds.has(exchangeId)) {
+      publicationContractError(`duplicate exchange_trader_id ${exchangeId}`)
+    }
+    exchangeIds.add(exchangeId)
+    if (!Number.isSafeInteger(row.rank) || row.rank < 1 || Object.is(row.rank, -0)) {
+      publicationContractError(`rank for ${exchangeId} must be a positive safe integer`)
+    }
+    if (ranks.has(row.rank)) publicationContractError(`duplicate rank ${row.rank}`)
+    ranks.add(row.rank)
+
+    if (
+      row.traderKind !== 'bot' ||
+      (row.botStrategy !== 'grid' && row.botStrategy !== 'martingale')
+    ) {
+      publicationContractError(`row ${exchangeId} is not a reviewed bot strategy`)
+    }
+    strategies.add(row.botStrategy)
+
+    // This board is cumulative and timeframe-less. Preserve its full card only
+    // in the immutable RAW capture; any headline scalar or copied card field in
+    // serving storage would be mislabeled as the canonical 30D source window.
+    if (row.headlineRoi !== null || row.headlinePnl !== null || row.headlineWinRate !== null) {
+      publicationContractError(
+        `row ${exchangeId} cumulative ROI/PnL/win-rate headlines must remain null`
+      )
+    }
+
+    const traderMeta = dataRecord(row.traderMeta, `row ${exchangeId} traderMeta`)
+    exactDataFields(traderMeta, ['bot'], `row ${exchangeId} traderMeta`)
+    const bot = dataRecord(traderMeta.bot, `row ${exchangeId} traderMeta.bot`)
+    exactDataFields(bot, BOT_META_FIELDS, `row ${exchangeId} traderMeta.bot`)
+
+    const botId = canonicalRequiredString(bot.exchange_bot_id, 'bot.exchange_bot_id')
+    if (botId.length > 512 || botId !== exchangeId) {
+      publicationContractError(`row ${exchangeId} bot identity mismatch`)
+    }
+    const productId = canonicalNullableString(bot.product_id, 'bot.product_id')
+    if (productId !== null && (productId.length > 512 || !/^[0-9]+$/.test(productId))) {
+      publicationContractError(`row ${exchangeId} product_id must be a decimal id or null`)
+    }
+    const ownerAccountId = canonicalNullableString(bot.owner_account_id, 'bot.owner_account_id')
+    if (ownerAccountId !== null && ownerAccountId.length > 256) {
+      publicationContractError(`row ${exchangeId} owner_account_id is too long`)
+    }
+    const ownerName = canonicalNullableString(bot.owner_name, 'bot.owner_name')
+    if (ownerName !== null && ownerName.length > 256) {
+      publicationContractError(`row ${exchangeId} owner_name is too long`)
+    }
+    const pair = canonicalRequiredString(bot.pair, 'bot.pair')
+    if (pair.length > 64 || row.nickname !== pair) {
+      publicationContractError(`row ${exchangeId} pair/title mismatch`)
+    }
+    if (bot.product_type !== contract.product || bot.strategy !== row.botStrategy) {
+      publicationContractError(`row ${exchangeId} product/strategy metadata mismatch`)
+    }
+    if (bot.direction !== null && bot.direction !== 'long' && bot.direction !== 'short') {
+      publicationContractError(`row ${exchangeId} direction is outside the reviewed enum`)
+    }
+    canonicalIsoOrNull(bot.created_at_origin, 'bot.created_at_origin')
+    if (
+      bot.runtime_days !== null &&
+      (!Number.isSafeInteger(bot.runtime_days) ||
+        (bot.runtime_days as number) < 0 ||
+        Object.is(bot.runtime_days, -0))
+    ) {
+      publicationContractError(`row ${exchangeId} runtime_days must be non-negative or null`)
+    }
+    if (
+      bot.profit_share_rate !== null &&
+      (typeof bot.profit_share_rate !== 'number' ||
+        !Number.isFinite(bot.profit_share_rate) ||
+        bot.profit_share_rate < 0 ||
+        bot.profit_share_rate > 100)
+    ) {
+      publicationContractError(`row ${exchangeId} profit_share_rate must be 0..100 or null`)
+    }
+    const status = canonicalNullableString(bot.status, 'bot.status')
+    if (status !== null && status.length > 64) {
+      publicationContractError(`row ${exchangeId} status is too long`)
+    }
+
+    const raw = dataRecord(row.raw, `row ${exchangeId} raw`)
+    exactDataFields(raw, BOT_ENTRY_RAW_FIELDS, `row ${exchangeId} raw`)
+    const expectedStrategyType =
+      contract.product === 'spot'
+        ? row.botStrategy === 'grid'
+          ? 1
+          : 3
+        : row.botStrategy === 'grid'
+          ? 2
+          : 4
+    if (raw.strategyType !== expectedStrategyType) {
+      publicationContractError(`row ${exchangeId} raw strategyType mismatch`)
+    }
+    if (raw.strategyId !== exchangeId) {
+      publicationContractError(`row ${exchangeId} raw strategyId mismatch`)
+    }
+    if ((raw.productId ?? null) !== productId) {
+      publicationContractError(`row ${exchangeId} raw productId mismatch`)
+    }
+    if ((raw.strAccountId ?? null) !== bot.owner_account_id) {
+      publicationContractError(`row ${exchangeId} raw owner identity mismatch`)
+    }
+    if ((raw.status === undefined ? null : String(raw.status)) !== bot.status) {
+      publicationContractError(`row ${exchangeId} raw status mismatch`)
+    }
+  }
+  if (!strategies.has('grid') || !strategies.has('martingale')) {
+    publicationContractError('the complete board must include both configured strategy partitions')
+  }
 }
 
 /** direction: 1 = 做多 (long), 2 = 做空 (short), others kept verbatim. */
@@ -79,18 +382,65 @@ function pairOf(item: Dict): string | null {
  * the shadow trader's exchange_trader_id.
  */
 export function parseBitgetBotsBoardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
-  const wrapper = (raw ?? {}) as { board?: string; payload?: unknown }
-  const board = wrapper.board ?? 'futures_grid'
-  const info = BOARD_FIELDS[board] ?? BOARD_FIELDS.futures_grid
-  const data = ((wrapper.payload as Dict)?.data ?? {}) as Dict
-  const items = Array.isArray(data.data) ? (data.data as Dict[]) : []
-  const reportedTotal = int(data.totalRecord)
+  const wrapper = dataRecord(raw, 'board page wrapper')
+  const board = canonicalRequiredString(wrapper.board, 'board page wrapper.board')
+  const info = BOARD_FIELDS[board]
+  if (!info) publicationContractError(`unreviewed board ${board}`)
+  const payload = dataRecord(wrapper.payload, 'board page payload')
+  if (payload.code !== '200') publicationContractError('board page response code must be 200')
+  const data = dataRecord(payload.data, 'board page payload.data')
+  if (!Array.isArray(data.data)) publicationContractError('board page data.data must be an array')
+  const items = data.data as unknown[]
+  const pageNo = canonicalNonNegativeInteger(data.pageNo, 'board page pageNo')
+  if (pageNo < 1) publicationContractError('board page pageNo must be positive')
+  if (wrapper.requestPageIndex !== undefined) {
+    const requested = canonicalNonNegativeInteger(
+      wrapper.requestPageIndex,
+      'board page requestPageIndex'
+    )
+    if (requested < 1 || requested !== pageNo) {
+      publicationContractError('board page pageNo must match its exact request')
+    }
+  }
+  const reportedTotal = canonicalNonNegativeInteger(data.totalRecord, 'board page totalRecord')
+  if (reportedTotal < items.length) {
+    publicationContractError('board page totalRecord cannot be smaller than its row count')
+  }
+  if (typeof data.nextFlag !== 'boolean') {
+    publicationContractError('board page nextFlag must be boolean')
+  }
+  if (wrapper.requestPageSize !== undefined) {
+    const pageSize = canonicalNonNegativeInteger(
+      wrapper.requestPageSize,
+      'board page requestPageSize'
+    )
+    if (pageSize < 1) publicationContractError('board page requestPageSize must be positive')
+    const rowsBeforePage = (pageNo - 1) * pageSize
+    const pageCapacity = pageNo * pageSize
+    if (!Number.isSafeInteger(rowsBeforePage) || !Number.isSafeInteger(pageCapacity)) {
+      publicationContractError('board page population offset exceeds the safe integer range')
+    }
+    const expectedRows = Math.max(0, Math.min(pageSize, reportedTotal - rowsBeforePage))
+    const expectedNextFlag = pageCapacity < reportedTotal
+    if (
+      items.length !== expectedRows ||
+      data.nextFlag !== expectedNextFlag ||
+      items.length > pageSize
+    ) {
+      publicationContractError('board page row count and nextFlag must exactly cover totalRecord')
+    }
+  }
 
   const rows: ParsedLeaderboardRow[] = []
   for (let i = 0; i < items.length; i++) {
-    const item = items[i]
+    const item = dataRecord(items[i], `board page card ${i + 1}`)
     const id = item.strategyId
-    if (!id) continue
+    if (typeof id !== 'string' || !/^[0-9]+$/.test(id)) {
+      throw new TypeError('[bitget_bots] every board card requires a decimal strategyId string')
+    }
+    if (item.strategyType !== info.strategyType) {
+      throw new TypeError('[bitget_bots] board identity and card strategyType must match')
+    }
     const runtimeMs = num(item.runTime)
     rows.push({
       exchangeTraderId: String(id),
@@ -101,8 +451,12 @@ export function parseBitgetBotsBoardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
       walletAddress: null,
       traderKind: 'bot',
       botStrategy: info.strategy,
-      headlineRoi: num(item.profitRate), // cumulative since creation, percent
-      headlinePnl: num(item.profitAmount),
+      // The strategyPlatform board is timeframe-less: profitRate and
+      // profitAmount are cumulative since creation, not 30D. The complete
+      // provider card remains in the immutable RAW capture; serving keeps only
+      // the identity fields needed to prove this row belongs to that capture.
+      headlineRoi: null,
+      headlinePnl: null,
       headlineWinRate: null,
       // 最大回撤 shown on every bot card (spec §11.5) — thirtyMaxDrawdown is the
       // 30d MDD, already in percent. Was dropped (board had no MDD field, profile
@@ -124,7 +478,13 @@ export function parseBitgetBotsBoardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
           status: item.status === undefined ? null : String(item.status),
         },
       },
-      raw: item,
+      raw: {
+        strategyId: String(id),
+        strategyType: item.strategyType,
+        productId: item.productId ?? null,
+        strAccountId: item.strAccountId ?? null,
+        status: item.status === undefined ? null : String(item.status),
+      },
     })
   }
   return { rows, reportedTotal }

@@ -1,4 +1,4 @@
-import type { BoardSeriesBlock, SourceRow } from '@/lib/ingest/core/types'
+import type { BoardSeriesBlock, ParsedLeaderboardRow, SourceRow } from '@/lib/ingest/core/types'
 import type {
   PreparedBoardSeriesPublication,
   PublishBoardSeriesOptions,
@@ -32,12 +32,73 @@ import {
 } from '../fenced-tier-a-publication'
 
 const src = {
+  adapter_slug: 'xt',
+  exchange_id: 8,
   id: 19,
   slug: 'xt_futures',
   currency: 'USDT',
   fetch_region: 'local',
+  page_size: 100,
+  pagination_kind: 'numeric',
+  product_type: 'futures',
+  serving_mode: 'serving',
   status: 'active',
+  timeframes_derived: [],
+  timeframes_native: [7, 30, 90],
+  trader_kind_scope: 'human',
 } as SourceRow
+
+interface LiveSourceRow {
+  adapter_slug: string
+  exchange_id: number
+  fetch_region: string
+  id: number
+  page_size: number | null
+  pagination_kind: string | null
+  product_type: string
+  serving_mode: string
+  slug: string
+  status: string
+  timeframes_derived: number[]
+  timeframes_native: number[]
+  trader_kind_scope: string
+}
+
+function liveSourceRow(overrides: Partial<LiveSourceRow> = {}): LiveSourceRow {
+  return {
+    adapter_slug: src.adapter_slug,
+    exchange_id: src.exchange_id,
+    fetch_region: src.fetch_region,
+    id: src.id,
+    page_size: src.page_size,
+    pagination_kind: src.pagination_kind,
+    product_type: src.product_type,
+    serving_mode: src.serving_mode,
+    slug: src.slug,
+    status: src.status,
+    timeframes_derived: [...src.timeframes_derived],
+    timeframes_native: [...src.timeframes_native],
+    trader_kind_scope: src.trader_kind_scope,
+    ...overrides,
+  }
+}
+
+function leaderboardRow(overrides: Partial<ParsedLeaderboardRow> = {}): ParsedLeaderboardRow {
+  return {
+    avatarUrlOrigin: null,
+    botStrategy: null,
+    exchangeTraderId: 'trader-1',
+    headlinePnl: 42,
+    headlineRoi: 12,
+    headlineWinRate: 60,
+    nickname: 'Trader One',
+    rank: 1,
+    raw: {},
+    traderKind: 'human',
+    walletAddress: null,
+    ...overrides,
+  }
+}
 
 const boardSeries = new Map<string, BoardSeriesBlock[]>([
   [
@@ -108,23 +169,54 @@ function boardPlan(
   }
 }
 
-function snapshotInput(): PublishSnapshotInput {
+function boardPlanForTimeframes(
+  timeframes: readonly (7 | 30 | 90)[]
+): PreparedBoardSeriesPublication {
+  return boardPlan({
+    expectedLatestSnapshots: timeframes.map((timeframe, index) => ({
+      timeframe,
+      id: 77 + index,
+      rawObjectId: 9001 + index,
+      scrapedAt: '2026-07-28T10:00:00.000Z',
+    })),
+    rows: timeframes.map((timeframe) => ({
+      trader_id: 501,
+      timeframe,
+      metric: 'pnl',
+      ts: '2026-07-28T10:00:00.000Z',
+      value: 42,
+    })),
+    snapshotMemberships: timeframes.map((timeframe, index) => ({
+      exchange_trader_id: 'trader-1',
+      trader_id: 501,
+      timeframe,
+      snapshot_id: 77 + index,
+      raw_object_id: 9001 + index,
+    })),
+  })
+}
+
+function snapshotInput(overrides: Partial<PublishSnapshotInput> = {}): PublishSnapshotInput {
   return {
     src,
     timeframe: 30,
     rows: [],
     rejects: [],
     rawObjectId: 9001,
+    ...overrides,
   }
 }
 
-function trustedInput(): PublishTrustedSnapshotInput {
+function trustedInput(
+  overrides: Partial<PublishTrustedSnapshotInput> = {}
+): PublishTrustedSnapshotInput {
   return {
     src,
     timeframe: 30,
     rows: [],
     rejects: [],
     trust: {} as never,
+    ...overrides,
   }
 }
 
@@ -141,22 +233,27 @@ function harness(options?: {
   authorityRegion?: 'local' | 'vps_sg'
   authorityScope?: string
   commitBarrier?: Promise<void>
+  liveTraderRows?: unknown[]
   liveRows?: unknown[]
   rowCount?: number | null
+  traderRowCount?: number | null
 }) {
   const query = jest.fn(async (text: string) => {
     validateWorkerDbFencedWriteStatement(text)
-    return {
-      rows: options?.liveRows ?? [
-        {
-          fetch_region: 'local',
-          id: src.id,
-          slug: src.slug,
-          status: 'active',
-        },
-      ],
-      rowCount: options?.rowCount === undefined ? 1 : options.rowCount,
+    if (text.includes('FROM arena.sources AS source')) {
+      return {
+        rows: options?.liveRows ?? [liveSourceRow()],
+        rowCount: options?.rowCount === undefined ? 1 : options.rowCount,
+      }
     }
+    if (text.includes('FROM arena.traders AS trader')) {
+      const rows = options?.liveTraderRows ?? []
+      return {
+        rows,
+        rowCount: options?.traderRowCount === undefined ? rows.length : options.traderRowCount,
+      }
+    }
+    throw new Error(`unexpected fenced publication query: ${text}`)
   })
   const transaction = Object.freeze({
     query,
@@ -339,7 +436,7 @@ describe('fenced Tier-A publication', () => {
 
   it('blocks board writes when the live source guard rejects inside the fenced transaction', async () => {
     const { context, query, transaction, withFencedWrite } = harness({
-      liveRows: [{ fetch_region: 'vps_sg', id: src.id, slug: src.slug, status: 'active' }],
+      liveRows: [liveSourceRow({ fetch_region: 'vps_sg' })],
     })
 
     await expect(
@@ -356,8 +453,167 @@ describe('fenced Tier-A publication', () => {
     expect(mockPublicationWrite).not.toHaveBeenCalled()
   })
 
+  it.each([7, 90] as const)(
+    'fails closed before serving DML when an old worker publishes removed native %dd',
+    async (timeframe) => {
+      const { context, query } = harness({
+        liveRows: [liveSourceRow({ timeframes_native: [30] })],
+      })
+
+      await expect(
+        publishFencedLeaderboardSnapshot(snapshotInput({ timeframe }), context)
+      ).rejects.toMatchObject({ code: 'source_configuration_mismatch' })
+
+      expect(mockPublicationWrite).not.toHaveBeenCalled()
+      expect(query).toHaveBeenCalledTimes(1)
+      expect(
+        query.mock.calls.every(([sql]) => !/\b(?:INSERT|UPDATE|DELETE)\b/i.test(String(sql)))
+      ).toBe(true)
+    }
+  )
+
+  it('rejects the reverse cached/live native-registry race before publication', async () => {
+    const cachedSource = { ...src, timeframes_native: [30] } as SourceRow
+    const { context } = harness({ liveRows: [liveSourceRow()] })
+
+    await expect(
+      publishFencedLeaderboardSnapshot(snapshotInput({ src: cachedSource, timeframe: 30 }), context)
+    ).rejects.toMatchObject({ code: 'source_configuration_mismatch' })
+
+    expect(mockPublicationWrite).not.toHaveBeenCalled()
+  })
+
+  it.each<[string, Partial<LiveSourceRow>]>([
+    ['adapter slug', { adapter_slug: 'other-adapter' }],
+    ['exchange id', { exchange_id: src.exchange_id + 1 }],
+    ['serving mode', { serving_mode: 'shadow' }],
+    ['product type', { product_type: 'spot' }],
+    ['trader-kind scope', { trader_kind_scope: 'bot' }],
+    ['page size', { page_size: 50 }],
+    ['pagination kind', { pagination_kind: 'api_cursor' }],
+    ['native timeframe registry', { timeframes_native: [30] }],
+    ['derived timeframe registry', { timeframes_derived: [7] }],
+  ])('rejects live source %s identity drift before publication DML', async (_label, drift) => {
+    const { context, query } = harness({ liveRows: [liveSourceRow(drift)] })
+
+    await expect(publishFencedLeaderboardSnapshot(snapshotInput(), context)).rejects.toMatchObject({
+      code: 'source_configuration_mismatch',
+    })
+
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(mockPublicationWrite).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['not live-native', { timeframes_native: [30], timeframes_derived: [7, 90] }],
+    ['also live-derived', { timeframes_native: [7, 30], timeframes_derived: [7] }],
+  ])('rejects a native snapshot timeframe that is %s', async (_label, registry) => {
+    const source = { ...src, ...registry } as SourceRow
+    const { context } = harness({ liveRows: [liveSourceRow(registry)] })
+
+    await expect(
+      publishFencedLeaderboardSnapshot(snapshotInput({ src: source, timeframe: 7 }), context)
+    ).rejects.toMatchObject({ code: 'source_timeframe_not_native' })
+
+    expect(mockPublicationWrite).not.toHaveBeenCalled()
+  })
+
+  it('validates every guarded board-series timeframe against the locked live registry', async () => {
+    const source = {
+      ...src,
+      timeframes_native: [30],
+      timeframes_derived: [7, 90],
+    } as SourceRow
+    mockPrepareBoardSeries.mockReturnValueOnce(boardPlanForTimeframes([30, 90]))
+    const { context, query } = harness({
+      liveRows: [liveSourceRow({ timeframes_native: [30], timeframes_derived: [7, 90] })],
+    })
+
+    await expect(
+      publishFencedBoardSeries(source, boardSeries, boardTraderIds, context, boardOptions)
+    ).rejects.toMatchObject({ code: 'source_timeframe_not_native' })
+
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(mockPublicationWrite).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['historical human kind', { trader_kind: 'human', bot_strategy: null }],
+    ['historical null kind', { trader_kind: null, bot_strategy: 'grid' }],
+    ['historical null strategy', { trader_kind: 'bot', bot_strategy: null }],
+    ['historical wrong strategy', { trader_kind: 'bot', bot_strategy: 'martingale' }],
+  ])(
+    'rejects bot identity drift from %s before snapshot/checkpoint DML',
+    async (_label, stored) => {
+      const source = { ...src, trader_kind_scope: 'bot' } as SourceRow
+      const incoming = leaderboardRow({ traderKind: 'bot', botStrategy: 'grid' })
+      const { context, query } = harness({
+        liveRows: [liveSourceRow({ trader_kind_scope: 'bot' })],
+        liveTraderRows: [{ exchange_trader_id: incoming.exchangeTraderId, ...stored }],
+      })
+
+      await expect(
+        publishFencedLeaderboardSnapshot(snapshotInput({ src: source, rows: [incoming] }), context)
+      ).rejects.toMatchObject({ code: 'trader_identity_mismatch' })
+
+      expect(query).toHaveBeenCalledTimes(2)
+      expect(String(query.mock.calls[1][0])).toMatch(
+        /FROM arena\.traders AS trader[\s\S]+FOR SHARE OF trader/
+      )
+      expect(query.mock.calls[1][1]).toEqual([src.id, [incoming.exchangeTraderId]])
+      expect(mockPublicationWrite).not.toHaveBeenCalled()
+    }
+  )
+
+  it('allows an exact existing bot identity and keeps the identity read on the fenced tx', async () => {
+    const source = { ...src, trader_kind_scope: 'bot' } as SourceRow
+    const incoming = leaderboardRow({ traderKind: 'bot', botStrategy: 'grid' })
+    const { context, query } = harness({
+      liveRows: [liveSourceRow({ trader_kind_scope: 'bot' })],
+      liveTraderRows: [
+        {
+          exchange_trader_id: incoming.exchangeTraderId,
+          trader_kind: 'bot',
+          bot_strategy: 'grid',
+        },
+      ],
+    })
+
+    await expect(
+      publishFencedLeaderboardSnapshot(snapshotInput({ src: source, rows: [incoming] }), context)
+    ).resolves.toEqual({ snapshotId: 77 })
+
+    expect(query).toHaveBeenCalledTimes(2)
+    expect(mockPublicationWrite).toHaveBeenCalledTimes(1)
+  })
+
+  it('applies the existing-trader identity guard to trusted snapshots too', async () => {
+    const source = { ...src, trader_kind_scope: 'bot' } as SourceRow
+    const incoming = leaderboardRow({ traderKind: 'bot', botStrategy: 'grid' })
+    const { context } = harness({
+      liveRows: [liveSourceRow({ trader_kind_scope: 'bot' })],
+      liveTraderRows: [
+        {
+          exchange_trader_id: incoming.exchangeTraderId,
+          trader_kind: 'human',
+          bot_strategy: null,
+        },
+      ],
+    })
+
+    await expect(
+      publishFencedTrustedLeaderboardSnapshot(
+        trustedInput({ src: source, rows: [incoming] }),
+        context
+      )
+    ).rejects.toMatchObject({ code: 'trader_identity_mismatch' })
+
+    expect(mockPublicationWrite).not.toHaveBeenCalled()
+  })
+
   it('reports a baseline shift only after the fenced commit is confirmed', async () => {
     const commit = deferred()
+    const publicationWrite = deferred()
     const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
     mockPublishSnapshot.mockImplementationOnce(
       async (
@@ -367,6 +623,7 @@ describe('fenced Tier-A publication', () => {
       ) => {
         await sourceAuthorityGuard(transaction)
         mockPublicationWrite()
+        publicationWrite.resolve()
         return {
           baselineShifted: true,
           published: true,
@@ -381,8 +638,7 @@ describe('fenced Tier-A publication', () => {
 
     try {
       const publication = publishFencedLeaderboardSnapshot(snapshotInput(), context)
-      await Promise.resolve()
-      await Promise.resolve()
+      await publicationWrite.promise
       expect(mockPublicationWrite).toHaveBeenCalledTimes(1)
       expect(warning).not.toHaveBeenCalled()
 
@@ -425,37 +681,14 @@ describe('fenced Tier-A publication', () => {
     ['missing source', [], 0, 'source_missing'],
     [
       'duplicate source',
-      [
-        { fetch_region: 'local', id: src.id, slug: src.slug, status: 'active' },
-        { fetch_region: 'local', id: src.id, slug: src.slug, status: 'active' },
-      ],
+      [liveSourceRow(), liveSourceRow()],
       2,
       'source_registry_contract_violation',
     ],
-    [
-      'wrong id',
-      [{ fetch_region: 'local', id: src.id + 1, slug: src.slug, status: 'active' }],
-      1,
-      'source_identity_mismatch',
-    ],
-    [
-      'wrong slug',
-      [{ fetch_region: 'local', id: src.id, slug: 'other', status: 'active' }],
-      1,
-      'source_identity_mismatch',
-    ],
-    [
-      'inactive source',
-      [{ fetch_region: 'local', id: src.id, slug: src.slug, status: 'inactive' }],
-      1,
-      'source_inactive',
-    ],
-    [
-      'moved source',
-      [{ fetch_region: 'vps_sg', id: src.id, slug: src.slug, status: 'active' }],
-      1,
-      'source_region_mismatch',
-    ],
+    ['wrong id', [liveSourceRow({ id: src.id + 1 })], 1, 'source_identity_mismatch'],
+    ['wrong slug', [liveSourceRow({ slug: 'other' })], 1, 'source_identity_mismatch'],
+    ['inactive source', [liveSourceRow({ status: 'inactive' })], 1, 'source_inactive'],
+    ['moved source', [liveSourceRow({ fetch_region: 'vps_sg' })], 1, 'source_region_mismatch'],
   ])(
     'fails closed for a %s inside the fenced transaction',
     async (_label, liveRows, rowCount, code) => {

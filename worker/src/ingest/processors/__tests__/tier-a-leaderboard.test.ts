@@ -35,7 +35,6 @@ const mockPublishLeaderboardSnapshot = jest.fn()
 const mockPublishTrustedLeaderboardSnapshot = jest.fn()
 const mockHasRegisteredLeaderboardMetricTrust = jest.fn()
 const mockPublishFencedBoardSeries = jest.fn()
-const mockPublishBots = jest.fn()
 const mockJobUpdateData = jest.fn()
 const mockResolveDeployedSha = jest.fn()
 
@@ -83,9 +82,6 @@ jest.mock('@/worker/src/ingest/fenced-tier-a-publication', () => ({
 jest.mock('@/lib/ingest/serving/metric-trust-publish', () => ({
   hasRegisteredLeaderboardMetricTrust: (...args: unknown[]) =>
     mockHasRegisteredLeaderboardMetricTrust(...args),
-}))
-jest.mock('@/lib/ingest/serving/publish-bots', () => ({
-  publishBots: (...args: unknown[]) => mockPublishBots(...args),
 }))
 jest.mock('@/worker/src/ingest/heartbeat', () => ({
   resolveDeployedSha: () => mockResolveDeployedSha(),
@@ -420,7 +416,6 @@ describe('Tier-A board-series publication guard', () => {
       },
     })
     mockPublishFencedBoardSeries.mockResolvedValue({ traders: 1, points: 1 })
-    mockPublishBots.mockResolvedValue({ written: 1 })
   })
 
   afterAll(() => {
@@ -597,7 +592,41 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
-    expect(mockPublishBots).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(job.data).toEqual({ sourceSlug: src.slug })
+  })
+
+  it('runs the source-specific whole-board gate before snapshot, series, or checkpoint', async () => {
+    const validateLeaderboard = jest.fn(() => {
+      throw new TypeError('source-specific board contract failed')
+    })
+    const parseLeaderboardSeries = jest.fn(() => new Map())
+    mockGetAdapter.mockReturnValue({
+      listLeaderboard: async function* () {
+        yield page
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      validateLeaderboard,
+      parseLeaderboardSeries,
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toBeInstanceOf(AggregateError)
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(validateLeaderboard).toHaveBeenCalledWith(
+      { parsedRows: [row], validRows: [row], rejectedRowCount: 0 },
+      src,
+      30
+    )
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(parseLeaderboardSeries).not.toHaveBeenCalled()
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
     expect(job.data).toEqual({ sourceSlug: src.slug })
   })
@@ -1629,35 +1658,19 @@ describe('Tier-A board-series publication guard', () => {
     expect(job.data).toEqual({ sourceSlug: src.slug })
   })
 
-  it('checkpoints a bot window only after bot publication succeeds', async () => {
+  it('checkpoints a bot window after its metadata commits in the fenced snapshot', async () => {
     mockGetSourceBySlug.mockResolvedValue({ ...src, trader_kind_scope: 'bot' })
 
     await expect(processTierA(job)).resolves.toHaveLength(1)
 
-    expect(mockPublishBots).toHaveBeenCalledTimes(1)
-    expect(mockPublishBots.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockPublishLeaderboardSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
       mockJobUpdateData.mock.invocationCallOrder[0]
     )
     expect(mockJobUpdateData).toHaveBeenCalledWith({
       sourceSlug: src.slug,
       completedTimeframes: [30],
     })
-  })
-
-  it('does not checkpoint a bot window whose bot publication fails', async () => {
-    mockGetSourceBySlug.mockResolvedValue({ ...src, trader_kind_scope: 'bot' })
-    mockPublishBots.mockRejectedValueOnce(new Error('bot write failed'))
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
-
-    try {
-      await expect(processTierA(job)).rejects.toThrow('1/1 native windows failed (30d)')
-    } finally {
-      errorSpy.mockRestore()
-    }
-
-    expect(mockPublishBots).toHaveBeenCalledTimes(1)
-    expect(mockJobUpdateData).not.toHaveBeenCalled()
-    expect(job.data).toEqual({ sourceSlug: src.slug })
   })
 
   it('fails closed, restores acknowledged data, and stops after an updateData failure', async () => {
@@ -1961,7 +1974,6 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
-    expect(mockPublishBots).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
 
     resolveFinish(undefined)
@@ -2216,7 +2228,6 @@ describe('Tier-A board-series publication guard', () => {
       expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
       expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
       expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
-      expect(mockPublishBots).not.toHaveBeenCalled()
       expect(mockJobUpdateData).not.toHaveBeenCalled()
     }
   )

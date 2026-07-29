@@ -19,6 +19,7 @@ import type {
   ParseCtx,
   ParsedHistoryRow,
   ParsedLeaderboardPage,
+  ParsedLeaderboardRow,
   ParsedPosition,
   ParsedProfile,
   RankingTimeframe,
@@ -111,6 +112,17 @@ export interface SourceAdapter {
 
   // ── Pure parsers ──
   parseLeaderboard(raw: unknown, ctx: ParseCtx): ParsedLeaderboardPage
+  /** Optional source-specific whole-board quality gate. Processors invoke it
+   * after generic staging validation and before manifest/publication work. */
+  validateLeaderboard?(
+    result: Readonly<{
+      parsedRows: readonly ParsedLeaderboardRow[]
+      validRows: readonly ParsedLeaderboardRow[]
+      rejectedRowCount: number
+    }>,
+    src: SourceRow,
+    timeframe: RankingTimeframe
+  ): void
   parseProfile(raw: unknown, ctx: ParseCtx): ParsedProfile
   /** Optional source-specific whole-profile quality gate. Processors invoke
    *  it only after RAW is durable and before any serving/cache publication. */

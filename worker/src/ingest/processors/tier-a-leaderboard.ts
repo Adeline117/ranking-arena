@@ -652,6 +652,15 @@ export async function processTierA(
           })
           failureReason = 'validation_failed'
           validated = validateLeaderboardRows(rows, requiredFields)
+          adapter.validateLeaderboard?.(
+            {
+              parsedRows: rows,
+              validRows: validated.valid,
+              rejectedRowCount: validated.rejects.length,
+            },
+            src,
+            timeframe
+          )
           failureReason = 'manifest_failed'
           const manifestInput = capture
             ? {
@@ -882,15 +891,6 @@ export async function processTierA(
           )
         }
 
-        // Bot boards (spec §11.5): shadow trader rows are published above
-        // like any board; additionally upsert arena.bots from the
-        // adapter-normalized fields (traderMeta.bot).
-        if (src.trader_kind_scope === 'bot') {
-          const { publishBots } = await import('@/lib/ingest/serving/publish-bots')
-          const bots = await publishBots(src, valid, result.traderIds)
-          console.log(`[tier-a] ${src.slug} ${timeframe}d bots upserted: ${bots.written}`)
-        }
-
         // (compat→trader_latest write removed 2026-06-15) The score chain now runs
         // on arena directly (compute-leaderboard reads arena_score_inputs, not
         // trader_latest), so the compat bridge is orphaned and trader_latest is
@@ -898,8 +898,10 @@ export async function processTierA(
 
         // This is deliberately the LAST awaited side effect in one window.
         // A retry may skip the window only after RAW + snapshot + optional
-        // board-series + optional bot publication have all completed. Persist
-        // after every window so a worker restart loses at most the in-flight TF.
+        // board-series publication have all completed. Bot metadata is already
+        // part of the fenced traders upsert above; no second serving projection
+        // is allowed after that commit. Persist after every window so a worker
+        // restart loses at most the in-flight TF.
         persistedJobData = await persistCompletedTimeframe(
           job,
           persistedJobData,
