@@ -28,7 +28,11 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { useAuthSession } from '../useAuthSession'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { getViewerScope } from '@/lib/auth/viewer-scope'
-import { AUTH_OPERATION_STORAGE_KEY, AUTH_STORAGE_KEY } from '@/lib/auth/session-operation'
+import {
+  AUTH_OPERATION_STATE_STORAGE_PREFIX,
+  AUTH_OPERATION_STORAGE_KEY,
+  AUTH_STORAGE_KEY,
+} from '@/lib/auth/session-operation'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -169,6 +173,57 @@ describe('useAuthSession', () => {
     })
     expect(result.current.userId).toBe('user-b')
     expect(result.current.viewerKey).toBe('user:user-b')
+    await act(async () => tokenRefreshCoordinator.signOut())
+  })
+
+  it('resolves a cross-tab rollback from the operation-specific state event', async () => {
+    const { result } = renderHook(() => useAuthSession())
+    await waitFor(() => expect(mockAuthStateCallback).toBeDefined())
+
+    const sessionA = {
+      user: { id: 'user-a', email: 'a@example.test' },
+      access_token: 'token-a',
+      refresh_token: 'refresh-a',
+    }
+    act(() => {
+      const generation = tokenRefreshCoordinator.beginIdentityTransition('user-a')
+      tokenRefreshCoordinator.completeIdentityTransition(generation, 'user-a')
+      mockAuthStateCallback?.('SIGNED_IN', sessionA)
+    })
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionA))
+    await waitFor(() => expect(result.current.userId).toBe('user-a'))
+
+    const pendingSwitch = {
+      id: 'cross-tab-failed-switch',
+      expectedUserId: 'user-b',
+      targetKnown: true,
+      identityTransition: true,
+    }
+    window.localStorage.setItem(AUTH_OPERATION_STORAGE_KEY, JSON.stringify(pendingSwitch))
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: AUTH_OPERATION_STORAGE_KEY,
+          newValue: JSON.stringify(pendingSwitch),
+        })
+      )
+    })
+    await waitFor(() => expect(result.current.viewerKey).toBe('pending'))
+
+    const rollback = { ...pendingSwitch, expectedUserId: 'user-a' }
+    const stateKey = `${AUTH_OPERATION_STATE_STORAGE_PREFIX}${pendingSwitch.id}`
+    window.localStorage.setItem(stateKey, JSON.stringify(rollback))
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: stateKey,
+          newValue: JSON.stringify(rollback),
+        })
+      )
+    })
+
+    await waitFor(() => expect(result.current.viewerKey).toBe('user:user-a'))
+    expect(result.current.accessToken).toBe('token-a')
     await act(async () => tokenRefreshCoordinator.signOut())
   })
 

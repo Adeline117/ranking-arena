@@ -27,6 +27,7 @@ import {
   type ViewerKey,
 } from '@/lib/auth/viewer-scope'
 import {
+  AUTH_OPERATION_STATE_STORAGE_PREFIX,
   AUTH_OPERATION_STORAGE_KEY,
   AUTH_STORAGE_KEY,
   getCurrentAuthOperation,
@@ -155,9 +156,17 @@ function initializeAuth() {
   // and show a toast notification so the user knows they need to log in again.
   if (typeof window !== 'undefined') {
     window.addEventListener('storage', (event) => {
-      if (event.key === AUTH_OPERATION_STORAGE_KEY) {
+      const isOperationPointer = event.key === AUTH_OPERATION_STORAGE_KEY
+      const isOperationState = event.key?.startsWith(AUTH_OPERATION_STATE_STORAGE_PREFIX) === true
+      if (isOperationPointer || isOperationState) {
         const operation = parseAuthOperationLease(event.newValue)
         if (!operation) return
+        if (
+          isOperationState &&
+          event.key !== `${AUTH_OPERATION_STATE_STORAGE_PREFIX}${operation.id}`
+        ) {
+          return
+        }
         const currentOperation = getCurrentAuthOperation()
         // Storage events are asynchronous. A logout/login from an older tab can
         // arrive after a newer operation already owns localStorage; never let

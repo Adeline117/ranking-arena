@@ -1,7 +1,9 @@
 import {
+  AUTH_OPERATION_STORAGE_KEY,
   AUTH_STORAGE_KEY,
   __resetAuthOperationsForTests,
   beginAuthIdentityOperation,
+  bindAuthOperationPrincipal,
   clearAuthRedirectAcquisitionReceipt,
   clearAuthStorage,
   completeAuthIdentityOperation,
@@ -64,6 +66,138 @@ describe('guarded auth session storage', () => {
     })
   })
 
+  it('restores the exact B session when B commits inside the stale A storage write', async () => {
+    // A second module instance models another tab: it shares localStorage but
+    // has an independent tab-local activeWriter context.
+    let tabB!: typeof import('../session-operation')
+    jest.isolateModules(() => {
+      tabB = jest.requireActual('../session-operation') as typeof import('../session-operation')
+    })
+
+    const operationA = beginAuthIdentityOperation('user-a')
+    const sessionA = storedSession('user-a', 'late-token-a')
+    const sessionB = storedSession('user-b', 'exact-token-b')
+    const rawSetItem = Storage.prototype.setItem
+    let injected = false
+    let writeB: Promise<void> | null = null
+    let operationB: ReturnType<typeof beginAuthIdentityOperation> | null = null
+
+    const setItem = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      key: string,
+      value: string
+    ) {
+      if (key === AUTH_STORAGE_KEY && value === sessionA && !injected) {
+        injected = true
+        operationB = tabB.beginAuthIdentityOperation('user-b')
+        writeB = tabB.withAuthSessionWriter(operationB, async () => {
+          tabB.guardedAuthStorage.setItem(AUTH_STORAGE_KEY, sessionB)
+        })
+        tabB.completeAuthIdentityOperation(operationB, 'user-b')
+      }
+      rawSetItem.call(this, key, value)
+    })
+
+    try {
+      await withAuthSessionWriter(operationA, async () => {
+        guardedAuthStorage.setItem(AUTH_STORAGE_KEY, sessionA)
+      })
+      await writeB
+    } finally {
+      setItem.mockRestore()
+    }
+
+    expect(operationB).not.toBeNull()
+    expect(getCurrentAuthOperation()).toMatchObject({
+      id: operationB?.id,
+      expectedUserId: 'user-b',
+      identityTransition: false,
+    })
+    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBe(sessionB)
+  })
+
+  it("does not restore B's superseded token over B's latest rotation", async () => {
+    let tabB!: typeof import('../session-operation')
+    jest.isolateModules(() => {
+      tabB = jest.requireActual('../session-operation') as typeof import('../session-operation')
+    })
+
+    const operationA = beginAuthIdentityOperation('user-a')
+    const sessionA = storedSession('user-a', 'late-token-a')
+    const firstSessionB = storedSession('user-b', 'superseded-token-b')
+    const rotatedSessionB = storedSession('user-b', 'rotated-token-b')
+    const rawSetItem = Storage.prototype.setItem
+    let injected = false
+    let writeB: Promise<void> | null = null
+
+    const setItem = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      key: string,
+      value: string
+    ) {
+      if (key === AUTH_STORAGE_KEY && value === sessionA && !injected) {
+        injected = true
+        const operationB = tabB.beginAuthIdentityOperation('user-b')
+        writeB = tabB.withAuthSessionWriter(operationB, async () => {
+          tabB.guardedAuthStorage.setItem(AUTH_STORAGE_KEY, firstSessionB)
+          tabB.guardedAuthStorage.setItem(AUTH_STORAGE_KEY, rotatedSessionB)
+        })
+        tabB.completeAuthIdentityOperation(operationB, 'user-b')
+      }
+      rawSetItem.call(this, key, value)
+    })
+
+    try {
+      await withAuthSessionWriter(operationA, async () => {
+        guardedAuthStorage.setItem(AUTH_STORAGE_KEY, sessionA)
+      })
+      await writeB
+    } finally {
+      setItem.mockRestore()
+    }
+
+    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBe(rotatedSessionB)
+    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).not.toBe(firstSessionB)
+  })
+
+  it('keeps an interleaved B logout authoritative and purges session journals', async () => {
+    let tabB!: typeof import('../session-operation')
+    jest.isolateModules(() => {
+      tabB = jest.requireActual('../session-operation') as typeof import('../session-operation')
+    })
+
+    const operationA = beginAuthIdentityOperation('user-a')
+    const sessionA = storedSession('user-a', 'late-secret-token-a')
+    const rawSetItem = Storage.prototype.setItem
+    let injected = false
+
+    const setItem = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      key: string,
+      value: string
+    ) {
+      if (key === AUTH_STORAGE_KEY && value === sessionA && !injected) {
+        injected = true
+        const logoutB = tabB.beginAuthIdentityOperation(null)
+        expect(tabB.clearAuthStorage(logoutB)).toBe(true)
+        tabB.completeAuthIdentityOperation(logoutB, null)
+      }
+      rawSetItem.call(this, key, value)
+    })
+
+    try {
+      await withAuthSessionWriter(operationA, async () => {
+        guardedAuthStorage.setItem(AUTH_STORAGE_KEY, sessionA)
+      })
+    } finally {
+      setItem.mockRestore()
+    }
+
+    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+    const remainingStorage = Array.from(
+      { length: window.localStorage.length },
+      (_, index) => window.localStorage.getItem(window.localStorage.key(index) ?? '') ?? ''
+    ).join('\n')
+    expect(remainingStorage).not.toContain('late-secret-token-a')
+  })
+
   it('keeps logout authoritative when an old refresh resumes later', async () => {
     const operationA = beginAuthIdentityOperation('user-a')
     await withAuthSessionWriter(operationA, async () => {
@@ -106,6 +240,23 @@ describe('guarded auth session storage', () => {
       purpose: 'oauth-callback',
     })
     window.history.pushState({}, '', '/')
+  })
+
+  it('keeps the current operation pointer immutable while binding and completing', () => {
+    const operation = beginAuthIdentityOperation()
+    const pointer = window.localStorage.getItem(AUTH_OPERATION_STORAGE_KEY)
+
+    const bound = bindAuthOperationPrincipal(operation, 'user-a')
+    expect(bound).not.toBeNull()
+    const completed = completeAuthIdentityOperation(bound!, 'user-a')
+
+    expect(completed).toMatchObject({
+      id: operation.id,
+      expectedUserId: 'user-a',
+      identityTransition: false,
+    })
+    expect(window.localStorage.getItem(AUTH_OPERATION_STORAGE_KEY)).toBe(pointer)
+    expect(getCurrentAuthOperation()).toEqual(completed)
   })
 
   it('issues a distinct receipt for a password-recovery redirect acquisition', () => {

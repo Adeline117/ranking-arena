@@ -10,6 +10,10 @@
 
 export const AUTH_STORAGE_KEY = 'arena-auth'
 export const AUTH_OPERATION_STORAGE_KEY = 'arena-auth-operation'
+export const AUTH_OPERATION_STATE_STORAGE_PREFIX = 'arena-auth-operation-state:'
+
+const AUTH_SESSION_INTENT_STORAGE_PREFIX = 'arena-auth-session-intent:'
+const AUTH_SESSION_BASE_STORAGE_PREFIX = 'arena-auth-session-base:'
 
 export type AuthOperationLease = {
   id: string
@@ -34,6 +38,23 @@ type StoredSession = {
   refresh_token?: unknown
   user?: { id?: unknown }
 }
+
+type StoredAuthOperationPointer = AuthOperationLease & {
+  /** Unique journal entry containing the canonical value at publication. */
+  stableSessionKey: string
+}
+
+type StoredStableSession = Readonly<{
+  operationId: string
+  value: string | null
+}>
+
+type AuthSessionIntent = Readonly<{
+  operationId: string
+  writeId: string
+  expectedUserId: string | null
+  value: string | null
+}>
 
 type PendingPasswordRecoveryRedirect = Readonly<{
   accessToken: string
@@ -220,27 +241,170 @@ export function parseAuthOperationLease(value: string | null): AuthOperationLeas
   }
 }
 
+function parseAuthOperationPointer(value: string | null): StoredAuthOperationPointer | null {
+  const lease = parseAuthOperationLease(value)
+  if (!lease || !value) return null
+  try {
+    const parsed = JSON.parse(value) as Partial<StoredAuthOperationPointer>
+    if (parsed.stableSessionKey !== stableSessionKey(lease.id)) return null
+    return { ...lease, stableSessionKey: parsed.stableSessionKey }
+  } catch {
+    return null
+  }
+}
+
+function operationStateKey(operationId: string): string {
+  return `${AUTH_OPERATION_STATE_STORAGE_PREFIX}${operationId}`
+}
+
+function sessionIntentKey(operationId: string): string {
+  return `${AUTH_SESSION_INTENT_STORAGE_PREFIX}${operationId}`
+}
+
+function stableSessionKey(operationId: string): string {
+  return `${AUTH_SESSION_BASE_STORAGE_PREFIX}${operationId}`
+}
+
+function parseStableSession(value: string | null, operationId: string): StoredStableSession | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as Partial<StoredStableSession>
+    if (
+      parsed.operationId !== operationId ||
+      (parsed.value !== null && typeof parsed.value !== 'string')
+    ) {
+      return null
+    }
+    return { operationId, value: parsed.value }
+  } catch {
+    return null
+  }
+}
+
+function parseSessionIntent(value: string | null, operationId: string): AuthSessionIntent | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as Partial<AuthSessionIntent>
+    if (
+      parsed.operationId !== operationId ||
+      typeof parsed.writeId !== 'string' ||
+      (parsed.expectedUserId !== null && typeof parsed.expectedUserId !== 'string') ||
+      (parsed.value !== null && typeof parsed.value !== 'string')
+    ) {
+      return null
+    }
+    return {
+      operationId,
+      writeId: parsed.writeId,
+      expectedUserId: parsed.expectedUserId,
+      value: parsed.value,
+    }
+  } catch {
+    return null
+  }
+}
+
 export function getCurrentAuthOperation(): AuthOperationLease | null {
   const authStorage = storage()
   if (!authStorage) return memoryLease
   try {
-    return parseAuthOperationLease(authStorage.getItem(AUTH_OPERATION_STORAGE_KEY))
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const pointerRaw = authStorage.getItem(AUTH_OPERATION_STORAGE_KEY)
+      const pointer = parseAuthOperationLease(pointerRaw)
+      if (!pointer) return null
+      const state = parseAuthOperationLease(authStorage.getItem(operationStateKey(pointer.id)))
+      if (authStorage.getItem(AUTH_OPERATION_STORAGE_KEY) === pointerRaw) {
+        return state?.id === pointer.id ? state : pointer
+      }
+    }
+    return null
   } catch {
     return memoryLease
   }
 }
 
+/**
+ * Publish the operation pointer exactly once. Later bind/complete updates use
+ * the operation's unique state key, so an old check-then-update can never
+ * overwrite a newer operation pointer from another tab.
+ */
 function publishLease(lease: AuthOperationLease): AuthOperationLease {
   memoryLease = lease
   const authStorage = storage()
   if (authStorage) {
+    const baseKey = stableSessionKey(lease.id)
+    let baseRaw: string | null = null
     try {
-      authStorage.setItem(AUTH_OPERATION_STORAGE_KEY, JSON.stringify(lease))
+      const previous = parseAuthOperationLease(authStorage.getItem(AUTH_OPERATION_STORAGE_KEY))
+      const stableSession = authStorage.getItem(AUTH_STORAGE_KEY)
+      baseRaw = JSON.stringify({ operationId: lease.id, value: stableSession })
+      const pointer: StoredAuthOperationPointer = { ...lease, stableSessionKey: baseKey }
+      authStorage.setItem(baseKey, baseRaw)
+      authStorage.setItem(AUTH_OPERATION_STORAGE_KEY, JSON.stringify(pointer))
+
+      const published =
+        parseAuthOperationLease(authStorage.getItem(AUTH_OPERATION_STORAGE_KEY))?.id === lease.id
+      if (!published && authStorage.getItem(baseKey) === baseRaw) {
+        authStorage.removeItem(baseKey)
+      }
+
+      // Only the winning pointer may discard its predecessor's token journal.
+      // A stale writer can still recreate its own record, but it can never make
+      // that record authoritative because desired sessions are selected by the
+      // immutable current pointer.
+      if (previous && previous.id !== lease.id) {
+        const current = parseAuthOperationLease(authStorage.getItem(AUTH_OPERATION_STORAGE_KEY))
+        if (current?.id === lease.id) {
+          authStorage.removeItem(operationStateKey(previous.id))
+          authStorage.removeItem(sessionIntentKey(previous.id))
+          authStorage.removeItem(stableSessionKey(previous.id))
+        }
+      }
     } catch {
+      try {
+        const current = parseAuthOperationLease(authStorage.getItem(AUTH_OPERATION_STORAGE_KEY))
+        if (
+          baseRaw !== null &&
+          current?.id !== lease.id &&
+          authStorage.getItem(baseKey) === baseRaw
+        ) {
+          authStorage.removeItem(baseKey)
+        }
+      } catch {
+        // The storage backend is unavailable; no further cleanup is possible.
+      }
       // The in-memory lease still protects this tab when storage is unavailable.
     }
   }
   return lease
+}
+
+function publishLeaseState(lease: AuthOperationLease): AuthOperationLease | null {
+  const authStorage = storage()
+  if (!authStorage) {
+    if (memoryLease?.id !== lease.id) return null
+    memoryLease = lease
+    return lease
+  }
+
+  const raw = JSON.stringify(lease)
+  try {
+    const pointer = parseAuthOperationLease(authStorage.getItem(AUTH_OPERATION_STORAGE_KEY))
+    if (pointer?.id !== lease.id) return null
+    authStorage.setItem(operationStateKey(lease.id), raw)
+    const current = parseAuthOperationLease(authStorage.getItem(AUTH_OPERATION_STORAGE_KEY))
+    const storedState = authStorage.getItem(operationStateKey(lease.id))
+    if (current?.id !== lease.id || storedState !== raw) {
+      if (current?.id !== lease.id && storedState === raw) {
+        authStorage.removeItem(operationStateKey(lease.id))
+      }
+      return null
+    }
+    memoryLease = lease
+    return lease
+  } catch {
+    return null
+  }
 }
 
 export function beginAuthIdentityOperation(expectedUserId?: string | null): AuthOperationLease {
@@ -257,6 +421,21 @@ export function captureAuthOperation(expectedUserId: string): AuthOperationLease
   const current = getCurrentAuthOperation()
   if (current) {
     if (!current.targetKnown || current.expectedUserId !== expectedUserId) return null
+    const authStorage = storage()
+    if (authStorage && !current.identityTransition) {
+      try {
+        if (
+          parseAuthOperationPointer(authStorage.getItem(AUTH_OPERATION_STORAGE_KEY))?.id !==
+          current.id
+        ) {
+          // Upgrade a steady-state lease left by an older bundle so its next
+          // write also has an exact recovery journal.
+          return publishLease({ ...current, id: createLeaseId() })
+        }
+      } catch {
+        return null
+      }
+    }
     return current
   }
   return publishLease({
@@ -275,11 +454,12 @@ export function bindAuthOperationPrincipal(
   lease: AuthOperationLease,
   userId: string | null
 ): AuthOperationLease | null {
-  if (!isAuthOperationCurrent(lease)) return null
-  if (lease.targetKnown && lease.expectedUserId !== userId) return null
-  if (lease.targetKnown) return lease
-  const bound = { ...lease, expectedUserId: userId, targetKnown: true }
-  return publishLease(bound)
+  const current = getCurrentAuthOperation()
+  if (!current || current.id !== lease.id) return null
+  if (current.targetKnown && current.expectedUserId !== userId) return null
+  if (current.targetKnown) return current
+  const bound = { ...current, expectedUserId: userId, targetKnown: true }
+  return publishLeaseState(bound)
 }
 
 /** Restore the session that remained in storage after a failed target switch. */
@@ -287,17 +467,24 @@ export function rebindAuthOperationPrincipal(
   lease: AuthOperationLease,
   userId: string | null
 ): AuthOperationLease | null {
-  if (!isAuthOperationCurrent(lease)) return null
-  return publishLease({ ...lease, expectedUserId: userId, targetKnown: true })
+  const current = getCurrentAuthOperation()
+  if (!current || current.id !== lease.id) return null
+  if (!current.identityTransition) {
+    return current.targetKnown && current.expectedUserId === userId ? current : null
+  }
+  return publishLeaseState({ ...current, expectedUserId: userId, targetKnown: true })
 }
 
 export function completeAuthIdentityOperation(
   lease: AuthOperationLease,
   userId: string | null
 ): AuthOperationLease | null {
-  if (!isAuthOperationCurrent(lease)) return null
-  return publishLease({
-    ...lease,
+  const current = getCurrentAuthOperation()
+  if (!current || current.id !== lease.id) return null
+  if (current.targetKnown && current.expectedUserId !== userId) return null
+  if (!current.identityTransition) return current
+  return publishLeaseState({
+    ...current,
     expectedUserId: userId,
     targetKnown: true,
     identityTransition: false,
@@ -348,6 +535,160 @@ function getPasswordRecoveryRedirectWriter(session: StoredSession): AuthOperatio
     return recovery.operation
   }
   return null
+}
+
+type DesiredAuthSession = Readonly<{
+  operationId: string
+  version: string
+  value: string | null
+}>
+
+function isAuthOperationPrincipalCurrent(lease: AuthOperationLease): boolean {
+  const current = getCurrentAuthOperation()
+  return (
+    current?.id === lease.id &&
+    current.targetKnown === lease.targetKnown &&
+    current.expectedUserId === lease.expectedUserId
+  )
+}
+
+function publishSessionIntent(
+  authStorage: Storage,
+  lease: AuthOperationLease,
+  value: string | null
+): AuthSessionIntent | null {
+  const intent: AuthSessionIntent = {
+    operationId: lease.id,
+    writeId: createLeaseId(),
+    expectedUserId: lease.expectedUserId,
+    value,
+  }
+  const raw = JSON.stringify(intent)
+
+  try {
+    if (!isAuthOperationPrincipalCurrent(lease)) return null
+    authStorage.setItem(sessionIntentKey(lease.id), raw)
+
+    const storedIntent = authStorage.getItem(sessionIntentKey(lease.id))
+    if (isAuthOperationPrincipalCurrent(lease) && storedIntent === raw) return intent
+
+    if (storedIntent === raw) authStorage.removeItem(sessionIntentKey(lease.id))
+    return null
+  } catch {
+    return null
+  }
+}
+
+function isSessionIntentCurrent(authStorage: Storage, intent: AuthSessionIntent): boolean {
+  try {
+    const pointerRaw = authStorage.getItem(AUTH_OPERATION_STORAGE_KEY)
+    const pointer = parseAuthOperationLease(pointerRaw)
+    const stateRaw = pointer ? authStorage.getItem(operationStateKey(pointer.id)) : null
+    const state = parseAuthOperationLease(stateRaw) ?? pointer
+    const current = parseSessionIntent(
+      authStorage.getItem(sessionIntentKey(intent.operationId)),
+      intent.operationId
+    )
+    return (
+      pointer?.id === intent.operationId &&
+      state?.targetKnown === true &&
+      state.expectedUserId === intent.expectedUserId &&
+      current?.writeId === intent.writeId &&
+      authStorage.getItem(AUTH_OPERATION_STORAGE_KEY) === pointerRaw &&
+      authStorage.getItem(operationStateKey(intent.operationId)) === stateRaw
+    )
+  } catch {
+    return false
+  }
+}
+
+function desiredAuthSession(authStorage: Storage): DesiredAuthSession | null {
+  try {
+    const pointerRaw = authStorage.getItem(AUTH_OPERATION_STORAGE_KEY)
+    const pointer = parseAuthOperationPointer(pointerRaw)
+    if (!pointer) return null
+    const stateRaw = authStorage.getItem(operationStateKey(pointer.id))
+    const state = parseAuthOperationLease(stateRaw) ?? pointer
+    const intent = parseSessionIntent(authStorage.getItem(sessionIntentKey(pointer.id)), pointer.id)
+    const stable = parseStableSession(authStorage.getItem(pointer.stableSessionKey), pointer.id)
+    if (
+      authStorage.getItem(AUTH_OPERATION_STORAGE_KEY) !== pointerRaw ||
+      authStorage.getItem(operationStateKey(pointer.id)) !== stateRaw
+    ) {
+      return null
+    }
+    if (intent && state.targetKnown && intent.expectedUserId === state.expectedUserId) {
+      return {
+        operationId: pointer.id,
+        version: `intent:${intent.writeId}`,
+        value: intent.value,
+      }
+    }
+    return stable
+      ? {
+          operationId: pointer.id,
+          version: 'stable',
+          value: stable.value,
+        }
+      : null
+  } catch {
+    return null
+  }
+}
+
+function sameDesiredSession(a: DesiredAuthSession | null, b: DesiredAuthSession | null): boolean {
+  return (
+    a !== null &&
+    b !== null &&
+    a.operationId === b.operationId &&
+    a.version === b.version &&
+    a.value === b.value
+  )
+}
+
+/**
+ * Repair a canonical write that lost a race with a newer operation. The
+ * winner's exact value is read from its own immutable-key journal; after every
+ * restore we re-read the journal so a token rotation that raced the restore is
+ * applied instead of being replaced by an older snapshot.
+ */
+function reconcileCanonicalAuthSession(authStorage: Storage): boolean {
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const desired = desiredAuthSession(authStorage)
+    if (!desired) return false
+
+    if (authStorage.getItem(AUTH_STORAGE_KEY) !== desired.value) {
+      if (desired.value === null) authStorage.removeItem(AUTH_STORAGE_KEY)
+      else authStorage.setItem(AUTH_STORAGE_KEY, desired.value)
+    }
+
+    const verified = desiredAuthSession(authStorage)
+    if (
+      sameDesiredSession(desired, verified) &&
+      authStorage.getItem(AUTH_STORAGE_KEY) === desired.value
+    ) {
+      return true
+    }
+  }
+
+  // Sustained cross-tab churn should not pin the browser's main thread. Every
+  // winning writer also reconciles synchronously; this retry covers the rare
+  // case where all 32 snapshots changed underneath this stale writer.
+  queueMicrotask(() => reconcileCanonicalAuthSession(authStorage))
+  return false
+}
+
+function discardStaleSessionIntent(authStorage: Storage, intent: AuthSessionIntent): void {
+  try {
+    const key = sessionIntentKey(intent.operationId)
+    const raw = authStorage.getItem(key)
+    if (parseSessionIntent(raw, intent.operationId)?.writeId === intent.writeId) {
+      const current = parseAuthOperationLease(authStorage.getItem(AUTH_OPERATION_STORAGE_KEY))
+      if (current?.id !== intent.operationId) authStorage.removeItem(key)
+    }
+  } catch {
+    // Cleanup is best-effort; the next winning operation also removes it.
+  }
 }
 
 /**
@@ -401,15 +742,28 @@ export const guardedAuthStorage = {
     const bound = bindAuthOperationPrincipal(writer, userId)
     if (!bound || !isAuthOperationCurrent(bound)) return
 
-    authStorage.setItem(key, value)
-
-    // localStorage operations are atomic individually, not as a pair. Re-check
-    // after the write so a cross-tab transition between CAS and set cannot leave
-    // this stale value behind. Never remove a newer value written by the winner.
-    if (!isAuthOperationCurrent(bound) && authStorage.getItem(key) === value) {
-      authStorage.removeItem(key)
+    // Publish the winner's exact session before touching the shared canonical
+    // key. Because this key is unique to the operation, a stale A writer cannot
+    // overwrite B's recovery value even if A resumes inside localStorage.setItem.
+    const intent = publishSessionIntent(authStorage, bound, value)
+    if (!intent || !isSessionIntentCurrent(authStorage, intent)) {
+      reconcileCanonicalAuthSession(authStorage)
       return
     }
+
+    authStorage.setItem(key, value)
+
+    // localStorage operations are atomic individually, not as a transaction.
+    // Reconcile from the current operation's exact intent rather than deleting
+    // this value or restoring an arbitrary earlier token.
+    const reconciled = reconcileCanonicalAuthSession(authStorage)
+    const stillOwnsWrite =
+      isAuthOperationCurrent(bound) && isSessionIntentCurrent(authStorage, intent)
+    if (!reconciled || !stillOwnsWrite) {
+      discardStaleSessionIntent(authStorage, intent)
+      return
+    }
+    authStorage.removeItem(stableSessionKey(bound.id))
     if (internalRedirectWriter) {
       const completed = completeAuthIdentityOperation(bound, userId)
       const navigationKey = getAuthRedirectNavigationKey()
@@ -440,7 +794,24 @@ export function clearAuthStorage(lease: AuthOperationLease): boolean {
   const authStorage = storage()
   if (!authStorage) return true
   try {
+    const intent = publishSessionIntent(authStorage, lease, null)
+    if (!intent || !isSessionIntentCurrent(authStorage, intent)) {
+      reconcileCanonicalAuthSession(authStorage)
+      return false
+    }
     authStorage.removeItem(AUTH_STORAGE_KEY)
+    const reconciled = reconcileCanonicalAuthSession(authStorage)
+    const stillOwnsClear =
+      isAuthOperationCurrent(lease) && isSessionIntentCurrent(authStorage, intent)
+    if (!stillOwnsClear) {
+      discardStaleSessionIntent(authStorage, intent)
+      return false
+    }
+    if (!reconciled) return false
+    authStorage.removeItem(stableSessionKey(lease.id))
+
+    // These companion values are only cleared after the canonical null intent
+    // is proven current. The guarded adapter ignores later stale removals.
     authStorage.removeItem(`${AUTH_STORAGE_KEY}-user`)
     authStorage.removeItem(`${AUTH_STORAGE_KEY}-code-verifier`)
     return true
@@ -471,6 +842,18 @@ export function __resetAuthOperationsForTests(): void {
     authStorage?.removeItem(AUTH_STORAGE_KEY)
     authStorage?.removeItem(`${AUTH_STORAGE_KEY}-user`)
     authStorage?.removeItem(`${AUTH_STORAGE_KEY}-code-verifier`)
+    if (authStorage) {
+      for (let index = authStorage.length - 1; index >= 0; index -= 1) {
+        const key = authStorage.key(index)
+        if (
+          key?.startsWith(AUTH_OPERATION_STATE_STORAGE_PREFIX) ||
+          key?.startsWith(AUTH_SESSION_INTENT_STORAGE_PREFIX) ||
+          key?.startsWith(AUTH_SESSION_BASE_STORAGE_PREFIX)
+        ) {
+          authStorage.removeItem(key)
+        }
+      }
+    }
   } catch {
     // Test environments without functional storage use the in-memory reset.
   }
