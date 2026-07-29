@@ -27,6 +27,7 @@ WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260725017500_leaderboard_rank_
 ATTESTATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260729011000_leaderboard_rank_manifest_attestation_substrate.sql"
 CANONICAL_BATCH_MIGRATION="$ROOT_DIR/supabase/migrations/20260729014500_leaderboard_rank_generation_canonical_batches.sql"
 ATTESTED_WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729015000_leaderboard_rank_generation_attested_batch_writer.sql"
+PRIVATE_STAGING_MIGRATION="$ROOT_DIR/supabase/migrations/20260729054400_leaderboard_rank_generation_private_staging.sql"
 CAPACITY_BENCHMARK="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-64k-benchmark.pg17.psql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 BENCHMARK_64K="${ARENA_ATOMIC_WRITER_BENCHMARK_64K:-0}"
@@ -67,6 +68,7 @@ for required_file in \
   "$ATTESTATION_MIGRATION" \
   "$CANONICAL_BATCH_MIGRATION" \
   "$ATTESTED_WRITER_MIGRATION" \
+  "$PRIVATE_STAGING_MIGRATION" \
   "$CAPACITY_BENCHMARK"; do
   if [[ ! -f "$required_file" ]]; then
     echo "required atomic-writer proof input is missing: $required_file" >&2
@@ -795,6 +797,25 @@ if ! psql_cmd -q -f "$ATTESTED_WRITER_MIGRATION" >"$ERROR_FILE" 2>&1; then
   exit 1
 fi
 psql_cmd -q <<'SQL'
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA arena
+  GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON TABLES TO fixture_rogue;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA arena
+  GRANT EXECUTE ON FUNCTIONS TO fixture_rogue;
+SQL
+if ! psql_cmd -q -f "$PRIVATE_STAGING_MIGRATION" >"$ERROR_FILE" 2>&1; then
+  echo 'private rank staging migration failed after the real dependency chain' >&2
+  sed -n '1,280p' "$ERROR_FILE" >&2
+  exit 1
+fi
+psql_cmd -q <<'SQL'
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA arena
+  REVOKE SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON TABLES FROM fixture_rogue;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA arena
+  REVOKE EXECUTE ON FUNCTIONS FROM fixture_rogue;
+SQL
+psql_cmd -q <<'SQL'
 DO $attestation_encoder_proof$
 DECLARE
   v_commitment text;
@@ -1025,7 +1046,7 @@ BEGIN
         joined.input_value->>'source',
         'futures'::text,
         joined.input_value->>'source_trader_id',
-        joined.public_rank,
+        NULL::integer,
         (joined.output_value->>'totalScore')::numeric,
         (joined.input_value->>'roi')::numeric,
         (joined.input_value->>'pnl')::numeric,
@@ -1083,8 +1104,8 @@ BEGIN
         'verified'::text,
         false,
         false,
-        0,
-        true,
+        NULL::integer,
+        NULL::boolean,
         10,
         (joined.output_value->>'totalScore')::numeric,
         (joined.output_value->>'totalScore')::numeric,
@@ -1991,6 +2012,383 @@ if [[ "$COMPLETE_STATE" != '1001|2|1001|2|alpha:1:3,beta:0:1|1|writing' ]]; then
   echo "successful atomic batch did not commit ranks and receipts together: $COMPLETE_STATE" >&2
   exit 1
 fi
+
+# The private store receives normalized scorer payloads only: terminal rank,
+# rank_change, and is_new remain NULL. Every fixed batch header and its rows are
+# born in one top-level transaction, while the deferred validators rebind the
+# exact claimed plan, typed evidence, and immutable manifest attestation without
+# touching live DML.
+expect_failure \
+  'private stage accepted a batch plan that did not reconstruct its claim' \
+  'stage batch lost its exact generation authority' \
+  "BEGIN;
+   CREATE TEMP TABLE stage_attack_clock ON COMMIT DROP AS
+   SELECT pg_catalog.clock_timestamp() AS staged_at;
+   INSERT INTO arena.leaderboard_rank_generation_stage_batches (
+     contract,season_id,generation_seq,score_cohort_id,batch_index,
+     score_input_manifest_id,score_input_manifest_digest,batch_sha256_plan,
+     batch_sha256,row_count,source_count,first_source,first_source_trader_id,
+     last_source,last_source_trader_id,staged_at
+   )
+   SELECT
+     'leaderboard-rank-generation-stage-batch@1',
+     fixture.season_id,
+     fixture.generation_seq,
+     fixture.score_cohort_id,
+     0,
+     fixture.score_input_manifest_id,
+     fixture.score_input_manifest_digest,
+     ARRAY[candidate.digest, fixture.batch_sha256_plan[2]]::text[],
+     receipt.batch_sha256,
+     receipt.row_count,
+     receipt.source_count,
+     receipt.first_source,
+     receipt.first_source_trader_id,
+     receipt.last_source,
+     receipt.last_source_trader_id,
+     attack.staged_at
+   FROM arena.fixture_atomic_writer_case AS fixture
+   JOIN ONLY arena.leaderboard_rank_generation_batch_receipts AS receipt
+     ON receipt.season_id=fixture.season_id
+    AND receipt.generation_seq=fixture.generation_seq
+    AND receipt.batch_index=0
+   CROSS JOIN stage_attack_clock AS attack
+   CROSS JOIN LATERAL (
+     SELECT option.digest
+     FROM pg_catalog.unnest(ARRAY[
+       pg_catalog.repeat('0',64),
+       pg_catalog.repeat('1',64),
+       pg_catalog.repeat('2',64)
+     ]::text[]) AS option(digest)
+     WHERE option.digest <> ALL(fixture.batch_sha256_plan)
+     LIMIT 1
+   ) AS candidate;
+   INSERT INTO arena.leaderboard_rank_generation_stage_rows (
+     contract,season_id,generation_seq,score_cohort_id,batch_index,
+     batch_position,source,source_trader_id,row_payload,staged_at
+   )
+   SELECT
+     'leaderboard-rank-generation-stage-row@1',
+     fixture.season_id,
+     fixture.generation_seq,
+     fixture.score_cohort_id,
+     0,
+     position.value,
+     (fixture.batch_0_rows[position.value]).source,
+     (fixture.batch_0_rows[position.value]).source_trader_id,
+     fixture.batch_0_rows[position.value],
+     attack.staged_at
+   FROM arena.fixture_atomic_writer_case AS fixture
+   CROSS JOIN stage_attack_clock AS attack
+   CROSS JOIN LATERAL pg_catalog.generate_subscripts(
+     fixture.batch_0_rows,1
+   ) AS position(value);
+   SET CONSTRAINTS
+     arena.leaderboard_rank_generation_stage_batches_complete IMMEDIATE;
+   COMMIT;"
+
+for stage_batch_index in 0 1; do
+  psql_cmd -q -v stage_batch_index="$stage_batch_index" <<'SQL'
+BEGIN;
+SELECT pg_catalog.set_config(
+  'arena.fixture_stage_batch_index',
+  :'stage_batch_index',
+  true
+);
+DO $stage_complete_generation$
+DECLARE
+  v_case arena.fixture_atomic_writer_case%ROWTYPE;
+  v_batch_index integer := pg_catalog.current_setting(
+    'arena.fixture_stage_batch_index'
+  )::integer;
+  v_input_rows arena.leaderboard_rank_batch_row_v1[];
+  v_stage_rows arena.leaderboard_rank_batch_row_v1[];
+  v_evidence jsonb;
+  v_staged_at timestamptz;
+BEGIN
+  SELECT fixture.*
+  INTO STRICT v_case
+  FROM arena.fixture_atomic_writer_case AS fixture;
+
+  v_input_rows := CASE v_batch_index
+    WHEN 0 THEN v_case.batch_0_rows
+    ELSE v_case.batch_1_rows
+  END;
+
+    SELECT pg_catalog.array_agg(
+      pg_catalog.jsonb_populate_record(
+        NULL::arena.leaderboard_rank_batch_row_v1,
+        pg_catalog.to_jsonb(input) ||
+          '{"rank":null,"rank_change":null,"is_new":null}'::jsonb
+      )
+      ORDER BY input.source COLLATE pg_catalog."C",
+               input.source_trader_id COLLATE pg_catalog."C"
+    )
+    INTO STRICT v_stage_rows
+    FROM pg_catalog.unnest(v_input_rows) AS input;
+
+    v_evidence := arena.build_leaderboard_rank_typed_batch_evidence_v1(
+      v_case.season_id,
+      v_case.score_cohort_id,
+      v_case.computed_at,
+      v_stage_rows
+    );
+    v_staged_at := pg_catalog.clock_timestamp();
+
+    INSERT INTO arena.leaderboard_rank_generation_stage_batches (
+      contract,
+      season_id,
+      generation_seq,
+      score_cohort_id,
+      batch_index,
+      score_input_manifest_id,
+      score_input_manifest_digest,
+      batch_sha256_plan,
+      batch_sha256,
+      row_count,
+      source_count,
+      first_source,
+      first_source_trader_id,
+      last_source,
+      last_source_trader_id,
+      staged_at
+    ) VALUES (
+      'leaderboard-rank-generation-stage-batch@1',
+      v_case.season_id,
+      v_case.generation_seq,
+      v_case.score_cohort_id,
+      v_batch_index,
+      v_case.score_input_manifest_id,
+      v_case.score_input_manifest_digest,
+      v_case.batch_sha256_plan,
+      v_evidence->>'batch_sha256',
+      (v_evidence->>'row_count')::integer,
+      (v_evidence->>'source_count')::integer,
+      v_evidence->>'first_source',
+      v_evidence->>'first_source_trader_id',
+      v_evidence->>'last_source',
+      v_evidence->>'last_source_trader_id',
+      v_staged_at
+    );
+
+    INSERT INTO arena.leaderboard_rank_generation_stage_rows (
+      contract,
+      season_id,
+      generation_seq,
+      score_cohort_id,
+      batch_index,
+      batch_position,
+      source,
+      source_trader_id,
+      row_payload,
+      staged_at
+    )
+    SELECT
+      'leaderboard-rank-generation-stage-row@1',
+      v_case.season_id,
+      v_case.generation_seq,
+      v_case.score_cohort_id,
+      v_batch_index,
+      position.value,
+      (v_stage_rows[position.value]).source,
+      (v_stage_rows[position.value]).source_trader_id,
+      v_stage_rows[position.value],
+      v_staged_at
+    FROM pg_catalog.generate_subscripts(v_stage_rows, 1)
+      AS position(value)
+    ORDER BY position.value;
+END
+$stage_complete_generation$;
+COMMIT;
+SQL
+done
+
+psql_cmd -q <<'SQL'
+DO $stage_proof$
+DECLARE
+  v_state text;
+  v_evidence_exact boolean;
+  v_write_set_exact boolean;
+BEGIN
+  SELECT pg_catalog.concat_ws(
+    '|',
+    (SELECT pg_catalog.count(*)
+     FROM ONLY arena.leaderboard_rank_generation_stage_batches),
+    (SELECT pg_catalog.count(*)
+     FROM ONLY arena.leaderboard_rank_generation_stage_rows),
+    (SELECT pg_catalog.sum(batch.row_count)
+     FROM ONLY arena.leaderboard_rank_generation_stage_batches AS batch),
+    (SELECT pg_catalog.count(*)
+     FROM ONLY arena.leaderboard_rank_generation_stage_rows AS staged
+     WHERE (staged.row_payload).rank IS NOT NULL
+        OR (staged.row_payload).rank_change IS NOT NULL
+        OR (staged.row_payload).is_new IS NOT NULL),
+    (SELECT pg_catalog.count(*)
+     FROM public.leaderboard_ranks AS rank_row
+     JOIN arena.fixture_atomic_writer_case AS fixture
+       ON fixture.season_id = rank_row.season_id
+      AND fixture.score_cohort_id = rank_row.rank_publication_id),
+    (SELECT pg_catalog.string_agg(
+       fence.source || ':' || fence.mutation_seq,
+       ',' ORDER BY fence.source COLLATE pg_catalog."C"
+     )
+     FROM ONLY arena.leaderboard_rank_mutation_fences AS fence
+     WHERE fence.season_id = '90D')
+  )
+  INTO STRICT v_state;
+
+  WITH rebuilt AS MATERIALIZED (
+    SELECT
+      batch.season_id,
+      batch.generation_seq,
+      batch.batch_index,
+      batch.batch_sha256,
+      arena.build_leaderboard_rank_typed_batch_evidence_v1(
+        batch.season_id,
+        batch.score_cohort_id,
+        claim.computed_at,
+        pg_catalog.array_agg(
+          staged.row_payload ORDER BY staged.batch_position
+        )
+      )->>'batch_sha256' AS rebuilt_sha256
+    FROM ONLY arena.leaderboard_rank_generation_stage_batches AS batch
+    JOIN ONLY arena.leaderboard_rank_generation_claims AS claim
+      ON claim.season_id = batch.season_id
+     AND claim.generation_seq = batch.generation_seq
+     AND claim.score_cohort_id = batch.score_cohort_id
+    JOIN ONLY arena.leaderboard_rank_generation_stage_rows AS staged
+      ON staged.season_id = batch.season_id
+     AND staged.generation_seq = batch.generation_seq
+     AND staged.batch_index = batch.batch_index
+     AND staged.score_cohort_id = batch.score_cohort_id
+    GROUP BY
+      batch.season_id,
+      batch.generation_seq,
+      batch.batch_index,
+      batch.batch_sha256,
+      batch.score_cohort_id,
+      claim.computed_at
+  )
+  SELECT pg_catalog.bool_and(
+    rebuilt.batch_sha256 = rebuilt.rebuilt_sha256
+  )
+  INTO STRICT v_evidence_exact
+  FROM rebuilt;
+
+  SELECT
+    pg_catalog.array_agg(
+      batch.batch_sha256 ORDER BY batch.batch_index
+    ) = batch.batch_sha256_plan
+    AND arena.build_leaderboard_rank_generation_write_set_sha256_v1(
+      batch.season_id,
+      batch.score_cohort_id,
+      batch.score_input_manifest_digest,
+      claim.computed_at,
+      claim.expected_rank_count,
+      pg_catalog.array_agg(
+        batch.batch_sha256 ORDER BY batch.batch_index
+      )
+    ) = claim.write_set_sha256
+  INTO STRICT v_write_set_exact
+  FROM ONLY arena.leaderboard_rank_generation_stage_batches AS batch
+  JOIN ONLY arena.leaderboard_rank_generation_claims AS claim
+    ON claim.season_id = batch.season_id
+   AND claim.generation_seq = batch.generation_seq
+   AND claim.score_cohort_id = batch.score_cohort_id
+  GROUP BY
+    batch.season_id,
+    batch.score_cohort_id,
+    batch.score_input_manifest_digest,
+    batch.batch_sha256_plan,
+    claim.computed_at,
+    claim.expected_rank_count,
+    claim.write_set_sha256;
+
+  IF v_state IS DISTINCT FROM '2|1001|1001|0|1001|alpha:3,beta:1'
+     OR v_evidence_exact IS DISTINCT FROM true
+     OR v_write_set_exact IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'private stage proof drifted: % % %',
+      v_state,
+      v_evidence_exact,
+      v_write_set_exact;
+  END IF;
+END
+$stage_proof$;
+SQL
+
+expect_failure \
+  'committed stage batch accepted an appended row' \
+  'exact batch header from the current transaction' \
+  "INSERT INTO arena.leaderboard_rank_generation_stage_rows (
+     contract,season_id,generation_seq,score_cohort_id,batch_index,
+     batch_position,source,source_trader_id,row_payload,staged_at
+   )
+   SELECT
+     'leaderboard-rank-generation-stage-row@1',
+     fixture.season_id,
+     fixture.generation_seq,
+     fixture.score_cohort_id,
+     1,
+     2,
+     'beta',
+     'trader-001002',
+     pg_catalog.jsonb_populate_record(
+       NULL::arena.leaderboard_rank_batch_row_v1,
+       pg_catalog.to_jsonb(fixture.batch_1_rows[1]) ||
+         pg_catalog.jsonb_build_object(
+           'source_trader_id','trader-001002',
+           'rank',NULL,
+           'rank_change',NULL,
+           'is_new',NULL
+         )
+     ),
+     batch.staged_at
+   FROM arena.fixture_atomic_writer_case AS fixture
+   JOIN ONLY arena.leaderboard_rank_generation_stage_batches AS batch
+     ON batch.season_id=fixture.season_id
+    AND batch.generation_seq=fixture.generation_seq
+    AND batch.batch_index=1;"
+
+expect_failure \
+  'private stage row was mutable after commit' \
+  'immutable' \
+  "UPDATE arena.leaderboard_rank_generation_stage_rows
+   SET staged_at=staged_at+interval '1 microsecond'
+   WHERE season_id='90D' AND generation_seq=1 AND batch_index=1;"
+
+expect_failure \
+  'private stage table was readable by service_role' \
+  'permission denied' \
+  "SET ROLE service_role;
+   SELECT pg_catalog.count(*)
+   FROM arena.leaderboard_rank_generation_stage_rows;"
+
+if [[ "$(psql_cmd -Atqc "
+  SELECT pg_catalog.count(*)
+  FROM ONLY arena.leaderboard_rank_generation_stage_rows;
+")" != '1001' ]]; then
+  echo 'rejected private-stage attacks changed the committed row set' >&2
+  exit 1
+fi
+
+# The remainder of this older writer proof deliberately mutates and removes
+# attestation fixtures. Remove only this test generation's private copy under
+# explicitly disabled owner triggers so those legacy negative cases remain
+# independent; production has no such cleanup path.
+psql_cmd -q <<'SQL'
+ALTER TABLE arena.leaderboard_rank_generation_stage_rows
+  DISABLE TRIGGER leaderboard_rank_generation_stage_rows_immutable;
+ALTER TABLE arena.leaderboard_rank_generation_stage_batches
+  DISABLE TRIGGER leaderboard_rank_generation_stage_batches_immutable;
+DELETE FROM ONLY arena.leaderboard_rank_generation_stage_rows
+WHERE season_id='90D' AND generation_seq=1;
+DELETE FROM ONLY arena.leaderboard_rank_generation_stage_batches
+WHERE season_id='90D' AND generation_seq=1;
+ALTER TABLE arena.leaderboard_rank_generation_stage_rows
+  ENABLE TRIGGER leaderboard_rank_generation_stage_rows_immutable;
+ALTER TABLE arena.leaderboard_rank_generation_stage_batches
+  ENABLE TRIGGER leaderboard_rank_generation_stage_batches_immutable;
+SQL
 
 PERSISTED_EQUALITY="$(psql_cmd -Atqc "
 WITH batches(batch_rows) AS (
