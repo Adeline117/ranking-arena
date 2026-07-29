@@ -6,6 +6,7 @@ import { useLanguage } from '../../Providers/LanguageProvider'
 import { MetricBadge } from './MetricBadge'
 import AntiGamingBadge from '@/app/components/ranking/AntiGamingBadge'
 import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
+import { formatDrawdown, NULL_DISPLAY } from '@/lib/utils/format'
 
 export interface MetricBadgesGridProps {
   sharpeRatio: number | undefined
@@ -52,6 +53,8 @@ export function MetricBadgesGrid({
   isVisible,
 }: MetricBadgesGridProps) {
   const { t } = useLanguage()
+  const maxDrawdownDisplay = formatDrawdown(maxDrawdown)
+  const hasNonZeroDrawdown = maxDrawdownDisplay !== NULL_DISPLAY && Math.abs(maxDrawdown ?? 0) > 0
 
   return (
     <Box
@@ -73,19 +76,9 @@ export function MetricBadgesGrid({
       />
       <MetricBadge
         label={t('maxDrawdownShort')}
-        value={
-          maxDrawdown != null && Math.abs(maxDrawdown) <= 100
-            ? Math.abs(maxDrawdown) < 0.05
-              ? '< -0.1%'
-              : `-${Math.abs(maxDrawdown).toFixed(1)}%`
-            : '—'
-        }
-        negative
-        tooltip={
-          maxDrawdown == null || Math.abs(maxDrawdown) > 100
-            ? t('drawdownNotAvailable')
-            : t('mddTooltip')
-        }
+        value={maxDrawdownDisplay}
+        negative={hasNonZeroDrawdown}
+        tooltip={maxDrawdownDisplay === NULL_DISPLAY ? t('drawdownNotAvailable') : t('mddTooltip')}
       />
       <MetricBadge
         label={t('winRateShort')}

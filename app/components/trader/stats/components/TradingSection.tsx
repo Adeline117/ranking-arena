@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { t as i18nT } from '@/lib/i18n'
-import { NULL_DISPLAY } from '@/lib/utils/format'
+import { formatDrawdown, NULL_DISPLAY } from '@/lib/utils/format'
 import { Box, Text } from '@/app/components/base'
 import type { TraderStats } from '@/lib/data/trader'
 import { PositionHistorySection } from './PositionHistorySection'
@@ -40,6 +40,9 @@ export function TradingSection({
   delay,
 }: TradingSectionProps) {
   const [mounted, setMounted] = useState(false)
+  const maxDrawdownDisplay = formatDrawdown(additionalStats?.maxDrawdown)
+  const hasNonZeroDrawdown =
+    maxDrawdownDisplay !== NULL_DISPLAY && Math.abs(additionalStats?.maxDrawdown ?? 0) > 0
 
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), delay * 1000)
@@ -179,17 +182,9 @@ export function TradingSection({
             />
             <MiniKpi
               label={t('maxDrawdown')}
-              value={
-                additionalStats?.maxDrawdown != null && Math.abs(additionalStats.maxDrawdown) <= 100
-                  ? Math.abs(additionalStats.maxDrawdown) < 0.05
-                    ? '< -0.1%'
-                    : `-${Math.abs(additionalStats.maxDrawdown).toFixed(1)}%`
-                  : NULL_DISPLAY
-              }
-              highlight={
-                additionalStats?.maxDrawdown != null && Math.abs(additionalStats.maxDrawdown) <= 100
-              }
-              isNegative
+              value={maxDrawdownDisplay}
+              highlight={hasNonZeroDrawdown}
+              isNegative={hasNonZeroDrawdown}
             />
             <MiniKpi
               label={i18nT('trackedSinceLabel')}
