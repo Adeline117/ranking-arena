@@ -42,6 +42,7 @@ const mockRecordFieldInventory = jest.fn()
 const mockValidateLeaderboardRows = jest.fn()
 const mockPublishLeaderboardSnapshot = jest.fn()
 const mockPublishTrustedLeaderboardSnapshot = jest.fn()
+const mockPublishAttemptBoundLeaderboardSnapshot = jest.fn()
 const mockHasRegisteredLeaderboardMetricTrust = jest.fn()
 const mockPublishFencedBoardSeries = jest.fn()
 const mockJobUpdateData = jest.fn()
@@ -87,6 +88,8 @@ jest.mock('@/worker/src/ingest/fenced-tier-a-publication', () => ({
   publishFencedLeaderboardSnapshot: (...args: unknown[]) => mockPublishLeaderboardSnapshot(...args),
   publishFencedTrustedLeaderboardSnapshot: (...args: unknown[]) =>
     mockPublishTrustedLeaderboardSnapshot(...args),
+  publishFencedAttemptBoundLeaderboardSnapshot: (...args: unknown[]) =>
+    mockPublishAttemptBoundLeaderboardSnapshot(...args),
 }))
 jest.mock('@/lib/ingest/serving/metric-trust-publish', () => ({
   hasRegisteredLeaderboardMetricTrust: (...args: unknown[]) =>
@@ -528,6 +531,17 @@ describe('Tier-A board-series publication guard', () => {
         replayed: false,
       },
     })
+    mockPublishAttemptBoundLeaderboardSnapshot.mockResolvedValue({
+      snapshotId: 778,
+      scrapedAt: '2026-07-16 00:01:02.123456+00',
+      verdict: { passed: true, baselineUsed: 3, deviationPct: 0 },
+      published: true,
+      traderIds: new Map([
+        ['grid-1', 43],
+        ['grid-2', 44],
+        ['martingale-1', 45],
+      ]),
+    })
     mockPublishFencedBoardSeries.mockResolvedValue({ traders: 1, points: 1 })
   })
 
@@ -702,19 +716,11 @@ describe('Tier-A board-series publication guard', () => {
     expect(captureLeaderboard).not.toHaveBeenCalled()
   })
 
-  it('builds terminal-gap v4 evidence with canonical partition anchors and dense storage ranks', async () => {
+  it('publishes terminal-gap v4 evidence only through its exact attempt fence', async () => {
     configureV4Source()
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
-    let failure: unknown
-
-    try {
-      await processTierA(job)
-    } catch (error) {
-      failure = error
-    } finally {
-      errorSpy.mockRestore()
-    }
-    expect(failure).toBeInstanceOf(AggregateError)
+    await expect(processTierA(job)).resolves.toEqual([
+      expect.objectContaining({ timeframe: 30, snapshotId: 778, passed: true }),
+    ])
 
     expect(mockStartLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -750,8 +756,60 @@ describe('Tier-A board-series publication guard', () => {
         projection: expect.objectContaining({ terminalState: 'complete' }),
       })
     )
+    expect(mockPublishAttemptBoundLeaderboardSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        src: bitgetBotsSrc,
+        timeframe: 30,
+        rows: expect.arrayContaining([
+          expect.objectContaining({ exchangeTraderId: 'grid-1', rank: 1 }),
+          expect.objectContaining({ exchangeTraderId: 'martingale-1', rank: 3 }),
+        ]),
+        rejects: [],
+        observationCycleId: expectedCycleId,
+        attemptEvidence: expect.objectContaining({
+          sourceRunId: artifactInput.built.sourceRunId,
+          manifest: artifactInput.built.manifest,
+          artifacts: expect.objectContaining({
+            sourcePayload: expect.objectContaining({ id: 9_501 }),
+            populationManifest: expect.objectContaining({ id: 9_502 }),
+          }),
+        }),
+      }),
+      expect.any(Object)
+    )
+    expect(mockHasRegisteredLeaderboardMetricTrust).not.toHaveBeenCalled()
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs the v4 terminal fence even for a gated snapshot and leaves its checkpoint open', async () => {
+    configureV4Source()
+    mockPublishAttemptBoundLeaderboardSnapshot.mockResolvedValue({
+      snapshotId: 779,
+      scrapedAt: '2026-07-16 00:01:02.123456+00',
+      verdict: { passed: false, baselineUsed: 20, deviationPct: 85 },
+      published: false,
+      traderIds: new Map(),
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(processTierA(job)).rejects.toBeInstanceOf(AggregateError)
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(mockFinishLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'manifest',
+        projection: expect.objectContaining({ terminalState: 'complete' }),
+      })
+    )
+    expect(mockPublishAttemptBoundLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
   })
 
   it('terminally records a v4/identity capture mismatch without publishing or downgrading', async () => {
