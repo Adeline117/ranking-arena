@@ -320,6 +320,12 @@ export async function createCheckoutSession(params: {
   promotionCode?: string
   allowPromotionCodes?: boolean
   trialDays?: number
+  /** Stable caller-owned identity for durable Checkout workflows. */
+  idempotencyKey?: string
+  /** Stripe Checkout expiration as an exact Unix timestamp in seconds. */
+  expiresAt?: number
+  /** Durable application identity copied to Checkout's client_reference_id. */
+  clientReferenceId?: string
 }): Promise<Stripe.Checkout.Session> {
   // Validate priceId before making Stripe API call
   if (!params.priceId || !params.priceId.startsWith('price_')) {
@@ -343,6 +349,8 @@ export async function createCheckoutSession(params: {
     mode: 'subscription',
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
+    expires_at: params.expiresAt,
+    client_reference_id: params.clientReferenceId,
     metadata: params.metadata,
     subscription_data: {
       metadata: params.metadata,
@@ -365,7 +373,9 @@ export async function createCheckoutSession(params: {
   // Idempotency key prevents duplicate checkout sessions if the client retries
   // (double-click, network retry, browser prefetch). Stripe deduplicates within 24h.
   // Key is scoped to customer + price so switching plans creates a new session.
-  const idempotencyKey = `checkout_${params.customerId}_${params.priceId}_${Math.floor(Date.now() / 60_000)}`
+  const idempotencyKey =
+    params.idempotencyKey ??
+    `checkout_${params.customerId}_${params.priceId}_${Math.floor(Date.now() / 60_000)}`
   const session = await stripe.checkout.sessions.create(sessionParams, {
     idempotencyKey,
   })

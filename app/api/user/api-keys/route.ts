@@ -45,30 +45,26 @@ export const POST = withAuth(
     const name =
       typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 50) : 'Default'
 
-    // Check key limit
-    const { count } = await supabase
-      .from('api_keys')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user!.id)
-      .eq('active', true)
-
-    if ((count ?? 0) >= MAX_KEYS_PER_USER) {
-      return NextResponse.json(
-        { error: `Maximum ${MAX_KEYS_PER_USER} active keys allowed` },
-        { status: 400 }
-      )
-    }
-
     // Generate key: arena_sk_ + 32 random hex chars
     const key = 'arena_sk_' + randomBytes(16).toString('hex')
 
-    const { data, error } = await supabase
-      .from('api_keys')
-      .insert({ user_id: user!.id, key, name, tier: 'free', daily_limit: 100 })
-      .select('id, name, key, tier, daily_limit, created_at')
-      .single()
+    // The RPC locks the profile row shared with Stripe projection, derives the
+    // current entitlement in the database, and enforces the active-key limit
+    // in the same transaction. A read-then-insert here can strand a paid user
+    // on free quota when key creation races a webhook.
+    const { data, error } = await supabase.rpc('create_user_api_key_with_current_entitlement', {
+      p_user_id: user!.id,
+      p_key: key,
+      p_name: name,
+    })
 
     if (error) {
+      if (error.code === 'P0001' && error.message === 'maximum 5 active API keys allowed') {
+        return NextResponse.json(
+          { error: `Maximum ${MAX_KEYS_PER_USER} active keys allowed` },
+          { status: 400 }
+        )
+      }
       // Handle unique violation (extremely unlikely with 16 random bytes)
       if (error.code === '23505') {
         return NextResponse.json(

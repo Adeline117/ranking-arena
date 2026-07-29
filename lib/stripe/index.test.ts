@@ -555,6 +555,42 @@ describe('createCheckoutSession', () => {
       expect.objectContaining({ idempotencyKey: expect.any(String) })
     )
   })
+
+  test('accepts an exact durable identity for an API-tier subscription Checkout', async () => {
+    stripe.checkout.sessions.create = jest.fn().mockResolvedValue({ id: 'cs_api_atomic' })
+    const metadata = {
+      userId: '11111111-1111-4111-8111-111111111111',
+      supabase_user_id: '11111111-1111-4111-8111-111111111111',
+      type: 'api_tier',
+      api_plan: 'starter',
+      api_tier_reservation_id: '22222222-2222-4222-8222-222222222222',
+    }
+
+    await createCheckoutSession({
+      customerId: 'cus_api_atomic',
+      priceId: 'price_api_starter',
+      successUrl: 'https://example.com/settings?api_upgraded=starter',
+      cancelUrl: 'https://example.com/api-docs',
+      metadata,
+      idempotencyKey: 'api_tier_checkout_test_22222222-2222-4222-8222-222222222222',
+      expiresAt: 1_900_000_000,
+      clientReferenceId: '22222222-2222-4222-8222-222222222222',
+    })
+
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: 'cus_api_atomic',
+        mode: 'subscription',
+        expires_at: 1_900_000_000,
+        client_reference_id: '22222222-2222-4222-8222-222222222222',
+        metadata,
+        subscription_data: { metadata },
+      }),
+      {
+        idempotencyKey: 'api_tier_checkout_test_22222222-2222-4222-8222-222222222222',
+      }
+    )
+  })
 })
 
 describe('createOneTimePaymentSession', () => {

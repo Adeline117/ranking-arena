@@ -2,6 +2,44 @@ import Stripe from 'stripe'
 import { stripe } from '@/lib/stripe'
 import { getSupabase, logger } from './shared'
 import { sendNotification } from '@/lib/data/notifications'
+import { carriesApiTierSubscriptionIdentity } from './api-tier-identity'
+import { getProPlanFromPriceId } from './stripe-price-identity'
+
+function exactOrdinaryProInvoiceCustomer(
+  invoice: Stripe.Invoice,
+  subscription: Stripe.Subscription
+): string {
+  const invoiceCustomer =
+    typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id || ''
+  const subscriptionCustomer =
+    typeof subscription.customer === 'string'
+      ? subscription.customer
+      : subscription.customer?.id || ''
+  const item = subscription.items.data.length === 1 ? subscription.items.data[0] : null
+  const priceId = item?.price.id
+  const plan = item?.quantity === 1 ? getProPlanFromPriceId(priceId) : null
+
+  if (
+    !invoiceCustomer ||
+    invoiceCustomer !== subscriptionCustomer ||
+    !item ||
+    item.quantity !== 1 ||
+    (plan !== 'monthly' && plan !== 'yearly')
+  ) {
+    logger.error('Invoice subscription is not exact ordinary Pro billing', {
+      invoiceId: invoice.id,
+      subscriptionId: subscription.id,
+      invoiceCustomer,
+      subscriptionCustomer,
+      itemCount: subscription.items.data.length,
+      quantity: item?.quantity ?? null,
+      priceId: priceId ?? null,
+    })
+    throw new Error(`Invoice ${invoice.id} subscription is not an exact ordinary Pro subscription`)
+  }
+
+  return invoiceCustomer
+}
 
 export async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   const subscriptionData = invoice.parent?.subscription_details?.subscription
@@ -11,8 +49,17 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   if (!subscriptionId) return
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-  const customerId =
-    typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id || ''
+  if (carriesApiTierSubscriptionIdentity(subscription)) {
+    // API quota is reconciled exclusively by the sealed subscription-event
+    // ledger. Treating this invoice as ordinary Pro billing could mint an
+    // unrelated B2C entitlement.
+    logger.info('API tier payment success left to subscription event authority', {
+      invoiceId: invoice.id,
+      subscriptionId,
+    })
+    return
+  }
+  const customerId = exactOrdinaryProInvoiceCustomer(invoice, subscription)
 
   const { data: profile, error: profileError } = await getSupabase()
     .from('user_profiles')
@@ -79,7 +126,24 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
 }
 
 export async function handlePaymentFailed(invoice: Stripe.Invoice) {
-  const customerId = invoice.customer as string
+  const subscriptionData = invoice.parent?.subscription_details?.subscription
+  const subscriptionId =
+    typeof subscriptionData === 'string' ? subscriptionData : subscriptionData?.id || null
+  const subscription = subscriptionId ? await stripe.subscriptions.retrieve(subscriptionId) : null
+
+  if (!subscriptionId || !subscription) return
+
+  if (carriesApiTierSubscriptionIdentity(subscription)) {
+    // API tier retry/grace/revocation is handled by customer.subscription.*
+    // through the atomic API entitlement ledger. Never mutate the Pro tables.
+    logger.info('API tier payment failure left to subscription event authority', {
+      invoiceId: invoice.id,
+      subscriptionId,
+    })
+    return
+  }
+
+  const customerId = exactOrdinaryProInvoiceCustomer(invoice, subscription)
 
   const { data: profile, error: profileError } = await getSupabase()
     .from('user_profiles')
@@ -111,12 +175,8 @@ export async function handlePaymentFailed(invoice: Stripe.Invoice) {
     throw new Error(`Failed to record payment failure: ${historyErr.message}`)
   }
 
-  const subscriptionData = invoice.parent?.subscription_details?.subscription
-  const subscriptionId =
-    typeof subscriptionData === 'string' ? subscriptionData : subscriptionData?.id || null
   if (subscriptionId) {
     try {
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
       if (subscription.status === 'past_due') {
         // 2026-07-11:只标 past_due,不再立即降级。此前首次扣款失败即
         // profile→free,而 Stripe smart-retries 常在几天内恢复(handlePaymentSucceeded

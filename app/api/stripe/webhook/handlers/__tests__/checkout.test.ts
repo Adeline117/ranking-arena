@@ -9,7 +9,17 @@ jest.mock('@/lib/stripe', () => ({
     },
   },
   getStripe: () => mockGetStripeClient,
+  SUBSCRIPTION_STATUS_MAP: { active: 'active', canceled: 'canceled', trialing: 'trialing' },
+  STRIPE_API_PRICE_IDS: { starter: 'price_api_starter', pro: 'price_api_pro' },
   API_TIER_LIMITS: { free: 100, starter: 10_000, pro: 0 },
+  STRIPE_PRICE_IDS: {
+    monthly: 'price_pro_monthly',
+    yearly: 'price_pro_yearly',
+    lifetime: 'price_pro_lifetime',
+  },
+}))
+jest.mock('@/lib/env', () => ({
+  env: { STRIPE_PRO_YEARLY_PRICE_ID: 'price_pro_yearly' },
 }))
 
 const mockActivateLifetimeCheckoutEntitlement = jest.fn()
@@ -33,11 +43,15 @@ jest.mock('@/lib/stripe/tip-completion', () => ({
 const mockUpdateUserSubscription = jest.fn()
 const mockGetProPlanFromPriceId = jest.fn()
 const mockApplyApiTierStripeEvent = jest.fn()
-jest.mock('../subscription', () => ({
-  applyApiTierStripeEvent: (...args: unknown[]) => mockApplyApiTierStripeEvent(...args),
-  updateUserSubscription: (...args: unknown[]) => mockUpdateUserSubscription(...args),
-  getProPlanFromPriceId: (...args: unknown[]) => mockGetProPlanFromPriceId(...args),
-}))
+jest.mock('../subscription', () => {
+  const actual = jest.requireActual('../subscription')
+  return {
+    ...actual,
+    applyApiTierStripeEvent: (...args: unknown[]) => mockApplyApiTierStripeEvent(...args),
+    updateUserSubscription: (...args: unknown[]) => mockUpdateUserSubscription(...args),
+    getProPlanFromPriceId: (...args: unknown[]) => mockGetProPlanFromPriceId(...args),
+  }
+})
 
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
@@ -88,6 +102,7 @@ function checkoutSession(
 
 const lifetimeUserId = '21e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const apiUserId = '11e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const apiReservationId = '81e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const lifetimeReservationId = '9a8df3e8-e908-4f27-9cb4-8b892d748cc7'
 const lifetimeRequestNonce = `lifetime:${lifetimeUserId}:123`
 const expiredEvent = { id: 'evt_expired_123', created: 1_800_000_000, livemode: true }
@@ -162,6 +177,96 @@ function paidLifetimeSession(
   })
 }
 
+function apiCheckoutSession(
+  plan: 'starter' | 'pro' = 'pro',
+  overrides: Partial<Stripe.Checkout.Session> = {}
+): Stripe.Checkout.Session {
+  return checkoutSession({
+    object: 'checkout.session',
+    mode: 'subscription',
+    status: 'complete',
+    payment_status: 'paid',
+    client_reference_id: apiReservationId,
+    metadata: {
+      userId: apiUserId,
+      supabase_user_id: apiUserId,
+      type: 'api_tier',
+      api_plan: plan,
+      api_tier_reservation_id: apiReservationId,
+    },
+    ...overrides,
+  })
+}
+
+function expiredApiSession(
+  metadataOverrides: Record<string, string> = {},
+  sessionOverrides: Partial<Stripe.Checkout.Session> = {}
+): Stripe.Checkout.Session {
+  return apiCheckoutSession('pro', {
+    status: 'expired',
+    payment_status: 'unpaid',
+    subscription: null,
+    expires_at: 1_790_000_000,
+    metadata: {
+      userId: apiUserId,
+      supabase_user_id: apiUserId,
+      type: 'api_tier',
+      api_plan: 'pro',
+      api_tier_reservation_id: apiReservationId,
+      ...metadataOverrides,
+    },
+    ...sessionOverrides,
+  })
+}
+
+function apiSubscription(
+  plan: 'starter' | 'pro' = 'pro',
+  overrides: Partial<Stripe.Subscription> = {}
+): Stripe.Subscription {
+  return {
+    id: 'sub_test_123',
+    status: 'active',
+    created: 1_700_000_000,
+    livemode: true,
+    customer: 'cus_test_123',
+    metadata: {
+      userId: apiUserId,
+      supabase_user_id: apiUserId,
+      type: 'api_tier',
+      api_plan: plan,
+      api_tier_reservation_id: apiReservationId,
+    },
+    items: {
+      data: [
+        {
+          quantity: 1,
+          price: { id: plan === 'starter' ? 'price_api_starter' : 'price_api_pro' },
+        },
+      ],
+    },
+    ...overrides,
+  } as Stripe.Subscription
+}
+
+function apiOwnerQuery(
+  data: unknown = {
+    id: apiUserId,
+    api_stripe_subscription_id: null,
+    api_tier: 'free',
+    stripe_customer_id: 'cus_test_123',
+  },
+  error: { message: string } | null = null
+) {
+  const query = {
+    select: jest.fn(),
+    eq: jest.fn(),
+    maybeSingle: jest.fn(async () => ({ data, error })),
+  }
+  query.select.mockReturnValue(query)
+  query.eq.mockReturnValue(query)
+  return query
+}
+
 function noExistingSubscriptionQuery() {
   return {
     select: () => ({
@@ -212,17 +317,18 @@ describe('handleCheckoutComplete entitlement safety', () => {
   it('rejects invalid API entitlement metadata instead of acknowledging it', async () => {
     await expect(
       handleCheckoutComplete(
-        checkoutSession({
+        apiCheckoutSession('pro', {
           metadata: {
             userId: apiUserId,
             supabase_user_id: apiUserId,
             type: 'api_tier',
             api_plan: 'enterprise',
+            api_tier_reservation_id: apiReservationId,
           },
         }),
         checkoutEvent
       )
-    ).rejects.toThrow('Checkout cs_test_123 has invalid API plan metadata')
+    ).rejects.toThrow('API checkout cs_test_123 has invalid exact entitlement identity')
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
@@ -301,14 +407,8 @@ describe('handleCheckoutComplete entitlement safety', () => {
 
   it('does not activate an unpaid API subscription', async () => {
     await handleCheckoutComplete(
-      checkoutSession({
+      apiCheckoutSession('pro', {
         payment_status: 'unpaid',
-        metadata: {
-          userId: apiUserId,
-          supabase_user_id: apiUserId,
-          type: 'api_tier',
-          api_plan: 'pro',
-        },
       }),
       checkoutEvent
     )
@@ -318,94 +418,157 @@ describe('handleCheckoutComplete entitlement safety', () => {
   })
 
   it('activates a paid API subscription with exact Checkout and event identity', async () => {
-    const apiSubscription = {
-      id: 'sub_test_123',
-      status: 'active',
-      created: 1_700_000_000,
-      livemode: true,
-      customer: 'cus_test_123',
-      metadata: {
-        userId: apiUserId,
-        supabase_user_id: apiUserId,
-        type: 'api_tier',
-        api_plan: 'pro',
-      },
-      items: { data: [{ price: { id: 'price_api_pro' } }] },
-    }
-    mockRetrieveSubscription.mockResolvedValue(apiSubscription)
+    const subscription = apiSubscription('pro')
+    mockRetrieveSubscription.mockResolvedValue(subscription)
+    mockFrom.mockReturnValue(apiOwnerQuery())
 
-    await handleCheckoutComplete(
-      checkoutSession({
-        metadata: {
-          userId: apiUserId,
-          supabase_user_id: apiUserId,
-          type: 'api_tier',
-          api_plan: 'pro',
-        },
-      }),
-      checkoutEvent
-    )
+    await handleCheckoutComplete(apiCheckoutSession('pro'), checkoutEvent)
 
     expect(mockApplyApiTierStripeEvent).toHaveBeenCalledWith({
-      userId: apiUserId,
+      authority: {
+        userId: apiUserId,
+        metadataUserId: apiUserId,
+        metadataSupabaseUserId: apiUserId,
+        stripeCustomerId: 'cus_test_123',
+        checkoutReservationId: apiReservationId,
+        stripePriceId: 'price_api_pro',
+        plan: 'pro',
+      },
       plan: 'pro',
       dailyLimit: 0,
-      subscription: apiSubscription,
+      subscription,
       event: checkoutEvent,
       isActive: true,
       isTerminal: false,
     })
   })
 
+  it('lets an exact paid API Checkout reach atomic authority after its profile was hard-deleted', async () => {
+    const subscription = apiSubscription('pro')
+    mockRetrieveSubscription.mockResolvedValue(subscription)
+    mockFrom.mockReturnValue(apiOwnerQuery(null))
+
+    await expect(
+      handleCheckoutComplete(apiCheckoutSession('pro'), checkoutEvent)
+    ).resolves.toBeUndefined()
+
+    expect(mockApplyApiTierStripeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authority: expect.objectContaining({
+          userId: apiUserId,
+          stripeCustomerId: 'cus_test_123',
+          checkoutReservationId: apiReservationId,
+        }),
+        subscription,
+        event: checkoutEvent,
+        isActive: true,
+        isTerminal: false,
+      })
+    )
+  })
+
+  it.each([
+    [
+      'mismatched user aliases',
+      {
+        metadata: {
+          userId: apiUserId,
+          supabase_user_id: lifetimeUserId,
+          type: 'api_tier',
+          api_plan: 'pro',
+          api_tier_reservation_id: apiReservationId,
+        },
+      },
+    ],
+    [
+      'malformed reservation',
+      {
+        metadata: {
+          userId: apiUserId,
+          supabase_user_id: apiUserId,
+          type: 'api_tier',
+          api_plan: 'pro',
+          api_tier_reservation_id: 'not-a-uuid',
+        },
+      },
+    ],
+    ['reservation/client-reference drift', { client_reference_id: lifetimeReservationId }],
+  ])('rejects a paid API Checkout with %s', async (_case, overrides) => {
+    await expect(
+      handleCheckoutComplete(apiCheckoutSession('pro', overrides), checkoutEvent)
+    ).rejects.toThrow('API checkout cs_test_123 has invalid exact entitlement identity')
+    expect(mockRetrieveSubscription).not.toHaveBeenCalled()
+    expect(mockApplyApiTierStripeEvent).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'non-unit item quantity',
+      apiSubscription('pro', {
+        items: {
+          data: [{ quantity: 2, price: { id: 'price_api_pro' } }],
+        } as Stripe.ApiList<Stripe.SubscriptionItem>,
+      }),
+    ],
+    [
+      'unknown price',
+      apiSubscription('pro', {
+        items: {
+          data: [{ quantity: 1, price: { id: 'price_api_unknown' } }],
+        } as Stripe.ApiList<Stripe.SubscriptionItem>,
+      }),
+    ],
+  ])('rejects API subscription authority with %s', async (_case, subscription) => {
+    mockRetrieveSubscription.mockResolvedValue(subscription)
+    mockFrom.mockReturnValue(apiOwnerQuery())
+
+    await expect(handleCheckoutComplete(apiCheckoutSession('pro'), checkoutEvent)).rejects.toThrow(
+      'API subscription sub_test_123 has invalid exact entitlement identity'
+    )
+    expect(mockApplyApiTierStripeEvent).not.toHaveBeenCalled()
+  })
+
+  it('rejects an API subscription Customer that does not match its owner profile', async () => {
+    mockRetrieveSubscription.mockResolvedValue(apiSubscription('pro', { customer: 'cus_attacker' }))
+    mockFrom.mockReturnValue(apiOwnerQuery())
+
+    await expect(handleCheckoutComplete(apiCheckoutSession('pro'), checkoutEvent)).rejects.toThrow(
+      'API subscription sub_test_123 customer ownership does not match'
+    )
+    expect(mockApplyApiTierStripeEvent).not.toHaveBeenCalled()
+  })
+
   it('rejects an API Checkout whose signed mode disagrees with its snapshot', async () => {
     await expect(
       handleCheckoutComplete(
-        checkoutSession({
+        apiCheckoutSession('starter', {
           livemode: false,
-          metadata: {
-            userId: apiUserId,
-            supabase_user_id: apiUserId,
-            type: 'api_tier',
-            api_plan: 'starter',
-          },
         }),
         checkoutEvent
       )
-    ).rejects.toThrow('API checkout cs_test_123 has invalid Stripe event identity')
+    ).rejects.toThrow('API checkout cs_test_123 has invalid exact entitlement identity')
 
     expect(mockRetrieveSubscription).not.toHaveBeenCalled()
     expect(mockApplyApiTierStripeEvent).not.toHaveBeenCalled()
   })
 
   it('rejects an API subscription whose metadata disagrees with its Checkout', async () => {
-    mockRetrieveSubscription.mockResolvedValue({
-      id: 'sub_test_123',
-      status: 'active',
-      created: 1_700_000_000,
-      livemode: true,
-      customer: 'cus_test_123',
-      metadata: {
-        userId: apiUserId,
-        supabase_user_id: apiUserId,
-        type: 'api_tier',
-        api_plan: 'starter',
-      },
-      items: { data: [{ price: { id: 'price_api_starter' } }] },
-    })
+    mockRetrieveSubscription.mockResolvedValue(
+      apiSubscription('starter', {
+        metadata: {
+          userId: apiUserId,
+          supabase_user_id: apiUserId,
+          type: 'api_tier',
+          api_plan: 'starter',
+          api_tier_reservation_id: '71e34ce2-43c1-4bcc-8f19-79b36d56605c',
+        },
+      })
+    )
+    mockFrom.mockReturnValue(apiOwnerQuery())
 
-    await expect(
-      handleCheckoutComplete(
-        checkoutSession({
-          metadata: {
-            userId: apiUserId,
-            supabase_user_id: apiUserId,
-            type: 'api_tier',
-            api_plan: 'pro',
-          },
-        }),
-        checkoutEvent
-      )
-    ).rejects.toThrow('API subscription sub_test_123 metadata does not match its checkout')
+    await expect(handleCheckoutComplete(apiCheckoutSession('pro'), checkoutEvent)).rejects.toThrow(
+      'API subscription sub_test_123 identity does not match its checkout'
+    )
     expect(mockApplyApiTierStripeEvent).not.toHaveBeenCalled()
   })
 
@@ -551,6 +714,115 @@ describe('handleCheckoutComplete entitlement safety', () => {
       expect(mockActivateLifetimeCheckoutEntitlement).not.toHaveBeenCalled()
     }
   )
+})
+
+describe('handleCheckoutExpired API tier reservation release', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockFrom.mockReset()
+    mockFrom.mockReturnValue(apiOwnerQuery())
+    mockRpc.mockResolvedValue({ data: { status: 'released' }, error: null })
+    mockRecordStripeCheckoutManualReview.mockResolvedValue(undefined)
+  })
+
+  it('releases the exact API reservation from signed Session and event identity', async () => {
+    await handleCheckoutExpired(expiredApiSession(), expiredEvent)
+
+    expect(mockRpc).toHaveBeenCalledWith('release_api_tier_checkout_reservation_atomic', {
+      p_reservation_id: apiReservationId,
+      p_user_id: apiUserId,
+      p_livemode: true,
+      p_stripe_customer_id: 'cus_test_123',
+      p_checkout_session_id: 'cs_test_123',
+      p_stripe_event_id: 'evt_expired_123',
+      p_stripe_event_created: 1_800_000_000,
+    })
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it('releases an exact Session that the server manually expired before expires_at', async () => {
+    await handleCheckoutExpired(
+      expiredApiSession({}, { expires_at: expiredEvent.created + 600 }),
+      expiredEvent
+    )
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'release_api_tier_checkout_reservation_atomic',
+      expect.objectContaining({
+        p_reservation_id: apiReservationId,
+        p_checkout_session_id: 'cs_test_123',
+        p_stripe_event_id: 'evt_expired_123',
+        p_stripe_event_created: expiredEvent.created,
+      })
+    )
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it('accepts an idempotent already-released reservation result', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'already_released' }, error: null })
+
+    await expect(handleCheckoutExpired(expiredApiSession(), expiredEvent)).resolves.toBeUndefined()
+  })
+
+  it.each([
+    ['mismatched aliases', { supabase_user_id: lifetimeUserId }, {}],
+    ['malformed reservation', { api_tier_reservation_id: 'not-a-uuid' }, {}],
+    ['wrong client reference', {}, { client_reference_id: lifetimeReservationId }],
+    ['subscription unexpectedly present', {}, { subscription: 'sub_wrong' }],
+  ])(
+    'records %s for durable review and never reports generic abandonment',
+    async (_case, metadata, sessionOverrides) => {
+      await handleCheckoutExpired(
+        expiredApiSession(metadata, sessionOverrides as Partial<Stripe.Checkout.Session>),
+        expiredEvent
+      )
+
+      expect(mockRpc).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+      expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reasonKey: 'api_tier_expiry_identity_invalid',
+        })
+      )
+    }
+  )
+
+  it('records a persisted Stripe Customer mismatch without releasing another reservation', async () => {
+    mockFrom.mockReturnValue(
+      apiOwnerQuery({
+        id: apiUserId,
+        stripe_customer_id: 'cus_other',
+      })
+    )
+
+    await handleCheckoutExpired(expiredApiSession(), expiredEvent)
+
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonKey: 'api_tier_expiry_customer_mismatch',
+      })
+    )
+  })
+
+  it('throws so Stripe retries when the exact reservation release fails', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'reservation database unavailable' },
+    })
+
+    await expect(handleCheckoutExpired(expiredApiSession(), expiredEvent)).rejects.toThrow(
+      'Failed to release expired API tier reservation: reservation database unavailable'
+    )
+  })
+
+  it('fails closed on an unknown reservation release result', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'identity_conflict' }, error: null })
+
+    await expect(handleCheckoutExpired(expiredApiSession(), expiredEvent)).rejects.toThrow(
+      'API tier checkout reservation release returned unexpected status identity_conflict'
+    )
+  })
 })
 
 describe('handleCheckoutExpired Tip lifecycle', () => {
