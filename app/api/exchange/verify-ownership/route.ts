@@ -32,6 +32,20 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 const logger = createLogger('verify-ownership')
 
+function connectionExchangeId(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/_(futures|spot)$/, '')
+}
+
+function comparisonExchangeId(value: string): string {
+  const exchange = connectionExchangeId(value)
+  if (exchange === 'gate') return 'gateio'
+  if (exchange === 'huobi') return 'htx'
+  return exchange
+}
+
 export const POST = withAuth(
   async ({ user, request }) => {
     let body: Record<string, unknown>
@@ -50,35 +64,48 @@ export const POST = withAuth(
       passphrase?: string
     }
 
-    if (!exchange || !traderId || !source) {
+    if (
+      typeof exchange !== 'string' ||
+      !exchange.trim() ||
+      typeof traderId !== 'string' ||
+      !traderId.trim() ||
+      typeof source !== 'string' ||
+      !source.trim()
+    ) {
       return badRequest('Missing required parameters: exchange, traderId, source')
     }
 
-    if (!apiKey || !apiSecret) {
+    if (
+      typeof apiKey !== 'string' ||
+      !apiKey.trim() ||
+      typeof apiSecret !== 'string' ||
+      !apiSecret.trim()
+    ) {
       return badRequest('Missing required parameters: apiKey, apiSecret')
     }
 
-    const connectionExchange = source.toLowerCase().replace(/_(futures|spot)$/, '')
-    const requestedExchange = exchange.toLowerCase().replace(/^gate$/, 'gateio')
-    if (requestedExchange !== connectionExchange.replace(/^gate$/, 'gateio')) {
+    const normalizedSource = source.trim().toLowerCase()
+    const requestedTraderId = traderId.trim()
+    const connectionExchange = connectionExchangeId(normalizedSource)
+    if (comparisonExchangeId(exchange) !== comparisonExchangeId(normalizedSource)) {
       return badRequest('Exchange does not match the trader source')
     }
 
     // Validate this is a CEX platform that supports API key verification
-    if (!isCexVerifiable(source)) {
+    if (!isCexVerifiable(normalizedSource)) {
       return badRequest(
-        `Platform ${source} does not support API key verification. Use wallet signature for DEX platforms.`
+        `Platform ${normalizedSource} does not support API key verification. Use wallet signature for DEX platforms.`
       )
     }
 
     // 2. Look up trader's source_trader_id from Arena DB (unified data layer)
     const adminSupabase = getSupabaseAdmin()
     const resolved = await resolveTrader(adminSupabase, {
-      handle: traderId,
-      platform: source,
+      handle: requestedTraderId,
+      platform: normalizedSource,
     })
 
-    const traderKey = resolved?.traderKey || traderId
+    const traderKey = resolved?.traderKey || requestedTraderId
 
     if (!resolved) {
       return notFound('Trader not found in Arena database')
@@ -86,7 +113,11 @@ export const POST = withAuth(
 
     // 3. Resolve the UID from the user's API credentials
     // NEVER log the API key or secret
-    const resolveResult = await resolveExchangeUid(source, { apiKey, apiSecret, passphrase })
+    const resolveResult = await resolveExchangeUid(normalizedSource, {
+      apiKey,
+      apiSecret,
+      passphrase,
+    })
 
     if (!resolveResult.success || !resolveResult.uid) {
       return NextResponse.json(
@@ -118,7 +149,7 @@ export const POST = withAuth(
     if (resolvedUid !== traderSourceId) {
       logger.warn('[verify-ownership] UID mismatch', {
         userId: user.id,
-        platform: source,
+        platform: normalizedSource,
         // Log only that there's a mismatch, NOT the actual UIDs for security
         match: false,
       })
@@ -140,23 +171,36 @@ export const POST = withAuth(
     const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
 
     // Upsert exchange connection for this user
-    const { error: upsertError } = await adminSupabase.from('user_exchange_connections').upsert(
-      {
-        user_id: user.id,
-        exchange: connectionExchange,
-        api_key_encrypted: encryptedApiKey,
-        api_secret_encrypted: encryptedApiSecret,
-        passphrase_encrypted: encryptedPassphrase,
-        is_active: true,
-        verified_uid: resolvedUid,
-        last_verified_at: new Date().toISOString(),
-        scope_permissions: resolveResult.permissions || ['read'],
-      },
-      { onConflict: 'user_id,exchange' }
-    )
+    const { data: savedConnection, error: upsertError } = await adminSupabase
+      .from('user_exchange_connections')
+      .upsert(
+        {
+          user_id: user.id,
+          exchange: connectionExchange,
+          api_key_encrypted: encryptedApiKey,
+          api_secret_encrypted: encryptedApiSecret,
+          passphrase_encrypted: encryptedPassphrase,
+          is_active: true,
+          verified_uid: resolvedUid,
+          last_verified_at: new Date().toISOString(),
+          scope_permissions: resolveResult.permissions || ['read'],
+        },
+        { onConflict: 'user_id,exchange' }
+      )
+      .select('user_id, exchange, verified_uid, is_active')
+      .single()
 
-    if (upsertError) {
-      logger.error('[verify-ownership] Failed to store exchange connection', upsertError)
+    if (
+      upsertError ||
+      savedConnection?.user_id !== user.id ||
+      savedConnection.exchange !== connectionExchange ||
+      savedConnection.verified_uid !== resolvedUid ||
+      savedConnection.is_active !== true
+    ) {
+      logger.error(
+        '[verify-ownership] Failed to store exchange connection',
+        upsertError ?? new Error('Persisted connection acknowledgement did not match')
+      )
       return serverError(
         'Verification succeeded but failed to store credentials. Please try again.'
       )
@@ -164,7 +208,7 @@ export const POST = withAuth(
 
     logger.info('[verify-ownership] Verification passed', {
       userId: user.id,
-      platform: source,
+      platform: normalizedSource,
       match: true,
     })
 
@@ -172,6 +216,13 @@ export const POST = withAuth(
       success: true,
       verified: true,
       uid: resolvedUid,
+      data: {
+        viewerId: savedConnection.user_id,
+        exchange: savedConnection.exchange,
+        source: normalizedSource,
+        traderId: requestedTraderId,
+        verifiedUid: savedConnection.verified_uid,
+      },
       message: 'Account ownership verified successfully',
     })
   },
