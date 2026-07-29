@@ -3,7 +3,7 @@ const mockRpc = jest.fn()
 const mockCacheGet = jest.fn()
 const mockCacheSet = jest.fn()
 const mockAttachAvatarMirrors = jest.fn(async (_supabase: unknown, traders: unknown[]) => traders)
-const mockReadSealedRankingGeneration = jest.fn()
+const mockReadSealedRankingAuthorityGeneration = jest.fn()
 const mockPublishedCounts = new Map<string, number>()
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -26,14 +26,16 @@ jest.mock('@/lib/logger', () => ({
 
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
   ...jest.requireActual('@/lib/rankings/read-sealed-ranking-generation'),
-  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
+  readSealedRankingAuthorityGeneration: (...args: unknown[]) =>
+    mockReadSealedRankingAuthorityGeneration(...args),
 }))
 
 const TEST_COHORT_ID = '11111111-1111-4111-8111-111111111111'
+const TEST_AUTHORITY_SOURCES = ['binance_futures', 'bybit', 'gmx', 'hyperliquid']
 
 async function readThroughSealedGeneration(
   _supabase: unknown,
-  input: { season: '7D' | '30D' | '90D'; sources: string[] },
+  season: '7D' | '30D' | '90D',
   reader: (publication: {
     state: 'sealed'
     season: '7D' | '30D' | '90D'
@@ -43,10 +45,10 @@ async function readThroughSealedGeneration(
 ) {
   const publication = {
     state: 'sealed' as const,
-    season: input.season,
+    season,
     scoreCohortId: TEST_COHORT_ID,
-    proofs: [...input.sources].sort().map((source) => ({
-      season_id: input.season,
+    proofs: TEST_AUTHORITY_SOURCES.map((source) => ({
+      season_id: season,
       source,
       source_as_of: '2026-07-24T11:00:00.000000Z',
       recorded_at: '2026-07-24T11:01:00.000000Z',
@@ -180,15 +182,13 @@ function abortablePendingQuery() {
   return proxy
 }
 
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import { PUBLIC_RANKING_QUARANTINED_SOURCES } from '@/lib/rankings/publication-policy'
 import { fetchLeaderboardFromDB, getInitialTraders } from '../getInitialTraders'
 
 describe('SSR public ranking source quarantine', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockPublishedCounts.clear()
-    mockReadSealedRankingGeneration.mockImplementation(readThroughSealedGeneration)
+    mockReadSealedRankingAuthorityGeneration.mockImplementation(readThroughSealedGeneration)
     mockCacheGet.mockResolvedValue(null)
     mockCacheSet.mockResolvedValue(undefined)
     jest.useFakeTimers().setSystemTime(new Date('2026-07-24T12:00:00.000Z'))
@@ -300,7 +300,7 @@ describe('SSR public ranking source quarantine', () => {
     expect(result.traders.map(({ id }) => id)).toEqual(['page-1-safe-1', 'page-1-safe-2'])
     expect(result.totalCount).toBe(4)
     expect(result.categoryCounts).toEqual({ all: 4, futures: 2, spot: 0, onchain: 2 })
-    expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+    expect(rankingQuery?.in).toHaveBeenCalledWith('source', TEST_AUTHORITY_SOURCES)
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
@@ -404,7 +404,7 @@ describe('SSR public ranking source quarantine', () => {
 
     expect(result.traders.map(({ id }) => id)).toEqual(['safe-1', 'safe-2', 'safe-3'])
     expect(result.totalCount).toBe(3)
-    expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+    expect(rankingQuery?.in).toHaveBeenCalledWith('source', TEST_AUTHORITY_SOURCES)
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
@@ -419,16 +419,9 @@ describe('SSR public ranking source quarantine', () => {
       (rankingQuery?.range as jest.Mock).mock.invocationCallOrder[0]
     )
     expect(mockRpc).not.toHaveBeenCalled()
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledWith(
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({
-        season: '90D',
-        sources: expect.not.arrayContaining([
-          'okx_web3_solana',
-          'bitget_bots_futures',
-          'bitget_bots_spot',
-        ]),
-      }),
+      '90D',
       expect.any(Function),
       expect.objectContaining({ timeoutMs: 4_500, signal: expect.any(AbortSignal) })
     )
@@ -498,7 +491,7 @@ describe('SSR public ranking source quarantine', () => {
       expect.objectContaining({ id: '0xpoison', source: 'hyperliquid' })
     )
     expect(result.totalCount).toBe(1)
-    expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+    expect(rankingQuery?.in).toHaveBeenCalledWith('source', TEST_AUTHORITY_SOURCES)
   })
 
   it('rejects an old generic SSR cache page instead of treating it as sealed last-good', async () => {
@@ -511,24 +504,24 @@ describe('SSR public ranking source quarantine', () => {
       totalCount: 999,
       categoryCounts: { all: 999, futures: 999, spot: 999, onchain: 999 },
     })
-    mockReadSealedRankingGeneration.mockRejectedValueOnce(new Error('proof unavailable'))
+    mockReadSealedRankingAuthorityGeneration.mockRejectedValueOnce(new Error('proof unavailable'))
 
     const result = await getInitialTraders('90D', 3, 1)
 
     expect(mockCacheGet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:home-initial-traders-sealed-v5:90D:p1'
+      'public-rank-policy-v4:home-initial-traders-sealed-v6:90D:p1'
     )
     expect(result.traders).toEqual([])
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(1)
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  it('never reads legacy data and uses the sealed v5 envelope for normal cache writes and reads', async () => {
+  it('never reads legacy data and uses the sealed v6 envelope for normal cache writes and reads', async () => {
     mockPublishedCounts.set('binance_futures', 1)
     const oldV3Key = 'public-rank-policy-v3:home-initial-traders-v4:90D:p1'
-    const newV5Key = 'public-rank-policy-v4:home-initial-traders-sealed-v5:90D:p1'
-    const newV5FallbackKey = 'public-rank-policy-v4:home-initial-traders-sealed-fallback-v5:90D:p1'
+    const newV6Key = 'public-rank-policy-v4:home-initial-traders-sealed-v6:90D:p1'
+    const newV6FallbackKey = 'public-rank-policy-v4:home-initial-traders-sealed-fallback-v6:90D:p1'
     const transformedCopin = {
       traders: [
         {
@@ -586,10 +579,10 @@ describe('SSR public ranking source quarantine', () => {
 
     expect(first.traders.map(({ id }) => id)).toEqual(['fresh-v4'])
     expect(mockCacheGet).not.toHaveBeenCalledWith(oldV3Key)
-    expect(mockCacheGet).toHaveBeenNthCalledWith(1, newV5Key)
-    expect(mockCacheGet).toHaveBeenNthCalledWith(2, newV5FallbackKey)
+    expect(mockCacheGet).toHaveBeenNthCalledWith(1, newV6Key)
+    expect(mockCacheGet).toHaveBeenNthCalledWith(2, newV6FallbackKey)
     expect(mockCacheSet).toHaveBeenCalledWith(
-      newV5Key,
+      newV6Key,
       expect.objectContaining({
         contract: 'sealed-ranking-cache@1',
         season: '90D',
@@ -598,7 +591,7 @@ describe('SSR public ranking source quarantine', () => {
       { ttl: 7200 }
     )
     expect(mockCacheSet).toHaveBeenCalledWith(
-      newV5FallbackKey,
+      newV6FallbackKey,
       expect.objectContaining({
         contract: 'sealed-ranking-cache@1',
         season: '90D',
@@ -626,16 +619,7 @@ describe('SSR public ranking source quarantine', () => {
       totalCount: 1,
       categoryCounts: { all: 1, futures: 1, spot: 0, onchain: 0 },
     }
-    const sealedFallback = await readThroughSealedGeneration(
-      {},
-      {
-        season: '90D',
-        sources: PUBLIC_ACTIVE_RANKING_SOURCES.filter(
-          (source) => !PUBLIC_RANKING_QUARANTINED_SOURCES.includes(source)
-        ),
-      },
-      async () => fallback
-    )
+    const sealedFallback = await readThroughSealedGeneration({}, '90D', async () => fallback)
     mockCacheGet.mockResolvedValueOnce(null).mockResolvedValueOnce({
       contract: 'sealed-ranking-cache@1',
       season: '90D',
@@ -652,11 +636,11 @@ describe('SSR public ranking source quarantine', () => {
 
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       1,
-      'public-rank-policy-v4:home-initial-traders-sealed-v5:90D:p0'
+      'public-rank-policy-v4:home-initial-traders-sealed-v6:90D:p0'
     )
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       2,
-      'public-rank-policy-v4:home-initial-traders-sealed-fallback-v5:90D:p0'
+      'public-rank-policy-v4:home-initial-traders-sealed-fallback-v6:90D:p0'
     )
     expect(result).toEqual({ ...fallback, isStale: true })
     expect(mockFrom).not.toHaveBeenCalled()
@@ -732,7 +716,7 @@ describe('SSR public ranking source quarantine', () => {
       categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 },
     })
 
-    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(1)
+    expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
     expect(mockAttachAvatarMirrors).not.toHaveBeenCalled()
   })
 

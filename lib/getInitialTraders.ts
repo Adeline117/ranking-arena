@@ -24,7 +24,7 @@ import {
   type SourceFreshnessRow,
   type SourceFreshnessSummary,
 } from '@/lib/rankings/source-freshness'
-import { PUBLIC_ACTIVE_RANKING_SOURCES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
   PUBLIC_RANKING_QUARANTINED_SOURCES,
@@ -35,7 +35,7 @@ import {
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
 import {
-  readSealedRankingGeneration,
+  readSealedRankingAuthorityGeneration,
   type SealedRankingGenerationRead,
 } from '@/lib/rankings/read-sealed-ranking-generation'
 import type { SealedLeaderboardPublicationProofSet } from '@/lib/rankings/read-publication-proofs'
@@ -129,10 +129,6 @@ export interface InitialTradersResult {
   categoryCounts: CategoryCounts
 }
 
-const HOME_RANKING_PROOF_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
-
 function staleCacheResult(
   ...candidates: Array<InitialTradersResult | null>
 ): InitialTradersResult | null {
@@ -150,12 +146,14 @@ function staleCacheResult(
  * never leaderboard_ranks.computed_at.
  * v5 (2026-07-29): only proof-fenced cohorts may populate the dedicated
  * sealed-ranking-cache@1 envelope; generic legacy values are rejected.
+ * v6 (2026-07-29): proof and row membership come from the dynamic registry
+ * authority instead of the historical TypeScript source registry.
  */
 export function homeInitialTradersCacheKeys(timeRange: Period, page: number) {
   return {
-    cacheKey: publicRankingCacheKey(`home-initial-traders-sealed-v5:${timeRange}:p${page}`),
+    cacheKey: publicRankingCacheKey(`home-initial-traders-sealed-v6:${timeRange}:p${page}`),
     fallbackKey: publicRankingCacheKey(
-      `home-initial-traders-sealed-fallback-v5:${timeRange}:p${page}`
+      `home-initial-traders-sealed-fallback-v6:${timeRange}:p${page}`
     ),
   }
 }
@@ -208,8 +206,7 @@ export async function getInitialTraders(
   try {
     const cachedEntry = parseSealedRankingCacheEntry<InitialTradersResult>(
       await cache.get<unknown>(cacheKey),
-      timeRange,
-      HOME_RANKING_PROOF_SOURCES
+      timeRange
     )
     cached = cachedEntry?.value ?? null
     if (cached?.traders && cached.traders.length > 0) {
@@ -220,8 +217,7 @@ export async function getInitialTraders(
     // Primary cache miss — try fallback (longer TTL, may be stale but better than empty)
     const fallbackEntry = parseSealedRankingCacheEntry<InitialTradersResult>(
       await cache.get<unknown>(fallbackKey),
-      timeRange,
-      HOME_RANKING_PROOF_SOURCES
+      timeRange
     )
     fallbackCached = fallbackEntry?.value ?? null
     if (fallbackCached) {
@@ -330,10 +326,11 @@ async function fetchSealedLeaderboardFromDB(
   const { signal } = controller
 
   try {
-    return await readSealedRankingGeneration(
+    return await readSealedRankingAuthorityGeneration(
       supabase,
-      { season: timeRange, sources: HOME_RANKING_PROOF_SOURCES },
+      timeRange,
       async (publication) => {
+        const authoritySources = publication.proofs.map((proof) => proof.source)
         let tradersPromise: Promise<{ traders: InitialTrader[]; lastUpdated: string | null }>
         if (page > 0) {
           tradersPromise = fetchPaginatedFromDB(
@@ -342,6 +339,7 @@ async function fetchSealedLeaderboardFromDB(
             limit,
             page,
             publication.scoreCohortId,
+            authoritySources,
             signal
           )
         } else {
@@ -353,6 +351,7 @@ async function fetchSealedLeaderboardFromDB(
             timeRange,
             limit,
             publication.scoreCohortId,
+            authoritySources,
             signal
           )
         }
@@ -485,6 +484,7 @@ async function fetchPaginatedFromDB(
   limit: number,
   page: number,
   scoreCohortId: string,
+  authoritySources: readonly string[],
   signal: AbortSignal
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const offset = page * limit
@@ -499,7 +499,7 @@ async function fetchPaginatedFromDB(
     .select(SSR_COLS)
     .eq('season_id', timeRange)
     .filter('rank_publication_id', 'eq', scoreCohortId)
-    .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+    .in('source', [...authoritySources])
     .gt('arena_score', 0)
     .or('is_outlier.is.null,is_outlier.eq.false')
 
@@ -539,6 +539,7 @@ async function fetchLeaderboardLegacy(
   timeRange: Period,
   limit: number,
   scoreCohortId: string,
+  authoritySources: readonly string[],
   signal: AbortSignal
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const { traders: unifiedTraders } = await getLeaderboard(supabase, {
@@ -548,7 +549,7 @@ async function fetchLeaderboardLegacy(
     excludeOutliers: true,
     sortBy: 'arena_score',
     scoreCohortId,
-    allowedSources: PUBLIC_ACTIVE_RANKING_SOURCES,
+    allowedSources: authoritySources,
     excludeSources: PUBLIC_RANKING_QUARANTINED_SOURCES,
     signal,
   })
