@@ -104,3 +104,24 @@ export const sendChannelMessageInputSchema = z
       })
     }
   })
+
+export const channelMessageReactionEmojis = [
+  '👍',
+  '🔥',
+  '💎',
+  '🚀',
+  '❤️',
+  '👀',
+  '🎯',
+  '💰',
+  '📈',
+  '📉',
+  '🤔',
+  '😂',
+] as const
+
+export const toggleChannelMessageReactionInputSchema = z
+  .object({
+    emoji: z.enum(channelMessageReactionEmojis),
+  })
+  .strict()

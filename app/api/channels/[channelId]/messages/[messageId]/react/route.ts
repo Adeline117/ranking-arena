@@ -2,41 +2,156 @@
  * Channel Message Emoji Reactions API
  * POST /api/channels/[channelId]/messages/[messageId]/react - Toggle an emoji
  * reaction on a group channel message.
- *
- * Mirrors app/api/messages/[messageId]/react/route.ts:
- *   check existing row → delete or insert → re-aggregate → return { counts, userEmojis }
- *
- * SECURITY: caller must be a member of the channel (verified via channel_members).
- * On ADD, the message author is notified (skip self-reactions); reactions are NOT
- * fanned out to all members.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin, getUserHandle } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { sendNotification } from '@/lib/data/notifications'
+import {
+  channelIdSchema,
+  channelMessageReactionEmojis,
+  toggleChannelMessageReactionInputSchema,
+} from '../../../../contracts'
 
 const logger = createLogger('api:channels:channelId:messages:react')
 
-export const dynamic = 'force-dynamic'
-
-// Allowed emoji set — mirrors the DM / post reaction allowlist
-const ALLOWED_EMOJIS = new Set([
-  '👍',
-  '🔥',
-  '💎',
-  '🚀',
-  '❤️',
-  '👀',
-  '🎯',
-  '💰',
-  '📈',
-  '📉',
-  '🤔',
-  '😂',
+const reactionFailureReasons = new Set([
+  'INVALID',
+  'ACTOR_UNAVAILABLE',
+  'CHANNEL_NOT_FOUND',
+  'CHANNEL_NOT_GROUP',
+  'MEMBERSHIP_NOT_FOUND',
+  'MESSAGE_NOT_FOUND',
 ])
+
+type ReactionAction = 'added' | 'removed'
+
+type ToggleReactionAcknowledgement =
+  | {
+      success: true
+      actorId: string
+      channelId: string
+      messageId: string
+      reactionId: string
+      emoji: (typeof channelMessageReactionEmojis)[number]
+      action: ReactionAction
+      counts: Record<string, number>
+      userEmojis: string[]
+      messageAuthorId: string
+      messagePreview: string
+    }
+  | { success: false; reason: string }
+
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const actual = Object.keys(value).sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function readReactionCounts(value: unknown): Record<string, number> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const entries: Array<[string, number]> = []
+  for (const [emoji, count] of Object.entries(value as Record<string, unknown>)) {
+    if (
+      emoji.length === 0 ||
+      emoji.length > 32 ||
+      !Number.isSafeInteger(count) ||
+      (count as number) < 1
+    ) {
+      return null
+    }
+    entries.push([emoji, count as number])
+  }
+  return Object.fromEntries(entries)
+}
+
+function readToggleReactionAcknowledgement(value: unknown): ToggleReactionAcknowledgement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const result = value as Record<string, unknown>
+  if (result.success === false) {
+    if (!hasExactKeys(result, ['reason', 'success'])) return null
+    if (typeof result.reason !== 'string' || !reactionFailureReasons.has(result.reason)) return null
+    return { success: false, reason: result.reason }
+  }
+
+  if (
+    result.success !== true ||
+    !hasExactKeys(result, [
+      'action',
+      'actor_id',
+      'changed',
+      'channel_id',
+      'counts',
+      'emoji',
+      'message_author_id',
+      'message_id',
+      'message_preview',
+      'reaction_id',
+      'success',
+      'user_emojis',
+    ]) ||
+    result.changed !== true ||
+    (result.action !== 'added' && result.action !== 'removed') ||
+    typeof result.emoji !== 'string' ||
+    !channelMessageReactionEmojis.includes(
+      result.emoji as (typeof channelMessageReactionEmojis)[number]
+    ) ||
+    !Array.isArray(result.user_emojis) ||
+    typeof result.message_preview !== 'string'
+  ) {
+    return null
+  }
+
+  const actorId = channelIdSchema.safeParse(result.actor_id)
+  const channelId = channelIdSchema.safeParse(result.channel_id)
+  const messageId = channelIdSchema.safeParse(result.message_id)
+  const reactionId = channelIdSchema.safeParse(result.reaction_id)
+  const messageAuthorId = channelIdSchema.safeParse(result.message_author_id)
+  const counts = readReactionCounts(result.counts)
+  if (
+    !actorId.success ||
+    !channelId.success ||
+    !messageId.success ||
+    !reactionId.success ||
+    !messageAuthorId.success ||
+    !counts
+  ) {
+    return null
+  }
+
+  const userEmojis: string[] = []
+  for (const emoji of result.user_emojis) {
+    if (
+      typeof emoji !== 'string' ||
+      emoji.length === 0 ||
+      emoji.length > 32 ||
+      userEmojis.includes(emoji) ||
+      counts[emoji] === undefined
+    ) {
+      return null
+    }
+    userEmojis.push(emoji)
+  }
+
+  return {
+    success: true,
+    actorId: actorId.data,
+    channelId: channelId.data,
+    messageId: messageId.data,
+    reactionId: reactionId.data,
+    emoji: result.emoji as (typeof channelMessageReactionEmojis)[number],
+    action: result.action,
+    counts,
+    userEmojis,
+    messageAuthorId: messageAuthorId.data,
+    messagePreview: result.message_preview,
+  }
+}
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(
   request: NextRequest,
@@ -49,90 +164,95 @@ export async function POST(
     const user = await getAuthUser(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { channelId, messageId } = await params
+    const rawParams = await params
+    const parsedChannelId = channelIdSchema.safeParse(rawParams.channelId)
+    const parsedMessageId = channelIdSchema.safeParse(rawParams.messageId)
+    if (!parsedChannelId.success || !parsedMessageId.success) {
+      return NextResponse.json({ error: 'Invalid channel or message id' }, { status: 400 })
+    }
 
-    let body: Record<string, unknown>
+    let rawBody: unknown
     try {
-      body = await request.json()
+      rawBody = await request.json()
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-    const emoji = body.emoji as string
-
-    if (!emoji || !ALLOWED_EMOJIS.has(emoji)) {
+    const parsedBody = toggleChannelMessageReactionInputSchema.safeParse(rawBody)
+    if (!parsedBody.success) {
       return NextResponse.json({ error: 'Invalid emoji' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const channelId = parsedChannelId.data
+    const messageId = parsedMessageId.data
+    const actorId = user.id.toLowerCase()
+    const emoji = parsedBody.data.emoji
+    const supabase = getSupabaseAdmin()
+    const { data, error } = await supabase.rpc('toggle_channel_message_reaction_atomic', {
+      p_channel_id: channelId,
+      p_message_id: messageId,
+      p_actor_id: actorId,
+      p_emoji: emoji,
+    })
 
-    // Verify caller is a member of the channel
-    const { data: membership } = await supabase
-      .from('channel_members')
-      .select('role')
-      .eq('channel_id', channelId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Not a member' }, { status: 403 })
+    if (error) {
+      logger.error('Atomic channel reaction toggle failed', { error: error.message })
+      return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
     }
 
-    // Verify the message exists and belongs to this channel
-    const { data: parentMsg } = await supabase
-      .from('channel_messages')
-      .select('id, channel_id, sender_id, content')
-      .eq('id', messageId)
-      .maybeSingle()
-
-    if (!parentMsg || parentMsg.channel_id !== channelId) {
-      return NextResponse.json({ error: 'Message not found' }, { status: 404 })
+    const acknowledgement = readToggleReactionAcknowledgement(data)
+    if (!acknowledgement) {
+      logger.error('Atomic channel reaction toggle returned an invalid acknowledgement')
+      return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
     }
 
-    // Toggle: check existing reaction
-    const { data: existing } = await supabase
-      .from('channel_message_reactions')
-      .select('id')
-      .eq('message_id', messageId)
-      .eq('user_id', user.id)
-      .eq('emoji', emoji)
-      .maybeSingle()
-
-    if (existing) {
-      await supabase.from('channel_message_reactions').delete().eq('id', existing.id)
-    } else {
-      await supabase.from('channel_message_reactions').insert({
-        message_id: messageId,
-        user_id: user.id,
-        emoji,
-      })
+    if (!acknowledgement.success) {
+      switch (acknowledgement.reason) {
+        case 'INVALID':
+          return NextResponse.json({ error: 'Invalid emoji' }, { status: 400 })
+        case 'ACTOR_UNAVAILABLE':
+          return NextResponse.json({ error: 'Account cannot react' }, { status: 403 })
+        case 'CHANNEL_NOT_FOUND':
+          return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
+        case 'CHANNEL_NOT_GROUP':
+          return NextResponse.json(
+            { error: 'Channel does not support group reactions' },
+            { status: 400 }
+          )
+        case 'MEMBERSHIP_NOT_FOUND':
+          return NextResponse.json({ error: 'Not a member' }, { status: 403 })
+        case 'MESSAGE_NOT_FOUND':
+          return NextResponse.json({ error: 'Message not found' }, { status: 404 })
+        default:
+          logger.error('Atomic channel reaction toggle returned an unknown denial')
+          return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
+      }
     }
 
-    // Re-aggregate counts for this message
-    const { data: reactions } = await supabase
-      .from('channel_message_reactions')
-      .select('emoji, user_id')
-      .eq('message_id', messageId)
-
-    const counts: Record<string, number> = {}
-    const userEmojis: string[] = []
-    for (const r of reactions || []) {
-      counts[r.emoji] = (counts[r.emoji] || 0) + 1
-      if (r.user_id === user.id) userEmojis.push(r.emoji)
+    if (
+      acknowledgement.actorId !== actorId ||
+      acknowledgement.channelId !== channelId ||
+      acknowledgement.messageId !== messageId ||
+      acknowledgement.emoji !== emoji ||
+      (acknowledgement.action === 'added' &&
+        (!acknowledgement.userEmojis.includes(emoji) ||
+          (acknowledgement.counts[emoji] ?? 0) < 1)) ||
+      (acknowledgement.action === 'removed' && acknowledgement.userEmojis.includes(emoji))
+    ) {
+      logger.error('Atomic channel reaction acknowledgement did not match its request')
+      return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
     }
 
-    // Notify the message author when a reaction is ADDED (skip self-reactions).
-    // Single-recipient only — never fan out to all channel members.
-    if (!existing && parentMsg.sender_id && parentMsg.sender_id !== user.id) {
+    if (acknowledgement.action === 'added' && acknowledgement.messageAuthorId !== actorId) {
       fireAndForget(
-        getUserHandle(user.id, user.email ?? undefined).then((handle) => {
+        getUserHandle(actorId, user.email ?? undefined).then((handle) => {
           sendNotification(
             supabase,
             {
-              user_id: parentMsg.sender_id,
+              user_id: acknowledgement.messageAuthorId,
               type: 'reaction',
               title: `${handle} reacted ${emoji} to your message`,
-              message: (parentMsg.content || '').slice(0, 100) || 'your message',
-              actor_id: user.id,
+              message: acknowledgement.messagePreview || 'your message',
+              actor_id: actorId,
               link: `/channels/${channelId}`,
               reference_id: messageId,
               read: false,
@@ -146,10 +266,10 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      action: existing ? 'removed' : 'added',
+      action: acknowledgement.action,
       emoji,
-      counts,
-      userEmojis,
+      counts: acknowledgement.counts,
+      userEmojis: acknowledgement.userEmojis,
     })
   } catch (error) {
     logger.error('REACT failed', {

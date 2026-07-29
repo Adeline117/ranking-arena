@@ -229,7 +229,6 @@ describe('channel membership server boundary migration', () => {
 
     expect(baseTableSources).toEqual(
       [
-        'app/api/channels/[channelId]/messages/[messageId]/react/route.ts',
         'app/api/channels/[channelId]/read/route.ts',
         'app/api/channels/[channelId]/route.ts',
         'app/api/channels/route.ts',
@@ -248,6 +247,15 @@ describe('channel membership server boundary migration', () => {
     expect(sendRoute).toContain("'send_channel_message_atomic'")
     expect(sendRoute).not.toMatch(
       /\.from\(\s*['"](?:channel_members|channel_messages|channel_message_reads)['"]\s*\)/
+    )
+
+    const reactionRoute = readFileSync(
+      join(process.cwd(), 'app/api/channels/[channelId]/messages/[messageId]/react/route.ts'),
+      'utf8'
+    )
+    expect(reactionRoute).toContain("'toggle_channel_message_reaction_atomic'")
+    expect(reactionRoute).not.toMatch(
+      /\.from\(\s*['"](?:channel_members|channel_messages|channel_message_reactions)['"]\s*\)/
     )
   })
 
