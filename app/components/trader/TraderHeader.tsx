@@ -436,6 +436,7 @@ export default function TraderHeader({
           traderId={traderId}
           registeredUserId={registeredUserId}
           handle={handle}
+          routeKey={traderKey}
           source={source}
           displayName={displayNameProp}
           effectiveAvatarUrl={effectiveAvatarUrl}

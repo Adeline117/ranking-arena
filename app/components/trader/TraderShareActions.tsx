@@ -28,6 +28,8 @@ import { platformLabel, formatRoiShort } from '@/lib/constants/platform-labels'
 
 interface TraderShareActionsProps {
   handle: string
+  /** Canonical account key used in the share route; handle remains display-only. */
+  routeKey?: string
   displayName?: string
   platform?: string
   rank?: number | null
@@ -131,6 +133,7 @@ function ShareNodesIcon() {
 
 export default function TraderShareActions({
   handle,
+  routeKey,
   displayName,
   platform,
   rank,
@@ -187,8 +190,8 @@ export default function TraderShareActions({
     params.set('window', windowParam)
     // Every logged-in brag is a referral link.
     if (referralCode) params.set('ref', referralCode)
-    return `${base}/share/rank/${encodeURIComponent(handle)}?${params}`
-  }, [handle, platform, windowParam, referralCode])
+    return `${base}/share/rank/${encodeURIComponent(routeKey || handle)}?${params}`
+  }, [handle, platform, referralCode, routeKey, windowParam])
 
   // OG rank-card preview / download source (query params only, no DB).
   const buildOgUrl = useCallback(() => {
