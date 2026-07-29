@@ -215,4 +215,35 @@ describe('serving → legacy adapter', () => {
       volume90d: 5000,
     })
   })
+
+  it('preserves measured zero optional stats instead of collapsing them to unknown', () => {
+    const s = servingToStats(
+      { sharpe: 0, mdd: 0, volume: 0 },
+      { trades_per_week: 0, risk_rating: 0 }
+    )
+
+    expect(s.additionalStats).toMatchObject({
+      tradesPerWeek: 0,
+      riskScore: 0,
+      volume90d: 0,
+      maxDrawdown: 0,
+      sharpeRatio: 0,
+    })
+  })
+
+  it('keeps absent and non-finite optional stats unknown', () => {
+    const s = servingToStats(
+      { sharpe: null, mdd: 'not-a-number', volume: Number.POSITIVE_INFINITY },
+      { trades_per_week: null, risk_rating: Number.NaN }
+    )
+
+    expect(s.additionalStats).toEqual({
+      tradesPerWeek: undefined,
+      avgHoldingTime: undefined,
+      riskScore: undefined,
+      volume90d: undefined,
+      maxDrawdown: undefined,
+      sharpeRatio: undefined,
+    })
+  })
 })
