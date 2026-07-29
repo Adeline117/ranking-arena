@@ -1764,16 +1764,17 @@ export async function handleChargeDisputeCreated(
 
   if (!durableResult) return
   const { acknowledgement, chargeId, freshDispute } = durableResult
-  if (acknowledgement.status === 'api_tier') {
-    try {
-      await drainApiTierReversalActions({ limit: 1 })
-    } catch (error) {
-      logger.error('Durable API tier cancellation remains queued after dispute', {
-        disputeId: freshDispute.id,
-        subscriptionId: acknowledgement.subscriptionId,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
+  try {
+    // The compatibility acknowledgement remains `not_api` for ordinary Pro
+    // while the database still enqueues its mode-aware cancellation action.
+    await drainApiTierReversalActions({ limit: 1 })
+  } catch (error) {
+    logger.error('Durable subscription cancellation remains queued after dispute', {
+      disputeId: freshDispute.id,
+      subscriptionId:
+        acknowledgement.status === 'api_tier' ? acknowledgement.subscriptionId : undefined,
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 
   logger.error('Chargeback/dispute created', {

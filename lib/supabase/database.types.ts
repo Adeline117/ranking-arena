@@ -521,6 +521,7 @@ export type Database = {
           livemode: boolean
           next_attempt_at: string
           ownership_id: string
+          product_kind: string
           state: string
           stripe_customer_id: string
           stripe_subscription_id: string
@@ -540,6 +541,7 @@ export type Database = {
           livemode: boolean
           next_attempt_at?: string
           ownership_id: string
+          product_kind?: string
           state?: string
           stripe_customer_id: string
           stripe_subscription_id: string
@@ -559,6 +561,7 @@ export type Database = {
           livemode?: boolean
           next_attempt_at?: string
           ownership_id?: string
+          product_kind?: string
           state?: string
           stripe_customer_id?: string
           stripe_subscription_id?: string
@@ -6134,6 +6137,96 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: 'stripe_api_tier_reversal_events_ownership_id_fkey'
+            columns: ['ownership_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_payment_ownerships'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      stripe_charge_dispute_events: {
+        Row: {
+          captured_amount: number
+          currency: string
+          dispute_amount: number
+          dispute_reason: string
+          dispute_status: string
+          livemode: boolean
+          recorded_at: string
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_dispute_id: string
+          stripe_event_created: number
+          stripe_event_id: string
+          stripe_payment_intent_id: string | null
+        }
+        Insert: {
+          captured_amount: number
+          currency: string
+          dispute_amount: number
+          dispute_reason: string
+          dispute_status: string
+          livemode: boolean
+          recorded_at?: string
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_dispute_id: string
+          stripe_event_created: number
+          stripe_event_id: string
+          stripe_payment_intent_id?: string | null
+        }
+        Update: {
+          captured_amount?: number
+          currency?: string
+          dispute_amount?: number
+          dispute_reason?: string
+          dispute_status?: string
+          livemode?: boolean
+          recorded_at?: string
+          stripe_charge_id?: string
+          stripe_customer_id?: string
+          stripe_dispute_id?: string
+          stripe_event_created?: number
+          stripe_event_id?: string
+          stripe_payment_intent_id?: string | null
+        }
+        Relationships: []
+      }
+      stripe_charge_dispute_projections: {
+        Row: {
+          livemode: boolean
+          ownership_id: string
+          product_kind: string
+          projected_at: string
+          result: Json
+          stripe_event_id: string
+        }
+        Insert: {
+          livemode: boolean
+          ownership_id: string
+          product_kind: string
+          projected_at?: string
+          result: Json
+          stripe_event_id: string
+        }
+        Update: {
+          livemode?: boolean
+          ownership_id?: string
+          product_kind?: string
+          projected_at?: string
+          result?: Json
+          stripe_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_charge_dispute_projections_event_fkey'
+            columns: ['livemode', 'stripe_event_id']
+            isOneToOne: true
+            referencedRelation: 'stripe_charge_dispute_events'
+            referencedColumns: ['livemode', 'stripe_event_id']
+          },
+          {
+            foreignKeyName: 'stripe_charge_dispute_projections_ownership_id_fkey'
             columns: ['ownership_id']
             isOneToOne: false
             referencedRelation: 'stripe_payment_ownerships'

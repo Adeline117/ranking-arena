@@ -72,6 +72,9 @@ const readyEntitlementAuthority = {
   stripe_payment_mode_anomalies: 0,
   refund_mode_anomalies: 0,
   group_payment_mode_anomalies: 0,
+  unprojected_charge_disputes: 0,
+  charge_dispute_identity_anomalies: 0,
+  charge_dispute_authority_drift: 0,
 }
 
 function chainable(result: { count: number | null; error: null | { message: string } }) {
