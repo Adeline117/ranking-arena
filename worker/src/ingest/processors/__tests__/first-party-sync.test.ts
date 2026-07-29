@@ -103,13 +103,14 @@ function queueQueries(
   source: { slug: string; exchange_slug: string } = {
     slug: 'bybit_copytrade',
     exchange_slug: 'bybit',
-  }
+  },
+  snapshots: Array<{ ts: string; equity: number; net_transfer_cum: number | null }> = []
 ) {
   mockQuery
     .mockResolvedValueOnce({ rows: [auth] })
     .mockResolvedValueOnce({ rows: [source] })
     .mockResolvedValueOnce({ rows: [{ id: 99 }] })
-    .mockResolvedValueOnce({ rows: [] })
+    .mockResolvedValueOnce({ rows: snapshots })
 }
 
 describe('first-party sync processor', () => {
@@ -187,6 +188,25 @@ describe('first-party sync processor', () => {
       'active',
       'ok stats=3 rejects=0',
     ])
+  })
+
+  it('uses the latest durable snapshot as the transfer replay cursor', async () => {
+    const staleAuthorizationSync = '2026-07-28T10:00:00.000Z'
+    const latestSnapshot = '2026-07-28T11:00:00.000Z'
+    queueQueries(
+      { ...AUTH, last_sync_at: staleAuthorizationSync },
+      { slug: 'bybit_copytrade', exchange_slug: 'bybit' },
+      [{ ts: latestSnapshot, equity: 100, net_transfer_cum: 5 }]
+    )
+    mockQuery.mockResolvedValue({ rows: [] })
+
+    const result = await processAuthorization()
+
+    expect(result.ok).toBe(true)
+    expect(mockFetchAccount).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ lastSyncMs: Date.parse(latestSnapshot) })
+    )
   })
 
   it.each([['binance_futures', 'futures', 'swap']])(

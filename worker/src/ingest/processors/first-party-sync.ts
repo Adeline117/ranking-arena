@@ -287,11 +287,20 @@ export async function processFirstPartySync(
     )
 
     const nowMs = Date.now()
+    const latestSnapshot = snapRows[snapRows.length - 1]
+    const latestSnapshotMs = latestSnapshot ? Date.parse(latestSnapshot.ts) : Number.NaN
     const account = await fetchFirstPartyAccount(client, {
       nowMs,
       ...exchangeContract,
       lookbackDays: 90,
-      lastSyncMs: auth.last_sync_at ? Date.parse(auth.last_sync_at) : null,
+      // The snapshot is written before authorization status is stamped. If a
+      // worker dies between those writes, auth.last_sync_at is stale and
+      // replaying from it would count the same transfer twice.
+      lastSyncMs: Number.isFinite(latestSnapshotMs)
+        ? latestSnapshotMs
+        : auth.last_sync_at
+          ? Date.parse(auth.last_sync_at)
+          : null,
     })
     const result = computeFirstParty({ ...account, snapshots: snapRows })
 
