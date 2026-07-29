@@ -11,6 +11,7 @@ Emergency operations manual for the Arena crypto trader ranking platform.
 - [Manual Leaderboard Recompute](#manual-leaderboard-recompute)
 - [Arena Score Recalculation](#arena-score-recalculation)
 - [Deployment Rollback](#deployment-rollback)
+- [Ranking Primary Authority Predeploy Gate](#ranking-primary-authority-predeploy-gate)
 - [Database Emergency Operations](#database-emergency-operations)
 - [Common Errors and Solutions](#common-errors-and-solutions)
 - [Key Infrastructure](#key-infrastructure)
@@ -393,6 +394,62 @@ Preview/PR 分支构建不受影响。
 - **自动回滚 API**：唯一真实端点是
   `POST https://api.vercel.com/v10/projects/{projectId}/promote/{deploymentId}`
   （旧 `/v6/deployments/{id}/promote` 是 404，2026-07-02 实测修正）。
+
+### Ranking Primary Authority Predeploy Gate
+
+组合榜的封闭读取跨两个传输层：publication receipt/cohort proof 经
+`NEXT_PUBLIC_SUPABASE_URL` 的 Supabase API 读取，榜单页经 PostgreSQL 连接池
+读取。`lib/db.ts` 在生产中优先使用 `DATABASE_POOLER_URL`，缺少时才回退
+`DATABASE_URL`。这些端点若指向不同项目，proof A 不能授权 rows B，必须视为
+P0 并扣留部署。
+
+Deploy Gate 会在候选构建前将 Vercel 的 production env 拉到 runner 临时文件，
+运行以下门禁，并在进程退出时删除文件；脚本只输出变量名和固定 project ref，
+不会打印连接串或密码：
+
+```bash
+npm run qa:ranking-primary-authority-env
+```
+
+门禁固定绑定生产 project `iknktzifjdyujdccyhsv`，并执行以下检查：
+
+- `NEXT_PUBLIC_SUPABASE_URL` 和已配置的 `SUPABASE_URL` 必须是该项目的精确
+  HTTPS origin；
+- `DATABASE_POOLER_URL`、`DATABASE_URL` 只要配置了就必须逐个通过，不能用一个
+  正确 fallback 掩盖另一个错误值；
+- direct endpoint 必须是 `db.<project-ref>.supabase.co:5432/postgres`；
+  pooler 必须是官方 `*.pooler.supabase.com`，用户名携带同一 project ref，
+  端口为 `5432` 或 `6543`；
+- 只允许缺省 TLS 参数，或唯一的 `sslmode=require|verify-full`；拒绝可覆盖
+  host/user 的连接参数。
+
+这是**部署环境身份门禁**，不是运行时请求检查，也不是数据库健康证明。不得把
+`DATABASE_*` 暴露给浏览器、改成 `NEXT_PUBLIC_*`，也不得在每次用户请求时解析
+或记录连接串。pooler 没有可安全交给浏览器的项目映射，数据库 secret 也只能
+存在服务端；因此同源约束应在获得完整 production env 的 Deploy Gate 中
+fail-closed。它不替代 migration ledger、schema readiness 或上线烟测。
+
+组合榜变更的顺序固定为：
+
+1. 同源门禁通过；
+2. 通过批准的生产 migration channel 应用并核对
+   `20260729071757_sealed_composite_rankings_rpc.sql` 的 exact ledger；
+3. 部署依赖该 RPC 的应用代码；
+4. 对生产端点做封闭读取烟测：
+
+   ```bash
+   curl -fsS --connect-timeout 5 --max-time 30 \
+     'https://www.arenafi.org/api/rankings?window=composite&limit=1&offset=0' \
+     | jq -e '
+       .success == true
+       and .data.window == "COMPOSITE"
+       and (.data.total_count | type) == "number"
+       and (.data.traders | type) == "array"
+     '
+   ```
+
+门禁失败时先在 Vercel Production 环境中纠正变量；禁止临时删除 checker、
+放宽 production project ref 或让 composite 回退到未封闭的旧读取路径。
 
 ### Vercel instant rollback
 
