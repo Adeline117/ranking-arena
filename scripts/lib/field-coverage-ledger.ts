@@ -5,7 +5,7 @@
  * extras filtering, or fill-rate semantics change.
  */
 export const FIELD_COVERAGE_DATA_CONTRACT = 'arena.trader_stats.field-coverage'
-export const FIELD_COVERAGE_DATA_CONTRACT_VERSION = 1
+export const FIELD_COVERAGE_DATA_CONTRACT_VERSION = 2
 
 export const FIELD_COVERAGE_TYPED_COLUMNS = [
   'roi',
@@ -57,7 +57,8 @@ function pct(n: number, total: number): string {
 
 export function renderFieldCoverageLedger(
   rows: FieldCoverageSourceRow[],
-  metadata: FieldCoverageLedgerMetadata
+  metadata: FieldCoverageLedgerMetadata,
+  servingSourceSlugs: readonly string[]
 ): string {
   validateMetadata(metadata)
 
@@ -66,9 +67,20 @@ export function renderFieldCoverageLedger(
     if (!bySource.has(row.slug)) bySource.set(row.slug, [])
     bySource.get(row.slug)!.push(row)
   }
+  const servingSources = [...servingSourceSlugs].sort()
+  if (
+    servingSources.some((slug) => !/^[a-z0-9_]+$/.test(slug)) ||
+    new Set(servingSources).size !== servingSources.length
+  ) {
+    throw new Error('servingSourceSlugs must contain unique canonical source slugs')
+  }
+  const undeclared = [...bySource.keys()].filter((slug) => !servingSources.includes(slug))
+  if (undeclared.length > 0) {
+    throw new Error(`field coverage rows include non-serving sources: ${undeclared.join(', ')}`)
+  }
 
   const out: string[] = []
-  out.push('# Exchange Field Coverage Ledger')
+  out.push('# Source-Board Field Coverage Ledger')
   out.push('')
   out.push(
     '> **Machine-generated** from production `arena.trader_stats` by ' +
@@ -89,19 +101,28 @@ export function renderFieldCoverageLedger(
   out.push(
     "Fill % = share of a source×timeframe's rows where the field is non-NULL. " +
       'A typed column or extras key at a low/zero rate is either not exposed by ' +
-      'that exchange or a promotion gap. A key that regresses to 0 is a silent ' +
+      'that source board or a promotion gap. A key that regresses to 0 is a silent ' +
       'field loss — see `scripts/openclaw/field-coverage-canary.mjs`.'
   )
   out.push('')
 
-  const sources = [...bySource.keys()].sort()
-  out.push(`**${sources.length} serving sources.**`)
+  const sourcesWithRows = [...bySource.keys()].sort()
+  out.push(
+    `**${servingSources.length} configured serving sources; ` +
+      `${sourcesWithRows.length} with trader_stats rows.**`
+  )
   out.push('')
 
-  for (const slug of sources) {
-    const tfRows = [...bySource.get(slug)!].sort((a, b) => a.timeframe - b.timeframe)
+  for (const slug of servingSources) {
     out.push(`## ${slug}`)
     out.push('')
+    const sourceRows = bySource.get(slug)
+    if (!sourceRows) {
+      out.push('No trader_stats rows were present at generation time.')
+      out.push('')
+      continue
+    }
+    const tfRows = [...sourceRows].sort((a, b) => a.timeframe - b.timeframe)
     const tfs = tfRows.map((row) => row.timeframe)
     out.push(`Timeframes: ${tfs.join(', ')} · rows: ${tfRows.map((row) => row.total).join(' / ')}`)
     out.push('')

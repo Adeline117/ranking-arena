@@ -27,8 +27,20 @@ import {
   type FieldCoverageSourceRow,
 } from './lib/field-coverage-ledger'
 
-async function collect(): Promise<FieldCoverageSourceRow[]> {
+async function collect(): Promise<{
+  rows: FieldCoverageSourceRow[]
+  servingSourceSlugs: string[]
+}> {
   const pool = getIngestPool()
+
+  // Keep the serving authority independent from trader_stats presence. An
+  // INNER JOIN alone silently hid serving sources with zero published rows.
+  const { rows: servingRows } = await pool.query<{ slug: string }>(
+    `SELECT slug
+       FROM arena.sources
+      WHERE serving_mode = 'serving'
+      ORDER BY slug`
+  )
 
   // Typed-column fill counts per (source, timeframe).
   const typedSelect = FIELD_COVERAGE_TYPED_COLUMNS.map((c) => `count(ts.${c}) AS ${c}`).join(', ')
@@ -77,7 +89,10 @@ async function collect(): Promise<FieldCoverageSourceRow[]> {
     const row = byKey.get(`${r.slug}|${r.timeframe}`)
     if (row) row.extras[r.key] = Number(r.n)
   }
-  return [...byKey.values()]
+  return {
+    rows: [...byKey.values()],
+    servingSourceSlugs: servingRows.map(({ slug }) => slug),
+  }
 }
 
 function cleanGitSha(): string {
@@ -98,12 +113,16 @@ function cleanGitSha(): string {
 async function main() {
   const gitSha = cleanGitSha()
   try {
-    const rows = await collect()
+    const { rows, servingSourceSlugs } = await collect()
     const md = await format(
-      renderFieldCoverageLedger(rows, {
-        generatedAt: new Date().toISOString(),
-        gitSha,
-      }),
+      renderFieldCoverageLedger(
+        rows,
+        {
+          generatedAt: new Date().toISOString(),
+          gitSha,
+        },
+        servingSourceSlugs
+      ),
       { parser: 'markdown' }
     )
     const outPath = join(process.cwd(), 'docs', 'EXCHANGE_FIELD_COVERAGE.md')

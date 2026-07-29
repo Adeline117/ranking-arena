@@ -33,10 +33,11 @@ const ROWS: FieldCoverageSourceRow[] = [
     extras: { zebra: 4 },
   },
 ]
+const SERVING_SOURCES = ['zeta', 'empty', 'alpha']
 
 describe('field coverage ledger renderer', () => {
   it('renders reproducible provenance metadata', () => {
-    const output = renderFieldCoverageLedger(ROWS, METADATA)
+    const output = renderFieldCoverageLedger(ROWS, METADATA, SERVING_SOURCES)
 
     expect(output).toContain(`| generated_at | \`${METADATA.generatedAt}\` |`)
     expect(output).toContain(`| git_sha | \`${METADATA.gitSha}\` |`)
@@ -49,31 +50,35 @@ describe('field coverage ledger renderer', () => {
   it.each(['2026-07-16', '2026-07-16T17:30:00Z', 'not-a-date'])(
     'rejects a non-canonical generatedAt value: %s',
     (generatedAt) => {
-      expect(() => renderFieldCoverageLedger(ROWS, { ...METADATA, generatedAt })).toThrow(
-        /generatedAt/
-      )
+      expect(() =>
+        renderFieldCoverageLedger(ROWS, { ...METADATA, generatedAt }, SERVING_SOURCES)
+      ).toThrow(/generatedAt/)
     }
   )
 
   it.each(['abc123', 'G123456789abcdef0123456789abcdef01234567', ''])(
     'rejects an invalid full Git SHA: %s',
     (gitSha) => {
-      expect(() => renderFieldCoverageLedger(ROWS, { ...METADATA, gitSha })).toThrow(/gitSha/)
+      expect(() =>
+        renderFieldCoverageLedger(ROWS, { ...METADATA, gitSha }, SERVING_SOURCES)
+      ).toThrow(/gitSha/)
     }
   )
 
   it('sorts sources, timeframes, and extras without mutating caller order', () => {
     const originalOrder = ROWS.map((row) => `${row.slug}:${row.timeframe}`)
-    const output = renderFieldCoverageLedger(ROWS, METADATA)
+    const output = renderFieldCoverageLedger(ROWS, METADATA, SERVING_SOURCES)
 
     expect(output.indexOf('## alpha')).toBeLessThan(output.indexOf('## zeta'))
+    expect(output).toContain('3 configured serving sources; 2 with trader_stats rows')
+    expect(output).toContain('## empty\n\nNo trader_stats rows were present at generation time.')
     expect(output).toContain('Timeframes: 7, 30 · rows: 4 / 2')
     expect(output.indexOf('| alpha |')).toBeLessThan(output.indexOf('| zebra |'))
     expect(ROWS.map((row) => `${row.slug}:${row.timeframe}`)).toEqual(originalOrder)
   })
 
   it('omits all-zero typed fields and calculates fill rates deterministically', () => {
-    const output = renderFieldCoverageLedger(ROWS, METADATA)
+    const output = renderFieldCoverageLedger(ROWS, METADATA, SERVING_SOURCES)
 
     expect(output).not.toContain('| pnl |')
     expect(output).toContain('| roi | 25% | 100% |')
@@ -84,7 +89,16 @@ describe('field coverage ledger renderer', () => {
 
   it('pins the field coverage contract identity', () => {
     expect(`${FIELD_COVERAGE_DATA_CONTRACT}@${FIELD_COVERAGE_DATA_CONTRACT_VERSION}`).toBe(
-      'arena.trader_stats.field-coverage@1'
+      'arena.trader_stats.field-coverage@2'
+    )
+  })
+
+  it('fails closed on ambiguous or undeclared serving identities', () => {
+    expect(() => renderFieldCoverageLedger(ROWS, METADATA, ['alpha', 'alpha', 'zeta'])).toThrow(
+      /unique canonical/
+    )
+    expect(() => renderFieldCoverageLedger(ROWS, METADATA, ['alpha', 'empty'])).toThrow(
+      /non-serving sources: zeta/
     )
   })
 })
