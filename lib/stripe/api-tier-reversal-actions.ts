@@ -8,6 +8,7 @@ import type { Database, Json } from '@/lib/supabase/database.types'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { parseApiTierSubscriptionAuthority } from '@/app/api/stripe/webhook/handlers/subscription'
+import { parseRecurringProCheckoutMetadata } from '@/lib/stripe/recurring-pro-checkout'
 
 const logger = createLogger('api-tier-reversal-actions')
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -17,6 +18,7 @@ const SUBSCRIPTION_ID_PATTERN = /^sub_[A-Za-z0-9_]+$/
 type ReversalAction = {
   id: string
   ownershipId: string
+  productKind: 'api_tier' | 'pro_entitlement'
   livemode: boolean
   userId: string
   customerId: string
@@ -41,6 +43,8 @@ function parseAction(value: Json, expectedToken: string): ReversalAction {
   const row = objectValue(value)
   const id = row?.id
   const ownershipId = row?.ownership_id
+  const rawProductKind = row?.product_kind
+  const productKind = rawProductKind === undefined ? 'api_tier' : rawProductKind
   const livemode = row?.livemode
   const userId = row?.user_id
   const customerId = row?.stripe_customer_id
@@ -52,6 +56,7 @@ function parseAction(value: Json, expectedToken: string): ReversalAction {
     !UUID_PATTERN.test(id) ||
     typeof ownershipId !== 'string' ||
     !UUID_PATTERN.test(ownershipId) ||
+    (productKind !== 'api_tier' && productKind !== 'pro_entitlement') ||
     typeof livemode !== 'boolean' ||
     typeof userId !== 'string' ||
     !UUID_PATTERN.test(userId) ||
@@ -70,6 +75,7 @@ function parseAction(value: Json, expectedToken: string): ReversalAction {
   return {
     id,
     ownershipId,
+    productKind,
     livemode,
     userId: userId.toLowerCase(),
     customerId,
@@ -161,15 +167,25 @@ async function executeAction(params: {
 
   try {
     const customerId = stripeCustomerId(subscription.customer)
-    const authority = parseApiTierSubscriptionAuthority(subscription, {
-      allowHistoricalPriceForNonGrant: true,
-    })
+    const authorityMatches =
+      action.productKind === 'api_tier'
+        ? (() => {
+            const authority = parseApiTierSubscriptionAuthority(subscription, {
+              allowHistoricalPriceForNonGrant: true,
+            })
+            return (
+              authority.userId === action.userId && authority.stripeCustomerId === action.customerId
+            )
+          })()
+        : (() => {
+            const authority = parseRecurringProCheckoutMetadata(subscription.metadata)
+            return authority?.userId === action.userId && authority.customerId === action.customerId
+          })()
     if (
       subscription.id !== action.subscriptionId ||
       subscription.livemode !== action.livemode ||
       customerId !== action.customerId ||
-      authority.userId !== action.userId ||
-      authority.stripeCustomerId !== action.customerId
+      !authorityMatches
     ) {
       throw new Error('Fresh Stripe subscription does not match reversal action identity')
     }
@@ -211,8 +227,9 @@ async function executeAction(params: {
       return 'completed'
     }
     const message = error instanceof Error ? error.message : String(error)
-    logger.error('API tier subscription cancellation will retry', {
+    logger.error('Stripe subscription reversal cancellation will retry', {
       actionId: action.id,
+      productKind: action.productKind,
       subscriptionId: action.subscriptionId,
       attempts: action.attempts,
       error: message,
