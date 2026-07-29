@@ -138,6 +138,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729054500_leaderboard_rank_generation_service_planner.sql
   20260729054600_atomic_leaderboard_rank_generation_publication.sql
   20260729055000_account_recovery_auth_manual_review.sql
+  20260729056000_atomic_two_factor_credentials.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055

@@ -147,7 +147,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const additiveApiTierMigration = '20260729020000_api_tier_cancellation_identity.sql'
   const legacyApiTierCleanupMigration = '20260729021000_disable_legacy_api_tier_writer.sql'
 
-  assert.equal(predeploy.length, 109)
+  assert.equal(predeploy.length, 110)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -227,6 +227,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260729054500_leaderboard_rank_generation_service_planner.sql',
           '20260729054600_atomic_leaderboard_rank_generation_publication.sql',
           '20260729055000_account_recovery_auth_manual_review.sql',
+          '20260729056000_atomic_two_factor_credentials.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -245,7 +246,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 122)
+  assert.equal(new Set(all).size, 123)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -259,7 +260,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-68), [
+  assert.deepEqual(predeploy.slice(-69), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -328,6 +329,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729054500_leaderboard_rank_generation_service_planner.sql',
     '20260729054600_atomic_leaderboard_rank_generation_publication.sql',
     '20260729055000_account_recovery_auth_manual_review.sql',
+    '20260729056000_atomic_two_factor_credentials.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -400,6 +402,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729054400_leaderboard_rank_generation_private_staging.sql'))
   assert.ok(predeploy.includes('20260729054500_leaderboard_rank_generation_service_planner.sql'))
   assert.ok(predeploy.includes('20260729054600_atomic_leaderboard_rank_generation_publication.sql'))
+  assert.ok(predeploy.includes('20260729056000_atomic_two_factor_credentials.sql'))
   assert.ok(
     predeploy.includes('20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql')
   )
@@ -511,6 +514,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
       '20260729054600_atomic_leaderboard_rank_generation_publication.sql'
     )
   )
+  assert.ok(!recoveryPrerequisites.includes('20260729056000_atomic_two_factor_credentials.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260729024000_api_tier_payment_reversals.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260729025000_recurring_pro_checkout_admission.sql'))
   assert.ok(!predeploy.includes('20260722054000_metric_trust_source_page_lineage.sql'))
