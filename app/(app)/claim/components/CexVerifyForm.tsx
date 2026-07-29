@@ -46,13 +46,29 @@ function responseMessage(value: unknown, fallback: string): string {
   return fallback
 }
 
-function readVerifiedUid(value: unknown): string | null {
+function connectionExchangeId(source: string): string {
+  return source
+    .trim()
+    .toLowerCase()
+    .replace(/_(futures|spot)$/, '')
+}
+
+function readVerifiedUid(
+  value: unknown,
+  expected: { source: string; traderId: string; userId: string }
+): string | null {
   if (
     !isRecord(value) ||
     value.success !== true ||
     value.verified !== true ||
     typeof value.uid !== 'string' ||
-    !value.uid.trim()
+    !value.uid.trim() ||
+    !isRecord(value.data) ||
+    value.data.viewerId !== expected.userId ||
+    value.data.exchange !== connectionExchangeId(expected.source) ||
+    value.data.source !== expected.source.trim().toLowerCase() ||
+    value.data.traderId !== expected.traderId ||
+    value.data.verifiedUid !== value.uid.trim()
   ) {
     return null
   }
@@ -139,7 +155,9 @@ function ViewerScopedCexVerifyForm({
   }
 
   const handleVerify = async () => {
-    if (loading) return // Guard against double-click race condition
+    // State updates render asynchronously; the ref closes the same-tick
+    // double-click window before the disabled button is painted.
+    if (loading || operationRef.current) return
     if (!verifiedUid && (!apiKey.trim() || !apiSecret.trim())) {
       showToast(t('fillApiKeySecret'), 'warning')
       return
@@ -188,7 +206,13 @@ function ViewerScopedCexVerifyForm({
           return
         }
 
-        const acknowledgedUid = verifyResult.ok ? readVerifiedUid(verifyResult.data) : null
+        const acknowledgedUid = verifyResult.ok
+          ? readVerifiedUid(verifyResult.data, {
+              source: trader.source,
+              traderId: trader.source_trader_id,
+              userId: operation.viewer.userId,
+            })
+          : null
         if (!acknowledgedUid) {
           // The exchange's raw (English) error is passed through — prefix it with
           // a localized "Exchange returned:" so a zh/ja/ko user knows the message
@@ -305,6 +329,7 @@ function ViewerScopedCexVerifyForm({
         <input
           type="text"
           value={apiKey}
+          disabled={loading}
           onChange={(e) => setApiKey(e.target.value)}
           placeholder={t('enterApiKeyPlaceholder')}
           style={{
@@ -331,6 +356,7 @@ function ViewerScopedCexVerifyForm({
         </label>
         <PasswordInput
           value={apiSecret}
+          disabled={loading}
           onChange={(e) => setApiSecret(e.target.value)}
           placeholder={t('enterApiSecretPlaceholder')}
           style={{
@@ -358,6 +384,7 @@ function ViewerScopedCexVerifyForm({
           </label>
           <PasswordInput
             value={passphrase}
+            disabled={loading}
             onChange={(e) => setPassphrase(e.target.value)}
             placeholder={t('enterPassphrasePlaceholder')}
             style={{

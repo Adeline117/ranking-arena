@@ -118,6 +118,30 @@ function response(data: unknown, status = 200) {
   }
 }
 
+function ownershipAcknowledgement(
+  overrides: Partial<{
+    exchange: string
+    source: string
+    traderId: string
+    uid: string
+    viewerId: string
+  }> = {}
+) {
+  const uid = overrides.uid ?? 'account/42'
+  return {
+    success: true,
+    verified: true,
+    uid,
+    data: {
+      viewerId: overrides.viewerId ?? VIEWER_A,
+      exchange: overrides.exchange ?? 'binance',
+      source: overrides.source ?? 'binance',
+      traderId: overrides.traderId ?? 'account/42',
+      verifiedUid: uid,
+    },
+  }
+}
+
 type MockFetchResult = ReturnType<typeof response>
 
 function deferred<T>() {
@@ -189,13 +213,7 @@ describe('CexVerifyForm login intent', () => {
   it('submits both ownership steps with one exact viewer scope', async () => {
     mockAuth = signedIn(VIEWER_A, 'access-token-a', 3)
     mockAuthedFetch
-      .mockResolvedValueOnce(
-        response({
-          success: true,
-          verified: true,
-          uid: 'account/42',
-        })
-      )
+      .mockResolvedValueOnce(response(ownershipAcknowledgement()))
       .mockResolvedValueOnce(
         response({
           success: true,
@@ -282,13 +300,7 @@ describe('CexVerifyForm login intent', () => {
     expect(screen.getByPlaceholderText('enterApiSecretPlaceholder')).toHaveValue('')
 
     await act(async () => {
-      verification.resolve(
-        response({
-          success: true,
-          verified: true,
-          uid: 'account/42',
-        })
-      )
+      verification.resolve(response(ownershipAcknowledgement()))
       await verification.promise
     })
 
@@ -296,5 +308,38 @@ describe('CexVerifyForm login intent', () => {
     expect(onSuccess).not.toHaveBeenCalled()
     expect(mockTrackEvent).not.toHaveBeenCalled()
     expect(mockShowToast).not.toHaveBeenCalledWith('claimSubmitted', 'success')
+  })
+
+  it('rejects a verification acknowledgement for another viewer', async () => {
+    mockAuth = signedIn(VIEWER_A, 'access-token-a', 6)
+    mockAuthedFetch.mockResolvedValueOnce(
+      response(ownershipAcknowledgement({ viewerId: VIEWER_B }))
+    )
+    const onSuccess = jest.fn()
+    renderForm(onSuccess)
+    fillCredentials()
+
+    fireEvent.click(screen.getByRole('button', { name: 'claimVerifyAndClaim' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('claimApiKeyMismatch', 'error'))
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(mockTrackEvent).not.toHaveBeenCalled()
+  })
+
+  it('starts only one ownership request for a same-tick double click', async () => {
+    mockAuth = signedIn(VIEWER_A, 'access-token-a', 7)
+    const verification = deferred<MockFetchResult>()
+    mockAuthedFetch.mockReturnValue(verification.promise)
+    renderForm()
+    fillCredentials()
+
+    const button = screen.getByRole('button', { name: 'claimVerifyAndClaim' })
+    act(() => {
+      button.click()
+      button.click()
+    })
+
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
   })
 })
