@@ -1,17 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '@/app/components/base'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { SearchResult, isSolanaDex, walletMatchesTrader } from './types'
 import { trackEvent } from '@/lib/analytics/track'
 import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
 import { buildTraderClaimWalletMessage } from '@/lib/auth/trader-claim-wallet-message'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
+import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
 
 declare global {
   interface Window {
@@ -26,19 +32,105 @@ interface SolanaProvider {
   connect: () => Promise<{ publicKey: { toString: () => string } }>
 }
 
-export function DexVerifyForm({
-  trader,
-  onSuccess,
-}: {
+type DexVerifyFormProps = {
   trader: SearchResult
   onSuccess: () => void
+}
+
+type ClaimOperation = {
+  controller: AbortController
+  viewer: SettingsViewerSnapshot
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function responseMessage(value: unknown, fallback: string): string {
+  if (!isRecord(value)) return fallback
+  if (typeof value.error === 'string' && value.error.trim()) return value.error.trim()
+  if (
+    isRecord(value.error) &&
+    typeof value.error.message === 'string' &&
+    value.error.message.trim()
+  ) {
+    return value.error.message.trim()
+  }
+  return fallback
+}
+
+function isClaimAcknowledgement(
+  value: unknown,
+  expected: {
+    source: string
+    traderId: string
+    userId: string
+  }
+): boolean {
+  if (!isRecord(value) || value.success !== true || !isRecord(value.data)) return false
+  const claim = value.data.claim
+  return (
+    isRecord(claim) &&
+    claim.user_id === expected.userId &&
+    claim.trader_id === expected.traderId &&
+    claim.source === expected.source.toLowerCase() &&
+    claim.status === 'reviewing' &&
+    claim.verification_method === 'signature' &&
+    value.data.auto_approved === false
+  )
+}
+
+function canonicalTraderId(trader: SearchResult): string {
+  try {
+    return canonicalizeWalletIdentity(trader.source_trader_id, trader.source)
+  } catch {
+    return trader.source_trader_id
+  }
+}
+
+export function DexVerifyForm(props: DexVerifyFormProps) {
+  const auth = useAuthSession()
+  const viewer = captureSettingsViewer(auth)
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${props.trader.source}\u0000${props.trader.source_trader_id}`
+
+  return <ViewerScopedDexVerifyForm key={scopeKey} {...props} viewer={viewer} />
+}
+
+function ViewerScopedDexVerifyForm({
+  trader,
+  onSuccess,
+  viewer,
+}: DexVerifyFormProps & {
+  viewer: SettingsViewerSnapshot | null
 }) {
   const { t } = useLanguage()
   const { showToast } = useToast()
   const router = useRouter()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const viewerRef = useRef(viewer)
+  viewerRef.current = viewer
+  const mountedRef = useRef(false)
+  const operationRef = useRef<ClaimOperation | null>(null)
   const [loading, setLoading] = useState(false)
 
   const isSolana = isSolanaDex(trader.source)
+  const claimTraderId = canonicalTraderId(trader)
+  const operationIsCurrent = (operation: ClaimOperation): boolean =>
+    mountedRef.current &&
+    operationRef.current === operation &&
+    isSettingsViewerCurrent(operation.viewer, authRef.current)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      operationRef.current?.controller.abort()
+      operationRef.current = null
+    }
+  }, [])
+
   const redirectToLogin = () => {
     showToast(t('loginExpiredPleaseRelogin'), 'error')
     router.push(
@@ -52,23 +144,28 @@ export function DexVerifyForm({
 
   const handleWalletVerify = async () => {
     if (loading) return
+    const operationViewer = viewerRef.current
+    if (!operationViewer || !isSettingsViewerCurrent(operationViewer, authRef.current)) {
+      if (authRef.current.authChecked && !authRef.current.loading && !authRef.current.userId) {
+        redirectToLogin()
+      }
+      return
+    }
+
+    const operation: ClaimOperation = {
+      controller: new AbortController(),
+      viewer: operationViewer,
+    }
+    operationRef.current = operation
     setLoading(true)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) {
-        redirectToLogin()
-        return
-      }
-
       let walletAddress: string
       let signature: string
       const timestamp = Date.now()
       const message = buildTraderClaimWalletMessage({
-        userId: session.user.id,
+        userId: operation.viewer.userId,
         source: trader.source,
-        traderKey: trader.source_trader_id,
+        traderKey: claimTraderId,
         timestamp,
       })
 
@@ -87,6 +184,7 @@ export function DexVerifyForm({
           )
         )
         const resp = await Promise.race([solanaProvider.connect(), connectTimeout])
+        if (!operationIsCurrent(operation)) return
         walletAddress = resp.publicKey.toString()
 
         if (!walletMatchesTrader(walletAddress, trader.source_trader_id, trader.source)) {
@@ -96,6 +194,7 @@ export function DexVerifyForm({
 
         const encodedMessage = new TextEncoder().encode(message)
         const signedMessage = await solanaProvider.signMessage(encodedMessage, 'utf8')
+        if (!operationIsCurrent(operation)) return
         // Convert Uint8Array signature to base64 for transmission
         // Use btoa instead of Buffer.from to avoid Node.js-only API in browser
         signature = btoa(String.fromCharCode(...signedMessage.signature))
@@ -116,6 +215,7 @@ export function DexVerifyForm({
           window.ethereum.request({ method: 'eth_requestAccounts' }),
           ethTimeout,
         ])) as string[]
+        if (!operationIsCurrent(operation)) return
         walletAddress = accounts[0]
 
         if (!walletAddress) {
@@ -132,20 +232,18 @@ export function DexVerifyForm({
           method: 'personal_sign',
           params: [message, walletAddress],
         })) as string
+        if (!operationIsCurrent(operation)) return
       }
 
       // The claim endpoint verifies and consumes the signed proof exactly once
       // before atomically creating the review submission. A separate preflight
       // verification would consume the replay nonce and make this request fail.
-      const claimRes = await fetch('/api/traders/claim', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({
-          trader_id: trader.source_trader_id,
+      const claimResult = await authedFetch<unknown>(
+        '/api/traders/claim',
+        'POST',
+        operation.viewer.accessToken,
+        {
+          trader_id: claimTraderId,
           source: trader.source,
           verification_method: 'signature',
           verification_data: {
@@ -153,17 +251,28 @@ export function DexVerifyForm({
             signature,
             message,
           },
-        }),
-      })
-
-      const claimData: { error?: string } = await claimRes.json().catch(() => ({}))
-
-      if (!claimRes.ok) {
-        if (claimRes.status === 401) {
-          redirectToLogin()
-          return
+        },
+        30_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
         }
-        showToast(claimData.error || t('claimFailed'), 'error')
+      )
+      if (claimResult.stale || !operationIsCurrent(operation)) return
+      if (claimResult.status === 401) {
+        redirectToLogin()
+        return
+      }
+      if (
+        !claimResult.ok ||
+        !isClaimAcknowledgement(claimResult.data, {
+          source: trader.source,
+          traderId: claimTraderId,
+          userId: operation.viewer.userId,
+        })
+      ) {
+        showToast(responseMessage(claimResult.data, t('claimFailed')), 'error')
         return
       }
 
@@ -171,6 +280,7 @@ export function DexVerifyForm({
       showToast(t('claimSubmitted'), 'success')
       onSuccess()
     } catch (error) {
+      if (!operationIsCurrent(operation)) return
       const msg = error instanceof Error ? error.message : ''
       if (
         msg.includes('User rejected') ||
@@ -186,9 +296,14 @@ export function DexVerifyForm({
       }
       showToast(t('claimWalletSignFailed'), 'error')
     } finally {
-      setLoading(false)
+      if (operationRef.current === operation) operationRef.current = null
+      if (mountedRef.current && isSettingsViewerCurrent(operation.viewer, authRef.current)) {
+        setLoading(false)
+      }
     }
   }
+
+  const authPending = !viewer && (!auth.authChecked || auth.loading || Boolean(auth.userId))
 
   return (
     <Box style={{ maxWidth: '500px', margin: '0 auto', textAlign: 'center' }}>
@@ -231,7 +346,7 @@ export function DexVerifyForm({
 
       <button
         onClick={handleWalletVerify}
-        disabled={loading}
+        disabled={loading || authPending}
         style={{
           width: '100%',
           padding: tokens.spacing[3],
@@ -239,10 +354,11 @@ export function DexVerifyForm({
           fontWeight: tokens.typography.fontWeight.semibold,
           borderRadius: tokens.radius.md,
           border: 'none',
-          backgroundColor: loading ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
+          backgroundColor:
+            loading || authPending ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
           color: tokens.colors.white,
-          cursor: loading ? 'not-allowed' : 'pointer',
-          opacity: loading ? 0.6 : 1,
+          cursor: loading || authPending ? 'not-allowed' : 'pointer',
+          opacity: loading || authPending ? 0.6 : 1,
         }}
       >
         {loading ? t('claimWalletSigning') : t('claimWalletSignMessage')}
