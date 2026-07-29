@@ -6,7 +6,10 @@ import {
   validateSgHeartbeatPayload,
   verifySgHeartbeatRoster,
 } from '../../../verify-sg-heartbeat'
-import { assertSgRuntimeEnvironment } from '../../../preflight-sg-runtime'
+import {
+  assertSgRuntimeEnvironment,
+  assertSgRuntimeEnvironmentFile,
+} from '../../../preflight-sg-runtime'
 
 const SHA = 'a'.repeat(40)
 const RELEASE = 'b'.repeat(64)
@@ -98,6 +101,25 @@ describe('SG Redis roster deployment proof', () => {
         })
       ).toThrow('attempt-bound capture must be enabled')
     }
+  })
+
+  test('requires the box-local env file itself to carry the exact SG rollout contract', () => {
+    const exact = {
+      WORKER_NODE_ID: 'vps_sg',
+      INGEST_REGIONS: 'vps_sg',
+      INGEST_LOCAL_REGION: 'vps_sg',
+      INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: 'true',
+    }
+    expect(() => assertSgRuntimeEnvironmentFile(exact)).not.toThrow()
+    expect(() => assertSgRuntimeEnvironmentFile(undefined)).toThrow(
+      'worker/.env could not be parsed'
+    )
+    expect(() =>
+      assertSgRuntimeEnvironmentFile({
+        ...exact,
+        INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: 'false',
+      })
+    ).toThrow('attempt-bound capture must be enabled')
   })
 
   test('accepts the exact candidate identity and returns its heartbeat PID', () => {

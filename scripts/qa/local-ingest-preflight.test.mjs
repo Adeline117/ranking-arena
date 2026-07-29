@@ -15,14 +15,16 @@ test('local preflight preserves one explicit logical-node and region contract', 
 
 test('database gate and both real persistent-browser paths run before success', () => {
   const databaseGate = source.indexOf('await assertMetricTrustWorkerReadiness()')
+  const partitionedV4Gate = source.indexOf('await assertPartitionedV4WorkerReadiness()')
   const bundledBrowser = source.indexOf('await provePersistentBrowser()')
   const brandedBrowser = source.indexOf("await provePersistentBrowser('chrome')")
   const closePool = source.indexOf('await closeIngestPool()')
 
   assert.ok(databaseGate >= 0)
-  assert.ok(databaseGate < bundledBrowser)
+  assert.ok(databaseGate < partitionedV4Gate)
+  assert.ok(partitionedV4Gate < closePool)
+  assert.ok(closePool < bundledBrowser)
   assert.ok(bundledBrowser < brandedBrowser)
-  assert.ok(brandedBrowser < closePool)
   assert.match(source, /chromium\.launchPersistentContext/)
   assert.match(source, /\.preflight-browser-/)
 })

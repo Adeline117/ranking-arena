@@ -1,6 +1,10 @@
 import { resolve } from 'node:path'
 import { config } from 'dotenv'
 import { mkdtemp, rm } from 'node:fs/promises'
+import {
+  assertAttemptBoundCaptureEnvironmentFile,
+  assertAttemptBoundCaptureRuntimeEnabled,
+} from './src/ingest/attempt-bound-capture-runtime'
 
 const releaseDir = process.cwd()
 const envFile = resolve(releaseDir, 'worker', '.env')
@@ -8,7 +12,10 @@ const browserDir = resolve(releaseDir, '.playwright-browsers')
 
 // Deployment-provided values (especially the release-owned browser path) win
 // over the secret file. The file supplies only the worker's runtime secrets.
-config({ path: envFile, override: false })
+const workerEnvironment = config({ path: envFile, override: false })
+
+assertAttemptBoundCaptureEnvironmentFile(workerEnvironment)
+assertAttemptBoundCaptureRuntimeEnabled(process.env)
 
 if (process.env.PLAYWRIGHT_BROWSERS_PATH !== browserDir) {
   throw new Error('[local-deploy-preflight] browser path is not release-owned')
@@ -69,29 +76,40 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 }
 
 async function main(): Promise<void> {
-  const [{ assertMetricTrustWorkerReadiness }, { closeIngestPool }, { getConnection }] =
-    await Promise.all([
-      import('./src/ingest/metric-trust-readiness'),
-      import('@/lib/ingest/db'),
-      import('./src/connection'),
-      import('@/lib/ingest/adapters/register'),
-    ])
+  const [
+    { assertMetricTrustWorkerReadiness },
+    { assertPartitionedV4WorkerReadiness },
+    { closeIngestPool },
+  ] = await Promise.all([
+    import('./src/ingest/metric-trust-readiness'),
+    import('./src/ingest/attempt-bound-capture-readiness'),
+    import('@/lib/ingest/db'),
+  ])
 
+  try {
+    await assertMetricTrustWorkerReadiness()
+    console.log('[local-deploy-preflight] metric-trust database release contract ready')
+    await assertPartitionedV4WorkerReadiness()
+    console.log('[local-deploy-preflight] partitioned V4 database release contract ready')
+  } finally {
+    await closeIngestPool().catch(() => undefined)
+  }
+
+  const [{ getConnection }] = await Promise.all([
+    import('./src/connection'),
+    import('@/lib/ingest/adapters/register'),
+  ])
   const redis = getConnection()
-
   try {
     const pong = await withTimeout(redis.ping(), 8_000, 'Redis PING')
     if (pong !== 'PONG') throw new Error('[local-deploy-preflight] Redis PING is not exact')
     console.log('[local-deploy-preflight] Redis connection ready')
-    await assertMetricTrustWorkerReadiness()
-    console.log('[local-deploy-preflight] metric-trust database release contract ready')
     await provePersistentBrowser()
     console.log('[local-deploy-preflight] release-owned Chromium profile launch ready')
     await provePersistentBrowser('chrome')
     console.log('[local-deploy-preflight] branded Chrome profile launch ready')
   } finally {
     redis.disconnect(false)
-    await closeIngestPool().catch(() => undefined)
   }
 }
 
