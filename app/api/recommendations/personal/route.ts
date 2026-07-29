@@ -2,14 +2,12 @@
  * GET /api/recommendations/personal
  *
  * Authenticated endpoint returning personalized trader recommendations.
- * Results cached per user in Upstash Redis with 5-minute TTL.
+ * The engine caches by user and exact sealed publication proof identity.
  */
 
 import { withAuth } from '@/lib/api/middleware'
 import { getPersonalRecommendations } from '@/lib/recommendations/personal'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { createLogger } from '@/lib/utils/logger'
-import type { PersonalRecommendation } from '@/lib/recommendations/personal'
 import { parseLimit } from '@/lib/utils/safe-parse'
 
 const _logger = createLogger('api-rec-personal')
@@ -18,20 +16,16 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
 
-export const GET = withAuth(async ({ user, request }) => {
-  const { searchParams } = new URL(request.url)
-  const limit = parseLimit(searchParams.get('limit'), 20, 50)
+export const GET = withAuth(
+  async ({ user, request }) => {
+    const { searchParams } = new URL(request.url)
+    const limit = parseLimit(searchParams.get('limit'), 20, 50)
 
-  const cacheKey = `recommendations:personal:${user.id}`
+    const recommendations = await getPersonalRecommendations(user.id, 50)
 
-  const recommendations = await tieredGetOrSet<PersonalRecommendation[]>(
-    cacheKey,
-    () => getPersonalRecommendations(user.id, 50),
-    'hot',
-    ['recommendations', `user:${user.id}`],
-  )
+    const sliced = recommendations.slice(0, limit)
 
-  const sliced = recommendations.slice(0, limit)
-
-  return { data: sliced, meta: { count: sliced.length, userId: user.id } }
-}, { name: 'get-recommendations-personal', rateLimit: 'authenticated' })
+    return { data: sliced, meta: { count: sliced.length, userId: user.id } }
+  },
+  { name: 'get-recommendations-personal', rateLimit: 'authenticated' }
+)
