@@ -11,9 +11,15 @@ import logger from '@/lib/logger'
 import { withCron } from '@/lib/api/with-cron'
 import { getStripe } from '@/lib/stripe'
 import {
+  discoverStripeSubscriptionBilling,
   expireOpenSubscriptionCheckouts,
   stopStripeSubscriptionRenewals,
+  type AccountDeletionOneTimeSettlementObservation,
 } from '@/lib/stripe/account-deletion'
+import {
+  checkAccountDeletionOneTimeSettlementsReady,
+  persistAccountDeletionOneTimeSettlementScan,
+} from '@/lib/stripe/account-deletion-settlement'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -94,70 +100,94 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
           !!account.stripe_customer_id || subscriptionIds.some(Boolean)
         let closedCheckoutCount = 0
         const changedRemoteSubscriptionIds = new Set<string>()
+        const stripeCustomerId = account.stripe_customer_id
+        const oneTimeSettlements = new Map<string, AccountDeletionOneTimeSettlementObservation>()
+        const mergeOneTimeSettlements = (
+          observations: AccountDeletionOneTimeSettlementObservation[]
+        ): void => {
+          for (const observation of observations) {
+            const existing = oneTimeSettlements.get(observation.checkoutSessionId)
+            if (existing && JSON.stringify(existing) !== JSON.stringify(observation)) {
+              throw new Error('Stripe one-time Checkout settlement changed during cleanup')
+            }
+            oneTimeSettlements.set(observation.checkoutSessionId, observation)
+          }
+        }
 
         if (hasStripeBillingSurface) {
           const stripeClient = getStripe()
+          if (!account.stripe_customer_id && subscriptionIds.some(Boolean)) {
+            const discovery = await discoverStripeSubscriptionBilling({
+              stripeClient,
+              subscriptionIds,
+              expectedUserId: account.id,
+              includeCustomerSubscriptions: true,
+            })
+            if (discovery.customerId) {
+              throw new Error('Derived Stripe customer is not durably bound to the deleted profile')
+            }
+          }
           if (account.stripe_customer_id) {
             const checkoutResult = await expireOpenSubscriptionCheckouts({
               stripeClient,
               customerId: account.stripe_customer_id,
+              expectedUserId: account.id,
             })
             closedCheckoutCount =
               checkoutResult.expiredSessionIds.length +
               checkoutResult.racedSubscriptionIds.length +
               checkoutResult.racedOneTimeSessionIds.length
             subscriptionIds.push(...checkoutResult.racedSubscriptionIds)
+            mergeOneTimeSettlements(checkoutResult.oneTimeSettlements)
           }
 
-          const stopped = await stopStripeSubscriptionRenewals({
-            stripeClient,
-            subscriptionIds,
-            expectedCustomerId: account.stripe_customer_id,
-            deletionMode: 'permanent',
-          })
-          stopped.changedSubscriptionIds.forEach((id) => changedRemoteSubscriptionIds.add(id))
-          if (!account.stripe_customer_id && stopped.customerId) {
-            const checkoutResult = await expireOpenSubscriptionCheckouts({
+          if (account.stripe_customer_id) {
+            const stopped = await stopStripeSubscriptionRenewals({
               stripeClient,
-              customerId: stopped.customerId,
+              subscriptionIds,
+              expectedCustomerId: account.stripe_customer_id,
+              deletionMode: 'permanent',
             })
-            closedCheckoutCount =
-              checkoutResult.expiredSessionIds.length +
-              checkoutResult.racedSubscriptionIds.length +
-              checkoutResult.racedOneTimeSessionIds.length
-            if (checkoutResult.racedSubscriptionIds.length > 0) {
-              const racedStopped = await stopStripeSubscriptionRenewals({
-                stripeClient,
-                subscriptionIds: checkoutResult.racedSubscriptionIds,
-                expectedCustomerId: stopped.customerId,
-                deletionMode: 'permanent',
-              })
-              racedStopped.changedSubscriptionIds.forEach((id) =>
-                changedRemoteSubscriptionIds.add(id)
+            stopped.changedSubscriptionIds.forEach((id) => changedRemoteSubscriptionIds.add(id))
+            if (changedRemoteSubscriptionIds.size > 0) {
+              logger.info(
+                `[cleanup-deleted-accounts] Cancelled ${changedRemoteSubscriptionIds.size} Stripe subscription(s) for user ${account.id}`
               )
             }
           }
-          if (changedRemoteSubscriptionIds.size > 0) {
-            logger.info(
-              `[cleanup-deleted-accounts] Cancelled ${changedRemoteSubscriptionIds.size} Stripe subscription(s) for user ${account.id}`
-            )
-          }
         }
 
-        // Cancellation and Checkout-expiry webhooks update the local ledgers
-        // asynchronously. Keep the profile tombstone for another cron pass
-        // whenever this pass observed a linked subscription or closed a remote
-        // billing surface. The next pass may hard-delete only after those
-        // local links have converged, so a late signed event never loses its
-        // owner row halfway through processing.
+        const settlementScan = await persistAccountDeletionOneTimeSettlementScan({
+          supabase,
+          userId: account.id,
+          stripeCustomerId,
+          observations: [...oneTimeSettlements.values()],
+        })
+        const settlementReady = await checkAccountDeletionOneTimeSettlementsReady({
+          supabase,
+          userId: account.id,
+          scanToken: settlementScan.scanToken,
+        })
+
+        // Cancellation and Checkout-expiry webhooks update local ledgers
+        // asynchronously. The durable one-time barrier additionally requires
+        // every complete lifetime, Tip, and group Checkout from this fresh,
+        // fully paginated scan to be fulfilled, refunded, or retained in
+        // terminal manual review before Auth deletion.
         if (
           recurringSubscriptionId ||
           account.api_stripe_subscription_id ||
           changedRemoteSubscriptionIds.size > 0 ||
-          closedCheckoutCount > 0
+          closedCheckoutCount > 0 ||
+          !settlementReady.ready
         ) {
           logger.info(
-            `[cleanup-deleted-accounts] Billing settlement pending for user ${account.id}; hard deletion deferred`
+            `[cleanup-deleted-accounts] Billing settlement pending for user ${account.id}; hard deletion deferred`,
+            {
+              pendingOneTimeSessions: settlementReady.pendingSessionIds.length,
+              pendingLifetimeReservations: settlementReady.pendingLifetimeReservations,
+              pendingTips: settlementReady.pendingTips,
+            }
           )
           return { id: account.id, deleted: false }
         }

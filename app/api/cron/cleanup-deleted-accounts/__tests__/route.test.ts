@@ -5,6 +5,9 @@ const mockRpc = jest.fn()
 const mockDeleteUser = jest.fn()
 const mockStopStripeSubscriptionRenewals = jest.fn()
 const mockExpireOpenSubscriptionCheckouts = jest.fn()
+const mockDiscoverStripeSubscriptionBilling = jest.fn()
+const mockPersistOneTimeSettlementScan = jest.fn()
+const mockCheckOneTimeSettlementsReady = jest.fn()
 const mockStripeClient = { marker: 'stripe-client' }
 
 const mockSupabase = {
@@ -26,10 +29,19 @@ jest.mock('@/lib/stripe', () => ({
 }))
 
 jest.mock('@/lib/stripe/account-deletion', () => ({
+  discoverStripeSubscriptionBilling: (...args: unknown[]) =>
+    mockDiscoverStripeSubscriptionBilling(...args),
   stopStripeSubscriptionRenewals: (...args: unknown[]) =>
     mockStopStripeSubscriptionRenewals(...args),
   expireOpenSubscriptionCheckouts: (...args: unknown[]) =>
     mockExpireOpenSubscriptionCheckouts(...args),
+}))
+
+jest.mock('@/lib/stripe/account-deletion-settlement', () => ({
+  persistAccountDeletionOneTimeSettlementScan: (...args: unknown[]) =>
+    mockPersistOneTimeSettlementScan(...args),
+  checkAccountDeletionOneTimeSettlementsReady: (...args: unknown[]) =>
+    mockCheckOneTimeSettlementsReady(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -92,6 +104,23 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       expiredSessionIds: ['cs_api_open'],
       racedSubscriptionIds: [],
       racedOneTimeSessionIds: [],
+      oneTimeSettlements: [],
+    })
+    mockDiscoverStripeSubscriptionBilling.mockResolvedValue({
+      customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_api'],
+    })
+    mockPersistOneTimeSettlementScan.mockResolvedValue({
+      scanToken: 'scan-1',
+      observedSessionIds: [],
+      pendingSessionIds: [],
+      terminalSessionIds: [],
+    })
+    mockCheckOneTimeSettlementsReady.mockResolvedValue({
+      ready: true,
+      pendingSessionIds: [],
+      pendingLifetimeReservations: 0,
+      pendingTips: 0,
     })
     mockDeleteUser.mockResolvedValue({ error: null })
   })
@@ -124,6 +153,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     expect(mockExpireOpenSubscriptionCheckouts).toHaveBeenCalledWith({
       stripeClient: mockStripeClient,
       customerId: 'cus_owner',
+      expectedUserId: 'user-expired',
     })
     expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledWith({
       stripeClient: mockStripeClient,
@@ -210,6 +240,39 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     expect(mockDeleteUser).not.toHaveBeenCalled()
   })
 
+  it('performs zero Stripe mutations for an unbound derived customer during cleanup', async () => {
+    queueDatabaseResults(
+      {
+        data: [
+          {
+            id: 'user-unbound',
+            original_email: null,
+            stripe_customer_id: null,
+            api_stripe_subscription_id: 'sub_api',
+          },
+        ],
+        error: null,
+      },
+      { data: null, error: null }
+    )
+
+    await expect(GET({} as never)).rejects.toThrow(
+      'Derived Stripe customer is not durably bound to the deleted profile'
+    )
+
+    expect(mockDiscoverStripeSubscriptionBilling).toHaveBeenCalledWith({
+      stripeClient: mockStripeClient,
+      subscriptionIds: [null, 'sub_api'],
+      expectedUserId: 'user-unbound',
+      includeCustomerSubscriptions: true,
+    })
+    expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
+    expect(mockPersistOneTimeSettlementScan).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+
   it('hard-deletes on a later pass only after billing links and remote work converge', async () => {
     queueDatabaseResults(
       {
@@ -230,6 +293,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       expiredSessionIds: [],
       racedSubscriptionIds: [],
       racedOneTimeSessionIds: [],
+      oneTimeSettlements: [],
     })
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
@@ -250,6 +314,66 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
     expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(
       mockDeleteUser.mock.invocationCallOrder[0]
     )
+  })
+
+  it('defers hard deletion while a complete Checkout awaits durable fulfillment', async () => {
+    queueDatabaseResults(
+      {
+        data: [
+          {
+            id: 'user-complete-pending',
+            original_email: null,
+            stripe_customer_id: 'cus_owner',
+            api_stripe_subscription_id: null,
+          },
+        ],
+        error: null,
+      },
+      { data: null, error: null }
+    )
+    const observation = {
+      checkoutSessionId: 'cs_lifetime_pending',
+      livemode: true,
+      stripeCustomerId: 'cus_owner',
+      productKind: 'lifetime',
+      stripeStatus: 'complete',
+      paymentStatus: 'paid',
+      ownershipStatus: 'exact',
+    }
+    mockExpireOpenSubscriptionCheckouts.mockResolvedValue({
+      expiredSessionIds: [],
+      racedSubscriptionIds: [],
+      racedOneTimeSessionIds: [],
+      oneTimeSettlements: [observation],
+    })
+    mockStopStripeSubscriptionRenewals.mockResolvedValue({
+      customerId: 'cus_owner',
+      observedSubscriptionIds: [],
+      changedSubscriptionIds: [],
+    })
+    mockPersistOneTimeSettlementScan.mockResolvedValue({
+      scanToken: 'scan-pending',
+      observedSessionIds: ['cs_lifetime_pending'],
+      pendingSessionIds: ['cs_lifetime_pending'],
+      terminalSessionIds: [],
+    })
+    mockCheckOneTimeSettlementsReady.mockResolvedValue({
+      ready: false,
+      pendingSessionIds: ['cs_lifetime_pending'],
+      pendingLifetimeReservations: 0,
+      pendingTips: 0,
+    })
+
+    await expect(GET({} as never)).resolves.toEqual({ count: 0, total: 1 })
+
+    expect(mockPersistOneTimeSettlementScan).toHaveBeenCalledWith(
+      expect.objectContaining({ observations: [observation] })
+    )
+    expect(mockCheckOneTimeSettlementsReady).toHaveBeenCalledWith(
+      expect.objectContaining({ scanToken: 'scan-pending' })
+    )
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
   })
 
   it('fails closed before purge/Auth deletion when an open Checkout remains payable', async () => {
@@ -295,6 +419,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       expiredSessionIds: [],
       racedSubscriptionIds: ['sub_checkout_race'],
       racedOneTimeSessionIds: [],
+      oneTimeSettlements: [],
     })
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
@@ -332,6 +457,17 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       expiredSessionIds: [],
       racedSubscriptionIds: [],
       racedOneTimeSessionIds: ['cs_tip_race'],
+      oneTimeSettlements: [
+        {
+          checkoutSessionId: 'cs_tip_race',
+          livemode: true,
+          stripeCustomerId: 'cus_owner',
+          productKind: 'tip',
+          stripeStatus: 'complete',
+          paymentStatus: 'paid',
+          ownershipStatus: 'exact',
+        },
+      ],
     })
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
@@ -381,6 +517,7 @@ describe('GET /api/cron/cleanup-deleted-accounts', () => {
       expiredSessionIds: [],
       racedSubscriptionIds: [],
       racedOneTimeSessionIds: [],
+      oneTimeSettlements: [],
     })
     mockRpc.mockResolvedValueOnce({ data: purgedResult(), error: null })
 

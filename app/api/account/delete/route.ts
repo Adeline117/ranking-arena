@@ -13,9 +13,12 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { getStripe } from '@/lib/stripe'
 import {
+  discoverStripeSubscriptionBilling,
   expireOpenSubscriptionCheckouts,
   stopStripeSubscriptionRenewals,
+  type AccountDeletionOneTimeSettlementObservation,
 } from '@/lib/stripe/account-deletion'
+import { persistAccountDeletionOneTimeSettlementScan } from '@/lib/stripe/account-deletion-settlement'
 
 const logger = createLogger('account-delete')
 
@@ -99,6 +102,16 @@ function isExactScheduleDeletionAck(
   )
 }
 
+function isExactCustomerBindingAck(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const ack = value as Record<string, unknown>
+  return (
+    Object.keys(ack).length === 1 &&
+    Object.prototype.hasOwnProperty.call(ack, 'status') &&
+    (ack.status === 'bound' || ack.status === 'already_bound')
+  )
+}
+
 export const POST = withAuth(
   async ({ user, request }) => {
     let body: { password?: string; reason?: string; confirm?: string }
@@ -141,6 +154,18 @@ export const POST = withAuth(
     let recurringSubscriptionId: string | null = null
     let stripeCustomerId: string | null = null
     const observedStripeSubscriptionIds = new Set<string>()
+    const oneTimeSettlements = new Map<string, AccountDeletionOneTimeSettlementObservation>()
+    const mergeOneTimeSettlements = (
+      observations: AccountDeletionOneTimeSettlementObservation[]
+    ): void => {
+      for (const observation of observations) {
+        const existing = oneTimeSettlements.get(observation.checkoutSessionId)
+        if (existing && JSON.stringify(existing) !== JSON.stringify(observation)) {
+          throw new Error('Stripe one-time Checkout settlement changed during account deletion')
+        }
+        oneTimeSettlements.set(observation.checkoutSessionId, observation)
+      }
+    }
     try {
       const { data: billingProfile, error: billingProfileError } = await adminSupabase
         .from('user_profiles')
@@ -172,53 +197,62 @@ export const POST = withAuth(
 
       if (hasStripeBillingSurface) {
         const stripeClient = getStripe()
-        if (billingProfile.stripe_customer_id) {
+        if (!stripeCustomerId && subscriptionIds.some(Boolean)) {
+          const discovery = await discoverStripeSubscriptionBilling({
+            stripeClient,
+            subscriptionIds,
+            expectedUserId: user.id,
+            includeCustomerSubscriptions: true,
+          })
+          discovery.observedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
+          if (discovery.customerId) {
+            const { data: bindAck, error: bindError } = await adminSupabase.rpc(
+              'bind_stripe_customer_owner_atomic',
+              {
+                p_user_id: user.id,
+                p_new_stripe_customer_id: discovery.customerId,
+                p_expected_previous_stripe_customer_id: null,
+              }
+            )
+            if (bindError || !isExactCustomerBindingAck(bindAck)) {
+              throw new Error('Derived Stripe customer ownership could not be bound exactly')
+            }
+            stripeCustomerId = discovery.customerId
+          }
+        }
+
+        if (stripeCustomerId) {
           const checkoutResult = await expireOpenSubscriptionCheckouts({
             stripeClient,
-            customerId: billingProfile.stripe_customer_id,
+            customerId: stripeCustomerId,
+            expectedUserId: user.id,
           })
           subscriptionIds.push(...checkoutResult.racedSubscriptionIds)
           checkoutResult.racedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
-        }
+          mergeOneTimeSettlements(checkoutResult.oneTimeSettlements)
 
-        const stopped = await stopStripeSubscriptionRenewals({
-          stripeClient,
-          subscriptionIds,
-          expectedCustomerId: billingProfile.stripe_customer_id,
-          deletionMode: 'recoverable',
-          pauseMarker: user.id,
-        })
-        if (stripeCustomerId !== null && stopped.customerId !== stripeCustomerId) {
-          throw new Error('Stripe subscription enumeration returned the wrong customer')
-        }
-        stripeCustomerId ??= stopped.customerId
-        stopped.observedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
-
-        if (!billingProfile.stripe_customer_id && stopped.customerId) {
-          const checkoutResult = await expireOpenSubscriptionCheckouts({
+          const stopped = await stopStripeSubscriptionRenewals({
             stripeClient,
-            customerId: stopped.customerId,
+            subscriptionIds,
+            expectedCustomerId: stripeCustomerId,
+            deletionMode: 'recoverable',
+            pauseMarker: user.id,
           })
-          checkoutResult.racedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
-          if (checkoutResult.racedSubscriptionIds.length > 0) {
-            const racedStopped = await stopStripeSubscriptionRenewals({
-              stripeClient,
-              subscriptionIds: checkoutResult.racedSubscriptionIds,
-              expectedCustomerId: stopped.customerId,
-              deletionMode: 'recoverable',
-              pauseMarker: user.id,
-            })
-            if (racedStopped.customerId !== stopped.customerId) {
-              throw new Error('Stripe Checkout race resolved to the wrong customer')
-            }
-            racedStopped.observedSubscriptionIds.forEach((id) =>
-              observedStripeSubscriptionIds.add(id)
-            )
+          if (stopped.customerId !== stripeCustomerId) {
+            throw new Error('Stripe subscription enumeration returned the wrong customer')
           }
+          stopped.observedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
         }
       }
+
+      await persistAccountDeletionOneTimeSettlementScan({
+        supabase: adminSupabase,
+        userId: user.id,
+        stripeCustomerId,
+        observations: [...oneTimeSettlements.values()],
+      })
     } catch (error) {
-      logger.error('Failed to stop subscription renewal; deletion not scheduled', {
+      logger.error('Failed to settle billing surfaces; deletion not scheduled', {
         userId: user.id,
         error: error instanceof Error ? error.message : String(error),
       })

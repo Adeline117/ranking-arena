@@ -3,6 +3,7 @@
 import type Stripe from 'stripe'
 import {
   ACCOUNT_DELETION_PAUSE_METADATA_KEY,
+  discoverStripeSubscriptionBilling,
   expireOpenSubscriptionCheckouts,
   resumeStripeSubscriptionRenewals,
   stopStripeSubscriptionRenewals,
@@ -15,7 +16,9 @@ const mockListSubscriptions = jest.fn()
 const mockRetrieveSubscription = jest.fn()
 const mockUpdateSubscription = jest.fn()
 const mockCancelSubscription = jest.fn()
+const mockRetrieveCustomer = jest.fn()
 const PAUSE_MARKER = 'user-1'
+const USER_ID = '11111111-1111-4111-8111-111111111111'
 
 const stripeClient = {
   checkout: {
@@ -30,6 +33,9 @@ const stripeClient = {
     retrieve: mockRetrieveSubscription,
     update: mockUpdateSubscription,
     cancel: mockCancelSubscription,
+  },
+  customers: {
+    retrieve: mockRetrieveCustomer,
   },
 } as unknown as Stripe
 
@@ -58,6 +64,10 @@ function checkout(
     customer: 'cus_owner',
     mode: 'subscription',
     status: 'open',
+    payment_status: 'unpaid',
+    livemode: true,
+    client_reference_id: null,
+    metadata: {},
     subscription: null,
     ...overrides,
   } as Stripe.Checkout.Session
@@ -72,6 +82,12 @@ describe('account deletion Stripe shutdown', () => {
     jest.clearAllMocks()
     mockListCheckouts.mockResolvedValue(page([]))
     mockListSubscriptions.mockResolvedValue(page([]))
+    mockRetrieveCustomer.mockResolvedValue({
+      object: 'customer',
+      id: 'cus_owner',
+      deleted: false,
+      metadata: { userId: USER_ID },
+    })
     mockUpdateSubscription.mockImplementation(
       async (id: string, update: { cancel_at_period_end?: boolean; metadata?: Stripe.Metadata }) =>
         subscription(id, {
@@ -189,6 +205,50 @@ describe('account deletion Stripe shutdown', () => {
       })
     ).rejects.toThrow('belongs to a different customer')
     expect(mockCancelSubscription).not.toHaveBeenCalled()
+  })
+
+  it('verifies the derived Stripe Customer identity before exposing it for binding', async () => {
+    mockRetrieveSubscription.mockResolvedValue(subscription('sub_derived'))
+
+    await expect(
+      discoverStripeSubscriptionBilling({
+        stripeClient,
+        subscriptionIds: ['sub_derived'],
+        expectedUserId: USER_ID,
+        includeCustomerSubscriptions: false,
+      })
+    ).resolves.toEqual({
+      customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_derived'],
+    })
+
+    expect(mockRetrieveCustomer).toHaveBeenCalledWith('cus_owner')
+    expect(mockUpdateSubscription).not.toHaveBeenCalled()
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
+    expect(mockExpireCheckout).not.toHaveBeenCalled()
+  })
+
+  it('rejects a derived Customer owned by another user before any Stripe mutation', async () => {
+    mockRetrieveSubscription.mockResolvedValue(subscription('sub_foreign'))
+    mockRetrieveCustomer.mockResolvedValue({
+      object: 'customer',
+      id: 'cus_owner',
+      deleted: false,
+      metadata: { userId: 'another-user' },
+    })
+
+    await expect(
+      discoverStripeSubscriptionBilling({
+        stripeClient,
+        subscriptionIds: ['sub_foreign'],
+        expectedUserId: USER_ID,
+        includeCustomerSubscriptions: false,
+      })
+    ).rejects.toThrow('belongs to a different user')
+
+    expect(mockUpdateSubscription).not.toHaveBeenCalled()
+    expect(mockCancelSubscription).not.toHaveBeenCalled()
+    expect(mockExpireCheckout).not.toHaveBeenCalled()
   })
 
   it.each(['past_due', 'incomplete'] as Stripe.Subscription.Status[])(
@@ -329,17 +389,34 @@ describe('account deletion Stripe shutdown', () => {
         )
       )
       .mockResolvedValueOnce(page([checkout('cs_api_2')]))
-    mockExpireCheckout.mockImplementation(async (id: string) => checkout(id, { status: 'expired' }))
+    mockExpireCheckout.mockImplementation(async (id: string) =>
+      checkout(id, {
+        mode: id === 'cs_tip' ? 'payment' : 'subscription',
+        status: 'expired',
+      })
+    )
 
     await expect(
       expireOpenSubscriptionCheckouts({
         stripeClient,
         customerId: 'cus_owner',
+        expectedUserId: USER_ID,
       })
     ).resolves.toEqual({
       expiredSessionIds: ['cs_api_1', 'cs_tip', 'cs_api_2'],
       racedSubscriptionIds: [],
       racedOneTimeSessionIds: [],
+      oneTimeSettlements: [
+        {
+          checkoutSessionId: 'cs_tip',
+          livemode: true,
+          stripeCustomerId: 'cus_owner',
+          productKind: 'unknown',
+          stripeStatus: 'expired',
+          paymentStatus: 'unpaid',
+          ownershipStatus: 'mismatch',
+        },
+      ],
     })
 
     expect(mockListCheckouts).toHaveBeenNthCalledWith(2, {
@@ -352,8 +429,138 @@ describe('account deletion Stripe shutdown', () => {
     expect(mockExpireCheckout).toHaveBeenCalledWith('cs_tip')
   })
 
+  it('fully paginates and classifies pre-existing complete one-time Checkouts', async () => {
+    const tipId = '22222222-2222-4222-8222-222222222222'
+    const postId = '33333333-3333-4333-8333-333333333333'
+    const recipientId = '44444444-4444-4444-8444-444444444444'
+    const groupId = '55555555-5555-4555-8555-555555555555'
+    const reservationId = '66666666-6666-4666-8666-666666666666'
+    mockListCheckouts
+      .mockResolvedValueOnce(page([]))
+      .mockResolvedValueOnce(
+        page(
+          [
+            checkout('cs_lifetime', {
+              mode: 'payment',
+              status: 'complete',
+              payment_status: 'paid',
+              metadata: {
+                lifetime_reservation_id: reservationId,
+                lifetime_reservation_nonce: 'lifetime:nonce:123',
+                plan: 'lifetime',
+                supabase_user_id: USER_ID,
+                userId: USER_ID,
+              },
+            }),
+            checkout('cs_tip', {
+              mode: 'payment',
+              status: 'complete',
+              payment_status: 'paid',
+              client_reference_id: tipId,
+              metadata: {
+                amount_cents: '500',
+                from_user_id: USER_ID,
+                post_id: postId,
+                tip_id: tipId,
+                to_user_id: recipientId,
+                type: 'tip',
+                user_id: USER_ID,
+              },
+            }),
+          ],
+          true
+        )
+      )
+      .mockResolvedValueOnce(
+        page([
+          checkout('cs_group', {
+            mode: 'payment',
+            status: 'complete',
+            payment_status: 'paid',
+            client_reference_id: USER_ID,
+            metadata: {
+              group_id: groupId,
+              tier: 'monthly',
+              user_id: USER_ID,
+            },
+          }),
+          checkout('cs_unknown', {
+            mode: 'payment',
+            status: 'complete',
+            payment_status: 'paid',
+          }),
+        ])
+      )
+
+    await expect(
+      expireOpenSubscriptionCheckouts({
+        stripeClient,
+        customerId: 'cus_owner',
+        expectedUserId: USER_ID,
+      })
+    ).resolves.toEqual({
+      expiredSessionIds: [],
+      racedSubscriptionIds: [],
+      racedOneTimeSessionIds: [],
+      oneTimeSettlements: [
+        expect.objectContaining({
+          checkoutSessionId: 'cs_group',
+          productKind: 'group_pass',
+          ownershipStatus: 'exact',
+        }),
+        expect.objectContaining({
+          checkoutSessionId: 'cs_lifetime',
+          productKind: 'lifetime',
+          ownershipStatus: 'exact',
+        }),
+        expect.objectContaining({
+          checkoutSessionId: 'cs_tip',
+          productKind: 'tip',
+          ownershipStatus: 'exact',
+        }),
+        expect.objectContaining({
+          checkoutSessionId: 'cs_unknown',
+          productKind: 'unknown',
+          ownershipStatus: 'mismatch',
+        }),
+      ],
+    })
+    expect(mockListCheckouts).toHaveBeenNthCalledWith(3, {
+      customer: 'cus_owner',
+      status: 'complete',
+      limit: 100,
+      starting_after: 'cs_tip',
+    })
+  })
+
+  it('fails closed when complete Checkout pagination returns an empty continuation', async () => {
+    mockListCheckouts
+      .mockResolvedValueOnce(page([]))
+      .mockResolvedValueOnce(
+        page(
+          [
+            checkout('cs_complete', {
+              mode: 'payment',
+              status: 'complete',
+              payment_status: 'paid',
+            }),
+          ],
+          true
+        )
+      )
+      .mockResolvedValueOnce(page([]))
+
+    await expect(
+      expireOpenSubscriptionCheckouts({
+        stripeClient,
+        customerId: 'cus_owner',
+        expectedUserId: USER_ID,
+      })
+    ).rejects.toThrow('empty continuation')
+  })
+
   it('returns the exact subscription when open Checkout completes during expiration', async () => {
-    mockListCheckouts.mockResolvedValue(page([checkout('cs_raced')]))
+    mockListCheckouts.mockResolvedValueOnce(page([checkout('cs_raced')]))
     mockExpireCheckout.mockRejectedValue(new Error('session is no longer open'))
     mockRetrieveCheckout.mockResolvedValue(
       checkout('cs_raced', {
@@ -371,17 +578,19 @@ describe('account deletion Stripe shutdown', () => {
       expiredSessionIds: [],
       racedSubscriptionIds: ['sub_raced'],
       racedOneTimeSessionIds: [],
+      oneTimeSettlements: [],
     })
     expect(mockCancelSubscription).not.toHaveBeenCalled()
   })
 
   it('surfaces a one-time payment that completes during expiration', async () => {
-    mockListCheckouts.mockResolvedValue(page([checkout('cs_tip_raced', { mode: 'payment' })]))
+    mockListCheckouts.mockResolvedValueOnce(page([checkout('cs_tip_raced', { mode: 'payment' })]))
     mockExpireCheckout.mockRejectedValue(new Error('session is no longer open'))
     mockRetrieveCheckout.mockResolvedValue(
       checkout('cs_tip_raced', {
         mode: 'payment',
         status: 'complete',
+        payment_status: 'paid',
       })
     )
 
@@ -389,16 +598,28 @@ describe('account deletion Stripe shutdown', () => {
       expireOpenSubscriptionCheckouts({
         stripeClient,
         customerId: 'cus_owner',
+        expectedUserId: USER_ID,
       })
     ).resolves.toEqual({
       expiredSessionIds: [],
       racedSubscriptionIds: [],
       racedOneTimeSessionIds: ['cs_tip_raced'],
+      oneTimeSettlements: [
+        {
+          checkoutSessionId: 'cs_tip_raced',
+          livemode: true,
+          stripeCustomerId: 'cus_owner',
+          productKind: 'unknown',
+          stripeStatus: 'complete',
+          paymentStatus: 'paid',
+          ownershipStatus: 'mismatch',
+        },
+      ],
     })
   })
 
   it('fails closed when an open Checkout cannot be made non-payable', async () => {
-    mockListCheckouts.mockResolvedValue(page([checkout('cs_open')]))
+    mockListCheckouts.mockResolvedValueOnce(page([checkout('cs_open')]))
     mockExpireCheckout.mockRejectedValue(new Error('Stripe unavailable'))
     mockRetrieveCheckout.mockResolvedValue(checkout('cs_open'))
 
