@@ -56,6 +56,8 @@ import { acquireRegionAuthorityLifecycleWithRetry } from './ingest/region-author
 import { prepareRegionConsumerRuntime } from './ingest/region-consumer-runtime'
 import { createNativeProcessCoordinator } from './ingest/native-process-coordinator'
 import { startBitgetBotAttemptHealthWatchdog } from './ingest/attempt-health-watchdog'
+import type { BullJobAuthority } from './ingest/job-provenance'
+import type { SourceJobRunProvenance } from './ingest/source-job-routing'
 
 // Per-region worker concurrency. Bumped 3→5 (2026-06-12): at 3 the drain
 // rate (~12-18 jobs/h, dragged by giant crawls like bybit_mt5's 29k rows)
@@ -86,8 +88,12 @@ const NATIVE_AUTHORITY_READY_TOKEN = '[ingest-worker] native regional authority 
 async function runJob(
   job: Job,
   context: AuthorizedConsumedRegionContext,
+  provenance: SourceJobRunProvenance,
   signal: AbortSignal
 ): Promise<unknown> {
+  // Safe hand-off point for a future queue/source claim coordinator. Only
+  // one-way token digests and the public lease proof can cross this boundary.
+  void provenance
   switch (job.name) {
     case INGEST_JOB.TIER_A: {
       const { processTierA } = await import('./ingest/processors/tier-a-leaderboard')
@@ -144,26 +150,30 @@ async function runJob(
 async function route(
   job: Job,
   context: AuthorizedConsumedRegionContext,
+  bullJob: BullJobAuthority,
   signal?: AbortSignal
 ): Promise<unknown> {
   return routeJobWithSourceLease({
     redis: getConnection(),
     job,
+    bullJob,
     signal,
-    run: async (runSignal) => {
+    run: async (provenance, runSignal) => {
       await assertSourceJobMatchesConsumedRegion(
         job,
         context,
         async (sourceSlug) => (await getSourceBySlug(sourceSlug)).fetch_region
       )
-      return runJob(job, context, runSignal)
+      return runJob(job, context, provenance, runSignal)
     },
   })
 }
 
 async function routeTierC(
   job: Job<TierCJobData>,
-  context: AuthorizedConsumedRegionContext
+  context: AuthorizedConsumedRegionContext,
+  _bullJob: BullJobAuthority,
+  _signal?: AbortSignal
 ): Promise<unknown> {
   const decision = await routeTierCJobRegion(job, context.consumedRegion)
   if (decision.action === 'rerouted') {

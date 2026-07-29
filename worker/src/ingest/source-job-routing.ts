@@ -1,5 +1,10 @@
 import { INGEST_JOB } from './job-names'
-import { withSourceJobLease, type SourceJobRedis } from './source-job-lease'
+import { createUnownedBullJobAuthority, type BullJobAuthority } from './job-provenance'
+import {
+  withSourceJobLease,
+  type SourceJobLeaseAuthority,
+  type SourceJobRedis,
+} from './source-job-lease'
 
 /**
  * Every recurring job that owns one source-wide browser or publication lane.
@@ -39,6 +44,18 @@ export type CoalescedSourceJob =
   | { coalesced: true; sourceSlug: string; lane: string }
   | { coalesced: true; authorizationId: string; lane: string }
 
+export interface SourceJobRunProvenance {
+  readonly bullJob: BullJobAuthority
+  readonly sourceLease: SourceJobLeaseAuthority | null
+}
+
+function runProvenance(
+  bullJob: BullJobAuthority,
+  sourceLease: SourceJobLeaseAuthority | null
+): SourceJobRunProvenance {
+  return Object.freeze({ bullJob, sourceLease })
+}
+
 export function sourceJobLeaseLane(jobName: string): string | null {
   return (
     SOURCE_JOB_LEASE_LANES[jobName as keyof typeof SOURCE_JOB_LEASE_LANES] ??
@@ -56,18 +73,22 @@ export function sourceJobLeaseLane(jobName: string): string | null {
 export async function routeJobWithSourceLease<T>({
   redis,
   job,
+  bullJob = createUnownedBullJobAuthority(job),
   run,
   signal,
   log = console.log,
 }: {
   redis: SourceJobRedis
   job: SourceJobLike
-  run: (signal: AbortSignal) => Promise<T>
+  bullJob?: BullJobAuthority
+  run: (provenance: SourceJobRunProvenance, signal: AbortSignal) => Promise<T>
   signal?: AbortSignal
   log?: (message: string) => void
 }): Promise<T | CoalescedSourceJob> {
   const lane = sourceJobLeaseLane(job.name)
-  if (!lane) return run(signal ?? new AbortController().signal)
+  if (!lane) {
+    return run(runProvenance(bullJob, null), signal ?? new AbortController().signal)
+  }
 
   const isGlobalJob = Object.prototype.hasOwnProperty.call(GLOBAL_JOB_LEASE_LANES, job.name)
   const isAuthorizationJob = Object.prototype.hasOwnProperty.call(
@@ -87,8 +108,8 @@ export async function routeJobWithSourceLease<T>({
   const result = await withSourceJobLease({
     redis,
     lane,
-    sourceSlug: scopeId,
-    run,
+    scopeId,
+    run: (_proof, runSignal, authority) => run(runProvenance(bullJob, authority), runSignal),
     signal,
     failClosedOnLeaseLoss: job.name === INGEST_JOB.TIER_A,
   })
