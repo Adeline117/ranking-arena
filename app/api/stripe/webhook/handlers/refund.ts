@@ -1574,7 +1574,7 @@ export async function handleRefundLifecycle(
 export const handleRefundUpdated = handleRefundLifecycle
 
 type ApiTierDisputeAcknowledgement =
-  | { status: 'not_api' | 'identity_conflict' | 'manual_review' }
+  | { status: 'not_api' | 'already_withdrawn' | 'identity_conflict' | 'manual_review' }
   | {
       status: 'api_tier'
       projectionStatus: string
@@ -1593,6 +1593,7 @@ function readApiTierDisputeAcknowledgement(value: unknown): ApiTierDisputeAcknow
   const result = value as Record<string, unknown>
   if (
     (result.status === 'not_api' ||
+      result.status === 'already_withdrawn' ||
       result.status === 'identity_conflict' ||
       result.status === 'manual_review') &&
     hasExactKeys(result, ['status'])
@@ -1638,14 +1639,35 @@ function readApiTierDisputeAcknowledgement(value: unknown): ApiTierDisputeAcknow
   throw new Error('API tier dispute RPC returned a contradictory acknowledgement')
 }
 
+const STRIPE_DISPUTE_STATUSES = new Set<Stripe.Dispute.Status>([
+  'lost',
+  'needs_response',
+  'prevented',
+  'under_review',
+  'warning_closed',
+  'warning_needs_response',
+  'warning_under_review',
+  'won',
+])
+
+const STRIPE_DISPUTE_FUNDS_WITHDRAWN_STATUSES = new Set<Stripe.Dispute.Status>([
+  'lost',
+  'needs_response',
+  'under_review',
+])
+
+type StripeDisputeWithdrawalSource = 'charge.dispute.created' | 'charge.dispute.funds_withdrawn'
+
 /**
- * A dispute is a sticky financial reversal for the exact API subscription that
- * owned its Charge. Persist that boundary before attempting an alert or remote
- * Stripe cancellation; the outbox retries cancellation after crashes.
+ * Persist a dispute as a financial reversal only while fresh Stripe authority
+ * says its funds remain withdrawn. A warning inquiry does not remove funds;
+ * if it later escalates, charge.dispute.funds_withdrawn enters this same
+ * idempotent boundary and performs the reversal then.
  */
-export async function handleChargeDisputeCreated(
+async function handleChargeDisputeWithdrawal(
   dispute: Stripe.Dispute,
-  context: StripeRefundEventContext
+  context: StripeRefundEventContext,
+  source: StripeDisputeWithdrawalSource
 ) {
   const durableResult = await withDeterministicRefundReview(async () => {
     const event = readRefundEventIdentity(context, 'dispute', dispute?.id)
@@ -1656,7 +1678,8 @@ export async function handleChargeDisputeCreated(
       !disputeId.startsWith('dp_') ||
       !signedChargeId ||
       !signedChargeId.startsWith('ch_') ||
-      dispute.livemode !== event.livemode
+      dispute.livemode !== event.livemode ||
+      !STRIPE_DISPUTE_STATUSES.has(dispute.status)
     ) {
       deterministicPoison({
         objectType: 'dispute',
@@ -1707,7 +1730,7 @@ export async function handleChargeDisputeCreated(
       freshDispute.amount <= 0 ||
       !currency ||
       !/^[a-z]{3}$/.test(currency) ||
-      !freshDispute.status ||
+      !STRIPE_DISPUTE_STATUSES.has(freshDispute.status) ||
       !freshDispute.reason
     ) {
       deterministicPoison({
@@ -1730,6 +1753,15 @@ export async function handleChargeDisputeCreated(
           fresh_status: safeEvidenceString(freshDispute.status),
         },
       })
+    }
+
+    if (!STRIPE_DISPUTE_FUNDS_WITHDRAWN_STATUSES.has(freshDispute.status)) {
+      return {
+        acknowledgement: null,
+        chargeId,
+        freshDispute,
+        fundsWithdrawn: false as const,
+      }
     }
 
     const charge = await retrieveFreshChargeRefundSnapshot(chargeId, event)
@@ -1759,44 +1791,65 @@ export async function handleChargeDisputeCreated(
     ) {
       throw new Error('API tier dispute acknowledgement contradicts fresh Stripe authority')
     }
-    return { acknowledgement, chargeId, freshDispute }
+    return {
+      acknowledgement,
+      chargeId,
+      freshDispute,
+      fundsWithdrawn: true as const,
+    }
   })
 
   if (!durableResult) return
   const { acknowledgement, chargeId, freshDispute } = durableResult
-  try {
-    // The compatibility acknowledgement remains `not_api` for ordinary Pro
-    // while the database still enqueues its mode-aware cancellation action.
-    await drainApiTierReversalActions({ limit: 1 })
-  } catch (error) {
-    logger.error('Durable subscription cancellation remains queued after dispute', {
-      disputeId: freshDispute.id,
-      subscriptionId:
-        acknowledgement.status === 'api_tier' ? acknowledgement.subscriptionId : undefined,
-      error: error instanceof Error ? error.message : String(error),
-    })
+  if (durableResult.fundsWithdrawn) {
+    const withdrawnAcknowledgement = durableResult.acknowledgement
+    try {
+      // The compatibility acknowledgement remains `not_api` for ordinary Pro
+      // while the database still enqueues its mode-aware cancellation action.
+      await drainApiTierReversalActions({ limit: 1 })
+    } catch (error) {
+      logger.error('Durable subscription cancellation remains queued after dispute', {
+        disputeId: freshDispute.id,
+        subscriptionId:
+          withdrawnAcknowledgement.status === 'api_tier'
+            ? withdrawnAcknowledgement.subscriptionId
+            : undefined,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
-  logger.error('Chargeback/dispute created', {
+  const fundsWithdrawn = durableResult.fundsWithdrawn
+  const logDetails = {
+    source,
     disputeId: freshDispute.id,
     chargeId,
     amount: freshDispute.amount,
     reason: freshDispute.reason,
     status: freshDispute.status,
-    apiTierStatus: acknowledgement.status,
-  })
+    apiTierStatus: acknowledgement?.status ?? 'not_applicable',
+  }
+  if (fundsWithdrawn) {
+    logger.error('Chargeback/dispute funds withdrawn', logDetails)
+  } else {
+    logger.warn('Stripe dispute inquiry observed without funds withdrawal', logDetails)
+  }
   try {
     const { sendAlert } = await import('@/lib/alerts/send-alert')
     await sendAlert({
-      level: 'critical',
+      level: fundsWithdrawn ? 'critical' : 'warning',
       source: 'stripe',
-      title: 'Chargeback / 支付争议',
-      message: `收到 chargeback(${freshDispute.reason})，金额 ${(freshDispute.amount / 100).toFixed(2)} ${freshDispute.currency.toUpperCase()}。财务撤权边界已持久化，请去 Stripe Dashboard 应诉或接受。`,
+      title: fundsWithdrawn ? 'Chargeback / 支付争议' : 'Stripe 支付调查',
+      message: fundsWithdrawn
+        ? `收到 chargeback(${freshDispute.reason})，金额 ${(freshDispute.amount / 100).toFixed(2)} ${freshDispute.currency.toUpperCase()}。资金已撤回且财务撤权边界已持久化，请去 Stripe Dashboard 应诉或接受。`
+        : `收到未撤资的支付调查(${freshDispute.reason})，金额 ${(freshDispute.amount / 100).toFixed(2)} ${freshDispute.currency.toUpperCase()}。当前保留已付款权益；若调查升级，funds_withdrawn 事件会执行撤权。`,
       details: {
+        source,
         disputeId: freshDispute.id,
         chargeId: chargeId ?? '—',
         status: freshDispute.status,
-        apiTierStatus: acknowledgement.status,
+        fundsWithdrawn,
+        apiTierStatus: acknowledgement?.status ?? 'not_applicable',
       },
     })
   } catch (err) {
@@ -1804,6 +1857,20 @@ export async function handleChargeDisputeCreated(
       error: err instanceof Error ? err.message : err,
     })
   }
+}
+
+export async function handleChargeDisputeCreated(
+  dispute: Stripe.Dispute,
+  context: StripeRefundEventContext
+) {
+  return handleChargeDisputeWithdrawal(dispute, context, 'charge.dispute.created')
+}
+
+export async function handleChargeDisputeFundsWithdrawn(
+  dispute: Stripe.Dispute,
+  context: StripeRefundEventContext
+) {
+  return handleChargeDisputeWithdrawal(dispute, context, 'charge.dispute.funds_withdrawn')
 }
 
 const DISPUTE_REINSTATEMENT_STATUSES = new Set([
