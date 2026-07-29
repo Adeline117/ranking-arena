@@ -22,7 +22,8 @@
  * Response:
  *   { data:[], meta: { window, category, platform, totalcount, ... } }
  *
- * Caching: s-maxage=60, stale-while-revalidate=300
+ * Caching: sealed internal cache; HTTP responses are never shared because
+ * every request must re-establish current publication authority.
  */
 
 import { createHash } from 'node:crypto'
@@ -37,7 +38,7 @@ import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { TradingPeriod } from '@/lib/types/unified-trader'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { ApiError } from '@/lib/api/errors'
-import { success as apiSuccess, withCache } from '@/lib/api/response'
+import { success as apiSuccess } from '@/lib/api/response'
 import { withPublic } from '@/lib/api/middleware'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
@@ -68,6 +69,15 @@ import {
 } from '@/lib/rankings/read-composite-ranking-page'
 
 const logger = createLogger('rankings-api')
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+const RANKING_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 function rankingProofSources(
   authoritySources: readonly string[],
@@ -197,8 +207,8 @@ export const GET = withPublic(
     const traderType = requestedTraderType
 
     if (isPublicRankingSourceQuarantined(platform)) {
-      return withCache(
-        apiSuccess({
+      return apiSuccess(
+        {
           traders: [],
           window: normalizedWindow === 'composite' ? 'COMPOSITE' : normalizedWindow.toUpperCase(),
           totalCount: 0,
@@ -212,8 +222,9 @@ export const GET = withPublic(
           ranking_visibility: 'partial',
           ranking_visibility_reason: 'publication_policy_filtered',
           ranking_visibility_reasons: ['quarantined_source_requested'],
-        }),
-        { maxAge: 60, staleWhileRevalidate: 300 }
+        },
+        200,
+        RANKING_NO_STORE_HEADERS
       )
     }
 
@@ -235,10 +246,11 @@ export const GET = withPublic(
 
     if (normalizedWindow === 'composite') {
       const sealedRead = await getCompositeRankings(query)
-      return withCache(apiSuccess(sanitizePublicRankingSourcePayload(sealedRead.value)), {
-        maxAge: 60,
-        staleWhileRevalidate: 300,
-      })
+      return apiSuccess(
+        sanitizePublicRankingSourcePayload(sealedRead.value),
+        200,
+        RANKING_NO_STORE_HEADERS
+      )
     }
 
     const cacheSeason = query.window.toUpperCase() as TradingPeriod
@@ -249,8 +261,8 @@ export const GET = withPublic(
     })
     const expectedCacheSources = rankingProofSources(authoritySources, query)
     if (expectedCacheSources.length === 0) {
-      return withCache(
-        apiSuccess({
+      return apiSuccess(
+        {
           traders: [],
           window: cacheSeason,
           totalCount: 0,
@@ -268,8 +280,9 @@ export const GET = withPublic(
               ? 'source_outside_publication_authority'
               : 'category_outside_publication_authority',
           ],
-        }),
-        { maxAge: 60, staleWhileRevalidate: 300 }
+        },
+        200,
+        RANKING_NO_STORE_HEADERS
       )
     }
 
@@ -374,8 +387,7 @@ export const GET = withPublic(
     }
 
     result = sanitizePublicRankingSourcePayload(result)
-    const response = apiSuccess(result)
-    return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 })
+    return apiSuccess(result, 200, RANKING_NO_STORE_HEADERS)
   },
   { name: 'rankings', rateLimit: { requests: 30, window: 60, prefix: 'rankings' } }
 )
