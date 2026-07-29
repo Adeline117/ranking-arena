@@ -1,0 +1,449 @@
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+
+INSERT INTO auth.users(id) VALUES
+  ('e6000000-0000-4000-8000-000000000001'),
+  ('e6000000-0000-4000-8000-000000000002'),
+  ('e6000000-0000-4000-8000-000000000003'),
+  ('e6000000-0000-4000-8000-000000000004'),
+  ('e6000000-0000-4000-8000-000000000005');
+
+INSERT INTO public.user_profiles(
+  id,
+  handle,
+  stripe_customer_id
+) VALUES
+  (
+    'e6000000-0000-4000-8000-000000000001',
+    'dispute_tip_payer',
+    'cus_dispute_tip'
+  ),
+  (
+    'e6000000-0000-4000-8000-000000000002',
+    'dispute_recipient',
+    NULL
+  ),
+  (
+    'e6000000-0000-4000-8000-000000000003',
+    'dispute_pro',
+    'cus_dispute_pro'
+  ),
+  (
+    'e6000000-0000-4000-8000-000000000004',
+    'dispute_group',
+    NULL
+  ),
+  (
+    'e6000000-0000-4000-8000-000000000005',
+    'dispute_first_tip',
+    'cus_dispute_first_tip'
+  );
+
+INSERT INTO public.posts(id, author_id, title, content) VALUES
+  (
+    'e6100000-0000-4000-8000-000000000001',
+    'e6000000-0000-4000-8000-000000000002',
+    'payment first dispute',
+    'payment first dispute'
+  ),
+  (
+    'e6100000-0000-4000-8000-000000000002',
+    'e6000000-0000-4000-8000-000000000002',
+    'dispute first payment',
+    'dispute first payment'
+  );
+
+INSERT INTO public.tips(
+  id,
+  post_id,
+  from_user_id,
+  to_user_id,
+  amount_cents,
+  status,
+  stripe_checkout_session_id
+) VALUES (
+  'e6200000-0000-4000-8000-000000000001',
+  'e6100000-0000-4000-8000-000000000001',
+  'e6000000-0000-4000-8000-000000000001',
+  'e6000000-0000-4000-8000-000000000002',
+  500,
+  'pending',
+  'cs_dispute_tip'
+);
+
+DO $tip_payment_first$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.complete_tip_with_stripe_ownership_atomic(
+    'e6200000-0000-4000-8000-000000000001',
+    'cus_dispute_tip',
+    'pi_dispute_tip',
+    'ch_dispute_tip',
+    'cs_dispute_tip',
+    500,
+    'usd',
+    pg_catalog.clock_timestamp()
+  );
+  IF v_result ->> 'status' NOT IN (
+    'completed',
+    'already_completed'
+  ) THEN
+    RAISE EXCEPTION 'tip payment setup failed: %', v_result;
+  END IF;
+
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_dispute_tip',
+    1900000001,
+    'dp_dispute_tip',
+    'warning_needs_response',
+    'fraudulent',
+    500,
+    'usd',
+    'cus_dispute_tip',
+    'pi_dispute_tip',
+    'ch_dispute_tip',
+    500
+  );
+  IF v_result IS DISTINCT FROM '{"status":"not_api"}'::jsonb THEN
+    RAISE EXCEPTION
+      'ordinary tip dispute compatibility acknowledgement drifted: %',
+      v_result;
+  END IF;
+  IF NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id =
+        'e6200000-0000-4000-8000-000000000001'
+        AND tip.status = 'refunded'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_charge_dispute_projections AS projection
+      WHERE projection.livemode
+        AND projection.stripe_event_id = 'evt_dispute_tip'
+        AND projection.product_kind = 'tip'
+    )
+  THEN
+    RAISE EXCEPTION 'payment-first Tip dispute retained authority';
+  END IF;
+END
+$tip_payment_first$;
+
+DO $pro_payment_first$
+DECLARE
+  v_result jsonb;
+  v_subscription_id uuid;
+BEGIN
+  v_result := public.activate_recurring_entitlement_payment_atomic(
+    'e6000000-0000-4000-8000-000000000003',
+    'cus_dispute_pro',
+    'sub_dispute_pro',
+    'in_dispute_pro',
+    'pi_dispute_pro',
+    'ch_dispute_pro',
+    'monthly',
+    1000,
+    'usd',
+    pg_catalog.date_trunc(
+      'second',
+      pg_catalog.clock_timestamp()
+    ),
+    pg_catalog.date_trunc(
+      'second',
+      pg_catalog.clock_timestamp()
+    ) + interval '30 days',
+    'paid',
+    'active',
+    true
+  );
+  IF v_result ->> 'status' NOT IN (
+    'activated',
+    'already_activated'
+  ) THEN
+    RAISE EXCEPTION 'recurring Pro payment setup failed: %', v_result;
+  END IF;
+
+  SELECT subscription.id
+  INTO STRICT v_subscription_id
+  FROM public.subscriptions AS subscription
+  WHERE subscription.user_id =
+    'e6000000-0000-4000-8000-000000000003';
+
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_dispute_pro',
+    1900000002,
+    'dp_dispute_pro',
+    'warning_needs_response',
+    'fraudulent',
+    1000,
+    'usd',
+    'cus_dispute_pro',
+    'pi_dispute_pro',
+    'ch_dispute_pro',
+    1000
+  );
+  IF v_result IS DISTINCT FROM '{"status":"not_api"}'::jsonb THEN
+    RAISE EXCEPTION
+      'ordinary Pro dispute compatibility acknowledgement drifted: %',
+      v_result;
+  END IF;
+
+  IF EXISTS (
+      SELECT 1
+      FROM public.subscriptions AS subscription
+      WHERE subscription.id = v_subscription_id
+        AND subscription.status IN ('active', 'trialing')
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_profiles AS profile
+      WHERE profile.id =
+        'e6000000-0000-4000-8000-000000000003'
+        AND profile.is_pro
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.api_tier_reversal_actions AS action
+      WHERE action.product_kind = 'pro_entitlement'
+        AND action.livemode
+        AND action.stripe_subscription_id = 'sub_dispute_pro'
+        AND action.state = 'pending'
+    )
+  THEN
+    RAISE EXCEPTION
+      'ordinary Pro dispute retained authority or lost cancellation';
+  END IF;
+
+  v_result := public.reconcile_recurring_subscription_state_atomic(
+    'e6000000-0000-4000-8000-000000000003',
+    'cus_dispute_pro',
+    'sub_dispute_pro',
+    'in_dispute_pro',
+    'monthly',
+    pg_catalog.date_trunc(
+      'second',
+      pg_catalog.clock_timestamp()
+    ),
+    pg_catalog.date_trunc(
+      'second',
+      pg_catalog.clock_timestamp()
+    ) + interval '30 days',
+    'active',
+    false,
+    NULL,
+    NULL,
+    'evt_dispute_pro_delayed_active',
+    pg_catalog.date_trunc(
+      'second',
+      pg_catalog.clock_timestamp()
+    ),
+    true
+  );
+  IF v_result ->> 'status' <> 'revoked'
+    OR EXISTS (
+      SELECT 1
+      FROM public.subscriptions AS subscription
+      WHERE subscription.id = v_subscription_id
+        AND subscription.status IN ('active', 'trialing')
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_profiles AS profile
+      WHERE profile.id =
+        'e6000000-0000-4000-8000-000000000003'
+        AND profile.is_pro
+    )
+  THEN
+    RAISE EXCEPTION
+      'delayed Stripe active state revived disputed Pro: %',
+      v_result;
+  END IF;
+END
+$pro_payment_first$;
+
+DO $group_payment_first$
+DECLARE
+  v_result jsonb;
+  v_subscription_id uuid;
+BEGIN
+  v_result :=
+    public.activate_group_subscription_with_stripe_ownership_atomic(
+      'e6000000-0000-4000-8000-000000000004',
+      'e6300000-0000-4000-8000-000000000001',
+      'monthly',
+      'pi_dispute_group',
+      'cs_dispute_group',
+      2500,
+      'usd',
+      'ch_dispute_group',
+      'cus_dispute_group',
+      true
+    );
+  IF v_result ->> 'status' NOT IN ('subscribed', 'renewed') THEN
+    RAISE EXCEPTION 'group payment setup failed: %', v_result;
+  END IF;
+
+  SELECT consumption.subscription_id
+  INTO STRICT v_subscription_id
+  FROM public.group_payment_consumptions AS consumption
+  WHERE consumption.payment_intent_id = 'pi_dispute_group';
+
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_dispute_group',
+    1900000003,
+    'dp_dispute_group',
+    'warning_needs_response',
+    'fraudulent',
+    2500,
+    'usd',
+    'cus_dispute_group',
+    'pi_dispute_group',
+    'ch_dispute_group',
+    2500
+  );
+  IF v_result IS DISTINCT FROM '{"status":"not_api"}'::jsonb THEN
+    RAISE EXCEPTION
+      'group dispute compatibility acknowledgement drifted: %',
+      v_result;
+  END IF;
+
+  IF EXISTS (
+      SELECT 1
+      FROM public.group_subscriptions AS subscription
+      WHERE subscription.id = v_subscription_id
+        AND subscription.status IN ('active', 'trialing')
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.group_members AS member
+      WHERE member.group_id =
+          'e6300000-0000-4000-8000-000000000001'
+        AND member.user_id =
+          'e6000000-0000-4000-8000-000000000004'
+        AND member.role::text = 'member'
+    )
+  THEN
+    RAISE EXCEPTION 'Group Pass dispute retained paid access';
+  END IF;
+END
+$group_payment_first$;
+
+DO $record_dispute_before_tip$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.record_api_tier_dispute_reversal_atomic(
+    true,
+    'evt_dispute_first_tip',
+    1900000004,
+    'dp_dispute_first_tip',
+    'warning_needs_response',
+    'fraudulent',
+    700,
+    'usd',
+    'cus_dispute_first_tip',
+    'pi_dispute_first_tip',
+    'ch_dispute_first_tip',
+    700
+  );
+  IF v_result IS DISTINCT FROM '{"status":"not_api"}'::jsonb THEN
+    RAISE EXCEPTION
+      'dispute-first event was not durably accepted: %',
+      v_result;
+  END IF;
+END
+$record_dispute_before_tip$;
+
+INSERT INTO public.tips(
+  id,
+  post_id,
+  from_user_id,
+  to_user_id,
+  amount_cents,
+  status,
+  stripe_checkout_session_id
+) VALUES (
+  'e6200000-0000-4000-8000-000000000002',
+  'e6100000-0000-4000-8000-000000000002',
+  'e6000000-0000-4000-8000-000000000005',
+  'e6000000-0000-4000-8000-000000000002',
+  700,
+  'pending',
+  'cs_dispute_first_tip'
+);
+
+SELECT public.complete_tip_with_stripe_ownership_atomic(
+  'e6200000-0000-4000-8000-000000000002',
+  'cus_dispute_first_tip',
+  'pi_dispute_first_tip',
+  'ch_dispute_first_tip',
+  'cs_dispute_first_tip',
+  700,
+  'usd',
+  pg_catalog.clock_timestamp()
+);
+
+DO $prove_deferred_dispute_first_projection$
+DECLARE
+  v_readiness jsonb;
+  v_claim jsonb;
+BEGIN
+  IF NOT EXISTS (
+      SELECT 1
+      FROM public.tips AS tip
+      WHERE tip.id =
+        'e6200000-0000-4000-8000-000000000002'
+        AND tip.status = 'refunded'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_charge_dispute_projections AS projection
+      WHERE projection.livemode
+        AND projection.stripe_event_id =
+          'evt_dispute_first_tip'
+        AND projection.product_kind = 'tip'
+    )
+  THEN
+    RAISE EXCEPTION
+      'dispute-first deferred ownership projection granted Tip';
+  END IF;
+
+  v_claim := public.claim_api_tier_reversal_actions_atomic(
+    'e6400000-0000-4000-8000-000000000001',
+    10,
+    120,
+    true
+  );
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.jsonb_array_elements(v_claim) AS claimed(action)
+    WHERE claimed.action ->> 'product_kind' = 'pro_entitlement'
+      AND claimed.action ->> 'stripe_subscription_id' =
+        'sub_dispute_pro'
+  ) THEN
+    RAISE EXCEPTION
+      'Pro dispute cancellation claim lost product routing: %',
+      v_claim;
+  END IF;
+
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  IF NOT (
+    v_readiness ? 'unprojected_charge_disputes'
+    AND v_readiness ? 'charge_dispute_identity_anomalies'
+    AND v_readiness ? 'charge_dispute_authority_drift'
+  ) THEN
+    RAISE EXCEPTION
+      'Stripe dispute readiness keys are incomplete: %',
+      v_readiness;
+  END IF;
+END
+$prove_deferred_dispute_first_projection$;
+
+\echo 'Stripe charge dispute authority fixture passed'
