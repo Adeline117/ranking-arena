@@ -130,6 +130,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729015000_leaderboard_rank_generation_attested_batch_writer.sql
   20260729015500_tier_a_execution_claim_fence.sql
   20260729054400_leaderboard_rank_generation_private_staging.sql
+  20260729060000_stale_leaderboard_attempt_report.sql
   20260729061533_leaderboard_rank_generation_staging_only_writer.sql
   20260729063000_leaderboard_rank_staging_full_xid_guard.sql
 )
@@ -153,6 +154,7 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
+  20260729061000_tier_a_execution_claim_enforcement.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover
