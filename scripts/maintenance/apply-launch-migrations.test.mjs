@@ -146,6 +146,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
 
   const additiveApiTierMigration = '20260729020000_api_tier_cancellation_identity.sql'
   const legacyApiTierCleanupMigration = '20260729021000_disable_legacy_api_tier_writer.sql'
+  const stripeDisputeAuthorityMigration = '20260729066000_stripe_charge_dispute_authority.sql'
 
   assert.equal(predeploy.length, 117)
   assert.deepEqual(postdeploy, [
@@ -154,6 +155,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     legacyApiTierCleanupMigration,
     '20260729063000_close_trader_follow_direct_writes.sql',
     '20260729065000_stripe_entitlement_livemode_authority.sql',
+    stripeDisputeAuthorityMigration,
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   assert.deepEqual(recoveryPrerequisites, [
@@ -261,6 +263,20 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
     1
   )
+  assert.equal(
+    postdeploy.filter((migration) => migration === stripeDisputeAuthorityMigration).length,
+    1
+  )
+  assert.ok(
+    postdeploy.indexOf(stripeDisputeAuthorityMigration) >
+      postdeploy.indexOf('20260729065000_stripe_entitlement_livemode_authority.sql')
+  )
+  assert.ok(!predeploy.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!recoveryPrerequisites.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!concurrentRecovery.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!recovery.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!quarantined.includes(stripeDisputeAuthorityMigration))
+  assert.ok(!superseded.includes(stripeDisputeAuthorityMigration))
   assert.ok(!predeploy.includes(legacyApiTierCleanupMigration))
   assert.ok(!postdeploy.includes(additiveApiTierMigration))
   assert.ok(!recoveryPrerequisites.includes(legacyApiTierCleanupMigration))

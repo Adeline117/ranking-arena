@@ -2,10 +2,9 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const root = process.cwd()
-const migration = readFileSync(
-  resolve(root, 'supabase/migrations/20260729066000_stripe_charge_dispute_authority.sql'),
-  'utf8'
-)
+const migrationName = '20260729066000_stripe_charge_dispute_authority.sql'
+const migration = readFileSync(resolve(root, 'supabase/migrations', migrationName), 'utf8')
+const runner = readFileSync(resolve(root, 'scripts/maintenance/apply-launch-migrations.sh'), 'utf8')
 const fixture = readFileSync(
   resolve(root, 'supabase/migrations/__tests__/stripe-charge-dispute-authority.fixture.psql'),
   'utf8'
@@ -144,5 +143,16 @@ describe('Stripe charge dispute authority', () => {
     expect(fixture).toContain('dispute-first deferred ownership projection granted Tip')
     expect(fixture).toContain('Pro dispute cancellation claim lost product routing')
     expect(fixture).toContain('Stripe dispute readiness keys are incomplete')
+  })
+
+  it('runs exactly once in POSTDEPLOY after livemode authority', () => {
+    const predeploy = runner.match(/PREDEPLOY_MIGRATIONS=\(([\s\S]*?)\n\)/)?.[1] ?? ''
+    const postdeploy = runner.match(/POSTDEPLOY_MIGRATIONS=\(([\s\S]*?)\n\)/)?.[1] ?? ''
+
+    expect(predeploy).not.toContain(migrationName)
+    expect(postdeploy.match(new RegExp(migrationName, 'g'))).toHaveLength(1)
+    expect(postdeploy.indexOf(migrationName)).toBeGreaterThan(
+      postdeploy.indexOf('20260729065000_stripe_entitlement_livemode_authority.sql')
+    )
   })
 })

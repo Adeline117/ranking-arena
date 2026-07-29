@@ -170,6 +170,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260729021000_disable_legacy_api_tier_writer.sql
   20260729063000_close_trader_follow_direct_writes.sql
   20260729065000_stripe_entitlement_livemode_authority.sql
+  20260729066000_stripe_charge_dispute_authority.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover
