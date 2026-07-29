@@ -20,6 +20,7 @@ import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { getFireAndForgetStats } from '@/lib/utils/logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { getAuthFailureStats } from '@/lib/auth/extract-user'
+import { buildFreshnessReport } from '@/lib/rankings/build-freshness-report'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -126,47 +127,21 @@ async function checkDatabaseAndCron(): Promise<{
     const cronRuns: CronRunInfo[] = []
 
     try {
-      const { data: cronLogs } = await supabase
-        .from('cron_logs')
-        .select('name, ran_at') // cron_logs 无 result 列(旧 select 400)；下方 JSON.parse 已有 '[]' 兜底
-        .order('ran_at', { ascending: false })
-        .limit(20)
-
-      if (cronLogs) {
-        // 为每个平台找到最近的运行记录
-        for (const platform of platforms) {
-          const platformLog = cronLogs.find(
-            (log) => log.name === `fetch-traders-${platform}` || log.name === 'fetch-traders-all'
-          )
-
-          if (platformLog) {
-            let success = true
-            try {
-              // cron_logs has no `result` column (dropped from the select) —
-              // access safely; undefined → '[]' fallback keeps success=true.
-              const result = JSON.parse((platformLog as { result?: string }).result || '[]')
-              success =
-                Array.isArray(result) && result.every((r: { success?: boolean }) => r.success)
-            } catch {
-              success = false
-            }
-
-            cronRuns.push({
-              platform,
-              ran_at: platformLog.ran_at,
-              success,
-            })
-          } else {
-            cronRuns.push({
-              platform,
-              ran_at: null,
-              success: null,
-            })
-          }
-        }
+      // cron_logs has no outcome column and no active repository writer. The
+      // sealed freshness report is the launch authority for whether every
+      // registry source/window completed a usable publication.
+      const freshness = await buildFreshnessReport()
+      for (const platform of freshness.platforms) {
+        cronRuns.push({
+          platform: platform.platform,
+          ran_at: platform.lastUpdate,
+          success:
+            platform.status === 'fresh' ? true : platform.status === 'unknown' ? null : false,
+        })
       }
     } catch {
-      // cron_logs 表可能不存在，忽略错误
+      // Keep database connectivity distinct from unavailable freshness
+      // authority. The overall cron status becomes unknown below.
       for (const platform of platforms) {
         cronRuns.push({ platform, ran_at: null, success: null })
       }
@@ -253,8 +228,8 @@ function calculateStatus(
     return 'degraded'
   }
 
-  // Cron 失败 = 降级
-  if (checks.cron.status === 'fail') {
+  // Missing freshness authority cannot prove the source pipeline healthy.
+  if (checks.cron.status !== 'pass') {
     return 'degraded'
   }
 
@@ -262,34 +237,6 @@ function calculateStatus(
 }
 
 // ---------- Connectors section (was /api/health/connectors) ----------
-
-const ACTIVE_PLATFORMS = [
-  'binance_futures',
-  'binance_spot',
-  'bitget_futures',
-  'okx_futures',
-  'htx_futures',
-  'mexc',
-  'coinex',
-  'bingx',
-  'gateio',
-  'xt',
-  'btcc',
-  'bitunix',
-  'bitfinex',
-  'toobit',
-  'etoro',
-  'hyperliquid',
-  'gmx',
-  'dydx',
-  'gains',
-  'jupiter_perps',
-  'aevo',
-  'drift',
-  'okx_web3',
-  'binance_web3',
-  'web3_bot',
-]
 
 async function getConnectorsSection(request: Request) {
   // Connectors section requires CRON_SECRET auth (timing-safe)
@@ -301,7 +248,7 @@ async function getConnectorsSection(request: Request) {
 
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
-  const [{ data: logs }, { data: freshness }] = await Promise.all([
+  const [{ data: logs }, freshness] = await Promise.all([
     supabase
       .from('pipeline_logs')
       .select(
@@ -310,15 +257,8 @@ async function getConnectorsSection(request: Request) {
       .like('job_name', 'batch-fetch-traders%')
       .gte('started_at', oneDayAgo)
       .order('started_at', { ascending: false }),
-    // Get latest computed_at per source using leaderboard_count_cache
-    // (was: fetch 5000 rows and dedupe in JS)
-    supabase.from('leaderboard_count_cache').select('source, updated_at').neq('source', '_all'),
+    buildFreshnessReport(),
   ])
-
-  const latestByPlatform = new Map<string, string>()
-  for (const row of freshness || []) {
-    latestByPlatform.set(row.source, row.updated_at)
-  }
 
   const groupStats = new Map<string, { total: number; success: number; errors: string[] }>()
   for (const log of logs || []) {
@@ -339,20 +279,16 @@ async function getConnectorsSection(request: Request) {
     }
   > = {}
 
-  for (const platform of ACTIVE_PLATFORMS) {
-    const latest = latestByPlatform.get(platform)
-    const hoursAgo = latest ? (Date.now() - new Date(latest).getTime()) / (60 * 60 * 1000) : null
-    connectors[platform] = {
+  for (const platform of freshness.platforms) {
+    connectors[platform.platform] = {
       status:
-        hoursAgo === null
-          ? 'critical'
-          : hoursAgo > 24
-            ? 'critical'
-            : hoursAgo > 8
-              ? 'stale'
-              : 'healthy',
-      last_update: latest || null,
-      staleness_hours: hoursAgo ? Math.round(hoursAgo * 10) / 10 : null,
+        platform.status === 'fresh'
+          ? 'healthy'
+          : platform.status === 'stale'
+            ? 'stale'
+            : 'critical',
+      last_update: platform.lastUpdate,
+      staleness_hours: platform.ageHours,
     }
   }
 
@@ -361,9 +297,9 @@ async function getConnectorsSection(request: Request) {
   const critical = Object.values(connectors).filter((c) => c.status === 'critical').length
 
   return NextResponse.json({
-    status: critical > 0 ? 'degraded' : 'healthy',
+    status: critical > 0 || stale > 0 ? 'degraded' : 'healthy',
     timestamp: new Date().toISOString(),
-    summary: { total: ACTIVE_PLATFORMS.length, healthy, stale, critical },
+    summary: { total: freshness.summary.total, healthy, stale, critical },
     connectors,
     pipeline_groups: Object.fromEntries(
       Array.from(groupStats.entries()).map(([k, v]) => [
@@ -539,16 +475,12 @@ export async function GET(request: NextRequest) {
 
     // 计算 Cron 状态
     const cronHasFailures = cronRuns.some((r) => r.success === false)
-    const cronHasRecent = cronRuns.some((r) => {
-      if (!r.ran_at) return false
-      const hourAgo = Date.now() - 7 * 60 * 60 * 1000 // 7 小时内（允许 6 小时间隔 + 1 小时容差）
-      return new Date(r.ran_at).getTime() > hourAgo
-    })
+    const cronHasUnknown = cronRuns.length === 0 || cronRuns.some((r) => r.success === null)
 
     const cronStatus: CronStatus = {
-      platforms: getSupportedPlatforms(),
+      platforms: cronRuns.map((run) => run.platform),
       lastRuns: cronRuns,
-      status: cronHasFailures ? 'fail' : cronHasRecent ? 'pass' : 'unknown',
+      status: cronHasFailures ? 'fail' : cronHasUnknown ? 'unknown' : 'pass',
     }
 
     const checks = {
