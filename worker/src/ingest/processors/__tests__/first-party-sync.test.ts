@@ -3,6 +3,7 @@ const mockPublishProfile = jest.fn()
 const mockFetchAccount = jest.fn()
 const mockCompute = jest.fn()
 const mockDecrypt = jest.fn((value: string) => `plain:${value}`)
+const mockValidateStats = jest.fn()
 const mockGetSourceBySlug = jest.fn()
 const mockCcxtConfigs: Record<string, unknown>[] = []
 
@@ -16,7 +17,7 @@ jest.mock('@/lib/ingest/serving/publish', () => ({
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
 }))
 jest.mock('@/lib/ingest/staging/validate', () => ({
-  validateStats: (stats: unknown) => ({ valid: stats, rejects: [] }),
+  validateStats: (...args: unknown[]) => mockValidateStats(...args),
 }))
 jest.mock('@/lib/ingest/first-party/fetch', () => ({
   fetchFirstPartyAccount: (...args: unknown[]) => mockFetchAccount(...args),
@@ -103,8 +104,13 @@ describe('first-party sync processor', () => {
     mockDecrypt.mockImplementation((value: string) => `plain:${value}`)
     mockPublishProfile.mockResolvedValue(undefined)
     mockFetchAccount.mockResolvedValue({ equity: 100 })
+    mockValidateStats.mockImplementation((stats: unknown) => ({ valid: stats, rejects: [] }))
     mockCompute.mockReturnValue({
-      stats: [{ timeframe: 90, roi: 12 }],
+      stats: [
+        { timeframe: 7, roi: 5 },
+        { timeframe: 30, roi: 8 },
+        { timeframe: 90, roi: 12 },
+      ],
       series: [{ timeframe: 90, metric: 'equity', points: [{ ts: 1, value: 100 }] }],
       snapshot: {
         equity: 100,
@@ -122,11 +128,17 @@ describe('first-party sync processor', () => {
 
     const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
 
-    expect(result).toMatchObject({ ok: true, statsWritten: 1, seriesPoints: 1 })
+    expect(result).toMatchObject({ ok: true, statsWritten: 3, seriesPoints: 1 })
     expect(mockPublishProfile).toHaveBeenCalledWith(
       expect.objectContaining({ slug: 'bybit_copytrade' }),
       99,
-      expect.objectContaining({ stats: [{ timeframe: 90, roi: 12 }] }),
+      expect.objectContaining({
+        stats: [
+          { timeframe: 7, roi: 5 },
+          { timeframe: 30, roi: 8 },
+          { timeframe: 90, roi: 12 },
+        ],
+      }),
       { fullSeries: true }
     )
     expect(
@@ -137,14 +149,11 @@ describe('first-party sync processor', () => {
       'success',
       0,
       'active',
-      'ok stats=1 rejects=0',
+      'ok stats=3 rejects=0',
     ])
   })
 
-  it.each([
-    ['binance_futures', 'futures', 'swap'],
-    ['binance_spot', 'spot', 'spot'],
-  ])(
+  it.each([['binance_futures', 'futures', 'swap']])(
     'constructs %s from the registry exchange identity with the matching CCXT product type',
     async (platform, productType, defaultType) => {
       queueQueries({ ...AUTH, platform }, { slug: platform, exchange_slug: 'binance' })
@@ -161,8 +170,36 @@ describe('first-party sync processor', () => {
       expect(mockQuery.mock.calls[1]?.[1]).toEqual([platform, null])
       expect(mockCcxtConfigs).toHaveLength(1)
       expect(mockCcxtConfigs[0]).toMatchObject({ options: { defaultType } })
+      expect(mockFetchAccount).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ balanceSemantics: 'total_includes_unrealized' })
+      )
     }
   )
+
+  it('fails closed for spot sources whose holdings need asset valuation', async () => {
+    queueQueries(
+      { ...AUTH, platform: 'binance_spot' },
+      { slug: 'binance_spot', exchange_slug: 'binance' }
+    )
+    mockGetSourceBySlug.mockResolvedValue({
+      id: 7,
+      slug: 'binance_spot',
+      product_type: 'spot',
+    })
+    mockQuery.mockResolvedValue({ rows: [] })
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
+
+    expect(result).toMatchObject({
+      ok: false,
+      detail: 'first-party sync unsupported for spot source',
+    })
+    expect(mockDecrypt).not.toHaveBeenCalled()
+    expect(mockFetchAccount).not.toHaveBeenCalled()
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+  })
 
   it('resolves an exchange-level Binance authorization to its unique human futures source', async () => {
     queueQueries(
@@ -196,6 +233,31 @@ describe('first-party sync processor', () => {
 
     expect(result.ok).toBe(true)
     expect(mockCcxtConfigs).toHaveLength(1)
+  })
+
+  it('does not mark a sync successful when any required stats window fails validation', async () => {
+    queueQueries()
+    mockQuery.mockResolvedValue({ rows: [] })
+    mockValidateStats.mockReturnValue({
+      valid: [{ timeframe: 90, roi: 12 }],
+      rejects: [{ reason: 'zod:invalid', payload: {} }],
+    })
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
+
+    expect(result).toMatchObject({
+      ok: false,
+      detail: 'first-party stats validation failed: valid=1 rejects=1',
+    })
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('last_sync_status = $2'), [
+      'auth-1',
+      'error',
+      1,
+      'active',
+      'first-party stats validation failed: valid=1 rejects=1',
+    ])
   })
 
   it('fails closed instead of choosing an ambiguous source alias', async () => {

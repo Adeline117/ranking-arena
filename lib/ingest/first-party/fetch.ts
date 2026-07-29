@@ -46,10 +46,15 @@ export interface CcxtLike {
   >
 }
 
+export type FirstPartyBalanceSemantics = 'total_includes_unrealized' | 'wallet_excludes_unrealized'
+
 const DAY_MS = 86_400_000
 const STABLES = ['USDT', 'USD', 'USDC']
 
 function num(v: unknown): number | null {
+  if (v === null || v === undefined) return null
+  if (typeof v !== 'number' && typeof v !== 'string') return null
+  if (typeof v === 'string' && v.trim() === '') return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
 }
@@ -134,7 +139,12 @@ async function netTransfers(
 
 export async function fetchFirstPartyAccount(
   client: CcxtLike,
-  opts: { nowMs: number; lookbackDays?: number; lastSyncMs?: number | null }
+  opts: {
+    nowMs: number
+    balanceSemantics: FirstPartyBalanceSemantics
+    lookbackDays?: number
+    lastSyncMs?: number | null
+  }
 ): Promise<Omit<FirstPartyComputeInput, 'snapshots'>> {
   const nowMs = opts.nowMs
   const sinceMs = nowMs - (opts.lookbackDays ?? 90) * DAY_MS
@@ -148,6 +158,10 @@ export async function fetchFirstPartyAccount(
       balanceNow = (balanceNow ?? 0) + v
     }
   }
+  if (balanceNow === null) {
+    throw new Error('[first-party] stablecoin balance evidence is unavailable')
+  }
+
   let unrealizedNow: number | null = null
   if (client.fetchPositions) {
     try {
@@ -157,7 +171,16 @@ export async function fetchFirstPartyAccount(
       unrealizedNow = null
     }
   }
-  const equityNow = (balanceNow ?? 0) + (unrealizedNow ?? 0)
+  if (opts.balanceSemantics === 'wallet_excludes_unrealized' && unrealizedNow === null) {
+    throw new Error('[first-party] unrealized PnL evidence is unavailable')
+  }
+  const equityNow =
+    opts.balanceSemantics === 'total_includes_unrealized'
+      ? balanceNow
+      : balanceNow + (unrealizedNow ?? 0)
+  if (!Number.isFinite(equityNow) || equityNow < 0) {
+    throw new Error('[first-party] account equity evidence is invalid')
+  }
 
   // Realized events: prefer per-position history (exact), else income ledger.
   let events: RealizedEvent[] = []

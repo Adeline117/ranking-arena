@@ -21,7 +21,11 @@ import { getSourceBySlug } from '@/lib/ingest/sources'
 import { publishProfile } from '@/lib/ingest/serving/publish'
 import { validateStats } from '@/lib/ingest/staging/validate'
 import { computeFirstParty, type EquitySnapshotRow } from '@/lib/ingest/first-party/engine'
-import { fetchFirstPartyAccount, type CcxtLike } from '@/lib/ingest/first-party/fetch'
+import {
+  fetchFirstPartyAccount,
+  type CcxtLike,
+  type FirstPartyBalanceSemantics,
+} from '@/lib/ingest/first-party/fetch'
 import {
   CCXT_ID,
   GEO_BLOCKED,
@@ -53,6 +57,10 @@ interface ResolvedSourceRow {
 }
 
 const DEFAULT_FUTURES_SOURCE_BY_EXCHANGE = new Set(['binance', 'okx', 'bitget'])
+// Pinned CCXT adapters expose account equity (already including unrealized
+// PnL) through balance.total for these exchanges. Bybit/Gate expose wallet
+// balance instead, so their position PnL must be added exactly once.
+const BALANCE_TOTAL_INCLUDES_UNREALIZED = new Set(['binance', 'bitget', 'htx', 'kucoin', 'okx'])
 
 async function markSync(
   authId: string,
@@ -171,6 +179,10 @@ export async function processFirstPartySync(
 
   try {
     // ── CCXT client (mirrors lib/portfolio/exchange-sync construction) ──
+    if (src.product_type !== 'futures') {
+      throw new Error(`first-party sync unsupported for ${src.product_type} source`)
+    }
+
     // arena.exchanges is the authority for the upstream exchange identity.
     // Source/product slugs (binance_futures, htx_spot, …) are not CCXT ids.
     const ex = srcRows[0].exchange_slug === 'gate' ? 'gateio' : srcRows[0].exchange_slug
@@ -216,6 +228,9 @@ export async function processFirstPartySync(
     const nowMs = Date.now()
     const account = await fetchFirstPartyAccount(client, {
       nowMs,
+      balanceSemantics: (BALANCE_TOTAL_INCLUDES_UNREALIZED.has(ex)
+        ? 'total_includes_unrealized'
+        : 'wallet_excludes_unrealized') satisfies FirstPartyBalanceSemantics,
       lookbackDays: 90,
       lastSyncMs: auth.last_sync_at ? Date.parse(auth.last_sync_at) : null,
     })
@@ -223,6 +238,16 @@ export async function processFirstPartySync(
 
     // ── Persist via the scraping pipeline's own write path (validation incl.) ──
     const { valid, rejects } = validateStats(result.stats, [])
+    const validTimeframes = new Set(valid.map((stats) => stats.timeframe))
+    if (
+      rejects.length > 0 ||
+      valid.length !== 3 ||
+      !([7, 30, 90] as const).every((timeframe) => validTimeframes.has(timeframe))
+    ) {
+      throw new Error(
+        `first-party stats validation failed: valid=${valid.length} rejects=${rejects.length}`
+      )
+    }
     await publishProfile(
       src,
       traderId,
