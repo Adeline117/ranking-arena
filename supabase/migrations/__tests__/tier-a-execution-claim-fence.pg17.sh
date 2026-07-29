@@ -10,6 +10,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260729015500_tier_a_execution_claim_fence.sql"
 ENFORCEMENT_MIGRATION="$ROOT_DIR/supabase/migrations/20260729061000_tier_a_execution_claim_enforcement.sql"
+ONE_PHASE_MIGRATION="$ROOT_DIR/supabase/migrations/20260729071500_tier_a_one_phase_commit_guard.sql"
 TSX_BIN="$ROOT_DIR/node_modules/.bin/tsx"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
@@ -106,6 +107,61 @@ assert_sql_true() {
   if [[ "$result" != "t" ]]; then
     echo "$label" >&2
     echo "query result: $result" >&2
+    exit 1
+  fi
+}
+
+worker_enforcement_catalog_result() {
+  {
+    cd "$ROOT_DIR"
+    printf '%s\n' \
+      'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;' \
+      "SET LOCAL statement_timeout = '10s';" \
+      'SET LOCAL search_path = pg_catalog, pg_temp;'
+    "$TSX_BIN" -e \
+      "import { TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL as sql } from './worker/src/ingest/attempt-bound-capture-readiness.ts'; process.stdout.write(sql + ';\\n')"
+    printf '%s\n' 'ROLLBACK;'
+  } | psql_cmd -Aq -F $'\t' -P footer=off
+}
+
+assert_worker_enforcement_catalog() {
+  local label="$1"
+  local expected_one_phase_exact="$2"
+  local expected_substrate_exact="$3"
+  local result
+  result="$(worker_enforcement_catalog_result)"
+  if ! printf '%s\n' "$result" |
+    awk -F '\t' \
+      -v expected_one_phase_exact="$expected_one_phase_exact" \
+      -v expected_substrate_exact="$expected_substrate_exact" '
+      NF > 0 {
+        row_count += 1
+        if (row_count == 1) {
+          for (field_index = 1; field_index <= NF; field_index += 1) {
+            if ($field_index == "one_phase_commit_exact") {
+              one_phase_index = field_index
+            }
+            if ($field_index == "substrate_contract_exact") {
+              substrate_index = field_index
+            }
+          }
+        } else if (row_count == 2) {
+          one_phase_value = $one_phase_index
+          substrate_value = $substrate_index
+        }
+      }
+      END {
+        invalid = row_count != 2 || one_phase_index < 1
+        invalid = invalid || substrate_index < 1
+        invalid = invalid || one_phase_value != expected_one_phase_exact
+        invalid = invalid || substrate_value != expected_substrate_exact
+        if (invalid) {
+          exit 1
+        }
+      }
+    '; then
+    echo "$label" >&2
+    printf '%s\n' "$result" >&2
     exit 1
   fi
 }
@@ -1268,6 +1324,47 @@ CREATE TRIGGER zz_fixture_launder_raw_before_insert
   EXECUTE FUNCTION arena.fixture_launder_raw_before_insert();
 SQL
 
+# The one-phase guard is an ordered predeploy migration.  Prove its real
+# rollout position against the expand schema before postdeploy enforcement,
+# including cleanup of the hostile ALTER DEFAULT PRIVILEGES fixture above.
+psql_cmd -q -f "$ONE_PHASE_MIGRATION"
+
+assert_sql_true \
+  'one-phase guard migration did not install its exact PG17 default contract' \
+  "SELECT pg_catalog.current_setting(
+            'max_prepared_transactions'
+          )::integer = 0
+          AND function_row.oid IS NOT NULL
+          AND function_row.prorettype = 'boolean'::pg_catalog.regtype
+          AND function_row.pronargs = 0
+          AND attribute_row.atttypid = 'boolean'::pg_catalog.regtype
+          AND attribute_row.attnotnull
+          AND attribute_row.attidentity = ''
+          AND attribute_row.attgenerated = ''
+          AND pg_catalog.pg_get_expr(
+                default_row.adbin,
+                default_row.adrelid,
+                true
+              ) = 'arena.require_tier_a_one_phase_commit()'
+     FROM pg_catalog.pg_attribute AS attribute_row
+     JOIN pg_catalog.pg_attrdef AS default_row
+       ON default_row.adrelid = attribute_row.attrelid
+      AND default_row.adnum = attribute_row.attnum
+     LEFT JOIN pg_catalog.pg_proc AS function_row
+       ON function_row.oid = pg_catalog.to_regprocedure(
+            'arena.require_tier_a_one_phase_commit()'
+          )
+    WHERE attribute_row.attrelid =
+          'arena.tier_a_execution_write_guards'::pg_catalog.regclass
+      AND attribute_row.attname = 'one_phase_commit_required'
+      AND attribute_row.attnum > 0
+      AND NOT attribute_row.attisdropped;"
+
+assert_worker_enforcement_catalog \
+  'worker enforcement catalog SQL rejected the exact one-phase expand state' \
+  't' \
+  'f'
+
 expect_file_failure \
   'hostile pre-existing trigger was accepted by enforcement' \
   'Tier-A execution trigger allowlist is not exact' \
@@ -1386,25 +1483,10 @@ assert_sql_true \
 # Execute the readiness query exported by the worker itself against this real
 # PG17 catalog. The query is intentionally imported through the repository's
 # runtime TypeScript loader so this proof cannot silently maintain a SQL copy.
-enforcement_catalog_result="$({
-  cd "$ROOT_DIR"
-  printf '%s\n' \
-    'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;' \
-    "SET LOCAL statement_timeout = '10s';" \
-    'SET LOCAL search_path = pg_catalog, pg_temp;'
-  "$TSX_BIN" -e \
-    "import { TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL as sql } from './worker/src/ingest/attempt-bound-capture-readiness.ts'; process.stdout.write(sql + ';\\n')"
-  printf '%s\n' 'ROLLBACK;'
-} | psql_cmd -Atq -F $'\t')"
-if ! printf '%s\n' "$enforcement_catalog_result" |
-  awk -F '\t' '
-    NF > 0 { row_count += 1; substrate_contract_exact = $NF }
-    END { exit !(row_count == 1 && substrate_contract_exact == "t") }
-  '; then
-  echo 'worker enforcement catalog SQL did not return one exact PG17 substrate row' >&2
-  printf '%s\n' "$enforcement_catalog_result" >&2
-  exit 1
-fi
+assert_worker_enforcement_catalog \
+  'worker enforcement catalog SQL did not return one exact PG17 substrate row' \
+  't' \
+  't'
 
 expect_failure \
   'service role retained legacy begin execution' \
@@ -2093,5 +2175,154 @@ assert_sql_true \
      JOIN pg_catalog.pg_proc AS marker_after
        ON marker_after.oid =
           'arena.tier_a_execution_claim_enforcement_state()'::pg_catalog.regprocedure;"
+
+assert_sql_true \
+  'enforcement replays removed or weakened the one-phase guard contract' \
+  "SELECT attribute_row.atttypid = 'boolean'::pg_catalog.regtype
+          AND attribute_row.attnotnull
+          AND pg_catalog.pg_get_expr(
+                default_row.adbin,
+                default_row.adrelid,
+                true
+              ) = 'arena.require_tier_a_one_phase_commit()'
+          AND pg_catalog.to_regprocedure(
+                'arena.require_tier_a_one_phase_commit()'
+              ) IS NOT NULL
+     FROM pg_catalog.pg_attribute AS attribute_row
+     JOIN pg_catalog.pg_attrdef AS default_row
+       ON default_row.adrelid = attribute_row.attrelid
+      AND default_row.adnum = attribute_row.attnum
+    WHERE attribute_row.attrelid =
+          'arena.tier_a_execution_write_guards'::pg_catalog.regclass
+      AND attribute_row.attname = 'one_phase_commit_required'
+      AND attribute_row.attnum > 0
+      AND NOT attribute_row.attisdropped;"
+
+# Refresh the long-lived source-1 execution immediately before the postmaster
+# restart. This keeps the negative guard assertion focused on the one-phase
+# default instead of allowing fixture lease expiry to mask the failure.
+assert_sql_true \
+  'one-phase negative probe did not retain a live claimed execution' \
+  "SET ROLE service_role;
+   BEGIN;
+   SELECT arena.fixture_begin_region_guard(1);
+   SELECT arena.heartbeat_tier_a_execution(
+     'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 3
+   )->>'phase' = 'active';
+   COMMIT;"
+
+"$PG_BIN/pg_ctl" -D "$DATA_DIR" -m fast -w stop >/dev/null
+"$PG_BIN/pg_ctl" \
+  -D "$DATA_DIR" \
+  -l "$LOG_FILE" \
+  -o "-F -p $PORT -k $SOCKET_DIR -c listen_addresses= -c max_prepared_transactions=10" \
+  -w start >/dev/null
+
+assert_sql_true \
+  'PG17 negative phase did not restart with prepared transactions enabled' \
+  "SELECT pg_catalog.current_setting(
+            'max_prepared_transactions'
+          )::integer = 10
+          AND setting::integer = 10
+          AND context = 'postmaster'
+     FROM pg_catalog.pg_settings
+    WHERE name = 'max_prepared_transactions';"
+
+assert_worker_enforcement_catalog \
+  'worker enforcement catalog SQL stayed ready with prepared transactions enabled' \
+  'f' \
+  'f'
+
+# Catch the helper directly so the runtime proof locks the promised SQLSTATE,
+# independent of psql's human-readable error formatting.
+assert_sql_true \
+  'one-phase helper did not reject nonzero max_prepared_transactions as 55000' \
+  "DO \$proof\$
+   BEGIN
+     BEGIN
+       PERFORM arena.require_tier_a_one_phase_commit();
+       RAISE EXCEPTION 'one-phase helper unexpectedly returned';
+     EXCEPTION
+       WHEN SQLSTATE '55000' THEN NULL;
+     END;
+   END
+   \$proof\$;
+   SELECT true;"
+
+worker_guard_count_before="$(
+  psql_cmd -Atq -c 'SELECT count(*) FROM arena.ingest_worker_write_guards;'
+)"
+if [[ ! "$worker_guard_count_before" =~ ^[0-9]+$ ]]; then
+  echo 'could not capture the pre-probe worker-guard fixture baseline' >&2
+  printf '%s\n' "$worker_guard_count_before" >&2
+  exit 1
+fi
+
+expect_failure \
+  'Tier-A guard insert survived prepared-transaction enablement' \
+  'Tier-A execution requires max_prepared_transactions = 0' \
+  "BEGIN;
+   SELECT arena.fixture_begin_region_guard(1);
+   INSERT INTO arena.raw_objects (
+     source_id, job_type, storage_path
+   ) VALUES (
+     1, 'tier_b', 'fixture://one-phase-guard-rollback-probe'
+   );
+   SELECT arena.assert_tier_a_execution_write(
+     'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 3
+   );
+   COMMIT;"
+
+assert_sql_true \
+  'failed one-phase guard left a prepared xact, guard, or business row' \
+  "SELECT NOT EXISTS (
+            SELECT 1 FROM pg_catalog.pg_prepared_xacts
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM arena.tier_a_execution_write_guards
+          )
+          AND (
+            SELECT count(*) FROM arena.ingest_worker_write_guards
+          ) = $worker_guard_count_before::bigint
+          AND NOT EXISTS (
+            SELECT 1
+              FROM arena.raw_objects
+             WHERE storage_path =
+                   'fixture://one-phase-guard-rollback-probe'
+          );"
+
+expect_file_failure \
+  'one-phase migration replayed with prepared transactions enabled' \
+  'Tier-A execution requires max_prepared_transactions = 0' \
+  "$ONE_PHASE_MIGRATION"
+
+assert_sql_true \
+  'failed one-phase migration replay left partial or prepared state' \
+  "SELECT pg_catalog.to_regprocedure(
+            'arena.require_tier_a_one_phase_commit()'
+          ) IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+              FROM pg_catalog.pg_attribute AS attribute_row
+             WHERE attribute_row.attrelid =
+                   'arena.tier_a_execution_write_guards'::pg_catalog.regclass
+               AND attribute_row.attname = 'one_phase_commit_required'
+               AND attribute_row.atttypid = 'boolean'::pg_catalog.regtype
+               AND attribute_row.attnotnull
+               AND attribute_row.attnum > 0
+               AND NOT attribute_row.attisdropped
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM pg_catalog.pg_prepared_xacts
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM arena.tier_a_execution_write_guards
+          )
+          AND NOT EXISTS (
+            SELECT 1
+              FROM arena.raw_objects
+             WHERE storage_path =
+                   'fixture://one-phase-guard-rollback-probe'
+          );"
 
 echo 'Tier-A execution claim fence and postdeploy enforcement PG17 proof passed'

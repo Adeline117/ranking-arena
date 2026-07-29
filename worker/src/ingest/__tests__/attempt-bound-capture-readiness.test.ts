@@ -20,6 +20,7 @@ import {
   TIER_A_EXECUTION_HEARTBEAT_RPC_SHA256,
   TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256,
   TIER_A_EXECUTION_TRIGGER_CATALOG_SHA256,
+  TIER_A_ONE_PHASE_COMMIT_HELPER_SHA256,
   assertPartitionedV4WorkerReadiness,
   loadPartitionedV4WorkerReadiness,
   validatePartitionedV4WorkerReadiness,
@@ -83,6 +84,7 @@ function enforcementCatalog(state: EnforcementState): Record<string, unknown> {
         marker_rpc_sha256: null,
         marker_contract_exact: false,
         marker_acl_exact: false,
+        one_phase_commit_exact: true,
         substrate_contract_exact: false,
       }
     : {
@@ -90,6 +92,7 @@ function enforcementCatalog(state: EnforcementState): Record<string, unknown> {
         marker_rpc_sha256: TIER_A_EXECUTION_ENFORCEMENT_MARKER_RPC_SHA256,
         marker_contract_exact: true,
         marker_acl_exact: true,
+        one_phase_commit_exact: true,
         substrate_contract_exact: true,
       }
 }
@@ -208,6 +211,30 @@ describe('partitioned V4 worker startup readiness', () => {
     expect(() =>
       validatePartitionedV4WorkerReadiness(readyPayload({ rpc: rpcRow('expand') }, 'enforced'))
     ).toThrow('enforced execution enforcement state is not exact')
+
+    expect(() =>
+      validatePartitionedV4WorkerReadiness(
+        readyPayload({
+          enforcement: {
+            ...enforcementPayload('expand'),
+            one_phase_commit_exact: false,
+          },
+        })
+      )
+    ).toThrow('expand execution enforcement state is not exact')
+    expect(() =>
+      validatePartitionedV4WorkerReadiness(
+        readyPayload(
+          {
+            enforcement: {
+              ...enforcementPayload('enforced'),
+              one_phase_commit_exact: false,
+            },
+          },
+          'enforced'
+        )
+      )
+    ).toThrow('enforced execution enforcement state is not exact')
   })
 
   it('rejects missing or drifted claimed/execution RPCs and every non-exact ACL', () => {
@@ -273,13 +300,17 @@ describe('partitioned V4 worker startup readiness', () => {
 
   it('rejects a forged, malformed, or wrongly granted enforcement marker', () => {
     const enforced = enforcementPayload('enforced')
+    const missingOnePhaseProof = { ...enforced }
+    delete missingOnePhaseProof.one_phase_commit_exact
     for (const enforcement of [
       { ...enforced, marker_present: false },
       { ...enforced, marker_rpc_sha256: '0'.repeat(64) },
       { ...enforced, marker_contract_exact: false },
       { ...enforced, marker_acl_exact: false },
+      { ...enforced, one_phase_commit_exact: false },
       { ...enforced, substrate_contract_exact: false },
       { ...enforced, marker_payload: null },
+      missingOnePhaseProof,
       {
         ...enforced,
         marker_payload: { contract: TIER_A_EXECUTION_CLAIM_ENFORCEMENT_CONTRACT },
@@ -334,12 +365,39 @@ describe('partitioned V4 worker startup readiness', () => {
     expect(queries[3]).toContain("source_row.adapter_slug = 'bitget_bots'")
     expect(queries[3]).toContain(PARTITIONED_V4_CAPTURE_CONTRACT)
     expect(queries[4]).toContain('tier_a_execution_claim_enforcement_state()')
+    expect(queries[4]).toContain('one_phase_commit_contract AS')
+    expect(queries[4]).toContain(
+      'COALESCE(one_phase_commit_contract.exact, false) AS one_phase_commit_exact'
+    )
     expect(queries[4]).toContain('substrate_contract_exact')
     expect(queries[4]).toContain(TIER_A_EXECUTION_CONSTRAINT_CATALOG_SHA256)
     expect(queries[4]).toContain(TIER_A_EXECUTION_TRIGGER_CATALOG_SHA256)
     expect(queries[4]).toContain('pg_catalog.count(*) = 65')
     expect(queries[4]).toContain('pg_catalog.count(*) = 21')
+    expect(queries[4]).toContain('pg_catalog.count(attribute.attrelid) = 33')
+    expect(queries[4]).toContain('pg_catalog.count(function_row.oid) = 17')
     expect(queries[4]).toContain("'verification_round'::name")
+    expect(queries[4]).toContain("'one_phase_commit_required'::name")
+    expect(queries[4]).toContain("'arena.require_tier_a_one_phase_commit()'")
+    expect(queries[4]).toContain(TIER_A_ONE_PHASE_COMMIT_HELPER_SHA256)
+    expect(queries[4]).toContain("'statement_timeout=5s'")
+    expect(queries[4]).toContain("function_row.proowner = pg_catalog.to_regrole('postgres')")
+    expect(queries[4]).toContain('function_row.prosecdef = expected.security_definer')
+    expect(queries[4]).toContain('function_row.provolatile::text = expected.volatility')
+    expect(queries[4]).toContain('function_row.proconfig IS NOT DISTINCT FROM expected.config')
+    expect(queries[4]).toContain('acl_row.grantee <> function_row.proowner')
+    expect(queries[4]).toContain("helper.proowner = pg_catalog.to_regrole('postgres')")
+    expect(queries[4]).toContain('helper.proconfig IS NOT DISTINCT FROM ARRAY[')
+    expect(queries[4]).toContain("guard_column.atttypid = 'boolean'::pg_catalog.regtype")
+    expect(queries[4]).toContain(") = 'arena.require_tier_a_one_phase_commit()'")
+    expect(queries[4]).toContain("guard_table.relkind = 'r'")
+    expect(queries[4]).toContain('guard_table.relrowsecurity')
+    expect(queries[4]).toContain('NOT guard_table.relforcerowsecurity')
+    expect(queries[4]).toContain('acl_row.grantee <> guard_table.relowner')
+    expect(queries[4]).toContain('guarded_attribute.attacl')
+    expect(queries[4]).toContain(
+      "pg_catalog.current_setting('max_prepared_transactions')::integer = 0"
+    )
     expect(queries[4]).toContain("'MAINTAIN'")
     expect(queries[5]).toContain('pg_catalog.encode(')
     expect(queries[5]).toContain('pg_catalog.convert_to(')
@@ -353,6 +411,93 @@ describe('partitioned V4 worker startup readiness', () => {
       'SELECT arena.tier_a_execution_claim_enforcement_state() AS enforcement_state'
     )
     expect(queries[6]).toBe('COMMIT')
+    expect(releases).toBe(1)
+  })
+
+  it('rejects expand startup when the one-phase migration proof is absent', async () => {
+    const queries: string[] = []
+    let releases = 0
+    const client: AttemptBoundCaptureReadinessClient = {
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql)
+        if (sql.includes('WITH candidate_sources AS')) {
+          return {
+            rowCount: 2,
+            rows: [registryRow('futures'), registryRow('spot')],
+          }
+        }
+        if (sql.includes('WITH marker_identity AS')) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                ...enforcementCatalog('expand'),
+                one_phase_commit_exact: false,
+              },
+            ],
+          }
+        }
+        if (sql.includes('WITH expected(')) {
+          return { rowCount: 1, rows: [rpcRow('expand')] }
+        }
+        return { rowCount: null, rows: [] }
+      }),
+      release: () => {
+        releases += 1
+      },
+    }
+
+    await expect(
+      assertPartitionedV4WorkerReadiness({
+        load: () => loadPartitionedV4WorkerReadiness({ connect: async () => client }),
+      })
+    ).rejects.toThrow('expand execution enforcement state is not exact')
+    expect(queries.at(-1)).toBe('COMMIT')
+    expect(releases).toBe(1)
+  })
+
+  it('fails closed before invoking the marker when the independent one-phase proof is false', async () => {
+    const queries: string[] = []
+    let releases = 0
+    const client: AttemptBoundCaptureReadinessClient = {
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql)
+        if (sql.includes('WITH candidate_sources AS')) {
+          return {
+            rowCount: 2,
+            rows: [registryRow('futures'), registryRow('spot')],
+          }
+        }
+        if (sql.includes('WITH marker_identity AS')) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                ...enforcementCatalog('enforced'),
+                one_phase_commit_exact: false,
+              },
+            ],
+          }
+        }
+        if (sql.includes('WITH expected(')) {
+          return { rowCount: 1, rows: [rpcRow('enforced')] }
+        }
+        return { rowCount: null, rows: [] }
+      }),
+      release: () => {
+        releases += 1
+      },
+    }
+
+    await expect(
+      assertPartitionedV4WorkerReadiness({
+        load: () => loadPartitionedV4WorkerReadiness({ connect: async () => client }),
+      })
+    ).rejects.toThrow('enforced execution enforcement state is not exact')
+    expect(queries).not.toContain(
+      'SELECT arena.tier_a_execution_claim_enforcement_state() AS enforcement_state'
+    )
+    expect(queries.at(-1)).toBe('COMMIT')
     expect(releases).toBe(1)
   })
 
@@ -426,6 +571,10 @@ describe('partitioned V4 worker startup readiness', () => {
       ),
       'utf8'
     )
+    const onePhaseMigration = readFileSync(
+      join(process.cwd(), 'supabase/migrations/20260729071500_tier_a_one_phase_commit_guard.sql'),
+      'utf8'
+    )
     const directBody = (migration: string, functionName: string): string => {
       const declaration = `CREATE OR REPLACE FUNCTION arena.${functionName}(`
       const declarationIndex = migration.indexOf(declaration)
@@ -453,9 +602,26 @@ describe('partitioned V4 worker startup readiness', () => {
     expect(sha256(directBody(executionClaimMigration, 'heartbeat_tier_a_execution'))).toBe(
       TIER_A_EXECUTION_HEARTBEAT_RPC_SHA256
     )
-    expect(sha256(directBody(executionClaimMigration, 'assert_tier_a_execution_write'))).toBe(
-      TIER_A_EXECUTION_ASSERT_RPC_SHA256
-    )
+    const executionAssertBody = directBody(executionClaimMigration, 'assert_tier_a_execution_write')
+    expect(sha256(executionAssertBody)).toBe(TIER_A_EXECUTION_ASSERT_RPC_SHA256)
+    expect(executionAssertBody).toContain(`INSERT INTO arena.tier_a_execution_write_guards (
+      contract,
+      top_xid8_text,
+      source_id,
+      generation_seq,
+      claim_id,
+      authority_scope,
+      authority_epoch,
+      worker_instance_id,
+      worker_node_id,
+      worker_region,
+      control_epoch,
+      release_id,
+      git_sha,
+      asserted_at,
+      lease_expires_at_at_assertion
+    ) VALUES (`)
+    expect(executionAssertBody).not.toContain('one_phase_commit_required')
     expect(sha256(directBody(executionClaimMigration, 'close_tier_a_execution'))).toBe(
       TIER_A_EXECUTION_CLOSE_RPC_SHA256
     )
@@ -468,6 +634,22 @@ describe('partitioned V4 worker startup readiness', () => {
     expect(
       sha256(directBody(enforcementMigration, 'tier_a_execution_claim_enforcement_state'))
     ).toBe(TIER_A_EXECUTION_ENFORCEMENT_MARKER_RPC_SHA256)
+    expect(sha256(directBody(onePhaseMigration, 'require_tier_a_one_phase_commit'))).toBe(
+      TIER_A_ONE_PHASE_COMMIT_HELPER_SHA256
+    )
+    expect(onePhaseMigration)
+      .toContain(`CREATE OR REPLACE FUNCTION arena.require_tier_a_one_phase_commit()
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+SET statement_timeout = '5s'`)
+    expect(onePhaseMigration).toContain(`ALTER FUNCTION arena.require_tier_a_one_phase_commit()
+  OWNER TO postgres;`)
+    expect(onePhaseMigration).toContain('NOT NULL DEFAULT arena.require_tier_a_one_phase_commit();')
+    expect(onePhaseMigration).toContain('expanded.grantee <> function_row.proowner')
+    expect(onePhaseMigration).toContain(TIER_A_EXECUTION_ASSERT_RPC_SHA256)
 
     const postflightStart = enforcementMigration.indexOf('DO $postflight$')
     const constraintManifestStart = enforcementMigration.indexOf(

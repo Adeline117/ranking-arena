@@ -30,6 +30,8 @@ export const TIER_A_EXECUTION_GET_RECEIPT_RPC_SHA256 =
   '079f55e3f71298e1509659fda8529c6d1f61f05e3aeaaf39c10418a9e082a4c8' as const
 export const TIER_A_EXECUTION_ENFORCEMENT_MARKER_RPC_SHA256 =
   '2fdc85842b2bc68331217a820de324ae274395778ab87fb072c787df251db8a4' as const
+export const TIER_A_ONE_PHASE_COMMIT_HELPER_SHA256 =
+  'd06a19a74542804b5a56ba6ecbece173e2b3c651aaca480a38abbada7945a431' as const
 export const TIER_A_EXECUTION_CONSTRAINT_CATALOG_SHA256 =
   '6e9627e5c475035c5e4f17c39754b25f81b16360ab84244b66bb50239d8dc0a9' as const
 export const TIER_A_EXECUTION_TRIGGER_CATALOG_SHA256 =
@@ -98,6 +100,7 @@ const ENFORCEMENT_ROW_KEYS = [
   'marker_payload',
   'marker_present',
   'marker_rpc_sha256',
+  'one_phase_commit_exact',
   'state',
   'substrate_contract_exact',
 ] as const
@@ -435,6 +438,118 @@ export const TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL = `WITH marker_identity AS
       '${EXECUTION_ENFORCEMENT_MARKER_RPC_SIGNATURE}'
     ) AS marker_oid
   ),
+  one_phase_identity AS (
+    SELECT
+      pg_catalog.to_regprocedure(
+        'arena.require_tier_a_one_phase_commit()'
+      ) AS helper_oid,
+      pg_catalog.to_regclass(
+        'arena.tier_a_execution_write_guards'
+      ) AS guard_table_oid
+  ),
+  one_phase_commit_contract AS (
+    SELECT COALESCE(
+      pg_catalog.current_setting('server_version_num')::integer
+        BETWEEN 170000 AND 179999
+      AND pg_catalog.current_setting('max_prepared_transactions')::integer = 0
+      AND helper.oid IS NOT NULL
+      AND helper.prokind = 'f'
+      AND helper.proowner = pg_catalog.to_regrole('postgres')
+      AND helper.prosecdef
+      AND helper.provolatile = 's'
+      AND NOT helper.proretset
+      AND NOT helper.proisstrict
+      AND NOT helper.proleakproof
+      AND helper.proparallel = 'u'
+      AND helper.pronargs = 0
+      AND helper.proargmodes IS NULL
+      AND helper.prorettype = 'boolean'::pg_catalog.regtype
+      AND helper_language.lanname = 'plpgsql'
+      AND helper.proconfig IS NOT DISTINCT FROM ARRAY[
+        'search_path=pg_catalog, pg_temp',
+        'statement_timeout=5s'
+      ]::pg_catalog.text[]
+      AND pg_catalog.encode(
+            pg_catalog.sha256(
+              pg_catalog.convert_to(helper.prosrc, 'UTF8')
+            ),
+            'hex'
+          ) = '${TIER_A_ONE_PHASE_COMMIT_HELPER_SHA256}'
+      AND pg_catalog.has_function_privilege(
+            'service_role', helper.oid, 'EXECUTE'
+          ) IS FALSE
+      AND pg_catalog.has_function_privilege(
+            'anon', helper.oid, 'EXECUTE'
+          ) IS FALSE
+      AND pg_catalog.has_function_privilege(
+            'authenticated', helper.oid, 'EXECUTE'
+          ) IS FALSE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.aclexplode(
+          COALESCE(
+            helper.proacl,
+            pg_catalog.acldefault('f', helper.proowner)
+          )
+        ) AS acl_row
+        WHERE acl_row.grantee <> helper.proowner
+      )
+      AND guard_table.oid IS NOT NULL
+      AND guard_table.relowner = pg_catalog.to_regrole('postgres')
+      AND guard_table.relkind = 'r'
+      AND guard_table.relrowsecurity
+      AND NOT guard_table.relforcerowsecurity
+      AND guard_column.attrelid IS NOT NULL
+      AND guard_column.atttypid = 'boolean'::pg_catalog.regtype
+      AND guard_column.attnotnull
+      AND guard_column.attidentity = ''
+      AND guard_column.attgenerated = ''
+      AND guard_default.oid IS NOT NULL
+      AND pg_catalog.pg_get_expr(
+            guard_default.adbin,
+            guard_default.adrelid,
+            true
+          ) = 'arena.require_tier_a_one_phase_commit()'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.aclexplode(
+          COALESCE(
+            guard_table.relacl,
+            pg_catalog.acldefault('r', guard_table.relowner)
+          )
+        ) AS acl_row
+        WHERE acl_row.grantee <> guard_table.relowner
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_attribute AS guarded_attribute
+        CROSS JOIN LATERAL pg_catalog.aclexplode(
+          guarded_attribute.attacl
+        ) AS acl_row
+        WHERE guarded_attribute.attrelid = guard_table.oid
+          AND guarded_attribute.attnum > 0
+          AND NOT guarded_attribute.attisdropped
+          AND guarded_attribute.attacl IS NOT NULL
+          AND acl_row.grantee <> guard_table.relowner
+      ),
+      false
+    ) AS exact
+    FROM one_phase_identity AS identity
+    LEFT JOIN pg_catalog.pg_proc AS helper
+      ON helper.oid = identity.helper_oid
+    LEFT JOIN pg_catalog.pg_language AS helper_language
+      ON helper_language.oid = helper.prolang
+    LEFT JOIN pg_catalog.pg_class AS guard_table
+      ON guard_table.oid = identity.guard_table_oid
+    LEFT JOIN pg_catalog.pg_attribute AS guard_column
+      ON guard_column.attrelid = guard_table.oid
+     AND guard_column.attname = 'one_phase_commit_required'
+     AND guard_column.attnum > 0
+     AND NOT guard_column.attisdropped
+    LEFT JOIN pg_catalog.pg_attrdef AS guard_default
+      ON guard_default.adrelid = guard_column.attrelid
+     AND guard_default.adnum = guard_column.attnum
+  ),
   expected_columns(
     table_oid,
     column_name,
@@ -474,11 +589,12 @@ export const TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL = `WITH marker_identity AS
       ('arena.tier_a_execution_write_guards'::pg_catalog.regclass, 'generation_seq'::name, 'bigint'::pg_catalog.regtype, true, NULL::text),
       ('arena.tier_a_execution_write_guards'::pg_catalog.regclass, 'claim_id'::name, 'uuid'::pg_catalog.regtype, true, NULL::text),
       ('arena.tier_a_execution_write_guards'::pg_catalog.regclass, 'verification_round'::name, 'smallint'::pg_catalog.regtype, true, '0'),
+      ('arena.tier_a_execution_write_guards'::pg_catalog.regclass, 'one_phase_commit_required'::name, 'boolean'::pg_catalog.regtype, true, 'arena.require_tier_a_one_phase_commit()'),
       ('arena.tier_a_execution_write_guards'::pg_catalog.regclass, 'worker_region'::name, 'text'::pg_catalog.regtype, true, NULL::text)
   ),
   column_contract AS (
     SELECT
-      pg_catalog.count(attribute.attrelid) = 32
+      pg_catalog.count(attribute.attrelid) = 33
       AND pg_catalog.bool_and(
         attribute.attrelid IS NOT NULL
         AND attribute.atttypid = expected.type_oid
@@ -589,6 +705,18 @@ export const TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL = `WITH marker_identity AS
         ]::pg_catalog.text[]
       ),
       (
+        'arena.require_tier_a_one_phase_commit()',
+        '${TIER_A_ONE_PHASE_COMMIT_HELPER_SHA256}',
+        true,
+        's',
+        'plpgsql',
+        'boolean',
+        ARRAY[
+          'search_path=pg_catalog, pg_temp',
+          'statement_timeout=5s'
+        ]::pg_catalog.text[]
+      ),
+      (
         'arena.require_tier_a_snapshot_execution_guard()',
         'e12f729b62503b1dd236e580d50069e9224575229fbfe6adb5040715689fecc9',
         true,
@@ -683,7 +811,7 @@ export const TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL = `WITH marker_identity AS
   ),
   function_contract AS (
     SELECT
-      pg_catalog.count(function_row.oid) = 16
+      pg_catalog.count(function_row.oid) = 17
       AND pg_catalog.bool_and(
         COALESCE(
           function_row.oid IS NOT NULL
@@ -1020,6 +1148,7 @@ export const TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL = `WITH marker_identity AS
     SELECT
       pg_catalog.current_setting('server_version_num')::integer
         BETWEEN 170000 AND 179999
+      AND pg_catalog.current_setting('max_prepared_transactions')::integer = 0
       AND COALESCE(column_contract.exact, false)
       AND COALESCE(function_contract.exact, false)
       AND COALESCE(trigger_contract.exact, false)
@@ -1107,13 +1236,15 @@ export const TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL = `WITH marker_identity AS
       marker.oid IS NOT NULL
       AND substrate_contract.exact,
       false
-    ) AS substrate_contract_exact
+    ) AS substrate_contract_exact,
+    COALESCE(one_phase_commit_contract.exact, false) AS one_phase_commit_exact
   FROM marker_identity
   LEFT JOIN pg_catalog.pg_proc AS marker
     ON marker.oid = marker_identity.marker_oid
   LEFT JOIN pg_catalog.pg_language AS language_row
     ON language_row.oid = marker.prolang
-  CROSS JOIN substrate_contract`
+  CROSS JOIN substrate_contract
+  CROSS JOIN one_phase_commit_contract`
 
 const ENFORCEMENT_MARKER_SQL = `SELECT arena.tier_a_execution_claim_enforcement_state() AS enforcement_state`
 
@@ -1224,6 +1355,7 @@ export function validatePartitionedV4WorkerReadiness(payload: unknown): void {
       payload.enforcement.marker_rpc_sha256 !== null ||
       payload.enforcement.marker_contract_exact !== false ||
       payload.enforcement.marker_acl_exact !== false ||
+      payload.enforcement.one_phase_commit_exact !== true ||
       payload.enforcement.substrate_contract_exact !== false ||
       payload.enforcement.marker_payload !== null ||
       payload.rpc.legacy_expand_acl_exact !== true ||
@@ -1241,6 +1373,7 @@ export function validatePartitionedV4WorkerReadiness(payload: unknown): void {
       payload.enforcement.marker_rpc_sha256 !== TIER_A_EXECUTION_ENFORCEMENT_MARKER_RPC_SHA256 ||
       payload.enforcement.marker_contract_exact !== true ||
       payload.enforcement.marker_acl_exact !== true ||
+      payload.enforcement.one_phase_commit_exact !== true ||
       payload.enforcement.substrate_contract_exact !== true ||
       !isRecord(markerPayload) ||
       !hasExactKeys(markerPayload, ENFORCEMENT_MARKER_PAYLOAD_KEYS) ||
@@ -1301,6 +1434,7 @@ export async function loadPartitionedV4WorkerReadiness({
       enforcementCatalog.marker_present === true &&
       enforcementCatalog.marker_contract_exact === true &&
       enforcementCatalog.marker_acl_exact === true &&
+      enforcementCatalog.one_phase_commit_exact === true &&
       enforcementCatalog.substrate_contract_exact === true &&
       enforcementCatalog.marker_rpc_sha256 === TIER_A_EXECUTION_ENFORCEMENT_MARKER_RPC_SHA256
     ) {
