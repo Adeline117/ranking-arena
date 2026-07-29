@@ -1,35 +1,144 @@
 'use client'
 import PasswordInput from '@/app/components/ui/PasswordInput'
 
-import { useCallback, useEffect, useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
-import { bootstrapClientAuth } from '@/lib/auth/client-auth-bootstrap'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import ErrorState from '@/app/components/ui/ErrorState'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
+import { useAuthSession, type AuthSessionReturn } from '@/lib/hooks/useAuthSession'
+import {
+  captureExchangeViewer,
+  isExchangeViewerCurrent,
+  type ExchangeViewerSnapshot,
+} from '@/lib/exchange/viewer-scope'
 import { EXCHANGE_CONFIGS, type ExchangeId } from './exchange-configs'
 
-function ApiKeyAuthContent() {
+type SecretField = 'apiKey' | 'apiSecret' | 'passphrase'
+
+type FormOwner = Pick<ExchangeViewerSnapshot, 'viewerKey' | 'sessionGeneration' | 'userId'>
+
+type SubmitOperation = {
+  id: number
+  viewer: ExchangeViewerSnapshot
+  exchange: ExchangeId
+  controller: AbortController
+}
+
+type ConnectExchangeResponse = {
+  success?: unknown
+  error?: unknown
+  data?: {
+    viewerId?: unknown
+    exchange?: unknown
+  }
+}
+
+function capturePageViewer(auth: AuthSessionReturn): ExchangeViewerSnapshot | null {
+  return auth.userId ? captureExchangeViewer(auth, auth.userId) : null
+}
+
+function sameFormViewer(owner: FormOwner | null, viewer: ExchangeViewerSnapshot | null): boolean {
+  return (
+    owner !== null &&
+    viewer !== null &&
+    owner.viewerKey === viewer.viewerKey &&
+    owner.sessionGeneration === viewer.sessionGeneration &&
+    owner.userId === viewer.userId
+  )
+}
+
+export function ApiKeyAuthContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const push = router.push
   const { t, language } = useLanguage()
   const { showToast } = useToast()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
   const exchangeParam = searchParams.get('exchange') as ExchangeId | null
 
-  const [userId, setUserId] = useState<string | null>(null)
-  const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [selectedExchange, setSelectedExchange] = useState<ExchangeId | null>(exchangeParam)
-  const [apiKey, setApiKey] = useState('')
-  const [apiSecret, setApiSecret] = useState('')
-  const [passphrase, setPassphrase] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [rawApiKey, setApiKey] = useState('')
+  const [rawApiSecret, setApiSecret] = useState('')
+  const [rawPassphrase, setPassphrase] = useState('')
+  const [rawLoading, setLoading] = useState(false)
+  const [rawError, setError] = useState<string | null>(null)
+  const [formOwner, setFormOwner] = useState<FormOwner | null>(null)
+  const formOwnerRef = useRef<FormOwner | null>(null)
+  const mountedRef = useRef(false)
+  const submitOperationRef = useRef<SubmitOperation | null>(null)
+  const nextSubmitOperationIdRef = useRef(0)
+  const pasteOperationIdsRef = useRef<Record<SecretField, number>>({
+    apiKey: 0,
+    apiSecret: 0,
+    passphrase: 0,
+  })
+
+  const renderViewer = capturePageViewer(auth)
+  const formBelongsToViewer = sameFormViewer(formOwner, renderViewer)
+  const apiKey = formBelongsToViewer ? rawApiKey : ''
+  const apiSecret = formBelongsToViewer ? rawApiSecret : ''
+  const passphrase = formBelongsToViewer ? rawPassphrase : ''
+  const loading = formBelongsToViewer ? rawLoading : false
+  const error = formBelongsToViewer ? rawError : null
+
+  const ownForm = (viewer: ExchangeViewerSnapshot) => {
+    const owner: FormOwner = {
+      viewerKey: viewer.viewerKey,
+      sessionGeneration: viewer.sessionGeneration,
+      userId: viewer.userId,
+    }
+    formOwnerRef.current = owner
+    setFormOwner(owner)
+  }
+
+  const viewerIsCurrent = (viewer: ExchangeViewerSnapshot): boolean =>
+    mountedRef.current && isExchangeViewerCurrent(viewer, authRef.current, viewer.userId)
+
+  const formIsCurrent = (viewer: ExchangeViewerSnapshot): boolean =>
+    sameFormViewer(formOwnerRef.current, viewer) && viewerIsCurrent(viewer)
+
+  const clearSecrets = () => {
+    setApiKey('')
+    setApiSecret('')
+    setPassphrase('')
+  }
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      submitOperationRef.current?.controller.abort()
+      submitOperationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const operation = submitOperationRef.current
+    if (operation && !viewerIsCurrent(operation.viewer)) {
+      operation.controller.abort()
+      submitOperationRef.current = null
+    }
+    pasteOperationIdsRef.current.apiKey += 1
+    pasteOperationIdsRef.current.apiSecret += 1
+    pasteOperationIdsRef.current.passphrase += 1
+    formOwnerRef.current = null
+    setFormOwner(null)
+    clearSecrets()
+    setLoading(false)
+    setError(null)
+  }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId, auth.viewerKey])
+
+  useEffect(() => {
+    if (auth.authChecked && !auth.loading && !auth.userId) {
+      router.push('/login?redirect=/exchange/auth/api-key')
+    }
+  }, [auth.authChecked, auth.loading, auth.userId, router])
 
   // 注入响应式网格样式
   useEffect(() => {
@@ -43,27 +152,6 @@ function ApiKeyAuthContent() {
     document.head.appendChild(style)
   }, [])
 
-  const loadAuth = useCallback(async () => {
-    setAuthStatus('loading')
-    const result = await bootstrapClientAuth(supabase.auth)
-
-    if (result.status === 'signed-out') {
-      push('/login?redirect=/exchange/auth/api-key')
-      return
-    }
-    if (result.status === 'error') {
-      setAuthStatus('error')
-      return
-    }
-
-    setUserId(result.user.id)
-    setAuthStatus('ready')
-  }, [push])
-
-  useEffect(() => {
-    void loadAuth()
-  }, [loadAuth])
-
   // This page is an INTERNAL step of the /exchange/auth flow — always reached
   // with a chosen ?exchange=. If someone lands here bare (or with an unknown
   // exchange), funnel them back to the single entry point (the method chooser)
@@ -76,70 +164,108 @@ function ApiKeyAuthContent() {
     }
   }, [exchangeParam, router])
 
-  const handlePaste = async (field: 'apiKey' | 'apiSecret' | 'passphrase') => {
+  const updateSecret = (
+    field: SecretField,
+    value: string,
+    viewer: ExchangeViewerSnapshot
+  ): void => {
+    if (!viewerIsCurrent(viewer)) return
+    ownForm(viewer)
+    if (field === 'apiKey') setApiKey(value)
+    else if (field === 'apiSecret') setApiSecret(value)
+    else setPassphrase(value)
+  }
+
+  const handlePaste = async (field: SecretField, viewer: ExchangeViewerSnapshot) => {
+    if (!viewerIsCurrent(viewer)) return
+    const operationId = ++pasteOperationIdsRef.current[field]
+    const operationIsCurrent = () =>
+      pasteOperationIdsRef.current[field] === operationId && viewerIsCurrent(viewer)
+
     try {
       const text = await navigator.clipboard.readText()
-      if (field === 'apiKey') setApiKey(text.trim())
-      else if (field === 'apiSecret') setApiSecret(text.trim())
-      else setPassphrase(text.trim())
+      if (!operationIsCurrent()) return
+      updateSecret(field, text.trim(), viewer)
+      if (!operationIsCurrent()) return
       showToast(t('pasted'), 'success')
     } catch {
-      showToast(t('cannotAccessClipboard'), 'error')
+      if (operationIsCurrent()) showToast(t('cannotAccessClipboard'), 'error')
     }
   }
 
-  const handleSubmit = async () => {
-    if (!selectedExchange || !apiKey || !apiSecret) {
+  const handleSubmit = async (
+    viewer: ExchangeViewerSnapshot,
+    credentials: {
+      exchange: ExchangeId | null
+      apiKey: string
+      apiSecret: string
+      passphrase: string
+    }
+  ) => {
+    if (!formIsCurrent(viewer)) return
+    const { exchange, apiKey: submittedApiKey, apiSecret: submittedSecret } = credentials
+
+    if (!exchange || !submittedApiKey || !submittedSecret) {
       setError(t('fillAllRequired'))
       return
     }
 
-    const config = EXCHANGE_CONFIGS[selectedExchange]
-    if (config.needsPassphrase && !passphrase) {
+    const config = EXCHANGE_CONFIGS[exchange]
+    if (config.needsPassphrase && !credentials.passphrase) {
       setError(t('fillPassphrase'))
       return
     }
 
+    const activeOperation = submitOperationRef.current
+    if (activeOperation && viewerIsCurrent(activeOperation.viewer)) return
+    activeOperation?.controller.abort()
+
+    const operation: SubmitOperation = {
+      id: ++nextSubmitOperationIdRef.current,
+      viewer,
+      exchange,
+      controller: new AbortController(),
+    }
+    submitOperationRef.current = operation
+    ownForm(viewer)
     setLoading(true)
     setError(null)
+    const operationIsCurrent = () =>
+      submitOperationRef.current?.id === operation.id && viewerIsCurrent(viewer)
 
+    let navigating = false
     try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession()
-      if (sessionError) {
-        setError(t('loadFailedRetryShort'))
-        return
-      }
-      if (!session) {
-        showToast(t('pleaseLogin'), 'warning')
-        router.push('/login?redirect=/exchange')
-        return
-      }
-
-      const response = await fetch('/api/exchange/connect', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
+      const response = await authedFetch<ConnectExchangeResponse>(
+        '/api/exchange/connect',
+        'POST',
+        viewer.accessToken,
+        {
+          exchange,
+          apiKey: submittedApiKey,
+          apiSecret: submittedSecret,
+          passphrase: config.needsPassphrase ? credentials.passphrase : undefined,
         },
-        body: JSON.stringify({
-          exchange: selectedExchange,
-          apiKey,
-          apiSecret,
-          passphrase: config.needsPassphrase ? passphrase : undefined,
-        }),
-      })
-
-      const result = await response.json().catch(() => null)
+        30_000,
+        {
+          expectedUserId: viewer.userId,
+          expectedSessionGeneration: viewer.sessionGeneration,
+          signal: operation.controller.signal,
+        }
+      )
+      if (!operationIsCurrent() || response.stale) return
 
       if (!response.ok) {
+        if (response.status === 401) {
+          showToast(t('pleaseLogin'), 'warning')
+          if (!operationIsCurrent()) return
+          navigating = true
+          router.push('/login?redirect=/exchange')
+          return
+        }
         // 就地渲染字段级错误 + 保留用户输入,绝不 throw 到 error boundary。
         // 区分「你的 key 有问题(改 key)」vs「服务端临时错误(可重试)」两类文案。
         // result.error 强制转字符串,防后端返回对象时 <Text>{error}</Text> 渲染崩溃触发整页错误边界。
-        const rawMsg = typeof result?.error === 'string' ? result.error.trim() : ''
+        const rawMsg = typeof response.data?.error === 'string' ? response.data.error.trim() : ''
         if (response.status >= 500) {
           setError(t('bindServerErrorRetry'))
         } else if (rawMsg && rawMsg !== 'Invalid input') {
@@ -151,17 +277,35 @@ function ApiKeyAuthContent() {
         return
       }
 
+      if (
+        response.data?.success !== true ||
+        response.data.data?.viewerId !== viewer.userId ||
+        response.data.data.exchange !== exchange
+      ) {
+        setError(t('bindServerErrorRetry'))
+        return
+      }
+
+      // Both the success UI and navigation are viewer-owned irreversible effects.
+      if (!operationIsCurrent()) return
       showToast(t('bindSuccess'), 'success')
+      if (!operationIsCurrent()) return
+      navigating = true
+      clearSecrets()
       router.push('/settings')
     } catch {
       // 网络/解析异常 = 服务端临时问题,可重试(输入保留)
-      setError(t('bindServerErrorRetry'))
+      if (operationIsCurrent()) setError(t('bindServerErrorRetry'))
     } finally {
-      setLoading(false)
+      if (!navigating && operationIsCurrent()) {
+        setLoading(false)
+        submitOperationRef.current = null
+      }
     }
   }
 
-  if (authStatus === 'error') {
+  const authResolved = auth.authChecked && !auth.loading
+  if (authResolved && auth.userId && !renderViewer) {
     return (
       <Box
         style={{
@@ -174,7 +318,7 @@ function ApiKeyAuthContent() {
           <ErrorState
             title={t('somethingWentWrong')}
             description={t('loadFailedRetryShort')}
-            retry={() => void loadAuth()}
+            retry={() => void auth.refreshSession()}
             variant="compact"
           />
         </Box>
@@ -182,7 +326,7 @@ function ApiKeyAuthContent() {
     )
   }
 
-  if (authStatus === 'loading' || !userId) {
+  if (!authResolved || !renderViewer) {
     return (
       <Box
         style={{
@@ -303,7 +447,7 @@ function ApiKeyAuthContent() {
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontSize: tokens.typography.fontSize.sm,
-                            fontWeight: 700,
+                            fontWeight: tokens.typography.fontWeight.bold,
                             flexShrink: 0,
                           }}
                         >
@@ -441,7 +585,8 @@ function ApiKeyAuthContent() {
                       <input
                         type="text"
                         value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
+                        onChange={(e) => updateSecret('apiKey', e.target.value, renderViewer)}
+                        disabled={loading}
                         placeholder={t('pasteYourApiKey')}
                         style={{
                           flex: 1,
@@ -457,7 +602,8 @@ function ApiKeyAuthContent() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => handlePaste('apiKey')}
+                        onClick={() => void handlePaste('apiKey', renderViewer)}
+                        disabled={loading}
                         style={{ whiteSpace: 'nowrap' }}
                       >
                         {t('paste')}
@@ -473,7 +619,8 @@ function ApiKeyAuthContent() {
                     <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
                       <PasswordInput
                         value={apiSecret}
-                        onChange={(e) => setApiSecret(e.target.value)}
+                        onChange={(e) => updateSecret('apiSecret', e.target.value, renderViewer)}
+                        disabled={loading}
                         placeholder={t('pasteYourApiSecret')}
                         style={{
                           flex: 1,
@@ -489,7 +636,8 @@ function ApiKeyAuthContent() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => handlePaste('apiSecret')}
+                        onClick={() => void handlePaste('apiSecret', renderViewer)}
+                        disabled={loading}
                         style={{ whiteSpace: 'nowrap' }}
                       >
                         {t('paste')}
@@ -506,7 +654,8 @@ function ApiKeyAuthContent() {
                       <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
                         <PasswordInput
                           value={passphrase}
-                          onChange={(e) => setPassphrase(e.target.value)}
+                          onChange={(e) => updateSecret('passphrase', e.target.value, renderViewer)}
+                          disabled={loading}
                           placeholder={t('pasteYourPassphrase')}
                           style={{
                             flex: 1,
@@ -522,7 +671,8 @@ function ApiKeyAuthContent() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => handlePaste('passphrase')}
+                          onClick={() => void handlePaste('passphrase', renderViewer)}
+                          disabled={loading}
                           style={{ whiteSpace: 'nowrap' }}
                         >
                           {t('paste')}
@@ -538,7 +688,14 @@ function ApiKeyAuthContent() {
                   <Button
                     variant="primary"
                     fullWidth
-                    onClick={handleSubmit}
+                    onClick={() =>
+                      void handleSubmit(renderViewer, {
+                        exchange: selectedExchange,
+                        apiKey,
+                        apiSecret,
+                        passphrase,
+                      })
+                    }
                     disabled={
                       loading || !apiKey || !apiSecret || (config.needsPassphrase && !passphrase)
                     }
