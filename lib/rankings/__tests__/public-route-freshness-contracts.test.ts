@@ -30,6 +30,7 @@ describe('public ranking freshness route contracts', () => {
   it.each([
     'app/api/rankings/route.ts',
     'app/api/rankings/live/route.ts',
+    'app/api/rankings/movers/route.ts',
     'app/api/rankings/platform-stats/route.ts',
     'app/api/sidebar/top-traders/route.ts',
     'app/api/traders/route.ts',

@@ -8,12 +8,12 @@
  * Compares leaderboard_ranks.roi (current 90D ROI) vs trader_daily_snapshots.roi (previous).
  *
  * Response: { risers: Mover[], fallers: Mover[], period: '90D' }
- * Cache: Redis 10min + HTTP 1 hour (s-maxage=3600)
+ * Cache: sealed Redis entry with live publication validation; HTTP no-store.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, checkRateLimit, RateLimitPresets } from '@/lib/api'
-import { getOrSetWithLock } from '@/lib/cache'
+import { del, getOrSetWithLock } from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'
 import {
   filterPublicRankingRows,
@@ -31,6 +31,14 @@ import {
 const log = createLogger('api:movers')
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+const RANKING_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 interface Mover {
   platform: string
@@ -100,47 +108,62 @@ export async function GET(request: NextRequest) {
   if (rateLimitResponse) return rateLimitResponse
 
   try {
-    const cached = await getOrSetWithLock<SealedRankingCacheEntry<MoversResponse>>(
-      publicRankingCacheKey('api:rankings:movers:sealed-v2'),
-      async () => computeMovers(),
-      // Short TTL keeps one sealed comparison generation visible briefly while
-      // avoiding a proof/database read on every request.
-      { ttl: 120, lockTtl: 15 }
-    )
-    const cachedEntry = parseSealedRankingCacheEntry<MoversResponse>(cached, '90D')
-    const proofSources = cachedEntry?.publication.proofs.map((proof) => proof.source) ?? []
-    if (!cachedEntry || !isMoversResponse(cachedEntry.value, proofSources)) {
-      throw new Error('movers cache did not contain a sealed scoped response')
+    const supabase = getSupabaseAdmin()
+    const cacheKey = publicRankingCacheKey('api:rankings:movers:sealed-v3')
+    const readAuthorizedCache = async () => {
+      const cached = await getOrSetWithLock<SealedRankingCacheEntry<MoversResponse>>(
+        cacheKey,
+        async () => computeMovers(supabase),
+        // Short TTL avoids rebuilding the historical comparison while the live
+        // proof check below prevents an older publication from remaining current.
+        { ttl: 120, lockTtl: 15 }
+      )
+      const entry = parseSealedRankingCacheEntry<MoversResponse>(cached, '90D')
+      const proofSources = entry?.publication.proofs.map((proof) => proof.source) ?? []
+      if (!entry || proofSources.length === 0 || !isMoversResponse(entry.value, proofSources)) {
+        return null
+      }
+
+      const currentGeneration = await readSealedRankingGeneration(
+        supabase,
+        { season: '90D', sources: proofSources },
+        async () => null,
+        { timeoutMs: 8_000 }
+      )
+      return currentGeneration.publicationIdentity === entry.publicationIdentity ? entry : null
     }
-    const result = cachedEntry.value
 
-    // Don't CDN-cache empty results for long — they recover within minutes
-    const hasData = result.risers?.length > 0 || result.fallers?.length > 0
-    const cacheHeader = hasData
-      ? 'public, s-maxage=3600, stale-while-revalidate=1800'
-      : 'public, s-maxage=60, stale-while-revalidate=30'
+    let cachedEntry = await readAuthorizedCache()
+    if (!cachedEntry) {
+      await del(cacheKey)
+      cachedEntry = await readAuthorizedCache()
+    }
+    if (!cachedEntry) {
+      throw new Error('movers cache did not contain a current sealed scoped response')
+    }
 
-    return NextResponse.json(result, {
-      headers: { 'Cache-Control': cacheHeader },
+    return NextResponse.json(cachedEntry.value, {
+      headers: RANKING_NO_STORE_HEADERS,
     })
   } catch (err) {
     log.error('Error computing movers', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json(
       { risers: [], fallers: [], period: '90D' },
-      { status: 200, headers: { 'Cache-Control': 'public, s-maxage=300' } }
+      { status: 200, headers: RANKING_NO_STORE_HEADERS }
     )
   }
 }
 
-async function computeMovers() {
+async function computeMovers(supabase: ReturnType<typeof getSupabaseAdmin>) {
   const signal = AbortSignal.timeout(10_000)
-  const sealedRead = await computeMoversInner(signal)
+  const sealedRead = await computeMoversInner(supabase, signal)
   return createSealedRankingCacheEntry(sealedRead)
 }
 
-async function computeMoversInner(signal: AbortSignal) {
-  const supabase = getSupabaseAdmin()
-
+async function computeMoversInner(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  signal: AbortSignal
+) {
   // Find the two most recent distinct snapshot dates.
   // trader_daily_snapshots has many rows per date (one per trader), so we fetch
   // a small batch and deduplicate in code to find 2 distinct dates.
