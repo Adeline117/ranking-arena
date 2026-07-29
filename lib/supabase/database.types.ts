@@ -11431,6 +11431,24 @@ export type Database = {
           total_count: number
         }[]
       }
+      get_public_token_trader_rankings: {
+        Args: {
+          allowed_sources: string[]
+          lookback_days: number
+          max_traders: number
+          row_offset: number
+          token_symbol: string
+        }
+        Returns: {
+          source: string
+          source_trader_id: string
+          token_avg_pnl_pct: number
+          token_pnl: number
+          token_trade_count: number
+          token_win_rate: number
+          total_count: number
+        }[]
+      }
       get_top_trust_ratio: {
         Args: { p_season_id?: string; p_top_n?: number }
         Returns: {

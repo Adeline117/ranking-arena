@@ -59,6 +59,20 @@ describe('getTokenTraderRankings', () => {
 
     const result = await getTokenTraderRankings(client as never, 'BTC', '90D', 25, 0)
 
+    expect(client.rpc).toHaveBeenCalledWith(
+      'get_public_token_trader_rankings',
+      expect.objectContaining({
+        token_symbol: 'BTC',
+        lookback_days: 90,
+        max_traders: 25,
+        row_offset: 0,
+        allowed_sources: expect.arrayContaining(['hyperliquid', 'bybit']),
+      })
+    )
+    const allowedSources = client.rpc.mock.calls[0][1].allowed_sources as string[]
+    expect(allowedSources).not.toContain('okx_web3_solana')
+    expect(allowedSources).not.toContain('bitget_bots_futures')
+    expect(allowedSources).not.toContain('bitget_bots_spot')
     expect(mockReadSealedRankIdentities).toHaveBeenCalledWith(client, '90D', [
       { source: 'hyperliquid', sourceTraderId: 'trader-1' },
     ])

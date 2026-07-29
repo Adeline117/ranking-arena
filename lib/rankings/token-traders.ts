@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
-import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
+import {
+  filterPublicRankingSources,
+  isPublicRankingSourceAllowed,
+} from '@/lib/rankings/publication-policy'
 import { readSealedRankIdentities } from '@/lib/rankings/read-sealed-rank-identities'
 import type { LeaderboardPublicationSeason } from '@/lib/rankings/read-publication-proofs'
 
@@ -9,6 +13,9 @@ const PERIOD_DAYS: Record<string, number> = {
   '30D': 30,
   '90D': 90,
 }
+const PUBLIC_TOKEN_RANKING_SOURCES = Object.freeze(
+  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+)
 
 // Cache namespace is versioned because the original endpoint cached empty
 // results produced by its retired raw-history query. Reusing that namespace
@@ -188,11 +195,12 @@ export async function getTokenTraderRankings(
   limit: number,
   offset: number
 ): Promise<TokenTraderRankingPage> {
-  const { data, error } = await supabase.rpc('get_token_trader_rankings', {
+  const { data, error } = await supabase.rpc('get_public_token_trader_rankings', {
     token_symbol: token,
     lookback_days: PERIOD_DAYS[period] || 90,
     max_traders: limit,
     row_offset: offset,
+    allowed_sources: [...PUBLIC_TOKEN_RANKING_SOURCES],
   })
 
   if (error) throw new Error(error.message)
