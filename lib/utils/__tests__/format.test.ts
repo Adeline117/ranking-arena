@@ -2,7 +2,15 @@
  * 格式化工具测试
  */
 
-import { formatNumber, formatPercent, formatCurrency, formatCompact, truncate, capitalize } from '../format'
+import {
+  formatNumber,
+  formatPercent,
+  formatCurrency,
+  formatCompact,
+  formatDrawdown,
+  truncate,
+  capitalize,
+} from '../format'
 
 describe('format utilities', () => {
   describe('formatNumber', () => {
@@ -114,6 +122,28 @@ describe('format utilities', () => {
 
     it('应该处理 NaN', () => {
       expect(formatCompact(NaN)).toBe('—')
+    })
+  })
+
+  describe('formatDrawdown', () => {
+    it('distinguishes measured zero, tiny non-zero risk, and unknown values', () => {
+      expect(formatDrawdown(0)).toBe('0.0%')
+      expect(formatDrawdown(-0)).toBe('0.0%')
+      expect(formatDrawdown(0.001)).toBe('< 0.1%')
+      expect(formatDrawdown(-0.099)).toBe('< 0.1%')
+      expect(formatDrawdown(null)).toBe('—')
+      expect(formatDrawdown(undefined)).toBe('—')
+      expect(formatDrawdown(Number.NaN)).toBe('—')
+      expect(formatDrawdown(Number.POSITIVE_INFINITY)).toBe('—')
+    })
+
+    it('normalizes signs, rounds once, and rejects impossible magnitudes', () => {
+      expect(formatDrawdown(0.1)).toBe('-0.1%')
+      expect(formatDrawdown(12.34)).toBe('-12.3%')
+      expect(formatDrawdown(-12.34)).toBe('-12.3%')
+      expect(formatDrawdown(100)).toBe('-100.0%')
+      expect(formatDrawdown(100.001)).toBe('—')
+      expect(formatDrawdown(-100.001)).toBe('—')
     })
   })
 
