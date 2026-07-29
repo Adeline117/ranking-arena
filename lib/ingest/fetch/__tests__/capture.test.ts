@@ -4,11 +4,12 @@ import {
   LeaderboardCaptureUpstreamError,
   captureNumericLeaderboard,
   capturePartitionedNumericLeaderboard,
+  leaderboardCaptureMode,
   leaderboardPublicRequestProjection,
   leaderboardPublicRequestSha256,
   replayPaged,
 } from '../capture'
-import type { JsonFetcher } from '../capture'
+import type { AnyLeaderboardCapture, JsonFetcher } from '../capture'
 import type { FetchSession, ReplayRequestTemplate } from '../types'
 import {
   LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
@@ -1366,6 +1367,52 @@ describe('capturePartitionedNumericLeaderboard', () => {
       capture.paginationTopology.partitions.map((partition) => partition.termination_reason)
     ).toEqual(['empty_page', 'empty_page'])
     expect(capture.terminationReason).toBe('reported_population_reached')
+  })
+})
+
+describe('leaderboardCaptureMode', () => {
+  it('routes only exact identity and partitioned evidence shapes', async () => {
+    const identity = await captureNumericLeaderboard(
+      captureOptions(makeCaptureFetcher([{ rows: ['one'], total: 1 }]))
+    )
+    const partitioned = await capturePartitionedNumericLeaderboard(
+      partitionedCaptureOptions(async (template) => ({
+        status: 200,
+        json: {
+          data: {
+            list: [(template.body as { strategyType: string }).strategyType],
+            totalRecord: 1,
+            currentPage: 1,
+            pageSize: 2,
+          },
+        },
+      }))
+    )
+
+    expect(leaderboardCaptureMode(identity)).toBe('identity')
+    expect(leaderboardCaptureMode(partitioned)).toBe('partitioned_numeric')
+
+    expect(() =>
+      leaderboardCaptureMode({
+        ...identity,
+        paginationTopology: partitioned.paginationTopology,
+      } as unknown as AnyLeaderboardCapture)
+    ).toThrow('identity leaderboard capture cannot declare partition topology')
+
+    const { paginationTopology: _omitted, ...partitionedWithoutTopology } = partitioned
+    expect(() =>
+      leaderboardCaptureMode(partitionedWithoutTopology as unknown as AnyLeaderboardCapture)
+    ).toThrow('requires its exact pagination topology')
+
+    expect(() =>
+      leaderboardCaptureMode({
+        ...partitioned,
+        paginationTopology: {
+          ...partitioned.paginationTopology,
+          rank_scope: 'unreviewed_global_rank',
+        },
+      } as unknown as AnyLeaderboardCapture)
+    ).toThrow('topology contract is unsupported')
   })
 })
 

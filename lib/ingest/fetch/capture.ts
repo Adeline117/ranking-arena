@@ -322,6 +322,48 @@ export interface PartitionedNumericLeaderboardCapture {
 
 export type AnyLeaderboardCapture = LeaderboardCapture | PartitionedNumericLeaderboardCapture
 
+export type LeaderboardCaptureMode = 'identity' | 'partitioned_numeric'
+
+/**
+ * Route a runtime capture only when its parser projection and pagination
+ * topology form one reviewed pair. This is deliberately stricter than a
+ * property-existence check: malformed partition evidence must never fall back
+ * to the legacy identity/V3 path.
+ */
+export function leaderboardCaptureMode(capture: AnyLeaderboardCapture): LeaderboardCaptureMode {
+  const transformation = capture.parserTransformation
+  const hasPaginationTopology = Object.prototype.hasOwnProperty.call(capture, 'paginationTopology')
+
+  if (transformation.kind === 'identity_projection') {
+    if (hasPaginationTopology) {
+      throw new TypeError('[ingest] identity leaderboard capture cannot declare partition topology')
+    }
+    return 'identity'
+  }
+
+  if (transformation.kind !== 'partitioned_numeric_projection' || !hasPaginationTopology) {
+    throw new TypeError(
+      '[ingest] partitioned leaderboard capture requires its exact pagination topology'
+    )
+  }
+
+  const topology = (capture as PartitionedNumericLeaderboardCapture).paginationTopology
+  if (
+    topology.kind !== 'partitioned_numeric' ||
+    topology.aggregation_contract !== LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT ||
+    topology.rank_scope !== 'partition_local_concatenated_for_storage'
+  ) {
+    throw new TypeError('[ingest] partitioned leaderboard capture topology contract is unsupported')
+  }
+  return 'partitioned_numeric'
+}
+
+export function isPartitionedNumericLeaderboardCapture(
+  capture: AnyLeaderboardCapture
+): capture is PartitionedNumericLeaderboardCapture {
+  return leaderboardCaptureMode(capture) === 'partitioned_numeric'
+}
+
 /**
  * An upstream transport, HTTP, or response-validation failure is both durable
  * evidence and a failed job attempt. A null status means no canonical HTTP
@@ -329,7 +371,7 @@ export type AnyLeaderboardCapture = LeaderboardCapture | PartitionedNumericLeade
  * transaction, then rethrows so the queue retry policy remains active.
  */
 export class LeaderboardCaptureUpstreamError<
-  TCapture extends AnyLeaderboardCapture = LeaderboardCapture,
+  TCapture extends AnyLeaderboardCapture = AnyLeaderboardCapture,
 > extends Error {
   constructor(
     public readonly status: number | null,
