@@ -38,11 +38,13 @@ import { fetchCurrentScoreMap, buildChangedTraders } from './incremental-diff'
 import { upsertLeaderboard, upsertSourceFreshness, zeroOutExcluded } from './write-leaderboard'
 import { hasComputeFailures, type ComputeResult } from './result-status'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
+import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { MIN_TRADES } from '@/lib/constants/trader-thresholds'
+import { acquireLeaderboardSeasonLocks, type LeaderboardSeasonLockRedis } from './season-lock'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -81,46 +83,47 @@ export async function GET(request: NextRequest) {
   const targetSeasons: Period[] =
     seasonParam && SEASONS.includes(seasonParam) ? [seasonParam] : SEASONS
 
-  // Idempotency: atomic SET NX EX (no race window between get and set)
-  // Per-season lock when running single season to allow parallel staggered runs
+  // Full and staggered jobs acquire the same per-season keys. A historical
+  // global key for full runs did not conflict with `:90D`/`:30D`/`:7D`, so the
+  // worker and watchdog could concurrently rewrite and clean up one season.
   const lockSuffix = targetSeasons.length === 1 ? `:${targetSeasons[0]}` : ''
-  const IDEMPOTENCY_KEY = `cron:compute-leaderboard:running${lockSuffix}`
-  let lockAcquired = false
+  let redis: Awaited<ReturnType<typeof getSharedRedis>>
   try {
-    const { getSharedRedis } = await import('@/lib/cache/redis-client')
-    const redis = await getSharedRedis()
-    if (redis) {
-      const result = await redis.set(IDEMPOTENCY_KEY, new Date().toISOString(), {
-        nx: true,
-        ex: 300,
-      })
-      lockAcquired = result === 'OK'
-    } else {
-      // Redis unavailable: fail safe. Previously used tieredGet/tieredSet which
-      // is NOT atomic — two concurrent requests could both see !cached.data as true
-      // and both acquire the "lock", causing double-compute with data inconsistency.
-      // The next cron invocation (1h) will retry when Redis is back.
-      logger.warn(
-        '[compute-leaderboard] Redis unavailable, skipping run (fail-safe to prevent double-compute)'
-      )
-      lockAcquired = false
-    }
+    redis = await getSharedRedis()
   } catch (err) {
-    // Redis threw — fail safe instead of proceeding unprotected.
-    // ROOT CAUSE FIX: Previously set lockAcquired=true here, allowing unprotected
-    // concurrent runs that could produce inconsistent leaderboard data.
-    logger.warn(
-      '[compute-leaderboard] Redis lock failed, skipping run (fail-safe):',
+    logger.error(
+      '[compute-leaderboard] Redis client failed; refusing an unfenced compute:',
       err instanceof Error ? err.message : String(err)
     )
-    lockAcquired = false
+    return NextResponse.json(
+      { ok: false, error: 'Leaderboard compute lock unavailable' },
+      { status: 503 }
+    )
   }
-  if (!lockAcquired) {
-    return NextResponse.json({
-      ok: true,
-      message: `Already running (atomic lock${lockSuffix})`,
-      cached: true,
-    })
+  if (!redis) {
+    logger.error('[compute-leaderboard] Redis unavailable; refusing an unfenced compute')
+    return NextResponse.json(
+      { ok: false, error: 'Leaderboard compute lock unavailable' },
+      { status: 503 }
+    )
+  }
+
+  const lockRedis: LeaderboardSeasonLockRedis = {
+    set: (key, value, options) => redis.set(key, value, options),
+    eval: (script, keys, args) => redis.eval(script, keys, args),
+  }
+  const seasonLock = await acquireLeaderboardSeasonLocks(lockRedis, targetSeasons)
+  if (!seasonLock.acquired) {
+    const conflict = seasonLock.reason === 'conflict'
+    return NextResponse.json(
+      {
+        ok: conflict,
+        skipped: true,
+        reason: conflict ? 'concurrent season compute' : 'leaderboard compute lock failed',
+        season: seasonLock.blockedSeason,
+      },
+      { status: conflict ? 200 : 503 }
+    )
   }
 
   const supabase = getSupabaseAdmin() as SupabaseClient
@@ -129,7 +132,14 @@ export async function GET(request: NextRequest) {
   const stats = { seasons: {} as Record<string, number> }
   const warnings: string[] = []
   const rolledBack: string[] = []
-  const plog = await PipelineLogger.start(`compute-leaderboard${lockSuffix}`)
+  let plog: Awaited<ReturnType<typeof PipelineLogger.start>>
+  try {
+    plog = await PipelineLogger.start(`compute-leaderboard${lockSuffix}`)
+  } catch (error) {
+    await seasonLock.release()
+    logger.error('[compute-leaderboard] Failed to start pipeline log', error)
+    return NextResponse.json({ error: 'Compute failed' }, { status: 500 })
+  }
 
   try {
     // P0-2: Record current counts from pre-computed cache (instant)
@@ -320,16 +330,6 @@ export async function GET(request: NextRequest) {
     fireAndForget(syncRedisSortedSet(supabase, SEASONS), 'sync-redis-sorted-set')
     fireAndForget(revalidateRankingPages(), 'revalidate-ranking-pages')
 
-    // Release idempotency lock (atomic Redis DEL with fallback)
-    try {
-      const { getSharedRedis: r } = await import('@/lib/cache/redis-client')
-      const c = await r()
-      if (c) await c.del(IDEMPOTENCY_KEY)
-      else await tieredDel(IDEMPOTENCY_KEY)
-    } catch {
-      await tieredDel(IDEMPOTENCY_KEY).catch(() => {})
-    }
-
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     // Distinguish between computation FAILUREs (real errors) and degradation SKIPs (auto-recoverable)
     const hasRealFailures = hasComputeFailures(results)
@@ -365,18 +365,11 @@ export async function GET(request: NextRequest) {
       { status: hasRealFailures ? 500 : 200 }
     )
   } catch (error: unknown) {
-    // Release idempotency lock on failure (atomic Redis DEL with fallback)
-    try {
-      const { getSharedRedis: r } = await import('@/lib/cache/redis-client')
-      const c = await r()
-      if (c) await c.del(IDEMPOTENCY_KEY)
-      else await tieredDel(IDEMPOTENCY_KEY)
-    } catch {
-      await tieredDel(IDEMPOTENCY_KEY).catch(() => {})
-    }
     logger.error('Failed to compute leaderboard', error)
     await plog.error(error)
     return NextResponse.json({ error: 'Compute failed', detail: String(error) }, { status: 500 })
+  } finally {
+    await seasonLock.release()
   }
 }
 
@@ -715,18 +708,20 @@ async function computeSeason(
   // lock expired but the previous function is still writing.
   let dbLockAcquired = false
   try {
-    const { data: lockResult } = await supabase.rpc('acquire_leaderboard_lock', { season })
-    dbLockAcquired = lockResult === true
-    if (!dbLockAcquired) {
-      logger.warn(
-        `[${season}] Could not acquire DB advisory lock — another compute may be writing. Proceeding anyway.`
-      )
+    const { data: lockResult, error: lockError } = await supabase.rpc('acquire_leaderboard_lock', {
+      season,
+    })
+    if (lockError) {
+      throw new Error(lockError.message)
     }
+    if (lockResult !== true) {
+      throw new Error('another compute owns the database season lock')
+    }
+    dbLockAcquired = true
   } catch (lockErr) {
-    logger.warn(
-      `[${season}] Advisory lock RPC failed (non-critical):`,
-      lockErr instanceof Error ? lockErr.message : String(lockErr)
-    )
+    throw new Error(`[${season}] database season lock unavailable; refusing concurrent writes`, {
+      cause: lockErr,
+    })
   }
 
   // Upsert changed rows + zero out excluded traders
