@@ -122,7 +122,23 @@ function buildChainMock(table: string): unknown {
 const mockSupabaseFrom = jest.fn((table: string) => buildChainMock(table))
 const mockProofTimestamp = new Date(Date.now()).toISOString()
 const mockSupabaseRpc = jest.fn(
-  (_functionName: string, args: { p_season_id: string; p_sources: string[] }) => {
+  (functionName: string, args?: { p_season_id: string; p_sources: string[] }) => {
+    if (functionName === 'arena_freshness_expected_sources') {
+      const result = Promise.resolve({
+        data: ['binance_futures', 'bybit'].flatMap((source) =>
+          ['7D', '30D', '90D'].map((season_id) => ({
+            registry_slug: source,
+            filter_source: source,
+            exchange_name: source,
+            season_id,
+          }))
+        ),
+        error: null,
+        status: 200,
+      })
+      return { abortSignal: jest.fn(() => result) }
+    }
+    if (!args) throw new Error('publication proof arguments are required')
     const result = Promise.resolve({
       data: [...args.p_sources].sort().map((source) => ({
         current_mutation_seq: 1,
