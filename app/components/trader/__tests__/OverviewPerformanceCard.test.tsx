@@ -44,7 +44,23 @@ jest.mock('../performance/HeroMetrics', () => ({
   ),
 }))
 jest.mock('../performance/MetricBadgesGrid', () => ({ MetricBadgesGrid: () => null }))
-jest.mock('../performance/ScoreBreakdownSection', () => ({ ScoreBreakdownSection: () => null }))
+jest.mock('../performance/ScoreBreakdownSection', () => ({
+  ScoreBreakdownSection: ({
+    periodProfitabilityScore,
+    periodRiskControlScore,
+  }: {
+    periodProfitabilityScore?: number
+    periodRiskControlScore?: number
+  }) => (
+    <output
+      data-testid="period-scores"
+      data-profitability={
+        periodProfitabilityScore == null ? 'unknown' : String(periodProfitabilityScore)
+      }
+      data-risk={periodRiskControlScore == null ? 'unknown' : String(periodRiskControlScore)}
+    />
+  ),
+}))
 
 describe('OverviewPerformanceCard period switching', () => {
   beforeEach(() => {
@@ -127,5 +143,42 @@ describe('OverviewPerformanceCard period switching', () => {
     fireEvent.click(screen.getByRole('button', { name: '30D period' }))
 
     expect(screen.getByText('traderDormantForPeriod')).toBeInTheDocument()
+  })
+
+  it('keeps the selected period scores instead of leaking 90D dimensions', () => {
+    render(
+      <OverviewPerformanceCard
+        performance={{
+          profitability_score: 88,
+          risk_control_score: 77,
+          return_score_30d: 0,
+          pnl_score_30d: 12,
+        }}
+      />
+    )
+
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-profitability', '88')
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', '77')
+
+    fireEvent.click(screen.getByRole('button', { name: '30D period' }))
+
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-profitability', '0')
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', '12')
+  })
+
+  it('does not mask an invalid canonical 90D dimension with a legacy score', () => {
+    render(
+      <OverviewPerformanceCard
+        performance={{
+          profitability_score: 100.01,
+          return_score: 50,
+          risk_control_score: Number.NaN,
+          pnl_score: 40,
+        }}
+      />
+    )
+
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-profitability', 'unknown')
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', 'unknown')
   })
 })

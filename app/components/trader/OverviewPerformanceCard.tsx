@@ -8,6 +8,7 @@ import { PeriodSelector } from './performance/PeriodSelector'
 import { HeroMetrics } from './performance/HeroMetrics'
 import { MetricBadgesGrid } from './performance/MetricBadgesGrid'
 import { ScoreBreakdownSection } from './performance/ScoreBreakdownSection'
+import { isValidScore } from './performance/ScoreBar'
 import type { Period } from './performance/PeriodSelector'
 import { usePeriodStore } from '@/lib/stores/periodStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -89,6 +90,14 @@ export interface OverviewPerformanceCardProps {
   } | null
 }
 
+function resolveValidScoreFallback(
+  primary: number | null | undefined,
+  fallback?: number | null
+): number | undefined {
+  if (primary != null) return isValidScore(primary, 100) ? primary : undefined
+  return isValidScore(fallback, 100) ? fallback : undefined
+}
+
 /**
  * Performance卡片 - 交易员主页核心指标
  * 优化版：信息层级分明，主指标突出，次指标用徽章展示
@@ -154,10 +163,8 @@ export default function OverviewPerformanceCard({
           sharpeRatio: performance.sharpe_ratio_7d,
           winningPositions: performance.winning_positions_7d ?? performance.winning_positions,
           totalPositions: performance.total_positions_7d ?? performance.total_positions,
-          returnScore: performance.return_score_7d,
-          pnlScore: performance.pnl_score_7d,
-          drawdownScore: performance.drawdown_score_7d,
-          stabilityScore: performance.stability_score_7d,
+          profitabilityScore: resolveValidScoreFallback(performance.return_score_7d),
+          riskControlScore: resolveValidScoreFallback(performance.pnl_score_7d),
           // V3 Metrics
           sortinoRatio: performance.sortino_ratio_7d,
           calmarRatio: performance.calmar_ratio_7d,
@@ -179,10 +186,8 @@ export default function OverviewPerformanceCard({
           sharpeRatio: performance.sharpe_ratio_30d,
           winningPositions: performance.winning_positions_30d ?? performance.winning_positions,
           totalPositions: performance.total_positions_30d ?? performance.total_positions,
-          returnScore: performance.return_score_30d,
-          pnlScore: performance.pnl_score_30d,
-          drawdownScore: performance.drawdown_score_30d,
-          stabilityScore: performance.stability_score_30d,
+          profitabilityScore: resolveValidScoreFallback(performance.return_score_30d),
+          riskControlScore: resolveValidScoreFallback(performance.pnl_score_30d),
           // V3 Metrics
           sortinoRatio: performance.sortino_ratio_30d,
           calmarRatio: performance.calmar_ratio_30d,
@@ -205,10 +210,14 @@ export default function OverviewPerformanceCard({
           sharpeRatio: performance.sharpe_ratio,
           winningPositions: performance.winning_positions,
           totalPositions: performance.total_positions,
-          returnScore: performance.return_score ?? undefined,
-          pnlScore: performance.pnl_score ?? undefined,
-          drawdownScore: performance.drawdown_score ?? undefined,
-          stabilityScore: performance.stability_score ?? undefined,
+          profitabilityScore: resolveValidScoreFallback(
+            performance.profitability_score,
+            performance.return_score
+          ),
+          riskControlScore: resolveValidScoreFallback(
+            performance.risk_control_score,
+            performance.pnl_score
+          ),
           // V3 Metrics
           sortinoRatio: performance.sortino_ratio,
           calmarRatio: performance.calmar_ratio,
@@ -232,10 +241,8 @@ export default function OverviewPerformanceCard({
     sharpeRatio,
     winningPositions,
     totalPositions,
-    returnScore: periodReturnScore,
-    pnlScore: periodPnlScore,
-    drawdownScore: periodDrawdownScore,
-    stabilityScore: periodStabilityScore,
+    profitabilityScore: periodProfitabilityScore,
+    riskControlScore: periodRiskControlScore,
     sortinoRatio,
     calmarRatio,
     alpha,
@@ -345,10 +352,8 @@ export default function OverviewPerformanceCard({
             <ScoreBreakdownSection
               performance={performance}
               periodArenaScore={periodArenaScore}
-              periodReturnScore={periodReturnScore}
-              periodPnlScore={periodPnlScore}
-              periodDrawdownScore={periodDrawdownScore}
-              periodStabilityScore={periodStabilityScore}
+              periodProfitabilityScore={periodProfitabilityScore}
+              periodRiskControlScore={periodRiskControlScore}
               arenaScoreV3={arenaScoreV3}
               isVisible={isVisible}
             />

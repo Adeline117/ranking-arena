@@ -10,7 +10,7 @@ interface ScoreRadarProps {
   /** @deprecated V3 removed the execution axis; v4 exposes consistency via the
    *  breakdown bars instead. Accepted for backwards-compat, not rendered. */
   execution?: number | null
-  arenaScore: number // 0-100, for color
+  arenaScore: number | null // 0-100, for color; null keeps the chart neutral
   size?: number
 }
 
@@ -30,11 +30,19 @@ export const ScoreRadar = memo(function ScoreRadar({
   const cy = size / 2
   const r = size * 0.38 // max radius
 
-  // Normalize to 0-1: both axes are 0-100 v4 dimension percentiles; guard null/NaN.
-  const pFinite = profitability != null && Number.isFinite(profitability)
-  const rFinite = riskControl != null && Number.isFinite(riskControl)
-  const pVal = pFinite ? (profitability as number) : 0
-  const rVal = rFinite ? (riskControl as number) : 0
+  // Normalize to 0-1: both axes are trusted only inside the declared 0-100 scale.
+  // Unknown/corrupt inputs must not be drawn as genuine zero scores.
+  const pFinite =
+    profitability != null &&
+    Number.isFinite(profitability) &&
+    profitability >= 0 &&
+    profitability <= 100
+  const rFinite =
+    riskControl != null && Number.isFinite(riskControl) && riskControl >= 0 && riskControl <= 100
+  const arenaFinite =
+    arenaScore != null && Number.isFinite(arenaScore) && arenaScore >= 0 && arenaScore <= 100
+  const pVal = pFinite ? profitability : 0
+  const rVal = rFinite ? riskControl : 0
   const pNorm = Math.min(Math.max(pVal / 100, 0), 1)
   const rNorm = Math.min(Math.max(rVal / 100, 0), 1)
 
@@ -67,7 +75,7 @@ export const ScoreRadar = memo(function ScoreRadar({
   const dataPoints = angles.map((a, i) => getPoint(a, Math.max(values[i], 0.05)))
   const dataPath = `M${cx},${cy} L${dataPoints[0].x},${dataPoints[0].y} L${dataPoints[1].x},${dataPoints[1].y} Z`
 
-  const color = getScoreColor(arenaScore)
+  const color = arenaFinite ? getScoreColor(arenaScore) : 'var(--color-text-tertiary)'
   const labelFontSize = Math.max(size * 0.08, 9)
   // Raw per-axis scores for on-data value labels.
   const rawValues = [pVal, rVal]
@@ -127,12 +135,30 @@ export const ScoreRadar = memo(function ScoreRadar({
           opacity={0.4}
         />
       ))}
-      {/* Data fill */}
-      <path d={dataPath} fill={color} fillOpacity={0.2} stroke={color} strokeWidth={1.5} />
+      {/* A filled shape is meaningful only when both axes are known. */}
+      {pFinite && rFinite && (
+        <path
+          className="score-radar-data-shape"
+          d={dataPath}
+          fill={color}
+          fillOpacity={0.2}
+          stroke={color}
+          strokeWidth={1.5}
+        />
+      )}
       {/* Data points */}
-      {dataPoints.map((pt, i) => (
-        <circle key={`pt-${i}`} cx={pt.x} cy={pt.y} r={2.5} fill={color} />
-      ))}
+      {dataPoints.map((pt, i) =>
+        rawFinite[i] ? (
+          <circle
+            className="score-radar-data-point"
+            key={`pt-${i}`}
+            cx={pt.x}
+            cy={pt.y}
+            r={2.5}
+            fill={color}
+          />
+        ) : null
+      )}
       {/* On-data value labels — score read directly off each axis dot. Nudged
           radially outward so they clear the filled polygon. */}
       {dataPoints.map((pt, i) =>
