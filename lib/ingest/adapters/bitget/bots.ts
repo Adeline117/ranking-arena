@@ -387,6 +387,7 @@ const bitgetBotsAdapter: SourceAdapter = {
   leaderboardPartitionIds: (src, timeframe) => [
     ...assertCanonicalBitgetBotsSource(src, timeframe).boards,
   ],
+  captureLeaderboard: captureBitgetBotsLeaderboard,
   capabilities: {
     profile: true, // tradeStrategyInfo {strategyId}
     positions: false,
