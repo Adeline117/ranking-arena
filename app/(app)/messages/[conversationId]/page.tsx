@@ -61,7 +61,11 @@ export default function ConversationPage({
 
   // Online presence
   const watchIds = msgHook.otherUser ? [msgHook.otherUser.id] : []
-  const { getUserPresence, setTyping, isUserTyping } = usePresence(userId, watchIds)
+  const { getUserPresence, setTyping, isUserTyping } = usePresence(
+    userId,
+    watchIds,
+    conversationId ? { kind: 'conversation', id: conversationId } : null
+  )
   const otherPresence = msgHook.otherUser ? getUserPresence(msgHook.otherUser.id) : null
   const otherIsTyping =
     msgHook.otherUser && conversationId ? isUserTyping(msgHook.otherUser.id, conversationId) : false

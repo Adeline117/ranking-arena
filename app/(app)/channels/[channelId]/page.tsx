@@ -97,7 +97,11 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   >(new Map())
 
   const memberIds = members.map((m) => m.user_id)
-  const { getUserPresence } = usePresence(userId || null, memberIds)
+  const { getUserPresence } = usePresence(
+    userId || null,
+    memberIds,
+    channelId ? { kind: 'channel', id: channelId } : null
+  )
 
   useEffect(() => {
     mountedRef.current = true
