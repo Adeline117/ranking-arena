@@ -135,7 +135,8 @@ export function createSealedRankingCacheEntry<T>(
  */
 export function parseSealedRankingCacheEntry<T>(
   input: unknown,
-  season: LeaderboardPublicationSeason
+  season: LeaderboardPublicationSeason,
+  expectedSources?: readonly string[]
 ): SealedRankingCacheEntry<T> | null {
   try {
     if (!isRecord(input)) return null
@@ -155,14 +156,29 @@ export function parseSealedRankingCacheEntry<T>(
       return null
     }
     if (input.contract !== SEALED_RANKING_CACHE_CONTRACT || input.season !== season) return null
+    const publication = input.publication
     if (
       typeof input.publicationIdentity !== 'string' ||
-      !isSealedPublicationProofSet(input.publication, season)
+      !isSealedPublicationProofSet(publication, season)
     ) {
       return null
     }
-    if (sealedRankingPublicationIdentity(input.publication) !== input.publicationIdentity) {
+    if (sealedRankingPublicationIdentity(publication) !== input.publicationIdentity) {
       return null
+    }
+    if (expectedSources) {
+      const canonicalExpectedSources = [...new Set(expectedSources)].sort()
+      if (
+        canonicalExpectedSources.length === 0 ||
+        canonicalExpectedSources.length !== expectedSources.length ||
+        canonicalExpectedSources.some((source) => !SOURCE_PATTERN.test(source)) ||
+        canonicalExpectedSources.length !== publication.proofs.length ||
+        canonicalExpectedSources.some(
+          (source, index) => source !== publication.proofs[index].source
+        )
+      ) {
+        return null
+      }
     }
     if (typeof input.cachedAt !== 'string' || !Number.isFinite(Date.parse(input.cachedAt))) {
       return null
@@ -174,7 +190,7 @@ export function parseSealedRankingCacheEntry<T>(
       contract: SEALED_RANKING_CACHE_CONTRACT,
       season,
       publicationIdentity: input.publicationIdentity,
-      publication: input.publication,
+      publication,
       cachedAt: input.cachedAt,
       value: input.value as T,
     }

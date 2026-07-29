@@ -116,6 +116,16 @@ describe('sealed ranking cache', () => {
     expect(parseSealedRankingCacheEntry(input, '90D')).toBeNull()
   })
 
+  test('binds a cache hit to the caller expected source set', () => {
+    const entry = createSealedRankingCacheEntry(read)
+
+    expect(parseSealedRankingCacheEntry(entry, '90D', ['binance_futures'])).not.toBeNull()
+    expect(parseSealedRankingCacheEntry(entry, '90D', ['hyperliquid'])).toBeNull()
+    expect(
+      parseSealedRankingCacheEntry(entry, '90D', ['binance_futures', 'binance_futures'])
+    ).toBeNull()
+  })
+
   test('rejects an invalid cache timestamp at creation', () => {
     expect(() => createSealedRankingCacheEntry(read, new Date('invalid'))).toThrow()
   })
