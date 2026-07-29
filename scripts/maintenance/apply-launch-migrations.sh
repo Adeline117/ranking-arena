@@ -197,6 +197,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260729069000_stripe_dispute_funds_reinstatement.sql
   20260729073000_stripe_dispute_funds_withdrawal_authority.sql
   20260729074000_recurring_payment_history_success_authority.sql
+  20260729152000_close_leaderboard_rank_direct_writes.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover
