@@ -358,6 +358,13 @@ describe('Bitget bot V4 partitioned capture boundary', () => {
       { ...canonical, timeframes_derived: [7] },
       { ...canonical, status: 'disabled' },
       { ...canonical, meta: { boards: ['futures_martingale', 'futures_grid'] } },
+      {
+        ...canonical,
+        meta: {
+          boards: ['futures_grid', 'futures_martingale'],
+          endpoints: { list: 'https://unreviewed.test/traceRanks' },
+        },
+      },
     ] as SourceRow[]
 
     for (const invalid of invalidSources) {

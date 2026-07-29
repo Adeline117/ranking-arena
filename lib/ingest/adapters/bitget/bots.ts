@@ -298,7 +298,13 @@ export async function captureBitgetBotsLeaderboard(
   timeframe: RankingTimeframe
 ) {
   const contract = assertCanonicalBitgetBotsSource(src, timeframe)
-  const listUrl = endpoint(src, 'list', `${S_BASE}/traceRanks`)
+  const canonicalListUrl = `${S_BASE}/traceRanks`
+  const listUrl = endpoint(src, 'list', canonicalListUrl)
+  if (listUrl !== canonicalListUrl) {
+    throw new TypeError(
+      '[bitget_bots] leaderboard publication contract failed: list endpoint drifted'
+    )
+  }
   const pageSize = src.page_size!
   const callerPageCap = configuredCallerPageCap(src.meta.max_pages)
   await warmSession(session, src)
