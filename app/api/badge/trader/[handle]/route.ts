@@ -18,6 +18,7 @@
 
 import type { NextRequest } from 'next/server'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readEdgePublicTraderRanking } from '@/lib/rankings/read-edge-public-trader-ranking'
 import {
   publicRankingResponseCacheHeaders,
   redirectToPublicRankingResponseCacheEpoch,
@@ -28,59 +29,55 @@ export const runtime = 'edge'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
-async function restSelect(table: string, query: string): Promise<Record<string, unknown> | null> {
+async function readActiveAuthorization(source: string, sourceTraderId: string): Promise<boolean> {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}&limit=1`, {
+    const params = new URLSearchParams({
+      select: 'trader_id',
+      status: 'eq.active',
+      platform: `eq.${source}`,
+      trader_id: `eq.${sourceTraderId}`,
+      limit: '1',
+    })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/trader_authorizations?${params.toString()}`, {
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       signal: AbortSignal.timeout(4000),
     })
-    if (!res.ok) return null
-    const rows = (await res.json()) as Record<string, unknown>[]
-    return rows[0] ?? null
+    if (!res.ok) return false
+    const payload: unknown = await res.json()
+    return (
+      Array.isArray(payload) &&
+      payload.length === 1 &&
+      payload[0] !== null &&
+      typeof payload[0] === 'object'
+    )
   } catch {
-    return null
+    return false
   }
 }
 
 async function fetchRank(handle: string) {
-  const enc = encodeURIComponent
-  const decoded = decodeURIComponent(handle)
-  const cols = 'handle,source,source_trader_id'
-  const source =
-    (await restSelect('trader_sources', `select=${cols}&handle=ilike.${enc(handle)}`)) ??
-    (await restSelect('trader_sources', `select=${cols}&source_trader_id=eq.${enc(decoded)}`)) ??
-    (await restSelect(
-      'leaderboard_ranks',
-      `select=${cols}&source_trader_id=eq.${enc(decoded)}&season_id=eq.90D`
-    ))
-  if (!source) return null
-  const srcName = source.source as string
-  const srcTraderId = source.source_trader_id as string
+  const trader = await readEdgePublicTraderRanking(
+    {
+      supabaseUrl: SUPABASE_URL,
+      serviceRoleKey: SUPABASE_KEY,
+    },
+    { handle }
+  )
+  if (!trader) return null
+
+  const srcName = trader.source
   if (!isPublicRankingSourceAllowed(srcName)) return null
   // A1 data-authenticity: an ACTIVE trader_authorizations row = read-only API
-  // key connected → numbers are API-verified, not scraped. Mirrors
-  // lib/data/verified-traders.ts. Fail-open (null → Tracked).
-  const authRow = await restSelect(
-    'trader_authorizations',
-    `select=trader_id&status=eq.active&platform=eq.${enc(srcName)}&trader_id=eq.${enc(srcTraderId)}`
-  )
-  const verified = authRow != null
+  // key connected → numbers are API-verified, not scraped. Verification is
+  // supplemental identity data, so an unavailable lookup only omits the mark.
+  const verified = await readActiveAuthorization(srcName, trader.sourceTraderId)
 
-  for (const season of ['90D', '30D', '7D']) {
-    const data = await restSelect(
-      'leaderboard_ranks',
-      `select=handle,arena_score,rank&source=eq.${enc(srcName)}&source_trader_id=eq.${enc(srcTraderId)}&season_id=eq.${season}`
-    )
-    if (data && data.rank != null) {
-      return {
-        handle: (data.handle as string) || (source.handle as string) || decoded,
-        rank: Number(data.rank),
-        score: data.arena_score != null ? Number(data.arena_score) : null,
-        verified,
-      }
-    }
+  return {
+    handle: trader.handle || handle,
+    rank: trader.rank,
+    score: trader.arenaScore,
+    verified,
   }
-  return { handle: (source.handle as string) || decoded, rank: null, score: null, verified }
 }
 
 /** XML-escape for safe SVG text interpolation. */
@@ -155,12 +152,17 @@ export async function GET(
   let score: number | null = null
   let verified = false
   if (SUPABASE_URL && SUPABASE_KEY) {
-    const data = await fetchRank(handle)
-    if (data) {
-      name = data.handle
-      rank = data.rank
-      score = data.score
-      verified = !!data.verified
+    try {
+      const data = await fetchRank(handle)
+      if (data) {
+        name = data.handle
+        rank = data.rank
+        score = data.score
+        verified = !!data.verified
+      }
+    } catch {
+      // A publication proof failure must not leak an unsealed rank. Keep the
+      // embed valid while rendering the generic, metric-free badge.
     }
   }
 

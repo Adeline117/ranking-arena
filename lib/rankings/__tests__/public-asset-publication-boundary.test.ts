@@ -33,4 +33,10 @@ describe('public ranking asset publication boundary', () => {
       /if \(!isPublicRankingSourceAllowed\((?:srcName|exchange|tr\.source|resolved\.platform)\)\)/
     )
   })
+  it('delegates the Edge badge metrics to the sealed trader-card reader', () => {
+    const text = source('app/api/badge/trader/[handle]/route.ts')
+    expect(text).toContain('readEdgePublicTraderRanking')
+    expect(text).not.toContain('/rest/v1/leaderboard_ranks')
+    expect(text).not.toContain('rank_publication_id=eq.')
+  })
 })
