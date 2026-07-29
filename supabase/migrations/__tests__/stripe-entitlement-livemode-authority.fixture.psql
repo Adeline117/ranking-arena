@@ -1,0 +1,140 @@
+DO $prove_stripe_entitlement_livemode_schema$
+DECLARE
+  v_relation text;
+  v_result jsonb;
+  v_before bigint;
+  v_after bigint;
+  v_readiness jsonb;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+
+  FOREACH v_relation IN ARRAY ARRAY[
+    'public.stripe_entitlement_payments',
+    'public.stripe_trial_entitlements',
+    'public.stripe_subscription_state_events',
+    'public.stripe_entitlement_refund_events',
+    'public.stripe_charge_refund_tombstones',
+    'public.stripe_charge_refund_tombstone_events',
+    'public.stripe_payment_ownerships',
+    'public.group_payment_consumptions'
+  ]
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_attribute AS attribute
+      WHERE attribute.attrelid = pg_catalog.to_regclass(v_relation)
+        AND attribute.attname = 'livemode'
+        AND attribute.attnum > 0
+        AND NOT attribute.attisdropped
+        AND attribute.attnotnull
+    ) THEN
+      RAISE EXCEPTION 'missing non-null livemode column: %', v_relation;
+    END IF;
+  END LOOP;
+
+  IF pg_catalog.has_function_privilege(
+      'service_role',
+      'public.activate_recurring_entitlement_payment_atomic(uuid,text,text,text,text,text,text,bigint,text,timestamp with time zone,timestamp with time zone,text,text)',
+      'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION 'legacy recurring writer is still executable';
+  END IF;
+  IF NOT pg_catalog.has_function_privilege(
+      'service_role',
+      'public.activate_recurring_entitlement_payment_atomic(uuid,text,text,text,text,text,text,bigint,text,timestamp with time zone,timestamp with time zone,text,text,boolean)',
+      'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION 'mode-aware recurring writer is not executable';
+  END IF;
+
+  SELECT pg_catalog.count(*)
+  INTO v_before
+  FROM public.stripe_entitlement_payments;
+
+  v_result := public.activate_recurring_entitlement_payment_atomic(
+    '99000000-0000-4000-8000-000000000001',
+    'cus_test_mode_noop',
+    'sub_test_mode_noop',
+    'in_test_mode_noop',
+    'pi_test_mode_noop',
+    'ch_test_mode_noop',
+    'monthly',
+    1000,
+    'usd',
+    pg_catalog.clock_timestamp(),
+    pg_catalog.clock_timestamp() + pg_catalog.make_interval(days => 30),
+    'paid',
+    'active',
+    false
+  );
+  SELECT pg_catalog.count(*)
+  INTO v_after
+  FROM public.stripe_entitlement_payments;
+  IF v_result ->> 'status' <> 'test_mode_non_entitling'
+    OR v_after IS DISTINCT FROM v_before
+  THEN
+    RAISE EXCEPTION 'test-mode recurring payment mutated authority: %', v_result;
+  END IF;
+
+  v_readiness := public.stripe_paid_launch_readiness_v2();
+  IF NOT (
+    v_readiness ? 'test_mode_entitlement_payments'
+    AND v_readiness ? 'test_mode_trial_entitlements'
+    AND v_readiness ? 'non_live_current_pro_authorities'
+    AND v_readiness ? 'non_live_current_group_passes'
+    AND v_readiness ? 'stripe_payment_mode_anomalies'
+    AND v_readiness ? 'refund_mode_anomalies'
+    AND v_readiness ? 'group_payment_mode_anomalies'
+  ) THEN
+    RAISE EXCEPTION 'livemode readiness keys are incomplete: %', v_readiness;
+  END IF;
+END
+$prove_stripe_entitlement_livemode_schema$;
+
+DO $prove_direct_insert_fails_closed$
+BEGIN
+  INSERT INTO public.stripe_subscription_state_events (
+    event_id,
+    user_id,
+    stripe_customer_id,
+    stripe_subscription_id,
+    current_invoice_id,
+    plan,
+    period_start,
+    period_end,
+    stripe_status,
+    cancel_at_period_end,
+    canceled_at,
+    requested_grace_expires_at,
+    event_created_at,
+    outcome
+  ) VALUES (
+    'evt_missing_mode_context',
+    NULL,
+    'cus_missing_mode_context',
+    'sub_missing_mode_context',
+    NULL,
+    'monthly',
+    pg_catalog.clock_timestamp(),
+    pg_catalog.clock_timestamp() + pg_catalog.make_interval(days => 30),
+    'active',
+    false,
+    NULL,
+    NULL,
+    pg_catalog.clock_timestamp(),
+    'observed'
+  );
+  RAISE EXCEPTION 'direct ledger insert without livemode context succeeded';
+EXCEPTION
+  WHEN check_violation THEN
+    NULL;
+END
+$prove_direct_insert_fails_closed$;
+
+\echo 'Stripe entitlement livemode authority fixture passed'
