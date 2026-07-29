@@ -170,6 +170,36 @@ describe('source job routing leases', () => {
     }
   })
 
+  it('fails a first-party route when its authorization lease is lost', async () => {
+    jest.useFakeTimers()
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const redis = redisMock(['OK'])
+      ;(redis.eval as jest.Mock).mockResolvedValue(0)
+      const finish = deferred<string>()
+      const run = jest.fn(async () => finish.promise)
+      const routed = routeJobWithSourceLease({
+        redis,
+        job: {
+          id: 'fp-initial-auth-a',
+          name: INGEST_JOB.FIRST_PARTY,
+          data: { authorizationId: 'auth-a' },
+        },
+        run,
+      })
+      await Promise.resolve()
+
+      await jest.advanceTimersByTimeAsync(SOURCE_JOB_LEASE_RENEW_MS)
+      finish.resolve('stale-first-party-result')
+
+      await expect(routed).rejects.toThrow('source-job lease ownership lost')
+      expect(run.mock.calls[0]?.[1].aborted).toBe(true)
+    } finally {
+      errorSpy.mockRestore()
+      jest.useRealTimers()
+    }
+  })
+
   it('keeps Tier-B behavior unchanged when its advisory lease is lost', async () => {
     jest.useFakeTimers()
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})

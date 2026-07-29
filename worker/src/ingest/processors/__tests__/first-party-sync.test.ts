@@ -64,6 +64,7 @@ jest.mock('ccxt', () => {
 })
 
 import { processFirstPartySync } from '../first-party-sync'
+import type { SourceJobLeaseAuthority } from '../../source-job-lease'
 
 const AUTH = {
   id: 'auth-1',
@@ -76,6 +77,25 @@ const AUTH = {
   status: 'active',
   last_sync_at: null,
   consecutive_failures: 0,
+}
+
+const LEASE_ERROR = new Error('[ingest] source-job lease ownership lost: first-party/auth-1')
+const mockAssertLeaseOwned = jest.fn()
+const mockRenewLease = jest.fn<Promise<void>, []>()
+const SOURCE_LEASE = {
+  proof: {
+    contract: 'arena.ingest.source-job-lease-provenance@1',
+    leaseId: 'lease-1',
+    lane: 'first-party',
+    scopeId: 'auth-1',
+    ownerTokenSha256: 'a'.repeat(64),
+  },
+  assertOwned: () => mockAssertLeaseOwned(),
+  renew: () => mockRenewLease(),
+} satisfies SourceJobLeaseAuthority
+
+function processAuthorization() {
+  return processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never, SOURCE_LEASE)
 }
 
 function queueQueries(
@@ -96,6 +116,8 @@ describe('first-party sync processor', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCcxtConfigs.length = 0
+    mockAssertLeaseOwned.mockReset()
+    mockRenewLease.mockReset().mockResolvedValue(undefined)
     mockGetSourceBySlug.mockReset().mockResolvedValue({
       id: 7,
       slug: 'bybit_copytrade',
@@ -126,7 +148,7 @@ describe('first-party sync processor', () => {
     queueQueries()
     mockQuery.mockResolvedValue({ rows: [] })
 
-    const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
+    const result = await processAuthorization()
 
     expect(result).toMatchObject({ ok: true, statsWritten: 3, seriesPoints: 1 })
     expect(mockPublishProfile).toHaveBeenCalledWith(
@@ -164,7 +186,7 @@ describe('first-party sync processor', () => {
       })
       mockQuery.mockResolvedValue({ rows: [] })
 
-      const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
+      const result = await processAuthorization()
 
       expect(result.ok).toBe(true)
       expect(mockQuery.mock.calls[1]?.[1]).toEqual([platform, null])
@@ -190,7 +212,7 @@ describe('first-party sync processor', () => {
     mockQuery.mockResolvedValue({ rows: [] })
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
-    const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
+    const result = await processAuthorization()
 
     expect(result).toMatchObject({
       ok: false,
@@ -213,7 +235,7 @@ describe('first-party sync processor', () => {
     })
     mockQuery.mockResolvedValue({ rows: [] })
 
-    const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
+    const result = await processAuthorization()
 
     expect(result.ok).toBe(true)
     expect(mockQuery.mock.calls[1]?.[1]).toEqual(['binance', 'binance'])
@@ -229,7 +251,7 @@ describe('first-party sync processor', () => {
     })
     mockQuery.mockResolvedValue({ rows: [] })
 
-    const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
+    const result = await processAuthorization()
 
     expect(result.ok).toBe(true)
     expect(mockCcxtConfigs).toHaveLength(1)
@@ -244,7 +266,7 @@ describe('first-party sync processor', () => {
     })
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
-    const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
+    const result = await processAuthorization()
 
     expect(result).toMatchObject({
       ok: false,
@@ -271,7 +293,7 @@ describe('first-party sync processor', () => {
       })
       .mockResolvedValue({ rows: [] })
 
-    const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
+    const result = await processAuthorization()
 
     expect(result).toMatchObject({ ok: false, detail: 'ambiguous platform bybit' })
     expect(mockGetSourceBySlug).not.toHaveBeenCalled()
@@ -285,6 +307,24 @@ describe('first-party sync processor', () => {
     ])
   })
 
+  it('does not publish or penalize the user after losing authorization lease ownership', async () => {
+    queueQueries()
+    mockQuery.mockResolvedValue({ rows: [] })
+    mockRenewLease.mockImplementation(async () => {
+      mockAssertLeaseOwned.mockImplementation(() => {
+        throw LEASE_ERROR
+      })
+      throw LEASE_ERROR
+    })
+
+    await expect(processAuthorization()).rejects.toThrow('source-job lease ownership lost')
+
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockQuery.mock.calls.some(([sql]) => String(sql).includes('last_sync_status = $2'))
+    ).toBe(false)
+  })
+
   it('suspends after the third failure and emits the account-attention notification', async () => {
     queueQueries({ ...AUTH, consecutive_failures: 2 })
     mockQuery.mockResolvedValue({ rows: [] })
@@ -293,7 +333,7 @@ describe('first-party sync processor', () => {
     })
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
-    const result = await processFirstPartySync({ data: { authorizationId: 'auth-1' } } as never)
+    const result = await processAuthorization()
 
     expect(result).toMatchObject({ ok: false, detail: 'credential unreadable' })
     expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('last_sync_status = $2'), [

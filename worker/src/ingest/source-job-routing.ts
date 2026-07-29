@@ -111,7 +111,7 @@ export async function routeJobWithSourceLease<T>({
     scopeId,
     run: (_proof, runSignal, authority) => run(runProvenance(bullJob, authority), runSignal),
     signal,
-    failClosedOnLeaseLoss: job.name === INGEST_JOB.TIER_A,
+    failClosedOnLeaseLoss: job.name === INGEST_JOB.TIER_A || job.name === INGEST_JOB.FIRST_PARTY,
   })
   if (!result.coalesced) return result.value as T
 

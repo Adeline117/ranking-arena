@@ -112,7 +112,10 @@ async function runJob(
     }
     case INGEST_JOB.FIRST_PARTY: {
       const { processFirstPartySync } = await import('./ingest/processors/first-party-sync')
-      return processFirstPartySync(job)
+      if (!provenance.sourceLease) {
+        throw new Error('[ingest-worker] first-party source lease authority is missing')
+      }
+      return processFirstPartySync(job, provenance.sourceLease)
     }
     case INGEST_JOB.TIER_D: {
       const { processTierD } = await import('./ingest/processors/tier-d-positions')

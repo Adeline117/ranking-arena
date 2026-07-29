@@ -33,6 +33,7 @@ import {
   makeProxyFetch,
 } from '@/lib/portfolio/exchange-sync'
 import { decryptAuthorizationCredential } from '@/lib/exchange/authorization-credentials'
+import type { SourceJobLeaseAuthority } from '../source-job-lease'
 
 export interface FirstPartyJobData {
   authorizationId: string
@@ -67,8 +68,12 @@ async function markSync(
   ok: boolean,
   detail: string,
   priorFailures: number,
+  sourceLease: SourceJobLeaseAuthority,
   ctx?: { userId: string; platform: string; traderId: string }
 ): Promise<void> {
+  // The authorization lease is a cross-worker write fence, not just a queue
+  // optimization. Renew it immediately before mutating user-visible state.
+  await sourceLease.renew()
   const failures = ok ? 0 : priorFailures + 1
   const status = ok ? 'active' : failures >= 3 ? 'suspended' : 'active'
   await getIngestPool().query(
@@ -116,8 +121,10 @@ export interface FirstPartySyncResult {
 }
 
 export async function processFirstPartySync(
-  job: Job<FirstPartyJobData>
+  job: Job<FirstPartyJobData>,
+  sourceLease: SourceJobLeaseAuthority
 ): Promise<FirstPartySyncResult> {
+  sourceLease.assertOwned()
   const pool = getIngestPool()
   const { rows: auths } = await pool.query<AuthRow>(
     `SELECT id, user_id, platform, trader_id, encrypted_api_key, encrypted_api_secret,
@@ -158,7 +165,7 @@ export async function processFirstPartySync(
       srcRows.length === 0
         ? `unknown platform ${requestedPlatform}`
         : `ambiguous platform ${requestedPlatform}`
-    await markSync(auth.id, false, detail, auth.consecutive_failures)
+    await markSync(auth.id, false, detail, auth.consecutive_failures, sourceLease)
     return { ok: false, statsWritten: 0, seriesPoints: 0, detail }
   }
   const src = await getSourceBySlug(srcRows[0].slug)
@@ -171,7 +178,8 @@ export async function processFirstPartySync(
       auth.id,
       false,
       'arena trader missing (claim not activated?)',
-      auth.consecutive_failures
+      auth.consecutive_failures,
+      sourceLease
     )
     return { ok: false, statsWritten: 0, seriesPoints: 0, detail: 'arena trader missing' }
   }
@@ -248,6 +256,10 @@ export async function processFirstPartySync(
         `first-party stats validation failed: valid=${valid.length} rejects=${rejects.length}`
       )
     }
+    // A lease can expire while CCXT is waiting on the exchange. Confirm and
+    // extend ownership before each publication boundary so an older recovered
+    // job cannot overwrite the newer owner.
+    await sourceLease.renew()
     await publishProfile(
       src,
       traderId,
@@ -259,6 +271,7 @@ export async function processFirstPartySync(
       },
       { fullSeries: true }
     )
+    await sourceLease.renew()
     await pool.query(
       `INSERT INTO arena.first_party_snapshots
          (trader_id, ts, equity, balance, unrealized_pnl, net_transfer_cum, currency)
@@ -275,14 +288,23 @@ export async function processFirstPartySync(
     )
 
     const seriesPoints = result.series.reduce((n, s) => n + s.points.length, 0)
-    await markSync(auth.id, true, `ok stats=${valid.length} rejects=${rejects.length}`, 0)
+    await markSync(
+      auth.id,
+      true,
+      `ok stats=${valid.length} rejects=${rejects.length}`,
+      0,
+      sourceLease
+    )
     console.log(
       `[first-party] ${auth.platform}/${auth.trader_id}: stats=${valid.length} series_pts=${seriesPoints} equity=${result.snapshot.equity}`
     )
     return { ok: true, statsWritten: valid.length, seriesPoints, detail: 'ok' }
   } catch (err) {
+    // Lease failures are infrastructure fencing events. Never count them as a
+    // bad user credential or suspend an otherwise healthy authorization.
+    sourceLease.assertOwned()
     const msg = err instanceof Error ? err.message : String(err)
-    await markSync(auth.id, false, msg, auth.consecutive_failures, {
+    await markSync(auth.id, false, msg, auth.consecutive_failures, sourceLease, {
       userId: auth.user_id,
       platform: auth.platform,
       traderId: auth.trader_id,
