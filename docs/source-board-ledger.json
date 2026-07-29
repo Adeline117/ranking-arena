@@ -6,8 +6,223 @@
     "codeRegistrySourceBoards": 37,
     "publicRankingAllowedSourceBoards": 34,
     "companyOrProtocolFamilies": 23,
-    "configuredSourcesWithData": 34
+    "configuredSourcesWithData": 34,
+    "arenaSeedSourceRows": 36,
+    "registeredIngestAdapters": 26
   },
+  "arenaSeedRegistry": {
+    "migration": "supabase/migrations/20260610223356_arena_schema_and_dimensions.sql",
+    "sourceRows": [
+      {
+        "registrySlug": "bitget_futures",
+        "adapterSlug": "bitget",
+        "platformIdentity": "bitget_futures"
+      },
+      {
+        "registrySlug": "bitget_spot",
+        "adapterSlug": "bitget",
+        "platformIdentity": "bitget_spot"
+      },
+      {
+        "registrySlug": "bitget_cfd",
+        "adapterSlug": "bitget",
+        "platformIdentity": "bitget_cfd"
+      },
+      {
+        "registrySlug": "bitget_bots_futures",
+        "adapterSlug": "bitget_bots",
+        "platformIdentity": "bitget_bots_futures"
+      },
+      {
+        "registrySlug": "bitget_bots_spot",
+        "adapterSlug": "bitget_bots",
+        "platformIdentity": "bitget_bots_spot"
+      },
+      {
+        "registrySlug": "bybit_mt5",
+        "adapterSlug": "bybit_mt5",
+        "platformIdentity": "bybit_mt5"
+      },
+      {
+        "registrySlug": "mexc_futures",
+        "adapterSlug": "mexc",
+        "platformIdentity": "mexc"
+      },
+      {
+        "registrySlug": "binance_futures",
+        "adapterSlug": "binance",
+        "platformIdentity": "binance_futures"
+      },
+      {
+        "registrySlug": "binance_spot",
+        "adapterSlug": "binance",
+        "platformIdentity": "binance_spot"
+      },
+      {
+        "registrySlug": "bybit_copytrade",
+        "adapterSlug": "bybit_copytrade",
+        "platformIdentity": "bybit"
+      },
+      {
+        "registrySlug": "hyperliquid",
+        "adapterSlug": "hyperliquid",
+        "platformIdentity": "hyperliquid"
+      },
+      {
+        "registrySlug": "coinex_futures",
+        "adapterSlug": "coinex",
+        "platformIdentity": "coinex"
+      },
+      {
+        "registrySlug": "htx_futures",
+        "adapterSlug": "htx",
+        "platformIdentity": "htx_futures"
+      },
+      {
+        "registrySlug": "htx_spot",
+        "adapterSlug": "htx",
+        "platformIdentity": "htx_spot"
+      },
+      {
+        "registrySlug": "gate_futures",
+        "adapterSlug": "gate",
+        "platformIdentity": "gateio"
+      },
+      {
+        "registrySlug": "gate_cfd",
+        "adapterSlug": "gate",
+        "platformIdentity": "gate_cfd"
+      },
+      {
+        "registrySlug": "bingx_futures",
+        "adapterSlug": "bingx",
+        "platformIdentity": "bingx"
+      },
+      {
+        "registrySlug": "bingx_spot",
+        "adapterSlug": "bingx",
+        "platformIdentity": "bingx_spot"
+      },
+      {
+        "registrySlug": "xt_futures",
+        "adapterSlug": "xt",
+        "platformIdentity": "xt"
+      },
+      {
+        "registrySlug": "xt_spot",
+        "adapterSlug": "xt",
+        "platformIdentity": "xt_spot"
+      },
+      {
+        "registrySlug": "blofin_futures",
+        "adapterSlug": "blofin",
+        "platformIdentity": "blofin"
+      },
+      {
+        "registrySlug": "blofin_spot",
+        "adapterSlug": "blofin",
+        "platformIdentity": "blofin_spot"
+      },
+      {
+        "registrySlug": "btcc_futures",
+        "adapterSlug": "btcc",
+        "platformIdentity": "btcc"
+      },
+      {
+        "registrySlug": "bitunix_futures",
+        "adapterSlug": "bitunix",
+        "platformIdentity": "bitunix"
+      },
+      {
+        "registrySlug": "kucoin_futures",
+        "adapterSlug": "kucoin",
+        "platformIdentity": "kucoin"
+      },
+      {
+        "registrySlug": "phemex_futures",
+        "adapterSlug": "phemex",
+        "platformIdentity": "phemex"
+      },
+      {
+        "registrySlug": "lbank_futures",
+        "adapterSlug": "lbank",
+        "platformIdentity": "lbank"
+      },
+      {
+        "registrySlug": "bitmart_futures",
+        "adapterSlug": "bitmart",
+        "platformIdentity": "bitmart_futures"
+      },
+      {
+        "registrySlug": "binance_web3_bsc",
+        "adapterSlug": "binance_web3",
+        "platformIdentity": "binance_web3"
+      },
+      {
+        "registrySlug": "okx_web3_solana",
+        "adapterSlug": "okx_web3",
+        "platformIdentity": "okx_web3_solana"
+      },
+      {
+        "registrySlug": "gmx",
+        "adapterSlug": "gmx",
+        "platformIdentity": "gmx"
+      },
+      {
+        "registrySlug": "gtrade",
+        "adapterSlug": "gtrade",
+        "platformIdentity": "gtrade"
+      },
+      {
+        "registrySlug": "bitfinex",
+        "adapterSlug": "bitfinex",
+        "platformIdentity": "bitfinex"
+      },
+      {
+        "registrySlug": "okx_futures",
+        "adapterSlug": "okx",
+        "platformIdentity": "okx_futures"
+      },
+      {
+        "registrySlug": "okx_spot",
+        "adapterSlug": "okx",
+        "platformIdentity": "okx_spot"
+      },
+      {
+        "registrySlug": "toobit_futures",
+        "adapterSlug": "toobit",
+        "platformIdentity": "toobit_futures"
+      }
+    ]
+  },
+  "registeredIngestAdapterSlugs": [
+    "binance",
+    "binance_web3",
+    "bingx",
+    "bitfinex",
+    "bitget",
+    "bitget_bots",
+    "bitmart",
+    "bitunix",
+    "blofin",
+    "btcc",
+    "bybit_copytrade",
+    "bybit_mt5",
+    "coinex",
+    "gate",
+    "gmx",
+    "gtrade",
+    "htx",
+    "hyperliquid",
+    "kucoin",
+    "lbank",
+    "mexc",
+    "okx",
+    "okx_web3",
+    "phemex",
+    "toobit",
+    "xt"
+  ],
   "families": [
     {
       "id": "binance",
@@ -108,11 +323,7 @@
       "sources": ["bitfinex"]
     }
   ],
-  "publicRankingQuarantinedSources": [
-    "okx_web3_solana",
-    "bitget_bots_futures",
-    "bitget_bots_spot"
-  ],
+  "publicRankingQuarantinedSources": ["okx_web3_solana", "bitget_bots_futures", "bitget_bots_spot"],
   "configuredSourcesWithData": [
     "binance_futures",
     "bybit",
@@ -155,8 +366,41 @@
       "bitget_bots_futures",
       "bitget_bots_spot",
       "okx_web3_solana"
-    ]
+    ],
+    "codeRegistryWithoutArenaSeedIdentity": ["drift", "paradex"],
+    "arenaSeedIdentityWithoutCodeRegistry": ["gtrade"],
+    "arenaSeedWithoutLatestCheckedInFieldRows": ["bingx_spot", "coinex_futures"]
   },
+  "reviewedLifecycleExceptions": [
+    {
+      "source": "drift",
+      "layer": "code_registry_only",
+      "reason": "legacy dead/blocked source with no replayable arena.sources row or ingest adapter"
+    },
+    {
+      "source": "paradex",
+      "layer": "code_registry_only",
+      "reason": "legacy blocked source with no replayable arena.sources row or ingest adapter"
+    },
+    {
+      "source": "gtrade",
+      "layer": "arena_collection_only",
+      "reason": "collection retained but ranking shadowed because upstream exposes no real ROI capital basis",
+      "contract": "supabase/migrations/20260718123000_shadow_sources_without_roi_basis.sql"
+    },
+    {
+      "source": "bitfinex",
+      "layer": "arena_collection_and_code_registry",
+      "reason": "collection retained but ranking shadowed because upstream exposes no real ROI capital basis",
+      "contract": "supabase/migrations/20260718123000_shadow_sources_without_roi_basis.sql"
+    },
+    {
+      "source": "okx_web3_solana",
+      "layer": "arena_collection_and_code_registry",
+      "reason": "ranking shadowed pending population, native-window, and currency-method authority",
+      "contract": "supabase/migrations/20260724010000_shadow_unverified_okx_web3_ranks.sql"
+    }
+  ],
   "currentServing": {
     "count": null,
     "status": "unverified",

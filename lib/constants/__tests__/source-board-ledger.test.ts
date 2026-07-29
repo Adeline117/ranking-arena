@@ -6,6 +6,8 @@ import {
   PUBLIC_RANKING_QUARANTINED_SOURCES,
   isPublicRankingSourceAllowed,
 } from '@/lib/rankings/publication-policy'
+import '@/lib/ingest/adapters/register'
+import { listAdapters } from '@/lib/ingest/core/adapter'
 
 const sorted = (values: readonly string[]) => [...values].sort()
 const difference = (left: readonly string[], right: readonly string[]) => {
@@ -42,6 +44,41 @@ describe('machine-verifiable source-board ledger', () => {
     )
   })
 
+  it('maps every replayable Arena seed row to a registered ingest adapter', () => {
+    const seed = readFileSync(join(process.cwd(), ledger.arenaSeedRegistry.migration), 'utf8')
+    const seedRows = [
+      ...seed.matchAll(
+        /\('([a-z0-9_]+)',\s*\(SELECT id FROM arena\.exchanges WHERE slug='[a-z0-9_]+'\),\s*'[a-z]+',\s*'[a-z]+',\s*'([a-z0-9_]+)'/g
+      ),
+    ].map((match) => ({ registrySlug: match[1], adapterSlug: match[2] }))
+    const ledgerRows = ledger.arenaSeedRegistry.sourceRows.map(({ registrySlug, adapterSlug }) => ({
+      registrySlug,
+      adapterSlug,
+    }))
+    const registeredAdapters = listAdapters()
+
+    expect(seedRows).toEqual(ledgerRows)
+    expect(ledger.counts.arenaSeedSourceRows).toBe(seedRows.length)
+    expect(sorted(ledger.registeredIngestAdapterSlugs)).toEqual(sorted(registeredAdapters))
+    expect(ledger.counts.registeredIngestAdapters).toBe(registeredAdapters.length)
+    expect(sorted([...new Set(seedRows.map(({ adapterSlug }) => adapterSlug))])).toEqual(
+      sorted(registeredAdapters)
+    )
+  })
+
+  it('pins the intentional identity gaps between code and Arena seed registries', () => {
+    const arenaPlatformIdentities = ledger.arenaSeedRegistry.sourceRows.map(
+      ({ platformIdentity }) => platformIdentity
+    )
+
+    expect(sorted(ledger.setDifferences.codeRegistryWithoutArenaSeedIdentity)).toEqual(
+      difference(ALL_SOURCES, arenaPlatformIdentities)
+    )
+    expect(sorted(ledger.setDifferences.arenaSeedIdentityWithoutCodeRegistry)).toEqual(
+      difference(arenaPlatformIdentities, ALL_SOURCES)
+    )
+  })
+
   it('keeps current serving unknown and validates the dated checked-in evidence separately', () => {
     expect(ledger.currentServing).toMatchObject({ count: null, status: 'unverified' })
 
@@ -59,5 +96,11 @@ describe('machine-verifiable source-board ledger', () => {
       sorted(evidenceSlugs)
     )
     expect(ledger.latestCheckedInServingEvidence.count).toBe(evidenceSlugs.length)
+    expect(sorted(ledger.setDifferences.arenaSeedWithoutLatestCheckedInFieldRows)).toEqual(
+      difference(
+        ledger.arenaSeedRegistry.sourceRows.map(({ registrySlug }) => registrySlug),
+        evidenceSlugs
+      )
+    )
   })
 })
