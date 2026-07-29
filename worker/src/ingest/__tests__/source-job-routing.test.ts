@@ -1,4 +1,5 @@
 import { INGEST_JOB } from '../job-names'
+import { createManagedBullJobAuthority } from '../job-provenance'
 import {
   AUTHORIZATION_JOB_LEASE_LANES,
   GLOBAL_JOB_LEASE_LANES,
@@ -7,7 +8,10 @@ import {
   SOURCE_JOB_LEASE_LANES,
 } from '../source-job-routing'
 import type { SourceJobRedis } from '../source-job-lease'
-import { SOURCE_JOB_LEASE_RENEW_MS } from '../source-job-lease'
+import {
+  SOURCE_JOB_LEASE_PROVENANCE_CONTRACT,
+  SOURCE_JOB_LEASE_RENEW_MS,
+} from '../source-job-lease'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -42,6 +46,57 @@ describe('source job routing leases', () => {
     expect(sourceJobLeaseLane(INGEST_JOB.FIRST_PARTY)).toBe('first-party')
     expect(sourceJobLeaseLane(INGEST_JOB.ONCHAIN_ENRICH)).toBe('onchain-enrich')
     expect(sourceJobLeaseLane(INGEST_JOB.FRESHNESS)).toBeNull()
+  })
+
+  it('hands downstream a frozen public lease proof and Bull token digests only', async () => {
+    const redis = redisMock(['OK'])
+    const processorToken = 'private-bull-processor-token'
+    const managedBullJob = createManagedBullJobAuthority(
+      {
+        attemptsMade: 1,
+        attemptsStarted: 2,
+        id: 'repeat:tiera:binance_futures',
+        name: INGEST_JOB.TIER_A,
+        queueName: 'arena:ingest:local',
+      },
+      processorToken,
+      new AbortController().signal
+    )
+    const bullJob = managedBullJob.authority
+    const run = jest.fn(async () => 'finished')
+
+    try {
+      await expect(
+        routeJobWithSourceLease({
+          redis,
+          bullJob,
+          job: {
+            id: 'repeat:tiera:binance_futures',
+            name: INGEST_JOB.TIER_A,
+            data: { sourceSlug: 'binance_futures' },
+          },
+          run,
+        })
+      ).resolves.toBe('finished')
+    } finally {
+      managedBullJob.close()
+    }
+
+    const provenance = run.mock.calls[0]?.[0]
+    const ownerToken = (redis.set as jest.Mock).mock.calls[0]?.[1]
+    expect(Object.isFrozen(provenance)).toBe(true)
+    expect(provenance.bullJob).toBe(bullJob)
+    expect(provenance.sourceLease.proof).toEqual({
+      contract: SOURCE_JOB_LEASE_PROVENANCE_CONTRACT,
+      leaseId: expect.any(String),
+      lane: 'tier-a',
+      scopeId: 'binance_futures',
+      ownerTokenSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    })
+    expect(Object.isFrozen(provenance.sourceLease)).toBe(true)
+    expect(Object.isFrozen(provenance.sourceLease.proof)).toBe(true)
+    expect(JSON.stringify(provenance)).not.toContain(processorToken)
+    expect(JSON.stringify(provenance)).not.toContain(ownerToken)
   })
 
   it('lets only one same-source iteration run while duplicates coalesce', async () => {
@@ -86,7 +141,7 @@ describe('source job routing leases', () => {
       const redis = redisMock(['OK'])
       ;(redis.eval as jest.Mock).mockResolvedValue(0)
       const run = jest.fn(
-        (signal: AbortSignal) =>
+        (_provenance: unknown, signal: AbortSignal) =>
           new Promise<never>((_resolve, reject) => {
             const cancel = () => reject(signal.reason)
             signal.addEventListener('abort', cancel, { once: true })
@@ -108,7 +163,7 @@ describe('source job routing leases', () => {
       await jest.advanceTimersByTimeAsync(SOURCE_JOB_LEASE_RENEW_MS)
 
       await rejected
-      expect(run.mock.calls[0]?.[0].aborted).toBe(true)
+      expect(run.mock.calls[0]?.[1].aborted).toBe(true)
     } finally {
       errorSpy.mockRestore()
       jest.useRealTimers()
@@ -122,7 +177,7 @@ describe('source job routing leases', () => {
       const redis = redisMock(['OK'])
       ;(redis.eval as jest.Mock).mockResolvedValue(0)
       const finish = deferred<string>()
-      const run = jest.fn(async (_signal: AbortSignal) => finish.promise)
+      const run = jest.fn(async (_provenance: unknown, _signal: AbortSignal) => finish.promise)
       const routed = routeJobWithSourceLease({
         redis,
         job: {
@@ -138,7 +193,7 @@ describe('source job routing leases', () => {
       finish.resolve('tier-b-finished')
 
       await expect(routed).resolves.toBe('tier-b-finished')
-      expect(run.mock.calls[0]?.[0].aborted).toBe(true)
+      expect(run.mock.calls[0]?.[1].aborted).toBe(true)
     } finally {
       errorSpy.mockRestore()
       jest.useRealTimers()
@@ -314,7 +369,7 @@ describe('source job routing leases', () => {
         },
         run,
       })
-    ).rejects.toThrow('redis unavailable')
+    ).rejects.toThrow('source-job lease acquire failed: first-party/auth-a')
 
     expect(run).not.toHaveBeenCalled()
   })
