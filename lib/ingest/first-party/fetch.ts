@@ -14,6 +14,13 @@
 
 import type { FirstPartyComputeInput, RealizedEvent } from './engine'
 
+interface CcxtPositionHistoryRow {
+  timestamp?: number | null
+  lastUpdateTimestamp?: number | null
+  realizedPnl?: number | null
+  info?: unknown
+}
+
 /** Minimal structural CCXT surface we rely on (no `as any`, spec 接地纪律). */
 export interface CcxtLike {
   has?: Record<string, boolean | 'emulated' | undefined>
@@ -29,7 +36,7 @@ export interface CcxtLike {
     since?: number,
     limit?: number,
     params?: Record<string, unknown>
-  ): Promise<Array<{ timestamp?: number | null; realizedPnl?: number | null; info?: unknown }>>
+  ): Promise<CcxtPositionHistoryRow[]>
   fetchLedger?(
     code?: string | undefined,
     since?: number,
@@ -59,6 +66,23 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+function positionCloseTimestamp(row: CcxtPositionHistoryRow): number | null {
+  const info = row.info as {
+    updatedTime?: unknown
+    uTime?: unknown
+    utime?: unknown
+    time?: unknown
+  }
+  return num(
+    row.lastUpdateTimestamp ??
+      info?.updatedTime ??
+      info?.uTime ??
+      info?.utime ??
+      info?.time ??
+      row.timestamp
+  )
+}
+
 /** Realized events via per-position close history (bybit/okx: exact). */
 async function eventsFromPositionsHistory(
   client: CcxtLike,
@@ -72,11 +96,13 @@ async function eventsFromPositionsHistory(
     const rows = await client.fetchPositionsHistory(undefined, since, 100)
     if (!rows?.length) break
     for (const r of rows) {
-      const ts = num(r.timestamp)
+      // CCXT's unified `timestamp` is commonly the position open/create time.
+      // Realized PnL belongs to the close/update window.
+      const ts = positionCloseTimestamp(r)
       const pnl = num(r.realizedPnl ?? (r.info as { closedPnl?: unknown })?.closedPnl)
       if (ts !== null && pnl !== null) out.push({ ts, pnl, positionLevel: true })
     }
-    const maxTs = Math.max(...rows.map((r) => num(r.timestamp) ?? 0))
+    const maxTs = Math.max(...rows.map((r) => positionCloseTimestamp(r) ?? 0))
     if (!Number.isFinite(maxTs) || maxTs <= since || rows.length < 100) break
     since = maxTs + 1
   }
@@ -98,7 +124,19 @@ async function eventsFromLedger(client: CcxtLike, sinceMs: number): Promise<Real
       ).toUpperCase()
       if (ts === null) continue
       if (incomeType === 'REALIZED_PNL') {
-        const amt = num(r.amount)
+        // CCXT ledger entries normalize amount to an absolute value and carry
+        // the sign in `direction`; Binance's raw income remains signed.
+        const rawIncome = num((r.info as { income?: unknown })?.income)
+        const normalizedAmount = num(r.amount)
+        const amt =
+          rawIncome ??
+          (normalizedAmount === null
+            ? null
+            : r.direction === 'out'
+              ? -Math.abs(normalizedAmount)
+              : r.direction === 'in'
+                ? Math.abs(normalizedAmount)
+                : normalizedAmount)
         if (amt !== null) out.push({ ts, pnl: amt, positionLevel: false })
       }
     }

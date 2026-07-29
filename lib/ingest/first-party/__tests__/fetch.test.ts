@@ -79,4 +79,52 @@ describe('first-party account equity evidence', () => {
       equityNow: 100,
     })
   })
+
+  it('preserves the loss sign from a normalized CCXT Binance ledger entry', async () => {
+    const fetchLedger = jest.fn().mockResolvedValue([
+      {
+        timestamp: NOW - 1_000,
+        amount: 25,
+        direction: 'out',
+        type: 'trade',
+        info: { incomeType: 'REALIZED_PNL', income: '-25' },
+      },
+    ])
+
+    const result = await fetchFirstPartyAccount(
+      client({
+        has: { fetchPositionsHistory: false },
+        fetchLedger,
+      }),
+      {
+        nowMs: NOW,
+        balanceSemantics: 'total_includes_unrealized',
+      }
+    )
+
+    expect(result.events).toEqual([{ ts: NOW - 1_000, pnl: -25, positionLevel: false }])
+  })
+
+  it('windows realized PnL by position close time instead of open time', async () => {
+    const openedBeforeWindow = NOW - 100 * 86_400_000
+    const closedInsideWindow = NOW - 1_000
+    const result = await fetchFirstPartyAccount(
+      client({
+        has: { fetchPositionsHistory: true },
+        fetchPositionsHistory: jest.fn().mockResolvedValue([
+          {
+            timestamp: openedBeforeWindow,
+            lastUpdateTimestamp: closedInsideWindow,
+            realizedPnl: 12,
+          },
+        ]),
+      }),
+      {
+        nowMs: NOW,
+        balanceSemantics: 'total_includes_unrealized',
+      }
+    )
+
+    expect(result.events).toEqual([{ ts: closedInsideWindow, pnl: 12, positionLevel: true }])
+  })
 })
