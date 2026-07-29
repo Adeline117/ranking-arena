@@ -47,6 +47,13 @@ interface AuthRow {
   consecutive_failures: number
 }
 
+interface ResolvedSourceRow {
+  slug: string
+  exchange_slug: string
+}
+
+const DEFAULT_FUTURES_SOURCE_BY_EXCHANGE = new Set(['binance', 'okx', 'bitget'])
+
 async function markSync(
   authId: string,
   ok: boolean,
@@ -118,15 +125,33 @@ export async function processFirstPartySync(
 
   // Resolve the arena source + trader (activateClaim's arena_set_trader_claimed
   // upserted the trader row; platform may be a serving name = legacy_platform).
-  const { rows: srcRows } = await pool.query<{ slug: string }>(
-    `SELECT slug FROM arena.sources
-      WHERE slug = $1 OR meta->>'legacy_platform' = $1
-      LIMIT 1`,
-    [auth.platform]
+  const requestedPlatform = auth.platform.trim().toLowerCase()
+  const defaultFuturesExchange = DEFAULT_FUTURES_SOURCE_BY_EXCHANGE.has(requestedPlatform)
+    ? requestedPlatform
+    : null
+  const { rows: srcRows } = await pool.query<ResolvedSourceRow>(
+    `SELECT source.slug, exchange.slug AS exchange_slug
+       FROM arena.sources AS source
+       JOIN arena.exchanges AS exchange ON exchange.id = source.exchange_id
+      WHERE source.slug = $1
+         OR source.meta->>'legacy_platform' = $1
+         OR (
+           $2::text IS NOT NULL
+           AND exchange.slug = $2
+           AND source.product_type = 'futures'
+           AND source.trader_kind_scope IN ('human', 'mixed')
+         )
+      ORDER BY source.slug
+      LIMIT 2`,
+    [requestedPlatform, defaultFuturesExchange]
   )
-  if (!srcRows[0]) {
-    await markSync(auth.id, false, `unknown platform ${auth.platform}`, auth.consecutive_failures)
-    return { ok: false, statsWritten: 0, seriesPoints: 0, detail: `unknown platform` }
+  if (srcRows.length !== 1) {
+    const detail =
+      srcRows.length === 0
+        ? `unknown platform ${requestedPlatform}`
+        : `ambiguous platform ${requestedPlatform}`
+    await markSync(auth.id, false, detail, auth.consecutive_failures)
+    return { ok: false, statsWritten: 0, seriesPoints: 0, detail }
   }
   const src = await getSourceBySlug(srcRows[0].slug)
   const { rows: traderRows } = await pool.query<{ id: number }>(
@@ -146,7 +171,9 @@ export async function processFirstPartySync(
 
   try {
     // ── CCXT client (mirrors lib/portfolio/exchange-sync construction) ──
-    const ex = auth.platform.toLowerCase()
+    // arena.exchanges is the authority for the upstream exchange identity.
+    // Source/product slugs (binance_futures, htx_spot, …) are not CCXT ids.
+    const ex = srcRows[0].exchange_slug === 'gate' ? 'gateio' : srcRows[0].exchange_slug
     const ccxtId = CCXT_ID[ex]
     if (!ccxtId) throw new Error(`unsupported exchange ${ex}`)
     const proxyFetch = GEO_BLOCKED.has(ex) ? makeProxyFetch() : null
@@ -174,7 +201,7 @@ export async function processFirstPartySync(
       ...(proxyFetch ? { fetchImplementation: proxyFetch } : {}),
       enableRateLimit: true,
       timeout: 15_000,
-      options: { defaultType: 'swap' },
+      options: { defaultType: src.product_type === 'spot' ? 'spot' : 'swap' },
     })
 
     // ── Prior snapshots (ROI denominator / MDD path) ──
