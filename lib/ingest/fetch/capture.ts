@@ -347,7 +347,22 @@ export function leaderboardCaptureMode(capture: AnyLeaderboardCapture): Leaderbo
     )
   }
 
-  const topology = (capture as PartitionedNumericLeaderboardCapture).paginationTopology
+  if (transformation.algorithm_contract !== LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT) {
+    throw new TypeError('[ingest] partitioned leaderboard parser contract is unsupported')
+  }
+  const topologyValue = (capture as { paginationTopology?: unknown }).paginationTopology
+  if (
+    topologyValue === null ||
+    typeof topologyValue !== 'object' ||
+    Array.isArray(topologyValue) ||
+    Object.keys(topologyValue).length !== 5 ||
+    !['kind', 'aggregation_contract', 'rank_scope', 'expected_partition_ids', 'partitions'].every(
+      (field) => Object.prototype.hasOwnProperty.call(topologyValue, field)
+    )
+  ) {
+    throw new TypeError('[ingest] partitioned leaderboard capture topology shape is unsupported')
+  }
+  const topology = topologyValue as PartitionedNumericLeaderboardCapture['paginationTopology']
   if (
     topology.kind !== 'partitioned_numeric' ||
     topology.aggregation_contract !== LEADERBOARD_PARTITIONED_NUMERIC_AGGREGATION_CONTRACT ||
