@@ -343,6 +343,76 @@ describe('TraderLinksSection viewer ownership', () => {
     expect(screen.getByText('Authoritative').parentElement).toHaveTextContent('primaryAccount')
   })
 
+  it('saves a label against the exact loaded row revision and adopts its acknowledgement', async () => {
+    const loaded = linkedTrader('user-a', 'Alpha')
+    const acknowledged = {
+      ...loaded,
+      label: 'Updated label',
+      updated_at: '2026-07-15T00:00:00.001Z',
+    }
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url === '/api/traders/linked' && method === 'GET') {
+        return Promise.resolve(listResult([loaded]))
+      }
+      if (url === '/api/traders/linked' && method === 'PATCH') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { linked_trader: acknowledged } },
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<TraderLinksSection userId="user-a" />)
+    await screen.findByText('Alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'editLabel' }))
+    fireEvent.change(screen.getByPlaceholderText('labelPlaceholder'), {
+      target: { value: 'Updated label' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'save' }))
+
+    expect(await screen.findByText('Updated label')).toBeInTheDocument()
+    const patchCall = mockAuthedFetch.mock.calls.find((call) => call[1] === 'PATCH')
+    expect(patchCall?.[3]).toEqual({
+      id: loaded.id,
+      label: 'Updated label',
+      expected_updated_at: loaded.updated_at,
+    })
+    expect(mockShowToast).toHaveBeenCalledWith('labelSaved', 'success')
+  })
+
+  it('keeps the label draft open when another tab wins the row revision', async () => {
+    const loaded = linkedTrader('user-a', 'Alpha')
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url === '/api/traders/linked' && method === 'GET') {
+        return Promise.resolve(listResult([loaded]))
+      }
+      if (url === '/api/traders/linked' && method === 'PATCH') {
+        return Promise.resolve({
+          ok: false,
+          status: 409,
+          data: { error: { code: 'DUPLICATE_ACTION' } },
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<TraderLinksSection userId="user-a" />)
+    await screen.findByText('Alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'editLabel' }))
+    fireEvent.change(screen.getByPlaceholderText('labelPlaceholder'), {
+      target: { value: 'Preserved draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'save' }))
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith('linkedTraderLabelConflict', 'error')
+    )
+    expect(screen.getByPlaceholderText('labelPlaceholder')).toHaveValue('Preserved draft')
+    expect(mockShowToast).not.toHaveBeenCalledWith('labelSaved', 'success')
+  })
+
   it('fails closed when the server returns a row owned by another viewer', async () => {
     mockAuthedFetch.mockResolvedValue(listResult([linkedTrader('user-b', 'Foreign')]))
 

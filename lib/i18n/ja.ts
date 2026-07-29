@@ -1049,6 +1049,8 @@ const ja = {
   primaryAccount: 'メイン',
   labelPlaceholder: 'カスタムラベル...',
   labelSaved: 'ラベルを更新しました',
+  linkedTraderLabelConflict:
+    'このアカウントは別の場所で更新されました。ラベルの下書きは保持されています。再読み込みしてから保存してください。',
   primarySet: 'メインアカウントを更新しました',
   traderUnlinked: 'トレーダーアカウントのリンクを解除しました',
   maxLinkedAccounts: 'リンク可能な最大10アカウントに達しました',

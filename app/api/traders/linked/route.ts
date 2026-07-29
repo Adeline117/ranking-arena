@@ -14,7 +14,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
-import { ApiError } from '@/lib/api/errors'
+import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { logger } from '@/lib/logger'
 import { invalidateLinkedTraderCache } from '@/lib/data/linked-traders'
 import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
@@ -54,6 +54,23 @@ function rejectUnknownFields(body: Record<string, unknown>, allowed: ReadonlySet
 function throwRpcError(error: { code?: string; message?: string }): never {
   if (error.code === 'P0002') throw ApiError.notFound('Linked trader not found')
   throw error
+}
+
+function requireExpectedUpdatedAt(body: Record<string, unknown>): {
+  expectedUpdatedAt: string
+  expectedUpdatedAtMs: number
+} {
+  if (typeof body.expected_updated_at !== 'string' || body.expected_updated_at.length > 64) {
+    throw ApiError.validation('A valid expected_updated_at is required')
+  }
+  const expectedUpdatedAtMs = Date.parse(body.expected_updated_at)
+  if (!Number.isFinite(expectedUpdatedAtMs) || expectedUpdatedAtMs >= 8_640_000_000_000_000) {
+    throw ApiError.validation('A valid expected_updated_at is required')
+  }
+  return {
+    expectedUpdatedAt: body.expected_updated_at,
+    expectedUpdatedAtMs,
+  }
 }
 
 interface LinkedRankRow {
@@ -158,7 +175,10 @@ export async function PATCH(request: NextRequest) {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
     const body = await readMutationBody(request)
-    rejectUnknownFields(body, new Set(['id', 'label', 'display_order', 'is_primary']))
+    rejectUnknownFields(
+      body,
+      new Set(['id', 'label', 'display_order', 'is_primary', 'expected_updated_at'])
+    )
     const id = requireLinkedTraderId(body)
     const hasLabel = Object.prototype.hasOwnProperty.call(body, 'label')
     const hasDisplayOrder = Object.prototype.hasOwnProperty.call(body, 'display_order')
@@ -175,6 +195,9 @@ export async function PATCH(request: NextRequest) {
       if (hasLabel || hasDisplayOrder) {
         throw ApiError.validation('Primary selection cannot be combined with other updates')
       }
+      if (Object.prototype.hasOwnProperty.call(body, 'expected_updated_at')) {
+        throw ApiError.validation('Primary selection does not accept expected_updated_at')
+      }
 
       const { data, error } = await supabase.rpc('set_primary_linked_trader', {
         p_link_id: id,
@@ -186,8 +209,10 @@ export async function PATCH(request: NextRequest) {
       return success({ linked_trader: data })
     }
 
+    const { expectedUpdatedAt, expectedUpdatedAtMs } = requireExpectedUpdatedAt(body)
+    const nextUpdatedAt = new Date(Math.max(Date.now(), expectedUpdatedAtMs + 1)).toISOString()
     const updateData: { display_order?: number; label?: string | null; updated_at: string } = {
-      updated_at: new Date().toISOString(),
+      updated_at: nextUpdatedAt,
     }
     if (hasLabel) {
       if (body.label !== null && typeof body.label !== 'string') {
@@ -215,11 +240,37 @@ export async function PATCH(request: NextRequest) {
       .update(updateData)
       .eq('id', id)
       .eq('user_id', user.id)
+      .eq('updated_at', expectedUpdatedAt)
       .select()
       .maybeSingle()
 
     if (error) throw error
-    if (!data) throw ApiError.notFound('Linked trader not found')
+    if (!data) {
+      const { data: current, error: currentError } = await supabase
+        .from('user_linked_traders')
+        .select('id')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (currentError) throw currentError
+      if (current) {
+        throw new ApiError('Linked trader settings changed since they were loaded', {
+          code: ErrorCode.DUPLICATE_ACTION,
+        })
+      }
+      throw ApiError.notFound('Linked trader not found')
+    }
+    if (
+      data.id !== id ||
+      data.user_id !== user.id ||
+      typeof data.updated_at !== 'string' ||
+      !Number.isFinite(Date.parse(data.updated_at)) ||
+      data.updated_at === expectedUpdatedAt ||
+      (hasLabel && data.label !== updateData.label) ||
+      (hasDisplayOrder && data.display_order !== updateData.display_order)
+    ) {
+      throw ApiError.database('Invalid linked trader update acknowledgement')
+    }
     await invalidateLinkedTraderCache(user.id)
     return success({ linked_trader: data })
   } catch (error: unknown) {

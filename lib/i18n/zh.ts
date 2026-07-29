@@ -1137,6 +1137,7 @@ const zh = {
   primaryAccount: '主账号',
   labelPlaceholder: '自定义标签...',
   labelSaved: '标签已更新',
+  linkedTraderLabelConflict: '此账号已在其他页面更新。标签草稿已保留，请刷新后再保存。',
   primarySet: '主账号已更新',
   traderUnlinked: '交易员账号已取消关联',
   maxLinkedAccounts: '已达到最多10个关联账号上限',

@@ -90,7 +90,14 @@ describe('/api/traders/linked atomic mutations', () => {
 
   it('allowlists and owner-scopes ordinary label updates', async () => {
     const result = Promise.resolve({
-      data: { id: LINK_ID, user_id: USER_ID, label: 'Alpha' },
+      data: {
+        id: LINK_ID,
+        user_id: USER_ID,
+        trader_id: 'trader-a',
+        source: 'binance_futures',
+        label: 'Alpha',
+        updated_at: '2026-07-29T10:00:00.001Z',
+      },
       error: null,
     })
     const builder: Record<string, jest.Mock> = {}
@@ -100,7 +107,13 @@ describe('/api/traders/linked atomic mutations', () => {
     builder.maybeSingle = jest.fn(() => result)
     mockFrom.mockReturnValue(builder)
 
-    const response = await PATCH(request({ id: LINK_ID, label: '  Alpha  ' }))
+    const response = await PATCH(
+      request({
+        id: LINK_ID,
+        label: '  Alpha  ',
+        expected_updated_at: '2026-07-29T10:00:00.000Z',
+      })
+    )
 
     expect(response.status).toBe(200)
     expect(mockFrom).toHaveBeenCalledWith('user_linked_traders')
@@ -109,7 +122,45 @@ describe('/api/traders/linked atomic mutations', () => {
     )
     expect(builder.eq).toHaveBeenNthCalledWith(1, 'id', LINK_ID)
     expect(builder.eq).toHaveBeenNthCalledWith(2, 'user_id', USER_ID)
+    expect(builder.eq).toHaveBeenNthCalledWith(3, 'updated_at', '2026-07-29T10:00:00.000Z')
     expect(mockInvalidateLinkedTraderCache).toHaveBeenCalledWith(USER_ID)
+  })
+
+  it('requires the linked row revision for an ordinary update', async () => {
+    const response = await PATCH(request({ id: LINK_ID, label: 'Alpha' }))
+
+    expect(response.status).toBe(400)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockInvalidateLinkedTraderCache).not.toHaveBeenCalled()
+  })
+
+  it('returns 409 when a stale linked-account form loses the CAS', async () => {
+    const staleBuilder: Record<string, jest.Mock> = {}
+    staleBuilder.update = jest.fn(() => staleBuilder)
+    staleBuilder.eq = jest.fn(() => staleBuilder)
+    staleBuilder.select = jest.fn(() => staleBuilder)
+    staleBuilder.maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null })
+
+    const currentBuilder: Record<string, jest.Mock> = {}
+    currentBuilder.select = jest.fn(() => currentBuilder)
+    currentBuilder.eq = jest.fn(() => currentBuilder)
+    currentBuilder.maybeSingle = jest.fn().mockResolvedValue({
+      data: { id: LINK_ID },
+      error: null,
+    })
+    mockFrom.mockReturnValueOnce(staleBuilder).mockReturnValueOnce(currentBuilder)
+
+    const response = await PATCH(
+      request({
+        id: LINK_ID,
+        label: 'Stale label',
+        expected_updated_at: '2026-07-29T10:00:00.000Z',
+      })
+    )
+
+    expect(response.status).toBe(409)
+    expect(mockFrom).toHaveBeenCalledTimes(2)
+    expect(mockInvalidateLinkedTraderCache).not.toHaveBeenCalled()
   })
 
   it('unlinks only through the atomic service RPC', async () => {

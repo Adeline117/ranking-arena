@@ -108,6 +108,25 @@ function isLinkedTraderForViewer(value: unknown, userId: string): value is Linke
   )
 }
 
+function isLinkedTraderLabelAcknowledgement(
+  value: unknown,
+  expected: LinkedTrader,
+  label: string | null
+): value is Pick<LinkedTrader, 'id' | 'user_id' | 'trader_id' | 'source' | 'label' | 'updated_at'> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const acknowledgement = value as Record<string, unknown>
+  return (
+    acknowledgement.id === expected.id &&
+    acknowledgement.user_id === expected.user_id &&
+    acknowledgement.trader_id === expected.trader_id &&
+    acknowledgement.source === expected.source &&
+    acknowledgement.label === label &&
+    typeof acknowledgement.updated_at === 'string' &&
+    Number.isFinite(Date.parse(acknowledgement.updated_at)) &&
+    acknowledgement.updated_at !== expected.updated_at
+  )
+}
+
 function getPlatformName(source: string): string {
   const map: Record<string, string> = {
     binance_futures: 'Binance Futures',
@@ -364,18 +383,25 @@ export function TraderLinksSection({ userId }: { userId: string }) {
 
   const handleUpdateLabel = async (id: string) => {
     const operation = beginMutation()
-    if (!operation || !traders.some((trader) => trader.id === id)) {
+    const ownedTrader = traders.find((trader) => trader.id === id)
+    if (!operation || !ownedTrader) {
       if (operation) finishMutation(operation)
       return
     }
     const normalizedLabel = editLabelValue.trim() || null
     setUpdatingId(id)
     try {
-      const result = await authedFetch(
+      const result = await authedFetch<{
+        data?: { linked_trader?: unknown }
+      }>(
         '/api/traders/linked',
         'PATCH',
         operation.scope.accessToken,
-        { id, label: normalizedLabel },
+        {
+          id,
+          label: normalizedLabel,
+          expected_updated_at: ownedTrader.updated_at,
+        },
         15_000,
         {
           expectedUserId: operation.scope.userId,
@@ -384,10 +410,25 @@ export function TraderLinksSection({ userId }: { userId: string }) {
       )
       if (!mutationIsCurrent(operation) || result.stale) return
       if (result.ok) {
+        const acknowledgement = result.data?.data?.linked_trader
+        if (!isLinkedTraderLabelAcknowledgement(acknowledgement, ownedTrader, normalizedLabel)) {
+          throw new Error('Invalid linked trader label acknowledgement')
+        }
         setTraders((prev) =>
-          prev.map((trader) => (trader.id === id ? { ...trader, label: normalizedLabel } : trader))
+          prev.map((trader) =>
+            trader.id === id
+              ? {
+                  ...trader,
+                  label: acknowledgement.label,
+                  updated_at: acknowledgement.updated_at,
+                }
+              : trader
+          )
         )
+        setEditingLabelId(null)
         feedbackRef.current.showToast(feedbackRef.current.t('labelSaved'), 'success')
+      } else if (result.status === 409) {
+        feedbackRef.current.showToast(feedbackRef.current.t('linkedTraderLabelConflict'), 'error')
       } else {
         feedbackRef.current.showToast(feedbackRef.current.t('operationFailed'), 'error')
       }
@@ -396,7 +437,6 @@ export function TraderLinksSection({ userId }: { userId: string }) {
         feedbackRef.current.showToast(feedbackRef.current.t('operationFailed'), 'error')
       }
     } finally {
-      if (mutationIsCurrent(operation)) setEditingLabelId(null)
       finishMutation(operation)
     }
   }

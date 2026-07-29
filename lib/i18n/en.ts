@@ -1159,6 +1159,8 @@ const en = {
   primaryAccount: 'Primary',
   labelPlaceholder: 'Custom label...',
   labelSaved: 'Label updated',
+  linkedTraderLabelConflict:
+    'This account changed elsewhere. Your label draft was kept; reload before saving again.',
   primarySet: 'Primary account updated',
   traderUnlinked: 'Trader account unlinked',
   maxLinkedAccounts: 'Maximum 10 linked accounts reached',

@@ -1093,6 +1093,8 @@ const ko = {
   primaryAccount: '기본',
   labelPlaceholder: '사용자 정의 라벨...',
   labelSaved: '라벨이 업데이트되었습니다',
+  linkedTraderLabelConflict:
+    '이 계정이 다른 곳에서 변경되었습니다. 라벨 초안은 유지되었으니 새로고침 후 다시 저장하세요.',
   primarySet: '기본 계정이 업데이트되었습니다',
   traderUnlinked: '트레이더 계정 연결이 해제되었습니다',
   maxLinkedAccounts: '최대 10개 연결 계정에 도달했습니다',
