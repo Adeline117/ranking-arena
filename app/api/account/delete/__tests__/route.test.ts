@@ -150,17 +150,33 @@ describe('account deletion scheduling', () => {
       if (functionName === 'bind_stripe_customer_owner_atomic') {
         return { data: { status: 'bound' }, error: null }
       }
-      return {
-        data: {
-          status: 'scheduled',
-          user_id: args.p_user_id,
-          deleted_at: new Date().toISOString(),
-          deletion_scheduled_at: args.p_scheduled_at,
-          stripe_customer_id: args.p_stripe_customer_id,
-          stripe_subscription_ids: args.p_stripe_subscription_ids,
-        },
-        error: null,
+      if (functionName === 'prepare_account_deletion_billing_atomic') {
+        return {
+          data: {
+            status: 'prepared',
+            operation_id: args.p_operation_id,
+            user_id: args.p_user_id,
+            deleted_at: new Date(Date.parse(String(args.p_scheduled_at)) - 1_000).toISOString(),
+            deletion_scheduled_at: args.p_scheduled_at,
+            stripe_customer_id: args.p_stripe_customer_id,
+            stripe_subscription_ids: args.p_stripe_subscription_ids,
+          },
+          error: null,
+        }
       }
+      if (functionName === 'finish_account_deletion_billing_atomic') {
+        return {
+          data: {
+            status: 'settled',
+            operation_id: args.p_operation_id,
+            user_id: args.p_user_id,
+            stripe_customer_id: args.p_stripe_customer_id,
+            stripe_subscription_ids: args.p_stripe_subscription_ids,
+          },
+          error: null,
+        }
+      }
+      throw new Error(`Unexpected RPC: ${functionName}`)
     })
     mockDiscoverStripeSubscriptionBilling.mockResolvedValue({
       customerId: 'cus_owner',
@@ -187,24 +203,47 @@ describe('account deletion scheduling', () => {
     mockAdminSignOut.mockResolvedValue({ error: null })
   })
 
-  it('retains account data and closes consumer, API, and open Checkout billing first', async () => {
+  it('persists the recoverable tombstone before closing every billing surface', async () => {
     const response = await POST(request({ password: 'correct', reason: 'privacy' }))
     const body = await response.json()
 
     expect(response.status).toBe(200)
     expect(body.user_id).toBe('user-1')
     expect(body.recovery_token).toMatch(/^[A-Za-z0-9_-]{40,}$/)
+    expect(body.billing_settlement_pending).toBe(false)
     expect(mockRpc).toHaveBeenCalledWith(
-      'schedule_account_deletion_with_billing_blocks',
+      'prepare_account_deletion_billing_atomic',
       expect.objectContaining({
         p_user_id: 'user-1',
+        p_operation_id: expect.any(String),
         p_reason: 'privacy',
         p_recovery_token_hash: createHash('sha256').update(body.recovery_token).digest('hex'),
         p_stripe_customer_id: 'cus_owner',
         p_stripe_subscription_ids: ['sub_123', 'sub_api'],
       })
     )
-    expect(mockRpc.mock.calls[0][1].p_recovery_token_hash).not.toBe(body.recovery_token)
+    const prepareCall = mockRpc.mock.calls.find(
+      ([name]) => name === 'prepare_account_deletion_billing_atomic'
+    )!
+    const finishCall = mockRpc.mock.calls.find(
+      ([name]) => name === 'finish_account_deletion_billing_atomic'
+    )!
+    expect(prepareCall[1].p_recovery_token_hash).not.toBe(body.recovery_token)
+    expect(finishCall[1]).toEqual(
+      expect.objectContaining({
+        p_user_id: 'user-1',
+        p_operation_id: prepareCall[1].p_operation_id,
+        p_stripe_customer_id: 'cus_owner',
+        p_stripe_subscription_ids: ['sub_123', 'sub_api'],
+      })
+    )
+    expect(mockDiscoverStripeSubscriptionBilling).toHaveBeenCalledWith({
+      stripeClient: mockStripeClient,
+      subscriptionIds: ['sub_123', 'sub_api'],
+      expectedUserId: 'user-1',
+      expectedCustomerId: 'cus_owner',
+      includeCustomerSubscriptions: true,
+    })
     expect(mockExpireOpenSubscriptionCheckouts).toHaveBeenCalledWith({
       stripeClient: mockStripeClient,
       customerId: 'cus_owner',
@@ -221,8 +260,8 @@ describe('account deletion scheduling', () => {
     expect(mockExpireOpenSubscriptionCheckouts.mock.invocationCallOrder[0]).toBeLessThan(
       mockStopStripeSubscriptionRenewals.mock.invocationCallOrder[0]
     )
-    expect(mockStopStripeSubscriptionRenewals.mock.invocationCallOrder[0]).toBeLessThan(
-      mockRpc.mock.invocationCallOrder[0]
+    expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(
+      mockExpireOpenSubscriptionCheckouts.mock.invocationCallOrder[0]
     )
     expect(mockPersistOneTimeSettlementScan).toHaveBeenCalledWith({
       supabase: expect.any(Object),
@@ -231,21 +270,12 @@ describe('account deletion scheduling', () => {
       observations: [],
     })
     expect(mockPersistOneTimeSettlementScan.mock.invocationCallOrder[0]).toBeLessThan(
-      mockRpc.mock.invocationCallOrder[0]
+      mockRpc.mock.invocationCallOrder.at(-1)!
     )
-    expect(mockLocalSubscriptionUpdate).toHaveBeenCalledWith({
-      status: 'canceled',
-      cancel_at_period_end: false,
-    })
-    expect(mockLocalSubscriptionUpdateEq).toHaveBeenNthCalledWith(
-      1,
-      'stripe_subscription_id',
-      'sub_123'
-    )
-    expect(mockLocalSubscriptionUpdateEq).toHaveBeenNthCalledWith(2, 'user_id', 'user-1')
+    expect(mockLocalSubscriptionUpdate).not.toHaveBeenCalled()
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
     expect(mockAdminSignOut).toHaveBeenCalledWith('user-1', 'global')
-    expect(mockFrom).toHaveBeenCalledTimes(3)
+    expect(mockFrom).toHaveBeenCalledTimes(2)
   })
 
   it('commits the exact caller-staged recovery credential for response-loss safety', async () => {
@@ -265,7 +295,7 @@ describe('account deletion scheduling', () => {
       })
     )
     expect(mockRpc).toHaveBeenCalledWith(
-      'schedule_account_deletion_with_billing_blocks',
+      'prepare_account_deletion_billing_atomic',
       expect.objectContaining({
         p_user_id: 'user-1',
         p_recovery_token_hash: createHash('sha256').update(recoveryToken).digest('hex'),
@@ -350,22 +380,24 @@ describe('account deletion scheduling', () => {
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  it('never revives canceled billing when database scheduling fails', async () => {
+  it('performs zero irreversible mutations when database preparation fails', async () => {
     mockRpc.mockResolvedValue({ data: null, error: { message: 'database unavailable' } })
 
     const response = await POST(request({ password: 'correct' }))
 
-    expect(response.status).toBe(500)
-    expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalled()
+    expect(response.status).toBe(503)
+    expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
     expect(mockAdminUpdateUser).not.toHaveBeenCalled()
   })
 
-  it('fails closed when the database does not acknowledge the exact billing block set', async () => {
+  it('fails closed before Stripe when preparation does not acknowledge the exact billing set', async () => {
     mockRpc.mockImplementation(async (_functionName: string, args: Record<string, unknown>) => ({
       data: {
-        status: 'scheduled',
+        status: 'prepared',
+        operation_id: args.p_operation_id,
         user_id: args.p_user_id,
-        deleted_at: new Date().toISOString(),
+        deleted_at: new Date(Date.parse(String(args.p_scheduled_at)) - 1_000).toISOString(),
         deletion_scheduled_at: args.p_scheduled_at,
         stripe_customer_id: args.p_stripe_customer_id,
         stripe_subscription_ids: ['sub_123'],
@@ -375,22 +407,68 @@ describe('account deletion scheduling', () => {
 
     const response = await POST(request({ password: 'correct' }))
 
-    expect(response.status).toBe(500)
+    expect(response.status).toBe(503)
+    expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
+    expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
     expect(mockLocalSubscriptionUpdate).not.toHaveBeenCalled()
     expect(mockAdminUpdateUser).not.toHaveBeenCalled()
     expect(mockAdminSignOut).not.toHaveBeenCalled()
   })
 
-  it('fails closed before scheduling when an open Checkout cannot be expired', async () => {
+  it('returns a retryable scheduled result when Checkout shutdown fails after preparation', async () => {
     mockExpireOpenSubscriptionCheckouts.mockRejectedValue(new Error('Checkout remains payable'))
 
     const response = await POST(request({ password: 'correct' }))
+    const body = await response.json()
 
-    expect(response.status).toBe(502)
+    expect(response.status).toBe(202)
+    expect(body).toEqual(
+      expect.objectContaining({ success: true, billing_settlement_pending: true })
+    )
     expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
     expect(mockPersistOneTimeSettlementScan).not.toHaveBeenCalled()
-    expect(mockRpc).not.toHaveBeenCalled()
-    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockRpc).toHaveBeenCalledWith(
+      'prepare_account_deletion_billing_atomic',
+      expect.any(Object)
+    )
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'finish_account_deletion_billing_atomic',
+      expect.any(Object)
+    )
+    expect(mockAdminUpdateUser).toHaveBeenCalled()
+  })
+
+  it('keeps the exact durable intent retryable when final DB acknowledgement is lost', async () => {
+    const defaultImplementation = mockRpc.getMockImplementation()!
+    mockRpc.mockImplementation(async (functionName: string, args: Record<string, unknown>) => {
+      if (functionName === 'finish_account_deletion_billing_atomic') {
+        return { data: null, error: { message: 'response lost after Stripe cancellation' } }
+      }
+      return defaultImplementation(functionName, args)
+    })
+
+    const response = await POST(request({ password: 'correct' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body).toEqual(
+      expect.objectContaining({
+        success: true,
+        recovery_token: DEFAULT_RECOVERY_TOKEN,
+        billing_settlement_pending: true,
+      })
+    )
+    expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenCalledWith(
+      'prepare_account_deletion_billing_atomic',
+      expect.any(Object)
+    )
+    expect(mockRpc).toHaveBeenCalledWith(
+      'finish_account_deletion_billing_atomic',
+      expect.any(Object)
+    )
+    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
+    expect(mockAdminSignOut).toHaveBeenCalledWith('user-1', 'global')
   })
 
   it('feeds a just-completed Checkout subscription into immediate shutdown', async () => {
@@ -416,7 +494,7 @@ describe('account deletion scheduling', () => {
       })
     )
     expect(mockRpc).toHaveBeenCalledWith(
-      'schedule_account_deletion_with_billing_blocks',
+      'finish_account_deletion_billing_atomic',
       expect.objectContaining({
         p_stripe_subscription_ids: ['sub_123', 'sub_api', 'sub_checkout_race'],
       })
@@ -471,12 +549,17 @@ describe('account deletion scheduling', () => {
     mockExpireOpenSubscriptionCheckouts.mockRejectedValue(new Error('Stripe unavailable'))
 
     const response = await POST(request({ password: 'correct' }))
+    const body = await response.json()
 
-    expect(response.status).toBe(502)
+    expect(response.status).toBe(202)
+    expect(body).toEqual(
+      expect.objectContaining({ success: true, billing_settlement_pending: true })
+    )
     expect(mockDiscoverStripeSubscriptionBilling).toHaveBeenCalledWith({
       stripeClient: mockStripeClient,
       subscriptionIds: ['sub_123', 'sub_api'],
       expectedUserId: 'user-1',
+      expectedCustomerId: null,
       includeCustomerSubscriptions: true,
     })
     expect(mockRpc).toHaveBeenCalledWith('bind_stripe_customer_owner_atomic', {
@@ -488,9 +571,16 @@ describe('account deletion scheduling', () => {
     expect(mockPersistOneTimeSettlementScan).not.toHaveBeenCalled()
     expect(
       mockRpc.mock.calls.some(
-        ([functionName]) => functionName === 'schedule_account_deletion_with_billing_blocks'
+        ([functionName]) => functionName === 'prepare_account_deletion_billing_atomic'
+      )
+    ).toBe(true)
+    expect(
+      mockRpc.mock.calls.some(
+        ([functionName]) => functionName === 'finish_account_deletion_billing_atomic'
       )
     ).toBe(false)
+    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
+    expect(mockAdminSignOut).toHaveBeenCalledWith('user-1', 'global')
   })
 
   it('performs zero Stripe mutations when another profile owns a derived customer', async () => {
@@ -529,6 +619,10 @@ describe('account deletion scheduling', () => {
 
   it('stops an API-only subscription even without a consumer Pro row', async () => {
     subscriptionResult = { data: null, error: null }
+    mockDiscoverStripeSubscriptionBilling.mockResolvedValue({
+      customerId: 'cus_owner',
+      observedSubscriptionIds: ['sub_api'],
+    })
     mockStopStripeSubscriptionRenewals.mockResolvedValue({
       customerId: 'cus_owner',
       observedSubscriptionIds: ['sub_api'],
@@ -540,7 +634,7 @@ describe('account deletion scheduling', () => {
     expect(response.status).toBe(200)
     expect(mockStopStripeSubscriptionRenewals).toHaveBeenCalledWith(
       expect.objectContaining({
-        subscriptionIds: [null, 'sub_api'],
+        subscriptionIds: ['sub_api'],
         deletionMode: 'recoverable',
       })
     )
@@ -574,9 +668,16 @@ describe('account deletion scheduling', () => {
       observations: [],
     })
     expect(mockRpc).toHaveBeenCalledWith(
-      'schedule_account_deletion_with_billing_blocks',
+      'prepare_account_deletion_billing_atomic',
       expect.objectContaining({
         p_recovery_token_hash: createHash('sha256').update(recoveryToken).digest('hex'),
+        p_stripe_customer_id: null,
+        p_stripe_subscription_ids: [],
+      })
+    )
+    expect(mockRpc).toHaveBeenCalledWith(
+      'finish_account_deletion_billing_atomic',
+      expect.objectContaining({
         p_stripe_customer_id: null,
         p_stripe_subscription_ids: [],
       })

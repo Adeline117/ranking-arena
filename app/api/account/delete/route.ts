@@ -3,7 +3,7 @@
  * Related account data is retained until the hard-delete cron runs.
  */
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
@@ -26,8 +26,9 @@ const logger = createLogger('account-delete')
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-interface ScheduleDeletionWithBillingBlocksArgs {
+interface PrepareDeletionBillingArgs {
   p_user_id: string
+  p_operation_id: string
   p_reason: string
   p_scheduled_at: string
   p_recovery_token_hash: string
@@ -35,16 +36,24 @@ interface ScheduleDeletionWithBillingBlocksArgs {
   p_stripe_subscription_ids: string[]
 }
 
-interface ScheduleDeletionWithBillingBlocksResult {
+interface DeletionBillingRpcResult {
   data: unknown
   error: { message: string } | null
 }
 
-const SCHEDULE_DELETION_ACK_KEYS = [
+const PREPARE_DELETION_ACK_KEYS = [
   'status',
+  'operation_id',
   'user_id',
   'deleted_at',
   'deletion_scheduled_at',
+  'stripe_customer_id',
+  'stripe_subscription_ids',
+].sort()
+const FINISH_DELETION_ACK_KEYS = [
+  'status',
+  'operation_id',
+  'user_id',
   'stripe_customer_id',
   'stripe_subscription_ids',
 ].sort()
@@ -57,9 +66,27 @@ function isIsoTimestamp(value: unknown): value is string {
   )
 }
 
-function isExactScheduleDeletionAck(
+function isExactStringSet(value: unknown, expected: string[]): boolean {
+  if (!Array.isArray(value) || value.some((id) => typeof id !== 'string')) return false
+  const receivedIds = value as string[]
+  const normalizedIds = [...new Set(receivedIds)].sort()
+  return (
+    receivedIds.length === normalizedIds.length &&
+    receivedIds.every((id, index) => id === normalizedIds[index]) &&
+    receivedIds.length === expected.length &&
+    receivedIds.every((id, index) => id === expected[index])
+  )
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const keys = Object.keys(value).sort()
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index])
+}
+
+function isExactPrepareDeletionAck(
   value: unknown,
   expected: {
+    operationId: string
     userId: string
     scheduledAt: string
     stripeCustomerId: string | null
@@ -68,16 +95,11 @@ function isExactScheduleDeletionAck(
 ): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const ack = value as Record<string, unknown>
-  const keys = Object.keys(ack).sort()
-  if (
-    keys.length !== SCHEDULE_DELETION_ACK_KEYS.length ||
-    keys.some((key, index) => key !== SCHEDULE_DELETION_ACK_KEYS[index])
-  ) {
-    return false
-  }
+  if (!hasExactKeys(ack, PREPARE_DELETION_ACK_KEYS)) return false
 
   if (
-    ack.status !== 'scheduled' ||
+    ack.status !== 'prepared' ||
+    ack.operation_id !== expected.operationId ||
     ack.user_id !== expected.userId ||
     ack.deletion_scheduled_at !== expected.scheduledAt ||
     ack.stripe_customer_id !== expected.stripeCustomerId ||
@@ -87,19 +109,27 @@ function isExactScheduleDeletionAck(
     return false
   }
 
-  if (
-    !Array.isArray(ack.stripe_subscription_ids) ||
-    ack.stripe_subscription_ids.some((id) => typeof id !== 'string')
-  ) {
-    return false
+  return isExactStringSet(ack.stripe_subscription_ids, expected.stripeSubscriptionIds)
+}
+
+function isExactFinishDeletionAck(
+  value: unknown,
+  expected: {
+    operationId: string
+    userId: string
+    stripeCustomerId: string | null
+    stripeSubscriptionIds: string[]
   }
-  const receivedIds = ack.stripe_subscription_ids as string[]
-  const normalizedIds = [...new Set(receivedIds)].sort()
+): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const ack = value as Record<string, unknown>
   return (
-    receivedIds.length === normalizedIds.length &&
-    receivedIds.every((id, index) => id === normalizedIds[index]) &&
-    receivedIds.length === expected.stripeSubscriptionIds.length &&
-    receivedIds.every((id, index) => id === expected.stripeSubscriptionIds[index])
+    hasExactKeys(ack, FINISH_DELETION_ACK_KEYS) &&
+    ack.status === 'settled' &&
+    ack.operation_id === expected.operationId &&
+    ack.user_id === expected.userId &&
+    ack.stripe_customer_id === expected.stripeCustomerId &&
+    isExactStringSet(ack.stripe_subscription_ids, expected.stripeSubscriptionIds)
   )
 }
 
@@ -190,13 +220,15 @@ export const POST = withAuth(
     // safely retry after refreshing their code.
     const recoveryTokenHash = createHash('sha256').update(recoveryToken).digest('hex')
 
-    // Stop every recurring billing surface before writing the deletion
-    // tombstone. API-tier billing is stored on user_profiles, independently of
-    // the consumer Pro row in subscriptions. Open subscription Checkout
-    // Sessions must also be expired or they can create a first charge later.
+    const operationId = randomUUID()
+
+    // Resolve and attest every currently visible billing identity without
+    // mutating Stripe. The database then persists the deletion tombstone and
+    // retry operation before the first irreversible remote write.
     let recurringSubscriptionId: string | null = null
     let stripeCustomerId: string | null = null
     const observedStripeSubscriptionIds = new Set<string>()
+    let stripeClient: ReturnType<typeof getStripe> | null = null
     const oneTimeSettlements = new Map<string, AccountDeletionOneTimeSettlementObservation>()
     const mergeOneTimeSettlements = (
       observations: AccountDeletionOneTimeSettlementObservation[]
@@ -239,126 +271,86 @@ export const POST = withAuth(
         !!billingProfile.stripe_customer_id || subscriptionIds.some(Boolean)
 
       if (hasStripeBillingSurface) {
-        const stripeClient = getStripe()
-        if (!stripeCustomerId && subscriptionIds.some(Boolean)) {
-          const discovery = await discoverStripeSubscriptionBilling({
-            stripeClient,
-            subscriptionIds,
-            expectedUserId: user.id,
-            includeCustomerSubscriptions: true,
-          })
-          discovery.observedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
-          if (discovery.customerId) {
-            const { data: bindAck, error: bindError } = await adminSupabase.rpc(
-              'bind_stripe_customer_owner_atomic',
-              {
-                p_user_id: user.id,
-                p_new_stripe_customer_id: discovery.customerId,
-                p_expected_previous_stripe_customer_id: null,
-              }
-            )
-            if (bindError || !isExactCustomerBindingAck(bindAck)) {
-              throw new Error('Derived Stripe customer ownership could not be bound exactly')
-            }
-            stripeCustomerId = discovery.customerId
-          }
+        stripeClient = getStripe()
+        const discovery = await discoverStripeSubscriptionBilling({
+          stripeClient,
+          subscriptionIds,
+          expectedUserId: user.id,
+          expectedCustomerId: stripeCustomerId,
+          includeCustomerSubscriptions: true,
+        })
+        discovery.observedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
+        if (stripeCustomerId && discovery.customerId !== stripeCustomerId) {
+          throw new Error('Stripe subscription discovery returned the wrong customer')
         }
-
-        if (stripeCustomerId) {
-          const checkoutResult = await expireOpenSubscriptionCheckouts({
-            stripeClient,
-            customerId: stripeCustomerId,
-            expectedUserId: user.id,
-          })
-          subscriptionIds.push(...checkoutResult.racedSubscriptionIds)
-          checkoutResult.racedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
-          mergeOneTimeSettlements(checkoutResult.oneTimeSettlements)
-
-          const stopped = await stopStripeSubscriptionRenewals({
-            stripeClient,
-            subscriptionIds,
-            expectedUserId: user.id,
-            expectedCustomerId: stripeCustomerId,
-            deletionMode: 'recoverable',
-            pauseMarker: user.id,
-          })
-          if (stopped.customerId !== stripeCustomerId) {
-            throw new Error('Stripe subscription enumeration returned the wrong customer')
+        if (!stripeCustomerId) {
+          if (!discovery.customerId) {
+            throw new Error('Stripe customer identity could not be proven for account deletion')
           }
-          stopped.observedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
+          const { data: bindAck, error: bindError } = await adminSupabase.rpc(
+            'bind_stripe_customer_owner_atomic',
+            {
+              p_user_id: user.id,
+              p_new_stripe_customer_id: discovery.customerId,
+              p_expected_previous_stripe_customer_id: null,
+            }
+          )
+          if (bindError || !isExactCustomerBindingAck(bindAck)) {
+            throw new Error('Derived Stripe customer ownership could not be bound exactly')
+          }
+          stripeCustomerId = discovery.customerId
         }
       }
-
-      await persistAccountDeletionOneTimeSettlementScan({
-        supabase: adminSupabase,
-        userId: user.id,
-        stripeCustomerId,
-        observations: [...oneTimeSettlements.values()],
-      })
     } catch (error) {
-      logger.error('Failed to settle billing surfaces; deletion not scheduled', {
+      logger.error('Failed to attest billing surfaces; deletion not scheduled', {
         userId: user.id,
         error: error instanceof Error ? error.message : String(error),
       })
       return NextResponse.json(
-        { error: 'Could not stop subscription renewal. Account deletion was not scheduled.' },
+        { error: 'Could not verify subscription ownership. Account deletion was not scheduled.' },
         { status: 502 }
       )
     }
 
-    const stripeSubscriptionIds = [...observedStripeSubscriptionIds].sort()
-    const scheduleArgs: ScheduleDeletionWithBillingBlocksArgs = {
+    const preparedStripeSubscriptionIds = [...observedStripeSubscriptionIds].sort()
+    const prepareArgs: PrepareDeletionBillingArgs = {
       p_user_id: user.id,
+      p_operation_id: operationId,
       p_reason: reason ?? '',
       p_scheduled_at: scheduledDeletion.toISOString(),
       p_recovery_token_hash: recoveryTokenHash,
       p_stripe_customer_id: stripeCustomerId,
-      p_stripe_subscription_ids: stripeSubscriptionIds,
+      p_stripe_subscription_ids: preparedStripeSubscriptionIds,
     }
-    // This RPC is introduced by the same deployment migration; Reflect keeps
-    // this route independently type-checkable until generated schema types are
-    // refreshed from the deployed database.
-    const { data: scheduleAck, error: scheduleError } = (await Reflect.apply(
+    const { data: prepareAck, error: prepareError } = (await Reflect.apply(
       adminSupabase.rpc,
       adminSupabase,
-      ['schedule_account_deletion_with_billing_blocks', scheduleArgs]
-    )) as ScheduleDeletionWithBillingBlocksResult
+      ['prepare_account_deletion_billing_atomic', prepareArgs]
+    )) as DeletionBillingRpcResult
 
     if (
-      scheduleError ||
-      !isExactScheduleDeletionAck(scheduleAck, {
+      prepareError ||
+      !isExactPrepareDeletionAck(prepareAck, {
+        operationId,
         userId: user.id,
         scheduledAt: scheduledDeletion.toISOString(),
         stripeCustomerId,
-        stripeSubscriptionIds,
+        stripeSubscriptionIds: preparedStripeSubscriptionIds,
       })
     ) {
-      // Immediate Stripe cancellation is deliberately irreversible: reviving
-      // it here could restart Smart Retries while deletion state is uncertain.
-      logger.error('Account deletion transaction failed', {
+      logger.error('Account deletion preparation failed before Stripe mutation', {
         userId: user.id,
-        error: scheduleError?.message ?? 'database returned an invalid deletion acknowledgement',
+        operationId,
+        error: prepareError?.message ?? 'database returned an invalid preparation acknowledgement',
       })
       return NextResponse.json(
         { error: 'Failed to schedule account deletion. Please try again.' },
-        { status: 500 }
+        { status: 503 }
       )
     }
 
-    if (recurringSubscriptionId) {
-      const { error: localSubscriptionError } = await adminSupabase
-        .from('subscriptions')
-        .update({ status: 'canceled', cancel_at_period_end: false })
-        .eq('stripe_subscription_id', recurringSubscriptionId)
-        .eq('user_id', user.id)
-      if (localSubscriptionError) {
-        logger.error('Remote subscription canceled but local projection update failed', {
-          userId: user.id,
-          error: localSubscriptionError.message,
-        })
-      }
-    }
-
+    // The tombstone is now durable. Auth invalidation and every Stripe write
+    // may fail independently without making the account active again.
     const { error: banError } = await adminSupabase.auth.admin.updateUserById(user.id, {
       ban_duration: '720h',
     })
@@ -373,14 +365,94 @@ export const POST = withAuth(
       })
     }
 
-    logger.info('Account deletion scheduled', { userId: user.id })
-    return NextResponse.json({
-      success: true,
-      user_id: user.id,
-      deletion_scheduled_at: scheduledDeletion.toISOString(),
-      recovery_token: recoveryToken,
-      message: 'Account marked for deletion, recoverable within 30 days',
-    })
+    const scheduledResponse = (billingSettlementPending: boolean) =>
+      NextResponse.json(
+        {
+          success: true,
+          user_id: user.id,
+          deletion_scheduled_at: scheduledDeletion.toISOString(),
+          recovery_token: recoveryToken,
+          billing_settlement_pending: billingSettlementPending,
+          message: billingSettlementPending
+            ? 'Account marked for deletion. Subscription shutdown is still being retried.'
+            : 'Account marked for deletion, recoverable within 30 days',
+        },
+        { status: billingSettlementPending ? 202 : 200 }
+      )
+
+    try {
+      if (stripeCustomerId && stripeClient) {
+        const checkoutResult = await expireOpenSubscriptionCheckouts({
+          stripeClient,
+          customerId: stripeCustomerId,
+          expectedUserId: user.id,
+        })
+        checkoutResult.racedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
+        mergeOneTimeSettlements(checkoutResult.oneTimeSettlements)
+
+        const stopped = await stopStripeSubscriptionRenewals({
+          stripeClient,
+          subscriptionIds: [...observedStripeSubscriptionIds].sort(),
+          expectedUserId: user.id,
+          expectedCustomerId: stripeCustomerId,
+          deletionMode: 'recoverable',
+          pauseMarker: user.id,
+        })
+        if (stopped.customerId !== stripeCustomerId) {
+          throw new Error('Stripe subscription enumeration returned the wrong customer')
+        }
+        stopped.observedSubscriptionIds.forEach((id) => observedStripeSubscriptionIds.add(id))
+      }
+
+      await persistAccountDeletionOneTimeSettlementScan({
+        supabase: adminSupabase,
+        userId: user.id,
+        stripeCustomerId,
+        observations: [...oneTimeSettlements.values()],
+      })
+    } catch (error) {
+      logger.error('Account deletion billing settlement will be retried from durable intent', {
+        userId: user.id,
+        operationId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return scheduledResponse(true)
+    }
+
+    const settledStripeSubscriptionIds = [...observedStripeSubscriptionIds].sort()
+    const { data: finishAck, error: finishError } = (await Reflect.apply(
+      adminSupabase.rpc,
+      adminSupabase,
+      [
+        'finish_account_deletion_billing_atomic',
+        {
+          p_user_id: user.id,
+          p_operation_id: operationId,
+          p_stripe_customer_id: stripeCustomerId,
+          p_stripe_subscription_ids: settledStripeSubscriptionIds,
+        },
+      ]
+    )) as DeletionBillingRpcResult
+
+    if (
+      finishError ||
+      !isExactFinishDeletionAck(finishAck, {
+        operationId,
+        userId: user.id,
+        stripeCustomerId,
+        stripeSubscriptionIds: settledStripeSubscriptionIds,
+      })
+    ) {
+      logger.error('Account deletion billing finish will be retried from durable intent', {
+        userId: user.id,
+        operationId,
+        error: finishError?.message ?? 'database returned an invalid finish acknowledgement',
+      })
+      return scheduledResponse(true)
+    }
+
+    logger.info('Account deletion scheduled and billing settled', { userId: user.id, operationId })
+    return scheduledResponse(false)
   },
   { name: 'account-delete', rateLimit: 'sensitive' }
 )
