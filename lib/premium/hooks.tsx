@@ -424,6 +424,17 @@ export function usePremium(): PremiumContextValue {
 }
 
 /**
+ * Whether the caller is actually nested under PremiumProvider.
+ *
+ * The provider-light homepage intentionally renders TopNav outside Providers
+ * for first-paint performance. Consumers that can safely use the tier hint
+ * cookie need to distinguish that case from a provider that is still loading.
+ */
+export function usePremiumProviderPresent(): boolean {
+  return useContext(PremiumContext) !== null
+}
+
+/**
  * 检查功能访问权限
  */
 export function useFeatureAccess(

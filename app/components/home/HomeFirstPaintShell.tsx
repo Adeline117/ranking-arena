@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
+import { FOUNDING_MEMBER_BANNER_HEIGHT } from './founding-member-layout'
 
 function SkeletonLines({ count, height }: { count: number; height: number }) {
   return (
@@ -46,7 +48,21 @@ function SidebarSkeleton({ rows, rowHeight }: { rows: number; rowHeight: number 
  */
 export default function HomeFirstPaintShell({ children }: { children: ReactNode }) {
   return (
-    <div id="ssr-home-content-shell" className="home-page-container">
+    <div
+      id="ssr-home-content-shell"
+      className="container-padding has-mobile-nav home-page-container"
+    >
+      {!PRO_FREE_PROMO && (
+        <div
+          className="skeleton contain-layout-style"
+          data-testid="first-paint-founding-member-slot"
+          aria-hidden="true"
+          style={{
+            height: FOUNDING_MEMBER_BANNER_HEIGHT,
+            borderRadius: tokens.radius.md,
+          }}
+        />
+      )}
       <div
         data-testid="first-paint-source-strip"
         aria-hidden="true"
