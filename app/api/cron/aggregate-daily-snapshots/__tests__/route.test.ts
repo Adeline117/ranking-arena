@@ -34,11 +34,6 @@ jest.mock('@/lib/cache/redis-client', () => ({
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
 
-jest.mock('@/lib/constants/exchanges', () => ({
-  ...jest.requireActual('@/lib/constants/exchanges'),
-  PUBLIC_ACTIVE_RANKING_SOURCES: ['binance_futures'],
-}))
-
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
     rpc: (...args: unknown[]) => mockRpc(...args),
@@ -47,10 +42,10 @@ jest.mock('@/lib/supabase/server', () => ({
 }))
 
 jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
-  readSealedRankingGeneration: jest.fn(
+  readSealedRankingAuthorityGeneration: jest.fn(
     async (
       _supabase: unknown,
-      input: { season: string; sources: string[] },
+      _season: string,
       reader: (publication: {
         scoreCohortId: string
         proofs: Array<{ source: string; published_rank_count: number }>
@@ -58,7 +53,7 @@ jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
     ) => {
       const publication = {
         scoreCohortId: '00000000-0000-4000-8000-000000000001',
-        proofs: input.sources.map((source) => ({ source, published_rank_count: 1 })),
+        proofs: [{ source: 'binance_futures', published_rank_count: 1 }],
       }
       return {
         value: await reader(publication),

@@ -8,11 +8,10 @@ const route = readFileSync(
 
 describe('daily snapshot ranking authority', () => {
   it('uses one sealed public cohort for rank gap fill and fallback', () => {
-    expect(route).toContain('filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)')
-    expect(route).toContain('readSealedRankingGeneration(')
-    expect(route).toContain("{ season: '90D', sources: AGGREGATE_RANKING_SOURCES }")
+    expect(route).toContain('readSealedRankingAuthorityGeneration(')
+    expect(route).toContain('const authoritySources = publication.proofs.map')
     expect(route.match(/rank_publication_id/g)).toHaveLength(2)
-    expect(route).toContain(".in('source', AGGREGATE_RANKING_SOURCES)")
+    expect(route).toContain(".in('source', authoritySources)")
     expect(route).toContain('!isPublicRankingSourceAllowed(row.source)')
   })
 

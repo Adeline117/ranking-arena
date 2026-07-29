@@ -21,19 +21,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import {
-  filterPublicRankingSources,
-  isPublicRankingSourceAllowed,
-} from '@/lib/rankings/publication-policy'
-import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-const AGGREGATE_RANKING_SOURCES = Object.freeze(
-  filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
-)
 const PER_PLATFORM_FALLBACK_LIMIT = 10_000
 const GAP_FILL_LIMIT = 50_000
 
@@ -163,10 +156,11 @@ async function aggregateForDate(
   // Step 2: Fill gaps from one immutable published 90D generation. If the
   // retired historical RPC is unavailable, the same sealed read becomes the
   // explicit fallback; it must never mix partial per-source generations.
-  const sealedRankRows = await readSealedRankingGeneration(
+  const sealedRankRows = await readSealedRankingAuthorityGeneration(
     readDb,
-    { season: '90D', sources: AGGREGATE_RANKING_SOURCES },
+    '90D',
     async (publication) => {
+      const authoritySources = publication.proofs.map((proof) => proof.source)
       // A current publication can fill yesterday's end-of-day snapshot only.
       // Reusing it for an older backfill date would rewrite history with
       // today's metrics, so historical dates rely solely on their dated RPC.
@@ -174,7 +168,7 @@ async function aggregateForDate(
 
       if (useLeaderboardFallback) {
         const batches = await Promise.all(
-          AGGREGATE_RANKING_SOURCES.map(async (source) => {
+          authoritySources.map(async (source) => {
             const { data, error } = await readDb
               .from('leaderboard_ranks')
               .select(
@@ -213,7 +207,7 @@ async function aggregateForDate(
         .select(
           'source, source_trader_id, roi, pnl, win_rate, max_drawdown, followers, trades_count, rank'
         )
-        .in('source', AGGREGATE_RANKING_SOURCES)
+        .in('source', authoritySources)
         .eq('season_id', '90D')
         .filter('rank_publication_id', 'eq', publication.scoreCohortId)
         .not('arena_score', 'is', null)
