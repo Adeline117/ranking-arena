@@ -4,6 +4,7 @@ const mockTieredSet = jest.fn()
 const mockGetSortedSetSize = jest.fn()
 const mockGetTopTraders = jest.fn()
 const mockFrom = jest.fn()
+const mockReadSealedRankingGeneration = jest.fn()
 
 jest.mock('next/server', () => {
   class MockNextResponse {
@@ -41,6 +42,11 @@ jest.mock('@/lib/cache/redis-layer', () => ({
 jest.mock('@/lib/realtime/ranking-store', () => ({
   getSortedSetSize: (...args: unknown[]) => mockGetSortedSetSize(...args),
   getTopTraders: (...args: unknown[]) => mockGetTopTraders(...args),
+}))
+
+jest.mock('@/lib/rankings/read-sealed-ranking-generation', () => ({
+  ...jest.requireActual('@/lib/rankings/read-sealed-ranking-generation'),
+  readSealedRankingGeneration: (...args: unknown[]) => mockReadSealedRankingGeneration(...args),
 }))
 
 jest.mock('@/lib/api', () => ({
@@ -151,7 +157,10 @@ function row(source: string, id: string, rank: number): DatabaseRow {
 
 import type { NextRequest } from 'next/server'
 import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
-import { PUBLIC_RANKING_POSTGREST_EXCLUSION } from '@/lib/rankings/publication-policy'
+import {
+  PUBLIC_RANKING_POSTGREST_EXCLUSION,
+  filterPublicRankingSources,
+} from '@/lib/rankings/publication-policy'
 import { GET } from '../route'
 
 function request() {
@@ -168,9 +177,45 @@ describe('GET /api/rankings/live publication authority', () => {
     mockTieredSet.mockResolvedValue(undefined)
     mockGetSortedSetSize.mockResolvedValue(0)
     mockGetTopTraders.mockResolvedValue([])
+    mockReadSealedRankingGeneration.mockImplementation(
+      async (
+        _supabase: unknown,
+        input: { season: '7D' | '30D' | '90D'; sources: string[] },
+        reader: (publication: {
+          state: 'sealed'
+          season: '7D' | '30D' | '90D'
+          scoreCohortId: string
+          proofs: Array<{ published_rank_count: number }>
+        }) => Promise<unknown>
+      ) => {
+        const scoreCohortId = '11111111-1111-4111-8111-111111111111'
+        const publication = {
+          state: 'sealed' as const,
+          season: input.season,
+          scoreCohortId,
+          proofs: [...input.sources].sort().map((source) => ({
+            season_id: input.season,
+            source,
+            source_as_of: '2026-07-29T10:00:00.000000Z',
+            recorded_at: '2026-07-29T10:01:00.000000Z',
+            score_cohort_id: scoreCohortId,
+            rank_mutation_seq: 9,
+            current_mutation_seq: 9,
+            published_rank_count: source === 'binance_futures' || source === 'hyperliquid' ? 1 : 0,
+            published_identity_sha256: 'a'.repeat(64),
+            is_sealed: true,
+          })),
+        }
+        return {
+          value: await reader(publication),
+          publication,
+          publicationIdentity: JSON.stringify(publication),
+        }
+      }
+    )
   })
 
-  it('filters active and quarantined sources before the cold-v4 DB range', async () => {
+  it('filters active and quarantined sources before the sealed DB range', async () => {
     const query = sourceFilteredQuery([
       row('copin', 'retired-slot', 1),
       row('okx_web3_solana', 'quarantined-slot', 2),
@@ -182,19 +227,31 @@ describe('GET /api/rankings/live publication authority', () => {
     const response = await GET(request())
     const body = await response.json()
 
-    expect(query.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+    expect(query.in).toHaveBeenCalledWith(
+      'source',
+      filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
+    )
+    expect(query.filter).toHaveBeenCalledWith(
+      'rank_publication_id',
+      'eq',
+      '11111111-1111-4111-8111-111111111111'
+    )
     expect(query.not).toHaveBeenCalledWith('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
     expect(query.range).toHaveBeenCalledWith(0, 1)
     expect(body.traders.map(({ id }: { id: string }) => id)).toEqual(['safe-one', 'safe-two'])
     expect(body.totalCount).toBe(2)
     expect(JSON.stringify(body)).not.toMatch(/retired-slot|quarantined-slot/)
     expect(mockTieredSet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:rankings:live:90D:2:0',
+      'public-rank-policy-v4:rankings:live:sealed-v5:90D:2:0',
       expect.objectContaining({
-        traders: expect.arrayContaining([
-          expect.objectContaining({ id: 'safe-one', source: 'binance_futures' }),
-          expect.objectContaining({ id: 'safe-two', source: 'hyperliquid' }),
-        ]),
+        contract: 'sealed-ranking-cache@1',
+        season: '90D',
+        value: expect.objectContaining({
+          traders: expect.arrayContaining([
+            expect.objectContaining({ id: 'safe-one', source: 'binance_futures' }),
+            expect.objectContaining({ id: 'safe-two', source: 'hyperliquid' }),
+          ]),
+        }),
       }),
       'hot',
       ['rankings', 'live:90D']
@@ -220,7 +277,7 @@ describe('GET /api/rankings/live publication authority', () => {
     expect(JSON.stringify(mockTieredSet.mock.calls)).not.toContain('0xpoison')
   })
 
-  it('sanitizes a polluted current-v4 cache hit without querying or writing it back', async () => {
+  it('rejects a generic cache page even when its policy epoch is current', async () => {
     mockTieredGet.mockResolvedValue({
       layer: 'redis',
       data: {
@@ -236,25 +293,26 @@ describe('GET /api/rankings/live publication authority', () => {
         hasMore: true,
       },
     })
+    mockFrom.mockReturnValue(queryResult([row('binance_futures', 'sealed-db-row', 1)]))
 
     const response = await GET(request())
     const body = await response.json()
 
-    expect(mockTieredGet).toHaveBeenCalledWith('public-rank-policy-v4:rankings:live:90D:2:0', 'hot')
-    expect(body.traders).toEqual([
-      expect.objectContaining({ source: 'binance_futures', source_trader_id: 'safe-cache-row' }),
-    ])
-    expect(body).toEqual(
-      expect.objectContaining({
-        total: 1,
-        totalCount: 1,
-        hasMore: false,
-        ranking_visibility_reason: 'publication_policy_filtered',
-      })
+    expect(mockTieredGet).toHaveBeenCalledWith(
+      'public-rank-policy-v4:rankings:live:sealed-v5:90D:2:0',
+      'hot'
     )
-    expect(response.headers.get('X-Cache')).toBe('HIT')
+    expect(body.traders).toEqual([
+      expect.objectContaining({ source: 'binance_futures', id: 'sealed-db-row' }),
+    ])
+    expect(JSON.stringify(body)).not.toMatch(
+      /safe-cache-row|retired-cache-row|quarantined-cache-row/
+    )
+    expect(response.headers.get('X-Cache')).toBe('MISS')
     expect(mockGetSortedSetSize).not.toHaveBeenCalled()
-    expect(mockFrom).not.toHaveBeenCalled()
-    expect(mockTieredSet).not.toHaveBeenCalled()
+    expect(mockGetTopTraders).not.toHaveBeenCalled()
+    expect(mockReadSealedRankingGeneration).toHaveBeenCalledTimes(1)
+    expect(mockFrom).toHaveBeenCalledWith('leaderboard_ranks')
+    expect(mockTieredSet).toHaveBeenCalledTimes(1)
   })
 })

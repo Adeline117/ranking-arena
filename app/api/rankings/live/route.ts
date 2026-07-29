@@ -1,8 +1,9 @@
 /**
  * Near-real-time rankings API
  *
- * Reads from Redis sorted set (populated by ranking-store) for instant rankings.
- * Falls back to leaderboard_ranks table if Redis sorted set is empty.
+ * Reads one stable sealed leaderboard_ranks generation and caches the complete
+ * proof envelope. The legacy Redis sorted set remains disabled for public reads
+ * until it carries the same publication identity as its rows.
  *
  * GET /api/rankings/live?period=90D&limit=50&offset=0
  *
@@ -11,7 +12,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getTopTraders, getSortedSetSize } from '@/lib/realtime/ranking-store'
 import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
@@ -19,15 +19,22 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
+  filterPublicRankingSources,
   filterPublicRankingRows,
   publicRankingCacheKey,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const logger = createLogger('rankings-live')
+const LIVE_PROOF_SOURCES = filterPublicRankingSources(PUBLIC_ACTIVE_RANKING_SOURCES)
 
 // ── Input validation schema ──────────────────────────────────────────────────
 const liveRankingsSchema = z.object({
@@ -57,17 +64,18 @@ export async function GET(request: NextRequest) {
   const { period, limit, offset } = parsed.data
 
   try {
-    // CQRS read-through cache: avoid hitting ZREVRANGE for repeated requests within 30s
-    const cacheKey = publicRankingCacheKey(`rankings:live:${period}:${limit}:${offset}`)
-    const cached = await tieredGet<Record<string, unknown>>(cacheKey, 'hot')
-    if (cached.data) {
-      // A policy-epoch rotation prevents older entries from being read, while
-      // source sanitation also fails closed if the current epoch is polluted.
-      const response = NextResponse.json(sanitizePublicRankingSourcePayload(cached.data))
+    // Dedicated read-through cache: generic live pages have no generation proof.
+    const cacheKey = publicRankingCacheKey(`rankings:live:sealed-v5:${period}:${limit}:${offset}`)
+    const cached = await tieredGet<unknown>(cacheKey, 'hot')
+    const cachedEntry = parseSealedRankingCacheEntry<Record<string, unknown>>(
+      cached.data,
+      period,
+      LIVE_PROOF_SOURCES
+    )
+    if (cachedEntry) {
+      const response = NextResponse.json(sanitizePublicRankingSourcePayload(cachedEntry.value))
       // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
-      // the Vercel CDN instead of every client invoking the function. The data is
-      // already Redis-cached ~30s, so a 15s edge TTL + SWR keeps staleness bounded
-      // (~15-45s) — acceptable for a "live" board and a huge $0 load reducer.
+      // the Vercel CDN instead of every client invoking the function.
       // Keyed by full URL (period/limit/offset), no auth personalization.
       response.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
       response.headers.set('X-Cache', 'HIT')
@@ -75,143 +83,45 @@ export async function GET(request: NextRequest) {
       return response
     }
 
-    // Try Redis sorted set first
-    const sortedSetSize = await getSortedSetSize(period)
-
-    if (sortedSetSize > 0) {
-      const traders = await getTopTraders(period, limit, offset)
-
-      if (traders.length > 0) {
-        // Enrich with handles/avatars from the traders table
-        const supabase = getSupabaseAdmin()
-        const traderKeys = traders.map((t) => t.traderKey)
-
-        // Batch lookup enrichment data from leaderboard_ranks.
-        // Chunks are independent — issue them in parallel instead of sequentially.
-        // At limit=200 this saves ~120-240ms vs the old serial loop.
-        const enrichMap = new Map<string, Record<string, unknown>>()
-
-        const chunks: string[][] = []
-        for (let i = 0; i < traderKeys.length; i += 100) {
-          chunks.push(traderKeys.slice(i, i + 100))
-        }
-
-        const chunkResults = await Promise.all(
-          chunks.map((chunk) =>
-            supabase
-              .from('leaderboard_ranks')
-              .select(
-                'source, source_trader_id, handle, avatar_url, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type'
-              )
-              .eq('season_id', period)
-              .in('source_trader_id', chunk)
-          )
-        )
-
-        for (const { data } of chunkResults) {
-          if (data) {
-            for (const row of data) {
-              enrichMap.set(
-                `${(row as Record<string, unknown>).source}:${(row as Record<string, unknown>).source_trader_id}`,
-                row as Record<string, unknown>
-              )
-            }
-          }
-        }
-
-        // Build response matching /api/traders format
-        const enrichedTraders = traders.map((t) => {
-          const enriched = enrichMap.get(`${t.platform}:${t.traderKey}`)
-          return {
-            id: t.traderKey,
-            handle: (enriched?.handle as string) || null,
-            source: t.platform,
-            source_type: (enriched?.source_type as string) || 'futures',
-            arena_score: t.score,
-            rank: t.rank,
-            roi: enriched?.roi != null ? Number(enriched.roi) : 0,
-            pnl: enriched?.pnl != null ? Number(enriched.pnl) : null,
-            win_rate: enriched?.win_rate != null ? Number(enriched.win_rate) : null,
-            max_drawdown: enriched?.max_drawdown != null ? Number(enriched.max_drawdown) : null,
-            trades_count: enriched?.trades_count != null ? Number(enriched.trades_count) : null,
-            followers: enriched?.followers != null ? Number(enriched.followers) : null,
-            avatar_url: (enriched?.avatar_url as string) || null,
-            profitability_score:
-              enriched?.profitability_score != null ? Number(enriched.profitability_score) : null,
-            risk_control_score:
-              enriched?.risk_control_score != null ? Number(enriched.risk_control_score) : null,
-            execution_score:
-              enriched?.execution_score != null ? Number(enriched.execution_score) : null,
-            trading_style: (enriched?.trading_style as string) || null,
-            sharpe_ratio: enriched?.sharpe_ratio != null ? Number(enriched.sharpe_ratio) : null,
-            trader_type: (enriched?.trader_type as string) || null,
-            is_bot:
-              t.platform === 'web3_bot' ||
-              enriched?.trader_type === 'bot' ||
-              enriched?.trader_type === 'suspected_bot',
-          }
-        })
-
-        const responseBody = sanitizePublicRankingSourcePayload({
-          traders: enrichedTraders,
-          total: sortedSetSize,
-          totalCount: sortedSetSize,
-          period,
-          source: 'redis',
-          hasMore: offset + limit < sortedSetSize,
-        })
-
-        // Cache the response for subsequent requests (hot tier = 60s memory, 300s Redis)
-        tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch((err) =>
-          logger.warn(
-            '[rankings/live] cache write failed:',
-            err instanceof Error ? err.message : String(err)
-          )
-        )
-
-        const response = NextResponse.json(responseBody)
-        // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
-        // the Vercel CDN instead of every client invoking the function. The data is
-        // already Redis-cached ~30s, so a 15s edge TTL + SWR keeps staleness bounded
-        // (~15-45s) — acceptable for a "live" board and a huge $0 load reducer.
-        // Keyed by full URL (period/limit/offset), no auth personalization.
-        response.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
-        response.headers.set('X-Cache', 'MISS')
-        return response
-      }
-    }
-
-    // Fallback: read from leaderboard_ranks
-    logger.info(`[rankings-live] Redis sorted set empty for ${period}, falling back to DB`)
+    // The legacy sorted set has no publication/cohort manifest. Its score order
+    // can belong to a prior generation while DB enrichment belongs to the next,
+    // so public reads stay on the sealed database generation until that store
+    // carries and validates the same proof identity.
     const supabase = getSupabaseAdmin()
 
-    let fallbackQuery = supabase
-      .from('leaderboard_ranks')
-      .select(
-        'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type',
-        { count: 'estimated' }
-      )
-      .eq('season_id', period)
-      .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+    const sealedRead = await readSealedRankingGeneration(
+      supabase,
+      { season: period, sources: LIVE_PROOF_SOURCES },
+      async (publication) => {
+        let query = supabase
+          .from('leaderboard_ranks')
+          .select(
+            'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type'
+          )
+          .eq('season_id', period)
+          .in('source', LIVE_PROOF_SOURCES)
+          .filter('rank_publication_id', 'eq', publication.scoreCohortId)
 
-    if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-      fallbackQuery = fallbackQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-    }
+        if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
+          query = query.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
+        }
 
-    const { data, count, error } = await fallbackQuery
-      .gt('arena_score', 0)
-      .or('is_outlier.is.null,is_outlier.eq.false')
-      .order('rank', { ascending: true })
-      .range(offset, offset + limit - 1)
-
-    if (error) {
-      logger.error('[rankings-live] DB fallback failed:', error)
-      return NextResponse.json({ error: 'Query failed' }, { status: 500 })
-    }
+        const result = await query
+          .gt('arena_score', 0)
+          .or('is_outlier.is.null,is_outlier.eq.false')
+          .order('rank', { ascending: true })
+          .range(offset, offset + limit - 1)
+        if (result.error) {
+          throw new Error(`live ranking query failed: ${result.error.message}`)
+        }
+        return (result.data ?? []) as Array<Record<string, unknown>>
+      },
+      { timeoutMs: 10_000 }
+    )
 
     // Filter the database-native source before mapping. This prevents a legacy
     // aggregator identity from being relabelled as an active canonical source.
-    const rawRows = (data || []) as Array<Record<string, unknown>>
+    const rawRows = sealedRead.value
     const publicRows = filterPublicRankingRows(rawRows, (row) => row.source)
     const removedNonPublicRows = publicRows.length !== rawRows.length
     const traders = publicRows.map((row) => ({
@@ -240,21 +150,27 @@ export async function GET(request: NextRequest) {
         row.trader_type === 'suspected_bot',
     }))
 
-    // Under a correctly behaving PostgREST response, count already reflects
-    // the pre-range allowlist. If a proxy violates that filter, fail closed to
-    // the finite safe page rather than publishing an untrusted aggregate.
-    const totalCount = removedNonPublicRows ? traders.length : (count ?? 0)
+    const publishedTotal = sealedRead.publication.proofs.reduce(
+      (sum, proof) => sum + proof.published_rank_count,
+      0
+    )
+    // If a proxy violates the source fence, fail closed to the finite safe page
+    // rather than publishing a proof total beside an untrusted page.
+    const totalCount = removedNonPublicRows ? traders.length : publishedTotal
     const responseBody = sanitizePublicRankingSourcePayload({
       traders,
       total: totalCount,
       totalCount,
       period,
-      source: 'database',
+      source: 'database_sealed',
       hasMore: !removedNonPublicRows && offset + limit < totalCount,
     })
 
-    // Cache the DB fallback response too
-    tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch((err) => {
+    const safeRead = { ...sealedRead, value: responseBody }
+    tieredSet(cacheKey, createSealedRankingCacheEntry(safeRead), 'hot', [
+      'rankings',
+      `live:${period}`,
+    ]).catch((err) => {
       logger.warn(
         '[rankings-live] Cache write failed:',
         err instanceof Error ? err.message : String(err)
@@ -263,9 +179,7 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.json(responseBody)
     // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
-    // the Vercel CDN instead of every client invoking the function. The data is
-    // already Redis-cached ~30s, so a 15s edge TTL + SWR keeps staleness bounded
-    // (~15-45s) — acceptable for a "live" board and a huge $0 load reducer.
+    // the Vercel CDN instead of every client invoking the function.
     // Keyed by full URL (period/limit/offset), no auth personalization.
     response.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
     response.headers.set('X-Cache', 'MISS')
