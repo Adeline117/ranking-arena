@@ -337,4 +337,67 @@ END
 $acl_proof$;
 SQL
 
+psql_cmd <<'SQL'
+INSERT INTO public.user_profiles (id)
+VALUES ('33333333-3333-4333-8333-333333333333');
+SQL
+
+PREPARE_HOLDER_LOG="$LOG_DIR/concurrent-prepare-holder.log"
+psql_cmd >"$PREPARE_HOLDER_LOG" 2>&1 <<'SQL' &
+BEGIN;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', false);
+SELECT pg_catalog.set_config('application_name', 'billing-prepare-holder', false);
+SELECT public.prepare_account_deletion_billing_atomic(
+  '33333333-3333-4333-8333-333333333333',
+  'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  'concurrent recovery proof',
+  pg_catalog.clock_timestamp() + interval '30 days',
+  pg_catalog.repeat('d', 64),
+  NULL,
+  ARRAY[]::text[]
+);
+SELECT pg_catalog.pg_sleep(2);
+COMMIT;
+SQL
+prepare_holder_pid=$!
+
+prepare_lock_visible=false
+for _attempt in {1..100}; do
+  if [[ "$(psql_cmd -Atc "
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_locks AS held_lock
+    JOIN pg_catalog.pg_stat_activity AS activity
+      ON activity.pid = held_lock.pid
+    WHERE activity.application_name = 'billing-prepare-holder'
+      AND held_lock.locktype = 'advisory'
+      AND held_lock.granted
+  ")" != "0" ]]; then
+    prepare_lock_visible=true
+    break
+  fi
+  sleep 0.02
+done
+if [[ "$prepare_lock_visible" != true ]]; then
+  wait "$prepare_holder_pid" || true
+  cat "$PREPARE_HOLDER_LOG" >&2
+  echo "Concurrent prepare never exposed its recovery advisory lock" >&2
+  exit 1
+fi
+
+concurrent_claim="$({ psql_cmd -At <<'SQL'
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', false);
+SELECT public.claim_account_recovery_admission_atomic(
+  '33333333-3333-4333-8333-333333333333',
+  pg_catalog.repeat('d', 64),
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+);
+SQL
+} | tail -n 1)"
+wait "$prepare_holder_pid"
+if [[ "$concurrent_claim" != "busy" ]]; then
+  cat "$PREPARE_HOLDER_LOG" >&2
+  echo "Concurrent recovery bypassed prepared deletion: $concurrent_claim" >&2
+  exit 1
+fi
+
 echo "Account deletion billing intent PostgreSQL 17 proof passed"

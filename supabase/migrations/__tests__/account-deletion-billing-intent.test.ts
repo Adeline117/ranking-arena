@@ -83,6 +83,8 @@ describe('durable account deletion billing intent', () => {
     expect(pg17Proof).toContain('$prepared_blocks_recovery$')
     expect(pg17Proof).toContain('$settled_allows_recovery$')
     expect(pg17Proof).toContain('$prepared_blocks_hard_delete$')
+    expect(pg17Proof).toContain("'billing-prepare-holder'")
+    expect(pg17Proof).toContain('Concurrent recovery bypassed prepared deletion')
     expect(pg17Proof).toContain('Account deletion billing intent PostgreSQL 17 proof passed')
   })
 })
