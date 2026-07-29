@@ -10329,6 +10329,19 @@ export type Database = {
         }
         Returns: Json
       }
+      record_recurring_payment_history_success_atomic: {
+        Args: {
+          p_amount_paid: number
+          p_currency: string
+          p_livemode: boolean
+          p_stripe_event_created: number
+          p_stripe_event_id: string
+          p_stripe_invoice_id: string
+          p_stripe_payment_intent_id: string | null
+          p_user_id: string
+        }
+        Returns: Json
+      }
       record_stripe_charge_dispute_reinstatement_atomic: {
         Args: {
           p_captured_amount: number

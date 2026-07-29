@@ -1,0 +1,67 @@
+\set ON_ERROR_STOP on
+
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+SELECT pg_catalog.set_config(
+  'arena.stripe_livemode',
+  'true',
+  false
+);
+
+-- preserve_financial_owner_after_account_deletion deliberately retains the
+-- canonical ledger UUID after auth/profile deletion, while payment_history's
+-- FK redacts its user_id to NULL. This is not an identity contradiction.
+INSERT INTO public.stripe_entitlement_payments (
+  user_id,
+  stripe_customer_id,
+  payment_kind,
+  plan,
+  stripe_subscription_id,
+  stripe_invoice_id,
+  stripe_payment_intent_id,
+  stripe_charge_id,
+  amount_paid,
+  currency,
+  period_start,
+  period_end,
+  payment_status,
+  livemode
+) VALUES (
+  'e74d0000-0000-4000-8000-000000000001',
+  'cus_history_deleted_subject',
+  'recurring',
+  'monthly',
+  'sub_history_deleted_subject',
+  'in_history_deleted_subject',
+  'pi_history_deleted_subject',
+  'ch_history_deleted_subject',
+  499,
+  'usd',
+  '2030-02-17 00:00:00+00',
+  '2030-03-17 00:00:00+00',
+  'paid',
+  true
+);
+
+INSERT INTO public.payment_history(
+  user_id,
+  stripe_invoice_id,
+  stripe_payment_intent_id,
+  amount,
+  currency,
+  status,
+  created_at
+) VALUES (
+  NULL,
+  'in_history_deleted_subject',
+  'pi_history_deleted_subject',
+  499,
+  'usd',
+  'succeeded',
+  '2030-02-17 00:00:00+00'
+);
+
+\echo 'Deleted financial-subject payment history pre-fixture passed'

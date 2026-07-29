@@ -280,7 +280,11 @@ describe('invoice webhook persistence', () => {
       livemode: true,
       metadata: { userId: USER_ID },
     })
-    mockRpc.mockResolvedValue({ data: 'completed', error: null })
+    mockRpc.mockImplementation(async (name: string) =>
+      name === 'record_recurring_payment_history_success_atomic'
+        ? { data: { status: 'recorded' }, error: null }
+        : { data: 'completed', error: null }
+    )
     mockActivateRecurringInvoiceEntitlement.mockResolvedValue({
       status: 'activated',
       authority: RECURRING_AUTHORITY,
@@ -354,16 +358,13 @@ describe('invoice webhook persistence', () => {
   })
 
   it('activates an ordinary Pro Invoice through the recurring payment ledger', async () => {
-    const historyMutation = mutationQuery()
-    mockFrom
-      .mockImplementationOnce(() =>
-        lookupQuery({
-          id: USER_ID,
-          subscription_tier: 'pro',
-          stripe_customer_id: 'cus_owner',
-        })
-      )
-      .mockImplementationOnce(() => historyMutation)
+    mockFrom.mockImplementationOnce(() =>
+      lookupQuery({
+        id: USER_ID,
+        subscription_tier: 'pro',
+        stripe_customer_id: 'cus_owner',
+      })
+    )
 
     await expect(handlePaymentSucceeded(invoice(), EVENT)).resolves.toBeUndefined()
 
@@ -373,21 +374,17 @@ describe('invoice webhook persistence', () => {
       invoice: expect.objectContaining({ id: 'in_test' }),
       livemode: true,
     })
-    expect(historyMutation.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        user_id: USER_ID,
-        stripe_invoice_id: 'in_test',
-        stripe_payment_intent_id: 'pi_test',
-        amount: 499,
-        currency: 'usd',
-        status: 'succeeded',
-      }),
-      { onConflict: 'stripe_invoice_id' }
-    )
-    expect(mockFrom.mock.calls.map(([table]) => table)).toEqual([
-      'user_profiles',
-      'payment_history',
-    ])
+    expect(mockRpc).toHaveBeenCalledWith('record_recurring_payment_history_success_atomic', {
+      p_user_id: USER_ID,
+      p_livemode: true,
+      p_stripe_event_id: 'evt_invoice_paid',
+      p_stripe_event_created: 1_800_000_100,
+      p_stripe_invoice_id: 'in_test',
+      p_stripe_payment_intent_id: 'pi_test',
+      p_amount_paid: 499,
+      p_currency: 'usd',
+    })
+    expect(mockFrom.mock.calls.map(([table]) => table)).toEqual(['user_profiles'])
   })
 
   it('durably reviews ordinary Pro authority drift without direct-table restoration', async () => {
@@ -500,18 +497,57 @@ describe('invoice webhook persistence', () => {
   })
 
   it('keeps a successful payment retryable when history persistence fails', async () => {
-    mockFrom
-      .mockImplementationOnce(() =>
-        lookupQuery({
-          id: USER_ID,
-          subscription_tier: 'pro',
-          stripe_customer_id: 'cus_owner',
-        })
-      )
-      .mockImplementationOnce(() => mutationQuery({ message: 'history write unavailable' }))
+    mockFrom.mockImplementationOnce(() =>
+      lookupQuery({
+        id: USER_ID,
+        subscription_tier: 'pro',
+        stripe_customer_id: 'cus_owner',
+      })
+    )
+    mockRpc.mockImplementation(async (name: string) =>
+      name === 'record_recurring_payment_history_success_atomic'
+        ? { data: null, error: { message: 'history write unavailable' } }
+        : { data: 'completed', error: null }
+    )
 
     await expect(handlePaymentSucceeded(invoice(), EVENT)).rejects.toThrow(
       'Failed to record successful payment: history write unavailable'
+    )
+  })
+
+  it('ACKs a durable successful-history identity conflict for manual review', async () => {
+    mockFrom.mockImplementationOnce(() =>
+      lookupQuery({
+        id: USER_ID,
+        subscription_tier: 'pro',
+        stripe_customer_id: 'cus_owner',
+      })
+    )
+    mockRpc.mockImplementation(async (name: string) =>
+      name === 'record_recurring_payment_history_success_atomic'
+        ? { data: { status: 'identity_conflict' }, error: null }
+        : { data: 'completed', error: null }
+    )
+
+    await expect(handlePaymentSucceeded(invoice(), EVENT)).resolves.toBeUndefined()
+  })
+
+  it('rejects a contradictory successful-history RPC result', async () => {
+    mockFrom.mockImplementationOnce(() =>
+      lookupQuery({
+        id: USER_ID,
+        subscription_tier: 'pro',
+        stripe_customer_id: 'cus_owner',
+      })
+    )
+    mockRpc.mockImplementation(async (name: string) =>
+      name === 'record_recurring_payment_history_success_atomic'
+        ? { data: { status: 'recorded', extra: true }, error: null }
+        : { data: 'completed', error: null }
+    )
+
+    await expect(handlePaymentSucceeded(invoice(), EVENT)).rejects.toThrow(
+      'record_recurring_payment_history_success_atomic returned an invalid result'
     )
   })
 

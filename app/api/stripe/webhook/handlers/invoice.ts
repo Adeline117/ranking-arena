@@ -30,6 +30,37 @@ export type StripeFailedInvoiceEventContext = StripeWebhookEventContext & {
 }
 
 const MAX_STRIPE_UNIX_SECONDS = 253_402_300_799
+const RECURRING_PAYMENT_HISTORY_SUCCESS_STATUSES = new Set([
+  'recorded',
+  'already_recorded',
+  'promoted_from_failed',
+  'identity_conflict',
+] as const)
+
+type RecurringPaymentHistorySuccessStatus =
+  | 'recorded'
+  | 'already_recorded'
+  | 'promoted_from_failed'
+  | 'identity_conflict'
+
+function recurringPaymentHistorySuccessStatus(
+  value: unknown
+): RecurringPaymentHistorySuccessStatus {
+  if (
+    !value ||
+    Array.isArray(value) ||
+    typeof value !== 'object' ||
+    Object.keys(value).length !== 1 ||
+    !('status' in value) ||
+    typeof value.status !== 'string' ||
+    !RECURRING_PAYMENT_HISTORY_SUCCESS_STATUSES.has(
+      value.status as RecurringPaymentHistorySuccessStatus
+    )
+  ) {
+    throw new Error('record_recurring_payment_history_success_atomic returned an invalid result')
+  }
+  return value.status as RecurringPaymentHistorySuccessStatus
+}
 
 function candidateInvoiceUserId(invoice: Stripe.Invoice): string | null {
   const metadata = invoice.parent?.subscription_details?.metadata
@@ -329,27 +360,38 @@ export async function handlePaymentSucceeded(
     return
   }
 
-  const { error: historyErr } = await getSupabase().from('payment_history').upsert(
+  const { data: historyData, error: historyErr } = await getSupabase().rpc(
+    'record_recurring_payment_history_success_atomic',
     {
-      user_id: profile.id,
-      stripe_invoice_id: invoice.id,
-      stripe_payment_intent_id: authority.paymentIntentId,
-      amount: authority.amount,
-      currency: authority.currency,
-      status: 'succeeded',
-      created_at: new Date().toISOString(),
-    },
-    { onConflict: 'stripe_invoice_id' }
+      p_user_id: profile.id,
+      p_livemode: event.livemode,
+      p_stripe_event_id: event.id,
+      p_stripe_event_created: event.created,
+      p_stripe_invoice_id: invoice.id,
+      p_stripe_payment_intent_id: authority.paymentIntentId,
+      p_amount_paid: authority.amount,
+      p_currency: authority.currency,
+    }
   )
   if (historyErr) {
     logger.error('Failed to record payment', { error: historyErr, invoiceId: invoice.id })
     throw new Error(`Failed to record successful payment: ${historyErr.message}`)
+  }
+  const historyStatus = recurringPaymentHistorySuccessStatus(historyData)
+  if (historyStatus === 'identity_conflict') {
+    logger.error('Recurring payment compatibility history requires manual review', {
+      invoiceId: invoice.id,
+      userId: profile.id,
+      activationStatus: activation.status,
+    })
+    return
   }
   logger.info('Recurring Pro Invoice payment reached a durable state', {
     userId: profile.id,
     invoiceId: invoice.id,
     amount: authority.amount,
     activationStatus: activation.status,
+    historyStatus,
   })
 }
 
