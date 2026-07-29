@@ -146,6 +146,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729061000_source_legacy_platform_alias_contract.sql
   20260729062000_atomic_trader_follow_limit.sql
   20260729064000_public_token_trader_rankings_authority.sql
+  20260729065500_public_platform_stats_authority.sql
   20260729067000_atomic_trader_claim_revocation.sql
   20260729068000_atomic_profile_settings_revision.sql
   20260729070000_atomic_verified_trader_profile_revision.sql
