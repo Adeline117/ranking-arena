@@ -1,6 +1,6 @@
 /**
  * linked-traders — 多账号关联 + 跨账号聚合统计。
- * 双表回退(user_linked_traders→trader_links)、|pnl| 加权分、Redis 缓存命中。
+ * canonical ownership、|pnl| 加权分、Redis 缓存命中。
  */
 
 const mockCacheStore = new Map<string, unknown>()
@@ -148,7 +148,7 @@ describe('getLinkedTraders', () => {
       expect.any(Function),
       { timeoutMs: 10_000 }
     )
-    expect(mockCacheStore.get('linked-traders:sealed-v2:u1')).toEqual(
+    expect(mockCacheStore.get('linked-traders:sealed-v3:u1')).toEqual(
       expect.objectContaining({ contract: 'sealed-ranking-cache@1', season: '90D' })
     )
   })
@@ -162,11 +162,11 @@ describe('getLinkedTraders', () => {
     await expect(getLinkedTraders(client, 'u1')).rejects.toThrow(
       'linked trader aggregation query failed: rank batch unavailable'
     )
-    expect(mockCacheStore.has('linked-traders:sealed-v2:u1')).toBe(false)
+    expect(mockCacheStore.has('linked-traders:sealed-v3:u1')).toBe(false)
   })
 
-  it('主表空 → 回退 trader_links,首个为 primary', async () => {
-    const { client } = queueClient({
+  it('canonical 为空时不从 retired trader_links 复活已解绑身份', async () => {
+    const { client, from } = queueClient({
       user_linked_traders: [{ data: [] }],
       trader_links: [
         {
@@ -194,19 +194,28 @@ describe('getLinkedTraders', () => {
       ],
       leaderboard_ranks: [{ data: [] }],
     })
-    const links = await getLinkedTraders(client, 'u1')
-    expect(links).toHaveLength(2)
-    expect(links[0].isPrimary).toBe(true)
-    expect(links[1].isPrimary).toBe(false)
-    expect(links[0].linkedAt).toBe('2026-06-01') // verified_at null → created_at
+    await expect(getLinkedTraders(client, 'u1')).resolves.toEqual([])
+    expect(from).toHaveBeenCalledTimes(1)
+    expect(from).not.toHaveBeenCalledWith('trader_links')
   })
 
-  it('两表都空 → []', async () => {
+  it('canonical 表空 → []', async () => {
     const { client } = queueClient({
       user_linked_traders: [{ data: [] }],
-      trader_links: [{ data: [] }],
     })
     expect(await getLinkedTraders(client, 'u1')).toEqual([])
+  })
+
+  it('canonical ownership 查询失败时诚实失败而不是降级到退休数据', async () => {
+    const { client, from } = queueClient({
+      user_linked_traders: [{ error: { message: 'canonical unavailable' } }],
+      trader_links: [{ data: [{ user_id: 'stale-owner' }] }],
+    })
+
+    await expect(getLinkedTraders(client, 'u1')).rejects.toThrow(
+      'canonical linked trader query failed: canonical unavailable'
+    )
+    expect(from).not.toHaveBeenCalledWith('trader_links')
   })
 
   it('二次调用命中缓存,不再查 DB', async () => {
@@ -272,24 +281,34 @@ describe('getAggregatedStats', () => {
 })
 
 describe('findUserByTrader + 缓存失效', () => {
-  it('主表命中 → user_id;主表无 → 回退 trader_links;都无 → null', async () => {
+  it('只从 canonical composite identity 解析 owner', async () => {
     const hit = queueClient({ user_linked_traders: [{ data: { user_id: 'u9' } }] })
     expect(await findUserByTrader(hit.client, 'bybit', 't1')).toBe('u9')
 
-    const fallback = queueClient({
+    const revoked = queueClient({
       user_linked_traders: [{ data: null }],
       trader_links: [{ data: { user_id: 'u8' } }],
     })
-    expect(await findUserByTrader(fallback.client, 'bybit', 't1')).toBe('u8')
+    expect(await findUserByTrader(revoked.client, 'bybit', 't1')).toBeNull()
+    expect(revoked.from).toHaveBeenCalledTimes(1)
+    expect(revoked.from).not.toHaveBeenCalledWith('trader_links')
+  })
 
-    const none = queueClient({
-      user_linked_traders: [{ data: null }],
-      trader_links: [{ data: null }],
+  it('does not hide canonical identity authority failures behind retired rows', async () => {
+    const failed = queueClient({
+      user_linked_traders: [{ error: { message: 'canonical unavailable' } }],
+      trader_links: [{ data: { user_id: 'stale-owner' } }],
     })
-    expect(await findUserByTrader(none.client, 'bybit', 't1')).toBeNull()
+
+    await expect(findUserByTrader(failed.client, 'bybit', 't1')).rejects.toThrow(
+      'canonical linked trader identity query failed: canonical unavailable'
+    )
+    expect(failed.from).not.toHaveBeenCalledWith('trader_links')
   })
 
   it('invalidateLinkedTraderCache 清理账号、聚合与路由三层 key', async () => {
+    mockCacheStore.set('linked-traders:sealed-v3:u1', ['current'])
+    mockCacheStore.set('linked-traders:sealed-v2:u1', ['retired'])
     mockCacheStore.set('linked-traders:u1', ['x'])
     mockCacheStore.set('linked-traders-agg:u1', { y: 1 })
     mockCacheStore.set('aggregate:user:u1', { z: 1 })

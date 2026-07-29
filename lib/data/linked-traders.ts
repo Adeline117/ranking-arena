@@ -2,7 +2,7 @@
  * lib/data/linked-traders.ts
  *
  * Data helpers for multi-account linked traders.
- * Queries `user_linked_traders` (Phase 1 table) with fallback to `trader_links`.
+ * Reads only the canonical `user_linked_traders` ownership projection.
  * Computes aggregated stats across all linked accounts.
  * Results cached in Redis for 5 minutes.
  */
@@ -52,6 +52,10 @@ export interface AggregatedStats {
 const CACHE_TTL = 300 // 5 minutes
 
 function linkedCacheKey(userId: string): string {
+  return `linked-traders:sealed-v3:${userId}`
+}
+
+function retiredLinkedCacheKey(userId: string): string {
   return `linked-traders:sealed-v2:${userId}`
 }
 
@@ -75,7 +79,8 @@ export function linkedTraderRouteAggregateCacheKey(userId: string): string {
 
 /**
  * Fetch all linked trader accounts for a user, with their latest snapshot stats.
- * Tries `user_linked_traders` first (Phase 1 table), falls back to `trader_links`.
+ * Retired `trader_links` rows are deliberately ignored: unlink revokes the
+ * canonical row, and a legacy fallback would resurrect the removed identity.
  */
 export async function getLinkedTraders(
   supabase: SupabaseClient,
@@ -97,9 +102,7 @@ export async function getLinkedTraders(
     }
   }
 
-  let links: LinkedTraderAccount[] = []
-
-  // Strategy 1: user_linked_traders table (Phase 1)
+  // Canonical activation/revocation projection.
   // Columns: trader_id (not trader_key), source (not platform), verified_at (not linked_at)
   const { data: ult, error: ultError } = await supabase
     .from('user_linked_traders')
@@ -108,54 +111,27 @@ export async function getLinkedTraders(
     .order('is_primary', { ascending: false })
     .order('verified_at', { ascending: true })
 
-  if (!ultError && ult && ult.length > 0) {
-    links = ult.map((row: Record<string, unknown>) => ({
-      id: String(row.id),
-      userId: String(row.user_id),
-      platform: String(row.source),
-      traderKey: String(row.trader_id),
-      handle: null, // not stored in user_linked_traders
-      label: row.label as string | null,
-      isPrimary: Boolean(row.is_primary),
-      linkedAt: String(row.verified_at),
-      roi: null,
-      pnl: null,
-      arenaScore: null,
-      winRate: null,
-      maxDrawdown: null,
-      rank: null,
-    }))
-  } else {
-    // Fallback: trader_links table (legacy)
-    const { data: tl, error: tlError } = await supabase
-      .from('trader_links')
-      .select('id, user_id, trader_id, source, handle, verified_at, created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true })
-
-    if (tlError || !tl || tl.length === 0) {
-      return []
-    }
-
-    links = tl.map((row: Record<string, unknown>, i: number) => ({
-      id: String(row.id),
-      userId: String(row.user_id),
-      platform: String(row.source),
-      traderKey: String(row.trader_id),
-      handle: row.handle as string | null,
-      label: null,
-      isPrimary: i === 0,
-      linkedAt: String(row.verified_at || row.created_at),
-      roi: null,
-      pnl: null,
-      arenaScore: null,
-      winRate: null,
-      maxDrawdown: null,
-      rank: null,
-    }))
+  if (ultError) {
+    throw new Error(`canonical linked trader query failed: ${ultError.message}`)
   }
+  if (!ult || ult.length === 0) return []
 
-  if (links.length === 0) return []
+  const links: LinkedTraderAccount[] = ult.map((row: Record<string, unknown>) => ({
+    id: String(row.id),
+    userId: String(row.user_id),
+    platform: String(row.source),
+    traderKey: String(row.trader_id),
+    handle: null, // not stored in user_linked_traders
+    label: row.label as string | null,
+    isPrimary: Boolean(row.is_primary),
+    linkedAt: String(row.verified_at),
+    roi: null,
+    pnl: null,
+    arenaScore: null,
+    winRate: null,
+    maxDrawdown: null,
+    rank: null,
+  }))
 
   // Enrich with latest snapshot stats — batch query instead of N+1
   // Group links by platform for efficient .in() queries
@@ -293,8 +269,8 @@ export async function findUserByTrader(
   platform: string,
   traderKey: string
 ): Promise<string | null> {
-  // Try user_linked_traders first
-  // Columns: source (not platform), trader_id (not trader_key)
+  // `trader_links` is retired and must never re-authorize an identity after
+  // its canonical row has been revoked.
   const { data: ult, error: ultError } = await supabase
     .from('user_linked_traders')
     .select('user_id')
@@ -302,22 +278,11 @@ export async function findUserByTrader(
     .eq('trader_id', traderKey)
     .limit(1)
     .maybeSingle()
-  if (ultError)
-    logger.warn('[findUserByTrader] user_linked_traders query error (drift?):', ultError.message)
+  if (ultError) {
+    throw new Error(`canonical linked trader identity query failed: ${ultError.message}`)
+  }
 
   if (ult?.user_id) return String(ult.user_id)
-
-  // Fallback to trader_links
-  const { data: tl, error: tlError } = await supabase
-    .from('trader_links')
-    .select('user_id')
-    .eq('source', platform)
-    .eq('trader_id', traderKey)
-    .limit(1)
-    .maybeSingle()
-  if (tlError) logger.warn('[findUserByTrader] trader_links query error (drift?):', tlError.message)
-
-  if (tl?.user_id) return String(tl.user_id)
 
   return null
 }
@@ -330,6 +295,7 @@ export async function invalidateLinkedTraderCache(userId: string): Promise<void>
   try {
     await Promise.all([
       cache.del(linkedCacheKey(userId)),
+      cache.del(retiredLinkedCacheKey(userId)),
       cache.del(legacyLinkedCacheKey(userId)),
       cache.del(aggCacheKey(userId)),
       cache.del(linkedTraderRouteAggregateCacheKey(userId)),
