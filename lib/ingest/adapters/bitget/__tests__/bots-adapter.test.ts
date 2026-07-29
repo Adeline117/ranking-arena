@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ParseCtx, SourceRow, Timeframe } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
+import { LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT } from '../../../acquisition-manifest'
 import {
   bitgetBotsAdapter,
   captureBitgetBotsLeaderboard,
@@ -139,6 +140,49 @@ async function collect(sessionValue: FetchSession, src = source()) {
   }
   return pages
 }
+
+describe('Bitget bot V4 adapter activation', () => {
+  it('binds the exact V4 capture hook and canonical ordered partitions', () => {
+    expect(bitgetBotsAdapter.leaderboardAcquisitionContract).toBe(
+      LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT
+    )
+    expect(bitgetBotsAdapter.captureLeaderboard).toBe(captureBitgetBotsLeaderboard)
+    expect(bitgetBotsAdapter.leaderboardPartitionIds?.(source(), 30)).toEqual([
+      'futures_grid',
+      'futures_martingale',
+    ])
+    expect(bitgetBotsAdapter.leaderboardPartitionIds?.(spotSource(), 30)).toEqual([
+      'spot_grid',
+      'spot_martingale',
+    ])
+  })
+
+  it('uses the V4 capture hook without entering the legacy list stream', async () => {
+    const legacyList = jest.spyOn(bitgetBotsAdapter, 'listLeaderboard')
+    try {
+      const capture = await bitgetBotsAdapter.captureLeaderboard?.(
+        session(async (request) => {
+          const strategyType = (request.body as { strategyType: 2 | 4 }).strategyType
+          return {
+            status: 200,
+            json: payload({ strategyType, total: 1, rowCount: 1, nextFlag: false }),
+          }
+        }),
+        source(),
+        30
+      )
+
+      expect(legacyList).not.toHaveBeenCalled()
+      expect(capture?.paginationTopology.expected_partition_ids).toEqual([
+        'futures_grid',
+        'futures_martingale',
+      ])
+      expect(capture?.sourcePages).toHaveLength(2)
+    } finally {
+      legacyList.mockRestore()
+    }
+  })
+})
 
 describe('Bitget bot partitioned legacy capture boundary', () => {
   it('keeps request-local page identity while assigning collision-free aggregate page indexes', async () => {
@@ -358,6 +402,7 @@ describe('Bitget bot V4 partitioned capture boundary', () => {
       { ...canonical, timeframes_derived: [7] },
       { ...canonical, status: 'disabled' },
       { ...canonical, meta: { boards: ['futures_martingale', 'futures_grid'] } },
+      { ...spotSource(), meta: { boards: ['spot_martingale', 'spot_grid'] } },
       {
         ...canonical,
         meta: {
@@ -368,12 +413,12 @@ describe('Bitget bot V4 partitioned capture boundary', () => {
     ] as SourceRow[]
 
     for (const invalid of invalidSources) {
-      await expect(captureBitgetBotsLeaderboard(noNetworkSession, invalid, 30)).rejects.toThrow(
-        'leaderboard publication contract failed'
-      )
+      await expect(
+        bitgetBotsAdapter.captureLeaderboard!(noNetworkSession, invalid, 30)
+      ).rejects.toThrow('leaderboard publication contract failed')
     }
     await expect(
-      captureBitgetBotsLeaderboard(noNetworkSession, canonical, 7 as never)
+      bitgetBotsAdapter.captureLeaderboard!(noNetworkSession, canonical, 7 as never)
     ).rejects.toThrow('leaderboard publication contract failed')
     expect(goto).not.toHaveBeenCalled()
     expect(pageFetch).not.toHaveBeenCalled()
