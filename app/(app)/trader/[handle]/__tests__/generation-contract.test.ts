@@ -31,6 +31,12 @@ describe('trader page direct ranking generation contract', () => {
     expect(page).toContain('resolveServingTrader(getReadReplica(), { handle, source })')
   })
 
+  it('reads the latest serving first screen without a cross-board data cache', () => {
+    expect(page).not.toContain("['trader-first-screen']")
+    expect(page).not.toContain('cachedGetFirstScreenISR')
+    expect(page).toContain('getFirstScreen(getReadReplica(), source, traderId)')
+  })
+
   it('keys serving score and metadata caches by current publication identity', () => {
     expect(page).toContain("['trader-serving-scores-sealed-v4']")
     expect(page).toContain("['trader-lb-meta-sealed-v4']")

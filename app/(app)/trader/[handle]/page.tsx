@@ -257,33 +257,22 @@ const cachedServingResolve = cache(async (handle: string, source?: string) => {
   }
 })
 
-const cachedGetFirstScreenISR = unstable_cache(
-  async (source: string, traderId: string) => {
-    const result = await getFirstScreen(getReadReplica(), source, traderId)
-    if (!result) throw new Error('TRADER_DETAIL_NULL') // never cache null
-    return result
-  },
-  ['trader-first-screen'],
-  { revalidate: 300, tags: ['trader-profile'] }
-)
-
-const cachedGetFirstScreen = async (
-  source: string,
-  traderId: string
-): Promise<TraderFirstScreen | null> => {
-  try {
-    return await Promise.race([
-      cachedGetFirstScreenISR(source, traderId),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)),
-    ])
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : ''
-    if (msg !== 'TRADER_DETAIL_NULL') {
-      logger.error('[trader/page] getFirstScreen failed:', msg)
+// The first-screen RPC selects the latest passing board entry per timeframe.
+// Keep only request-local memoization: a persistent 5-minute entry can cross a
+// board or metric-authority cutover and render withdrawn ranks as current.
+const cachedGetFirstScreen = cache(
+  async (source: string, traderId: string): Promise<TraderFirstScreen | null> => {
+    try {
+      return await Promise.race([
+        getFirstScreen(getReadReplica(), source, traderId),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)),
+      ])
+    } catch (err) {
+      logger.error('[trader/page] getFirstScreen failed:', err instanceof Error ? err.message : err)
+      return null
     }
-    return null
   }
-}
+)
 
 // Capability matrix is near-static (spec §6) — 1h revalidate, best-effort.
 const cachedCapabilitiesISR = unstable_cache(
