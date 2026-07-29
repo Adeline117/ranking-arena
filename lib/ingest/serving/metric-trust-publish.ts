@@ -17,10 +17,13 @@ import {
 import {
   LEADERBOARD_ACQUISITION_MANIFEST_V2_CONTRACT,
   LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
+  LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
   parseLeaderboardAcquisitionManifest,
   parseLeaderboardAcquisitionManifestV3,
+  parseLeaderboardAcquisitionManifestV4,
   type LeaderboardAcquisitionManifest,
   type LeaderboardAcquisitionManifestV3,
+  type LeaderboardAcquisitionManifestV4,
 } from '../acquisition-manifest'
 import type {
   ParsedLeaderboardRow,
@@ -46,6 +49,18 @@ export interface LeaderboardMetricTrustBundle {
   artifacts: LeaderboardRawArtifactSetReceipt
 }
 
+/**
+ * Attempt evidence for a canonical snapshot whose ranking metrics remain
+ * untrusted. V4 is deliberately excluded from LeaderboardMetricTrustBundle:
+ * proving capture completeness must never promote partition-local bot ranks
+ * or headline metrics into metric authority.
+ */
+export interface LeaderboardAttemptBoundV4Bundle {
+  sourceRunId: string
+  manifest: LeaderboardAcquisitionManifestV4
+  artifacts: LeaderboardRawArtifactSetReceipt
+}
+
 export type LeaderboardMetricTrustManifest =
   | LeaderboardAcquisitionManifest
   | LeaderboardAcquisitionManifestV3
@@ -56,6 +71,14 @@ export interface PrepareLeaderboardMetricTrustInput {
   rows: ParsedLeaderboardRow[]
   rejectedRowCount: number
   bundle: LeaderboardMetricTrustBundle
+}
+
+export interface PrepareLeaderboardAttemptBoundV4EvidenceInput {
+  src: SourceRow
+  timeframe: RankingTimeframe
+  rows: ParsedLeaderboardRow[]
+  rejectedRowCount: number
+  bundle: LeaderboardAttemptBoundV4Bundle
 }
 
 export interface PreparedLeaderboardMetricTrust {
@@ -70,6 +93,25 @@ export interface PreparedLeaderboardMetricTrust {
   nativeWindowEvidence: NativeWindowRequestEvidence
   expectedFields: SourceMetricFieldContract[]
 }
+
+export interface PreparedLeaderboardAttemptBoundV4Evidence {
+  src: SourceRow
+  timeframe: RankingTimeframe
+  rows: ParsedLeaderboardRow[]
+  manifest: LeaderboardAcquisitionManifestV4
+  sourceRunId: string
+  artifacts: LeaderboardRawArtifactSetReceipt
+}
+
+type PreparedLeaderboardEvidence =
+  | PreparedLeaderboardMetricTrust
+  | PreparedLeaderboardAttemptBoundV4Evidence
+
+export type PreparedAttemptBoundLeaderboardEvidence =
+  | (Omit<PreparedLeaderboardMetricTrust, 'manifest'> & {
+      manifest: LeaderboardAcquisitionManifestV3
+    })
+  | PreparedLeaderboardAttemptBoundV4Evidence
 
 export interface MetricTrustSnapshotContext {
   snapshotId: number
@@ -218,7 +260,9 @@ function publicationError(detail: string): Error {
   return new Error(`[metric-trust-publish] ${detail}`)
 }
 
-function assertPreparedManifestIntegrity(prepared: PreparedLeaderboardMetricTrust): void {
+function assertPreparedManifestIntegrity(
+  prepared: Pick<PreparedLeaderboardEvidence, 'manifest' | 'sourceRunId'>
+): void {
   if (strictCanonicalSha256(prepared.manifest) !== prepared.sourceRunId) {
     throw publicationError('prepared manifest changed after source-run verification')
   }
@@ -376,6 +420,108 @@ function hasCanonicalRawIntegrity(value: unknown): boolean {
     (integrity as Record<string, unknown>).hash_algorithm === 'sha256' &&
     (integrity as Record<string, unknown>).hash_scope === 'json_utf8'
   )
+}
+
+/**
+ * Snapshot and verify a V4 capture proof before any authorized transaction is
+ * opened. This preparation establishes capture authority only; it does not
+ * inspect or create metric-source contracts and cannot produce observations.
+ */
+export function prepareLeaderboardAttemptBoundV4Evidence(
+  input: PrepareLeaderboardAttemptBoundV4EvidenceInput
+): PreparedLeaderboardAttemptBoundV4Evidence {
+  const src = snapshotLeaderboardTrustValue(input.src)
+  const rows = snapshotLeaderboardTrustValue(input.rows)
+  const timeframe = input.timeframe
+  const rejectedRowCount = input.rejectedRowCount
+  const bundle = {
+    sourceRunId: input.bundle.sourceRunId,
+    manifest: input.bundle.manifest,
+    artifacts: {
+      sourcePayload: { ...input.bundle.artifacts.sourcePayload },
+      populationManifest: { ...input.bundle.artifacts.populationManifest },
+    },
+  }
+
+  assertPositiveSafeInteger(src.id, 'source id')
+  if (!Number.isSafeInteger(rejectedRowCount) || rejectedRowCount < 0) {
+    throw publicationError('rejected row count must be a non-negative safe integer')
+  }
+  if (!SHA256.test(bundle.sourceRunId)) {
+    throw publicationError('source run id must be a lowercase SHA-256 digest')
+  }
+  if (
+    !bundle.manifest ||
+    typeof bundle.manifest !== 'object' ||
+    bundle.manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT
+  ) {
+    throw publicationError('attempt-bound canonical publication requires a v4 manifest')
+  }
+  const manifest = parseLeaderboardAcquisitionManifestV4(bundle.manifest)
+  if (strictCanonicalSha256(manifest) !== bundle.sourceRunId) {
+    throw publicationError('source run id does not match the canonical manifest')
+  }
+  if (
+    manifest.source.id !== src.id ||
+    manifest.source.slug !== src.slug ||
+    manifest.source.adapter_slug !== src.adapter_slug ||
+    manifest.timeframe !== timeframe
+  ) {
+    throw publicationError('manifest source or timeframe does not match publication input')
+  }
+  if (
+    manifest.capture_evidence_state !== 'verified' ||
+    manifest.assessment.acquisition_state !== 'complete' ||
+    manifest.assessment.population_state !== 'verified' ||
+    manifest.caller_limited ||
+    manifest.safety_limited
+  ) {
+    throw publicationError('canonical publication requires a complete verified uncapped capture')
+  }
+  if (
+    manifest.population.accepted_population !== rows.length ||
+    manifest.population.rejected_row_count !== rejectedRowCount
+  ) {
+    throw publicationError('manifest accepted/rejected counts do not match staged rows')
+  }
+  if (manifest.source_pages.length === 0) {
+    throw publicationError('complete capture must contain source page evidence')
+  }
+
+  const exchangeIds = rows.map((row) => row.exchangeTraderId)
+  if (exchangeIds.some((id) => typeof id !== 'string' || id.trim().length === 0)) {
+    throw publicationError('ranked row has an empty exchange trader id')
+  }
+  if (new Set(exchangeIds).size !== exchangeIds.length) {
+    throw publicationError('ranked rows contain duplicate exchange trader ids')
+  }
+
+  assertPositiveSafeInteger(bundle.artifacts.sourcePayload.id, 'source payload RAW id')
+  assertPositiveSafeInteger(bundle.artifacts.populationManifest.id, 'manifest RAW id')
+  if (bundle.artifacts.sourcePayload.id === bundle.artifacts.populationManifest.id) {
+    throw publicationError('population payload and manifest must use distinct RAW pointers')
+  }
+  if (!SHA256.test(bundle.artifacts.sourcePayload.contentHash)) {
+    throw publicationError('source payload RAW hash must be SHA-256')
+  }
+  if (bundle.artifacts.populationManifest.contentHash !== bundle.sourceRunId) {
+    throw publicationError('manifest RAW hash must equal source run id')
+  }
+  if (
+    bundle.artifacts.sourcePayload.storagePath.trim().length === 0 ||
+    bundle.artifacts.populationManifest.storagePath.trim().length === 0
+  ) {
+    throw publicationError('attempt-bound RAW storage paths must be non-empty')
+  }
+
+  return {
+    src,
+    timeframe,
+    rows,
+    manifest,
+    sourceRunId: bundle.sourceRunId,
+    artifacts: bundle.artifacts,
+  }
 }
 
 export function prepareLeaderboardMetricTrust(
@@ -718,19 +864,27 @@ function rawRefForRole(
 }
 
 /**
- * A v3 manifest is trusted only after the append-only acquisition ledger has
- * recorded the exact terminal outcome for the same attempt and RAW pair.
+ * An attempt-bound manifest can publish only after the append-only acquisition
+ * ledger has recorded the exact terminal outcome for the same attempt and RAW
+ * pair. V3 uses this as its final metric-trust fence; V4 uses the same evidence
+ * comparison without entering metric trust.
  * This query runs on the publisher's transaction client, so a missing,
  * unfinished, or differently-bound attempt rolls the whole publication back.
  * The v2 path remains unchanged while its workers are still live.
  */
 async function assertAttemptBoundAcquisitionOutcome(
   client: IngestQueryExecutor,
-  prepared: PreparedLeaderboardMetricTrust
+  prepared: PreparedLeaderboardEvidence,
+  failureDetail = 'attempt-bound trusted publication requires one exact complete acquisition outcome'
 ): Promise<void> {
   assertPreparedManifestIntegrity(prepared)
   const manifest = prepared.manifest
-  if (manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT) return
+  if (
+    manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT &&
+    manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT
+  ) {
+    return
+  }
 
   const populationReport = manifest.population.reports.population
   const pageCountReport = manifest.population.reports.page_count
@@ -859,9 +1013,7 @@ async function assertAttemptBoundAcquisitionOutcome(
   )
 
   if (rows.length !== 1) {
-    throw publicationError(
-      'attempt-bound trusted publication requires one exact complete acquisition outcome'
-    )
+    throw publicationError(failureDetail)
   }
 }
 
@@ -886,6 +1038,36 @@ export async function fenceAttemptBoundLeaderboardPublicationCommit(
     [`arena.leaderboard-acquisition-source:${prepared.src.id}:${prepared.timeframe}`]
   )
   await assertAttemptBoundAcquisitionOutcome(client, prepared)
+}
+
+/**
+ * Final transaction fence shared by attempt-bound V3 and V4 evidence.
+ *
+ * Unlike the backwards-compatible trusted wrapper above, this API fails
+ * closed for every non-attempt contract. Callers must perform no mutable work
+ * after it and must commit through the same transaction owner.
+ */
+export async function fenceAttemptBoundLeaderboardEvidencePublicationCommit(
+  client: IngestQueryExecutor,
+  prepared: PreparedAttemptBoundLeaderboardEvidence
+): Promise<void> {
+  assertPreparedManifestIntegrity(prepared)
+  if (
+    prepared.manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT &&
+    prepared.manifest.data_contract !== LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT
+  ) {
+    throw publicationError('attempt-bound publication requires a supported acquisition contract')
+  }
+
+  await client.query(
+    `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
+    [`arena.leaderboard-acquisition-source:${prepared.src.id}:${prepared.timeframe}`]
+  )
+  await assertAttemptBoundAcquisitionOutcome(
+    client,
+    prepared,
+    'attempt-bound publication requires one exact complete acquisition outcome'
+  )
 }
 
 export async function writeLeaderboardMetricTrust(
