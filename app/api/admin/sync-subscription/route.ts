@@ -14,6 +14,7 @@ import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 import { getStripe, STRIPE_PRICE_IDS, SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { logger } from '@/lib/logger'
+import { updateUserSubscription } from '@/app/api/stripe/webhook/handlers/subscription'
 
 export const dynamic = 'force-dynamic'
 
@@ -108,61 +109,19 @@ export async function POST(request: NextRequest) {
         : new Date(activeSub.start_date * 1000).toISOString()
       const periodEnd = pEnd ? new Date(pEnd * 1000).toISOString() : null
 
-      // Upsert the subscriptions table
-      const { error: subError } = await supabase.from('subscriptions').upsert(
-        {
-          user_id: userId,
-          stripe_subscription_id: activeSub.id,
-          stripe_customer_id: customerId,
-          status,
-          tier: 'pro',
-          plan,
-          current_period_start: periodStart,
-          current_period_end: periodEnd,
-          cancel_at_period_end: activeSub.cancel_at_period_end,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' }
-      )
+      const projectionStatus = await updateUserSubscription(userId, activeSub, plan)
 
-      if (subError) {
-        logger.error('sync-subscription: failed to upsert subscription', {
-          userId,
-          error: subError.message,
-        })
-        return NextResponse.json(
-          { error: `Failed to upsert subscription: ${subError.message}` },
-          { status: 500 }
-        )
-      }
-
-      // Update user_profiles to pro
-      const { error: tierError } = await supabase
-        .from('user_profiles')
-        .update({
-          subscription_tier: 'pro',
-          pro_plan: plan,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId)
-
-      if (tierError) {
-        logger.error('sync-subscription: failed to update user tier', {
-          userId,
-          error: tierError.message,
-        })
-      }
-
-      logger.info('sync-subscription: synced active subscription', {
+      logger.info('sync-subscription: converged active subscription through financial authority', {
         userId,
         stripeSubscriptionId: activeSub.id,
         status,
         plan,
+        projectionStatus,
       })
 
       return NextResponse.json({
         success: true,
-        action: 'synced_active',
+        action: projectionStatus === 'updated' ? 'synced_active' : projectionStatus,
         subscription: {
           stripeSubscriptionId: activeSub.id,
           status,

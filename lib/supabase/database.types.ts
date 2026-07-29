@@ -12284,6 +12284,19 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: boolean
       }
+      sync_recurring_pro_subscription_projection_atomic: {
+        Args: {
+          p_cancel_at_period_end: boolean
+          p_period_end: string | null
+          p_period_start: string
+          p_plan: string
+          p_status: string
+          p_stripe_customer_id: string
+          p_stripe_subscription_id: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       text_to_bytea: { Args: { data: string }; Returns: string }
       toggle_comment_reaction: {
         Args: {

@@ -3532,6 +3532,303 @@ ALTER FUNCTION public.stripe_refund_tombstone_is_resolved_v2(text)
 REVOKE ALL ON FUNCTION public.stripe_refund_tombstone_is_resolved_v2(text)
   FROM PUBLIC, anon, authenticated, service_role, authenticator;
 
+-- Every legacy Stripe-subscription synchronizer must converge through this
+-- one atomic projection writer. A still-active Stripe Subscription is not
+-- financial authority after its current bound/latest paid period was fully
+-- refunded. A later, unrefunded payment can become current only through the
+-- paid-Invoice activation RPC, which replaces entitlement_payment_id first.
+CREATE OR REPLACE FUNCTION
+  public.sync_recurring_pro_subscription_projection_atomic(
+    p_user_id uuid,
+    p_status text,
+    p_stripe_subscription_id text,
+    p_stripe_customer_id text,
+    p_plan text,
+    p_period_start timestamptz,
+    p_period_end timestamptz,
+    p_cancel_at_period_end boolean
+  )
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+VOLATILE
+CALLED ON NULL INPUT
+PARALLEL UNSAFE
+SET search_path = pg_catalog, pg_temp
+SET lock_timeout = '5s'
+AS $function$
+DECLARE
+  v_profile public.user_profiles%ROWTYPE;
+  v_subscription public.subscriptions%ROWTYPE;
+  v_bound_payment public.stripe_entitlement_payments%ROWTYPE;
+  v_latest_payment public.stripe_entitlement_payments%ROWTYPE;
+  v_blocking_payment public.stripe_entitlement_payments%ROWTYPE;
+  v_stored_status text;
+  v_now timestamptz := pg_catalog.clock_timestamp();
+BEGIN
+  IF COALESCE((SELECT auth.role()), '') IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'service role required' USING ERRCODE = '42501';
+  END IF;
+  IF p_user_id IS NULL
+    OR p_status IS NULL
+    OR p_status NOT IN (
+      'active',
+      'trialing',
+      'past_due',
+      'canceled',
+      'expired',
+      'incomplete',
+      'incomplete_expired',
+      'paused',
+      'unpaid'
+    )
+    OR p_stripe_subscription_id IS NULL
+    OR p_stripe_subscription_id !~ '^sub_[A-Za-z0-9_]+$'
+    OR pg_catalog.length(p_stripe_subscription_id) > 255
+    OR p_stripe_customer_id IS NULL
+    OR p_stripe_customer_id !~ '^cus_[A-Za-z0-9_]+$'
+    OR pg_catalog.length(p_stripe_customer_id) > 255
+    OR p_plan IS NULL
+    OR p_plan NOT IN ('monthly', 'yearly')
+    OR p_period_start IS NULL
+    OR (
+      p_period_end IS NOT NULL
+      AND p_period_end <= p_period_start
+    )
+    OR p_cancel_at_period_end IS NULL
+  THEN
+    RAISE EXCEPTION 'recurring Pro subscription projection input is invalid'
+      USING ERRCODE = '22023';
+  END IF;
+
+  SELECT profile.*
+  INTO v_profile
+  FROM public.user_profiles AS profile
+  WHERE profile.id = p_user_id
+  FOR UPDATE;
+  IF NOT FOUND OR v_profile.deleted_at IS NOT NULL THEN
+    RETURN 'subject_deleted';
+  END IF;
+  IF v_profile.stripe_customer_id IS NOT NULL
+    AND v_profile.stripe_customer_id <> p_stripe_customer_id
+  THEN
+    RAISE EXCEPTION 'recurring Pro customer ownership changed'
+      USING ERRCODE = '23514';
+  END IF;
+
+  SELECT subscription.*
+  INTO v_subscription
+  FROM public.subscriptions AS subscription
+  WHERE subscription.user_id = p_user_id
+  FOR UPDATE;
+
+  IF v_subscription.id IS NOT NULL
+    AND v_subscription.stripe_subscription_id IS DISTINCT FROM
+      p_stripe_subscription_id
+    AND v_subscription.status IN ('active', 'trialing')
+  THEN
+    RETURN 'stale_current_subscription';
+  END IF;
+
+  IF v_subscription.id IS NOT NULL
+    AND v_subscription.stripe_subscription_id =
+      p_stripe_subscription_id
+    AND v_subscription.entitlement_payment_id IS NOT NULL
+  THEN
+    SELECT payment.*
+    INTO v_bound_payment
+    FROM public.stripe_entitlement_payments AS payment
+    WHERE payment.id = v_subscription.entitlement_payment_id
+    FOR SHARE;
+    IF NOT FOUND
+      OR v_bound_payment.payment_kind <> 'recurring'
+      OR v_bound_payment.user_id IS DISTINCT FROM p_user_id
+      OR v_bound_payment.stripe_customer_id <>
+        p_stripe_customer_id
+      OR v_bound_payment.stripe_subscription_id <>
+        p_stripe_subscription_id
+    THEN
+      RAISE EXCEPTION 'bound recurring Pro payment identity drifted'
+        USING ERRCODE = '23514';
+    END IF;
+  END IF;
+
+  SELECT payment.*
+  INTO v_latest_payment
+  FROM public.stripe_entitlement_payments AS payment
+  WHERE payment.payment_kind = 'recurring'
+    AND payment.user_id = p_user_id
+    AND payment.stripe_customer_id = p_stripe_customer_id
+    AND payment.stripe_subscription_id =
+      p_stripe_subscription_id
+    AND payment.payment_status = 'paid'
+  ORDER BY
+    payment.period_start DESC,
+    payment.created_at DESC,
+    payment.id DESC
+  LIMIT 1
+  FOR SHARE;
+
+  IF p_status IN ('active', 'trialing') THEN
+    IF v_bound_payment.id IS NOT NULL
+      AND v_bound_payment.refund_state = 'succeeded'
+      AND v_bound_payment.refund_succeeded_amount >=
+        v_bound_payment.amount_paid
+    THEN
+      v_blocking_payment := v_bound_payment;
+    ELSIF v_bound_payment.id IS NULL
+      AND v_latest_payment.id IS NOT NULL
+      AND v_latest_payment.refund_state = 'succeeded'
+      AND v_latest_payment.refund_succeeded_amount >=
+        v_latest_payment.amount_paid
+    THEN
+      v_blocking_payment := v_latest_payment;
+    END IF;
+  END IF;
+
+  IF v_blocking_payment.id IS NOT NULL THEN
+    IF v_subscription.id IS NULL THEN
+      INSERT INTO public.subscriptions (
+        user_id,
+        stripe_subscription_id,
+        stripe_customer_id,
+        status,
+        tier,
+        plan,
+        current_period_start,
+        current_period_end,
+        cancel_at_period_end,
+        canceled_at,
+        entitlement_payment_id,
+        updated_at
+      ) VALUES (
+        p_user_id,
+        p_stripe_subscription_id,
+        p_stripe_customer_id,
+        'canceled',
+        'pro',
+        p_plan,
+        p_period_start,
+        p_period_end,
+        false,
+        v_now,
+        v_blocking_payment.id,
+        v_now
+      );
+    ELSIF v_subscription.stripe_subscription_id =
+      p_stripe_subscription_id
+    THEN
+      UPDATE public.subscriptions
+      SET
+        status = 'canceled',
+        cancel_at_period_end = false,
+        canceled_at = COALESCE(canceled_at, v_now),
+        entitlement_payment_id = v_blocking_payment.id,
+        entitlement_trial_id = NULL,
+        entitlement_trial_verified_at = NULL,
+        updated_at = v_now
+      WHERE id = v_subscription.id;
+    END IF;
+
+    UPDATE public.user_profiles
+    SET
+      stripe_customer_id = p_stripe_customer_id,
+      updated_at = v_now
+    WHERE id = p_user_id;
+    PERFORM public.sync_current_pro_projection_atomic(p_user_id);
+    RETURN 'blocked_full_refund';
+  END IF;
+
+  v_stored_status := CASE
+    WHEN p_status IN (
+      'active',
+      'trialing',
+      'past_due',
+      'canceled',
+      'expired'
+    )
+    THEN p_status
+    WHEN p_status = 'incomplete_expired' THEN 'expired'
+    ELSE 'past_due'
+  END;
+
+  INSERT INTO public.subscriptions (
+    user_id,
+    stripe_subscription_id,
+    stripe_customer_id,
+    status,
+    tier,
+    plan,
+    current_period_start,
+    current_period_end,
+    cancel_at_period_end,
+    canceled_at,
+    entitlement_payment_id,
+    updated_at
+  ) VALUES (
+    p_user_id,
+    p_stripe_subscription_id,
+    p_stripe_customer_id,
+    v_stored_status,
+    'pro',
+    p_plan,
+    p_period_start,
+    p_period_end,
+    p_cancel_at_period_end,
+    CASE
+      WHEN v_stored_status IN ('active', 'trialing') THEN NULL
+      ELSE v_now
+    END,
+    CASE
+      WHEN v_subscription.stripe_subscription_id =
+        p_stripe_subscription_id
+      THEN v_subscription.entitlement_payment_id
+      ELSE NULL
+    END,
+    v_now
+  )
+  ON CONFLICT (user_id) DO UPDATE SET
+    stripe_subscription_id =
+      EXCLUDED.stripe_subscription_id,
+    stripe_customer_id = EXCLUDED.stripe_customer_id,
+    status = EXCLUDED.status,
+    tier = EXCLUDED.tier,
+    plan = EXCLUDED.plan,
+    current_period_start = EXCLUDED.current_period_start,
+    current_period_end = EXCLUDED.current_period_end,
+    cancel_at_period_end =
+      EXCLUDED.cancel_at_period_end,
+    canceled_at = EXCLUDED.canceled_at,
+    entitlement_payment_id =
+      EXCLUDED.entitlement_payment_id,
+    updated_at = v_now;
+
+  UPDATE public.user_profiles
+  SET
+    stripe_customer_id = p_stripe_customer_id,
+    updated_at = v_now
+  WHERE id = p_user_id;
+  PERFORM public.sync_current_pro_projection_atomic(p_user_id);
+  RETURN 'updated';
+END
+$function$;
+
+ALTER FUNCTION
+  public.sync_recurring_pro_subscription_projection_atomic(
+    uuid, text, text, text, text, timestamptz, timestamptz, boolean
+  )
+OWNER TO postgres;
+REVOKE ALL ON FUNCTION
+  public.sync_recurring_pro_subscription_projection_atomic(
+    uuid, text, text, text, text, timestamptz, timestamptz, boolean
+  )
+FROM PUBLIC, anon, authenticated, service_role, authenticator;
+GRANT EXECUTE ON FUNCTION
+  public.sync_recurring_pro_subscription_projection_atomic(
+    uuid, text, text, text, text, timestamptz, timestamptz, boolean
+  )
+TO service_role;
+
 DO $rename_readiness$
 BEGIN
   IF pg_catalog.to_regprocedure(
@@ -3683,6 +3980,7 @@ BEGIN
       'public.claim_api_tier_payment_backfill_targets_atomic(uuid,integer,integer,boolean)',
       'public.checkpoint_api_tier_payment_backfill_target_atomic(boolean,text,uuid,text,integer,integer)',
       'public.finish_api_tier_payment_backfill_target_atomic(boolean,text,uuid,boolean,boolean,text)',
+      'public.sync_recurring_pro_subscription_projection_atomic(uuid,text,text,text,text,timestamp with time zone,timestamp with time zone,boolean)',
       'public.stripe_paid_launch_readiness_v2()'
     ]::text[]) AS required_routine(signature)
     LEFT JOIN pg_catalog.pg_proc AS routine

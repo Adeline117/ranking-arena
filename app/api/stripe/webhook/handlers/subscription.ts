@@ -850,6 +850,22 @@ export async function updateUserSubscription(
   subscription: Stripe.Subscription,
   plan: string
 ) {
+  const customerId =
+    typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id
+  const item = subscription.items?.data?.length === 1 ? subscription.items.data[0] : null
+  const authoritativePlan = getProPlanFromPriceId(item?.price.id)
+  if (
+    !UUID_PATTERN.test(userId) ||
+    !customerId ||
+    !STRIPE_CUSTOMER_ID_PATTERN.test(customerId) ||
+    !subscription.id.startsWith('sub_') ||
+    !item ||
+    item.quantity !== 1 ||
+    (plan !== 'monthly' && plan !== 'yearly') ||
+    authoritativePlan !== plan
+  ) {
+    throw new Error(`Subscription ${subscription.id} has invalid recurring Pro projection identity`)
+  }
   const status = SUBSCRIPTION_STATUS_MAP[subscription.status] || subscription.status
   const sub = subscription as unknown as Record<string, unknown>
   const itemPeriod = subscription.items?.data?.[0] as unknown as Record<string, unknown> | undefined
@@ -864,63 +880,41 @@ export async function updateUserSubscription(
 
   logger.info(`updateUserSubscription`, { userId, status, plan, periodStart, periodEnd })
 
-  await withRetry(async () => {
-    const { error: rpcError } = await getSupabase().rpc('update_subscription_and_profile', {
-      p_user_id: userId,
-      p_tier: 'pro',
-      p_status: status,
-      p_stripe_sub_id: subscription.id,
-      p_stripe_customer_id: subscription.customer as string,
-      p_plan: plan,
-      p_period_start: periodStart,
-      p_period_end: periodEnd,
-      p_cancel_at_period_end: subscription.cancel_at_period_end,
-    })
+  return withRetry(async () => {
+    const { data, error: rpcError } = await getSupabase().rpc(
+      'sync_recurring_pro_subscription_projection_atomic',
+      {
+        p_user_id: userId,
+        p_status: status,
+        p_stripe_subscription_id: subscription.id,
+        p_stripe_customer_id: customerId,
+        p_plan: plan,
+        p_period_start: periodStart,
+        p_period_end: periodEnd,
+        p_cancel_at_period_end: subscription.cancel_at_period_end,
+      }
+    )
 
     if (rpcError) {
-      logger.warn('RPC update_subscription_and_profile failed, using fallback', {
-        error: rpcError.message,
-      })
-
-      const { error: subscriptionError } = await getSupabase()
-        .from('subscriptions')
-        .upsert(
-          {
-            user_id: userId,
-            stripe_subscription_id: subscription.id,
-            stripe_customer_id: subscription.customer as string,
-            status: status,
-            tier: 'pro',
-            plan: plan,
-            current_period_start: periodStart,
-            current_period_end: periodEnd,
-            cancel_at_period_end: subscription.cancel_at_period_end,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: 'user_id',
-          }
-        )
-
-      if (subscriptionError) {
-        throw new Error(`Failed to upsert subscriptions: ${subscriptionError.message}`)
-      }
-
-      const shouldBePro = status === 'active' || status === 'trialing'
-      const { error: profileError } = await getSupabase()
-        .from('user_profiles')
-        .update({
-          subscription_tier: shouldBePro ? 'pro' : 'free',
-          stripe_customer_id: subscription.customer as string,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId)
-
-      if (profileError) {
-        throw new Error(`Failed to update user_profiles: ${profileError.message}`)
-      }
+      throw new Error(`Failed to sync recurring Pro subscription projection: ${rpcError.message}`)
     }
 
-    logger.info(`Subscription updated for user ${userId}`, { status, plan })
+    if (
+      data !== 'updated' &&
+      data !== 'blocked_full_refund' &&
+      data !== 'stale_current_subscription' &&
+      data !== 'subject_deleted'
+    ) {
+      throw new Error(
+        `sync_recurring_pro_subscription_projection_atomic returned ${String(data ?? 'missing')}`
+      )
+    }
+    const details = { status, plan, projectionStatus: data }
+    if (data === 'blocked_full_refund' || data === 'stale_current_subscription') {
+      logger.warn(`Subscription projection did not grant Pro for user ${userId}`, details)
+    } else {
+      logger.info(`Subscription updated for user ${userId}`, details)
+    }
+    return data
   })
 }

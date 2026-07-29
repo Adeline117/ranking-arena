@@ -42,10 +42,15 @@ jest.mock('@/lib/notifications/telegram', () => ({
   sendTelegramAlert: jest.fn().mockResolvedValue(undefined),
 }))
 
-import { handleSubscriptionCanceled, handleSubscriptionUpdate } from '../subscription'
+import {
+  handleSubscriptionCanceled,
+  handleSubscriptionUpdate,
+  updateUserSubscription,
+} from '../subscription'
 
 type DbError = { message: string }
 const stripeEvent = { id: 'evt_current', created: 1_800_000_000, livemode: true }
+const proUserId = '10e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const apiUserId = '11e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const apiReservationId = '91e34ce2-43c1-4bcc-8f19-79b36d56605c'
 const apiSubscriptions = new Map<string, Stripe.Subscription>()
@@ -90,7 +95,7 @@ function subscription(overrides: Partial<Stripe.Subscription> = {}): Stripe.Subs
     start_date: 1_700_000_000,
     cancel_at_period_end: false,
     items: {
-      data: [{ price: { id: 'price_pro_monthly' } }],
+      data: [{ quantity: 1, price: { id: 'price_pro_monthly' } }],
     },
     ...overrides,
   } as Stripe.Subscription
@@ -202,7 +207,7 @@ function arrangeRegularCancellation(
   } = {}
 ) {
   mockFrom
-    .mockImplementationOnce(() => lookupQuery({ id: 'user-1' }))
+    .mockImplementationOnce(() => lookupQuery({ id: proUserId }))
     .mockImplementationOnce(() => mutationQuery(options.subscriptionUpdateError))
     .mockImplementationOnce(() =>
       lookupQuery(
@@ -228,8 +233,8 @@ describe('subscription webhook persistence', () => {
       if (name === 'apply_user_api_tier_persisted_non_grant_event') {
         return Promise.resolve(mockPersistedRpcResult)
       }
-      if (name === 'update_subscription_and_profile') {
-        return Promise.resolve({ data: null, error: null })
+      if (name === 'sync_recurring_pro_subscription_projection_atomic') {
+        return Promise.resolve({ data: 'updated', error: null })
       }
       throw new Error(`Unexpected RPC: ${name}`)
     })
@@ -251,25 +256,59 @@ describe('subscription webhook persistence', () => {
     await expect(handleSubscriptionUpdate(subscription(), stripeEvent)).rejects.toThrow(
       'Failed to find subscription owner: user_profiles temporarily unavailable'
     )
-    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
+      'apply_user_api_tier_persisted_non_grant_event',
+    ])
   })
 
   it('keeps the successful subscription update path intact', async () => {
-    mockFrom.mockReturnValueOnce(lookupQuery({ id: 'user-1' }))
+    mockFrom.mockReturnValueOnce(lookupQuery({ id: proUserId }))
 
     await expect(handleSubscriptionUpdate(subscription(), stripeEvent)).resolves.toBeUndefined()
     expect(mockRpc).toHaveBeenCalledWith(
-      'update_subscription_and_profile',
+      'sync_recurring_pro_subscription_projection_atomic',
       expect.objectContaining({
-        p_user_id: 'user-1',
-        p_stripe_sub_id: 'sub_current',
-        p_tier: 'pro',
+        p_user_id: proUserId,
+        p_stripe_subscription_id: 'sub_current',
       })
     )
   })
 
+  it('ACKs a sticky full-refund block without reviving the Stripe-active subscription', async () => {
+    mockRpc.mockImplementation((name: string) => {
+      if (name === 'apply_user_api_tier_persisted_non_grant_event') {
+        return Promise.resolve(mockPersistedRpcResult)
+      }
+      if (name === 'sync_recurring_pro_subscription_projection_atomic') {
+        return Promise.resolve({ data: 'blocked_full_refund', error: null })
+      }
+      throw new Error(`Unexpected RPC: ${name}`)
+    })
+    mockFrom.mockReturnValueOnce(lookupQuery({ id: proUserId }))
+
+    await expect(handleSubscriptionUpdate(subscription(), stripeEvent)).resolves.toBeUndefined()
+
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+    expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
+      'apply_user_api_tier_persisted_non_grant_event',
+      'sync_recurring_pro_subscription_projection_atomic',
+    ])
+  })
+
+  it('keeps a projection RPC failure retryable and has no direct-table fallback', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'projection unavailable' },
+    })
+
+    await expect(updateUserSubscription(proUserId, subscription(), 'monthly')).rejects.toThrow(
+      'Failed to sync recurring Pro subscription projection: projection unavailable'
+    )
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
   it('keeps an unknown paid price retryable without granting Pro', async () => {
-    mockFrom.mockReturnValueOnce(lookupQuery({ id: 'user-1' }))
+    mockFrom.mockReturnValueOnce(lookupQuery({ id: proUserId }))
 
     await expect(
       handleSubscriptionUpdate(
@@ -285,7 +324,7 @@ describe('subscription webhook persistence', () => {
   })
 
   it('does not classify a missing price as a configured yearly plan', async () => {
-    mockFrom.mockReturnValueOnce(lookupQuery({ id: 'user-1' }))
+    mockFrom.mockReturnValueOnce(lookupQuery({ id: proUserId }))
 
     await expect(
       handleSubscriptionUpdate(
@@ -879,7 +918,7 @@ describe('subscription webhook persistence', () => {
   })
 
   it('continues the ordinary subscription path after persisted identity says not_api', async () => {
-    mockFrom.mockReturnValueOnce(lookupQuery({ id: 'user-1' }))
+    mockFrom.mockReturnValueOnce(lookupQuery({ id: proUserId }))
 
     await handleSubscriptionUpdate(
       subscription({
@@ -892,7 +931,7 @@ describe('subscription webhook persistence', () => {
 
     expect(mockRpc.mock.calls.map(([name]) => name)).toEqual([
       'apply_user_api_tier_persisted_non_grant_event',
-      'update_subscription_and_profile',
+      'sync_recurring_pro_subscription_projection_atomic',
     ])
   })
 
@@ -1208,7 +1247,7 @@ describe('subscription webhook persistence', () => {
       'apply_user_api_tier_persisted_non_grant_event',
       expect.any(Object)
     )
-    expect(mockLeaveProOfficialGroup).toHaveBeenCalledWith('user-1')
+    expect(mockLeaveProOfficialGroup).toHaveBeenCalledWith(proUserId)
   })
 
   it('preserves a replacement API subscription when an older cancellation arrives late', async () => {
@@ -1286,7 +1325,7 @@ describe('subscription webhook persistence', () => {
   it('fails closed instead of routing an unclassified cancellation into Pro mutation', async () => {
     mockFrom.mockReturnValueOnce(
       lookupQuery({
-        id: 'user-1',
+        id: proUserId,
         api_stripe_subscription_id: 'sub_other',
         api_tier: 'starter',
       })
@@ -1319,7 +1358,7 @@ describe('subscription webhook persistence', () => {
 
   it('does not remove official-group access for a late cancellation of an older subscription', async () => {
     mockFrom
-      .mockImplementationOnce(() => lookupQuery({ id: 'user-1' }))
+      .mockImplementationOnce(() => lookupQuery({ id: proUserId }))
       .mockImplementationOnce(() => mutationQuery())
       .mockImplementationOnce(() =>
         lookupQuery({ stripe_subscription_id: 'sub_newer', status: 'active' })
@@ -1331,7 +1370,7 @@ describe('subscription webhook persistence', () => {
 
   it('does not remove lifetime official-group access when a subscription is canceled', async () => {
     mockFrom
-      .mockImplementationOnce(() => lookupQuery({ id: 'user-1' }))
+      .mockImplementationOnce(() => lookupQuery({ id: proUserId }))
       .mockImplementationOnce(() => mutationQuery())
       .mockImplementationOnce(() =>
         lookupQuery({ stripe_subscription_id: 'sub_current', status: 'canceled' })
@@ -1346,6 +1385,6 @@ describe('subscription webhook persistence', () => {
     arrangeRegularCancellation()
 
     await expect(handleSubscriptionCanceled(subscription(), stripeEvent)).resolves.toBeUndefined()
-    expect(mockLeaveProOfficialGroup).toHaveBeenCalledWith('user-1')
+    expect(mockLeaveProOfficialGroup).toHaveBeenCalledWith(proUserId)
   })
 })
