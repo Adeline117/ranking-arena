@@ -402,6 +402,19 @@ describe('parseGmxPositions', () => {
     }
     expect(parseGmxPositions(doctored, ctx)).toHaveLength(0)
   })
+
+  it('accepts an explicitly complete empty position bundle', () => {
+    expect(parseGmxPositions({ positions: [], markets: [], tokens: [] }, ctx)).toEqual([])
+  })
+
+  it.each([
+    [{ markets: [], tokens: [] }, /malformed positions result/],
+    [{ positions: [], tokens: [] }, /malformed position markets result/],
+    [{ positions: [], markets: [] }, /malformed position tokens result/],
+    [null, /malformed position response bundle/],
+  ])('rejects incomplete position bundles', (payload, expected) => {
+    expect(() => parseGmxPositions(payload, ctx)).toThrow(expected as RegExp)
+  })
 })
 
 describe('gmxWindowBounds', () => {

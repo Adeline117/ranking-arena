@@ -293,8 +293,22 @@ export function parseBitmartProfile(raw: unknown, ctx: ParseCtx): ParsedProfile 
  * PnL (`pnl`) and margin metrics are public.
  */
 export function parseBitmartPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const d = data(raw)
-  const list = Array.isArray(d?.list) ? (d.list as Dict[]) : []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[bitmart] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.errno !== 'OK' || envelope.success !== true) {
+    throw new TypeError(`[bitmart] position response failed with errno ${String(envelope.errno)}`)
+  }
+  const response = envelope.data
+  if (typeof response !== 'object' || response === null || Array.isArray(response)) {
+    throw new TypeError('[bitmart] malformed position response data')
+  }
+  const positions = (response as Dict).list
+  if (!Array.isArray(positions)) {
+    throw new TypeError('[bitmart] malformed position response list')
+  }
+  const list = positions as Dict[]
   const out: ParsedPosition[] = []
   for (const item of list) {
     if (!item.contract_name) continue
