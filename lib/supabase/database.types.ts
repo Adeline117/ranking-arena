@@ -11239,6 +11239,10 @@ export type Database = {
       refresh_hot_scores: { Args: never; Returns: undefined }
       refresh_hot_scores_incremental: { Args: never; Returns: number }
       refresh_leaderboard_count_cache: { Args: never; Returns: undefined }
+      refresh_leaderboard_count_cache_for_seasons: {
+        Args: { p_season_ids: string[] }
+        Returns: undefined
+      }
       refresh_materialized_views: { Args: never; Returns: undefined }
       refresh_popular_tokens_mv: { Args: never; Returns: undefined }
       refresh_source_capabilities_mv: { Args: never; Returns: undefined }
