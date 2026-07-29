@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import Footer from '@/app/components/layout/Footer'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useProductFacts } from '@/lib/hooks/useProductFacts'
 
 function FeatureCard({ title, description }: { title: string; description: string }) {
   return (
@@ -57,6 +58,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function AboutPageClient() {
   const { t } = useLanguage()
+  const productFacts = useProductFacts()
 
   const features = [
     { title: t('aboutFeature1Title'), desc: t('aboutFeature1Desc') },
@@ -188,7 +190,13 @@ export default function AboutPageClient() {
           >
             {[
               { value: t('aboutStatTraders'), label: t('aboutStatTradersLabel') },
-              { value: t('aboutStatExchanges'), label: t('aboutStatExchangesLabel') },
+              {
+                value: t('aboutStatSourceBoards').replace(
+                  '{boards}',
+                  String(productFacts.sourceBoardCount)
+                ),
+                label: t('aboutStatSourceBoardsLabel'),
+              },
               { value: t('aboutStatResources'), label: t('aboutStatResourcesLabel') },
               { value: t('aboutStatInstitutions'), label: t('aboutStatInstitutionsLabel') },
             ].map((stat, i) => (

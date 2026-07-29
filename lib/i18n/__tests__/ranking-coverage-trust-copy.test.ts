@@ -42,6 +42,10 @@ describe('ranking coverage trust copy', () => {
       expect(copy).not.toMatch(/30\s*(?:minutes?|mins?|分钟|分|분)/i)
       expect(dictionary.methodologyFaqA2).toContain('2')
       expect(dictionary.methodologySec1List).not.toMatch(/dYdX|Drift|Vertex|Aevo|Kwenta/)
+      expect(dictionary.aboutStatSourceBoards).toBe('{boards}')
+      expect(dictionary.aboutStatSourceBoardsLabel).toMatch(
+        /board|来源板|ソースボード|소스 보드/i
+      )
     }
   )
 
