@@ -179,6 +179,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:rank-staging-xid-pg17
 
+      - name: Prove immutable generation publication plans
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:rank-publication-plan-pg17
+
   # ─────────────────────────────────────────────
   # Stage 2: Lint + Type Check
   # ─────────────────────────────────────────────
