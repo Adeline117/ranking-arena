@@ -27,6 +27,7 @@ import {
   withCache,
 } from '@/lib/api/response'
 import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
+import { serializePublicLinkedAggregate } from '@/lib/data/linked-trader-public'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
@@ -41,6 +42,30 @@ export const revalidate = 300 // 5分钟，与 Cache-Control s-maxage 一致
 
 // 缓存键前缀
 const CACHE_PREFIX = publicRankingCacheKey('trader:')
+
+const LINKED_MEMBERSHIP_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function noStoreLinkedMembership<T extends Response>(response: T): T {
+  for (const [name, value] of Object.entries(LINKED_MEMBERSHIP_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
+
+function requestCarriesLinkedMembership(request: NextRequest): boolean {
+  const includes = (request.nextUrl.searchParams.get('include') || '')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+  return (
+    includes.includes('aggregate') ||
+    request.nextUrl.searchParams.get('e2e_fixture') === 'linked_accounts'
+  )
+}
 
 /**
  * E2E test fixture mode — returns deterministic mock data when the
@@ -79,44 +104,43 @@ const E2E_FIXTURES: Record<string, () => unknown> = {
     equityCurve: { '90D': [], '30D': [], '7D': [] },
     assetBreakdown: { '90D': [], '30D': [], '7D': [] },
     similarTraders: [],
-    aggregate: {
-      aggregated: {
-        combinedPnl: 370000,
-        bestRoi: { value: 180.5, platform: 'binance_futures', traderKey: 'e2e-primary-key' },
-        weightedScore: 81,
+    aggregate: serializePublicLinkedAggregate(
+      {
+        accounts: [
+          {
+            id: 'e2e-internal-1',
+            userId: 'e2e-private-owner',
+            platform: 'binance_futures',
+            traderKey: 'e2e-primary-key',
+            handle: 'e2e_primary',
+            label: 'Private primary label',
+            isPrimary: true,
+            roi: 180.5,
+            pnl: 250000,
+            arenaScore: 85,
+            winRate: 65,
+            maxDrawdown: 22,
+            rank: 42,
+          },
+          {
+            id: 'e2e-internal-2',
+            userId: 'e2e-private-owner',
+            platform: 'bybit',
+            traderKey: 'e2e-linked-key',
+            handle: 'e2e_secondary',
+            label: 'Private secondary label',
+            isPrimary: false,
+            roi: 95.2,
+            pnl: 120000,
+            arenaScore: 72,
+            winRate: 61,
+            maxDrawdown: 18,
+            rank: 87,
+          },
+        ],
       },
-      totalAccounts: 2,
-      accounts: [
-        {
-          id: 'e2e-1',
-          platform: 'binance_futures',
-          traderKey: 'e2e-primary-key',
-          handle: 'e2e_primary',
-          label: 'Primary',
-          isPrimary: true,
-          roi: 180.5,
-          pnl: 250000,
-          arenaScore: 85,
-          winRate: 65,
-          maxDrawdown: 22,
-          rank: 42,
-        },
-        {
-          id: 'e2e-2',
-          platform: 'bybit',
-          traderKey: 'e2e-linked-key',
-          handle: 'e2e_secondary',
-          label: 'Secondary',
-          isPrimary: false,
-          roi: 95.2,
-          pnl: 120000,
-          arenaScore: 72,
-          winRate: 61,
-          maxDrawdown: 18,
-          rank: 87,
-        },
-      ],
-    },
+      { platform: 'binance_futures', traderKey: 'e2e-primary-key' }
+    ),
     claim_status: {
       trader_id: 'e2e-primary-key',
       source: 'binance_futures',
@@ -286,41 +310,26 @@ export async function GET(
                   resolved.traderKey
                 )
                 if (!userId) {
-                  extras.aggregate = { aggregated: null, accounts: [], totalAccounts: 0 }
+                  extras.aggregate = serializePublicLinkedAggregate(null, {
+                    platform: resolved.platform,
+                    traderKey: resolved.traderKey,
+                  })
                 } else {
                   const stats = await getAggregatedStats(supabase, userId)
-                  if (!stats) {
-                    extras.aggregate = { aggregated: null, accounts: [], totalAccounts: 0 }
-                  } else {
-                    extras.aggregate = {
-                      aggregated: {
-                        combinedPnl: stats.combinedPnl,
-                        bestRoi: stats.bestRoi,
-                        weightedScore: stats.weightedScore,
-                      },
-                      accounts: stats.accounts.map((a) => ({
-                        id: a.id,
-                        platform: a.platform,
-                        traderKey: a.traderKey,
-                        handle: a.handle,
-                        label: a.label,
-                        isPrimary: a.isPrimary,
-                        roi: a.roi,
-                        pnl: a.pnl,
-                        arenaScore: a.arenaScore,
-                        winRate: a.winRate,
-                        maxDrawdown: a.maxDrawdown,
-                        rank: a.rank,
-                      })),
-                      totalAccounts: stats.totalAccounts,
-                    }
-                  }
+                  extras.aggregate = serializePublicLinkedAggregate(stats, {
+                    platform: resolved.platform,
+                    traderKey: resolved.traderKey,
+                  })
                 }
               } catch (e) {
                 logger.warn('include=aggregate failed', {
                   error: e instanceof Error ? e.message : String(e),
                 })
                 extras.aggregate = {
+                  subject: {
+                    platform: resolved.platform,
+                    traderKey: resolved.traderKey,
+                  },
                   aggregated: null,
                   accounts: [],
                   totalAccounts: 0,
@@ -402,10 +411,14 @@ export async function GET(
         response.headers.set('X-Arena-Consistency-Proof', 'live-loader-v1')
         return response
       }
+      if (includes.includes('aggregate')) {
+        return noStoreLinkedMembership(response)
+      }
       return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
     },
     { name: 'trader-detail', rateLimit: 'public' }
   )
 
-  return handler(request)
+  const response = await handler(request)
+  return requestCarriesLinkedMembership(request) ? noStoreLinkedMembership(response) : response
 }

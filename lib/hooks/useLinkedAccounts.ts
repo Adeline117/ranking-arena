@@ -1,103 +1,83 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { STALE_RELAXED } from './cache-presets'
+import {
+  parsePublicLinkedAggregate,
+  type PublicLinkedAccount,
+  type PublicLinkedAggregateData,
+  type PublicLinkedAggregateResponse,
+  type PublicLinkedSubject,
+} from '@/lib/data/linked-trader-public'
 
-export interface LinkedAccountData {
-  id: string
-  platform: string
-  traderKey: string
-  handle: string | null
-  label: string | null
-  isPrimary: boolean
-  roi: number | null
-  pnl: number | null
-  arenaScore: number | null
-  winRate: number | null
-  maxDrawdown: number | null
-  rank: number | null
-}
+export type LinkedAccountData = PublicLinkedAccount
+export type AggregatedData = PublicLinkedAggregateData
 
-export interface AggregatedData {
-  combinedPnl: number
-  bestRoi: { value: number; platform: string; traderKey: string } | null
-  weightedScore: number
-}
+type LinkedAccountsResponse = PublicLinkedAggregateResponse
 
-interface LinkedAccountsResponse {
-  accounts: LinkedAccountData[]
-  aggregated: AggregatedData | null
-}
-
-const linkedAccountsFetcher = async (url: string): Promise<LinkedAccountsResponse | null> => {
+export const linkedAccountsFetcher = async (
+  url: string,
+  expectedSubject: PublicLinkedSubject
+): Promise<LinkedAccountsResponse> => {
   const res = await fetch(url)
-  if (!res.ok) return null
-  const result = await res.json()
-  if (result?.data?.totalAccounts >= 2) {
-    return {
-      accounts: result.data.accounts,
-      aggregated: result.data.aggregated,
+  if (!res.ok) {
+    const error = new Error(`Linked accounts request failed (${res.status})`) as Error & {
+      status?: number
     }
+    error.status = res.status
+    throw error
   }
-  return null
+  const result = await res.json()
+  if (result?.success !== true) {
+    throw new Error('Linked accounts response failed its public contract')
+  }
+  const parsed = parsePublicLinkedAggregate(result?.data, expectedSubject)
+  if (!parsed) throw new Error('Linked accounts response failed its public contract')
+  return parsed
 }
 
 /**
- * P7: Parse bundled aggregate data (from merged trader detail endpoint) into LinkedAccountsResponse.
- * Returns null if the bundled data doesn't contain 2+ accounts.
+ * React Query hook for the privacy-sensitive live linked-membership relation.
+ * HTTP no-store is not enough: cached query data is hidden until this mount has
+ * completed an exact subject-bound fetch, and it is hidden again while a live
+ * revalidation is in flight or after an error.
  */
-function parseBundledAggregate(
-  bundled: { aggregated: unknown; accounts: unknown[]; totalAccounts: number } | undefined | null
-): LinkedAccountsResponse | null {
-  if (!bundled || bundled.totalAccounts < 2) return null
-  return {
-    accounts: bundled.accounts as LinkedAccountData[],
-    aggregated: bundled.aggregated as AggregatedData | null,
-  }
-}
-
-/**
- * React Query hook for fetching linked trader accounts.
- * Replaces raw useEffect + fetch in TraderProfileClient and TraderProfileView.
- *
- * P7: Accepts optional `bundledData` from the merged trader detail endpoint.
- * When bundled data is available, skips the separate /api/traders/aggregate call.
- */
-export function useLinkedAccounts(
-  platform: string | undefined,
-  traderKey: string | undefined,
-  bundledData?: { aggregated: unknown; accounts: unknown[]; totalAccounts: number } | null
-) {
-  const parsedBundled = parseBundledAggregate(bundledData)
-
-  // P7: Skip separate fetch when bundled data is available
-  const shouldFetch = !parsedBundled && !!platform && !!traderKey
-  const url = shouldFetch
-    ? `/api/traders/aggregate?platform=${encodeURIComponent(platform!)}&trader_key=${encodeURIComponent(traderKey!)}`
+export function useLinkedAccounts(platform: string | undefined, traderKey: string | undefined) {
+  const subject: PublicLinkedSubject | null = platform && traderKey ? { platform, traderKey } : null
+  const shouldFetch = subject !== null
+  const url = subject
+    ? `/api/traders/aggregate?contract=2&platform=${encodeURIComponent(subject.platform)}&trader_key=${encodeURIComponent(subject.traderKey)}`
     : ''
 
   const {
     data: queryData,
     error,
-    isLoading,
-  } = useQuery<LinkedAccountsResponse | null>({
-    queryKey: ['linked-accounts', platform, traderKey],
-    placeholderData: (prev) => prev,
-    queryFn: () => linkedAccountsFetcher(url),
+    fetchStatus,
+    isFetching,
+    isFetchedAfterMount,
+  } = useQuery<LinkedAccountsResponse>({
+    queryKey: ['linked-accounts-v2', platform, traderKey],
+    queryFn: () => linkedAccountsFetcher(url, subject!),
     enabled: shouldFetch,
-    refetchOnWindowFocus: false,
-    staleTime: STALE_RELAXED,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    // Bound cross-device unlink staleness while the page stays continuously
+    // visible; background tabs revalidate on focus instead of polling.
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     retry: 1,
   })
 
-  // Prefer bundled data, fall back to query data
-  const data = parsedBundled ?? queryData
+  const canPublishQueryData =
+    shouldFetch && isFetchedAfterMount && fetchStatus === 'idle' && !isFetching && !error
+  const data = canPublishQueryData ? queryData : undefined
 
   return {
     linkedAccounts: data?.accounts ?? [],
     aggregatedData: data?.aggregated ?? null,
-    hasMultipleAccounts: (data?.accounts?.length ?? 0) >= 2,
-    isLoading: !parsedBundled && isLoading,
-    error: parsedBundled ? undefined : error,
+    hasMultipleAccounts: (data?.accounts.length ?? 0) >= 2,
+    isLoading: shouldFetch && (!isFetchedAfterMount || fetchStatus !== 'idle' || isFetching),
+    error,
   }
 }
