@@ -42,6 +42,8 @@ interface RecoveryRpcResult {
   error: { message: string } | null
 }
 
+type RecoveryAuthReviewReason = 'auth_reban_failed' | 'finish_outcome_unknown'
+
 async function recoveryRpc(
   functionName: string,
   args: Record<string, unknown>
@@ -98,6 +100,30 @@ async function abortRecoveryAdmission(params: {
     throw new Error(error?.message ?? 'Recovery abort returned an invalid acknowledgement')
   }
   return data
+}
+
+async function recordRecoveryAuthManualReview(params: {
+  userId: string
+  operationId: string
+  reason: RecoveryAuthReviewReason
+}): Promise<boolean> {
+  try {
+    const { data, error } = await recoveryRpc('record_account_recovery_auth_manual_review', {
+      p_user_id: params.userId,
+      p_operation_id: params.operationId,
+      p_reason_key: params.reason,
+    })
+    if (error || (data !== 'recorded' && data !== 'existing')) {
+      throw new Error(error?.message ?? 'Recovery Auth review returned an invalid acknowledgement')
+    }
+    return true
+  } catch (error) {
+    logger.error('Failed to persist account recovery Auth manual review', {
+      ...params,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
 }
 
 async function abortRecoveryAdmissionBestEffort(params: {
@@ -373,7 +399,14 @@ export const POST = withPublic(
         ban_duration: 'none',
       })
       if (verificationUnbanError) {
-        await reban(userId)
+        const banRestored = await reban(userId)
+        if (!banRestored) {
+          await recordRecoveryAuthManualReview({
+            userId,
+            operationId,
+            reason: 'auth_reban_failed',
+          })
+        }
         await abortRecoveryAdmissionBestEffort({ userId, operationId })
         logger.error('Failed to open credential verification window', {
           userId,
@@ -386,6 +419,11 @@ export const POST = withPublic(
       const { error: signInError } = await anon.auth.signInWithPassword({ email, password })
       const banRestored = await reban(userId)
       if (!banRestored) {
+        await recordRecoveryAuthManualReview({
+          userId,
+          operationId,
+          reason: 'auth_reban_failed',
+        })
         await abortRecoveryAdmissionBestEffort({ userId, operationId })
         return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
       }
@@ -393,6 +431,33 @@ export const POST = withPublic(
         await abortRecoveryAdmissionBestEffort({ userId, operationId })
         return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
       }
+    }
+
+    // Auth must be ready before PostgreSQL consumes the one-time recovery
+    // credential and clears the deletion tombstone. The tombstone still
+    // blocks application access during this short window, and no session is
+    // returned by this route. This ordering prevents a transient post-commit
+    // Auth failure from leaving an otherwise-restored subject permanently
+    // banned with no reusable recovery credential.
+    const { error: recoveryUnbanError } = await admin.auth.admin.updateUserById(userId, {
+      ban_duration: 'none',
+    })
+    if (recoveryUnbanError) {
+      const banRestored = await reban(userId)
+      if (!banRestored) {
+        await recordRecoveryAuthManualReview({
+          userId,
+          operationId,
+          reason: 'auth_reban_failed',
+        })
+      }
+      await abortRecoveryAdmissionBestEffort({ userId, operationId })
+      logger.error('Failed to prepare Auth for account recovery', {
+        userId,
+        operationId,
+        recoveryUnbanError,
+      })
+      return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
     }
 
     let finishAck: RecoveryFinishAck
@@ -407,6 +472,21 @@ export const POST = withPublic(
         resolution,
       })
       if (resolution !== 'finished') {
+        const banRestored = await reban(userId)
+        if (resolution === null) {
+          await recordRecoveryAuthManualReview({
+            userId,
+            operationId,
+            reason: 'finish_outcome_unknown',
+          })
+        }
+        if (!banRestored) {
+          await recordRecoveryAuthManualReview({
+            userId,
+            operationId,
+            reason: 'auth_reban_failed',
+          })
+        }
         return NextResponse.json(
           { success: false, error: 'Recovery is temporarily unavailable. Please try again.' },
           { status: 503 }
@@ -415,6 +495,14 @@ export const POST = withPublic(
       finishAck = 'finished'
     }
     if (finishAck !== 'finished') {
+      const banRestored = await reban(userId)
+      if (!banRestored) {
+        await recordRecoveryAuthManualReview({
+          userId,
+          operationId,
+          reason: 'auth_reban_failed',
+        })
+      }
       await abortRecoveryAdmissionBestEffort({ userId, operationId })
       logger.error('Account recovery admission did not finish', {
         userId,
@@ -422,18 +510,6 @@ export const POST = withPublic(
         finishAck,
       })
       return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
-    }
-
-    const { error: finalUnbanError } = await admin.auth.admin.updateUserById(userId, {
-      ban_duration: 'none',
-    })
-    if (finalUnbanError) {
-      logger.error('Account restored but final Auth unban failed', {
-        userId,
-        operationId,
-        finalUnbanError,
-      })
-      return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
     }
 
     let billingRecovery: BillingRecoveryState

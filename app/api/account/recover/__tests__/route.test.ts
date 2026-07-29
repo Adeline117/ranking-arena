@@ -234,8 +234,8 @@ describe('account recovery', () => {
         )
       ]
     expect(claimCallOrder).toBeLessThan(finishCallOrder)
-    expect(finishCallOrder).toBeLessThan(mockAdminUpdateUser.mock.invocationCallOrder[0])
-    expect(mockAdminUpdateUser.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockAdminUpdateUser.mock.invocationCallOrder[0]).toBeLessThan(finishCallOrder)
+    expect(finishCallOrder).toBeLessThan(
       mockResumeStripeSubscriptionRenewals.mock.invocationCallOrder[0]
     )
   })
@@ -324,6 +324,99 @@ describe('account recovery', () => {
     expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', {
       ban_duration: '720h',
     })
+  })
+
+  it('never consumes the recovery credential when Auth cannot be prepared first', async () => {
+    mockAdminUpdateUser
+      .mockResolvedValueOnce({ error: { message: 'Auth unavailable' } })
+      .mockResolvedValueOnce({ error: null })
+
+    const response = await POST(request({ recovery_token: RECOVERY_TOKEN }))
+
+    expect(response.status).toBe(500)
+    expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(1, 'user-1', {
+      ban_duration: 'none',
+    })
+    expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(2, 'user-1', {
+      ban_duration: '720h',
+    })
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'finish_account_recovery_admission_atomic',
+      expect.any(Object)
+    )
+    expect(mockRpc).toHaveBeenCalledWith(
+      'abort_account_recovery_admission_atomic',
+      expect.objectContaining({ p_user_id: 'user-1' })
+    )
+    expect(mockResumeStripeSubscriptionRenewals).not.toHaveBeenCalled()
+  })
+
+  it('durably opens manual review when a failed finish cannot restore the Auth ban', async () => {
+    mockRpc.mockImplementation(async (functionName: string) => {
+      if (functionName === 'claim_account_recovery_admission_atomic') {
+        return { data: 'claimed', error: null }
+      }
+      if (functionName === 'finish_account_recovery_admission_atomic') {
+        return { data: 'invalid', error: null }
+      }
+      if (functionName === 'abort_account_recovery_admission_atomic') {
+        return { data: 'aborted', error: null }
+      }
+      if (functionName === 'record_account_recovery_auth_manual_review') {
+        return { data: 'recorded', error: null }
+      }
+      throw new Error(`Unexpected RPC: ${functionName}`)
+    })
+    mockAdminUpdateUser
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: { message: 'Auth re-ban unavailable' } })
+
+    const response = await POST(request({ recovery_token: RECOVERY_TOKEN }))
+
+    expect(response.status).toBe(401)
+    const operationId = mockRpc.mock.calls.find(
+      ([functionName]) => functionName === 'claim_account_recovery_admission_atomic'
+    )?.[1].p_operation_id
+    expect(mockRpc).toHaveBeenCalledWith('record_account_recovery_auth_manual_review', {
+      p_user_id: 'user-1',
+      p_operation_id: operationId,
+      p_reason_key: 'auth_reban_failed',
+    })
+    expect(mockResumeStripeSubscriptionRenewals).not.toHaveBeenCalled()
+  })
+
+  it('durably records an unknown finish outcome after both exact probes fail', async () => {
+    mockRpc.mockImplementation(async (functionName: string) => {
+      if (functionName === 'claim_account_recovery_admission_atomic') {
+        return { data: 'claimed', error: null }
+      }
+      if (functionName === 'finish_account_recovery_admission_atomic') {
+        return { data: null, error: { message: 'finish response unavailable' } }
+      }
+      if (functionName === 'abort_account_recovery_admission_atomic') {
+        return { data: null, error: { message: 'resolution unavailable' } }
+      }
+      if (functionName === 'record_account_recovery_auth_manual_review') {
+        return { data: 'recorded', error: null }
+      }
+      throw new Error(`Unexpected RPC: ${functionName}`)
+    })
+
+    const response = await POST(request({ recovery_token: RECOVERY_TOKEN }))
+
+    expect(response.status).toBe(503)
+    const operationId = mockRpc.mock.calls.find(
+      ([functionName]) => functionName === 'claim_account_recovery_admission_atomic'
+    )?.[1].p_operation_id
+    expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(2, 'user-1', {
+      ban_duration: '720h',
+    })
+    expect(mockRpc).toHaveBeenCalledWith('record_account_recovery_auth_manual_review', {
+      p_user_id: 'user-1',
+      p_operation_id: operationId,
+      p_reason_key: 'finish_outcome_unknown',
+    })
+    expect(mockResumeStripeSubscriptionRenewals).not.toHaveBeenCalled()
   })
 
   it('keeps the recovered account active and reports reactivation when Stripe recovery fails', async () => {
