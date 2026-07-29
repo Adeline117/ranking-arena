@@ -15,6 +15,8 @@ import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getOrSetWithLock } from '@/lib/cache'
 import { readPublicProfileAudienceByHandle } from '@/lib/profile/public-audience'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 
 export async function GET(request: NextRequest, context: { params: Promise<{ handle: string }> }) {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.read)
@@ -71,107 +73,127 @@ export async function GET(request: NextRequest, context: { params: Promise<{ han
     const audienceIdentity =
       audience.status === 'active' ? `user:${audience.profile.id}` : 'unregistered'
     const traderIdentity = `${profile.source || 'unknown'}:${profile.id}`
-    const cacheKey = `users-full:v3:${handle.toLocaleLowerCase('en-US')}:${audienceIdentity}:${traderIdentity}`
-    const result = await getOrSetWithLock(
-      cacheKey,
-      async () => {
-        // Phase 2: parallel-fetch everything else (including similarTraders now that we have profile.source)
-        const [
-          performanceResult,
-          statsResult,
-          portfolioResult,
-          subscriptionData,
-          similarTradersData,
-        ] = await Promise.all([
-          // 绩效数据 — log before degrading to null so a systemic failure
-          // (e.g. schema drift in getTraderStats) is observable, not invisible.
-          getTraderPerformance(handle, '90D').catch((e) => {
-            logger.error('[users/full] getTraderPerformance failed', { handle, error: String(e) })
-            return null
-          }),
-          // 统计数据
-          getTraderStats(handle).catch((e) => {
-            logger.error('[users/full] getTraderStats failed', { handle, error: String(e) })
-            return null
-          }),
-          // 持仓数据
-          getTraderPortfolio(handle).catch((e) => {
-            logger.error('[users/full] getTraderPortfolio failed', { handle, error: String(e) })
-            return null
-          }),
-          // 订阅状态 + 粉丝/关注缓存计数（如果是用户）
-          // follower_count / following_count are cached columns kept in sync by
-          // updateFollowCounts() on every follow/unfollow, so we read them
-          // here instead of issuing two COUNT(*) queries on user_follows.
-          (async () => {
-            if (audience.status !== 'active') return null
-            try {
-              const { data } = await supabase
-                .from('user_profiles')
-                .select('subscription_tier, show_pro_badge, follower_count, following_count')
-                .eq('id', audience.profile.id)
-                .maybeSingle()
-              return data
-            } catch (e) {
-              logger.error('[users/full] user_profiles counts query failed', {
-                handle,
-                error: String(e),
-              })
+    const cacheKey = `users-full:v4:${handle.toLocaleLowerCase('en-US')}:${audienceIdentity}:${traderIdentity}`
+    const publicRankingSource =
+      profile.source && isPublicRankingSourceAllowed(profile.source) ? profile.source : null
+    const traderId = profile.id
+
+    async function readSubscriptionProfile() {
+      if (audience.status !== 'active') return null
+      const subscriptionResult = await supabase
+        .from('user_profiles')
+        .select('subscription_tier, show_pro_badge, follower_count, following_count')
+        .eq('id', audience.profile.id)
+        .maybeSingle()
+      if (subscriptionResult.error) {
+        throw new Error(`subscription profile query failed: ${subscriptionResult.error.message}`)
+      }
+      if (subscriptionResult.data == null) {
+        throw new Error('subscription profile query returned no active profile')
+      }
+      return subscriptionResult.data
+    }
+
+    async function readSimilarTraders() {
+      if (!publicRankingSource) return []
+      const sealedRead = await readSealedRankingGeneration(
+        supabase,
+        { season: '90D', sources: [publicRankingSource] },
+        async (publication) => {
+          const similarResult = await supabase
+            .from('leaderboard_ranks')
+            .select('source_trader_id, handle, source, roi, followers, season_id')
+            .eq('source', publicRankingSource)
+            .eq('season_id', '90D')
+            .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+            .neq('source_trader_id', traderId)
+            .not('arena_score', 'is', null)
+            .order('arena_score', { ascending: false })
+            .limit(5)
+          if (similarResult.error) {
+            throw new Error(`similar traders query failed: ${similarResult.error.message}`)
+          }
+          if (!Array.isArray(similarResult.data)) {
+            throw new Error('similar traders query returned an ambiguous payload')
+          }
+          return similarResult.data.filter(
+            (row) =>
+              row.source === publicRankingSource &&
+              row.season_id === '90D' &&
+              row.source_trader_id !== traderId
+          )
+        },
+        { timeoutMs: 15_000 }
+      )
+      return sealedRead.value
+    }
+
+    // Subscription/account state and sealed similar rankings are request-time
+    // authority. Keep them outside the generic candidate cache so neither can
+    // be served after an entitlement change or publication cutover.
+    const [cachedCore, subscriptionData, similarTraders] = await Promise.all([
+      getOrSetWithLock(
+        cacheKey,
+        async () => {
+          const [performanceResult, statsResult, portfolioResult] = await Promise.all([
+            // 绩效数据 — log before degrading to null so a systemic failure
+            // (e.g. schema drift in getTraderStats) is observable, not invisible.
+            getTraderPerformance(handle, '90D').catch((e) => {
+              logger.error('[users/full] getTraderPerformance failed', { handle, error: String(e) })
               return null
-            }
-          })(),
-          // 相似交易员 (runs in parallel now instead of sequentially)
-          (async () => {
-            if (!profile.source) return []
-            const { data: similar } = await supabase
-              .from('leaderboard_ranks')
-              .select('source_trader_id, handle, source, roi, followers')
-              .eq('source', profile.source)
-              .eq('season_id', '90D')
-              .neq('handle', handle)
-              .not('arena_score', 'is', null)
-              .order('arena_score', { ascending: false })
-              .limit(5)
-            return similar || []
-          })(),
-        ])
+            }),
+            // 统计数据
+            getTraderStats(handle).catch((e) => {
+              logger.error('[users/full] getTraderStats failed', { handle, error: String(e) })
+              return null
+            }),
+            // 持仓数据
+            getTraderPortfolio(handle).catch((e) => {
+              logger.error('[users/full] getTraderPortfolio failed', { handle, error: String(e) })
+              return null
+            }),
+          ])
 
-        const performance = performanceResult?.ok ? performanceResult.data : null
-        const stats = statsResult?.ok ? statsResult.data : null
-        const portfolio = portfolioResult?.ok ? portfolioResult.data : []
-        const similarTraders = similarTradersData
+          const performance = performanceResult?.ok ? performanceResult.data : null
+          const stats = statsResult?.ok ? statsResult.data : null
+          const portfolio = portfolioResult?.ok ? portfolioResult.data : []
 
-        // 粉丝/关注数 — served from cached columns fetched above
-        // (subscriptionData). Falls back to profile.followers (trader row)
-        // for handles that don't have a user_profiles entry.
-        return {
-          profile: {
-            ...profile,
-            followers: subscriptionData?.follower_count ?? profile.followers ?? 0,
-            following: subscriptionData?.following_count ?? 0,
-            subscription_tier: subscriptionData?.subscription_tier || 'free',
-            show_pro_badge: subscriptionData?.show_pro_badge ?? true,
-          },
-          performance,
-          stats,
-          portfolio,
-          similarTraders,
-          // Flag partial failures so UI can show appropriate indicators
-          _errors: {
-            performance:
-              performanceResult && !performanceResult.ok ? performanceResult.error : undefined,
-            stats: statsResult && !statsResult.ok ? statsResult.error : undefined,
-            portfolio: portfolioResult && !portfolioResult.ok ? portfolioResult.error : undefined,
-          },
-          // 元信息
-          meta: {
-            timestamp: new Date().toISOString(),
-            cached: false,
-          },
-        }
+          return {
+            profile,
+            performance,
+            stats,
+            portfolio,
+            // Flag partial failures so UI can show appropriate indicators
+            _errors: {
+              performance:
+                performanceResult && !performanceResult.ok ? performanceResult.error : undefined,
+              stats: statsResult && !statsResult.ok ? statsResult.error : undefined,
+              portfolio: portfolioResult && !portfolioResult.ok ? portfolioResult.error : undefined,
+            },
+            // 元信息
+            meta: {
+              timestamp: new Date().toISOString(),
+              cached: false,
+            },
+          }
+        },
+        { ttl: 120 }
+      ),
+      readSubscriptionProfile(),
+      readSimilarTraders(),
+    ])
+
+    const result = {
+      ...cachedCore,
+      profile: {
+        ...cachedCore.profile,
+        followers: subscriptionData?.follower_count ?? profile.followers ?? 0,
+        following: subscriptionData?.following_count ?? 0,
+        subscription_tier: subscriptionData?.subscription_tier || 'free',
+        show_pro_badge: subscriptionData?.show_pro_badge ?? true,
       },
-      { ttl: 120 }
-    ) // 2 min cache
+      similarTraders,
+    }
 
     return NextResponse.json(result, {
       headers: {
