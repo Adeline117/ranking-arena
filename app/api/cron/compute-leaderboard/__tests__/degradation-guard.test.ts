@@ -148,7 +148,7 @@ describe('degradation route contract', () => {
     const forceIndex = route.indexOf("searchParams.get('force') === '1'")
     const guardIndex = route.indexOf('await checkDegradationGuard({')
     const skipIndex = route.indexOf("if (degradation.action === 'skip') return -1")
-    const writeIndex = route.indexOf('await upsertLeaderboard({')
+    const writeIndex = route.indexOf('await publishAtomicRankGeneration({')
 
     expect(authIndex).toBeGreaterThan(-1)
     expect(forceIndex).toBeGreaterThan(authIndex)

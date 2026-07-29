@@ -14,7 +14,6 @@ import { getSupabaseAdmin } from '@/lib/api'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { type Period } from '@/lib/utils/arena-score'
-import { SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import {
   warmupSsrHomepageCache,
@@ -22,31 +21,21 @@ import {
   revalidateRankingPages,
   warmupLeaderboardCache,
 } from './post-processing'
-import { detectTraderType, deriveWinRateMDD } from './helpers'
+import { deriveWinRateMDD } from './helpers'
 import { type TraderRow, makeAddToTraderMap, sanitizeTraderRow } from './trader-row'
 import { computeLastResortCalmar, classifyTradingStyle } from './scoring-helpers'
-import { checkPlatformFreshness } from './freshness-check'
 import { fetchHandleAvatarMap } from './fetch-handles'
 import { enrichFromStatsDetail } from './enrich-stats-detail'
 import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enrich-equity-curve'
 import { deriveAdvancedFromDailySnapshots } from './enrich-daily-snapshots'
 import { runPhase1, getPhase1ReadSource } from './phase1-select'
-import { rerankAllRows, cleanupStaleRows, atomicPlatformCleanup } from './rerank-cleanup'
-import { scoreTraders, type ScoredTrader } from './score-traders'
+import { scoreTraders } from './score-traders'
 import { checkDegradationGuard, saveScoredCount } from './degradation-guard'
-import { fetchCurrentScoreMap, buildChangedTraders } from './incremental-diff'
-import {
-  buildSourceFreshnessWriteRows,
-  upsertLeaderboard,
-  upsertSourceFreshness,
-  zeroOutExcluded,
-} from './write-leaderboard'
+import { publishAtomicRankGeneration } from './publish-atomic-rank-generation'
 import { hasComputeFailures, type ComputeResult } from './result-status'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { getSharedRedis } from '@/lib/cache/redis-client'
-import { PipelineState } from '@/lib/services/pipeline-state'
-import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { MIN_TRADES } from '@/lib/constants/trader-thresholds'
 import { acquireLeaderboardSeasonLocks, type LeaderboardSeasonLockRedis } from './season-lock'
@@ -54,9 +43,7 @@ import { acquireLeaderboardSeasonLocks, type LeaderboardSeasonLockRedis } from '
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-// detectTraderType, getFreshnessHours, deriveWinRateMDD all live in ./helpers.ts
-// (single source of truth — duplicates removed 2026-04-09). getFreshnessHours
-// is now consumed only by fetch-phase1.ts.
+// getFreshnessHours and deriveWinRateMDD live in ./helpers.ts.
 
 const logger = createLogger('compute-leaderboard')
 
@@ -396,7 +383,7 @@ async function computeSeason(
   // a partial failure (e.g., season 7D succeeded, 30D timed out — retry
   // shouldn't redo 7D).
   const hourKey = new Date().toISOString().slice(0, 13) // "2026-04-14T08"
-  const checkpointKey = `leaderboard:computed:${season}:${hourKey}`
+  const checkpointKey = `leaderboard:computed:atomic-v1:${season}:${hourKey}`
   try {
     const { data: checkpoint } = await tieredGet<{ count: number }>(checkpointKey, 'warm')
     if (checkpoint && checkpoint.count > 0 && !forceWrite) {
@@ -433,22 +420,16 @@ async function computeSeason(
     // Non-critical — informational log only
   }
 
-  // Upsert abort flag (set inside the upsert loop when time runs out, consumed
-  // by the zero-out phase below to skip its expensive N+1 cleanup path).
-  let upsertAborted = false
   // Stream directly into traderMap instead of accumulating allSnapshots array
   // This reduces peak memory from ~200MB to ~50MB by avoiding intermediate array.
   // TraderRow shape + addToTraderMap sanitize/merge logic live in ./trader-row.ts.
   const traderMap = new Map<string, TraderRow>()
   const addToTraderMap = makeAddToTraderMap(traderMap)
 
-  // Phase 1: Fetch fresh trader rows into traderMap. The read source is
-  // chosen by COMPUTE_READ_SOURCE (trader_latest | arena | diff) — the ENDGAME
-  // cutover switch from the legacy trader_latest table to the arena pipeline's
-  // arena_score_inputs RPC. Default 'trader_latest' is the legacy per-platform
-  // reader; 'diff' publishes legacy while logging the arena delta (shadow
-  // phase); 'arena' reads purely from the new pipeline. See phase1-select.ts.
-  await runPhase1(supabase, season, traderMap, addToTraderMap)
+  // Phase 1: read score rows and every physical-board authority record in one
+  // database snapshot. The strict parser validates the whole bundle before any
+  // row is projected into the temporary compute map.
+  const sourcePublication = await runPhase1(supabase, season, traderMap, addToTraderMap)
 
   // V1 fetch removed — v2 backfill (migration 20260319b) ensures v2 has full coverage.
   // upsertTraders() writes to both v1 and v2 on every cron run, so v2 stays current.
@@ -467,41 +448,24 @@ async function computeSeason(
   // runConnectorBatch() builds a union of all traders across all windows and ensures
   // every trader has entries for ALL windows in trader_snapshots_v2.
 
-  // Data freshness check: classify each source as fresh / stale / query-failed.
-  // If ALL platforms are stale (>48h) we skip computation to avoid publishing
-  // a stale leaderboard. Logic lives in freshness-check.ts.
-  const { expectedPlatforms, freshPlatforms, stalePlatforms, queryFailedPlatforms } =
-    await checkPlatformFreshness(supabase, traderMap, season)
-
-  if (queryFailedPlatforms.length > 0) {
-    logger.warn(
-      `[${season}] ${queryFailedPlatforms.length} platforms had query failures but DB has fresh data: ${queryFailedPlatforms.join(', ')}`
-    )
+  // The one publication-bundle RPC is the source/freshness authority for this
+  // generation. Atomic all-source publication cannot mix retained old boards
+  // with a new score cohort, so any retain decision blocks before enrichment,
+  // manifest creation, or ranking mutation.
+  if (sourcePublication.evidence.retainedAliases.length > 0) {
+    const retained = sourcePublication.evidence.retainedAliases
+      .map((alias) => `${alias.source}:${alias.denial_reasons.join('+')}`)
+      .join(', ')
+    throw new Error(`[${season}] source publication authority retained ${retained}`)
   }
-
-  if (freshPlatforms.length === 0 && expectedPlatforms.length > 0) {
-    if (queryFailedPlatforms.length > 0) {
-      logger.error(
-        `[${season}] No fresh platforms loaded but ${queryFailedPlatforms.length} had DB fresh-data (query failures). Transient Supabase issue — skipping this run.`,
-        { queryFailedPlatforms, stalePlatforms }
-      )
-      throw new Error(
-        `Query failures prevented loading ${queryFailedPlatforms.length} fresh platforms — will retry next cron cycle.`
-      )
-    }
-    logger.error(
-      `[${season}] ALL platforms are stale (>48h). Skipping computation to prevent stale leaderboard.`,
-      { stalePlatforms }
-    )
-    throw new Error(
-      `All ${stalePlatforms.length} platforms are stale (>48h). Blocking computation.`
-    )
-  }
-
-  if (stalePlatforms.length > 0) {
-    logger.warn(
-      `[${season}] ${stalePlatforms.length} platforms have stale data (>48h): ${stalePlatforms.join(', ')}. Computing with ${freshPlatforms.length} fresh platforms.`
-    )
+  const expectedPlatforms = sourcePublication.evidence.aliases.map((alias) => alias.source)
+  const freshPlatforms = sourcePublication.evidence.freshAliases.map((alias) => alias.source)
+  if (
+    expectedPlatforms.length === 0 ||
+    freshPlatforms.length !== expectedPlatforms.length ||
+    freshPlatforms.length !== new Set(freshPlatforms).size
+  ) {
+    throw new Error(`[${season}] source publication authority is incomplete`)
   }
 
   // Phase 3: Fill missing metrics from trader_stats_detail (enrichment table).
@@ -598,8 +562,8 @@ async function computeSeason(
   const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
   const freshPlatformSet = new Set(freshPlatforms)
   const uniqueTraders = Array.from(traderMap.values())
-    // Stale sources keep their prior public rows and watermark. They must not
-    // be rescored from old input while fresh sources advance independently.
+    // Defense in depth: only rows covered by this exact all-fresh authority
+    // bundle may enter the manifest.
     .filter((t) => freshPlatformSet.has(t.source))
     .filter((t) => t.source !== 'web3_bot') // DeFi protocol contracts, not real traders — exclude entirely
     .filter((t) => t.roi != null)
@@ -631,10 +595,9 @@ async function computeSeason(
   }
 
   if (!uniqueTraders.length) {
-    logger.warn(
-      `[${season}] No traders passed filters! traderMap.size=${traderMap.size}, roiThreshold=${roiThreshold}`
+    throw new Error(
+      `[${season}] no traders passed publication filters (input=${traderMap.size}, roiThreshold=${roiThreshold}); preserving the current sealed cohort`
     )
-    return 0
   }
 
   // Prefetch on-chain contract detection results from trader_sources.
@@ -661,29 +624,13 @@ async function computeSeason(
   const handleMap = await fetchHandleAvatarMap(supabase, uniqueTraders)
 
   // Calculate arena scores, mark outliers, apply followers, filter nulls
-  const { scored, scoredFiltered } = await scoreTraders(
+  const { scored } = await scoreTraders(
     uniqueTraders,
     handleMap,
     contractAddresses,
     season,
     supabase
   )
-
-  // Sort by arena_score desc, then trust weight (higher trust = higher for ties),
-  // then Sharpe ratio (better risk-adjusted), then stable id.
-  // Trust weight removed from score formula (same skill ≠ different score per exchange)
-  // but kept here as tie-breaker for equal-scoring traders.
-  scoredFiltered.sort((a, b) => {
-    const diff = b.arena_score! - a.arena_score!
-    if (Math.abs(diff) > 0.01) return diff
-    const twA = SOURCE_TRUST_WEIGHT[a.source] ?? 0.5
-    const twB = SOURCE_TRUST_WEIGHT[b.source] ?? 0.5
-    if (Math.abs(twB - twA) > 0.01) return twB - twA
-    const srA = a.sharpe_ratio ?? -99
-    const srB = b.sharpe_ratio ?? -99
-    if (Math.abs(srB - srA) > 0.01) return srB - srA
-    return a.source_trader_id.localeCompare(b.source_trader_id)
-  })
 
   // Degradation guard: prevent bad data from overwriting good leaderboard data
   const degradation = await checkDegradationGuard({
@@ -696,123 +643,29 @@ async function computeSeason(
   })
   if (degradation.action === 'skip') return -1
 
-  // Validate every source publication timestamp before the first ranking
-  // mutation. Otherwise a source with invalid provenance could receive new
-  // rows while retaining a still-fresh last-good watermark.
-  const sourceCount = new Set(scoredFiltered.map((trader) => trader.source)).size
-  const sourcePublications = buildSourceFreshnessWriteRows(season, scoredFiltered)
-  if (sourcePublications.length !== sourceCount) {
-    throw new Error(`[${season}] invalid source publication provenance; refusing ranking writes`)
-  }
-
-  // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
-  const currentScoreMap = await fetchCurrentScoreMap(
-    supabase as SupabaseClient,
-    season,
-    isOutOfTime
-  )
-  const { changedTraders, rankMap, prevRankMap } = buildChangedTraders(
-    scoredFiltered,
-    currentScoreMap,
-    season
-  )
-
   // Concurrency is fenced by the owner-token Redis season lease acquired by GET().
   // Do not add a session-level PostgreSQL advisory lock through Supabase RPC here:
   // PostgREST may execute acquire and release on different pooled connections,
   // leaking the lock on the acquire session and permanently blocking this season.
-
-  // Upsert changed rows + zero out excluded traders
-  const { upsertErrors, upsertAborted: upsertWasAborted } = await upsertLeaderboard({
-    supabase: supabase as SupabaseClient,
-    season,
-    changedTraders,
-    rankMap,
-    prevRankMap,
-    isOutOfTime,
-    timeLeftMs,
-  })
-  upsertAborted = upsertWasAborted
-
-  if (upsertAborted || upsertErrors > 0) {
+  if (isOutOfTime(75_000)) {
     throw new Error(
-      `[${season}] incomplete ranking upsert (aborted=${upsertAborted}, errors=${upsertErrors})`
+      `[${season}] insufficient time for atomic publication (${Math.round(timeLeftMs() / 1000)}s left)`
     )
   }
 
-  await zeroOutExcluded({
-    supabase: supabase as SupabaseClient,
+  // The finalizer validates the complete manifest/generation/source authority,
+  // then live-upserts, exact-cleans, reranks, seals proofs, and advances the
+  // generation head inside one PostgreSQL transaction. Any error leaves the
+  // previously sealed public cohort byte-for-byte readable.
+  const publication = await publishAtomicRankGeneration({
+    supabase: supabase as never,
     season,
-    uniqueTraders,
-    traderMap,
-    freshPlatforms,
-    isOutOfTime,
-    upsertAborted,
-    timeLeftMs,
+    sourceEvidence: sourcePublication.evidence,
+    scoredTraders: scored,
   })
-
-  // Re-rank ALL rows to fix drift from incremental upserts. Stale traders
-  // (outside freshness window) keep old ranks while new traders shift numbering;
-  // this global re-rank ensures rank always matches arena_score DESC ordering.
-  // A publication without the final global rank pass is incomplete. Fail
-  // closed so watermarks/checkpoints cannot advance over rank drift.
-  if (isOutOfTime(15_000)) {
-    throw new Error(
-      `[${season}] insufficient time for required re-rank (${Math.round(timeLeftMs() / 1000)}s left)`
-    )
-  }
-  await rerankAllRows(supabase, season)
-
-  // --- ROOT CAUSE FIX: Atomic per-platform cleanup ---
-  // For each FRESH platform, delete all rows NOT in the new scored set.
-  // This eliminates zombie rows immediately instead of waiting 5 days.
-  // Stale/query-failed platforms are untouched (their data is preserved).
-  if (isOutOfTime(15_000)) {
-    throw new Error(
-      `[${season}] insufficient time for required platform cleanup (${Math.round(timeLeftMs() / 1000)}s left)`
-    )
-  } else {
-    // Build per-platform trader ID map from the scored result
-    const scoredTradersByPlatform = new Map<string, string[]>()
-    for (const t of scoredFiltered) {
-      const ids = scoredTradersByPlatform.get(t.source) || []
-      ids.push(t.source_trader_id)
-      scoredTradersByPlatform.set(t.source, ids)
-    }
-    const atomicCleaned = await atomicPlatformCleanup(
-      supabase as SupabaseClient,
-      season,
-      freshPlatforms,
-      scoredTradersByPlatform
-    )
-    if (atomicCleaned > 0) {
-      logger.info(
-        `${season}: atomic cleanup removed ${atomicCleaned} zombie rows from fresh platforms`
-      )
-    }
-  }
-
-  // Legacy stale-row cleanup as safety net (catches rows from platforms
-  // that were stale for >5 days and never got atomic-cleaned)
-  if (isOutOfTime(10_000)) {
-    logger.warn(
-      `[${season}] SKIPPING stale-row cleanup — only ${Math.round(timeLeftMs() / 1000)}s left`
-    )
-  } else {
-    const cleaned = await cleanupStaleRows(supabase, season)
-    if (cleaned > 0) {
-      logger.info(`${season}: cleaned ${cleaned} old orphan rows from currently fresh sources`)
-    }
-  }
-
-  // Publish source-data watermarks only after every required ranking mutation
-  // succeeds. A failed watermark write is a failed publication, not a warning.
-  const watermarksWritten = await upsertSourceFreshness({
-    supabase: supabase as SupabaseClient,
-    season,
-    scoredTraders: scoredFiltered,
-  })
-  logger.info(`[${season}] published ${watermarksWritten} source freshness watermarks`)
+  logger.info(
+    `[${season}] atomically sealed generation ${publication.generationSeq} / ${publication.scoreCohortId} (${publication.publishedCount} ranks, ${publication.sourceCount} sources)`
+  )
 
   // Save scored count for future degradation checks
   await saveScoredCount(season, scored.length)
@@ -820,20 +673,22 @@ async function computeSeason(
   // Write per-season checkpoint so retries within the same hour skip this season.
   // TTL = warm (900s) — survives the cron interval but doesn't linger.
   try {
-    await tieredSet(checkpointKey, { count: scored.length, at: new Date().toISOString() }, 'warm', [
-      'leaderboard',
-    ])
+    await tieredSet(
+      checkpointKey,
+      { count: publication.publishedCount, at: new Date().toISOString() },
+      'warm',
+      ['leaderboard']
+    )
   } catch (e) {
     logger.warn(
       `[${season}] Checkpoint write failed: ${e instanceof Error ? e.message : String(e)}`
     )
   }
 
-  const actualUpserted = scoredFiltered.length - upsertErrors
   logger.info(
-    `${season}: ranked ${scoredFiltered.length} traders (${scored.length} total scored, ${scored.length - scoredFiltered.length} zero-score excluded, ${upsertErrors} upsert errors)`
+    `${season}: atomically ranked ${publication.publishedCount} traders from ${scored.length} score candidates`
   )
-  return actualUpserted
+  return publication.publishedCount
 }
 
 // deriveWinRateMDD lives in ./helpers.ts (single source of truth, 2026-04-09)

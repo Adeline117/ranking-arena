@@ -181,21 +181,18 @@ describe('compute leaderboard source freshness writes', () => {
     expect(from).not.toHaveBeenCalled()
   })
 
-  it('publishes watermarks only after a complete, error-free ranking write', () => {
+  it('delegates source proofs only through the atomic generation finalizer path', () => {
     const route = readFileSync(
       join(process.cwd(), 'app/api/cron/compute-leaderboard/route.ts'),
       'utf8'
     )
-    const guard = route.indexOf('if (upsertAborted || upsertErrors > 0)')
-    const incompleteThrow = route.indexOf('incomplete ranking upsert', guard)
-    const zeroOut = route.indexOf('await zeroOutExcluded({', guard)
-    const publish = route.indexOf('await upsertSourceFreshness({', guard)
+    const guard = route.indexOf('await checkDegradationGuard({')
+    const publish = route.indexOf('await publishAtomicRankGeneration({', guard)
 
     expect(guard).toBeGreaterThan(-1)
-    expect(incompleteThrow).toBeGreaterThan(guard)
-    expect(zeroOut).toBeGreaterThan(incompleteThrow)
     expect(publish).toBeGreaterThan(guard)
-    expect(route.slice(guard, publish)).not.toContain('source freshness publish failed')
+    expect(route).not.toContain('await upsertSourceFreshness({')
+    expect(route).not.toContain('await zeroOutExcluded({')
   })
 
   it('does not rescore stale source inputs while preserving their last-good rows', () => {
