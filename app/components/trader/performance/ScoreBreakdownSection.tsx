@@ -6,7 +6,7 @@ import { useLanguage } from '../../Providers/LanguageProvider'
 import { ScoreRadar } from '@/app/components/ranking/ScoreRadar'
 import { CompactErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { getScoreColor as getArenaScoreColor } from '@/lib/utils/score-colors'
-import { ScoreBar } from './ScoreBar'
+import { isValidScore, ScoreBar } from './ScoreBar'
 import type { ExtendedPerformance } from '../OverviewPerformanceCard'
 
 const arenaScoreColor = (score: number) => getArenaScoreColor(score)
@@ -14,10 +14,8 @@ const arenaScoreColor = (score: number) => getArenaScoreColor(score)
 export interface ScoreBreakdownSectionProps {
   performance: ExtendedPerformance
   periodArenaScore: number | undefined
-  periodReturnScore: number | undefined
-  periodPnlScore: number | undefined
-  periodDrawdownScore: number | undefined
-  periodStabilityScore: number | undefined
+  periodProfitabilityScore: number | undefined
+  periodRiskControlScore: number | undefined
   arenaScoreV3: number | undefined
   isVisible: boolean
   rank?: number
@@ -28,10 +26,8 @@ export interface ScoreBreakdownSectionProps {
 export function ScoreBreakdownSection({
   performance,
   periodArenaScore,
-  periodReturnScore,
-  periodPnlScore,
-  periodDrawdownScore,
-  periodStabilityScore,
+  periodProfitabilityScore,
+  periodRiskControlScore,
   arenaScoreV3,
   isVisible,
   rank,
@@ -39,14 +35,21 @@ export function ScoreBreakdownSection({
   platformName,
 }: ScoreBreakdownSectionProps) {
   const { t } = useLanguage()
+  const profitabilityScore = isValidScore(periodProfitabilityScore, 100)
+    ? periodProfitabilityScore
+    : null
+  const riskControlScore = isValidScore(periodRiskControlScore, 100) ? periodRiskControlScore : null
+  const canonicalArenaScore =
+    periodArenaScore != null
+      ? isValidScore(periodArenaScore, 100)
+        ? periodArenaScore
+        : null
+      : isValidScore(arenaScoreV3, 100)
+        ? arenaScoreV3
+        : null
 
   const hasScores =
-    periodArenaScore != null ||
-    periodReturnScore != null ||
-    periodDrawdownScore != null ||
-    periodStabilityScore != null ||
-    arenaScoreV3 != null ||
-    performance.profitability_score != null
+    canonicalArenaScore != null || profitabilityScore != null || riskControlScore != null
 
   if (!hasScores) return null
 
@@ -168,47 +171,20 @@ export function ScoreBreakdownSection({
             gap: tokens.spacing[2],
           }}
         >
-          {arenaScoreV3 != null && (
-            <Box
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: tokens.spacing[1],
-                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                background: `${alpha(tokens.colors.accent.success, 8)}`,
-                borderRadius: tokens.radius.full,
-                border: `1px solid ${alpha(tokens.colors.accent.success, 19)}`,
-              }}
-            >
-              <Text size="xs" color="secondary" weight="bold">
-                V3
-              </Text>
-              <Text
-                size="sm"
-                weight="black"
-                style={{
-                  color: tokens.colors.accent.success,
-                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
-                }}
-              >
-                {arenaScoreV3.toFixed(0)}
-              </Text>
-            </Box>
-          )}
-          {periodArenaScore != null && (
+          {canonicalArenaScore != null && (
             <Box
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: tokens.spacing[2],
                 padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                background: `${alpha(arenaScoreColor(periodArenaScore), 8)}`,
+                background: `${alpha(arenaScoreColor(canonicalArenaScore), 8)}`,
                 borderRadius: tokens.radius.full,
-                border: `1px solid ${alpha(arenaScoreColor(periodArenaScore), 19)}`,
+                border: `1px solid ${alpha(arenaScoreColor(canonicalArenaScore), 19)}`,
               }}
             >
               <Text className="score-label-full" size="xs" color="secondary" weight="bold">
-                Arena Score
+                {t('arenaScore')}
               </Text>
               <Text className="score-label-short" size="xs" color="secondary" weight="bold">
                 Score
@@ -217,11 +193,11 @@ export function ScoreBreakdownSection({
                 size="sm"
                 weight="black"
                 style={{
-                  color: arenaScoreColor(periodArenaScore),
+                  color: arenaScoreColor(canonicalArenaScore),
                   fontFamily: tokens.typography.fontFamily.mono.join(', '),
                 }}
               >
-                {periodArenaScore.toFixed(0)}
+                {canonicalArenaScore.toFixed(0)}
               </Text>
             </Box>
           )}
@@ -267,18 +243,18 @@ export function ScoreBreakdownSection({
             gap: tokens.spacing[3],
           }}
         >
-          {/* v4 (2026-07): 优先用 serving 的 v4 维度分(0-100 百分位:盈利=PnL+ROI,
-              风控=回撤+Sharpe),legacy period 子分仅作陈旧缓存回退。旧 60/40 标尺已废。 */}
+          {/* Current-period v4 dimensions (0-100 percentiles) are resolved by the caller.
+              This section never reaches back to a different period for a visual fallback. */}
           <ScoreBar
             label={t('scoreProfit')}
-            score={performance.profitability_score ?? periodReturnScore ?? null}
+            score={profitabilityScore}
             maxScore={100}
             isVisible={isVisible}
             delay={500}
           />
           <ScoreBar
             label={t('scoreRisk')}
-            score={performance.risk_control_score ?? periodPnlScore ?? null}
+            score={riskControlScore}
             maxScore={100}
             isVisible={isVisible}
             delay={550}
@@ -295,10 +271,10 @@ export function ScoreBreakdownSection({
         >
           <CompactErrorBoundary>
             <ScoreRadar
-              profitability={performance.profitability_score ?? periodReturnScore ?? 0}
-              riskControl={performance.risk_control_score ?? periodPnlScore ?? 0}
+              profitability={profitabilityScore}
+              riskControl={riskControlScore}
               execution={null}
-              arenaScore={performance.arena_score_v3 ?? periodArenaScore ?? 0}
+              arenaScore={canonicalArenaScore}
               size={130}
             />
           </CompactErrorBoundary>

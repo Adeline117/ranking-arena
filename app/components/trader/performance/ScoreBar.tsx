@@ -7,7 +7,7 @@ import { Box, Text } from '../../base'
 /**
  * 分数配色
  */
-export function getScoreColor(score: number | null, max: number): string {
+export function getScoreColor(score: number | null | undefined, max: number): string {
   if (!isValidScore(score, max)) return 'var(--color-text-tertiary)'
   const ratio = score / max
   if (ratio >= 0.7) return 'var(--color-accent-success)'
@@ -16,7 +16,7 @@ export function getScoreColor(score: number | null, max: number): string {
 }
 
 /** Scores outside their declared scale are corrupt/unknown, not displayable extremes. */
-export function isValidScore(score: number | null, max: number): score is number {
+export function isValidScore(score: number | null | undefined, max: number): score is number {
   return (
     score != null &&
     Number.isFinite(score) &&
