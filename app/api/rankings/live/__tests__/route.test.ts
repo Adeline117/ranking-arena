@@ -12,16 +12,17 @@ jest.mock('next/server', () => {
     readonly status: number
     readonly headers = new Headers()
 
-    constructor(body: unknown, init: { status?: number } = {}) {
+    constructor(body: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this.body = body
       this.status = init.status ?? 200
+      this.headers = new Headers(init.headers)
     }
 
     async json() {
       return this.body
     }
 
-    static json(body: unknown, init?: { status?: number }) {
+    static json(body: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(body, init)
     }
   }
@@ -323,6 +324,9 @@ describe('GET /api/rankings/live publication authority', () => {
       /safe-cache-row|retired-cache-row|quarantined-cache-row/
     )
     expect(response.headers.get('X-Cache')).toBe('MISS')
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
     expect(mockGetSortedSetSize).not.toHaveBeenCalled()
     expect(mockGetTopTraders).not.toHaveBeenCalled()
     expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
@@ -350,6 +354,9 @@ describe('GET /api/rankings/live publication authority', () => {
       expect.objectContaining({ source: 'binance_futures', id: 'current-cache-row' }),
     ])
     expect(response.headers.get('X-Cache')).toBe('HIT')
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
     expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockTieredSet).not.toHaveBeenCalled()

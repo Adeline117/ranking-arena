@@ -29,6 +29,7 @@ describe('public ranking freshness route contracts', () => {
 
   it.each([
     'app/api/rankings/route.ts',
+    'app/api/rankings/live/route.ts',
     'app/api/traders/route.ts',
     'app/api/v2/rankings/route.ts',
   ])('%s cannot bypass live proof checks through an edge cache', (path) => {

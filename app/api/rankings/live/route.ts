@@ -29,9 +29,15 @@ import {
 } from '@/lib/rankings/sealed-ranking-cache'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 export const runtime = 'nodejs'
 
 const logger = createLogger('rankings-live')
+const RANKING_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 // ── Input validation schema ──────────────────────────────────────────────────
 const liveRankingsSchema = z.object({
@@ -75,11 +81,12 @@ export async function GET(request: NextRequest) {
           { timeoutMs: 10_000 }
         )
         if (currentGeneration.publicationIdentity === cachedEntry.publicationIdentity) {
-          const response = NextResponse.json(sanitizePublicRankingSourcePayload(cachedEntry.value))
-          // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
-          // the Vercel CDN instead of every client invoking the function.
-          // Keyed by full URL (period/limit/offset), no auth personalization.
-          response.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
+          const response = NextResponse.json(
+            sanitizePublicRankingSourcePayload(cachedEntry.value),
+            {
+              headers: RANKING_NO_STORE_HEADERS,
+            }
+          )
           response.headers.set('X-Cache', 'HIT')
           response.headers.set('X-Cache-Layer', cached.layer || 'unknown')
           return response
@@ -188,11 +195,7 @@ export async function GET(request: NextRequest) {
       )
     })
 
-    const response = NextResponse.json(responseBody)
-    // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
-    // the Vercel CDN instead of every client invoking the function.
-    // Keyed by full URL (period/limit/offset), no auth personalization.
-    response.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
+    const response = NextResponse.json(responseBody, { headers: RANKING_NO_STORE_HEADERS })
     response.headers.set('X-Cache', 'MISS')
     return response
   } catch (error) {
