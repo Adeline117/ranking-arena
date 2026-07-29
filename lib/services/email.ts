@@ -24,6 +24,7 @@ function getResend(): Resend | null {
 }
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Arena <noreply@arenafi.org>'
+const DEFAULT_SEND_TIMEOUT_MS = 10_000
 
 export async function sendEmail(options: {
   to: string
@@ -31,20 +32,37 @@ export async function sendEmail(options: {
   html: string
   /** Provider-level retry deduplication; Resend retains keys for 24 hours. */
   idempotencyKey?: string
+  /** Bound the provider request so callers cannot hang until their runtime is killed. */
+  timeoutMs?: number
 }): Promise<boolean> {
   // Strategy 1: Resend (primary)
   const resend = getResend()
   if (resend) {
     try {
-      await resend.emails.send(
+      // Resend 6.x forwards request options to fetch at runtime. Its public
+      // request-options type omits RequestInit.signal, so keep the object in a
+      // variable to preserve the real abort signal without an unsafe cast.
+      const requestOptions = {
+        idempotencyKey: options.idempotencyKey,
+        signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_SEND_TIMEOUT_MS),
+      }
+      const { data, error } = await resend.emails.send(
         {
           from: FROM_EMAIL,
           to: options.to,
           subject: options.subject,
           html: options.html,
         },
-        options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : undefined
+        requestOptions
       )
+
+      // Resend resolves provider/API failures as { data: null, error } rather
+      // than rejecting. Never count those responses as successful delivery.
+      if (error || !data?.id) {
+        logger.error('Resend send failed', { error, to: options.to })
+        return false
+      }
+
       logger.info('Email sent via Resend', { to: options.to, subject: options.subject })
       return true
     } catch (error) {
