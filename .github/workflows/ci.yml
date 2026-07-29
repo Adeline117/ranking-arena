@@ -93,6 +93,7 @@ jobs:
   pre-checks:
     name: Pre-flight Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -164,6 +165,19 @@ jobs:
           if [ "$ADHOC" -gt 100 ]; then
             echo "::warning::$ADHOC API routes still use ad-hoc error responses. Migrate to apiError() from lib/api/response.ts"
           fi
+
+      - name: Install isolated PostgreSQL 17 server binaries
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-17 ripgrep
+          /usr/lib/postgresql/17/bin/initdb --version
+
+      - name: Prove stage backfill, crossed epochs, and legacy replay
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:rank-staging-xid-pg17
 
   # ─────────────────────────────────────────────
   # Stage 2: Lint + Type Check

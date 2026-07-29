@@ -29,12 +29,15 @@ CANONICAL_BATCH_MIGRATION="$ROOT_DIR/supabase/migrations/20260729014500_leaderbo
 ATTESTED_WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729015000_leaderboard_rank_generation_attested_batch_writer.sql"
 PRIVATE_STAGING_MIGRATION="$ROOT_DIR/supabase/migrations/20260729054400_leaderboard_rank_generation_private_staging.sql"
 STAGING_ONLY_WRITER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729061533_leaderboard_rank_generation_staging_only_writer.sql"
+STAGING_FULL_XID_MIGRATION="$ROOT_DIR/supabase/migrations/20260729063000_leaderboard_rank_staging_full_xid_guard.sql"
 CAPACITY_BENCHMARK="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-rank-generation-64k-benchmark.pg17.psql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 BENCHMARK_64K="${ARENA_ATOMIC_WRITER_BENCHMARK_64K:-0}"
 BENCHMARK_SCENARIO="${ARENA_ATOMIC_WRITER_BENCHMARK_SCENARIO:-insert}"
 STAGING_ONLY_WRITER="${ARENA_ATOMIC_WRITER_STAGING_ONLY:-0}"
 LEGACY_CUTOVER_REPLAY="${ARENA_ATOMIC_WRITER_LEGACY_CUTOVER_REPLAY:-0}"
+STAGING_XID_EPOCH="${ARENA_ATOMIC_WRITER_STAGING_XID_EPOCH:-0}"
+STAGING_XID_REPAIR_TIMING="${ARENA_ATOMIC_WRITER_STAGING_XID_REPAIR_TIMING:-before-writes}"
 
 if [[ "$BENCHMARK_64K" != '0' && "$BENCHMARK_64K" != '1' ]]; then
   echo 'ARENA_ATOMIC_WRITER_BENCHMARK_64K must be 0 or 1' >&2
@@ -52,6 +55,15 @@ if [[ "$LEGACY_CUTOVER_REPLAY" != '0' && "$LEGACY_CUTOVER_REPLAY" != '1' ]]; the
   echo 'ARENA_ATOMIC_WRITER_LEGACY_CUTOVER_REPLAY must be 0 or 1' >&2
   exit 1
 fi
+if [[ "$STAGING_XID_EPOCH" != '0' && "$STAGING_XID_EPOCH" != '1' ]]; then
+  echo 'ARENA_ATOMIC_WRITER_STAGING_XID_EPOCH must be 0 or 1' >&2
+  exit 1
+fi
+if [[ "$STAGING_XID_REPAIR_TIMING" != 'before-writes' \
+   && "$STAGING_XID_REPAIR_TIMING" != 'after-batch-zero' ]]; then
+  echo 'ARENA_ATOMIC_WRITER_STAGING_XID_REPAIR_TIMING must be before-writes or after-batch-zero' >&2
+  exit 1
+fi
 if [[ "$BENCHMARK_64K" == '1' && "$STAGING_ONLY_WRITER" == '1' ]]; then
   echo 'staging-only proof and legacy 64k benchmark are separate scenarios' >&2
   exit 1
@@ -61,8 +73,17 @@ if [[ "$LEGACY_CUTOVER_REPLAY" == '1' \
   echo 'legacy cutover replay, staging-only proof, and 64k benchmark are separate scenarios' >&2
   exit 1
 fi
+if [[ "$STAGING_XID_EPOCH" == '1' && "$STAGING_ONLY_WRITER" != '1' ]]; then
+  echo 'nonzero staging XID epoch requires the staging-only proof' >&2
+  exit 1
+fi
+if [[ "$STAGING_XID_REPAIR_TIMING" == 'after-batch-zero' \
+   && "$STAGING_ONLY_WRITER" != '1' ]]; then
+  echo 'deferred staging XID repair requires the staging-only proof' >&2
+  exit 1
+fi
 
-for executable in initdb pg_ctl psql; do
+for executable in initdb pg_ctl pg_resetwal psql; do
   if [[ ! -x "$PG_BIN/$executable" ]]; then
     echo "PostgreSQL 17 executable not found: $PG_BIN/$executable" >&2
     exit 1
@@ -90,6 +111,7 @@ for required_file in \
   "$ATTESTED_WRITER_MIGRATION" \
   "$PRIVATE_STAGING_MIGRATION" \
   "$STAGING_ONLY_WRITER_MIGRATION" \
+  "$STAGING_FULL_XID_MIGRATION" \
   "$CAPACITY_BENCHMARK"; do
   if [[ ! -f "$required_file" ]]; then
     echo "required atomic-writer proof input is missing: $required_file" >&2
@@ -309,6 +331,10 @@ SQL
   --encoding=UTF8 \
   --username=postgres \
   --no-locale >/dev/null
+if [[ "$STAGING_XID_EPOCH" == '1' \
+   && "$STAGING_XID_REPAIR_TIMING" == 'before-writes' ]]; then
+  "$PG_BIN/pg_resetwal" -e 1 "$DATA_DIR" >/dev/null
+fi
 if [[ "$BENCHMARK_64K" == '1' ]]; then
   POSTGRES_OPTIONS="-p $PORT -k $SOCKET_DIR -c listen_addresses= -c fsync=on -c synchronous_commit=on -c full_page_writes=on"
 else
@@ -1111,6 +1137,13 @@ SQL
     sed -n '1,320p' "$ERROR_FILE" >&2
     exit 1
   fi
+  if [[ "$STAGING_XID_REPAIR_TIMING" == 'before-writes' ]]; then
+    if ! psql_cmd -q -f "$STAGING_FULL_XID_MIGRATION" >"$ERROR_FILE" 2>&1; then
+      echo 'full-XID staging guard migration failed after staging-only cutover' >&2
+      sed -n '1,320p' "$ERROR_FILE" >&2
+      exit 1
+    fi
+  fi
 fi
 psql_cmd -q <<'SQL'
 DO $attestation_encoder_proof$
@@ -1675,6 +1708,70 @@ if [[ "$STAGING_ONLY_WRITER" == '1' ]]; then
       );"
   }
 
+  capture_staging_authority_without_full_xid() {
+    psql_cmd -Atqc "
+      SELECT pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(
+            pg_catalog.jsonb_build_object(
+              'head', (
+                SELECT pg_catalog.to_jsonb(head.*)
+                FROM ONLY arena.leaderboard_rank_generation_heads AS head
+                WHERE head.season_id='90D'
+              ),
+              'claim', (
+                SELECT pg_catalog.to_jsonb(claim.*)
+                FROM ONLY arena.leaderboard_rank_generation_claims AS claim
+                WHERE claim.season_id='90D' AND claim.generation_seq=1
+              ),
+              'receipts', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(receipt.*) ORDER BY receipt.batch_index
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_generation_batch_receipts AS receipt
+              ),
+              'bindings', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(binding.*)
+                  ORDER BY binding.season_id, binding.generation_seq
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_generation_manifest_bindings AS binding
+              ),
+              'attestations', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(header.*)
+                  ORDER BY header.season_id, header.generation_seq
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_manifest_attestations AS header
+              ),
+              'chunks', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(chunk.*) ORDER BY chunk.chunk_index
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_manifest_attestation_chunks AS chunk
+              ),
+              'stage_batches', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(batch.*) - 'stage_write_top_xid'
+                  ORDER BY batch.batch_index
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_generation_stage_batches AS batch
+              ),
+              'stage_rows', (
+                SELECT COALESCE(pg_catalog.jsonb_agg(
+                  pg_catalog.to_jsonb(staged.*)
+                  ORDER BY staged.batch_index, staged.batch_position
+                ), '[]'::jsonb)
+                FROM ONLY arena.leaderboard_rank_generation_stage_rows AS staged
+              )
+            )::text,
+            'UTF8'
+          )
+        ),
+        'hex'
+      );"
+  }
+
   psql_cmd -q <<'SQL'
 INSERT INTO public.leaderboard_ranks (
   season_id,
@@ -2100,6 +2197,62 @@ SQL
     exit 1
   fi
 
+  if [[ "$STAGING_XID_REPAIR_TIMING" == 'after-batch-zero' ]]; then
+    STAGING_XID_UPGRADE_AUTHORITY_BEFORE="$(
+      capture_staging_authority_without_full_xid
+    )"
+    STAGING_XID_UPGRADE_SERVING_BEFORE="$(capture_staging_only_serving_state)"
+    if [[ "$STAGING_XID_EPOCH" == '1' ]]; then
+      # Preserve a real epoch-zero immutable stage batch across an offline
+      # epoch advance. The old helper could create this evidence only in epoch
+      # zero; the repair must recover its original full xid while every later
+      # write receives an epoch-one xid8 marker.
+      "$PG_BIN/pg_ctl" -D "$DATA_DIR" -m fast -w stop >/dev/null
+      "$PG_BIN/pg_resetwal" -e 1 "$DATA_DIR" >/dev/null
+      "$PG_BIN/pg_ctl" \
+        -D "$DATA_DIR" \
+        -l "$LOG_FILE" \
+        -o "$POSTGRES_OPTIONS" \
+        -w start >/dev/null
+      if [[ "$(capture_staging_authority_without_full_xid)" != \
+            "$STAGING_XID_UPGRADE_AUTHORITY_BEFORE" \
+         || "$(capture_staging_only_serving_state)" != \
+            "$STAGING_XID_UPGRADE_SERVING_BEFORE" ]]; then
+        echo 'offline XID epoch advance changed staged authority or serving state' >&2
+        exit 1
+      fi
+    fi
+    if ! psql_cmd -q -f "$STAGING_FULL_XID_MIGRATION" >"$ERROR_FILE" 2>&1; then
+      echo 'full-XID stage repair rejected complete legacy staged evidence' >&2
+      sed -n '1,320p' "$ERROR_FILE" >&2
+      exit 1
+    fi
+    if [[ "$(capture_staging_authority_without_full_xid)" != \
+          "$STAGING_XID_UPGRADE_AUTHORITY_BEFORE" \
+       || "$(capture_staging_only_serving_state)" != \
+          "$STAGING_XID_UPGRADE_SERVING_BEFORE" ]]; then
+      echo 'full-XID legacy metadata backfill changed authority payload or serving state' >&2
+      exit 1
+    fi
+    STAGING_XID_BACKFILL_STATE="$(psql_cmd -Atqc "
+      SELECT pg_catalog.concat_ws(
+        '|',
+        pg_catalog.count(*),
+        pg_catalog.bool_and(
+          batch.stage_write_top_xid IS NOT NULL
+          AND batch.stage_write_top_xid::pg_catalog.xid = staged.xmin
+        )
+      )
+      FROM ONLY arena.leaderboard_rank_generation_stage_batches AS batch
+      JOIN ONLY arena.leaderboard_rank_generation_stage_rows AS staged
+        USING (season_id, generation_seq, batch_index);
+    ")"
+    if [[ "$STAGING_XID_BACKFILL_STATE" != '1000|t' ]]; then
+      echo "full-XID legacy metadata backfill was incomplete: $STAGING_XID_BACKFILL_STATE" >&2
+      exit 1
+    fi
+  fi
+
   # Batch zero froze the manifest into immutable attestation chunks. Later
   # batches and response-loss replay must not depend on the raw scorer row.
   psql_cmd -q <<'SQL'
@@ -2112,6 +2265,65 @@ SQL
     FROM ONLY arena.leaderboard_score_input_manifests;
   ')" != '0' ]]; then
     echo 'staging-only batch zero did not permit raw manifest pruning' >&2
+    exit 1
+  fi
+
+  # The complete xid8 marker closes epoch/wrap collisions, while direct tuple
+  # xmin equality intentionally preserves the top-level-RPC contract. A
+  # SAVEPOINT or PL/pgSQL exception block owns a subxid and must roll back every
+  # receipt/evidence/stage mutation instead of becoming a backfill path.
+  STAGING_SUBXACT_BEFORE="$(capture_staging_only_state)"
+  expect_failure \
+    'staging-only writer accepted a SAVEPOINT subtransaction' \
+    'exact batch header from the current (top-level )?transaction|transaction-atomic' \
+    "BEGIN;
+     SAVEPOINT staging_batch_subtransaction;
+     SELECT arena.write_leaderboard_rank_generation_batch_v1(
+       fixture.season_id,fixture.generation_seq,fixture.score_cohort_id,1,
+       fixture.score_input_manifest_id,fixture.score_input_manifest_digest,
+       fixture.batch_sha256_plan,fixture.batch_1_rows
+     )
+     FROM arena.fixture_atomic_writer_case AS fixture;
+     RELEASE SAVEPOINT staging_batch_subtransaction;
+     COMMIT;"
+  if [[ "$(capture_staging_only_state)" != "$STAGING_SUBXACT_BEFORE" \
+     || "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'rejected staging SAVEPOINT write changed durable state' >&2
+    exit 1
+  fi
+
+  STAGING_EXCEPTION_SUBXACT_BEFORE="$(capture_staging_only_state)"
+  psql_cmd -q <<'SQL'
+DO $staging_exception_subtransaction$
+DECLARE
+  v_rejected boolean := false;
+BEGIN
+  BEGIN
+    PERFORM arena.write_leaderboard_rank_generation_batch_v1(
+      fixture.season_id,
+      fixture.generation_seq,
+      fixture.score_cohort_id,
+      1,
+      fixture.score_input_manifest_id,
+      fixture.score_input_manifest_digest,
+      fixture.batch_sha256_plan,
+      fixture.batch_1_rows
+    )
+    FROM arena.fixture_atomic_writer_case AS fixture;
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      v_rejected := true;
+  END;
+
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'implicit exception subtransaction was not rejected';
+  END IF;
+END
+$staging_exception_subtransaction$;
+SQL
+  if [[ "$(capture_staging_only_state)" != "$STAGING_EXCEPTION_SUBXACT_BEFORE" \
+     || "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
+    echo 'rejected implicit staging subtransaction changed durable state' >&2
     exit 1
   fi
 
@@ -2452,6 +2664,39 @@ SQL
   fi
   if [[ "$(capture_staging_only_serving_state)" != "$STAGING_SERVING_BASELINE" ]]; then
     echo 'terminal staging-only replay changed serving state' >&2
+    exit 1
+  fi
+
+  STAGING_FULL_XID_STATE="$(psql_cmd -Atqc "
+    SELECT pg_catalog.concat_ws(
+      '|',
+      pg_catalog.count(*),
+      pg_catalog.bool_and(
+        batch.stage_write_top_xid IS NOT NULL
+        AND staged.xmin = batch.stage_write_top_xid::pg_catalog.xid
+      ),
+      pg_catalog.bool_and(
+        CASE
+          WHEN '$STAGING_XID_EPOCH' = '1'
+               AND '$STAGING_XID_REPAIR_TIMING' = 'after-batch-zero' THEN
+            (batch.batch_index = 0
+             AND batch.stage_write_top_xid::text::numeric <= 4294967295::numeric)
+            OR
+            (batch.batch_index = 1
+             AND batch.stage_write_top_xid::text::numeric > 4294967295::numeric)
+          WHEN '$STAGING_XID_EPOCH' = '1' THEN
+            batch.stage_write_top_xid::text::numeric > 4294967295::numeric
+          ELSE
+            batch.stage_write_top_xid::text::numeric > 0::numeric
+        END
+      )
+    )
+    FROM ONLY arena.leaderboard_rank_generation_stage_batches AS batch
+    JOIN ONLY arena.leaderboard_rank_generation_stage_rows AS staged
+      USING (season_id, generation_seq, batch_index);
+  ")"
+  if [[ "$STAGING_FULL_XID_STATE" != '1001|t|t' ]]; then
+    echo "staged rows lost their full/top-level XID proof: $STAGING_FULL_XID_STATE" >&2
     exit 1
   fi
 
@@ -3890,6 +4135,11 @@ if [[ "$LEGACY_CUTOVER_REPLAY" == '1' ]]; then
   LEGACY_CUTOVER_STATE_BEFORE="$(capture_atomic_state)"
   if ! psql_cmd -q -f "$STAGING_ONLY_WRITER_MIGRATION" >"$ERROR_FILE" 2>&1; then
     echo 'staging-only writer migration rejected a terminal legacy receipt graph' >&2
+    sed -n '1,320p' "$ERROR_FILE" >&2
+    exit 1
+  fi
+  if ! psql_cmd -q -f "$STAGING_FULL_XID_MIGRATION" >"$ERROR_FILE" 2>&1; then
+    echo 'full-XID staging guard migration rejected legacy receipt cutover' >&2
     sed -n '1,320p' "$ERROR_FILE" >&2
     exit 1
   fi

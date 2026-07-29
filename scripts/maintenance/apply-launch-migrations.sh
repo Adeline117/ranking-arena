@@ -131,6 +131,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729015500_tier_a_execution_claim_fence.sql
   20260729054400_leaderboard_rank_generation_private_staging.sql
   20260729061533_leaderboard_rank_generation_staging_only_writer.sql
+  20260729063000_leaderboard_rank_staging_full_xid_guard.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
