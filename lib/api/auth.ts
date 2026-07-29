@@ -8,6 +8,7 @@ import { User } from '@supabase/supabase-js'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SubscriptionTier } from '@/lib/types/premium'
 import { logger } from '@/lib/logger'
+import { getCanonicalSubscriptionTier } from '@/lib/premium/server-entitlement'
 
 /**
  * 验证结果类型
@@ -21,9 +22,7 @@ export type VerifyAuthResult =
  * @param request NextRequest 对象
  * @returns 包含用户和订阅等级的对象，或错误信息
  */
-export async function verifyAuth(
-  request: NextRequest
-): Promise<VerifyAuthResult> {
+export async function verifyAuth(request: NextRequest): Promise<VerifyAuthResult> {
   try {
     // 1. 获取认证用户
     const user = await getAuthUser(request)
@@ -31,24 +30,12 @@ export async function verifyAuth(
       return { error: '未授权', status: 401 }
     }
 
-    // 2. 获取用户的订阅等级 - subscriptions table is the single source of truth
+    // 2. Read canonical, fail-closed entitlement authority. Subscription and
+    // profile rows are projections and are not authorization boundaries.
     const supabase = getSupabaseAdmin()
-    const { data: subscription, error: subError } = await supabase
-      .from('subscriptions')
-      .select('tier, status')
-      .eq('user_id', user.id)
-      .in('status', ['active', 'trialing'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (subError) {
-      logger.error('[verifyAuth] 获取订阅信息失败:', subError)
-      return { error: '获取用户信息失败', status: 500 }
-    }
+    const tier: SubscriptionTier = await getCanonicalSubscriptionTier(supabase, user.id)
 
     // 3. 返回用户和订阅等级
-    const tier = (subscription?.tier || 'free') as SubscriptionTier
     return { user, tier }
   } catch (error: unknown) {
     logger.error('[verifyAuth] 验证失败:', error)

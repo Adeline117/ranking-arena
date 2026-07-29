@@ -14,10 +14,11 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { resolveTrader } from '@/lib/data/unified'
-import { hasFeatureAccess, normalizeSubscriptionTier } from '@/lib/types/premium'
+import { hasFeatureAccess } from '@/lib/types/premium'
 import { PUBLIC_ACTIVE_RANKING_SOURCES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { filterPublicRankingSources } from '@/lib/rankings/publication-policy'
 import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { getCanonicalSubscriptionTier } from '@/lib/premium/server-entitlement'
 
 export const runtime = 'nodejs'
 
@@ -107,17 +108,7 @@ export async function GET(
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
 
-    // 获取用户订阅等级
-    const { data: subscription, error: subscriptionError } = await supabase
-      .from('subscriptions')
-      .select('tier')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    if (subscriptionError) {
-      throw new Error(`subscription authority lookup failed: ${subscriptionError.message}`)
-    }
-
-    const tier = normalizeSubscriptionTier(subscription?.tier)
+    const tier = await getCanonicalSubscriptionTier(supabase, user.id)
 
     // 检查是否有权限
     if (!hasFeatureAccess(tier, 'score_breakdown')) {

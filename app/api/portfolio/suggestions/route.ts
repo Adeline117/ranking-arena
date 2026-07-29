@@ -21,6 +21,7 @@ import {
 } from '@/lib/utils/portfolio-builder'
 import { getFeatureLimits } from '@/lib/types/premium'
 import { readSealedPortfolioSuggestionPool } from '@/lib/portfolio/read-suggestion-pool'
+import { getCanonicalSubscriptionTier } from '@/lib/premium/server-entitlement'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,16 +48,10 @@ export async function GET(request: NextRequest) {
     // 获取当前用户（检查权限）
     const user = await getAuthUser(request)
 
-    // 获取用户订阅信息
+    // Authorize from exact entitlement authority, never a mutable projection.
     let userTier: 'free' | 'pro' = 'free'
     if (user) {
-      const { data: subscription } = await supabase
-        .from('subscriptions')
-        .select('tier')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      userTier = (subscription?.tier as typeof userTier) || 'free'
+      userTier = await getCanonicalSubscriptionTier(supabase, user.id)
     }
 
     // 检查权限
