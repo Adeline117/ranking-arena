@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { profileUserTarget, queueProfileActionLogin } from '@/lib/auth/profile-action-login'
 
 const mockPush = jest.fn()
@@ -47,6 +47,14 @@ function response(body: unknown, status = 200): Response {
   } as unknown as Response
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('UserFollowButton login intent', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -77,7 +85,7 @@ describe('UserFollowButton login intent', () => {
   it('re-authenticates a 401 without losing the intended follow', async () => {
     global.fetch = jest
       .fn()
-      .mockResolvedValueOnce(response({ following: false, followedBy: false }))
+      .mockResolvedValueOnce(response({ following: false, followedBy: false, mutual: false }))
       .mockResolvedValueOnce(response({ error: 'Unauthorized' }, 401)) as typeof fetch
 
     render(
@@ -115,9 +123,9 @@ describe('UserFollowButton login intent', () => {
     )
     global.fetch = jest
       .fn()
-      .mockResolvedValueOnce(response({ following: false, followedBy: false }))
+      .mockResolvedValueOnce(response({ following: false, followedBy: false, mutual: false }))
       .mockResolvedValueOnce(
-        response({ following: true, mutual: false, success: true })
+        response({ following: true, followedBy: false, mutual: false, success: true })
       ) as typeof fetch
 
     render(
@@ -153,7 +161,7 @@ describe('UserFollowButton login intent', () => {
       .fn()
       .mockResolvedValueOnce(response({ error: 'unavailable' }, 500))
       .mockResolvedValueOnce(
-        response({ following: false, mutual: false, success: true })
+        response({ following: false, followedBy: false, mutual: false, success: true })
       ) as typeof fetch
 
     render(
@@ -199,5 +207,103 @@ describe('UserFollowButton login intent', () => {
     )
     expect(window.sessionStorage).toHaveLength(0)
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not apply a late status response to a replacement profile target', async () => {
+    const firstStatus = deferred<Response>()
+    global.fetch = jest
+      .fn()
+      .mockReturnValueOnce(firstStatus.promise)
+      .mockResolvedValueOnce(
+        response({ following: true, followedBy: false, mutual: false })
+      ) as typeof fetch
+
+    const view = render(<UserFollowButton targetUserId="target-a" currentUserId="viewer-user" />)
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+
+    view.rerender(<UserFollowButton targetUserId="target-b" currentUserId="viewer-user" />)
+    expect(await screen.findByRole('button', { name: 'unfollowUser' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+
+    await act(async () => {
+      firstStatus.resolve(response({ following: false, followedBy: false, mutual: false }))
+      await firstStatus.promise
+    })
+
+    expect(screen.getByRole('button', { name: 'unfollowUser' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  })
+
+  it('does not apply an old mutation after the viewer moves to another target', async () => {
+    const oldMutation = deferred<Response>()
+    global.fetch = jest.fn((url: string, options?: RequestInit) => {
+      if (url === '/api/users/follow' && options?.method === 'POST') {
+        return oldMutation.promise
+      }
+      return Promise.resolve(response({ following: false, followedBy: false, mutual: false }))
+    }) as typeof fetch
+
+    const view = render(<UserFollowButton targetUserId="target-a" currentUserId="viewer-user" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'followUser' }))
+    await waitFor(() =>
+      expect(
+        (global.fetch as jest.Mock).mock.calls.some(
+          (call) => call[0] === '/api/users/follow' && call[1]?.method === 'POST'
+        )
+      ).toBe(true)
+    )
+
+    view.rerender(<UserFollowButton targetUserId="target-b" currentUserId="viewer-user" />)
+    expect(await screen.findByRole('button', { name: 'followUser' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+
+    await act(async () => {
+      oldMutation.resolve(
+        response({
+          success: true,
+          following: true,
+          followedBy: false,
+          mutual: false,
+        })
+      )
+      await oldMutation.promise
+    })
+
+    expect(screen.getByRole('button', { name: 'followUser' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+    expect(mockBroadcast).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalledWith('followSuccess', 'success')
+  })
+
+  it('rolls back an optimistic follow when the success acknowledgement is malformed', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(response({ following: false, followedBy: false, mutual: false }))
+      .mockResolvedValueOnce(
+        response({
+          success: true,
+          following: 'yes',
+          followedBy: false,
+          mutual: false,
+        })
+      ) as typeof fetch
+
+    render(<UserFollowButton targetUserId="target-user" currentUserId="viewer-user" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'followUser' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('operationFailedRetry', 'error'))
+    expect(screen.getByRole('button', { name: 'followUser' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+    expect(mockBroadcast).not.toHaveBeenCalled()
   })
 })

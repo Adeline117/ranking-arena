@@ -29,6 +29,49 @@ type UserFollowButtonProps = {
   onFollowChange?: (following: boolean, mutual: boolean) => void
 }
 
+type FollowOperationScope = {
+  currentUserId: string | null
+  generation: number
+  targetUserId: string
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isFollowStatusAcknowledgement(value: unknown): value is {
+  followedBy: boolean
+  following: boolean
+  mutual: boolean
+} {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.following === 'boolean' &&
+    typeof value.followedBy === 'boolean' &&
+    typeof value.mutual === 'boolean' &&
+    value.mutual === (value.following && value.followedBy)
+  )
+}
+
+function isFollowMutationAcknowledgement(
+  value: unknown,
+  desiredFollowing: boolean
+): value is {
+  followedBy: boolean
+  following: boolean
+  mutual: boolean
+  success: true
+} {
+  if (!isRecord(value)) return false
+  return (
+    value.success === true &&
+    value.following === desiredFollowing &&
+    typeof value.followedBy === 'boolean' &&
+    typeof value.mutual === 'boolean' &&
+    value.mutual === (desiredFollowing && value.followedBy)
+  )
+}
+
 /**
  * 关注用户的按钮
  * 用于用户主页，关注/取消关注平台用户
@@ -48,12 +91,45 @@ export default function UserFollowButton({
   const { showToast } = useToast()
   const { t } = useLanguage()
   const { getAuthHeadersAsync } = useAuthSession()
+  const identityKey = `${currentUserId ?? 'anonymous'}\u0000${targetUserId}`
   const [following, setFollowing] = useState(initialFollowing)
   const [followedBy, setFollowedBy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true) // 初始加载状态
+  const [stateIdentityKey, setStateIdentityKey] = useState(identityKey)
   const pendingRef = useRef(false)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const mountedRef = useRef(false)
+  const statusAbortRef = useRef<AbortController | null>(null)
+  const mutationAbortRef = useRef<AbortController | null>(null)
+  const identityRef = useRef<FollowOperationScope>({
+    currentUserId,
+    generation: 0,
+    targetUserId,
+  })
+  if (
+    identityRef.current.currentUserId !== currentUserId ||
+    identityRef.current.targetUserId !== targetUserId
+  ) {
+    identityRef.current = {
+      currentUserId,
+      generation: identityRef.current.generation + 1,
+      targetUserId,
+    }
+  }
+
+  const captureOperationScope = useCallback((): FollowOperationScope => {
+    return { ...identityRef.current }
+  }, [])
+  const operationIsCurrent = useCallback((scope: FollowOperationScope): boolean => {
+    const current = identityRef.current
+    return (
+      mountedRef.current &&
+      current.generation === scope.generation &&
+      current.currentUserId === scope.currentUserId &&
+      current.targetUserId === scope.targetUserId
+    )
+  }, [])
 
   // Cross-tab follow sync
   const { broadcast, on } = useUserFollowSync()
@@ -69,9 +145,12 @@ export default function UserFollowButton({
     return unsubscribe
   }, [targetUserId, currentUserId, on, onFollowChange])
 
-  // 清理超时计时器
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
+      statusAbortRef.current?.abort()
+      mutationAbortRef.current?.abort()
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
       }
@@ -79,38 +158,70 @@ export default function UserFollowButton({
   }, [])
 
   useEffect(() => {
+    const scope = captureOperationScope()
+    statusAbortRef.current?.abort()
+    mutationAbortRef.current?.abort()
+    statusAbortRef.current = null
+    mutationAbortRef.current = null
+    pendingRef.current = false
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+    setStateIdentityKey(identityKey)
+    setFollowing(initialFollowing)
+    setFollowedBy(false)
+    setLoading(false)
+
     if (!currentUserId || currentUserId === targetUserId) {
       setInitialLoading(false)
       return
     }
 
     const abortController = new AbortController()
-
+    statusAbortRef.current = abortController
+    setInitialLoading(true)
     ;(async () => {
       try {
         const authHeaders = await getAuthHeadersAsync()
+        if (!operationIsCurrent(scope)) return
         const response = await fetch(`/api/users/follow?followingId=${targetUserId}`, {
           signal: abortController.signal,
           headers: authHeaders,
         })
         if (response.ok) {
-          const data = await response.json()
+          const data: unknown = await response.json()
+          if (!operationIsCurrent(scope)) return
+          if (!isFollowStatusAcknowledgement(data)) {
+            throw new Error('Invalid user follow status acknowledgement')
+          }
           setFollowing(data.following)
           setFollowedBy(data.followedBy)
         }
       } catch (error) {
-        if ((error as Error).name !== 'AbortError') {
+        if (operationIsCurrent(scope) && (error as Error).name !== 'AbortError') {
           logger.error('Check following error:', error)
         }
       } finally {
-        setInitialLoading(false)
+        if (statusAbortRef.current === abortController) {
+          statusAbortRef.current = null
+        }
+        if (operationIsCurrent(scope)) setInitialLoading(false)
       }
     })()
 
     return () => {
       abortController.abort()
     }
-  }, [currentUserId, targetUserId, getAuthHeadersAsync])
+  }, [
+    captureOperationScope,
+    currentUserId,
+    getAuthHeadersAsync,
+    identityKey,
+    initialFollowing,
+    operationIsCurrent,
+    targetUserId,
+  ])
 
   const redirectToLogin = useCallback(
     (action: ProfileActionIntent) => {
@@ -138,6 +249,9 @@ export default function UserFollowButton({
         return
       }
 
+      const scope = captureOperationScope()
+      if (!operationIsCurrent(scope)) return
+
       // Prevent double-click
       if (pendingRef.current || loading) return
       pendingRef.current = true
@@ -149,13 +263,18 @@ export default function UserFollowButton({
 
       // Create AbortController for request cancellation
       const abortController = new AbortController()
+      mutationAbortRef.current = abortController
 
       // Timeout protection: 10 seconds (increased from 5s for slow networks)
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
       }
       timeoutRef.current = setTimeout(() => {
-        if (pendingRef.current) {
+        if (
+          pendingRef.current &&
+          mutationAbortRef.current === abortController &&
+          operationIsCurrent(scope)
+        ) {
           abortController.abort()
           pendingRef.current = false
           setLoading(false)
@@ -165,6 +284,7 @@ export default function UserFollowButton({
 
       try {
         const authHeaders = await getAuthHeadersAsync()
+        if (!operationIsCurrent(scope)) return
         const response = await fetch('/api/users/follow', {
           method: 'POST',
           headers: {
@@ -180,11 +300,12 @@ export default function UserFollowButton({
         })
 
         // Clear timeout on response
-        if (timeoutRef.current) {
+        if (mutationAbortRef.current === abortController && timeoutRef.current) {
           clearTimeout(timeoutRef.current)
           timeoutRef.current = null
         }
 
+        if (!operationIsCurrent(scope)) return
         if (response.status === 401) {
           setFollowing(previousFollowing)
           showToast(t('loginExpiredPleaseRelogin'), 'error')
@@ -192,39 +313,43 @@ export default function UserFollowButton({
           return
         }
 
-        const result = await response.json()
+        const result: unknown = await response.json()
+        if (!operationIsCurrent(scope)) return
 
-        if (response.ok && result.success !== false) {
+        if (response.ok && isFollowMutationAcknowledgement(result, desiredFollowing)) {
           setFollowing(result.following)
-          if (result.mutual !== undefined) {
-            setFollowedBy(result.mutual)
-          }
-          onFollowChange?.(result.following, result.mutual ?? false)
+          setFollowedBy(result.followedBy)
+          onFollowChange?.(result.following, result.mutual)
           broadcast('FOLLOW_CHANGED', {
-            targetUserId,
+            targetUserId: scope.targetUserId,
             following: result.following,
-            currentUserId: currentUserId!,
+            currentUserId: scope.currentUserId!,
           })
           haptic('success')
           showToast(result.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
-        } else if (result.tableNotFound) {
+        } else if (isRecord(result) && result.tableNotFound === true) {
           setFollowing(previousFollowing) // rollback
           showToast(t('followFeatureComingSoon'), 'warning')
         } else {
           setFollowing(previousFollowing) // rollback
-          const errorMsg = result.error || t('operationFailedRetry')
+          const errorMsg =
+            isRecord(result) && typeof result.error === 'string'
+              ? result.error
+              : t('operationFailedRetry')
           showToast(errorMsg, 'error')
         }
       } catch (error) {
-        setFollowing(previousFollowing) // rollback optimistic update
+        if (operationIsCurrent(scope)) {
+          setFollowing(previousFollowing) // rollback optimistic update
+        }
         // Clear timeout on error
-        if (timeoutRef.current) {
+        if (mutationAbortRef.current === abortController && timeoutRef.current) {
           clearTimeout(timeoutRef.current)
           timeoutRef.current = null
         }
 
         // Handle abort errors silently (user already notified via timeout)
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (!operationIsCurrent(scope) || (error instanceof Error && error.name === 'AbortError')) {
           return
         }
 
@@ -238,13 +363,17 @@ export default function UserFollowButton({
           'error'
         )
       } finally {
-        setLoading(false)
-        pendingRef.current = false
+        if (mutationAbortRef.current === abortController) {
+          mutationAbortRef.current = null
+          pendingRef.current = false
+          if (operationIsCurrent(scope)) setLoading(false)
+        }
       }
     },
     [
       currentUserId,
       targetUserId,
+      captureOperationScope,
       following,
       loading,
       getAuthHeadersAsync,
@@ -253,6 +382,7 @@ export default function UserFollowButton({
       onFollowChange,
       redirectToLogin,
       broadcast,
+      operationIsCurrent,
     ]
   )
 
@@ -288,7 +418,7 @@ export default function UserFollowButton({
           border: `1px solid var(--glass-border-medium)`,
           background: 'var(--glass-bg-light)',
           color: tokens.colors.text.primary,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
           cursor: 'pointer',
         }}
       >
@@ -302,8 +432,9 @@ export default function UserFollowButton({
     return null
   }
 
-  // 初始加载时显示加载状态
-  if (initialLoading) {
+  // A prop transition must synchronously hide the previous identity's state,
+  // even before the replacement status effect has had a chance to run.
+  if (initialLoading || stateIdentityKey !== identityKey) {
     return (
       <button
         disabled
@@ -315,7 +446,7 @@ export default function UserFollowButton({
           border: `1px solid var(--glass-border-medium)`,
           background: 'var(--glass-bg-light)',
           color: tokens.colors.white,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
           cursor: 'not-allowed',
           opacity: 0.6,
           display: 'flex',
@@ -344,7 +475,7 @@ export default function UserFollowButton({
         // following bg is the theme-aware glass tint (light theme ≈ near-white), so
         // hard white text went invisible there. Use theme-aware text in that state.
         color: following ? 'var(--color-text-primary)' : tokens.colors.white,
-        fontWeight: 700,
+        fontWeight: tokens.typography.fontWeight.bold,
         cursor: loading ? 'not-allowed' : 'pointer',
         opacity: loading ? 0.6 : 1,
         transition: 'all 200ms ease',
