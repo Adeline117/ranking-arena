@@ -22,6 +22,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import type { LeaderboardValidationOptions } from '../../core/adapter'
 
 type Dict = Record<string, unknown>
 
@@ -238,13 +239,17 @@ export function assertBitgetBotsLeaderboardPublication(
     rejectedRowCount: number
   }>,
   src: SourceRow,
-  timeframe: RankingTimeframe
+  timeframe: RankingTimeframe,
+  options: LeaderboardValidationOptions = { purpose: 'publication' }
 ): void {
+  if (options.purpose !== 'publication' && options.purpose !== 'evidence_only') {
+    publicationContractError('leaderboard validation purpose is unsupported')
+  }
   const contract = assertCanonicalBitgetBotsSource(src, timeframe)
   if (!Number.isSafeInteger(result.rejectedRowCount) || result.rejectedRowCount !== 0) {
     publicationContractError('the complete board must have zero rejected rows')
   }
-  if (result.parsedRows.length === 0) {
+  if (options.purpose === 'publication' && result.parsedRows.length === 0) {
     publicationContractError('the complete board cannot be empty')
   }
   if (result.parsedRows.length !== result.validRows.length) {
@@ -366,7 +371,10 @@ export function assertBitgetBotsLeaderboardPublication(
       publicationContractError(`row ${exchangeId} raw status mismatch`)
     }
   }
-  if (!strategies.has('grid') || !strategies.has('martingale')) {
+  if (
+    options.purpose === 'publication' &&
+    (!strategies.has('grid') || !strategies.has('martingale'))
+  ) {
     publicationContractError('the complete board must include both configured strategy partitions')
   }
 }

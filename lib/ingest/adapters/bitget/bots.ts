@@ -41,7 +41,10 @@ import {
   replayPaged,
   type LeaderboardPublicRequestProjectionInput,
 } from '../../fetch/capture'
-import { LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT } from '../../acquisition-manifest'
+import {
+  LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
+  LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+} from '../../acquisition-manifest'
 import {
   assertCanonicalBitgetBotsSource,
   assertBitgetBotsLeaderboardPublication,
@@ -374,6 +377,10 @@ async function cachedStrategyInfo(
 
 const bitgetBotsAdapter: SourceAdapter = {
   slug: 'bitget_bots',
+  leaderboardAcquisitionContract: LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
+  leaderboardPartitionIds: (src, timeframe) => [
+    ...assertCanonicalBitgetBotsSource(src, timeframe).boards,
+  ],
   capabilities: {
     profile: true, // tradeStrategyInfo {strategyId}
     positions: false,
