@@ -24,17 +24,27 @@ import {
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import {
   LeaderboardCaptureUpstreamError,
+  isPartitionedNumericLeaderboardCapture,
+  type AnyLeaderboardCapture,
   type LeaderboardCapture,
+  type PartitionedNumericLeaderboardCapture,
 } from '@/lib/ingest/fetch/capture'
 import {
   buildLeaderboardAcquisitionManifest,
   buildLeaderboardAcquisitionManifestV3,
+  buildLeaderboardAcquisitionManifestV4,
+  LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+  projectPartitionedNumericParserPage,
+  type BuildLeaderboardAcquisitionManifestInput,
+  type BuildLeaderboardAcquisitionManifestV4Input,
 } from '@/lib/ingest/acquisition-manifest'
 import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+  ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
+  findRegisteredAttemptBoundLeaderboardAcquisitionContract,
   finishLeaderboardAcquisitionAttempt,
-  hasRegisteredAttemptBoundLeaderboardAcquisitionContract,
   startLeaderboardAcquisitionAttempt,
+  type AttemptBoundLeaderboardAcquisitionContract,
   type LeaderboardAcquisitionAttempt,
   type LeaderboardAcquisitionFailureStage,
   type LeaderboardAcquisitionReasonCode,
@@ -45,7 +55,10 @@ import {
   writeRawObject,
   type RawObjectReceipt,
 } from '@/lib/ingest/raw'
-import { STRICT_CANONICAL_JSON_CONTRACT } from '@/lib/ingest/strict-canonical-json'
+import {
+  STRICT_CANONICAL_JSON_CONTRACT,
+  strictCanonicalJson,
+} from '@/lib/ingest/strict-canonical-json'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
 import {
@@ -75,10 +88,10 @@ export interface TierAResult {
 }
 
 type TierAAcquisition =
-  | { kind: 'capture'; capture: LeaderboardCapture }
+  | { kind: 'capture'; capture: AnyLeaderboardCapture }
   | {
       kind: 'captured_error'
-      capture: LeaderboardCapture
+      capture: AnyLeaderboardCapture
       error: LeaderboardCaptureUpstreamError
     }
   | { kind: 'legacy'; pages: RawPage[] }
@@ -115,6 +128,30 @@ function verifiedRunnerGitSha(): string | null {
 
 function attemptBoundCaptureEnabled(): boolean {
   return process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED === 'true'
+}
+
+function authoritativePartitionIds(
+  adapter: SourceAdapter,
+  src: SourceRow,
+  timeframe: RankingTimeframe
+): readonly string[] {
+  if (!adapter.leaderboardPartitionIds) {
+    throw new TypeError(
+      `[tier-a] ${src.slug} v4 capture requires authoritative adapter partition ids`
+    )
+  }
+  const partitionIds = [...adapter.leaderboardPartitionIds(src, timeframe)]
+  if (
+    partitionIds.length < 2 ||
+    new Set(partitionIds).size !== partitionIds.length ||
+    partitionIds.some(
+      (partitionId) =>
+        typeof partitionId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(partitionId)
+    )
+  ) {
+    throw new TypeError(`[tier-a] ${src.slug} v4 partition ids are not canonical and unique`)
+  }
+  return Object.freeze(partitionIds)
 }
 
 function completedTimeframesFrom(value: unknown): RankingTimeframe[] {
@@ -188,15 +225,15 @@ interface CaptureManifestInput {
   completedAt: string
   runnerGitSha: string | null
   cycleId: string | null
-  capture: LeaderboardCapture
+  capture: AnyLeaderboardCapture
   capturedFailure: boolean
   acceptedPopulation: number
   rejectedRowCount: number
 }
 
 function captureManifestInput(
-  input: CaptureManifestInput
-): Parameters<typeof buildLeaderboardAcquisitionManifest>[0] {
+  input: CaptureManifestInput & { capture: LeaderboardCapture }
+): BuildLeaderboardAcquisitionManifestInput {
   const { src, capture } = input
   const unavailableCapture = input.capturedFailure && capture.sourcePages.length === 0
   if (
@@ -246,20 +283,112 @@ function captureManifestInput(
 }
 
 function buildCaptureManifest(input: CaptureManifestInput) {
-  return buildLeaderboardAcquisitionManifest(captureManifestInput(input))
+  if (isPartitionedNumericLeaderboardCapture(input.capture)) {
+    throw new TypeError('[tier-a] partitioned capture requires an attempt-bound v4 contract')
+  }
+  return buildLeaderboardAcquisitionManifest(
+    captureManifestInput({ ...input, capture: input.capture })
+  )
 }
 
 function buildAttemptBoundCaptureManifest(
-  input: CaptureManifestInput & { attempt: LeaderboardAcquisitionAttempt }
+  input: CaptureManifestInput & {
+    attempt: LeaderboardAcquisitionAttempt
+    configuredPartitionIds: readonly string[] | null
+  }
 ) {
-  return buildLeaderboardAcquisitionManifestV3({
-    ...captureManifestInput(input),
-    acquisition_attempt: {
-      binding_contract: input.attempt.attemptBindingContract,
-      attempt_id: input.attempt.attemptId,
-      attempt_seq: input.attempt.attemptSeq,
+  const unavailableCapture = input.capturedFailure && input.capture.sourcePages.length === 0
+  if (
+    unavailableCapture &&
+    (input.capture.parsePages.length !== 0 ||
+      input.capture.parserTransformation.source_page_ordinals.length !== 0)
+  ) {
+    throw new TypeError('[tier-a] unavailable capture cannot contain parser pages')
+  }
+  if (
+    input.capturedFailure &&
+    !unavailableCapture &&
+    input.capture.terminationReason !== 'upstream_error'
+  ) {
+    throw new TypeError('[tier-a] captured upstream evidence must terminate as upstream_error')
+  }
+  const acquisitionAttempt = {
+    binding_contract: input.attempt.attemptBindingContract,
+    attempt_id: input.attempt.attemptId,
+    attempt_seq: input.attempt.attemptSeq,
+  }
+  if (input.attempt.captureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT) {
+    if (isPartitionedNumericLeaderboardCapture(input.capture)) {
+      throw new TypeError('[tier-a] attempt-bound v3 requires an identity capture')
+    }
+    return {
+      kind: 'v3' as const,
+      built: buildLeaderboardAcquisitionManifestV3({
+        ...captureManifestInput({ ...input, capture: input.capture }),
+        acquisition_attempt: acquisitionAttempt,
+      }),
+    }
+  }
+  if (input.attempt.captureContract !== ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT) {
+    throw new TypeError('[tier-a] attempt-bound capture contract is unsupported')
+  }
+  if (!isPartitionedNumericLeaderboardCapture(input.capture)) {
+    throw new TypeError('[tier-a] attempt-bound v4 requires a partitioned numeric capture')
+  }
+  if (input.configuredPartitionIds === null) {
+    throw new TypeError('[tier-a] attempt-bound v4 requires authoritative partition ids')
+  }
+  const expectedPartitionIds = input.capture.paginationTopology.expected_partition_ids
+  if (
+    expectedPartitionIds.length !== input.configuredPartitionIds.length ||
+    expectedPartitionIds.some(
+      (partitionId, index) => partitionId !== input.configuredPartitionIds![index]
+    )
+  ) {
+    throw new TypeError(
+      '[tier-a] captured partition topology does not match authoritative source configuration'
+    )
+  }
+  const { expected_partition_ids: _capturedExpectedIds, ...paginationTopology } =
+    input.capture.paginationTopology
+  const manifestInput: BuildLeaderboardAcquisitionManifestV4Input = {
+    source: {
+      id: input.src.id,
+      slug: input.src.slug,
+      adapter_slug: input.src.adapter_slug,
+      configured_page_size: input.src.page_size,
+      configured_pagination_kind: input.src.pagination_kind,
+      configured_partition_ids: [...input.configuredPartitionIds],
     },
-  })
+    surface: 'tier_a_leaderboard',
+    timeframe: input.timeframe,
+    started_at: input.startedAt,
+    completed_at: input.completedAt,
+    runner_git_sha: input.runnerGitSha,
+    observation_cycle_id: input.cycleId,
+    capture_evidence_state:
+      input.capturedFailure && input.capture.sourcePages.length === 0 ? 'unavailable' : 'verified',
+    termination_reason:
+      input.capturedFailure && input.capture.sourcePages.length === 0
+        ? 'unknown'
+        : input.capture.terminationReason,
+    capture_config: input.capture.captureConfig,
+    source_pages: input.capture.sourcePages.map((sourcePage) => ({
+      raw_page: sourcePage.rawPage,
+      source_row_count: sourcePage.sourceRowCount,
+      request_sha256: sourcePage.requestSha256,
+      http_status: sourcePage.httpStatus,
+      pagination_position: sourcePage.paginationPosition,
+      source_reports: sourcePage.sourceReports,
+    })),
+    parse_pages: input.capture.parsePages,
+    parser_transformation: input.capture.parserTransformation,
+    accepted_population: input.acceptedPopulation,
+    rejected_row_count: input.rejectedRowCount,
+    acquisition_attempt: acquisitionAttempt,
+    pagination_topology: paginationTopology,
+  }
+  return { kind: 'v4' as const, built: buildLeaderboardAcquisitionManifestV4(manifestInput) }
 }
 
 interface CapturedPageRankAnchor {
@@ -268,7 +397,7 @@ interface CapturedPageRankAnchor {
   sourceRowCount: number
 }
 
-function capturedPageRankAnchors(capture: LeaderboardCapture): CapturedPageRankAnchor[] {
+function capturedIdentityPageRankAnchors(capture: LeaderboardCapture): CapturedPageRankAnchor[] {
   const ordinals = capture.parserTransformation.source_page_ordinals
   if (ordinals.length !== capture.parsePages.length) {
     throw new TypeError('[tier-a] parser pages require one source-page ordinal each')
@@ -316,6 +445,172 @@ function capturedPageRankAnchors(capture: LeaderboardCapture): CapturedPageRankA
     }
     return anchor
   })
+}
+
+function assertDenseOrdinals(
+  ordinals: readonly number[],
+  expectedCount: number,
+  label: string
+): void {
+  if (
+    ordinals.length !== expectedCount ||
+    ordinals.some((ordinal, index) => ordinal !== index + 1)
+  ) {
+    throw new TypeError(`[tier-a] ${label} must form one dense ordered cover`)
+  }
+}
+
+function capturedPartitionedPageRankAnchors(
+  capture: PartitionedNumericLeaderboardCapture,
+  configuredPageSize: number | null
+): CapturedPageRankAnchor[] {
+  const topology = capture.paginationTopology
+  const transformation = capture.parserTransformation
+  if (
+    transformation.algorithm_contract !== LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT ||
+    configuredPageSize === null ||
+    !Number.isSafeInteger(configuredPageSize) ||
+    Object.is(configuredPageSize, -0) ||
+    configuredPageSize < 1
+  ) {
+    throw new TypeError(
+      '[tier-a] partitioned parser projection requires its exact algorithm and page size'
+    )
+  }
+  if (
+    topology.expected_partition_ids.length !== topology.partitions.length ||
+    topology.partitions.some(
+      (partition, index) => partition.partition_id !== topology.expected_partition_ids[index]
+    ) ||
+    new Set(topology.expected_partition_ids).size !== topology.expected_partition_ids.length
+  ) {
+    throw new TypeError('[tier-a] captured partitions must exactly match expected ids and order')
+  }
+  if (
+    transformation.source_page_ordinals.length !== capture.parsePages.length ||
+    transformation.page_bindings.length !== capture.parsePages.length
+  ) {
+    throw new TypeError('[tier-a] partitioned parser pages require one exact binding each')
+  }
+
+  const topologySourceOrdinals = topology.partitions.flatMap(
+    (partition) => partition.source_page_ordinals
+  )
+  const topologyParserOrdinals = topology.partitions.flatMap(
+    (partition) => partition.parser_page_ordinals
+  )
+  assertDenseOrdinals(
+    topologySourceOrdinals,
+    capture.sourcePages.length,
+    'partition source-page ordinals'
+  )
+  assertDenseOrdinals(
+    topologyParserOrdinals,
+    capture.parsePages.length,
+    'partition parser-page ordinals'
+  )
+
+  const parserPartitionByOrdinal = new Map<
+    number,
+    { partitionId: string; partitionOrdinal: number }
+  >()
+
+  for (const [partitionIndex, partition] of topology.partitions.entries()) {
+    for (const parserPageOrdinal of partition.parser_page_ordinals) {
+      parserPartitionByOrdinal.set(parserPageOrdinal, {
+        partitionId: partition.partition_id,
+        partitionOrdinal: partitionIndex + 1,
+      })
+    }
+    const positiveSourceOrdinals: number[] = []
+    for (const [localPageIndex, sourcePageOrdinal] of partition.source_page_ordinals.entries()) {
+      const sourcePage = capture.sourcePages[sourcePageOrdinal - 1]
+      const position = sourcePage?.paginationPosition
+      if (
+        !sourcePage ||
+        sourcePage.rawPage.pageIndex !== sourcePageOrdinal ||
+        position?.kind !== 'partitioned_page_index' ||
+        position.partition_ordinal !== partitionIndex + 1 ||
+        position.partition_id !== partition.partition_id ||
+        position.request_page_index !== localPageIndex + 1
+      ) {
+        throw new TypeError(
+          '[tier-a] partition source pages must bind their exact ordered topology'
+        )
+      }
+      if (
+        !Number.isSafeInteger(sourcePage.sourceRowCount) ||
+        Object.is(sourcePage.sourceRowCount, -0) ||
+        sourcePage.sourceRowCount < 0
+      ) {
+        throw new TypeError('[tier-a] partition source row count must be non-negative')
+      }
+      if (sourcePage.sourceRowCount > 0) positiveSourceOrdinals.push(sourcePageOrdinal)
+    }
+    const boundSourceOrdinals = partition.parser_page_ordinals.map(
+      (parserPageOrdinal) => transformation.source_page_ordinals[parserPageOrdinal - 1]
+    )
+    if (
+      boundSourceOrdinals.length !== positiveSourceOrdinals.length ||
+      boundSourceOrdinals.some(
+        (sourcePageOrdinal, index) => sourcePageOrdinal !== positiveSourceOrdinals[index]
+      )
+    ) {
+      throw new TypeError(
+        '[tier-a] partition parser pages must exactly cover positive source pages'
+      )
+    }
+  }
+
+  let rankBase = 0
+  return capture.parsePages.map((parsePage, pageOffset) => {
+    const sourcePageOrdinal = transformation.source_page_ordinals[pageOffset]
+    const binding = transformation.page_bindings[pageOffset]
+    const sourcePage = capture.sourcePages[sourcePageOrdinal - 1]
+    const position = sourcePage?.paginationPosition
+    const topologyPartition = parserPartitionByOrdinal.get(pageOffset + 1)
+    if (
+      !sourcePage ||
+      !binding ||
+      !topologyPartition ||
+      binding.source_page_ordinal !== sourcePageOrdinal ||
+      position?.kind !== 'partitioned_page_index' ||
+      binding.partition_ordinal !== topologyPartition.partitionOrdinal ||
+      binding.partition_id !== topologyPartition.partitionId ||
+      binding.partition_ordinal !== position.partition_ordinal ||
+      binding.partition_id !== position.partition_id ||
+      binding.request_page_index !== position.request_page_index ||
+      binding.request_page_size !== configuredPageSize ||
+      strictCanonicalJson(projectPartitionedNumericParserPage(sourcePage.rawPage, binding)) !==
+        strictCanonicalJson(parsePage)
+    ) {
+      throw new TypeError(
+        '[tier-a] partitioned parser projection is not canonically bound to its source page'
+      )
+    }
+    if (
+      !Number.isSafeInteger(sourcePage.sourceRowCount) ||
+      Object.is(sourcePage.sourceRowCount, -0) ||
+      sourcePage.sourceRowCount < 1
+    ) {
+      throw new TypeError('[tier-a] partitioned parser page must have a positive source row count')
+    }
+    const anchor = { sourcePageOrdinal, rankBase, sourceRowCount: sourcePage.sourceRowCount }
+    rankBase += sourcePage.sourceRowCount
+    if (!Number.isSafeInteger(rankBase)) {
+      throw new TypeError('[tier-a] captured rank base exceeds the safe integer range')
+    }
+    return anchor
+  })
+}
+
+function capturedPageRankAnchors(
+  capture: AnyLeaderboardCapture,
+  configuredPageSize: number | null
+): CapturedPageRankAnchor[] {
+  return isPartitionedNumericLeaderboardCapture(capture)
+    ? capturedPartitionedPageRankAnchors(capture, configuredPageSize)
+    : capturedIdentityPageRankAnchors(capture)
 }
 
 function parseLeaderboardRows(input: {
@@ -413,7 +708,7 @@ async function persistUnprocessedCaptureRaw(input: {
   cycleId: string | null
   startedAt: string
   completedAt: string
-  capture: LeaderboardCapture
+  capture: AnyLeaderboardCapture
   priorFailures: readonly unknown[]
   attempt?: LeaderboardAcquisitionAttempt | null
 }): Promise<RawObjectReceipt> {
@@ -514,15 +809,34 @@ export async function processTierA(
 
   const adapter = getAdapter(src.adapter_slug)
   const cycleId = observationCycleId(job, 'tier-a', src.slug)
-  // A registered contract means the database can understand v3 evidence; it
-  // is not rollout approval. Keep acquisition on v2 until an operator enables
-  // the worker only after the v3 database authority and canaries are live.
-  const attemptBoundCapture =
-    attemptBoundCaptureEnabled() &&
-    (await hasRegisteredAttemptBoundLeaderboardAcquisitionContract({
-      sourceId: src.id,
-      adapterSlug: src.adapter_slug,
-    }))
+  const desiredCaptureContract: AttemptBoundLeaderboardAcquisitionContract =
+    adapter.leaderboardAcquisitionContract ?? ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT
+  const rolloutEnabled = attemptBoundCaptureEnabled()
+  if (
+    desiredCaptureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT &&
+    !rolloutEnabled
+  ) {
+    throw new Error(`[tier-a] ${src.slug} v4 capture rollout is not enabled`)
+  }
+  // Registry selection is exact and happens before any upstream session. A
+  // V4 adapter can never borrow a V3 registration or fall back to legacy/V2.
+  const registeredCaptureContract = rolloutEnabled
+    ? await findRegisteredAttemptBoundLeaderboardAcquisitionContract({
+        sourceId: src.id,
+        adapterSlug: src.adapter_slug,
+        captureContract: desiredCaptureContract,
+      })
+    : null
+  if (registeredCaptureContract !== null && registeredCaptureContract !== desiredCaptureContract) {
+    throw new Error(`[tier-a] ${src.slug} registry returned a conflicting capture contract`)
+  }
+  if (
+    desiredCaptureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT &&
+    registeredCaptureContract === null
+  ) {
+    throw new Error(`[tier-a] ${src.slug} v4 capture contract is not exactly registered`)
+  }
+  const attemptBoundCapture = registeredCaptureContract !== null
   const workerRegion = context.executionRegion
   // Freeze provenance before the first upstream request. A long-running crawl
   // must not bind later timeframes to a different checkout/deployment SHA.
@@ -536,6 +850,12 @@ export async function processTierA(
     throw new Error(
       `[tier-a] ${src.slug} attempt-bound capture requires an exact deployed runner SHA`
     )
+  }
+  const partitionIdsByTimeframe = new Map<RankingTimeframe, readonly string[]>()
+  if (desiredCaptureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT) {
+    for (const timeframe of pendingTimeframes) {
+      partitionIdsByTimeframe.set(timeframe, authoritativePartitionIds(adapter, src, timeframe))
+    }
   }
   const results: TierAResult[] = []
   const failures: Array<{ timeframe: number; error: Error }> = []
@@ -565,7 +885,7 @@ export async function processTierA(
             observationCycleId: cycleId,
             queueJobId: job.id === undefined ? null : String(job.id),
             queueAttempt: job.attemptsMade,
-            captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+            captureContract: registeredCaptureContract!,
             runnerGitSha,
             workerRegion,
           })
@@ -642,7 +962,9 @@ export async function processTierA(
         failureStage = 'parse_validate_manifest'
         failureReason = 'parse_failed'
         try {
-          const captureRankAnchors = capture ? capturedPageRankAnchors(capture) : undefined
+          const captureRankAnchors = capture
+            ? capturedPageRankAnchors(capture, src.page_size)
+            : undefined
           rows = parseLeaderboardRows({
             adapter,
             pages,
@@ -659,7 +981,8 @@ export async function processTierA(
               rejectedRowCount: validated.rejects.length,
             },
             src,
-            timeframe
+            timeframe,
+            { purpose: capturedError ? 'evidence_only' : 'publication' }
           )
           failureReason = 'manifest_failed'
           const manifestInput = capture
@@ -681,6 +1004,7 @@ export async function processTierA(
               ? buildAttemptBoundCaptureManifest({
                   ...manifestInput,
                   attempt: acquisitionAttempt,
+                  configuredPartitionIds: partitionIdsByTimeframe.get(timeframe) ?? null,
                 })
               : null
           built = manifestInput && !acquisitionAttempt ? buildCaptureManifest(manifestInput) : null
@@ -717,11 +1041,18 @@ export async function processTierA(
           failureStage = 'raw_persistence'
           failureReason = 'raw_persistence_failed'
           try {
-            artifactSet = await writeAttemptBoundLeaderboardRawArtifactSet({
-              attempt: acquisitionAttempt,
-              built: attemptBoundBuilt,
-              sourcePages: rawPages,
-            })
+            artifactSet =
+              attemptBoundBuilt.kind === 'v3'
+                ? await writeAttemptBoundLeaderboardRawArtifactSet({
+                    attempt: acquisitionAttempt,
+                    built: attemptBoundBuilt.built,
+                    sourcePages: rawPages,
+                  })
+                : await writeAttemptBoundLeaderboardRawArtifactSet({
+                    attempt: acquisitionAttempt,
+                    built: attemptBoundBuilt.built,
+                    sourcePages: rawPages,
+                  })
           } catch (persistenceCause) {
             throw new TierAEvidencePersistenceError(
               src.slug,
@@ -731,10 +1062,12 @@ export async function processTierA(
             )
           }
           rawObjectId = artifactSet.sourcePayload.id
-          metricTrust = {
-            sourceRunId: attemptBoundBuilt.sourceRunId,
-            manifest: attemptBoundBuilt.manifest,
-            artifacts: artifactSet,
+          if (attemptBoundBuilt.kind === 'v3') {
+            metricTrust = {
+              sourceRunId: attemptBoundBuilt.built.sourceRunId,
+              manifest: attemptBoundBuilt.built.manifest,
+              artifacts: artifactSet,
+            }
           }
 
           attemptLifecycle = 'finalizing'
@@ -809,6 +1142,14 @@ export async function processTierA(
           throw new Error('capture evidence completed without a source RAW pointer')
         }
 
+        if (
+          acquisitionAttempt?.captureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT
+        ) {
+          throw new Error(
+            `[tier-a] ${src.slug} ${timeframe}d v4 evidence is terminal but its publication fence is not installed`
+          )
+        }
+
         // Series are additive serving material, not population evidence.
         // Parse them only after the capture pair passed its trust gate so a
         // series-specific bug cannot erase an otherwise truthful manifest.
@@ -816,7 +1157,10 @@ export async function processTierA(
 
         const registeredMetricTrust =
           metricTrust !== null && hasRegisteredLeaderboardMetricTrust(src, timeframe)
-        if (acquisitionAttempt && !registeredMetricTrust) {
+        if (
+          acquisitionAttempt?.captureContract === ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT &&
+          !registeredMetricTrust
+        ) {
           throw new Error(
             `[tier-a] ${src.slug} ${timeframe}d attempt-bound capture has no reviewed metric trust contract`
           )
