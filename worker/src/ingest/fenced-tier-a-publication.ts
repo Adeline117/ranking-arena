@@ -1,8 +1,11 @@
 import type { IngestQueryExecutor } from '@/lib/ingest/db'
-import type { SourceRow } from '@/lib/ingest/core/types'
+import type { BoardSeriesBlock, SourceRow } from '@/lib/ingest/core/types'
 import {
+  prepareBoardSeriesPublication,
+  publishBoardSeriesInTransaction,
   publishLeaderboardSnapshotInTransaction,
   publishTrustedLeaderboardSnapshotInTransaction,
+  type PublishBoardSeriesOptions,
   type PublishSnapshotInput,
   type PublishSnapshotResult,
   type PublishTrustedSnapshotInput,
@@ -38,6 +41,8 @@ interface LockedSourceAuthorityRow {
   status: string
 }
 
+type TierAPublicationSourceIdentity = Pick<SourceRow, 'fetch_region' | 'id' | 'slug'>
+
 function publicationFenceError(code: TierAPublicationFenceErrorCode): TierAPublicationFenceError {
   return new TierAPublicationFenceError(code)
 }
@@ -56,7 +61,7 @@ function assertAuthorityIdentity(context: AuthorizedConsumedRegionContext): void
 
 async function lockAndAssertLiveSourceAuthority(
   transaction: IngestQueryExecutor,
-  src: SourceRow,
+  src: TierAPublicationSourceIdentity,
   context: AuthorizedConsumedRegionContext
 ): Promise<void> {
   const result = await transaction.query<LockedSourceAuthorityRow>(
@@ -96,7 +101,7 @@ async function lockAndAssertLiveSourceAuthority(
 }
 
 async function withFencedTierAPublication<T>(
-  src: SourceRow,
+  src: TierAPublicationSourceIdentity,
   context: AuthorizedConsumedRegionContext,
   publish: (
     transaction: IngestQueryExecutor,
@@ -155,4 +160,18 @@ export async function publishFencedTrustedLeaderboardSnapshot(
   )
   reportCommittedBaselineShift(input, result)
   return result
+}
+
+export async function publishFencedBoardSeries(
+  src: SourceRow,
+  seriesByTrader: Map<string, BoardSeriesBlock[]>,
+  traderIds: Map<string, number>,
+  context: AuthorizedConsumedRegionContext,
+  options: PublishBoardSeriesOptions
+): Promise<{ traders: number; points: number }> {
+  const prepared = prepareBoardSeriesPublication(src, seriesByTrader, traderIds, options)
+  if (prepared.rows.length === 0) return { traders: 0, points: 0 }
+  return withFencedTierAPublication(prepared.source, context, (transaction, sourceAuthorityGuard) =>
+    publishBoardSeriesInTransaction(transaction, prepared, sourceAuthorityGuard)
+  )
 }

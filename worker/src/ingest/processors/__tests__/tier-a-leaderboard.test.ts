@@ -34,7 +34,7 @@ const mockValidateLeaderboardRows = jest.fn()
 const mockPublishLeaderboardSnapshot = jest.fn()
 const mockPublishTrustedLeaderboardSnapshot = jest.fn()
 const mockHasRegisteredLeaderboardMetricTrust = jest.fn()
-const mockPublishBoardSeries = jest.fn()
+const mockPublishFencedBoardSeries = jest.fn()
 const mockPublishBots = jest.fn()
 const mockJobUpdateData = jest.fn()
 const mockResolveDeployedSha = jest.fn()
@@ -74,10 +74,8 @@ jest.mock('@/lib/ingest/field-inventory', () => ({
 jest.mock('@/lib/ingest/staging/validate', () => ({
   validateLeaderboardRows: (...args: unknown[]) => mockValidateLeaderboardRows(...args),
 }))
-jest.mock('@/lib/ingest/serving/publish', () => ({
-  publishBoardSeries: (...args: unknown[]) => mockPublishBoardSeries(...args),
-}))
 jest.mock('@/worker/src/ingest/fenced-tier-a-publication', () => ({
+  publishFencedBoardSeries: (...args: unknown[]) => mockPublishFencedBoardSeries(...args),
   publishFencedLeaderboardSnapshot: (...args: unknown[]) => mockPublishLeaderboardSnapshot(...args),
   publishFencedTrustedLeaderboardSnapshot: (...args: unknown[]) =>
     mockPublishTrustedLeaderboardSnapshot(...args),
@@ -421,7 +419,7 @@ describe('Tier-A board-series publication guard', () => {
         replayed: false,
       },
     })
-    mockPublishBoardSeries.mockResolvedValue({ traders: 1, points: 1 })
+    mockPublishFencedBoardSeries.mockResolvedValue({ traders: 1, points: 1 })
     mockPublishBots.mockResolvedValue({ written: 1 })
   })
 
@@ -514,10 +512,11 @@ describe('Tier-A board-series publication guard', () => {
       expect.objectContaining({ timeframe: 30, snapshotId: 777, passed: true }),
     ])
 
-    expect(mockPublishBoardSeries).toHaveBeenCalledWith(
+    expect(mockPublishFencedBoardSeries).toHaveBeenCalledWith(
       src,
       expect.any(Map),
       new Map([[row.exchangeTraderId, 42]]),
+      expect.objectContaining({ consumedRegion: 'local' }),
       {
         expectedLatestSnapshots: new Map([
           [
@@ -551,10 +550,56 @@ describe('Tier-A board-series publication guard', () => {
       sourceSlug: src.slug,
       completedTimeframes: [30],
     })
-    expect(mockPublishBoardSeries.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockPublishFencedBoardSeries.mock.invocationCallOrder[0]).toBeLessThan(
       mockJobUpdateData.mock.invocationCallOrder[0]
     )
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a cross-timeframe series block before snapshot publication or checkpoint', async () => {
+    mockGetAdapter.mockReturnValue({
+      listLeaderboard: async function* () {
+        yield page
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () =>
+        new Map([
+          [
+            row.exchangeTraderId,
+            [
+              {
+                timeframe: 7,
+                metric: 'pnl',
+                points: [{ ts: '2026-07-16T00:00:00.000Z', value: 20 }],
+              },
+            ],
+          ],
+        ]),
+    })
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    let failure: unknown
+    try {
+      await processTierA(job)
+    } catch (error) {
+      failure = error
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    const windowFailure = (failure as AggregateError).errors[0] as Error & { cause?: unknown }
+    expect(windowFailure.cause).toEqual(
+      expect.objectContaining({
+        message: '[tier-a] board series block crossed its snapshot timeframe',
+      })
+    )
+    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
+    expect(mockPublishBots).not.toHaveBeenCalled()
+    expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(job.data).toEqual({ sourceSlug: src.slug })
   })
 
   it('prefers capture evidence, parses only parsePages, and stores all sourcePages in RAW', async () => {
@@ -1569,7 +1614,7 @@ describe('Tier-A board-series publication guard', () => {
   })
 
   it('does not checkpoint a window until board-series publication succeeds', async () => {
-    mockPublishBoardSeries.mockRejectedValueOnce(new Error('series write failed'))
+    mockPublishFencedBoardSeries.mockRejectedValueOnce(new Error('series write failed'))
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
     try {
@@ -1579,7 +1624,7 @@ describe('Tier-A board-series publication guard', () => {
     }
 
     expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledTimes(1)
-    expect(mockPublishBoardSeries).toHaveBeenCalledTimes(1)
+    expect(mockPublishFencedBoardSeries).toHaveBeenCalledTimes(1)
     expect(mockJobUpdateData).not.toHaveBeenCalled()
     expect(job.data).toEqual({ sourceSlug: src.slug })
   })
@@ -1915,7 +1960,7 @@ describe('Tier-A board-series publication guard', () => {
     await finishCalled
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
-    expect(mockPublishBoardSeries).not.toHaveBeenCalled()
+    expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
     expect(mockPublishBots).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
 
@@ -2170,7 +2215,7 @@ describe('Tier-A board-series publication guard', () => {
       expect(finishInput.projection).toMatchObject({ terminalState, reasonCode })
       expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
       expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
-      expect(mockPublishBoardSeries).not.toHaveBeenCalled()
+      expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
       expect(mockPublishBots).not.toHaveBeenCalled()
       expect(mockJobUpdateData).not.toHaveBeenCalled()
     }

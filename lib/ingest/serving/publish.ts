@@ -1030,10 +1030,19 @@ export interface PublishBoardSeriesOptions {
    * Exact latest-passed snapshot identity per timeframe. Live Tier-A and RAW
    * replay both pass this so an older crawl cannot publish after a newer one.
    */
-  expectedLatestSnapshots?: ReadonlyMap<
+  expectedLatestSnapshots: ReadonlyMap<
     number,
     { id: number; rawObjectId: number; scrapedAt: string }
   >
+}
+
+export class SupersededBoardSeriesPublicationError extends Error {
+  readonly code = 'snapshot_superseded' as const
+
+  constructor(sourceSlug: string, timeframe: number) {
+    super(`[board-series] snapshot superseded for ${sourceSlug} ${timeframe}d`)
+    this.name = 'SupersededBoardSeriesPublicationError'
+  }
 }
 
 /** Pure publication-boundary preparation, also used by replay dry-runs. */
@@ -1102,146 +1111,371 @@ export function prepareBoardSeriesRows(
   }
 }
 
-export async function publishBoardSeries(
+export interface PreparedBoardSeriesRiskRow {
+  trader_id: number
+  timeframe: number
+  sharpe: number | null
+  sortino: number | null
+  volatility: number | null
+}
+
+export interface PreparedBoardSeriesSnapshotExpectation {
+  timeframe: number
+  id: number
+  rawObjectId: number
+  scrapedAt: string
+}
+
+export interface PreparedBoardSeriesSnapshotMembership {
+  exchange_trader_id: string
+  trader_id: number
+  timeframe: number
+  snapshot_id: number
+  raw_object_id: number
+}
+
+export interface PreparedBoardSeriesPublication {
+  readonly derivedRiskRows: readonly PreparedBoardSeriesRiskRow[]
+  readonly expectedLatestSnapshots: readonly PreparedBoardSeriesSnapshotExpectation[]
+  readonly replacements: readonly PreparedBoardSeriesReplacement[]
+  readonly rows: readonly PreparedBoardSeriesRow[]
+  readonly snapshotMemberships: readonly PreparedBoardSeriesSnapshotMembership[]
+  readonly source: Readonly<Pick<SourceRow, 'currency' | 'fetch_region' | 'id' | 'slug'>>
+  readonly traders: number
+}
+
+const PREPARED_BOARD_SERIES_PUBLICATIONS = new WeakSet<object>()
+
+function freezeBoardSeriesRows<T extends object>(rows: readonly T[]): readonly Readonly<T>[] {
+  return Object.freeze(rows.map((row) => Object.freeze({ ...row })))
+}
+
+function snapshotBoardSeriesExpectation(
+  timeframe: unknown,
+  value: unknown,
+  sourceSlug: string
+): PreparedBoardSeriesSnapshotExpectation {
+  if (
+    ![7, 30, 90].includes(timeframe as number) ||
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value)
+  ) {
+    throw new Error(`[board-series] snapshot guard malformed for ${sourceSlug}`)
+  }
+  const prototype = Object.getPrototypeOf(value)
+  const names = Object.getOwnPropertyNames(value).sort()
+  const descriptors = Object.getOwnPropertyDescriptors(value)
+  if (
+    (prototype !== Object.prototype && prototype !== null) ||
+    Object.getOwnPropertySymbols(value).length !== 0 ||
+    names.join('\u0000') !== ['id', 'rawObjectId', 'scrapedAt'].join('\u0000') ||
+    !('value' in descriptors.id) ||
+    !('value' in descriptors.rawObjectId) ||
+    !('value' in descriptors.scrapedAt)
+  ) {
+    throw new Error(`[board-series] snapshot guard malformed for ${sourceSlug}`)
+  }
+  const id: unknown = descriptors.id.value
+  const rawObjectId: unknown = descriptors.rawObjectId.value
+  const scrapedAt: unknown = descriptors.scrapedAt.value
+  const scrapedAtMs = typeof scrapedAt === 'string' ? Date.parse(scrapedAt) : Number.NaN
+  if (
+    typeof id !== 'number' ||
+    !Number.isSafeInteger(id) ||
+    id <= 0 ||
+    typeof rawObjectId !== 'number' ||
+    !Number.isSafeInteger(rawObjectId) ||
+    rawObjectId <= 0 ||
+    typeof scrapedAt !== 'string' ||
+    !Number.isFinite(scrapedAtMs) ||
+    new Date(scrapedAtMs).toISOString() !== scrapedAt
+  ) {
+    throw new Error(`[board-series] snapshot guard malformed for ${sourceSlug}`)
+  }
+  return {
+    timeframe: timeframe as number,
+    id,
+    rawObjectId,
+    scrapedAt,
+  }
+}
+
+/** Snapshot every mutable producer input before an authorized transaction opens. */
+export function prepareBoardSeriesPublication(
   src: SourceRow,
   seriesByTrader: Map<string, BoardSeriesBlock[]>,
   traderIds: Map<string, number>,
-  options: PublishBoardSeriesOptions = {}
-): Promise<{ traders: number; points: number }> {
-  const prepared = prepareBoardSeriesRows(seriesByTrader, traderIds)
-  const flat = prepared.rows
-  const replacements = prepared.replacements
-  const tradersWithSeries = prepared.traders
-  if (flat.length === 0) return { traders: 0, points: 0 }
-
-  const expectedSnapshots = options.expectedLatestSnapshots
-  if (replacements.length > 0) {
-    const missingGuards = [
-      ...new Set(replacements.map((replacement) => replacement.timeframe)),
-    ].filter((timeframe) => !expectedSnapshots?.has(timeframe))
+  options: PublishBoardSeriesOptions
+): PreparedBoardSeriesPublication {
+  const source = Object.freeze({
+    currency: src.currency,
+    fetch_region: src.fetch_region,
+    id: src.id,
+    slug: src.slug,
+  })
+  const preparedRows = prepareBoardSeriesRows(seriesByTrader, traderIds)
+  const expectedLatestSnapshots: PreparedBoardSeriesSnapshotExpectation[] = []
+  if (preparedRows.rows.length > 0) {
+    if (!(options?.expectedLatestSnapshots instanceof Map)) {
+      throw new Error(`[board-series] snapshot guard malformed for ${source.slug}`)
+    }
+    const guardedTimeframes = new Set<number>()
+    const guards = Map.prototype.entries.call(options.expectedLatestSnapshots) as IterableIterator<
+      [unknown, unknown]
+    >
+    for (const [timeframe, expected] of guards) {
+      const snapshot = snapshotBoardSeriesExpectation(timeframe, expected, source.slug)
+      if (guardedTimeframes.has(snapshot.timeframe)) {
+        throw new Error(`[board-series] duplicate snapshot guard for ${source.slug}`)
+      }
+      guardedTimeframes.add(snapshot.timeframe)
+      expectedLatestSnapshots.push(snapshot)
+    }
+    const publishedTimeframes = new Set(preparedRows.rows.map((row) => row.timeframe))
+    const missingGuards = [...publishedTimeframes].filter(
+      (timeframe) => !guardedTimeframes.has(timeframe)
+    )
     if (missingGuards.length > 0) {
       throw new Error(
-        `[board-series] replacement snapshot guard missing for ${src.slug}: ` +
+        `[board-series] snapshot guard missing for ${source.slug}: ` +
           `${missingGuards.sort((a, b) => a - b).join(',')}d`
       )
     }
+    const unrelatedGuards = [...guardedTimeframes].filter(
+      (timeframe) => !publishedTimeframes.has(timeframe)
+    )
+    if (unrelatedGuards.length > 0) {
+      throw new Error(
+        `[board-series] snapshot guard has unrelated timeframe for ${source.slug}: ` +
+          `${unrelatedGuards.sort((a, b) => a - b).join(',')}d`
+      )
+    }
+    expectedLatestSnapshots.sort((left, right) => left.timeframe - right.timeframe)
   }
 
-  // Chunk the insert — boards reach thousands of traders × ~30-90 pts each.
-  const CHUNK = 5000
-  const client = await ingestClientConnect()
-  let transactionStarted = false
-  try {
-    await client.query('BEGIN')
-    transactionStarted = true
-    // Serialize live Tier-A publication and operator replay for one source.
-    // Transaction-scoped lock is safe through PgBouncer transaction mode.
-    await lockSourcePublication(client, src.id)
-    if (expectedSnapshots && expectedSnapshots.size > 0) {
-      const timeframes = [...expectedSnapshots.keys()]
-      const { rows } = await client.query<{
-        timeframe: number
-        id: number
-        raw_object_id: number | null
-        scraped_at: string
-      }>(
-        `SELECT DISTINCT ON (timeframe)
-                timeframe, id, raw_object_id, scraped_at::text
-           FROM arena.leaderboard_snapshots
-          WHERE source_id = $1 AND count_check_passed
-            AND timeframe = ANY($2::smallint[])
-          ORDER BY timeframe, scraped_at DESC, id DESC`,
-        [src.id, timeframes]
-      )
-      const current = new Map(rows.map((row) => [row.timeframe, row]))
-      for (const [timeframe, expected] of expectedSnapshots) {
-        const latest = current.get(timeframe)
-        if (
-          latest?.id !== expected.id ||
-          latest.raw_object_id !== expected.rawObjectId ||
-          new Date(latest.scraped_at).toISOString() !== expected.scrapedAt
-        ) {
-          throw new Error(
-            `[board-series] stale snapshot for ${src.slug} ${timeframe}d: expected=${expected.id}, latest=${latest?.id ?? 'missing'}`
-          )
-        }
-      }
+  const expectedSnapshotByTimeframe = new Map(
+    expectedLatestSnapshots.map((expected) => [expected.timeframe, expected])
+  )
+  const exchangeTraderIdsByTraderId = new Map<number, Set<string>>()
+  for (const exchangeTraderId of seriesByTrader.keys()) {
+    const traderId = traderIds.get(exchangeTraderId)
+    if (traderId === undefined || !Number.isSafeInteger(traderId) || traderId <= 0) continue
+    const identities = exchangeTraderIdsByTraderId.get(traderId) ?? new Set<string>()
+    identities.add(exchangeTraderId)
+    exchangeTraderIdsByTraderId.set(traderId, identities)
+  }
+  const snapshotMembershipsByKey = new Map<string, PreparedBoardSeriesSnapshotMembership>()
+  for (const row of preparedRows.rows) {
+    const expected = expectedSnapshotByTimeframe.get(row.timeframe)
+    if (expected === undefined) {
+      throw new Error(`[board-series] snapshot guard missing for ${source.slug}: ${row.timeframe}d`)
     }
-    // Only adapters that explicitly prove a non-empty block is a complete
-    // snapshot opt into replacement. Delete both stores inside this same
-    // transaction; any later insert/count failure restores the old chart.
-    for (let i = 0; i < replacements.length; i += CHUNK) {
-      const slice = replacements.slice(i, i + CHUNK)
-      const payload = JSON.stringify(slice)
-      await client.query(
-        `DELETE FROM arena.trader_series_weekly AS series
-          USING jsonb_to_recordset($1::jsonb) AS r(
-            trader_id bigint, timeframe int, metric text)
-          WHERE series.trader_id = r.trader_id
-            AND series.timeframe = r.timeframe
-            AND series.metric = r.metric`,
-        [payload]
-      )
-      await client.query(
-        `DELETE FROM arena.trader_series AS series
-          USING jsonb_to_recordset($1::jsonb) AS r(
-            trader_id bigint, timeframe int, metric text)
-          WHERE series.trader_id = r.trader_id
-            AND series.timeframe = r.timeframe
-            AND series.metric = r.metric`,
-        [payload]
-      )
+    const exchangeTraderIds = exchangeTraderIdsByTraderId.get(row.trader_id)
+    if (exchangeTraderIds === undefined || exchangeTraderIds.size !== 1) {
+      throw new Error(`[board-series] trader identity is ambiguous for ${source.slug}`)
     }
-    for (let i = 0; i < flat.length; i += CHUNK) {
-      const slice = flat.slice(i, i + CHUNK)
-      const result = await client.query(
-        `INSERT INTO arena.trader_series (trader_id, timeframe, metric, ts, value, currency)
-         SELECT r.trader_id, r.timeframe, r.metric, r.ts::timestamptz, r.value, $2
-           FROM jsonb_to_recordset($1::jsonb) AS r(
-             trader_id bigint, timeframe int, metric text, ts text, value numeric)
-         ON CONFLICT (trader_id, timeframe, metric, ts)
-         DO UPDATE SET value = EXCLUDED.value`,
-        [JSON.stringify(slice), src.currency]
-      )
-      if (result.rowCount !== slice.length) {
-        throw new Error(
-          `[board-series] write count mismatch for ${src.slug}: expected=${slice.length}, actual=${result.rowCount ?? 0}`
-        )
-      }
-    }
+    const [exchangeTraderId] = exchangeTraderIds
+    snapshotMembershipsByKey.set(`${row.trader_id}|${row.timeframe}`, {
+      exchange_trader_id: exchangeTraderId,
+      trader_id: row.trader_id,
+      timeframe: row.timeframe,
+      snapshot_id: expected.id,
+      raw_object_id: expected.rawObjectId,
+    })
+  }
+  const snapshotMemberships = [...snapshotMembershipsByKey.values()].sort(
+    (left, right) => left.trader_id - right.trader_id || left.timeframe - right.timeframe
+  )
 
-    // Board-path self-derivation — PURE-DEX only (see publishProfile note +
-    // user directive 2026-07-02). CEX gets no self-filled risk ratios: harvest
-    // the exchange's real value or leave honest NULL.
-    const derived: Array<{
+  // Board-path self-derivation — PURE-DEX only (see publishProfile note +
+  // user directive 2026-07-02). CEX gets no self-filled risk ratios: harvest
+  // the exchange's real value or leave honest NULL.
+  const derivedRiskRows: PreparedBoardSeriesRiskRow[] = []
+  if (SELF_DERIVE_RISK_SOURCES.has(source.slug)) {
+    const canonicalBlocks = new Map<
+      string,
+      {
+        metrics: Map<string, Array<{ ts: string; value: number }>>
+        timeframe: number
+        traderId: number
+      }
+    >()
+    for (const row of preparedRows.rows) {
+      const key = `${row.trader_id}|${row.timeframe}`
+      const group = canonicalBlocks.get(key) ?? {
+        metrics: new Map(),
+        timeframe: row.timeframe,
+        traderId: row.trader_id,
+      }
+      const points = group.metrics.get(row.metric) ?? []
+      points.push({ ts: row.ts, value: row.value })
+      group.metrics.set(row.metric, points)
+      canonicalBlocks.set(key, group)
+    }
+    for (const group of canonicalBlocks.values()) {
+      const blocks = [...group.metrics].map(([metric, points]) => ({
+        timeframe: group.timeframe,
+        metric,
+        points,
+      }))
+      const risk = deriveRiskFromBlocks(blocks)
+      if (risk && (risk.sharpe !== null || risk.sortino !== null || risk.volatility !== null)) {
+        derivedRiskRows.push({ trader_id: group.traderId, timeframe: group.timeframe, ...risk })
+      }
+    }
+  }
+
+  const publication = Object.freeze({
+    derivedRiskRows: freezeBoardSeriesRows(derivedRiskRows),
+    expectedLatestSnapshots: freezeBoardSeriesRows(expectedLatestSnapshots),
+    replacements: freezeBoardSeriesRows(preparedRows.replacements),
+    rows: freezeBoardSeriesRows(preparedRows.rows),
+    snapshotMemberships: freezeBoardSeriesRows(snapshotMemberships),
+    source,
+    traders: preparedRows.traders,
+  })
+  PREPARED_BOARD_SERIES_PUBLICATIONS.add(publication)
+  return publication
+}
+
+async function publishPreparedBoardSeriesTransactionInternal(
+  client: IngestQueryExecutor,
+  prepared: PreparedBoardSeriesPublication,
+  sourceAuthorityGuard?: LeaderboardSourceAuthorityGuard
+): Promise<{ traders: number; points: number }> {
+  const {
+    derivedRiskRows,
+    expectedLatestSnapshots,
+    replacements,
+    rows,
+    snapshotMemberships,
+    source,
+  } = prepared
+  if (rows.length === 0) return { traders: 0, points: 0 }
+
+  // Serialize live Tier-A publication and operator replay for one source.
+  // Transaction-scoped lock is safe through PgBouncer transaction mode.
+  await lockSourcePublication(client, source.id)
+  if (sourceAuthorityGuard !== undefined) await sourceAuthorityGuard(client)
+
+  if (expectedLatestSnapshots.length > 0) {
+    const { rows: latestSnapshots } = await client.query<{
+      timeframe: number
+      id: number
+      raw_object_id: number | null
+      scraped_at: string
+    }>(
+      `SELECT DISTINCT ON (timeframe)
+              timeframe, id, raw_object_id, scraped_at::text
+         FROM arena.leaderboard_snapshots
+        WHERE source_id = $1 AND count_check_passed
+          AND timeframe = ANY($2::smallint[])
+        ORDER BY timeframe, scraped_at DESC, id DESC`,
+      [source.id, expectedLatestSnapshots.map((expectation) => expectation.timeframe)]
+    )
+    const expectedTimeframes = new Set(
+      expectedLatestSnapshots.map((expectation) => expectation.timeframe)
+    )
+    const current = new Map<number, (typeof latestSnapshots)[number]>()
+    for (const latest of latestSnapshots) {
+      const scrapedAtMs =
+        typeof latest.scraped_at === 'string' ? Date.parse(latest.scraped_at) : Number.NaN
+      if (
+        ![7, 30, 90].includes(latest.timeframe) ||
+        !expectedTimeframes.has(latest.timeframe) ||
+        !Number.isSafeInteger(latest.id) ||
+        latest.id <= 0 ||
+        (latest.raw_object_id !== null &&
+          (!Number.isSafeInteger(latest.raw_object_id) || latest.raw_object_id <= 0)) ||
+        !Number.isFinite(scrapedAtMs) ||
+        current.has(latest.timeframe)
+      ) {
+        throw new Error(`[board-series] latest snapshot contract violation for ${source.slug}`)
+      }
+      current.set(latest.timeframe, latest)
+    }
+    for (const expected of expectedLatestSnapshots) {
+      const latest = current.get(expected.timeframe)
+      const latestAtMs = latest ? Date.parse(latest.scraped_at) : Number.NaN
+      const expectedAtMs = Date.parse(expected.scrapedAt)
+      const exact =
+        latest !== undefined &&
+        latest.id === expected.id &&
+        latest.raw_object_id === expected.rawObjectId &&
+        new Date(latestAtMs).toISOString() === expected.scrapedAt
+      if (!exact) {
+        const provablyNewer =
+          latest !== undefined &&
+          latest.id !== expected.id &&
+          (latestAtMs > expectedAtMs || (latestAtMs === expectedAtMs && latest.id > expected.id))
+        if (provablyNewer) {
+          throw new SupersededBoardSeriesPublicationError(source.slug, expected.timeframe)
+        }
+        throw new Error(`[board-series] stale snapshot for ${source.slug} ${expected.timeframe}d`)
+      }
+    }
+  }
+
+  // A source-level fence is not enough: a malformed traderIds map could point
+  // at a different source's trader. Prove and lock every DML target as a member
+  // of the exact snapshot guarded above before touching stats or series.
+  const chunkSize = 5000
+  for (let index = 0; index < snapshotMemberships.length; index += chunkSize) {
+    const slice = snapshotMemberships.slice(index, index + chunkSize)
+    const membership = await client.query<{
+      exchange_trader_id: string
       trader_id: number
       timeframe: number
-      sharpe: number | null
-      sortino: number | null
-      volatility: number | null
-    }> = []
-    if (SELF_DERIVE_RISK_SOURCES.has(src.slug)) {
-      for (const [exchangeTraderId, blocks] of seriesByTrader) {
-        const traderId = traderIds.get(exchangeTraderId)
-        if (traderId === undefined) continue
-        const byTf = new Map<number, BoardSeriesBlock[]>()
-        for (const b of blocks) {
-          const arr = byTf.get(b.timeframe) ?? []
-          arr.push(b)
-          byTf.set(b.timeframe, arr)
-        }
-        for (const [timeframe, tfBlocks] of byTf) {
-          const r = deriveRiskFromBlocks(tfBlocks)
-          if (r && (r.sharpe !== null || r.sortino !== null || r.volatility !== null)) {
-            derived.push({ trader_id: traderId, timeframe, ...r })
-          }
-        }
-      }
-    } // end SELF_DERIVE_RISK_SOURCES gate
-    for (let i = 0; i < derived.length; i += CHUNK) {
-      const slice = derived.slice(i, i + CHUNK)
-      await client.query(
-        `UPDATE arena.trader_stats ts SET
+      snapshot_id: number
+    }>(
+      `SELECT expected.exchange_trader_id, expected.trader_id,
+              expected.timeframe, expected.snapshot_id
+         FROM jsonb_to_recordset($1::jsonb) AS expected(
+           exchange_trader_id text, trader_id bigint, timeframe int, snapshot_id bigint,
+           raw_object_id bigint)
+         JOIN arena.leaderboard_snapshots AS guarded_snapshot
+           ON guarded_snapshot.id = expected.snapshot_id
+          AND guarded_snapshot.source_id = $2
+          AND guarded_snapshot.timeframe = expected.timeframe
+          AND guarded_snapshot.raw_object_id = expected.raw_object_id
+          AND guarded_snapshot.count_check_passed
+         JOIN arena.traders AS trader
+           ON trader.id = expected.trader_id
+          AND trader.source_id = $2
+          AND trader.exchange_trader_id = expected.exchange_trader_id
+         JOIN arena.leaderboard_entries AS entry
+           ON entry.scraped_at = guarded_snapshot.scraped_at
+          AND entry.snapshot_id = guarded_snapshot.id
+          AND entry.trader_id = expected.trader_id
+          AND entry.timeframe = expected.timeframe
+        ORDER BY expected.trader_id, expected.timeframe
+        FOR SHARE OF guarded_snapshot, trader, entry`,
+      [JSON.stringify(slice), source.id]
+    )
+    const exactMembership =
+      membership.rowCount === slice.length &&
+      membership.rows.length === slice.length &&
+      membership.rows.every(
+        (row, offset) =>
+          row.exchange_trader_id === slice[offset].exchange_trader_id &&
+          row.trader_id === slice[offset].trader_id &&
+          row.timeframe === slice[offset].timeframe &&
+          row.snapshot_id === slice[offset].snapshot_id
+      )
+    if (!exactMembership) {
+      throw new Error(`[board-series] trader snapshot membership mismatch for ${source.slug}`)
+    }
+  }
+
+  // Chunk the writes — boards reach thousands of traders × ~30-90 pts each.
+  // Match profile publication's trader_stats → series row-lock order. The
+  // risk rows were derived from the frozen canonical series plan, so they do
+  // not depend on inserting the series rows first.
+  for (let index = 0; index < derivedRiskRows.length; index += chunkSize) {
+    const slice = derivedRiskRows.slice(index, index + chunkSize)
+    await client.query(
+      `UPDATE arena.trader_stats ts SET
            sharpe = COALESCE(ts.sharpe, d.sharpe),
            extras = ts.extras
              || CASE WHEN ts.extras ? 'sortino' OR d.sortino IS NULL THEN '{}'::jsonb
@@ -1249,29 +1483,126 @@ export async function publishBoardSeries(
              || CASE WHEN ts.extras ? 'volatility' OR d.volatility IS NULL THEN '{}'::jsonb
                      ELSE jsonb_build_object('volatility', d.volatility) END
              || CASE WHEN ts.sharpe IS NOT NULL OR d.sharpe IS NULL THEN '{}'::jsonb
-                     ELSE '{"risk_self_derived": true}'::jsonb END
+                     ELSE jsonb_build_object('risk_self_derived', true) END
          FROM jsonb_to_recordset($1::jsonb) AS d(
            trader_id bigint, timeframe int, sharpe numeric, sortino numeric, volatility numeric)
          WHERE ts.trader_id = d.trader_id AND ts.timeframe = d.timeframe
            AND (ts.sharpe IS NULL OR NOT (ts.extras ? 'sortino') OR NOT (ts.extras ? 'volatility'))`,
-        [JSON.stringify(slice)]
+      [JSON.stringify(slice)]
+    )
+  }
+
+  // Only adapters that explicitly prove a non-empty block is a complete
+  // snapshot opt into replacement. Delete both stores inside this same
+  // transaction; any later insert/count failure restores the old chart.
+  for (let index = 0; index < replacements.length; index += chunkSize) {
+    const slice = replacements.slice(index, index + chunkSize)
+    const payload = JSON.stringify(slice)
+    await client.query(
+      `DELETE FROM arena.trader_series_weekly AS series
+        USING jsonb_to_recordset($1::jsonb) AS r(
+          trader_id bigint, timeframe int, metric text)
+        WHERE series.trader_id = r.trader_id
+          AND series.timeframe = r.timeframe
+          AND series.metric = r.metric`,
+      [payload]
+    )
+    await client.query(
+      `DELETE FROM arena.trader_series AS series
+        USING jsonb_to_recordset($1::jsonb) AS r(
+          trader_id bigint, timeframe int, metric text)
+        WHERE series.trader_id = r.trader_id
+          AND series.timeframe = r.timeframe
+          AND series.metric = r.metric`,
+      [payload]
+    )
+  }
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    const slice = rows.slice(index, index + chunkSize)
+    const result = await client.query(
+      `INSERT INTO arena.trader_series (trader_id, timeframe, metric, ts, value, currency)
+       SELECT r.trader_id, r.timeframe, r.metric, r.ts::timestamptz, r.value, $2
+         FROM jsonb_to_recordset($1::jsonb) AS r(
+           trader_id bigint, timeframe int, metric text, ts text, value numeric)
+       ON CONFLICT (trader_id, timeframe, metric, ts)
+       DO UPDATE SET value = EXCLUDED.value`,
+      [JSON.stringify(slice), source.currency]
+    )
+    if (result.rowCount !== slice.length) {
+      throw new Error(
+        `[board-series] write count mismatch for ${source.slug}: ` +
+          `expected=${slice.length}, actual=${result.rowCount ?? 0}`
       )
     }
+  }
+
+  return { traders: prepared.traders, points: rows.length }
+}
+
+export async function publishBoardSeriesInTransaction(
+  transaction: IngestQueryExecutor,
+  prepared: PreparedBoardSeriesPublication,
+  sourceAuthorityGuard: LeaderboardSourceAuthorityGuard
+): Promise<{ traders: number; points: number }> {
+  if (
+    typeof sourceAuthorityGuard !== 'function' ||
+    !PREPARED_BOARD_SERIES_PUBLICATIONS.has(prepared)
+  ) {
+    throw new Error('[board-series] fenced publication requires a source authority guard')
+  }
+  return publishPreparedBoardSeriesTransactionInternal(transaction, prepared, sourceAuthorityGuard)
+}
+
+export async function publishBoardSeries(
+  src: SourceRow,
+  seriesByTrader: Map<string, BoardSeriesBlock[]>,
+  traderIds: Map<string, number>,
+  options: PublishBoardSeriesOptions
+): Promise<{ traders: number; points: number }> {
+  const prepared = prepareBoardSeriesPublication(src, seriesByTrader, traderIds, options)
+  if (prepared.rows.length === 0) return { traders: 0, points: 0 }
+
+  const client = await ingestClientConnect()
+  let transactionStarted = false
+  let commitAttempted = false
+  let destroyClient = false
+  try {
+    await client.query('BEGIN')
+    transactionStarted = true
+    const result = await publishPreparedBoardSeriesTransactionInternal(client, prepared)
+    commitAttempted = true
     await client.query('COMMIT')
     transactionStarted = false
+    return result
   } catch (err) {
-    if (transactionStarted) {
+    let failure: unknown = err
+    if (transactionStarted && !commitAttempted) {
       try {
         await client.query('ROLLBACK')
-      } catch {
-        // Preserve the publication error; the broken client is released below.
+        transactionStarted = false
+      } catch (rollbackCause) {
+        destroyClient = true
+        failure = new AggregateError(
+          [
+            err instanceof Error ? err : new Error(String(err)),
+            rollbackCause instanceof Error ? rollbackCause : new Error(String(rollbackCause)),
+          ],
+          '[board-series] publication and rollback both failed'
+        )
       }
+    } else if (commitAttempted) {
+      // Never reuse a connection whose COMMIT outcome is ambiguous. Board
+      // writes are exact-snapshot guarded and idempotent, so a retry is safe.
+      destroyClient = true
+    } else {
+      // A rejected BEGIN/query timeout does not prove the backend stayed out
+      // of a transaction. Do not return that connection to the shared pool.
+      destroyClient = true
     }
-    throw err
+    throw failure
   } finally {
-    client.release()
+    client.release(destroyClient)
   }
-  return { traders: tradersWithSeries, points: flat.length }
 }
 
 /**
