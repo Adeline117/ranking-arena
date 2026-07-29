@@ -12,6 +12,12 @@ import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import {
+  publicRankingResponseCacheHeaders,
+  publicRankingResponseRejectionHeaders,
+  redirectToPublicRankingResponseCacheEpoch,
+} from '@/lib/rankings/public-response-cache'
 
 export const runtime = 'nodejs' // requires Node.js for getSupabaseAdmin()
 
@@ -168,6 +174,15 @@ export async function GET(request: NextRequest) {
     if (!exchange) {
       return new Response('Missing exchange parameter', { status: 400 })
     }
+    if (!isPublicRankingSourceAllowed(exchange)) {
+      return new Response('Unknown or unavailable ranking source', {
+        status: 404,
+        headers: publicRankingResponseRejectionHeaders(),
+      })
+    }
+
+    const epochRedirect = redirectToPublicRankingResponseCacheEpoch(request)
+    if (epochRedirect) return epochRedirect
 
     const displayName =
       PLATFORM_NAMES[exchange] ||
@@ -518,7 +533,9 @@ export async function GET(request: NextRequest) {
       {
         width: 1200,
         height: 630,
-        headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
+        headers: publicRankingResponseCacheHeaders(
+          'public, s-maxage=3600, stale-while-revalidate=86400'
+        ),
       }
     )
   } catch (e) {
@@ -526,6 +543,12 @@ export async function GET(request: NextRequest) {
     // Never 500 an OG endpoint — a broken social preview (no card on Twitter/
     // Discord) is worse than a generic one. Redirect to the static site image
     // (same pattern as og/trader / og/rank fallbacks).
-    return new Response(null, { status: 302, headers: { Location: `${BASE_URL}/og-image.png` } })
+    return new Response(null, {
+      status: 302,
+      headers: {
+        ...publicRankingResponseRejectionHeaders(),
+        Location: `${BASE_URL}/og-image.png`,
+      },
+    })
   }
 }

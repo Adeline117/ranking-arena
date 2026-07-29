@@ -10,6 +10,12 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { BASE_URL } from '@/lib/constants/urls'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import {
+  publicRankingResponseCacheHeaders,
+  publicRankingResponseRejectionHeaders,
+  redirectToPublicRankingResponseCacheEpoch,
+} from '@/lib/rankings/public-response-cache'
 
 // 2026-07-11:改回 edge runtime。此前 runtime='nodejs'(为 getSupabaseAdmin)触发
 // next/og@16 在 nodejs runtime 的 pipe-time "u2 is not iterable" bug —— 惰性渲染
@@ -148,6 +154,7 @@ async function fetchTrader(handle: string) {
   if (!source) return null
   const srcName = source.source as string
   const srcTraderId = source.source_trader_id as string
+  if (!isPublicRankingSourceAllowed(srcName)) return null
 
   // Cascade through season_ids: 90D → 30D → 7D
   let rankData: Record<string, unknown> | null = null
@@ -185,6 +192,15 @@ export async function GET(request: NextRequest) {
     // ROI/score/rank overrides removed — prevents attackers from crafting
     // misleading share links with fake stats for any trader.
     const overrideSource = (searchParams.get('source') || '').slice(0, 50)
+    if (overrideSource && !isPublicRankingSourceAllowed(overrideSource)) {
+      return new Response('Unknown or unavailable ranking source', {
+        status: 404,
+        headers: publicRankingResponseRejectionHeaders(),
+      })
+    }
+
+    const epochRedirect = redirectToPublicRankingResponseCacheEpoch(request)
+    if (epochRedirect) return epochRedirect
 
     const trader = (await fetchTrader(handle)) as Record<string, unknown> | null
     const num = (v: unknown): number | null => (typeof v === 'number' ? v : null)
@@ -642,9 +658,9 @@ export async function GET(request: NextRequest) {
       {
         width: 1200,
         height: 630,
-        headers: {
-          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
-        },
+        headers: publicRankingResponseCacheHeaders(
+          'public, s-maxage=3600, stale-while-revalidate=86400'
+        ),
       }
     )
   } catch (e) {
@@ -699,7 +715,9 @@ export async function GET(request: NextRequest) {
         {
           width: 1200,
           height: 630,
-          headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
+          headers: publicRankingResponseCacheHeaders(
+            'public, s-maxage=60, stale-while-revalidate=300'
+          ),
         }
       )
     } catch {
@@ -714,7 +732,10 @@ export async function GET(request: NextRequest) {
       // header never throws.
       return new Response(null, {
         status: 302,
-        headers: { Location: `${BASE_URL}/og-image.png` },
+        headers: {
+          ...publicRankingResponseRejectionHeaders(),
+          Location: `${BASE_URL}/og-image.png`,
+        },
       })
     }
   }
