@@ -316,8 +316,8 @@ test('semantic override manifest stays narrow and auditable', () => {
   ])
   assert.equal(Object.keys(NULLABLE_RPC_ARGS).length, 27)
   assert.equal(fieldCount(NULLABLE_RPC_ARGS), 60)
-  assert.equal(Object.keys(GROUP_CUTOVER_NULLABLE_RPC_ARGS).length, 7)
-  assert.equal(fieldCount(GROUP_CUTOVER_NULLABLE_RPC_ARGS), 11)
+  assert.equal(Object.keys(GROUP_CUTOVER_NULLABLE_RPC_ARGS).length, 8)
+  assert.equal(fieldCount(GROUP_CUTOVER_NULLABLE_RPC_ARGS), 13)
   assert.deepEqual(Object.keys(NULLABLE_RPC_RETURNS).sort(), [
     'moderate_report_queue_atomic',
     'moderate_report_queue_atomic_v1_internal',

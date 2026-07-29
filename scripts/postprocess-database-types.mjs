@@ -168,6 +168,10 @@ export const NULLABLE_RPC_ARGS = {
 }
 
 export const GROUP_CUTOVER_NULLABLE_RPC_ARGS = {
+  broadcast_group_notification_atomic: {
+    p_target_user_ids: { type: 'string[]', optional: true },
+    p_title: { type: 'string', optional: false },
+  },
   lock_post_interaction_block_edges: {
     p_target_comment_id: { type: 'string', optional: true },
   },

@@ -2349,6 +2349,33 @@ export type Database = {
         }
         Relationships: []
       }
+      group_notification_broadcast_operations: {
+        Row: {
+          actor_id: string
+          created_at: string
+          group_id: string
+          intent_fingerprint: string
+          operation_id: string
+          result: Json
+        }
+        Insert: {
+          actor_id: string
+          created_at?: string
+          group_id: string
+          intent_fingerprint: string
+          operation_id: string
+          result: Json
+        }
+        Update: {
+          actor_id?: string
+          created_at?: string
+          group_id?: string
+          intent_fingerprint?: string
+          operation_id?: string
+          result?: Json
+        }
+        Relationships: []
+      }
       group_pass_refund_revocation_acks: {
         Row: {
           acknowledged_at: string
@@ -10526,6 +10553,17 @@ export type Database = {
           p_stripe_customer_id: string
           p_stripe_price_id: string
           p_user_id: string
+        }
+        Returns: Json
+      }
+      broadcast_group_notification_atomic: {
+        Args: {
+          p_actor_id: string
+          p_group_id: string
+          p_message: string
+          p_operation_id: string
+          p_target_user_ids?: string[] | null
+          p_title: string | null
         }
         Returns: Json
       }
