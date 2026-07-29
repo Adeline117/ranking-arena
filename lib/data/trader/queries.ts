@@ -299,6 +299,13 @@ export async function getLeaderboard(
 
   const ascending = sortBy === 'rank'
   query = query.order(sortColumn, { ascending, nullsFirst: false })
+  // Offset pagination needs a total order. Scores and ranks can tie across
+  // sources, so a primary-only ORDER BY can duplicate or skip rows between
+  // adjacent pages as Postgres changes equal-key execution order.
+  if (!platform) {
+    query = query.order(LR.source, { ascending: true })
+  }
+  query = query.order(LR.source_trader_id, { ascending: true })
 
   query = query.range(offset, offset + limit - 1)
 

@@ -206,6 +206,10 @@ describe('getLeaderboard source exclusion', () => {
       '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
     )
     expect(leaderboardQuery.eq).toHaveBeenCalledWith('source', 'binance_futures')
+    expect(leaderboardQuery.order.mock.calls).toEqual([
+      ['rank', { ascending: true, nullsFirst: false }],
+      ['source_trader_id', { ascending: true }],
+    ])
     expect(leaderboardQuery.range).toHaveBeenCalledWith(0, 19)
     expect(leaderboardQuery.abortSignal).toHaveBeenCalledWith(signal)
     expect(countQuery.abortSignal).toHaveBeenCalledWith(signal)
@@ -266,6 +270,14 @@ describe('getLeaderboard source exclusion', () => {
       '11111111-1111-4111-8111-111111111111'
     )
     expect(leaderboardQuery.gte).not.toHaveBeenCalled()
+    expect(leaderboardQuery.order.mock.calls).toEqual([
+      ['rank', { ascending: true, nullsFirst: false }],
+      ['source', { ascending: true }],
+      ['source_trader_id', { ascending: true }],
+    ])
+    expect(leaderboardQuery.order.mock.invocationCallOrder[2]).toBeLessThan(
+      leaderboardQuery.range.mock.invocationCallOrder[0]
+    )
     expect(from).not.toHaveBeenCalledWith('leaderboard_count_cache')
     expect(result.traders).toHaveLength(2)
     expect(result.total).toBe(13)
