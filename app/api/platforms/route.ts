@@ -1,11 +1,13 @@
 /**
  * GET /api/platforms
  *
- * Returns the list of active exchange platforms with metadata.
+ * Returns configured source boards that have historical data.
+ * This is not a live serving count and not a count of exchange companies.
  */
 
 import { NextResponse } from 'next/server'
 import { EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS, SOURCES_WITH_DATA } from '@/lib/constants/exchanges'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('platforms-api')
@@ -25,11 +27,20 @@ export async function GET() {
           name: config?.name || source,
           type: config?.sourceType || 'futures',
           reliability: config?.reliability || 0,
+          rankingEligible: isPublicRankingSourceAllowed(source),
         }
       })
 
     return NextResponse.json(
-      { platforms, total: platforms.length },
+      {
+        // `platforms` and `total` remain for compatibility. The explicit
+        // machine-readable fields prevent consumers from treating boards as
+        // exchange companies or as proof that a board is live.
+        platforms,
+        total: platforms.length,
+        countUnit: 'source_board',
+        scope: 'configured_source_boards_with_historical_data',
+      },
       { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' } }
     )
   } catch (error) {
