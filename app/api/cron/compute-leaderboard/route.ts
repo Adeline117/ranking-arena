@@ -703,26 +703,10 @@ async function computeSeason(
     season
   )
 
-  // Acquire DB-level advisory lock to prevent concurrent upserts for the same season.
-  // This is a second layer of protection (Redis lock is first) for cases where Redis
-  // lock expired but the previous function is still writing.
-  let dbLockAcquired = false
-  try {
-    const { data: lockResult, error: lockError } = await supabase.rpc('acquire_leaderboard_lock', {
-      season,
-    })
-    if (lockError) {
-      throw new Error(lockError.message)
-    }
-    if (lockResult !== true) {
-      throw new Error('another compute owns the database season lock')
-    }
-    dbLockAcquired = true
-  } catch (lockErr) {
-    throw new Error(`[${season}] database season lock unavailable; refusing concurrent writes`, {
-      cause: lockErr,
-    })
-  }
+  // Concurrency is fenced by the owner-token Redis season lease acquired by GET().
+  // Do not add a session-level PostgreSQL advisory lock through Supabase RPC here:
+  // PostgREST may execute acquire and release on different pooled connections,
+  // leaking the lock on the acquire session and permanently blocking this season.
 
   // Upsert changed rows + zero out excluded traders
   const { upsertErrors, upsertAborted: upsertWasAborted } = await upsertLeaderboard({
@@ -837,15 +821,6 @@ async function computeSeason(
     logger.warn(
       `[${season}] Checkpoint write failed: ${e instanceof Error ? e.message : String(e)}`
     )
-  }
-
-  // Release DB advisory lock
-  if (dbLockAcquired) {
-    try {
-      await supabase.rpc('release_leaderboard_lock', { season })
-    } catch {
-      // Non-critical — session-level lock auto-releases when connection closes
-    }
   }
 
   const actualUpserted = scoredFiltered.length - upsertErrors

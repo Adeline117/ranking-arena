@@ -15,15 +15,21 @@ describe('compute-leaderboard route lock contract', () => {
     expect(lock).toContain("redis.call('GET', KEYS[1]) == ARGV[1]")
   })
 
-  it('fails closed when the database season lock is denied or errors', () => {
-    expect(route).toContain('if (lockError)')
-    expect(route).toContain('if (lockResult !== true)')
-    expect(route).toContain('database season lock unavailable; refusing concurrent writes')
-    expect(route).not.toContain('Proceeding anyway')
+  it('never uses session-level PostgreSQL advisory locks through pooled RPC calls', () => {
+    expect(route).not.toContain("supabase.rpc('acquire_leaderboard_lock'")
+    expect(route).not.toContain("supabase.rpc('release_leaderboard_lock'")
+    expect(route).not.toContain('pg_try_advisory_lock')
+    expect(route).not.toContain('pg_advisory_unlock')
+    expect(route).toContain(
+      'PostgREST may execute acquire and release on different pooled connections'
+    )
+  })
 
-    const acquireIndex = route.indexOf("supabase.rpc('acquire_leaderboard_lock'")
-    const upsertIndex = route.indexOf('await upsertLeaderboard({')
-    expect(acquireIndex).toBeGreaterThan(-1)
-    expect(upsertIndex).toBeGreaterThan(acquireIndex)
+  it('keeps the Redis lease longer than the route hard runtime limit', () => {
+    const maxDuration = Number(route.match(/export const maxDuration = (\d+)/)?.[1])
+    const ttlSeconds = Number(lock.match(/LEADERBOARD_SEASON_LOCK_TTL_SECONDS = (\d+)/)?.[1])
+
+    expect(maxDuration).toBeGreaterThan(0)
+    expect(ttlSeconds).toBeGreaterThan(maxDuration)
   })
 })
