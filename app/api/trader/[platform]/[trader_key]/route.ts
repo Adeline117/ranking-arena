@@ -9,7 +9,8 @@
  * Pure DB read - never fetches external data synchronously.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'node:crypto'
 import { withPublic } from '@/lib/api/middleware'
 import type {
   Platform,
@@ -24,16 +25,37 @@ import type {
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
-import { after } from 'next/server'
-import { ALL_SOURCES } from '@/lib/constants/exchanges'
+import {
+  isPublicRankingSourceAllowed,
+  publicRankingCacheKey,
+} from '@/lib/rankings/publication-policy'
+import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import {
+  createSealedRankingCacheEntry,
+  parseSealedRankingCacheEntry,
+  type SealedRankingCacheEntry,
+} from '@/lib/rankings/sealed-ranking-cache'
 import { createLogger } from '@/lib/utils/logger'
-import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
-
-const log = createLogger('api:trader-detail')
 
 export const dynamic = 'force-dynamic'
 
-const VALID_PLATFORMS: string[] = ALL_SOURCES as string[]
+const log = createLogger('api:trader-detail')
+const SEALED_TRADER_DETAIL_CACHE_CONTRACT = 'sealed-trader-detail-cache@1'
+const SEALED_TRADER_DETAIL_BINDING_CONTRACT = 'sealed-trader-detail-binding@1'
+const SNAPSHOT_WINDOWS = ['7D', '30D', '90D'] as const satisfies readonly SnapshotWindow[]
+
+interface SealedTraderDetailBinding {
+  readonly contract: typeof SEALED_TRADER_DETAIL_BINDING_CONTRACT
+  readonly platform: string
+  readonly traderKey: string
+  readonly responseSha256: string
+}
+
+interface SealedTraderDetailCache {
+  readonly contract: typeof SEALED_TRADER_DETAIL_CACHE_CONTRACT
+  readonly response: TraderDetailResponse
+  readonly windows: Record<SnapshotWindow, SealedRankingCacheEntry<SealedTraderDetailBinding>>
+}
 
 export async function GET(
   request: NextRequest,
@@ -43,8 +65,10 @@ export async function GET(
 
   const handler = withPublic(
     async ({ supabase }) => {
-      // Validate platform
-      if (!VALID_PLATFORMS.includes(platform)) {
+      // This is a public ranking surface, not a raw collection endpoint. Accept
+      // only the exact canonical source spelling that is currently authorized
+      // for public ranking publication.
+      if (!isPublicRankingSourceAllowed(platform)) {
         return NextResponse.json({ error: `Invalid platform: ${platform}` }, { status: 400 })
       }
 
@@ -58,13 +82,18 @@ export async function GET(
       // causing 2x edge re-validation traffic on endpoints that were missing
       // the Redis cache. Align both paths: 60s fresh + 300s SWR.
       const CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300'
-
-      // Check cache first (warm tier - 5min TTL)
-      const cacheKey = publicRankingCacheKey(`trader:${platform}:${trader_key}`)
-      const cached = await tieredGet<TraderDetailResponse>(cacheKey)
-      if (cached.data) {
-        return NextResponse.json(cached.data, {
-          headers: { 'X-Cache': 'HIT', 'Cache-Control': CACHE_CONTROL },
+      const cacheKey = publicRankingCacheKey(
+        `trader:sealed-v1:${platform}:${encodeURIComponent(trader_key)}`
+      )
+      const cached = await tieredGet<unknown>(cacheKey)
+      const cachedResponse = parseSealedTraderDetailCache(cached.data, platform, trader_key)
+      if (cachedResponse) {
+        return NextResponse.json(withCurrentStaleness(cachedResponse), {
+          headers: {
+            'X-Cache': 'HIT',
+            'X-Cache-Layer': cached.layer || 'unknown',
+            'Cache-Control': CACHE_CONTROL,
+          },
         })
       }
 
@@ -73,96 +102,88 @@ export async function GET(
         binance_futures: ['binance', 'binance_futures'],
         bitget_futures: ['bitget', 'bitget_futures'],
         htx_futures: ['htx_futures', 'htx'],
-        okx_web3: ['okx', 'okx_web3'],
       }
       const sourceAliases = LEGACY_SOURCE_ALIASES[platform] || [platform]
 
-      // Phase 1: fire the 6 always-needed queries in parallel.
-      //
-      // v2 snapshots table has 1.4M+ rows — most traders DO have v2 data, so the
-      // 4 leaderboard_ranks fallback queries from the old code (profile, 7D, 30D,
-      // 90D) were wasted work 95%+ of the time. We defer them to Phase 2, firing
-      // only on the rare miss. trader_timeseries is still empty so legacy
-      // equity_curve + asset_breakdown stay in Phase 1 unconditionally.
-      //
-      // Common case: 6 queries. Cold case (no v2 data): 6 + 1 = 7 queries (the
-      // fallback is a single merged .in('season_id', ...) query instead of 4).
-      const windows: SnapshotWindow[] = ['7D', '30D', '90D']
-      const [profileResult, snapshotsResult, timeseriesResult, jobResult, ecResult, abResult] =
-        await Promise.all([
-          // V2 primary queries
-          supabase
-            .from('trader_profiles_v2')
-            .select(
-              'id, platform, trader_key, display_name, avatar_url, profile_url, bio, bio_source, tags, followers, copiers, aum, updated_at, last_enriched_at, created_at'
-            )
-            .eq('platform', platform)
-            .eq('trader_key', trader_key)
-            .maybeSingle(),
-          // trader_snapshots_v2 retired (2026-06-15) → always use the leaderboard_ranks
-          // fallback below (empty array → needsLrFallback true).
-          Promise.resolve({
-            data: [] as Array<{ updated_at?: string | null; as_of_ts?: string | null }>,
-          }),
-          supabase
-            .from('trader_timeseries')
-            .select('series_type, data, as_of_ts, updated_at')
-            .eq('platform', platform)
-            .eq('trader_key', trader_key)
-            .order('as_of_ts', { ascending: false })
-            .limit(5),
-          supabase
-            .from('refresh_jobs')
-            .select('id, status, attempts, last_error, created_at, updated_at')
-            .eq('platform', platform)
-            .eq('trader_key', trader_key)
-            .in('status', ['pending', 'running'])
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
+      // Phase 1: fetch the non-ranking profile and chart enrichments in
+      // parallel. Ranking snapshots are authorized separately below.
+      const [profileResult, timeseriesResult, jobResult, ecResult, abResult] = await Promise.all([
+        // V2 primary queries
+        supabase
+          .from('trader_profiles_v2')
+          .select(
+            'id, platform, trader_key, display_name, avatar_url, profile_url, bio, bio_source, tags, followers, copiers, aum, updated_at, last_enriched_at, created_at'
+          )
+          .eq('platform', platform)
+          .eq('trader_key', trader_key)
+          .maybeSingle(),
+        supabase
+          .from('trader_timeseries')
+          .select('series_type, data, as_of_ts, updated_at')
+          .eq('platform', platform)
+          .eq('trader_key', trader_key)
+          .order('as_of_ts', { ascending: false })
+          .limit(5),
+        supabase
+          .from('refresh_jobs')
+          .select('id, status, attempts, last_error, created_at, updated_at')
+          .eq('platform', platform)
+          .eq('trader_key', trader_key)
+          .in('status', ['pending', 'running'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
 
-          // Legacy timeseries (trader_timeseries is empty, always needed).
-          // Use .eq('source', ...) when only 1 alias — .in() adds BitmapOr plan overhead.
-          sourceAliases.length === 1
-            ? supabase
-                .from('trader_equity_curve')
-                .select('data_date, roi_pct, pnl_usd')
-                .eq('source', sourceAliases[0])
-                .eq('source_trader_id', trader_key)
-                .in('period', ['90D', '30D', '7D'])
-                .order('data_date', { ascending: true })
-                .limit(365)
-            : supabase
-                .from('trader_equity_curve')
-                .select('data_date, roi_pct, pnl_usd')
-                .in('source', sourceAliases)
-                .eq('source_trader_id', trader_key)
-                .in('period', ['90D', '30D', '7D'])
-                .order('data_date', { ascending: true })
-                .limit(365),
-          sourceAliases.length === 1
-            ? supabase
-                .from('trader_asset_breakdown')
-                .select('symbol, weight_pct')
-                .eq('source', sourceAliases[0])
-                .eq('source_trader_id', trader_key)
-                .order('weight_pct', { ascending: false })
-                .limit(20)
-            : supabase
-                .from('trader_asset_breakdown')
-                .select('symbol, weight_pct')
-                .in('source', sourceAliases)
-                .eq('source_trader_id', trader_key)
-                .order('weight_pct', { ascending: false })
-                .limit(20),
-        ])
+        // Legacy timeseries (trader_timeseries is empty, always needed).
+        // Use .eq('source', ...) when only 1 alias — .in() adds BitmapOr plan overhead.
+        sourceAliases.length === 1
+          ? supabase
+              .from('trader_equity_curve')
+              .select('data_date, roi_pct, pnl_usd')
+              .eq('source', sourceAliases[0])
+              .eq('source_trader_id', trader_key)
+              .in('period', ['90D', '30D', '7D'])
+              .order('data_date', { ascending: true })
+              .limit(365)
+          : supabase
+              .from('trader_equity_curve')
+              .select('data_date, roi_pct, pnl_usd')
+              .in('source', sourceAliases)
+              .eq('source_trader_id', trader_key)
+              .in('period', ['90D', '30D', '7D'])
+              .order('data_date', { ascending: true })
+              .limit(365),
+        sourceAliases.length === 1
+          ? supabase
+              .from('trader_asset_breakdown')
+              .select('symbol, weight_pct')
+              .eq('source', sourceAliases[0])
+              .eq('source_trader_id', trader_key)
+              .order('weight_pct', { ascending: false })
+              .limit(20)
+          : supabase
+              .from('trader_asset_breakdown')
+              .select('symbol, weight_pct')
+              .in('source', sourceAliases)
+              .eq('source_trader_id', trader_key)
+              .order('weight_pct', { ascending: false })
+              .limit(20),
+      ])
 
-      // Phase 2: leaderboard_ranks fallback — only fire if v2 data is missing.
-      // Merged into 1 query (instead of 4) via .in('season_id', ...). Common case
-      // (v2 data present) skips this entirely.
-      const needsLrFallback =
-        !profileResult.data || !snapshotsResult.data || snapshotsResult.data.length === 0
+      assertQuerySucceeded('trader profile', profileResult, true)
+      assertQuerySucceeded('trader timeseries', timeseriesResult)
+      assertQuerySucceeded('refresh job', jobResult, true)
+      assertQuerySucceeded('trader equity curve', ecResult)
+      assertQuerySucceeded('trader asset breakdown', abResult)
+
+      // Phase 2: the retired v2 snapshot table means leaderboard_ranks is now
+      // authoritative for all three windows. Read every window independently
+      // under its own sealed proof and bind the row query to that proof's exact
+      // score cohort. A single naked `.in('season_id', ...)` query could mix
+      // three generations during a publication cutover.
       type LrRow = {
+        source: string
+        source_trader_id: string
         season_id: string
         handle: string | null
         avatar_url: string | null
@@ -176,18 +197,41 @@ export async function GET(
         rank: number | null
         computed_at: string | null
       }
-      const lrRows: LrRow[] = needsLrFallback
-        ? (((
-            await supabase
-              .from('leaderboard_ranks')
-              .select(
-                'season_id, handle, avatar_url, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at'
-              )
-              .eq('source', platform)
-              .eq('source_trader_id', trader_key)
-              .in('season_id', ['7D', '30D', '90D'])
-          ).data ?? []) as LrRow[])
-        : []
+      const rankReads = await Promise.all(
+        SNAPSHOT_WINDOWS.map((season) =>
+          readSealedRankingGeneration(
+            supabase,
+            { season, sources: [platform] },
+            async (publication) => {
+              const result = await supabase
+                .from('leaderboard_ranks')
+                .select(
+                  'source, source_trader_id, season_id, handle, avatar_url, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at'
+                )
+                .eq('source', platform)
+                .eq('source_trader_id', trader_key)
+                .eq('season_id', season)
+                .filter('rank_publication_id', 'eq', publication.scoreCohortId)
+                .limit(1)
+
+              assertQuerySucceeded(`leaderboard ${season}`, result)
+              const rows = result.data as LrRow[]
+              for (const row of rows) {
+                if (
+                  row.source !== platform ||
+                  row.source_trader_id !== trader_key ||
+                  row.season_id !== season
+                ) {
+                  throw new Error(`leaderboard ${season} returned an unexpected trader identity`)
+                }
+              }
+              return rows
+            },
+            { timeoutMs: 15_000 }
+          )
+        )
+      )
+      const lrRows = rankReads.flatMap((read) => read.value)
       const lrByWindow = new Map<string, LrRow>()
       for (const row of lrRows) {
         lrByWindow.set(row.season_id, row)
@@ -233,7 +277,7 @@ export async function GET(
       // Snapshots from leaderboard_ranks
       const hasAnyV2Snapshot = Object.values(snapshots).some((s) => s !== null)
       if (!hasAnyV2Snapshot && lrRows.length > 0) {
-        for (const win of windows) {
+        for (const win of SNAPSHOT_WINDOWS) {
           const snap = lrByWindow.get(win)
           if (snap) {
             const winRate =
@@ -318,10 +362,10 @@ export async function GET(
         })) as AssetBreakdownPoint[]
       }
 
-      // Determine staleness from most recent update (LR computed_at now that v2 is gone)
-      const latestUpdate = getLatestUpdate(
-        profile.updated_at,
-        lrRows.map((r) => r.computed_at).filter((x): x is string => !!x)
+      // Publication source_as_of is the freshness authority. `computed_at` can
+      // move during recomputation without any newer source observation.
+      const latestUpdate = getOldestPublicationUpdate(
+        rankReads.flatMap((read) => read.publication.proofs.map((proof) => proof.source_as_of))
       )
       const stalenessSeconds = getStalenessSeconds(latestUpdate)
       const isStale = stalenessSeconds > STALENESS_THRESHOLDS.STALE
@@ -348,17 +392,27 @@ export async function GET(
         refresh_job: refreshJob,
       }
 
-      // Cache to Redis (warm tier - 5min TTL). Use next/server `after()` so the
-      // serverless function waits for the write to complete BEFORE Vercel
-      // tears down the execution context. Previous `void tieredSet(...).catch()`
-      // pattern leaked writes when the function returned faster than Redis,
-      // causing 5-15% cache miss inflation under load.
+      const cacheBinding: SealedTraderDetailBinding = {
+        contract: SEALED_TRADER_DETAIL_BINDING_CONTRACT,
+        platform,
+        traderKey: trader_key,
+        responseSha256: traderDetailResponseSha256(response),
+      }
+      const sealedCache: SealedTraderDetailCache = {
+        contract: SEALED_TRADER_DETAIL_CACHE_CONTRACT,
+        response,
+        windows: {
+          '7D': createSealedRankingCacheEntry({ ...rankReads[0], value: cacheBinding }),
+          '30D': createSealedRankingCacheEntry({ ...rankReads[1], value: cacheBinding }),
+          '90D': createSealedRankingCacheEntry({ ...rankReads[2], value: cacheBinding }),
+        },
+      }
       after(async () => {
         try {
-          await tieredSet(cacheKey, response, 'warm', ['trader', platform])
-        } catch (err) {
-          log.warn('cache write failed', {
-            error: err instanceof Error ? err.message : String(err),
+          await tieredSet(cacheKey, sealedCache, 'warm', ['trader', platform])
+        } catch (error) {
+          log.warn('sealed cache write failed', {
+            error: error instanceof Error ? error.message : String(error),
           })
         }
       })
@@ -374,12 +428,130 @@ export async function GET(
   return handler(request)
 }
 
-function getLatestUpdate(profileUpdated: string, snapshotDates: string[]): string {
-  const dates = [profileUpdated, ...snapshotDates]
+function assertQuerySucceeded(
+  label: string,
+  result: { data?: unknown; error?: { message?: string } | null },
+  nullable = false
+): void {
+  if (result.error) {
+    throw new Error(`${label} query failed: ${result.error.message || 'unknown database error'}`)
+  }
+  if (nullable) {
+    if (result.data !== null && (typeof result.data !== 'object' || Array.isArray(result.data))) {
+      throw new Error(`${label} query returned an ambiguous payload`)
+    }
+    return
+  }
+  if (!Array.isArray(result.data)) {
+    throw new Error(`${label} query returned an ambiguous payload`)
+  }
+}
+
+function getOldestPublicationUpdate(sourceDates: string[]): string {
+  const dates = sourceDates
     .filter(Boolean)
     .map((d) => new Date(d).getTime())
     .filter((t) => t > 0)
 
   if (dates.length === 0) return new Date(0).toISOString()
-  return new Date(Math.max(...dates)).toISOString()
+  return new Date(Math.min(...dates)).toISOString()
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isTraderDetailResponseForIdentity(
+  value: unknown,
+  platform: string,
+  traderKey: string
+): value is TraderDetailResponse {
+  if (!isRecord(value) || !isRecord(value.profile)) return false
+  return (
+    value.profile.platform === platform &&
+    value.profile.trader_key === traderKey &&
+    isRecord(value.snapshots) &&
+    isRecord(value.timeseries) &&
+    typeof value.updated_at === 'string' &&
+    typeof value.is_stale === 'boolean' &&
+    typeof value.staleness_seconds === 'number' &&
+    Object.prototype.hasOwnProperty.call(value, 'refresh_job')
+  )
+}
+
+function parseSealedTraderDetailCache(
+  input: unknown,
+  platform: string,
+  traderKey: string
+): TraderDetailResponse | null {
+  try {
+    if (!isRecord(input)) return null
+    const keys = Object.keys(input).sort()
+    if (
+      keys.length !== 3 ||
+      keys[0] !== 'contract' ||
+      keys[1] !== 'response' ||
+      keys[2] !== 'windows' ||
+      input.contract !== SEALED_TRADER_DETAIL_CACHE_CONTRACT ||
+      !isTraderDetailResponseForIdentity(input.response, platform, traderKey) ||
+      !isRecord(input.windows)
+    ) {
+      return null
+    }
+    const response = input.response
+    const responseSha256 = traderDetailResponseSha256(response)
+
+    const windowKeys = Object.keys(input.windows).sort()
+    if (
+      windowKeys.length !== SNAPSHOT_WINDOWS.length ||
+      [...SNAPSHOT_WINDOWS].sort().some((window, index) => window !== windowKeys[index])
+    ) {
+      return null
+    }
+
+    const sourceDates: string[] = []
+    for (const window of SNAPSHOT_WINDOWS) {
+      const entry = parseSealedRankingCacheEntry<SealedTraderDetailBinding>(
+        input.windows[window],
+        window,
+        [platform]
+      )
+      if (!entry || !isRecord(entry.value)) return null
+      const bindingKeys = Object.keys(entry.value).sort()
+      if (
+        bindingKeys.length !== 4 ||
+        bindingKeys[0] !== 'contract' ||
+        bindingKeys[1] !== 'platform' ||
+        bindingKeys[2] !== 'responseSha256' ||
+        bindingKeys[3] !== 'traderKey' ||
+        entry.value.contract !== SEALED_TRADER_DETAIL_BINDING_CONTRACT ||
+        entry.value.platform !== platform ||
+        entry.value.traderKey !== traderKey ||
+        entry.value.responseSha256 !== responseSha256
+      ) {
+        return null
+      }
+
+      sourceDates.push(...entry.publication.proofs.map((proof) => proof.source_as_of))
+    }
+
+    const updatedAt = getOldestPublicationUpdate(sourceDates)
+    if (response.updated_at !== updatedAt) return null
+    return response
+  } catch {
+    return null
+  }
+}
+
+function traderDetailResponseSha256(response: TraderDetailResponse): string {
+  return createHash('sha256').update(JSON.stringify(response)).digest('hex')
+}
+
+function withCurrentStaleness(response: TraderDetailResponse): TraderDetailResponse {
+  const stalenessSeconds = getStalenessSeconds(response.updated_at)
+  return {
+    ...response,
+    staleness_seconds: stalenessSeconds,
+    is_stale: stalenessSeconds > STALENESS_THRESHOLDS.STALE,
+  }
 }
