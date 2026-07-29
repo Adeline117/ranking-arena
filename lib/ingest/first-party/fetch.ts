@@ -148,17 +148,31 @@ async function eventsFromPositionsHistory(
   if (!client.fetchPositionsHistory) {
     throw new Error('[first-party] position history evidence is unavailable')
   }
+  const fetchPositionsHistory = client.fetchPositionsHistory.bind(client)
   const out: RealizedEvent[] = []
   const maxRangeMs = maxRangeDays === undefined ? null : maxRangeDays * DAY_MS
+  let requests = 0
   let rangeStart = sinceMs
 
-  while (rangeStart <= untilMs) {
-    const rangeEnd = maxRangeMs === null ? untilMs : Math.min(untilMs, rangeStart + maxRangeMs)
-    const rows = await client.fetchPositionsHistory(undefined, rangeStart, POSITION_HISTORY_LIMIT, {
-      until: rangeEnd,
+  const fetchRange = async (start: number, end: number): Promise<void> => {
+    requests += 1
+    if (requests > MAX_EVIDENCE_REQUESTS) {
+      throw new Error('[first-party] position history evidence is truncated')
+    }
+    const rows = await fetchPositionsHistory(undefined, start, POSITION_HISTORY_LIMIT, {
+      until: end,
     })
     if (rows.length >= POSITION_HISTORY_LIMIT) {
-      throw new Error('[first-party] position history evidence is truncated')
+      // OKX's pinned adapter does not forward time bounds; it must remain
+      // fail-closed on a saturated latest page. The bounded adapters can
+      // safely prove completeness by splitting the requested time range.
+      if (maxRangeMs === null || start >= end) {
+        throw new Error('[first-party] position history evidence is truncated')
+      }
+      const midpoint = Math.floor((start + end) / 2)
+      await fetchRange(start, midpoint)
+      await fetchRange(midpoint + 1, end)
+      return
     }
     for (const r of rows) {
       // CCXT's unified `timestamp` is commonly the position open/create time.
@@ -169,15 +183,20 @@ async function eventsFromPositionsHistory(
       // `netProfit` also includes open/close fees and funding, which is the
       // amount that actually changed account equity.
       const pnl = num(info?.netProfit ?? r.realizedPnl ?? info?.closedPnl)
-      if (ts === null || pnl === null || ts < rangeStart || ts > rangeEnd) {
+      if (ts === null || pnl === null || ts < start || ts > end) {
         throw new Error('[first-party] position history evidence is invalid')
       }
       out.push({ ts, pnl, positionLevel: true })
     }
+  }
+
+  while (rangeStart <= untilMs) {
+    const rangeEnd = maxRangeMs === null ? untilMs : Math.min(untilMs, rangeStart + maxRangeMs)
+    await fetchRange(rangeStart, rangeEnd)
     if (maxRangeMs === null || rangeEnd === untilMs) break
     rangeStart = rangeEnd + 1
   }
-  return out
+  return out.sort((a, b) => a.ts - b.ts)
 }
 
 /** Realized events via income/ledger records (binanceusdm REALIZED_PNL). */

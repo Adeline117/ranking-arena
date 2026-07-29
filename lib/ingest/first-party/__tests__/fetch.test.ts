@@ -425,6 +425,39 @@ describe('first-party account equity evidence', () => {
     ).rejects.toThrow('position history evidence is truncated')
   })
 
+  it('time-partitions saturated position history for adapters with bounded ranges', async () => {
+    const since = NOW - 2 * DAY
+    const midpoint = Math.floor((since + NOW) / 2)
+    const saturated = Array.from({ length: 100 }, () => ({
+      lastUpdateTimestamp: midpoint,
+      realizedPnl: 1,
+    }))
+    const fetchPositionsHistory = jest
+      .fn()
+      .mockResolvedValueOnce(saturated)
+      .mockResolvedValueOnce([{ lastUpdateTimestamp: since + 1, realizedPnl: -2 }])
+      .mockResolvedValueOnce([{ lastUpdateTimestamp: midpoint + 1, realizedPnl: 3 }])
+
+    const result = await fetchFirstPartyAccount(client({ fetchPositionsHistory }), {
+      nowMs: NOW,
+      lookbackDays: 2,
+      balanceSemantics: 'total_includes_unrealized',
+      realizedPnlSource: 'positions_history',
+      positionHistoryMaxRangeDays: 90,
+    })
+
+    expect(result.events).toEqual([
+      { ts: since + 1, pnl: -2, positionLevel: true },
+      { ts: midpoint + 1, pnl: 3, positionLevel: true },
+    ])
+    expect(fetchPositionsHistory).toHaveBeenNthCalledWith(2, undefined, since, 100, {
+      until: midpoint,
+    })
+    expect(fetchPositionsHistory).toHaveBeenNthCalledWith(3, undefined, midpoint + 1, 100, {
+      until: NOW,
+    })
+  })
+
   it('rejects an exchange without its contracted realized-PnL surface', async () => {
     await expect(
       fetchFirstPartyAccount(client({ fetchPositionsHistory: undefined }), {
