@@ -58,7 +58,7 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
 }))
 
 jest.mock('@/lib/alerts/send-alert', () => ({
-  sendAlert: jest.fn().mockResolvedValue(undefined),
+  sendAlert: jest.fn().mockResolvedValue({ sent: true, channels: ['telegram'] }),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -169,12 +169,12 @@ describe('GET /api/cron/weekly-report', () => {
     expect(mockSendAlert).toHaveBeenCalledWith(
       expect.objectContaining({
         title: expect.stringContaining('每周报告'),
-        level: 'info',
+        level: 'report',
       })
     )
   })
 
-  it('sends warning level when success rate is low', async () => {
+  it('marks low success in the immediate report payload', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PipelineLogger } = require('@/lib/services/pipeline-logger')
     PipelineLogger.getJobStats.mockResolvedValueOnce([
@@ -188,10 +188,35 @@ describe('GET /api/cron/weekly-report', () => {
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
-    expect(mockSendAlert).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }))
+    expect(mockSendAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'report',
+        message: expect.stringContaining('状态: warning'),
+      })
+    )
+  })
+
+  it('returns 500 when the report channel does not deliver', async () => {
+    mockFrom.mockImplementation(() => chainable({ data: [], error: null, count: 0 }))
+    mockSendAlert.mockResolvedValueOnce({ sent: false, channels: [] })
+
+    const res = await GET(createCronRequest(CRON_SECRET))
+
+    expect(res.status).toBe(500)
   })
 
   // ---- Error handling ------------------------------------------------------
+
+  it('returns 500 instead of reporting zeroes when a report query fails', async () => {
+    mockFrom.mockImplementation(() =>
+      chainable({ data: null, error: { message: 'database unavailable' }, count: null })
+    )
+
+    const res = await GET(createCronRequest(CRON_SECRET))
+
+    expect(res.status).toBe(500)
+    expect(mockSendAlert).not.toHaveBeenCalled()
+  })
 
   it('returns 500 when an error occurs', async () => {
     mockFrom.mockImplementation(() => {

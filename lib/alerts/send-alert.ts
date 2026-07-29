@@ -13,7 +13,7 @@ interface AlertPayload {
   source?: string
   title: string
   message: string
-  level: 'info' | 'warning' | 'critical'
+  level: 'info' | 'warning' | 'critical' | 'report'
   details?: Record<string, unknown>
   /** Override default channels. Default: ['telegram'] */
   channels?: AlertChannel[]
@@ -377,6 +377,7 @@ const COOLDOWN_BY_LEVEL: Record<AlertPayload['level'], number> = {
   info: 3600000, // 1 hour
   warning: 3600000, // 1 hour
   critical: 900000, // 15 minutes
+  report: 3600000, // 1 hour
 }
 
 /**

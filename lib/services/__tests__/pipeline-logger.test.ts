@@ -334,6 +334,14 @@ describe('PipelineLogger', () => {
       expect(statsAbortSignal).toHaveBeenCalledWith(signal)
     })
 
+    it('can fail closed when job stats are required for an operator report', async () => {
+      mockSupabaseRpc.mockResolvedValue({ data: null, error: { message: 'rpc failed' } })
+
+      await expect(PipelineLogger.getJobStats(undefined, true)).rejects.toThrow(
+        'Pipeline job-stats authority is unavailable'
+      )
+    })
+
     it('passes an abort signal to the recent failures query', async () => {
       const abortSignal = jest.fn().mockResolvedValue({ data: [], error: null })
       const chain = {

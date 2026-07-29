@@ -14,10 +14,55 @@ export const maxDuration = 30
 
 export const GET = withCron('weekly-report', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin()
+  const reportSignal = AbortSignal.timeout(12_000)
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  // 1. Pipeline 任务统计 (最近 7 天)
-  const jobStats = await PipelineLogger.getJobStats()
+  // All report inputs are independent. Read them concurrently under one
+  // deadline so Telegram still has enough time inside the 30s route budget.
+  const [
+    jobStats,
+    newTraderResult,
+    totalTraderResult,
+    recentFailures,
+    staleSourceResult,
+    newUserResult,
+  ] = await Promise.all([
+    PipelineLogger.getJobStats(reportSignal, true),
+    supabase
+      .from('trader_sources')
+      .select('id', { count: 'estimated', head: true })
+      .gte('created_at', weekAgo)
+      .abortSignal(reportSignal),
+    supabase
+      .from('trader_sources')
+      .select('id', { count: 'estimated', head: true })
+      .abortSignal(reportSignal),
+    PipelineLogger.getRecentFailures(10, 7 * 24 * 60, reportSignal, true),
+    supabase
+      .from('trader_sources')
+      .select('source')
+      .lt('last_refreshed_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+      .limit(100)
+      .abortSignal(reportSignal),
+    supabase
+      .from('user_profiles')
+      .select('id', { count: 'estimated', head: true })
+      .gte('created_at', weekAgo)
+      .abortSignal(reportSignal),
+  ])
+
+  const { count: newTraders, error: newTradersError } = newTraderResult
+  const { count: totalTraders, error: totalTradersError } = totalTraderResult
+  const { data: staleSources, error: staleSourcesError } = staleSourceResult
+  const { count: newUsers, error: newUsersError } = newUserResult
+  const reportInputError =
+    newTradersError ?? totalTradersError ?? staleSourcesError ?? newUsersError
+  if (reportInputError || staleSources === null) {
+    throw new Error(
+      `Weekly report input unavailable: ${reportInputError?.message ?? 'null stale-source payload'}`
+    )
+  }
+
   const totalRuns = jobStats.reduce((sum, j) => sum + j.total_runs, 0)
   const totalErrors = jobStats.reduce((sum, j) => sum + j.error_count, 0)
   const avgSuccessRate =
@@ -28,41 +73,15 @@ export const GET = withCron('weekly-report', async (_request: NextRequest) => {
     .sort((a, b) => b.error_count - a.error_count)
     .slice(0, 5)
 
-  // 2. 本周新增交易员 — estimated
-  const { count: newTraders } = await supabase
-    .from('trader_sources')
-    .select('id', { count: 'estimated', head: true })
-    .gte('created_at', weekAgo)
-
-  // 3. 交易员总数 — estimated
-  const { count: totalTraders } = await supabase
-    .from('trader_sources')
-    .select('id', { count: 'estimated', head: true })
-
-  // 4. 最近失败
-  const recentFailures = await PipelineLogger.getRecentFailures(10, 7 * 24 * 60)
   const uniqueFailedJobs = new Set(recentFailures.map((f) => f.job_name))
 
-  // 5. 数据新鲜度 — 过期数据源
-  const { data: staleSources } = await supabase
-    .from('trader_sources')
-    .select('source')
-    .lt('last_refreshed_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-    .limit(100)
-
   const staleSourceCounts: Record<string, number> = {}
-  staleSources?.forEach((s) => {
+  staleSources.forEach((s) => {
     staleSourceCounts[s.source] = (staleSourceCounts[s.source] || 0) + 1
   })
   const staleExchanges = Object.entries(staleSourceCounts)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5)
-
-  // 6. 用户增长 — estimated
-  const { count: newUsers } = await supabase
-    .from('user_profiles')
-    .select('id', { count: 'estimated', head: true })
-    .gte('created_at', weekAgo)
 
   // 构建报告
   const failingJobLines =
@@ -95,12 +114,11 @@ export const GET = withCron('weekly-report', async (_request: NextRequest) => {
     `最近失败任务数: ${uniqueFailedJobs.size}`,
   ].join('\n')
 
-  const level = avgSuccessRate < 0.8 ? 'warning' : 'info'
-
-  await sendAlert({
+  const health = avgSuccessRate < 0.8 ? 'warning' : 'healthy'
+  const delivery = await sendAlert({
     title: `Arena 每周报告 — ${new Date().toISOString().split('T')[0]}`,
-    message,
-    level,
+    message: `状态: ${health}\n\n${message}`,
+    level: 'report',
     details: {
       总运行数: totalRuns,
       错误数: totalErrors,
@@ -109,7 +127,10 @@ export const GET = withCron('weekly-report', async (_request: NextRequest) => {
       新增用户: newUsers ?? 0,
     },
   })
+  if (!delivery.sent) {
+    throw new Error('Weekly report delivery failed')
+  }
 
   logger.info('[每周报告] 已发送')
-  return { count: totalRuns, totalErrors, avgSuccessRate, newTraders, newUsers }
-})
+  return { count: totalRuns, totalErrors, avgSuccessRate, health, newTraders, newUsers }
+}, { safetyTimeoutMs: 25_000 })

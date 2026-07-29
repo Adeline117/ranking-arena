@@ -96,6 +96,18 @@ describe('sendAlert', () => {
     expect(call.details).toEqual({ count: '42', name: 'test' })
   })
 
+  test('forwards scheduled reports to the immediate Telegram report channel', async () => {
+    await sendAlert({
+      title: 'Weekly report',
+      message: 'operator summary',
+      level: 'report',
+    })
+
+    expect(mockSendTelegram).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 'report', title: 'Weekly report' })
+    )
+  })
+
   test('preserves a caller-provided source for Telegram dedup identity', async () => {
     await sendAlert({
       source: 'stripe',

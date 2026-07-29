@@ -550,7 +550,10 @@ export class PipelineLogger {
    * Fix: use the new `get_pipeline_job_stats_recent()` RPC. Returns ~133 rows
    * in 3-5s. Same time bound + GROUP BY but isolated from view contention.
    */
-  static async getJobStats(signal?: AbortSignal): Promise<
+  static async getJobStats(
+    signal?: AbortSignal,
+    failOnError = false
+  ): Promise<
     Array<{
       job_name: string
       total_runs: number
@@ -567,6 +570,9 @@ export class PipelineLogger {
 
     if (error) {
       logger.warn(`[PipelineLogger] Failed to get job stats: ${error.message}`)
+      if (failOnError) {
+        throw new Error('Pipeline job-stats authority is unavailable')
+      }
       return []
     }
     return (
