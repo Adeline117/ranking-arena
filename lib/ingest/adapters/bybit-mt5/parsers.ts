@@ -253,8 +253,23 @@ function mt5Side(v: unknown): 'long' | 'short' | null {
  * those stay NULL (NULL-collapse, spec §6). TP/SL kept in raw.
  */
 export function parseBybitMt5Positions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const list = result(raw).openPositionList
-  if (!Array.isArray(list)) return []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[bybit-mt5] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.retCode !== 0) {
+    throw new TypeError(
+      `[bybit-mt5] position response failed with retCode ${String(envelope.retCode)}`
+    )
+  }
+  const response = envelope.result
+  if (typeof response !== 'object' || response === null || Array.isArray(response)) {
+    throw new TypeError('[bybit-mt5] malformed position response result')
+  }
+  const list = (response as Dict).openPositionList
+  if (!Array.isArray(list)) {
+    throw new TypeError('[bybit-mt5] malformed position response list')
+  }
   const out: ParsedPosition[] = []
   for (const item of list as Dict[]) {
     if (!item.symbol) continue

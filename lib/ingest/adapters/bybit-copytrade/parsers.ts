@@ -385,8 +385,27 @@ function beehiveSide(v: unknown): 'long' | 'short' | null {
  * Traders with 未结仓位保护 return data:[] + openTradeInfoProtection=1.
  */
 export function parseBybitCopytradePositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const list = result(raw).data
-  if (!Array.isArray(list)) return []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[bybit-copytrade] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.retCode !== 0) {
+    throw new TypeError(
+      `[bybit-copytrade] position response failed with retCode ${String(envelope.retCode)}`
+    )
+  }
+  const response = envelope.result
+  if (typeof response !== 'object' || response === null || Array.isArray(response)) {
+    throw new TypeError('[bybit-copytrade] malformed position response result')
+  }
+  const positionResult = response as Dict
+  if (num(positionResult.openTradeInfoProtection) === 1) {
+    throw new TypeError('[bybit-copytrade] position response is visibility-protected')
+  }
+  const list = positionResult.data
+  if (!Array.isArray(list)) {
+    throw new TypeError('[bybit-copytrade] malformed position response data')
+  }
   const out: ParsedPosition[] = []
   for (const item of list as Dict[]) {
     if (!item.symbol) continue
