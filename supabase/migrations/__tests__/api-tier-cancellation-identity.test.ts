@@ -165,6 +165,8 @@ describe('API tier Stripe event ledger contract', () => {
       'restored account accepted its permanently blocked old subscription'
     )
     expect(pg17Proof).toContain('restored account could not grant a distinct fresh subscription')
+    expect(pg17Proof).toContain('legacy blocked subscription without reservation was rejected')
+    expect(pg17Proof).toContain('null profile customer was not backfilled under deletion locks')
   })
 
   it('converges the old and new authority ACLs to their exact boundaries', () => {

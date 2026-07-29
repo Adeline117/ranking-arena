@@ -304,6 +304,12 @@ INSERT INTO public.user_profiles (
     'free',
     NULL,
     'cus_13'
+  ),
+  (
+    '10000000-0000-4000-8000-000000000014',
+    'starter',
+    'sub_legacy_deleted_14',
+    NULL
   );
 
 INSERT INTO public.api_keys (id, user_id, active, tier, daily_limit)
@@ -779,6 +785,95 @@ if [[ "$(
     "SELECT pg_catalog.count(*) FROM public.api_tier_subscription_blocks WHERE user_id = '10000000-0000-4000-8000-000000000013' AND stripe_subscription_id = 'sub_deleted_subject' AND block_kind = 'account_deletion'"
 )" != "2" ]]; then
   echo "account deletion did not persist both-mode subscription blocks" >&2
+  exit 1
+fi
+
+# A pre-ledger legacy subscription may have neither a checkout reservation nor
+# a local customer. The exact Stripe-derived customer is backfilled under the
+# same locks, and its deletion block must let delayed signed events converge
+# durably instead of failing before the block lookup.
+psql_cmd <<'SQL'
+SET ROLE service_role;
+DO $legacy_deletion_block_proof$
+DECLARE
+  v_schedule jsonb;
+  v_status text;
+BEGIN
+  v_schedule :=
+    public.schedule_account_deletion_with_billing_blocks(
+      '10000000-0000-4000-8000-000000000014',
+      'legacy deletion',
+      pg_catalog.clock_timestamp() + interval '30 days',
+      pg_catalog.repeat('b', 64),
+      'cus_14',
+      ARRAY['sub_legacy_deleted_14']::text[]
+    );
+
+  IF v_schedule->>'status' <> 'scheduled'
+    OR v_schedule->>'stripe_customer_id' <> 'cus_14'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.user_profiles AS profile
+      WHERE profile.id = '10000000-0000-4000-8000-000000000014'
+        AND profile.stripe_customer_id = 'cus_14'
+        AND profile.deleted_at IS NOT NULL
+        AND profile.api_tier = 'free'
+        AND profile.api_stripe_subscription_id IS NULL
+    )
+  THEN
+    RAISE EXCEPTION
+      'null profile customer was not backfilled under deletion locks';
+  END IF;
+
+  UPDATE public.user_profiles
+  SET deleted_at = NULL
+  WHERE id = '10000000-0000-4000-8000-000000000014';
+
+  v_status := public.apply_user_api_tier_stripe_event(
+    '10000000-0000-4000-8000-000000000014',
+    '10000000-0000-4000-8000-000000000014',
+    '10000000-0000-4000-8000-000000000014',
+    'cus_14',
+    NULL,
+    'price_api_legacy_starter',
+    'starter',
+    10000,
+    'sub_legacy_deleted_14',
+    1500,
+    'evt_legacy_deleted_14_active',
+    1500,
+    true,
+    false,
+    true,
+    NULL,
+    NULL,
+    NULL,
+    'signed_metadata'
+  );
+
+  IF v_status <> 'blocked'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.user_profiles AS profile
+      WHERE profile.id = '10000000-0000-4000-8000-000000000014'
+        AND profile.deleted_at IS NULL
+        AND profile.api_tier = 'free'
+        AND profile.api_stripe_subscription_id IS NULL
+    )
+  THEN
+    RAISE EXCEPTION
+      'legacy blocked subscription without reservation was rejected';
+  END IF;
+END
+$legacy_deletion_block_proof$;
+RESET ROLE;
+SQL
+
+if [[ "$(
+  psql_cmd -Atqc \
+    "SELECT pg_catalog.count(*) FROM public.api_tier_subscription_blocks WHERE user_id = '10000000-0000-4000-8000-000000000014' AND stripe_subscription_id = 'sub_legacy_deleted_14' AND block_kind = 'account_deletion'"
+)" != "2" ]]; then
+  echo "legacy deletion block did not survive recovery" >&2
   exit 1
 fi
 

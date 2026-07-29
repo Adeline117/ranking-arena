@@ -1293,7 +1293,7 @@ BEGIN
     OR p_recovery_token_hash IS NULL
     OR p_recovery_token_hash !~ '^[0-9a-f]{64}$'
     OR p_stripe_subscription_ids IS NULL
-    OR pg_catalog.cardinality(p_stripe_subscription_ids) > 100
+    OR pg_catalog.cardinality(p_stripe_subscription_ids) > 1000
     OR p_stripe_subscription_ids IS DISTINCT FROM
       v_normalized_subscription_ids
     OR (
@@ -1400,6 +1400,37 @@ BEGIN
       USING
         ERRCODE = 'P0002',
         MESSAGE = 'account deletion profile does not exist';
+  END IF;
+  IF v_profile_customer_id IS NULL
+    AND p_stripe_customer_id IS NOT NULL
+  THEN
+    IF EXISTS (
+      SELECT 1
+      FROM public.user_profiles AS other_profile
+      WHERE other_profile.id <> p_user_id
+        AND other_profile.stripe_customer_id =
+          p_stripe_customer_id
+    ) THEN
+      RAISE EXCEPTION
+        USING
+          ERRCODE = '40001',
+          MESSAGE = 'account deletion Stripe customer is already owned';
+    END IF;
+
+    UPDATE public.user_profiles AS profile
+    SET
+      stripe_customer_id = p_stripe_customer_id,
+      updated_at = pg_catalog.clock_timestamp()
+    WHERE profile.id = p_user_id
+      AND profile.stripe_customer_id IS NULL;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION
+        USING
+          ERRCODE = '40001',
+          MESSAGE = 'account deletion Stripe customer backfill raced';
+    END IF;
+    v_profile_customer_id := p_stripe_customer_id;
   END IF;
   IF v_profile_customer_id IS DISTINCT FROM p_stripe_customer_id THEN
     RAISE EXCEPTION
@@ -2209,6 +2240,18 @@ BEGIN
           AND ledger.stripe_subscription_id =
             p_stripe_subscription_id
           AND ledger.checkout_reservation_id IS NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.api_tier_subscription_blocks AS block
+        WHERE block.user_id = p_user_id
+          AND block.livemode = p_livemode
+          AND block.stripe_subscription_id =
+            p_stripe_subscription_id
+          AND (
+            block.stripe_customer_id IS NULL
+            OR block.stripe_customer_id = p_stripe_customer_id
+          )
       )
     THEN
       RAISE EXCEPTION
