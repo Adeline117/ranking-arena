@@ -24,6 +24,9 @@ const translations: Record<string, string> = {
   bookmarkFailed: 'Bookmark failed',
   failedToLoad: 'Failed to load folder',
   itemCount: '{n} items',
+  loadMore: 'Load more',
+  loadMoreFailed: 'Failed to load more',
+  loadingMore: 'Loading more...',
   networkError: 'Network error',
   noBookmarks: 'No bookmarks',
   noBookmarksDesc: 'This folder is empty',
@@ -121,7 +124,9 @@ jest.mock('@/app/components/base', () => ({
       {children}
     </div>
   ),
-  Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
+  Text: ({ children, role }: { children?: ReactNode; role?: string }) => (
+    <span role={role}>{children}</span>
+  ),
   Button: ({
     children,
     onClick,
@@ -149,28 +154,57 @@ function response(body: unknown, status = 200): Response {
   } as unknown as Response
 }
 
-function folderDetailResponse(name: string, isSubscribed = false, subscriberCount = 0) {
+function bookmarkedPost(index: number) {
+  return {
+    bookmark_id: `bookmark-${index}`,
+    bookmarked_at: `2026-07-${String(index).padStart(2, '0')}T00:00:00.000Z`,
+    id: `post-${index}`,
+    title: `Post ${index}`,
+    content: `Content ${index}`,
+    author_id: 'post-author',
+    author_handle: 'author',
+    group_id: null,
+    like_count: 0,
+    comment_count: 0,
+    bookmark_count: 1,
+    created_at: `2026-07-${String(index).padStart(2, '0')}T00:00:00.000Z`,
+  }
+}
+
+function folderDetailResponse(
+  name: string,
+  isSubscribed = false,
+  subscriberCount = 0,
+  options: {
+    posts?: ReturnType<typeof bookmarkedPost>[]
+    postCount?: number
+    pagination?: { limit: number; offset: number; has_more: boolean }
+    isOwner?: boolean
+    ownerId?: string
+  } = {}
+) {
+  const posts = options.posts ?? []
   return response({
     success: true,
     data: {
       folder: {
         id: FOLDER_ID,
-        user_id: 'folder-owner',
+        user_id: options.ownerId ?? 'folder-owner',
         name,
         description: null,
         avatar_url: null,
         is_public: true,
         is_default: false,
-        post_count: 0,
+        post_count: options.postCount ?? posts.length,
         subscriber_count: subscriberCount,
         created_at: '2026-07-29T00:00:00.000Z',
         owner_handle: 'owner',
         owner_avatar_url: null,
       },
-      posts: [],
-      is_owner: false,
+      posts,
+      is_owner: options.isOwner ?? false,
       is_subscribed: isSubscribed,
-      pagination: { limit: 20, offset: 0, has_more: false },
+      pagination: options.pagination ?? { limit: 20, offset: 0, has_more: false },
     },
   })
 }
@@ -259,6 +293,166 @@ describe('favorite folder detail viewer ownership', () => {
 
     expect(await screen.findByText('Failed to load folder')).toBeInTheDocument()
     expect(screen.queryByText('No bookmarks')).not.toBeInTheDocument()
+  })
+
+  it('loads the remaining folder posts without replacing the visible first page', async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => bookmarkedPost(index + 1))
+    const fetchMock = jest.fn((url: string) => {
+      if (url === `/api/bookmark-folders/${FOLDER_ID}`) {
+        return Promise.resolve(
+          folderDetailResponse('Paged folder', false, 0, {
+            posts: firstPage,
+            postCount: 22,
+            pagination: { limit: 20, offset: 0, has_more: true },
+          })
+        )
+      }
+      if (url === `/api/bookmark-folders/${FOLDER_ID}?limit=20&offset=20`) {
+        return Promise.resolve(
+          folderDetailResponse('Paged folder', false, 0, {
+            posts: [bookmarkedPost(21), bookmarkedPost(22)],
+            postCount: 22,
+            pagination: { limit: 20, offset: 20, has_more: false },
+          })
+        )
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    renderPage()
+    expect(await screen.findByText('Post 1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+
+    expect(await screen.findByText('Post 22')).toBeInTheDocument()
+    expect(screen.getByText('Post 1')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/bookmark-folders/${FOLDER_ID}?limit=20&offset=20`,
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer token-viewer-a' },
+      })
+    )
+  })
+
+  it('rejects an overlapping post page and keeps the first page retryable', async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => bookmarkedPost(index + 1))
+    const fetchMock = jest.fn((url: string) => {
+      if (url === `/api/bookmark-folders/${FOLDER_ID}`) {
+        return Promise.resolve(
+          folderDetailResponse('Paged folder', false, 0, {
+            posts: firstPage,
+            postCount: 21,
+            pagination: { limit: 20, offset: 0, has_more: true },
+          })
+        )
+      }
+      if (url === `/api/bookmark-folders/${FOLDER_ID}?limit=20&offset=20`) {
+        return Promise.resolve(
+          folderDetailResponse('Paged folder', false, 0, {
+            posts: [bookmarkedPost(1)],
+            postCount: 21,
+            pagination: { limit: 20, offset: 20, has_more: false },
+          })
+        )
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    renderPage()
+    expect(await screen.findByText('Post 1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load more')
+    expect(screen.getByText('Post 1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument()
+  })
+
+  it('shifts the next post offset after removing an item from the loaded prefix', async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => bookmarkedPost(index + 1))
+    const ownerOptions = { isOwner: true, ownerId: 'viewer-a' }
+    const fetchMock = jest.fn((url: string, options?: RequestInit) => {
+      if (url === `/api/bookmark-folders/${FOLDER_ID}`) {
+        return Promise.resolve(
+          folderDetailResponse('Owner folder', false, 0, {
+            ...ownerOptions,
+            posts: firstPage,
+            postCount: 22,
+            pagination: { limit: 20, offset: 0, has_more: true },
+          })
+        )
+      }
+      if (url === '/api/posts/post-1/bookmark' && options?.method === 'POST') {
+        return Promise.resolve(response({ success: true }))
+      }
+      if (url === `/api/bookmark-folders/${FOLDER_ID}?limit=20&offset=19`) {
+        return Promise.resolve(
+          folderDetailResponse('Owner folder', false, 0, {
+            ...ownerOptions,
+            posts: [bookmarkedPost(21), bookmarkedPost(22)],
+            postCount: 21,
+            pagination: { limit: 20, offset: 19, has_more: false },
+          })
+        )
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    renderPage()
+    expect(await screen.findByText('Post 1')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'remove' })[0])
+    await waitFor(() => expect(screen.queryByText('Post 1')).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+
+    expect(await screen.findByText('Post 22')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/bookmark-folders/${FOLDER_ID}?limit=20&offset=19`,
+      expect.any(Object)
+    )
+  })
+
+  it('rejects a late post page after the viewer changes', async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => bookmarkedPost(index + 1))
+    const latePage = deferred<Response>()
+    const fetchMock = jest.fn((url: string, options?: RequestInit) => {
+      const authorization = (options?.headers as Record<string, string> | undefined)?.Authorization
+      if (authorization === 'Bearer token-viewer-b') {
+        return Promise.resolve(folderDetailResponse('Viewer B folder'))
+      }
+      if (url.includes('?limit=20&offset=20')) return latePage.promise
+      return Promise.resolve(
+        folderDetailResponse('Viewer A folder', false, 0, {
+          posts: firstPage,
+          postCount: 21,
+          pagination: { limit: 20, offset: 0, has_more: true },
+        })
+      )
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    const view = renderPage()
+    expect(await screen.findByText('Viewer A folder')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+
+    setViewer('viewer-b')
+    view.rerender(<FolderDetailPage params={Promise.resolve({ folderId: FOLDER_ID })} />)
+    expect(await screen.findByText('Viewer B folder')).toBeInTheDocument()
+
+    await act(async () => {
+      latePage.resolve(
+        folderDetailResponse('Viewer A folder', false, 0, {
+          posts: [bookmarkedPost(21)],
+          postCount: 21,
+          pagination: { limit: 20, offset: 20, has_more: false },
+        })
+      )
+      await latePage.promise
+    })
+
+    expect(screen.queryByText('Post 21')).not.toBeInTheDocument()
+    expect(screen.getByText('Viewer B folder')).toBeInTheDocument()
   })
 
   it('does not let viewer A subscription completion overwrite viewer B', async () => {

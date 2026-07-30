@@ -58,6 +58,11 @@ type FolderDetailPayload = {
   posts: BookmarkedPost[]
   isOwner: boolean
   isSubscribed: boolean
+  pagination: {
+    limit: number
+    offset: number
+    hasMore: boolean
+  }
 }
 
 type FolderRequestScope = {
@@ -68,8 +73,10 @@ type FolderRequestScope = {
 }
 
 type OperationKind = 'save' | 'delete' | 'subscribe' | 'post-detail'
+type PostsMoreStatus = 'idle' | 'loading' | 'error'
 
 const FOLDER_REQUEST_TIMEOUT_MS = 15_000
+const FOLDER_POST_PAGE_LIMIT = 20
 
 class FolderDetailLoadError extends Error {}
 
@@ -144,7 +151,8 @@ function apiErrorMessage(payload: unknown, fallback: string): string {
 async function readFolderDetail(
   response: Response,
   expectedFolderId: string,
-  fallbackError: string
+  fallbackError: string,
+  expectedOffset = 0
 ): Promise<FolderDetailPayload> {
   const payload: unknown = await response.json()
   if (!response.ok) throw new FolderDetailLoadError(apiErrorMessage(payload, fallbackError))
@@ -152,22 +160,45 @@ async function readFolderDetail(
     throw new FolderDetailLoadError(fallbackError)
   }
 
-  const { folder, posts, is_owner: isOwner, is_subscribed: isSubscribed } = payload.data
+  const { folder, posts, is_owner: isOwner, is_subscribed: isSubscribed, pagination } = payload.data
   if (
     !isBookmarkFolder(folder, expectedFolderId) ||
     !Array.isArray(posts) ||
     !posts.every(isBookmarkedPost) ||
     new Set(posts.map((post) => post.bookmark_id)).size !== posts.length ||
+    new Set(posts.map((post) => post.id)).size !== posts.length ||
     typeof isOwner !== 'boolean' ||
     typeof isSubscribed !== 'boolean' ||
     (isOwner && isSubscribed) ||
     (!folder.is_public && !isOwner) ||
-    (!folder.is_public && isSubscribed)
+    (!folder.is_public && isSubscribed) ||
+    !isRecord(pagination) ||
+    pagination.limit !== FOLDER_POST_PAGE_LIMIT ||
+    pagination.offset !== expectedOffset ||
+    typeof pagination.has_more !== 'boolean' ||
+    posts.length > FOLDER_POST_PAGE_LIMIT ||
+    (pagination.has_more &&
+      (posts.length !== FOLDER_POST_PAGE_LIMIT ||
+        folder.post_count <= expectedOffset + FOLDER_POST_PAGE_LIMIT)) ||
+    (!pagination.has_more &&
+      posts.length > 0 &&
+      folder.post_count !== expectedOffset + posts.length) ||
+    (!pagination.has_more && posts.length === 0 && folder.post_count > expectedOffset)
   ) {
     throw new FolderDetailLoadError(fallbackError)
   }
 
-  return { folder, posts, isOwner, isSubscribed }
+  return {
+    folder,
+    posts,
+    isOwner,
+    isSubscribed,
+    pagination: {
+      limit: FOLDER_POST_PAGE_LIMIT,
+      offset: expectedOffset,
+      hasMore: pagination.has_more,
+    },
+  }
 }
 
 function readUpdatedFolder(payload: unknown, expectedFolderId: string) {
@@ -235,6 +266,9 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [dataResourceKey, setDataResourceKey] = useState<string | null>(null)
+  const [postsHasMore, setPostsHasMore] = useState(false)
+  const [postsNextOffset, setPostsNextOffset] = useState(0)
+  const [postsMoreStatus, setPostsMoreStatus] = useState<PostsMoreStatus>('idle')
 
   // 编辑状态
   const [isEditing, setIsEditing] = useState(false)
@@ -268,6 +302,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const stateResourceKeyRef = useRef(resourceKey)
   const loadRequestIdRef = useRef(0)
   const loadControllerRef = useRef<AbortController | null>(null)
+  const postsPageRequestIdRef = useRef(0)
+  const postsPageControllerRef = useRef<AbortController | null>(null)
   const operationIdsRef = useRef<Record<OperationKind, number>>({
     save: 0,
     delete: 0,
@@ -282,8 +318,10 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
     if (resourceChanged) {
       stateResourceKeyRef.current = resourceKey
       loadControllerRef.current?.abort()
+      postsPageControllerRef.current?.abort()
       postDetailControllerRef.current?.abort()
       loadRequestIdRef.current += 1
+      postsPageRequestIdRef.current += 1
       for (const operation of Object.keys(operationIdsRef.current) as OperationKind[]) {
         operationIdsRef.current[operation] += 1
       }
@@ -303,6 +341,9 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       setRemovingBookmark({})
       setError(null)
       setDataResourceKey(null)
+      setPostsHasMore(false)
+      setPostsNextOffset(0)
+      setPostsMoreStatus('idle')
     }
 
     if (!folderId) {
@@ -322,6 +363,9 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
     }
 
     loadControllerRef.current?.abort()
+    postsPageControllerRef.current?.abort()
+    postsPageRequestIdRef.current += 1
+    setPostsMoreStatus('idle')
     const controller = new AbortController()
     loadControllerRef.current = controller
     const requestId = ++loadRequestIdRef.current
@@ -362,6 +406,9 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
         setFolder(detail.folder)
         setPosts(detail.posts)
+        setPostsHasMore(detail.pagination.hasMore)
+        setPostsNextOffset(detail.pagination.offset + detail.posts.length)
+        setPostsMoreStatus('idle')
         setIsOwner(detail.isOwner)
         setIsSubscribed(detail.isSubscribed)
         setSubscriberCount(detail.folder.subscriber_count)
@@ -382,6 +429,9 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         logger.error('Error loading folder:', err)
         setFolder(null)
         setPosts([])
+        setPostsHasMore(false)
+        setPostsNextOffset(0)
+        setPostsMoreStatus('idle')
         setError(err instanceof FolderDetailLoadError ? err.message : tRef.current('networkError'))
         setDataResourceKey(resourceKey)
       } finally {
@@ -409,8 +459,10 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   useEffect(
     () => () => {
       loadControllerRef.current?.abort()
+      postsPageControllerRef.current?.abort()
       postDetailControllerRef.current?.abort()
       loadRequestIdRef.current += 1
+      postsPageRequestIdRef.current += 1
       for (const operation of Object.keys(operationIdsRef.current) as OperationKind[]) {
         operationIdsRef.current[operation] += 1
       }
@@ -433,6 +485,96 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   ): boolean =>
     operationIdsRef.current[operation] === operationId &&
     isFolderRequestScopeCurrent(scope, currentScopeRef.current)
+
+  const handleLoadMorePosts = async () => {
+    if (
+      !folder ||
+      loading ||
+      dataResourceKey !== resourceKey ||
+      postsMoreStatus === 'loading' ||
+      !postsHasMore ||
+      postsPageControllerRef.current
+    ) {
+      return
+    }
+
+    const scope = captureScope()
+    if (!isFolderRequestScopeCurrent(scope, currentScopeRef.current)) return
+    const expectedOffset = postsNextOffset
+    const existingPosts = posts
+    const expectedOwnerId = folder.user_id
+    const expectedIsOwner = isOwner
+    if (expectedOffset !== existingPosts.length) {
+      logger.error('Folder post pagination offset no longer matches the visible list')
+      setPostsMoreStatus('error')
+      return
+    }
+
+    const controller = new AbortController()
+    postsPageControllerRef.current = controller
+    const requestId = ++postsPageRequestIdRef.current
+    let timedOut = false
+    const timeoutId = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, FOLDER_REQUEST_TIMEOUT_MS)
+    setPostsMoreStatus('loading')
+
+    try {
+      const headers: Record<string, string> = {}
+      if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+      const response = await fetch(
+        `/api/bookmark-folders/${folderId}?limit=${FOLDER_POST_PAGE_LIMIT}&offset=${expectedOffset}`,
+        { headers, signal: controller.signal }
+      )
+      const detail = await readFolderDetail(
+        response,
+        folderId,
+        tRef.current('loadMoreFailed'),
+        expectedOffset
+      )
+      if (
+        controller.signal.aborted ||
+        postsPageRequestIdRef.current !== requestId ||
+        !isFolderRequestScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        return
+      }
+      if (detail.folder.user_id !== expectedOwnerId || detail.isOwner !== expectedIsOwner) {
+        throw new FolderDetailLoadError(tRef.current('loadMoreFailed'))
+      }
+      const bookmarkIds = new Set(existingPosts.map((post) => post.bookmark_id))
+      const postIds = new Set(existingPosts.map((post) => post.id))
+      if (detail.posts.some((post) => bookmarkIds.has(post.bookmark_id) || postIds.has(post.id))) {
+        throw new FolderDetailLoadError(tRef.current('loadMoreFailed'))
+      }
+
+      setPosts([...existingPosts, ...detail.posts])
+      setPostsHasMore(detail.pagination.hasMore)
+      setPostsNextOffset(detail.pagination.offset + detail.posts.length)
+      setPostsMoreStatus('idle')
+      setFolder((currentFolder) =>
+        currentFolder?.id === folderId
+          ? { ...currentFolder, post_count: detail.folder.post_count }
+          : currentFolder
+      )
+    } catch (err) {
+      if (
+        (!timedOut && controller.signal.aborted) ||
+        postsPageRequestIdRef.current !== requestId ||
+        !isFolderRequestScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        return
+      }
+      logger.error('Error loading more folder posts:', err)
+      setPostsMoreStatus('error')
+    } finally {
+      clearTimeout(timeoutId)
+      if (postsPageControllerRef.current === controller) {
+        postsPageControllerRef.current = null
+      }
+    }
+  }
 
   const handleSave = async () => {
     if (!accessToken || !folder) return
@@ -672,6 +814,21 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
     const requestIsCurrent = () =>
       removeRequestIdsRef.current[postId] === requestId &&
       isFolderRequestScopeCurrent(scope, currentScopeRef.current)
+    const removeFromVisiblePage = () => {
+      // Removing an item from the loaded prefix shifts every later offset by
+      // one. Cancel any page using the old offset before updating local state.
+      postsPageControllerRef.current?.abort()
+      postsPageControllerRef.current = null
+      postsPageRequestIdRef.current += 1
+      setPostsMoreStatus('idle')
+      setPostsNextOffset((currentOffset) => Math.max(0, currentOffset - 1))
+      setPosts((currentPosts) => currentPosts.filter((post) => post.bookmark_id !== bookmarkId))
+      setFolder((currentFolder) =>
+        currentFolder
+          ? { ...currentFolder, post_count: Math.max(0, currentFolder.post_count - 1) }
+          : currentFolder
+      )
+    }
 
     setRemovingBookmark((prev) => ({ ...prev, [postId]: true }))
 
@@ -687,26 +844,14 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       if (!requestIsCurrent()) return
 
       if (response.ok) {
-        // 从列表中移除
-        setPosts((prev) => prev.filter((p) => p.bookmark_id !== bookmarkId))
-        // 更新收藏夹计数
-        setFolder((currentFolder) =>
-          currentFolder
-            ? { ...currentFolder, post_count: Math.max(0, currentFolder.post_count - 1) }
-            : currentFolder
-        )
+        removeFromVisiblePage()
         showToast(t('removedFromFavorites'), 'success')
       } else {
         const data: unknown = await response.json()
         if (!requestIsCurrent()) return
         // 如果帖子不存在，也从列表中移除
         if (response.status === 404) {
-          setPosts((prev) => prev.filter((p) => p.bookmark_id !== bookmarkId))
-          setFolder((currentFolder) =>
-            currentFolder
-              ? { ...currentFolder, post_count: Math.max(0, currentFolder.post_count - 1) }
-              : currentFolder
-          )
+          removeFromVisiblePage()
         } else {
           showToast(apiErrorMessage(data, t('removeFailed')), 'error')
         }
@@ -1184,6 +1329,32 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 </Box>
               </Box>
             ))}
+            {postsHasMore && (
+              <Box
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: tokens.spacing[2],
+                  paddingTop: tokens.spacing[2],
+                }}
+              >
+                {postsMoreStatus === 'error' && (
+                  <Text role="alert" size="sm" color="secondary">
+                    {t('loadMoreFailed')}
+                  </Text>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void handleLoadMorePosts()}
+                  disabled={postsMoreStatus === 'loading'}
+                  aria-busy={postsMoreStatus === 'loading'}
+                >
+                  {postsMoreStatus === 'loading' ? t('loadingMore') : t('loadMore')}
+                </Button>
+              </Box>
+            )}
           </Box>
         )}
       </Box>
