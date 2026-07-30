@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
       .select(
         'rank, trader_id:source_trader_id, handle, source, arena_score, roi, pnl, win_rate, max_drawdown, followers, trades_count'
       )
+      .not('rank', 'is', null)
       .or('is_outlier.is.null,is_outlier.eq.false')
       .order('rank', { ascending: true })
       .limit(limit)
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch rankings' }, { status: 500 })
     }
 
-    const rows = data || []
+    const rows = (data || []).filter((row) => row.rank != null)
 
     if (format === 'json') {
       return new Response(JSON.stringify(rows, null, 2), {

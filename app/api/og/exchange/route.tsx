@@ -128,10 +128,12 @@ async function fetchExchangeData(
     .select('handle, avatar_url, roi, arena_score, rank')
     .eq('source', exchange)
     .eq('season_id', '90D')
+    .not('rank', 'is', null)
     .not('arena_score', 'is', null)
     .gt('arena_score', 0)
     .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false, nullsFirst: false })
+    .order('rank', { ascending: true, nullsFirst: false })
     .limit(3)
 
   if (topErr) {
@@ -145,6 +147,7 @@ async function fetchExchangeData(
     .select('*', { count: 'estimated', head: true })
     .eq('source', exchange)
     .eq('season_id', '90D')
+    .not('rank', 'is', null)
     .not('arena_score', 'is', null)
     .gt('arena_score', 0)
     .or('is_outlier.is.null,is_outlier.eq.false')
@@ -153,13 +156,15 @@ async function fetchExchangeData(
     logger.error('[OG Exchange] Error fetching count:', countErr)
   }
 
-  const traders: TopTrader[] = (top3 || []).map((t, i) => ({
-    handle: t.handle as string | null,
-    avatar_url: t.avatar_url as string | null,
-    roi: t.roi as number | null,
-    arena_score: t.arena_score as number | null,
-    rank: i + 1,
-  }))
+  const traders: TopTrader[] = (top3 || [])
+    .filter((t) => t.rank != null)
+    .map((t) => ({
+      handle: t.handle as string | null,
+      avatar_url: t.avatar_url as string | null,
+      roi: t.roi as number | null,
+      arena_score: t.arena_score as number | null,
+      rank: Number(t.rank),
+    }))
 
   return { traders, total: count ?? 0 }
 }

@@ -30,8 +30,14 @@ import { checkRateLimitFull } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { apiSuccess, apiError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
+import {
+  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+  PUBLIC_RANKING_REDIS_TAG,
+  publicRankingCacheKey,
+} from '@/lib/rankings/publication-policy'
 
 export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 
 const log = createLogger('api:v3')
 
@@ -116,26 +122,14 @@ const _CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
 }
 
-// Per-endpoint cache policies:
-//   rankings → 5 min fresh, 10 min stale (data refreshes every ~5 min via cron)
-//   trader   → 5 min fresh, 10 min stale (same cadence as rankings)
-//   search   → 1 min fresh, 5 min stale  (needs fresher results for new traders)
-const CACHE_POLICY: Record<string, string> = {
-  rankings: 'public, s-maxage=300, stale-while-revalidate=600',
-  trader: 'public, s-maxage=300, stale-while-revalidate=600',
-  search: 'public, s-maxage=60, stale-while-revalidate=300',
-  platforms: 'public, s-maxage=3600, stale-while-revalidate=7200',
-  history: 'public, s-maxage=300, stale-while-revalidate=600',
-  bulk: 'public, s-maxage=300, stale-while-revalidate=600',
-}
+// Every response contains per-request rate-limit or API-key quota metadata.
+// A shared CDN key does not vary safely on those identities, so all v3 payloads
+// must remain private even when their underlying ranking data uses Redis.
+const PRIVATE_NO_STORE = 'private, no-store, max-age=0, must-revalidate'
 
 function jsonResponse(data: unknown, meta: Record<string, unknown>, status = 200) {
-  const endpoint = (meta.endpoint as string) || ''
   const res = apiSuccess(data, meta, status)
-  res.headers.set(
-    'Cache-Control',
-    CACHE_POLICY[endpoint] || 'public, s-maxage=60, stale-while-revalidate=120'
-  )
+  res.headers.set('Cache-Control', PRIVATE_NO_STORE)
   res.headers.set('Access-Control-Allow-Origin', '*')
   res.headers.set('Access-Control-Allow-Credentials', 'false')
   return res
@@ -143,6 +137,7 @@ function jsonResponse(data: unknown, meta: Record<string, unknown>, status = 200
 
 function errorResponse(message: string, status: number) {
   const res = apiError('API_ERROR', message, status)
+  res.headers.set('Cache-Control', PRIVATE_NO_STORE)
   res.headers.set('Access-Control-Allow-Origin', '*')
   res.headers.set('Access-Control-Allow-Credentials', 'false')
   return res
@@ -232,15 +227,12 @@ function toCsv(rows: Record<string, unknown>[]): string {
   return `${header}\n${body}`
 }
 
-function cleanTraderForApi(
-  trader: Record<string, unknown>,
-  idx: number,
-  offset: number
-): Record<string, unknown> {
+function cleanTraderForApi(trader: Record<string, unknown>): Record<string, unknown> {
   const t = { ...trader }
 
-  // 1. Sequential rank based on position in result set (not DB global rank)
-  t.rank = offset + idx + 1
+  // Persist the publication authority's rank. Search/profile results may be
+  // unranked, but a page position must never be presented as a global rank.
+  t.rank = t.rank != null ? Number(t.rank) : null
 
   // 2. Handle fallback: use shortened address for DEX wallet addresses
   if (!t.handle && typeof t.traderKey === 'string') {
@@ -285,9 +277,9 @@ async function handleRankings(params: URLSearchParams) {
     limit,
     offset,
   })
-  const cleaned = result.traders.map((t, i) =>
-    cleanTraderForApi(t as unknown as Record<string, unknown>, i, offset)
-  )
+  const cleaned = result.traders
+    .filter((trader) => trader.rank != null)
+    .map((trader) => cleanTraderForApi(trader as unknown as Record<string, unknown>))
   return { data: cleaned, total: result.total }
 }
 
@@ -323,8 +315,8 @@ async function handleSearch(params: URLSearchParams) {
   const supabase = getSupabaseAdmin() as SupabaseClient
   const { q, limit, platform } = parsed.data
   const traders = await searchTraders(supabase, { query: q, limit, platform })
-  const cleaned = traders.map((t, i) =>
-    cleanTraderForApi(t as unknown as Record<string, unknown>, i, 0)
+  const cleaned = traders.map((trader) =>
+    cleanTraderForApi(trader as unknown as Record<string, unknown>)
   )
   return { data: cleaned, total: cleaned.length }
 }
@@ -336,15 +328,20 @@ async function handlePlatforms() {
   // (公开 API,100x 峰值下每 PV 多 MB PostgREST 传输)。语义不变,套 warm 档
   // 分层缓存(Redis 15min/内存 2min)→ 全表扫描峰值大幅收敛;Redis 故障回退直算。
   const countMap = await tieredGetOrSet<Record<string, number>>(
-    'v3:platform-counts',
+    publicRankingCacheKey('v3:platform-counts'),
     async () => {
       const supabase = getSupabaseAdmin() as SupabaseClient
-      const { data: counts } = await supabase.from('leaderboard_ranks').select('source')
+      const { data: counts } = await supabase
+        .from('leaderboard_ranks')
+        .select('source')
+        .not('rank', 'is', null)
       const m: Record<string, number> = {}
       for (const row of counts ?? []) m[row.source] = (m[row.source] || 0) + 1
       return m
     },
-    'warm'
+    'warm',
+    [PUBLIC_RANKING_REDIS_TAG, 'platform-counts'],
+    { skipMemory: true, writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY }
   )
 
   const platforms = activeSources
@@ -406,9 +403,9 @@ async function handleBulk(params: URLSearchParams) {
     limit,
     offset: 0,
   })
-  const cleaned = result.traders.map((t, i) =>
-    cleanTraderForApi(t as unknown as Record<string, unknown>, i, 0)
-  )
+  const cleaned = result.traders
+    .filter((trader) => trader.rank != null)
+    .map((trader) => cleanTraderForApi(trader as unknown as Record<string, unknown>))
   return { data: cleaned, total: result.total }
 }
 
@@ -453,7 +450,11 @@ export async function GET(request: NextRequest) {
         },
         {
           status: 429,
-          headers: { 'Access-Control-Allow-Origin': '*', 'Retry-After': '86400' },
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': PRIVATE_NO_STORE,
+            'Retry-After': '86400',
+          },
         }
       )
     }
@@ -479,7 +480,11 @@ export async function GET(request: NextRequest) {
         },
         {
           status: 429,
-          headers: { 'Access-Control-Allow-Origin': '*', 'Retry-After': '86400' },
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': PRIVATE_NO_STORE,
+            'Retry-After': '86400',
+          },
         }
       )
     }
@@ -537,8 +542,7 @@ export async function GET(request: NextRequest) {
         headers: {
           'Content-Type': 'text/csv; charset=utf-8',
           'Content-Disposition': `attachment; filename="arena-${endpoint}.csv"`,
-          'Cache-Control':
-            CACHE_POLICY[endpoint] || 'public, s-maxage=60, stale-while-revalidate=120',
+          'Cache-Control': PRIVATE_NO_STORE,
           'Access-Control-Allow-Origin': '*',
         },
       })

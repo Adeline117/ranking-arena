@@ -396,6 +396,44 @@ Preview/PR 分支构建不受影响。
   `POST https://api.vercel.com/v10/projects/{projectId}/promote/{deploymentId}`
   （旧 `/v6/deployments/{id}/promote` 是 404，2026-07-02 实测修正）。
 
+### 排名权威数据库先行门禁（待执行）
+
+以下步骤是发布门禁，不是生产执行记录。截至 2026-07-29，仓库只完成迁移、
+清单与离线 PG17 证明；不得据此声称两个迁移已经在生产应用。
+
+1. 在应用候选版本发布前，按 ADR-023 仅通过获准的 Supabase MCP
+   `apply_migration` 生产通道，严格连续应用以下两个文件；每次只提交一个完整文件，
+   不得使用本地 `db push` 或脚本中已禁用的 psql 写命令：
+   1. `20260729223000_rerank_public_eligible_rows_only.sql`
+   2. `20260729224000_rank_eligible_leaderboard_count_cache.sql`
+2. 第二个迁移提交后，等待迁移内的 `NOTIFY pgrst, 'reload schema'` 生效；若需
+   重发 reload，也必须走同一获准生产通道。然后通过生产 PostgREST 执行两个
+   无副作用的非法参数探针，且只接受精确 SQLSTATE `22023`：
+
+   ```bash
+   curl -sS -X POST \
+     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/rerank_public_eligible_leaderboard" \
+     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+     -H 'Content-Type: application/json' \
+     -d '{"p_season_id":"__contract_probe__"}' | jq -e '.code == "22023"'
+
+   curl -sS -X POST \
+     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/refresh_public_rank_count_cache_for_seasons" \
+     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+     -H 'Content-Type: application/json' \
+     -d '{"p_season_ids":[]}' | jq -e '.code == "22023"'
+   ```
+
+   `PGRST202`、`42883`、权限错误、超时或任何非 `22023` 结果都表示 schema/RPC
+   契约尚未就绪，必须停止发布。非法参数在任何锁、重排或计数写入前被拒绝，探针
+   不改变排名数据。
+
+3. 只有两个探针均通过后，才允许发布应用候选版本并执行标准生产 smoke。
+   第二个迁移会在同一事务中切换 legacy rerank wrapper、重排三个 season 并重建
+   rank-derived count；不得只应用第一个迁移后发布应用。
+
 ### Vercel instant rollback
 
 ```bash

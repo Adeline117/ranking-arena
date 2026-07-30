@@ -67,15 +67,150 @@ function readLatestFinalizeFunction(
 }
 
 describe('compute leaderboard source freshness publication path', () => {
-  it('keeps the legacy freshness write behind the complete, error-free rank-write gate', () => {
+  it('treats legacy freshness as a required database gate after every cohort finalizer', () => {
     if (usesAtomicFinalize) {
       expect(usesAtomicFinalize).toBe(true)
       return
     }
 
+    const incompleteGate = route.indexOf('if (upsertAborted || upsertErrors > 0)')
+    const zeroOut = route.indexOf('await zeroOutExcluded({', incompleteGate)
+    const cleanup = route.indexOf('await atomicPlatformCleanup(', zeroOut)
+    const rerank = route.indexOf('await rerankAllRows(', cleanup)
+    const freshness = route.indexOf('await upsertSourceFreshness({', rerank)
+    const finalized = route.indexOf("status: 'database_finalized'", freshness)
+
+    expect(incompleteGate).toBeGreaterThan(-1)
+    expect(route.slice(incompleteGate, zeroOut)).toContain('throw new Error(')
+    expect(zeroOut).toBeGreaterThan(incompleteGate)
+    expect(cleanup).toBeGreaterThan(zeroOut)
+    expect(rerank).toBeGreaterThan(cleanup)
+    expect(freshness).toBeGreaterThan(rerank)
+    expect(finalized).toBeGreaterThan(freshness)
+    expect(route.slice(freshness, finalized)).not.toContain('catch (freshness')
+  })
+
+  it('never authorizes a global-count fallback or fail-open publication write', () => {
+    expect(route).not.toContain('saveScoredCount(')
     expect(route).toMatch(
-      /if\s*\(\s*!upsertAborted\s*&&\s*upsertErrors\s*===\s*0\s*\)\s*\{\s*try\s*\{[\s\S]*?\bawait\s+upsertSourceFreshness\s*\(/
+      /leaderboardCheckpointKey\(result\.season\),[\s\S]*?\{\s*count:\s*result\.count,\s*at:/
     )
+    expect(route).not.toMatch(/tieredSet\(\s*checkpointKey\s*,/)
+    expect(route).toMatch(
+      /if\s*\(upsertAborted\s*\|\|\s*upsertErrors\s*>\s*0\)[\s\S]*?throw\s+new\s+Error\([\s\S]*?database finalization withheld/
+    )
+    expect(route).not.toContain('Proceeding anyway')
+    expect(route).not.toContain('Advisory lock RPC failed (non-critical)')
+    expect(route).not.toContain("rpc('acquire_leaderboard_lock'")
+    expect(route).toContain('await acquireLeaderboardRunLease(targetSeasons)')
+    expect(route).toContain('await runLease.release()')
+  })
+
+  it('never substitutes a different timeframe for missing PnL', () => {
+    expect(route).not.toMatch(/\.rpc\(\s*['"]fill_null_pnl_from_siblings['"]\s*\)/)
+  })
+
+  it('withholds every authority and cache side effect unless all targets were finalized', () => {
+    const completeResult = route.indexOf(
+      'const databaseFinalizationComplete = isCompleteDatabaseFinalizationRun('
+    )
+    const authorityGate = route.indexOf(
+      'if (databaseFinalizationComplete && remainingMs() > 30_000)',
+      completeResult
+    )
+    const scopedRefresh = route.indexOf(
+      "'refresh_public_rank_count_cache_for_seasons'",
+      authorityGate
+    )
+    const authorityReadyGate = route.indexOf('if (publicationAuthorityReady)', scopedRefresh)
+    const cacheInvalidate = route.indexOf(
+      'await revalidateRankingPages(runLease)',
+      authorityReadyGate
+    )
+    const cacheWarm = route.indexOf('warmupLeaderboardCache(supabase, SEASONS)', cacheInvalidate)
+    const cacheSettled = route.indexOf('await Promise.allSettled(', cacheWarm)
+    const marker = route.indexOf('`leaderboard:last-success:${result.season}`', cacheSettled)
+    const checkpoint = route.indexOf('leaderboardCheckpointKey(result.season)', marker)
+
+    expect(completeResult).toBeGreaterThan(-1)
+    expect(authorityGate).toBeGreaterThan(completeResult)
+    expect(scopedRefresh).toBeGreaterThan(authorityGate)
+    expect(authorityReadyGate).toBeGreaterThan(scopedRefresh)
+    expect(cacheInvalidate).toBeGreaterThan(authorityReadyGate)
+    expect(cacheWarm).toBeGreaterThan(cacheInvalidate)
+    expect(cacheSettled).toBeGreaterThan(cacheWarm)
+    expect(marker).toBeGreaterThan(cacheSettled)
+    expect(checkpoint).toBeGreaterThan(marker)
+    expect(route).not.toContain('SELECT refresh_leaderboard_count_cache()')
+    expect(route).not.toContain('warmupLeaderboardCache(supabase, targetSeasons)')
+    expect(route).not.toContain('syncRedisSortedSet(')
+    expect(route).not.toMatch(/tieredSet\(\s*['"]leaderboard:last-success['"]\s*,/)
+    expect(route).toContain('tieredSetRequired(')
+    expect(route).not.toContain('fireAndForget(')
+    expect(route).not.toContain('deriveWinRateMDD(')
+  })
+
+  it('treats checkpoints as one target-set preflight and never skips inside computeSeason', () => {
+    const contract = route.indexOf("LEADERBOARD_CHECKPOINT_CONTRACT = 'publication-v2'")
+    const forceTombstone = route.indexOf('if (forceWrite) {', contract)
+    const preflight = route.indexOf('const checkpointHits = new Map<Period, number>()')
+    const allHit = route.indexOf('if (checkpointHits.size === targetSeasons.length)', preflight)
+    const partialHit = route.indexOf('if (checkpointHits.size > 0)', allHit)
+    const compute = route.indexOf('await computeSeason(', partialHit)
+    const computeSeason = route.indexOf('async function computeSeason(')
+
+    expect(contract).toBeGreaterThan(-1)
+    expect(forceTombstone).toBeGreaterThan(contract)
+    expect(route.slice(forceTombstone, preflight)).toContain('tieredSetRequired(')
+    expect(preflight).toBeGreaterThan(forceTombstone)
+    expect(route.slice(preflight, allHit)).toContain('tieredGetRequired<')
+    expect(route.slice(preflight, allHit)).not.toContain('tieredGet<')
+    expect(allHit).toBeGreaterThan(preflight)
+    expect(partialHit).toBeGreaterThan(allHit)
+    expect(compute).toBeGreaterThan(partialHit)
+    expect(route.slice(computeSeason)).not.toContain('tieredGet<')
+    expect(route.slice(computeSeason)).not.toContain("status: 'checkpoint_skip'")
+  })
+
+  it('acquires one owner-token run lease before compute and releases it in finally', () => {
+    const acquire = route.indexOf('await acquireLeaderboardRunLease(targetSeasons)')
+    const compute = route.indexOf('await computeSeason(', acquire)
+    const outerFinally = route.lastIndexOf(
+      '} finally {',
+      route.indexOf('async function computeSeason')
+    )
+    const release = route.indexOf('await runLease.release()', outerFinally)
+
+    expect(acquire).toBeGreaterThan(-1)
+    expect(compute).toBeGreaterThan(acquire)
+    expect(outerFinally).toBeGreaterThan(compute)
+    expect(release).toBeGreaterThan(outerFinally)
+    expect(route).not.toContain('IDEMPOTENCY_KEY')
+    expect(route).not.toMatch(/runLease[\s\S]*?\.del\s*\(/)
+  })
+
+  it('proves migration-first RPC availability before any live leaderboard work', () => {
+    const preflight = route.indexOf('await assertRankPublicationDatabaseContract(supabase)')
+    const forceCheckpoint = route.indexOf('if (forceWrite)', preflight)
+    const compute = route.indexOf('await computeSeason(', preflight)
+    const liveDml = route.indexOf('await upsertLeaderboard({', compute)
+
+    expect(preflight).toBeGreaterThan(-1)
+    expect(forceCheckpoint).toBeGreaterThan(preflight)
+    expect(compute).toBeGreaterThan(preflight)
+    expect(liveDml).toBeGreaterThan(compute)
+  })
+
+  it('reports lease contention as pending instead of a completed cached publication', () => {
+    const contentionBranch = route.slice(
+      route.indexOf('if (!leaseResult.acquired)'),
+      route.indexOf('const runLease = leaseResult.lease')
+    )
+
+    expect(contentionBranch).toContain('publication_pending: true')
+    expect(contentionBranch).toContain('status: contended ? 423 : 503')
+    expect(contentionBranch).not.toContain('cached: true')
+    expect(contentionBranch).not.toContain('ok: true')
   })
 
   it('publishes source freshness inside the latest atomic finalize function before returning', () => {

@@ -134,16 +134,15 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
         2,
         source
       )
-      const rolledBack = computeBody?.rolled_back as string[] | undefined
+      const unsealedSeasons = computeBody?.publication_unsealed as string[] | undefined
       logger.info(
-        `[${source}] compute-leaderboard: ok (${Date.now() - computeStart}ms, trace=${traceId})${rolledBack?.length ? ` rolled_back=[${rolledBack.join(',')}]` : ''}`
+        `[${source}] compute-leaderboard: ok (${Date.now() - computeStart}ms, trace=${traceId})${unsealedSeasons?.length ? ` publication_unsealed=[${unsealedSeasons.join(',')}]` : ''}`
       )
 
-      // If ALL seasons rolled back due to degradation, skip downstream — data didn't change
-      if (rolledBack && rolledBack.length >= 3) {
-        logger.warn(
-          `[${source}] All seasons rolled back — skipping downstream (warm-cache/evaluate would use stale data)`
-        )
+      // If all seasons withheld a publication seal, downstream evaluation and
+      // warming cannot claim a coherent new generation.
+      if (unsealedSeasons && unsealedSeasons.length >= 3) {
+        logger.warn(`[${source}] All seasons are unsealed — skipping downstream generation work`)
         return
       }
 

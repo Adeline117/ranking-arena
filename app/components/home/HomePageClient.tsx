@@ -42,7 +42,7 @@ export default function HomePageClient({
   // Convert InitialTrader[] to Trader[] for compatibility
   const convertedInitialTraders: Trader[] | undefined = useMemo(
     () =>
-      initialTraders?.map((t, idx) => ({
+      initialTraders?.map((t) => ({
         id: t.id,
         handle: t.handle,
         roi: t.roi,
@@ -55,7 +55,7 @@ export default function HomePageClient({
         avatar_url_mirror: t.avatar_url_mirror,
         arena_score: t.arena_score,
         score_confidence: t.score_confidence,
-        rank: idx + 1,
+        rank: t.rank,
         // Rank-movement signals — the SSR shape carries them but this
         // allowlist copy silently dropped them, so first-paint rows never
         // showed the ↑/↓ arrows that hydrated /api/traders rows now get.

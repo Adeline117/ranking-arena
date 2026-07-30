@@ -106,7 +106,8 @@ describe('compute leaderboard source freshness writes', () => {
       upsertSourceFreshness({
         supabase: { from } as never,
         season: '90D',
-        scoredTraders: [trader('fresh_source', sourceAsOf)],
+        expectedSources: ['fresh_source'],
+        sourceEvidence: [trader('fresh_source', sourceAsOf)],
       })
     ).resolves.toBe(1)
 
@@ -122,6 +123,25 @@ describe('compute leaderboard source freshness writes', () => {
       { onConflict: 'season_id,source' }
     )
     expect(JSON.stringify(upsert.mock.calls)).not.toContain('absent_source')
+  })
+
+  it('seals a fresh zero-rank source from board evidence rather than scored rows', async () => {
+    const upsert = jest.fn().mockResolvedValue({ error: null })
+    const from = jest.fn(() => ({ upsert }))
+    const sourceAsOf = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+
+    await expect(
+      upsertSourceFreshness({
+        supabase: { from } as never,
+        season: '7D',
+        expectedSources: ['fresh_but_no_eligible_rows'],
+        sourceEvidence: [{ source: 'fresh_but_no_eligible_rows', source_as_of: sourceAsOf }],
+      })
+    ).resolves.toBe(1)
+    expect(upsert).toHaveBeenCalledWith(
+      [expect.objectContaining({ source: 'fresh_but_no_eligible_rows', source_as_of: sourceAsOf })],
+      { onConflict: 'season_id,source' }
+    )
   })
 
   it('fails closed by skipping a source when any board watermark is invalid', () => {
@@ -151,6 +171,39 @@ describe('compute leaderboard source freshness writes', () => {
     expect(rows.map((row) => row.source)).toEqual(['valid_source'])
   })
 
+  it('fails the whole freshness gate before writing when any finalized source is invalid', async () => {
+    const from = jest.fn()
+
+    await expect(
+      upsertSourceFreshness({
+        supabase: { from } as never,
+        season: '30D',
+        expectedSources: ['valid_source', 'invalid_source'],
+        sourceEvidence: [
+          trader('valid_source', '2026-07-18T11:00:00.000Z'),
+          trader('invalid_source', 'not-a-timestamp'),
+        ],
+      })
+    ).rejects.toThrow(
+      '[30D] source freshness gate incomplete: 1/2 fresh sources have valid board watermarks'
+    )
+    expect(from).not.toHaveBeenCalled()
+  })
+
+  it('never reports an empty finalized cohort as a successful freshness gate', async () => {
+    const from = jest.fn()
+
+    await expect(
+      upsertSourceFreshness({
+        supabase: { from } as never,
+        season: '7D',
+        expectedSources: [],
+        sourceEvidence: [],
+      })
+    ).rejects.toThrow('[7D] source freshness gate requires at least one fresh source')
+    expect(from).not.toHaveBeenCalled()
+  })
+
   it('surfaces a watermark write failure so the caller can retain the previous state', async () => {
     const upsert = jest.fn().mockResolvedValue({ error: { message: 'write failed' } })
     const from = jest.fn(() => ({ upsert }))
@@ -160,22 +213,36 @@ describe('compute leaderboard source freshness writes', () => {
       upsertSourceFreshness({
         supabase: { from } as never,
         season: '90D',
-        scoredTraders: [trader('source', sourceAsOf)],
+        expectedSources: ['source'],
+        sourceEvidence: [trader('source', sourceAsOf)],
       })
     ).rejects.toThrow('source freshness upsert failed: write failed')
   })
 
-  it('publishes watermarks only after a complete, error-free ranking write', () => {
+  it('publishes the required watermark seal only after every cohort finalizer succeeds', () => {
     const route = readFileSync(
       join(process.cwd(), 'app/api/cron/compute-leaderboard/route.ts'),
       'utf8'
     )
-    const guard = route.indexOf('if (!upsertAborted && upsertErrors === 0)')
-    const publish = route.indexOf('await upsertSourceFreshness({', guard)
+    const completeWriteGuard = route.indexOf('if (upsertAborted || upsertErrors > 0)')
+    const zeroOut = route.indexOf('await zeroOutExcluded({', completeWriteGuard)
+    const atomicCleanup = route.indexOf('await atomicPlatformCleanup(', zeroOut)
+    const rerank = route.indexOf('await rerankAllRows(', atomicCleanup)
+    const publish = route.indexOf('await upsertSourceFreshness({', rerank)
+    const publishLog = route.indexOf('logger.info(', publish)
 
-    expect(guard).toBeGreaterThan(-1)
-    expect(publish).toBeGreaterThan(guard)
-    expect(route.slice(guard, publish)).not.toContain('||')
+    expect(completeWriteGuard).toBeGreaterThan(-1)
+    expect(route.slice(completeWriteGuard, zeroOut)).toContain('throw new Error(')
+    expect(zeroOut).toBeGreaterThan(completeWriteGuard)
+    expect(atomicCleanup).toBeGreaterThan(zeroOut)
+    expect(rerank).toBeGreaterThan(atomicCleanup)
+    expect(publish).toBeGreaterThan(rerank)
+    expect(publishLog).toBeGreaterThan(publish)
+    expect(route.slice(publish, publishLog)).not.toMatch(/\b(?:try|catch)\b/)
+    expect(route).not.toContain('source freshness publish failed')
+    expect(route).toContain('source_as_of: trader.source_board_as_of')
+    expect(route.slice(publish, publishLog)).toContain('expectedSources: freshRankingPlatforms')
+    expect(route.slice(publish, publishLog)).toContain('sourceEvidence: freshSourceEvidence')
   })
 
   it('does not rescore stale source inputs while preserving their last-good rows', () => {

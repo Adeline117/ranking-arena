@@ -8,6 +8,10 @@ import type { Period } from '@/lib/utils/arena-score'
 import type { ScoredTrader } from './score-traders'
 import { createLogger } from '@/lib/utils/logger'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import {
+  PUBLIC_RANKING_FUTURE_TOLERANCE_MS,
+  PUBLIC_RANKING_MAX_COMPUTED_AGE_MS,
+} from '@/lib/rankings/publication-policy'
 
 const logger = createLogger('compute-leaderboard')
 
@@ -17,7 +21,8 @@ export interface CurrentRow {
   arena_score_v3: number | null
   arena_score_v4: number | null
   score_factors: ScoredTrader['score_factors']
-  rank: number
+  rank: number | null
+  computed_at: string | null
   handle: string | null
   avatar_url: string | null
   roi: number | null
@@ -41,6 +46,22 @@ export interface CurrentRow {
   trader_type: string | null
   is_outlier: boolean | null
   metrics_estimated: boolean | null
+}
+
+// Refresh stable rows at half the public eligibility window. This certifies
+// that a fresh source observation remains current without rewriting the whole
+// board every hour, and leaves a full 24-hour margin before the 48-hour hard
+// public cutoff.
+const INCREMENTAL_ROW_REFRESH_MS = PUBLIC_RANKING_MAX_COMPUTED_AGE_MS / 2
+
+function requiresComputedAtRefresh(computedAt: string | null, nowMs: number): boolean {
+  if (!Number.isFinite(nowMs) || typeof computedAt !== 'string') return true
+  const computedAtMs = Date.parse(computedAt)
+  if (!Number.isFinite(computedAtMs)) return true
+  return (
+    computedAtMs <= nowMs - INCREMENTAL_ROW_REFRESH_MS ||
+    computedAtMs > nowMs + PUBLIC_RANKING_FUTURE_TOLERANCE_MS
+  )
 }
 
 function nullableNumberChanged(next: number | null, current: number | null): boolean {
@@ -118,22 +139,25 @@ export async function fetchCurrentScoreMap(
 
   while (true) {
     if (++pageCount > MAX_PAGES) {
-      logger.warn(`Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
-      break
+      throw new Error(`[${season}] current-rank authority exceeds ${MAX_PAGES * PAGE} rows`)
     }
     if (isOutOfTime(45_000)) {
-      logger.warn(
-        `[${season}] aborting currentScoreMap fetch at page ${pageCount} — time running out`
+      throw new Error(
+        `[${season}] current-rank authority read deadline reached at page ${pageCount}`
       )
-      break
     }
-    const { data: currentScores } = await supabase
+    const { data: currentScores, error } = await supabase
       .from('leaderboard_ranks')
       .select(
-        'source, source_type, source_trader_id, arena_score, arena_score_v3, arena_score_v4, score_factors, rank, handle, avatar_url, roi, pnl, win_rate, max_drawdown, followers, copiers, trades_count, profitability_score, risk_control_score, execution_score, score_completeness, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trading_style, avg_holding_hours, style_confidence, trader_type, is_outlier, metrics_estimated'
+        'source, source_type, source_trader_id, arena_score, arena_score_v3, arena_score_v4, score_factors, rank, computed_at, handle, avatar_url, roi, pnl, win_rate, max_drawdown, followers, copiers, trades_count, profitability_score, risk_control_score, execution_score, score_completeness, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trading_style, avg_holding_hours, style_confidence, trader_type, is_outlier, metrics_estimated'
       )
       .eq('season_id', season)
+      .order('source', { ascending: true })
+      .order('source_trader_id', { ascending: true })
       .range(offset, offset + PAGE - 1)
+    if (error) {
+      throw new Error(`[${season}] current-rank authority read failed: ${error.message}`)
+    }
     if (!currentScores?.length) break
     for (const r of currentScores) {
       currentScoreMap.set(`${r.source}:${r.source_trader_id}`, {
@@ -143,6 +167,7 @@ export async function fetchCurrentScoreMap(
         arena_score_v4: r.arena_score_v4,
         score_factors: r.score_factors as ScoredTrader['score_factors'],
         rank: r.rank,
+        computed_at: r.computed_at,
         handle: r.handle,
         avatar_url: r.avatar_url,
         roi: r.roi,
@@ -182,17 +207,16 @@ export async function fetchCurrentScoreMap(
 export function buildChangedTraders(
   scoredFiltered: ScoredTrader[],
   currentScoreMap: Map<string, CurrentRow>,
-  season: Period
+  season: Period,
+  nowMs: number = Date.now()
 ): {
   changedTraders: ScoredTrader[]
-  rankMap: Map<string, number>
   prevRankMap: Map<string, number>
 } {
-  const changedTraders = scoredFiltered.filter((t, idx) => {
+  const changedTraders = scoredFiltered.filter((t) => {
     const current = currentScoreMap.get(`${t.source}:${t.source_trader_id}`)
     if (current == null) return true
-    const newRank = idx + 1
-    if (current.rank !== newRank) return true
+    if (requiresComputedAtRefresh(current.computed_at, nowMs)) return true
     return servingFieldsChanged(t, current)
   })
 
@@ -200,14 +224,12 @@ export function buildChangedTraders(
     `[${season}] Incremental upsert: ${changedTraders.length}/${scoredFiltered.length} changed (${((1 - changedTraders.length / Math.max(1, scoredFiltered.length)) * 100).toFixed(1)}% skipped)`
   )
 
-  // Build rank + prev-rank maps
-  const rankMap = new Map<string, number>()
-  scoredFiltered.forEach((t, idx) => rankMap.set(`${t.source}:${t.source_trader_id}`, idx + 1))
-
+  // Preserve the prior database rank while changed rows are written. The
+  // finalizer replaces every rank set-wise; unversioned movement stays unknown.
   const prevRankMap = new Map<string, number>()
   for (const [key, current] of currentScoreMap) {
     if (current.rank != null) prevRankMap.set(key, current.rank)
   }
 
-  return { changedTraders, rankMap, prevRankMap }
+  return { changedTraders, prevRankMap }
 }

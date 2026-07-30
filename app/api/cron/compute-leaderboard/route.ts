@@ -11,18 +11,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { type Period } from '@/lib/utils/arena-score'
-import { SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
-import { createLogger, fireAndForget } from '@/lib/utils/logger'
+import { createLogger } from '@/lib/utils/logger'
 import {
   warmupSsrHomepageCache,
-  syncRedisSortedSet,
   revalidateRankingPages,
   warmupLeaderboardCache,
 } from './post-processing'
-import { detectTraderType, deriveWinRateMDD } from './helpers'
 import { type TraderRow, makeAddToTraderMap, sanitizeTraderRow } from './trader-row'
 import { computeLastResortCalmar, classifyTradingStyle } from './scoring-helpers'
 import { checkPlatformFreshness } from './freshness-check'
@@ -31,29 +27,41 @@ import { enrichFromStatsDetail } from './enrich-stats-detail'
 import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enrich-equity-curve'
 import { deriveAdvancedFromDailySnapshots } from './enrich-daily-snapshots'
 import { runPhase1, getPhase1ReadSource } from './phase1-select'
-import { rerankAllRows, cleanupStaleRows, atomicPlatformCleanup } from './rerank-cleanup'
-import { scoreTraders, type ScoredTrader } from './score-traders'
-import { checkDegradationGuard, saveScoredCount } from './degradation-guard'
+import { rerankAllRows, atomicPlatformCleanup } from './rerank-cleanup'
+import { scoreTraders } from './score-traders'
+import { checkDegradationGuard } from './degradation-guard'
 import { fetchCurrentScoreMap, buildChangedTraders } from './incremental-diff'
 import { upsertLeaderboard, upsertSourceFreshness, zeroOutExcluded } from './write-leaderboard'
-import { hasComputeFailures, type ComputeResult } from './result-status'
+import { acquireLeaderboardRunLease } from './run-lease'
+import { assertRankPublicationDatabaseContract } from './database-contract'
+import {
+  hasComputeFailures,
+  isCompleteDatabaseFinalizationRun,
+  type ComputeResult,
+  type ComputeSeasonOutcome,
+} from './result-status'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
-import { PipelineState } from '@/lib/services/pipeline-state'
+import { tieredGetRequired, tieredSetRequired } from '@/lib/cache/redis-layer'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { MIN_TRADES } from '@/lib/constants/trader-thresholds'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-// detectTraderType, getFreshnessHours, deriveWinRateMDD all live in ./helpers.ts
+// detectTraderType and getFreshnessHours live in ./helpers.ts
 // (single source of truth — duplicates removed 2026-04-09). getFreshnessHours
 // is now consumed only by fetch-phase1.ts.
 
 const logger = createLogger('compute-leaderboard')
 
 const SEASONS: Period[] = ['7D', '30D', '90D']
+const LEADERBOARD_CHECKPOINT_CONTRACT = 'publication-v2'
+
+function leaderboardCheckpointKey(season: string, now = new Date()): string {
+  return `leaderboard:computed:${LEADERBOARD_CHECKPOINT_CONTRACT}:${season}:${now.toISOString().slice(0, 13)}`
+}
 // H-7: Use centralized threshold from lib/constants/trader-thresholds.ts
 // Previously hardcoded as 5 here vs 10 in lib/utils/ranking.ts — now unified to MIN_TRADES (10).
 // DEGRADATION_THRESHOLD moved to degradation-guard.ts
@@ -81,57 +89,50 @@ export async function GET(request: NextRequest) {
   const targetSeasons: Period[] =
     seasonParam && SEASONS.includes(seasonParam) ? [seasonParam] : SEASONS
 
-  // Idempotency: atomic SET NX EX (no race window between get and set)
-  // Per-season lock when running single season to allow parallel staggered runs
+  // Every invocation owns the same global publication surface. The lease
+  // serializes even disjoint single-season runs because cache invalidation and
+  // public markers are shared across seasons.
   const lockSuffix = targetSeasons.length === 1 ? `:${targetSeasons[0]}` : ''
-  const IDEMPOTENCY_KEY = `cron:compute-leaderboard:running${lockSuffix}`
-  let lockAcquired = false
-  try {
-    const { getSharedRedis } = await import('@/lib/cache/redis-client')
-    const redis = await getSharedRedis()
-    if (redis) {
-      const result = await redis.set(IDEMPOTENCY_KEY, new Date().toISOString(), {
-        nx: true,
-        ex: 300,
-      })
-      lockAcquired = result === 'OK'
-    } else {
-      // Redis unavailable: fail safe. Previously used tieredGet/tieredSet which
-      // is NOT atomic — two concurrent requests could both see !cached.data as true
-      // and both acquire the "lock", causing double-compute with data inconsistency.
-      // The next cron invocation (1h) will retry when Redis is back.
-      logger.warn(
-        '[compute-leaderboard] Redis unavailable, skipping run (fail-safe to prevent double-compute)'
-      )
-      lockAcquired = false
-    }
-  } catch (err) {
-    // Redis threw — fail safe instead of proceeding unprotected.
-    // ROOT CAUSE FIX: Previously set lockAcquired=true here, allowing unprotected
-    // concurrent runs that could produce inconsistent leaderboard data.
+  const leaseResult = await acquireLeaderboardRunLease(targetSeasons)
+  if (!leaseResult.acquired) {
+    const contended = leaseResult.reason === 'contended'
     logger.warn(
-      '[compute-leaderboard] Redis lock failed, skipping run (fail-safe):',
-      err instanceof Error ? err.message : String(err)
+      `[compute-leaderboard] run lease withheld (${leaseResult.reason})${
+        leaseResult.error ? `: ${leaseResult.error}` : ''
+      }`
     )
-    lockAcquired = false
+    return NextResponse.json(
+      contended
+        ? {
+            ok: false,
+            error: `Leaderboard publication still running (owner-token lease${lockSuffix})`,
+            publication_pending: true,
+            lock_reason: leaseResult.reason,
+          }
+        : {
+            ok: false,
+            error: 'Leaderboard run lease unavailable',
+            lock_reason: leaseResult.reason,
+          },
+      { status: contended ? 423 : 503 }
+    )
   }
-  if (!lockAcquired) {
-    return NextResponse.json({
-      ok: true,
-      message: `Already running (atomic lock${lockSuffix})`,
-      cached: true,
-    })
-  }
+  const runLease = leaseResult.lease
 
-  const supabase = getSupabaseAdmin() as SupabaseClient
-  const readDb = getReadReplica() as SupabaseClient // Read replica for SELECT queries (falls back to primary if not configured)
-  const startTime = Date.now()
-  const stats = { seasons: {} as Record<string, number> }
-  const warnings: string[] = []
-  const rolledBack: string[] = []
-  const plog = await PipelineLogger.start(`compute-leaderboard${lockSuffix}`)
-
+  let plog: Awaited<ReturnType<typeof PipelineLogger.start>> | undefined
   try {
+    const supabase = getSupabaseAdmin()
+    // Migration-first deploy gate. These invalid-argument probes perform no
+    // writes and must prove both new RPC identities through PostgREST before
+    // any live leaderboard mutation can begin.
+    await assertRankPublicationDatabaseContract(supabase)
+    const readDb = getReadReplica() // Read replica for SELECT queries (falls back to primary if not configured)
+    const startTime = Date.now()
+    const stats = { seasons: {} as Record<string, number> }
+    const warnings: string[] = []
+    const unsealedSeasons: string[] = []
+    plog = await PipelineLogger.start(`compute-leaderboard${lockSuffix}`)
+
     // P0-2: Record current counts from pre-computed cache (instant)
     // PERF FIX: was count:exact (25s+ per season × 3 = 75s wasted)
     const previousCounts: Record<string, number> = {}
@@ -147,13 +148,75 @@ export async function GET(request: NextRequest) {
 
     const forceWrite = request.nextUrl.searchParams.get('force') === '1'
 
-    // Pre-compute: fill NULL PnL from sibling windows for platforms where
-    // the leaderboard API doesn't return PnL (e.g., Bybit).
-    // This propagates enrichment PnL across all windows for the same trader.
-    try {
-      await supabase.rpc('fill_null_pnl_from_siblings')
-    } catch (e) {
-      logger.warn('fill_null_pnl_from_siblings failed (non-critical):', e)
+    // A forced repair must retire any successful checkpoint from an earlier
+    // run in the same hour before the first database mutation. Required reads
+    // below bypass process memory, so every later instance observes this
+    // shared tombstone and recomputes after a failed force run.
+    if (forceWrite) {
+      await Promise.all(
+        targetSeasons.map((season) =>
+          tieredSetRequired(
+            leaderboardCheckpointKey(season),
+            { count: 0, invalidatedAt: new Date().toISOString() },
+            'warm',
+            ['leaderboard', `season:${season}`]
+          )
+        )
+      )
+    }
+
+    // Checkpoints are a target-set decision, never a per-season branch inside
+    // the write loop. All targets hit => the whole invocation is cached. A
+    // partial hit is ignored and every target is recomputed, preventing a
+    // checkpoint_skip + published mixed run that mutates DB but cannot publish
+    // coherent authority/cache state.
+    if (!forceWrite) {
+      const checkpointHits = new Map<Period, number>()
+      try {
+        const checkpointReads = await Promise.all(
+          targetSeasons.map(async (season) => ({
+            season,
+            checkpoint: await tieredGetRequired<{ count: number }>(
+              leaderboardCheckpointKey(season)
+            ),
+          }))
+        )
+        for (const { season, checkpoint } of checkpointReads) {
+          const count = checkpoint?.count
+          if (typeof count === 'number' && Number.isSafeInteger(count) && count > 0) {
+            checkpointHits.set(season, count)
+          }
+        }
+      } catch (error) {
+        logger.warn(
+          `Target-set checkpoint read failed; recomputing all targets: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        )
+      }
+
+      if (checkpointHits.size === targetSeasons.length) {
+        for (const season of targetSeasons) {
+          stats.seasons[season] = checkpointHits.get(season) as number
+        }
+        const totalRanked = Object.values(stats.seasons).reduce((sum, count) => sum + count, 0)
+        await plog.success(totalRanked, { stats, cached: true })
+        return NextResponse.json({
+          ok: true,
+          cached: true,
+          message: 'All requested seasons already published this hour',
+          stats,
+          previous_counts: previousCounts,
+          publication_status: Object.fromEntries(
+            targetSeasons.map((season) => [season, 'checkpoint_skip'])
+          ),
+        })
+      }
+      if (checkpointHits.size > 0) {
+        logger.info(
+          `Ignoring partial target-set checkpoints (${[...checkpointHits.keys()].join(',')}); recomputing ${targetSeasons.join(',')}`
+        )
+      }
     }
 
     // Compute target seasons (single season when staggered, all when fallback)
@@ -166,44 +229,52 @@ export async function GET(request: NextRequest) {
     const results: ComputeResult[] = []
     for (const season of targetSeasons) {
       try {
-        const count = await computeSeason(
-          supabase,
-          season,
-          previousCounts[season],
-          forceWrite,
-          computeDeadline
-        )
-        results.push({ season, count, error: null })
+        const outcome = await computeSeason(supabase, season, forceWrite, computeDeadline)
+        results.push({ season, ...outcome, error: null })
       } catch (err) {
         logger.error(`[${season}] computeSeason failed:`, err)
-        results.push({ season, count: -1, error: err })
+        results.push({ season, count: -1, status: 'failed', error: err })
       }
     }
 
-    for (const { season, count, error } of results) {
+    for (const { season, count, error, status } of results) {
       stats.seasons[season] = count
 
       if (error) {
         const msg = `${season}: computation FAILED — ${String(error)}`
         warnings.push(msg)
-        rolledBack.push(season)
-        stats.seasons[season] = previousCounts[season]
-      } else if (count === -1) {
-        // Degradation skip is auto-recoverable (MAX_CONSECUTIVE_SKIPS=2 forces compute on 3rd attempt)
-        // Only treat as warning, not error, to avoid noisy OpenClaw alerts
+        unsealedSeasons.push(season)
+      } else if (status === 'degradation_skip') {
+        // Retry on the next cron, but never auto-force a degraded publication.
+        // Only treat the preserved last-good board as a warning here.
         const msg = `${season}: degradation detected, upsert SKIPPED (table: ${previousCounts[season]})`
         warnings.push(msg)
-        rolledBack.push(season)
+        unsealedSeasons.push(season)
         stats.seasons[season] = previousCounts[season] // Keep old count in stats
+      } else if (status === 'no_candidates') {
+        const msg = `${season}: no eligible publication candidates; publication withheld`
+        warnings.push(msg)
+        unsealedSeasons.push(season)
       }
+    }
+
+    // A single failed, skipped, empty, missing, or duplicate season makes the
+    // database-finalization set incomplete. Count authority, last-success, and
+    // public caches must continue describing the last fully published run.
+    const databaseFinalizationComplete = isCompleteDatabaseFinalizationRun(results, targetSeasons)
+    if (!databaseFinalizationComplete && warnings.length === 0) {
+      warnings.push(
+        `Leaderboard invocation incomplete: ${results
+          .map(({ season, status }) => `${season}=${status}`)
+          .join(', ')}`
+      )
     }
 
     // POST-COMPUTE ASSERTION: verify leaderboard_ranks is not empty.
     // ROOT CAUSE FIX for 12-day empty homepage (2026-05-19): missing DEFAULT nextval()
     // on partition id column caused silent upsert failures. This assertion catches any
     // future scenario where compute "succeeds" but writes 0 rows.
-    const totalRankedAllSeasons = results.reduce((sum, r) => sum + Math.max(0, r.count), 0)
-    if (totalRankedAllSeasons === 0 && results.every((r) => !r.error)) {
+    if (results.length > 0 && results.every((r) => r.status === 'no_candidates')) {
       const assertionMsg = `CRITICAL: compute-leaderboard completed but ranked 0 traders across all seasons. Likely silent upsert failure (check DB constraints, partition defaults).`
       logger.error(assertionMsg)
       warnings.push(assertionMsg)
@@ -226,123 +297,196 @@ export async function GET(request: NextRequest) {
     const elapsed = Date.now() - startTime
     logger.info(`Leaderboard computed in ${elapsed}ms`, stats)
 
-    // Send alert if degradation detected (rate-limited: 6h cooldown)
-    if (warnings.length > 0) {
-      try {
-        const { sendRateLimitedAlert } = await import('@/lib/alerts/send-alert')
-        await sendRateLimitedAlert(
-          {
-            title: '排行榜降级告警',
-            message: warnings.join('\n'),
-            level: 'critical',
-            details: { seasons_affected: rolledBack.join(', ') },
-          },
-          'leaderboard:degradation',
-          6 * 60 * 60 * 1000
-        )
-      } catch (e) {
-        logger.error('[compute-leaderboard] 告警发送失败:', e)
-      }
-    }
-
     // Time budget: skip non-critical post-processing if <60s remaining (prevents 300s timeout)
     const TIME_BUDGET_MS = (maxDuration - 20) * 1000 // 280s safety margin
     const remainingMs = () => TIME_BUDGET_MS - (Date.now() - startTime)
 
-    // Refresh leaderboard count cache after all seasons computed
-    if (remainingMs() > 30_000) {
+    // Refresh count authority only after every requested season completed its
+    // live-table finalization. A mixed/partial board must never become the next
+    // degradation baseline.
+    let publicationAuthorityReady = databaseFinalizationComplete
+    if (databaseFinalizationComplete && remainingMs() > 30_000) {
       try {
-        const { query: dbQuery } = await import('@/lib/db')
-        await dbQuery('SELECT refresh_leaderboard_count_cache()', [])
-        logger.info('Refreshed leaderboard_count_cache')
+        const { error: refreshError } = await supabase.rpc(
+          'refresh_public_rank_count_cache_for_seasons',
+          { p_season_ids: targetSeasons }
+        )
+        if (refreshError) {
+          throw new Error(refreshError.message || 'unknown count authority refresh error')
+        }
+        logger.info(`Refreshed leaderboard_count_cache for ${targetSeasons.join(',')}`)
       } catch (cacheErr) {
-        logger.warn('Failed to refresh leaderboard_count_cache:', cacheErr)
+        publicationAuthorityReady = false
+        const message = `Leaderboard database finalization completed, but count authority refresh failed: ${
+          cacheErr instanceof Error ? cacheErr.message : String(cacheErr)
+        }`
+        logger.error(message)
+        warnings.push(message)
       }
+    } else if (databaseFinalizationComplete) {
+      publicationAuthorityReady = false
+      const message = `Leaderboard database finalization completed, but count authority refresh was withheld — only ${Math.round(remainingMs() / 1000)}s remaining`
+      logger.error(message)
+      warnings.push(message)
     } else {
-      logger.warn(
-        `Skipping leaderboard_count_cache refresh — only ${Math.round(remainingMs() / 1000)}s remaining`
-      )
+      logger.warn('Withholding leaderboard_count_cache refresh after incomplete publication run')
     }
 
     // (removed 2026-06-15) arena_score → trader_snapshots_v2 write-back.
     // v2 is being retired (ARENA_DATA_SPEC endgame); leaderboard_ranks is the
     // canonical score store. No point syncing scores back into a doomed table.
 
-    // Save last-known-good snapshot marker for fallback resilience.
-    // Rankings API reads this to verify compute health; if stale, it serves
-    // cached data instead of failing when the DB query errors out.
-    {
-      const successfulSeasons = results.filter((r) => !r.error && r.count > 0)
-      if (successfulSeasons.length > 0) {
-        try {
-          await tieredSet(
-            'leaderboard:last-success',
-            {
-              timestamp: new Date().toISOString(),
-              seasons: successfulSeasons.map((r) => r.season),
-              traderCounts: Object.fromEntries(successfulSeasons.map((r) => [r.season, r.count])),
-            },
-            'warm',
-            ['leaderboard']
-          ) // 900s TTL (warm tier)
-        } catch (e) {
-          logger.warn(
-            'Failed to write leaderboard:last-success marker:',
-            e instanceof Error ? e.message : String(e)
-          )
-        }
-      }
-    }
-
     // (removed 2026-06-15) sub-scores → trader_snapshots_v2 write-back
     // (syncSubscoresToV2). v2 is being retired; leaderboard_ranks holds the
     // canonical sub-scores. See post-processing.ts.
 
-    // Post-compute: derive WR/MDD from historical snapshots for traders missing them
-    // Gated by time budget: this queries historical data and can be slow
-    let wrMddDerived = 0
-    if (remainingMs() > 40_000) {
+    // A publication remains under the owner-token lease until every cache
+    // mutation settles. Invalidate first, then warm the new generation; this
+    // prevents an old fire-and-forget task from racing a later publication or
+    // deleting keys that the same run just warmed.
+    let publicationSurfaceReady = publicationAuthorityReady
+    if (publicationAuthorityReady) {
       try {
-        wrMddDerived = await deriveWinRateMDD(supabase)
-        if (wrMddDerived > 0) logger.info(`Derived WR/MDD for ${wrMddDerived} traders`)
-      } catch (e) {
-        logger.warn('WR/MDD derivation failed (non-critical):', e)
+        await revalidateRankingPages(runLease)
+      } catch (error) {
+        publicationSurfaceReady = false
+        warnings.push(
+          `Leaderboard cache invalidation/revalidation failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        )
+      }
+
+      if (publicationSurfaceReady) {
+        const cacheTasks: Array<{ label: string; promise: Promise<void> }> = [
+          {
+            label: 'leaderboard cache warmup',
+            // Invalidation is global, so every default season must be restored
+            // even when this invocation only recomputed one season.
+            promise: warmupLeaderboardCache(supabase, SEASONS),
+          },
+          {
+            label: 'SSR homepage cache warmup',
+            promise: warmupSsrHomepageCache(),
+          },
+        ]
+
+        const cacheResults = await Promise.allSettled(cacheTasks.map(({ promise }) => promise))
+        for (const [index, result] of cacheResults.entries()) {
+          if (result.status === 'rejected') {
+            publicationSurfaceReady = false
+            warnings.push(
+              `${cacheTasks[index].label} failed: ${
+                result.reason instanceof Error ? result.reason.message : String(result.reason)
+              }`
+            )
+          }
+        }
+      } else {
+        logger.warn('Withholding cache warmup because shared invalidation did not complete')
       }
     } else {
-      logger.warn(
-        `Skipping WR/MDD derivation — only ${Math.round(remainingMs() / 1000)}s remaining`
-      )
+      logger.warn('Withholding leaderboard cache warmup/revalidation after incomplete publication')
     }
 
-    // Post-processing blocks extracted to post-processing.ts.
-    fireAndForget(warmupLeaderboardCache(supabase, SEASONS), 'warmup-leaderboard-cache')
-    fireAndForget(warmupSsrHomepageCache(), 'warmup-ssr-homepage-cache')
-    fireAndForget(syncRedisSortedSet(supabase, SEASONS), 'sync-redis-sorted-set')
-    fireAndForget(revalidateRankingPages(), 'revalidate-ranking-pages')
+    // Record last-known-good markers independently per season only after the
+    // database authority and public cache surface both completed. The hourly
+    // checkpoint is deliberately last: if a durable marker fails, the next
+    // invocation must recompute instead of skipping the repair.
+    if (publicationSurfaceReady) {
+      try {
+        await Promise.all(
+          results.map((result) =>
+            tieredSetRequired(
+              `leaderboard:last-success:${result.season}`,
+              {
+                timestamp: new Date().toISOString(),
+                season: result.season,
+                traderCount: result.count,
+              },
+              'warm',
+              ['leaderboard', `season:${result.season}`]
+            )
+          )
+        )
+      } catch (error) {
+        publicationSurfaceReady = false
+        warnings.push(
+          `Failed to write a durable per-season leaderboard:last-success marker: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        )
+      }
+    }
 
-    // Release idempotency lock (atomic Redis DEL with fallback)
-    try {
-      const { getSharedRedis: r } = await import('@/lib/cache/redis-client')
-      const c = await r()
-      if (c) await c.del(IDEMPOTENCY_KEY)
-      else await tieredDel(IDEMPOTENCY_KEY)
-    } catch {
-      await tieredDel(IDEMPOTENCY_KEY).catch(() => {})
+    if (publicationSurfaceReady) {
+      try {
+        await Promise.all(
+          results.map((result) =>
+            tieredSetRequired(
+              leaderboardCheckpointKey(result.season),
+              { count: result.count, at: new Date().toISOString() },
+              'warm',
+              ['leaderboard', `season:${result.season}`]
+            )
+          )
+        )
+      } catch (error) {
+        publicationSurfaceReady = false
+        warnings.push(
+          `Failed to write the final post-publication checkpoint: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        )
+      }
+    }
+
+    // Any failure after live-table DML leaves the generation unpublished even
+    // though database rows may already have changed. Make that distinction
+    // explicit to operators and downstream triggers.
+    if (!publicationSurfaceReady) {
+      for (const season of targetSeasons) {
+        if (!unsealedSeasons.includes(season)) unsealedSeasons.push(season)
+      }
+    }
+
+    // Alert after every publication surface has settled so cache failures are
+    // included in the same rate-limited trust incident.
+    if (warnings.length > 0) {
+      try {
+        await sendRateLimitedAlert(
+          {
+            title: '排行榜发布可信度告警',
+            message: warnings.join('\n'),
+            level: 'critical',
+            details: { seasons_affected: unsealedSeasons.join(', ') },
+          },
+          'leaderboard:publication-trust',
+          6 * 60 * 60 * 1000
+        )
+      } catch (error) {
+        logger.error('[compute-leaderboard] 告警发送失败:', error)
+      }
     }
 
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
-    // Distinguish between computation FAILUREs (real errors) and degradation SKIPs (auto-recoverable)
-    const hasRealFailures = hasComputeFailures(results)
+    // Distinguish computation failures from safe last-good degradation skips.
+    const hasRealFailures =
+      hasComputeFailures(results) ||
+      results.some((result) => result.status === 'no_candidates') ||
+      (!databaseFinalizationComplete &&
+        results.some((result) => result.status === 'database_finalized')) ||
+      (databaseFinalizationComplete && !publicationSurfaceReady)
     if (hasRealFailures) {
       // Real computation failure — report as error
-      await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })
+      await plog.error(new Error(warnings.join('; ')), { stats, unsealedSeasons })
     } else if (warnings.length > 0) {
-      // Only degradation skips — report as partial success (auto-recovers next run)
+      // Safe skips retain the last-good public state and retry on the next run.
       await plog.success(totalRanked, {
         stats,
         warnings,
-        rolledBack,
-        note: 'degradation skips are auto-recoverable',
+        unsealedSeasons,
+        note: 'incomplete runs preserve last-good authority and public caches',
       })
     } else {
       await plog.success(totalRanked, { stats })
@@ -350,7 +494,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        ok: warnings.length === 0,
+        ok: !hasRealFailures && warnings.length === 0,
         elapsed_ms: elapsed,
         // ENDGAME cutover visibility: which Phase-1 reader actually ran
         // (trader_latest | arena | diff). Lets the cutover be verified from the
@@ -358,60 +502,43 @@ export async function GET(request: NextRequest) {
         read_source: getPhase1ReadSource(),
         stats,
         previous_counts: previousCounts,
+        publication_status: Object.fromEntries(
+          results.map((result) => [
+            result.season,
+            publicationSurfaceReady && result.status === 'database_finalized'
+              ? 'published'
+              : result.status,
+          ])
+        ),
         warnings: warnings.length > 0 ? warnings : undefined,
-        rolled_back: rolledBack.length > 0 ? rolledBack : undefined,
-        wr_mdd_derived: wrMddDerived,
+        publication_unsealed: unsealedSeasons.length > 0 ? unsealedSeasons : undefined,
       },
       { status: hasRealFailures ? 500 : 200 }
     )
   } catch (error: unknown) {
-    // Release idempotency lock on failure (atomic Redis DEL with fallback)
-    try {
-      const { getSharedRedis: r } = await import('@/lib/cache/redis-client')
-      const c = await r()
-      if (c) await c.del(IDEMPOTENCY_KEY)
-      else await tieredDel(IDEMPOTENCY_KEY)
-    } catch {
-      await tieredDel(IDEMPOTENCY_KEY).catch(() => {})
-    }
     logger.error('Failed to compute leaderboard', error)
-    await plog.error(error)
+    await plog?.error(error)
     return NextResponse.json({ error: 'Compute failed', detail: String(error) }, { status: 500 })
+  } finally {
+    const releaseResult = await runLease.release()
+    if (!releaseResult.released) {
+      logger.error('[compute-leaderboard] run lease release was not confirmed', releaseResult)
+    }
   }
 }
 
 async function computeSeason(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   season: Period,
-  previousCount?: number,
   forceWrite?: boolean,
   deadlineMs: number = Date.now() + 270_000
-): Promise<number> {
+): Promise<ComputeSeasonOutcome> {
   // Deadline helpers — any phase can call these to abort early when time runs out.
   // Prevents cumulative Phase 3/4/4b/4b2 enrichment queries from blowing past
   // Vercel's 300s maxDuration and leaving pipeline_logs as 'running' until
   // cleanup-stuck-logs sweeps them 30 min later.
   const timeLeftMs = () => deadlineMs - Date.now()
   const isOutOfTime = (minMs: number = 10_000) => timeLeftMs() < minMs
-  // Checkpoint recovery: skip this season if it was already computed this hour.
-  // Prevents redundant recomputation when compute-leaderboard is retried after
-  // a partial failure (e.g., season 7D succeeded, 30D timed out — retry
-  // shouldn't redo 7D).
-  const hourKey = new Date().toISOString().slice(0, 13) // "2026-04-14T08"
-  const checkpointKey = `leaderboard:computed:${season}:${hourKey}`
-  try {
-    const { data: checkpoint } = await tieredGet<{ count: number }>(checkpointKey, 'warm')
-    if (checkpoint && checkpoint.count > 0 && !forceWrite) {
-      logger.info(
-        `[${season}] Checkpoint hit — already computed this hour (${checkpoint.count} traders). Skipping.`
-      )
-      return checkpoint.count
-    }
-  } catch (e) {
-    logger.warn(
-      `[${season}] Checkpoint read failed (proceeding): ${e instanceof Error ? e.message : String(e)}`
-    )
-  }
 
   // Log scheduler provenance only. Independent per-source board watermarks below are
   // the source-data freshness gate; a completed batch job is not itself proof
@@ -636,7 +763,7 @@ async function computeSeason(
     logger.warn(
       `[${season}] No traders passed filters! traderMap.size=${traderMap.size}, roiThreshold=${roiThreshold}`
     )
-    return 0
+    return { count: 0, status: 'no_candidates' }
   }
 
   // Prefetch on-chain contract detection results from trader_sources.
@@ -671,196 +798,146 @@ async function computeSeason(
     supabase
   )
 
-  // Sort by arena_score desc, then trust weight (higher trust = higher for ties),
-  // then Sharpe ratio (better risk-adjusted), then stable id.
-  // Trust weight removed from score formula (same skill ≠ different score per exchange)
-  // but kept here as tie-breaker for equal-scoring traders.
-  scoredFiltered.sort((a, b) => {
-    const diff = b.arena_score! - a.arena_score!
-    if (Math.abs(diff) > 0.01) return diff
-    const twA = SOURCE_TRUST_WEIGHT[a.source] ?? 0.5
-    const twB = SOURCE_TRUST_WEIGHT[b.source] ?? 0.5
-    if (Math.abs(twB - twA) > 0.01) return twB - twA
-    const srA = a.sharpe_ratio ?? -99
-    const srB = b.sharpe_ratio ?? -99
-    if (Math.abs(srB - srA) > 0.01) return srB - srA
-    return a.source_trader_id.localeCompare(b.source_trader_id)
-  })
+  // Application array order is never rank authority. The database finalizer
+  // owns the established score -> persisted-id order after all row mutations.
+
+  const scoredCountBySource = new Map<string, number>()
+  for (const trader of scoredFiltered) {
+    scoredCountBySource.set(trader.source, (scoredCountBySource.get(trader.source) ?? 0) + 1)
+  }
+  const freshRankingPlatforms = [
+    ...new Set(freshPlatforms.filter((source) => isPublicRankingSourceAllowed(source))),
+  ]
+  // Publication freshness describes the complete source board, including a
+  // fresh source that legitimately yields zero rank-eligible rows. Derive it
+  // from the Phase-1 board evidence, never from the scored subset.
+  const freshSourceEvidence = [...traderMap.values()]
+    .filter((trader) => freshRankingPlatforms.includes(trader.source))
+    .map((trader) => ({
+      source: trader.source,
+      source_as_of: trader.source_board_as_of,
+    }))
 
   // Degradation guard: prevent bad data from overwriting good leaderboard data
   const degradation = await checkDegradationGuard({
-    supabase: supabase as SupabaseClient,
+    supabase,
     season,
-    scoredCount: scored.length,
-    freshPlatforms,
+    // Only the actual publication cohort can satisfy the last-good coverage
+    // gate. Partial/untrusted rows in `scored` must not pad this count.
+    scoredCount: scoredFiltered.length,
+    freshPlatforms: freshRankingPlatforms,
     forceWrite: forceWrite || false,
-    previousCount,
+    scoredCountBySource,
   })
-  if (degradation.action === 'skip') return -1
+  if (degradation.action === 'skip') return { count: -1, status: 'degradation_skip' }
 
-  // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
-  const currentScoreMap = await fetchCurrentScoreMap(
-    supabase as SupabaseClient,
-    season,
-    isOutOfTime
-  )
-  const { changedTraders, rankMap, prevRankMap } = buildChangedTraders(
+  // Phase 2: Incremental upsert — only update changed serving fields. The
+  // database finalizer owns rank and scrubs unversioned movement to unknown.
+  const currentScoreMap = await fetchCurrentScoreMap(supabase, season, isOutOfTime)
+  const { changedTraders, prevRankMap } = buildChangedTraders(
     scoredFiltered,
     currentScoreMap,
     season
   )
 
-  // Acquire DB-level advisory lock to prevent concurrent upserts for the same season.
-  // This is a second layer of protection (Redis lock is first) for cases where Redis
-  // lock expired but the previous function is still writing.
-  let dbLockAcquired = false
-  try {
-    const { data: lockResult } = await supabase.rpc('acquire_leaderboard_lock', { season })
-    dbLockAcquired = lockResult === true
-    if (!dbLockAcquired) {
-      logger.warn(
-        `[${season}] Could not acquire DB advisory lock — another compute may be writing. Proceeding anyway.`
-      )
-    }
-  } catch (lockErr) {
-    logger.warn(
-      `[${season}] Advisory lock RPC failed (non-critical):`,
-      lockErr instanceof Error ? lockErr.message : String(lockErr)
+  // Do not begin a legacy multi-call write when the required finalization
+  // reserve is already gone. Once the first row is written, every required
+  // step below must either complete or throw before database finalization.
+  if (isOutOfTime(35_000)) {
+    throw new Error(
+      `[${season}] insufficient time to begin leaderboard publication (${Math.round(timeLeftMs() / 1000)}s remaining)`
     )
   }
 
-  // Upsert changed rows + zero out excluded traders
-  const { upsertErrors, upsertAborted: upsertWasAborted } = await upsertLeaderboard({
-    supabase: supabase as SupabaseClient,
+  let upsertErrors = 0
+  // Upsert changed rows + zero out excluded traders. Cross-request mutual
+  // exclusion is owned by the owner-token Redis run lease. The retired
+  // session-level advisory RPC could not span PostgREST requests and therefore
+  // did not protect this multi-call publication.
+  const upsertResult = await upsertLeaderboard({
+    supabase,
     season,
     changedTraders,
-    rankMap,
     prevRankMap,
     isOutOfTime,
     timeLeftMs,
   })
-  upsertAborted = upsertWasAborted
+  upsertErrors = upsertResult.upsertErrors
+  upsertAborted = upsertResult.upsertAborted
+
+  // Some rows may already have been updated by the legacy batch writer; the
+  // staging/atomic finalizer remains the follow-up for byte-for-byte atomicity.
+  // Never bless that mixed state as a successful publication.
+  if (upsertAborted || upsertErrors > 0) {
+    throw new Error(
+      `[${season}] leaderboard upsert incomplete (aborted=${upsertAborted}, errors=${upsertErrors}); database finalization withheld`
+    )
+  }
 
   await zeroOutExcluded({
-    supabase: supabase as SupabaseClient,
+    supabase,
     season,
     uniqueTraders,
     traderMap,
-    freshPlatforms,
+    freshPlatforms: freshRankingPlatforms,
     isOutOfTime,
     upsertAborted,
     timeLeftMs,
   })
 
-  // Re-rank ALL rows to fix drift from incremental upserts. Stale traders
-  // (outside freshness window) keep old ranks while new traders shift numbering;
-  // this global re-rank ensures rank always matches arena_score DESC ordering.
-  // Skip if running out of time — next cron cycle will catch up. Logic in
-  // rerank-cleanup.ts.
   if (isOutOfTime(15_000)) {
-    logger.warn(`[${season}] SKIPPING re-rank — only ${Math.round(timeLeftMs() / 1000)}s left`)
-  } else {
-    await rerankAllRows(supabase, season)
+    throw new Error(
+      `[${season}] insufficient time for required platform cleanup (${Math.round(timeLeftMs() / 1000)}s remaining)`
+    )
   }
 
-  // --- ROOT CAUSE FIX: Atomic per-platform cleanup ---
-  // For each FRESH platform, delete all rows NOT in the new scored set.
-  // This eliminates zombie rows immediately instead of waiting 5 days.
-  // Stale/query-failed platforms are untouched (their data is preserved).
-  if (isOutOfTime(15_000)) {
-    logger.warn(
-      `[${season}] SKIPPING atomic cleanup — only ${Math.round(timeLeftMs() / 1000)}s left`
+  // Delete obsolete rows before re-ranking so the final rank sequence has no
+  // gaps. Stale/query-failed sources remain untouched.
+  const scoredTradersByPlatform = new Map<string, string[]>(
+    freshRankingPlatforms.map((source) => [source, []])
+  )
+  for (const trader of scoredFiltered) {
+    const ids = scoredTradersByPlatform.get(trader.source) ?? []
+    ids.push(trader.source_trader_id)
+    scoredTradersByPlatform.set(trader.source, ids)
+  }
+  const atomicCleaned = await atomicPlatformCleanup(
+    supabase,
+    season,
+    freshRankingPlatforms,
+    scoredTradersByPlatform
+  )
+  if (atomicCleaned > 0) {
+    logger.info(
+      `${season}: atomic cleanup removed ${atomicCleaned} zombie rows from fresh platforms`
     )
-  } else if (!upsertAborted) {
-    // Build per-platform trader ID map from the scored result
-    const scoredTradersByPlatform = new Map<string, string[]>()
-    for (const t of scoredFiltered) {
-      const ids = scoredTradersByPlatform.get(t.source) || []
-      ids.push(t.source_trader_id)
-      scoredTradersByPlatform.set(t.source, ids)
-    }
-    const atomicCleaned = await atomicPlatformCleanup(
-      supabase as SupabaseClient,
-      season,
-      freshPlatforms,
-      scoredTradersByPlatform
-    )
-    if (atomicCleaned > 0) {
-      logger.info(
-        `${season}: atomic cleanup removed ${atomicCleaned} zombie rows from fresh platforms`
-      )
-    }
   }
 
-  // Legacy stale-row cleanup as safety net (catches rows from platforms
-  // that were stale for >5 days and never got atomic-cleaned)
   if (isOutOfTime(10_000)) {
-    logger.warn(
-      `[${season}] SKIPPING stale-row cleanup — only ${Math.round(timeLeftMs() / 1000)}s left`
-    )
-  } else {
-    const cleaned = await cleanupStaleRows(supabase, season)
-    if (cleaned > 0) {
-      logger.info(`${season}: cleaned ${cleaned} old orphan rows from currently fresh sources`)
-    }
-  }
-
-  // Publish the source-data watermarks only after every ranking upsert for this
-  // season completed. A partial/errored write must leave the previous
-  // last-good watermarks untouched so public APIs fail closed to stale.
-  if (!upsertAborted && upsertErrors === 0) {
-    try {
-      const watermarksWritten = await upsertSourceFreshness({
-        supabase: supabase as SupabaseClient,
-        season,
-        scoredTraders: scoredFiltered,
-      })
-      logger.info(`[${season}] published ${watermarksWritten} source freshness watermarks`)
-    } catch (freshnessError) {
-      logger.warn(
-        `[${season}] source freshness publish failed; keeping prior watermarks: ${
-          freshnessError instanceof Error ? freshnessError.message : String(freshnessError)
-        }`
-      )
-    }
-  } else {
-    logger.warn(
-      `[${season}] source freshness publish skipped after partial ranking write (aborted=${upsertAborted}, errors=${upsertErrors})`
+    throw new Error(
+      `[${season}] insufficient time for required re-rank (${Math.round(timeLeftMs() / 1000)}s remaining)`
     )
   }
+  await rerankAllRows(supabase, season)
 
-  // Save scored count for future degradation checks
-  await saveScoredCount(season, scored.length)
-
-  // Write per-season checkpoint so retries within the same hour skip this season.
-  // TTL = warm (900s) — survives the cron interval but doesn't linger.
-  try {
-    await tieredSet(checkpointKey, { count: scored.length, at: new Date().toISOString() }, 'warm', [
-      'leaderboard',
-    ])
-  } catch (e) {
-    logger.warn(
-      `[${season}] Checkpoint write failed: ${e instanceof Error ? e.message : String(e)}`
-    )
-  }
-
-  // Release DB advisory lock
-  if (dbLockAcquired) {
-    try {
-      await supabase.rpc('release_leaderboard_lock', { season })
-    } catch {
-      // Non-critical — session-level lock auto-releases when connection closes
-    }
-  }
+  // Legacy source watermarks are a required database-finalization gate, not an
+  // atomic publication seal. Missing/invalid evidence or a database error must
+  // throw and withhold every later authority/cache marker.
+  const watermarksWritten = await upsertSourceFreshness({
+    supabase,
+    season,
+    expectedSources: freshRankingPlatforms,
+    sourceEvidence: freshSourceEvidence,
+  })
+  logger.info(`[${season}] finalized ${watermarksWritten} source freshness watermarks`)
 
   const actualUpserted = scoredFiltered.length - upsertErrors
   logger.info(
     `${season}: ranked ${scoredFiltered.length} traders (${scored.length} total scored, ${scored.length - scoredFiltered.length} zero-score excluded, ${upsertErrors} upsert errors)`
   )
-  return actualUpserted
-}
 
-// deriveWinRateMDD lives in ./helpers.ts (single source of truth, 2026-04-09)
+  return { count: actualUpserted, status: 'database_finalized' }
+}
 
 /**
  * Pre-populate Redis with top 100 leaderboard rows for each season.

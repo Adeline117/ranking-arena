@@ -49,8 +49,10 @@ export const metadata: Metadata = {
   },
 }
 
-// ISR: Revalidate every 5 minutes (300s)
-export const revalidate = 300
+// Request-rendered from the publication-fenced shared Redis generation. ISR can
+// finish an old render after revalidatePath('/') and restore stale HTML with no
+// generation CAS, so it cannot be part of the sealed ranking surface.
+export const dynamic = 'force-dynamic'
 
 // Site-level JSON-LD structured data. The hero RPC currently reports a
 // deduplicated source-family count, not a canonical arena.exchanges count, so
@@ -150,7 +152,7 @@ export default async function Page() {
               perPage={PER_PAGE}
               lastUpdated={lastUpdated}
             />
-            <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
+            <SSRRankingTable traders={traders} />
           </div>
         </HomeFirstPaintShell>
 

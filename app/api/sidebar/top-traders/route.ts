@@ -6,7 +6,12 @@
 import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
 import { getOrSetWithLock } from '@/lib/cache'
-import { filterPublicRankingRows, publicRankingCacheKey } from '@/lib/rankings/publication-policy'
+import {
+  filterPublicRankingRows,
+  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+  PUBLIC_RANKING_REDIS_TAG,
+  publicRankingCacheKey,
+} from '@/lib/rankings/publication-policy'
 
 export const runtime = 'edge'
 
@@ -20,10 +25,12 @@ export const GET = withPublic(
           .from('leaderboard_ranks')
           .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score')
           .eq('season_id', '90D')
+          .not('rank', 'is', null)
           .not('arena_score', 'is', null)
           .gt('arena_score', 50)
           .or('is_outlier.is.null,is_outlier.eq.false')
           .order('arena_score', { ascending: false })
+          .order('rank', { ascending: true, nullsFirst: false })
           .limit(50)
 
         if (snapErr) {
@@ -60,11 +67,17 @@ export const GET = withPublic(
 
         return { traders }
       },
-      { ttl: 300, lockTtl: 10 } // Cache 5 minutes
+      {
+        ttl: 300,
+        lockTtl: 10,
+        tags: [PUBLIC_RANKING_REDIS_TAG, 'season:90D'],
+        skipMemory: true,
+        writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+      }
     )
 
     const response = NextResponse.json(data)
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
+    response.headers.set('Cache-Control', 'private, no-store, max-age=0, must-revalidate')
     return response
   },
   { name: 'sidebar-top-traders', rateLimit: 'read' }

@@ -39,7 +39,7 @@ type QueryChain = Record<string, jest.Mock> & { then: Promise<QueryResult>['then
 
 function makeQuery(result: QueryResult): QueryChain {
   const chain = {} as QueryChain
-  for (const method of ['select', 'in', 'is', 'eq', 'gt', 'or', 'order']) {
+  for (const method of ['select', 'in', 'is', 'eq', 'not', 'gt', 'or', 'order']) {
     chain[method] = jest.fn(() => chain)
   }
   chain.limit = jest.fn(async () => result)
@@ -217,6 +217,7 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
       source_trader_id: 'current-trader',
       handle: 'Current trader',
       arena_score: 88,
+      rank: 1,
     }
     const topQuery = makeQuery({ data: [trader], error: null })
     mockFrom.mockReturnValueOnce(topQuery)
@@ -230,6 +231,7 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
     expect(mockRpc).not.toHaveBeenCalled()
     expect(mockFrom).toHaveBeenCalledWith('leaderboard_ranks')
     expect(topQuery.eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(topQuery.not).toHaveBeenCalledWith('rank', 'is', null)
     expect(topQuery.gt).toHaveBeenCalledWith('arena_score', 0)
     expect(topQuery.or).toHaveBeenCalledWith('is_outlier.is.null,is_outlier.eq.false')
     expect(body).toEqual({
@@ -260,12 +262,14 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
           source_trader_id: 'key:with-colon',
           handle: 'Current DB handle',
           arena_score: 70,
+          rank: 1,
         },
         {
           source: 'wrong_source',
           source_trader_id: 'missing',
           handle: 'Wrong composite identity',
           arena_score: 60,
+          rank: 2,
         },
       ],
       error: null,
@@ -291,6 +295,7 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
           source_trader_id: 'key:with-colon',
           handle: 'Current DB handle',
           arena_score: 70,
+          rank: 1,
           recommendation_score: 9,
         },
       ],

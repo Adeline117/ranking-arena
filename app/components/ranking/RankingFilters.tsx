@@ -59,6 +59,7 @@ interface ExportRankingButtonProps {
     handle: string | null
     source?: string
     arena_score?: number
+    rank?: number | null
     roi: number
     pnl?: number | null
     win_rate?: number | null
@@ -92,8 +93,8 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
   }, [showMenu])
 
   const buildRows = (count: number) =>
-    traders.slice(0, count).map((t, i) => ({
-      rank: i + 1,
+    traders.slice(0, count).map((t) => ({
+      rank: t.rank ?? '',
       handle: t.handle || t.id,
       source: t.source || '',
       arena_score: t.arena_score ?? '',
