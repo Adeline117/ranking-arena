@@ -62,33 +62,39 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 
 const mockRequireAuth = jest.fn()
 const mockGetAuthUser = jest.fn()
+const mockSupabaseRpc = jest.fn()
+const mockSupabaseFrom = jest.fn()
 let mockSupabaseRpcResult: { data: unknown; error: unknown } = { data: null, error: null }
 let mockSupabaseSelectResult: { data: unknown; error: unknown } = { data: [], error: null }
-let mockSupabaseInsertResult: { data: unknown; error: unknown } = { data: null, error: null }
 let mockSupabaseTableResults: Record<string, { data: unknown; error: unknown }> = {}
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
-    rpc: jest.fn().mockImplementation(() => Promise.resolve(mockSupabaseRpcResult)),
-    from: jest.fn((table: string) => {
-      const chain: Record<string, jest.Mock> = {}
-      chain.select = jest.fn(() => chain)
-      chain.eq = jest.fn(() => chain)
-      chain.order = jest.fn(() => chain)
-      chain.insert = jest.fn(() => chain)
-      chain.single = jest.fn(() => Promise.resolve(mockSupabaseInsertResult))
-      // Make the chain thenable so `await` resolves to the select result
-      chain.then = jest.fn((resolve: (v: unknown) => void) =>
-        resolve(mockSupabaseTableResults[table] ?? mockSupabaseSelectResult)
-      ) as jest.Mock
-      return chain
-    }),
+    rpc: (...args: unknown[]) => mockSupabaseRpc(...args),
+    from: (...args: unknown[]) => mockSupabaseFrom(...args),
   })),
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   getUserHandle: jest.fn(),
   getUserProfile: jest.fn(),
 }))
+
+mockSupabaseRpc.mockImplementation(() => Promise.resolve(mockSupabaseRpcResult))
+mockSupabaseFrom.mockImplementation((table: string) => {
+  const chain: Record<string, jest.Mock> = {}
+  chain.select = jest.fn(() => chain)
+  chain.eq = jest.fn(() => chain)
+  chain.order = jest.fn(() => chain)
+  chain.insert = jest.fn(() => chain)
+  chain.single = jest.fn(() =>
+    Promise.resolve(mockSupabaseTableResults[table] ?? mockSupabaseSelectResult)
+  )
+  // Make the chain thenable so `await` resolves to the select result
+  chain.then = jest.fn((resolve: (v: unknown) => void) =>
+    resolve(mockSupabaseTableResults[table] ?? mockSupabaseSelectResult)
+  ) as jest.Mock
+  return chain
+})
 
 jest.mock('@/lib/utils/csrf', () => ({
   validateCsrfToken: jest.fn().mockReturnValue(true),
@@ -121,15 +127,48 @@ import { NextRequest } from 'next/server'
 import { GET, POST } from '../route'
 
 describe('/api/bookmark-folders', () => {
-  const mockUser = { id: 'user-1', email: 'test@test.com' }
+  const USER_ID = '11111111-1111-4111-8111-111111111111'
+  const FOLDER_ID = '22222222-2222-4222-8222-222222222222'
+  const mockUser = { id: USER_ID, email: 'test@test.com' }
+
+  function mutationFolder(overrides: Record<string, unknown> = {}) {
+    return {
+      id: FOLDER_ID,
+      user_id: USER_ID,
+      name: 'My Folder',
+      description: null,
+      avatar_url: null,
+      is_public: false,
+      is_default: false,
+      post_count: 0,
+      subscriber_count: 0,
+      created_at: '2026-07-29T00:00:00Z',
+      updated_at: '2026-07-29T00:00:00Z',
+      ...overrides,
+    }
+  }
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockSupabaseRpc.mockImplementation(() => Promise.resolve(mockSupabaseRpcResult))
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      const chain: Record<string, jest.Mock> = {}
+      chain.select = jest.fn(() => chain)
+      chain.eq = jest.fn(() => chain)
+      chain.order = jest.fn(() => chain)
+      chain.insert = jest.fn(() => chain)
+      chain.single = jest.fn(() =>
+        Promise.resolve(mockSupabaseTableResults[table] ?? mockSupabaseSelectResult)
+      )
+      chain.then = jest.fn((resolve: (v: unknown) => void) =>
+        resolve(mockSupabaseTableResults[table] ?? mockSupabaseSelectResult)
+      ) as jest.Mock
+      return chain
+    })
     mockRequireAuth.mockResolvedValue(mockUser)
     mockGetAuthUser.mockResolvedValue(mockUser)
     mockSupabaseRpcResult = { data: null, error: null }
     mockSupabaseSelectResult = { data: [], error: null }
-    mockSupabaseInsertResult = { data: null, error: null }
     mockSupabaseTableResults = {}
   })
 
@@ -255,8 +294,11 @@ describe('/api/bookmark-folders', () => {
     })
 
     it('creates folder successfully with valid name', async () => {
-      const mockFolder = { id: 'f-new', name: 'My Folder', is_default: false, is_public: false }
-      mockSupabaseInsertResult = { data: mockFolder, error: null }
+      const mockFolder = mutationFolder()
+      mockSupabaseRpcResult = {
+        data: { status: 'created', user_id: USER_ID, folder: mockFolder },
+        error: null,
+      }
 
       const req = new NextRequest('http://localhost/api/bookmark-folders', {
         method: 'POST',
@@ -268,13 +310,23 @@ describe('/api/bookmark-folders', () => {
       expect(res.status).toBe(201)
       expect(body.success).toBe(true)
       expect(body.data.folder.name).toBe('My Folder')
+      expect(mockSupabaseRpc).toHaveBeenCalledWith('mutate_bookmark_folder_atomic', {
+        p_action: 'create',
+        p_folder_id: null,
+        p_name: 'My Folder',
+        p_description: null,
+        p_avatar_url: null,
+        p_is_public: false,
+        p_set_name: true,
+        p_set_description: true,
+        p_set_avatar_url: true,
+        p_set_is_public: true,
+      })
+      expect(mockSupabaseFrom).not.toHaveBeenCalled()
     })
 
     it('handles duplicate folder name error', async () => {
-      mockSupabaseInsertResult = {
-        data: null,
-        error: { code: '23505', message: 'duplicate key value' },
-      }
+      mockSupabaseRpcResult = { data: { status: 'name_conflict' }, error: null }
 
       const req = new NextRequest('http://localhost/api/bookmark-folders', {
         method: 'POST',
@@ -283,8 +335,69 @@ describe('/api/bookmark-folders', () => {
       const res = await POST(req)
       const body = await res.json()
 
-      expect(res.status).toBeGreaterThanOrEqual(400)
+      expect(res.status).toBe(409)
       expect(body.success).toBe(false)
+    })
+
+    it('returns 503 when the lifecycle authority is not deployed', async () => {
+      mockSupabaseRpcResult = {
+        data: null,
+        error: { code: 'PGRST202', message: 'Could not find the function' },
+      }
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders', {
+        method: 'POST',
+        body: { name: 'My Folder' },
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(503)
+      expect(body.success).toBe(false)
+      expect(body.error.code).toBe('SERVICE_UNAVAILABLE')
+    })
+
+    it('fails closed on a forged or malformed create acknowledgement', async () => {
+      mockSupabaseRpcResult = {
+        data: {
+          status: 'created',
+          user_id: USER_ID,
+          folder: mutationFolder({ user_id: '99999999-9999-4999-8999-999999999999' }),
+        },
+        error: null,
+      }
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders', {
+        method: 'POST',
+        body: { name: 'My Folder' },
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(500)
+      expect(body.success).toBe(false)
+    })
+
+    it.each([null, [], 'folder'])('rejects a non-object JSON body: %p', async (bodyValue) => {
+      const req = new NextRequest('http://localhost/api/bookmark-folders', {
+        method: 'POST',
+        body: bodyValue,
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(400)
+      expect(mockSupabaseRpc).not.toHaveBeenCalled()
+    })
+
+    it('rejects control characters before invoking the authority', async () => {
+      const req = new NextRequest('http://localhost/api/bookmark-folders', {
+        method: 'POST',
+        body: { name: 'My\u0000Folder' },
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(400)
+      expect(mockSupabaseRpc).not.toHaveBeenCalled()
     })
   })
 })

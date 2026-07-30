@@ -21,6 +21,7 @@ const mockLoggerWarn = jest.fn()
 
 const translations: Record<string, string> = {
   browsePublicFolders: 'Browse public folders',
+  createFailed: 'Failed to create folder',
   defaultFolderName: 'Default',
   itemCount: '{n} items',
   loadFoldersFailed: 'Failed to load folders',
@@ -378,6 +379,42 @@ describe('FavoritesPageClient load states', () => {
     fireEvent.click(screen.getByText('create'))
 
     expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
+  })
+
+  it('shows the server message from a standard create error envelope', async () => {
+    const fetchMock = jest.fn((url: string, options?: RequestInit) => {
+      if (options?.method === 'POST') {
+        return Promise.resolve(
+          response(
+            {
+              success: false,
+              error: {
+                code: 'RESOURCE_EXISTS',
+                message: 'A folder with this name already exists',
+              },
+            },
+            409
+          )
+        )
+      }
+      if (url === '/api/bookmark-folders' || url === '/api/bookmark-folders/subscribed') {
+        return Promise.resolve(folderResponse([]))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    render(<FavoritesPageClient embedded />)
+    expect(await screen.findByText('No folders yet')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'New folder' }))
+    fireEvent.change(screen.getByPlaceholderText('bookmarkFolderName'), {
+      target: { value: 'Duplicate' },
+    })
+    fireEvent.click(screen.getByText('create'))
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith('A folder with this name already exists', 'error')
+    )
   })
 
   it('hides account A immediately and rejects its late refresh after switching to B', async () => {

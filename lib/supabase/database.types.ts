@@ -10496,6 +10496,21 @@ export type Database = {
         Args: { p_action: string; p_folder_id: string }
         Returns: Json
       }
+      mutate_bookmark_folder_atomic: {
+        Args: {
+          p_action: string
+          p_avatar_url: string | null
+          p_description: string | null
+          p_folder_id: string | null
+          p_is_public: boolean | null
+          p_name: string | null
+          p_set_avatar_url: boolean
+          p_set_description: boolean
+          p_set_is_public: boolean
+          p_set_name: boolean
+        }
+        Returns: Json
+      }
       mutate_trader_watchlist_atomic: {
         Args: {
           p_action: string

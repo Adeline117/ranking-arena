@@ -7,8 +7,23 @@
 
 import { NextRequest } from 'next/server'
 import { withAuth, withPublic } from '@/lib/api/middleware'
-import { success, badRequest, handleError } from '@/lib/api/response'
+import {
+  badRequest,
+  conflict,
+  error as errorResponse,
+  forbidden,
+  handleError,
+  notFound,
+  success,
+} from '@/lib/api/response'
+import { ErrorCode } from '@/lib/api/errors'
 import { validateString, validateBoolean, validateNumber } from '@/lib/api/validation'
+import {
+  hasControlCharacters,
+  isBookmarkFolderAuthorityUnavailable,
+  normalizeBookmarkFolderId,
+  validateBookmarkFolderMutationAck,
+} from '@/lib/bookmarks/folder-mutation'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -19,10 +34,13 @@ function isNoRows(error: { code?: string } | null): boolean {
 // 获取收藏夹详情和帖子列表
 export async function GET(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
+  const folderId = normalizeBookmarkFolderId(id)
 
   const handler = withPublic(
     async ({ user, supabase, request: req }) => {
       try {
+        if (!folderId) return badRequest('Invalid folder id')
+
         const { searchParams } = new URL(req.url)
 
         const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 50 }) ?? 20
@@ -34,7 +52,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           .select(
             'id, user_id, name, description, avatar_url, is_public, is_default, post_count, created_at'
           )
-          .eq('id', id)
+          .eq('id', folderId)
           .single()
 
         if (folderError && !isNoRows(folderError)) {
@@ -56,7 +74,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         const { count: subscriberCount, error: subscriberCountError } = await supabase
           .from('folder_subscriptions')
           .select('id', { count: 'exact', head: true })
-          .eq('folder_id', id)
+          .eq('folder_id', folderId)
         if (
           subscriberCountError ||
           !Number.isSafeInteger(subscriberCount) ||
@@ -72,7 +90,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
             .from('folder_subscriptions')
             .select('id')
             .eq('user_id', user.id)
-            .eq('folder_id', id)
+            .eq('folder_id', folderId)
             .single()
           if (subscriptionError && !isNoRows(subscriptionError)) {
             throw subscriptionError
@@ -102,7 +120,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
             )
           `
           )
-          .eq('folder_id', id)
+          .eq('folder_id', folderId)
           .order('created_at', { ascending: false })
           .range(offset, offset + limit - 1)
 
@@ -172,27 +190,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
 // 更新收藏夹信息
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
+  const folderId = normalizeBookmarkFolderId(id)
 
   const handler = withAuth(
     async ({ user, supabase, request: req }) => {
       try {
-        // 检查收藏夹是否存在且属于当前用户
-        const { data: folder, error: folderError } = await supabase
-          .from('bookmark_folders')
-          .select('id, user_id, is_default')
-          .eq('id', id)
-          .single()
-
-        if (folderError && !isNoRows(folderError)) {
-          throw folderError
-        }
-        if (!folder) {
-          return success({ error: 'Folder not found' }, 404)
-        }
-
-        if (folder.user_id !== user.id) {
-          return success({ error: 'No permission to modify this folder' }, 403)
-        }
+        if (!folderId) return badRequest('Invalid folder id')
 
         let body: Record<string, unknown>
         try {
@@ -200,56 +203,89 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         } catch {
           return badRequest('Invalid JSON body')
         }
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+          return badRequest('Invalid JSON body')
+        }
 
-        const updateData: Record<string, string | boolean | null> = {}
+        const has = (key: string) => Object.prototype.hasOwnProperty.call(body, key)
+        const setName = has('name')
+        const setDescription = has('description')
+        const setAvatarUrl = has('avatar_url')
+        const setIsPublic = has('is_public')
+        if (!setName && !setDescription && !setAvatarUrl && !setIsPublic) {
+          return badRequest('Nothing to update')
+        }
 
-        // 验证并添加更新字段
-        const name = validateString(body.name, { minLength: 1, maxLength: 50 })
-        if (name !== undefined) {
-          // 默认收藏夹不能修改名称
-          if (folder.is_default) {
-            return success({ error: 'Cannot rename the default folder' }, 400)
+        const name = setName
+          ? validateString(body.name, {
+              required: true,
+              minLength: 1,
+              maxLength: 50,
+              fieldName: 'folder name',
+            })!
+          : null
+        const description = setDescription
+          ? validateString(body.description, { maxLength: 200, fieldName: 'description' })
+          : null
+        const avatarUrl = setAvatarUrl
+          ? validateString(body.avatar_url, { maxLength: 500, fieldName: 'avatar_url' })
+          : null
+        const isPublic = setIsPublic
+          ? validateBoolean(body.is_public, { required: true, fieldName: 'is_public' })!
+          : null
+
+        if (
+          hasControlCharacters(name) ||
+          hasControlCharacters(description) ||
+          hasControlCharacters(avatarUrl)
+        ) {
+          return badRequest('Folder fields cannot contain control characters')
+        }
+
+        const { data, error } = await supabase.rpc('mutate_bookmark_folder_atomic', {
+          p_action: 'update',
+          p_folder_id: folderId,
+          p_name: name,
+          p_description: description,
+          p_avatar_url: avatarUrl,
+          p_is_public: isPublic,
+          p_set_name: setName,
+          p_set_description: setDescription,
+          p_set_avatar_url: setAvatarUrl,
+          p_set_is_public: setIsPublic,
+        })
+        if (error) {
+          if (isBookmarkFolderAuthorityUnavailable(error)) {
+            return errorResponse(
+              'Bookmark folders are temporarily unavailable',
+              503,
+              ErrorCode.SERVICE_UNAVAILABLE
+            )
           }
-          updateData.name = name
+          throw error
         }
 
-        const description = validateString(body.description, { maxLength: 200 })
-        if (description !== undefined) {
-          updateData.description = description
+        const ack = validateBookmarkFolderMutationAck(data, {
+          action: 'update',
+          userId: user.id,
+          folderId,
+        })
+        if (ack.status === 'account_inactive') return forbidden('Account is inactive')
+        if (ack.status === 'folder_not_found') return notFound('Folder not found')
+        if (ack.status === 'folder_forbidden') {
+          return forbidden('No permission to modify this folder')
+        }
+        if (ack.status === 'default_protected') {
+          return badRequest('Cannot rename the default folder')
+        }
+        if (ack.status === 'name_conflict') {
+          return conflict('A folder with this name already exists')
+        }
+        if (ack.status !== 'updated' || !('folder' in ack)) {
+          throw new Error('Atomic bookmark folder update returned an impossible status')
         }
 
-        const avatar_url = validateString(body.avatar_url, { maxLength: 500 })
-        if (avatar_url !== undefined) {
-          updateData.avatar_url = avatar_url
-        }
-
-        const is_public = validateBoolean(body.is_public)
-        if (is_public !== undefined) {
-          updateData.is_public = is_public
-        }
-
-        if (Object.keys(updateData).length === 0) {
-          return success({ error: 'Nothing to update' }, 400)
-        }
-
-        updateData.updated_at = new Date().toISOString()
-
-        // 执行更新
-        const { data: updatedFolder, error: updateError } = await supabase
-          .from('bookmark_folders')
-          .update(updateData)
-          .eq('id', id)
-          .select()
-          .single()
-
-        if (updateError) {
-          if (updateError.code === '23505') {
-            return success({ error: 'A folder with this name already exists' }, 409)
-          }
-          throw updateError
-        }
-
-        return success({ folder: updatedFolder })
+        return success({ folder: ack.folder })
       } catch (error: unknown) {
         return handleError(error, 'bookmark-folders/[id] PATCH')
       }
@@ -263,38 +299,51 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 // 删除收藏夹
 export async function DELETE(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
+  const folderId = normalizeBookmarkFolderId(id)
 
   const handler = withAuth(
     async ({ user, supabase }) => {
       try {
-        // 检查收藏夹是否存在且属于当前用户
-        const { data: folder, error: folderError } = await supabase
-          .from('bookmark_folders')
-          .select('id, user_id, is_default')
-          .eq('id', id)
-          .single()
+        if (!folderId) return badRequest('Invalid folder id')
 
-        if (folderError && !isNoRows(folderError)) {
-          throw folderError
+        const { data, error } = await supabase.rpc('mutate_bookmark_folder_atomic', {
+          p_action: 'delete',
+          p_folder_id: folderId,
+          p_name: null,
+          p_description: null,
+          p_avatar_url: null,
+          p_is_public: null,
+          p_set_name: false,
+          p_set_description: false,
+          p_set_avatar_url: false,
+          p_set_is_public: false,
+        })
+        if (error) {
+          if (isBookmarkFolderAuthorityUnavailable(error)) {
+            return errorResponse(
+              'Bookmark folders are temporarily unavailable',
+              503,
+              ErrorCode.SERVICE_UNAVAILABLE
+            )
+          }
+          throw error
         }
-        if (!folder) {
-          return success({ error: 'Folder not found' }, 404)
+
+        const ack = validateBookmarkFolderMutationAck(data, {
+          action: 'delete',
+          userId: user.id,
+          folderId,
+        })
+        if (ack.status === 'account_inactive') return forbidden('Account is inactive')
+        if (ack.status === 'folder_not_found') return notFound('Folder not found')
+        if (ack.status === 'folder_forbidden') {
+          return forbidden('No permission to delete this folder')
         }
-
-        if (folder.user_id !== user.id) {
-          return success({ error: 'No permission to delete this folder' }, 403)
+        if (ack.status === 'default_protected') {
+          return badRequest('Cannot delete the default folder')
         }
-
-        // 默认收藏夹不能删除
-        if (folder.is_default) {
-          return success({ error: 'Cannot delete the default folder' }, 400)
-        }
-
-        // 删除收藏夹（收藏记录会通过 CASCADE 自动删除）
-        const { error: deleteError } = await supabase.from('bookmark_folders').delete().eq('id', id)
-
-        if (deleteError) {
-          throw deleteError
+        if (ack.status !== 'deleted') {
+          throw new Error('Atomic bookmark folder delete returned an impossible status')
         }
 
         return success({ message: 'Folder deleted' })

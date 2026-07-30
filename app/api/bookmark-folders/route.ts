@@ -5,8 +5,21 @@
  */
 
 import { withAuth } from '@/lib/api/middleware'
-import { badRequest, success, handleError } from '@/lib/api/response'
+import {
+  badRequest,
+  conflict,
+  error as errorResponse,
+  forbidden,
+  success,
+  handleError,
+} from '@/lib/api/response'
+import { ErrorCode } from '@/lib/api/errors'
 import { validateString, validateBoolean } from '@/lib/api/validation'
+import {
+  hasControlCharacters,
+  isBookmarkFolderAuthorityUnavailable,
+  validateBookmarkFolderMutationAck,
+} from '@/lib/bookmarks/folder-mutation'
 
 export const GET = withAuth(
   async ({ user, supabase }) => {
@@ -72,6 +85,9 @@ export const POST = withAuth(
       } catch {
         return badRequest('Invalid JSON body')
       }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return badRequest('Invalid JSON body')
+      }
 
       const name = validateString(body.name, {
         required: true,
@@ -83,28 +99,50 @@ export const POST = withAuth(
       const avatar_url = validateString(body.avatar_url, { maxLength: 500 })
       const is_public = validateBoolean(body.is_public) ?? false
 
-      // 创建收藏夹
-      const { data: folder, error } = await supabase
-        .from('bookmark_folders')
-        .insert({
-          user_id: user.id,
-          name,
-          description,
-          avatar_url,
-          is_public,
-          is_default: false,
-        })
-        .select()
-        .single()
+      if (
+        hasControlCharacters(name) ||
+        hasControlCharacters(description) ||
+        hasControlCharacters(avatar_url)
+      ) {
+        return badRequest('Folder fields cannot contain control characters')
+      }
 
+      const { data, error } = await supabase.rpc('mutate_bookmark_folder_atomic', {
+        p_action: 'create',
+        p_folder_id: null,
+        p_name: name,
+        p_description: description,
+        p_avatar_url: avatar_url,
+        p_is_public: is_public,
+        p_set_name: true,
+        p_set_description: true,
+        p_set_avatar_url: true,
+        p_set_is_public: true,
+      })
       if (error) {
-        if (error.code === '23505') {
-          throw new Error('A folder with this name already exists')
+        if (isBookmarkFolderAuthorityUnavailable(error)) {
+          return errorResponse(
+            'Bookmark folders are temporarily unavailable',
+            503,
+            ErrorCode.SERVICE_UNAVAILABLE
+          )
         }
         throw error
       }
 
-      return success({ folder }, 201)
+      const ack = validateBookmarkFolderMutationAck(data, {
+        action: 'create',
+        userId: user.id,
+      })
+      if (ack.status === 'account_inactive') return forbidden('Account is inactive')
+      if (ack.status === 'name_conflict') {
+        return conflict('A folder with this name already exists')
+      }
+      if (ack.status !== 'created' || !('folder' in ack)) {
+        throw new Error('Atomic bookmark folder create returned an impossible status')
+      }
+
+      return success({ folder: ack.folder }, 201)
     } catch (error: unknown) {
       return handleError(error, 'bookmark-folders POST')
     }

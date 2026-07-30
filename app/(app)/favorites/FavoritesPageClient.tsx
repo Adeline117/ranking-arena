@@ -106,6 +106,16 @@ function isRequestScopeCurrent(
   )
 }
 
+function apiErrorMessage(payload: unknown, fallback: string): string {
+  if (!isRecord(payload)) return fallback
+  if (typeof payload.error === 'string') return payload.error
+  if (isRecord(payload.error) && typeof payload.error.message === 'string') {
+    return payload.error.message
+  }
+  if (typeof payload.message === 'string') return payload.message
+  return fallback
+}
+
 async function readFolderList<T>(
   response: Response,
   isFolder: (value: unknown) => value is T
@@ -401,7 +411,7 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
         showToast(t('folderCreated'), 'success')
         void loadFolders(true)
       } else {
-        showToast(data.error || t('createFailed'), 'error')
+        showToast(apiErrorMessage(data, t('createFailed')), 'error')
       }
     } catch (error) {
       if (
