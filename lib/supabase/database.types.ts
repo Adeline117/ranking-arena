@@ -10536,6 +10536,10 @@ export type Database = {
         Args: { p_actor_id: string; p_limit: number; p_offset: number }
         Returns: Json
       }
+      remove_post_bookmark_from_folder_atomic: {
+        Args: { p_bookmark_id: string; p_folder_id: string; p_post_id: string }
+        Returns: Json
+      }
       mutate_trader_watchlist_atomic: {
         Args: {
           p_action: string
