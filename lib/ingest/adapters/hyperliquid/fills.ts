@@ -193,7 +193,10 @@ export function reconstructRoundTripsWithDiagnostics(fills: HlFill[]): RoundTrip
           exitPrice: open.exitSize > EPS ? open.exitNotional / open.exitSize : px,
           size: open.maxAbs,
           realizedPnl: Math.round(open.realized * 1e6) / 1e6,
-          fromFlip: flipped,
+          // A trip opened by a previous direction flip keeps that approximate
+          // boundary even when this fill is an ordinary close. Never promote
+          // a flip-derived cost basis to a fully observed round trip.
+          fromFlip: open.fromFlip || flipped,
           fills: open.fills,
         })
         open = flipped

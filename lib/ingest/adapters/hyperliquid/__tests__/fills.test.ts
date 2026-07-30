@@ -67,6 +67,7 @@ describe('reconstructRoundTrips', () => {
     expect(first.side).toBe('long')
     expect(first.fromFlip).toBe(true) // boundary approximated at the flip fill
     expect(second.side).toBe('short')
+    expect(second.fromFlip).toBe(true) // opened at the approximate flip boundary
     expect(second.realizedPnl).toBeCloseTo(10, 6)
   })
 
