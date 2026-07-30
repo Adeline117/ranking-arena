@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser } from '@/lib/supabase/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 
@@ -30,13 +29,34 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    const { error: updateError } = await supabase
-      .from('user_profiles')
-      .update({ wallet_address: null })
-      .eq('id', user.id)
+    // Bearer admission and mutation are separate requests. Recheck lifecycle
+    // state and release the wallet under the same subject/wallet lock order as
+    // SIWE binding so a concurrent ban, deletion, or re-link has one outcome.
+    const { data, error: unlinkError } = await supabase.rpc(
+      'unbind_siwe_wallet_for_active_profile_atomic',
+      { p_user_id: user.id }
+    )
+    if (unlinkError) {
+      logger.error('[SIWE unlink] Atomic wallet unlink failed', {
+        userId: user.id,
+        code: unlinkError.code,
+      })
+      return NextResponse.json({ error: 'Failed to unlink wallet' }, { status: 503 })
+    }
 
-    if (updateError) {
-      return NextResponse.json({ error: 'Failed to unlink wallet' }, { status: 500 })
+    const acknowledgement = Array.isArray(data) && data.length === 1 ? data[0] : null
+    if (acknowledgement?.status === 'suspended') {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
+    }
+    if (
+      (acknowledgement?.status !== 'unbound' && acknowledgement?.status !== 'already_unbound') ||
+      acknowledgement.result_user_id !== user.id
+    ) {
+      logger.error('[SIWE unlink] Invalid atomic wallet unlink acknowledgement', {
+        userId: user.id,
+        status: acknowledgement?.status,
+      })
+      return NextResponse.json({ error: 'Failed to unlink wallet' }, { status: 503 })
     }
 
     return NextResponse.json({ success: true })

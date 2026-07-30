@@ -13095,6 +13095,14 @@ export type Database = {
         Returns: Json
       }
       trunc_hour: { Args: { ts: string }; Returns: string }
+      unbind_siwe_wallet_for_active_profile_atomic: {
+        Args: { p_user_id: string }
+        Returns: {
+          released_wallet_address: string | null
+          result_user_id: string | null
+          status: string
+        }[]
+      }
       unlink_linked_trader: {
         Args: { p_link_id: string; p_user_id: string }
         Returns: {
