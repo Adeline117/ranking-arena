@@ -19,6 +19,7 @@ import { withPublic } from '@/lib/api/middleware'
 import { badRequest, serverError } from '@/lib/api/response'
 import { NextResponse } from 'next/server'
 import { getWebAuthnConfig, consumeAuthenticationChallenge } from '@/lib/auth/webauthn'
+import { getUserAccountStatus } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('webauthn-authentication-verify')
@@ -35,23 +36,21 @@ interface PasskeyRow {
   user_id: string
   public_key: string
   counter: number | string
+  last_used_at: string | null
   transports: string[] | null
 }
 
-interface LoginProfileRow {
-  id: string
-  banned_at: string | null
-  ban_expires_at: string | null
-  deleted_at: string | null
-  is_banned: boolean | null
+function parsePasskeyCounter(value: number | string): number | null {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value >= 0 ? value : null
+  }
+  if (!/^(0|[1-9]\d*)$/.test(value)) return null
+  const parsed = BigInt(value)
+  return parsed <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(parsed) : null
 }
 
-function isLoginProfileSuspended(profile: LoginProfileRow): boolean {
-  if (profile.banned_at !== null || profile.deleted_at !== null) return true
-  if (profile.is_banned !== true) return false
-  if (profile.ban_expires_at === null) return true
-  const expiresAt = Date.parse(profile.ban_expires_at)
-  return !Number.isFinite(expiresAt) || expiresAt > Date.now()
+async function hasActiveVerifiedAuthProfile(userId: string, verifiedEmail: string) {
+  return (await getUserAccountStatus(userId, { verifiedEmail })) === 'active'
 }
 
 export const POST = withPublic(
@@ -83,7 +82,7 @@ export const POST = withPublic(
     // no authenticated user yet during passwordless login).
     const { data: rowData, error: lookupError } = await supabase
       .from('user_passkeys')
-      .select('id, user_id, public_key, counter, transports')
+      .select('id, user_id, public_key, counter, last_used_at, transports')
       .eq('credential_id', credentialId)
       .maybeSingle()
 
@@ -95,6 +94,11 @@ export const POST = withPublic(
     const row = rowData as PasskeyRow | null
     if (!row) {
       return badRequest('Passkey not recognized')
+    }
+    const storedCounter = parsePasskeyCounter(row.counter)
+    if (storedCounter === null) {
+      logger.error('[authentication-verify] Stored credential counter is invalid')
+      return serverError('Login failed')
     }
 
     let rpID: string
@@ -116,7 +120,7 @@ export const POST = withPublic(
         credential: {
           id: credentialId,
           publicKey: isoBase64URL.toBuffer(row.public_key, 'base64'),
-          counter: Number(row.counter) || 0,
+          counter: storedCounter,
           transports: (row.transports ?? undefined) as AuthenticatorTransportFuture[] | undefined,
         },
       })
@@ -129,44 +133,40 @@ export const POST = withPublic(
       return badRequest('Passkey could not be verified')
     }
 
-    // The auth trigger is the sole profile provisioner. Never mint a session
-    // for an auth identity whose required application profile is missing.
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('id, banned_at, ban_expires_at, deleted_at, is_banned')
-      .eq('id', row.user_id)
-      .maybeSingle()
-
-    const loginProfile = profile as LoginProfileRow | null
-    if (
-      profileError ||
-      !loginProfile ||
-      loginProfile.id !== row.user_id ||
-      isLoginProfileSuspended(loginProfile)
-    ) {
-      logger.error('[authentication-verify] Provisioned profile unavailable:', profileError)
+    const newCounter = parsePasskeyCounter(verification.authenticationInfo.newCounter)
+    if (newCounter === null) {
+      logger.error('[authentication-verify] Verified credential counter is invalid')
       return serverError('Login failed')
     }
 
-    // Update the signature counter + last used timestamp (replay protection).
-    // Bind the write to every security-sensitive value we verified. This CAS
-    // prevents two stale reads from overwriting a winning higher counter and
-    // prevents a concurrently replaced credential from inheriting the proof.
-    const { data: updatedCredential, error: updateError } = await supabase
-      .from('user_passkeys')
-      .update({
-        counter: verification.authenticationInfo.newCounter,
-        last_used_at: new Date().toISOString(),
-      })
-      .eq('id', row.id)
-      .eq('user_id', row.user_id)
-      .eq('credential_id', credentialId)
-      .eq('counter', row.counter)
-      .select('id')
-      .maybeSingle()
-
-    if (updateError || !updatedCredential) {
-      logger.error('[authentication-verify] Counter update failed:', updateError)
+    // The database takes the account lifecycle lock, verifies Auth/profile,
+    // locks the exact credential, and consumes its counter generation in one
+    // transaction. last_used_at makes even counterless (0 -> 0) assertions a
+    // single-winner CAS.
+    const { data: consumptionData, error: consumptionError } = await supabase.rpc(
+      'consume_webauthn_authentication_atomic',
+      {
+        p_user_id: row.user_id,
+        p_passkey_id: row.id,
+        p_credential_id: credentialId,
+        p_expected_public_key: row.public_key,
+        p_expected_counter: storedCounter,
+        p_expected_last_used_at: row.last_used_at,
+        p_new_counter: newCounter,
+      }
+    )
+    const consumption =
+      Array.isArray(consumptionData) && consumptionData.length === 1 ? consumptionData[0] : null
+    if (
+      consumptionError ||
+      consumption?.status !== 'consumed' ||
+      consumption.result_user_id !== row.user_id ||
+      consumption.result_passkey_id !== row.id ||
+      consumption.result_credential_id !== credentialId ||
+      typeof consumption.consumed_at !== 'string' ||
+      !consumption.consumed_at
+    ) {
+      logger.error('[authentication-verify] Atomic assertion consumption failed:', consumptionError)
       return serverError('Login failed')
     }
 
@@ -178,6 +178,10 @@ export const POST = withPublic(
     const email = authUser?.email
     if (getUserError || !authUser || authUser.id !== row.user_id || !email) {
       logger.error('[authentication-verify] Could not resolve user email:', getUserError)
+      return serverError('Login failed')
+    }
+
+    if (!(await hasActiveVerifiedAuthProfile(row.user_id, email))) {
       return serverError('Login failed')
     }
 
@@ -194,6 +198,12 @@ export const POST = withPublic(
     if (linkError || !hashedToken) {
       logger.error('[authentication-verify] generateLink failed:', linkError)
       return serverError('Failed to create session')
+    }
+
+    // Auth token creation cannot share the Postgres transaction. Recheck
+    // immediately before the actual session mint.
+    if (!(await hasActiveVerifiedAuthProfile(row.user_id, email))) {
+      return serverError('Login failed')
     }
 
     // Use a non-admin (anon) client to exchange the token for a session, the
@@ -214,6 +224,11 @@ export const POST = withPublic(
     if (otpError || !otpData.session || otpData.session.user.id !== row.user_id) {
       logger.error('[authentication-verify] verifyOtp failed:', otpError)
       return serverError('Failed to establish session')
+    }
+
+    // A session minted during a losing lifecycle race is never disclosed.
+    if (!(await hasActiveVerifiedAuthProfile(row.user_id, email))) {
+      return serverError('Login failed')
     }
 
     return NextResponse.json({

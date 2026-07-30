@@ -10279,6 +10279,24 @@ export type Database = {
           status: string
         }[]
       }
+      consume_webauthn_authentication_atomic: {
+        Args: {
+          p_credential_id: string
+          p_expected_counter: number
+          p_expected_last_used_at: string | null
+          p_expected_public_key: string
+          p_new_counter: number
+          p_passkey_id: string
+          p_user_id: string
+        }
+        Returns: {
+          consumed_at: string | null
+          result_credential_id: string | null
+          result_passkey_id: string | null
+          result_user_id: string | null
+          status: string
+        }[]
+      }
       assert_recurring_pro_checkout_completed_atomic: {
         Args: {
           p_livemode: boolean

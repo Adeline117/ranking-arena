@@ -22,39 +22,26 @@ jest.mock('@/lib/auth/webauthn', () => ({
 }))
 
 const mockLookupCredential = jest.fn()
-const mockLookupProfile = jest.fn()
-const mockUpdateCredential = jest.fn()
-const mockUpdateCredentialEq = jest.fn()
-const mockUpdateCredentialPayload = jest.fn()
+const mockConsumeAssertion = jest.fn()
 const mockGetUserById = jest.fn()
 const mockGenerateLink = jest.fn()
 const mockVerifyOtp = jest.fn()
+const mockGetUserAccountStatus = jest.fn()
+
+jest.mock('@/lib/supabase/server', () => ({
+  getUserAccountStatus: (...args: unknown[]) => mockGetUserAccountStatus(...args),
+}))
 
 const mockSupabase = {
   from: jest.fn((table: string) => {
-    if (table === 'user_profiles') {
-      return {
-        select: () => ({ eq: () => ({ maybeSingle: mockLookupProfile }) }),
-      }
-    }
     if (table === 'user_passkeys') {
-      const updateBuilder = {
-        eq: (...args: unknown[]) => {
-          mockUpdateCredentialEq(...args)
-          return updateBuilder
-        },
-        select: () => ({ maybeSingle: mockUpdateCredential }),
-      }
       return {
         select: () => ({ eq: () => ({ maybeSingle: mockLookupCredential }) }),
-        update: (...args: unknown[]) => {
-          mockUpdateCredentialPayload(...args)
-          return updateBuilder
-        },
       }
     }
     throw new Error(`Unexpected table: ${table}`)
   }),
+  rpc: (...args: unknown[]) => mockConsumeAssertion(...args),
   auth: {
     admin: {
       getUserById: (...args: unknown[]) => mockGetUserById(...args),
@@ -93,11 +80,27 @@ import { POST } from '../route'
 
 const USER_ID = '11111111-1111-4111-8111-111111111111'
 const CREDENTIAL_ROW = {
-  id: 'credential-row-id',
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   user_id: USER_ID,
   public_key: 'cHVibGljLWtleQ',
   counter: 4,
+  last_used_at: '2026-07-28T00:00:00.000000+00:00',
   transports: ['internal'],
+}
+
+function consumedAssertion() {
+  return {
+    data: [
+      {
+        status: 'consumed',
+        result_user_id: USER_ID,
+        result_passkey_id: CREDENTIAL_ROW.id,
+        result_credential_id: 'credential-id',
+        consumed_at: '2026-07-29T00:00:00.000001+00:00',
+      },
+    ],
+    error: null,
+  }
 }
 
 function request() {
@@ -119,17 +122,8 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
       verified: true,
       authenticationInfo: { newCounter: 5 },
     })
-    mockLookupProfile.mockResolvedValue({
-      data: {
-        id: USER_ID,
-        banned_at: null,
-        ban_expires_at: null,
-        deleted_at: null,
-        is_banned: false,
-      },
-      error: null,
-    })
-    mockUpdateCredential.mockResolvedValue({ data: { id: CREDENTIAL_ROW.id }, error: null })
+    mockConsumeAssertion.mockResolvedValue(consumedAssertion())
+    mockGetUserAccountStatus.mockResolvedValue('active')
     mockGetUserById.mockResolvedValue({
       data: { user: { id: USER_ID, email: 'wallet@example.com' } },
       error: null,
@@ -150,7 +144,7 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
     })
   })
 
-  it('mints a session only after the required profile and replay counter are persisted', async () => {
+  it('mints a session only after exact atomic assertion consumption and three active checks', async () => {
     const response = await POST(request())
 
     expect(response.status).toBe(200)
@@ -158,120 +152,150 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
       verified: true,
       session: { access_token: 'access-token', refresh_token: 'refresh-token' },
     })
-    expect(mockLookupProfile).toHaveBeenCalledTimes(1)
-    expect(mockUpdateCredential).toHaveBeenCalledTimes(1)
-    expect(mockUpdateCredentialPayload).toHaveBeenCalledWith(
-      expect.objectContaining({ counter: 5, last_used_at: expect.any(String) })
-    )
-    expect(mockUpdateCredentialEq.mock.calls).toEqual([
-      ['id', CREDENTIAL_ROW.id],
-      ['user_id', USER_ID],
-      ['credential_id', 'credential-id'],
-      ['counter', 4],
-    ])
-    expect(mockLookupProfile.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockConsumeAssertion).toHaveBeenCalledWith('consume_webauthn_authentication_atomic', {
+      p_user_id: USER_ID,
+      p_passkey_id: CREDENTIAL_ROW.id,
+      p_credential_id: 'credential-id',
+      p_expected_public_key: CREDENTIAL_ROW.public_key,
+      p_expected_counter: 4,
+      p_expected_last_used_at: CREDENTIAL_ROW.last_used_at,
+      p_new_counter: 5,
+    })
+    expect(mockConsumeAssertion.mock.invocationCallOrder[0]).toBeLessThan(
       mockGenerateLink.mock.invocationCallOrder[0]
     )
-    expect(mockUpdateCredential.mock.invocationCallOrder[0]).toBeLessThan(
-      mockGenerateLink.mock.invocationCallOrder[0]
+    expect(mockGetUserAccountStatus).toHaveBeenCalledTimes(3)
+    expect(mockGetUserAccountStatus).toHaveBeenNthCalledWith(1, USER_ID, {
+      verifiedEmail: 'wallet@example.com',
+    })
+    expect(mockGetUserAccountStatus.mock.invocationCallOrder[1]).toBeLessThan(
+      mockVerifyOtp.mock.invocationCallOrder[0]
+    )
+    expect(mockVerifyOtp.mock.invocationCallOrder[0]).toBeLessThan(
+      mockGetUserAccountStatus.mock.invocationCallOrder[2]
     )
   })
 
   it.each([
-    [{ data: null, error: null }, 'missing profile'],
-    [{ data: null, error: { code: 'XX001' } }, 'profile lookup error'],
-  ])('fails closed for %s (%s)', async (profileResult) => {
-    mockLookupProfile.mockResolvedValue(profileResult)
+    [{ data: null, error: { code: 'XX001' } }, 'database error'],
+    [{ data: [], error: null }, 'empty acknowledgement'],
+    [
+      {
+        data: [consumedAssertion().data[0], consumedAssertion().data[0]],
+        error: null,
+      },
+      'multiple acknowledgements',
+    ],
+    [
+      {
+        data: [{ ...consumedAssertion().data[0], status: 'suspended' }],
+        error: null,
+      },
+      'suspended account',
+    ],
+    [
+      {
+        data: [{ ...consumedAssertion().data[0], status: 'conflict' }],
+        error: null,
+      },
+      'counter conflict',
+    ],
+    [
+      {
+        data: [{ ...consumedAssertion().data[0], result_user_id: 'other-user' }],
+        error: null,
+      },
+      'wrong subject',
+    ],
+    [
+      {
+        data: [{ ...consumedAssertion().data[0], consumed_at: null }],
+        error: null,
+      },
+      'missing consumption generation',
+    ],
+  ])('fails closed for an invalid atomic consumption (%s: %s)', async (result) => {
+    mockConsumeAssertion.mockResolvedValue(result)
 
     const response = await POST(request())
 
     expect(response.status).toBe(500)
-    expect(mockUpdateCredential).not.toHaveBeenCalled()
     expect(mockGenerateLink).not.toHaveBeenCalled()
   })
 
-  it.each([
-    [
-      'banned',
-      {
-        id: USER_ID,
-        banned_at: '2026-07-29T00:00:00.000Z',
-        ban_expires_at: null,
-        deleted_at: null,
-        is_banned: false,
-      },
-    ],
-    [
-      'deleted',
-      {
-        id: USER_ID,
-        banned_at: null,
-        ban_expires_at: null,
-        deleted_at: '2026-07-29T00:00:00.000Z',
-        is_banned: false,
-      },
-    ],
-    [
-      'active legacy ban',
-      {
-        id: USER_ID,
-        banned_at: null,
-        ban_expires_at: '2999-01-01T00:00:00.000Z',
-        deleted_at: null,
-        is_banned: true,
-      },
-    ],
-    [
-      'wrong-subject',
-      {
-        id: '22222222-2222-4222-8222-222222222222',
-        banned_at: null,
-        ban_expires_at: null,
-        deleted_at: null,
-        is_banned: false,
-      },
-    ],
-  ])('does not mint a session for a %s profile', async (_label, profile) => {
-    mockLookupProfile.mockResolvedValue({ data: profile, error: null })
-
-    const response = await POST(request())
-
-    expect(response.status).toBe(500)
-    expect(mockUpdateCredential).not.toHaveBeenCalled()
-    expect(mockGetUserById).not.toHaveBeenCalled()
-    expect(mockGenerateLink).not.toHaveBeenCalled()
-    expect(mockVerifyOtp).not.toHaveBeenCalled()
-  })
-
-  it('allows a legacy temporary ban only after its expiry', async () => {
-    mockLookupProfile.mockResolvedValue({
-      data: {
-        id: USER_ID,
-        banned_at: null,
-        ban_expires_at: '2000-01-01T00:00:00.000Z',
-        deleted_at: null,
-        is_banned: true,
-      },
+  it('preserves counterless assertions while binding their last-used CAS generation', async () => {
+    mockLookupCredential.mockResolvedValue({
+      data: { ...CREDENTIAL_ROW, counter: '0', last_used_at: null },
       error: null,
+    })
+    mockVerifyAuthenticationResponse.mockResolvedValue({
+      verified: true,
+      authenticationInfo: { newCounter: 0 },
     })
 
     const response = await POST(request())
 
     expect(response.status).toBe(200)
-    expect(mockGenerateLink).toHaveBeenCalledTimes(1)
+    expect(mockConsumeAssertion).toHaveBeenCalledWith(
+      'consume_webauthn_authentication_atomic',
+      expect.objectContaining({
+        p_expected_counter: 0,
+        p_expected_last_used_at: null,
+        p_new_counter: 0,
+      })
+    )
   })
 
   it.each([
-    [{ data: null, error: null }, 'zero-row counter update'],
-    [{ data: null, error: { code: 'XX001' } }, 'counter update error'],
-  ])('does not mint a session after %s (%s)', async (counterResult) => {
-    mockUpdateCredential.mockResolvedValue(counterResult)
+    [-1, 'negative number'],
+    [Number.MAX_SAFE_INTEGER + 1, 'unsafe number'],
+    ['01', 'non-canonical decimal'],
+    ['9223372036854775807', 'unsafe bigint'],
+  ])(
+    'rejects an invalid stored counter before cryptographic verification: %s (%s)',
+    async (counter) => {
+      mockLookupCredential.mockResolvedValue({ data: { ...CREDENTIAL_ROW, counter }, error: null })
+
+      const response = await POST(request())
+
+      expect(response.status).toBe(500)
+      expect(mockVerifyAuthenticationResponse).not.toHaveBeenCalled()
+      expect(mockConsumeAssertion).not.toHaveBeenCalled()
+    }
+  )
+
+  it('rejects an invalid verified counter without consuming the assertion', async () => {
+    mockVerifyAuthenticationResponse.mockResolvedValue({
+      verified: true,
+      authenticationInfo: { newCounter: Number.MAX_SAFE_INTEGER + 1 },
+    })
 
     const response = await POST(request())
 
     expect(response.status).toBe(500)
+    expect(mockConsumeAssertion).not.toHaveBeenCalled()
     expect(mockGenerateLink).not.toHaveBeenCalled()
   })
+
+  it.each([
+    [['suspended'], false, false, 'before link generation'],
+    [['active', 'suspended'], true, false, 'before session mint'],
+    [['active', 'active', 'suspended'], true, true, 'before token release'],
+  ])(
+    'withholds credentials when lifecycle changes %s',
+    async (statuses, generatedLink, mintedSession, _label) => {
+      for (const status of statuses) {
+        mockGetUserAccountStatus.mockResolvedValueOnce(status)
+      }
+
+      const response = await POST(request())
+
+      expect(response.status).toBe(500)
+      expect(mockGenerateLink).toHaveBeenCalledTimes(generatedLink ? 1 : 0)
+      expect(mockVerifyOtp).toHaveBeenCalledTimes(mintedSession ? 1 : 0)
+      expect(await response.json()).not.toHaveProperty('session')
+    }
+  )
 
   it('rejects a Supabase session belonging to another identity', async () => {
     mockVerifyOtp.mockResolvedValue({
@@ -288,6 +312,7 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
     const response = await POST(request())
 
     expect(response.status).toBe(500)
+    expect(await response.json()).not.toHaveProperty('session')
   })
 
   it('rejects an Auth lookup response belonging to another identity before link minting', async () => {
@@ -306,5 +331,18 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
     expect(response.status).toBe(500)
     expect(mockGenerateLink).not.toHaveBeenCalled()
     expect(mockVerifyOtp).not.toHaveBeenCalled()
+  })
+
+  it('contains no direct profile admission or credential mutation', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const source = fs.readFileSync(
+      path.join(process.cwd(), 'app/api/auth/webauthn/authentication-verify/route.ts'),
+      'utf8'
+    )
+
+    expect(source).not.toMatch(/\.from\(['"]user_profiles['"]\)/)
+    expect(source).not.toMatch(/\.from\(['"]user_passkeys['"]\)[\s\S]*?\.update\(/)
+    expect(source).toContain("'consume_webauthn_authentication_atomic'")
   })
 })
