@@ -396,6 +396,7 @@ const hyperliquidAdapter: SourceAdapter = {
       pageIndex: 1,
       payload: {
         fillsFetchTrigger: 'history',
+        historyTraderIdentity: address,
         fillsFetchState: outcome.state,
         fillsFetchReason: outcome.reason,
         fillsSnapshot: outcome.snapshot,

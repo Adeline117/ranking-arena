@@ -60,6 +60,7 @@ function fillSnapshot(
     ...metaOverrides,
   }
   return {
+    historyTraderIdentity: '0x0000000000000000000000000000000000000001',
     fillsFetchState: 'fetched',
     fillsSnapshot: {
       schemaVersion: 2,
@@ -480,5 +481,39 @@ describe('parseHyperliquidHistory', () => {
       complete: false,
     })
     expect(() => parseHyperliquidHistory(partial, 'position_history', ctx)).toThrow(/incomplete/)
+  })
+
+  it('binds the reconstructed identity to the trader wallet', () => {
+    const T = Date.parse(ctx.scrapedAt) - DAY_MS
+    const capture = fillSnapshot([
+      {
+        coin: 'BTC',
+        time: T,
+        side: 'B',
+        sz: '1',
+        px: '100',
+        startPosition: '0',
+        closedPnl: '0',
+        fee: '0',
+      },
+      {
+        coin: 'BTC',
+        time: T + 1_000,
+        side: 'A',
+        sz: '1',
+        px: '110',
+        startPosition: '1',
+        closedPnl: '10',
+        fee: '0',
+      },
+    ])
+    const otherWallet = {
+      ...capture,
+      historyTraderIdentity: '0x0000000000000000000000000000000000000002',
+    }
+
+    const first = parseHyperliquidHistory(capture, 'position_history', ctx)[0]
+    const second = parseHyperliquidHistory(otherWallet, 'position_history', ctx)[0]
+    expect(first.dedupeHash).not.toBe(second.dedupeHash)
   })
 })
