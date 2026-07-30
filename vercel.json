@@ -60,10 +60,6 @@
       "schedule": "27 */6 * * *"
     },
     {
-      "path": "/api/cron/batch-discover",
-      "schedule": "56 */6 * * *"
-    },
-    {
       "path": "/api/cron/subscription-expiry",
       "schedule": "9 0 * * 1"
     },
