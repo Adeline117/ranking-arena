@@ -23,6 +23,12 @@ import { useFileUpload } from './hooks/useFileUpload'
 import { buildConversationLoginHref } from './login-intent'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
+function latestClearBoundary(left: string | null, right: string | null): string | null {
+  if (!left) return right
+  if (!right) return left
+  return Date.parse(right) >= Date.parse(left) ? right : left
+}
+
 export default function ConversationPage({
   params,
 }: {
@@ -139,6 +145,11 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
     }
   }, [params])
 
+  useEffect(() => {
+    setRemark(null)
+    setClearedBefore(null)
+  }, [conversationId])
+
   // Load messages when auth + conversationId ready
   useEffect(() => {
     if (userId && conversationId && accessToken) {
@@ -147,20 +158,26 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
     // eslint-disable-next-line react-hooks/exhaustive-deps -- msgHook.loadMessages is stable, excluding to avoid infinite loop
   }, [conversationId, userId, accessToken])
 
-  // Load settings
+  // Load the display-only remark separately. cleared_before comes from the
+  // pair-serialized message page or the settings mutation acknowledgement,
+  // never from this independent request.
   useEffect(() => {
     if (!conversationId || !accessToken) return
+    const controller = new AbortController()
     fetch(`/api/chat/${conversationId}/settings`, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: controller.signal,
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.settings) {
           setRemark(data.settings.remark || null)
-          setClearedBefore(data.settings.cleared_before || null)
         }
       })
-      .catch((err) => console.warn('[Messages] fetch failed', err))
+      .catch((err) => {
+        if (!controller.signal.aborted) console.warn('[Messages] fetch failed', err)
+      })
+    return () => controller.abort()
   }, [conversationId, accessToken])
 
   // Send handler
@@ -376,8 +393,9 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
     )
   }
 
-  const visibleMessages = clearedBefore
-    ? msgHook.messages.filter((msg) => new Date(msg.created_at) > new Date(clearedBefore))
+  const effectiveClearBoundary = latestClearBoundary(clearedBefore, msgHook.clearedBefore)
+  const visibleMessages = effectiveClearBoundary
+    ? msgHook.messages.filter((msg) => new Date(msg.created_at) > new Date(effectiveClearBoundary))
     : msgHook.messages
   const messageGroups = msgHook.groupMessagesByDate(visibleMessages)
 
@@ -622,12 +640,13 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
           accessToken={accessToken}
           onSettingsChange={(newSettings) => {
             setRemark(newSettings.remark)
-            if (newSettings.cleared_before) setClearedBefore(newSettings.cleared_before)
+            if (newSettings.cleared_before) {
+              setClearedBefore((previous) =>
+                latestClearBoundary(previous, newSettings.cleared_before)
+              )
+            }
           }}
           onSearchOpen={() => setSearchOpen(true)}
-          onClearHistory={() => {
-            setClearedBefore(new Date().toISOString())
-          }}
         />
       )}
       {previewOpen && (

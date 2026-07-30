@@ -45,17 +45,55 @@ type ConversationOperation = {
 }
 
 type MessagesAcknowledgement = {
+  clearedBefore: string | null
   hasMore: boolean
   messages: Message[]
+  nextCursor: MessagePageCursor | null
   otherUser: OtherUser
+}
+
+type MessagePageCursor = {
+  before: string
+  beforeId: string
 }
 
 type SendAcknowledgement = {
   message: Message
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const sortedExpected = [...expected].sort()
+  return (
+    actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index])
+  )
+}
+
+function timestampMicros(value: string): number | null {
+  const milliseconds = Date.parse(value)
+  if (!Number.isFinite(milliseconds)) return null
+  const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? ''
+  if (fraction.length > 6) return null
+  return milliseconds * 1000 + Number(fraction.padEnd(6, '0').slice(3, 6))
+}
+
+function compareMessagePosition(
+  left: { created_at: string; id: string },
+  right: { created_at: string; id: string }
+): number | null {
+  const leftTime = timestampMicros(left.created_at)
+  const rightTime = timestampMicros(right.created_at)
+  if (leftTime === null || rightTime === null) return null
+  if (leftTime !== rightTime) return leftTime - rightTime
+  if (left.id === right.id) return 0
+  return left.id < right.id ? -1 : 1
 }
 
 function readServerError(value: unknown): { error?: string; error_code?: string } {
@@ -69,16 +107,13 @@ function readServerError(value: unknown): { error?: string; error_code?: string 
 function readOtherUser(value: unknown, viewerId: string): OtherUser | null {
   if (
     !isRecord(value) ||
+    !hasExactKeys(value, ['avatar_url', 'bio', 'handle', 'id']) ||
     typeof value.id !== 'string' ||
-    !value.id ||
+    !UUID_PATTERN.test(value.id) ||
     value.id === viewerId ||
-    !(value.handle === null || value.handle === undefined || typeof value.handle === 'string') ||
-    !(
-      value.avatar_url === null ||
-      value.avatar_url === undefined ||
-      typeof value.avatar_url === 'string'
-    ) ||
-    !(value.bio === null || value.bio === undefined || typeof value.bio === 'string')
+    typeof value.handle !== 'string' ||
+    !(value.avatar_url === null || typeof value.avatar_url === 'string') ||
+    !(value.bio === null || typeof value.bio === 'string')
   ) {
     return null
   }
@@ -97,14 +132,44 @@ function readMessage(value: unknown, viewerId: string, otherUserId: string): Mes
     value.media_type === 'video' ||
     value.media_type === 'file'
   const createdAt = typeof value.created_at === 'string' ? Date.parse(value.created_at) : NaN
+  const readAtIsValid =
+    value.read_at === null ||
+    value.read_at === undefined ||
+    (typeof value.read_at === 'string' && Number.isFinite(Date.parse(value.read_at)))
+  const replyPreviewIsValid =
+    value.reply_preview === null ||
+    value.reply_preview === undefined ||
+    (isRecord(value.reply_preview) &&
+      hasExactKeys(value.reply_preview, ['content', 'sender_id']) &&
+      (value.reply_preview.sender_id === viewerId ||
+        value.reply_preview.sender_id === otherUserId) &&
+      typeof value.reply_preview.content === 'string' &&
+      value.reply_preview.content.length <= 120)
   if (
     typeof value.id !== 'string' ||
-    !value.id ||
+    !UUID_PATTERN.test(value.id) ||
     !participantPairIsExact ||
     typeof value.content !== 'string' ||
     typeof value.read !== 'boolean' ||
+    !readAtIsValid ||
     !Number.isFinite(createdAt) ||
-    !mediaTypeIsValid
+    !mediaTypeIsValid ||
+    !(
+      value.media_url === null ||
+      value.media_url === undefined ||
+      typeof value.media_url === 'string'
+    ) ||
+    !(
+      value.media_name === null ||
+      value.media_name === undefined ||
+      typeof value.media_name === 'string'
+    ) ||
+    !(
+      value.reply_to_id === null ||
+      value.reply_to_id === undefined ||
+      (typeof value.reply_to_id === 'string' && UUID_PATTERN.test(value.reply_to_id))
+    ) ||
+    !replyPreviewIsValid
   ) {
     return null
   }
@@ -117,9 +182,16 @@ function readMessage(value: unknown, viewerId: string, otherUserId: string): Mes
           typeof reaction.emoji !== 'string' ||
           typeof reaction.count !== 'number' ||
           !Number.isInteger(reaction.count) ||
-          reaction.count < 0 ||
+          reaction.count <= 0 ||
           typeof reaction.mine !== 'boolean'
       ))
+  ) {
+    return null
+  }
+  if (
+    Array.isArray(value.reactions) &&
+    new Set(value.reactions.map((reaction) => (reaction as Record<string, unknown>).emoji)).size !==
+      value.reactions.length
   ) {
     return null
   }
@@ -131,18 +203,94 @@ function readMessagesAcknowledgement(
   viewerId: string,
   expectedOtherUserId?: string
 ): MessagesAcknowledgement | null {
-  if (!isRecord(value) || !Array.isArray(value.messages) || typeof value.has_more !== 'boolean') {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['cleared_before', 'has_more', 'messages', 'next_cursor', 'otherUser']) ||
+    !Array.isArray(value.messages) ||
+    typeof value.has_more !== 'boolean' ||
+    !(
+      value.cleared_before === null ||
+      (typeof value.cleared_before === 'string' && timestampMicros(value.cleared_before) !== null)
+    )
+  ) {
     return null
   }
   const otherUser = readOtherUser(value.otherUser, viewerId)
   if (!otherUser || (expectedOtherUserId && otherUser.id !== expectedOtherUserId)) return null
+
+  let nextCursor: MessagePageCursor | null = null
+  if (value.next_cursor !== null) {
+    if (
+      !isRecord(value.next_cursor) ||
+      !hasExactKeys(value.next_cursor, ['before', 'before_id']) ||
+      typeof value.next_cursor.before !== 'string' ||
+      timestampMicros(value.next_cursor.before) === null ||
+      typeof value.next_cursor.before_id !== 'string' ||
+      !UUID_PATTERN.test(value.next_cursor.before_id)
+    ) {
+      return null
+    }
+    nextCursor = {
+      before: value.next_cursor.before,
+      beforeId: value.next_cursor.before_id,
+    }
+  }
+  if (value.has_more !== (nextCursor !== null)) return null
+
   const messages: Message[] = []
+  const messageIds = new Set<string>()
+  const clearedBefore = value.cleared_before
+  const clearedAt = clearedBefore === null ? null : timestampMicros(clearedBefore)
   for (const candidate of value.messages) {
+    if (
+      !isRecord(candidate) ||
+      !hasExactKeys(candidate, [
+        'content',
+        'created_at',
+        'id',
+        'media_name',
+        'media_type',
+        'media_url',
+        'reactions',
+        'read',
+        'read_at',
+        'receiver_id',
+        'reply_preview',
+        'reply_to_id',
+        'sender_id',
+      ])
+    ) {
+      return null
+    }
     const message = readMessage(candidate, viewerId, otherUser.id)
-    if (!message) return null
+    if (!message || messageIds.has(message.id)) return null
+    messageIds.add(message.id)
+
+    const messageTime = timestampMicros(message.created_at)
+    if (messageTime === null || (clearedAt !== null && messageTime <= clearedAt)) return null
+
+    const previous = messages.at(-1)
+    if (previous) {
+      const order = compareMessagePosition(previous, message)
+      if (order === null || order >= 0) return null
+    }
     messages.push(message)
   }
-  return { hasMore: value.has_more, messages, otherUser }
+
+  if (nextCursor !== null) {
+    const oldest = messages[0]
+    if (!oldest || nextCursor.before !== oldest.created_at || nextCursor.beforeId !== oldest.id) {
+      return null
+    }
+  }
+
+  return {
+    clearedBefore,
+    hasMore: value.has_more,
+    messages,
+    nextCursor,
+    otherUser,
+  }
 }
 
 function readSendAcknowledgement(
@@ -301,6 +449,8 @@ export function useConversationMessages({
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
+  const [nextCursor, setNextCursor] = useState<MessagePageCursor | null>(null)
+  const [clearedBefore, setClearedBefore] = useState<string | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<
     'connected' | 'disconnected' | 'reconnecting'
   >('connected')
@@ -408,6 +558,8 @@ export function useConversationMessages({
     setLoading(Boolean(userId))
     setLoadingMore(false)
     setHasMore(true)
+    setNextCursor(null)
+    setClearedBefore(null)
     setReplyingTo(null)
     reactionRowMapRef.current.clear()
     isLoadingOlderRef.current = false
@@ -477,6 +629,8 @@ export function useConversationMessages({
       setMessages(acknowledgement.messages)
       setOtherUser(acknowledgement.otherUser)
       setHasMore(acknowledgement.hasMore)
+      setNextCursor(acknowledgement.nextCursor)
+      setClearedBefore(acknowledgement.clearedBefore)
     } catch {
       if (!operationIsCurrent(operation)) return
       showToast(t('networkErrorLoadMessages'), 'error')
@@ -490,14 +644,14 @@ export function useConversationMessages({
   const loadOlderMessages = useCallback(async () => {
     if (loadingMore || !hasMore || latestOperationByKeyRef.current.has('messages')) return
     const counterpart = otherUser
-    const oldest = messagesRef.current.find((message) => !message._tempId)
-    if (!counterpart || !oldest) return
+    const cursor = nextCursor
+    if (!counterpart || !cursor) return
     const operation = userId ? beginOperation('messages', { conversationId, userId }) : null
     if (!operation) return
     setLoadingMore(true)
     try {
       const result = await authedFetch<unknown>(
-        `/api/messages?conversationId=${encodeURIComponent(operation.conversationId)}&before=${encodeURIComponent(oldest.created_at)}`,
+        `/api/messages?conversationId=${encodeURIComponent(operation.conversationId)}&before=${encodeURIComponent(cursor.before)}&beforeId=${encodeURIComponent(cursor.beforeId)}`,
         'GET',
         operation.viewer.accessToken,
         undefined,
@@ -516,19 +670,23 @@ export function useConversationMessages({
         showToast(t('loadOlderMessagesFailed'), 'error')
         return
       }
-      if (acknowledgement.messages.length) {
-        isLoadingOlderRef.current = true
-        setMessages((previous) => {
-          const existingIds = new Set(previous.map((message) => message.id))
-          return [
-            ...acknowledgement.messages.filter((message) => !existingIds.has(message.id)),
-            ...previous,
-          ]
+      setClearedBefore(acknowledgement.clearedBefore)
+      setNextCursor(acknowledgement.nextCursor)
+      setHasMore(acknowledgement.hasMore)
+      if (acknowledgement.messages.length) isLoadingOlderRef.current = true
+      setMessages((previous) => {
+        const existingIds = new Set(previous.map((message) => message.id))
+        const merged = [
+          ...acknowledgement.messages.filter((message) => !existingIds.has(message.id)),
+          ...previous,
+        ]
+        if (acknowledgement.clearedBefore === null) return merged
+        const boundary = timestampMicros(acknowledgement.clearedBefore)
+        return merged.filter((message) => {
+          const createdAt = timestampMicros(message.created_at)
+          return boundary !== null && createdAt !== null && createdAt > boundary
         })
-        setHasMore(acknowledgement.hasMore)
-      } else {
-        setHasMore(false)
-      }
+      })
     } catch {
       if (!operationIsCurrent(operation)) return
       showToast(t('loadOlderMessagesFailed'), 'error')
@@ -543,6 +701,7 @@ export function useConversationMessages({
     finishOperation,
     hasMore,
     loadingMore,
+    nextCursor,
     operationIsCurrent,
     otherUser,
     showToast,
@@ -1211,6 +1370,7 @@ export function useConversationMessages({
     loading,
     loadingMore,
     hasMore,
+    clearedBefore,
     connectionStatus,
     messagesEndRef,
     messageRefs,

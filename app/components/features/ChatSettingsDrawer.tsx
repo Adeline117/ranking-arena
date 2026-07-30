@@ -44,7 +44,6 @@ type ChatSettingsDrawerProps = {
   accessToken: string
   onSettingsChange: (settings: ChatSettings) => void
   onSearchOpen: () => void
-  onClearHistory: () => void
 }
 
 export default function ChatSettingsDrawer({
@@ -55,7 +54,6 @@ export default function ChatSettingsDrawer({
   accessToken,
   onSettingsChange,
   onSearchOpen,
-  onClearHistory,
 }: ChatSettingsDrawerProps) {
   const { showToast } = useToast()
   const { t } = useLanguage()
@@ -154,7 +152,6 @@ export default function ChatSettingsDrawer({
     }
 
     if (await updateSetting({ clear_history: true })) {
-      onClearHistory()
       showToast(t('chatHistoryCleared'), 'success')
     }
   }

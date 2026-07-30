@@ -80,13 +80,20 @@ function message(id: string, senderId: string, receiverId: string, content = 'he
     receiver_id: receiverId,
     content,
     read: false,
+    read_at: null,
     created_at: '2026-07-29T12:00:00.000Z',
+    media_url: null,
+    media_type: null,
+    media_name: null,
+    reply_to_id: null,
+    reply_preview: null,
     reactions: [],
   }
 }
 
-function messagesAcknowledgement(viewerId = VIEWER_A) {
+function messagesAcknowledgement(viewerId = VIEWER_A, overrides: Record<string, unknown> = {}) {
   return {
+    cleared_before: null,
     has_more: false,
     messages: [
       message(MESSAGE_FROM_OTHER, OTHER_USER, viewerId),
@@ -98,6 +105,8 @@ function messagesAcknowledgement(viewerId = VIEWER_A) {
       avatar_url: null,
       bio: null,
     },
+    next_cursor: null,
+    ...overrides,
   }
 }
 
@@ -239,6 +248,107 @@ describe('useConversationMessages viewer scope', () => {
     expect(result.current.otherUser?.id).toBe(OTHER_USER)
     expect(result.current.messages).toHaveLength(2)
     expect(result.current.loading).toBe(false)
+  })
+
+  it('loads older messages with the server-issued composite cursor and clear boundary', async () => {
+    const { result } = renderConversation()
+    const firstPage = messagesAcknowledgement(VIEWER_A, {
+      has_more: true,
+      next_cursor: {
+        before: '2026-07-29T12:00:00.000Z',
+        before_id: MESSAGE_FROM_OTHER,
+      },
+    })
+    mockAuthedFetch.mockResolvedValueOnce({ data: firstPage, ok: true, status: 200 })
+
+    await act(async () => {
+      await result.current.loadMessages()
+    })
+
+    const olderMessage = {
+      ...message('11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa', OTHER_USER, VIEWER_A, 'older'),
+      created_at: '2026-07-29T11:00:00.000Z',
+    }
+    mockAuthedFetch.mockResolvedValueOnce({
+      data: messagesAcknowledgement(VIEWER_A, {
+        cleared_before: '2026-07-29T10:00:00.000Z',
+        messages: [olderMessage],
+      }),
+      ok: true,
+      status: 200,
+    })
+
+    await act(async () => {
+      await result.current.loadOlderMessages()
+    })
+
+    expect(mockAuthedFetch.mock.calls[1]?.[0]).toBe(
+      `/api/messages?conversationId=${CONVERSATION_ID}&before=${encodeURIComponent('2026-07-29T12:00:00.000Z')}&beforeId=${MESSAGE_FROM_OTHER}`
+    )
+    expect(result.current.messages.map((item) => item.id)).toEqual([
+      olderMessage.id,
+      MESSAGE_FROM_OTHER,
+      MESSAGE_FROM_VIEWER,
+    ])
+    expect(result.current.clearedBefore).toBe('2026-07-29T10:00:00.000Z')
+    expect(result.current.hasMore).toBe(false)
+  })
+
+  it('rejects a mismatched server cursor without publishing page data', async () => {
+    const { result } = renderConversation()
+    mockAuthedFetch.mockResolvedValueOnce({
+      data: messagesAcknowledgement(VIEWER_A, {
+        has_more: true,
+        next_cursor: {
+          before: '2026-07-29T12:00:00.000Z',
+          before_id: MESSAGE_FROM_VIEWER,
+        },
+      }),
+      ok: true,
+      status: 200,
+    })
+
+    await act(async () => {
+      await result.current.loadMessages()
+    })
+
+    expect(result.current.messages).toEqual([])
+    expect(result.current.otherUser).toBeNull()
+    expect(mockShowToast).toHaveBeenCalledWith('loadMessagesFailed', 'error')
+  })
+
+  it('purges already loaded history when an older-page snapshot advances the clear boundary', async () => {
+    const { result } = renderConversation()
+    mockAuthedFetch.mockResolvedValueOnce({
+      data: messagesAcknowledgement(VIEWER_A, {
+        has_more: true,
+        next_cursor: {
+          before: '2026-07-29T12:00:00.000Z',
+          before_id: MESSAGE_FROM_OTHER,
+        },
+      }),
+      ok: true,
+      status: 200,
+    })
+    await act(async () => {
+      await result.current.loadMessages()
+    })
+
+    mockAuthedFetch.mockResolvedValueOnce({
+      data: messagesAcknowledgement(VIEWER_A, {
+        cleared_before: '2026-07-29T12:00:01.000Z',
+        messages: [],
+      }),
+      ok: true,
+      status: 200,
+    })
+    await act(async () => {
+      await result.current.loadOlderMessages()
+    })
+
+    expect(result.current.messages).toEqual([])
+    expect(result.current.clearedBefore).toBe('2026-07-29T12:00:01.000Z')
+    expect(result.current.hasMore).toBe(false)
   })
 
   it('does not let an old account handler send after the viewer changes', async () => {
