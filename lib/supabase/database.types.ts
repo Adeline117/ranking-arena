@@ -12265,6 +12265,10 @@ export type Database = {
         Args: { p_tip_id: string }
         Returns: Json
       }
+      mark_direct_message_conversation_read_atomic: {
+        Args: { p_actor_id: string; p_conversation_id: string }
+        Returns: Json
+      }
       moderate_comment: {
         Args: {
           p_action: string
