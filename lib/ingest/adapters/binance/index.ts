@@ -430,7 +430,7 @@ const binanceAdapter: SourceAdapter = {
         const response = await fetchPage(url, bodyOf(pageNo))
         const data = ((response as Record<string, unknown>)?.data ?? {}) as Record<string, unknown>
         const rows = Array.isArray(data.list) ? (data.list as Array<Record<string, unknown>>) : []
-        if (rows.length === 0) break
+        if (rows.length === 0) return
 
         yield {
           pageIndex: pageNo,
@@ -439,13 +439,16 @@ const binanceAdapter: SourceAdapter = {
           fetchedAt: new Date().toISOString(),
         }
 
-        if (rows.length < opts.pageSize) break
+        if (rows.length < opts.pageSize) return
         if (opts.tsOf && Number.isFinite(cursorMs)) {
           const ts = rows.map(opts.tsOf).filter((t): t is number => Number.isFinite(t as number))
           // Overlap reached: this page already dips into stored history.
-          if (ts.length > 0 && Math.min(...ts) <= cursorMs) break
+          if (ts.length > 0 && Math.min(...ts) <= cursorMs) return
         }
       }
+      throw new Error(
+        `[binance] ${kind} ${opts.sort ?? 'default'} reached page cap ${opts.pages} without terminal proof`
+      )
     }
 
     if (kind === 'position_history') {
