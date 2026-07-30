@@ -55,7 +55,7 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 }))
 
 const mockRequireAuth = jest.fn()
-const mockSupabaseFrom = jest.fn()
+const mockSupabaseRpc = jest.fn()
 
 // Mock middleware to pass through to existing mockRequireAuth
 jest.mock('@/lib/api/middleware', () => ({
@@ -83,7 +83,7 @@ jest.mock('@/lib/api/middleware', () => ({
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
-    from: (...args: unknown[]) => mockSupabaseFrom(...args),
+    rpc: (...args: unknown[]) => mockSupabaseRpc(...args),
   })),
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
   getAuthUser: jest.fn(),
@@ -117,24 +117,31 @@ import { NextRequest } from 'next/server'
 import { POST } from '../route'
 
 describe('POST /api/exchange/connect', () => {
-  const mockUser = { id: 'user-1', email: 'test@test.com' }
+  const mockUser = {
+    id: '11111111-1111-4111-8111-111111111111',
+    email: 'test@test.com',
+  }
+  const connectionId = '22222222-2222-4222-8222-222222222222'
 
-  function createMockSupabase(
-    savedConnection: unknown = { user_id: mockUser.id, exchange: 'binance' },
+  function atomicSaveResult(
+    savedConnection: unknown = {
+      status: 'saved',
+      user_id: mockUser.id,
+      exchange: 'binance',
+      connection_id: connectionId,
+      generation: 1,
+      verified: false,
+    },
     saveError: unknown = null
   ) {
-    const chain: Record<string, jest.Mock> = {}
-    chain.select = jest.fn(() => chain)
-    chain.upsert = jest.fn(() => chain)
-    chain.single = jest.fn().mockResolvedValue({ data: savedConnection, error: saveError })
-    return chain
+    return { data: savedConnection, error: saveError }
   }
 
   beforeEach(() => {
     jest.clearAllMocks()
     mockRequireAuth.mockResolvedValue(mockUser)
     mockValidateReadOnlyAccess.mockResolvedValue({ isValid: true, permissions: ['read'] })
-    mockSupabaseFrom.mockReturnValue(createMockSupabase())
+    mockSupabaseRpc.mockResolvedValue(atomicSaveResult())
   })
 
   // --- Authentication ---
@@ -237,7 +244,7 @@ describe('POST /api/exchange/connect', () => {
     expect(res.status).toBeGreaterThanOrEqual(400)
     expect(body.success).not.toBe(true)
     expect(mockEncrypt).not.toHaveBeenCalled()
-    expect(mockSupabaseFrom).not.toHaveBeenCalled()
+    expect(mockSupabaseRpc).not.toHaveBeenCalled()
   })
 
   it('does not encrypt or persist a key when the exchange cannot prove read-only scope', async () => {
@@ -258,14 +265,13 @@ describe('POST /api/exchange/connect', () => {
 
     expect(res.status).toBe(400)
     expect(mockEncrypt).not.toHaveBeenCalled()
-    expect(mockSupabaseFrom).not.toHaveBeenCalled()
+    expect(mockSupabaseRpc).not.toHaveBeenCalled()
   })
 
   // --- Success ---
 
   it('connects exchange successfully with valid credentials', async () => {
     mockValidateReadOnlyAccess.mockResolvedValue({ isValid: true, permissions: ['read'] })
-    mockSupabaseFrom.mockReturnValue(createMockSupabase())
 
     const req = new NextRequest('http://localhost/api/exchange/connect', {
       method: 'POST',
@@ -279,22 +285,22 @@ describe('POST /api/exchange/connect', () => {
     expect(body.data).toEqual(
       expect.objectContaining({ viewerId: mockUser.id, exchange: 'binance' })
     )
-    expect(mockSupabaseFrom.mock.results[0]?.value.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        user_id: mockUser.id,
-        exchange: 'binance',
-        api_key_encrypted: 'encrypted_valid-api-key-12345',
-        api_secret_encrypted: 'encrypted_valid-secret-12345',
-        scope_permissions: ['read'],
-      }),
-      { onConflict: 'user_id,exchange' }
+    expect(mockSupabaseRpc).toHaveBeenCalledWith(
+      'upsert_exchange_api_connection_for_active_profile_atomic',
+      {
+        p_user_id: mockUser.id,
+        p_exchange: 'binance',
+        p_api_key_encrypted: 'encrypted_valid-api-key-12345',
+        p_api_secret_encrypted: 'encrypted_valid-secret-12345',
+        p_passphrase_encrypted: null,
+        p_verified_uid: null,
+        p_scope_permissions: ['read'],
+      }
     )
   })
 
   it('uses the same atomic authority for reconnecting an existing exchange', async () => {
     mockValidateReadOnlyAccess.mockResolvedValue({ isValid: true, permissions: ['read'] })
-    const existingChain = createMockSupabase({ user_id: mockUser.id, exchange: 'binance' })
-    mockSupabaseFrom.mockReturnValue(existingChain)
 
     const req = new NextRequest('http://localhost/api/exchange/connect', {
       method: 'POST',
@@ -305,13 +311,20 @@ describe('POST /api/exchange/connect', () => {
 
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
-    expect(existingChain.upsert).toHaveBeenCalledTimes(1)
+    expect(mockSupabaseRpc).toHaveBeenCalledTimes(1)
   })
 
   it('fails instead of acknowledging a missing or mismatched persisted row', async () => {
     mockValidateReadOnlyAccess.mockResolvedValue({ isValid: true, permissions: ['read'] })
-    mockSupabaseFrom.mockReturnValue(
-      createMockSupabase({ user_id: 'other-user', exchange: 'binance' })
+    mockSupabaseRpc.mockResolvedValue(
+      atomicSaveResult({
+        status: 'saved',
+        user_id: '33333333-3333-4333-8333-333333333333',
+        exchange: 'binance',
+        connection_id: connectionId,
+        generation: 1,
+        verified: false,
+      })
     )
 
     const req = new NextRequest('http://localhost/api/exchange/connect', {
@@ -323,6 +336,18 @@ describe('POST /api/exchange/connect', () => {
 
     expect(res.status).toBeGreaterThanOrEqual(400)
     expect(body.success).not.toBe(true)
+  })
+
+  it('fails closed when the account becomes unavailable after exchange validation', async () => {
+    mockSupabaseRpc.mockResolvedValue(atomicSaveResult({ status: 'suspended' }))
+
+    const req = new NextRequest('http://localhost/api/exchange/connect', {
+      method: 'POST',
+      body: { exchange: 'binance', apiKey: 'valid-api-key-12345', apiSecret: 'valid-secret-12345' },
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(403)
   })
 
   // --- Bitget Passphrase ---

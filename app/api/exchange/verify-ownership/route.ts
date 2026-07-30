@@ -19,7 +19,8 @@
 
 import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
-import { badRequest, notFound, serverError } from '@/lib/api/response'
+import { badRequest, forbidden, notFound, serverError } from '@/lib/api/response'
+import { exchangeApiConnectionSaveResultSchema } from '@/lib/exchange/api-key-lifecycle'
 import { resolveExchangeUid, isCexVerifiable } from '@/lib/validators/exchange-uid-resolver'
 // Must use the SAME module the sync reader (app/api/exchange/sync) decrypts with.
 // lib/crypto/encryption outputs a base64 blob; lib/exchange/encryption outputs
@@ -170,37 +171,56 @@ export const POST = withAuth(
     const encryptedApiSecret = encrypt(apiSecret)
     const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
 
-    // Upsert exchange connection for this user
-    const { data: savedConnection, error: upsertError } = await adminSupabase
-      .from('user_exchange_connections')
-      .upsert(
-        {
-          user_id: user.id,
-          exchange: connectionExchange,
-          api_key_encrypted: encryptedApiKey,
-          api_secret_encrypted: encryptedApiSecret,
-          passphrase_encrypted: encryptedPassphrase,
-          is_active: true,
-          verified_uid: resolvedUid,
-          last_verified_at: new Date().toISOString(),
-          scope_permissions: resolveResult.permissions || ['read'],
-        },
-        { onConflict: 'user_id,exchange' }
-      )
-      .select('user_id, exchange, verified_uid, is_active')
-      .single()
+    // UID resolution happens outside PostgreSQL. Persist the proof only after
+    // reacquiring the canonical account lifecycle lock, so a concurrent
+    // moderation/deletion transaction cannot be followed by reactivation.
+    const { data: saveResult, error: upsertError } = await adminSupabase.rpc(
+      'upsert_exchange_api_connection_for_active_profile_atomic',
+      {
+        p_user_id: user.id,
+        p_exchange: connectionExchange,
+        p_api_key_encrypted: encryptedApiKey,
+        p_api_secret_encrypted: encryptedApiSecret,
+        p_passphrase_encrypted: encryptedPassphrase,
+        p_verified_uid: resolvedUid,
+        p_scope_permissions: resolveResult.permissions?.length
+          ? resolveResult.permissions
+          : ['read'],
+      }
+    )
 
-    if (
-      upsertError ||
-      savedConnection?.user_id !== user.id ||
-      savedConnection.exchange !== connectionExchange ||
-      savedConnection.verified_uid !== resolvedUid ||
-      savedConnection.is_active !== true
-    ) {
-      logger.error(
-        '[verify-ownership] Failed to store exchange connection',
-        upsertError ?? new Error('Persisted connection acknowledgement did not match')
+    if (upsertError) {
+      logger.error('[verify-ownership] Failed to store exchange connection', {
+        code: upsertError.code,
+        userId: user.id,
+      })
+      return serverError(
+        'Verification succeeded but failed to store credentials. Please try again.'
       )
+    }
+
+    const parsedSave = exchangeApiConnectionSaveResultSchema.safeParse(saveResult)
+    if (!parsedSave.success) {
+      logger.error('[verify-ownership] Invalid atomic persistence acknowledgement', {
+        userId: user.id,
+      })
+      return serverError(
+        'Verification succeeded but failed to store credentials. Please try again.'
+      )
+    }
+    if (parsedSave.data.status === 'suspended' || parsedSave.data.status === 'missing_account') {
+      return forbidden('Account unavailable')
+    }
+    if (
+      parsedSave.data.status !== 'saved' ||
+      parsedSave.data.user_id !== user.id ||
+      parsedSave.data.exchange !== connectionExchange ||
+      !parsedSave.data.verified
+    ) {
+      logger.error('[verify-ownership] Atomic persistence was rejected', {
+        status: parsedSave.data.status,
+        userId: user.id,
+      })
       return serverError(
         'Verification succeeded but failed to store credentials. Please try again.'
       )
@@ -217,11 +237,11 @@ export const POST = withAuth(
       verified: true,
       uid: resolvedUid,
       data: {
-        viewerId: savedConnection.user_id,
-        exchange: savedConnection.exchange,
+        viewerId: parsedSave.data.user_id,
+        exchange: parsedSave.data.exchange,
         source: normalizedSource,
         traderId: requestedTraderId,
-        verifiedUid: savedConnection.verified_uid,
+        verifiedUid: resolvedUid,
       },
       message: 'Account ownership verified successfully',
     })

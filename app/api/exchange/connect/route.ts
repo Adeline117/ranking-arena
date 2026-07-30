@@ -6,8 +6,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
-import { badRequest } from '@/lib/api/response'
+import { badRequest, forbidden, serverError } from '@/lib/api/response'
 import { SUPPORTED_EXCHANGES, type Exchange } from '@/lib/exchange'
+import { exchangeApiConnectionSaveResultSchema } from '@/lib/exchange/api-key-lifecycle'
 import { encrypt } from '@/lib/exchange/encryption'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
@@ -77,41 +78,62 @@ export const POST = withAuth(
     const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
     const adminSupabase = getSupabaseAdmin()
 
-    const connectionData = {
-      user_id: user.id,
-      exchange,
-      api_key_encrypted: encryptedApiKey,
-      api_secret_encrypted: encryptedSecret,
-      is_active: true,
-      last_sync_status: 'pending',
-      last_verified_at: new Date().toISOString(),
-      scope_permissions: verifiedPermissions,
-      updated_at: new Date().toISOString(),
-      ...(encryptedPassphrase ? { passphrase_encrypted: encryptedPassphrase } : {}),
+    // Credential validation happens outside PostgreSQL. Re-enter through the
+    // account lifecycle authority so a concurrent ban/delete cannot land
+    // between validation and an active credential write.
+    const { data: saveResult, error: saveError } = await adminSupabase.rpc(
+      'upsert_exchange_api_connection_for_active_profile_atomic',
+      {
+        p_user_id: user.id,
+        p_exchange: exchange,
+        p_api_key_encrypted: encryptedApiKey,
+        p_api_secret_encrypted: encryptedSecret,
+        p_passphrase_encrypted: encryptedPassphrase,
+        p_verified_uid: null,
+        p_scope_permissions: verifiedPermissions,
+      }
+    )
+
+    if (saveError) {
+      logger.error('Atomic connection persistence failed', {
+        code: saveError.code,
+        exchange,
+        userId: user.id,
+      })
+      return serverError('Failed to persist connection')
     }
 
-    // One statement is the persistence authority. A read-then-update/insert
-    // sequence races concurrent reconnects, and an update that matched zero
-    // rows could previously still return a false success to the client.
-    const { data: savedConnection, error: saveError } = await adminSupabase
-      .from('user_exchange_connections')
-      .upsert(connectionData, { onConflict: 'user_id,exchange' })
-      .select('user_id, exchange')
-      .single()
+    const parsedSave = exchangeApiConnectionSaveResultSchema.safeParse(saveResult)
+    if (!parsedSave.success) {
+      logger.error('Atomic connection persistence returned an invalid acknowledgement', {
+        exchange,
+        userId: user.id,
+      })
+      return serverError('Failed to persist connection')
+    }
 
+    if (parsedSave.data.status === 'suspended' || parsedSave.data.status === 'missing_account') {
+      return forbidden('Account unavailable')
+    }
     if (
-      saveError ||
-      savedConnection?.user_id !== user.id ||
-      savedConnection.exchange !== exchange
+      parsedSave.data.status !== 'saved' ||
+      parsedSave.data.user_id !== user.id ||
+      parsedSave.data.exchange !== exchange ||
+      parsedSave.data.verified
     ) {
-      throw new Error('Failed to persist connection')
+      logger.error('Atomic connection persistence was rejected', {
+        status: parsedSave.data.status,
+        exchange,
+        userId: user.id,
+      })
+      return serverError('Failed to persist connection')
     }
 
     return NextResponse.json({
       success: true,
       data: {
-        viewerId: savedConnection.user_id,
-        exchange: savedConnection.exchange,
+        viewerId: parsedSave.data.user_id,
+        exchange: parsedSave.data.exchange,
         message: `Successfully connected to ${exchange}. Syncing data...`,
       },
     })

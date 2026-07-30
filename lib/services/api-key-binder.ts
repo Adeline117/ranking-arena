@@ -17,6 +17,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { encryptAuthorizationCredential } from '@/lib/exchange/authorization-credentials'
+import { traderAuthorizationBindResultSchema } from '@/lib/exchange/api-key-lifecycle'
 import {
   validateExchangeApiKey,
   type ExchangeCredentials,
@@ -42,6 +43,8 @@ export interface BindApiKeyResult {
   authorizationId?: string
   traderId?: string // Exchange UID extracted from the key
   nickname?: string // Exchange nickname if available
+  permissions?: string[]
+  reason?: 'invalid_input' | 'validation_failed' | 'account_unavailable' | 'persistence_failed'
   error?: string
 }
 
@@ -88,6 +91,7 @@ export async function bindApiKey(
   if (!isSupportedPlatform(platformLower)) {
     return {
       success: false,
+      reason: 'invalid_input',
       error: `Platform "${platform}" is not supported for API key binding. Supported: ${SUPPORTED_PLATFORMS.join(', ')}`,
     }
   }
@@ -96,6 +100,7 @@ export async function bindApiKey(
   if (requiresPassphrase(platformLower) && !passphrase) {
     return {
       success: false,
+      reason: 'invalid_input',
       error: `Passphrase is required for ${platform}`,
     }
   }
@@ -110,6 +115,7 @@ export async function bindApiKey(
     logger.error('[api-key-binder] Validation threw', {}, error as Error)
     return {
       success: false,
+      reason: 'validation_failed',
       error: 'Failed to validate API key. Please check your credentials and try again.',
     }
   }
@@ -117,7 +123,16 @@ export async function bindApiKey(
   if (!validation.isValid || !validation.traderId) {
     return {
       success: false,
+      reason: 'validation_failed',
       error: validation.error || 'API key validation failed',
+    }
+  }
+  const traderId = validation.traderId.trim()
+  if (!traderId) {
+    return {
+      success: false,
+      reason: 'validation_failed',
+      error: 'API key validation returned an invalid account ID',
     }
   }
 
@@ -126,105 +141,71 @@ export async function bindApiKey(
   const encryptedApiSecret = encryptAuthorizationCredential(apiSecret)
   const encryptedPassphrase = passphrase ? encryptAuthorizationCredential(passphrase) : null
 
-  // 5. Upsert into trader_authorizations
-  const now = new Date().toISOString()
+  const permissions = validation.permissions?.length ? validation.permissions : ['read']
 
   try {
-    const { data: existing } = await supabase
-      .from('trader_authorizations')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('platform', platformLower)
-      .eq('trader_id', validation.traderId)
-      .maybeSingle()
-
-    let authorizationId: string
-
-    if (existing) {
-      // Update existing authorization
-      const { data: updated, error: updateError } = await supabase
-        .from('trader_authorizations')
-        .update({
-          encrypted_api_key: encryptedApiKey,
-          encrypted_api_secret: encryptedApiSecret,
-          encrypted_passphrase: encryptedPassphrase,
-          permissions: validation.permissions || ['read'],
-          read_only_verified_at: now,
-          status: 'active',
-          last_verified_at: now,
-          last_sync_at: null,
-          last_sync_status: 'pending',
-          consecutive_failures: 0,
-          verification_error: null,
-          label: label || undefined,
-          sync_frequency: syncFrequency || 'realtime',
-        })
-        .eq('id', existing.id)
-        .select('id')
-        .single()
-
-      if (updateError) {
-        logger.error('[api-key-binder] Failed to update authorization', updateError)
-        return { success: false, error: 'Failed to update authorization' }
+    // The proof connection and worker authorization are one security fact.
+    // Store both in one lifecycle-locked transaction so neither can survive
+    // alone and a concurrent ban/delete cannot be followed by reactivation.
+    const { data, error } = await supabase.rpc(
+      'bind_trader_authorization_for_active_profile_atomic',
+      {
+        p_user_id: userId,
+        p_platform: platformLower,
+        p_trader_id: traderId,
+        p_api_key_encrypted: encryptedApiKey,
+        p_api_secret_encrypted: encryptedApiSecret,
+        p_passphrase_encrypted: encryptedPassphrase,
+        p_permissions: permissions,
+        p_label: label?.trim() || null,
+        p_sync_frequency: syncFrequency || 'realtime',
       }
+    )
 
-      authorizationId = updated!.id
-    } else {
-      // Create new authorization
-      const { data: created, error: createError } = await supabase
-        .from('trader_authorizations')
-        .insert({
-          user_id: userId,
-          platform: platformLower,
-          trader_id: validation.traderId,
-          encrypted_api_key: encryptedApiKey,
-          encrypted_api_secret: encryptedApiSecret,
-          encrypted_passphrase: encryptedPassphrase,
-          permissions: validation.permissions || ['read'],
-          read_only_verified_at: now,
-          status: 'active',
-          last_verified_at: now,
-          last_sync_status: 'pending',
-          label: label || null,
-          sync_frequency: syncFrequency || 'realtime',
-        })
-        .select('id')
-        .single()
-
-      if (createError) {
-        // Handle unique constraint violation
-        if (createError.code === '23505') {
-          return { success: false, error: 'This API key is already bound to another account' }
-        }
-        logger.error('[api-key-binder] Failed to create authorization', createError)
-        return { success: false, error: 'Failed to store authorization' }
+    if (error) {
+      logger.error('[api-key-binder] Atomic bind failed', error)
+      return {
+        success: false,
+        reason: 'persistence_failed',
+        error: 'Failed to store authorization',
       }
-
-      authorizationId = created!.id
     }
 
-    // 6. Also upsert into user_exchange_connections for claim flow compatibility
-    await supabase
-      .from('user_exchange_connections')
-      .upsert(
-        {
-          user_id: userId,
-          exchange: platformLower,
-          api_key_encrypted: encryptedApiKey,
-          api_secret_encrypted: encryptedApiSecret,
-          passphrase_encrypted: encryptedPassphrase,
-          is_active: true,
-          verified_uid: validation.traderId,
-          last_verified_at: now,
-          scope_permissions: validation.permissions || ['read'],
-        },
-        { onConflict: 'user_id,exchange' }
-      )
-      .then(({ error }) => {
-        if (error) {
-          logger.warn('[api-key-binder] Failed to upsert exchange connection (non-fatal)', error)
-        }
+    const parsed = traderAuthorizationBindResultSchema.safeParse(data)
+    if (!parsed.success) {
+      logger.error('[api-key-binder] Atomic bind returned an invalid acknowledgement')
+      return {
+        success: false,
+        reason: 'persistence_failed',
+        error: 'Failed to store authorization',
+      }
+    }
+    if (parsed.data.status === 'suspended' || parsed.data.status === 'missing_account') {
+      return {
+        success: false,
+        reason: 'account_unavailable',
+        error: 'Account unavailable',
+      }
+    }
+    if (
+      parsed.data.status !== 'bound' ||
+      parsed.data.user_id !== userId ||
+      parsed.data.platform !== platformLower ||
+      parsed.data.trader_id !== traderId
+    ) {
+      logger.error('[api-key-binder] Atomic bind was rejected', {
+        userId,
+        platform: platformLower,
+        status: parsed.data.status,
       })
+      return {
+        success: false,
+        reason: parsed.data.status === 'invalid' ? 'invalid_input' : 'persistence_failed',
+        error: 'Failed to store authorization',
+      }
+    }
+
+    const authorizationId = parsed.data.authorization_id
 
     logger.info('[api-key-binder] API key bound successfully', {
       userId,
@@ -235,12 +216,17 @@ export async function bindApiKey(
     return {
       success: true,
       authorizationId,
-      traderId: validation.traderId,
+      traderId,
       nickname: validation.nickname,
+      permissions,
     }
   } catch (error) {
     logger.error('[api-key-binder] Unexpected error during bind', {}, error as Error)
-    return { success: false, error: 'Unexpected error during API key binding' }
+    return {
+      success: false,
+      reason: 'persistence_failed',
+      error: 'Unexpected error during API key binding',
+    }
   }
 }
 

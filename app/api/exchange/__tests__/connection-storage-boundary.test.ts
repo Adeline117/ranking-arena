@@ -23,30 +23,39 @@ describe('exchange connection storage boundary', () => {
     expect(source).not.toMatch(/async \(\{[^}]*\bsupabase\b[^}]*\}\) =>/)
   })
 
-  it('keeps every service-role read and update owner-scoped', () => {
-    for (const routeFile of [
-      'connections/route.ts',
-      'disconnect/route.ts',
-      'sync/route.ts',
-    ] as const) {
+  it('keeps direct service-role reads and updates owner-scoped', () => {
+    for (const routeFile of ['connections/route.ts', 'disconnect/route.ts'] as const) {
       expect(routeSource(routeFile)).toContain(".eq('user_id', user.id)")
     }
 
-    const connect = routeSource('connect/route.ts')
-    expect(connect).toContain('user_id: user.id')
-    expect(connect).toContain("onConflict: 'user_id,exchange'")
-    expect(connect).toContain(".select('user_id, exchange')")
-    expect(connect).toContain('savedConnection?.user_id !== user.id')
-    expect(connect).toContain('savedConnection.exchange !== exchange')
-    expect(connect).not.toMatch(/user_id\s*:\s*(?:body|request|input)/)
-    expect(routeSource('sync/route.ts').match(/\.eq\('user_id', user\.id\)/g)).toHaveLength(3)
+    for (const routeFile of [
+      'connect/route.ts',
+      'sync/route.ts',
+      'verify-ownership/route.ts',
+    ] as const) {
+      const source = routeSource(routeFile)
+      expect(source).toContain('p_user_id: user.id')
+      expect(source).not.toContain(".from('user_exchange_connections')")
+    }
   })
 
   it('binds verified proof writes to the authenticated actor and canonical account key', () => {
     const source = routeSource('verify-ownership/route.ts')
 
-    expect(source).toContain('user_id: user.id')
-    expect(source).toContain("onConflict: 'user_id,exchange'")
+    expect(source).toContain(
+      "rpc(\n      'upsert_exchange_api_connection_for_active_profile_atomic'"
+    )
+    expect(source).toContain('p_user_id: user.id')
+    expect(source).toContain('p_exchange: connectionExchange')
     expect(source).not.toMatch(/user_id\s*:\s*(?:body|request|input)/)
+  })
+
+  it('uses generation-fenced claim and finish authorities for live sync', () => {
+    const source = routeSource('sync/route.ts')
+
+    expect(source).toContain("'claim_exchange_api_sync_atomic'")
+    expect(source).toContain("'finish_exchange_api_sync_atomic'")
+    expect(source).toContain('p_generation: connection.generation')
+    expect(source).not.toMatch(/\.update\(\{[\s\S]*last_sync_status/)
   })
 })

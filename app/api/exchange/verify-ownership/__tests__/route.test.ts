@@ -38,8 +38,11 @@ jest.mock('next/server', () => {
   return { NextRequest: MockNextRequest, NextResponse: MockNextResponse }
 })
 
-const mockUser = { id: 'viewer-a', email: 'viewer-a@example.com' }
-const mockSupabaseFrom = jest.fn()
+const mockUser = {
+  id: '11111111-1111-4111-8111-111111111111',
+  email: 'viewer-a@example.com',
+}
+const mockSupabaseRpc = jest.fn()
 const mockResolveTrader = jest.fn()
 const mockResolveExchangeUid = jest.fn()
 const mockIsCexVerifiable = jest.fn()
@@ -52,7 +55,7 @@ jest.mock('@/lib/api/middleware', () => ({
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: () => ({
-    from: (...args: unknown[]) => mockSupabaseFrom(...args),
+    rpc: (...args: unknown[]) => mockSupabaseRpc(...args),
   }),
 }))
 
@@ -78,26 +81,26 @@ import { NextRequest } from 'next/server'
 import { POST } from '../route'
 
 type PersistedConnection = {
+  status: 'saved'
   exchange: string
-  is_active: boolean
   user_id: string
-  verified_uid: string
+  connection_id: string
+  generation: number
+  verified: boolean
 }
 
-function connectionChain(
+function atomicSaveResult(
   savedConnection: PersistedConnection | null = {
+    status: 'saved',
     exchange: 'binance',
-    is_active: true,
     user_id: mockUser.id,
-    verified_uid: 'account-42',
+    connection_id: '22222222-2222-4222-8222-222222222222',
+    generation: 1,
+    verified: true,
   },
   error: unknown = null
 ) {
-  const chain: Record<string, jest.Mock> = {}
-  chain.upsert = jest.fn(() => chain)
-  chain.select = jest.fn(() => chain)
-  chain.single = jest.fn().mockResolvedValue({ data: savedConnection, error })
-  return chain
+  return { data: savedConnection, error }
 }
 
 function request(overrides: Record<string, unknown> = {}) {
@@ -125,7 +128,7 @@ describe('POST /api/exchange/verify-ownership identity contract', () => {
       isReadOnly: true,
       permissions: ['read'],
     })
-    mockSupabaseFrom.mockReturnValue(connectionChain())
+    mockSupabaseRpc.mockResolvedValue(atomicSaveResult())
   })
 
   it('accepts a supported suffixed leaderboard source and persists its base connection', async () => {
@@ -141,17 +144,18 @@ describe('POST /api/exchange/verify-ownership identity contract', () => {
       'binance_futures',
       expect.objectContaining({ apiKey: 'read-only-key', apiSecret: 'read-only-secret' })
     )
-    const chain = mockSupabaseFrom.mock.results[0]?.value
-    expect(chain.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        user_id: mockUser.id,
-        exchange: 'binance',
-        verified_uid: 'account-42',
-        is_active: true,
-      }),
-      { onConflict: 'user_id,exchange' }
+    expect(mockSupabaseRpc).toHaveBeenCalledWith(
+      'upsert_exchange_api_connection_for_active_profile_atomic',
+      {
+        p_user_id: mockUser.id,
+        p_exchange: 'binance',
+        p_api_key_encrypted: 'encrypted:read-only-key',
+        p_api_secret_encrypted: 'encrypted:read-only-secret',
+        p_passphrase_encrypted: null,
+        p_verified_uid: 'account-42',
+        p_scope_permissions: ['read'],
+      }
     )
-    expect(chain.select).toHaveBeenCalledWith('user_id, exchange, verified_uid, is_active')
     expect(body).toMatchObject({
       success: true,
       verified: true,
@@ -173,16 +177,18 @@ describe('POST /api/exchange/verify-ownership identity contract', () => {
     expect(response.status).toBe(400)
     expect(body.success).toBe(false)
     expect(mockResolveTrader).not.toHaveBeenCalled()
-    expect(mockSupabaseFrom).not.toHaveBeenCalled()
+    expect(mockSupabaseRpc).not.toHaveBeenCalled()
   })
 
   it('fails closed when the persisted connection acknowledgement is mismatched', async () => {
-    mockSupabaseFrom.mockReturnValue(
-      connectionChain({
+    mockSupabaseRpc.mockResolvedValue(
+      atomicSaveResult({
+        status: 'saved',
         exchange: 'binance',
-        is_active: true,
-        user_id: 'viewer-b',
-        verified_uid: 'account-42',
+        user_id: '33333333-3333-4333-8333-333333333333',
+        connection_id: '22222222-2222-4222-8222-222222222222',
+        generation: 1,
+        verified: true,
       })
     )
 

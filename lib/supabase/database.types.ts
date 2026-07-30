@@ -9268,6 +9268,7 @@ export type Database = {
           access_token_encrypted: string | null
           api_key_encrypted: string
           api_secret_encrypted: string
+          connection_generation: number
           created_at: string | null
           exchange: string
           exchange_user_id: string | null
@@ -9289,6 +9290,7 @@ export type Database = {
           access_token_encrypted?: string | null
           api_key_encrypted: string
           api_secret_encrypted: string
+          connection_generation?: number
           created_at?: string | null
           exchange: string
           exchange_user_id?: string | null
@@ -9310,6 +9312,7 @@ export type Database = {
           access_token_encrypted?: string | null
           api_key_encrypted?: string
           api_secret_encrypted?: string
+          connection_generation?: number
           created_at?: string | null
           exchange?: string
           exchange_user_id?: string | null
@@ -10282,6 +10285,32 @@ export type Database = {
           status: string
         }[]
       }
+      bind_trader_authorization_for_active_profile_atomic: {
+        Args: {
+          p_api_key_encrypted: string
+          p_api_secret_encrypted: string
+          p_label: string | null
+          p_passphrase_encrypted: string | null
+          p_permissions: Json
+          p_platform: string
+          p_sync_frequency: string
+          p_trader_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      upsert_exchange_api_connection_for_active_profile_atomic: {
+        Args: {
+          p_api_key_encrypted: string
+          p_api_secret_encrypted: string
+          p_exchange: string
+          p_passphrase_encrypted: string | null
+          p_scope_permissions: Json | null
+          p_user_id: string
+          p_verified_uid: string | null
+        }
+        Returns: Json
+      }
       consume_webauthn_authentication_atomic: {
         Args: {
           p_credential_id: string
@@ -10405,6 +10434,10 @@ export type Database = {
         }
         Returns: Json
       }
+      claim_exchange_api_sync_atomic: {
+        Args: { p_exchange: string; p_user_id: string }
+        Returns: Json
+      }
       claim_portfolio_sync_generation_atomic: {
         Args: { p_actor_id: string; p_portfolio_id: string }
         Returns: Json
@@ -10439,6 +10472,16 @@ export type Database = {
           p_succeeded: boolean
         }
         Returns: string
+      }
+      finish_exchange_api_sync_atomic: {
+        Args: {
+          p_connection_id: string
+          p_error: string | null
+          p_generation: number
+          p_succeeded: boolean
+          p_user_id: string
+        }
+        Returns: Json
       }
       finish_first_party_authorization_sync_atomic: {
         Args: {
