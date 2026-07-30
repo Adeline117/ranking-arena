@@ -200,6 +200,64 @@ describe('OKX product-specific record contracts', () => {
     expect(urls[1]).toContain('after=newer-close')
   })
 
+  it('yields replayable pages before rejecting an unproven page-cap stop', async () => {
+    global.fetch = jest.fn(async () =>
+      ok([
+        {
+          subPosId: 'still-has-older-rows',
+          openTime: String(Date.parse('2026-07-01T00:00:00.000Z')),
+          closeTime: String(Date.parse('2026-07-10T00:00:00.000Z')),
+        },
+      ])
+    ) as unknown as typeof fetch
+
+    const captured = []
+    let failure: unknown = null
+    try {
+      for await (const page of okxAdapter.getHistory(
+        session(),
+        {
+          ...source('futures', 'SWAP'),
+          meta: { inst_type: 'SWAP', history_max_pages: 1 },
+        },
+        UNIQUE_CODE,
+        'position_history',
+        null
+      )) {
+        captured.push(page)
+      }
+    } catch (error) {
+      failure = error
+    }
+
+    expect(captured).toHaveLength(1)
+    expect(failure).toEqual(
+      expect.objectContaining({
+        message: '[okx] position history reached page cap 1 without exhaustion or cursor overlap',
+      })
+    )
+  })
+
+  it('rejects a non-empty history page without its continuation identity', async () => {
+    global.fetch = jest.fn(async () =>
+      ok([
+        {
+          openTime: String(Date.parse('2026-07-01T00:00:00.000Z')),
+          closeTime: String(Date.parse('2026-07-10T00:00:00.000Z')),
+        },
+      ])
+    ) as unknown as typeof fetch
+
+    const iterator = okxAdapter
+      .getHistory(session(), source('futures', 'SWAP'), UNIQUE_CODE, 'position_history', null)
+      [Symbol.asyncIterator]()
+
+    await expect(iterator.next()).resolves.toMatchObject({ done: false })
+    await expect(iterator.next()).rejects.toThrow(
+      '[okx] position history page is missing the pagination subPosId'
+    )
+  })
+
   it('treats an invalid instType as configuration failure, not unsupported data', () => {
     expect(() =>
       supportsSourceSurface(okxAdapter, source('futures', 'MARGIN'), 'positions')
