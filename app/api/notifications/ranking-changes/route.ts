@@ -8,6 +8,8 @@ import {
   isPublicRankingSourceAllowed,
 } from '@/lib/rankings/publication-policy'
 import { readSealedRankingGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { createRankingNotificationsBatch } from '@/lib/data/ranking-notifications'
+import { watchedRankingChangeLink, watchedRankingChangeReference } from './notification-identity'
 
 export async function POST(request: NextRequest) {
   if (!verifyCronSecret(request)) {
@@ -18,7 +20,6 @@ export async function POST(request: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin()
-    let notificationsCreated = 0
 
     const { data: prefs, error: prefsError } = await supabase
       .from('user_preferences')
@@ -171,13 +172,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build all notifications to BATCH INSERT
+    // Build one stable logical identity per recipient and rank movement. The
+    // batch authority makes a retry after any committed chunk harmless.
     const notificationRows: Array<{
-      user_id: string
-      type: string
+      userId: string
       title: string
       message: string
-      data: Record<string, unknown>
+      link: string
+      referenceId: string
     }> = []
 
     for (const [key, userIds] of allWatched) {
@@ -207,38 +209,34 @@ export async function POST(request: NextRequest) {
         const message = `Now ranked #${current.rank} (was #${prevRank})`
 
         notificationRows.push({
-          user_id: userId,
-          type: 'ranking_change',
+          userId,
           title,
           message,
-          data: {
+          link: watchedRankingChangeLink(sourceId, source),
+          referenceId: watchedRankingChangeReference(
+            sourceId,
             source,
-            source_trader_id: sourceId,
-            handle,
-            old_rank: prevRank,
-            new_rank: current.rank,
-            change: rankChange,
-          },
+            yesterday,
+            prevRank,
+            current.rank
+          ),
         })
       }
     }
 
-    // BATCH INSERT all notifications in one query (chunks of 500 to avoid payload limits)
-    // service-layer-exempt: batch — this is a cron-style pipeline job, not a user-facing API.
-    // Uses table-name indirection to avoid pre-push hook grep (cron batch jobs are exempt per CLAUDE.md).
-    const NOTIF_TABLE = 'notifications' as const
-    const BATCH_SIZE = 500
-    for (let i = 0; i < notificationRows.length; i += BATCH_SIZE) {
-      const batch = notificationRows.slice(i, i + BATCH_SIZE)
-      const { error: insertError } = await supabase.from(NOTIF_TABLE).insert(batch)
-      if (insertError) {
-        throw new Error(`Ranking notification batch insert failed: ${insertError.message}`)
-      }
-      notificationsCreated += batch.length
-    }
+    const delivery = await createRankingNotificationsBatch(supabase, notificationRows)
 
-    await plog.success(notificationsCreated)
-    return NextResponse.json({ ok: true, notifications: notificationsCreated })
+    await plog.success(delivery.createdCount, {
+      requested: delivery.requestedCount,
+      deduplicated: delivery.deduplicatedCount,
+      skipped: delivery.skippedCount,
+    })
+    return NextResponse.json({
+      ok: true,
+      notifications: delivery.createdCount,
+      deduplicated: delivery.deduplicatedCount,
+      skipped: delivery.skippedCount,
+    })
   } catch (err) {
     await plog.error(err instanceof Error ? err : new Error(String(err)))
     logger.error('[Notifications] Ranking changes error:', err)
