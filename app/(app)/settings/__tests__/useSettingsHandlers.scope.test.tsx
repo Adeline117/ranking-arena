@@ -332,6 +332,62 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.passkeys).toHaveLength(1)
   })
 
+  it('keeps a passkey visible without an exact removal acknowledgement and single-flights clicks', async () => {
+    const credentialId = '00000000-0000-4000-8000-000000000001'
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockAuthedFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        passkeys: [
+          {
+            id: credentialId,
+            deviceName: 'Laptop',
+            createdAt: '2026-07-29T00:00:00.000Z',
+            lastUsedAt: null,
+            transports: ['internal'],
+          },
+        ],
+      },
+    })
+    showConfirm.mockResolvedValue(true)
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true }),
+    }) as unknown as typeof fetch
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    await act(async () => {
+      await hook.result.current.loadPasskeys()
+    })
+    expect(hook.result.current.passkeys).toHaveLength(1)
+
+    await act(async () => {
+      await Promise.all([
+        hook.result.current.handleRemovePasskey(credentialId),
+        hook.result.current.handleRemovePasskey(credentialId),
+      ])
+    })
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.passkeys).toHaveLength(1)
+    expect(showToast).toHaveBeenCalledWith('operationFailed', 'error')
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ removed: true }),
+    })
+    await act(async () => {
+      await hook.result.current.handleRemovePasskey(credentialId)
+    })
+
+    expect(hook.result.current.passkeys).toEqual([])
+    expect(showToast).toHaveBeenCalledWith('passkeyRemoved', 'success')
+  })
+
   it('does not present a failed block-list read as no blocked users', async () => {
     mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
     mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())

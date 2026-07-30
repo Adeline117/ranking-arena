@@ -714,6 +714,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                   variant="ghost"
                   size="sm"
                   onClick={() => props.onRemovePasskey(passkey.id)}
+                  disabled={props.passkeyBusy}
                   style={{
                     color: tokens.colors.accent.error,
                     fontSize: tokens.typography.fontSize.xs,

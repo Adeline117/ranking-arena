@@ -1450,9 +1450,11 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
 
   const handleRemovePasskey = async (id: string) => {
     const scope = captureViewer()
-    if (!scope || !stateBelongsToViewer(scope)) return
+    if (submittingRef.current || passkeyBusy || !scope || !stateBelongsToViewer(scope)) return
     const confirmed = await showConfirm(t('passkeyRemoveTitle'), t('passkeyRemoveConfirm'))
-    if (!confirmed || !viewerIsCurrent(scope)) return
+    if (!confirmed || !viewerIsCurrent(scope) || submittingRef.current || passkeyBusy) return
+    submittingRef.current = true
+    setPasskeyBusy(true)
     try {
       const token = await getFreshToken(scope)
       if (!viewerIsCurrent(scope)) return
@@ -1470,7 +1472,9 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         body: JSON.stringify({ id }),
       })
       if (!viewerIsCurrent(scope)) return
-      if (res.ok) {
+      const data = await res.json().catch(() => null)
+      if (!viewerIsCurrent(scope)) return
+      if (res.ok && data?.removed === true) {
         setPasskeys((prev) => prev.filter((p) => p.id !== id))
         showToast(t('passkeyRemoved'), 'success')
       } else {
@@ -1479,6 +1483,11 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     } catch {
       if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
+    } finally {
+      if (viewerIsCurrent(scope)) {
+        setPasskeyBusy(false)
+        submittingRef.current = false
+      }
     }
   }
 
