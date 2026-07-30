@@ -34,9 +34,13 @@ jest.mock('@/lib/api', () => ({
 
 const mockTieredGetOrSet = jest.fn()
 const mockTieredDel = jest.fn()
+const mockTieredGet = jest.fn()
+const mockTieredSet = jest.fn()
 jest.mock('@/lib/cache/redis-layer', () => ({
   tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
   tieredDel: (...args: unknown[]) => mockTieredDel(...args),
+  tieredGet: (...args: unknown[]) => mockTieredGet(...args),
+  tieredSet: (...args: unknown[]) => mockTieredSet(...args),
 }))
 
 const mockReadSealedTokenTraderRankings = jest.fn()
@@ -119,12 +123,22 @@ function request() {
   } as never
 }
 
+function popularRequest() {
+  return {
+    nextUrl: new URL('http://localhost/api/rankings/by-token?action=popular-tokens'),
+  } as never
+}
+
+const popularTokens = [{ token: 'BTC', trade_count: 10, trader_count: 3, total_pnl: 100 }]
+
 describe('GET /api/rankings/by-token publication cache', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCheckRateLimit.mockResolvedValue(null)
     mockGetSupabaseAdmin.mockReturnValue({})
     mockTieredDel.mockResolvedValue(undefined)
+    mockTieredGet.mockResolvedValue({ data: null, layer: null })
+    mockTieredSet.mockResolvedValue(true)
     mockTieredGetOrSet.mockImplementation(async (_key: string, fetcher: () => Promise<unknown>) =>
       fetcher()
     )
@@ -146,6 +160,56 @@ describe('GET /api/rankings/by-token publication cache', () => {
         }
       }
     )
+  })
+
+  it('persists a validated popular-token result as last known good', async () => {
+    mockTieredGetOrSet.mockResolvedValueOnce(popularTokens)
+
+    const response = await GET(popularRequest())
+
+    await expect(response.json()).resolves.toEqual({ tokens: popularTokens })
+    expect(mockTieredSet).toHaveBeenCalledWith(
+      'rankings:popular-tokens:last-good:v1',
+      popularTokens,
+      'cold',
+      ['rankings', 'popular-tokens-last-good'],
+      { redisTtlSeconds: 2_592_000, staleWhileRevalidateSeconds: 0 }
+    )
+  })
+
+  it('serves labelled last-known-good data when the live read fails', async () => {
+    mockTieredGetOrSet.mockRejectedValueOnce(new Error('database unavailable'))
+    mockTieredGet.mockResolvedValueOnce({ data: popularTokens, layer: 'redis' })
+
+    const response = await GET(popularRequest())
+
+    await expect(response.json()).resolves.toEqual({ tokens: popularTokens, degraded: true })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('X-Data-Mode')).toBe('last-known-good')
+  })
+
+  it('returns a retryable 503 instead of a false empty result without fallback data', async () => {
+    mockTieredGetOrSet.mockRejectedValueOnce(new Error('database unavailable'))
+
+    const response = await GET(popularRequest())
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('Retry-After')).toBe('30')
+    await expect(response.json()).resolves.toEqual({
+      error: 'Popular token rankings are temporarily unavailable',
+    })
+  })
+
+  it('rejects malformed last-known-good cache data', async () => {
+    mockTieredGetOrSet.mockRejectedValueOnce(new Error('database unavailable'))
+    mockTieredGet.mockResolvedValueOnce({
+      data: [{ token: 'BTC', trade_count: -1, trader_count: 3, total_pnl: 100 }],
+      layer: 'redis',
+    })
+
+    const response = await GET(popularRequest())
+
+    expect(response.status).toBe(503)
   })
 
   it('serves a sealed token page only while its publication remains current', async () => {

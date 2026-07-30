@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { tieredDel, tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { tieredDel, tieredGet, tieredGetOrSet, tieredSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
 import {
@@ -36,6 +36,38 @@ interface PopularToken {
   trade_count: number
   trader_count: number
   total_pnl: number
+}
+
+const POPULAR_TOKENS_CACHE_KEY = 'rankings:popular-tokens'
+const POPULAR_TOKENS_LAST_GOOD_KEY = 'rankings:popular-tokens:last-good:v1'
+const POPULAR_TOKENS_LAST_GOOD_TTL_SECONDS = 30 * 24 * 60 * 60
+
+function isPopularTokenList(value: unknown): value is PopularToken[] {
+  if (!Array.isArray(value) || value.length > 50) return false
+  const seen = new Set<string>()
+  return value.every((row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return false
+    const token = Reflect.get(row, 'token')
+    const tradeCount = Reflect.get(row, 'trade_count')
+    const traderCount = Reflect.get(row, 'trader_count')
+    const totalPnl = Reflect.get(row, 'total_pnl')
+    if (
+      typeof token !== 'string' ||
+      token !== token.toUpperCase() ||
+      !isValidTokenSymbol(token) ||
+      seen.has(token) ||
+      !Number.isSafeInteger(tradeCount) ||
+      Number(tradeCount) < 0 ||
+      !Number.isSafeInteger(traderCount) ||
+      Number(traderCount) < 0 ||
+      typeof totalPnl !== 'number' ||
+      !Number.isFinite(totalPnl)
+    ) {
+      return false
+    }
+    seen.add(token)
+    return true
+  })
 }
 
 interface TokenRankingResponse {
@@ -94,7 +126,7 @@ function isTokenRankingResponse(
 async function handlePopularTokens(): Promise<NextResponse> {
   try {
     const result = await tieredGetOrSet<PopularToken[]>(
-      'rankings:popular-tokens',
+      POPULAR_TOKENS_CACHE_KEY,
       async () => {
         const supabase = getSupabaseAdmin()
 
@@ -126,7 +158,7 @@ async function handlePopularTokens(): Promise<NextResponse> {
               .filter((row) => isValidTokenSymbol(String(row.token ?? '').toUpperCase()))
               .slice(0, 50)
               .map((row) => ({
-                token: row.token,
+                token: String(row.token).toUpperCase(),
                 trade_count: Number(row.trade_count),
                 trader_count: Number(row.trader_count),
                 total_pnl: Number(row.total_pnl),
@@ -140,13 +172,61 @@ async function handlePopularTokens(): Promise<NextResponse> {
       ['rankings', 'popular-tokens']
     )
 
+    if (!isPopularTokenList(result)) {
+      await tieredDel(POPULAR_TOKENS_CACHE_KEY)
+      throw new Error('popular token cache failed validation')
+    }
+
+    // Keep a substantially longer last-known-good copy. Popular-token counts
+    // are discovery metadata, so a clearly labelled stale snapshot is safer
+    // during a database outage than turning the whole index into a 500. Empty
+    // results are legitimate but must not erase the last non-empty snapshot.
+    if (result.length > 0) {
+      await tieredSet(
+        POPULAR_TOKENS_LAST_GOOD_KEY,
+        result,
+        'cold',
+        ['rankings', 'popular-tokens-last-good'],
+        {
+          redisTtlSeconds: POPULAR_TOKENS_LAST_GOOD_TTL_SECONDS,
+          staleWhileRevalidateSeconds: 0,
+        }
+      )
+    }
+
     return NextResponse.json(
       { tokens: result },
       { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800' } }
     )
   } catch (err) {
     logger.error('[popular-tokens]', err instanceof Error ? err : new Error(String(err)))
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    let fallbackData: unknown = null
+    try {
+      fallbackData = (await tieredGet<unknown>(POPULAR_TOKENS_LAST_GOOD_KEY, 'cold')).data
+    } catch (fallbackError) {
+      logger.warn('[popular-tokens] last-known-good read failed', fallbackError)
+    }
+    if (isPopularTokenList(fallbackData) && fallbackData.length > 0) {
+      return NextResponse.json(
+        { tokens: fallbackData, degraded: true },
+        {
+          headers: {
+            'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=300',
+            'X-Data-Mode': 'last-known-good',
+          },
+        }
+      )
+    }
+    return NextResponse.json(
+      { error: 'Popular token rankings are temporarily unavailable' },
+      {
+        status: 503,
+        headers: {
+          'Cache-Control': 'private, no-store, max-age=0',
+          'Retry-After': '30',
+        },
+      }
+    )
   }
 }
 

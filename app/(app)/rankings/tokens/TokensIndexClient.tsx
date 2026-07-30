@@ -147,7 +147,9 @@ export default function TokensIndexClient({
 
       setPopularTokens((data as { tokens: PopularToken[] }).tokens)
       setHasSuccessfulData(true)
-      setLoadState('success')
+      // A last-known-good response remains useful, but keep the compact retry
+      // notice visible so stale discovery counts are never presented as live.
+      setLoadState((data as { degraded?: unknown }).degraded === true ? 'error' : 'success')
     } catch (error) {
       if (requestRef.current !== controller) return
       if (controller.signal.aborted && !timedOut) return
@@ -236,7 +238,7 @@ export default function TokensIndexClient({
             border: `1px solid ${tokens.colors.border.primary}`,
             background: tokens.colors.bg.secondary,
             color: tokens.colors.text.primary,
-            fontSize: 14,
+            fontSize: tokens.typography.fontSize.base,
             transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
           }}
         />

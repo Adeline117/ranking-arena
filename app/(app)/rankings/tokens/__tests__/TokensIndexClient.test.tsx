@@ -98,4 +98,16 @@ describe('TokensIndexClient hydration readiness', () => {
     )
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+
+  it('keeps labelled last-known-good data visible with a compact retry state', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ tokens: initialTokens, degraded: true }),
+    })
+    const { container } = render(<TokensIndexClient initialTokens={[]} initialStatus="error" />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('failedToLoadRankings')
+    expect(container.querySelector('[data-token="BTC"]')).toHaveAttribute('data-trader-count', '3')
+  })
 })
