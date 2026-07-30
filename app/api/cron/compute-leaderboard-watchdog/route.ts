@@ -19,8 +19,7 @@
 
 import { NextRequest } from 'next/server'
 import { withCron } from '@/lib/api/with-cron'
-import { sendAlert } from '@/lib/alerts/send-alert'
-import { logger } from '@/lib/logger'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import {
   parseSeasonFreshnessPayload,
   triggerSeasonCompute,
@@ -52,6 +51,7 @@ export const GET = withCron(
     // keeps computing, the global-newest stays fresh and the watchdog never
     // fires — the exact silent-stale-flagship failure this net exists to catch.
     const sb = supabase
+    const checkedAt = Date.now()
     const freshness = await Promise.all(
       SEASONS.map(async (season) => {
         const { data, error } = await sb
@@ -64,9 +64,10 @@ export const GET = withCron(
         if (error) {
           throw new Error(`Leaderboard freshness query failed for ${season}: ${error.message}`)
         }
-        return { season, ...parseSeasonFreshnessPayload(data, Date.now()) }
+        return { season, ...parseSeasonFreshnessPayload(data, checkedAt) }
       })
     )
+    workSignal.throwIfAborted()
 
     const staleSeasons = freshness.filter((f) => f.ageMs > STALE_MS)
     if (staleSeasons.length === 0) {
@@ -82,34 +83,48 @@ export const GET = withCron(
     const secret = process.env.CRON_SECRET
     const triggers: ComputeTriggerResult[] = []
     for (const s of staleSeasons) {
+      workSignal.throwIfAborted()
       if (!secret) {
         triggers.push({ season: s.season, triggered: false, note: 'CRON_SECRET missing' })
         continue
       }
       triggers.push(await triggerSeasonCompute(base, secret, s.season, { signal: workSignal }))
+      workSignal.throwIfAborted()
     }
 
     const failedTriggers = triggers.filter((trigger) => !trigger.triggered)
-    const staleDesc = staleSeasons.map((s) => `${s.season} ${s.ageMin}min`).join(', ')
+    const staleDesc = staleSeasons
+      .map((s) => (s.ageMin < 0 ? `${s.season} NEVER` : `${s.season} ${s.ageMin}min`))
+      .join(', ')
     const allAcknowledged = failedTriggers.length === 0
-    const alertResult = await sendAlert({
-      level: 'critical',
-      title: allAcknowledged
-        ? 'compute-leaderboard 看门狗触发已确认'
-        : 'compute-leaderboard 看门狗触发失败',
-      message: allAcknowledged
-        ? `服务层 leaderboard 部分 season 已 >3h 未重算(${staleDesc})——Mac Mini worker 触发链可能已死。兜底请求已被 compute endpoint 明确认领。请检查 worker。`
-        : `服务层 leaderboard 部分 season 已 >3h 未重算(${staleDesc})，且 ${failedTriggers.map((trigger) => trigger.season).join(', ')} 的兜底请求未获明确成功回执。不得视为已兜底，请立即检查 worker 与 compute endpoint。`,
-      details: { staleSeasons: staleSeasons.map((s) => ({ [s.season]: s.ageMin })), triggers },
-    })
-    if (!alertResult.sent) {
-      logger.error('[compute-watchdog] critical watchdog alert was not delivered')
-    }
+    const alertResult = await sendRateLimitedAlert(
+      {
+        level: 'critical',
+        title: allAcknowledged
+          ? 'compute-leaderboard 看门狗触发已确认'
+          : 'compute-leaderboard 看门狗触发失败',
+        message: allAcknowledged
+          ? `服务层 leaderboard 部分 season 已 >3h 未重算(${staleDesc})——Mac Mini worker 触发链可能已死。兜底请求已被 compute endpoint 明确认领。请检查 worker。`
+          : `服务层 leaderboard 部分 season 已 >3h 未重算(${staleDesc})，且 ${failedTriggers.map((trigger) => trigger.season).join(', ')} 的兜底请求未获明确成功回执。不得视为已兜底，请立即检查 worker 与 compute endpoint。`,
+        details: {
+          staleSeasons: staleSeasons.map((s) => ({ [s.season]: s.ageMin })),
+          triggers,
+        },
+      },
+      `compute-leaderboard-watchdog:${allAcknowledged ? 'triggered' : 'failed'}:${staleSeasons
+        .map((season) => season.season)
+        .join(',')}`,
+      30 * 60 * 1000
+    )
+    workSignal.throwIfAborted()
 
     if (!allAcknowledged) {
       throw new Error(
         `Leaderboard recovery trigger failed for: ${failedTriggers.map((trigger) => trigger.season).join(', ')}`
       )
+    }
+    if (!alertResult.handled) {
+      throw new Error('Leaderboard watchdog alert delivery failed')
     }
 
     return { stale: true, staleSeasons: staleSeasons.map((s) => s.season), triggers }

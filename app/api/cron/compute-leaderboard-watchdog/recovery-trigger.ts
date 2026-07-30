@@ -1,3 +1,5 @@
+import { RANKING_SOURCE_FUTURE_TOLERANCE_MS } from '@/lib/rankings/source-freshness'
+
 export type SeasonFreshness = {
   ageMs: number
   ageMin: number
@@ -14,6 +16,10 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function parseSeasonFreshnessPayload(value: unknown, now: number): SeasonFreshness {
+  if (!Number.isFinite(now)) {
+    throw new Error('Leaderboard freshness clock is invalid')
+  }
+
   if (!Array.isArray(value)) {
     throw new Error('Leaderboard freshness query returned an invalid payload')
   }
@@ -33,7 +39,7 @@ export function parseSeasonFreshnessPayload(value: unknown, now: number): Season
   }
 
   const computedAt = Date.parse(row.computed_at)
-  if (!Number.isFinite(computedAt)) {
+  if (!Number.isFinite(computedAt) || computedAt > now + RANKING_SOURCE_FUTURE_TOLERANCE_MS) {
     throw new Error('Leaderboard freshness query returned an invalid payload')
   }
 

@@ -1,4 +1,5 @@
 import { parseSeasonFreshnessPayload, triggerSeasonCompute } from '../recovery-trigger'
+import { RANKING_SOURCE_FUTURE_TOLERANCE_MS } from '@/lib/rankings/source-freshness'
 
 const response = (status: number, payload: unknown): Response =>
   ({
@@ -19,6 +20,26 @@ describe('compute leaderboard watchdog recovery contract', () => {
 
   it('treats a missing ranking row as stale', () => {
     expect(parseSeasonFreshnessPayload([], Date.now())).toEqual({ ageMs: Infinity, ageMin: -1 })
+  })
+
+  it('accepts only the configured amount of future clock skew', () => {
+    const now = Date.parse('2026-07-29T10:00:00.000Z')
+    const boundary = new Date(now + RANKING_SOURCE_FUTURE_TOLERANCE_MS).toISOString()
+    const beyondBoundary = new Date(now + RANKING_SOURCE_FUTURE_TOLERANCE_MS + 1).toISOString()
+
+    expect(parseSeasonFreshnessPayload([{ computed_at: boundary }], now)).toEqual({
+      ageMs: 0,
+      ageMin: 0,
+    })
+    expect(() => parseSeasonFreshnessPayload([{ computed_at: beyondBoundary }], now)).toThrow(
+      'Leaderboard freshness query returned an invalid payload'
+    )
+  })
+
+  it.each([Number.NaN, Infinity, -Infinity])('rejects an invalid freshness clock: %s', (now) => {
+    expect(() => parseSeasonFreshnessPayload([], now)).toThrow(
+      'Leaderboard freshness clock is invalid'
+    )
   })
 
   it.each([

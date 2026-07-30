@@ -21,4 +21,15 @@ describe('compute leaderboard watchdog route', () => {
     expect(route).toContain('if (!allAcknowledged)')
     expect(route).toContain('throw new Error(')
   })
+
+  it('requires critical alert handling before acknowledging recovery', () => {
+    expect(route).toContain('sendRateLimitedAlert(')
+    expect(route).toContain('if (!alertResult.handled)')
+    expect(route).toContain("throw new Error('Leaderboard watchdog alert delivery failed')")
+    expect(route).not.toContain('sendAlert({')
+  })
+
+  it('checks the run deadline before acknowledging query, trigger, and alert work', () => {
+    expect(route.match(/workSignal\.throwIfAborted\(\)/g)).toHaveLength(4)
+  })
 })
