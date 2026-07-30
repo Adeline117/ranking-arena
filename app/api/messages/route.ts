@@ -13,6 +13,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { createLogger, traceMessage } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { parseLimit } from '@/lib/utils/safe-parse'
+import { refreshAuthorizedChatMediaUrls } from '@/lib/chat/private-media'
 
 const logger = createLogger('messages-api')
 
@@ -276,6 +277,11 @@ export const GET = withAuth(
         }))
       })(),
     }))
+    const authorizedMessages = await refreshAuthorizedChatMediaUrls(
+      supabase,
+      enrichedMessages,
+      conversationId
+    )
 
     // Mark-as-read is now handled by the dedicated POST /api/messages/read endpoint.
     // Removing auto-mark from GET to prevent duplicate read operations and unnecessary writes.
@@ -307,7 +313,7 @@ export const GET = withAuth(
         }
 
     return NextResponse.json({
-      messages: enrichedMessages,
+      messages: authorizedMessages,
       otherUser: otherUserData,
       has_more,
     })

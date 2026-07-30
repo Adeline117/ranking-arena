@@ -11,6 +11,7 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { z } from 'zod'
 import { channelIdSchema, updateGroupChannelInputSchema } from '../contracts'
+import { refreshAuthorizedChatMediaUrls } from '@/lib/chat/private-media'
 
 const logger = createLogger('api:channels:channelId')
 
@@ -361,7 +362,8 @@ export async function GET(
 
     const channelId = parsedChannelId.data
     const actorId = user.id.toLowerCase()
-    const { data, error } = await getSupabaseAdmin().rpc('get_group_channel_page_atomic', {
+    const supabase = getSupabaseAdmin()
+    const { data, error } = await supabase.rpc('get_group_channel_page_atomic', {
       p_actor_id: actorId,
       p_channel_id: channelId,
       p_before: before,
@@ -411,10 +413,16 @@ export async function GET(
       return NextResponse.json({ error: 'Failed to load channel' }, { status: 500 })
     }
 
+    const authorizedMessages = await refreshAuthorizedChatMediaUrls(
+      supabase,
+      acknowledgement.messages,
+      channelId
+    )
+
     return NextResponse.json({
       channel: acknowledgement.channel,
       members: acknowledgement.members,
-      messages: acknowledgement.messages,
+      messages: authorizedMessages,
       has_more: acknowledgement.has_more,
       my_role: acknowledgement.my_role,
     })

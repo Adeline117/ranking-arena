@@ -21,6 +21,7 @@ const mockGetSupabaseAdmin = jest.fn()
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
 const mockLoggerError = jest.fn()
+const mockRefreshAuthorizedChatMediaUrls = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
@@ -36,6 +37,10 @@ jest.mock('@/lib/utils/logger', () => ({
     warn: jest.fn(),
     info: jest.fn(),
   }),
+}))
+jest.mock('@/lib/chat/private-media', () => ({
+  refreshAuthorizedChatMediaUrls: (...args: unknown[]) =>
+    mockRefreshAuthorizedChatMediaUrls(...args),
 }))
 
 import { DELETE, GET, PATCH } from '../route'
@@ -166,6 +171,9 @@ describe('GET /api/channels/[channelId]', () => {
       throw new Error('GET must not issue direct table queries')
     })
     mockGetSupabaseAdmin.mockReturnValue({ rpc: mockRpc, from: mockFrom })
+    mockRefreshAuthorizedChatMediaUrls.mockImplementation(
+      async (_supabase: unknown, messages: unknown) => messages
+    )
     rpcResult(pageAcknowledgement())
   })
 
@@ -191,6 +199,37 @@ describe('GET /api/channels/[channelId]', () => {
       p_before: null,
       p_limit: 50,
     })
+    expect(mockRefreshAuthorizedChatMediaUrls).toHaveBeenCalledWith(
+      expect.objectContaining({ rpc: mockRpc }),
+      [pageMessage],
+      channelId
+    )
+  })
+
+  it('returns only freshly authorized private media URLs', async () => {
+    const legacyMessage = {
+      ...pageMessage,
+      media_url: `https://project.supabase.co/storage/v1/object/public/chat/${channelId}/image/legacy.webp`,
+      media_type: 'image',
+    }
+    const signedMessage = {
+      ...legacyMessage,
+      media_url: `https://project.supabase.co/storage/v1/object/sign/chat/${channelId}/image/legacy.webp?token=fresh`,
+    }
+    rpcResult(pageAcknowledgement({ messages: [legacyMessage] }))
+    mockRefreshAuthorizedChatMediaUrls.mockResolvedValue([signedMessage])
+
+    const response = await GET(getRequest(), context())
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({ messages: [signedMessage] })
+    )
+    expect(mockRefreshAuthorizedChatMediaUrls).toHaveBeenCalledWith(
+      expect.anything(),
+      [legacyMessage],
+      channelId
+    )
   })
 
   it('binds a valid offset cursor into the one atomic RPC', async () => {

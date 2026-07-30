@@ -114,6 +114,7 @@ export async function refreshAuthorizedChatMediaUrls<T extends ChatMediaRow>(
   const { data, error } = await supabase.storage
     .from(CHAT_MEDIA_BUCKET)
     .createSignedUrls(requestedPaths, CHAT_MEDIA_SIGNED_URL_TTL_SECONDS)
+    .catch(() => ({ data: null, error: new Error('Chat media signing failed') }))
 
   const signedByPath = new Map<string, string>()
   if (!error && data && data.length === requestedPaths.length) {
