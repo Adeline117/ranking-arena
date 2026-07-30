@@ -138,10 +138,16 @@ export const GET = withPublic(
       return badRequest('Invalid exchange')
     }
     const cursor = parsed.data.cursor != null ? String(parsed.data.cursor) : null
-    const page = parsed.data.page ?? NaN
-    const useLegacyPaging = !isNaN(page) && !cursor
-
     const effectiveSortBy = sortBy || 'arena_score'
+    const cursorCompatible = effectiveSortBy === 'arena_score' && order === 'desc'
+    if (cursor && !cursorCompatible) {
+      return badRequest('Cursor pagination requires sortBy=arena_score&order=desc')
+    }
+    const pageWasProvided = parsed.data.page != null
+    const page = parsed.data.page ?? 0
+    // Non-default sorts have no rank-compatible keyset cursor. Treat a missing
+    // page as page 0 so the response advertises the continuation mode honestly.
+    const useLegacyPaging = !cursor && (pageWasProvided || !cursorCompatible)
 
     if (isPublicRankingSourceQuarantined(canonicalExchange)) {
       return NextResponse.json(
@@ -394,8 +400,9 @@ async function fetchFromLeaderboardCohort(
   if (sortBy === 'arena_score') {
     // ROOT CAUSE FIX: ORDER BY rank used wrong index path (5707ms).
     // ORDER BY arena_score uses idx_leaderboard_ranks_ssr_v2 (376ms).
-    // Both produce identical ordering since rank is computed from arena_score DESC.
-    query = query.order('arena_score', { ascending: false, nullsFirst: false })
+    // Descending matches rank order; ascending is still a supported explicit
+    // page-based sort and must not be silently rewritten to descending.
+    query = query.order('arena_score', { ascending, nullsFirst: false })
   } else {
     query = query.order(sortColumn, { ascending, nullsFirst: false })
   }
@@ -530,7 +537,7 @@ async function fetchFromLeaderboardCohort(
 
   // Next cursor
   const lastTrader = dedupedTraders[dedupedTraders.length - 1]
-  const nextCursor = lastTrader ? lastTrader.rank : null
+  const nextCursor = !useLegacyPaging && lastTrader ? lastTrader.rank : null
   const hasMore = useLegacyPaging ? (page + 1) * limit < totalCount : traders.length === limit
 
   const availableSources = filterPublicRankingSources(publicSources)

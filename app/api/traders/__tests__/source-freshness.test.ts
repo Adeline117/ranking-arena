@@ -344,6 +344,57 @@ describe('GET /api/traders source freshness', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
+  it.each(['sortBy=roi&order=desc&cursor=50', 'sortBy=arena_score&order=asc&cursor=50'])(
+    'rejects a rank cursor that cannot continue the requested sort: %s',
+    async (query) => {
+      const response = await GET({
+        nextUrl: new URL(`http://localhost/api/traders?timeRange=90D&${query}`),
+      } as never)
+      const body = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(body.success).toBe(false)
+      expect(mockReadPublicationAuthority).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  it('honors ascending Arena Score and exposes page mode for non-default ordering', async () => {
+    proofOverrides.set('binance_futures', { publishedRankCount: 1 })
+    let rankingQuery: ReturnType<typeof queryResult> | undefined
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') {
+        rankingQuery = queryResult([
+          {
+            source: 'binance_futures',
+            source_trader_id: 'lowest-score',
+            source_type: 'futures',
+            handle: 'Lowest',
+            arena_score: 1,
+            rank: 1,
+          },
+        ])
+        return rankingQuery
+      }
+      if (table === 'verified_traders') return queryResult([])
+      throw new Error(`unexpected table ${table}`)
+    })
+
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/traders?timeRange=90D&sortBy=arena_score&order=asc'),
+    } as never)
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(rankingQuery?.order).toHaveBeenCalledWith('arena_score', {
+      ascending: true,
+      nullsFirst: false,
+    })
+    expect(rankingQuery?.range).toHaveBeenCalledWith(0, 49)
+    expect(body.page).toBe(0)
+    expect(body.nextCursor).toBeNull()
+  })
+
   it('evicts a sealed cache page after the authority advances to another cohort', async () => {
     const cachedTrader = { source: 'binance_futures', id: 'old-cache-row' }
     mockGetOrSetWithLock
