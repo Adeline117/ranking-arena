@@ -548,9 +548,19 @@ export function parseHyperliquidHistory(
     throw new Error(`[hyperliquid] history surface ${kind} not supported`)
   }
   const payload = (raw ?? {}) as Dict
+  const traderIdentity =
+    typeof payload.historyTraderIdentity === 'string' &&
+    /^0x[0-9a-f]{40}$/i.test(payload.historyTraderIdentity)
+      ? payload.historyTraderIdentity.toLowerCase()
+      : null
   const snapshot = payload.fillsSnapshot as Partial<HyperliquidFillsFetch> | undefined
   const evidence = fillMetricEvidence(payload, 90)
-  if (!evidence.stats || snapshot?.schemaVersion !== 2 || !Array.isArray(snapshot.fills)) {
+  if (
+    traderIdentity === null ||
+    !evidence.stats ||
+    snapshot?.schemaVersion !== 2 ||
+    !Array.isArray(snapshot.fills)
+  ) {
     throw new Error('[hyperliquid] position history fill window is incomplete')
   }
   const arr = snapshot.fills as HlFill[]
@@ -566,7 +576,9 @@ export function parseHyperliquidHistory(
     exitPrice: Math.round(t.exitPrice * 1e6) / 1e6,
     realizedPnl: t.realizedPnl,
     dedupeHash: createHash('sha1')
-      .update(['hl_ph', t.coin, t.openedAtMs, t.closedAtMs, t.realizedPnl].join('|'))
+      .update(
+        ['hl_ph', traderIdentity, t.coin, t.openedAtMs, t.closedAtMs, t.realizedPnl].join('|')
+      )
       .digest('hex'),
     raw: {
       coin: t.coin,

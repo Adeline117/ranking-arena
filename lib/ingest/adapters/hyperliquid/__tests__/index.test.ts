@@ -157,6 +157,7 @@ describe('hyperliquid profile fetch intent', () => {
     expect(bodies.filter((body) => body.type === 'userFillsByTime')).toHaveLength(1)
     expect(pages[0].payload).toMatchObject({
       fillsFetchTrigger: 'history',
+      historyTraderIdentity: ADDRESS,
       fillsFetchState: 'fetched',
     })
   })
