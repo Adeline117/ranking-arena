@@ -142,6 +142,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729223000_rerank_public_eligible_rows_only.sql
   20260729224000_rank_eligible_leaderboard_count_cache.sql
   20260729225000_token_trader_rank_authority.sql
+  20260729230000_token_ranking_generation_barrier.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
