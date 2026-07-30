@@ -8,7 +8,7 @@
  * 2. 重复通知轰炸用户
  * 3. 通知失败影响主流程
  *
- * 仅经审计的 cron 批量广播可直接 insert（有独立批次 authority）。
+ * 排名类 cron 批量广播必须使用 ranking-notifications 的独立批次 authority。
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
