@@ -332,6 +332,34 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.passkeys).toHaveLength(1)
   })
 
+  it('does not present a failed block-list read as no blocked users', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    mockPublicQuery.eq.mockImplementationOnce(async () => ({
+      data: null,
+      error: { message: 'database unavailable' },
+    }))
+    await act(async () => {
+      await hook.result.current.loadBlockedUsers()
+    })
+
+    expect(hook.result.current.blockedUsers).toEqual([])
+    expect(hook.result.current.blockedUsersLoadFailed).toBe(true)
+
+    mockPublicQuery.eq.mockImplementationOnce(async () => ({ data: [], error: null }))
+    await act(async () => {
+      await hook.result.current.loadBlockedUsers()
+    })
+
+    expect(hook.result.current.blockedUsersLoadFailed).toBe(false)
+    expect(hook.result.current.blockedUsers).toEqual([])
+  })
+
   it('blocks A form actions while B ownership is still unresolved', async () => {
     const publicB = deferred<ReturnType<typeof publicProfile>>()
     const sensitiveB = deferred<ReturnType<typeof sensitiveProfile>>()

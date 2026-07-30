@@ -26,8 +26,10 @@ interface PrivacySectionProps {
   setDmPermission: (v: 'all' | 'mutual' | 'none') => void
   blockedUsers: BlockedUserInfo[]
   loadingBlockedUsers: boolean
+  blockedUsersLoadFailed: boolean
   unblockingId: string | null
   onUnblock: (id: string) => void
+  onRetryBlockedUsers: () => void
 }
 
 export const PrivacySection = React.memo(function PrivacySection(props: PrivacySectionProps) {
@@ -165,6 +167,27 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
           <Text size="sm" color="tertiary">
             {t('loading')}
           </Text>
+        ) : props.blockedUsersLoadFailed ? (
+          <Box
+            role="alert"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: tokens.spacing[3],
+              padding: tokens.spacing[3],
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${alpha(tokens.colors.accent.error, 25)}`,
+              background: alpha(tokens.colors.accent.error, 6),
+            }}
+          >
+            <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+              {t('loadFailedRetryShort')}
+            </Text>
+            <Button variant="secondary" size="sm" onClick={props.onRetryBlockedUsers}>
+              {t('retry')}
+            </Button>
+          </Box>
         ) : props.blockedUsers.length === 0 ? (
           <EmptyState variant="compact" title={t('noBlockedUsers')} />
         ) : (

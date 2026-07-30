@@ -270,6 +270,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   }
   const [blockedUsers, setBlockedUsers] = useState<BlockedUserInfo[]>([])
   const [loadingBlockedUsers, setLoadingBlockedUsers] = useState(false)
+  const [blockedUsersLoadFailed, setBlockedUsersLoadFailed] = useState(false)
   const [unblockingId, setUnblockingId] = useState<string | null>(null)
 
   // Email digest state
@@ -509,6 +510,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     setRevokingOtherSessions(false)
     setBlockedUsers([])
     setLoadingBlockedUsers(false)
+    setBlockedUsersLoadFailed(false)
     setUnblockingId(null)
 
     setEmailDigest('none')
@@ -1538,6 +1540,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     const loadIsCurrent = () =>
       blockedUsersLoadGenerationRef.current === loadGeneration && viewerIsCurrent(scope)
     setLoadingBlockedUsers(true)
+    setBlockedUsersLoadFailed(false)
     try {
       const { data: blockedRows, error } = await supabase
         .from('blocked_users')
@@ -1573,6 +1576,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     } catch (error) {
       if (!loadIsCurrent()) return
       uiLogger.error('[BlockedUsers] Load error:', error)
+      setBlockedUsersLoadFailed(true)
     } finally {
       if (loadIsCurrent()) setLoadingBlockedUsers(false)
     }
@@ -1918,6 +1922,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     // Blocked users
     blockedUsers,
     loadingBlockedUsers,
+    blockedUsersLoadFailed,
     unblockingId,
 
     // Delete account

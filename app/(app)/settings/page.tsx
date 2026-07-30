@@ -578,8 +578,10 @@ export function SettingsContent() {
             setDmPermission={h.setDmPermission}
             blockedUsers={h.blockedUsers}
             loadingBlockedUsers={h.loadingBlockedUsers}
+            blockedUsersLoadFailed={h.blockedUsersLoadFailed}
             unblockingId={h.unblockingId}
             onUnblock={h.handleUnblock}
+            onRetryBlockedUsers={h.loadBlockedUsers}
           />
 
           {/* Referral Section */}
