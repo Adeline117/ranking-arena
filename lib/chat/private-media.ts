@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const CHAT_MEDIA_BUCKET = 'chat'
-export const CHAT_MEDIA_SIGNED_URL_TTL_SECONDS = 5 * 60
+export const CHAT_MEDIA_SIGNED_URL_TTL_SECONDS = 15 * 60
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const CHAT_OBJECT_PATH_PATTERN =

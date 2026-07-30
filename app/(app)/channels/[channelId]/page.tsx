@@ -432,8 +432,8 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('userId', userId)
       formData.append('conversationId', channelId)
+      formData.append('scopeType', 'channel')
       // /api/chat/upload is withAuth (Bearer header only) — 401'd without the token
       const res = await globalThis.fetch('/api/chat/upload', {
         method: 'POST',

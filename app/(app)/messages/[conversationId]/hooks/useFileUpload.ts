@@ -138,6 +138,7 @@ export function useFileUpload({ userId, accessToken, conversationId }: UseFileUp
         const formData = new FormData()
         formData.append('file', file)
         formData.append('conversationId', conversationId)
+        formData.append('scopeType', 'conversation')
         const res = await globalThis.fetch('/api/chat/upload', {
           method: 'POST',
           headers: {

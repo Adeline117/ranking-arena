@@ -2,9 +2,22 @@ import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { sniffImageFile } from '@/lib/utils/image-magic-bytes'
 import logger from '@/lib/logger'
+import { randomBytes } from 'node:crypto'
+import {
+  CHAT_MEDIA_BUCKET,
+  CHAT_MEDIA_SIGNED_URL_TTL_SECONDS,
+  parseChatMediaUrl,
+} from '@/lib/chat/private-media'
 
 // Supported file types
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+]
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
 const ALLOWED_FILE_TYPES = [
   'application/pdf',
@@ -21,29 +34,90 @@ const ALLOWED_FILE_TYPES = [
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+function isUploadFile(value: FormDataEntryValue | null): value is File {
+  return (
+    value !== null &&
+    typeof value !== 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.type === 'string' &&
+    Number.isSafeInteger(value.size) &&
+    typeof value.arrayBuffer === 'function'
+  )
+}
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
     const formData = await request.formData()
-    const file = formData.get('file') as File
-    const conversationId = formData.get('conversationId') as string
+    const fileEntry = formData.get('file')
+    const scopeIdEntry = formData.get('conversationId')
+    const scopeTypeEntry = formData.get('scopeType')
 
-    if (!file) {
+    if (!isUploadFile(fileEntry)) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
+    const file = fileEntry
 
-    if (!conversationId) {
+    if (typeof scopeIdEntry !== 'string') {
       return NextResponse.json({ error: 'No conversationId provided' }, { status: 400 })
     }
+    const scopeId = scopeIdEntry.toLowerCase()
+    if (!UUID_PATTERN.test(scopeId)) {
+      return NextResponse.json({ error: 'Invalid conversationId' }, { status: 400 })
+    }
 
-    // SECURITY: Verify user is a member of this conversation
-    const { data: conv } = await supabase
-      .from('conversations')
-      .select('user1_id, user2_id')
-      .eq('id', conversationId)
-      .maybeSingle()
-    if (!conv || (conv.user1_id !== user.id && conv.user2_id !== user.id)) {
-      return NextResponse.json({ error: 'Not a member of this conversation' }, { status: 403 })
+    // Missing scopeType remains a backwards-compatible direct-message request.
+    const scopeType =
+      scopeTypeEntry === null
+        ? 'conversation'
+        : typeof scopeTypeEntry === 'string'
+          ? scopeTypeEntry
+          : null
+    if (scopeType !== 'conversation' && scopeType !== 'channel') {
+      return NextResponse.json({ error: 'Invalid upload scope' }, { status: 400 })
+    }
+
+    if (scopeType === 'conversation') {
+      const { data: conversation, error: conversationError } = await supabase
+        .from('conversations')
+        .select('user1_id, user2_id')
+        .eq('id', scopeId)
+        .maybeSingle()
+      if (conversationError) {
+        logger.error('Conversation upload authorization failed:', conversationError)
+        return NextResponse.json({ error: 'Could not authorize upload' }, { status: 503 })
+      }
+      if (
+        !conversation ||
+        (conversation.user1_id !== user.id && conversation.user2_id !== user.id)
+      ) {
+        return NextResponse.json({ error: 'Not a member of this conversation' }, { status: 403 })
+      }
+    } else {
+      const { data: channel, error: channelError } = await supabase
+        .from('chat_channels')
+        .select('id, type')
+        .eq('id', scopeId)
+        .maybeSingle()
+      if (channelError) {
+        logger.error('Channel upload authorization failed:', channelError)
+        return NextResponse.json({ error: 'Could not authorize upload' }, { status: 503 })
+      }
+
+      const { data: membership, error: membershipError } = await supabase
+        .from('channel_members')
+        .select('channel_id')
+        .eq('channel_id', scopeId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (membershipError) {
+        logger.error('Channel membership upload authorization failed:', membershipError)
+        return NextResponse.json({ error: 'Could not authorize upload' }, { status: 503 })
+      }
+      if (!channel || channel.type !== 'group' || !membership) {
+        return NextResponse.json({ error: 'Not a member of this channel' }, { status: 403 })
+      }
     }
 
     // Determine file category
@@ -74,6 +148,10 @@ export const POST = withAuth(
     }
 
     // Validate file size
+    if (file.size <= 0) {
+      return NextResponse.json({ error: 'File is empty' }, { status: 400 })
+    }
+
     if (file.size > maxSize) {
       const maxSizeMB = Math.round(maxSize / (1024 * 1024))
       return NextResponse.json(
@@ -107,7 +185,9 @@ export const POST = withAuth(
       sniffedExt = sniffed.extension
     }
 
-    // Check if chat bucket exists, create if not
+    // Deployments must provision the bucket privately. Never create or repair
+    // it in a request, because a public fallback turns every attachment into a
+    // bearerless permanent URL.
     const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
     if (bucketsError) {
       logger.error('Error listing buckets:', bucketsError)
@@ -120,51 +200,53 @@ export const POST = withAuth(
       )
     }
 
-    const chatBucketExists = buckets?.some((b: { id: string }) => b.id === 'chat')
-    if (!chatBucketExists) {
-      // Create chat bucket
-      const { error: createBucketError } = await supabase.storage.createBucket('chat', {
-        public: true,
-        fileSizeLimit: MAX_VIDEO_SIZE,
-      })
-      if (createBucketError && !createBucketError.message?.includes('already exists')) {
-        logger.error('Error creating chat bucket:', createBucketError)
-        return NextResponse.json(
-          {
-            error: 'Could not create storage bucket',
-          },
-          { status: 503 }
-        )
-      }
+    const chatBucket = buckets?.find((bucket: { id: string }) => bucket.id === CHAT_MEDIA_BUCKET)
+    if (!chatBucket || chatBucket.public !== false) {
+      logger.error('Chat storage bucket is missing or public')
+      return NextResponse.json({ error: 'Private chat storage is not configured' }, { status: 503 })
     }
 
     // Generate unique filename. For images, force SERVER-derived extension
     // from the sniffed magic bytes — never echo the client-supplied name
     // back to disk in a path that could be served as text/html or SVG.
     const timestamp = Date.now()
-    const randomStr = Math.random().toString(36).substring(2, 15)
-    const safeOriginalName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_').substring(0, 50)
+    const randomStr = randomBytes(12).toString('hex')
+    const safeOriginalName =
+      file.name.replace(/[^a-zA-Z0-9.-]/g, '_').substring(0, 50) || 'attachment'
     const fileName = sniffedExt
-      ? `${conversationId}/${fileCategory}/${timestamp}-${randomStr}.${sniffedExt}`
-      : `${conversationId}/${fileCategory}/${timestamp}-${randomStr}-${safeOriginalName}`
+      ? `${scopeId}/${fileCategory}/${timestamp}-${randomStr}.${sniffedExt}`
+      : `${scopeId}/${fileCategory}/${timestamp}-${randomStr}-${safeOriginalName}`
 
     // Upload to Supabase Storage with sniffed Content-Type for images,
     // declared type for video/file (out of scope for sniffing — see comment above)
-    const { data, error } = await supabase.storage.from('chat').upload(fileName, file, {
+    const storageBucket = supabase.storage.from(CHAT_MEDIA_BUCKET)
+    const { data, error } = await storageBucket.upload(fileName, file, {
       contentType: sniffedMime || file.type,
       upsert: false,
     })
 
-    if (error) {
+    if (error || data?.path !== fileName) {
       logger.error('Upload error:', error)
+      if (!error) await storageBucket.remove([fileName]).catch(() => undefined)
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage.from('chat').getPublicUrl(fileName)
+    const { data: signedData, error: signedError } = await storageBucket.createSignedUrl(
+      fileName,
+      CHAT_MEDIA_SIGNED_URL_TTL_SECONDS
+    )
+    if (
+      signedError ||
+      !signedData?.signedUrl ||
+      parseChatMediaUrl(signedData.signedUrl, scopeId)?.objectName !== fileName
+    ) {
+      logger.error('Chat upload signing failed:', signedError)
+      await storageBucket.remove([fileName]).catch(() => undefined)
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
 
     return NextResponse.json({
-      url: urlData.publicUrl,
+      url: signedData.signedUrl,
       fileName: data.path,
       originalName: file.name,
       fileType: file.type,
