@@ -19,6 +19,12 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
 
 const RATE_LIMIT_DELAY = 200 // 200ms between requests
+const UPSTREAM_TIMEOUT_MS = 12_000
+const DATABASE_TIMEOUT_MS = 12_000
+const JOB_BUDGET_MS = 240_000
+const MAX_FUNDING_AGE_MS = 3 * 24 * 60 * 60 * 1000
+const MAX_FUNDING_FUTURE_MS = 24 * 60 * 60 * 1000
+const MAX_ABSOLUTE_FUNDING_RATE = 1
 
 interface ExchangeConfig {
   name: string
@@ -32,6 +38,13 @@ interface FundingRateData {
   symbol: string
   funding_rate: number
   funding_time: string
+}
+
+interface FundingFailure {
+  stage: 'upstream' | 'validation' | 'database' | 'budget'
+  exchange: string
+  symbol: string
+  error: string
 }
 
 // ============================================
@@ -164,50 +177,85 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function remainingTimeout(deadlineMs: number, maximumMs: number): number {
+  return Math.max(1, Math.min(maximumMs, deadlineMs - Date.now()))
+}
+
+function validateFundingRates(
+  rates: FundingRateData[],
+  exchange: string,
+  symbol: string,
+  nowMs = Date.now()
+): FundingRateData[] {
+  if (rates.length === 0) {
+    throw Object.assign(new Error('upstream payload contained no funding rate'), {
+      stage: 'validation' as const,
+    })
+  }
+
+  return rates.map((rate) => {
+    const fundingTimeMs = Date.parse(rate.funding_time)
+    if (
+      rate.platform !== exchange ||
+      typeof rate.symbol !== 'string' ||
+      rate.symbol.length === 0 ||
+      !Number.isFinite(rate.funding_rate) ||
+      Math.abs(rate.funding_rate) > MAX_ABSOLUTE_FUNDING_RATE ||
+      !Number.isFinite(fundingTimeMs) ||
+      fundingTimeMs < nowMs - MAX_FUNDING_AGE_MS ||
+      fundingTimeMs > nowMs + MAX_FUNDING_FUTURE_MS
+    ) {
+      throw Object.assign(new Error(`invalid funding rate payload for ${exchange}/${symbol}`), {
+        stage: 'validation' as const,
+      })
+    }
+
+    return rate
+  })
+}
+
 async function fetchFundingRate(
   exchange: ExchangeConfig,
-  symbol: string
+  symbol: string,
+  deadlineMs: number
 ): Promise<FundingRateData[]> {
-  try {
-    let url = exchange.url
+  let url = exchange.url
 
-    // Build query string based on exchange
-    switch (exchange.name) {
-      case 'binance':
-        url += `?symbol=${symbol}&limit=1`
-        break
-      case 'bybit':
-        url += `?category=linear&symbol=${symbol}&limit=1`
-        break
-      case 'okx':
-        url += `?instId=${symbol}`
-        break
-      case 'bitget':
-        url += `?symbol=${symbol}&productType=usdt-futures`
-        break
-    }
-
-    const response = await fetch(url, {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'RankingArena/1.0',
-      },
-    })
-
-    if (!response.ok) {
-      // 403/451 are expected (WAF/geo-block) — don't send to Sentry
-      logger.warn(`[funding] ${exchange.name} ${symbol}: HTTP ${response.status}`)
-      return []
-    }
-
-    const data = await response.json()
-    return exchange.responseMapper(data, symbol)
-  } catch (error) {
-    logger.warn(
-      `[funding] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`
-    )
-    return []
+  // Build query string based on exchange
+  switch (exchange.name) {
+    case 'binance':
+      url += `?symbol=${symbol}&limit=1`
+      break
+    case 'bybit':
+      url += `?category=linear&symbol=${symbol}&limit=1`
+      break
+    case 'okx':
+      url += `?instId=${symbol}`
+      break
+    case 'bitget':
+      url += `?symbol=${symbol}&productType=usdt-futures`
+      break
   }
+
+  const response = await fetch(url, {
+    cache: 'no-store',
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'RankingArena/1.0',
+    },
+    signal: AbortSignal.timeout(remainingTimeout(deadlineMs, UPSTREAM_TIMEOUT_MS)),
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  const data = await response.json()
+  return validateFundingRates(exchange.responseMapper(data, symbol), exchange.name, symbol)
 }
 
 // ============================================
@@ -223,66 +271,137 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseAdmin()
 
   const startTime = Date.now()
+  const deadlineMs = startTime + JOB_BUDGET_MS
   let fetched = 0
   let inserted = 0
-  let errors = 0
+  let attempted = 0
+  let upstreamSucceeded = 0
+  const failures: FundingFailure[] = []
   const plog = await PipelineLogger.start('fetch-funding-rates')
 
   try {
-    for (const exchange of EXCHANGES) {
+    exchangeLoop: for (const exchange of EXCHANGES) {
       for (const symbol of exchange.symbols) {
+        if (Date.now() >= deadlineMs) {
+          failures.push({
+            stage: 'budget',
+            exchange: exchange.name,
+            symbol,
+            error: `job budget exhausted after ${JOB_BUDGET_MS}ms`,
+          })
+          break exchangeLoop
+        }
+
+        attempted++
         try {
-          // Fetch funding rate
-          const rates = await fetchFundingRate(exchange, symbol)
-
-          // Insert into database
-          for (const rate of rates) {
-            const { error } = await supabase.from('funding_rates').upsert(
-              {
-                platform: rate.platform,
-                symbol: rate.symbol,
-                funding_rate: rate.funding_rate,
-                funding_time: rate.funding_time,
-              },
-              {
-                onConflict: 'platform,symbol,funding_time',
-              }
-            )
-
-            if (error) {
-              logger.dbError('insert-funding-rate', error, { rate })
-              errors++
-            } else {
-              inserted++
-            }
-          }
-
+          const rates = await fetchFundingRate(exchange, symbol, deadlineMs)
+          upstreamSucceeded++
           fetched += rates.length
 
-          // Rate limiting
-          await sleep(RATE_LIMIT_DELAY)
+          for (const rate of rates) {
+            try {
+              const { error } = await supabase
+                .from('funding_rates')
+                .upsert(
+                  {
+                    platform: rate.platform,
+                    symbol: rate.symbol,
+                    funding_rate: rate.funding_rate,
+                    funding_time: rate.funding_time,
+                  },
+                  {
+                    onConflict: 'platform,symbol,funding_time',
+                  }
+                )
+                .abortSignal(AbortSignal.timeout(remainingTimeout(deadlineMs, DATABASE_TIMEOUT_MS)))
+
+              if (error) {
+                failures.push({
+                  stage: 'database',
+                  exchange: exchange.name,
+                  symbol,
+                  error: error.message || String(error),
+                })
+                logger.dbError('insert-funding-rate', error, { rate })
+              } else {
+                inserted++
+              }
+            } catch (error) {
+              const message = errorMessage(error)
+              failures.push({
+                stage: 'database',
+                exchange: exchange.name,
+                symbol,
+                error: message,
+              })
+              logger.dbError('insert-funding-rate', error, { rate })
+            }
+          }
         } catch (error) {
-          logger.error(
-            'Error processing funding rate',
-            { exchange: exchange.name, symbol },
-            error instanceof Error ? error : new Error(String(error))
-          )
-          errors++
+          const stage =
+            error && typeof error === 'object' && 'stage' in error
+              ? (error.stage as FundingFailure['stage'])
+              : 'upstream'
+          const message = errorMessage(error)
+          failures.push({ stage, exchange: exchange.name, symbol, error: message })
+          logger.warn(`[funding] ${exchange.name} ${symbol}: ${message}`)
+        } finally {
+          await sleep(RATE_LIMIT_DELAY)
         }
       }
     }
 
     const duration = Date.now() - startTime
-
-    await plog.success(inserted, { fetched, errors, duration })
-    return NextResponse.json({
-      success: true,
+    const expected = EXCHANGES.reduce((total, exchange) => total + exchange.symbols.length, 0)
+    const acknowledgement = {
+      expected,
+      attempted,
+      upstream_succeeded: upstreamSucceeded,
       fetched,
       inserted,
-      errors,
-      exchanges: EXCHANGES.length,
-      duration: `${duration}ms`,
-    })
+      durable_writes: inserted,
+      unattempted: expected - attempted,
+      failures,
+    }
+    const noDurableWrites = inserted === 0
+    const partial =
+      !noDurableWrites &&
+      (attempted < expected ||
+        upstreamSucceeded < expected ||
+        inserted < fetched ||
+        failures.length > 0)
+    const status = noDurableWrites ? 'failed' : partial ? 'partial' : 'success'
+    const success = status === 'success'
+
+    if (success) {
+      await plog.success(inserted, { status, acknowledgement, duration })
+    } else if (partial) {
+      await plog.partialSuccess(
+        inserted,
+        failures.map((failure) => `${failure.exchange}/${failure.symbol}:${failure.stage}`),
+        { status, acknowledgement, duration }
+      )
+    } else {
+      await plog.error(new Error('funding rate job produced no durable writes'), {
+        status,
+        acknowledgement,
+        duration,
+      })
+    }
+
+    return NextResponse.json(
+      {
+        success,
+        status,
+        fetched,
+        inserted,
+        errors: failures.length,
+        acknowledgement,
+        exchanges: EXCHANGES.length,
+        duration: `${duration}ms`,
+      },
+      { status: noDurableWrites ? 503 : partial ? 207 : 200 }
+    )
   } catch (error) {
     await plog.error(error instanceof Error ? error : new Error(String(error)))
     logger.apiError('/api/cron/fetch-funding-rates', error, {})
@@ -292,7 +411,8 @@ export async function POST(request: NextRequest) {
         details: error instanceof Error ? error.message : 'Unknown error',
         fetched,
         inserted,
-        errors,
+        errors: failures.length,
+        failures,
       },
       { status: 500 }
     )
