@@ -28,4 +28,19 @@ describe('broadcast ranking notification authority', () => {
     expect(route).toContain(".order('source', { ascending: true })")
     expect(route).toContain(".order('source_trader_id', { ascending: true })")
   })
+
+  it('uses the retry-safe batch authority and pushes only newly created rows', () => {
+    expect(route).toContain('await createRankingNotificationsBatch(supabase, rows)')
+    expect(route).toContain('delivery.created.slice(')
+    expect(route).not.toContain("from('notifications').insert")
+    expect(route).toContain('traderEventReference(traderId, source, kind, yStr)')
+  })
+
+  it('does not consume new-position state before durable notification creation', () => {
+    expect(route).toContain('pendingPositionSeenRows.push(...seenRows)')
+    expect(route).toContain('await persistPendingPositionSeen()')
+    expect(route.indexOf('const delivery = await createRankingNotificationsBatch')).toBeLessThan(
+      route.lastIndexOf('await persistPendingPositionSeen()')
+    )
+  })
 })

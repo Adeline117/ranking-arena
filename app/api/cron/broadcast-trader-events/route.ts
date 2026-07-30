@@ -29,6 +29,7 @@ import { loadBroadcastEventPreferences, loadBroadcastEventRows } from './event-d
 import { traderEventLink, traderEventReference } from './notification-identity'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
+import { createRankingNotificationsBatch } from '@/lib/data/ranking-notifications'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -222,6 +223,12 @@ export async function GET(request: NextRequest) {
     // side) and diff against trader_position_seen (insert-once). A trader with no
     // seen rows yet is SEEDED silently — no first-run alert spam.
     const positionEvents = new Map<string, TraderEvent>()
+    const pendingPositionSeenRows: Array<{
+      trader_id: string
+      source: string
+      symbol: string
+      side: string
+    }> = []
     const POSITION_TRADER_CAP = 200 // bound RPC fan-out per run
     const followedKeys = [...followersByTrader.keys()].slice(0, POSITION_TRADER_CAP)
     for (const key of followedKeys) {
@@ -275,17 +282,29 @@ export async function GET(request: NextRequest) {
         const fresh = current.filter((p) => !seenKeys.has(`${p.symbol}|${p.side}`))
         if (fresh.length === 0) continue
 
-        const { error: upErr } = await supabase.from('trader_position_seen').upsert(
-          fresh.map((p) => ({ trader_id: traderId, source, symbol: p.symbol, side: p.side })),
-          { onConflict: 'trader_id,source,symbol,side', ignoreDuplicates: true }
-        )
-        if (upErr) {
-          // Do NOT emit an event if we couldn't persist the seen-state — otherwise
-          // the same "new" position would re-alert every run.
-          logger.error('[broadcast-trader-events] seen upsert failed (no event):', upErr.message)
-          continue
+        const seenRows = fresh.map((position) => ({
+          trader_id: traderId,
+          source,
+          symbol: position.symbol,
+          side: position.side,
+        }))
+        if (isSeed) {
+          const { error: seedError } = await supabase
+            .from('trader_position_seen')
+            .upsert(seenRows, {
+              onConflict: 'trader_id,source,symbol,side',
+              ignoreDuplicates: true,
+            })
+          if (seedError) {
+            logger.error('[broadcast-trader-events] position seed failed:', seedError.message)
+          }
+          continue // first sighting of this trader: seed silently
         }
-        if (isSeed) continue // first sighting of this trader: seed silently
+
+        // For real events, persist seen-state only after the retry-safe
+        // notification authority succeeds. If a later step fails, replayed
+        // notification identities deduplicate before this state is retried.
+        pendingPositionSeenRows.push(...seenRows)
 
         const names = fresh.slice(0, 3).map((p) => `${p.symbol}${p.side ? ` ${p.side}` : ''}`)
         positionEvents.set(key, {
@@ -301,8 +320,10 @@ export async function GET(request: NextRequest) {
     }
     // Merge: a trader can emit at most one metric event AND one position event.
     for (const [key, ev] of positionEvents) {
-      if (!events.has(key)) events.set(key, ev)
-      else events.set(`${key}#pos`, ev) // second slot; fan-out resolves followers via base key
+      // Keep the suffix even when there is no metric event. It is part of the
+      // durable identity and prevents a position-only alert being mislabeled
+      // as a metric event during fan-out.
+      events.set(`${key}#pos`, ev)
     }
 
     if (events.size === 0) {
@@ -330,14 +351,16 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. Build notification rows (one per follower per triggered trader).
-    const rows: Array<{
-      user_id: string
-      type: string
-      title: string
-      message: string
-      link: string
-      reference_id: string
-    }> = []
+    const rowsByIdentity = new Map<
+      string,
+      {
+        userId: string
+        title: string
+        message: string
+        link: string
+        referenceId: string
+      }
+    >()
     for (const [key, ev] of events) {
       const bk = baseKey(key)
       const sep = bk.indexOf('|')
@@ -345,54 +368,88 @@ export async function GET(request: NextRequest) {
       const source = bk.slice(sep + 1)
       const kind = key.endsWith('#pos') ? 'position' : 'metric'
       const link = traderEventLink(traderId, source)
-      for (const uid of followersByTrader.get(bk) ?? []) {
-        if (optedOut.has(uid)) continue
-        rows.push({
-          user_id: uid,
-          type: 'ranking_change',
+      const referenceId = traderEventReference(traderId, source, kind, yStr)
+      for (const userId of followersByTrader.get(bk) ?? []) {
+        if (optedOut.has(userId)) continue
+        rowsByIdentity.set(`${userId}\u0000${referenceId}`, {
+          userId,
           title: ev.title,
           message: ev.message,
           link,
-          reference_id: traderEventReference(traderId, source, kind),
+          referenceId,
         })
+      }
+    }
+    const rows: Array<{
+      userId: string
+      title: string
+      message: string
+      link: string
+      referenceId: string
+    }> = [...rowsByIdentity.values()]
+
+    const persistPendingPositionSeen = async () => {
+      if (pendingPositionSeenRows.length === 0) return
+      const { error } = await supabase
+        .from('trader_position_seen')
+        .upsert(pendingPositionSeenRows, {
+          onConflict: 'trader_id,source,symbol,side',
+          ignoreDuplicates: true,
+        })
+      if (error) {
+        throw new Error(`Position seen-state persistence failed: ${error.message}`)
       }
     }
 
     if (rows.length === 0) {
+      await persistPendingPositionSeen()
       await plog.success(0, { events: events.size, message: 'all recipients opted out' })
       return NextResponse.json({ status: 'ok', events: events.size, notified: 0 })
     }
 
-    const { error: insErr } = await supabase.from('notifications').insert(rows)
-    if (insErr) {
-      logger.error('[broadcast-trader-events] notifications insert failed:', insErr.message)
-      throw insErr
-    }
+    const delivery = await createRankingNotificationsBatch(supabase, rows)
 
-    // Push (best-effort, batched).
+    // Push only rows created by this invocation. A cron replay receives
+    // DEDUPLICATED acknowledgements and cannot push the same event again.
     try {
       const push = getPushNotificationService()
       const BATCH = 10
-      for (let i = 0; i < rows.length; i += BATCH) {
+      for (let i = 0; i < delivery.created.length; i += BATCH) {
         await Promise.allSettled(
-          rows.slice(i, i + BATCH).map((r) =>
-            push.sendToUser(r.user_id, {
-              title: r.title,
-              body: r.message,
-              data: { url: r.link, type: 'ranking_change' },
+          delivery.created.slice(i, i + BATCH).map((created) => {
+            if (created.link === null) {
+              throw new Error('Created trader-event notification is missing its bound link')
+            }
+            return push.sendToUser(created.userId, {
+              title: created.title,
+              body: created.message,
+              data: { url: created.link, type: 'ranking_change' },
             })
-          )
+          })
         )
       }
     } catch (pushErr) {
       logger.warn('[broadcast-trader-events] push failed', { error: pushErr })
     }
 
+    await persistPendingPositionSeen()
+
     logger.info(
-      `[broadcast-trader-events] events=${events.size} notified=${rows.length} optedOut=${optedOut.size}`
+      `[broadcast-trader-events] events=${events.size} notified=${delivery.createdCount} deduplicated=${delivery.deduplicatedCount} skipped=${delivery.skippedCount} optedOut=${optedOut.size}`
     )
-    await plog.success(rows.length, { events: events.size })
-    return NextResponse.json({ status: 'ok', events: events.size, notified: rows.length })
+    await plog.success(delivery.createdCount, {
+      events: events.size,
+      requested: delivery.requestedCount,
+      deduplicated: delivery.deduplicatedCount,
+      skipped: delivery.skippedCount,
+    })
+    return NextResponse.json({
+      status: 'ok',
+      events: events.size,
+      notified: delivery.createdCount,
+      deduplicated: delivery.deduplicatedCount,
+      skipped: delivery.skippedCount,
+    })
   } catch (err) {
     logger.error('[broadcast-trader-events] failed', err)
     await plog.error(err)
