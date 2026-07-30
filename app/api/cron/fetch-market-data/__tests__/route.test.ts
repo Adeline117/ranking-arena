@@ -1,30 +1,44 @@
 /**
- * Cron: fetch-market-data route tests
- * Tests auth, price fetching, market condition detection, and error handling.
- *
  * @jest-environment node
  */
 
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
-
-// Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
 jest.mock('@/lib/env', () => ({
-  env: new Proxy({}, {
-    get(_t, key) {
-      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
-      return process.env[String(key)]
-    },
-  }),
+  env: new Proxy(
+    {},
+    {
+      get(_target, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
 }))
 
-
-const mockFrom = jest.fn()
+const mockBenchmarkUpsert = jest.fn()
+const mockBenchmarkRead = jest.fn()
+const mockConditionUpsert = jest.fn()
+const mockFrom = jest.fn((table: string) => {
+  if (table === 'market_benchmarks') {
+    return {
+      upsert: mockBenchmarkUpsert,
+      select: jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({
+          order: jest.fn().mockReturnValue({
+            limit: mockBenchmarkRead,
+          }),
+        }),
+      }),
+    }
+  }
+  if (table === 'market_conditions') {
+    return { upsert: mockConditionUpsert }
+  }
+  throw new Error(`Unexpected table: ${table}`)
+})
 const mockSupabaseClient = { from: mockFrom }
 
 jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => mockSupabaseClient),
+  createClient: jest.fn(),
 }))
 
 jest.mock('@/lib/utils/market-correlation', () => ({
@@ -45,71 +59,89 @@ jest.mock('@/lib/logger', () => ({
 
 jest.mock('@/lib/utils/logger', () => ({
   fireAndForget: jest.fn(),
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  apiLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  dataLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  apiLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  dataLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
   captureError: jest.fn(),
   captureMessage: jest.fn(),
 }))
 
 jest.mock('@/lib/utils/pipeline-monitor', () => ({
-  recordFetchResult: jest.fn().mockResolvedValue(undefined),
+  recordFetchResult: jest.fn(),
 }))
 
 jest.mock('@/lib/services/pipeline-logger', () => ({
   PipelineLogger: {
-    start: jest.fn().mockResolvedValue({
-      id: 1,
-      success: jest.fn().mockResolvedValue(undefined),
-      error: jest.fn().mockResolvedValue(undefined),
-      timeout: jest.fn().mockResolvedValue(undefined),
-    }),
+    start: jest.fn(),
   },
 }))
 
-// Mock global fetch for CoinGecko API
 const mockFetch = jest.fn()
 global.fetch = mockFetch
 
 import { NextRequest } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { POST } from '../route'
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+const CRON_SECRET = 'test-secret'
+const mockCreateClient = createClient as jest.Mock
+const mockRecordFetchResult = recordFetchResult as jest.Mock
+const mockPipelineStart = PipelineLogger.start as jest.Mock
+const mockPipelineSuccess = jest.fn()
+const mockPipelineError = jest.fn()
 
-function createCronRequest(secret?: string, params?: Record<string, string>): NextRequest {
+function createCronRequest(secret?: string, type?: string): NextRequest {
   const headers = new Headers()
   if (secret) headers.set('authorization', `Bearer ${secret}`)
-  const searchParams = new URLSearchParams(params || {})
-  return new NextRequest(
-    `http://localhost:3000/api/cron/fetch-market-data?${searchParams}`,
-    { method: 'POST', headers }
-  )
+  const search = type ? `?type=${encodeURIComponent(type)}` : ''
+  return new NextRequest(`http://localhost:3000/api/cron/fetch-market-data${search}`, {
+    method: 'POST',
+    headers,
+  })
 }
 
-/** Build chainable mock */
-function _chainable(result: { data?: unknown; error?: unknown }) {
-  const handler = (): unknown =>
-    new Proxy(
-      {},
-      {
-        get(_target, prop) {
-          if (prop === 'then') return (resolve: (v: unknown) => void) => resolve(result)
-          return jest.fn().mockImplementation(handler)
-        },
-      }
-    )
-  return handler()
+function validPricePayload() {
+  const now = Date.now()
+  return {
+    prices: [
+      [now - 86_400_000, 60_000],
+      [now, 61_000],
+    ],
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+function successfulUpstreamResponse() {
+  return {
+    ok: true,
+    status: 200,
+    json: jest.fn().mockResolvedValue(validPricePayload()),
+  }
+}
 
 describe('POST /api/cron/fetch-market-data', () => {
-  const CRON_SECRET = 'test-secret'
-
   beforeAll(() => {
     process.env.CRON_SECRET = CRON_SECRET
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.test'
@@ -118,167 +150,227 @@ describe('POST /api/cron/fetch-market-data', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-  })
-
-  // ---- Auth ----------------------------------------------------------------
-
-  it('returns 401 when CRON_SECRET is missing', async () => {
-    const res = await POST(createCronRequest())
-    expect(res.status).toBe(401)
-  })
-
-  it('returns 401 when secret does not match', async () => {
-    const res = await POST(createCronRequest('wrong'))
-    expect(res.status).toBe(401)
-  })
-
-  // ---- Successful execution ------------------------------------------------
-
-  it('fetches BTC/ETH prices and saves to database', async () => {
-    const now = Date.now()
-    const priceData = {
-      prices: [
-        [now - 86400000, 60000],
-        [now, 61000],
-      ],
-    }
-
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(priceData),
+    mockCreateClient.mockReturnValue(mockSupabaseClient)
+    mockRecordFetchResult.mockResolvedValue(undefined)
+    mockPipelineSuccess.mockResolvedValue(undefined)
+    mockPipelineError.mockResolvedValue(undefined)
+    mockPipelineStart.mockResolvedValue({
+      id: 1,
+      success: mockPipelineSuccess,
+      error: mockPipelineError,
+      timeout: jest.fn().mockResolvedValue(undefined),
     })
-
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'market_benchmarks') {
-        return {
-          upsert: jest.fn().mockResolvedValue({ error: null }),
-        }
-      }
-      if (table === 'market_conditions') {
-        return {
-          upsert: jest.fn().mockResolvedValue({ error: null }),
-        }
-      }
-      return {
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              limit: jest.fn().mockResolvedValue({
-                data: Array.from({ length: 10 }, () => ({ daily_return_pct: 1.5 })),
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      }
+    mockFetch.mockResolvedValue(successfulUpstreamResponse())
+    mockBenchmarkUpsert.mockResolvedValue({ error: null })
+    mockBenchmarkRead.mockResolvedValue({
+      data: Array.from({ length: 10 }, () => ({ daily_return_pct: 1.5 })),
+      error: null,
     })
+    mockConditionUpsert.mockResolvedValue({ error: null })
+  })
 
-    const res = await POST(createCronRequest(CRON_SECRET, { type: 'prices' }))
-    const body = await res.json()
+  it('rejects missing or wrong cron credentials', async () => {
+    await expect(POST(createCronRequest())).resolves.toMatchObject({ status: 401 })
+    await expect(POST(createCronRequest('wrong'))).resolves.toMatchObject({ status: 401 })
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
 
-    expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
-    expect(body.results.prices).toBeDefined()
-    // Fetches both bitcoin and ethereum
+  it('rejects an unknown task type before starting work', async () => {
+    const response = await POST(createCronRequest(CRON_SECRET, 'unknown'))
+    expect(response.status).toBe(400)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('acknowledges only fully persisted BTC and ETH price/condition writes', async () => {
+    const timeoutSpy = jest.spyOn(AbortSignal, 'timeout')
+    const response = await POST(createCronRequest(CRON_SECRET, 'prices'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      success: true,
+      status: 'success',
+      acknowledgement: {
+        prices_expected: 2,
+        prices_written: 2,
+        conditions_written: 2,
+        conditions_skipped: 0,
+        durable_writes: 4,
+        failures: [],
+      },
+    })
     expect(mockFetch).toHaveBeenCalledTimes(2)
+    for (const [, init] of mockFetch.mock.calls) {
+      expect(init.cache).toBe('no-store')
+      expect(init.signal).toBeInstanceOf(AbortSignal)
+    }
+    expect(timeoutSpy).toHaveBeenCalledTimes(2)
+    expect(timeoutSpy).toHaveBeenCalledWith(12_000)
+    timeoutSpy.mockRestore()
+    expect(mockRecordFetchResult).toHaveBeenCalledWith(
+      mockSupabaseClient,
+      'market_data',
+      expect.objectContaining({ success: true, recordCount: 4 })
+    )
+    expect(mockPipelineSuccess).toHaveBeenCalledWith(4, expect.any(Object))
+    expect(mockPipelineError).not.toHaveBeenCalled()
   })
 
-  it('handles funding type request', async () => {
-    const res = await POST(createCronRequest(CRON_SECRET, { type: 'funding' }))
-    const body = await res.json()
+  it('keeps the legacy funding-only no-op explicit and does not fetch prices', async () => {
+    const response = await POST(createCronRequest(CRON_SECRET, 'funding'))
+    const body = await response.json()
 
-    expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
-    expect(body.results.funding).toBeDefined()
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      success: true,
+      status: 'success',
+      acknowledgement: { prices_expected: 0, prices_written: 0, durable_writes: 0 },
+    })
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  // ---- Error handling ------------------------------------------------------
+  it('returns 503 and records failure when every upstream request fails', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 429 })
 
-  it('handles CoinGecko API errors gracefully', async () => {
-    mockFetch.mockResolvedValue({
-      ok: false,
-      status: 429,
+    const response = await POST(createCronRequest(CRON_SECRET, 'prices'))
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body).toMatchObject({
+      success: false,
+      status: 'failed',
+      acknowledgement: {
+        prices_written: 0,
+        conditions_written: 0,
+        durable_writes: 0,
+      },
     })
-
-    mockFrom.mockReturnValue({
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          order: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-        }),
-      }),
-    })
-
-    const res = await POST(createCronRequest(CRON_SECRET, { type: 'prices' }))
-    const body = await res.json()
-
-    // Route handles individual errors per symbol, still returns 200
-    expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
+    expect(body.acknowledgement.failures).toHaveLength(2)
+    expect(mockRecordFetchResult).toHaveBeenCalledWith(
+      mockSupabaseClient,
+      'market_data',
+      expect.objectContaining({ success: false, recordCount: 0 })
+    )
+    expect(mockPipelineSuccess).not.toHaveBeenCalled()
+    expect(mockPipelineError).toHaveBeenCalledTimes(1)
   })
 
-  it('handles fetch throwing for individual symbols without crashing', async () => {
-    mockFetch.mockImplementation(() => {
-      throw new Error('Network failure')
-    })
+  it('treats upstream timeout as a failed no-write execution', async () => {
+    mockFetch.mockRejectedValue(
+      Object.assign(new Error('upstream timed out'), { name: 'TimeoutError' })
+    )
 
-    mockFrom.mockReturnValue({
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          order: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-        }),
-      }),
-    })
+    const response = await POST(createCronRequest(CRON_SECRET, 'prices'))
+    const body = await response.json()
 
-    const res = await POST(createCronRequest(CRON_SECRET, { type: 'prices' }))
-    const body = await res.json()
-
-    // Individual symbol errors are caught, route still returns 200
-    expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
-    expect(body.results.prices).toBeDefined()
+    expect(response.status).toBe(503)
+    expect(body.success).toBe(false)
+    expect(body.acknowledgement.prices_written).toBe(0)
+    expect(body.acknowledgement.failures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ stage: 'upstream', error: 'upstream timed out' }),
+      ])
+    )
   })
 
-  it('returns 500 when outer try-catch catches an unhandled error', async () => {
-    // Force an error inside the try block by making the supabase client throw
-    // on a method that isn't individually try-caught
+  it('returns 207 and failure metrics when only one asset persists', async () => {
+    mockFetch
+      .mockResolvedValueOnce(successfulUpstreamResponse())
+      .mockResolvedValueOnce({ ok: false, status: 429 })
+
+    const response = await POST(createCronRequest(CRON_SECRET, 'prices'))
+    const body = await response.json()
+
+    expect(response.status).toBe(207)
+    expect(body).toMatchObject({
+      success: false,
+      status: 'partial',
+      acknowledgement: {
+        prices_written: 1,
+        conditions_written: 1,
+        conditions_skipped: 1,
+        durable_writes: 2,
+      },
+    })
+    expect(body.acknowledgement.failures).toHaveLength(1)
+    expect(mockRecordFetchResult).toHaveBeenCalledWith(
+      mockSupabaseClient,
+      'market_data',
+      expect.objectContaining({ success: false, recordCount: 2 })
+    )
+    expect(mockPipelineSuccess).not.toHaveBeenCalled()
+    expect(mockPipelineError).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not count a failed benchmark upsert as a durable price write', async () => {
+    mockBenchmarkUpsert
+      .mockResolvedValueOnce({ error: { message: 'benchmark write unavailable' } })
+      .mockResolvedValueOnce({ error: null })
+
+    const response = await POST(createCronRequest(CRON_SECRET, 'prices'))
+    const body = await response.json()
+
+    expect(response.status).toBe(207)
+    expect(body.acknowledgement).toMatchObject({ prices_written: 1, conditions_written: 1 })
+    expect(body.acknowledgement.failures).toEqual(
+      expect.arrayContaining([expect.objectContaining({ stage: 'benchmark_write', symbol: 'BTC' })])
+    )
+  })
+
+  it('returns 503 when valid upstream payloads produce zero durable benchmark writes', async () => {
+    mockBenchmarkUpsert.mockResolvedValue({ error: { message: 'benchmark database unavailable' } })
+
+    const response = await POST(createCronRequest(CRON_SECRET, 'prices'))
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body).toMatchObject({
+      success: false,
+      status: 'failed',
+      acknowledgement: { prices_written: 0, durable_writes: 0 },
+    })
+    expect(body.acknowledgement.failures).toEqual([
+      expect.objectContaining({ stage: 'benchmark_write', symbol: 'BTC' }),
+      expect.objectContaining({ stage: 'benchmark_write', symbol: 'ETH' }),
+    ])
+    expect(mockPipelineSuccess).not.toHaveBeenCalled()
+  })
+
+  it('does not report success when condition history queries fail', async () => {
+    mockBenchmarkRead.mockResolvedValue({
+      data: null,
+      error: { message: 'benchmark read unavailable' },
+    })
+
+    const response = await POST(createCronRequest(CRON_SECRET, 'prices'))
+    const body = await response.json()
+
+    expect(response.status).toBe(207)
+    expect(body.acknowledgement).toMatchObject({ prices_written: 2, conditions_written: 0 })
+    expect(body.acknowledgement.failures).toHaveLength(2)
+    expect(body.acknowledgement.failures[0]).toMatchObject({ stage: 'condition_read' })
+    expect(mockConditionUpsert).not.toHaveBeenCalled()
+    expect(mockPipelineSuccess).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-finite or out-of-range upstream payloads before database writes', async () => {
     const now = Date.now()
     mockFetch.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ prices: [[now - 86400000, 60000], [now, 61000]] }),
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        prices: [
+          [now - 86_400_000, 60_000],
+          [now, Number.POSITIVE_INFINITY],
+        ],
+      }),
     })
 
-    // The upsert inside the price save triggers a Supabase error that is
-    // checked with logger.dbError but doesn't throw. To trigger the outer
-    // catch, we need something that throws inside the try block but outside
-    // per-symbol catches. Make mockFrom throw on 'market_conditions'.
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'market_benchmarks') {
-        return { upsert: jest.fn().mockResolvedValue({ error: null }) }
-      }
-      // Throw on market_conditions to escape per-symbol try/catch
-      // Actually the conditions loop has its own try/catch too.
-      // So let's just verify the route handles per-symbol errors gracefully
-      return {
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-            }),
-          }),
-        }),
-        upsert: jest.fn().mockResolvedValue({ error: null }),
-      }
-    })
+    const response = await POST(createCronRequest(CRON_SECRET, 'prices'))
+    const body = await response.json()
 
-    const res = await POST(createCronRequest(CRON_SECRET, { type: 'all' }))
-    const body = await res.json()
-
-    // Route has comprehensive error handling, returns 200 even with partial failures
-    expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
+    expect(response.status).toBe(503)
+    expect(body.acknowledgement.prices_written).toBe(0)
+    expect(mockBenchmarkUpsert).not.toHaveBeenCalled()
   })
 })
