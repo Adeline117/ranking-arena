@@ -297,4 +297,23 @@ describe('createBillingPortalFlow', () => {
       })
     ).rejects.toThrow('subscription-update Billing Portal flow')
   })
+
+  it.each([
+    'https://attacker.example/p/session/phishing',
+    'https://billing.stripe.com.attacker.example/p/session/phishing',
+    'https://billing.stripe.com@attacker.example/p/session/phishing',
+    'http://billing.stripe.com/p/session/insecure',
+  ])('rejects a non-Stripe Billing Portal URL: %s', async (url) => {
+    const mock = stripeClient({ sessionOverrides: { url } })
+
+    await expect(
+      createBillingPortalFlow({
+        stripe: mock.client,
+        authority: membershipAuthority,
+        flow: 'payment_method_update',
+        returnUrl: 'https://www.arenafi.org/user-center?tab=membership',
+        prices,
+      })
+    ).rejects.toThrow('invalid Billing Portal URL')
+  })
 })

@@ -1,6 +1,7 @@
 import 'server-only'
 import type Stripe from 'stripe'
 import { assertStripeSubscriptionIdentity, stripeObjectId } from '@/lib/stripe/identity'
+import { isTrustedStripeBillingPortalUrl } from '@/lib/stripe/hosted-url'
 
 export type BillingPortalFlow = 'payment_method_update' | 'subscription_cancel'
 export type BillingPortalScope = 'membership' | 'api'
@@ -220,14 +221,8 @@ function assertCreatedPortalSession(
     throw new Error('Stripe returned a Billing Portal flow for a different customer')
   }
 
-  let url: URL
-  try {
-    url = new URL(session.url)
-  } catch {
+  if (!isTrustedStripeBillingPortalUrl(session.url)) {
     throw new Error('Stripe returned an invalid Billing Portal URL')
-  }
-  if (url.protocol !== 'https:') {
-    throw new Error('Stripe returned an insecure Billing Portal URL')
   }
 }
 

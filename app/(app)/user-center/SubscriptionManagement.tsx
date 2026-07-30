@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
 import { authedFetch } from '@/lib/api/client'
+import { isTrustedStripeBillingPortalUrl } from '@/lib/stripe/hosted-url'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import {
   captureSettingsViewer,
@@ -130,7 +131,7 @@ export default function SubscriptionManagement({
       )
       if (!operationIsCurrent() || res.stale) return
 
-      if (res.ok && typeof res.data?.url === 'string' && res.data.url.startsWith('https://')) {
+      if (res.ok && isTrustedStripeBillingPortalUrl(res.data?.url)) {
         // Last CAS immediately before the irreversible browser navigation.
         if (!operationIsCurrent()) return
         navigating = true

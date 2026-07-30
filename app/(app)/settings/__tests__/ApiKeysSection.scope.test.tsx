@@ -655,6 +655,47 @@ describe('ApiKeysSection viewer ownership', () => {
     await waitFor(() => expect(paymentButton).toBeEnabled())
   })
 
+  it('rejects a non-Stripe API Portal URL and releases the controls', async () => {
+    const redirect = jest.fn()
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url.includes('/usage')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { keys: [], daily: [], totals: {} } },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'GET') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: {
+            data: [apiKey('user-a')],
+            entitlement: { tier: 'starter', hasStripeSubscription: true },
+          },
+        })
+      }
+      if (url === '/api/stripe/portal' && method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { url: 'https://attacker.example/fake-billing-portal' },
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<ApiKeysSection redirectToPortal={redirect} />)
+    const paymentButton = await screen.findByRole('button', { name: 'paymentMethods' })
+    fireEvent.click(paymentButton)
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith('paymentSystemComingSoon', 'error')
+    )
+    expect(redirect).not.toHaveBeenCalled()
+    expect(paymentButton).toBeEnabled()
+  })
+
   it('aborts and drops A Portal navigation after switching to B', async () => {
     const portalA = deferred<FetchResult>()
     const redirect = jest.fn()

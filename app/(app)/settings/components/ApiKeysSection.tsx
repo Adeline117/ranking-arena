@@ -7,6 +7,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useApiCheckout } from '@/lib/hooks/useApiCheckout'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { authedFetch } from '@/lib/api/client'
+import { isTrustedStripeBillingPortalUrl } from '@/lib/stripe/hosted-url'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatDateLocalized } from '@/lib/utils/format'
 import { SectionCard, getInputStyle } from './shared'
@@ -427,7 +428,7 @@ export function ApiKeysSection({
         }
       )
       if (!operationIsCurrent() || res.stale) return
-      if (res.ok && typeof res.data?.url === 'string' && res.data.url.startsWith('https://')) {
+      if (res.ok && isTrustedStripeBillingPortalUrl(res.data?.url)) {
         // Last CAS immediately before the irreversible browser navigation.
         if (!operationIsCurrent()) return
         navigating = true

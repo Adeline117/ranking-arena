@@ -221,6 +221,22 @@ describe('POST /api/stripe/portal', () => {
     )
   })
 
+  it('does not expose a non-Stripe navigation URL returned by the adapter', async () => {
+    mockCreatePortalFlow.mockResolvedValue({
+      url: 'https://attacker.example/fake-billing-portal',
+    })
+
+    const response = await POST(
+      request({ flow: 'payment_method_update', scope: 'membership' }) as never
+    )
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Unable to open subscription management. Please retry.',
+      code: 'BILLING_PORTAL_UNAVAILABLE',
+    })
+  })
+
   it.each([
     ['generic request', {}],
     ['legacy flow_data', { flow_data: { type: 'payment_method_update' } }],

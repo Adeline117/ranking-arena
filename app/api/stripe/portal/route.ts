@@ -16,6 +16,7 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { env } from '@/lib/env'
 import { extractUserFromRequest } from '@/lib/auth/extract-user'
+import { isTrustedStripeBillingPortalUrl } from '@/lib/stripe/hosted-url'
 
 const allowedFlows = new Set<BillingPortalFlow>(['payment_method_update', 'subscription_cancel'])
 const allowedScopes = new Set<BillingPortalScope>(['membership', 'api'])
@@ -248,6 +249,12 @@ export async function POST(request: NextRequest) {
         },
       },
     })
+
+    // Keep the route boundary independently fail-closed even if the Stripe
+    // adapter is mocked, replaced, or regresses later.
+    if (!isTrustedStripeBillingPortalUrl(portalSession.url)) {
+      throw new Error('Stripe returned an invalid Billing Portal URL')
+    }
 
     logger.info('Stripe Billing Portal flow created', {
       userId: user.id,

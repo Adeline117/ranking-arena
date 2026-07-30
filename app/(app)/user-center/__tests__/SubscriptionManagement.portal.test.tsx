@@ -172,6 +172,25 @@ describe('SubscriptionManagement Billing Portal flows', () => {
     await waitFor(() => expect(paymentButton).toBeEnabled())
   })
 
+  it('rejects a non-Stripe portal URL and releases the controls', async () => {
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { url: 'https://attacker.example/fake-billing-portal' },
+    })
+    const redirect = jest.fn()
+    renderManagement(redirect)
+
+    const paymentButton = screen.getByRole('button', { name: 'paymentMethods' })
+    fireEvent.click(paymentButton)
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith('paymentSystemComingSoon', 'error')
+    )
+    expect(redirect).not.toHaveBeenCalled()
+    expect(paymentButton).toBeEnabled()
+  })
+
   it('hides A controls and drops A portal URL after switching to B', async () => {
     const pendingA = deferred<PortalResult>()
     const pendingB = deferred<PortalResult>()
