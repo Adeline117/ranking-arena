@@ -19,6 +19,7 @@ type Trader = {
   avatar_url: string | null
   roi: number | null
   arena_score: number | null
+  rank: number
 }
 
 const RANK_COLORS = RANK_COLORS_ARRAY
@@ -207,7 +208,7 @@ export default function TopTraders() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {traders.map((trader, idx) => {
+          {traders.map((trader) => {
             const isAddress = (s: string) => /^0x[0-9a-fA-F]{10,}$/.test(s)
             const isLongNumeric = (s: string) => /^\d{7,}$/.test(s)
             const formatAddr = (s: string) => `${s.slice(0, 6)}...${s.slice(-4)}`
@@ -242,13 +243,14 @@ export default function TopTraders() {
                   style={{
                     fontSize: tokens.typography.fontSize.sm,
                     fontWeight: tokens.typography.fontWeight.extrabold,
-                    minWidth: 16,
+                    minWidth: 28,
                     textAlign: 'right',
-                    color: idx < 3 ? RANK_COLORS[idx] : tokens.colors.text.tertiary,
+                    color:
+                      trader.rank <= 3 ? RANK_COLORS[trader.rank - 1] : tokens.colors.text.tertiary,
                     flexShrink: 0,
                   }}
                 >
-                  {idx + 1}
+                  #{trader.rank}
                 </span>
 
                 {/* Avatar */}

@@ -19,6 +19,7 @@ export type Trader = {
   avatar_url: string | null
   roi: number | null
   arena_score: number | null
+  rank: number
 }
 
 export type Group = {
