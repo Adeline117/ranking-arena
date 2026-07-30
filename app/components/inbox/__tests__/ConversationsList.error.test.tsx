@@ -97,6 +97,24 @@ jest.mock('@/lib/stores/inboxStore', () => {
 
 const originalFetch = global.fetch
 
+function validConversation(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    other_user: {
+      id: '22222222-2222-4222-8222-222222222222',
+      handle: 'Alice',
+      avatar_url: null,
+      bio: null,
+    },
+    last_message_at: '2026-07-18T12:00:00.000Z',
+    last_message_preview: 'Hello',
+    unread_count: 1,
+    created_at: '2026-07-18T11:00:00.000Z',
+    member_settings: null,
+    ...overrides,
+  }
+}
+
 describe('ConversationsList load failure', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -212,15 +230,7 @@ describe('ConversationsList load failure', () => {
           ok: true,
           status: 200,
           json: async () => ({
-            conversations: [
-              {
-                id: 'conversation-1',
-                other_user: { id: 'user-2', handle: 'Alice', avatar_url: null },
-                last_message_at: '2026-07-18T12:00:00.000Z',
-                last_message_preview: 'Hello',
-                unread_count: 1,
-              },
-            ],
+            conversations: [validConversation()],
           }),
         }
       }
@@ -272,6 +282,103 @@ describe('ConversationsList load failure', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(conversationAttempts).toBe(1)
     expect(groupAttempts).toBe(2)
+  })
+
+  it('rejects a malformed successful conversation payload instead of rendering partial data', async () => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          url === '/api/conversations'
+            ? {
+                conversations: [
+                  validConversation({
+                    member_settings: undefined,
+                  }),
+                ],
+              }
+            : { channels: [] },
+      } as Response
+    }) as typeof fetch
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationsList />
+      </QueryClientProvider>
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Direct')
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to load, please retry')
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
+    expect(screen.queryByText('No messages')).not.toBeInTheDocument()
+  })
+
+  it('refetches the authority for inbound, outbound, and member-setting realtime changes', async () => {
+    let conversationAttempts = 0
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/conversations') conversationAttempts += 1
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          url === '/api/conversations'
+            ? { conversations: [validConversation()] }
+            : { channels: [] },
+      } as Response
+    }) as typeof fetch
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationsList />
+      </QueryClientProvider>
+    )
+
+    expect(await screen.findByText('Alice')).toBeInTheDocument()
+    const directChannel = mockRegisteredChannels.find((channel) =>
+      channel.name.startsWith(`inbox:user-1:${mockAuthState.sessionGeneration}:`)
+    )
+    expect(directChannel).toBeDefined()
+
+    const registrations = directChannel!.on.mock.calls.map(([, filter, callback]) => ({
+      filter,
+      callback: callback as () => void,
+    }))
+    expect(registrations.map(({ filter }) => filter)).toEqual([
+      {
+        event: '*',
+        schema: 'public',
+        table: 'direct_messages',
+        filter: 'receiver_id=eq.user-1',
+      },
+      {
+        event: '*',
+        schema: 'public',
+        table: 'direct_messages',
+        filter: 'sender_id=eq.user-1',
+      },
+      {
+        event: '*',
+        schema: 'public',
+        table: 'conversation_members',
+        filter: 'user_id=eq.user-1',
+      },
+    ])
+
+    registrations[0]?.callback()
+    await waitFor(() => expect(conversationAttempts).toBe(2))
+    registrations[1]?.callback()
+    await waitFor(() => expect(conversationAttempts).toBe(3))
+    registrations[2]?.callback()
+    await waitFor(() => expect(conversationAttempts).toBe(4))
   })
 
   it('gives two same-viewer instances independent physical realtime topics', async () => {

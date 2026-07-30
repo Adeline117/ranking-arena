@@ -46,11 +46,19 @@ type Conversation = {
   other_user: {
     id: string
     handle: string | null
-    avatar_url?: string | null
+    avatar_url: string | null
+    bio: string | null
   }
   last_message_at: string
-  last_message_preview?: string
+  last_message_preview: string | null
   unread_count: number
+  created_at: string | null
+  member_settings: {
+    remark: string | null
+    is_muted: boolean
+    is_pinned: boolean
+    is_blocked: boolean
+  } | null
 }
 
 function calculateTotalUnread(conversations: Conversation[]): number {
@@ -66,6 +74,152 @@ function readCollection<T>(payload: unknown, key: string): T[] {
     throw new Error(`Invalid ${key} response`)
   }
   return (payload as Record<string, unknown>)[key] as T[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const expected = [...keys].sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
+  )
+}
+
+function isTimestamp(value: unknown): value is string {
+  if (
+    typeof value !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
+    !Number.isFinite(Date.parse(value))
+  ) {
+    return false
+  }
+  return (value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1]?.length ?? 0) <= 6
+}
+
+function timestampMicros(value: string): number {
+  const milliseconds = Date.parse(value)
+  const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? ''
+  return milliseconds * 1000 + Number(fraction.padEnd(6, '0').slice(3, 6))
+}
+
+function readConversation(value: unknown): Conversation | null {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      'id',
+      'other_user',
+      'last_message_at',
+      'last_message_preview',
+      'unread_count',
+      'created_at',
+      'member_settings',
+    ]) ||
+    !isUuid(value.id) ||
+    !isRecord(value.other_user) ||
+    !hasExactKeys(value.other_user, ['id', 'handle', 'avatar_url', 'bio']) ||
+    !isUuid(value.other_user.id) ||
+    (value.other_user.handle !== null && typeof value.other_user.handle !== 'string') ||
+    (value.other_user.avatar_url !== null && typeof value.other_user.avatar_url !== 'string') ||
+    (value.other_user.bio !== null && typeof value.other_user.bio !== 'string') ||
+    (value.other_user.handle === null &&
+      (value.other_user.avatar_url !== null || value.other_user.bio !== null)) ||
+    !isTimestamp(value.last_message_at) ||
+    (value.last_message_preview !== null &&
+      (typeof value.last_message_preview !== 'string' ||
+        value.last_message_preview.length > 100)) ||
+    !Number.isSafeInteger(value.unread_count) ||
+    (value.unread_count as number) < 0 ||
+    (value.created_at !== null && !isTimestamp(value.created_at))
+  ) {
+    return null
+  }
+
+  let memberSettings: Conversation['member_settings'] = null
+  if (value.member_settings !== null) {
+    if (
+      !isRecord(value.member_settings) ||
+      !hasExactKeys(value.member_settings, ['remark', 'is_muted', 'is_pinned', 'is_blocked']) ||
+      (value.member_settings.remark !== null && typeof value.member_settings.remark !== 'string') ||
+      typeof value.member_settings.is_muted !== 'boolean' ||
+      typeof value.member_settings.is_pinned !== 'boolean' ||
+      typeof value.member_settings.is_blocked !== 'boolean'
+    ) {
+      return null
+    }
+    memberSettings = {
+      remark: value.member_settings.remark as string | null,
+      is_muted: value.member_settings.is_muted,
+      is_pinned: value.member_settings.is_pinned,
+      is_blocked: value.member_settings.is_blocked,
+    }
+  }
+
+  return {
+    id: value.id,
+    other_user: {
+      id: value.other_user.id,
+      handle: value.other_user.handle as string | null,
+      avatar_url: value.other_user.avatar_url as string | null,
+      bio: value.other_user.bio as string | null,
+    },
+    last_message_at: value.last_message_at,
+    last_message_preview: value.last_message_preview as string | null,
+    unread_count: value.unread_count as number,
+    created_at: value.created_at as string | null,
+    member_settings: memberSettings,
+  }
+}
+
+function readConversationCollection(payload: unknown): Conversation[] {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['conversations'])) {
+    throw new Error('Invalid conversations response')
+  }
+  if (!Array.isArray(payload.conversations) || payload.conversations.length > 50) {
+    throw new Error('Invalid conversations response')
+  }
+
+  const conversations: Conversation[] = []
+  const conversationIds = new Set<string>()
+  const counterpartyIds = new Set<string>()
+  for (const value of payload.conversations) {
+    const conversation = readConversation(value)
+    if (
+      !conversation ||
+      conversationIds.has(conversation.id) ||
+      counterpartyIds.has(conversation.other_user.id)
+    ) {
+      throw new Error('Invalid conversations response')
+    }
+    conversationIds.add(conversation.id)
+    counterpartyIds.add(conversation.other_user.id)
+
+    const previous = conversations[conversations.length - 1]
+    if (previous) {
+      const previousPinned = previous.member_settings?.is_pinned ?? false
+      const currentPinned = conversation.member_settings?.is_pinned ?? false
+      const previousTime = timestampMicros(previous.last_message_at)
+      const currentTime = timestampMicros(conversation.last_message_at)
+      if (
+        (!previousPinned && currentPinned) ||
+        (previousPinned === currentPinned && previousTime < currentTime) ||
+        (previousPinned === currentPinned &&
+          previousTime === currentTime &&
+          previous.id >= conversation.id)
+      ) {
+        throw new Error('Invalid conversations response')
+      }
+    }
+    conversations.push(conversation)
+  }
+  return conversations
 }
 
 function ConversationListSkeleton({
@@ -363,7 +517,11 @@ export default function ConversationsList({
       if (!result.ok || result.stale || !isInboxViewerCurrent(viewer, authRef.current)) {
         throw new Error(`HTTP ${result.status}`)
       }
-      return readCollection<Conversation>(result.data, 'conversations')
+      const response = readConversationCollection(result.data)
+      if (response.some((conversation) => conversation.other_user.id === viewer.userId)) {
+        throw new Error('Invalid conversations response')
+      }
+      return response
     },
     enabled: canLoad,
     staleTime: STALE_STANDARD,
@@ -454,7 +612,9 @@ export default function ConversationsList({
     void refetchGroupChannels()
   }, [refetchGroupChannels])
 
-  // Realtime: auto-refresh when new DMs arrive for this user
+  // Realtime is only an invalidation signal. The authoritative list RPC owns
+  // unread counts, clear/delete privacy, pin order, and previews; incrementing
+  // them from an at-least-once event stream can double-count or reorder pins.
   useEffect(() => {
     if (!viewer) return
     const operation = viewer
@@ -464,53 +624,41 @@ export default function ConversationsList({
       context: 'inbox-direct-messages',
       topic: `inbox:${operation.userId}:${operation.sessionGeneration}:${realtimeOwnerId}:${attempt}`,
       configure: (ownedChannel) => {
+        const refreshAuthoritativeList = () => {
+          if (isInboxViewerCurrent(operation, authRef.current)) {
+            void loadConversations()
+          }
+        }
+
         ownedChannel.on(
           'postgres_changes',
           {
-            event: 'INSERT',
+            event: '*',
             schema: 'public',
             table: 'direct_messages',
             filter: `receiver_id=eq.${operation.userId}`,
           },
-          (payload) => {
-            if (!isInboxViewerCurrent(operation, authRef.current)) return
-            // Incremental update: update the affected conversation in-place
-            const newMsg = payload.new as {
-              conversation_id?: string
-              content?: string
-              created_at?: string
-              sender_id?: string
-            }
-            if (!newMsg.conversation_id) {
-              void loadConversations()
-              return
-            }
-            let needsRefresh = false
-            queryClient.setQueryData<Conversation[]>(conversationQueryKey, (current = []) => {
-              const idx = current.findIndex((c) => c.id === newMsg.conversation_id)
-              if (idx === -1) {
-                needsRefresh = true
-                return current
-              }
-              const updated = [...current]
-              updated[idx] = {
-                ...updated[idx],
-                last_message_at: newMsg.created_at || new Date().toISOString(),
-                last_message_preview: newMsg.content || '',
-                unread_count: updated[idx].unread_count + 1,
-              }
-              // Re-sort by last_message_at descending
-              updated.sort(
-                (a, b) =>
-                  new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
-              )
-              setUnreadMessages(operation, calculateTotalUnread(updated))
-              return updated
-            })
-            if (needsRefresh && isInboxViewerCurrent(operation, authRef.current)) {
-              void loadConversations()
-            }
-          }
+          refreshAuthoritativeList
+        )
+        ownedChannel.on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'direct_messages',
+            filter: `sender_id=eq.${operation.userId}`,
+          },
+          refreshAuthoritativeList
+        )
+        ownedChannel.on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'conversation_members',
+            filter: `user_id=eq.${operation.userId}`,
+          },
+          refreshAuthoritativeList
         )
       },
     })
@@ -518,15 +666,7 @@ export default function ConversationsList({
     return () => {
       void removeOwnedRealtimeChannels(supabase, [channel], 'inbox-direct-messages-cleanup')
     }
-  }, [
-    conversationQueryKey,
-    loadConversations,
-    queryClient,
-    realtimeOwnerId,
-    scopeKey,
-    setUnreadMessages,
-    viewer,
-  ])
+  }, [loadConversations, realtimeOwnerId, scopeKey, viewer])
 
   // Realtime: auto-refresh when new group channel messages arrive
   useEffect(() => {
