@@ -99,7 +99,7 @@ const ja = {
   loggedInShowAll: 'ログイン済み：すべてのおすすめを表示',
   notLoggedInShowLimited: '未ログイン：最初の10件のみ表示',
   groupRecommendations: 'おすすめグループ',
-  hotGroups: '人気グループ',
+  hotGroups: '最近アクティブなグループ',
   groupRecommendationsComingSoon: 'グループのおすすめは近日公開',
   hotList: '人気リスト',
   loggedInShowAllHot: 'ログイン済み：すべて表示',

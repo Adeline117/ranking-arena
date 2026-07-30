@@ -53,7 +53,7 @@ export function HotGroupsList({
               background: 'none',
               border: 'none',
               textDecoration: 'underline',
-              fontSize: 14,
+              fontSize: tokens.typography.fontSize.base,
             }}
           >
             {t('retry')}
@@ -73,7 +73,7 @@ export function HotGroupsList({
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-      {groups.map((group, idx) => (
+      {groups.map((group) => (
         <Link
           key={group.id}
           href={`/groups/${group.id}`}
@@ -101,20 +101,9 @@ export function HotGroupsList({
           }}
         >
           <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <Text
-                size="sm"
-                weight="black"
-                style={{
-                  color: idx < 3 ? 'var(--color-accent-warning)' : 'var(--color-text-secondary)',
-                }}
-              >
-                #{idx + 1}
-              </Text>
-              <Text size="base" weight="bold">
-                {localizedName(group.name, group.name_en)}
-              </Text>
-            </Box>
+            <Text size="base" weight="bold">
+              {localizedName(group.name, group.name_en)}
+            </Text>
             <Text size="xs" color="tertiary">
               {group.member_count.toLocaleString('en-US')} {t('membersUnit')}
             </Text>

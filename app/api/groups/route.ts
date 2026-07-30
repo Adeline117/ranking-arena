@@ -25,7 +25,8 @@ function parseGroupSort(value: string | null): GroupSort {
  * 获取小组列表，支持排序和分页
  *
  * Query params:
- * - sort_by: 'activity' | 'member_count' | 'created_at' (default: 'member_count')
+ * - sort_by: 'activity' (recently updated) | 'member_count' | 'created_at'
+ *   (default: 'member_count')
  * - limit: number (default: 10, max: 50)
  * - offset: number (default: 0)
  */
@@ -41,6 +42,9 @@ export async function GET(request: NextRequest) {
     const sortBy = parseGroupSort(searchParams.get('sort_by'))
     const limit = parseLimit(searchParams.get('limit'), 10, 50)
     const offset = parseOffset(searchParams.get('offset'))
+    // `activity` is a backwards-compatible query value for recency. There is
+    // no public group activity score, so consumers must not render this order
+    // as a scored leaderboard.
     const orderColumn =
       sortBy === 'activity' ? 'updated_at' : sortBy === 'created_at' ? 'created_at' : 'member_count'
     const supabase = getSupabaseAdmin()

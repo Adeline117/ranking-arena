@@ -99,7 +99,7 @@ const en = {
   loggedInShowAll: 'Logged in: Show all recommendations',
   notLoggedInShowLimited: 'Not logged in: Show first 10 only',
   groupRecommendations: 'Group Recommendations',
-  hotGroups: 'Hot Groups',
+  hotGroups: 'Recently Active Groups',
   groupRecommendationsComingSoon: 'Group recommendations coming soon',
   hotList: 'Hot List',
   loggedInShowAllHot: 'Logged in: Show all',

@@ -99,7 +99,7 @@ const zh = {
   loggedInShowAll: '已登录：显示全部推荐',
   notLoggedInShowLimited: '未登录：仅显示前10条',
   groupRecommendations: '小组推荐',
-  hotGroups: '热门小组',
+  hotGroups: '最近活跃小组',
   groupRecommendationsComingSoon: '小组推荐功能待实现',
   hotList: '热榜',
   loggedInShowAllHot: '已登录：显示全部',
