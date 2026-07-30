@@ -31,7 +31,10 @@ import { Worker } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
 import { QUEUE_NAME, JOB, getQueue } from './queues'
 import { PIPELINE_WORKER_CONCURRENCY } from './pipeline-runtime'
-import { assertSuccessfulMeilisearchSyncResponse } from './pipeline-response'
+import {
+  assertSuccessfulLeaderboardComputeResponse,
+  assertSuccessfulMeilisearchSyncResponse,
+} from './pipeline-response'
 import { registerSchedules } from './scheduler'
 import { startDashboard } from './dashboard'
 import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readiness'
@@ -75,7 +78,7 @@ async function main() {
           job.log(
             `compute-leaderboard ${season}: ${resp.status} — ${JSON.stringify(body).slice(0, 200)}`
           )
-          if (!resp.ok) throw new Error(`compute-leaderboard ${season} returned ${resp.status}`)
+          assertSuccessfulLeaderboardComputeResponse(resp.ok, resp.status, body, season)
           return { season, status: resp.status, ...body }
         }
 
