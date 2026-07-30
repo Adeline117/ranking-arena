@@ -310,9 +310,9 @@ async function installBrowserState(page: Page, authenticated: boolean, locale: T
     { session: authenticated ? fakeSession() : null, savedLocale: locale }
   )
 
-  // Authentication/profile reads are made deterministic, but rankings remain
-  // untouched: this test must prove nav/CLS stability without waiting for a
-  // successful rankings request.
+  // Make browser-side data reads deterministic. This test owns layout/CLS,
+  // including the truthful no-data handoff; a real backend outage must not
+  // consume its whole viewport matrix through stacked 10-20 second timeouts.
   await page.route('**/rest/v1/**', async (route) => {
     await route.fulfill({
       status: 200,
@@ -321,11 +321,21 @@ async function installBrowserState(page: Page, authenticated: boolean, locale: T
       body: '[]',
     })
   })
-  await page.route('**/api/subscription', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
-  })
-  await page.route('**/api/track', async (route) => {
-    await route.fulfill({ status: 204, body: '' })
+  await page.route('**/api/**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname
+    if (pathname === '/api/subscription') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+      return
+    }
+    if (pathname === '/api/track') {
+      await route.fulfill({ status: 204, body: '' })
+      return
+    }
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'E2E_BACKEND_UNAVAILABLE' }),
+    })
   })
 }
 
