@@ -17,10 +17,21 @@ describe('sealed Redis ranking cache authority', () => {
   it('fails closed on partial reads and incomplete cache populations', () => {
     expect(store).toContain('if (error || data === null)')
     expect(store).toContain('allTraders.length !== expectedRowCount')
+    expect(store).toContain('.abortSignal(workSignal)')
+    expect(store).toContain('{ timeoutMs: 10_000, signal: workSignal }')
     expect(store).toContain("throw new Error('Redis unavailable")
+    expect(store).toContain('acknowledgements.length !== commandCount')
+    expect(store).toContain('generation returned duplicate member')
     expect(store).toMatch(
       /catch \(error\) \{\s+logger\.error\('\[ranking-store\] syncSortedSetFromLeaderboard failed:', error\)\s+throw error/
     )
+  })
+
+  it('batches Redis writes and verifies exact transaction acknowledgements', () => {
+    expect(store).toContain('transaction.zadd(key, members[0], ...members.slice(1))')
+    expect(store).toContain('transaction.hset(hashKey, detailEntries)')
+    expect(store).toContain('exactAcknowledgements.set(rankingExpiryIndex, 1)')
+    expect(store).toContain('exactAcknowledgements.set(detailExpiryIndex, 1)')
   })
 
   it('isolates the sealed namespace and forbids incremental public writes', () => {

@@ -26,6 +26,37 @@ const logger = createLogger('ranking-store')
 
 const REDIS_KEY_PREFIX = 'ranking:sealed-v1'
 const TTL_SECONDS = 2 * 60 * 60 // 2 hours
+const SYNC_WORK_BUDGET_MS = 45_000
+
+interface RankingStoreSyncOptions {
+  signal?: AbortSignal
+}
+
+async function waitForSignal<T>(
+  run: () => Promise<T>,
+  signal: AbortSignal,
+  operation: string
+): Promise<T> {
+  if (signal.aborted) {
+    throw signal.reason instanceof Error ? signal.reason : new Error(`${operation} aborted`)
+  }
+
+  let onAbort: (() => void) | undefined
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () =>
+      reject(signal.reason instanceof Error ? signal.reason : new Error(`${operation} aborted`))
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+
+  try {
+    if (signal.aborted) {
+      throw signal.reason instanceof Error ? signal.reason : new Error(`${operation} aborted`)
+    }
+    return await Promise.race([run(), aborted])
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort)
+  }
+}
 
 function redisKey(period: string): string {
   return publicRankingCacheKey(`${REDIS_KEY_PREFIX}:${period.toUpperCase()}`)
@@ -209,9 +240,15 @@ const SYNC_SELECT_FIELDS = [
  */
 export async function syncSortedSetFromLeaderboard(
   supabase: SupabaseClient<Database>,
-  period: string
+  period: string,
+  options: RankingStoreSyncOptions = {}
 ): Promise<number> {
-  const redis = await getSharedRedis()
+  const workSignal = options.signal ?? AbortSignal.timeout(SYNC_WORK_BUDGET_MS)
+  const redis = await waitForSignal(
+    () => getSharedRedis(),
+    workSignal,
+    'Ranking cache Redis initialization'
+  )
   if (!redis) {
     throw new Error('Redis unavailable while rebuilding sealed ranking cache')
   }
@@ -242,6 +279,7 @@ export async function syncSortedSetFromLeaderboard(
             .order('source', { ascending: true })
             .order('source_trader_id', { ascending: true })
             .range(offset, offset + PAGE_SIZE - 1)
+            .abortSignal(workSignal)
 
           if (error || data === null) {
             throw new Error(
@@ -264,7 +302,7 @@ export async function syncSortedSetFromLeaderboard(
 
         return rows
       },
-      { timeoutMs: 10_000 }
+      { timeoutMs: 10_000, signal: workSignal }
     )
     const allTraders = sealedRead.value
     const expectedRowCount = sealedRead.publication.proofs.reduce(
@@ -280,8 +318,33 @@ export async function syncSortedSetFromLeaderboard(
         `Sealed ${season} ranking cache read ${allTraders.length} of ${expectedRowCount} published rows`
       )
     }
-    if (allTraders.some((trader) => !isPublicRankingSourceAllowed(trader.source))) {
-      throw new Error(`Sealed ${season} generation returned a non-public ranking source`)
+    const seenMembers = new Set<string>()
+    const preparedTraders = allTraders.map((trader, index) => {
+      const source = trader.source
+      const traderId = trader.source_trader_id
+      const score = trader.arena_score
+      if (typeof source !== 'string' || !isPublicRankingSourceAllowed(source)) {
+        throw new Error(`Sealed ${season} row ${index} returned a non-public ranking source`)
+      }
+      if (typeof traderId !== 'string' || traderId.length === 0) {
+        throw new Error(`Sealed ${season} row ${index} returned an invalid trader identifier`)
+      }
+      if (typeof score !== 'number' || !Number.isFinite(score) || score <= 0) {
+        throw new Error(`Sealed ${season} row ${index} returned an invalid arena score`)
+      }
+
+      const member = memberKey(source, traderId)
+      if (seenMembers.has(member)) {
+        throw new Error(`Sealed ${season} generation returned duplicate member ${member}`)
+      }
+      seenMembers.add(member)
+      return { member, score, detail: trader }
+    })
+
+    if (workSignal.aborted) {
+      throw workSignal.reason instanceof Error
+        ? workSignal.reason
+        : new Error(`Sealed ${season} ranking cache rebuild aborted`)
     }
 
     // Publish both Redis readers in one transaction. A plain Upstash pipeline
@@ -290,31 +353,57 @@ export async function syncSortedSetFromLeaderboard(
     const transaction = redis.multi()
     transaction.del(key)
 
+    const exactAcknowledgements = new Map<number, number>()
     const CHUNK_SIZE = 500
-    for (let i = 0; i < allTraders.length; i += CHUNK_SIZE) {
-      const chunk = allTraders.slice(i, i + CHUNK_SIZE)
-      for (const t of chunk) {
-        const source = String(t.source)
-        const traderId = String(t.source_trader_id)
-        transaction.zadd(key, {
-          score: Number(t.arena_score),
-          member: memberKey(source, traderId),
-        })
-      }
+    for (let i = 0; i < preparedTraders.length; i += CHUNK_SIZE) {
+      const chunk = preparedTraders.slice(i, i + CHUNK_SIZE)
+      const members = chunk.map(({ score, member }) => ({ score, member }))
+      const commandIndex = transaction.length()
+      transaction.zadd(key, members[0], ...members.slice(1))
+      exactAcknowledgements.set(commandIndex, members.length)
     }
+    const rankingExpiryIndex = transaction.length()
     transaction.expire(key, TTL_SECONDS)
+    exactAcknowledgements.set(rankingExpiryIndex, 1)
 
     // Hash map for trader details (top 200 only to limit memory)
     // Beyond top 200, fallback to DB is acceptable (low traffic)
     const TOP_N_CACHED = 200
-    const topTraders = allTraders.slice(0, TOP_N_CACHED)
+    const topTraders = preparedTraders.slice(0, TOP_N_CACHED)
     transaction.del(hashKey)
-    for (const t of topTraders) {
-      const member = memberKey(String(t.source), String(t.source_trader_id))
-      transaction.hset(hashKey, { [member]: JSON.stringify(t) })
-    }
+    const detailEntries = Object.fromEntries(
+      topTraders.map(({ member, detail }) => [member, JSON.stringify(detail)])
+    )
+    const detailWriteIndex = transaction.length()
+    transaction.hset(hashKey, detailEntries)
+    exactAcknowledgements.set(detailWriteIndex, topTraders.length)
+    const detailExpiryIndex = transaction.length()
     transaction.expire(hashKey, DETAIL_HASH_TTL)
-    await transaction.exec()
+    exactAcknowledgements.set(detailExpiryIndex, 1)
+
+    const commandCount = transaction.length()
+    const acknowledgements = await waitForSignal(
+      () => transaction.exec(),
+      workSignal,
+      `Sealed ${season} Redis transaction`
+    )
+    if (!Array.isArray(acknowledgements) || acknowledgements.length !== commandCount) {
+      throw new Error(`Sealed ${season} Redis transaction returned an incomplete acknowledgement`)
+    }
+    for (const [index, expected] of exactAcknowledgements) {
+      if (acknowledgements[index] !== expected) {
+        throw new Error(
+          `Sealed ${season} Redis command ${index} acknowledged ${String(
+            acknowledgements[index]
+          )}, expected ${expected}`
+        )
+      }
+    }
+    if (workSignal.aborted) {
+      throw workSignal.reason instanceof Error
+        ? workSignal.reason
+        : new Error(`Sealed ${season} ranking cache rebuild aborted`)
+    }
 
     logger.info(
       `[ranking-store] Synced ${allTraders.length} traders to ${key}, ${topTraders.length} details to ${hashKey}`

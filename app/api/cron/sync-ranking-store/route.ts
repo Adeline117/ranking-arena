@@ -24,12 +24,22 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const SEASONS = ['7D', '30D', '90D'] as const
+const SYNC_WORK_BUDGET_MS = 45_000
 
-export const GET = withCron('sync-ranking-store', async (_request: NextRequest, { supabase }) => {
-  const synced: Record<string, number> = {}
-  for (const season of SEASONS) {
-    synced[season] = await syncSortedSetFromLeaderboard(supabase, season)
-  }
-  const count = Object.values(synced).reduce((a, b) => a + b, 0)
-  return { count, synced }
-}, { safetyTimeoutMs: 55_000 })
+export const GET = withCron(
+  'sync-ranking-store',
+  async (_request: NextRequest, { supabase }) => {
+    const workSignal = AbortSignal.timeout(SYNC_WORK_BUDGET_MS)
+    const synced: Record<string, number> = {}
+    for (const season of SEASONS) {
+      workSignal.throwIfAborted()
+      synced[season] = await syncSortedSetFromLeaderboard(supabase, season, {
+        signal: workSignal,
+      })
+    }
+    workSignal.throwIfAborted()
+    const count = Object.values(synced).reduce((a, b) => a + b, 0)
+    return { count, synced }
+  },
+  { safetyTimeoutMs: 55_000 }
+)
