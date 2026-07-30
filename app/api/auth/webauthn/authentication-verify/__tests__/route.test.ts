@@ -152,6 +152,14 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
       verified: true,
       session: { access_token: 'access-token', refresh_token: 'refresh-token' },
     })
+    expect(mockVerifyAuthenticationResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedChallenge: 'expected-challenge',
+        expectedOrigin: 'https://www.arenafi.org',
+        expectedRPID: 'www.arenafi.org',
+        requireUserVerification: true,
+      })
+    )
     expect(mockConsumeAssertion).toHaveBeenCalledWith('consume_webauthn_authentication_atomic', {
       p_user_id: USER_ID,
       p_passkey_id: CREDENTIAL_ROW.id,
@@ -340,9 +348,16 @@ describe('POST /api/auth/webauthn/authentication-verify', () => {
       path.join(process.cwd(), 'app/api/auth/webauthn/authentication-verify/route.ts'),
       'utf8'
     )
+    const optionsSource = fs.readFileSync(
+      path.join(process.cwd(), 'app/api/auth/webauthn/authentication-options/route.ts'),
+      'utf8'
+    )
 
     expect(source).not.toMatch(/\.from\(['"]user_profiles['"]\)/)
     expect(source).not.toMatch(/\.from\(['"]user_passkeys['"]\)[\s\S]*?\.update\(/)
     expect(source).toContain("'consume_webauthn_authentication_atomic'")
+    expect(source).toContain('requireUserVerification: true')
+    expect(optionsSource).toContain('allowCredentials: []')
+    expect(optionsSource).toContain("userVerification: 'required'")
   })
 })

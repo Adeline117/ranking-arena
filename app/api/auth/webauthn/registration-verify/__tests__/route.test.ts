@@ -100,6 +100,14 @@ describe('POST /api/auth/webauthn/registration-verify', () => {
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ verified: true })
+    expect(mockVerifyRegistrationResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedChallenge: 'expected-challenge',
+        expectedOrigin: 'https://www.arenafi.org',
+        expectedRPID: 'www.arenafi.org',
+        requireUserVerification: true,
+      })
+    )
     expect(mockRpc).toHaveBeenCalledWith('register_webauthn_credential_for_active_profile_atomic', {
       p_user_id: USER.id,
       p_credential_id: 'verified-credential',
@@ -194,8 +202,15 @@ describe('POST /api/auth/webauthn/registration-verify', () => {
       join(process.cwd(), 'app/api/auth/webauthn/registration-verify/route.ts'),
       'utf8'
     )
+    const optionsSource = readFileSync(
+      join(process.cwd(), 'app/api/auth/webauthn/registration-options/route.ts'),
+      'utf8'
+    )
 
     expect(source).not.toMatch(/\.from\(['"]user_passkeys['"]\)/)
     expect(source).not.toContain('.insert(')
+    expect(source).toContain('requireUserVerification: true')
+    expect(optionsSource).toContain("residentKey: 'required'")
+    expect(optionsSource).toContain("userVerification: 'required'")
   })
 })

@@ -51,8 +51,12 @@ export const POST = withAuth(
           transports: (row.transports ?? undefined) as AuthenticatorTransportFuture[] | undefined,
         })),
         authenticatorSelection: {
-          residentKey: 'preferred',
-          userVerification: 'preferred',
+          // Authentication is intentionally usernameless (`allowCredentials`
+          // is empty), so every enrolled credential must be discoverable.
+          // Requiring local user verification keeps possession of a roaming
+          // key alone from becoming an unverified passwordless login.
+          residentKey: 'required',
+          userVerification: 'required',
         },
       })
 

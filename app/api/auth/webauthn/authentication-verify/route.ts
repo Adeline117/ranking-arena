@@ -116,7 +116,7 @@ export const POST = withPublic(
         expectedChallenge,
         expectedOrigin: origin,
         expectedRPID: rpID,
-        requireUserVerification: false,
+        requireUserVerification: true,
         credential: {
           id: credentialId,
           publicKey: isoBase64URL.toBuffer(row.public_key, 'base64'),

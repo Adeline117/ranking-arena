@@ -26,7 +26,7 @@ export const POST = withPublic(
         // Empty allowCredentials → usernameless / discoverable credential flow:
         // the authenticator offers the user any passkey it holds for this RP.
         allowCredentials: [],
-        userVerification: 'preferred',
+        userVerification: 'required',
       })
 
       const challengeKey = randomBytes(32).toString('hex')

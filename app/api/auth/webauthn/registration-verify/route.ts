@@ -52,7 +52,7 @@ export const POST = withAuth(
         expectedChallenge,
         expectedOrigin: origin,
         expectedRPID: rpID,
-        requireUserVerification: false,
+        requireUserVerification: true,
       })
     } catch (err) {
       logger.warn('[registration-verify] Verification threw:', err)
