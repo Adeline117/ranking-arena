@@ -298,15 +298,17 @@ BEGIN
     )
   );
   IF p_clear_history THEN
-    INSERT INTO public.conversation_members(conversation_id, user_id, cleared_before)
-    VALUES (p_conversation_id, p_actor_id, v_now)
-    ON CONFLICT (conversation_id, user_id) DO UPDATE
+    UPDATE public.conversation_members
     SET cleared_before = CASE
-      WHEN conversation_members.cleared_before IS NULL
-        OR conversation_members.cleared_before < EXCLUDED.cleared_before
-      THEN EXCLUDED.cleared_before
-      ELSE conversation_members.cleared_before
-    END;
+      WHEN cleared_before IS NULL OR cleared_before < v_now THEN v_now
+      ELSE cleared_before
+    END
+    WHERE conversation_id = p_conversation_id
+      AND user_id = p_actor_id;
+    IF NOT FOUND THEN
+      INSERT INTO public.conversation_members(conversation_id, user_id, cleared_before)
+      VALUES (p_conversation_id, p_actor_id, v_now);
+    END IF;
   END IF;
   RETURN pg_catalog.jsonb_build_object('success', true, 'cleared_before', v_now);
 END

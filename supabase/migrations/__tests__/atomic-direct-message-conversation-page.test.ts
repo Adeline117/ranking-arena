@@ -94,6 +94,18 @@ describe('atomic direct-message conversation-page authority', () => {
     expect(migration).toContain("'next_cursor', CASE")
   })
 
+  it('attests the exact settings and reaction uniqueness it reads', () => {
+    expect(migration).toContain(
+      'conversation page requires UNIQUE (conversation_id, user_id) settings'
+    )
+    expect(migration).toContain(
+      'conversation page requires UNIQUE (message_id, user_id, emoji) reactions'
+    )
+    expect(migration).toContain('canonical direct-message settings lock/write contract drifted')
+    expect(migration).toContain('LEFT JOIN public.direct_messages AS message_row')
+    expect(migration).toContain('message_row.id IS NULL')
+  })
+
   it('returns deterministic reaction evidence and fails closed on identity drift', () => {
     expect(migration).toContain('FROM public.message_reactions AS reaction')
     expect(migration).toContain('pg_catalog.bool_or(reaction.user_id = p_actor_id) AS mine')

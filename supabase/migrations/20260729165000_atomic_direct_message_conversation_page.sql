@@ -60,6 +60,8 @@ DECLARE
   v_pair_source text;
   v_dependency regprocedure;
   v_dependency_source text;
+  v_conversation_attnum smallint;
+  v_member_user_attnum smallint;
 BEGIN
   SELECT pg_catalog.array_agg(required_role ORDER BY required_role)
   INTO v_missing_roles
@@ -264,6 +266,75 @@ BEGIN
       v_invalid_columns;
   END IF;
 
+  SELECT attribute.attnum
+  INTO STRICT v_conversation_attnum
+  FROM pg_catalog.pg_attribute AS attribute
+  WHERE attribute.attrelid = 'public.conversation_members'::regclass
+    AND attribute.attname = 'conversation_id'
+    AND attribute.attnum > 0
+    AND NOT attribute.attisdropped;
+
+  SELECT attribute.attnum
+  INTO STRICT v_member_user_attnum
+  FROM pg_catalog.pg_attribute AS attribute
+  WHERE attribute.attrelid = 'public.conversation_members'::regclass
+    AND attribute.attname = 'user_id'
+    AND attribute.attnum > 0
+    AND NOT attribute.attisdropped;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_index AS index_row
+    WHERE index_row.indrelid = 'public.conversation_members'::regclass
+      AND index_row.indisunique
+      AND index_row.indisvalid
+      AND index_row.indpred IS NULL
+      AND index_row.indexprs IS NULL
+      AND index_row.indnkeyatts = 2
+      AND ARRAY(
+        SELECT key_column.attnum
+        FROM pg_catalog.unnest(
+          index_row.indkey::smallint[]
+        ) WITH ORDINALITY AS key_column(attnum, ordinality)
+        WHERE key_column.ordinality <= index_row.indnkeyatts
+        ORDER BY key_column.ordinality
+      ) = ARRAY[v_conversation_attnum, v_member_user_attnum]::smallint[]
+  ) THEN
+    RAISE EXCEPTION
+      'conversation page requires UNIQUE (conversation_id, user_id) settings';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_row
+    WHERE constraint_row.conrelid = 'public.message_reactions'::regclass
+      AND constraint_row.contype = 'u'
+      AND constraint_row.convalidated
+      AND constraint_row.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = 'public.message_reactions'::regclass
+            AND attribute.attname = 'message_id'
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = 'public.message_reactions'::regclass
+            AND attribute.attname = 'user_id'
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = 'public.message_reactions'::regclass
+            AND attribute.attname = 'emoji'
+        )
+      ]::smallint[]
+  ) THEN
+    RAISE EXCEPTION
+      'conversation page requires UNIQUE (message_id, user_id, emoji) reactions';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM public.conversations AS conversation
@@ -296,9 +367,10 @@ BEGIN
   ) OR EXISTS (
     SELECT 1
     FROM public.message_reactions AS reaction
-    JOIN public.direct_messages AS message_row
+    LEFT JOIN public.direct_messages AS message_row
       ON message_row.id = reaction.message_id
-    WHERE reaction.user_id NOT IN (
+    WHERE message_row.id IS NULL
+       OR reaction.user_id NOT IN (
       message_row.sender_id,
       message_row.receiver_id
     )
@@ -354,6 +426,25 @@ BEGIN
         v_dependency;
     END IF;
   END LOOP;
+
+  SELECT function_row.prosrc
+  INTO STRICT v_dependency_source
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid = v_settings_function;
+
+  IF pg_catalog.strpos(v_dependency_source, 'direct-message:settings:') = 0
+     OR pg_catalog.strpos(
+       v_dependency_source,
+       'UPDATE public.conversation_members'
+     ) = 0
+     OR pg_catalog.strpos(
+       v_dependency_source,
+       'INSERT INTO public.conversation_members'
+     ) = 0
+  THEN
+    RAISE EXCEPTION
+      'canonical direct-message settings lock/write contract drifted';
+  END IF;
 
   IF pg_catalog.has_table_privilege(
        'authenticated', 'public.direct_messages', 'INSERT,UPDATE,DELETE,TRUNCATE'
