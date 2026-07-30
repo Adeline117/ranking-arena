@@ -66,17 +66,76 @@ jest.mock('ccxt', () => {
 import { processFirstPartySync } from '../first-party-sync'
 import type { SourceJobLeaseAuthority } from '../../source-job-lease'
 
-const AUTH = {
+interface MockAuthorization {
+  id: string
+  authorization_generation: number
+  user_id: string
+  platform: string
+  trader_id: string
+  encrypted_api_key: string
+  encrypted_api_secret: string
+  encrypted_passphrase: string | null
+  last_sync_at: string | null
+  consecutive_failures: number
+}
+
+const AUTH: MockAuthorization = {
   id: 'auth-1',
+  authorization_generation: 1,
   user_id: 'user-1',
   platform: 'bybit',
   trader_id: 'trader-1',
   encrypted_api_key: 'key-cipher',
   encrypted_api_secret: 'secret-cipher',
   encrypted_passphrase: null,
-  status: 'active',
   last_sync_at: null,
   consecutive_failures: 0,
+}
+
+let mockSnapshots: Array<{ ts: string; equity: number; net_transfer_cum: number | null }> = []
+
+function claimed(auth = AUTH) {
+  return {
+    status: 'claimed',
+    authorization_id: auth.id,
+    generation: auth.authorization_generation,
+    user_id: auth.user_id,
+    platform: auth.platform,
+    trader_id: auth.trader_id,
+    encrypted_api_key: auth.encrypted_api_key,
+    encrypted_api_secret: auth.encrypted_api_secret,
+    encrypted_passphrase: auth.encrypted_passphrase,
+    last_sync_at: auth.last_sync_at,
+    consecutive_failures: auth.consecutive_failures,
+  }
+}
+
+async function fallbackQuery(statement: string, values?: readonly unknown[]) {
+  if (statement.includes('FROM arena.first_party_snapshots')) {
+    return { rows: mockSnapshots }
+  }
+  if (statement.includes('finish_first_party_authorization_sync_atomic')) {
+    const generation = Number(values?.[1])
+    const priorFailures = Number(values?.[2])
+    const succeeded = values?.[3] === true
+    const failures = succeeded ? 0 : priorFailures + 1
+    const suspended = !succeeded && failures >= 3
+    return {
+      rows: [
+        {
+          result: {
+            status: 'recorded',
+            authorization_status: suspended ? 'suspended' : 'active',
+            generation: suspended ? generation + 1 : generation,
+            consecutive_failures: failures,
+            notification_needed: suspended,
+            synced_at: '2026-07-29T00:00:00.000Z',
+          },
+        },
+      ],
+    }
+  }
+  return { rows: [] }
 }
 
 const LEASE_ERROR = new Error('[ingest] source-job lease ownership lost: first-party/auth-1')
@@ -99,23 +158,25 @@ function processAuthorization() {
 }
 
 function queueQueries(
-  auth = AUTH,
+  auth: MockAuthorization = AUTH,
   source: { slug: string; exchange_slug: string } = {
     slug: 'bybit_copytrade',
     exchange_slug: 'bybit',
   },
   snapshots: Array<{ ts: string; equity: number; net_transfer_cum: number | null }> = []
 ) {
+  mockSnapshots = snapshots
   mockQuery
-    .mockResolvedValueOnce({ rows: [auth] })
+    .mockResolvedValueOnce({ rows: [{ result: claimed(auth) }] })
     .mockResolvedValueOnce({ rows: [source] })
     .mockResolvedValueOnce({ rows: [{ id: 99 }] })
-    .mockResolvedValueOnce({ rows: snapshots })
 }
 
 describe('first-party sync processor', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockSnapshots = []
+    mockQuery.mockReset().mockImplementation(fallbackQuery)
     mockCcxtConfigs.length = 0
     mockAssertLeaseOwned.mockReset()
     mockRenewLease.mockReset().mockResolvedValue(undefined)
@@ -147,7 +208,6 @@ describe('first-party sync processor', () => {
 
   it('publishes first-party data before marking the authorization successful', async () => {
     queueQueries()
-    mockQuery.mockResolvedValue({ rows: [] })
 
     const result = await processAuthorization()
 
@@ -162,7 +222,13 @@ describe('first-party sync processor', () => {
           { timeframe: 90, roi: 12 },
         ],
       }),
-      { fullSeries: true }
+      {
+        fullSeries: true,
+        firstPartyAuthorization: {
+          authorizationId: 'auth-1',
+          generation: 1,
+        },
+      }
     )
     expect(mockFetchAccount).toHaveBeenCalledWith(
       expect.anything(),
@@ -182,13 +248,10 @@ describe('first-party sync processor', () => {
     expect(
       mockQuery.mock.calls.some(([sql]) => String(sql).includes('arena.first_party_snapshots'))
     ).toBe(true)
-    expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('last_sync_status = $2'), [
-      'auth-1',
-      'success',
-      0,
-      'active',
-      'ok stats=3 rejects=0',
-    ])
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('finish_first_party_authorization_sync_atomic'),
+      ['auth-1', 1, 0, true, 'ok stats=3 rejects=0', 99, 100, 90, 10, 0, 'USDT']
+    )
   })
 
   it('uses the latest durable snapshot as the transfer replay cursor', async () => {
@@ -199,7 +262,6 @@ describe('first-party sync processor', () => {
       { slug: 'bybit_copytrade', exchange_slug: 'bybit' },
       [{ ts: latestSnapshot, equity: 100, net_transfer_cum: 5 }]
     )
-    mockQuery.mockResolvedValue({ rows: [] })
 
     const result = await processAuthorization()
 
@@ -219,7 +281,6 @@ describe('first-party sync processor', () => {
         slug: platform,
         product_type: productType,
       })
-      mockQuery.mockResolvedValue({ rows: [] })
 
       const result = await processAuthorization()
 
@@ -252,7 +313,6 @@ describe('first-party sync processor', () => {
       slug: 'binance_spot',
       product_type: 'spot',
     })
-    mockQuery.mockResolvedValue({ rows: [] })
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
     const result = await processAuthorization()
@@ -276,7 +336,6 @@ describe('first-party sync processor', () => {
       slug: 'binance_futures',
       product_type: 'futures',
     })
-    mockQuery.mockResolvedValue({ rows: [] })
 
     const result = await processAuthorization()
 
@@ -292,7 +351,6 @@ describe('first-party sync processor', () => {
       slug: 'gate_futures',
       product_type: 'futures',
     })
-    mockQuery.mockResolvedValue({ rows: [] })
 
     const result = await processAuthorization()
 
@@ -317,7 +375,6 @@ describe('first-party sync processor', () => {
       slug: 'htx_futures',
       product_type: 'futures',
     })
-    mockQuery.mockResolvedValue({ rows: [] })
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
     const result = await processAuthorization()
@@ -333,7 +390,6 @@ describe('first-party sync processor', () => {
 
   it('does not mark a sync successful when any required stats window fails validation', async () => {
     queueQueries()
-    mockQuery.mockResolvedValue({ rows: [] })
     mockValidateStats.mockReturnValue({
       valid: [{ timeframe: 90, roi: 12 }],
       rejects: [{ reason: 'zod:invalid', payload: {} }],
@@ -347,43 +403,45 @@ describe('first-party sync processor', () => {
       detail: 'first-party stats validation failed: valid=1 rejects=1',
     })
     expect(mockPublishProfile).not.toHaveBeenCalled()
-    expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('last_sync_status = $2'), [
-      'auth-1',
-      'error',
-      1,
-      'active',
-      'first-party stats validation failed: valid=1 rejects=1',
-    ])
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('finish_first_party_authorization_sync_atomic'),
+      [
+        'auth-1',
+        1,
+        0,
+        false,
+        'first-party stats validation failed: valid=1 rejects=1',
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+      ]
+    )
   })
 
   it('fails closed instead of choosing an ambiguous source alias', async () => {
-    mockQuery
-      .mockResolvedValueOnce({ rows: [AUTH] })
-      .mockResolvedValueOnce({
-        rows: [
-          { slug: 'bybit_copytrade', exchange_slug: 'bybit' },
-          { slug: 'bybit_shadow', exchange_slug: 'bybit' },
-        ],
-      })
-      .mockResolvedValue({ rows: [] })
+    mockQuery.mockResolvedValueOnce({ rows: [{ result: claimed(AUTH) }] }).mockResolvedValueOnce({
+      rows: [
+        { slug: 'bybit_copytrade', exchange_slug: 'bybit' },
+        { slug: 'bybit_shadow', exchange_slug: 'bybit' },
+      ],
+    })
 
     const result = await processAuthorization()
 
     expect(result).toMatchObject({ ok: false, detail: 'ambiguous platform bybit' })
     expect(mockGetSourceBySlug).not.toHaveBeenCalled()
     expect(mockPublishProfile).not.toHaveBeenCalled()
-    expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('last_sync_status = $2'), [
-      'auth-1',
-      'error',
-      1,
-      'active',
-      'ambiguous platform bybit',
-    ])
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('finish_first_party_authorization_sync_atomic'),
+      ['auth-1', 1, 0, false, 'ambiguous platform bybit', null, null, null, null, null, null]
+    )
   })
 
   it('does not publish or penalize the user after losing authorization lease ownership', async () => {
     queueQueries()
-    mockQuery.mockResolvedValue({ rows: [] })
     mockRenewLease.mockImplementation(async () => {
       mockAssertLeaseOwned.mockImplementation(() => {
         throw LEASE_ERROR
@@ -395,13 +453,14 @@ describe('first-party sync processor', () => {
 
     expect(mockPublishProfile).not.toHaveBeenCalled()
     expect(
-      mockQuery.mock.calls.some(([sql]) => String(sql).includes('last_sync_status = $2'))
+      mockQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('finish_first_party_authorization_sync_atomic')
+      )
     ).toBe(false)
   })
 
   it('suspends after the third failure and emits the account-attention notification', async () => {
     queueQueries({ ...AUTH, consecutive_failures: 2 })
-    mockQuery.mockResolvedValue({ rows: [] })
     mockDecrypt.mockImplementation(() => {
       throw new Error('credential unreadable')
     })
@@ -410,15 +469,28 @@ describe('first-party sync processor', () => {
     const result = await processAuthorization()
 
     expect(result).toMatchObject({ ok: false, detail: 'credential unreadable' })
-    expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('last_sync_status = $2'), [
-      'auth-1',
-      'error',
-      3,
-      'suspended',
-      'credential unreadable',
-    ])
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('finish_first_party_authorization_sync_atomic'),
+      ['auth-1', 1, 2, false, 'credential unreadable', null, null, null, null, null, null]
+    )
     expect(
       mockQuery.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO public.notifications'))
     ).toBe(true)
+  })
+
+  it('never decrypts credentials when active-account claim admission is suspended', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ result: { status: 'suspended' } }] })
+
+    const result = await processAuthorization()
+
+    expect(result).toEqual({
+      ok: false,
+      statsWritten: 0,
+      seriesPoints: 0,
+      detail: 'status=suspended',
+    })
+    expect(mockDecrypt).not.toHaveBeenCalled()
+    expect(mockFetchAccount).not.toHaveBeenCalled()
+    expect(mockPublishProfile).not.toHaveBeenCalled()
   })
 })

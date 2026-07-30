@@ -217,8 +217,27 @@ export async function reconcileSchedulers(): Promise<void> {
     const { rows: fpAuths } = await (await import('@/lib/ingest/db'))
       .getIngestPool()
       .query<{ id: string }>(
-        `SELECT id FROM public.trader_authorizations
-          WHERE status = 'active' AND read_only_verified_at IS NOT NULL`
+        `SELECT authorization.id
+           FROM public.trader_authorizations AS authorization
+           JOIN auth.users AS auth_user
+             ON auth_user.id = authorization.user_id
+           JOIN public.user_profiles AS profile
+             ON profile.id = authorization.user_id
+          WHERE authorization.status = 'active'
+            AND authorization.read_only_verified_at IS NOT NULL
+            AND (
+              authorization.expires_at IS NULL
+              OR authorization.expires_at > clock_timestamp()
+            )
+            AND profile.deleted_at IS NULL
+            AND profile.banned_at IS NULL
+            AND (
+              NOT COALESCE(profile.is_banned, false)
+              OR (
+                profile.ban_expires_at IS NOT NULL
+                AND profile.ban_expires_at <= clock_timestamp()
+              )
+            )`
       )
 
     // Establish the complete authority set before any BullMQ write. If one

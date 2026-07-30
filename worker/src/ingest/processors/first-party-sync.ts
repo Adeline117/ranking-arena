@@ -44,15 +44,29 @@ export interface FirstPartyJobData {
 
 interface AuthRow {
   id: string
+  authorization_generation: number
   user_id: string
   platform: string
   trader_id: string
   encrypted_api_key: string
   encrypted_api_secret: string
   encrypted_passphrase: string | null
-  status: string
   last_sync_at: string | null
   consecutive_failures: number
+}
+
+interface FirstPartySnapshotOutcome {
+  traderId: number
+  equity: number
+  balance: number | null
+  unrealizedPnl: number | null
+  netTransferCum: number | null
+  currency: string
+}
+
+interface RecordedSyncOutcome {
+  generation: number
+  notificationNeeded: boolean
 }
 
 interface ResolvedSourceRow {
@@ -61,6 +75,79 @@ interface ResolvedSourceRow {
 }
 
 const DEFAULT_FUTURES_SOURCE_BY_EXCHANGE = new Set(['binance', 'okx', 'bitget'])
+
+const INACTIVE_CLAIM_STATUSES = new Set(['inactive', 'missing_account', 'not_found', 'suspended'])
+
+const NON_RECORDED_OUTCOME_STATUSES = new Set([
+  'inactive',
+  'missing_account',
+  'not_found',
+  'superseded',
+  'suspended',
+])
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function parseAuthorizationClaim(value: unknown): AuthRow | string | null {
+  const result = record(value)
+  if (!result || typeof result.status !== 'string') return null
+  if (INACTIVE_CLAIM_STATUSES.has(result.status)) return result.status
+  if (
+    result.status !== 'claimed' ||
+    typeof result.authorization_id !== 'string' ||
+    typeof result.user_id !== 'string' ||
+    typeof result.platform !== 'string' ||
+    typeof result.trader_id !== 'string' ||
+    typeof result.encrypted_api_key !== 'string' ||
+    typeof result.encrypted_api_secret !== 'string' ||
+    (result.encrypted_passphrase !== null && typeof result.encrypted_passphrase !== 'string') ||
+    (result.last_sync_at !== null && typeof result.last_sync_at !== 'string') ||
+    typeof result.generation !== 'number' ||
+    !Number.isSafeInteger(result.generation) ||
+    result.generation <= 0 ||
+    typeof result.consecutive_failures !== 'number' ||
+    !Number.isSafeInteger(result.consecutive_failures) ||
+    result.consecutive_failures < 0
+  ) {
+    return null
+  }
+
+  return {
+    id: result.authorization_id,
+    authorization_generation: Number(result.generation),
+    user_id: result.user_id,
+    platform: result.platform,
+    trader_id: result.trader_id,
+    encrypted_api_key: result.encrypted_api_key,
+    encrypted_api_secret: result.encrypted_api_secret,
+    encrypted_passphrase: result.encrypted_passphrase,
+    last_sync_at: result.last_sync_at,
+    consecutive_failures: Number(result.consecutive_failures),
+  }
+}
+
+function parseRecordedOutcome(value: unknown): RecordedSyncOutcome | string | null {
+  const result = record(value)
+  if (!result || typeof result.status !== 'string') return null
+  if (NON_RECORDED_OUTCOME_STATUSES.has(result.status)) return result.status
+  if (
+    result.status !== 'recorded' ||
+    typeof result.generation !== 'number' ||
+    !Number.isSafeInteger(result.generation) ||
+    result.generation <= 0 ||
+    typeof result.notification_needed !== 'boolean'
+  ) {
+    return null
+  }
+  return {
+    generation: Number(result.generation),
+    notificationNeeded: result.notification_needed,
+  }
+}
 
 interface FirstPartyExchangeContract {
   balanceSemantics: FirstPartyBalanceSemantics
@@ -121,44 +208,66 @@ const FIRST_PARTY_EXCHANGE_CONTRACTS: Readonly<Record<string, FirstPartyExchange
 }
 
 async function markSync(
-  authId: string,
+  auth: AuthRow,
   ok: boolean,
   detail: string,
-  priorFailures: number,
   sourceLease: SourceJobLeaseAuthority,
-  ctx?: { userId: string; platform: string; traderId: string }
-): Promise<void> {
+  ctx?: { userId: string; platform: string; traderId: string },
+  snapshot?: FirstPartySnapshotOutcome
+): Promise<boolean> {
   // The authorization lease is a cross-worker write fence, not just a queue
   // optimization. Renew it immediately before mutating user-visible state.
   await sourceLease.renew()
-  const failures = ok ? 0 : priorFailures + 1
-  const status = ok ? 'active' : failures >= 3 ? 'suspended' : 'active'
-  await getIngestPool().query(
-    `UPDATE public.trader_authorizations
-        SET last_sync_at = now(), last_sync_status = $2,
-            consecutive_failures = $3, status = $4,
-            last_verified_at = CASE WHEN $2 = 'success' THEN now() ELSE last_verified_at END,
-            verification_error = CASE WHEN $2 = 'success' THEN NULL ELSE $5 END
-      WHERE id = $1`,
-    [authId, ok ? 'success' : 'error', failures, status, detail.slice(0, 200)]
+  const boundedDetail = detail.slice(0, 200) || (ok ? 'success' : 'unknown failure')
+  const { rows } = await getIngestPool().query<{ result: unknown }>(
+    `SELECT public.finish_first_party_authorization_sync_atomic(
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+     ) AS result`,
+    [
+      auth.id,
+      auth.authorization_generation,
+      auth.consecutive_failures,
+      ok,
+      boundedDetail,
+      snapshot?.traderId ?? null,
+      snapshot?.equity ?? null,
+      snapshot?.balance ?? null,
+      snapshot?.unrealizedPnl ?? null,
+      snapshot?.netTransferCum ?? null,
+      snapshot?.currency ?? null,
+    ]
   )
+  const outcome = rows.length === 1 ? parseRecordedOutcome(rows[0].result) : null
+  if (typeof outcome === 'string') return false
+  if (!outcome) throw new Error('[first-party] invalid sync outcome acknowledgement')
+
   // 连挂 3 次转 error 的瞬间通知用户换 key(E2E 干跑 2026-07-10 发现的缺口)。
   // worker=批处理语境,按 CLAUDE.md 通知铁律允许直插;ON CONFLICT 无约束可依,
   // 用 reference_id 幂等判重(同一授权只发一次,直到恢复 active 再挂才重发)。
-  if (!ok && failures === 3 && ctx) {
+  if (!ok && outcome.notificationNeeded && ctx) {
     try {
       await getIngestPool().query(
         `INSERT INTO public.notifications (user_id, type, title, message, reference_id)
          SELECT $1, 'system', 'Exchange connection needs attention',
                 $2, $3
-          WHERE NOT EXISTS (
+          WHERE EXISTS (
+            SELECT 1
+              FROM public.trader_authorizations AS authorization_row
+             WHERE authorization_row.id = $4
+               AND authorization_row.user_id = $1
+               AND authorization_row.status = 'suspended'
+               AND authorization_row.authorization_generation = $5
+          )
+            AND NOT EXISTS (
             SELECT 1 FROM public.notifications
              WHERE user_id = $1 AND reference_id = $3
                AND created_at > now() - interval '7 days')`,
         [
           ctx.userId,
           `Syncing your ${ctx.platform} account (${ctx.traderId.slice(0, 12)}…) failed 3 times — your rankings fall back to exchange board data. Please re-verify or rotate your API key in Settings.`,
-          `fp-error-${authId}`,
+          `fp-error-${auth.id}`,
+          auth.id,
+          outcome.generation,
         ]
       )
     } catch (err) {
@@ -168,6 +277,7 @@ async function markSync(
       )
     }
   }
+  return true
 }
 
 export interface FirstPartySyncResult {
@@ -183,16 +293,16 @@ export async function processFirstPartySync(
 ): Promise<FirstPartySyncResult> {
   sourceLease.assertOwned()
   const pool = getIngestPool()
-  const { rows: auths } = await pool.query<AuthRow>(
-    `SELECT id, user_id, platform, trader_id, encrypted_api_key, encrypted_api_secret,
-            encrypted_passphrase, status, last_sync_at, consecutive_failures
-       FROM public.trader_authorizations WHERE id = $1`,
+  const { rows: claimRows } = await pool.query<{ result: unknown }>(
+    `SELECT public.claim_first_party_authorization_sync_atomic($1) AS result`,
     [job.data.authorizationId]
   )
-  const auth = auths[0]
-  if (!auth) return { ok: false, statsWritten: 0, seriesPoints: 0, detail: 'authorization missing' }
-  if (auth.status !== 'active') {
-    return { ok: false, statsWritten: 0, seriesPoints: 0, detail: `status=${auth.status}` }
+  const auth = claimRows.length === 1 ? parseAuthorizationClaim(claimRows[0].result) : null
+  if (typeof auth === 'string') {
+    return { ok: false, statsWritten: 0, seriesPoints: 0, detail: `status=${auth}` }
+  }
+  if (!auth) {
+    throw new Error('[first-party] invalid authorization claim acknowledgement')
   }
 
   // Resolve the arena source + trader (activateClaim's arena_set_trader_claimed
@@ -222,7 +332,7 @@ export async function processFirstPartySync(
       srcRows.length === 0
         ? `unknown platform ${requestedPlatform}`
         : `ambiguous platform ${requestedPlatform}`
-    await markSync(auth.id, false, detail, auth.consecutive_failures, sourceLease)
+    await markSync(auth, false, detail, sourceLease)
     return { ok: false, statsWritten: 0, seriesPoints: 0, detail }
   }
   const src = await getSourceBySlug(srcRows[0].slug)
@@ -231,13 +341,7 @@ export async function processFirstPartySync(
     [src.id, auth.trader_id]
   )
   if (!traderRows[0]) {
-    await markSync(
-      auth.id,
-      false,
-      'arena trader missing (claim not activated?)',
-      auth.consecutive_failures,
-      sourceLease
-    )
+    await markSync(auth, false, 'arena trader missing (claim not activated?)', sourceLease)
     return { ok: false, statsWritten: 0, seriesPoints: 0, detail: 'arena trader missing' }
   }
   const traderId = traderRows[0].id
@@ -335,32 +439,39 @@ export async function processFirstPartySync(
         nickname: null,
         avatarUrlOrigin: null,
       },
-      { fullSeries: true }
-    )
-    await sourceLease.renew()
-    await pool.query(
-      `INSERT INTO arena.first_party_snapshots
-         (trader_id, ts, equity, balance, unrealized_pnl, net_transfer_cum, currency)
-       VALUES ($1, now(), $2, $3, $4, $5, $6)
-       ON CONFLICT (trader_id, ts) DO NOTHING`,
-      [
-        traderId,
-        result.snapshot.equity,
-        result.snapshot.balance,
-        result.snapshot.unrealizedPnl,
-        result.snapshot.netTransferCum,
-        result.snapshot.currency,
-      ]
+      {
+        fullSeries: true,
+        firstPartyAuthorization: {
+          authorizationId: auth.id,
+          generation: auth.authorization_generation,
+        },
+      }
     )
 
     const seriesPoints = result.series.reduce((n, s) => n + s.points.length, 0)
-    await markSync(
-      auth.id,
+    const recorded = await markSync(
+      auth,
       true,
       `ok stats=${valid.length} rejects=${rejects.length}`,
-      0,
-      sourceLease
+      sourceLease,
+      undefined,
+      {
+        traderId,
+        equity: result.snapshot.equity,
+        balance: result.snapshot.balance,
+        unrealizedPnl: result.snapshot.unrealizedPnl,
+        netTransferCum: result.snapshot.netTransferCum,
+        currency: result.snapshot.currency,
+      }
     )
+    if (!recorded) {
+      return {
+        ok: false,
+        statsWritten: 0,
+        seriesPoints: 0,
+        detail: 'authorization changed before sync outcome',
+      }
+    }
     console.log(
       `[first-party] ${auth.platform}/${auth.trader_id}: stats=${valid.length} series_pts=${seriesPoints} equity=${result.snapshot.equity}`
     )
@@ -370,7 +481,7 @@ export async function processFirstPartySync(
     // bad user credential or suspend an otherwise healthy authorization.
     sourceLease.assertOwned()
     const msg = err instanceof Error ? err.message : String(err)
-    await markSync(auth.id, false, msg, auth.consecutive_failures, sourceLease, {
+    await markSync(auth, false, msg, sourceLease, {
       userId: auth.user_id,
       platform: auth.platform,
       traderId: auth.trader_id,

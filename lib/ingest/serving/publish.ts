@@ -130,6 +130,16 @@ export class StaleLeaderboardPublicationError extends Error {
   }
 }
 
+export class FirstPartyAuthorizationPublicationFenceError extends Error {
+  readonly status: string
+
+  constructor(status: string) {
+    super(`[publish] first-party authorization publication rejected: ${status}`)
+    this.name = 'FirstPartyAuthorizationPublicationFenceError'
+    this.status = status
+  }
+}
+
 async function assertTrustedPublicationIsNewest(
   client: IngestQueryExecutor,
   prepared: PreparedLeaderboardMetricTrust
@@ -813,11 +823,37 @@ export async function publishProfile(
   src: SourceRow,
   traderId: number,
   profile: ParsedProfile,
-  opts: { fullSeries: boolean } // false → long-tail: latest snapshot only (spec §13.1)
+  opts: {
+    fullSeries: boolean
+    /**
+     * First-party publications carry the generation that released their
+     * credentials. The database function acquires lifecycle → Auth → profile
+     * → authorization locks inside this transaction before any serving DML.
+     */
+    firstPartyAuthorization?: {
+      authorizationId: string
+      generation: number
+    }
+  } // false → long-tail: latest snapshot only (spec §13.1)
 ): Promise<void> {
   const client = await ingestClientConnect()
   try {
     await client.query('BEGIN')
+
+    if (opts.firstPartyAuthorization) {
+      const { authorizationId, generation } = opts.firstPartyAuthorization
+      const { rows } = await client.query<{ status: string }>(
+        `SELECT public.lock_first_party_authorization_publication_atomic(
+           $1,
+           $2
+         ) AS status`,
+        [authorizationId, generation]
+      )
+      const status = rows.length === 1 ? rows[0].status : 'invalid_acknowledgement'
+      if (status !== 'active') {
+        throw new FirstPartyAuthorizationPublicationFenceError(status)
+      }
+    }
 
     if (profile.nickname || profile.avatarUrlOrigin) {
       await client.query(

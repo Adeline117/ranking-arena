@@ -228,4 +228,61 @@ describe('publishProfile whole-window coverage gate', () => {
     expect(query.mock.calls.map(([statement]) => String(statement).trim())).toContain('ROLLBACK')
     expect(release).toHaveBeenCalledTimes(1)
   })
+
+  it('locks an active authorization generation before any first-party serving DML', async () => {
+    query.mockImplementation(async (statement: string) => {
+      if (statement.includes('lock_first_party_authorization_publication_atomic')) {
+        return { rows: [{ status: 'active' }], rowCount: 1 }
+      }
+      return { rows: [], rowCount: 1 }
+    })
+
+    await publishProfile(src, 42, profile({ profile_window_metrics_complete: false }), {
+      fullSeries: true,
+      firstPartyAuthorization: {
+        authorizationId: 'authorization-1',
+        generation: 7,
+      },
+    })
+
+    expect(query.mock.calls.slice(0, 3)).toEqual([
+      ['BEGIN'],
+      [
+        expect.stringContaining('lock_first_party_authorization_publication_atomic'),
+        ['authorization-1', 7],
+      ],
+      [expect.stringContaining('UPDATE arena.trader_stats'), expect.any(Array)],
+    ])
+  })
+
+  it('rolls back a suspended first-party generation before touching serving data', async () => {
+    query.mockImplementation(async (statement: string) => {
+      if (statement.includes('lock_first_party_authorization_publication_atomic')) {
+        return { rows: [{ status: 'suspended' }], rowCount: 1 }
+      }
+      return { rows: [], rowCount: 1 }
+    })
+
+    await expect(
+      publishProfile(src, 42, profile({ profile_window_metrics_complete: true }), {
+        fullSeries: true,
+        firstPartyAuthorization: {
+          authorizationId: 'authorization-1',
+          generation: 7,
+        },
+      })
+    ).rejects.toMatchObject({
+      name: 'FirstPartyAuthorizationPublicationFenceError',
+      status: 'suspended',
+    })
+
+    const sql = query.mock.calls.map(([statement]) => String(statement))
+    expect(sql.some((statement) => statement.includes('arena.trader_stats'))).toBe(false)
+    expect(sql.some((statement) => statement.includes('arena.trader_series'))).toBe(false)
+    expect(sql.map((statement) => statement.trim())).toEqual([
+      'BEGIN',
+      expect.stringContaining('lock_first_party_authorization_publication_atomic'),
+      'ROLLBACK',
+    ])
+  })
 })

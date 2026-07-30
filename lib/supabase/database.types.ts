@@ -8179,6 +8179,7 @@ export type Database = {
       }
       trader_authorizations: {
         Row: {
+          authorization_generation: number
           consecutive_failures: number
           created_at: string | null
           data_source: string
@@ -8203,6 +8204,7 @@ export type Database = {
           verification_error: string | null
         }
         Insert: {
+          authorization_generation?: number
           consecutive_failures?: number
           created_at?: string | null
           data_source?: string
@@ -8227,6 +8229,7 @@ export type Database = {
           verification_error?: string | null
         }
         Update: {
+          authorization_generation?: number
           consecutive_failures?: number
           created_at?: string | null
           data_source?: string
@@ -10406,6 +10409,10 @@ export type Database = {
         Args: { p_actor_id: string; p_portfolio_id: string }
         Returns: Json
       }
+      claim_first_party_authorization_sync_atomic: {
+        Args: { p_authorization_id: string }
+        Returns: Json
+      }
       claim_referral_qualification_candidates_atomic: {
         Args: { p_limit: number; p_now: string }
         Returns: Json
@@ -10433,6 +10440,22 @@ export type Database = {
         }
         Returns: string
       }
+      finish_first_party_authorization_sync_atomic: {
+        Args: {
+          p_authorization_id: string
+          p_balance: number | null
+          p_currency: string | null
+          p_detail: string
+          p_equity: number | null
+          p_expected_failures: number
+          p_generation: number
+          p_net_transfer_cum: number | null
+          p_succeeded: boolean
+          p_trader_id: number | null
+          p_unrealized_pnl: number | null
+        }
+        Returns: Json
+      }
       finish_api_tier_reversal_action_atomic: {
         Args: {
           p_action_id: string
@@ -10453,6 +10476,10 @@ export type Database = {
           p_user_id: string
         }
         Returns: Json
+      }
+      lock_first_party_authorization_publication_atomic: {
+        Args: { p_authorization_id: string; p_generation: number }
+        Returns: string
       }
       project_api_tier_financial_reversal_atomic: {
         Args: { p_ownership_id: string; p_should_revoke: boolean }
