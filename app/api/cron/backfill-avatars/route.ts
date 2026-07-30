@@ -7,7 +7,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
@@ -32,44 +32,53 @@ interface AvatarResult {
   total: number
   updated: number
   errors: number
+  success?: boolean
+  status?: 'success' | 'partial' | 'failed' | 'skipped'
+  message?: string
+  deferred?: number
 }
 
 async function fetchJSON(url: string, options: RequestInit = {}): Promise<unknown> {
-  try {
-    const resp = await fetch(url, {
-      ...options,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        Accept: 'application/json',
-        ...((options.headers as Record<string, string>) || {}),
-      },
-      signal: AbortSignal.timeout(15000),
-    })
-    if (!resp.ok) return null
-    return await resp.json()
-  } catch (err) {
-    log.warn(`fetchJSON failed for ${url}`, {
-      error: err instanceof Error ? err.message : String(err),
-    })
-    return null
+  const timeoutSignal = AbortSignal.timeout(15_000)
+  const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal
+  const resp = await fetch(url, {
+    ...options,
+    cache: 'no-store',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      Accept: 'application/json',
+      ...((options.headers as Record<string, string>) || {}),
+    },
+    signal,
+  })
+  if (!resp.ok) {
+    throw new Error(`Avatar upstream returned HTTP ${resp.status}`)
   }
+  return resp.json()
 }
 
 // ── Platform-specific avatar fetchers ──
 
-async function fetchBinanceFuturesAvatar(traderId: string): Promise<string | null> {
+async function fetchBinanceFuturesAvatar(
+  traderId: string,
+  signal?: AbortSignal
+): Promise<string | null> {
   const data = (await fetchJSON(
     'https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: 'https://www.binance.com' },
       body: JSON.stringify({ portfolioId: traderId }),
+      signal,
     }
   )) as { data?: { userPhotoUrl?: string } } | null
   return data?.data?.userPhotoUrl || null
 }
 
-async function _fetchBinanceSpotAvatar(traderId: string): Promise<string | null> {
+async function _fetchBinanceSpotAvatar(
+  traderId: string,
+  signal?: AbortSignal
+): Promise<string | null> {
   // Binance spot uses same portfolio API
   const data = (await fetchJSON(
     'https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail',
@@ -77,99 +86,103 @@ async function _fetchBinanceSpotAvatar(traderId: string): Promise<string | null>
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: 'https://www.binance.com' },
       body: JSON.stringify({ portfolioId: traderId }),
+      signal,
     }
   )) as { data?: { userPhotoUrl?: string } } | null
   return data?.data?.userPhotoUrl || null
 }
 
-async function fetchBybitAvatar(traderId: string): Promise<string | null> {
+async function fetchBybitAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
     `https://api2.bybit.com/fapi/beehive/public/v1/common/leader/detail?leaderMark=${encodeURIComponent(traderId)}`,
-    { headers: { Origin: 'https://www.bybit.com', Referer: 'https://www.bybit.com/' } }
+    { headers: { Origin: 'https://www.bybit.com', Referer: 'https://www.bybit.com/' }, signal }
   )) as { result?: { avatar?: string } } | null
   return data?.result?.avatar || null
 }
 
-async function fetchBitgetAvatar(traderId: string): Promise<string | null> {
+async function fetchBitgetAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
     `https://www.bitget.com/v1/copy/mix/trader/detail?traderId=${traderId}`,
-    { headers: { Origin: 'https://www.bitget.com' } }
+    { headers: { Origin: 'https://www.bitget.com' }, signal }
   )) as { data?: { traderImg?: string; avatar?: string; headUrl?: string } } | null
   return data?.data?.traderImg || data?.data?.avatar || data?.data?.headUrl || null
 }
 
-async function fetchOKXAvatar(traderId: string): Promise<string | null> {
+async function fetchOKXAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
     `https://www.okx.com/api/v5/copytrading/public-lead-traders/detail?uniqueCode=${encodeURIComponent(traderId)}`,
-    { headers: { Origin: 'https://www.okx.com' } }
+    { headers: { Origin: 'https://www.okx.com' }, signal }
   )) as { data?: Array<{ portLink?: string }> } | null
   return data?.data?.[0]?.portLink || null
 }
 
-async function fetchKuCoinAvatar(traderId: string): Promise<string | null> {
+async function fetchKuCoinAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
     `https://www.kucoin.com/_api/copy-trade/leader/detail?leaderId=${traderId}`,
-    { headers: { Origin: 'https://www.kucoin.com' } }
+    { headers: { Origin: 'https://www.kucoin.com' }, signal }
   )) as { data?: { avatar?: string; avatarUrl?: string } } | null
   return data?.data?.avatar || data?.data?.avatarUrl || null
 }
 
-async function fetchCoinExAvatar(traderId: string): Promise<string | null> {
+async function fetchCoinExAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(`https://www.coinex.com/res/copy-trading/trader/${traderId}`, {
     headers: { Origin: 'https://www.coinex.com' },
+    signal,
   })) as { data?: { avatar?: string } } | null
   return data?.data?.avatar || null
 }
 
-async function fetchHTXAvatar(traderId: string): Promise<string | null> {
+async function fetchHTXAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
-    `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/leaderInfo?userSign=${encodeURIComponent(traderId)}`
+    `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/leaderInfo?userSign=${encodeURIComponent(traderId)}`,
+    { signal }
   )) as { data?: { imgUrl?: string; avatar?: string } } | null
   return data?.data?.imgUrl || data?.data?.avatar || null
 }
 
-async function fetchWeexAvatar(traderId: string): Promise<string | null> {
+async function fetchWeexAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
     `https://www.weex.com/gateway/v1/futures/copy-trade/trader/detail?traderId=${traderId}`,
-    { headers: { Origin: 'https://www.weex.com' } }
+    { headers: { Origin: 'https://www.weex.com' }, signal }
   )) as { data?: { headPic?: string; avatar?: string } } | null
   return data?.data?.headPic || data?.data?.avatar || null
 }
 
-async function fetchMEXCAvatar(traderId: string): Promise<string | null> {
+async function fetchMEXCAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
     `https://futures.mexc.com/api/platform/copy-trade/trader/detail?traderId=${traderId}`,
-    { headers: { Origin: 'https://futures.mexc.com' } }
+    { headers: { Origin: 'https://futures.mexc.com' }, signal }
   )) as { data?: { avatar?: string } } | null
   return data?.data?.avatar || null
 }
 
-async function fetchBingXAvatar(traderId: string): Promise<string | null> {
+async function fetchBingXAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
     `https://bingx.com/api/copy/public/v1/trader/detail?uniqueId=${traderId}`,
-    { headers: { Origin: 'https://bingx.com' } }
+    { headers: { Origin: 'https://bingx.com' }, signal }
   )) as { data?: { headUrl?: string; avatar?: string } } | null
   return data?.data?.headUrl || data?.data?.avatar || null
 }
 
-async function fetchPhemexAvatar(traderId: string): Promise<string | null> {
+async function fetchPhemexAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
     `https://api.phemex.com/api/copy/v1/leader/detail?traderId=${traderId}`,
-    { headers: { Origin: 'https://phemex.com' } }
+    { headers: { Origin: 'https://phemex.com' }, signal }
   )) as { data?: { avatar?: string } } | null
   return data?.data?.avatar || null
 }
 
 // fetchLBankAvatar: REMOVED — lbank permanently dead (API 404 since 2026-04)
 
-async function fetchBlofinAvatar(traderId: string): Promise<string | null> {
+async function fetchBlofinAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
-    `https://openapi.blofin.com/api/v1/copytrading/public-lead-traders/detail?uniqueCode=${traderId}`
+    `https://openapi.blofin.com/api/v1/copytrading/public-lead-traders/detail?uniqueCode=${traderId}`,
+    { signal }
   )) as { data?: Array<{ avatar?: string; portraitLink?: string }> } | null
   return data?.data?.[0]?.avatar || data?.data?.[0]?.portraitLink || null
 }
 
-async function fetchXTAvatar(traderId: string): Promise<string | null> {
+async function fetchXTAvatar(traderId: string, signal?: AbortSignal): Promise<string | null> {
   const data = (await fetchJSON(
     `https://www.xt.com/fapi/user/v1/public/copy-trade/leader-detail?accountId=${traderId}`,
     {
@@ -177,6 +190,7 @@ async function fetchXTAvatar(traderId: string): Promise<string | null> {
         Origin: 'https://www.xt.com',
         Referer: 'https://www.xt.com/en/copy-trading/futures',
       },
+      signal,
     }
   )) as { result?: { avatar?: string } } | null
   return data?.result?.avatar || null
@@ -186,7 +200,7 @@ async function fetchXTAvatar(traderId: string): Promise<string | null> {
 // Max 120s per bulk fetch to stay within serverless budget
 const BULK_DEADLINE_MS = 120_000
 
-async function fetchXTBulk(): Promise<Map<string, string>> {
+async function fetchXTBulk(signal?: AbortSignal): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
 
   for (const sortType of ['INCOME_RATE', 'TOTAL_INCOME', 'WIN_RATE', 'FOLLOWERS']) {
@@ -199,6 +213,7 @@ async function fetchXTBulk(): Promise<Map<string, string>> {
               Origin: 'https://www.xt.com',
               Referer: 'https://www.xt.com/en/copy-trading/futures',
             },
+            signal,
           }
         )) as {
           returnCode?: number
@@ -230,12 +245,13 @@ async function fetchXTBulk(): Promise<Map<string, string>> {
   return avatarMap
 }
 
-async function fetchHTXBulk(): Promise<Map<string, string>> {
+async function fetchHTXBulk(signal?: AbortSignal): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
 
   for (let page = 1; page <= 30; page++) {
     const data = (await fetchJSON(
-      `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=50`
+      `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=50`,
+      { signal }
     )) as {
       code?: number
       data?: {
@@ -260,12 +276,13 @@ async function fetchHTXBulk(): Promise<Map<string, string>> {
   return avatarMap
 }
 
-async function fetchOKXBulk(): Promise<Map<string, string>> {
+async function fetchOKXBulk(signal?: AbortSignal): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
 
   for (let page = 1; page <= 50; page++) {
     const data = (await fetchJSON(
-      `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&page=${page}`
+      `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&page=${page}`,
+      { signal }
     )) as { data?: Array<{ ranks?: Array<{ uniqueCode?: string; portLink?: string }> }> } | null
 
     const ranks = data?.data?.[0]?.ranks || []
@@ -281,7 +298,7 @@ async function fetchOKXBulk(): Promise<Map<string, string>> {
   return avatarMap
 }
 
-async function fetchBinanceBulk(): Promise<Map<string, string>> {
+async function fetchBinanceBulk(signal?: AbortSignal): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
 
   // Try multiple ranking endpoints
@@ -293,6 +310,7 @@ async function fetchBinanceBulk(): Promise<Map<string, string>> {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Origin: 'https://www.binance.com' },
           body: JSON.stringify({ pageNumber: page, pageSize: 50, timeRange }),
+          signal,
         }
       )) as { data?: { list?: Array<{ portfolioId?: string; userPhotoUrl?: string }> } } | null
 
@@ -312,14 +330,17 @@ async function fetchBinanceBulk(): Promise<Map<string, string>> {
   return avatarMap
 }
 
-async function fetchBybitBulk(): Promise<Map<string, string>> {
+async function fetchBybitBulk(signal?: AbortSignal): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
 
   for (const timeRange of ['SEVEN_DAY', 'THIRTY_DAY', 'NINETY_DAY']) {
     for (let page = 1; page <= 20; page++) {
       const data = (await fetchJSON(
         `https://api2.bybit.com/fapi/beehive/public/v1/common/leader/list?pageNo=${page}&pageSize=50&timeRange=${timeRange}&dataSortType=FOLLOWER_PNL_SORT&isRookie=0`,
-        { headers: { Origin: 'https://www.bybit.com', Referer: 'https://www.bybit.com/' } }
+        {
+          headers: { Origin: 'https://www.bybit.com', Referer: 'https://www.bybit.com/' },
+          signal,
+        }
       )) as { result?: Array<{ leaderMark?: string; avatar?: string }> } | null
 
       const list = data?.result || []
@@ -338,7 +359,7 @@ async function fetchBybitBulk(): Promise<Map<string, string>> {
   return avatarMap
 }
 
-async function fetchBitgetBulk(): Promise<Map<string, string>> {
+async function fetchBitgetBulk(signal?: AbortSignal): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
 
   for (const periodType of [1, 2, 3]) {
@@ -346,7 +367,7 @@ async function fetchBitgetBulk(): Promise<Map<string, string>> {
     for (let page = 1; page <= 20; page++) {
       const data = (await fetchJSON(
         `https://www.bitget.com/v1/copy/mix/trader/list?pageNo=${page}&pageSize=50&periodType=${periodType}`,
-        { headers: { Origin: 'https://www.bitget.com' } }
+        { headers: { Origin: 'https://www.bitget.com' }, signal }
       )) as {
         data?: {
           list?: Array<{ traderId?: string; headUrl?: string; avatar?: string; traderImg?: string }>
@@ -371,7 +392,10 @@ async function fetchBitgetBulk(): Promise<Map<string, string>> {
 }
 
 // Map platform to fetcher
-const INDIVIDUAL_FETCHERS: Record<string, (id: string) => Promise<string | null>> = {
+const INDIVIDUAL_FETCHERS: Record<
+  string,
+  (id: string, signal?: AbortSignal) => Promise<string | null>
+> = {
   binance_futures: fetchBinanceFuturesAvatar,
   // binance_spot: REMOVED 2026-03-14
   bybit: fetchBybitAvatar,
@@ -389,7 +413,7 @@ const INDIVIDUAL_FETCHERS: Record<string, (id: string) => Promise<string | null>
   xt: fetchXTAvatar,
 }
 
-const BULK_FETCHERS: Record<string, () => Promise<Map<string, string>>> = {
+const BULK_FETCHERS: Record<string, (signal?: AbortSignal) => Promise<Map<string, string>>> = {
   xt: fetchXTBulk,
   htx_futures: fetchHTXBulk,
   htx: fetchHTXBulk,
@@ -398,6 +422,131 @@ const BULK_FETCHERS: Record<string, () => Promise<Map<string, string>>> = {
   // binance_spot: REMOVED 2026-03-14
   bybit: fetchBybitBulk,
   bitget_futures: fetchBitgetBulk,
+}
+
+const SINGLE_WORK_BUDGET_MS = 250_000
+const DATABASE_TIMEOUT_MS = 15_000
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function databaseSignal(workSignal: AbortSignal): AbortSignal {
+  return AbortSignal.any([workSignal, AbortSignal.timeout(DATABASE_TIMEOUT_MS)])
+}
+
+async function withDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
+function validCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function parseAvatarResult(payload: unknown, platform: string, responseOk: boolean): AvatarResult {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return {
+      platform,
+      total: 0,
+      updated: 0,
+      errors: 1,
+      success: false,
+      status: 'failed',
+      message: 'Invalid avatar subtask acknowledgement',
+    }
+  }
+
+  const candidate = payload as Partial<AvatarResult>
+  if (
+    candidate.platform !== platform ||
+    !validCount(candidate.total) ||
+    !validCount(candidate.updated) ||
+    !validCount(candidate.errors) ||
+    candidate.updated > candidate.total ||
+    typeof candidate.success !== 'boolean' ||
+    !['success', 'partial', 'failed', 'skipped'].includes(String(candidate.status))
+  ) {
+    return {
+      platform,
+      total: 0,
+      updated: 0,
+      errors: 1,
+      success: false,
+      status: 'failed',
+      message: 'Malformed avatar subtask acknowledgement',
+    }
+  }
+
+  const acknowledged = candidate as AvatarResult
+  if (!responseOk || acknowledged.success !== true) {
+    return {
+      ...acknowledged,
+      success: false,
+      status: acknowledged.status === 'partial' ? 'partial' : 'failed',
+      errors: Math.max(acknowledged.errors, 1),
+    }
+  }
+  return acknowledged
+}
+
+async function confirmAvatarUpdate(
+  query: {
+    select(columns: string): {
+      abortSignal(signal: AbortSignal): PromiseLike<{
+        data: Array<{ id: string | number }> | null
+        error: { message?: string } | null
+      }>
+    }
+  },
+  expectedId: string | number,
+  workSignal: AbortSignal
+): Promise<void> {
+  const { data, error } = await query.select('id').abortSignal(databaseSignal(workSignal))
+  if (error || !Array.isArray(data) || data.length !== 1 || data[0]?.id !== expectedId) {
+    throw new Error(error?.message || 'Avatar update was not durably acknowledged')
+  }
+}
+
+async function finalizeAvatarResult(
+  plog: PipelineLogHandle,
+  result: AvatarResult
+): Promise<NextResponse> {
+  const deferred = result.deferred ?? 0
+  const hasIncompleteWork = result.errors > 0 || deferred > 0
+  const noProgressFailure = result.total > 0 && result.updated === 0 && hasIncompleteWork
+  const status = noProgressFailure ? 'failed' : hasIncompleteWork ? 'partial' : 'success'
+  const success = status === 'success'
+  const body = { ...result, success, status }
+
+  if (success) {
+    await plog.success(result.updated, body)
+  } else if (status === 'partial') {
+    await plog.partialSuccess(
+      result.updated,
+      [`${result.platform}:${result.errors + deferred}`],
+      body
+    )
+  } else {
+    await plog.error(new Error(`Avatar backfill failed for ${result.platform}`), body)
+  }
+
+  return NextResponse.json(body, {
+    status: status === 'failed' ? 503 : status === 'partial' ? 207 : 200,
+  })
 }
 
 export async function GET(request: Request) {
@@ -411,49 +560,102 @@ export async function GET(request: Request) {
   const mode = url.searchParams.get('mode') || 'auto' // 'bulk', 'individual', 'auto'
   const plog = await PipelineLogger.start(`backfill-avatars-${platform || 'unknown'}`)
 
+  if (!['bulk', 'individual', 'auto'].includes(mode)) {
+    await plog.error(new Error('invalid avatar backfill mode'))
+    return NextResponse.json({ error: 'invalid mode' }, { status: 400 })
+  }
+
   // Skip dead platforms — import from canonical source
   const { DEAD_BLOCKED_PLATFORMS } = await import('@/lib/constants/exchanges')
   const DEAD_PLATFORMS = new Set(DEAD_BLOCKED_PLATFORMS as string[])
 
   // Support comma-separated platforms for consolidated cron jobs
   if (platform && platform.includes(',')) {
-    const platforms = platform
+    const requestedPlatforms = platform
       .split(',')
       .map((p) => p.trim())
-      .filter((p) => p && !DEAD_PLATFORMS.has(p))
-    const results: AvatarResult[] = []
-    const perPlatformLimit = Math.floor(limit / platforms.length) || 50
+      .filter(Boolean)
+    const activePlatforms = requestedPlatforms.filter((p) => !DEAD_PLATFORMS.has(p))
+    const results: AvatarResult[] = requestedPlatforms
+      .filter((p) => DEAD_PLATFORMS.has(p))
+      .map((p) => ({
+        platform: p,
+        total: 0,
+        updated: 0,
+        errors: 0,
+        success: true,
+        status: 'skipped',
+        message: 'Platform skipped (dead/blocked)',
+      }))
+    const perPlatformLimit = Math.floor(limit / Math.max(activePlatforms.length, 1)) || 50
     const PER_PLATFORM_TIMEOUT = 18_000 // 18s per platform (14 platforms × 18s = 252s < 300s limit)
+    const PER_PLATFORM_WORK_BUDGET_MS = 15_000
 
-    for (const p of platforms) {
+    for (const p of activePlatforms) {
       try {
         const subUrl = new URL(request.url)
         subUrl.searchParams.set('platform', p)
         subUrl.searchParams.set('limit', String(perPlatformLimit))
-        const subReq = new Request(subUrl.toString(), { headers: request.headers })
-        const subRes = await Promise.race([
+        const subHeaders = new Headers(request.headers)
+        subHeaders.set('x-avatar-work-budget-ms', String(PER_PLATFORM_WORK_BUDGET_MS))
+        const subReq = new Request(subUrl.toString(), { headers: subHeaders })
+        const subRes = await withDeadline(
           GET(subReq),
-          new Promise<Response>((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`Avatar backfill ${p} timed out`)),
-              PER_PLATFORM_TIMEOUT
-            )
-          ),
-        ])
-        const subData = (await subRes.json()) as AvatarResult
-        results.push(subData)
-      } catch (_err) {
-        results.push({ platform: p, total: 0, updated: 0, errors: 1 })
+          PER_PLATFORM_TIMEOUT,
+          `Avatar backfill ${p} timed out`
+        )
+        results.push(parseAvatarResult(await subRes.json(), p, subRes.ok))
+      } catch (error) {
+        results.push({
+          platform: p,
+          total: 0,
+          updated: 0,
+          errors: 1,
+          success: false,
+          status: 'failed',
+          message: errorMessage(error),
+        })
       }
     }
-    await plog.success(results.reduce((s, r) => s + r.updated, 0))
-    return NextResponse.json({ platforms: results })
+
+    const updated = results.reduce((sum, result) => sum + result.updated, 0)
+    const incomplete = results.filter(
+      (result) => result.status === 'failed' || result.status === 'partial'
+    )
+    const successful = results.filter((result) => result.status === 'success')
+    const status =
+      incomplete.length === 0
+        ? 'success'
+        : successful.length > 0 || updated > 0
+          ? 'partial'
+          : 'failed'
+    const success = status === 'success'
+    const metadata = { status, requested: requestedPlatforms.length, results }
+
+    if (success) {
+      await plog.success(updated, metadata)
+    } else if (status === 'partial') {
+      await plog.partialSuccess(
+        updated,
+        incomplete.map((result) => result.platform),
+        metadata
+      )
+    } else {
+      await plog.error(new Error('All avatar backfill subtasks failed'), metadata)
+    }
+
+    return NextResponse.json(
+      { success, status, updated, platforms: results },
+      { status: status === 'failed' ? 503 : status === 'partial' ? 207 : 200 }
+    )
   }
 
   // Skip single dead platform
   if (platform && DEAD_PLATFORMS.has(platform)) {
     await plog.success(0)
     return NextResponse.json({
+      success: true,
+      status: 'skipped',
       platform,
       total: 0,
       updated: 0,
@@ -473,106 +675,174 @@ export async function GET(request: Request) {
     )
   }
 
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supportsRequestedMode =
+    mode === 'bulk'
+      ? Boolean(BULK_FETCHERS[platform])
+      : mode === 'individual'
+        ? Boolean(INDIVIDUAL_FETCHERS[platform])
+        : Boolean(BULK_FETCHERS[platform] || INDIVIDUAL_FETCHERS[platform])
+  if (!supportsRequestedMode) {
+    const result: AvatarResult = {
+      platform,
+      total: 0,
+      updated: 0,
+      errors: 1,
+      success: false,
+      status: 'failed',
+      message: `No ${mode} avatar fetcher configured for ${platform}`,
+    }
+    await plog.error(new Error(result.message), { ...result })
+    return NextResponse.json(result, { status: 400 })
+  }
 
+  const supabase = getSupabaseAdmin() as SupabaseClient
+  const startedAt = Date.now()
+  const requestedWorkBudget = Number.parseInt(
+    request.headers.get('x-avatar-work-budget-ms') || '',
+    10
+  )
+  const workBudgetMs = Number.isFinite(requestedWorkBudget)
+    ? Math.min(Math.max(requestedWorkBudget, 5_000), SINGLE_WORK_BUDGET_MS)
+    : SINGLE_WORK_BUDGET_MS
+  const workSignal = AbortSignal.timeout(workBudgetMs)
+  const functionDeadline = startedAt + workBudgetMs
   const result: AvatarResult = { platform, total: 0, updated: 0, errors: 0 }
 
-  // Get traders with missing avatars
-  const traders: Array<{ id: string; source_trader_id: string; handle: string }> = []
-  let from = 0
-  const MAX_PAGES = 100
-  let pageCount = 0
-  while (traders.length < limit) {
-    if (++pageCount > MAX_PAGES) {
-      log.warn(`Reached MAX_PAGES (${MAX_PAGES}) for ${platform}, breaking`)
-      break
-    }
-    const { data } = await supabase
-      .from('trader_sources')
-      .select('id, source_trader_id, handle')
-      .eq('source', platform)
-      .is('avatar_url', null)
-      .range(from, from + Math.min(999, limit - traders.length - 1))
-    if (!data?.length) break
-    traders.push(...data)
-    from += 1000
-    if (data.length < 1000) break
-  }
-
-  result.total = traders.length
-  if (!traders.length) {
-    await plog.success(0)
-    return NextResponse.json({ ...result, message: 'No missing avatars' })
-  }
-
-  // Try bulk fetch first (timeout 120s to stay within serverless budget)
-  if (mode !== 'individual' && BULK_FETCHERS[platform]) {
-    const bulkMap = await Promise.race([
-      BULK_FETCHERS[platform](),
-      new Promise<Map<string, string>>((resolve) =>
-        setTimeout(() => resolve(new Map()), BULK_DEADLINE_MS)
-      ),
-    ])
-
-    for (const t of traders) {
-      const avatar = bulkMap.get(t.source_trader_id) || bulkMap.get(t.handle)
-      if (avatar && !avatar.includes('default') && !avatar.includes('blockie')) {
-        const { error } = await supabase
-          .from('trader_sources')
-          .update({ avatar_url: avatar })
-          .eq('id', t.id)
-        if (!error) result.updated++
-        else result.errors++
+  try {
+    // Get traders with missing avatars
+    const traders: Array<{
+      id: string | number
+      source_trader_id: string
+      handle: string | null
+    }> = []
+    let from = 0
+    const MAX_PAGES = 100
+    let pageCount = 0
+    while (traders.length < limit) {
+      workSignal.throwIfAborted()
+      if (++pageCount > MAX_PAGES) {
+        throw new Error(`Reached MAX_PAGES (${MAX_PAGES}) for ${platform}`)
       }
+      const { data, error } = await supabase
+        .from('trader_sources')
+        .select('id, source_trader_id, handle')
+        .eq('source', platform)
+        .is('avatar_url', null)
+        .order('id', { ascending: true })
+        .range(from, from + Math.min(999, limit - traders.length - 1))
+        .abortSignal(databaseSignal(workSignal))
+      if (error || !Array.isArray(data)) {
+        throw new Error(`Avatar source query failed: ${error?.message || 'invalid payload'}`)
+      }
+      if (data.length === 0) break
+      traders.push(...data)
+      from += data.length
+      if (data.length < 1000) break
     }
 
-    // If bulk got most of them, return
-    if (result.updated > traders.length * 0.5 || mode === 'bulk') {
-      await plog.success(result.updated, { total: result.total, errors: result.errors })
-      return NextResponse.json(result)
+    result.total = traders.length
+    if (!traders.length) {
+      return finalizeAvatarResult(plog, { ...result, message: 'No missing avatars' })
     }
-  }
 
-  // Fall back to individual fetching for remaining
-  // Safety: stop 30s before maxDuration to ensure plog.success() runs
-  const functionDeadline = Date.now() + 250_000 // ~4m10s of 5m budget
-  if (mode !== 'bulk' && INDIVIDUAL_FETCHERS[platform]) {
-    const remaining = traders.filter((_t) => {
-      // Skip already updated
-      return true // We'll check via a simpler approach
-    })
+    const updatedIds = new Set<string | number>()
 
-    const delayMs = platform.includes('binance') ? 3000 : 1500
-    let individualUpdated = 0
-
-    for (const t of remaining.slice(0, limit)) {
-      if (individualUpdated + result.updated >= limit) break
-      if (Date.now() > functionDeadline) break // safety timeout
-
+    // Try bulk fetch first. Its signal cancels the fetch loops instead of merely
+    // resolving a race while the abandoned work keeps running in the background.
+    if (mode !== 'individual' && BULK_FETCHERS[platform]) {
+      let bulkMap = new Map<string, string>()
       try {
-        const avatar = await INDIVIDUAL_FETCHERS[platform](t.source_trader_id)
+        const bulkSignal = AbortSignal.any([
+          workSignal,
+          AbortSignal.timeout(Math.min(BULK_DEADLINE_MS, workBudgetMs)),
+        ])
+        bulkMap = await BULK_FETCHERS[platform](bulkSignal)
+      } catch (error) {
+        result.errors++
+        log.warn(`Bulk avatar fetch failed for ${platform}`, { error: errorMessage(error) })
+      }
+
+      for (const t of traders) {
+        if (workSignal.aborted) break
+        const avatar = bulkMap.get(t.source_trader_id) || (t.handle ? bulkMap.get(t.handle) : null)
         if (avatar && !avatar.includes('default') && !avatar.includes('blockie')) {
-          const { error } = await supabase
-            .from('trader_sources')
-            .update({ avatar_url: avatar })
-            .eq('id', t.id)
-          if (!error) {
+          try {
+            const query = supabase
+              .from('trader_sources')
+              .update({ avatar_url: avatar })
+              .eq('id', t.id)
+            await confirmAvatarUpdate(query as any, t.id, workSignal)
             result.updated++
-            individualUpdated++
-          } else result.errors++
+            updatedIds.add(t.id)
+          } catch (error) {
+            result.errors++
+            log.warn(`Bulk avatar update failed for ${platform}/${t.source_trader_id}`, {
+              error: errorMessage(error),
+            })
+          }
         }
-      } catch (err) {
-        log.warn(`Individual fetch failed for ${platform}/${t.source_trader_id}`, {
-          error: err instanceof Error ? err.message : String(err),
-        })
+      }
+
+      if (mode === 'bulk' && result.updated === 0 && result.total > 0 && result.errors === 0) {
         result.errors++
       }
+      if (workSignal.aborted) result.deferred = result.total - updatedIds.size
 
-      await sleep(delayMs)
+      if (workSignal.aborted) {
+        return finalizeAvatarResult(plog, result)
+      }
+
+      // If bulk got most of them, return. Rows without a published avatar are
+      // legitimate no-ops; only failed stages/deadlines make the result partial.
+      if (result.updated > traders.length * 0.5 || mode === 'bulk') {
+        return finalizeAvatarResult(plog, result)
+      }
     }
-  }
 
-  await plog.success(result.updated, { total: result.total, errors: result.errors })
-  return NextResponse.json(result)
+    // Fall back to individual fetching for rows not already updated by bulk.
+    if (mode !== 'bulk' && INDIVIDUAL_FETCHERS[platform]) {
+      const remaining = traders.filter((trader) => !updatedIds.has(trader.id)).slice(0, limit)
+      const delayMs = platform.includes('binance') ? 3000 : 1500
+      let processed = 0
+
+      for (const trader of remaining) {
+        if (Date.now() >= functionDeadline || workSignal.aborted) break
+        processed++
+
+        try {
+          const avatar = await INDIVIDUAL_FETCHERS[platform](trader.source_trader_id, workSignal)
+          if (avatar && !avatar.includes('default') && !avatar.includes('blockie')) {
+            const query = supabase
+              .from('trader_sources')
+              .update({ avatar_url: avatar })
+              .eq('id', trader.id)
+            await confirmAvatarUpdate(query as any, trader.id, workSignal)
+            result.updated++
+            updatedIds.add(trader.id)
+          }
+        } catch (error) {
+          log.warn(`Individual fetch failed for ${platform}/${trader.source_trader_id}`, {
+            error: errorMessage(error),
+          })
+          result.errors++
+        }
+
+        if (!workSignal.aborted) await sleep(delayMs)
+      }
+
+      const deferred = remaining.length - processed
+      if (deferred > 0) result.deferred = (result.deferred ?? 0) + deferred
+    }
+
+    return finalizeAvatarResult(plog, result)
+  } catch (error) {
+    const message = errorMessage(error)
+    result.errors = Math.max(result.errors, 1)
+    result.success = false
+    result.status = 'failed'
+    result.message = message
+    await plog.error(error instanceof Error ? error : new Error(message), { ...result })
+    return NextResponse.json(result, { status: workSignal.aborted ? 504 : 500 })
+  }
 }
 // Avatar backfill trigger - Sat Feb  7 18:04:52 PST 2026
