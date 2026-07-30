@@ -92,6 +92,12 @@ function isSafeCount(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0
 }
 
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const expected = [...keys].sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
 function isBookmarkFolder(value: unknown, expectedFolderId: string): value is BookmarkFolder {
   if (!isRecord(value)) return false
   return (
@@ -234,6 +240,29 @@ function readSubscriptionMutation(payload: unknown) {
   if (typeof isSubscribed !== 'boolean' || !isSafeCount(subscriberCount)) return null
   if (isSubscribed && subscriberCount < 1) return null
   return { isSubscribed, subscriberCount }
+}
+
+function readBookmarkRemoval(payload: unknown, expected: { bookmarkId: string; folderId: string }) {
+  if (
+    !isRecord(payload) ||
+    !hasExactKeys(payload, [
+      'action',
+      'already_removed',
+      'bookmark_count',
+      'bookmark_id',
+      'bookmarked',
+      'folder_id',
+    ]) ||
+    payload.action !== 'removed' ||
+    payload.bookmarked !== false ||
+    payload.bookmark_id !== expected.bookmarkId ||
+    payload.folder_id !== expected.folderId ||
+    typeof payload.already_removed !== 'boolean' ||
+    !isSafeCount(payload.bookmark_count)
+  ) {
+    return null
+  }
+  return { bookmarkCount: payload.bookmark_count }
 }
 
 function isFolderRequestScopeCurrent(
@@ -836,14 +865,27 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       const response = await fetch(`/api/posts/${postId}/bookmark`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
           ...getCsrfHeaders(),
         },
+        body: JSON.stringify({
+          action: 'remove',
+          bookmark_id: bookmarkId,
+          folder_id: folderId,
+        }),
       })
 
       if (!requestIsCurrent()) return
 
       if (response.ok) {
+        const data: unknown = await response.json()
+        if (!requestIsCurrent()) return
+        if (!readBookmarkRemoval(data, { bookmarkId, folderId })) {
+          logger.error('Bookmark removal returned an invalid acknowledgement')
+          showToast(t('removeFailed'), 'error')
+          return
+        }
         removeFromVisiblePage()
         showToast(t('removedFromFavorites'), 'success')
       } else {

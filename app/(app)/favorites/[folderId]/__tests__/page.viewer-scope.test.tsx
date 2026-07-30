@@ -32,6 +32,7 @@ const translations: Record<string, string> = {
   noBookmarksDesc: 'This folder is empty',
   processing: 'Processing',
   publicFolder: 'Public',
+  removeFailed: 'Remove failed',
   subscriberCount: '{n} subscribers',
   unbookmarked: 'Unbookmarked',
   unbookmarkFailed: 'Unbookmark failed',
@@ -384,7 +385,16 @@ describe('favorite folder detail viewer ownership', () => {
         )
       }
       if (url === '/api/posts/post-1/bookmark' && options?.method === 'POST') {
-        return Promise.resolve(response({ success: true }))
+        return Promise.resolve(
+          response({
+            action: 'removed',
+            bookmarked: false,
+            bookmark_count: 0,
+            bookmark_id: 'bookmark-1',
+            folder_id: FOLDER_ID,
+            already_removed: false,
+          })
+        )
       }
       if (url === `/api/bookmark-folders/${FOLDER_ID}?limit=20&offset=19`) {
         return Promise.resolve(
@@ -411,6 +421,53 @@ describe('favorite folder detail viewer ownership', () => {
       `/api/bookmark-folders/${FOLDER_ID}?limit=20&offset=19`,
       expect.any(Object)
     )
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/posts/post-1/bookmark',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'remove',
+          bookmark_id: 'bookmark-1',
+          folder_id: FOLDER_ID,
+        }),
+      })
+    )
+  })
+
+  it('keeps the post when removal acknowledgement identity does not match', async () => {
+    const fetchMock = jest.fn((url: string, options?: RequestInit) => {
+      if (url === `/api/bookmark-folders/${FOLDER_ID}`) {
+        return Promise.resolve(
+          folderDetailResponse('Owner folder', false, 0, {
+            isOwner: true,
+            ownerId: 'viewer-a',
+            posts: [bookmarkedPost(1)],
+            postCount: 1,
+          })
+        )
+      }
+      if (url === '/api/posts/post-1/bookmark' && options?.method === 'POST') {
+        return Promise.resolve(
+          response({
+            action: 'removed',
+            bookmarked: false,
+            bookmark_count: 0,
+            bookmark_id: 'bookmark-crossed',
+            folder_id: FOLDER_ID,
+            already_removed: false,
+          })
+        )
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    renderPage()
+    expect(await screen.findByText('Post 1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'remove' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Remove failed', 'error'))
+    expect(screen.getByText('Post 1')).toBeInTheDocument()
   })
 
   it('rejects a late post page after the viewer changes', async () => {
