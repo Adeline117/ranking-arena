@@ -17,9 +17,74 @@ const logger = createLogger('trigger-chain')
 
 const DEDUP_KEY = 'trigger-chain:last-run'
 const DEDUP_WINDOW_MS = 5 * 60 * 1000 // 5 minutes — skip if last trigger was <5min ago
+const FULL_LEADERBOARD_SEASONS = ['7D', '30D', '90D'] as const
 
 // In-memory fallback dedup when Redis is unavailable
 let memoryLastRun = 0
+
+type JsonObject = Record<string, unknown>
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function containsErrors(value: unknown): boolean {
+  if (value == null) return false
+  if (Array.isArray(value)) return value.length > 0
+  if (isJsonObject(value)) return Object.keys(value).length > 0
+  return true
+}
+
+function describePayload(value: unknown): string {
+  return String(JSON.stringify(value)).slice(0, 500)
+}
+
+/**
+ * A full leaderboard refresh is successful only after every public season
+ * publishes at least one row. The endpoint deliberately returns structured
+ * JSON for degradation and lock conflicts, including some HTTP 200 responses,
+ * so transport success alone is not a publication acknowledgement.
+ */
+export function assertSuccessfulFullLeaderboardComputeResponse(
+  body: unknown
+): 'published' | 'concurrent' {
+  if (!isJsonObject(body) || body.ok !== true) {
+    throw new Error(
+      `compute-leaderboard returned an unsuccessful payload: ${describePayload(body)}`
+    )
+  }
+
+  if (body.skipped === true) {
+    if (
+      body.reason === 'concurrent season compute' &&
+      typeof body.season === 'string' &&
+      FULL_LEADERBOARD_SEASONS.includes(body.season as (typeof FULL_LEADERBOARD_SEASONS)[number])
+    ) {
+      return 'concurrent'
+    }
+    throw new Error('compute-leaderboard returned an invalid skip acknowledgement')
+  }
+
+  const stats = isJsonObject(body.stats) ? body.stats : null
+  const seasons = stats && isJsonObject(stats.seasons) ? stats.seasons : null
+  const hasCompletePublication = FULL_LEADERBOARD_SEASONS.every((season) => {
+    const count = seasons?.[season]
+    return Number.isSafeInteger(count) && (count as number) > 0
+  })
+
+  if (
+    !hasCompletePublication ||
+    containsErrors(body.warnings) ||
+    containsErrors(body.rolled_back) ||
+    containsErrors(body.empty_publications)
+  ) {
+    throw new Error(
+      `compute-leaderboard returned an incomplete publication acknowledgement: ${describePayload(body)}`
+    )
+  }
+
+  return 'published'
+}
 
 /**
  * Fetch with retry + exponential backoff for downstream job triggers.
@@ -134,18 +199,16 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
         2,
         source
       )
-      const rolledBack = computeBody?.rolled_back as string[] | undefined
-      logger.info(
-        `[${source}] compute-leaderboard: ok (${Date.now() - computeStart}ms, trace=${traceId})${rolledBack?.length ? ` rolled_back=[${rolledBack.join(',')}]` : ''}`
-      )
-
-      // If ALL seasons rolled back due to degradation, skip downstream — data didn't change
-      if (rolledBack && rolledBack.length >= 3) {
-        logger.warn(
-          `[${source}] All seasons rolled back — skipping downstream (warm-cache/evaluate would use stale data)`
+      const computeOutcome = assertSuccessfulFullLeaderboardComputeResponse(computeBody)
+      if (computeOutcome === 'concurrent') {
+        logger.info(
+          `[${source}] compute-leaderboard already owned by another invocation; skipping downstream (trace=${traceId})`
         )
         return
       }
+      logger.info(
+        `[${source}] compute-leaderboard: published all seasons (${Date.now() - computeStart}ms, trace=${traceId})`
+      )
 
       // ── 2. Trigger pipeline-evaluate (Anthropic harness: independent Evaluator) ──
       logger.info(`[${source}] Triggering pipeline-evaluate (trace=${traceId})...`)
