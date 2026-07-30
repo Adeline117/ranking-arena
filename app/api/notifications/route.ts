@@ -7,16 +7,9 @@
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
-import { success, badRequest, handleError } from '@/lib/api/response'
-import { validateString } from '@/lib/api/validation'
-import {
-  markNotificationAsRead,
-  markAllNotificationsAsRead,
-  deleteNotification,
-} from '@/lib/data/notifications'
 import { features } from '@/lib/features'
-import { delByPattern } from '@/lib/cache'
 import { PERSISTED_NOTIFICATION_TYPES, type NotificationType } from '@/lib/types/notification'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -25,6 +18,7 @@ export const dynamic = 'force-dynamic'
 const logger = createLogger('notifications-list')
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
+const MAX_MUTATION_IDS = 100
 const PRIVATE_NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' }
 
 const FILTER_TYPE_MAP = {
@@ -51,6 +45,10 @@ const SOCIAL_NOTIFICATION_TYPES = [
 const SOCIAL_NOTIFICATION_TYPE_SET = new Set<NotificationType>(SOCIAL_NOTIFICATION_TYPES)
 
 const UuidSchema = z.string().uuid()
+const NormalizedUuidSchema = z
+  .string()
+  .uuid()
+  .transform((value) => value.toLowerCase())
 const TimestampSchema = z
   .string()
   .datetime({ offset: true })
@@ -115,6 +113,48 @@ const NotificationPageSuccessSchema = z
       .nullable(),
   })
   .strict()
+
+const NotificationMutationActionSchema = z.enum(['MARK_READ', 'MARK_ALL_READ', 'DELETE'])
+const NotificationMutationFailureSchema = z
+  .object({
+    success: z.literal(false),
+    reason: z.enum(['INVALID', 'ACTOR_UNAVAILABLE', 'NOT_FOUND']),
+  })
+  .strict()
+const NotificationMutationSuccessSchema = z
+  .object({
+    success: z.literal(true),
+    actor_id: UuidSchema,
+    action: NotificationMutationActionSchema,
+    notification_ids: z.array(UuidSchema).max(MAX_MUTATION_IDS).nullable(),
+    changed_count: z.number().int().nonnegative().refine(Number.isSafeInteger),
+    mutation_at: TimestampSchema,
+  })
+  .strict()
+
+const NotificationIdsSchema = z
+  .array(NormalizedUuidSchema)
+  .min(1)
+  .max(MAX_MUTATION_IDS)
+  .superRefine((ids, context) => {
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Duplicate notification ID' })
+    }
+  })
+const MarkAllBodySchema = z.object({ mark_all: z.literal(true) }).strict()
+const MarkOneBodySchema = z.object({ notification_id: NormalizedUuidSchema }).strict()
+const MarkManyBodySchema = z.object({ notification_ids: NotificationIdsSchema }).strict()
+const NotificationPutBodySchema = z.union([
+  MarkAllBodySchema,
+  MarkOneBodySchema,
+  MarkManyBodySchema,
+])
+const NotificationDeleteBodySchema = MarkOneBodySchema
+
+type NotificationMutationInput = {
+  action: z.infer<typeof NotificationMutationActionSchema>
+  notificationIds: string[] | null
+}
 
 type NotificationPageInput = {
   before: string | null
@@ -253,6 +293,99 @@ function privateJson(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: PRIVATE_NO_STORE_HEADERS })
 }
 
+function sameIds(left: readonly string[] | null, right: readonly string[] | null): boolean {
+  if (left === null || right === null) return left === right
+  return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
+function mutationAcknowledgementMatchesRequest(
+  acknowledgement: z.infer<typeof NotificationMutationSuccessSchema>,
+  actorId: string,
+  input: NotificationMutationInput
+): boolean {
+  if (
+    acknowledgement.actor_id !== actorId ||
+    acknowledgement.action !== input.action ||
+    !sameIds(acknowledgement.notification_ids, input.notificationIds)
+  ) {
+    return false
+  }
+
+  if (input.action === 'DELETE') return acknowledgement.changed_count === 1
+  if (input.action === 'MARK_READ') {
+    return (
+      input.notificationIds !== null &&
+      acknowledgement.changed_count <= input.notificationIds.length
+    )
+  }
+  return input.notificationIds === null
+}
+
+async function executeNotificationMutation(
+  supabase: SupabaseClient,
+  rawActorId: string,
+  input: NotificationMutationInput
+) {
+  const parsedActorId = NormalizedUuidSchema.safeParse(rawActorId)
+  if (!parsedActorId.success) {
+    logger.error('Authenticated notification mutation actor is malformed')
+    return privateJson({ error: 'Failed to mutate notifications' }, 500)
+  }
+  const actorId = parsedActorId.data
+
+  const { data, error } = await supabase.rpc('mutate_notifications_atomic', {
+    p_actor_id: actorId,
+    p_action: input.action,
+    p_notification_ids: input.notificationIds,
+  })
+
+  if (error) {
+    logger.error('Atomic notification mutation failed', { error: error.message })
+    return privateJson({ error: 'Failed to mutate notifications' }, 500)
+  }
+
+  const failure = NotificationMutationFailureSchema.safeParse(data)
+  if (failure.success) {
+    switch (failure.data.reason) {
+      case 'ACTOR_UNAVAILABLE':
+        return privateJson({ error: 'No permission to mutate notifications' }, 403)
+      case 'NOT_FOUND':
+        return privateJson({ error: 'Notification not found' }, 404)
+      case 'INVALID':
+        logger.error('Atomic notification mutation rejected validated input')
+        return privateJson({ error: 'Failed to mutate notifications' }, 500)
+    }
+  }
+
+  const acknowledgement = NotificationMutationSuccessSchema.safeParse(data)
+  if (
+    !acknowledgement.success ||
+    !mutationAcknowledgementMatchesRequest(acknowledgement.data, actorId, input)
+  ) {
+    logger.error('Atomic notification mutation returned an invalid acknowledgement')
+    return privateJson({ error: 'Failed to mutate notifications' }, 500)
+  }
+
+  return privateJson({
+    success: true,
+    data: {
+      message:
+        input.action === 'DELETE'
+          ? 'Notification deleted'
+          : input.action === 'MARK_ALL_READ'
+            ? 'All notifications marked as read'
+            : input.notificationIds?.length === 1
+              ? 'Marked as read'
+              : `${input.notificationIds?.length ?? 0} notifications marked as read`,
+      actor_id: acknowledgement.data.actor_id,
+      action: acknowledgement.data.action,
+      notification_ids: acknowledgement.data.notification_ids,
+      changed_count: acknowledgement.data.changed_count,
+      mutation_at: acknowledgement.data.mutation_at,
+    },
+  })
+}
+
 export const GET = withAuth(
   async ({ user, supabase, request }) => {
     const input = readPageInput(new URL(request.url).searchParams)
@@ -313,71 +446,50 @@ export const GET = withAuth(
 
 export const PUT = withAuth(
   async ({ user, supabase, request }) => {
+    let rawBody: unknown
     try {
-      let body: Record<string, unknown>
-      try {
-        body = await request.json()
-      } catch {
-        return badRequest('Invalid JSON body')
-      }
-
-      const notification_id = validateString(body.notification_id)
-      const notification_ids: string[] | undefined = Array.isArray(body.notification_ids)
-        ? body.notification_ids.filter((id: unknown) => typeof id === 'string')
-        : undefined
-      const mark_all = body.mark_all === true
-
-      if (mark_all) {
-        await markAllNotificationsAsRead(supabase, user.id)
-        await delByPattern(`notifications:${user.id}:*`)
-        return success({ message: 'All notifications marked as read' })
-      } else if (notification_ids && notification_ids.length > 0) {
-        // Batch mark-read: update all IDs belonging to this user
-        await supabase
-          .from('notifications')
-          .update({ read: true, read_at: new Date().toISOString() })
-          .in('id', notification_ids)
-          .eq('user_id', user.id)
-        await delByPattern(`notifications:${user.id}:*`)
-        return success({ message: `${notification_ids.length} notifications marked as read` })
-      } else if (notification_id) {
-        await markNotificationAsRead(supabase, notification_id, user.id)
-        await delByPattern(`notifications:${user.id}:*`)
-        return success({ message: 'Marked as read' })
-      } else {
-        return badRequest(
-          'Please provide notification_id, notification_ids, or set mark_all to true'
-        )
-      }
-    } catch (error: unknown) {
-      return handleError(error, 'notifications PUT')
+      rawBody = await request.json()
+    } catch {
+      return privateJson({ error: 'Invalid notification mutation request' }, 400)
     }
+
+    const body = NotificationPutBodySchema.safeParse(rawBody)
+    if (!body.success) {
+      return privateJson({ error: 'Invalid notification mutation request' }, 400)
+    }
+
+    let input: NotificationMutationInput
+    if ('mark_all' in body.data) {
+      input = { action: 'MARK_ALL_READ', notificationIds: null }
+    } else if ('notification_ids' in body.data) {
+      input = { action: 'MARK_READ', notificationIds: body.data.notification_ids }
+    } else {
+      input = { action: 'MARK_READ', notificationIds: [body.data.notification_id] }
+    }
+
+    return executeNotificationMutation(supabase, user.id, input)
   },
   { name: 'notifications-mark-read', rateLimit: 'write' }
 )
 
 export const DELETE = withAuth(
   async ({ user, supabase, request }) => {
+    let rawBody: unknown
     try {
-      let body: Record<string, unknown>
-      try {
-        body = await request.json()
-      } catch {
-        return badRequest('Invalid JSON body')
-      }
-
-      const notification_id = validateString(body.notification_id)
-
-      if (!notification_id) {
-        return badRequest('Please provide notification_id')
-      }
-
-      await deleteNotification(supabase, notification_id, user.id)
-      await delByPattern(`notifications:${user.id}:*`)
-      return success({ message: 'Notification deleted' })
-    } catch (error: unknown) {
-      return handleError(error, 'notifications DELETE')
+      rawBody = await request.json()
+    } catch {
+      return privateJson({ error: 'Invalid notification deletion request' }, 400)
     }
+
+    const body = NotificationDeleteBodySchema.safeParse(rawBody)
+    if (!body.success) {
+      return privateJson({ error: 'Invalid notification deletion request' }, 400)
+    }
+
+    return executeNotificationMutation(supabase, user.id, {
+      action: 'DELETE',
+      notificationIds: [body.data.notification_id],
+    })
   },
   { name: 'notifications-delete', rateLimit: 'write' }
 )

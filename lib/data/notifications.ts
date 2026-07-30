@@ -161,25 +161,6 @@ export async function getUnreadNotificationCount(
 }
 
 /**
- * 标记通知为已读
- */
-export async function markNotificationAsRead(
-  supabase: SupabaseClient,
-  notificationId: string,
-  userId: string
-): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ read: true, read_at: new Date().toISOString() })
-    .eq('id', notificationId)
-    .eq('user_id', userId)
-
-  if (error) {
-    throw error
-  }
-}
-
-/**
  * 统一通知入口 — 所有 API route 必须使用这个函数发送通知。
  * 强制 fire-and-forget + dedup，不阻塞响应，不影响主流程。
  *
@@ -234,25 +215,6 @@ export function sendNotifications(
     Promise.all(notifications.map((n) => createNotificationDeduped(supabase, n))),
     context
   )
-}
-
-/**
- * 标记所有通知为已读
- */
-export async function markAllNotificationsAsRead(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ read: true, read_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .eq('read', false)
-
-  if (error) {
-    logger.error('[notifications] 标记全部已读失败:', error)
-    throw error
-  }
 }
 
 /**
@@ -323,43 +285,5 @@ export async function createNotificationDeduped(
 
   if (error) {
     logger.warn('[notifications] Deduped insert failed:', error.message)
-  }
-}
-
-/**
- * 删除通知
- */
-export async function deleteNotification(
-  supabase: SupabaseClient,
-  notificationId: string,
-  userId: string
-): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .delete()
-    .eq('id', notificationId)
-    .eq('user_id', userId)
-
-  if (error) {
-    logger.error('[notifications] 删除通知失败:', error)
-    throw error
-  }
-}
-
-/**
- * 清空已读通知
- */
-export async function clearReadNotifications(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .delete()
-    .eq('user_id', userId)
-    .eq('read', true)
-
-  if (error) {
-    throw error
   }
 }

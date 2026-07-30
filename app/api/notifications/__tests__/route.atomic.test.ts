@@ -49,12 +49,6 @@ jest.mock('@/lib/api/middleware', () => ({
       }),
 }))
 
-jest.mock('@/lib/data/notifications', () => ({
-  deleteNotification: jest.fn(),
-  markAllNotificationsAsRead: jest.fn(),
-  markNotificationAsRead: jest.fn(),
-}))
-jest.mock('@/lib/cache', () => ({ delByPattern: jest.fn() }))
 jest.mock('@/lib/features', () => ({
   features: {
     get social() {
