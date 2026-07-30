@@ -41,6 +41,7 @@ interface SubscribedFolder {
 }
 
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
+type LoadMoreStatus = 'idle' | 'loading' | 'error'
 type FolderLane = 'my' | 'subscribed'
 type RequestScope = {
   viewerKey: ViewerKey
@@ -50,6 +51,7 @@ type RequestScope = {
 
 const FOLDER_CACHE_TTL_MS = 60_000
 const FOLDER_REQUEST_TIMEOUT_MS = 15_000
+const SUBSCRIBED_PAGE_LIMIT = 20
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object'
@@ -139,6 +141,38 @@ async function readFolderList<T>(
   return payload.data.folders
 }
 
+async function readSubscribedFolderPage(
+  response: Response,
+  expectedOffset: number
+): Promise<{ folders: SubscribedFolder[]; hasMore: boolean; nextOffset: number }> {
+  if (!response.ok) throw new Error(`Folder request failed with HTTP ${response.status}`)
+
+  const payload: unknown = await response.json()
+  if (!isRecord(payload) || !isRecord(payload.data)) {
+    throw new Error('Subscribed folder request returned an invalid payload')
+  }
+  const { folders, pagination } = payload.data
+  if (
+    !Array.isArray(folders) ||
+    !folders.every(isSubscribedFolder) ||
+    new Set(folders.map((folder) => folder.id)).size !== folders.length ||
+    !isRecord(pagination) ||
+    pagination.limit !== SUBSCRIBED_PAGE_LIMIT ||
+    pagination.offset !== expectedOffset ||
+    typeof pagination.has_more !== 'boolean' ||
+    folders.length > SUBSCRIBED_PAGE_LIMIT ||
+    (pagination.has_more && folders.length !== SUBSCRIBED_PAGE_LIMIT)
+  ) {
+    throw new Error('Subscribed folder request returned an invalid payload')
+  }
+
+  return {
+    folders,
+    hasMore: pagination.has_more,
+    nextOffset: pagination.offset + folders.length,
+  }
+}
+
 export default function FavoritesPageClient({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useLanguage()
   const { showToast } = useToast()
@@ -147,6 +181,9 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
   const [subscribedFolders, setSubscribedFolders] = useState<SubscribedFolder[]>([])
   const [foldersStatus, setFoldersStatus] = useState<LoadStatus>('idle')
   const [subscribedStatus, setSubscribedStatus] = useState<LoadStatus>('idle')
+  const [subscribedMoreStatus, setSubscribedMoreStatus] = useState<LoadMoreStatus>('idle')
+  const [subscribedHasMore, setSubscribedHasMore] = useState(false)
+  const [subscribedNextOffset, setSubscribedNextOffset] = useState(0)
   const [dataViewerKey, setDataViewerKey] = useState<ViewerKey>('pending')
   const [activeTab, setActiveTab] = useState<'my' | 'subscribed'>('my')
   // B2 tabs a11y: my/subscribed folders share the single list region below.
@@ -274,15 +311,16 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
         controller.abort()
       }, FOLDER_REQUEST_TIMEOUT_MS)
       setSubscribedStatus('loading')
+      setSubscribedMoreStatus('idle')
 
       try {
         const response = await fetch('/api/bookmark-folders/subscribed', {
           headers: { Authorization: `Bearer ${accessToken}` },
           signal: controller.signal,
         })
-        // The route's feature-unavailable contract is a 200 with an empty
-        // folders array. A 404 indicates routing/deployment failure.
-        const nextFolders = await readFolderList(response, isSubscribedFolder)
+        // Deployment/authority failures are non-success responses; only a
+        // validated 200 snapshot may become authoritative empty data.
+        const page = await readSubscribedFolderPage(response, 0)
         if (
           controller.signal.aborted ||
           requestIdsRef.current.subscribed !== requestId ||
@@ -291,7 +329,9 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
           return
         }
 
-        setSubscribedFolders(nextFolders)
+        setSubscribedFolders(page.folders)
+        setSubscribedHasMore(page.hasMore)
+        setSubscribedNextOffset(page.nextOffset)
         setSubscribedStatus('success')
         if (successCacheRef.current.viewerKey === viewerKey) {
           successCacheRef.current.subscribed = Date.now()
@@ -316,6 +356,88 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
     [accessToken, authChecked, sessionGeneration, userId, viewerKey]
   )
 
+  const loadMoreSubscribedFolders = useCallback(async () => {
+    if (
+      !authChecked ||
+      !accessToken ||
+      !userId ||
+      viewerKey === 'pending' ||
+      viewerKey === 'anon' ||
+      subscribedStatus !== 'success' ||
+      subscribedMoreStatus === 'loading' ||
+      !subscribedHasMore
+    ) {
+      return
+    }
+
+    const scope: RequestScope = { viewerKey, sessionGeneration, userId }
+    const expectedOffset = subscribedNextOffset
+    const existingFolders = subscribedFolders
+    requestControllersRef.current.subscribed?.abort()
+    const controller = new AbortController()
+    requestControllersRef.current.subscribed = controller
+    const requestId = ++requestIdsRef.current.subscribed
+    let timedOut = false
+    const timeoutId = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, FOLDER_REQUEST_TIMEOUT_MS)
+    setSubscribedMoreStatus('loading')
+
+    try {
+      const response = await fetch(
+        `/api/bookmark-folders/subscribed?limit=${SUBSCRIBED_PAGE_LIMIT}&offset=${expectedOffset}`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: controller.signal,
+        }
+      )
+      const page = await readSubscribedFolderPage(response, expectedOffset)
+      if (
+        controller.signal.aborted ||
+        requestIdsRef.current.subscribed !== requestId ||
+        !isRequestScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        return
+      }
+      const existingIds = new Set(existingFolders.map((folder) => folder.id))
+      if (page.folders.some((folder) => existingIds.has(folder.id))) {
+        throw new Error('Subscribed folder page overlaps previously loaded data')
+      }
+
+      setSubscribedFolders([...existingFolders, ...page.folders])
+      setSubscribedHasMore(page.hasMore)
+      setSubscribedNextOffset(page.nextOffset)
+      setSubscribedMoreStatus('idle')
+    } catch (error) {
+      if (
+        (!timedOut && controller.signal.aborted) ||
+        requestIdsRef.current.subscribed !== requestId ||
+        !isRequestScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        return
+      }
+      logger.warn('[Favorites] Failed to fetch more subscribed folders:', error)
+      setSubscribedMoreStatus('error')
+    } finally {
+      clearTimeout(timeoutId)
+      if (requestControllersRef.current.subscribed === controller) {
+        delete requestControllersRef.current.subscribed
+      }
+    }
+  }, [
+    accessToken,
+    authChecked,
+    sessionGeneration,
+    subscribedFolders,
+    subscribedHasMore,
+    subscribedMoreStatus,
+    subscribedNextOffset,
+    subscribedStatus,
+    userId,
+    viewerKey,
+  ])
+
   useEffect(() => {
     const viewerChanged = successCacheRef.current.viewerKey !== viewerKey
     if (viewerChanged) {
@@ -330,6 +452,9 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
       setSubscribedFolders([])
       setFoldersStatus('idle')
       setSubscribedStatus('idle')
+      setSubscribedMoreStatus('idle')
+      setSubscribedHasMore(false)
+      setSubscribedNextOffset(0)
       setCreating(false)
       setShowCreateForm(false)
       setNewFolderName('')
@@ -461,6 +586,7 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
   const viewerDataReady = dataViewerKey === viewerKey
   const visibleFolders = viewerDataReady ? folders : []
   const visibleSubscribedFolders = viewerDataReady ? subscribedFolders : []
+  const visibleSubscribedHasMore = viewerDataReady && subscribedHasMore
   const activeStatus = activeTab === 'my' ? foldersStatus : subscribedStatus
   const activeFolderCount =
     activeTab === 'my' ? visibleFolders.length : visibleSubscribedFolders.length
@@ -640,7 +766,8 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
               transition: `all ${tokens.transition.base}`,
             }}
           >
-            {t('subscribedFoldersTab')} ({visibleSubscribedFolders.length})
+            {t('subscribedFoldersTab')} ({visibleSubscribedFolders.length}
+            {visibleSubscribedHasMore ? '+' : ''})
           </button>
         </Box>
 
@@ -1040,6 +1167,32 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
                   </Text>
                 </Link>
               ))}
+              {subscribedStatus === 'success' && visibleSubscribedHasMore && (
+                <Box
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    paddingTop: tokens.spacing[2],
+                  }}
+                >
+                  {subscribedMoreStatus === 'error' && (
+                    <Text role="alert" size="sm" color="secondary">
+                      {t('loadMoreFailed')}
+                    </Text>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void loadMoreSubscribedFolders()}
+                    disabled={subscribedMoreStatus === 'loading'}
+                    aria-busy={subscribedMoreStatus === 'loading'}
+                  >
+                    {subscribedMoreStatus === 'loading' ? t('loadingMore') : t('loadMore')}
+                  </Button>
+                </Box>
+              )}
             </Box>
           )}
         </div>

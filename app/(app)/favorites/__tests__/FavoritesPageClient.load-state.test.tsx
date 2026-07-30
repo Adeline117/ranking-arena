@@ -24,8 +24,11 @@ const translations: Record<string, string> = {
   createFailed: 'Failed to create folder',
   defaultFolderName: 'Default',
   itemCount: '{n} items',
+  loadMore: 'Load more',
+  loadMoreFailed: 'Failed to load more',
   loadFoldersFailed: 'Failed to load folders',
   loadFoldersFailedRetry: 'Failed to load folders. Please retry.',
+  loadingMore: 'Loading more...',
   myFoldersTab: 'My Folders',
   newFolder: 'New folder',
   noFolders: 'No folders yet',
@@ -149,8 +152,11 @@ function subscribedFolder(id: string, name: string) {
   }
 }
 
-function folderResponse(folders: unknown[]) {
-  return response({ data: { folders } })
+function folderResponse(
+  folders: unknown[],
+  pagination = { limit: 20, offset: 0, has_more: false }
+) {
+  return response({ data: { folders, pagination } })
 }
 
 function setViewer(userId: string, token = `token-${userId}`) {
@@ -327,6 +333,79 @@ describe('FavoritesPageClient load states', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(endpointCalls(fetchMock, '/api/bookmark-folders')).toBe(1)
     expect(endpointCalls(fetchMock, '/api/bookmark-folders/subscribed')).toBe(2)
+  })
+
+  it('loads every subscribed folder page without replacing the visible first page', async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) =>
+      subscribedFolder(`sub-${index + 1}`, `Subscribed ${index + 1}`)
+    )
+    const fetchMock = jest.fn((url: string) => {
+      if (url === '/api/bookmark-folders') return Promise.resolve(folderResponse([]))
+      if (url === '/api/bookmark-folders/subscribed') {
+        return Promise.resolve(folderResponse(firstPage, { limit: 20, offset: 0, has_more: true }))
+      }
+      if (url === '/api/bookmark-folders/subscribed?limit=20&offset=20') {
+        return Promise.resolve(
+          folderResponse(
+            [
+              subscribedFolder('sub-21', 'Subscribed 21'),
+              subscribedFolder('sub-22', 'Subscribed 22'),
+            ],
+            { limit: 20, offset: 20, has_more: false }
+          )
+        )
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    render(<FavoritesPageClient embedded />)
+    expect(await screen.findByText('No folders yet')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Subscribed Folders/ }))
+
+    expect(await screen.findByText('Subscribed 1')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Subscribed Folders (20+)' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+
+    expect(await screen.findByText('Subscribed 22')).toBeInTheDocument()
+    expect(screen.getByText('Subscribed 1')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Subscribed Folders (22)' })).toBeInTheDocument()
+    expect(endpointCalls(fetchMock, '/api/bookmark-folders/subscribed?limit=20&offset=20')).toBe(1)
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
+  })
+
+  it('rejects an overlapping subscribed page and keeps the first page retryable', async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) =>
+      subscribedFolder(`sub-${index + 1}`, `Subscribed ${index + 1}`)
+    )
+    const fetchMock = jest.fn((url: string) => {
+      if (url === '/api/bookmark-folders') return Promise.resolve(folderResponse([]))
+      if (url === '/api/bookmark-folders/subscribed') {
+        return Promise.resolve(folderResponse(firstPage, { limit: 20, offset: 0, has_more: true }))
+      }
+      if (url === '/api/bookmark-folders/subscribed?limit=20&offset=20') {
+        return Promise.resolve(
+          folderResponse([subscribedFolder('sub-1', 'Duplicate')], {
+            limit: 20,
+            offset: 20,
+            has_more: false,
+          })
+        )
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    render(<FavoritesPageClient embedded />)
+    expect(await screen.findByText('No folders yet')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Subscribed Folders/ }))
+    expect(await screen.findByText('Subscribed 1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load more')
+    expect(screen.getByText('Subscribed 1')).toBeInTheDocument()
+    expect(screen.queryByText('Duplicate')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument()
   })
 
   it('turns a hung request into a retryable error instead of a permanent skeleton', async () => {
