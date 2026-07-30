@@ -396,7 +396,12 @@ function requireMutationCount(
   return data
 }
 
-export async function refreshHotScoresInline(): Promise<InlineJobResult> {
+async function executeHotScoreRpc(supabase: SupabaseClient, rpcName: string, signal?: AbortSignal) {
+  const request = supabase.rpc(rpcName)
+  return signal ? await request.abortSignal(signal) : await request
+}
+
+export async function refreshHotScoresInline(signal?: AbortSignal): Promise<InlineJobResult> {
   const start = Date.now()
   const name = 'refresh-hot-scores'
   try {
@@ -404,14 +409,26 @@ export async function refreshHotScoresInline(): Promise<InlineJobResult> {
 
     // Velocity and report counts are inputs to the canonical score function.
     // Continuing after either write fails publishes rankings from stale inputs.
-    const { data: velocityData, error: velocityError } = await supabase.rpc('update_post_velocity')
+    const { data: velocityData, error: velocityError } = await executeHotScoreRpc(
+      supabase,
+      'update_post_velocity',
+      signal
+    )
     const velocityCount = requireMutationCount('update_post_velocity', velocityData, velocityError)
 
-    const { data: reportData, error: reportError } = await supabase.rpc('update_post_report_counts')
+    const { data: reportData, error: reportError } = await executeHotScoreRpc(
+      supabase,
+      'update_post_report_counts',
+      signal
+    )
     const reportCount = requireMutationCount('update_post_report_counts', reportData, reportError)
 
     // Step 2: Incremental refresh
-    const { data: incCount, error: incErr } = await supabase.rpc('refresh_hot_scores_incremental')
+    const { data: incCount, error: incErr } = await executeHotScoreRpc(
+      supabase,
+      'refresh_hot_scores_incremental',
+      signal
+    )
     if (!incErr && isExactMutationCount(incCount)) {
       await cacheDelete(HOT_POSTS_CACHE_KEY)
       return {
@@ -428,7 +445,11 @@ export async function refreshHotScoresInline(): Promise<InlineJobResult> {
     }
 
     // Step 3: Full refresh
-    const { data: fullCount, error: fullErr } = await supabase.rpc('refresh_hot_scores')
+    const { data: fullCount, error: fullErr } = await executeHotScoreRpc(
+      supabase,
+      'refresh_hot_scores',
+      signal
+    )
     if (!fullErr && isExactMutationCount(fullCount)) {
       await cacheDelete(HOT_POSTS_CACHE_KEY)
       return {
