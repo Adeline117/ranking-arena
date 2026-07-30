@@ -1,9 +1,18 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockShowToast = jest.fn()
-const mockAuthSession = {
+const mockAuthSession: {
+  accessToken: string
+  authChecked: boolean
+  userId: string
+  viewerKey: `user:${string}`
+  sessionGeneration: number
+} = {
   accessToken: 'access-token',
   authChecked: true,
+  userId: '11111111-1111-4111-8111-111111111111',
+  viewerKey: 'user:11111111-1111-4111-8111-111111111111',
+  sessionGeneration: 1,
 }
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
@@ -28,6 +37,14 @@ function response(body: unknown, ok = true, status = ok ? 200 : 500): Response {
   } as Response
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
+}
+
 function renderModal() {
   return render(
     <BookmarkModal
@@ -44,6 +61,10 @@ describe('BookmarkModal folder load states', () => {
     jest.clearAllMocks()
     mockAuthSession.accessToken = 'access-token'
     mockAuthSession.authChecked = true
+    mockAuthSession.userId = '11111111-1111-4111-8111-111111111111'
+    mockAuthSession.viewerKey = 'user:11111111-1111-4111-8111-111111111111'
+    mockAuthSession.sessionGeneration = 1
+    window.scrollTo = jest.fn()
     global.fetch = jest.fn()
   })
 
@@ -106,5 +127,145 @@ describe('BookmarkModal folder load states', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('loadBookmarksFailed')
     expect(screen.queryByText('noBookmarkFolders')).not.toBeInTheDocument()
+  })
+
+  it('hides viewer A folders immediately and rejects its late response after switching to B', async () => {
+    let resolveViewerA!: (value: Response) => void
+    ;(global.fetch as jest.Mock)
+      .mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          resolveViewerA = resolve
+        })
+      )
+      .mockResolvedValueOnce(
+        response({
+          data: {
+            folders: [
+              {
+                id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                name: 'Viewer B folder',
+                description: null,
+                avatar_url: null,
+                is_public: false,
+                is_default: false,
+                post_count: 0,
+              },
+            ],
+          },
+        })
+      )
+
+    const view = renderModal()
+    expect(screen.getByText('loading')).toBeInTheDocument()
+
+    mockAuthSession.accessToken = 'token-viewer-b'
+    mockAuthSession.userId = '22222222-2222-4222-8222-222222222222'
+    mockAuthSession.viewerKey = 'user:22222222-2222-4222-8222-222222222222'
+    mockAuthSession.sessionGeneration = 2
+    view.rerender(
+      <BookmarkModal
+        isOpen
+        onClose={jest.fn()}
+        onSelect={jest.fn()}
+        postId="22222222-2222-4222-8222-222222222222"
+      />
+    )
+
+    expect(await screen.findByText('Viewer B folder')).toBeInTheDocument()
+    await act(async () => {
+      resolveViewerA(
+        response({
+          data: {
+            folders: [
+              {
+                id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                name: 'Viewer A private folder',
+                description: null,
+                avatar_url: null,
+                is_public: false,
+                is_default: false,
+                post_count: 1,
+              },
+            ],
+          },
+        })
+      )
+    })
+
+    expect(screen.queryByText('Viewer A private folder')).not.toBeInTheDocument()
+    expect(screen.getByText('Viewer B folder')).toBeInTheDocument()
+  })
+
+  it('does not append a late viewer A create result after switching to B', async () => {
+    const lateCreate = deferred<Response>()
+    ;(global.fetch as jest.Mock).mockImplementation((_url: string, options?: RequestInit) => {
+      const authorization = (options?.headers as Record<string, string> | undefined)?.Authorization
+      if (options?.method === 'POST') return lateCreate.promise
+      if (authorization === 'Bearer token-viewer-b') {
+        return Promise.resolve(
+          response({
+            data: {
+              folders: [
+                {
+                  id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  name: 'Viewer B folder',
+                  description: null,
+                  avatar_url: null,
+                  is_public: false,
+                  is_default: false,
+                  post_count: 0,
+                },
+              ],
+            },
+          })
+        )
+      }
+      return Promise.resolve(response({ data: { folders: [] } }))
+    })
+
+    const view = renderModal()
+    expect(await screen.findByText('noBookmarkFolders')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'newBookmarkFolder' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'bookmarkFolderName' }), {
+      target: { value: 'Viewer A private draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'create' }))
+
+    mockAuthSession.accessToken = 'token-viewer-b'
+    mockAuthSession.userId = '22222222-2222-4222-8222-222222222222'
+    mockAuthSession.viewerKey = 'user:22222222-2222-4222-8222-222222222222'
+    mockAuthSession.sessionGeneration = 2
+    view.rerender(
+      <BookmarkModal
+        isOpen
+        onClose={jest.fn()}
+        onSelect={jest.fn()}
+        postId="22222222-2222-4222-8222-222222222222"
+      />
+    )
+    expect(await screen.findByText('Viewer B folder')).toBeInTheDocument()
+
+    await act(async () => {
+      lateCreate.resolve(
+        response({
+          data: {
+            folder: {
+              id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              name: 'Viewer A private draft',
+              description: null,
+              avatar_url: null,
+              is_public: false,
+              is_default: false,
+              post_count: 0,
+            },
+          },
+        })
+      )
+      await lateCreate.promise
+    })
+
+    expect(screen.queryByText('Viewer A private draft')).not.toBeInTheDocument()
+    expect(screen.getByText('Viewer B folder')).toBeInTheDocument()
+    expect(mockShowToast).not.toHaveBeenCalledWith('bookmarkFolderCreated', 'success')
   })
 })

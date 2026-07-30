@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
@@ -12,15 +12,73 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 import ErrorState from './ErrorState'
+import type { ViewerKey } from '@/lib/auth/viewer-scope'
 
 type BookmarkFolder = {
   id: string
   name: string
-  description?: string
-  avatar_url?: string
+  description?: string | null
+  avatar_url?: string | null
   is_public: boolean
   is_default: boolean
   post_count: number
+}
+
+type BookmarkModalScope = {
+  viewerKey: ViewerKey
+  sessionGeneration: number
+  userId: string
+}
+
+const BOOKMARK_MODAL_TIMEOUT_MS = 15_000
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isBookmarkFolder(value: unknown): value is BookmarkFolder {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    typeof value.name === 'string' &&
+    value.name.length > 0 &&
+    value.name.length <= 50 &&
+    (value.description === undefined ||
+      value.description === null ||
+      typeof value.description === 'string') &&
+    (value.avatar_url === undefined ||
+      value.avatar_url === null ||
+      typeof value.avatar_url === 'string') &&
+    typeof value.is_public === 'boolean' &&
+    typeof value.is_default === 'boolean' &&
+    Number.isSafeInteger(value.post_count) &&
+    Number(value.post_count) >= 0
+  )
+}
+
+function isScopeCurrent(
+  expected: BookmarkModalScope,
+  current: {
+    viewerKey: ViewerKey
+    sessionGeneration: number
+    userId: string | null
+  }
+): boolean {
+  return (
+    expected.viewerKey === current.viewerKey &&
+    expected.sessionGeneration === current.sessionGeneration &&
+    expected.userId === current.userId
+  )
+}
+
+function apiErrorMessage(payload: unknown, fallback: string): string {
+  if (!isRecord(payload)) return fallback
+  if (typeof payload.error === 'string') return payload.error
+  if (isRecord(payload.error) && typeof payload.error.message === 'string') {
+    return payload.error.message
+  }
+  return fallback
 }
 
 interface BookmarkModalProps {
@@ -37,8 +95,10 @@ export default function BookmarkModal({
   postId: _postId,
 }: BookmarkModalProps) {
   const { showToast } = useToast()
-  const { accessToken, authChecked } = useAuthSession()
+  const { accessToken, authChecked, userId, viewerKey, sessionGeneration } = useAuthSession()
   const { t } = useLanguage()
+  const tRef = useRef(t)
+  tRef.current = t
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -46,70 +106,186 @@ export default function BookmarkModal({
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [newFolderPublic, setNewFolderPublic] = useState(true)
+  const [dataViewerKey, setDataViewerKey] = useState<ViewerKey>('pending')
   const modalRef = useRef<HTMLDivElement>(null)
+  const currentScopeRef = useRef({ viewerKey, sessionGeneration, userId })
+  currentScopeRef.current = { viewerKey, sessionGeneration, userId }
+  const stateViewerKeyRef = useRef<ViewerKey>(viewerKey)
+  const loadRequestIdRef = useRef(0)
+  const loadControllerRef = useRef<AbortController | null>(null)
+  const createRequestIdRef = useRef(0)
+  const createControllerRef = useRef<AbortController | null>(null)
 
-  useEffect(() => {
-    if (isOpen && authChecked && accessToken) {
-      loadFolders()
+  const loadFolders = useCallback(async () => {
+    if (!accessToken || !userId || viewerKey === 'pending' || viewerKey === 'anon') {
+      return
     }
-    if (!isOpen) {
-      setFolders([])
-      setLoading(true)
-      setLoadFailed(false)
-      setShowCreateForm(false)
-      setNewFolderName('')
-      setNewFolderPublic(true)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFolders is defined in closure, not a stable ref
-  }, [isOpen, authChecked, accessToken])
-
-  useModalA11y({ open: isOpen, onClose, modalRef })
-
-  const loadFolders = async () => {
+    const scope: BookmarkModalScope = { viewerKey, sessionGeneration, userId }
+    loadControllerRef.current?.abort()
+    const controller = new AbortController()
+    loadControllerRef.current = controller
+    const requestId = ++loadRequestIdRef.current
+    let timedOut = false
+    const timeoutId = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, BOOKMARK_MODAL_TIMEOUT_MS)
     setLoading(true)
     setLoadFailed(false)
     setFolders([])
 
     try {
-      if (!accessToken) {
-        return
-      }
-
       const response = await fetch('/api/bookmark-folders', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
+        signal: controller.signal,
       })
+      if (
+        controller.signal.aborted ||
+        loadRequestIdRef.current !== requestId ||
+        !isScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        return
+      }
 
       if (response.status === 401) {
         setLoadFailed(true)
+        setDataViewerKey(viewerKey)
         return
       }
 
       if (!response.ok) {
-        showToast(t('loadBookmarksFailed'), 'error')
+        showToast(tRef.current('loadBookmarksFailed'), 'error')
         setLoadFailed(true)
+        setDataViewerKey(viewerKey)
         return
       }
 
-      const data = await response.json()
-      const loadedFolders = data.data?.folders ?? data.folders
-      if (!Array.isArray(loadedFolders)) {
+      const data: unknown = await response.json()
+      if (
+        controller.signal.aborted ||
+        loadRequestIdRef.current !== requestId ||
+        !isScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        return
+      }
+      const loadedFolders = isRecord(data)
+        ? isRecord(data.data)
+          ? data.data.folders
+          : data.folders
+        : null
+      if (
+        !Array.isArray(loadedFolders) ||
+        !loadedFolders.every(isBookmarkFolder) ||
+        new Set(loadedFolders.map((folder) => folder.id)).size !== loadedFolders.length
+      ) {
         throw new Error('Bookmark folders response is missing a folders array')
       }
       setFolders(loadedFolders)
+      setDataViewerKey(viewerKey)
     } catch (error) {
+      if (
+        (!timedOut && controller.signal.aborted) ||
+        loadRequestIdRef.current !== requestId ||
+        !isScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        return
+      }
       logger.error('Load bookmarks failed:', error)
-      showToast(t('loadBookmarksFailed'), 'error')
+      showToast(tRef.current('loadBookmarksFailed'), 'error')
       setLoadFailed(true)
+      setDataViewerKey(viewerKey)
     } finally {
-      setLoading(false)
+      clearTimeout(timeoutId)
+      if (
+        loadRequestIdRef.current === requestId &&
+        isScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        setLoading(false)
+      }
+      if (loadControllerRef.current === controller) {
+        loadControllerRef.current = null
+      }
     }
-  }
+  }, [accessToken, sessionGeneration, showToast, userId, viewerKey])
+
+  useEffect(() => {
+    const viewerChanged = stateViewerKeyRef.current !== viewerKey
+    if (viewerChanged) {
+      stateViewerKeyRef.current = viewerKey
+      loadControllerRef.current?.abort()
+      createControllerRef.current?.abort()
+      loadRequestIdRef.current += 1
+      createRequestIdRef.current += 1
+      setFolders([])
+      setLoading(true)
+      setLoadFailed(false)
+      setCreating(false)
+      setShowCreateForm(false)
+      setNewFolderName('')
+      setNewFolderPublic(true)
+      setDataViewerKey('pending')
+    }
+
+    if (!isOpen) {
+      loadControllerRef.current?.abort()
+      createControllerRef.current?.abort()
+      loadRequestIdRef.current += 1
+      createRequestIdRef.current += 1
+      setFolders([])
+      setLoading(true)
+      setLoadFailed(false)
+      setCreating(false)
+      setShowCreateForm(false)
+      setNewFolderName('')
+      setNewFolderPublic(true)
+      setDataViewerKey(viewerKey)
+      return
+    }
+
+    if (authChecked && accessToken && userId) void loadFolders()
+
+    return () => {
+      loadControllerRef.current?.abort()
+    }
+  }, [accessToken, authChecked, isOpen, loadFolders, userId, viewerKey])
+
+  useEffect(
+    () => () => {
+      loadControllerRef.current?.abort()
+      createControllerRef.current?.abort()
+      loadRequestIdRef.current += 1
+      createRequestIdRef.current += 1
+    },
+    []
+  )
+
+  useModalA11y({ open: isOpen, onClose, modalRef })
 
   const createFolder = async () => {
-    if (!newFolderName.trim() || !accessToken) return
+    if (
+      !newFolderName.trim() ||
+      !accessToken ||
+      !userId ||
+      viewerKey === 'pending' ||
+      viewerKey === 'anon'
+    ) {
+      return
+    }
 
+    const scope: BookmarkModalScope = { viewerKey, sessionGeneration, userId }
+    const folderName = newFolderName.trim()
+    const folderIsPublic = newFolderPublic
+    createControllerRef.current?.abort()
+    const controller = new AbortController()
+    createControllerRef.current = controller
+    const requestId = ++createRequestIdRef.current
+    let timedOut = false
+    const timeoutId = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, BOOKMARK_MODAL_TIMEOUT_MS)
     setCreating(true)
     try {
       const response = await fetch('/api/bookmark-folders', {
@@ -120,31 +296,63 @@ export default function BookmarkModal({
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
-          name: newFolderName.trim(),
-          is_public: newFolderPublic,
+          name: folderName,
+          is_public: folderIsPublic,
         }),
+        signal: controller.signal,
       })
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: t('createFailed') }))
-        showToast(data.error?.message || data.error || t('createFailed'), 'error')
+      const data: unknown = await response.json().catch(() => null)
+      if (
+        controller.signal.aborted ||
+        createRequestIdRef.current !== requestId ||
+        !isScopeCurrent(scope, currentScopeRef.current)
+      ) {
         return
       }
 
-      const data = await response.json()
-      const newFolder = data.data?.folder || data.folder
-      if (newFolder) {
-        setFolders((prev) => [...prev, newFolder])
+      if (!response.ok) {
+        showToast(apiErrorMessage(data, tRef.current('createFailed')), 'error')
+        return
       }
+
+      const newFolder = isRecord(data)
+        ? isRecord(data.data)
+          ? data.data.folder
+          : data.folder
+        : null
+      if (!isBookmarkFolder(newFolder)) {
+        throw new Error('Create bookmark folder returned an invalid payload')
+      }
+      setFolders((currentFolders) =>
+        currentFolders.some((folder) => folder.id === newFolder.id)
+          ? currentFolders
+          : [...currentFolders, newFolder]
+      )
       setNewFolderName('')
       setNewFolderPublic(true)
       setShowCreateForm(false)
-      showToast(t('bookmarkFolderCreated'), 'success')
+      showToast(tRef.current('bookmarkFolderCreated'), 'success')
     } catch (error) {
+      if (
+        (!timedOut && controller.signal.aborted) ||
+        createRequestIdRef.current !== requestId ||
+        !isScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        return
+      }
       logger.error('Create bookmark folder failed:', error)
-      showToast(t('createFailed'), 'error')
+      showToast(tRef.current('createFailed'), 'error')
     } finally {
-      setCreating(false)
+      clearTimeout(timeoutId)
+      if (
+        createRequestIdRef.current === requestId &&
+        isScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        setCreating(false)
+      }
+      if (createControllerRef.current === controller) {
+        createControllerRef.current = null
+      }
     }
   }
 
@@ -166,6 +374,10 @@ export default function BookmarkModal({
     const index = name.charCodeAt(0) % colors.length
     return colors[index]
   }
+
+  const viewerDataReady = dataViewerKey === viewerKey
+  const visibleFolders = viewerDataReady ? folders : []
+  const foldersLoading = loading || !viewerDataReady
 
   if (!isOpen || typeof document === 'undefined') return null
 
@@ -288,7 +500,7 @@ export default function BookmarkModal({
               variant="text"
               size="sm"
               onClick={() => setShowCreateForm(!showCreateForm)}
-              disabled={loading || loadFailed}
+              disabled={foldersLoading || loadFailed}
               style={{ color: tokens.colors.accent?.primary }}
             >
               {t('newBookmarkFolder')}
@@ -299,7 +511,7 @@ export default function BookmarkModal({
               style={{
                 background: 'transparent',
                 border: 'none',
-                fontSize: 20,
+                fontSize: tokens.typography.fontSize.xl,
                 cursor: 'pointer',
                 color: tokens.colors.text.tertiary,
                 minWidth: 44,
@@ -377,7 +589,7 @@ export default function BookmarkModal({
           </Box>
         )}
 
-        {loading ? (
+        {foldersLoading ? (
           <Text
             size="sm"
             color="tertiary"
@@ -387,7 +599,7 @@ export default function BookmarkModal({
           </Text>
         ) : loadFailed ? (
           <ErrorState title={t('loadBookmarksFailed')} retry={loadFolders} variant="compact" />
-        ) : folders.length === 0 ? (
+        ) : visibleFolders.length === 0 ? (
           <Text
             size="sm"
             color="tertiary"
@@ -397,100 +609,98 @@ export default function BookmarkModal({
           </Text>
         ) : (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-            {folders
-              .filter((folder) => folder && folder.id && folder.name)
-              .map((folder) => (
+            {visibleFolders.map((folder) => (
+              <Box
+                key={folder.id}
+                role="button"
+                tabIndex={0}
+                aria-label={folder.name}
+                onClick={() => handleSelectFolder(folder.id)}
+                onKeyDown={(e: React.KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleSelectFolder(folder.id)
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[3],
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  cursor: 'pointer',
+                  transition: `background ${tokens.transition.base}`,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = tokens.colors.bg.secondary
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                }}
+              >
                 <Box
-                  key={folder.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={folder.name}
-                  onClick={() => handleSelectFolder(folder.id)}
-                  onKeyDown={(e: React.KeyboardEvent) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      handleSelectFolder(folder.id)
-                    }
-                  }}
                   style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: tokens.radius.md,
+                    backgroundColor: folder?.avatar_url
+                      ? undefined
+                      : getDefaultAvatar(folder?.name || ''),
+                    backgroundImage: folder?.avatar_url ? `url(${folder.avatar_url})` : undefined,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: tokens.spacing[3],
-                    padding: tokens.spacing[3],
-                    borderRadius: tokens.radius.md,
-                    cursor: 'pointer',
-                    transition: `background ${tokens.transition.base}`,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.secondary
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent'
+                    justifyContent: 'center',
+                    flexShrink: 0,
                   }}
                 >
-                  <Box
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: tokens.radius.md,
-                      backgroundColor: folder?.avatar_url
-                        ? undefined
-                        : getDefaultAvatar(folder?.name || ''),
-                      backgroundImage: folder?.avatar_url ? `url(${folder.avatar_url})` : undefined,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {!folder?.avatar_url && folder?.name && (
-                      <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
-                        {folder.name.charAt(0)}
-                      </Text>
+                  {!folder?.avatar_url && folder?.name && (
+                    <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
+                      {folder.name.charAt(0)}
+                    </Text>
+                  )}
+                </Box>
+
+                <Box style={{ flex: 1 }}>
+                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                    <Text size="sm" weight="semibold">
+                      {folder.name}
+                    </Text>
+                    {folder.is_default && (
+                      <span
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          padding: '2px 6px',
+                          background: tokens.colors.accent?.primary + '20',
+                          color: tokens.colors.accent?.primary,
+                          borderRadius: tokens.radius.sm,
+                        }}
+                      >
+                        {t('defaultLabel')}
+                      </span>
+                    )}
+                    {folder.is_public && (
+                      <span
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          padding: '2px 6px',
+                          background: 'var(--color-accent-success-20)',
+                          color: 'var(--color-accent-success)',
+                          borderRadius: tokens.radius.sm,
+                        }}
+                      >
+                        {t('publicLabel')}
+                      </span>
                     )}
                   </Box>
-
-                  <Box style={{ flex: 1 }}>
-                    <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                      <Text size="sm" weight="semibold">
-                        {folder.name}
-                      </Text>
-                      {folder.is_default && (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            padding: '2px 6px',
-                            background: tokens.colors.accent?.primary + '20',
-                            color: tokens.colors.accent?.primary,
-                            borderRadius: tokens.radius.sm,
-                          }}
-                        >
-                          {t('defaultLabel')}
-                        </span>
-                      )}
-                      {folder.is_public && (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            padding: '2px 6px',
-                            background: 'var(--color-accent-success-20)',
-                            color: 'var(--color-accent-success)',
-                            borderRadius: tokens.radius.sm,
-                          }}
-                        >
-                          {t('publicLabel')}
-                        </span>
-                      )}
-                    </Box>
-                    <Text size="xs" color="tertiary">
-                      {t('bookmarkItems').replace('{count}', String(folder.post_count || 0))}
-                    </Text>
-                  </Box>
+                  <Text size="xs" color="tertiary">
+                    {t('bookmarkItems').replace('{count}', String(folder.post_count || 0))}
+                  </Text>
                 </Box>
-              ))}
+              </Box>
+            ))}
           </Box>
         )}
       </Box>
