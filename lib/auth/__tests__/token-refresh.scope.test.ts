@@ -397,6 +397,33 @@ describe('TokenRefreshCoordinator viewer binding', () => {
     expect(mockGetSession).not.toHaveBeenCalled()
   })
 
+  it.each([null, { id: 'user-b', email: 'user-b@example.test' }])(
+    'rejects a successful auth update without an exact viewer acknowledgement: %p',
+    async (acknowledgedUser) => {
+      await seedStoredSession('user-a', 'token-a1')
+      const scope = synchronizeViewerScope(true, 'user-a')
+      const publishedStates: Array<{ userId: string | null; accessToken: string | null }> = []
+      registerAuthStateSetter((state) => {
+        publishedStates.push({ userId: state.userId, accessToken: state.accessToken })
+      })
+      mockUpdateUser.mockResolvedValueOnce({
+        data: { user: acknowledgedUser },
+        error: null,
+      })
+
+      await expect(
+        tokenRefreshCoordinator.updateUserWithSession(
+          { password: 'correct-horse-battery-staple' },
+          { expectedUserId: 'user-a', sessionGeneration: scope.sessionGeneration }
+        )
+      ).resolves.toMatchObject({
+        data: { user: null, session: null },
+        error: { code: 'auth_update_unacknowledged' },
+      })
+      expect(publishedStates).toEqual([])
+    }
+  )
+
   it('does not send an initial request whose captured A scope is already stale', async () => {
     const scope = synchronizeViewerScope(true, 'user-a')
     beginViewerTransition('user-b')

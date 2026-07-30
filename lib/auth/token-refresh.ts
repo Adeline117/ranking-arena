@@ -178,6 +178,17 @@ function staleUpdateUserWithSessionResult(): UpdateUserWithSessionResult {
   }
 }
 
+function unacknowledgedUpdateUserWithSessionResult(): UpdateUserWithSessionResult {
+  return {
+    data: { user: null, session: null },
+    error: new AuthError(
+      'Authentication update was not acknowledged',
+      502,
+      'auth_update_unacknowledged'
+    ),
+  }
+}
+
 /**
  * Core coordinator: ensures only ONE refresh is in-flight at a time.
  * All concurrent callers receive the same promise result.
@@ -596,6 +607,9 @@ class TokenRefreshCoordinator {
       )
       if (result.error) {
         return { data: { user: result.data.user, session: null }, error: result.error }
+      }
+      if (!result.data.user || result.data.user.id !== viewer.userId) {
+        return unacknowledgedUpdateUserWithSessionResult()
       }
       if (!isViewerScopeCurrent(viewer) || !isAuthOperationCurrent(operation)) {
         return staleUpdateUserWithSessionResult()
