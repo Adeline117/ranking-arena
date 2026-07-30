@@ -258,7 +258,7 @@ describe('channel membership server boundary migration', () => {
       join(process.cwd(), 'app/api/channels/[channelId]/messages/[messageId]/react/route.ts'),
       'utf8'
     )
-    expect(reactionRoute).toContain("'toggle_channel_message_reaction_atomic'")
+    expect(reactionRoute).toContain("'toggle_channel_message_reaction_idempotent'")
     expect(reactionRoute).not.toMatch(
       /\.from\(\s*['"](?:channel_members|channel_messages|channel_message_reactions)['"]\s*\)/
     )

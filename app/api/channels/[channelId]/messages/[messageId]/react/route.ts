@@ -1,7 +1,8 @@
 /**
  * Channel Message Emoji Reactions API
  * POST /api/channels/[channelId]/messages/[messageId]/react - Toggle an emoji
- * reaction on a group channel message.
+ * reaction on a group channel message. A durable operation ID makes an
+ * uncertain transport replay return the original toggle acknowledgement.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -24,6 +25,7 @@ const reactionFailureReasons = new Set([
   'CHANNEL_NOT_GROUP',
   'MEMBERSHIP_NOT_FOUND',
   'MESSAGE_NOT_FOUND',
+  'OPERATION_CONFLICT',
 ])
 
 type ReactionAction = 'added' | 'removed'
@@ -31,6 +33,7 @@ type ReactionAction = 'added' | 'removed'
 type ToggleReactionAcknowledgement =
   | {
       success: true
+      operationId: string
       actorId: string
       channelId: string
       messageId: string
@@ -41,12 +44,17 @@ type ToggleReactionAcknowledgement =
       userEmojis: string[]
       messageAuthorId: string
       messagePreview: string
+      applied: boolean
     }
   | { success: false; reason: string }
 
 function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
   const actual = Object.keys(value).sort()
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+  const sortedExpected = [...expected].sort()
+  return (
+    actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index])
+  )
 }
 
 function readReactionCounts(value: unknown): Record<string, number> | null {
@@ -81,6 +89,7 @@ function readToggleReactionAcknowledgement(value: unknown): ToggleReactionAcknow
     result.success !== true ||
     !hasExactKeys(result, [
       'action',
+      'applied',
       'actor_id',
       'changed',
       'channel_id',
@@ -89,11 +98,13 @@ function readToggleReactionAcknowledgement(value: unknown): ToggleReactionAcknow
       'message_author_id',
       'message_id',
       'message_preview',
+      'operation_id',
       'reaction_id',
       'success',
       'user_emojis',
     ]) ||
     result.changed !== true ||
+    typeof result.applied !== 'boolean' ||
     (result.action !== 'added' && result.action !== 'removed') ||
     typeof result.emoji !== 'string' ||
     !channelMessageReactionEmojis.includes(
@@ -106,12 +117,14 @@ function readToggleReactionAcknowledgement(value: unknown): ToggleReactionAcknow
   }
 
   const actorId = channelIdSchema.safeParse(result.actor_id)
+  const operationId = channelIdSchema.safeParse(result.operation_id)
   const channelId = channelIdSchema.safeParse(result.channel_id)
   const messageId = channelIdSchema.safeParse(result.message_id)
   const reactionId = channelIdSchema.safeParse(result.reaction_id)
   const messageAuthorId = channelIdSchema.safeParse(result.message_author_id)
   const counts = readReactionCounts(result.counts)
   if (
+    !operationId.success ||
     !actorId.success ||
     !channelId.success ||
     !messageId.success ||
@@ -138,6 +151,7 @@ function readToggleReactionAcknowledgement(value: unknown): ToggleReactionAcknow
 
   return {
     success: true,
+    operationId: operationId.data,
     actorId: actorId.data,
     channelId: channelId.data,
     messageId: messageId.data,
@@ -148,6 +162,7 @@ function readToggleReactionAcknowledgement(value: unknown): ToggleReactionAcknow
     userEmojis,
     messageAuthorId: messageAuthorId.data,
     messagePreview: result.message_preview,
+    applied: result.applied,
   }
 }
 
@@ -179,15 +194,17 @@ export async function POST(
     }
     const parsedBody = toggleChannelMessageReactionInputSchema.safeParse(rawBody)
     if (!parsedBody.success) {
-      return NextResponse.json({ error: 'Invalid emoji' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid reaction request' }, { status: 400 })
     }
 
     const channelId = parsedChannelId.data
     const messageId = parsedMessageId.data
     const actorId = user.id.toLowerCase()
+    const operationId = parsedBody.data.operation_id
     const emoji = parsedBody.data.emoji
     const supabase = getSupabaseAdmin()
-    const { data, error } = await supabase.rpc('toggle_channel_message_reaction_atomic', {
+    const { data, error } = await supabase.rpc('toggle_channel_message_reaction_idempotent', {
+      p_operation_id: operationId,
       p_channel_id: channelId,
       p_message_id: messageId,
       p_actor_id: actorId,
@@ -208,7 +225,7 @@ export async function POST(
     if (!acknowledgement.success) {
       switch (acknowledgement.reason) {
         case 'INVALID':
-          return NextResponse.json({ error: 'Invalid emoji' }, { status: 400 })
+          return NextResponse.json({ error: 'Invalid reaction request' }, { status: 400 })
         case 'ACTOR_UNAVAILABLE':
           return NextResponse.json({ error: 'Account cannot react' }, { status: 403 })
         case 'CHANNEL_NOT_FOUND':
@@ -222,6 +239,11 @@ export async function POST(
           return NextResponse.json({ error: 'Not a member' }, { status: 403 })
         case 'MESSAGE_NOT_FOUND':
           return NextResponse.json({ error: 'Message not found' }, { status: 404 })
+        case 'OPERATION_CONFLICT':
+          return NextResponse.json(
+            { error: 'Operation id conflicts with another request' },
+            { status: 409 }
+          )
         default:
           logger.error('Atomic channel reaction toggle returned an unknown denial')
           return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
@@ -230,6 +252,7 @@ export async function POST(
 
     if (
       acknowledgement.actorId !== actorId ||
+      acknowledgement.operationId !== operationId ||
       acknowledgement.channelId !== channelId ||
       acknowledgement.messageId !== messageId ||
       acknowledgement.emoji !== emoji ||
@@ -242,7 +265,11 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
     }
 
-    if (acknowledgement.action === 'added' && acknowledgement.messageAuthorId !== actorId) {
+    if (
+      acknowledgement.applied &&
+      acknowledgement.action === 'added' &&
+      acknowledgement.messageAuthorId !== actorId
+    ) {
       fireAndForget(
         getUserHandle(actorId, user.email ?? undefined).then((handle) => {
           sendNotification(
@@ -269,10 +296,15 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      action: acknowledgement.action,
-      emoji,
-      counts: acknowledgement.counts,
-      userEmojis: acknowledgement.userEmojis,
+      data: {
+        operationId,
+        messageId,
+        action: acknowledgement.action,
+        emoji,
+        counts: acknowledgement.counts,
+        userEmojis: acknowledgement.userEmojis,
+        replayed: !acknowledgement.applied,
+      },
     })
   } catch (error) {
     logger.error('REACT failed', {

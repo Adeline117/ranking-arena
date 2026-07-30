@@ -933,6 +933,36 @@ export type Database = {
           },
         ]
       }
+      channel_message_reaction_operations: {
+        Row: {
+          actor_id: string
+          channel_id: string
+          created_at: string
+          intent_fingerprint: string
+          message_id: string
+          operation_id: string
+          result: Json
+        }
+        Insert: {
+          actor_id: string
+          channel_id: string
+          created_at?: string
+          intent_fingerprint: string
+          message_id: string
+          operation_id: string
+          result: Json
+        }
+        Update: {
+          actor_id?: string
+          channel_id?: string
+          created_at?: string
+          intent_fingerprint?: string
+          message_id?: string
+          operation_id?: string
+          result?: Json
+        }
+        Relationships: []
+      }
       channel_message_reactions: {
         Row: {
           created_at: string | null
@@ -13380,6 +13410,16 @@ export type Database = {
           p_channel_id: string
           p_emoji: string
           p_message_id: string
+        }
+        Returns: Json
+      }
+      toggle_channel_message_reaction_idempotent: {
+        Args: {
+          p_actor_id: string
+          p_channel_id: string
+          p_emoji: string
+          p_message_id: string
+          p_operation_id: string
         }
         Returns: Json
       }

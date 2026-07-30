@@ -21,6 +21,8 @@ import type {
   MessageReaction,
   ReplyPreview,
 } from '@/app/(app)/messages/[conversationId]/components/types'
+import { ChannelMessageReactionOperationLedger } from './channel-message-reaction-operation'
+import { readChannelMessageReactionAcknowledgement } from './channel-message-reaction-client'
 
 type ChannelMessage = {
   id: string
@@ -95,6 +97,16 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   const reactionRowMapRef = useRef<
     Map<string, { messageId: string; emoji: string; userId: string }>
   >(new Map())
+  const reactionOperationsRef = useRef(new ChannelMessageReactionOperationLedger())
+  // One in-flight mutation per message prevents two distinct emoji responses
+  // from overwriting each other's full aggregate acknowledgement out of order.
+  const reactionInFlightRef = useRef<Set<string>>(new Set())
+  const messagesRef = useRef(messages)
+  const userIdRef = useRef(userId)
+  const channelIdRef = useRef(channelId)
+  messagesRef.current = messages
+  userIdRef.current = userId
+  channelIdRef.current = channelId
 
   const memberIds = members.map((m) => m.user_id)
   const { getUserPresence } = usePresence(
@@ -273,58 +285,118 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   // Toggle an emoji reaction — delta-based optimistic update + rollback.
   const handleToggleReaction = useCallback(
     async (messageId: string, emoji: string) => {
-      if (!userId || !accessToken || !channelId) return
+      if (!userId || !accessToken || !channelId || !DM_REACTION_EMOJIS.includes(emoji)) {
+        return
+      }
       setCtxMenu(null)
 
-      let wasMine = false
-      setMessages((prev) =>
-        prev.map((m) => {
-          if (m.id !== messageId) return m
-          wasMine = !!m.reactions?.find((r) => r.emoji === emoji)?.mine
-          return {
-            ...m,
-            reactions: applyReactionDelta(m.reactions, emoji, wasMine ? -1 : 1, !wasMine),
-          }
-        })
-      )
+      const actorId = userId
+      const operationChannelId = channelId
+      const operationAccessToken = accessToken
+      const target = messagesRef.current.find((message) => message.id === messageId)
+      if (!target) return
+
+      const inFlightKey = `${actorId}\u0000${operationChannelId}\u0000${messageId}`
+      if (reactionInFlightRef.current.has(inFlightKey)) return
+      reactionInFlightRef.current.add(inFlightKey)
+
+      const isCurrent = () =>
+        mountedRef.current &&
+        userIdRef.current === actorId &&
+        channelIdRef.current === operationChannelId
+      const wasMine = !!target.reactions?.find((reaction) => reaction.emoji === emoji)?.mine
+      let optimisticApplied = false
 
       try {
+        const acquired = await reactionOperationsRef.current.acquire({
+          actorId,
+          channelId: operationChannelId,
+          messageId,
+          emoji,
+        })
+        const reactionRequest = acquired.operation
+        if (!isCurrent()) return
+
+        // A reused ID is an uncertain transport replay, not a second user
+        // toggle. Wait for the durable acknowledgement without flipping twice.
+        if (!acquired.reused) {
+          optimisticApplied = true
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === messageId
+                ? {
+                    ...message,
+                    reactions: applyReactionDelta(
+                      message.reactions,
+                      emoji,
+                      wasMine ? -1 : 1,
+                      !wasMine
+                    ),
+                  }
+                : message
+            )
+          )
+        }
+
         const res = await globalThis.fetch(
-          `/api/channels/${channelId}/messages/${messageId}/react`,
+          `/api/channels/${operationChannelId}/messages/${messageId}/react`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
+              Authorization: `Bearer ${operationAccessToken}`,
               ...getCsrfHeaders(),
             },
-            body: JSON.stringify({ emoji }),
+            body: JSON.stringify({ emoji, operation_id: reactionRequest.operationId }),
           }
         )
-        const data = await res.json()
-        if (res.ok && data.success) {
-          const counts = (data.counts || {}) as Record<string, number>
-          const userEmojis = new Set((data.userEmojis || []) as string[])
-          const reactions: MessageReaction[] = Object.entries(counts)
-            .filter(([, c]) => c > 0)
-            .map(([e, c]) => ({ emoji: e, count: c, mine: userEmojis.has(e) }))
-          setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, reactions } : m)))
-        } else {
-          throw new Error('react failed')
-        }
-      } catch {
-        // Rollback the optimistic delta
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === messageId
-              ? {
-                  ...m,
-                  reactions: applyReactionDelta(m.reactions, emoji, wasMine ? 1 : -1, wasMine),
-                }
-              : m
+        const data: unknown = await res.json().catch(() => null)
+        if (!isCurrent()) return
+
+        const reactions = res.ok
+          ? readChannelMessageReactionAcknowledgement(data, {
+              emoji,
+              messageId,
+              operationId: reactionRequest.operationId,
+            })
+          : null
+        if (reactions) {
+          reactionOperationsRef.current.complete(reactionRequest)
+          setMessages((prev) =>
+            prev.map((message) => (message.id === messageId ? { ...message, reactions } : message))
           )
-        )
+          return
+        }
+
+        // A 4xx is a definitive denial. A 5xx or malformed success may have
+        // committed, so retain the same operation ID for a safe replay.
+        if (!res.ok && res.status >= 400 && res.status < 500) {
+          reactionOperationsRef.current.complete(reactionRequest)
+        }
+        throw new Error('react failed')
+      } catch {
+        if (!isCurrent()) return
+        // Rollback the optimistic delta
+        if (optimisticApplied) {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === messageId
+                ? {
+                    ...message,
+                    reactions: applyReactionDelta(
+                      message.reactions,
+                      emoji,
+                      wasMine ? 1 : -1,
+                      wasMine
+                    ),
+                  }
+                : message
+            )
+          )
+        }
         showToast(t('operationFailed'), 'error')
+      } finally {
+        reactionInFlightRef.current.delete(inFlightKey)
       }
     },
     [userId, accessToken, channelId, showToast] // eslint-disable-line react-hooks/exhaustive-deps -- t is stable

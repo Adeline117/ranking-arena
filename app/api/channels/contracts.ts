@@ -122,6 +122,7 @@ export const channelMessageReactionEmojis = [
 
 export const toggleChannelMessageReactionInputSchema = z
   .object({
+    operation_id: channelIdSchema,
     emoji: z.enum(channelMessageReactionEmojis),
   })
   .strict()

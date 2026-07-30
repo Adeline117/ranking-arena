@@ -53,6 +53,7 @@ const messageAuthorId = '22222222-2222-4222-8222-222222222222'
 const channelId = '33333333-3333-4333-8333-333333333333'
 const messageId = '44444444-4444-4444-8444-444444444444'
 const reactionId = '55555555-5555-4555-8555-555555555555'
+const operationId = '66666666-6666-4666-8666-666666666666'
 
 function context(channel = channelId, message = messageId) {
   return { params: Promise.resolve({ channelId: channel, messageId: message }) }
@@ -66,9 +67,14 @@ function request(body: unknown, malformed = false) {
   } as never
 }
 
+function validBody(emoji: '🔥' | '👍' = '🔥') {
+  return { operation_id: operationId, emoji }
+}
+
 function acknowledgement(
   overrides: Partial<{
     action: unknown
+    applied: unknown
     actor_id: unknown
     changed: unknown
     channel_id: unknown
@@ -77,6 +83,7 @@ function acknowledgement(
     message_author_id: unknown
     message_id: unknown
     message_preview: unknown
+    operation_id: unknown
     reaction_id: unknown
     success: unknown
     user_emojis: unknown
@@ -84,12 +91,14 @@ function acknowledgement(
 ) {
   return {
     success: true,
+    operation_id: operationId,
     actor_id: actorId,
     channel_id: channelId,
     message_id: messageId,
     reaction_id: reactionId,
     emoji: '🔥',
     action: 'added',
+    applied: true,
     changed: true,
     counts: { '👍': 1, '🔥': 2 },
     user_emojis: ['🔥'],
@@ -121,7 +130,7 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
 
   it('accepts exact added evidence and notifies the DB-bound message author', async () => {
     const response = await POST(
-      request({ emoji: '🔥' }),
+      request(validBody()),
       context(channelId.toUpperCase(), messageId.toUpperCase())
     )
     await Promise.resolve()
@@ -130,13 +139,19 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       success: true,
-      action: 'added',
-      emoji: '🔥',
-      counts: { '👍': 1, '🔥': 2 },
-      userEmojis: ['🔥'],
+      data: {
+        operationId,
+        messageId,
+        action: 'added',
+        emoji: '🔥',
+        counts: { '👍': 1, '🔥': 2 },
+        userEmojis: ['🔥'],
+        replayed: false,
+      },
     })
     expect(mockRpc).toHaveBeenCalledTimes(1)
-    expect(mockRpc).toHaveBeenCalledWith('toggle_channel_message_reaction_atomic', {
+    expect(mockRpc).toHaveBeenCalledWith('toggle_channel_message_reaction_idempotent', {
+      p_operation_id: operationId,
       p_channel_id: channelId,
       p_message_id: messageId,
       p_actor_id: actorId,
@@ -169,15 +184,20 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
       })
     )
 
-    const response = await POST(request({ emoji: '🔥' }), context())
+    const response = await POST(request(validBody()), context())
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       success: true,
-      action: 'removed',
-      emoji: '🔥',
-      counts: { '👍': 1 },
-      userEmojis: [],
+      data: {
+        operationId,
+        messageId,
+        action: 'removed',
+        emoji: '🔥',
+        counts: { '👍': 1 },
+        userEmojis: [],
+        replayed: false,
+      },
     })
     expect(mockGetUserHandle).not.toHaveBeenCalled()
     expect(mockFireAndForget).not.toHaveBeenCalled()
@@ -192,7 +212,7 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
       })
     )
 
-    const response = await POST(request({ emoji: '👍' }), context())
+    const response = await POST(request(validBody('👍')), context())
     await Promise.resolve()
     await Promise.resolve()
 
@@ -206,10 +226,24 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
     )
   })
 
+  it('returns a replay acknowledgement without emitting the side effect again', async () => {
+    rpcResult(acknowledgement({ applied: false }))
+
+    const response = await POST(request(validBody()), context())
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { operationId, action: 'added', replayed: true },
+    })
+    expect(mockGetUserHandle).not.toHaveBeenCalled()
+    expect(mockFireAndForget).not.toHaveBeenCalled()
+  })
+
   it('requires authentication before parsing input or calling the RPC', async () => {
     mockGetAuthUser.mockResolvedValue(null)
 
-    const response = await POST(request({ emoji: '🔥' }), context())
+    const response = await POST(request(validBody()), context())
 
     expect(response.status).toBe(401)
     expect(mockRpc).not.toHaveBeenCalled()
@@ -219,7 +253,7 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
     ['bad-channel', messageId],
     [channelId, 'bad-message'],
   ])('rejects invalid resource ids before the RPC %#', async (channel, message) => {
-    const response = await POST(request({ emoji: '🔥' }), context(channel, message))
+    const response = await POST(request(validBody()), context(channel, message))
 
     expect(response.status).toBe(400)
     expect(mockRpc).not.toHaveBeenCalled()
@@ -233,28 +267,33 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  it.each([{}, { emoji: '💣' }, { emoji: '🔥', extra: true }, { emoji: 1 }])(
-    'rejects invalid emoji input before the atomic RPC %#',
-    async (body) => {
-      const response = await POST(request(body), context())
+  it.each([
+    {},
+    { emoji: '🔥' },
+    { operation_id: 'not-a-uuid', emoji: '🔥' },
+    { operation_id: operationId, emoji: '💣' },
+    { ...validBody(), extra: true },
+    { operation_id: operationId, emoji: 1 },
+  ])('rejects invalid reaction input before the atomic RPC %#', async (body) => {
+    const response = await POST(request(body), context())
 
-      expect(response.status).toBe(400)
-      await expect(response.json()).resolves.toEqual({ error: 'Invalid emoji' })
-      expect(mockRpc).not.toHaveBeenCalled()
-    }
-  )
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid reaction request' })
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
 
   it.each([
-    ['INVALID', 400, 'Invalid emoji'],
+    ['INVALID', 400, 'Invalid reaction request'],
     ['ACTOR_UNAVAILABLE', 403, 'Account cannot react'],
     ['CHANNEL_NOT_FOUND', 404, 'Channel not found'],
     ['CHANNEL_NOT_GROUP', 400, 'Channel does not support group reactions'],
     ['MEMBERSHIP_NOT_FOUND', 403, 'Not a member'],
     ['MESSAGE_NOT_FOUND', 404, 'Message not found'],
+    ['OPERATION_CONFLICT', 409, 'Operation id conflicts with another request'],
   ])('maps the exact %s denial without a fallback write', async (reason, status, error) => {
     rpcResult({ success: false, reason })
 
-    const response = await POST(request({ emoji: '🔥' }), context())
+    const response = await POST(request(validBody()), context())
 
     expect(response.status).toBe(status)
     await expect(response.json()).resolves.toEqual({ error })
@@ -264,7 +303,7 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
   it('fails closed when the atomic RPC errors', async () => {
     rpcResult(null, { message: 'serialization failure' })
 
-    const response = await POST(request({ emoji: '🔥' }), context())
+    const response = await POST(request(validBody()), context())
 
     expect(response.status).toBe(500)
     expect(mockLoggerError).toHaveBeenCalledWith('Atomic channel reaction toggle failed', {
@@ -278,6 +317,7 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
     { success: false, reason: 'UNKNOWN' },
     { success: false, reason: 'MESSAGE_NOT_FOUND', extra: true },
     acknowledgement({ changed: false }),
+    acknowledgement({ applied: 'true' }),
     acknowledgement({ action: 'changed' }),
     acknowledgement({ emoji: '💣' }),
     acknowledgement({ actor_id: 'not-a-uuid' }),
@@ -286,6 +326,7 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
     acknowledgement({ reaction_id: 'not-a-uuid' }),
     acknowledgement({ message_author_id: 'not-a-uuid' }),
     acknowledgement({ message_preview: null }),
+    acknowledgement({ operation_id: 'not-a-uuid' }),
     acknowledgement({ counts: null }),
     acknowledgement({ counts: { '🔥': 0 } }),
     acknowledgement({ counts: { '🔥': 1.5 } }),
@@ -295,7 +336,7 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
   ])('rejects malformed or non-exact RPC acknowledgements %#', async (ack) => {
     rpcResult(ack)
 
-    const response = await POST(request({ emoji: '🔥' }), context())
+    const response = await POST(request(validBody()), context())
 
     expect(response.status).toBe(500)
     expect(mockLoggerError).toHaveBeenCalledWith(
@@ -305,6 +346,7 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
 
   it.each([
     acknowledgement({ actor_id: messageAuthorId }),
+    acknowledgement({ operation_id: messageAuthorId }),
     acknowledgement({ channel_id: messageAuthorId }),
     acknowledgement({ message_id: messageAuthorId }),
     acknowledgement({ emoji: '👍', counts: { '👍': 1 }, user_emojis: ['👍'] }),
@@ -313,7 +355,7 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
   ])('rejects well-shaped evidence bound to the wrong request %#', async (ack) => {
     rpcResult(ack)
 
-    const response = await POST(request({ emoji: '🔥' }), context())
+    const response = await POST(request(validBody()), context())
 
     expect(response.status).toBe(500)
     expect(mockLoggerError).toHaveBeenCalledWith(
