@@ -131,3 +131,27 @@ export interface Trader {
    *  (vs scraped "Tracked"). Drives the ✓ Verified badge. */
   is_verified_data?: boolean
 }
+
+export type PublishedRankTrader = Trader & { rank: number }
+
+/**
+ * A ranking UI may display only the persisted publication authority's rank.
+ * Array position, filtered position, and page offsets are never rank evidence.
+ */
+export function hasPublishedTraderRank(trader: Trader): trader is PublishedRankTrader {
+  return Number.isSafeInteger(trader.rank) && Number(trader.rank) > 0
+}
+
+export function selectPublishedRankTraders(traders: readonly Trader[]): PublishedRankTrader[] {
+  return traders.filter(hasPublishedTraderRank)
+}
+
+export function selectTopPublishedRankTraders(
+  traders: readonly Trader[],
+  limit = 3
+): PublishedRankTrader[] {
+  if (!Number.isSafeInteger(limit) || limit <= 0) return []
+  return selectPublishedRankTraders(traders)
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, limit)
+}
