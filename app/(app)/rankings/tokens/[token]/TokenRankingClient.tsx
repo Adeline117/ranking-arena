@@ -34,7 +34,8 @@ export interface TokenTrader {
   avatar_url: string | null
   arena_score: number | null
   roi: number | null
-  total_pnl: number
+  total_pnl: number | null
+  token_rank: number
   token_pnl: number
   token_trade_count: number
   token_win_rate: number | null
@@ -57,6 +58,57 @@ type RequestState = {
 
 function rankingPageKey(token: string, period: Period, page: number): string {
   return `${token}:${period}:${page}`
+}
+
+function rankBelongsToPage(rank: number, total: number, pageIndex: number): boolean {
+  const firstRank = pageIndex * PAGE_SIZE + 1
+  const lastRank = Math.min(firstRank + PAGE_SIZE - 1, total)
+  return rank >= firstRank && rank <= lastRank
+}
+
+function finiteNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function safeIntegerOrNull(value: unknown, minimum: number): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum ? value : null
+}
+
+function normalizeTokenTrader(value: unknown): TokenTrader | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const trader = value as Record<string, unknown>
+  const tokenRank = safeIntegerOrNull(trader.token_rank, 1)
+  const tokenPnl = finiteNumberOrNull(trader.token_pnl)
+  const tokenTradeCount = safeIntegerOrNull(trader.token_trade_count, 0)
+  if (
+    typeof trader.source !== 'string' ||
+    trader.source.trim().length === 0 ||
+    typeof trader.source_trader_id !== 'string' ||
+    trader.source_trader_id.trim().length === 0 ||
+    tokenRank === null ||
+    tokenPnl === null ||
+    tokenTradeCount === null
+  ) {
+    return null
+  }
+
+  const arenaScore = finiteNumberOrNull(trader.arena_score)
+  const tokenWinRate = finiteNumberOrNull(trader.token_win_rate)
+  return {
+    source: trader.source,
+    source_trader_id: trader.source_trader_id,
+    handle: typeof trader.handle === 'string' && trader.handle.length > 0 ? trader.handle : null,
+    avatar_url: typeof trader.avatar_url === 'string' ? trader.avatar_url : null,
+    arena_score: arenaScore !== null && arenaScore >= 0 && arenaScore <= 100 ? arenaScore : null,
+    roi: finiteNumberOrNull(trader.roi),
+    total_pnl: finiteNumberOrNull(trader.total_pnl),
+    token_rank: tokenRank,
+    token_pnl: tokenPnl,
+    token_trade_count: tokenTradeCount,
+    token_win_rate:
+      tokenWinRate !== null && tokenWinRate >= 0 && tokenWinRate <= 100 ? tokenWinRate : null,
+    token_avg_pnl_pct: finiteNumberOrNull(trader.token_avg_pnl_pct),
+  }
 }
 
 // Frozen rank + name (sticky-left) then six numeric columns. gap:0 so the
@@ -271,7 +323,7 @@ export default function TokenRankingClient({
   initialTraders: TokenTrader[]
   initialTotal: number
   initialStatus?: 'success' | 'error'
-  asOf: string
+  asOf: string | null
 }) {
   const { t } = useLanguage()
   const router = useRouter()
@@ -287,9 +339,21 @@ export default function TokenRankingClient({
   const [pages, setPages] = useState<Map<string, RankingPageData>>(() => {
     const initialPages = new Map<string, RankingPageData>()
     if (initialStatus === 'success') {
+      const total = safeIntegerOrNull(initialTotal, 0) ?? 0
+      const seenRanks = new Set<number>()
+      const seenIdentities = new Set<string>()
+      const traders = initialTraders.flatMap((value) => {
+        const trader = normalizeTokenTrader(value)
+        if (!trader || !rankBelongsToPage(trader.token_rank, total, 0)) return []
+        const identity = `${trader.source}:${trader.source_trader_id}`
+        if (seenRanks.has(trader.token_rank) || seenIdentities.has(identity)) return []
+        seenRanks.add(trader.token_rank)
+        seenIdentities.add(identity)
+        return [trader]
+      })
       initialPages.set(rankingPageKey(token, initialPeriod, 0), {
-        traders: initialTraders,
-        total: initialTotal,
+        traders,
+        total,
       })
     }
     return initialPages
@@ -354,16 +418,42 @@ export default function TokenRankingClient({
           (data as { token?: unknown }).token !== token ||
           (data as { period?: unknown }).period !== p ||
           !Array.isArray((data as { traders?: unknown }).traders) ||
-          typeof (data as { total?: unknown }).total !== 'number'
+          safeIntegerOrNull((data as { total?: unknown }).total, 0) === null
         ) {
           throw new Error('Token rankings response did not match the requested page')
         }
         if (abortRef.current !== controller || controller.signal.aborted) return
 
+        const responseTotal = safeIntegerOrNull((data as { total: unknown }).total, 0)
+        if (responseTotal === null) {
+          throw new Error('Token rankings response contained an invalid total')
+        }
+        const responseTraders = (data as { traders: unknown[] }).traders
+        const normalizedTraders = responseTraders.map(normalizeTokenTrader)
+        if (normalizedTraders.some((trader) => trader === null)) {
+          throw new Error('Token rankings response contained an ineligible ranked row')
+        }
+        const seenRanks = new Set<number>()
+        const seenIdentities = new Set<string>()
+        const authoritativeTraders: TokenTrader[] = []
+        for (const trader of normalizedTraders) {
+          if (!trader) continue
+          if (!rankBelongsToPage(trader.token_rank, responseTotal, pageIndex)) {
+            throw new Error('Token rankings response contained rank outside its requested page')
+          }
+          const identity = `${trader.source}:${trader.source_trader_id}`
+          if (seenRanks.has(trader.token_rank) || seenIdentities.has(identity)) {
+            throw new Error('Token rankings response contained duplicate rank authority')
+          }
+          seenRanks.add(trader.token_rank)
+          seenIdentities.add(identity)
+          authoritativeTraders.push(trader)
+        }
+
         const nextPages = new Map(pagesRef.current)
         nextPages.set(key, {
-          traders: (data as { traders: TokenTrader[] }).traders,
-          total: (data as { total: number }).total,
+          traders: authoritativeTraders,
+          total: responseTotal,
         })
         pagesRef.current = nextPages
         setPages(nextPages)
@@ -416,24 +506,21 @@ export default function TokenRankingClient({
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
-  // Attach the server (token-PnL) rank BEFORE display sorting so medals + the #
-  // column always reflect the leaderboard position, not the transient sort.
-  const ranked = useMemo(
-    () => traders.map((tr, i) => ({ ...tr, _rank: page * PAGE_SIZE + i + 1 })),
-    [traders, page]
-  )
-
   const displayed = useMemo(() => {
-    const arr = [...ranked]
+    const arr = [...traders]
     arr.sort((a, b) => {
       const av = a[sortKey]
       const bv = b[sortKey]
-      const an = av == null ? Number.NEGATIVE_INFINITY : (av as number)
-      const bn = bv == null ? Number.NEGATIVE_INFINITY : (bv as number)
-      return sortDir === 'desc' ? bn - an : an - bn
+      const an = finiteNumberOrNull(av)
+      const bn = finiteNumberOrNull(bv)
+      if (an === null && bn === null) return a.token_rank - b.token_rank
+      if (an === null) return 1
+      if (bn === null) return -1
+      const comparison = sortDir === 'desc' ? bn - an : an - bn
+      return comparison || a.token_rank - b.token_rank
     })
     return arr
-  }, [ranked, sortKey, sortDir])
+  }, [traders, sortKey, sortDir])
 
   const numCols: { key: SortKey; label: string }[] = [
     { key: 'token_pnl', label: `${token} PnL` },
@@ -617,7 +704,7 @@ export default function TokenRankingClient({
                       </div>
                     ))
                   : displayed.map((trader) => {
-                      const rank = trader._rank
+                      const rank = trader.token_rank
                       const name = getDisplayName(trader)
                       const platformName = EXCHANGE_NAMES[trader.source] || trader.source
                       const medal =
@@ -646,7 +733,7 @@ export default function TokenRankingClient({
                       return (
                         <Link
                           key={`${trader.source}:${trader.source_trader_id}`}
-                          href={`/trader/${encodeURIComponent(trader.handle || trader.source_trader_id)}?platform=${trader.source}`}
+                          href={`/trader/${encodeURIComponent(trader.handle || trader.source_trader_id)}?platform=${encodeURIComponent(trader.source)}`}
                           className="token-row"
                           role="row"
                           style={{
@@ -871,7 +958,17 @@ export default function TokenRankingClient({
           </Box>
 
           {/* Provenance footer (spec §6) */}
-          <ProvenanceFooter provenance={{ source: 'arena', asOf }} exchangeName="Arena" />
+          {asOf ? (
+            <ProvenanceFooter provenance={{ source: 'arena', asOf }} exchangeName="Arena" />
+          ) : (
+            <Text
+              size="xs"
+              color="tertiary"
+              style={{ display: 'block', marginTop: tokens.spacing[2] }}
+            >
+              {t('provenanceSource')}: Arena · {t('provenanceAsOf')} {t('unknown')}
+            </Text>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (

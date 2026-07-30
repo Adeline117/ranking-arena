@@ -10596,6 +10596,7 @@ export type Database = {
           source_trader_id: string
           token_avg_pnl_pct: number
           token_pnl: number
+          token_rank: number
           token_trade_count: number
           token_win_rate: number
           total_count: number
