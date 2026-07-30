@@ -447,6 +447,62 @@ describe('LoginPageClient exact identity boundary', () => {
     expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBe(recoveryToken)
   })
 
+  it('rolls back a password session that differs from the recovered account', async () => {
+    const recoveredUserId = '11111111-1111-4111-8111-111111111111'
+    const wrongSession = session('22222222-2222-4222-8222-222222222222')
+    mockSignInWithPassword
+      .mockResolvedValueOnce({
+        data: { session: null, user: null },
+        error: { message: 'User is banned' },
+      })
+      .mockImplementationOnce(async () => {
+        makeCurrent(wrongSession)
+        return {
+          data: { session: wrongSession, user: wrongSession.user },
+          error: null,
+        }
+      })
+    mockSignOutIfCurrent.mockImplementationOnce(async () => {
+      makeAnonymous()
+      return true
+    })
+    global.fetch = jest.fn().mockResolvedValue(
+      Object.assign(
+        new Response(
+          JSON.stringify({
+            success: true,
+            user_id: recoveredUserId,
+            subscription_resumed: true,
+            billing_reactivation_required: false,
+            message: 'Account and retained data recovered successfully. You can now log in.',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        ),
+        { ok: true }
+      )
+    )
+
+    await renderLogin()
+    fireEvent.change(screen.getByPlaceholderText('you@email.com'), {
+      target: { value: 'recovered@example.test' },
+    })
+    act(() => mockLoginFormProps?.setPassword('Correct-Horse-42!'))
+    fireEvent.click(screen.getByTestId('password-login'))
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+
+    await waitFor(() =>
+      expect(mockSignOutIfCurrent).toHaveBeenCalledWith(
+        wrongSession.user.id,
+        wrongSession.access_token,
+        wrongSession.refresh_token
+      )
+    )
+    expect(await screen.findByText('loginRecoveryFailed')).toBeInTheDocument()
+    expect(mockGetUser).not.toHaveBeenCalled()
+    expect(mockProfileMaybeSingle).not.toHaveBeenCalled()
+    expect(mockPush).not.toHaveBeenCalled()
+  })
+
   it('restages the exact credential after an unknown transport outcome', async () => {
     const recoveryToken = 'A'.repeat(43)
     mockSearchParams = new URLSearchParams('recover=1')

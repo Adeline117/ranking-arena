@@ -133,6 +133,13 @@ class StaleLoginAttemptError extends Error {
   }
 }
 
+class AccountRecoveryIdentityMismatchError extends Error {
+  constructor() {
+    super('Recovered account did not match the established session')
+    this.name = 'AccountRecoveryIdentityMismatchError'
+  }
+}
+
 class MissingProvisionedProfileError extends Error {
   constructor() {
     super('Profile provisioning is incomplete')
@@ -1231,6 +1238,12 @@ export default function LoginPageClient() {
         if (loginError || !authData.session) {
           if (isSupersededAuthError(loginError)) throw new StaleLoginAttemptError()
           setError(loginError?.message || t('loginFailed'))
+        } else if (authData.session.user.id !== recoveryAcknowledgement.userId) {
+          // A successful password recovery may only establish the exact
+          // principal named by the server acknowledgement. Fail closed if a
+          // concurrent auth event or stale credential resolves to another
+          // account, then roll that exact session back in the catch path.
+          throw new AccountRecoveryIdentityMismatchError()
         } else {
           const { identity, profile } = await loadAuthenticatedSession(attempt, authData.session)
           commitLogin(attempt, identity, profile, { track: true })
@@ -1253,11 +1266,15 @@ export default function LoginPageClient() {
       }
     } catch (err) {
       const cancelled = isCancellation(err)
+      const failureMessage =
+        err instanceof AccountRecoveryIdentityMismatchError
+          ? t('loginRecoveryFailed')
+          : t('networkErrorRetry')
       if (establishedSession && !completionCommitted) {
-        await rollbackSession(establishedSession, cancelled ? undefined : t('networkErrorRetry'))
+        await rollbackSession(establishedSession, cancelled ? undefined : failureMessage)
       } else if (!cancelled && isAttemptCurrent(attempt)) {
         logger.error('Account recovery error:', err)
-        setError(t('networkErrorRetry'))
+        setError(failureMessage)
       }
     } finally {
       if (recoveryToken && preserveRecoveryToken) {
