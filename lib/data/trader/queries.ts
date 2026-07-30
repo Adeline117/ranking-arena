@@ -94,11 +94,9 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /**
  * Get ranked traders for leaderboard display.
  * Used by: homepage, /rankings/[exchange], sidebar widgets
- * Source: Redis sorted set (fast path) → leaderboard_ranks (fallback)
- *
- * Redis-first optimization: Default queries (no platform filter, no minScore,
- * sorted by rank, top 200) read directly from Redis sorted set + hash (~1ms)
- * instead of Supabase PostgREST (~200ms). Falls back to DB transparently.
+ * Source: persisted leaderboard_ranks publication authority.
+ * Response-level caches may cache this result, but sorted-set position is not
+ * rank authority.
  */
 export async function getLeaderboard(
   supabase: SupabaseClient,
@@ -132,7 +130,6 @@ export async function getLeaderboard(
     excludeSources = [],
     signal,
   } = params
-  const opts = params
   if (platform && !isPublicRankingSourceAllowed(platform)) {
     return { traders: [], total: 0 }
   }
@@ -140,44 +137,7 @@ export async function getLeaderboard(
     ...new Set([...excludeSources, ...PUBLIC_RANKING_QUARANTINED_SOURCES]),
   ]
 
-  // Redis-first path: default queries (no filters, sorted by rank/score, within top 200)
-  // These cover ~90% of homepage and ranking page loads
-  const isDefaultQuery =
-    !platform &&
-    allowedSources.length === 0 &&
-    excludeSources.length === 0 &&
-    !minScore &&
-    excludeOutliers &&
-    (sortBy === 'rank' || sortBy === 'arena_score') &&
-    offset + limit <= 200
-  if (isDefaultQuery) {
-    try {
-      const { getTopTradersWithDetails } = await import('@/lib/realtime/ranking-store')
-      const cached = await getTopTradersWithDetails(period, limit, offset)
-      if (cached.length > 0) {
-        const traders = cached.map((row) => mapLeaderboardRow(row))
-        // Total from count cache, not data length
-        let total = traders.length
-        try {
-          let countQuery = supabase
-            .from('leaderboard_count_cache')
-            .select('total_count')
-            .eq('season_id', period)
-            .eq('source', '_all')
-          if (signal) countQuery = countQuery.abortSignal(signal)
-          const { data: cacheRow } = await countQuery.maybeSingle()
-          if (cacheRow && cacheRow.total_count > 0) total = cacheRow.total_count
-        } catch {
-          /* fall back to data length */
-        }
-        return { traders, total }
-      }
-    } catch {
-      // Redis failed, fall through to DB
-    }
-  }
-
-  // DB fallback path (filtered queries, deep pagination, or Redis miss)
+  // Persisted publication-authority path for every public cohort read.
   // NOTE: Do NOT use { count: 'exact' } here. leaderboard_ranks has ~314k rows
   // and an exact COUNT(*) can take 3-25s. Callers that need a total should use
   // /api/rankings (returns estimated counts) or query leaderboard_count_cache.
@@ -191,6 +151,7 @@ export async function getLeaderboard(
        trader_type, is_outlier, ${LR.season_id}`
     )
     .eq(LR.season_id, period)
+    .not('rank', 'is', null)
 
   if (allowedSources.length > 0) {
     query = query.in(LR.source, [...new Set(allowedSources)])
@@ -216,7 +177,7 @@ export async function getLeaderboard(
   const STALE_FALLBACK_HOURS = 24
   const freshCutoff = new Date(Date.now() - FRESH_HOURS * 3600_000).toISOString()
   const staleCutoff = new Date(Date.now() - STALE_FALLBACK_HOURS * 3600_000).toISOString()
-  const effectiveCutoff = opts?.allowStale ? staleCutoff : freshCutoff
+  const effectiveCutoff = params.allowStale ? staleCutoff : freshCutoff
   query = query.gte('computed_at', effectiveCutoff)
 
   // Sorting
@@ -231,6 +192,9 @@ export async function getLeaderboard(
 
   const ascending = sortBy === 'rank'
   query = query.order(sortColumn, { ascending, nullsFirst: false })
+  if (sortColumn !== 'rank') {
+    query = query.order('rank', { ascending: true, nullsFirst: false })
+  }
 
   query = query.range(offset, offset + limit - 1)
 
@@ -245,9 +209,9 @@ export async function getLeaderboard(
     return { traders: [], total: 0, error: error.message }
   }
 
-  const traders = filterPublicRankingRows(data || [], (row) => row[LR.source]).map(
-    (row: Record<string, unknown>) => mapLeaderboardRow(row)
-  )
+  const traders = filterPublicRankingRows(data || [], (row) => row[LR.source])
+    .filter((row) => row.rank != null)
+    .map((row: Record<string, unknown>) => mapLeaderboardRow(row))
 
   // Total count from pre-computed cache (instant) instead of traders.length
   // which only reflects the current page size and breaks pagination.

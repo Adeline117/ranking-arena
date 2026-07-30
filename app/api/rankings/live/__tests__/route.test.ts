@@ -1,8 +1,7 @@
 const mockCheckRateLimit = jest.fn()
 const mockTieredGet = jest.fn()
 const mockTieredSet = jest.fn()
-const mockGetSortedSetSize = jest.fn()
-const mockGetTopTraders = jest.fn()
+const mockReadSharedCacheWriteFence = jest.fn()
 const mockFrom = jest.fn()
 
 jest.mock('next/server', () => {
@@ -38,9 +37,8 @@ jest.mock('@/lib/cache/redis-layer', () => ({
   tieredSet: (...args: unknown[]) => mockTieredSet(...args),
 }))
 
-jest.mock('@/lib/realtime/ranking-store', () => ({
-  getSortedSetSize: (...args: unknown[]) => mockGetSortedSetSize(...args),
-  getTopTraders: (...args: unknown[]) => mockGetTopTraders(...args),
+jest.mock('@/lib/cache', () => ({
+  readSharedCacheWriteFence: (...args: unknown[]) => mockReadSharedCacheWriteFence(...args),
 }))
 
 jest.mock('@/lib/api', () => ({
@@ -87,6 +85,7 @@ function queryResult(data: DatabaseRow[], count = data.length, error: unknown = 
 function sourceFilteredQuery(data: DatabaseRow[]) {
   let allowedSources: Set<unknown> | null = null
   let excludedSources = new Set<string>()
+  let requirePublishedRank = false
   let range: [number, number] | null = null
   const methods: Record<string, jest.Mock> = {}
   const proxy = new Proxy<Record<string, unknown>>(
@@ -97,6 +96,7 @@ function sourceFilteredQuery(data: DatabaseRow[]) {
           const filtered = data
             .filter((row) => allowedSources === null || allowedSources.has(row.source))
             .filter((row) => !excludedSources.has(String(row.source)))
+            .filter((row) => !requirePublishedRank || row.rank != null)
           const page = range ? filtered.slice(range[0], range[1] + 1) : filtered
           const result = { data: page, count: filtered.length, error: null }
           return (
@@ -114,9 +114,16 @@ function sourceFilteredQuery(data: DatabaseRow[]) {
           return methods.in
         }
         if (key === 'not') {
-          methods.not ??= jest.fn((column: string, operator: string, value: string) => {
+          methods.not ??= jest.fn((column: string, operator: string, value: unknown) => {
             if (column === 'source' && operator === 'in') {
-              excludedSources = new Set(value.replace(/^\(|\)$/g, '').split(','))
+              excludedSources = new Set(
+                String(value)
+                  .replace(/^\(|\)$/g, '')
+                  .split(',')
+              )
+            }
+            if (column === 'rank' && operator === 'is' && value === null) {
+              requirePublishedRank = true
             }
             return proxy
           })
@@ -166,14 +173,17 @@ describe('GET /api/rankings/live publication authority', () => {
     mockCheckRateLimit.mockResolvedValue(null)
     mockTieredGet.mockResolvedValue({ data: null, layer: null })
     mockTieredSet.mockResolvedValue(undefined)
-    mockGetSortedSetSize.mockResolvedValue(0)
-    mockGetTopTraders.mockResolvedValue([])
+    mockReadSharedCacheWriteFence.mockResolvedValue({
+      key: 'public-rankings:write-fence:v1',
+      token: '7',
+    })
   })
 
   it('filters active and quarantined sources before the cold-v4 DB range', async () => {
     const query = sourceFilteredQuery([
       row('copin', 'retired-slot', 1),
       row('okx_web3_solana', 'quarantined-slot', 2),
+      { ...row('binance_futures', 'unranked-slot', 3), rank: null },
       row('binance_futures', 'safe-one', 3),
       row('hyperliquid', 'safe-two', 4),
     ])
@@ -183,13 +193,14 @@ describe('GET /api/rankings/live publication authority', () => {
     const body = await response.json()
 
     expect(query.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+    expect(query.not).toHaveBeenCalledWith('rank', 'is', null)
     expect(query.not).toHaveBeenCalledWith('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
     expect(query.range).toHaveBeenCalledWith(0, 1)
     expect(body.traders.map(({ id }: { id: string }) => id)).toEqual(['safe-one', 'safe-two'])
     expect(body.totalCount).toBe(2)
-    expect(JSON.stringify(body)).not.toMatch(/retired-slot|quarantined-slot/)
+    expect(JSON.stringify(body)).not.toMatch(/retired-slot|quarantined-slot|unranked-slot/)
     expect(mockTieredSet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:rankings:live:90D:2:0',
+      'public-rank-policy-v6:rankings:live:90D:2:0',
       expect.objectContaining({
         traders: expect.arrayContaining([
           expect.objectContaining({ id: 'safe-one', source: 'binance_futures' }),
@@ -197,7 +208,11 @@ describe('GET /api/rankings/live publication authority', () => {
         ]),
       }),
       'hot',
-      ['rankings', 'live:90D']
+      ['rankings:public-rank-policy-v6', 'live:90D'],
+      {
+        skipMemory: true,
+        writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
+      }
     )
     expect(JSON.stringify(mockTieredSet.mock.calls)).not.toMatch(/retired-slot|quarantined-slot/)
   })
@@ -205,6 +220,7 @@ describe('GET /api/rankings/live publication authority', () => {
   it('filters a forbidden raw DB row before mapping or caching even if the query layer violates filters', async () => {
     const query = queryResult([
       row('copin', 'hyperliquid:0xpoison', 1),
+      { ...row('binance_futures', 'unranked-db-row', 2), rank: null },
       row('binance_futures', 'safe-db-row', 2),
     ])
     mockFrom.mockReturnValue(query)
@@ -217,6 +233,7 @@ describe('GET /api/rankings/live publication authority', () => {
     ])
     expect(body).toEqual(expect.objectContaining({ total: 1, totalCount: 1, hasMore: false }))
     expect(JSON.stringify(body)).not.toContain('0xpoison')
+    expect(JSON.stringify(body)).not.toContain('unranked-db-row')
     expect(JSON.stringify(mockTieredSet.mock.calls)).not.toContain('0xpoison')
   })
 
@@ -240,7 +257,14 @@ describe('GET /api/rankings/live publication authority', () => {
     const response = await GET(request())
     const body = await response.json()
 
-    expect(mockTieredGet).toHaveBeenCalledWith('public-rank-policy-v4:rankings:live:90D:2:0', 'hot')
+    expect(mockTieredGet).toHaveBeenCalledWith(
+      'public-rank-policy-v6:rankings:live:90D:2:0',
+      'hot',
+      {
+        skipMemory: true,
+        writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
+      }
+    )
     expect(body.traders).toEqual([
       expect.objectContaining({ source: 'binance_futures', source_trader_id: 'safe-cache-row' }),
     ])
@@ -253,7 +277,6 @@ describe('GET /api/rankings/live publication authority', () => {
       })
     )
     expect(response.headers.get('X-Cache')).toBe('HIT')
-    expect(mockGetSortedSetSize).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockTieredSet).not.toHaveBeenCalled()
   })

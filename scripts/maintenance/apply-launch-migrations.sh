@@ -139,6 +139,8 @@ PREDEPLOY_MIGRATIONS=(
   20260729070500_leaderboard_score_input_manifest_v2.sql
   20260729071000_leaderboard_metric_trust_projection_v2.sql
   20260729071500_tier_a_one_phase_commit_guard.sql
+  20260729223000_rerank_public_eligible_rows_only.sql
+  20260729224000_rank_eligible_leaderboard_count_cache.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055

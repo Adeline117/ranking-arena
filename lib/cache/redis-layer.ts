@@ -14,6 +14,14 @@
 
 import { dataLogger } from '@/lib/utils/logger'
 import { getMemoryCache } from './memory-fallback'
+import {
+  compareAndDeleteSharedCacheLock,
+  createSharedCacheLockToken,
+  readSharedCacheWriteFence,
+  setSharedCacheEntryIfFenceMatches,
+  type SharedCacheWriteFence,
+  type SharedCacheWriteLock,
+} from './write-fence'
 
 // Correlation ID support — logs cache operations with the current request's correlation ID
 let _getCorrelationId: (() => string | undefined) | null = null
@@ -55,6 +63,23 @@ export interface CacheEntry<T> {
   expiresAt: number
   /** Soft expiry — data is stale but serveable during SWR window (softExpiresAt < now < expiresAt) */
   softExpiresAt?: number
+}
+
+export interface TieredReadOptions {
+  /** Bypass process-local state for a fleet-wide publication surface. */
+  skipMemory?: boolean
+  /** `null` means the shared generation could not be proven: do not read. */
+  writeFence?: SharedCacheWriteFence | null
+}
+
+export interface TieredWriteOptions extends TieredReadOptions {
+  /** Internal distributed-lock commit guard. */
+  writeLock?: SharedCacheWriteLock | null
+}
+
+export interface TieredGetOrSetOptions extends TieredReadOptions {
+  /** Capture this generation before the first cache read or source fetch. */
+  writeFenceKey?: string
 }
 
 export interface LayerStats {
@@ -209,23 +234,28 @@ export function resetLayerStats(): void {
  */
 export async function tieredGet<T>(
   key: string,
-  tier: CacheTier = 'warm'
+  tier: CacheTier = 'warm',
+  options: TieredReadOptions = {}
 ): Promise<{ data: T | null; layer: CacheLayer | null }> {
   const memoryCache = getMemoryCache()
   const config = CACHE_TIERS[tier]
+  const skipMemory = options.skipMemory === true
+  if (options.writeFence === null) return { data: null, layer: null }
 
   // L1: 内存缓存
-  const memoryData = memoryCache.get<CacheEntry<T>>(key)
-  if (memoryData?.data !== undefined) {
-    // Check soft expiry — if past soft TTL, treat as miss so SWR can serve stale + revalidate
-    const softExpiry = memoryData.softExpiresAt ?? memoryData.expiresAt
-    if (Date.now() < softExpiry) {
-      layerStats.memory.hits++
-      return { data: memoryData.data, layer: 'memory' }
+  if (!skipMemory) {
+    const memoryData = memoryCache.get<CacheEntry<T>>(key)
+    if (memoryData?.data !== undefined) {
+      // Check soft expiry — if past soft TTL, treat as miss so SWR can serve stale + revalidate
+      const softExpiry = memoryData.softExpiresAt ?? memoryData.expiresAt
+      if (Date.now() < softExpiry) {
+        layerStats.memory.hits++
+        return { data: memoryData.data, layer: 'memory' }
+      }
+      // Past soft expiry but still in memory (SWR window) — fall through to let tieredGetOrSet handle it
     }
-    // Past soft expiry but still in memory (SWR window) — fall through to let tieredGetOrSet handle it
+    layerStats.memory.misses++
   }
-  layerStats.memory.misses++
 
   // L2: Redis 缓存
   const redis = await initRedis()
@@ -235,8 +265,9 @@ export async function tieredGet<T>(
       if (redisData?.data !== undefined) {
         layerStats.redis.hits++
 
-        // 回填到内存缓存
-        memoryCache.set(key, redisData, config.memoryTtlSeconds)
+        // Shared publication reads must never recreate an instance-local value
+        // that another instance's tag invalidation cannot remove.
+        if (!skipMemory) memoryCache.set(key, redisData, config.memoryTtlSeconds)
 
         return { data: redisData.data, layer: 'redis' }
       }
@@ -254,13 +285,38 @@ export async function tieredGet<T>(
 }
 
 /**
+ * Publication-critical Redis read. It deliberately bypasses process memory:
+ * a force-recompute tombstone or another instance's final checkpoint must be
+ * observed immediately across the fleet. Only values written in the shared
+ * CacheEntry envelope are accepted.
+ */
+export async function tieredGetRequired<T>(key: string): Promise<T | null> {
+  const redis = await initRedis()
+  if (!redis) throw new Error(`Required Redis cache read unavailable for ${key}`)
+
+  const entry = await redis.get<CacheEntry<T>>(key)
+  if (entry == null) return null
+  if (
+    typeof entry !== 'object' ||
+    !('data' in entry) ||
+    !('tier' in entry) ||
+    !('cachedAt' in entry) ||
+    !('expiresAt' in entry)
+  ) {
+    throw new Error(`Required Redis cache entry is invalid for ${key}`)
+  }
+  return entry.data
+}
+
+/**
  * 写入分层缓存
  */
 export async function tieredSet<T>(
   key: string,
   data: T,
   tier: CacheTier = 'warm',
-  tags?: string[]
+  tags: string[] = [],
+  options: TieredWriteOptions = {}
 ): Promise<boolean> {
   const memoryCache = getMemoryCache()
   const config = CACHE_TIERS[tier]
@@ -276,6 +332,7 @@ export async function tieredSet<T>(
 
   // L2: 写入 Redis (single pipeline when tags present)
   const redis = await initRedis()
+  const commitGuarded = options.writeFence !== undefined || options.writeLock !== undefined
 
   // L1: 写入内存缓存 — TTL covers SWR window (primary + stale period).
   // When Redis is unavailable, extend memory TTL to redisTtlSeconds so memory
@@ -284,11 +341,27 @@ export async function tieredSet<T>(
   const memoryTtl = redis
     ? config.memoryTtlSeconds + config.staleWhileRevalidate
     : config.redisTtlSeconds
-  memoryCache.set(key, entry, memoryTtl)
+  if (!commitGuarded && !options.skipMemory) memoryCache.set(key, entry, memoryTtl)
 
   if (redis) {
     try {
-      if (tags && tags.length > 0) {
+      if (commitGuarded) {
+        const writeFence = options.writeFence
+        const writeLock = options.writeLock
+        if (writeFence === null || writeLock === null) return false
+        if (!writeFence && !writeLock) return false
+        const written = await setSharedCacheEntryIfFenceMatches(
+          redis,
+          key,
+          JSON.stringify(entry),
+          config.redisTtlSeconds,
+          tags,
+          writeFence ?? undefined,
+          writeLock ?? undefined
+        )
+        if (!written) return false
+        if (!options.skipMemory) memoryCache.set(key, entry, memoryTtl)
+      } else if (tags.length > 0) {
         const pipeline = redis.pipeline()
         pipeline.set(key, entry, { ex: config.redisTtlSeconds })
         for (const tag of tags) {
@@ -307,11 +380,51 @@ export async function tieredSet<T>(
         error: error instanceof Error ? error.message : String(error),
         correlationId: correlationId(),
       })
-      return false // Redis write failed — data is memory-only, not persisted cross-instance
+      return false // Redis write failed — fenced values are never exposed locally
     }
   }
 
-  return true // 内存缓存已写入
+  return !commitGuarded && !options.skipMemory
+}
+
+/**
+ * Publication-critical cache write. Unlike tieredSet, memory-only success is
+ * not sufficient: every serverless instance must observe the same marker or
+ * warmed payload. Throws when Redis is unavailable or the remote write fails.
+ */
+export async function tieredSetRequired<T>(
+  key: string,
+  data: T,
+  tier: CacheTier = 'warm',
+  tags?: string[]
+): Promise<void> {
+  const redis = await initRedis()
+  if (!redis) throw new Error(`Required Redis cache write unavailable for ${key}`)
+
+  const memoryCache = getMemoryCache()
+  const config = CACHE_TIERS[tier]
+  const now = Date.now()
+  const entry: CacheEntry<T> = {
+    data,
+    tier,
+    cachedAt: now,
+    expiresAt: now + (config.redisTtlSeconds + config.staleWhileRevalidate) * 1000,
+    softExpiresAt: now + config.redisTtlSeconds * 1000,
+  }
+
+  if (tags && tags.length > 0) {
+    const pipeline = redis.pipeline()
+    pipeline.set(key, entry, { ex: config.redisTtlSeconds })
+    for (const tag of tags) {
+      pipeline.sadd(`tag:${tag}`, key)
+      pipeline.expire(`tag:${tag}`, config.redisTtlSeconds * 2)
+    }
+    await pipeline.exec()
+  } else {
+    await redis.set(key, entry, { ex: config.redisTtlSeconds })
+  }
+
+  memoryCache.set(key, entry, config.memoryTtlSeconds + config.staleWhileRevalidate)
 }
 
 /**
@@ -362,6 +475,26 @@ export async function tieredDelByTag(tag: string): Promise<number> {
   }
 }
 
+/**
+ * Publication-critical tag invalidation. The best-effort variant above is
+ * appropriate for ordinary request caches; a publication gate must instead
+ * surface Redis absence and command failures to its owner-token lease holder.
+ */
+export async function tieredDelByTagStrict(tag: string): Promise<number> {
+  const redis = await initRedis()
+  const memoryCache = getMemoryCache()
+  if (!redis) {
+    memoryCache.deleteByPrefix(`tag:${tag}`)
+    throw new Error(`Required Redis tag invalidation unavailable for ${tag}`)
+  }
+
+  const keys = await redis.smembers(`tag:${tag}`)
+  if (keys.length === 0) return 0
+  for (const key of keys) memoryCache.delete(key)
+  await redis.del(...keys, `tag:${tag}`)
+  return keys.length
+}
+
 // ============================================
 // 高级缓存操作
 // ============================================
@@ -389,14 +522,50 @@ if (typeof setInterval !== 'undefined') {
   }, 60_000).unref?.()
 }
 
+async function tieredFenceAdvanced(
+  writeFenceKey: string | undefined,
+  capturedFence: SharedCacheWriteFence | null | undefined
+): Promise<boolean> {
+  if (!writeFenceKey || !capturedFence) return false
+  const currentFence = await readSharedCacheWriteFence(writeFenceKey)
+  return (
+    currentFence === null ||
+    currentFence.key !== capturedFence.key ||
+    currentFence.token !== capturedFence.token
+  )
+}
+
 export async function tieredGetOrSet<T>(
   key: string,
-  fetcher: () => Promise<T>,
+  fetcher: (writeFence?: SharedCacheWriteFence | null) => Promise<T>,
   tier: CacheTier = 'warm',
-  tags?: string[]
+  tags: string[] = [],
+  options: TieredGetOrSetOptions = {}
 ): Promise<T> {
+  return tieredGetOrSetAttempt(key, fetcher, tier, tags, options, false)
+}
+
+async function tieredGetOrSetAttempt<T>(
+  key: string,
+  fetcher: (writeFence?: SharedCacheWriteFence | null) => Promise<T>,
+  tier: CacheTier,
+  tags: string[],
+  options: TieredGetOrSetOptions,
+  fenceRetryAttempted: boolean
+): Promise<T> {
+  const writeFence = options.writeFenceKey
+    ? await readSharedCacheWriteFence(options.writeFenceKey)
+    : options.writeFence
+  const writeOptions: TieredWriteOptions = {
+    skipMemory: options.skipMemory,
+    writeFence,
+  }
+
   // 尝试获取缓存
-  const { data } = await tieredGet<T>(key, tier)
+  const { data } = await tieredGet<T>(key, tier, {
+    skipMemory: options.skipMemory,
+    writeFence,
+  })
 
   if (data !== null) {
     return data
@@ -404,7 +573,7 @@ export async function tieredGetOrSet<T>(
 
   // Check stale-while-revalidate: primary entry may be past soft expiry but still in memory
   const config = CACHE_TIERS[tier]
-  if (config.staleWhileRevalidate > 0) {
+  if (config.staleWhileRevalidate > 0 && !options.skipMemory) {
     const memoryCache = getMemoryCache()
     const staleEntry = memoryCache.get<CacheEntry<T>>(key)
     if (
@@ -413,9 +582,9 @@ export async function tieredGetOrSet<T>(
       Date.now() >= staleEntry.softExpiresAt
     ) {
       // Serve stale, refresh in background
-      fetcher()
+      fetcher(writeFence)
         .then((fresh) => {
-          tieredSet(key, fresh, tier, tags).catch((err) =>
+          tieredSet(key, fresh, tier, tags, writeOptions).catch((err) =>
             dataLogger.warn(`[redis-layer] SWR set failed for ${key}:`, {
               error: err instanceof Error ? err.message : String(err),
             })
@@ -436,14 +605,21 @@ export async function tieredGetOrSet<T>(
   const LOCK_TTL_SECONDS = 5
   const LOCK_MAX_RETRIES = 3
   const LOCK_RETRY_DELAY_MS = 100
-  const lockKey = `lock:${key}`
+  const fenceLockSuffix = options.writeFenceKey
+    ? `:fence:${writeFence?.token ?? 'unavailable'}`
+    : ''
+  const lockKey = `lock:${key}${fenceLockSuffix}`
+  const lockOwnerToken = createSharedCacheLockToken()
 
   const lockRedis = await initRedis()
   let lockAcquired = false
   if (lockRedis) {
     try {
       // SET NX EX — acquire lock atomically
-      const lockResult = await lockRedis.set(lockKey, '1', { nx: true, ex: LOCK_TTL_SECONDS })
+      const lockResult = await lockRedis.set(lockKey, lockOwnerToken, {
+        nx: true,
+        ex: LOCK_TTL_SECONDS,
+      })
       lockAcquired = lockResult === 'OK'
     } catch (err) {
       dataLogger.warn(
@@ -456,7 +632,10 @@ export async function tieredGetOrSet<T>(
       // Another instance is fetching — wait and retry cache reads
       for (let retry = 0; retry < LOCK_MAX_RETRIES; retry++) {
         await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_DELAY_MS))
-        const { data: retryData } = await tieredGet<T>(key, tier)
+        const { data: retryData } = await tieredGet<T>(key, tier, {
+          skipMemory: options.skipMemory,
+          writeFence,
+        })
         if (retryData !== null) {
           return retryData
         }
@@ -467,16 +646,32 @@ export async function tieredGetOrSet<T>(
   }
 
   // Coalesce concurrent fetches for the same key (per-instance stampede protection)
-  const existing = inFlightRequests.get(key)
+  // Never coalesce a post-publication request with a source fetch captured
+  // under the previous generation.
+  const requestKey = options.writeFenceKey
+    ? `${key}:fence:${writeFence?.token ?? 'unavailable'}`
+    : key
+  const existing = inFlightRequests.get(requestKey)
   if (existing) {
     // Evict stale entries from previous invocations (hung promises on warm reuse)
     if (Date.now() - existing.createdAt > IN_FLIGHT_MAX_AGE_MS) {
-      inFlightRequests.delete(key)
+      inFlightRequests.delete(requestKey)
       dataLogger.warn(
         `[redis-layer] Evicted stale in-flight request: ${key} (age=${Date.now() - existing.createdAt}ms)`
       )
+    } else if (!lockAcquired) {
+      const existingData = await (existing.promise as Promise<T>)
+      if (await tieredFenceAdvanced(options.writeFenceKey, writeFence)) {
+        if (fenceRetryAttempted) {
+          throw new Error(`[RedisLayer] Publication changed repeatedly while reading ${key}`)
+        }
+        return tieredGetOrSetAttempt(key, fetcher, tier, tags, options, true)
+      }
+      return existingData
     } else {
-      return existing.promise as Promise<T>
+      // The previous owner's lock expired. Do not let its still-running fetch
+      // replace the new lock owner's source read under the same generation.
+      inFlightRequests.delete(requestKey)
     }
   }
 
@@ -484,25 +679,41 @@ export async function tieredGetOrSet<T>(
   // CRITICAL: Use try-finally to guarantee inFlightRequests cleanup.
   // Without this, synchronous throws or unhandled rejections leak Map entries,
   // causing unbounded memory growth in long-lived serverless functions.
-  const promise = fetcher()
-  inFlightRequests.set(key, { promise, createdAt: Date.now() })
+  const promise = Promise.resolve().then(() => fetcher(writeFence))
+  inFlightRequests.set(requestKey, { promise, createdAt: Date.now() })
+  let retryAfterFenceAdvance = false
   try {
     const freshData = await promise
 
     // 异步写入缓存
-    tieredSet(key, freshData, tier, tags).catch((err) => {
-      dataLogger.warn('[RedisLayer] 缓存写入失败:', { key, error: err })
-    })
+    const commitWriteOptions: TieredWriteOptions = lockRedis
+      ? {
+          ...writeOptions,
+          writeLock: lockAcquired ? { key: lockKey, ownerToken: lockOwnerToken } : null,
+        }
+      : writeOptions
+    const cacheWritten = await tieredSet(key, freshData, tier, tags, commitWriteOptions)
+    if (!cacheWritten && lockRedis) {
+      dataLogger.warn('[RedisLayer] Cache commit guard rejected the write:', { key })
+    }
+    retryAfterFenceAdvance =
+      !cacheWritten && (await tieredFenceAdvanced(options.writeFenceKey, writeFence))
 
-    return freshData
+    if (!retryAfterFenceAdvance) return freshData
   } finally {
-    inFlightRequests.delete(key)
-    // Release distributed lock (best-effort)
+    if (inFlightRequests.get(requestKey)?.promise === promise) {
+      inFlightRequests.delete(requestKey)
+    }
+    // Release distributed lock only when this request still owns its token.
     if (lockRedis && lockAcquired) {
-      // eslint-disable-next-line no-restricted-syntax
-      lockRedis.del(lockKey).catch(() => {})
+      await compareAndDeleteSharedCacheLock(lockRedis, lockKey, lockOwnerToken).catch(() => false)
     }
   }
+
+  if (fenceRetryAttempted) {
+    throw new Error(`[RedisLayer] Publication changed repeatedly while reading ${key}`)
+  }
+  return tieredGetOrSetAttempt(key, fetcher, tier, tags, options, true)
 }
 
 /**

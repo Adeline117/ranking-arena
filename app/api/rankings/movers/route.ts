@@ -17,10 +17,13 @@ import { getOrSetWithLock } from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'
 import {
   isPublicRankingSourceAllowed,
+  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+  PUBLIC_RANKING_REDIS_TAG,
   publicRankingCacheKey,
 } from '@/lib/rankings/publication-policy'
 
 const log = createLogger('api:movers')
+const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
 
 export const runtime = 'nodejs'
 
@@ -44,14 +47,18 @@ export async function GET(request: NextRequest) {
       async () => computeMovers(),
       // 120s Redis TTL (was 600s). Movers computation is cheap (~100ms, 2 queries).
       // Short TTL ensures empty results from leaderboard outages recover quickly.
-      { ttl: 120, lockTtl: 15 }
+      {
+        ttl: 120,
+        lockTtl: 15,
+        tags: [PUBLIC_RANKING_REDIS_TAG, 'season:90D'],
+        skipMemory: true,
+        writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+      }
     )
 
-    // Don't CDN-cache empty results for long — they recover within minutes
-    const hasData = result.risers?.length > 0 || result.fallers?.length > 0
-    const cacheHeader = hasData
-      ? 'public, s-maxage=3600, stale-while-revalidate=1800'
-      : 'public, s-maxage=60, stale-while-revalidate=30'
+    // Redis is publication-fenced; an opaque CDN object cannot be actively
+    // invalidated by the leaderboard publisher.
+    const cacheHeader = PUBLIC_RANKING_RESPONSE_CACHE_CONTROL
 
     return NextResponse.json(result, {
       headers: { 'Cache-Control': cacheHeader },
@@ -60,7 +67,7 @@ export async function GET(request: NextRequest) {
     log.error('Error computing movers', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json(
       { risers: [], fallers: [], period: '90D' },
-      { status: 200, headers: { 'Cache-Control': 'public, s-maxage=300' } }
+      { status: 200, headers: { 'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL } }
     )
   }
 }
@@ -139,6 +146,7 @@ async function computeMoversInner() {
     .select('source, source_trader_id, rank, arena_score, roi, handle, avatar_url')
     .eq('season_id', '90D')
     .in('source_trader_id', allTraderKeys.slice(0, 1000))
+    .not('rank', 'is', null)
     .not('arena_score', 'is', null)
     .limit(2000)
 
@@ -152,7 +160,7 @@ async function computeMoversInner() {
     if (!isPublicRankingSourceAllowed(r.source)) continue
     const key = `${r.source}:${r.source_trader_id}`
     const yesterdayRoi = yesterdayRoiMap.get(key)
-    if (yesterdayRoi == null || r.roi == null || r.arena_score == null) continue
+    if (yesterdayRoi == null || r.roi == null || r.arena_score == null || r.rank == null) continue
 
     const roiDelta = r.roi - yesterdayRoi
     if (Math.abs(roiDelta) < 0.5) continue
@@ -160,7 +168,7 @@ async function computeMoversInner() {
     movers.push({
       platform: r.source,
       trader_key: r.source_trader_id,
-      rank: r.rank ?? 0,
+      rank: Number(r.rank),
       arena_score: r.arena_score,
       roiDelta: Math.round(roiDelta * 100) / 100,
       handle: r.handle,

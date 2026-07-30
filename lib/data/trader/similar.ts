@@ -64,11 +64,13 @@ async function fetchSimilarTradersUncached(
         .eq(LR.source, platform)
         .eq(LR.season_id, '90D')
         .neq(LR.source_trader_id, traderKey)
+        .not('rank', 'is', null)
         .not(LR.arena_score, 'is', null)
         .or('is_outlier.is.null,is_outlier.eq.false')
         .gte(LR.arena_score, arenaScore - scoreRange)
         .lte(LR.arena_score, arenaScore + scoreRange)
         .order(LR.arena_score, { ascending: false })
+        .order(LR.rank, { ascending: true, nullsFirst: false })
         .limit(10)
       data = result.data as Record<string, unknown>[] | null
     } else if (roi != null) {
@@ -81,10 +83,12 @@ async function fetchSimilarTradersUncached(
         .eq(LR.source, platform)
         .eq(LR.season_id, '90D')
         .neq(LR.source_trader_id, traderKey)
+        .not('rank', 'is', null)
         .or('is_outlier.is.null,is_outlier.eq.false')
         .gte(LR.roi, roi - roiRange)
         .lte(LR.roi, roi + roiRange)
         .order(LR.roi, { ascending: false })
+        .order(LR.rank, { ascending: true, nullsFirst: false })
         .limit(10)
       data = result.data as Record<string, unknown>[] | null
     }
@@ -95,6 +99,7 @@ async function fetchSimilarTradersUncached(
     const seen = new Set<string>()
     return data
       .filter((row) => {
+        if (row.rank == null) return false
         if (!isPublicRankingSourceAllowed(row[LR.source])) return false
         const id = String(row[LR.source_trader_id] || '')
         if (seen.has(id)) return false

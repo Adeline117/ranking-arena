@@ -43,6 +43,11 @@ export interface SourceFreshnessWriteRow {
   recorded_at: string
 }
 
+export interface SourceFreshnessEvidence {
+  source: string
+  source_as_of: string
+}
+
 /**
  * Collapse trader-level board-publication timestamps to one conservative
  * source watermark. Every row from a PASSED source board normally has the same
@@ -54,7 +59,7 @@ export interface SourceFreshnessWriteRow {
  */
 export function buildSourceFreshnessWriteRows(
   season: Period,
-  traders: readonly ScoredTrader[],
+  traders: readonly SourceFreshnessEvidence[],
   recordedAt = new Date().toISOString()
 ): SourceFreshnessWriteRow[] {
   const bySource = new Map<string, { oldestMs: number; invalid: boolean }>()
@@ -95,26 +100,37 @@ export function buildSourceFreshnessWriteRows(
 }
 
 /**
- * Publish source watermarks only after the season's ranking writes complete.
- * Missing sources are intentionally not deleted/upserted: their last-good
- * watermark must remain visible and age honestly while their last-good ranks
- * continue to serve.
+ * Gate a completed season write with one conservative watermark per finalized
+ * source. Missing sources are never deleted, so absent sources retain their
+ * last-good state. A source present in this cohort is different: if its
+ * watermark cannot be proven, the whole gate fails before any watermark write.
+ * This legacy upsert is not the proof-carrying atomic publication seal.
  */
 export async function upsertSourceFreshness(params: {
   supabase: SupabaseClient
   season: Period
-  scoredTraders: readonly ScoredTrader[]
+  expectedSources: readonly string[]
+  sourceEvidence: readonly SourceFreshnessEvidence[]
 }): Promise<number> {
-  const { supabase, season, scoredTraders } = params
-  const rows = buildSourceFreshnessWriteRows(season, scoredTraders)
-  const sourceCount = new Set(scoredTraders.map((trader) => trader.source)).size
+  const { supabase, season, expectedSources, sourceEvidence } = params
+  const expectedSourceSet = new Set(expectedSources)
+  const rows = buildSourceFreshnessWriteRows(season, sourceEvidence)
+  const rowSourceSet = new Set(rows.map((row) => row.source))
 
-  if (rows.length < sourceCount) {
-    logger.warn(
-      `[${season}] source freshness skipped ${sourceCount - rows.length} source(s) with invalid board watermark`
+  if (expectedSourceSet.size === 0) {
+    throw new Error(`[${season}] source freshness gate requires at least one fresh source`)
+  }
+  const unexpectedEvidence = sourceEvidence.some(
+    (evidence) => !expectedSourceSet.has(evidence.source)
+  )
+  const hasExactSourceSet =
+    rows.length === expectedSourceSet.size &&
+    [...expectedSourceSet].every((source) => rowSourceSet.has(source))
+  if (unexpectedEvidence || !hasExactSourceSet) {
+    throw new Error(
+      `[${season}] source freshness gate incomplete: ${rows.length}/${expectedSourceSet.size} fresh sources have valid board watermarks`
     )
   }
-  if (rows.length === 0) return 0
 
   const { error } = await supabase
     .from('leaderboard_source_freshness')
@@ -133,12 +149,11 @@ export async function upsertLeaderboard(params: {
   supabase: SupabaseClient
   season: Period
   changedTraders: ScoredTrader[]
-  rankMap: Map<string, number>
   prevRankMap: Map<string, number>
   isOutOfTime: (buffer: number) => boolean
   timeLeftMs: () => number
 }): Promise<{ upsertErrors: number; upsertAborted: boolean }> {
-  const { supabase, season, changedTraders, rankMap, prevRankMap, isOutOfTime, timeLeftMs } = params
+  const { supabase, season, changedTraders, prevRankMap, isOutOfTime, timeLeftMs } = params
   let upsertErrors = 0
   let upsertAborted = false
   const batchUpsertSize = 50
@@ -154,17 +169,23 @@ export async function upsertLeaderboard(params: {
 
     const batch = changedTraders.slice(i, i + batchUpsertSize).map((t) => {
       const key = `${t.source}:${t.source_trader_id}`
-      const newRank = rankMap.get(key) ?? 0
       const prevRank = prevRankMap.get(key)
-      const rankChange = prevRank != null ? prevRank - newRank : null
       return {
         season_id: season,
         source: t.source,
         source_type: SOURCE_TYPE_MAP[t.source] || 'futures',
         source_trader_id: t.source_trader_id,
-        rank: newRank,
-        rank_change: rankChange,
-        is_new: prevRank == null,
+        // Preserve the current live pre-write rank until the transaction-scoped
+        // reranker has the complete post-cleanup cohort. New rows begin NULL.
+        // This prevents provisional application ordering from becoming public
+        // authority between batch writes. Movement remains unknown until a
+        // generation-aware last-published baseline exists.
+        rank: prevRank ?? null,
+        rank_change: null,
+        // A live row has no generation-aware last-published baseline yet.
+        // Withhold NEW instead of emitting a transient, unprovable label on
+        // rank-null profile/raw readers between PostgREST transactions.
+        is_new: false,
         arena_score: t.arena_score, // v4 (flagship, ranked by rerank RPC)
         arena_score_v4: t.arena_score_v4, // = arena_score (labeled)
         arena_score_v3: t.arena_score_v3, // rollback: pre-v4 score
@@ -191,29 +212,32 @@ export async function upsertLeaderboard(params: {
         profit_factor: t.profit_factor ?? null,
         calmar_ratio: t.calmar_ratio ?? null,
         trader_type: t.trader_type || (t.source === 'web3_bot' ? 'bot' : null),
-        is_outlier: (t as unknown as Record<string, unknown>).is_outlier === true ? true : false,
+        is_outlier: t.is_outlier === true,
         metrics_estimated: t.metrics_estimated,
       }
     })
 
     // Validate batch before write
-    const { valid: validBatch, rejected } = validateBeforeWrite(
-      batch as Record<string, unknown>[],
-      'leaderboard_ranks'
-    )
-    if (rejected.length) logRejectedWrites(rejected, supabase)
+    const { valid: validBatch, rejected } = validateBeforeWrite(batch, 'leaderboard_ranks')
+    if (rejected.length) {
+      await logRejectedWrites(rejected, supabase)
+      // Validation rejection is a failed publication row, not a harmless
+      // omission. Propagate it so the route cannot cleanup or checkpoint a
+      // cohort that was only partially persisted.
+      upsertErrors += rejected.length
+    }
 
     if (validBatch.length > 0) {
       // Guarantee trader_sources parent rows exist
-      const parentRows = (validBatch as Array<Record<string, unknown>>).map((r) => ({
-        source: r.source as string,
-        source_trader_id: r.source_trader_id as string,
-        source_type: r.source_type as string | null,
-        handle: r.handle as string | null,
-        avatar_url: r.avatar_url as string | null,
+      const parentRows = validBatch.map((row) => ({
+        source: row.source,
+        source_trader_id: row.source_trader_id,
+        source_type: row.source_type,
+        handle: row.handle,
+        avatar_url: row.avatar_url,
         is_active: true,
         identity_type: 'public',
-        source_kind: getSourceKind(r.source as string),
+        source_kind: getSourceKind(row.source),
         last_seen_at: new Date().toISOString(),
       }))
       const { error: parentErr } = await supabase
@@ -225,7 +249,7 @@ export async function upsertLeaderboard(params: {
 
       const { error } = await supabase
         .from('leaderboard_ranks')
-        .upsert(validBatch as any, { onConflict: 'season_id,source,source_trader_id' })
+        .upsert(validBatch, { onConflict: 'season_id,source,source_trader_id' })
       if (error) {
         logger.error(`Upsert error for ${season} batch ${i}:`, error)
         upsertErrors += validBatch.length
@@ -238,7 +262,10 @@ export async function upsertLeaderboard(params: {
 
 /**
  * Zero out arena_score for traders that were in traderMap (V2 data fresh)
- * but excluded from computation (negative ROI, < min trades, etc.).
+ * but excluded from computation (negative ROI, < min trades, etc.). This is a
+ * current-cohort finalization step: deadline, partial-upsert, and database
+ * failures propagate so callers cannot publish a watermark or checkpoint for
+ * an incompletely finalized board.
  */
 export async function zeroOutExcluded(params: {
   supabase: SupabaseClient
@@ -261,11 +288,13 @@ export async function zeroOutExcluded(params: {
     timeLeftMs,
   } = params
 
-  if (upsertAborted || isOutOfTime(25_000)) {
-    if (upsertAborted) logger.warn(`[${season}] SKIPPING zero-out (upsert aborted)`)
-    else
-      logger.warn(`[${season}] SKIPPING zero-out — only ${Math.round(timeLeftMs() / 1000)}s left`)
-    return 0
+  if (upsertAborted) {
+    throw new Error(`[${season}] zero-out refused because leaderboard upsert was aborted`)
+  }
+  if (isOutOfTime(25_000)) {
+    throw new Error(
+      `[${season}] zero-out deadline reached with ${Math.round(timeLeftMs() / 1000)}s remaining`
+    )
   }
 
   const computedTraderIds = new Set(uniqueTraders.map((t) => `${t.source}:${t.source_trader_id}`))
@@ -290,20 +319,35 @@ export async function zeroOutExcluded(params: {
 
   let zeroed = 0
   for (const [source, ids] of excludedBySource) {
-    if (isOutOfTime(20_000)) {
-      logger.warn(`[${season}] zero-out aborted after ${zeroed} traders`)
-      break
-    }
     for (let i = 0; i < ids.length; i += 100) {
+      if (isOutOfTime(20_000)) {
+        throw new Error(
+          `[${season}] zero-out deadline reached after ${zeroed} traders with ${Math.round(timeLeftMs() / 1000)}s remaining`
+        )
+      }
       const batch = ids.slice(i, i + 100)
-      const { error: zeroErr } = await supabase
-        .from('leaderboard_ranks')
-        .update({ arena_score: 0, computed_at: new Date().toISOString() })
-        .eq('season_id', season)
-        .eq('source', source)
-        .in('source_trader_id', batch)
-        .gt('arena_score', 0)
-      if (!zeroErr) zeroed += batch.length
+      let zeroResult: { error: { message: string } | null }
+      try {
+        zeroResult = (await supabase
+          .from('leaderboard_ranks')
+          .update({ arena_score: 0, computed_at: new Date().toISOString() })
+          .eq('season_id', season)
+          .eq('source', source)
+          .in('source_trader_id', batch)
+          .gt('arena_score', 0)) as typeof zeroResult
+      } catch (error) {
+        throw new Error(
+          `[${season}] zero-out update threw for ${source}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        )
+      }
+      if (zeroResult.error) {
+        throw new Error(
+          `[${season}] zero-out update failed for ${source}: ${zeroResult.error.message}`
+        )
+      }
+      zeroed += batch.length
     }
   }
 

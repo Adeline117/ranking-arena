@@ -209,6 +209,7 @@ async function getCurrentTraderRecommendations(
           .from('leaderboard_ranks')
           .select(TRADER_RECOMMENDATION_SELECT)
           .eq('season_id', '90D')
+          .not('rank', 'is', null)
           .in('source_trader_id', traderKeys)
           .gt('arena_score', 0)
           .or('is_outlier.is.null,is_outlier.eq.false')
@@ -240,11 +241,11 @@ async function getCurrentTraderRecommendations(
       .from('leaderboard_ranks')
       .select(TRADER_RECOMMENDATION_SELECT)
       .eq('season_id', '90D')
+      .not('rank', 'is', null)
       .gt('arena_score', 0)
       .or('is_outlier.is.null,is_outlier.eq.false')
       .order('arena_score', { ascending: false, nullsFirst: false })
-      .order('source', { ascending: true })
-      .order('source_trader_id', { ascending: true })
+      .order('rank', { ascending: true, nullsFirst: false })
       .limit(Math.min(100, limit + existingIds.size))
     if (topTradersError) throw topTradersError
 

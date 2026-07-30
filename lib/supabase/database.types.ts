@@ -11243,6 +11243,10 @@ export type Database = {
         Args: { p_season_ids: string[] }
         Returns: undefined
       }
+      refresh_public_rank_count_cache_for_seasons: {
+        Args: { p_season_ids: string[] }
+        Returns: undefined
+      }
       refresh_materialized_views: { Args: never; Returns: undefined }
       refresh_popular_tokens_mv: { Args: never; Returns: undefined }
       refresh_source_capabilities_mv: { Args: never; Returns: undefined }
@@ -11268,6 +11272,10 @@ export type Database = {
         Returns: boolean
       }
       release_stale_locks: { Args: never; Returns: number }
+      rerank_public_eligible_leaderboard: {
+        Args: { p_season_id: string }
+        Returns: number
+      }
       rerank_leaderboard: { Args: { p_season_id: string }; Returns: number }
       reserve_lifetime_membership_spot_atomic: {
         Args: {

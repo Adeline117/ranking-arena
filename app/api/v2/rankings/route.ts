@@ -49,14 +49,17 @@ import { getOrSetWithLock } from '@/lib/cache'
 import { summarizeSourceFreshness, type SourceFreshnessRow } from '@/lib/rankings/source-freshness'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
+  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+  PUBLIC_RANKING_REDIS_TAG,
   isPublicRankingSourceQuarantined,
   publicRankingCacheKey,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
 
-// Removed force-dynamic — it contradicted revalidate and prevented CDN caching.
-// With Redis cache + CDN s-maxage headers, this route is fast and scalable.
-export const revalidate = 600 // ISR: revalidate every 10 minutes (data refreshes via cron every 30 min)
+// Publication actively invalidates the Redis generation; the route itself must
+// not create a separate CDN/ISR generation that the publisher cannot purge.
+export const dynamic = 'force-dynamic'
+const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
 
 // ── Input validation schema ──────────────────────────────────────────────────
 const v2RankingsSchema = z.object({
@@ -123,7 +126,7 @@ export const GET = withPublic(
         },
         {
           headers: {
-            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+            'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL,
           },
         }
       )
@@ -179,6 +182,7 @@ export const GET = withPublic(
           )
           .eq('source', platform)
           .eq('season_id', seasonId)
+          .not('rank', 'is', null)
           .not('arena_score', 'is', null)
           .or('is_outlier.is.null,is_outlier.eq.false')
 
@@ -230,6 +234,9 @@ export const GET = withPublic(
             query = query.order('arena_score', { ascending: false, nullsFirst: false })
         }
 
+        // Persisted rank is the final authority for every metric tie.
+        query = query.order('rank', { ascending: true, nullsFirst: false })
+
         query = query.range(offset, offset + limit - 1)
 
         const {
@@ -264,63 +271,65 @@ export const GET = withPublic(
         )
 
         // Build response — maintain exact same response format for frontend consumers
-        const traders: RankingEntry[] = (rows || []).map((r) => {
-          const sourceType =
-            (r.source_type as string) || SOURCE_TYPE_MAP[String(r.source)] || marketType
-          const baseEntry = {
-            platform: r.source as LeaderboardPlatform,
-            market_type: sourceType,
-            trader_key: String(r.source_trader_id),
-            display_name: (r.handle as string) || null,
-            avatar_url: (r.avatar_url as string) || null,
-            window: window as Window,
-            metrics: {
-              roi: r.roi != null ? Number(r.roi) : null,
-              pnl: r.pnl != null ? Number(r.pnl) : null,
-              win_rate: r.win_rate != null ? Number(r.win_rate) : null,
-              max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
-              sharpe_ratio: r.sharpe_ratio != null ? Number(r.sharpe_ratio) : null,
-              sortino_ratio: null, // not in leaderboard_ranks
-              trades_count: r.trades_count != null ? Number(r.trades_count) : null,
-              followers: r.followers != null ? Number(r.followers) : null,
-              copiers: null as number | null,
-              aum: null as number | null,
-              platform_rank: r.rank != null ? Number(r.rank) : null,
-              arena_score: r.arena_score != null ? Number(r.arena_score) : null,
-              return_score: null as number | null,
-              drawdown_score: null as number | null,
-              stability_score: null as number | null,
-              volatility_pct: null as number | null,
-              avg_holding_hours: r.avg_holding_hours != null ? Number(r.avg_holding_hours) : null,
-              profit_factor: null, // not in leaderboard_ranks
-            },
-            quality_flags: {
-              missing_fields: [] as string[],
-              non_standard_fields: {} as Record<string, string>,
-              window_native: true,
-              notes: [] as string[],
-            },
-            updated_at: freshnessSummary.asOf,
-            is_stale: freshnessSummary.isStale,
-            computed_at: String(r.computed_at || '') || null,
-          }
+        const traders: RankingEntry[] = (rows || [])
+          .filter((r) => r.rank != null)
+          .map((r) => {
+            const sourceType =
+              (r.source_type as string) || SOURCE_TYPE_MAP[String(r.source)] || marketType
+            const baseEntry = {
+              platform: r.source as LeaderboardPlatform,
+              market_type: sourceType,
+              trader_key: String(r.source_trader_id),
+              display_name: (r.handle as string) || null,
+              avatar_url: (r.avatar_url as string) || null,
+              window: window as Window,
+              metrics: {
+                roi: r.roi != null ? Number(r.roi) : null,
+                pnl: r.pnl != null ? Number(r.pnl) : null,
+                win_rate: r.win_rate != null ? Number(r.win_rate) : null,
+                max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
+                sharpe_ratio: r.sharpe_ratio != null ? Number(r.sharpe_ratio) : null,
+                sortino_ratio: null, // not in leaderboard_ranks
+                trades_count: r.trades_count != null ? Number(r.trades_count) : null,
+                followers: r.followers != null ? Number(r.followers) : null,
+                copiers: null as number | null,
+                aum: null as number | null,
+                platform_rank: Number(r.rank),
+                arena_score: r.arena_score != null ? Number(r.arena_score) : null,
+                return_score: null as number | null,
+                drawdown_score: null as number | null,
+                stability_score: null as number | null,
+                volatility_pct: null as number | null,
+                avg_holding_hours: r.avg_holding_hours != null ? Number(r.avg_holding_hours) : null,
+                profit_factor: null, // not in leaderboard_ranks
+              },
+              quality_flags: {
+                missing_fields: [] as string[],
+                non_standard_fields: {} as Record<string, string>,
+                window_native: true,
+                notes: [] as string[],
+              },
+              updated_at: freshnessSummary.asOf,
+              is_stale: freshnessSummary.isStale,
+              computed_at: String(r.computed_at || '') || null,
+            }
 
-          return {
-            ...baseEntry,
-            // V3 extended fields
-            arena_score_v3: null,
-            sortino_ratio: null, // not in leaderboard_ranks
-            calmar_ratio: null, // not in leaderboard_ranks
-            alpha: null,
-            trading_style: (r.trading_style as string) || null,
-          } as RankingEntry & {
-            arena_score_v3: number | null
-            sortino_ratio: number | null
-            calmar_ratio: number | null
-            alpha: number | null
-            trading_style: string | null
-          }
-        })
+            return {
+              ...baseEntry,
+              // V3 extended fields
+              arena_score_v3: null,
+              sortino_ratio: null, // not in leaderboard_ranks
+              calmar_ratio: null, // not in leaderboard_ranks
+              alpha: null,
+              trading_style: (r.trading_style as string) || null,
+            } as RankingEntry & {
+              arena_score_v3: number | null
+              sortino_ratio: number | null
+              calmar_ratio: number | null
+              alpha: number | null
+              trading_style: string | null
+            }
+          })
 
         return sanitizePublicRankingSourcePayload({
           traders,
@@ -336,14 +345,19 @@ export const GET = withPublic(
           },
         }) as RankingsResponse
       }, // end fetcher
-      { ttl: 120 }
+      {
+        ttl: 120,
+        tags: [PUBLIC_RANKING_REDIS_TAG, `season:${window.toUpperCase()}`],
+        skipMemory: true,
+        writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+      }
     ) // end getOrSetWithLock
 
     const safeCached = sanitizePublicRankingSourcePayload(cached)
 
     return NextResponse.json(safeCached, {
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL,
       },
     })
   },

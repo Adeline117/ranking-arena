@@ -65,9 +65,14 @@ jest.mock('@/lib/supabase/read-replica', () => ({
   })),
 }))
 
-const mockTieredSet = jest.fn().mockResolvedValue(undefined)
+const mockTieredSet = jest.fn().mockResolvedValue(true)
+const mockReadSharedCacheWriteFence = jest.fn()
 jest.mock('@/lib/cache/redis-layer', () => ({
   tieredSet: (...args: unknown[]) => mockTieredSet(...args),
+}))
+
+jest.mock('@/lib/cache', () => ({
+  readSharedCacheWriteFence: (...args: unknown[]) => mockReadSharedCacheWriteFence(...args),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -206,6 +211,11 @@ describe('GET /api/cron/precompute-composite', () => {
     mockPgQueryResults = {}
     mockPgClient.query.mockClear()
     mockPgClient.release.mockClear()
+    mockTieredSet.mockResolvedValue(true)
+    mockReadSharedCacheWriteFence.mockResolvedValue({
+      key: 'public-rankings:write-fence:v1',
+      token: '7',
+    })
   })
 
   // ---- Auth ----------------------------------------------------------------
@@ -285,7 +295,7 @@ describe('GET /api/cron/precompute-composite', () => {
     expect(mockTieredSet).toHaveBeenCalled()
     // First call stores the freshness-aware composite cache generation.
     const firstCall = mockTieredSet.mock.calls[0]
-    expect(firstCall[0]).toBe('public-rank-policy-v4:precomputed:composite:all:v2')
+    expect(firstCall[0]).toBe('public-rank-policy-v6:precomputed:composite:all:v2')
     const compositeData = firstCall[1]
     expect(compositeData.window).toBe('COMPOSITE')
     expect(compositeData.precomputed).toBe(true)
@@ -296,6 +306,7 @@ describe('GET /api/cron/precompute-composite', () => {
       String(sql).includes('FROM leaderboard_ranks AS ranks')
     )?.[0] as string
     expect(leaderboardSelect).toContain('ranks.arena_score > 0')
+    expect(leaderboardSelect).toContain('ranks.rank IS NOT NULL')
     expect(leaderboardSelect).toContain('ranks.roi IS NOT NULL')
     expect(leaderboardSelect).toContain('(ranks.is_outlier IS NULL OR ranks.is_outlier = false)')
   })
@@ -352,7 +363,7 @@ describe('GET /api/cron/precompute-composite', () => {
       expect(res.status).toBe(200)
 
       const compositeData = mockTieredSet.mock.calls.find(
-        ([key]) => key === 'public-rank-policy-v4:precomputed:composite:all:v2'
+        ([key]) => key === 'public-rank-policy-v6:precomputed:composite:all:v2'
       )?.[1]
       expect(compositeData).toBeDefined()
       expect(compositeData.is_stale).toBe(true)

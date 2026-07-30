@@ -228,8 +228,10 @@ export async function getTopMovers(
     .from('leaderboard_ranks')
     .select('platform:source, trader_key:source_trader_id, window:season_id, arena_score')
     .eq('season_id', period)
+    .not('rank', 'is', null)
     .not('arena_score', 'is', null)
     .order('arena_score', { ascending: false })
+    .order('rank', { ascending: true, nullsFirst: false })
     .limit(limit)
 
   if (error) {

@@ -27,7 +27,9 @@ import {
 import { PUBLIC_ACTIVE_RANKING_SOURCES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
+  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
   PUBLIC_RANKING_QUARANTINED_SOURCES,
+  PUBLIC_RANKING_REDIS_TAG,
   filterPublicRankingRows,
   filterPublicRankingSources,
   publicRankingCacheKey,
@@ -39,6 +41,8 @@ import {
 export interface InitialTrader {
   id: string
   handle: string
+  /** Persisted publication rank; never inferred from page position. */
+  rank: number
   roi: number
   pnl: number
   win_rate: number | null
@@ -67,7 +71,9 @@ export interface InitialTrader {
 /**
  * Map a UnifiedTrader to the InitialTrader interface used by frontend components.
  */
-function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader {
+function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
+  if (t.rank == null) return null
+
   // For copin aggregator: extract real platform from trader_key (e.g., "hyperliquid:0x..." → "hyperliquid")
   let displayPlatform = t.platform
   let displayKey = t.traderKey
@@ -87,6 +93,7 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader {
   return {
     id: displayKey,
     handle: displayHandle,
+    rank: t.rank,
     roi: t.roi ?? 0,
     pnl: t.pnl ?? 0,
     win_rate: t.winRate,
@@ -153,13 +160,28 @@ export async function refreshHomeInitialTradersCache(
   timeRange: Period = '90D',
   limit = 50
 ): Promise<number> {
+  const writeFence = await cache.readSharedCacheWriteFence(PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY)
+  if (!writeFence) throw new Error('SSR homepage cache write fence was not available')
   const result = await fetchLeaderboardFromDB(timeRange, limit, 0)
   if (result.traders.length === 0) return 0
   const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, 0)
-  await Promise.all([
-    cache.set(cacheKey, result, { ttl: 7200 }),
-    cache.set(fallbackKey, result, { ttl: 14400 }),
+  const writes = await Promise.all([
+    cache.set(cacheKey, result, {
+      ttl: 7200,
+      tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
+      skipMemory: true,
+      writeFence,
+    }),
+    cache.set(fallbackKey, result, {
+      ttl: 14400,
+      tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
+      skipMemory: true,
+      writeFence,
+    }),
   ])
+  if (writes.some((written) => !written)) {
+    throw new Error('SSR homepage Redis cache write was not confirmed')
+  }
   return result.traders.length
 }
 
@@ -179,6 +201,11 @@ export async function getInitialTraders(
     }
   }
 
+  // Capture before the first cache read and before any database query. If a
+  // publication advances this generation while the request is in flight, its
+  // eventual fire-and-forget writes are rejected atomically by Redis.
+  const writeFence = await cache.readSharedCacheWriteFence(PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY)
+
   // Try Redis cache first — fresh hit returns immediately.
   // Two-tier cache strategy:
   //   1. Primary cache (2h TTL) — normal serving
@@ -186,22 +213,24 @@ export async function getInitialTraders(
   const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, page)
   let cached: InitialTradersResult | null = null
   let fallbackCached: InitialTradersResult | null = null
-  try {
-    cached = await cache.get<InitialTradersResult>(cacheKey)
-    if (cached && cached.traders && cached.traders.length > 0) {
-      const safeCached = sanitizePublicRankingSourcePayload(cached)
-      if (safeCached.traders.length > 0) return safeCached
-      cached = safeCached
+  if (writeFence !== null) {
+    try {
+      cached = await cache.get<InitialTradersResult>(cacheKey, { skipMemory: true })
+      if (cached && cached.traders && cached.traders.length > 0) {
+        const safeCached = sanitizePublicRankingSourcePayload(cached)
+        if (safeCached.traders.length > 0) return safeCached
+        cached = safeCached
+      }
+      // Primary cache miss — try fallback (longer TTL, may be stale but better than empty)
+      fallbackCached = await cache.get<InitialTradersResult>(fallbackKey, { skipMemory: true })
+      if (fallbackCached) {
+        fallbackCached = sanitizePublicRankingSourcePayload(fallbackCached)
+        const stale = staleCacheResult(fallbackCached)
+        if (stale) return stale
+      }
+    } catch (_err) {
+      // Redis unavailable — fall through to DB
     }
-    // Primary cache miss — try fallback (longer TTL, may be stale but better than empty)
-    fallbackCached = await cache.get<InitialTradersResult>(fallbackKey)
-    if (fallbackCached) {
-      fallbackCached = sanitizePublicRankingSourcePayload(fallbackCached)
-      const stale = staleCacheResult(fallbackCached)
-      if (stale) return stale
-    }
-  } catch (_err) {
-    // Redis unavailable — fall through to DB
   }
 
   // fetchLeaderboardFromDB owns the single 5s timeout and aborts the actual
@@ -225,8 +254,18 @@ export async function getInitialTraders(
     if (result.traders.length > 0) {
       fireAndForget(
         Promise.all([
-          cache.set(cacheKey, result, { ttl: 7200 }),
-          cache.set(fallbackKey, result, { ttl: 14400 }),
+          cache.set(cacheKey, result, {
+            ttl: 7200,
+            tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
+            skipMemory: true,
+            writeFence,
+          }),
+          cache.set(fallbackKey, result, {
+            ttl: 14400,
+            tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
+            skipMemory: true,
+            writeFence,
+          }),
         ]),
         'cache-set-initial-traders'
       )
@@ -492,6 +531,7 @@ async function fetchPaginatedFromDB(
     .from('leaderboard_ranks')
     .select(SSR_COLS)
     .eq('season_id', timeRange)
+    .not('rank', 'is', null)
     .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
     .gt('arena_score', 0)
     .or('is_outlier.is.null,is_outlier.eq.false')
@@ -502,6 +542,7 @@ async function fetchPaginatedFromDB(
 
   const { data, error } = await query
     .order('arena_score', { ascending: false })
+    .order('rank', { ascending: true, nullsFirst: false })
     .range(offset, offset + limit - 1)
     .abortSignal(signal)
 
@@ -515,8 +556,12 @@ async function fetchPaginatedFromDB(
   const unifiedTraders = filterPublicRankingRows(
     data as Record<string, unknown>[],
     (row) => row.source
-  ).map((row) => mapLeaderboardRow(row))
-  const initialTraders = unifiedTraders.map(mapUnifiedToInitial)
+  )
+    .filter((row) => row.rank != null)
+    .map((row) => mapLeaderboardRow(row))
+  const initialTraders = unifiedTraders
+    .map(mapUnifiedToInitial)
+    .filter((trader): trader is InitialTrader => trader !== null)
   const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
 
   return { traders: initialTraders, lastUpdated }
@@ -543,7 +588,9 @@ async function fetchLeaderboardLegacy(
     signal,
   })
 
-  const initialTraders = unifiedTraders.map(mapUnifiedToInitial)
+  const initialTraders = unifiedTraders
+    .map(mapUnifiedToInitial)
+    .filter((trader): trader is InitialTrader => trader !== null)
   const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
 
   return {

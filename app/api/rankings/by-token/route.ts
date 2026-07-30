@@ -16,6 +16,10 @@ import { getSupabaseAdmin } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
+import {
+  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+  PUBLIC_RANKING_REDIS_TAG,
+} from '@/lib/rankings/publication-policy'
 import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
 import {
   getTokenTraderRankingCacheKey,
@@ -79,12 +83,13 @@ async function handlePopularTokens(): Promise<NextResponse> {
         }
       },
       'cold',
-      ['rankings', 'popular-tokens']
+      [PUBLIC_RANKING_REDIS_TAG, 'popular-tokens'],
+      { skipMemory: true, writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY }
     )
 
     return NextResponse.json(
       { tokens: result },
-      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800' } }
+      { headers: { 'Cache-Control': 'private, no-store, max-age=0, must-revalidate' } }
     )
   } catch (err) {
     logger.error('[popular-tokens]', err instanceof Error ? err : new Error(String(err)))
@@ -152,12 +157,13 @@ export async function GET(request: NextRequest) {
         return { traders, token, period, total }
       },
       'cold',
-      ['rankings', 'by-token']
+      [PUBLIC_RANKING_REDIS_TAG, 'by-token'],
+      { skipMemory: true, writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY }
     )
 
     return NextResponse.json(result, {
       headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800',
+        'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
       },
     })
   } catch (err) {

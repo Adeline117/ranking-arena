@@ -2,6 +2,7 @@ const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 const mockCacheGet = jest.fn()
 const mockCacheSet = jest.fn()
+const mockReadSharedCacheWriteFence = jest.fn()
 const mockAttachAvatarMirrors = jest.fn(async (_supabase: unknown, traders: unknown[]) => traders)
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -15,6 +16,7 @@ jest.mock('@/lib/data/avatar-mirrors', () => ({
 jest.mock('@/lib/cache', () => ({
   get: (...args: unknown[]) => mockCacheGet(...args),
   set: (...args: unknown[]) => mockCacheSet(...args),
+  readSharedCacheWriteFence: (...args: unknown[]) => mockReadSharedCacheWriteFence(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -45,13 +47,14 @@ function queryResult(data: unknown[], error: unknown = null) {
 }
 
 /**
- * Emulate PostgREST's source filters and RANGE order. A retired row ahead of a
- * page boundary therefore consumes a slot unless `.in('source', active)` was
- * applied before `.range(...)`.
+ * Emulate PostgREST's publication filters and RANGE order. A retired or
+ * unpublished row ahead of a page boundary therefore consumes a slot unless
+ * those filters are applied before `.range(...)`.
  */
 function sourceFilteredPageQuery(data: Array<Record<string, unknown>>, error: unknown = null) {
   let allowedSources: Set<unknown> | null = null
   let excludedSources = new Set<string>()
+  let requirePublishedRank = false
   let range: [number, number] | null = null
   const methods: Record<string, jest.Mock> = {}
   const proxy = new Proxy<Record<string, unknown>>(
@@ -62,6 +65,7 @@ function sourceFilteredPageQuery(data: Array<Record<string, unknown>>, error: un
           const filtered = data
             .filter((row) => allowedSources === null || allowedSources.has(row.source))
             .filter((row) => typeof row.source !== 'string' || !excludedSources.has(row.source))
+            .filter((row) => !requirePublishedRank || row.rank != null)
           const page = range ? filtered.slice(range[0], range[1] + 1) : filtered
           const result = { data: page, error }
           return (
@@ -79,9 +83,16 @@ function sourceFilteredPageQuery(data: Array<Record<string, unknown>>, error: un
           return methods.in
         }
         if (key === 'not') {
-          methods.not ??= jest.fn((column: string, operator: string, value: string) => {
+          methods.not ??= jest.fn((column: string, operator: string, value: unknown) => {
             if (column === 'source' && operator === 'in') {
-              excludedSources = new Set(value.replace(/^\(|\)$/g, '').split(','))
+              excludedSources = new Set(
+                String(value)
+                  .replace(/^\(|\)$/g, '')
+                  .split(',')
+              )
+            }
+            if (column === 'rank' && operator === 'is' && value === null) {
+              requirePublishedRank = true
             }
             return proxy
           })
@@ -144,6 +155,10 @@ describe('SSR public ranking source quarantine', () => {
     jest.clearAllMocks()
     mockCacheGet.mockResolvedValue(null)
     mockCacheSet.mockResolvedValue(undefined)
+    mockReadSharedCacheWriteFence.mockResolvedValue({
+      key: 'public-rankings:write-fence:v1',
+      token: '7',
+    })
     jest.useFakeTimers().setSystemTime(new Date('2026-07-24T12:00:00.000Z'))
   })
 
@@ -175,6 +190,7 @@ describe('SSR public ranking source quarantine', () => {
             source_type: 'futures',
             handle: 'Page 0 Safe 1',
             arena_score: 100,
+            rank: 1,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -183,6 +199,16 @@ describe('SSR public ranking source quarantine', () => {
             source_type: 'futures',
             handle: 'Page 0 Safe 2',
             arena_score: 95,
+            rank: 2,
+            computed_at: '2026-07-24T11:55:00.000Z',
+          },
+          {
+            source: 'binance_futures',
+            source_trader_id: 'active-but-unpublished',
+            source_type: 'futures',
+            handle: 'Active but unpublished',
+            arena_score: 92,
+            rank: null,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -191,6 +217,7 @@ describe('SSR public ranking source quarantine', () => {
             source_type: 'web3',
             handle: 'Retired Copin Slot',
             arena_score: 90,
+            rank: 3,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -199,6 +226,7 @@ describe('SSR public ranking source quarantine', () => {
             source_type: 'futures',
             handle: 'Retired Toobit Slot',
             arena_score: 85,
+            rank: 4,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -207,6 +235,7 @@ describe('SSR public ranking source quarantine', () => {
             source_type: 'web3',
             handle: 'Page 1 Safe 1',
             arena_score: 80,
+            rank: 5,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -215,6 +244,7 @@ describe('SSR public ranking source quarantine', () => {
             source_type: 'web3',
             handle: 'Page 1 Safe 2',
             arena_score: 75,
+            rank: 6,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
         ])
@@ -251,6 +281,11 @@ describe('SSR public ranking source quarantine', () => {
     expect(result.totalCount).toBe(4)
     expect(result.categoryCounts).toEqual({ all: 4, futures: 2, spot: 0, onchain: 2 })
     expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+    expect(rankingQuery?.not).toHaveBeenCalledWith('rank', 'is', null)
+    expect(rankingQuery?.order).toHaveBeenCalledWith('rank', {
+      ascending: true,
+      nullsFirst: false,
+    })
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
@@ -290,6 +325,7 @@ describe('SSR public ranking source quarantine', () => {
             source_trader_id: 'hyperliquid:0xretired-page-zero',
             handle: 'Retired Copin',
             arena_score: 110,
+            rank: 1,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -297,6 +333,7 @@ describe('SSR public ranking source quarantine', () => {
             source_trader_id: 'retired-toobit-page-zero',
             handle: 'Retired Toobit',
             arena_score: 105,
+            rank: 2,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -304,6 +341,7 @@ describe('SSR public ranking source quarantine', () => {
             source_trader_id: 'quarantined-page-zero',
             handle: 'Quarantined',
             arena_score: 100,
+            rank: 3,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -311,6 +349,7 @@ describe('SSR public ranking source quarantine', () => {
             source_trader_id: 'safe-1',
             handle: 'Safe 1',
             arena_score: 90,
+            rank: 4,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -318,6 +357,7 @@ describe('SSR public ranking source quarantine', () => {
             source_trader_id: 'safe-2',
             handle: 'Safe 2',
             arena_score: 80,
+            rank: 5,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -325,6 +365,7 @@ describe('SSR public ranking source quarantine', () => {
             source_trader_id: 'safe-3',
             handle: 'Safe 3',
             arena_score: 70,
+            rank: 6,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
         ])
@@ -356,6 +397,7 @@ describe('SSR public ranking source quarantine', () => {
     expect(result.traders.map(({ id }) => id)).toEqual(['safe-1', 'safe-2', 'safe-3'])
     expect(result.totalCount).toBe(3)
     expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+    expect(rankingQuery?.not).toHaveBeenCalledWith('rank', 'is', null)
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
@@ -396,6 +438,7 @@ describe('SSR public ranking source quarantine', () => {
             source_type: 'web3',
             handle: 'Retired Copin',
             arena_score: 100,
+            rank: 1,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
           {
@@ -404,6 +447,7 @@ describe('SSR public ranking source quarantine', () => {
             source_type: 'futures',
             handle: 'Safe',
             arena_score: 90,
+            rank: 2,
             computed_at: '2026-07-24T11:55:00.000Z',
           },
         ])
@@ -451,7 +495,8 @@ describe('SSR public ranking source quarantine', () => {
     const result = await getInitialTraders('90D', 3, 1)
 
     expect(mockCacheGet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:home-initial-traders-v4:90D:p1'
+      'public-rank-policy-v6:home-initial-traders-v4:90D:p1',
+      { skipMemory: true }
     )
     expect(result.traders).toEqual([first, last])
     expect(result.totalCount).toBe(2)
@@ -464,8 +509,8 @@ describe('SSR public ranking source quarantine', () => {
 
   it('never reads transformed Copin data from v3 and uses v4 for normal cache writes and reads', async () => {
     const oldV3Key = 'public-rank-policy-v3:home-initial-traders-v4:90D:p1'
-    const newV4Key = 'public-rank-policy-v4:home-initial-traders-v4:90D:p1'
-    const newV4FallbackKey = 'public-rank-policy-v4:home-initial-traders-fallback-v4:90D:p1'
+    const newV4Key = 'public-rank-policy-v6:home-initial-traders-v4:90D:p1'
+    const newV4FallbackKey = 'public-rank-policy-v6:home-initial-traders-fallback-v4:90D:p1'
     const transformedCopin = {
       traders: [
         {
@@ -494,6 +539,7 @@ describe('SSR public ranking source quarantine', () => {
         source_type: 'futures',
         handle: 'Fresh V4',
         arena_score: 90,
+        rank: 1,
         computed_at: '2026-07-24T11:55:00.000Z',
       },
     ])
@@ -522,11 +568,21 @@ describe('SSR public ranking source quarantine', () => {
     const first = await getInitialTraders('90D', 1, 1)
 
     expect(first.traders.map(({ id }) => id)).toEqual(['fresh-v4'])
-    expect(mockCacheGet).not.toHaveBeenCalledWith(oldV3Key)
-    expect(mockCacheGet).toHaveBeenNthCalledWith(1, newV4Key)
-    expect(mockCacheGet).toHaveBeenNthCalledWith(2, newV4FallbackKey)
-    expect(mockCacheSet).toHaveBeenCalledWith(newV4Key, first, { ttl: 7200 })
-    expect(mockCacheSet).toHaveBeenCalledWith(newV4FallbackKey, first, { ttl: 14400 })
+    expect(mockCacheGet).not.toHaveBeenCalledWith(oldV3Key, expect.anything())
+    expect(mockCacheGet).toHaveBeenNthCalledWith(1, newV4Key, { skipMemory: true })
+    expect(mockCacheGet).toHaveBeenNthCalledWith(2, newV4FallbackKey, { skipMemory: true })
+    expect(mockCacheSet).toHaveBeenCalledWith(newV4Key, first, {
+      ttl: 7200,
+      tags: ['rankings:public-rank-policy-v6', 'season:90D'],
+      skipMemory: true,
+      writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
+    })
+    expect(mockCacheSet).toHaveBeenCalledWith(newV4FallbackKey, first, {
+      ttl: 14400,
+      tags: ['rankings:public-rank-policy-v6', 'season:90D'],
+      skipMemory: true,
+      writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
+    })
     expect(cacheEntries.get(oldV3Key)).toBe(transformedCopin)
 
     mockFrom.mockClear()
@@ -555,11 +611,13 @@ describe('SSR public ranking source quarantine', () => {
 
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       1,
-      'public-rank-policy-v4:home-initial-traders-v4:90D:p0'
+      'public-rank-policy-v6:home-initial-traders-v4:90D:p0',
+      { skipMemory: true }
     )
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       2,
-      'public-rank-policy-v4:home-initial-traders-fallback-v4:90D:p0'
+      'public-rank-policy-v6:home-initial-traders-fallback-v4:90D:p0',
+      { skipMemory: true }
     )
     expect(result).toEqual({ ...fallback, isStale: true })
     expect(mockFrom).not.toHaveBeenCalled()
@@ -575,6 +633,7 @@ describe('SSR public ranking source quarantine', () => {
         source_type: 'futures',
         handle: 'Shared Signal',
         arena_score: 90,
+        rank: 1,
         computed_at: '2026-07-24T11:55:00.000Z',
       },
     ])

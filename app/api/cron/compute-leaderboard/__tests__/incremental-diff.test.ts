@@ -20,6 +20,7 @@ const FACTORS: NonNullable<ScoredTrader['score_factors']> = {
   sharpe: 0.58,
   consistency: 0.67,
 }
+const DEFAULT_COMPUTED_AT = new Date().toISOString()
 
 function makeScored(overrides: Partial<ScoredTrader> = {}): ScoredTrader {
   return {
@@ -66,6 +67,7 @@ function makeCurrent(overrides: Partial<CurrentRow> = {}): CurrentRow {
     arena_score_v4: trader.arena_score_v4,
     score_factors: { ...FACTORS },
     rank: 1,
+    computed_at: DEFAULT_COMPUTED_AT,
     roi: trader.roi,
     pnl: trader.pnl,
     win_rate: trader.win_rate,
@@ -162,7 +164,9 @@ describe('compute-leaderboard incremental diff', () => {
       ...makeCurrent(),
     }
     const range = jest.fn().mockResolvedValue({ data: [databaseRow], error: null })
-    const eq = jest.fn(() => ({ range }))
+    const query = { order: jest.fn(), range }
+    query.order.mockReturnValue(query)
+    const eq = jest.fn(() => query)
     const select = jest.fn(() => ({ eq }))
     const from = jest.fn(() => ({ select }))
 
@@ -170,6 +174,10 @@ describe('compute-leaderboard incremental diff', () => {
 
     expect(from).toHaveBeenCalledWith('leaderboard_ranks')
     expect(eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(query.order.mock.calls).toEqual([
+      ['source', { ascending: true }],
+      ['source_trader_id', { ascending: true }],
+    ])
     expect(range).toHaveBeenCalledWith(0, 999)
 
     const selected = String(select.mock.calls[0]?.[0])
@@ -183,6 +191,7 @@ describe('compute-leaderboard incremental diff', () => {
       'arena_score_v4',
       'score_factors',
       'rank',
+      'computed_at',
       'roi',
       'pnl',
       'win_rate',
@@ -215,6 +224,33 @@ describe('compute-leaderboard incremental diff', () => {
     expect(result.get('fixture_source:trader-1')).toEqual(makeCurrent())
   })
 
+  it('fails closed before diffing when current-rank authority is unreadable', async () => {
+    const range = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'replica unavailable' },
+    })
+    const query = { order: jest.fn(), range }
+    query.order.mockReturnValue(query)
+    const supabase = {
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({ eq: jest.fn(() => query) })),
+      })),
+    }
+
+    await expect(fetchCurrentScoreMap(supabase as never, '30D', () => false)).rejects.toThrow(
+      '[30D] current-rank authority read failed: replica unavailable'
+    )
+  })
+
+  it('fails closed instead of returning a deadline-truncated rank map', async () => {
+    const from = jest.fn()
+
+    await expect(fetchCurrentScoreMap({ from } as never, '7D', () => true)).rejects.toThrow(
+      '[7D] current-rank authority read deadline reached at page 1'
+    )
+    expect(from).not.toHaveBeenCalled()
+  })
+
   it('skips a structurally identical row, including a separately allocated factor object', () => {
     const trader = makeScored()
     const current = makeCurrent({ score_factors: { ...FACTORS } })
@@ -222,9 +258,41 @@ describe('compute-leaderboard incremental diff', () => {
     const result = diffOne(trader, current)
 
     expect(result.changedTraders).toEqual([])
-    expect(result.rankMap).toEqual(new Map([[keyFor(trader), 1]]))
     expect(result.prevRankMap).toEqual(new Map([[keyFor(trader), 1]]))
   })
+
+  it('refreshes stable rows halfway through the public computed-at eligibility window', () => {
+    const nowMs = Date.parse('2026-07-29T12:00:00.000Z')
+    const trader = makeScored()
+    const currentScoreMap = (computedAt: string | null) =>
+      new Map([[keyFor(trader), makeCurrent({ computed_at: computedAt })]])
+
+    expect(
+      buildChangedTraders([trader], currentScoreMap('2026-07-29T00:00:00.000Z'), '90D', nowMs)
+        .changedTraders
+    ).toEqual([])
+    expect(
+      buildChangedTraders([trader], currentScoreMap('2026-07-28T12:00:00.000Z'), '90D', nowMs)
+        .changedTraders
+    ).toEqual([trader])
+  })
+
+  it.each([null, 'not-a-time', '2026-07-29T12:06:00.000Z'])(
+    'refreshes an unverifiable computed_at value: %p',
+    (computedAt) => {
+      const nowMs = Date.parse('2026-07-29T12:00:00.000Z')
+      const trader = makeScored()
+
+      expect(
+        buildChangedTraders(
+          [trader],
+          new Map([[keyFor(trader), makeCurrent({ computed_at: computedAt })]]),
+          '90D',
+          nowMs
+        ).changedTraders
+      ).toEqual([trader])
+    }
+  )
 
   it.each(nullableFieldCases)('%s value -> null is a write-worthy change', (field, value) => {
     const trader = { ...makeScored(), [field]: null } as ScoredTrader
@@ -273,16 +341,14 @@ describe('compute-leaderboard incremental diff', () => {
 
     expect(diffOne(trader, makeCurrent({ arena_score: 79.61 })).changedTraders).toEqual([])
     expect(diffOne(trader, makeCurrent({ arena_score: 79.59 })).changedTraders).toEqual([trader])
-    expect(diffOne(trader, makeCurrent({ arena_score: 80, rank: 2 })).changedTraders).toEqual([
-      trader,
-    ])
+    expect(diffOne(trader, makeCurrent({ arena_score: 80, rank: 2 })).changedTraders).toEqual([])
     expect(
       diffOne(makeScored({ arena_score: 0 }), makeCurrent({ arena_score: 0 })).changedTraders
     ).toEqual([])
     expect(diffOne(trader, makeCurrent({ arena_score: 0 })).changedTraders).toEqual([trader])
   })
 
-  it('marks absent rows changed and builds new-rank plus complete previous-rank maps', () => {
+  it('marks absent rows changed and preserves the complete previous-rank map', () => {
     const first = makeScored()
     const second = makeScored({ source_trader_id: 'trader-2', arena_score: 70 })
     const staleKey = 'fixture_source:stale-trader'
@@ -293,13 +359,7 @@ describe('compute-leaderboard incremental diff', () => {
 
     const result = buildChangedTraders([first, second], currentScoreMap, '90D')
 
-    expect(result.changedTraders).toEqual([first, second])
-    expect(result.rankMap).toEqual(
-      new Map([
-        [keyFor(first), 1],
-        [keyFor(second), 2],
-      ])
-    )
+    expect(result.changedTraders).toEqual([second])
     expect(result.prevRankMap).toEqual(
       new Map([
         [keyFor(first), 3],
