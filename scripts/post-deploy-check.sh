@@ -13,25 +13,8 @@ FAIL=0
 echo "🔍 Post-deploy check: $BASE"
 echo ""
 
-# 动态取排行第一名做 trader 详情页冒烟（固定 handle 会因数据下架变成死链，
-# 如 /trader/soul 的 weex 数据 2026-06 已不存在 — 页面 200 但内容是 not-found）
-TRADER_PATH="/trader/soul"
-TOP=$(curl -s --max-time 15 "${BASE}/api/rankings?window=30d&limit=1" | python3 -c "
-import json,sys
-try:
-    t=json.load(sys.stdin)['data']['traders'][0]
-    print(f\"/trader/{t['trader_key']}?platform={t['platform']}\")
-except Exception:
-    pass" 2>/dev/null)
-[ -n "$TOP" ] && TRADER_PATH="$TOP"
-
-for path in \
-  "/" \
-  "$TRADER_PATH" \
-  "/login" \
-  "/pricing" \
-  "/api/health"; do
-
+check_path() {
+  local path="$1"
   STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 \
     --retry 2 --retry-all-errors --retry-delay 1 "${BASE}${path}" || true)
   case "$STATUS" in
@@ -44,6 +27,41 @@ for path in \
       FAIL=$((FAIL+1))
       ;;
   esac
+}
+
+# 动态取当前公开榜第一名做 trader 详情页冒烟。固定 handle 会在来源下架后
+# 变成 200 not-found；取样 API 不可用或为空本身就是 discovery hard failure，
+# 因此这里 fail closed，不回退到历史 fixture。
+TOP_JSON=$(curl -fsS --max-time 20 --retry 2 --retry-all-errors --retry-delay 1 \
+  "${BASE}/api/rankings?window=30d&limit=1&_release_check=$(date +%s)" || true)
+TRADER_PATH=$(printf '%s' "$TOP_JSON" | python3 -c '
+import json,sys
+from urllib.parse import quote
+try:
+    trader=json.load(sys.stdin)["data"]["traders"][0]
+    key=trader["trader_key"]
+    source=trader["platform"]
+    if not isinstance(key,str) or not key or not isinstance(source,str) or not source:
+        raise ValueError("invalid ranking sample identity")
+    key=quote(key, safe="")
+    source=quote(source, safe="")
+    print(f"/trader/{key}?source={source}")
+except Exception:
+    pass
+' 2>/dev/null)
+if [ -n "$TRADER_PATH" ]; then
+  check_path "$TRADER_PATH"
+else
+  echo "❌ FAIL current ranking sample is empty or unreadable"
+  FAIL=$((FAIL+1))
+fi
+
+for path in \
+  "/" \
+  "/login" \
+  "/pricing" \
+  "/api/health"; do
+  check_path "$path"
 done
 
 # Release identity: CLI deployments do not always populate VERCEL_GIT_COMMIT_SHA,

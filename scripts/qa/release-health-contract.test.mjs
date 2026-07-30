@@ -94,3 +94,13 @@ test('deploy smoke and rollback use the same release-health authority', () => {
   assert.match(gate, /"\$HEALTH_HTTP" = "202"/)
   assert.match(gate, /\[ "\$HEALTH_SAFE" = "true" \]/)
 })
+
+test('deploy smoke samples a current source-scoped trader and has no retired fallback', () => {
+  const smoke = fs.readFileSync(path.join(root, 'scripts/post-deploy-check.sh'), 'utf8')
+
+  assert.doesNotMatch(smoke, /\/trader\/soul/)
+  assert.match(smoke, /curl -fsS[^]*\/api\/rankings\?window=30d&limit=1/)
+  assert.match(smoke, /source=quote\(source, safe=""\)/)
+  assert.match(smoke, /\?source=\{source\}/)
+  assert.match(smoke, /current ranking sample is empty or unreadable/)
+})
