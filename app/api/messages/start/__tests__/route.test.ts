@@ -1,250 +1,331 @@
-/**
- * Tests for POST /api/messages/start
- *
- * Covers: auth required, Zod validation, self-messaging prevention,
- * conversation dedup (existing conv returned), DM blocking.
- */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
-import type { NextRequest } from 'next/server'
-
-const mockRpc = jest.fn()
-const mockFrom = jest.fn()
-const SENDER_ID = '11111111-1111-4111-8111-111111111111'
-const RECEIVER_ID = '22222222-2222-4222-8222-222222222222'
-const CONVERSATION_ID = '33333333-3333-4333-8333-333333333333'
-
-function selectQuery(result: { data: unknown; error: { code?: string; message?: string } | null }) {
-  const query = {
-    select: jest.fn(),
-    eq: jest.fn(),
-    maybeSingle: jest.fn().mockResolvedValue(result),
-    single: jest.fn().mockResolvedValue(result),
-  }
-  query.select.mockReturnValue(query)
-  query.eq.mockReturnValue(query)
-  return query
-}
-
-// Mock dependencies
 jest.mock('next/server', () => {
   class MockNextResponse {
+    private readonly body: unknown
     status: number
+    headers: Headers
 
-    constructor(
-      private readonly body: unknown,
-      init: { status?: number } = {}
-    ) {
+    constructor(body: unknown, init: { status?: number; headers?: HeadersInit } = {}) {
+      this.body = body
       this.status = init.status ?? 200
+      this.headers = new Headers(init.headers)
     }
 
     async json() {
       return this.body
     }
 
-    static json(body: unknown, init?: { status?: number }) {
+    static json(body: unknown, init?: { status?: number; headers?: HeadersInit }) {
       return new MockNextResponse(body, init)
     }
   }
 
-  return { NextResponse: MockNextResponse }
+  class MockNextRequest {
+    url: string
+    method: string
+    private readonly rawBody: string
+
+    constructor(url: string, init: { method?: string; body?: string } = {}) {
+      this.url = url
+      this.method = init.method ?? 'POST'
+      this.rawBody = init.body ?? ''
+    }
+
+    async json() {
+      if (!this.rawBody) throw new Error('missing body')
+      return JSON.parse(this.rawBody)
+    }
+  }
+
+  return { NextRequest: MockNextRequest, NextResponse: MockNextResponse }
 })
+
+const mockRpc = jest.fn()
+const mockFrom = jest.fn()
+const mockLoggerError = jest.fn()
+const mockTraceMessage = jest.fn()
+
+const SENDER_ID = '11111111-1111-4111-8111-111111111111'
+const RECEIVER_ID = '22222222-2222-4222-8222-222222222222'
+const CONVERSATION_ID = '33333333-3333-4333-8333-333333333333'
+
 jest.mock('@/lib/api/middleware', () => ({
   withAuth:
-    (handler: (context: Record<string, unknown>) => Promise<unknown>) => (request: unknown) =>
+    (
+      handler: (context: {
+        user: { id: string }
+        supabase: { rpc: typeof mockRpc; from: typeof mockFrom }
+        request: unknown
+      }) => unknown
+    ) =>
+    (request: unknown) =>
       handler({
         user: { id: SENDER_ID },
         supabase: { rpc: mockRpc, from: mockFrom },
         request,
       }),
 }))
-jest.mock('@/lib/features', () => ({
-  socialFeatureGuard: jest.fn().mockReturnValue(null),
-}))
-jest.mock('@/lib/utils/logger', () => ({
-  traceMessage: jest.fn(),
-  fireAndForget: jest.fn(),
-  createLogger: jest.fn().mockReturnValue({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }),
-}))
+jest.mock('@/lib/features', () => ({ socialFeatureGuard: () => null }))
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
-  default: { warn: jest.fn(), error: jest.fn(), info: jest.fn() },
+  default: { error: (...args: unknown[]) => mockLoggerError(...args) },
+}))
+jest.mock('@/lib/utils/logger', () => ({
+  traceMessage: (...args: unknown[]) => mockTraceMessage(...args),
 }))
 
-describe('POST /api/messages/start', () => {
-  beforeEach(() => {
-    jest.clearAllMocks()
+import { NextRequest } from 'next/server'
+import { POST } from '../route'
+
+function successResult(overrides: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    sender_id: SENDER_ID,
+    receiver_id: RECEIVER_ID,
+    conversation_id: CONVERSATION_ID,
+    receiver_handle: 'receiver',
+    can_message: true,
+    is_mutual_follow: false,
+    message_limit: null,
+    created: true,
+    ...overrides,
+  }
+}
+
+function request(body: unknown = { receiverId: RECEIVER_ID }): NextRequest {
+  return new NextRequest('http://localhost/api/messages/start', {
+    method: 'POST',
+    body: JSON.stringify(body),
   })
+}
 
-  test('exports a POST handler', async () => {
-    const mod = await import('../route')
-    expect(mod.POST).toBeDefined()
-    expect(typeof mod.POST).toBe('function')
+function rawRequest(rawBody: string): NextRequest {
+  return new NextRequest('http://localhost/api/messages/start', {
+    method: 'POST',
+    body: rawBody,
   })
+}
 
-  test('POST handler requires authentication', async () => {
-    // NextRequest constructor conflicts with jest.setup.js polyfill in jsdom.
-    // Verify the handler exists and is a function — integration test covers auth.
-    const { POST } = await import('../route')
-    expect(typeof POST).toBe('function')
-  })
+beforeEach(() => {
+  jest.clearAllMocks()
+  mockRpc.mockResolvedValue({ data: successResult(), error: null })
+})
 
-  test('Zod schema rejects non-UUID receiverId', async () => {
-    // The schema requires a valid UUID
-    const { z } = await import('zod')
-    const schema = z.object({
-      receiverId: z.string().uuid('Invalid receiver ID'),
-    })
-
-    const result = schema.safeParse({ receiverId: 'not-a-uuid' })
-    expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0].message).toBe('Invalid receiver ID')
-    }
-  })
-
-  test('Zod schema accepts valid UUID', async () => {
-    const { z } = await import('zod')
-    const schema = z.object({
-      receiverId: z.string().uuid('Invalid receiver ID'),
-    })
-
-    const result = schema.safeParse({ receiverId: '123e4567-e89b-12d3-a456-426614174000' })
-    expect(result.success).toBe(true)
-  })
-
-  test('Zod schema rejects missing receiverId', async () => {
-    const { z } = await import('zod')
-    const schema = z.object({
-      receiverId: z.string().uuid('Invalid receiver ID'),
-    })
-
-    const result = schema.safeParse({})
-    expect(result.success).toBe(false)
-  })
-
-  test.each(['BLOCKED', 'SENDER_UNAVAILABLE', 'UNKNOWN_DENIAL'])(
-    'fails closed without querying or creating a conversation for %s',
-    async (reason) => {
-      mockRpc.mockResolvedValue({ data: { allowed: false, reason }, error: null })
-
-      const { POST } = await import('../route')
-      const response = await POST({
-        json: async () => ({ receiverId: RECEIVER_ID }),
-      } as NextRequest)
-
-      expect(response.status).toBe(403)
-      await expect(response.json()).resolves.toEqual({
-        error: 'Permission denied',
-        error_code: 'PERMISSION_DENIED',
-      })
-      expect(mockFrom).not.toHaveBeenCalled()
-    }
-  )
-
-  test.each([
-    null,
-    {},
-    { allowed: 'yes' },
-    { allowed: true, reason: 'BLOCKED' },
-    { allowed: false },
-    { allowed: false, reason: 'LIMIT_REACHED', sent_count: 2 },
-  ])('fails closed for malformed permission acknowledgement %#', async (permission) => {
-    mockRpc.mockResolvedValue({ data: permission, error: null })
-
-    const { POST } = await import('../route')
-    const response = await POST({
-      json: async () => ({ receiverId: RECEIVER_ID }),
-    } as NextRequest)
-
-    expect(response.status).toBe(500)
-    await expect(response.json()).resolves.toEqual({
-      error: 'Failed to check permissions',
-      error_code: 'PERMISSION_CHECK_FAILED',
-    })
-    expect(mockFrom).not.toHaveBeenCalled()
-  })
-
-  test('does not create a conversation after an existing-conversation lookup error', async () => {
-    mockRpc.mockResolvedValue({ data: { allowed: true }, error: null })
-    const profileQuery = selectQuery({ data: { handle: 'receiver' }, error: null })
-    const conversationQuery = selectQuery({
-      data: null,
-      error: { code: '57014', message: 'query cancelled' },
-    })
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'user_profiles') return profileQuery
-      if (table === 'conversations') return conversationQuery
-      throw new Error(`Unexpected table: ${table}`)
-    })
-
-    const { POST } = await import('../route')
-    const response = await POST({
-      json: async () => ({ receiverId: RECEIVER_ID }),
-    } as NextRequest)
-
-    expect(response.status).toBe(500)
-    await expect(response.json()).resolves.toEqual({ error: 'Failed to find conversation' })
-    expect(conversationQuery.single).not.toHaveBeenCalled()
-  })
-
-  test('returns an identity-bound acknowledgement for the exact conversation pair', async () => {
-    mockRpc.mockResolvedValue({ data: { allowed: true, is_mutual: true }, error: null })
-    const profileQuery = selectQuery({ data: { handle: 'receiver' }, error: null })
-    const conversationQuery = selectQuery({
-      data: {
-        id: CONVERSATION_ID,
-        user1_id: SENDER_ID,
-        user2_id: RECEIVER_ID,
-        created_at: '2026-07-29T00:00:00.000Z',
-      },
-      error: null,
-    })
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'user_profiles') return profileQuery
-      if (table === 'conversations') return conversationQuery
-      throw new Error(`Unexpected table: ${table}`)
-    })
-
-    const { POST } = await import('../route')
-    const response = await POST({
-      json: async () => ({ receiverId: RECEIVER_ID }),
-    } as NextRequest)
+describe('POST /api/messages/start atomic boundary', () => {
+  it('normalizes the receiver and binds exactly one conversation-start RPC', async () => {
+    const response = await POST(request({ receiverId: RECEIVER_ID.toUpperCase() }))
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
     await expect(response.json()).resolves.toEqual({
       conversation_id: CONVERSATION_ID,
       sender_id: SENDER_ID,
       receiver_id: RECEIVER_ID,
       can_message: true,
-      is_mutual_follow: true,
+      is_mutual_follow: false,
       message_limit: null,
       receiver_handle: 'receiver',
     })
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenCalledWith('start_direct_message_conversation_atomic', {
+      p_sender_id: SENDER_ID,
+      p_receiver_id: RECEIVER_ID,
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockTraceMessage).toHaveBeenCalledWith({
+      event: 'conversation_created',
+      conversationId: CONVERSATION_ID,
+      senderId: SENDER_ID,
+      receiverId: RECEIVER_ID,
+      metadata: { created: true, isMutualFollow: false },
+    })
   })
 
-  test('rejects a conversation row belonging to a different user pair', async () => {
-    mockRpc.mockResolvedValue({ data: { allowed: true }, error: null })
-    const profileQuery = selectQuery({ data: { handle: 'receiver' }, error: null })
-    const conversationQuery = selectQuery({
-      data: {
-        id: CONVERSATION_ID,
-        user1_id: SENDER_ID,
-        user2_id: '44444444-4444-4444-8444-444444444444',
-      },
+  it('returns the exact existing limited conversation without claiming it was created', async () => {
+    mockRpc.mockResolvedValue({
+      data: successResult({
+        can_message: false,
+        message_limit: { reached: true, sent: 3, max: 3 },
+        created: false,
+      }),
       error: null,
     })
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'user_profiles') return profileQuery
-      if (table === 'conversations') return conversationQuery
-      throw new Error(`Unexpected table: ${table}`)
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      conversation_id: CONVERSATION_ID,
+      can_message: false,
+      message_limit: { reached: true, sent: 3, max: 3 },
+    })
+    expect(mockTraceMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { created: false, isMutualFollow: false } })
+    )
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('accepts the bounded non-mutual capacity acknowledgement', async () => {
+    mockRpc.mockResolvedValue({
+      data: successResult({
+        message_limit: { reached: false, sent: 2, max: 3 },
+        created: false,
+      }),
+      error: null,
     })
 
-    const { POST } = await import('../route')
-    const response = await POST({
-      json: async () => ({ receiverId: RECEIVER_ID }),
-    } as NextRequest)
+    const response = await POST(request())
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      can_message: true,
+      is_mutual_follow: false,
+      message_limit: { reached: false, sent: 2, max: 3 },
+    })
+  })
+
+  it.each([
+    ['missing receiver', {}],
+    ['invalid receiver', { receiverId: 'not-a-uuid' }],
+    ['null body', null],
+    ['array body', [RECEIVER_ID]],
+    ['unexpected sender', { receiverId: RECEIVER_ID, senderId: SENDER_ID }],
+  ])('rejects %s before opening the atomic boundary', async (_name, body) => {
+    const response = await POST(request(body))
+
+    expect(response.status).toBe(400)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    await expect(response.json()).resolves.toMatchObject({ error_code: 'VALIDATION_ERROR' })
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed JSON and self-message requests before the RPC', async () => {
+    const malformed = await POST(rawRequest('{'))
+    const selfMessage = await POST(request({ receiverId: SENDER_ID }))
+
+    expect(malformed.status).toBe(400)
+    expect(selfMessage.status).toBe(400)
+    expect(malformed.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(selfMessage.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'DM_DISABLED',
+      403,
+      { error: 'This user has disabled direct messages', error_code: 'PERMISSION_DENIED' },
+    ],
+    ['USER_NOT_FOUND', 404, { error: 'User not found' }],
+    ['SENDER_UNAVAILABLE', 403, { error: 'Permission denied', error_code: 'PERMISSION_DENIED' }],
+    ['BLOCKED', 403, { error: 'Permission denied', error_code: 'PERMISSION_DENIED' }],
+  ] as const)('maps %s to a stable private denial', async (reason, status, body) => {
+    mockRpc.mockResolvedValue({ data: { success: false, reason }, error: null })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(status)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    await expect(response.json()).resolves.toEqual(body)
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockTraceMessage).not.toHaveBeenCalled()
+  })
+
+  it('fails closed on database errors', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: '40001', message: 'serialization failure' },
+    })
+
+    const response = await POST(request())
 
     expect(response.status).toBe(500)
-    await expect(response.json()).resolves.toEqual({ error: 'Unable to create conversation' })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    await expect(response.json()).resolves.toEqual({ error: 'Failed to start conversation' })
+    expect(mockLoggerError).toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockTraceMessage).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['null result', null],
+    ['unknown denial', { success: false, reason: 'UNKNOWN' }],
+    ['denial with extra field', { success: false, reason: 'BLOCKED', extra: true }],
+    ['success with extra field', successResult({ extra: true })],
+    ['wrong sender', successResult({ sender_id: CONVERSATION_ID })],
+    ['wrong receiver', successResult({ receiver_id: CONVERSATION_ID })],
+    ['same participant', successResult({ receiver_id: SENDER_ID })],
+    ['invalid conversation', successResult({ conversation_id: 'not-a-uuid' })],
+    ['empty receiver handle', successResult({ receiver_handle: '' })],
+    ['nullable receiver handle', successResult({ receiver_handle: null })],
+    ['denied without reached limit', successResult({ can_message: false })],
+    [
+      'reached limit still writable',
+      successResult({
+        message_limit: { reached: true, sent: 3, max: 3 },
+        can_message: true,
+      }),
+    ],
+    [
+      'available limit denied',
+      successResult({
+        message_limit: { reached: false, sent: 2, max: 3 },
+        can_message: false,
+      }),
+    ],
+    [
+      'mutual response with a limit',
+      successResult({
+        is_mutual_follow: true,
+        message_limit: { reached: false, sent: 1, max: 3 },
+      }),
+    ],
+    [
+      'created reached-limit conversation',
+      successResult({
+        can_message: false,
+        message_limit: { reached: true, sent: 3, max: 3 },
+        created: true,
+      }),
+    ],
+    [
+      'under-counted reached limit',
+      successResult({
+        can_message: false,
+        message_limit: { reached: true, sent: 2, max: 3 },
+        created: false,
+      }),
+    ],
+    [
+      'wrong limit maximum',
+      successResult({
+        message_limit: { reached: false, sent: 1, max: 4 },
+      }),
+    ],
+  ])('fails closed on %s', async (_name, data) => {
+    mockRpc.mockResolvedValue({ data, error: null })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(mockLoggerError).toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockTraceMessage).not.toHaveBeenCalled()
+  })
+
+  it('contains no route-level permission, profile, or conversation table query', () => {
+    const source = readFileSync(join(__dirname, '../route.ts'), 'utf8')
+
+    expect(source).toContain(".rpc('start_direct_message_conversation_atomic'")
+    expect(source).not.toMatch(/\.from\(/)
+    expect(source).not.toContain("'check_dm_permission'")
+    expect(source).not.toContain('existingConversation')
+    expect(source).not.toContain('receiverProfile')
   })
 })

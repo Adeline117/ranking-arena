@@ -303,8 +303,9 @@ describe('channel membership server boundary migration', () => {
     expect(readFileSync(join(process.cwd(), 'app/api/messages/route.ts'), 'utf8')).toContain(
       "'send_direct_message_atomic'"
     )
-    expect(readFileSync(join(process.cwd(), 'app/api/messages/start/route.ts'), 'utf8')).toContain(
-      "'check_dm_permission'"
-    )
+    const startRoute = readFileSync(join(process.cwd(), 'app/api/messages/start/route.ts'), 'utf8')
+    expect(startRoute).toContain("'start_direct_message_conversation_atomic'")
+    expect(startRoute).not.toContain("'check_dm_permission'")
+    expect(startRoute).not.toContain('.from(')
   })
 })
