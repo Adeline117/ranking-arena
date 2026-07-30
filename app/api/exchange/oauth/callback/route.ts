@@ -16,6 +16,10 @@ type OAuthStateClaim = {
   claim_token?: unknown
 }
 
+type OAuthCompletion = {
+  connectionId: string
+}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -24,7 +28,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseExpiresIn(value: unknown): number | null {
   const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= 366 * 24 * 60 * 60 ? parsed : null
 }
 
 function providerErrorMessage(payload: unknown): string {
@@ -57,6 +61,41 @@ function parseClaim(
     id: claim.id,
     codeVerifier: claim.code_verifier,
     claimToken: claim.claim_token,
+  }
+}
+
+function parseCompletion(
+  raw: unknown,
+  expected: {
+    userId: string
+    exchange: string
+    stateId: string
+  }
+): OAuthCompletion | null {
+  if (!isRecord(raw) || raw.success !== true || raw.status !== 'connected') return null
+  if (
+    raw.user_id !== expected.userId ||
+    raw.exchange !== expected.exchange ||
+    raw.state_id !== expected.stateId ||
+    typeof raw.connection_id !== 'string' ||
+    !UUID_PATTERN.test(raw.connection_id)
+  ) {
+    return null
+  }
+  return { connectionId: raw.connection_id }
+}
+
+function completionFailureStatus(raw: unknown): { error: string; status: number } | null {
+  if (!isRecord(raw) || raw.success !== false) return null
+  switch (raw.reason) {
+    case 'ACTOR_UNAVAILABLE':
+      return { error: 'Account unavailable', status: 403 }
+    case 'STALE_CLAIM':
+      return { error: 'Authorization state changed; please retry', status: 409 }
+    case 'INVALID':
+      return { error: 'Invalid authorization result', status: 400 }
+    default:
+      return null
   }
 }
 
@@ -114,7 +153,7 @@ export async function POST(request: NextRequest) {
     const state = typeof body.state === 'string' ? body.state.trim() : ''
     const userId = user.id // Use authenticated user ID, not from body
 
-    if (!exchange || !code || !state) {
+    if (!exchange || !code || state.length < 32 || state.length > 512) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
     }
 
@@ -259,51 +298,43 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 存储到数据库
-      const { error: dbError } = await supabase.from('user_exchange_connections').upsert(
-        {
-          user_id: userId,
-          exchange,
-          exchange_user_id: exchangeUserId,
-          access_token_encrypted: encryptedAccessToken,
-          refresh_token_encrypted: encryptedRefreshToken,
-          expires_at: expiresAt,
-          is_active: true,
-          last_sync_at: new Date().toISOString(),
-          last_sync_status: 'success',
-          // 对于 OAuth 连接，不需要 API key/secret
-          api_key_encrypted: 'oauth',
-          api_secret_encrypted: 'oauth',
-        },
-        {
-          onConflict: 'user_id,exchange',
-        }
-      )
-
-      if (dbError) {
-        logger.error('Error saving connection', { error: dbError, userId, exchange })
-        return NextResponse.json({ error: 'Failed to save connection' }, { status: 500 })
-      }
-
-      const { data: finishData, error: finishError } = await supabase.rpc(
-        'finish_exchange_oauth_state_claim_atomic',
+      // Publish credentials and consume the exact state lease in the same
+      // active-account transaction. A concurrent ban/delete therefore wins
+      // either before publication or immediately quiesces the committed row.
+      const { data: completionData, error: completionError } = await supabase.rpc(
+        'complete_exchange_oauth_callback_atomic',
         {
           p_user_id: userId,
           p_exchange: exchange,
           p_state: state,
+          p_state_id: stateClaim.id,
           p_claim_token: stateClaim.claimToken,
-          p_succeeded: true,
+          p_exchange_user_id: exchangeUserId,
+          p_access_token_encrypted: encryptedAccessToken,
+          p_refresh_token_encrypted: encryptedRefreshToken,
+          p_expires_at: expiresAt,
         }
       )
-      if (
-        finishError ||
-        !finishData ||
-        typeof finishData !== 'object' ||
-        (finishData as { status?: unknown }).status !== 'consumed'
-      ) {
-        logger.error('Failed to consume OAuth state claim', {
-          error: finishError,
-          status: (finishData as { status?: unknown } | null)?.status,
+      if (completionError) {
+        logger.error('Failed to complete OAuth credential transaction', {
+          error: completionError,
+          userId,
+          exchange,
+        })
+        return NextResponse.json({ error: 'Failed to finalize authorization' }, { status: 500 })
+      }
+      const completion = parseCompletion(completionData, {
+        userId,
+        exchange,
+        stateId: stateClaim.id,
+      })
+      if (!completion) {
+        const failure = completionFailureStatus(completionData)
+        if (failure) {
+          return NextResponse.json({ error: failure.error }, { status: failure.status })
+        }
+        logger.error('OAuth completion acknowledgement mismatch', {
+          acknowledgement: completionData,
           userId,
           exchange,
         })
@@ -318,6 +349,7 @@ export async function POST(request: NextRequest) {
         data: {
           viewerId: userId,
           exchange,
+          connectionId: completion.connectionId,
           exchangeUserId,
         },
       })

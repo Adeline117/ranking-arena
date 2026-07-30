@@ -65,10 +65,14 @@ const mockGetAuthUser = jest.fn()
 const mockValidateCsrfToken = jest.fn()
 const mockFetchOAuthJsonWithTimeout = jest.fn()
 const mockFrom = jest.fn()
+const mockRpc = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
-  getSupabaseAdmin: () => ({ from: (...args: unknown[]) => mockFrom(...args) }),
+  getSupabaseAdmin: () => ({
+    from: (...args: unknown[]) => mockFrom(...args),
+    rpc: (...args: unknown[]) => mockRpc(...args),
+  }),
 }))
 
 jest.mock('@/lib/utils/csrf', () => ({
@@ -205,7 +209,7 @@ function successAck(
   })
 }
 
-function claimAck(call: UpdateCall): QueryResult {
+function failureAck(call: UpdateCall): QueryResult {
   return {
     data: {
       id: CONNECTION_ID,
@@ -217,15 +221,42 @@ function claimAck(call: UpdateCall): QueryResult {
   }
 }
 
-function failureAck(call: UpdateCall): QueryResult {
-  return {
-    data: {
-      id: CONNECTION_ID,
-      user_id: USER_A,
-      exchange: 'binance',
-      refresh_token_encrypted: call.payload.refresh_token_encrypted,
-    },
-    error: null,
+function installRpcSuccess() {
+  mockRpc.mockImplementation(
+    async (
+      name: string,
+      args: {
+        p_connection_id: string
+        p_exchange: string
+        p_lease_refresh_token_encrypted: string
+        p_user_id: string
+      }
+    ) => {
+      if (name !== 'claim_exchange_oauth_refresh_atomic') {
+        throw new Error(`Unexpected RPC: ${name}`)
+      }
+      return {
+        data: {
+          success: true,
+          status: 'claimed',
+          connection_id: args.p_connection_id,
+          user_id: args.p_user_id,
+          exchange: args.p_exchange,
+          refresh_token_encrypted: args.p_lease_refresh_token_encrypted,
+        },
+        error: null,
+      }
+    }
+  )
+}
+
+function refreshClaimArgs(index = 0) {
+  return mockRpc.mock.calls[index][1] as {
+    p_connection_id: string
+    p_exchange: string
+    p_expected_refresh_token_encrypted: string
+    p_lease_refresh_token_encrypted: string
+    p_user_id: string
   }
 }
 
@@ -263,6 +294,7 @@ describe('POST /api/exchange/oauth/refresh', () => {
     mockGetAuthUser.mockResolvedValue({ id: USER_A })
     mockValidateCsrfToken.mockReturnValue(true)
     installSupabaseMock()
+    installRpcSuccess()
   })
 
   it('requires the authenticated viewer, CSRF proof, and a valid body', async () => {
@@ -278,7 +310,7 @@ describe('POST /api/exchange/oauth/refresh', () => {
   })
 
   it('reads and publishes only the exact viewer/exchange/token generation', async () => {
-    updateResults.push(claimAck, successAck())
+    updateResults.push(successAck())
     mockFetchOAuthJsonWithTimeout.mockResolvedValue(
       providerResponse(200, {
         access_token: 'new-access-token',
@@ -313,37 +345,34 @@ describe('POST /api/exchange/oauth/refresh', () => {
     )
     const requestBody = mockFetchOAuthJsonWithTimeout.mock.calls[0][1].body as string
     expect(requestBody).toContain('refresh_token=legacy-refresh-token')
-    expect(updateCalls).toHaveLength(2)
+    expect(mockRpc).toHaveBeenCalledWith('claim_exchange_oauth_refresh_atomic', {
+      p_user_id: USER_A,
+      p_exchange: 'binance',
+      p_connection_id: CONNECTION_ID,
+      p_expected_refresh_token_encrypted: capturedRefreshCiphertext,
+      p_lease_refresh_token_encrypted: expect.stringMatching(/^refresh-lease-v1:/),
+    })
+    expect(updateCalls).toHaveLength(1)
     expect(updateCalls[0].equals).toEqual([
       ['id', CONNECTION_ID],
       ['user_id', USER_A],
       ['exchange', 'binance'],
       ['is_active', true],
-      ['refresh_token_encrypted', capturedRefreshCiphertext],
+      ['refresh_token_encrypted', refreshClaimArgs().p_lease_refresh_token_encrypted],
     ])
-    expect(updateCalls[0].payload.refresh_token_encrypted).toEqual(
-      expect.stringMatching(/^refresh-lease-v1:/)
-    )
-    expect(updateCalls[1].equals).toEqual([
-      ['id', CONNECTION_ID],
-      ['user_id', USER_A],
-      ['exchange', 'binance'],
-      ['is_active', true],
-      ['refresh_token_encrypted', updateCalls[0].payload.refresh_token_encrypted],
-    ])
-    expect(updateCalls[1].payload).not.toHaveProperty('is_active')
-    expect(updateCalls[1].payload.access_token_encrypted).toEqual(expect.stringMatching(/^v2:/))
-    expect(updateCalls[1].payload.refresh_token_encrypted).toEqual(expect.stringMatching(/^v2:/))
+    expect(updateCalls[0].payload).not.toHaveProperty('is_active')
+    expect(updateCalls[0].payload.access_token_encrypted).toEqual(expect.stringMatching(/^v2:/))
+    expect(updateCalls[0].payload.refresh_token_encrypted).toEqual(expect.stringMatching(/^v2:/))
     expect(
       decryptOAuthToken(
-        updateCalls[1].payload.access_token_encrypted as string,
+        updateCalls[0].payload.access_token_encrypted as string,
         KEY,
         ACCESS_CONTEXT
       )
     ).toBe('new-access-token')
     expect(
       decryptOAuthToken(
-        updateCalls[1].payload.refresh_token_encrypted as string,
+        updateCalls[0].payload.refresh_token_encrypted as string,
         KEY,
         REFRESH_CONTEXT
       )
@@ -351,7 +380,7 @@ describe('POST /api/exchange/oauth/refresh', () => {
   })
 
   it('migrates a legacy CBC refresh token even when the provider does not rotate it', async () => {
-    updateResults.push(claimAck, successAck())
+    updateResults.push(successAck())
     mockFetchOAuthJsonWithTimeout.mockResolvedValue(
       providerResponse(200, { access_token: 'new-access-token', expires_in: '3600' })
     )
@@ -359,7 +388,7 @@ describe('POST /api/exchange/oauth/refresh', () => {
     const response = await POST(request())
 
     expect(response.status).toBe(200)
-    const rewritten = updateCalls[1].payload.refresh_token_encrypted as string
+    const rewritten = updateCalls[0].payload.refresh_token_encrypted as string
     expect(rewritten).toMatch(/^v2:/)
     expect(decryptOAuthToken(rewritten, KEY, REFRESH_CONTEXT)).toBe('legacy-refresh-token')
   })
@@ -369,26 +398,38 @@ describe('POST /api/exchange/oauth/refresh', () => {
     const providerPending = new Promise<ReturnType<typeof providerResponse>>((resolve) => {
       resolveProvider = resolve
     })
-    updateResults.push((call) => {
+    updateResults.push(successAck())
+    mockRpc.mockImplementationOnce(async (name: string, args: Record<string, unknown>) => {
+      expect(name).toBe('claim_exchange_oauth_refresh_atomic')
       connectionResult.data = {
         ...connectionResult.data!,
-        refresh_token_encrypted: call.payload.refresh_token_encrypted,
+        refresh_token_encrypted: args.p_lease_refresh_token_encrypted,
       }
-      return claimAck(call)
-    }, successAck())
+      return {
+        data: {
+          success: true,
+          status: 'claimed',
+          connection_id: args.p_connection_id,
+          user_id: args.p_user_id,
+          exchange: args.p_exchange,
+          refresh_token_encrypted: args.p_lease_refresh_token_encrypted,
+        },
+        error: null,
+      }
+    })
     mockFetchOAuthJsonWithTimeout.mockReturnValueOnce(providerPending)
 
     const firstRefresh = POST(request())
-    for (let attempt = 0; attempt < 10 && updateCalls.length === 0; attempt += 1) {
+    for (let attempt = 0; attempt < 10 && mockRpc.mock.calls.length === 0; attempt += 1) {
       await new Promise<void>((resolve) => setTimeout(resolve, 0))
     }
     expect(mockFetchOAuthJsonWithTimeout).toHaveBeenCalledTimes(1)
-    expect(updateCalls).toHaveLength(1)
+    expect(updateCalls).toHaveLength(0)
 
     const concurrentRefresh = await POST(request())
     expect(concurrentRefresh.status).toBe(409)
     expect(mockFetchOAuthJsonWithTimeout).toHaveBeenCalledTimes(1)
-    expect(updateCalls).toHaveLength(1)
+    expect(updateCalls).toHaveLength(0)
 
     resolveProvider(
       providerResponse(200, {
@@ -398,7 +439,7 @@ describe('POST /api/exchange/oauth/refresh', () => {
       })
     )
     expect((await firstRefresh).status).toBe(200)
-    expect(updateCalls).toHaveLength(2)
+    expect(updateCalls).toHaveLength(1)
   })
 
   it('reclaims an expired refresh lease without nesting the stored ciphertext', async () => {
@@ -407,7 +448,7 @@ describe('POST /api/exchange/oauth/refresh', () => {
       ...connectionResult.data!,
       refresh_token_encrypted: expiredLease,
     }
-    updateResults.push(claimAck, successAck())
+    updateResults.push(successAck())
     mockFetchOAuthJsonWithTimeout.mockResolvedValue(
       providerResponse(200, { access_token: 'new-access-token', expires_in: 3600 })
     )
@@ -415,11 +456,11 @@ describe('POST /api/exchange/oauth/refresh', () => {
     const response = await POST(request())
 
     expect(response.status).toBe(200)
-    expect(updateCalls[0].equals).toContainEqual(['refresh_token_encrypted', expiredLease])
-    expect(updateCalls[0].payload.refresh_token_encrypted).toEqual(
+    expect(refreshClaimArgs().p_expected_refresh_token_encrypted).toBe(expiredLease)
+    expect(refreshClaimArgs().p_lease_refresh_token_encrypted).toEqual(
       expect.stringMatching(/^refresh-lease-v1:/)
     )
-    expect(updateCalls[0].payload.refresh_token_encrypted).not.toContain(
+    expect(refreshClaimArgs().p_lease_refresh_token_encrypted).not.toContain(
       Buffer.from(expiredLease, 'utf8').toString('base64url')
     )
     const requestBody = mockFetchOAuthJsonWithTimeout.mock.calls[0][1].body as string
@@ -439,9 +480,44 @@ describe('POST /api/exchange/oauth/refresh', () => {
       ...connectionResult.data!,
       refresh_token_encrypted: capturedRefreshCiphertext,
     }
-    updateResults.push({ data: null, error: { message: 'database unavailable' } })
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'database unavailable' } })
     expect((await POST(request())).status).toBe(500)
     expect(mockFetchOAuthJsonWithTimeout).not.toHaveBeenCalled()
+  })
+
+  it('maps lifecycle and generation claim failures before provider access', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: { success: false, reason: 'ACTOR_UNAVAILABLE' },
+      error: null,
+    })
+    expect((await POST(request())).status).toBe(403)
+
+    mockRpc.mockResolvedValueOnce({
+      data: { success: false, reason: 'CONNECTION_CHANGED' },
+      error: null,
+    })
+    expect((await POST(request())).status).toBe(409)
+
+    expect(mockFetchOAuthJsonWithTimeout).not.toHaveBeenCalled()
+    expect(updateCalls).toHaveLength(0)
+  })
+
+  it('rejects a refresh claim acknowledgement with the wrong identity', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: {
+        success: true,
+        status: 'claimed',
+        connection_id: CONNECTION_ID,
+        user_id: USER_B,
+        exchange: 'binance',
+        refresh_token_encrypted: 'wrong-lease',
+      },
+      error: null,
+    })
+
+    expect((await POST(request())).status).toBe(500)
+    expect(mockFetchOAuthJsonWithTimeout).not.toHaveBeenCalled()
+    expect(updateCalls).toHaveLength(0)
   })
 
   it.each([
@@ -461,37 +537,36 @@ describe('POST /api/exchange/oauth/refresh', () => {
       expectedStatus: 401,
     },
   ])('records $label without deactivating the connection', async ({ response, expectedStatus }) => {
-    updateResults.push(claimAck, failureAck)
+    updateResults.push(failureAck)
     mockFetchOAuthJsonWithTimeout.mockResolvedValue(response)
 
     const result = await POST(request())
 
     expect(result.status).toBe(expectedStatus)
-    expect(updateCalls).toHaveLength(2)
+    expect(updateCalls).toHaveLength(1)
     expect(updateCalls[0].payload).not.toHaveProperty('is_active')
-    expect(updateCalls[1].payload).not.toHaveProperty('is_active')
-    expect(updateCalls[1].payload.refresh_token_encrypted).toBe(capturedRefreshCiphertext)
-    expect(updateCalls[1].equals).toContainEqual([
+    expect(updateCalls[0].payload.refresh_token_encrypted).toBe(capturedRefreshCiphertext)
+    expect(updateCalls[0].equals).toContainEqual([
       'refresh_token_encrypted',
-      updateCalls[0].payload.refresh_token_encrypted,
+      refreshClaimArgs().p_lease_refresh_token_encrypted,
     ])
   })
 
   it('treats a bounded transport failure as retryable without deactivation', async () => {
-    updateResults.push(claimAck, failureAck)
+    updateResults.push(failureAck)
     mockFetchOAuthJsonWithTimeout.mockRejectedValue(new DOMException('timed out', 'AbortError'))
 
     const response = await POST(request())
 
     expect(response.status).toBe(503)
-    expect(updateCalls[1].payload).not.toHaveProperty('is_active')
-    expect(updateCalls[1].payload.last_sync_error).toBe(
+    expect(updateCalls[0].payload).not.toHaveProperty('is_active')
+    expect(updateCalls[0].payload.last_sync_error).toBe(
       'OAuth token refresh temporarily unavailable'
     )
   })
 
   it('drops a stale success when another refresh already changed the token generation', async () => {
-    updateResults.push(claimAck, { data: null, error: null })
+    updateResults.push({ data: null, error: null })
     mockFetchOAuthJsonWithTimeout.mockResolvedValue(
       providerResponse(200, {
         access_token: 'stale-access-token',
@@ -503,14 +578,14 @@ describe('POST /api/exchange/oauth/refresh', () => {
     const response = await POST(request())
 
     expect(response.status).toBe(409)
-    expect(updateCalls[1].equals).toContainEqual([
+    expect(updateCalls[0].equals).toContainEqual([
       'refresh_token_encrypted',
-      updateCalls[0].payload.refresh_token_encrypted,
+      refreshClaimArgs().p_lease_refresh_token_encrypted,
     ])
   })
 
   it('drops a stale provider failure after another refresh changed the generation', async () => {
-    updateResults.push(claimAck, { data: null, error: null })
+    updateResults.push({ data: null, error: null })
     mockFetchOAuthJsonWithTimeout.mockResolvedValue(
       providerResponse(503, { error: 'temporarily_unavailable' })
     )
@@ -518,7 +593,7 @@ describe('POST /api/exchange/oauth/refresh', () => {
     const response = await POST(request())
 
     expect(response.status).toBe(409)
-    expect(updateCalls[1].payload).not.toHaveProperty('is_active')
+    expect(updateCalls[0].payload).not.toHaveProperty('is_active')
   })
 
   it('fails before provider access on owner mismatch or tampered GCM ciphertext', async () => {
@@ -539,11 +614,11 @@ describe('POST /api/exchange/oauth/refresh', () => {
   })
 
   it('fails closed on malformed provider success and DB publication errors', async () => {
-    updateResults.push(claimAck, failureAck)
+    updateResults.push(failureAck)
     mockFetchOAuthJsonWithTimeout.mockResolvedValue(providerResponse(200, { expires_in: 3600 }))
     expect((await POST(request())).status).toBe(503)
 
-    updateResults.push(claimAck, { data: null, error: { message: 'database unavailable' } })
+    updateResults.push({ data: null, error: { message: 'database unavailable' } })
     mockFetchOAuthJsonWithTimeout.mockResolvedValue(
       providerResponse(200, { access_token: 'new-access-token', expires_in: 3600 })
     )

@@ -10378,6 +10378,30 @@ export type Database = {
         }
         Returns: Json
       }
+      claim_exchange_oauth_refresh_atomic: {
+        Args: {
+          p_connection_id: string
+          p_exchange: string
+          p_expected_refresh_token_encrypted: string
+          p_lease_refresh_token_encrypted: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      complete_exchange_oauth_callback_atomic: {
+        Args: {
+          p_access_token_encrypted: string
+          p_claim_token: string
+          p_exchange: string
+          p_exchange_user_id: string | null
+          p_expires_at: string | null
+          p_refresh_token_encrypted: string | null
+          p_state: string
+          p_state_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       claim_portfolio_sync_generation_atomic: {
         Args: { p_actor_id: string; p_portfolio_id: string }
         Returns: Json

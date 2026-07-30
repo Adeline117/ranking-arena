@@ -56,17 +56,12 @@ jest.mock('next/server', () => {
 
 const mockGetAuthUser = jest.fn()
 const mockRpc = jest.fn()
-const mockUpsert = jest.fn()
 const mockValidateCsrfToken = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   getSupabaseAdmin: () => ({
     rpc: (...args: unknown[]) => mockRpc(...args),
-    from: (table: string) => {
-      if (table !== 'user_exchange_connections') throw new Error(`Unexpected table: ${table}`)
-      return { upsert: (...args: unknown[]) => mockUpsert(...args) }
-    },
   }),
 }))
 
@@ -100,13 +95,15 @@ type CallbackHandler = (request: InstanceType<typeof NextRequest>) => Promise<{
 const USER_A = '10000000-0000-4000-8000-000000000001'
 const CLAIM_ID = '20000000-0000-4000-8000-000000000001'
 const CLAIM_TOKEN = '30000000-0000-4000-8000-000000000001'
+const CONNECTION_ID = '40000000-0000-4000-8000-000000000001'
+const VALID_STATE = 'binance.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 
 function callbackRequest(body: Record<string, unknown> = {}) {
   return new NextRequest('http://localhost/api/exchange/oauth/callback', {
     body: {
       exchange: 'binance',
       code: 'authorization-code',
-      state: 'oauth-state',
+      state: VALID_STATE,
       ...body,
     },
     headers: { 'x-csrf-token': 'csrf-token' },
@@ -115,7 +112,7 @@ function callbackRequest(body: Record<string, unknown> = {}) {
 }
 
 function installRpcSuccess() {
-  mockRpc.mockImplementation(async (name: string, args: { p_succeeded?: boolean }) => {
+  mockRpc.mockImplementation(async (name: string) => {
     if (name === 'claim_exchange_oauth_state_atomic') {
       return {
         data: {
@@ -127,11 +124,21 @@ function installRpcSuccess() {
         error: null,
       }
     }
-    if (name === 'finish_exchange_oauth_state_claim_atomic') {
+    if (name === 'complete_exchange_oauth_callback_atomic') {
       return {
-        data: { status: args.p_succeeded ? 'consumed' : 'released' },
+        data: {
+          success: true,
+          status: 'connected',
+          user_id: USER_A,
+          exchange: 'binance',
+          state_id: CLAIM_ID,
+          connection_id: CONNECTION_ID,
+        },
         error: null,
       }
+    }
+    if (name === 'finish_exchange_oauth_state_claim_atomic') {
+      return { data: { status: 'released' }, error: null }
     }
     throw new Error(`Unexpected RPC: ${name}`)
   })
@@ -179,7 +186,6 @@ describe('POST /api/exchange/oauth/callback', () => {
     jest.clearAllMocks()
     mockGetAuthUser.mockResolvedValue({ id: USER_A })
     mockValidateCsrfToken.mockReturnValue(true)
-    mockUpsert.mockResolvedValue({ error: null })
     installRpcSuccess()
     installTokenSuccess()
   })
@@ -213,28 +219,26 @@ describe('POST /api/exchange/oauth/callback', () => {
       data: {
         viewerId: USER_A,
         exchange: 'binance',
+        connectionId: CONNECTION_ID,
         exchangeUserId: 'binance-user-a',
       },
     })
     expect(mockRpc).toHaveBeenNthCalledWith(1, 'claim_exchange_oauth_state_atomic', {
       p_user_id: USER_A,
       p_exchange: 'binance',
-      p_state: 'oauth-state',
+      p_state: VALID_STATE,
       p_lease_seconds: 300,
     })
-    expect(mockUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({ user_id: USER_A, exchange: 'binance' }),
-      { onConflict: 'user_id,exchange' }
-    )
-    const storedConnection = mockUpsert.mock.calls[0][0] as Record<string, unknown>
-    expect(storedConnection.access_token_encrypted).toEqual(expect.stringMatching(/^v2:/))
-    expect(storedConnection.refresh_token_encrypted).toEqual(expect.stringMatching(/^v2:/))
-    expect(mockRpc).toHaveBeenNthCalledWith(2, 'finish_exchange_oauth_state_claim_atomic', {
+    expect(mockRpc).toHaveBeenNthCalledWith(2, 'complete_exchange_oauth_callback_atomic', {
       p_user_id: USER_A,
       p_exchange: 'binance',
-      p_state: 'oauth-state',
+      p_state: VALID_STATE,
+      p_state_id: CLAIM_ID,
       p_claim_token: CLAIM_TOKEN,
-      p_succeeded: true,
+      p_exchange_user_id: 'binance-user-a',
+      p_access_token_encrypted: expect.stringMatching(/^v2:/),
+      p_refresh_token_encrypted: expect.stringMatching(/^v2:/),
+      p_expires_at: expect.any(String),
     })
     expect(mockRpc).toHaveBeenCalledTimes(2)
 
@@ -249,7 +253,6 @@ describe('POST /api/exchange/oauth/callback', () => {
 
     expect(response.status).toBe(400)
     expect(global.fetch).not.toHaveBeenCalled()
-    expect(mockUpsert).not.toHaveBeenCalled()
   })
 
   it('returns a server error when the atomic claim cannot be established', async () => {
@@ -275,15 +278,30 @@ describe('POST /api/exchange/oauth/callback', () => {
     expect(mockRpc).toHaveBeenLastCalledWith('finish_exchange_oauth_state_claim_atomic', {
       p_user_id: USER_A,
       p_exchange: 'binance',
-      p_state: 'oauth-state',
+      p_state: VALID_STATE,
       p_claim_token: CLAIM_TOKEN,
       p_succeeded: false,
     })
-    expect(mockUpsert).not.toHaveBeenCalled()
   })
 
-  it('releases the lease when the connection write fails', async () => {
-    mockUpsert.mockResolvedValueOnce({ error: { message: 'database unavailable' } })
+  it('releases the lease when the atomic completion RPC fails', async () => {
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === 'claim_exchange_oauth_state_atomic') {
+        return {
+          data: {
+            status: 'claimed',
+            id: CLAIM_ID,
+            code_verifier: 'pkce-verifier',
+            claim_token: CLAIM_TOKEN,
+          },
+          error: null,
+        }
+      }
+      if (name === 'complete_exchange_oauth_callback_atomic') {
+        return { data: null, error: { message: 'database unavailable' } }
+      }
+      return { data: { status: 'released' }, error: null }
+    })
 
     const response = await POST(callbackRequest())
 
@@ -294,8 +312,8 @@ describe('POST /api/exchange/oauth/callback', () => {
     )
   })
 
-  it('does not acknowledge success when the state lease cannot be consumed', async () => {
-    mockRpc.mockImplementation(async (name: string, args: { p_succeeded?: boolean }) => {
+  it('does not acknowledge success when the atomic state lease became stale', async () => {
+    mockRpc.mockImplementation(async (name: string) => {
       if (name === 'claim_exchange_oauth_state_atomic') {
         return {
           data: {
@@ -307,24 +325,87 @@ describe('POST /api/exchange/oauth/callback', () => {
           error: null,
         }
       }
-      return {
-        data: { status: args.p_succeeded ? 'stale_claim' : 'released' },
-        error: null,
+      if (name === 'complete_exchange_oauth_callback_atomic') {
+        return { data: { success: false, reason: 'STALE_CLAIM' }, error: null }
       }
+      return { data: { status: 'released' }, error: null }
     })
 
     const response = await POST(callbackRequest())
 
-    expect(response.status).toBe(500)
+    expect(response.status).toBe(409)
     expect(mockRpc).toHaveBeenNthCalledWith(
       2,
-      'finish_exchange_oauth_state_claim_atomic',
-      expect.objectContaining({ p_succeeded: true })
+      'complete_exchange_oauth_callback_atomic',
+      expect.objectContaining({ p_state_id: CLAIM_ID, p_claim_token: CLAIM_TOKEN })
     )
     expect(mockRpc).toHaveBeenNthCalledWith(
       3,
       'finish_exchange_oauth_state_claim_atomic',
       expect.objectContaining({ p_succeeded: false })
     )
+  })
+
+  it('rejects completion after the viewer account became unavailable', async () => {
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === 'claim_exchange_oauth_state_atomic') {
+        return {
+          data: {
+            status: 'claimed',
+            id: CLAIM_ID,
+            code_verifier: null,
+            claim_token: CLAIM_TOKEN,
+          },
+          error: null,
+        }
+      }
+      if (name === 'complete_exchange_oauth_callback_atomic') {
+        return { data: { success: false, reason: 'ACTOR_UNAVAILABLE' }, error: null }
+      }
+      return { data: { status: 'released' }, error: null }
+    })
+
+    const response = await POST(callbackRequest())
+
+    expect(response.status).toBe(403)
+    expect(mockRpc).toHaveBeenLastCalledWith(
+      'finish_exchange_oauth_state_claim_atomic',
+      expect.objectContaining({ p_succeeded: false })
+    )
+  })
+
+  it('fails closed on a completion acknowledgement with the wrong identity', async () => {
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === 'claim_exchange_oauth_state_atomic') {
+        return {
+          data: {
+            status: 'claimed',
+            id: CLAIM_ID,
+            code_verifier: null,
+            claim_token: CLAIM_TOKEN,
+          },
+          error: null,
+        }
+      }
+      if (name === 'complete_exchange_oauth_callback_atomic') {
+        return {
+          data: {
+            success: true,
+            status: 'connected',
+            user_id: 'attacker-controlled-user',
+            exchange: 'binance',
+            state_id: CLAIM_ID,
+            connection_id: CONNECTION_ID,
+          },
+          error: null,
+        }
+      }
+      return { data: { status: 'released' }, error: null }
+    })
+
+    const response = await POST(callbackRequest())
+
+    expect(response.status).toBe(500)
+    expect(mockRpc).toHaveBeenCalledTimes(3)
   })
 })

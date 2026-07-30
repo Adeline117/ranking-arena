@@ -98,6 +98,40 @@ function createRefreshLease(tokenCiphertext: string): RefreshLease {
   return { claimId, expiresAt, tokenCiphertext, storedValue }
 }
 
+function hasExactRefreshClaim(
+  raw: unknown,
+  expected: {
+    connectionId: string
+    userId: string
+    exchange: string
+    lease: string
+  }
+): boolean {
+  return (
+    isRecord(raw) &&
+    raw.success === true &&
+    raw.status === 'claimed' &&
+    raw.connection_id === expected.connectionId &&
+    raw.user_id === expected.userId &&
+    raw.exchange === expected.exchange &&
+    raw.refresh_token_encrypted === expected.lease
+  )
+}
+
+function refreshClaimFailureStatus(raw: unknown): { error: string; status: number } | null {
+  if (!isRecord(raw) || raw.success !== false) return null
+  switch (raw.reason) {
+    case 'ACTOR_UNAVAILABLE':
+      return { error: 'Account unavailable', status: 403 }
+    case 'CONNECTION_CHANGED':
+      return { error: 'Connection changed during refresh', status: 409 }
+    case 'INVALID':
+      return { error: 'Failed to initialize token refresh', status: 500 }
+    default:
+      return null
+  }
+}
+
 /**
  * POST: refresh an OAuth access token for the authenticated viewer.
  *
@@ -218,16 +252,16 @@ export async function POST(request: NextRequest) {
     }
 
     const refreshLease = createRefreshLease(tokenCiphertext)
-    const { data: claimedConnection, error: claimError } = await supabase
-      .from('user_exchange_connections')
-      .update({ refresh_token_encrypted: refreshLease.storedValue })
-      .eq('id', connection.id)
-      .eq('user_id', userId)
-      .eq('exchange', exchange)
-      .eq('is_active', true)
-      .eq('refresh_token_encrypted', connection.refresh_token_encrypted)
-      .select('id, user_id, exchange, refresh_token_encrypted')
-      .maybeSingle()
+    const { data: claimedConnection, error: claimError } = await supabase.rpc(
+      'claim_exchange_oauth_refresh_atomic',
+      {
+        p_user_id: userId,
+        p_exchange: exchange,
+        p_connection_id: connection.id,
+        p_expected_refresh_token_encrypted: connection.refresh_token_encrypted,
+        p_lease_refresh_token_encrypted: refreshLease.storedValue,
+      }
+    )
 
     if (claimError) {
       logger.error('Failed to claim OAuth refresh generation', {
@@ -238,16 +272,20 @@ export async function POST(request: NextRequest) {
       })
       return NextResponse.json({ error: 'Failed to initialize token refresh' }, { status: 500 })
     }
-    if (!claimedConnection) {
-      return NextResponse.json({ error: 'Connection changed during refresh' }, { status: 409 })
-    }
     if (
-      claimedConnection.id !== connection.id ||
-      claimedConnection.user_id !== userId ||
-      claimedConnection.exchange !== exchange ||
-      claimedConnection.refresh_token_encrypted !== refreshLease.storedValue
+      !hasExactRefreshClaim(claimedConnection, {
+        connectionId: connection.id,
+        userId,
+        exchange,
+        lease: refreshLease.storedValue,
+      })
     ) {
+      const failure = refreshClaimFailureStatus(claimedConnection)
+      if (failure) {
+        return NextResponse.json({ error: failure.error }, { status: failure.status })
+      }
       logger.error('OAuth refresh claim ACK identity mismatch', {
+        acknowledgement: claimedConnection,
         connectionId: connection.id,
         exchange,
         userId,
