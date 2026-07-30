@@ -320,14 +320,21 @@ BEGIN
          OR pg_catalog.length(p_passphrase_encrypted) > 32768
        )
      )
-     OR ((p_verified_uid IS NULL) IS DISTINCT FROM
-         (p_scope_permissions IS NULL))
-     OR ((p_verified_uid IS NULL) IS DISTINCT FROM (p_verified_at IS NULL))
+     OR (
+       p_verified_uid IS NOT NULL
+       AND p_scope_permissions IS NULL
+     )
+     OR ((p_scope_permissions IS NULL) IS DISTINCT FROM (p_verified_at IS NULL))
      OR (
        p_verified_uid IS NOT NULL
        AND (
          pg_catalog.length(pg_catalog.btrim(p_verified_uid)) NOT BETWEEN 1 AND 255
-         OR pg_catalog.jsonb_typeof(p_scope_permissions) IS DISTINCT FROM 'array'
+       )
+     )
+     OR (
+       p_scope_permissions IS NOT NULL
+       AND (
+         pg_catalog.jsonb_typeof(p_scope_permissions) IS DISTINCT FROM 'array'
          OR pg_catalog.jsonb_array_length(p_scope_permissions) = 0
          OR pg_catalog.jsonb_array_length(p_scope_permissions) > 100
          OR EXISTS (
@@ -480,7 +487,7 @@ BEGIN
         p_passphrase_encrypted,
         p_verified_uid,
         p_scope_permissions,
-        CASE WHEN p_verified_uid IS NULL THEN NULL ELSE v_now END
+        CASE WHEN p_scope_permissions IS NULL THEN NULL ELSE v_now END
       );
   EXCEPTION
     WHEN SQLSTATE '22023' THEN

@@ -399,8 +399,15 @@ expect_value \
   "SELECT result->>'status', result->>'verified', result->>'generation'
    FROM (SELECT public.upsert_exchange_api_connection_for_active_profile_atomic(
      '10000000-0000-4000-8000-000000000001',
-     'binance', '$CIPHER_A', '$CIPHER_A', NULL, NULL, NULL
+     'binance', '$CIPHER_A', '$CIPHER_A', NULL, NULL, '[\"read\"]'::jsonb
    ) AS result) AS admitted;"
+expect_value \
+  "permission-only connection proof" \
+  "|[\"read\"]|t" \
+  "SELECT verified_uid, scope_permissions, last_verified_at IS NOT NULL
+   FROM public.user_exchange_connections
+   WHERE user_id = '10000000-0000-4000-8000-000000000001'
+     AND exchange = 'binance';"
 
 expect_value \
   "missing profile admission" \

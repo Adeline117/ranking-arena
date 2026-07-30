@@ -49,6 +49,17 @@ describe('exchange API-key account lifecycle migration', () => {
     }
   })
 
+  it('preserves exchange-proven read-only scope even when no account UID is available', () => {
+    const helper = functionBody('upsert_exchange_api_connection_without_lifecycle_internal')
+    const admission = functionBody('upsert_exchange_api_connection_for_active_profile_atomic')
+
+    expect(helper).toContain(
+      '(p_scope_permissions IS NULL) IS DISTINCT FROM (p_verified_at IS NULL)'
+    )
+    expect(helper).toContain('p_verified_uid IS NOT NULL\n       AND p_scope_permissions IS NULL')
+    expect(admission).toContain('CASE WHEN p_scope_permissions IS NULL THEN NULL ELSE v_now END')
+  })
+
   it('stores verified connection proof and authorization in one transaction', () => {
     const body = functionBody('bind_trader_authorization_for_active_profile_atomic')
 
