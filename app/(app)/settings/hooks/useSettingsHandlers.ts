@@ -1108,16 +1108,34 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         showToast(error.message, 'error')
         return
       }
-      // After a password change, terminate OTHER devices FOR REAL. Pass the
-      // exact A token explicitly so a late A completion can never read B's
-      // newly-active browser session and revoke B's other devices.
+      // After a password change, terminate the other real GoTrue sessions.
+      // Supabase's browser client cannot call the admin endpoint with an anon
+      // key, so hand the exact A token to our authenticated server boundary.
+      // Keeping this request viewer-scoped also prevents a late A completion
+      // from revoking B's sessions after an account switch.
       try {
         const revocationToken = await getFreshToken(scope)
         if (!viewerIsCurrent(scope)) return
         if (!revocationToken) throw new Error('Could not refresh the session revocation token')
-        const { error: revokeError } = await supabase.auth.admin.signOut(revocationToken, 'others')
-        if (!viewerIsCurrent(scope)) return
-        if (revokeError) throw revokeError
+        const revocation = await authedFetch<{ success?: unknown; revokedOthers?: unknown }>(
+          '/api/settings/sessions',
+          'DELETE',
+          revocationToken,
+          { all: true },
+          15_000,
+          {
+            expectedUserId: scope.userId,
+            expectedSessionGeneration: scope.sessionGeneration,
+          }
+        )
+        if (!viewerIsCurrent(scope) || revocation.stale) return
+        if (
+          !revocation.ok ||
+          revocation.data?.success !== true ||
+          revocation.data.revokedOthers !== true
+        ) {
+          throw new Error('Other sessions were not revoked')
+        }
       } catch (revokeErr) {
         if (!viewerIsCurrent(scope)) return
         // Non-critical: password was changed even if session revocation fails

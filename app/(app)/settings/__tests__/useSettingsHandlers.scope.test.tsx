@@ -97,9 +97,14 @@ const {
 const { authedFetch: mockAuthedFetch } = jest.requireMock('@/lib/api/client').__settingsMocks as {
   authedFetch: jest.Mock
 }
-const { forceRefresh: mockForceRefresh } = jest.requireMock('@/lib/auth/token-refresh')
-  .tokenRefreshCoordinator as {
+const {
+  forceRefresh: mockForceRefresh,
+  reauthenticateWithPassword: mockReauthenticateWithPassword,
+  updateUser: mockUpdateUser,
+} = jest.requireMock('@/lib/auth/token-refresh').tokenRefreshCoordinator as {
   forceRefresh: jest.Mock
+  reauthenticateWithPassword: jest.Mock
+  updateUser: jest.Mock
 }
 const { replaceDocument: mockReplaceDocument } = jest.requireMock(
   '@/lib/auth/account-recovery-token'
@@ -205,6 +210,8 @@ describe('useSettingsHandlers viewer ownership', () => {
     __resetViewerScopeForTests()
     mockAuthedFetch.mockResolvedValue({ ok: true, status: 200, data: { success: true } })
     mockForceRefresh.mockResolvedValue(jwt('user-a'))
+    mockReauthenticateWithPassword.mockResolvedValue({ error: null })
+    mockUpdateUser.mockResolvedValue({ error: null })
     global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch
   })
 
@@ -581,6 +588,47 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(saveCalls).toHaveLength(2)
     expect(saveCalls[0][1]).toEqual(expect.objectContaining({ p_expected_version: 0 }))
     expect(saveCalls[1][1]).toEqual(expect.objectContaining({ p_expected_version: 1 }))
+  })
+
+  it('revokes real other sessions through the authenticated server after a password change', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { success: true, revokedOthers: true },
+    })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+
+    act(() => {
+      hook.result.current.setCurrentPassword('old-password')
+      hook.result.current.setNewPassword('new-password')
+      hook.result.current.setConfirmNewPassword('new-password')
+    })
+    await act(async () => {
+      await hook.result.current.handleChangePassword()
+    })
+
+    expect(mockReauthenticateWithPassword).toHaveBeenCalledWith(
+      { email: 'user-a@example.com', password: 'old-password' },
+      { expectedUserId: 'user-a', sessionGeneration: scope.sessionGeneration }
+    )
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      { password: 'new-password' },
+      { expectedUserId: 'user-a', sessionGeneration: scope.sessionGeneration }
+    )
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      '/api/settings/sessions',
+      'DELETE',
+      jwt('user-a'),
+      { all: true },
+      15_000,
+      { expectedUserId: 'user-a', expectedSessionGeneration: scope.sessionGeneration }
+    )
+    expect(showToast).toHaveBeenCalledWith('passwordChanged', 'success')
   })
 
   it('keeps an already-running Replay clean when localStorage and local sign-out fail', async () => {
