@@ -88,6 +88,121 @@ const TIER_LABELS: Record<string, { labelKey: string; color: string; limitKey: s
 }
 
 const FULL_API_KEY_PATTERN = /^arena_sk_[0-9a-f]{32}$/
+const MASKED_API_KEY_PATTERN = /^arena_s\.\.\.[0-9a-f]{4}$/
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const API_KEY_LIST_FIELDS = [
+  'active',
+  'created_at',
+  'daily_limit',
+  'id',
+  'key',
+  'last_used_at',
+  'name',
+  'request_count_today',
+  'revoked_at',
+  'tier',
+].sort()
+const API_KEY_LIMITS: Record<ApiTier, number> = { free: 100, starter: 10_000, pro: 0 }
+
+function timestampOrNull(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && Number.isFinite(Date.parse(value)))
+}
+
+function parseListedApiKey(value: unknown): ApiKey | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const row = value as Record<string, unknown>
+  const fields = Object.keys(row).sort()
+  if (
+    fields.length !== API_KEY_LIST_FIELDS.length ||
+    !fields.every((field, index) => field === API_KEY_LIST_FIELDS[index])
+  ) {
+    return null
+  }
+
+  const tier = row.tier
+  if (tier !== 'free' && tier !== 'starter' && tier !== 'pro') return null
+  if (
+    typeof row.id !== 'string' ||
+    !UUID_PATTERN.test(row.id) ||
+    typeof row.name !== 'string' ||
+    row.name !== row.name.trim() ||
+    row.name.length < 1 ||
+    row.name.length > 50 ||
+    typeof row.key !== 'string' ||
+    !MASKED_API_KEY_PATTERN.test(row.key) ||
+    row.daily_limit !== API_KEY_LIMITS[tier] ||
+    typeof row.request_count_today !== 'number' ||
+    !Number.isSafeInteger(row.request_count_today) ||
+    row.request_count_today < 0 ||
+    typeof row.active !== 'boolean' ||
+    !timestampOrNull(row.last_used_at) ||
+    typeof row.created_at !== 'string' ||
+    !Number.isFinite(Date.parse(row.created_at)) ||
+    !timestampOrNull(row.revoked_at)
+  ) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    key: row.key,
+    tier,
+    daily_limit: row.daily_limit,
+    request_count_today: row.request_count_today,
+    active: row.active,
+    last_used_at: row.last_used_at,
+    created_at: row.created_at,
+    revoked_at: row.revoked_at,
+  }
+}
+
+function parseApiKeyListPayload(
+  value: unknown
+): { keys: ApiKey[]; entitlement: ApiEntitlement } | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const payload = value as Record<string, unknown>
+  const payloadFields = Object.keys(payload).sort()
+  if (
+    payloadFields.length !== 2 ||
+    payloadFields[0] !== 'data' ||
+    payloadFields[1] !== 'entitlement' ||
+    !Array.isArray(payload.data) ||
+    !payload.entitlement ||
+    typeof payload.entitlement !== 'object' ||
+    Array.isArray(payload.entitlement)
+  ) {
+    return null
+  }
+
+  const entitlement = payload.entitlement as Record<string, unknown>
+  const entitlementFields = Object.keys(entitlement).sort()
+  const tier = entitlement.tier
+  if (
+    entitlementFields.length !== 2 ||
+    entitlementFields[0] !== 'hasStripeSubscription' ||
+    entitlementFields[1] !== 'tier' ||
+    (tier !== 'free' && tier !== 'starter' && tier !== 'pro') ||
+    typeof entitlement.hasStripeSubscription !== 'boolean' ||
+    (tier === 'free' && entitlement.hasStripeSubscription)
+  ) {
+    return null
+  }
+
+  const keys: ApiKey[] = []
+  for (const value of payload.data) {
+    const key = parseListedApiKey(value)
+    if (!key) return null
+    keys.push(key)
+  }
+  return {
+    keys,
+    entitlement: {
+      tier,
+      hasStripeSubscription: entitlement.hasStripeSubscription,
+    },
+  }
+}
 
 export function ApiKeysSection({
   redirectToPortal = defaultPortalRedirect,
@@ -175,7 +290,8 @@ export function ApiKeysSection({
           expectedSessionGeneration: scope.sessionGeneration,
         })
         if (!loadIsCurrent() || res.stale) return false
-        if (!res.ok || !Array.isArray(res.data?.data)) {
+        const parsed = res.ok ? parseApiKeyListPayload(res.data) : null
+        if (!parsed) {
           if (!preserveReadyState) {
             setKeys([])
             setEntitlement(null)
@@ -184,24 +300,8 @@ export function ApiKeysSection({
           }
           return false
         }
-        const loadedKeys = res.data.data
-        const rawTier = res.data?.entitlement?.tier
-        const tier: ApiTier =
-          rawTier === 'starter' || rawTier === 'pro'
-            ? rawTier
-            : rawTier === 'free'
-              ? 'free'
-              : loadedKeys.find((key) => key.active)?.tier === 'starter'
-                ? 'starter'
-                : loadedKeys.find((key) => key.active)?.tier === 'pro'
-                  ? 'pro'
-                  : 'free'
-        setKeys(loadedKeys)
-        setEntitlement({
-          tier,
-          hasStripeSubscription:
-            tier !== 'free' && res.data?.entitlement?.hasStripeSubscription === true,
-        })
+        setKeys(parsed.keys)
+        setEntitlement(parsed.entitlement)
         loadOutcomeRef.current = 'ready'
         setLoadOutcome('ready')
         return true

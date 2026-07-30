@@ -113,16 +113,29 @@ function authFor(userId: string, sessionGeneration: number) {
 
 function apiKey(userId: string) {
   return {
-    id: `key-${userId}`,
+    id:
+      userId === 'user-a'
+        ? '11111111-1111-4111-8111-111111111111'
+        : '22222222-2222-4222-8222-222222222222',
     name: `${userId} private key`,
-    key: `arena_${userId}_masked`,
+    key: userId === 'user-a' ? 'arena_s...aaaa' : 'arena_s...bbbb',
     tier: 'starter',
-    daily_limit: 1000,
+    daily_limit: 10_000,
     request_count_today: 2,
     active: true,
     last_used_at: null,
     created_at: '2026-07-15T00:00:00.000Z',
     revoked_at: null,
+  }
+}
+
+function apiKeyList(...keys: ReturnType<typeof apiKey>[]) {
+  return {
+    data: keys,
+    entitlement: {
+      tier: keys.length > 0 ? keys[0].tier : 'free',
+      hasStripeSubscription: false,
+    },
   }
 }
 
@@ -137,7 +150,7 @@ function installListResponses(listB: ReturnType<typeof deferred<FetchResult>>) {
     }
     if (url === '/api/user/api-keys' && method === 'GET') {
       if (accessToken === jwt('user-a')) {
-        return Promise.resolve({ ok: true, status: 200, data: { data: [apiKey('user-a')] } })
+        return Promise.resolve({ ok: true, status: 200, data: apiKeyList(apiKey('user-a')) })
       }
       if (accessToken === jwt('user-b')) return listB.promise
     }
@@ -193,7 +206,7 @@ describe('ApiKeysSection viewer ownership', () => {
     expect(mockAuthedFetch.mock.calls.some((call) => call[1] === 'PATCH')).toBe(false)
 
     await act(async () => {
-      listB.resolve({ ok: true, status: 200, data: { data: [] } })
+      listB.resolve({ ok: true, status: 200, data: apiKeyList() })
     })
     await waitFor(() => expect(inputForB).not.toBeDisabled())
 
@@ -222,7 +235,11 @@ describe('ApiKeysSection viewer ownership', () => {
         }
         if (url === '/api/user/api-keys' && method === 'GET') {
           return accessToken === jwt('user-a')
-            ? Promise.resolve({ ok: true, status: 200, data: { data: [apiKey('user-a')] } })
+            ? Promise.resolve({
+                ok: true,
+                status: 200,
+                data: apiKeyList(apiKey('user-a')),
+              })
             : listB.promise
         }
         return Promise.resolve({ ok: false, status: 500, data: null })
@@ -287,7 +304,11 @@ describe('ApiKeysSection viewer ownership', () => {
         }
         if (url === '/api/user/api-keys' && method === 'GET') {
           return accessToken === jwt('user-a')
-            ? Promise.resolve({ ok: true, status: 200, data: { data: [apiKey('user-a')] } })
+            ? Promise.resolve({
+                ok: true,
+                status: 200,
+                data: apiKeyList(apiKey('user-a')),
+              })
             : listB.promise
         }
         return Promise.resolve({ ok: false, status: 500, data: null })
@@ -337,7 +358,7 @@ describe('ApiKeysSection viewer ownership', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        data: { data: [apiKey('user-a')] },
+        data: apiKeyList(apiKey('user-a')),
       })
       .mockResolvedValue({
         ok: true,
@@ -359,6 +380,43 @@ describe('ApiKeysSection viewer ownership', () => {
     expect(screen.getByPlaceholderText('apiKeyNamePlaceholder')).toBeEnabled()
   })
 
+  it.each([
+    ['missing entitlement', { data: [apiKey('user-a')] }],
+    ['unmasked secret', apiKeyList({ ...apiKey('user-a'), key: FULL_SECRET_A })],
+    [
+      'unexpected row field',
+      apiKeyList({ ...apiKey('user-a'), injected: 'value' } as ReturnType<typeof apiKey>),
+    ],
+    [
+      'impossible free subscription entitlement',
+      {
+        data: [],
+        entitlement: { tier: 'free', hasStripeSubscription: true },
+      },
+    ],
+  ])('fails closed for a %s list response', async (_label, payload) => {
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url.includes('/usage')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { keys: [], daily: [], totals: {} } },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'GET') {
+        return Promise.resolve({ ok: true, status: 200, data: payload })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<ApiKeysSection />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('loadFailedRetryShort')
+    expect(screen.queryByText('user-a private key')).not.toBeInTheDocument()
+    expect(screen.queryByText(FULL_SECRET_A)).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('apiKeyNamePlaceholder')).not.toBeInTheDocument()
+  })
+
   it('catches create network failures, preserves the draft, and releases the busy state', async () => {
     mockAuthedFetch.mockImplementation((url: string, method: string) => {
       if (url.includes('/usage')) {
@@ -369,7 +427,7 @@ describe('ApiKeysSection viewer ownership', () => {
         })
       }
       if (url === '/api/user/api-keys' && method === 'GET') {
-        return Promise.resolve({ ok: true, status: 200, data: { data: [] } })
+        return Promise.resolve({ ok: true, status: 200, data: apiKeyList() })
       }
       if (url === '/api/user/api-keys' && method === 'POST') {
         return Promise.reject(new TypeError('Failed to fetch'))
@@ -399,7 +457,7 @@ describe('ApiKeysSection viewer ownership', () => {
       }
       if (url === '/api/user/api-keys' && method === 'GET') {
         listReads += 1
-        return Promise.resolve({ ok: true, status: 200, data: { data: [] } })
+        return Promise.resolve({ ok: true, status: 200, data: apiKeyList() })
       }
       if (url === '/api/user/api-keys' && method === 'POST') {
         return Promise.resolve({
@@ -436,7 +494,7 @@ describe('ApiKeysSection viewer ownership', () => {
         listReads += 1
         return Promise.resolve(
           listReads === 1
-            ? { ok: true, status: 200, data: { data: [] } }
+            ? { ok: true, status: 200, data: apiKeyList() }
             : { ok: false, status: 503, data: { error: 'unavailable' } }
         )
       }
@@ -475,7 +533,7 @@ describe('ApiKeysSection viewer ownership', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          data: { data: [apiKey('user-a')] },
+          data: apiKeyList(apiKey('user-a')),
         })
       }
       if (url === '/api/user/api-keys' && method === 'PATCH') {
@@ -512,7 +570,7 @@ describe('ApiKeysSection viewer ownership', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          data: { data: [apiKey('user-a')] },
+          data: apiKeyList(apiKey('user-a')),
         })
       }
       if (url === '/api/user/api-keys' && method === 'PATCH') {
