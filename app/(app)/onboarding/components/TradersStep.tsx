@@ -125,7 +125,7 @@ export default function TradersStep({
             {tr('noDataShort')}
           </Text>
         ) : (
-          traders.slice(0, 10).map((t, idx) => {
+          traders.slice(0, 10).map((t) => {
             const tid = `${t.source}:${t.source_trader_id}`
             const isFollowed = followedTraders.has(tid)
             return (
@@ -147,16 +147,16 @@ export default function TradersStep({
                     minWidth: 20,
                     textAlign: 'right',
                     color:
-                      idx < 3
+                      t.rank <= 3
                         ? [
                             'var(--color-accent-warning)',
                             'var(--color-text-tertiary)',
                             'var(--color-medal-bronze)',
-                          ][idx]
+                          ][t.rank - 1]
                         : theme.textSecondary,
                   }}
                 >
-                  {idx + 1}
+                  #{t.rank}
                 </span>
                 <Box
                   style={{

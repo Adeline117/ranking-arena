@@ -63,4 +63,62 @@ describe('onboarding discovery loaders', () => {
 
     await expect(loadOnboardingTraders(fetcher)).rejects.toThrow('status 200')
   })
+
+  it('accepts and preserves persisted positive safe-integer trader ranks', async () => {
+    const traders = [
+      {
+        source: 'binance_futures',
+        source_trader_id: 'one',
+        handle: 'One',
+        avatar_url: null,
+        roi: 10,
+        arena_score: 99,
+        rank: 1,
+      },
+      {
+        source: 'okx_futures',
+        source_trader_id: 'twelve',
+        handle: 'Twelve',
+        avatar_url: null,
+        roi: 8,
+        arena_score: 95,
+        rank: 12,
+      },
+      {
+        source: 'binance_futures',
+        source_trader_id: 'two',
+        handle: 'Two',
+        avatar_url: null,
+        roi: 7,
+        arena_score: 90,
+        rank: 2,
+      },
+    ]
+    const fetcher = jest.fn().mockResolvedValue(response({ traders }))
+
+    await expect(loadOnboardingTraders(fetcher)).resolves.toEqual(traders)
+  })
+
+  it.each([null, 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '2'])(
+    'rejects a non-authoritative trader rank %p',
+    async (rank) => {
+      const fetcher = jest.fn().mockResolvedValue(
+        response({
+          traders: [
+            {
+              source: 'binance_futures',
+              source_trader_id: 'invalid-rank',
+              handle: 'Invalid Rank',
+              avatar_url: null,
+              roi: 10,
+              arena_score: 90,
+              rank,
+            },
+          ],
+        })
+      )
+
+      await expect(loadOnboardingTraders(fetcher)).rejects.toThrow('malformed')
+    }
+  )
 })
