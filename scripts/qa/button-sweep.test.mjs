@@ -5,6 +5,7 @@ import test from 'node:test'
 
 const source = readFileSync(join(process.cwd(), 'scripts/qa/button-sweep.mjs'), 'utf8')
 const authSource = readFileSync(join(process.cwd(), 'scripts/qa/auth-button-sweep.mjs'), 'utf8')
+const visualSource = readFileSync(join(process.cwd(), 'scripts/qa/visual-audit.mjs'), 'utf8')
 
 test('public entity routes use live API samples instead of retired fixtures', () => {
   assert.doesNotMatch(source, /\/trader\/soul|\/wrapped\/soul|\/u\/arena_bot/)
@@ -23,4 +24,11 @@ test('the authenticated write sweep has no retired trader fallback', () => {
   assert.doesNotMatch(authSource, /\/trader\/soul/)
   assert.match(authSource, /\?source=\$\{encodeURIComponent\(t0r\.platform\)\}/)
   assert.match(authSource, /不回退历史 fixture/)
+})
+
+test('the visual audit resolves public entities and reports missing samples', () => {
+  assert.doesNotMatch(visualSource, /\/trader\/soul|\/u\/arena_bot/)
+  assert.match(visualSource, /addDynamic\('\/trader\/\[handle\]'/)
+  assert.match(visualSource, /addDynamic\('\/u\/\[handle\]'/)
+  assert.match(visualSource, /显式跳过/)
 })

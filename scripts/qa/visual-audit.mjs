@@ -25,7 +25,6 @@ const CORE_ROUTES = [
   '/rankings/tokens',
   '/rankings/exchanges',
   '/rankings/weekly',
-  '/trader/soul',
   '/hot',
   '/feed',
   '/search?q=btc',
@@ -57,7 +56,6 @@ const SECONDARY_ROUTES = [
   '/rankings/tokens/BTC',
   '/s/BTC',
   '/hashtag/btc',
-  '/u/arena_bot',
   // 登录态页（未登录截到登录墙/空态本身也是 UX 检查点）
   '/settings',
   '/watchlist',
@@ -92,17 +90,56 @@ async function shoot(ctx, route, viewport, tag) {
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true })
   const routes = CORE_ONLY ? CORE_ROUTES : [...CORE_ROUTES, ...SECONDARY_ROUTES]
+  const skips = []
 
   // 动态样本 ID（与 button-sweep 同源）
+  const jget = async (path) => {
+    const response = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(15000) })
+    if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`)
+    return response.json()
+  }
+  const addDynamic = async (label, loader) => {
+    try {
+      const route = await loader()
+      if (route) routes.push(route)
+      else skips.push(`${label}（API 返回空样本）`)
+    } catch (error) {
+      skips.push(`${label}（取样失败: ${String(error?.message || error).slice(0, 100)}）`)
+    }
+  }
+  let rankingSamplePromise
+  const rankingSample = () => {
+    rankingSamplePromise ??= jget('/api/rankings?window=30d&limit=1').then(
+      (body) => body?.data?.traders?.[0]
+    )
+    return rankingSamplePromise
+  }
+  await addDynamic('/trader/[handle]', async () => {
+    const sample = await rankingSample()
+    const key = sample?.trader_key
+    const source = sample?.platform
+    if (!key || !source) return null
+    return `/trader/${encodeURIComponent(key)}?source=${encodeURIComponent(source)}`
+  })
+
   if (!CORE_ONLY) {
-    const jget = (p) =>
-      fetch(`${BASE}${p}`, { signal: AbortSignal.timeout(15000) })
-        .then((r) => r.json())
-        .catch(() => null)
-    const post = (await jget('/api/posts?limit=1'))?.data?.posts?.[0]?.id
-    if (post) routes.push(`/post/${post}`)
-    const group = (await jget('/api/groups?limit=1'))?.data?.groups?.[0]?.id
-    if (group) routes.push(`/groups/${group}`)
+    let postSamplePromise
+    const postSample = () => {
+      postSamplePromise ??= jget('/api/posts?limit=1').then((body) => body?.data?.posts?.[0])
+      return postSamplePromise
+    }
+    await addDynamic('/post/[id]', async () => {
+      const id = (await postSample())?.id
+      return id && `/post/${encodeURIComponent(id)}`
+    })
+    await addDynamic('/u/[handle]', async () => {
+      const handle = (await postSample())?.author_handle
+      return handle && `/u/${encodeURIComponent(handle)}`
+    })
+    await addDynamic('/groups/[id]', async () => {
+      const id = (await jget('/api/groups?limit=1'))?.data?.groups?.[0]?.id
+      return id && `/groups/${encodeURIComponent(id)}`
+    })
   }
 
   const browser = await chromium.launch({ headless: true })
@@ -135,6 +172,10 @@ async function main() {
   fs.writeFileSync('/tmp/arena-visual-index.json', JSON.stringify(index, null, 2))
   const ok = index.filter((r) => r.file).length
   console.log(`\n== 截图 ${ok}/${index.length} 成功 → ${OUT_DIR} ==`)
+  if (skips.length) {
+    console.log(`== 显式跳过 ${skips.length} 个动态路由 ==`)
+    for (const skip of skips) console.log(`  SKIP ${skip}`)
+  }
   console.log('索引: /tmp/arena-visual-index.json')
   process.exit(0)
 }
