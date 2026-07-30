@@ -11527,6 +11527,10 @@ export type Database = {
         }
         Returns: Json
       }
+      create_ranking_notifications_batch_atomic: {
+        Args: { p_rows: Json }
+        Returns: Json
+      }
       current_user_can_read_post_with_current_entitlement: {
         Args: { p_post_id: string }
         Returns: boolean
