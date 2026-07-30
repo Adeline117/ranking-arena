@@ -68,21 +68,41 @@ export const DELETE = withAuth(
       return badRequest('Invalid passkey id')
     }
 
-    // Scope the delete to the owner so a user can never remove someone else's key.
-    const { data, error } = await supabase
-      .from('user_passkeys')
-      .delete()
-      .eq('id', parsed.data.id)
-      .eq('user_id', user.id)
-      .select('id')
+    // Delete under the account lifecycle lock and require an exact typed ACK.
+    const { data, error } = await supabase.rpc(
+      'delete_webauthn_credential_for_active_profile_atomic',
+      {
+        p_user_id: user.id,
+        p_passkey_id: parsed.data.id,
+      }
+    )
+    const deletion = Array.isArray(data) && data.length === 1 ? data[0] : null
 
-    if (error) {
-      logger.error('[credentials DELETE] Failed to remove passkey:', error)
+    if (error || !deletion) {
+      logger.error('[credentials DELETE] Atomic removal failed:', error)
       return serverError('Failed to remove passkey')
     }
-
-    if (!data || data.length === 0) {
+    if (
+      deletion.status === 'suspended' &&
+      deletion.result_user_id === null &&
+      deletion.result_passkey_id === null
+    ) {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
+    }
+    if (
+      deletion.status === 'not_found' &&
+      deletion.result_user_id === user.id &&
+      deletion.result_passkey_id === parsed.data.id
+    ) {
       return NextResponse.json({ error: 'Passkey not found' }, { status: 404 })
+    }
+    if (
+      deletion.status !== 'deleted' ||
+      deletion.result_user_id !== user.id ||
+      deletion.result_passkey_id !== parsed.data.id
+    ) {
+      logger.error('[credentials DELETE] Atomic removal returned an invalid acknowledgement')
+      return serverError('Failed to remove passkey')
     }
 
     return NextResponse.json({ removed: true })

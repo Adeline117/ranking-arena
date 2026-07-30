@@ -10297,6 +10297,30 @@ export type Database = {
           status: string
         }[]
       }
+      delete_webauthn_credential_for_active_profile_atomic: {
+        Args: { p_passkey_id: string; p_user_id: string }
+        Returns: {
+          result_passkey_id: string | null
+          result_user_id: string | null
+          status: string
+        }[]
+      }
+      register_webauthn_credential_for_active_profile_atomic: {
+        Args: {
+          p_counter: number
+          p_credential_id: string
+          p_device_name: string | null
+          p_public_key: string
+          p_transports: string[] | null
+          p_user_id: string
+        }
+        Returns: {
+          result_credential_id: string | null
+          result_passkey_id: string | null
+          result_user_id: string | null
+          status: string
+        }[]
+      }
       assert_recurring_pro_checkout_completed_atomic: {
         Args: {
           p_livemode: boolean

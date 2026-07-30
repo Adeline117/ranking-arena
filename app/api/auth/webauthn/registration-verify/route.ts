@@ -65,22 +65,48 @@ export const POST = withAuth(
 
     const { credential } = verification.registrationInfo
     const publicKeyBase64 = isoBase64URL.fromBuffer(credential.publicKey, 'base64')
+    if (!Number.isSafeInteger(credential.counter) || credential.counter < 0) {
+      logger.error('[registration-verify] Verified credential counter is invalid')
+      return serverError('Failed to save passkey')
+    }
 
-    const { error: insertError } = await supabase.from('user_passkeys').insert({
-      user_id: user.id,
-      credential_id: credential.id,
-      public_key: publicKeyBase64,
-      counter: credential.counter,
-      transports: credential.transports ?? null,
-      device_name: deviceName || null,
-    })
-
-    if (insertError) {
-      // 23505 = credential already enrolled (unique credential_id)
-      if ((insertError as { code?: string }).code === '23505') {
-        return NextResponse.json({ error: 'This passkey is already registered' }, { status: 409 })
+    // The database serializes account suspension/deletion with credential
+    // registration and persists only the fields verified by the server above.
+    const { data: registrationData, error: registrationError } = await supabase.rpc(
+      'register_webauthn_credential_for_active_profile_atomic',
+      {
+        p_user_id: user.id,
+        p_credential_id: credential.id,
+        p_public_key: publicKeyBase64,
+        p_counter: credential.counter,
+        p_transports: credential.transports ?? null,
+        p_device_name: deviceName || null,
       }
-      logger.error('[registration-verify] Insert failed:', insertError)
+    )
+    const registration =
+      Array.isArray(registrationData) && registrationData.length === 1 ? registrationData[0] : null
+
+    if (registrationError || !registration) {
+      logger.error('[registration-verify] Atomic registration failed:', registrationError)
+      return serverError('Failed to save passkey')
+    }
+    const emptyResult =
+      registration.result_user_id === null &&
+      registration.result_passkey_id === null &&
+      registration.result_credential_id === null
+    if (registration.status === 'suspended' && emptyResult) {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
+    }
+    if (registration.status === 'conflict' && emptyResult) {
+      return NextResponse.json({ error: 'This passkey is already registered' }, { status: 409 })
+    }
+    if (
+      registration.status !== 'registered' ||
+      registration.result_user_id !== user.id ||
+      registration.result_credential_id !== credential.id ||
+      !z.string().uuid().safeParse(registration.result_passkey_id).success
+    ) {
+      logger.error('[registration-verify] Atomic registration returned an invalid acknowledgement')
       return serverError('Failed to save passkey')
     }
 

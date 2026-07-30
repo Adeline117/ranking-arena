@@ -5,6 +5,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 ADMISSION_MIGRATION="$ROOT_DIR/supabase/migrations/20260729158500_siwe_active_profile_wallet_admission.sql"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260729160500_webauthn_active_profile_assertion.sql"
+CREDENTIAL_MUTATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260729161000_webauthn_active_profile_credential_mutations.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -288,6 +289,8 @@ SQL
 psql_cmd -q -f "$ADMISSION_MIGRATION"
 psql_cmd -q -f "$MIGRATION"
 psql_cmd -q -f "$MIGRATION"
+psql_cmd -q -f "$CREDENTIAL_MUTATION_MIGRATION"
+psql_cmd -q -f "$CREDENTIAL_MUTATION_MIGRATION"
 
 service_query() {
   local sql="$1"
@@ -462,4 +465,273 @@ expect_eq "$(psql_cmd -Atqc "SELECT counter FROM public.user_passkeys WHERE id =
   '13' \
   'mint-window credential remains unconsumed'
 
-echo 'WebAuthn active-profile assertion pg17 proof passed'
+# Registration persists one server-verified credential exactly, rejects a
+# duplicate identity, and deletion returns a typed idempotency boundary.
+registration_ack="$(service_query "
+  SELECT
+    status,
+    result_user_id = '$ACTIVE'::uuid,
+    result_passkey_id IS NOT NULL,
+    result_credential_id = 'credential-register-exact'
+  FROM public.register_webauthn_credential_for_active_profile_atomic(
+    '$ACTIVE',
+    'credential-register-exact',
+    'key-register-exact',
+    17,
+    ARRAY['internal', 'hybrid'],
+    'Test key'
+  )
+")"
+expect_eq "$registration_ack" \
+  'registered|t|t|t' \
+  'exact registration acknowledgement'
+REGISTERED_PASSKEY="$(psql_cmd -Atqc "SELECT id FROM public.user_passkeys WHERE credential_id = 'credential-register-exact'")"
+expect_eq "$(psql_cmd -AtF '|' -c "
+  SELECT
+    user_id,
+    credential_id,
+    public_key,
+    counter,
+    transports,
+    device_name,
+    created_at IS NOT NULL,
+    last_used_at IS NULL
+  FROM public.user_passkeys
+  WHERE id = '$REGISTERED_PASSKEY'
+")" \
+  "$ACTIVE|credential-register-exact|key-register-exact|17|{internal,hybrid}|Test key|t|t" \
+  'exact registered credential state'
+expect_eq "$(service_query "
+  SELECT status
+  FROM public.register_webauthn_credential_for_active_profile_atomic(
+    '$ACTIVE',
+    'credential-register-exact',
+    'different-key',
+    0,
+    NULL,
+    NULL
+  )
+")" \
+  'conflict' \
+  'duplicate registration conflict'
+expect_eq "$(service_query "
+  SELECT status || '|' || (result_user_id = '$ACTIVE'::uuid)::text || '|' ||
+    (result_passkey_id = '$REGISTERED_PASSKEY'::uuid)::text
+  FROM public.delete_webauthn_credential_for_active_profile_atomic(
+    '$ACTIVE', '$REGISTERED_PASSKEY'
+  )
+")" \
+  'deleted|true|true' \
+  'exact deletion acknowledgement'
+expect_eq "$(service_query "
+  SELECT status || '|' || (result_user_id = '$ACTIVE'::uuid)::text || '|' ||
+    (result_passkey_id = '$REGISTERED_PASSKEY'::uuid)::text
+  FROM public.delete_webauthn_credential_for_active_profile_atomic(
+    '$ACTIVE', '$REGISTERED_PASSKEY'
+  )
+")" \
+  'not_found|true|true' \
+  'typed deletion replay acknowledgement'
+
+# Every current and legacy suspension representation wins before registration
+# or deletion can mutate credential state.
+expect_eq "$(service_query "
+  SELECT status
+  FROM public.register_webauthn_credential_for_active_profile_atomic(
+    '$BANNED', 'credential-banned-new', 'key-banned-new', 0, NULL, NULL
+  )
+")" \
+  'suspended' \
+  'banned registration rejection'
+expect_eq "$(service_query "
+  SELECT status
+  FROM public.register_webauthn_credential_for_active_profile_atomic(
+    '$DELETED', 'credential-deleted-new', 'key-deleted-new', 0, NULL, NULL
+  )
+")" \
+  'suspended' \
+  'deleted registration rejection'
+expect_eq "$(service_query "
+  SELECT status
+  FROM public.delete_webauthn_credential_for_active_profile_atomic(
+    '$BANNED', '$PASSKEY_BANNED'
+  )
+")" \
+  'suspended' \
+  'banned credential deletion rejection'
+expect_eq "$(service_query "
+  SELECT status
+  FROM public.delete_webauthn_credential_for_active_profile_atomic(
+    '$DELETED', '$PASSKEY_DELETED'
+  )
+")" \
+  'suspended' \
+  'deleted credential deletion rejection'
+expect_eq "$(psql_cmd -Atqc "
+  SELECT count(*)
+  FROM public.user_passkeys
+  WHERE credential_id IN (
+    'credential-banned',
+    'credential-deleted',
+    'credential-banned-new',
+    'credential-deleted-new'
+  )
+")" \
+  '2' \
+  'suspended credential state unchanged'
+
+# Different account locks still converge on one globally unique credential
+# identity. Exactly one concurrent registration can win.
+service_query "
+  SELECT status
+  FROM public.register_webauthn_credential_for_active_profile_atomic(
+    '$ACTIVE', 'credential-concurrent-global', 'key-concurrent-active', 0, NULL, NULL
+  )
+" >"$LOG_DIR/register-concurrent-a.out" 2>"$LOG_DIR/register-concurrent-a.err" &
+register_a_pid=$!
+service_query "
+  SELECT status
+  FROM public.register_webauthn_credential_for_active_profile_atomic(
+    '$COUNTERLESS', 'credential-concurrent-global', 'key-concurrent-counterless', 0, NULL, NULL
+  )
+" >"$LOG_DIR/register-concurrent-b.out" 2>"$LOG_DIR/register-concurrent-b.err" &
+register_b_pid=$!
+wait "$register_a_pid"
+wait "$register_b_pid"
+expect_eq "$(awk '$1 == "registered" || $1 == "conflict" { print $1 }' "$LOG_DIR"/register-concurrent-*.out | sort | paste -sd, -)" \
+  'conflict,registered' \
+  'concurrent global credential acknowledgements'
+expect_eq "$(psql_cmd -Atqc "SELECT count(*) FROM public.user_passkeys WHERE credential_id = 'credential-concurrent-global'")" \
+  '1' \
+  'single global credential winner'
+
+# Trigger failures roll back registration and deletion completely.
+psql_cmd <<SQL
+CREATE FUNCTION public.fail_test_credential_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS \$function\$
+BEGIN
+  IF TG_OP = 'INSERT' AND NEW.credential_id = 'credential-register-failure' THEN
+    RAISE EXCEPTION 'injected credential registration failure';
+  END IF;
+  IF TG_OP = 'DELETE' AND OLD.id = '$PASSKEY_FAILURE' THEN
+    RAISE EXCEPTION 'injected credential deletion failure';
+  END IF;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END
+\$function\$;
+CREATE TRIGGER fail_test_credential_mutation
+  BEFORE INSERT OR DELETE ON public.user_passkeys
+  FOR EACH ROW EXECUTE FUNCTION public.fail_test_credential_mutation();
+SQL
+expect_failure_matching \
+  "SET ROLE service_role; SET request.jwt.claim.role = 'service_role'; SELECT * FROM public.register_webauthn_credential_for_active_profile_atomic('$FAILURE', 'credential-register-failure', 'key-register-failure', 0, NULL, NULL)" \
+  'injected-registration-failure' \
+  'injected credential registration failure'
+expect_eq "$(psql_cmd -Atqc "SELECT count(*) FROM public.user_passkeys WHERE credential_id = 'credential-register-failure'")" \
+  '0' \
+  'failed registration rollback'
+expect_failure_matching \
+  "SET ROLE service_role; SET request.jwt.claim.role = 'service_role'; SELECT * FROM public.delete_webauthn_credential_for_active_profile_atomic('$FAILURE', '$PASSKEY_FAILURE')" \
+  'injected-deletion-failure' \
+  'injected credential deletion failure'
+expect_eq "$(psql_cmd -Atqc "SELECT count(*) FROM public.user_passkeys WHERE id = '$PASSKEY_FAILURE'")" \
+  '1' \
+  'failed deletion rollback'
+psql_cmd -q -c 'DROP TRIGGER fail_test_credential_mutation ON public.user_passkeys; DROP FUNCTION public.fail_test_credential_mutation()'
+
+# An assertion that owns the lifecycle order commits its counter generation;
+# the queued deletion then removes that exact generation.
+PASSKEY_ASSERT_FIRST='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1'
+PASSKEY_DELETE_FIRST='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'
+psql_cmd -q <<SQL
+INSERT INTO public.user_passkeys (
+  id, user_id, credential_id, public_key, counter, last_used_at
+) VALUES
+  ('$PASSKEY_ASSERT_FIRST', '$ACTIVE', 'credential-assert-first', 'key-assert-first', 20, NULL),
+  ('$PASSKEY_DELETE_FIRST', '$ACTIVE', 'credential-delete-first', 'key-delete-first', 30, NULL);
+SQL
+psql_cmd -qAt <<SQL >"$LOG_DIR/assertion-first.out" 2>"$LOG_DIR/assertion-first.err" &
+BEGIN;
+SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
+SELECT status
+FROM public.consume_webauthn_authentication_atomic(
+  '$ACTIVE',
+  '$PASSKEY_ASSERT_FIRST',
+  'credential-assert-first',
+  'key-assert-first',
+  20,
+  NULL,
+  21
+);
+SELECT pg_catalog.pg_sleep(0.75);
+COMMIT;
+SQL
+assertion_first_pid=$!
+wait_for_subject_lock "$ACTIVE"
+expect_eq "$(service_query "
+  SELECT status
+  FROM public.delete_webauthn_credential_for_active_profile_atomic(
+    '$ACTIVE', '$PASSKEY_ASSERT_FIRST'
+  )
+")" \
+  'deleted' \
+  'assertion-first queued deletion'
+wait "$assertion_first_pid"
+expect_eq "$(awk '$1 == "consumed" { print $1 }' "$LOG_DIR/assertion-first.out")" \
+  'consumed' \
+  'assertion-first consumption acknowledgement'
+expect_eq "$(psql_cmd -Atqc "SELECT count(*) FROM public.user_passkeys WHERE id = '$PASSKEY_ASSERT_FIRST'")" \
+  '0' \
+  'assertion-first final deletion state'
+
+# Conversely, deletion that owns the same lifecycle order removes the row;
+# the queued assertion must observe the committed absence and fail closed.
+psql_cmd -qAt <<SQL >"$LOG_DIR/deletion-first.out" 2>"$LOG_DIR/deletion-first.err" &
+BEGIN;
+SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
+SELECT status
+FROM public.delete_webauthn_credential_for_active_profile_atomic(
+  '$ACTIVE', '$PASSKEY_DELETE_FIRST'
+);
+SELECT pg_catalog.pg_sleep(0.75);
+COMMIT;
+SQL
+deletion_first_pid=$!
+wait_for_subject_lock "$ACTIVE"
+expect_eq "$(service_query "
+  SELECT status
+  FROM public.consume_webauthn_authentication_atomic(
+    '$ACTIVE',
+    '$PASSKEY_DELETE_FIRST',
+    'credential-delete-first',
+    'key-delete-first',
+    30,
+    NULL,
+    31
+  )
+")" \
+  'conflict' \
+  'deletion-first queued assertion rejection'
+wait "$deletion_first_pid"
+expect_eq "$(awk '$1 == "deleted" { print $1 }' "$LOG_DIR/deletion-first.out")" \
+  'deleted' \
+  'deletion-first acknowledgement'
+expect_eq "$(psql_cmd -Atqc "SELECT count(*) FROM public.user_passkeys WHERE id = '$PASSKEY_DELETE_FIRST'")" \
+  '0' \
+  'deletion-first final state'
+
+# RPC execution remains server-only even though reads are owner-scoped.
+expect_failure_matching \
+  "SET ROLE anon; SELECT * FROM public.register_webauthn_credential_for_active_profile_atomic('$ACTIVE', 'credential-anon', 'key-anon', 0, NULL, NULL)" \
+  'anon-register-execute' \
+  '42501'
+expect_failure_matching \
+  "SET ROLE authenticated; SELECT * FROM public.delete_webauthn_credential_for_active_profile_atomic('$ACTIVE', '$PASSKEY_ACTIVE')" \
+  'authenticated-delete-execute' \
+  '42501'
+
+echo 'WebAuthn active-profile assertion and credential mutation pg17 proof passed'
