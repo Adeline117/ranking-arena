@@ -99,7 +99,7 @@ const ko = {
   loggedInShowAll: '로그인: 모든 추천 표시',
   notLoggedInShowLimited: '비로그인: 상위 10개만 표시',
   groupRecommendations: '그룹 추천',
-  hotGroups: '인기 그룹',
+  hotGroups: '최근 활동 그룹',
   groupRecommendationsComingSoon: '그룹 추천 기능이 곧 출시됩니다',
   hotList: '인기 목록',
   loggedInShowAllHot: '로그인: 전체 표시',

@@ -144,7 +144,7 @@ describe('GET /api/groups current discovery boundary', () => {
     expect(mockFrom).toHaveBeenCalledTimes(4)
   })
 
-  it('honors bounded pagination and allow-listed sorting', async () => {
+  it('defines activity sorting as recently updated order, not an activity-score ranking', async () => {
     const { dataQuery } = queueRequest({ data: [], error: null }, { count: 80, error: null })
 
     const response = await GET(
@@ -157,6 +157,11 @@ describe('GET /api/groups current discovery boundary', () => {
       ascending: false,
       nullsFirst: false,
     })
+    expect(dataQuery.order).toHaveBeenNthCalledWith(2, 'id', { ascending: true })
+    expect(dataQuery.select).toHaveBeenCalledWith(
+      'id, name, name_en, description, avatar_url, member_count'
+    )
+    expect(String(dataQuery.select.mock.calls[0]?.[0])).not.toMatch(/activity[_A-Z]?score/i)
     expect(dataQuery.range).toHaveBeenCalledWith(20, 69)
   })
 
