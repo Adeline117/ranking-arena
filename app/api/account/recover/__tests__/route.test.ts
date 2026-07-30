@@ -117,7 +117,7 @@ import { POST } from '../route'
 
 const RECOVERY_TOKEN = 'A'.repeat(43)
 
-function request(body: Record<string, unknown>): Request {
+function request(body: unknown): Request {
   return new Request('https://www.arenafi.org/api/account/recover', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -279,6 +279,56 @@ describe('account recovery', () => {
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockAdminUpdateUser).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a null body', null, 400],
+    ['an array body', [], 400],
+    [
+      'mixed token and password credentials',
+      { recovery_token: RECOVERY_TOKEN, email: 'user@example.com', password: 'password' },
+      401,
+    ],
+    [
+      'an extra password-mode field',
+      { email: 'user@example.com', password: 'password', x: 1 },
+      400,
+    ],
+  ])('rejects %s before account lookup', async (_label, body, status) => {
+    const response = await POST(request(body))
+
+    expect(response.status).toBe(status)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing owner', { user_id: null }],
+    ['invalid expiry', { expires_at: 'not-a-date' }],
+    ['missing expiry', { expires_at: null }],
+    ['non-null consumed marker', { used_at: 'not-a-date' }],
+  ])('rejects a token row with %s before admission', async (_label, drift) => {
+    tokenResult = { data: { ...tokenResult.data, ...drift }, error: null }
+
+    const response = await POST(request({ recovery_token: RECOVERY_TOKEN }))
+
+    expect(response.status).toBe(401)
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([null, 'not-a-date'])('rejects an invalid deletion deadline %s', async (deadline) => {
+    profileResult = { data: { deletion_scheduled_at: deadline }, error: null }
+
+    const response = await POST(
+      request({ email: 'user@example.com', password: 'correct-password' })
+    )
+
+    expect(response.status).toBe(401)
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockRpc).toHaveBeenCalledTimes(1)
   })
 
   it('re-bans a password account when credential verification fails', async () => {

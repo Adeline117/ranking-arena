@@ -19,9 +19,27 @@ import { enforceAccountDeletionAuthBan } from '@/lib/account/deletion-auth-inval
 
 const logger = createLogger('account-recover')
 const INVALID_RECOVERY = 'Invalid credentials or no pending deletion'
+const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const keys = Object.keys(value).sort()
+  const sortedExpected = [...expected].sort()
+  return (
+    keys.length === sortedExpected.length &&
+    keys.every((key, index) => key === sortedExpected[index])
+  )
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    ISO_TIMESTAMP_PATTERN.test(value) &&
+    Number.isFinite(Date.parse(value))
+  )
+}
 
 async function reban(userId: string): Promise<boolean> {
   try {
@@ -303,20 +321,32 @@ async function stopUncommittedBillingRecovery(
 
 export const POST = withPublic(
   async ({ request }) => {
-    let body: { email?: string; password?: string; recovery_token?: string }
+    let parsedBody: unknown
     try {
-      body = await request.json()
+      parsedBody = await request.json()
     } catch {
       return badRequest('Invalid JSON body')
     }
 
+    if (!parsedBody || typeof parsedBody !== 'object' || Array.isArray(parsedBody)) {
+      return badRequest('Request body must be an object')
+    }
+    const body = parsedBody as Record<string, unknown>
+
     const hasRecoveryToken = Object.prototype.hasOwnProperty.call(body, 'recovery_token')
     let recoveryToken: string | null = null
+    let passwordCredentials: { email: string; password: string } | null = null
     if (hasRecoveryToken) {
-      if (!isAccountRecoveryToken(body.recovery_token)) {
+      if (
+        !hasExactKeys(body, ['recovery_token']) ||
+        typeof body.recovery_token !== 'string' ||
+        !isAccountRecoveryToken(body.recovery_token)
+      ) {
         return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
       }
       recoveryToken = body.recovery_token
+    } else if (!hasExactKeys(body, ['email', 'password'])) {
+      return badRequest('Provide exactly one account recovery credential')
     }
 
     const admin = getSupabaseAdmin()
@@ -331,10 +361,17 @@ export const POST = withPublic(
         .eq('token_hash', recoveryTokenHash)
         .maybeSingle()
 
-      if (error || !tokenRow || tokenRow.used_at) {
+      if (
+        error ||
+        !tokenRow ||
+        typeof tokenRow.user_id !== 'string' ||
+        tokenRow.user_id.length === 0 ||
+        !isIsoTimestamp(tokenRow.expires_at) ||
+        tokenRow.used_at !== null
+      ) {
         return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
       }
-      if (new Date(tokenRow.expires_at).getTime() <= Date.now()) {
+      if (Date.parse(tokenRow.expires_at) <= Date.now()) {
         return NextResponse.json(
           { success: false, error: 'Recovery period has expired.' },
           { status: 410 }
@@ -355,6 +392,7 @@ export const POST = withPublic(
       }
 
       const verifiedEmail = email.trim()
+      passwordCredentials = { email: verifiedEmail, password }
       try {
         userId = await resolveRecoveryAuthSubject(verifiedEmail)
       } catch (error) {
@@ -380,17 +418,15 @@ export const POST = withPublic(
       if (error || !profile) {
         return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
       }
-      if (
-        profile.deletion_scheduled_at &&
-        new Date(profile.deletion_scheduled_at).getTime() <= Date.now()
-      ) {
+      if (!isIsoTimestamp(profile.deletion_scheduled_at)) {
+        return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
+      }
+      if (Date.parse(profile.deletion_scheduled_at) <= Date.now()) {
         return NextResponse.json(
           { success: false, error: 'Recovery period has expired.' },
           { status: 410 }
         )
       }
-
-      body.email = verifiedEmail
     }
 
     if (!userId) {
@@ -433,8 +469,11 @@ export const POST = withPublic(
     // before the PostgreSQL finish transition so an ambiguous finish always
     // leaves the subject banned rather than racing an active session.
     if (!recoveryTokenHash) {
-      const email = body.email!
-      const password = body.password!
+      if (!passwordCredentials) {
+        await abortRecoveryAdmissionBestEffort({ userId, operationId })
+        return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
+      }
+      const { email, password } = passwordCredentials
       const { error: verificationUnbanError } = await admin.auth.admin.updateUserById(userId, {
         ban_duration: 'none',
       })
