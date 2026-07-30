@@ -7,6 +7,8 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260729165000_atomic_direct_message_conversation_page.sql"
+EXTRA_MIGRATION="${DM_PAGE_EXTRA_MIGRATION:-}"
+EXTRA_PROOF="${DM_PAGE_EXTRA_PROOF:-}"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -144,6 +146,7 @@ CREATE TABLE public.conversations (
   id uuid PRIMARY KEY,
   user1_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   user2_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at timestamptz DEFAULT pg_catalog.statement_timestamp(),
   UNIQUE (user1_id, user2_id),
   CHECK (user1_id < user2_id)
 );
@@ -151,6 +154,10 @@ CREATE TABLE public.conversation_members (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
   conversation_id uuid NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  remark text,
+  is_muted boolean NOT NULL DEFAULT false,
+  is_pinned boolean NOT NULL DEFAULT false,
+  is_blocked boolean NOT NULL DEFAULT false,
   cleared_before timestamptz,
   UNIQUE (conversation_id, user_id)
 );
@@ -281,6 +288,7 @@ DECLARE
     pg_catalog.statement_timestamp()
   );
 BEGIN
+  PERFORM pg_catalog.hashtextextended('account-recovery-admission:', 0);
   SELECT conversation.user1_id, conversation.user2_id
   INTO STRICT v_left, v_right
   FROM public.conversations AS conversation
@@ -341,6 +349,24 @@ BEGIN
   RETURN '{}'::jsonb;
 END
 $function$;
+CREATE FUNCTION public.start_direct_message_conversation_atomic(uuid, uuid)
+RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+AS $function$
+BEGIN
+  PERFORM pg_catalog.hashtextextended('account-recovery-admission:', 0);
+  PERFORM pg_catalog.hashtextextended('direct-message:pair:', 0);
+  RETURN '{}'::jsonb;
+END
+$function$;
+CREATE FUNCTION public.mark_direct_message_conversation_read_atomic(uuid, uuid)
+RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+AS $function$
+BEGIN
+  PERFORM pg_catalog.hashtextextended('account-recovery-admission:', 0);
+  PERFORM pg_catalog.hashtextextended('direct-message:pair:', 0);
+  RETURN '{}'::jsonb;
+END
+$function$;
 CREATE FUNCTION public.toggle_direct_message_reaction_atomic(uuid, uuid, uuid, text)
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 AS $function$
@@ -352,6 +378,10 @@ $function$;
 ALTER FUNCTION public.send_direct_message_atomic(uuid,uuid,text,text,text,text,uuid)
   OWNER TO postgres;
 ALTER FUNCTION public.delete_direct_message_atomic(uuid,uuid) OWNER TO postgres;
+ALTER FUNCTION public.start_direct_message_conversation_atomic(uuid,uuid)
+  OWNER TO postgres;
+ALTER FUNCTION public.mark_direct_message_conversation_read_atomic(uuid,uuid)
+  OWNER TO postgres;
 ALTER FUNCTION public.toggle_direct_message_reaction_atomic(uuid,uuid,uuid,text)
   OWNER TO postgres;
 
@@ -364,6 +394,10 @@ SQL
 
 psql_cmd -f "$MIGRATION" >/dev/null
 psql_cmd -f "$MIGRATION" >/dev/null
+if [[ -n "$EXTRA_MIGRATION" ]]; then
+  psql_cmd -f "$EXTRA_MIGRATION" >/dev/null
+  psql_cmd -f "$EXTRA_MIGRATION" >/dev/null
+fi
 
 expect_failure "SET ROLE authenticated; SET request.jwt.claim.role='authenticated'; SELECT public.get_direct_message_conversation_page_atomic('a0000000-0000-4000-8000-000000000001','11111111-1111-4111-8111-111111111111',NULL,NULL,50)"
 expect_failure "SET ROLE rogue_role; SELECT public.get_direct_message_conversation_page_atomic('a0000000-0000-4000-8000-000000000001','11111111-1111-4111-8111-111111111111',NULL,NULL,50)"
@@ -553,5 +587,10 @@ conversation_delete_pid=$!
 wait_for_query 'dm_page_conversation_delete_hold'
 assert_service_scalar 'NOT_FOUND' "SELECT public.get_direct_message_conversation_page_atomic('a0000000-0000-4000-8000-000000000003','31111111-1111-4111-8111-111111111111',NULL,NULL,100)->>'reason'"
 wait "$conversation_delete_pid"
+
+if [[ -n "$EXTRA_PROOF" ]]; then
+  # shellcheck source=/dev/null
+  source "$EXTRA_PROOF"
+fi
 
 echo "atomic direct-message conversation-page PostgreSQL 17 checks passed"

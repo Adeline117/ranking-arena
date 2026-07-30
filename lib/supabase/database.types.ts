@@ -11755,6 +11755,10 @@ export type Database = {
         }
         Returns: Json
       }
+      get_direct_message_conversation_list_atomic: {
+        Args: { p_actor_id: string; p_limit: number }
+        Returns: Json
+      }
       get_following_posts_page: {
         Args: {
           p_author_handle?: string
