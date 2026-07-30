@@ -31,6 +31,22 @@ export interface HealthReport {
   duration_ms: number
 }
 
+interface HealthCheckOptions {
+  signal?: AbortSignal
+}
+
+const REQUEST_TIMEOUT_MS = 10_000
+const DATABASE_TIMEOUT_MS = 12_000
+
+function boundedSignal(parent: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs)
+  return parent ? AbortSignal.any([parent, timeout]) : timeout
+}
+
+function databaseFailure(check: string, error: { message?: string } | null): Error {
+  return new Error(`${check} query failed: ${error?.message || 'invalid acknowledgement'}`)
+}
+
 // ── Frontend Health Checks ───────────────────────────────────────
 
 const CORE_PAGES = [
@@ -41,7 +57,10 @@ const CORE_PAGES = [
   { path: '/pricing', name: 'Pricing', expectSSR: 'Pro' },
 ]
 
-export async function checkFrontendHealth(baseUrl: string): Promise<HealthCheck[]> {
+export async function checkFrontendHealth(
+  baseUrl: string,
+  options: HealthCheckOptions = {}
+): Promise<HealthCheck[]> {
   const checks: HealthCheck[] = []
 
   const results = await Promise.allSettled(
@@ -49,7 +68,8 @@ export async function checkFrontendHealth(baseUrl: string): Promise<HealthCheck[
       const start = Date.now()
       try {
         const res = await fetch(`${baseUrl}${page.path}`, {
-          signal: AbortSignal.timeout(10_000),
+          cache: 'no-store',
+          signal: boundedSignal(options.signal, REQUEST_TIMEOUT_MS),
           headers: { 'User-Agent': 'ArenaHealthCheck/1.0' },
         })
         const latency = Date.now() - start
@@ -124,7 +144,10 @@ const API_ENDPOINTS = [
   { path: '/api/stats', name: 'Site Stats', expectKey: null },
 ]
 
-export async function checkAPIHealth(baseUrl: string): Promise<HealthCheck[]> {
+export async function checkAPIHealth(
+  baseUrl: string,
+  options: HealthCheckOptions = {}
+): Promise<HealthCheck[]> {
   const checks: HealthCheck[] = []
 
   const results = await Promise.allSettled(
@@ -132,7 +155,8 @@ export async function checkAPIHealth(baseUrl: string): Promise<HealthCheck[]> {
       const start = Date.now()
       try {
         const res = await fetch(`${baseUrl}${ep.path}`, {
-          signal: AbortSignal.timeout(10_000),
+          cache: 'no-store',
+          signal: boundedSignal(options.signal, REQUEST_TIMEOUT_MS),
           headers: { 'User-Agent': 'ArenaHealthCheck/1.0' },
         })
         const latency = Date.now() - start
@@ -150,8 +174,11 @@ export async function checkAPIHealth(baseUrl: string): Promise<HealthCheck[]> {
         } else if (latency > 3000) {
           status = 'warn'
           details = `Slow: ${latency}ms`
-        } else if (ep.expectKey && body && !(ep.expectKey in body)) {
-          status = 'warn'
+        } else if (
+          ep.expectKey &&
+          (!body || typeof body !== 'object' || Array.isArray(body) || !(ep.expectKey in body))
+        ) {
+          status = 'fail'
           details = `Missing key "${ep.expectKey}" in response`
         }
 
@@ -191,7 +218,7 @@ export async function checkAPIHealth(baseUrl: string): Promise<HealthCheck[]> {
 
 // ── Data Quality Checks ──────────────────────────────────────────
 
-export async function checkDataQuality(): Promise<HealthCheck[]> {
+export async function checkDataQuality(options: HealthCheckOptions = {}): Promise<HealthCheck[]> {
   const supabase = getSupabaseAdmin() as SupabaseClient
   const checks: HealthCheck[] = []
 
@@ -200,16 +227,19 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
     // Check 1: Ranking consistency — top 10 should have descending arena_score
     (async () => {
       const start = Date.now()
-      const { data: top10 } = await supabase
+      const { data: top10, error } = await supabase
         .from('leaderboard_ranks')
         .select('rank, arena_score, source')
         .eq('season_id', '90D')
         .not('arena_score', 'is', null)
         .order('rank', { ascending: true })
         .limit(10)
+        .abortSignal(boundedSignal(options.signal, DATABASE_TIMEOUT_MS))
+
+      if (error || !Array.isArray(top10)) throw databaseFailure('ranking order', error)
 
       let sorted = true
-      if (top10 && top10.length > 1) {
+      if (top10.length > 1) {
         for (let i = 1; i < top10.length; i++) {
           if ((top10[i].arena_score ?? 0) > (top10[i - 1].arena_score ?? 0)) {
             sorted = false
@@ -221,11 +251,14 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
       return {
         name: 'dq:ranking_order',
         category: 'data_quality' as const,
-        status: sorted ? ('pass' as const) : ('fail' as const),
+        status: top10.length > 0 && sorted ? ('pass' as const) : ('fail' as const),
         latency_ms: Date.now() - start,
-        details: sorted
-          ? 'Top 10 rankings correctly ordered'
-          : 'Ranking order inconsistency detected',
+        details:
+          top10.length === 0
+            ? 'No published 90D ranking rows'
+            : sorted
+              ? 'Top 10 rankings correctly ordered'
+              : 'Ranking order inconsistency detected',
       }
     })(),
 
@@ -235,16 +268,19 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
     // only implementation.
     (async () => {
       const start = Date.now()
-      const { data: sample } = await supabase
+      const { data: sample, error } = await supabase
         .from('leaderboard_ranks')
         .select('source, source_trader_id, season_id')
         .eq('season_id', '90D')
         .order('updated_at', { ascending: false })
         .limit(500)
+        .abortSignal(boundedSignal(options.signal, DATABASE_TIMEOUT_MS))
+
+      if (error || !Array.isArray(sample)) throw databaseFailure('duplicate sample', error)
 
       const seen = new Set<string>()
       let dupes = 0
-      for (const r of sample || []) {
+      for (const r of sample) {
         const key = `${r.source}:${r.source_trader_id}`
         if (seen.has(key)) dupes++
         seen.add(key)
@@ -253,9 +289,14 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
       return {
         name: 'dq:no_duplicates',
         category: 'data_quality' as const,
-        status: dupes === 0 ? ('pass' as const) : ('fail' as const),
+        status: sample.length > 0 && dupes === 0 ? ('pass' as const) : ('fail' as const),
         latency_ms: Date.now() - start,
-        details: dupes === 0 ? 'No duplicates in sample' : `${dupes} duplicates found in top 500`,
+        details:
+          sample.length === 0
+            ? 'No published 90D rows available for duplicate check'
+            : dupes === 0
+              ? 'No duplicates in sample'
+              : `${dupes} duplicates found in top 500`,
       }
     })(),
 
@@ -267,14 +308,16 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
     // existed in prod — no repo migration defines it.)
     (async () => {
       const start = Date.now()
-      const { data: platforms } = await supabase
+      const { data: platforms, error } = await supabase
         .from('leaderboard_ranks')
         .select('source')
         .eq('season_id', '90D')
         .not('arena_score', 'is', null)
         .order('arena_score', { ascending: false })
         .limit(5000)
-      const count = new Set((platforms || []).map((p) => p.source)).size
+        .abortSignal(boundedSignal(options.signal, DATABASE_TIMEOUT_MS))
+      if (error || !Array.isArray(platforms)) throw databaseFailure('platform coverage', error)
+      const count = new Set(platforms.map((p) => p.source)).size
 
       return {
         name: 'dq:platform_coverage',
@@ -289,17 +332,20 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
     // Check 4: No extreme anomalies in top 100
     (async () => {
       const start = Date.now()
-      const { data: top100 } = await supabase
+      const { data: top100, error } = await supabase
         .from('leaderboard_ranks')
         .select('source, source_trader_id, roi, arena_score, win_rate, max_drawdown, trades_count')
         .eq('season_id', '90D')
         .not('arena_score', 'is', null)
         .order('rank', { ascending: true })
         .limit(100)
+        .abortSignal(boundedSignal(options.signal, DATABASE_TIMEOUT_MS))
+
+      if (error || !Array.isArray(top100)) throw databaseFailure('anomaly sample', error)
 
       let anomalies = 0
       const issues: string[] = []
-      for (const t of top100 || []) {
+      for (const t of top100) {
         // ROI > 50000% is suspicious
         if (t.roi != null && (t.roi > 50000 || t.roi < -100)) {
           anomalies++
@@ -321,38 +367,51 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
         name: 'dq:anomaly_check',
         category: 'data_quality' as const,
         status:
-          anomalies === 0
-            ? ('pass' as const)
-            : anomalies <= 3
-              ? ('warn' as const)
-              : ('fail' as const),
+          top100.length === 0
+            ? ('fail' as const)
+            : anomalies === 0
+              ? ('pass' as const)
+              : anomalies <= 3
+                ? ('warn' as const)
+                : ('fail' as const),
         latency_ms: Date.now() - start,
         details:
-          anomalies === 0
-            ? 'No anomalies in top 100'
-            : `${anomalies} anomalies: ${issues.slice(0, 3).join(', ')}`,
+          top100.length === 0
+            ? 'No published 90D rows available for anomaly check'
+            : anomalies === 0
+              ? 'No anomalies in top 100'
+              : `${anomalies} anomalies: ${issues.slice(0, 3).join(', ')}`,
       }
     })(),
 
     // Check 5: Data freshness — leaderboard should be updated within 2 hours
     (async () => {
       const start = Date.now()
-      const { data: latest } = await supabase
+      const freshnessQuery = supabase
         .from('leaderboard_ranks')
         .select('computed_at')
         .eq('season_id', '90D')
         .order('computed_at', { ascending: false })
         .limit(1)
-        .maybeSingle()
+        .abortSignal(boundedSignal(options.signal, DATABASE_TIMEOUT_MS))
+      const { data: latest, error } = await freshnessQuery.maybeSingle()
 
-      const age = latest ? Date.now() - new Date(latest.computed_at).getTime() : Infinity
+      if (error) throw databaseFailure('freshness', error)
+
+      const computedAtMs = latest ? Date.parse(String(latest.computed_at)) : Number.NaN
+      const age = Number.isFinite(computedAtMs) ? Date.now() - computedAtMs : Infinity
       const ageHours = age / 3600000
+      const timestampValid = Number.isFinite(computedAtMs) && age >= -5 * 60_000
 
       return {
         name: 'dq:freshness',
         category: 'data_quality' as const,
         status:
-          ageHours < 2 ? ('pass' as const) : ageHours < 6 ? ('warn' as const) : ('fail' as const),
+          timestampValid && ageHours < 2
+            ? ('pass' as const)
+            : timestampValid && ageHours < 6
+              ? ('warn' as const)
+              : ('fail' as const),
         latency_ms: Date.now() - start,
         details: `Leaderboard last updated ${ageHours.toFixed(1)}h ago`,
       }
@@ -369,11 +428,15 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
 
       const countResults = await Promise.all(
         ['7D', '30D', '90D'].map(async (period) => {
-          const { count } = await supabase
+          const { count, error } = await supabase
             .from('leaderboard_ranks')
             .select('*', { count: 'estimated', head: true })
             .eq('season_id', period)
             .not('arena_score', 'is', null)
+            .abortSignal(boundedSignal(options.signal, DATABASE_TIMEOUT_MS))
+          if (error || typeof count !== 'number' || !Number.isFinite(count) || count < 0) {
+            throw databaseFailure(`period count ${period}`, error)
+          }
           return [period, count ?? 0] as const
         })
       )
@@ -381,14 +444,21 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
 
       // 7D should be at least 30% of 90D (some traders may not have 7D data)
       const ratio7d = counts['90D'] > 0 ? counts['7D'] / counts['90D'] : 1
-      const isConsistent = ratio7d >= 0.3
+      const hasPublishedRows = counts['90D'] > 0
+      const isConsistent = hasPublishedRows && ratio7d >= 0.3
 
       return {
         name: 'dq:period_consistency',
         category: 'data_quality' as const,
-        status: isConsistent ? ('pass' as const) : ('warn' as const),
+        status: isConsistent
+          ? ('pass' as const)
+          : hasPublishedRows
+            ? ('warn' as const)
+            : ('fail' as const),
         latency_ms: Date.now() - start,
-        details: `7D: ${counts['7D']}, 30D: ${counts['30D']}, 90D: ${counts['90D']} (ratio 7D/90D: ${(ratio7d * 100).toFixed(0)}%)`,
+        details: hasPublishedRows
+          ? `7D: ${counts['7D']}, 30D: ${counts['30D']}, 90D: ${counts['90D']} (ratio 7D/90D: ${(ratio7d * 100).toFixed(0)}%)`
+          : 'No published 90D rows available for period consistency',
       }
     })(),
   ])
@@ -412,7 +482,10 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
 
 // ── Combined Report ──────────────────────────────────────────────
 
-export async function runFullHealthCheck(baseUrl: string): Promise<HealthReport> {
+export async function runFullHealthCheck(
+  baseUrl: string,
+  options: HealthCheckOptions = {}
+): Promise<HealthReport> {
   const startTime = Date.now()
 
   // Run all categories in parallel — surface crash as explicit FAIL check instead of silent []
@@ -432,9 +505,9 @@ export async function runFullHealthCheck(baseUrl: string): Promise<HealthReport>
     ])
 
   const [frontendChecks, apiChecks, dataChecks] = await Promise.all([
-    wrapCategory('frontend', checkFrontendHealth(baseUrl)),
-    wrapCategory('api', checkAPIHealth(baseUrl)),
-    wrapCategory('data', checkDataQuality()),
+    wrapCategory('frontend', checkFrontendHealth(baseUrl, options)),
+    wrapCategory('api', checkAPIHealth(baseUrl, options)),
+    wrapCategory('data', checkDataQuality(options)),
   ])
 
   const allChecks = [...frontendChecks, ...apiChecks, ...dataChecks]

@@ -37,7 +37,7 @@ export type TelegramDeliveryResult =
     }
   | {
       outcome: 'failed'
-      reason: 'missing_config' | 'http_error' | 'timeout' | 'network_error'
+      reason: 'missing_config' | 'http_error' | 'timeout' | 'network_error' | 'buffer_unavailable'
       httpStatus?: number
     }
 
@@ -269,14 +269,9 @@ export async function sendTelegramAlertDetailed(
   // WARNING level: log and buffer for daily digest, don't send individually
   if (opts.level === 'warning') {
     logger.warn(`[Telegram/WARNING] ${opts.source}: ${opts.title} — ${opts.message}`)
-    // Record to Redis for daily digest aggregation
-    try {
-      await recordWarningForDigest(opts)
-    } catch (err) {
-      logger.error(
-        '[telegram] warning digest recording failed:',
-        err instanceof Error ? err.message : String(err)
-      )
+    const buffered = await recordWarningForDigest(opts)
+    if (!buffered) {
+      return { outcome: 'failed', reason: 'buffer_unavailable' }
     }
     return { outcome: 'suppressed', reason: 'warning_buffered' }
   }
@@ -412,10 +407,10 @@ export async function sendRecoveryNotification(
  * Record a WARNING alert to Redis for inclusion in daily digest.
  * Stored as a sorted set with timestamp scores for 24h retention.
  */
-async function recordWarningForDigest(opts: TelegramAlertOptions): Promise<void> {
+async function recordWarningForDigest(opts: TelegramAlertOptions): Promise<boolean> {
   try {
     const redis = await getSharedRedis()
-    if (!redis) return
+    if (!redis) return false
 
     const entry = JSON.stringify({
       source: opts.source,
@@ -428,11 +423,13 @@ async function recordWarningForDigest(opts: TelegramAlertOptions): Promise<void>
     const cutoff = Date.now() - 24 * 60 * 60 * 1000
     await redis.zremrangebyscore('alert:warnings:24h', 0, cutoff)
     await redis.zremrangebyrank('alert:warnings:24h', 0, -1001)
+    return true
   } catch (err) {
     logger.error(
       '[telegram] Redis warning aggregation failed:',
       err instanceof Error ? err.message : String(err)
     )
+    return false
   }
 }
 

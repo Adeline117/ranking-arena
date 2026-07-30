@@ -50,6 +50,9 @@ const mockRedis = {
     for (const key of keys) redisStore.delete(key)
     return keys.length
   }),
+  zadd: jest.fn().mockResolvedValue(1),
+  zremrangebyscore: jest.fn().mockResolvedValue(0),
+  zremrangebyrank: jest.fn().mockResolvedValue(0),
 }
 
 const baseAlert: TelegramAlertOptions = {
@@ -221,6 +224,14 @@ describe('sendTelegramAlertDetailed', () => {
       sendTelegramAlertDetailed({ ...baseAlert, level: 'warning', title: 'Warning' })
     ).resolves.toEqual({ outcome: 'suppressed', reason: 'warning_buffered' })
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  test('reports a warning buffer outage as a real handling failure', async () => {
+    mockGetSharedRedis.mockResolvedValue(null)
+
+    await expect(
+      sendTelegramAlertDetailed({ ...baseAlert, level: 'warning', title: 'Unbuffered warning' })
+    ).resolves.toEqual({ outcome: 'failed', reason: 'buffer_unavailable' })
   })
 
   test('does not leak the bot token or chat id into error logs', async () => {

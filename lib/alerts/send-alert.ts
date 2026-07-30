@@ -30,6 +30,7 @@ interface AlertDispatchResult {
   sent: boolean
   channels: string[]
   requestedChannelDelivered: boolean
+  requestedChannelHandled: boolean
 }
 
 /**
@@ -208,6 +209,7 @@ async function dispatchAlert(payload: AlertPayload): Promise<AlertDispatchResult
     if (result.delivery.delivered) sentChannels.push(result.channel)
   }
   const requestedChannelDelivered = fulfilled.some((result) => result.delivery.delivered)
+  const requestedChannelHandled = fulfilled.some((result) => result.delivery.handled)
   const telegramResult = fulfilled.find((result) => result.channel === 'telegram')
 
   // SEV1 backstop: Telegram is the only real primary channel and it's a SPOF
@@ -227,6 +229,7 @@ async function dispatchAlert(payload: AlertPayload): Promise<AlertDispatchResult
     sent: requestedChannelDelivered || sentChannels.includes('github'),
     channels: sentChannels,
     requestedChannelDelivered,
+    requestedChannelHandled,
   }
 }
 
@@ -392,7 +395,7 @@ export async function sendRateLimitedAlert(
   payload: AlertPayload,
   rateLimitKey: string,
   rateLimitMs?: number
-): Promise<{ sent: boolean; rateLimited: boolean; channels: string[] }> {
+): Promise<{ sent: boolean; handled: boolean; rateLimited: boolean; channels: string[] }> {
   const now = Date.now()
   const effectiveCooldown = rateLimitMs ?? COOLDOWN_BY_LEVEL[payload.level] ?? 300000
   const redisKey = `alert:ratelimit:${rateLimitKey}`
@@ -404,7 +407,7 @@ export async function sendRateLimitedAlert(
     if (redis) {
       const existing = await redis.get<number>(redisKey)
       if (existing && now - existing < effectiveCooldown) {
-        return { sent: false, rateLimited: true, channels: [] }
+        return { sent: false, handled: true, rateLimited: true, channels: [] }
       }
     }
   } catch (err) {
@@ -418,7 +421,7 @@ export async function sendRateLimitedAlert(
   // Also honor a local marker left by a prior Redis read/write outage.
   const lastSent = rateLimitCache.get(rateLimitKey)
   if (lastSent && now - lastSent < effectiveCooldown) {
-    return { sent: false, rateLimited: true, channels: [] }
+    return { sent: false, handled: true, rateLimited: true, channels: [] }
   }
 
   // Dispatch exactly once. A post-delivery cooldown write failure must never
@@ -447,7 +450,12 @@ export async function sendRateLimitedAlert(
     }
   }
 
-  return { sent: result.sent, channels: result.channels, rateLimited: false }
+  return {
+    sent: result.sent,
+    handled: result.sent || result.requestedChannelHandled,
+    channels: result.channels,
+    rateLimited: false,
+  }
 }
 
 // ============================================

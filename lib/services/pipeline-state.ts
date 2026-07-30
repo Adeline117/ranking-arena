@@ -40,15 +40,20 @@ export class PipelineState {
   /**
    * Set a value in persistent state (upsert).
    */
-  static async set(key: string, value: unknown): Promise<void> {
+  static async set(
+    key: string,
+    value: unknown,
+    options: { signal?: AbortSignal } = {}
+  ): Promise<void> {
     try {
       const supabase = getSupabaseAdmin()
-      const { error } = await supabase
+      const query = supabase
         .from('pipeline_state')
         .upsert(
           { key, value: value as Json, updated_at: new Date().toISOString() },
           { onConflict: 'key' }
         )
+      const { error } = await (options.signal ? query.abortSignal(options.signal) : query)
       if (error) {
         throw new Error(error.message)
       }

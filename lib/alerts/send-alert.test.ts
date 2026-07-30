@@ -179,6 +179,38 @@ describe('sendAlert', () => {
 })
 
 describe('sendRateLimitedAlert', () => {
+  test('distinguishes an intentionally buffered warning from delivery failure', async () => {
+    mockSendTelegram.mockResolvedValue({ outcome: 'suppressed', reason: 'warning_buffered' })
+
+    const result = await sendRateLimitedAlert(
+      { title: 'Degraded', message: 'digest this warning', level: 'warning' },
+      'warning-buffered'
+    )
+
+    expect(result).toEqual({
+      sent: false,
+      handled: true,
+      rateLimited: false,
+      channels: [],
+    })
+  })
+
+  test('surfaces a warning buffer outage as unhandled', async () => {
+    mockSendTelegram.mockResolvedValue({ outcome: 'failed', reason: 'buffer_unavailable' })
+
+    const result = await sendRateLimitedAlert(
+      { title: 'Degraded', message: 'buffer unavailable', level: 'warning' },
+      'warning-buffer-failed'
+    )
+
+    expect(result).toEqual({
+      sent: false,
+      handled: false,
+      rateLimited: false,
+      channels: [],
+    })
+  })
+
   test('does not write a cooldown when only the GitHub fallback delivered', async () => {
     const redis = {
       get: jest.fn().mockResolvedValue(null),
@@ -231,7 +263,7 @@ describe('sendRateLimitedAlert', () => {
     )
 
     expect(first.sent).toBe(true)
-    expect(second).toEqual({ sent: false, rateLimited: true, channels: [] })
+    expect(second).toEqual({ sent: false, handled: true, rateLimited: true, channels: [] })
     expect(mockSendTelegram).toHaveBeenCalledTimes(1)
     expect(redis.set).toHaveBeenCalledTimes(1)
   })

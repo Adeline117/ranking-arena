@@ -50,6 +50,17 @@ describe('PipelineState storage authority', () => {
     await expect(PipelineState.set('key', 1)).rejects.toThrow('pipeline_state upsert failed')
   })
 
+  test('set forwards a caller deadline to the durable write', async () => {
+    const abortSignal = jest.fn().mockResolvedValue({ data: null, error: null })
+    mockFrom.mockReturnValue({
+      upsert: jest.fn().mockReturnValue({ abortSignal }),
+    })
+    const signal = new AbortController().signal
+
+    await expect(PipelineState.set('key', 1, { signal })).resolves.toBeUndefined()
+    expect(abortSignal).toHaveBeenCalledWith(signal)
+  })
+
   test('del rejects when PostgREST resolves with a delete error', async () => {
     mockFrom.mockReturnValue({
       delete: jest.fn().mockReturnValue({
