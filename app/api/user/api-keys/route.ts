@@ -3,6 +3,51 @@ import { randomBytes } from 'crypto'
 import { withAuth } from '@/lib/api/middleware'
 
 const MAX_KEYS_PER_USER = 5
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const API_KEY_PATTERN = /^arena_sk_[0-9a-f]{32}$/
+const CREATE_ACK_KEYS = ['created_at', 'daily_limit', 'id', 'key', 'name', 'tier'].sort()
+
+function isExactCreateAcknowledgement(
+  value: unknown,
+  expected: { key: string; name: string }
+): value is {
+  id: string
+  name: string
+  key: string
+  tier: 'free' | 'starter' | 'pro'
+  daily_limit: number
+  created_at: string
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const acknowledgement = value as Record<string, unknown>
+  const keys = Object.keys(acknowledgement).sort()
+  if (
+    keys.length !== CREATE_ACK_KEYS.length ||
+    !keys.every((key, index) => key === CREATE_ACK_KEYS[index])
+  ) {
+    return false
+  }
+
+  const expectedDailyLimit =
+    acknowledgement.tier === 'free'
+      ? 100
+      : acknowledgement.tier === 'starter'
+        ? 10_000
+        : acknowledgement.tier === 'pro'
+          ? 0
+          : null
+  return (
+    typeof acknowledgement.id === 'string' &&
+    UUID_PATTERN.test(acknowledgement.id) &&
+    acknowledgement.name === expected.name &&
+    acknowledgement.key === expected.key &&
+    API_KEY_PATTERN.test(expected.key) &&
+    expectedDailyLimit !== null &&
+    acknowledgement.daily_limit === expectedDailyLimit &&
+    typeof acknowledgement.created_at === 'string' &&
+    Number.isFinite(Date.parse(acknowledgement.created_at))
+  )
+}
 
 /**
  * GET /api/user/api-keys
@@ -96,6 +141,9 @@ export const POST = withAuth(
         )
       }
       return NextResponse.json({ error: 'Failed to create API key' }, { status: 500 })
+    }
+    if (!isExactCreateAcknowledgement(data, { key, name })) {
+      return NextResponse.json({ error: 'Failed to acknowledge API key creation' }, { status: 500 })
     }
 
     // Return the FULL key only on creation — user must copy it now

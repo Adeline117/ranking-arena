@@ -47,17 +47,17 @@ function request(body: unknown) {
 describe('POST /api/user/api-keys', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockRpc.mockResolvedValue({
+    mockRpc.mockImplementation(async (_name: string, args: Record<string, unknown>) => ({
       data: {
-        id: 'key-id',
-        name: 'Production',
-        key: 'arena_sk_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        id: '10000000-0000-4000-8000-000000000001',
+        name: args.p_name,
+        key: args.p_key,
         tier: 'pro',
         daily_limit: 0,
         created_at: '2026-07-29T00:00:00.000Z',
       },
       error: null,
-    })
+    }))
   })
 
   it('creates through the profile-locked entitlement authority', async () => {
@@ -106,5 +106,32 @@ describe('POST /api/user/api-keys', () => {
 
     expect(response.status).toBe(409)
     expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { key: 'arena_sk_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+    { tier: 'starter', daily_limit: 0 },
+    { id: 'not-a-uuid' },
+    { unexpected: true },
+  ])('fails closed on a malformed creation acknowledgement: %p', async (override) => {
+    mockRpc.mockImplementationOnce(async (_name: string, args: Record<string, unknown>) => ({
+      data: {
+        id: '10000000-0000-4000-8000-000000000001',
+        name: args.p_name,
+        key: args.p_key,
+        tier: 'pro',
+        daily_limit: 0,
+        created_at: '2026-07-29T00:00:00.000Z',
+        ...override,
+      },
+      error: null,
+    }))
+
+    const response = await POST(request({ name: 'Production' }))
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to acknowledge API key creation',
+    })
   })
 })
