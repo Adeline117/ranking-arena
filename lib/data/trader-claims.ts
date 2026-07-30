@@ -478,9 +478,10 @@ export async function reviewClaim(
         type: 'system',
         title: 'Claim approved',
         message: `Your claim for ${claim.trader_id} (${claim.source}) is approved — your profile is now verified.`,
-        reference_id: String(claim.id),
+        reference_id: `approved:${claim.id}`,
       },
-      'trader-claim-approve'
+      'trader-claim-approve',
+      { deduplicate: true, dedupWindowSeconds: 604800 }
     )
 
     return claim
@@ -516,9 +517,10 @@ export async function reviewClaim(
       type: 'system',
       title: 'Claim rejected',
       message: `Your claim for ${claim.trader_id} (${claim.source}) was not approved${rejectReason ? `: ${rejectReason}` : '.'}`,
-      reference_id: String(claim.id),
+      reference_id: `rejected:${claim.id}`,
     },
-    'trader-claim-reject'
+    'trader-claim-reject',
+    { deduplicate: true, dedupWindowSeconds: 604800 }
   )
 
   return claim

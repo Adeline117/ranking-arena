@@ -954,7 +954,8 @@ export async function handleTrialWillEnd(subscription: Stripe.Subscription) {
       message: `您的 Pro 会员试用期将于 ${trialEndDate} 结束。届时将开始正式计费，如需取消请前往设置页面。`,
       reference_id: `trial_ending_${subscription.id}`,
     },
-    'stripe-trial-ending'
+    'stripe-trial-ending',
+    { deduplicate: true, dedupWindowSeconds: 604800 }
   )
 
   logger.info(`Trial ending notification sent to user ${profile.id}`)

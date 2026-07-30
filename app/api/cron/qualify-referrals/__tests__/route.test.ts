@@ -222,7 +222,8 @@ describe('GET /api/cron/qualify-referrals retryable authority', () => {
         user_id: REFERRED_ID,
         reference_id: `friend:${ATTRIBUTION_ONE}`,
       }),
-      'Referral friend reward notification'
+      'Referral friend reward notification',
+      { deduplicate: true, dedupWindowSeconds: 604800 }
     )
     expect(mockSendNotification).toHaveBeenCalledWith(
       expect.anything(),
@@ -230,7 +231,8 @@ describe('GET /api/cron/qualify-referrals retryable authority', () => {
         user_id: REFERRER_ID,
         reference_id: `advocate:${REWARD_ID}`,
       }),
-      'Referral advocate reward notification'
+      'Referral advocate reward notification',
+      { deduplicate: true, dedupWindowSeconds: 604800 }
     )
     await expect(response.json()).resolves.toMatchObject({
       status: 'ok',

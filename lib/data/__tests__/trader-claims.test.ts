@@ -398,8 +398,13 @@ describe('trader claim atomic mutations', () => {
     expect(mockEnqueueFirstPartySync).toHaveBeenCalledWith('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
     expect(mockSendNotification).toHaveBeenCalledWith(
       client,
-      expect.objectContaining({ user_id: USER_ID, title: 'Claim approved' }),
-      'trader-claim-approve'
+      expect.objectContaining({
+        user_id: USER_ID,
+        title: 'Claim approved',
+        reference_id: `approved:${CLAIM_ID}`,
+      }),
+      'trader-claim-approve',
+      { deduplicate: true, dedupWindowSeconds: 604800 }
     )
     expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(
       mockInvalidateLinkedTraderCache.mock.invocationCallOrder[0]
@@ -486,8 +491,12 @@ describe('trader claim atomic mutations', () => {
     expect(builder.in).toHaveBeenCalledWith('status', ['pending', 'reviewing'])
     expect(mockSendNotification).toHaveBeenCalledWith(
       client,
-      expect.objectContaining({ title: 'Claim rejected' }),
-      'trader-claim-reject'
+      expect.objectContaining({
+        title: 'Claim rejected',
+        reference_id: `rejected:${CLAIM_ID}`,
+      }),
+      'trader-claim-reject',
+      { deduplicate: true, dedupWindowSeconds: 604800 }
     )
   })
 

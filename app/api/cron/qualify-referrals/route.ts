@@ -268,7 +268,8 @@ export async function GET(request: NextRequest) {
             link: '/settings',
             reference_id: `friend:${ack.attributionId}`,
           },
-          'Referral friend reward notification'
+          'Referral friend reward notification',
+          { deduplicate: true, dedupWindowSeconds: 604800 }
         )
       }
       if (ack.advocateStatus === 'granted' && ack.advocateRewardId) {
@@ -283,7 +284,8 @@ export async function GET(request: NextRequest) {
             link: '/settings',
             reference_id: `advocate:${ack.advocateRewardId}`,
           },
-          'Referral advocate reward notification'
+          'Referral advocate reward notification',
+          { deduplicate: true, dedupWindowSeconds: 604800 }
         )
       }
       if (

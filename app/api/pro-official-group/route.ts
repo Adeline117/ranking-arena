@@ -465,9 +465,11 @@ function sendWelcomeNotification(userId: string, groupId: string) {
       message:
         '你已自动加入 Arena Pro 会员官方群！在这里可以与其他 Pro 会员交流，有问题可以直接在群里提问。',
       link: `/groups/${groupId}`,
+      reference_id: `official-group-welcome:${groupId}`,
       read: false,
     },
-    'pro-official-group:welcome'
+    'pro-official-group:welcome',
+    { deduplicate: true, dedupWindowSeconds: 604800 }
   )
 }
 

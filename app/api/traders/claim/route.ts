@@ -267,9 +267,10 @@ export async function POST(request: NextRequest) {
         type: 'system',
         title: 'Claim under review',
         message: `Your claim for ${trader_id} (${source}) passed verification and is awaiting manual review.`,
-        reference_id: String(claim.id),
+        reference_id: `submitted:${claim.id}`,
       },
-      'trader-claim-submit'
+      'trader-claim-submit',
+      { deduplicate: true, dedupWindowSeconds: 604800 }
     )
     // Owner alert (Telegram) — the review queue ping.
     notifyTraderClaim(user.email ?? null, trader_id, source)

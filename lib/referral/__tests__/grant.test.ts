@@ -61,7 +61,8 @@ describe('grantProDays', () => {
         link: '/settings',
         reference_id: identity.sourceKey,
       },
-      'Referral reward notification'
+      'Referral reward notification',
+      { deduplicate: true, dedupWindowSeconds: 604800 }
     )
   })
 

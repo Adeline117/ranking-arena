@@ -199,7 +199,15 @@ describe('Pro official-group atomic route', () => {
       p_actor_id: actorId,
       p_owner_id: ownerId,
     })
-    expect(mockSendNotification).toHaveBeenCalledTimes(1)
+    expect(mockSendNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        user_id: actorId,
+        reference_id: `official-group-welcome:${groupId}`,
+      }),
+      'pro-official-group:welcome',
+      { deduplicate: true, dedupWindowSeconds: 604800 }
+    )
   })
 
   it('accepts an exact already-member replay without a duplicate welcome', async () => {
