@@ -1,151 +1,179 @@
 /**
- * 会话列表 API
- * GET: 获取当前用户的所有会话（需要认证）
+ * Direct-message inbox API.
  *
- * SECURITY: Uses withAuth middleware which derives userId from authenticated session,
- * preventing users from accessing other users' conversation lists.
+ * SECURITY: The actor comes only from the authenticated session. One
+ * service-only RPC returns the sorted conversation window, profiles, settings,
+ * previews, and unread counts from one database snapshot.
  */
 
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 
 export const dynamic = 'force-dynamic'
 
+const LIST_LIMIT = 50
+const PRIVATE_NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' }
+
+const UuidSchema = z
+  .string()
+  .uuid()
+  .refine((value) => value === value.toLowerCase())
+const TimestampSchema = z
+  .string()
+  .datetime({ offset: true })
+  .refine((value) => (value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1]?.length ?? 0) <= 6)
+
+const MemberSettingsSchema = z
+  .object({
+    remark: z.string().nullable(),
+    is_muted: z.boolean(),
+    is_pinned: z.boolean(),
+    is_blocked: z.boolean(),
+  })
+  .strict()
+
+const ConversationSchema = z
+  .object({
+    id: UuidSchema,
+    other_user: z
+      .object({
+        id: UuidSchema,
+        handle: z.string().nullable(),
+        avatar_url: z.string().nullable(),
+        bio: z.string().nullable(),
+      })
+      .strict(),
+    last_message_at: TimestampSchema,
+    last_message_preview: z.string().max(100).nullable(),
+    unread_count: z.number().int().nonnegative(),
+    created_at: TimestampSchema.nullable(),
+    member_settings: MemberSettingsSchema.nullable(),
+  })
+  .strict()
+
+const ConversationListSuccessSchema = z
+  .object({
+    success: z.literal(true),
+    actor_id: UuidSchema,
+    limit: z.literal(LIST_LIMIT),
+    conversations: z.array(ConversationSchema).max(LIST_LIMIT),
+  })
+  .strict()
+
+const ConversationListFailureSchema = z
+  .object({
+    success: z.literal(false),
+    reason: z.enum(['INVALID', 'ACTOR_UNAVAILABLE']),
+  })
+  .strict()
+
+type ConversationListAcknowledgement =
+  | z.infer<typeof ConversationListSuccessSchema>
+  | z.infer<typeof ConversationListFailureSchema>
+
+function timestampMicros(value: string): number | null {
+  const milliseconds = Date.parse(value)
+  if (!Number.isFinite(milliseconds)) return null
+  const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? ''
+  if (fraction.length > 6) return null
+  const microsWithinMillisecond = Number(fraction.padEnd(6, '0').slice(3, 6))
+  return milliseconds * 1000 + microsWithinMillisecond
+}
+
+function readAcknowledgement(value: unknown): ConversationListAcknowledgement | null {
+  const failure = ConversationListFailureSchema.safeParse(value)
+  if (failure.success) return failure.data
+
+  const success = ConversationListSuccessSchema.safeParse(value)
+  return success.success ? success.data : null
+}
+
+function acknowledgementMatchesActor(
+  acknowledgement: z.infer<typeof ConversationListSuccessSchema>,
+  actorId: string
+): boolean {
+  if (acknowledgement.actor_id !== actorId || acknowledgement.limit !== LIST_LIMIT) return false
+
+  const conversationIds = new Set<string>()
+  const counterpartyIds = new Set<string>()
+
+  for (let index = 0; index < acknowledgement.conversations.length; index += 1) {
+    const conversation = acknowledgement.conversations[index]
+    if (
+      !conversation ||
+      conversationIds.has(conversation.id) ||
+      counterpartyIds.has(conversation.other_user.id) ||
+      conversation.other_user.id === actorId
+    ) {
+      return false
+    }
+    conversationIds.add(conversation.id)
+    counterpartyIds.add(conversation.other_user.id)
+
+    if (
+      conversation.other_user.handle === null &&
+      (conversation.other_user.avatar_url !== null || conversation.other_user.bio !== null)
+    ) {
+      return false
+    }
+
+    const currentTime = timestampMicros(conversation.last_message_at)
+    if (currentTime === null) return false
+
+    const previous = acknowledgement.conversations[index - 1]
+    if (!previous) continue
+
+    const previousPinned = previous.member_settings?.is_pinned ?? false
+    const currentPinned = conversation.member_settings?.is_pinned ?? false
+    if (!previousPinned && currentPinned) return false
+    if (previousPinned !== currentPinned) continue
+
+    const previousTime = timestampMicros(previous.last_message_at)
+    if (
+      previousTime === null ||
+      previousTime < currentTime ||
+      (previousTime === currentTime && previous.id >= conversation.id)
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: PRIVATE_NO_STORE_HEADERS })
+}
+
 export const GET = withAuth(
   async ({ user, supabase }) => {
-    const userId = user.id
+    const actor = z.string().uuid().safeParse(user.id)
+    if (!actor.success) return json({ error: 'Failed to fetch conversations' }, 500)
 
-    // 获取用户的所有会话
-    const { data: conversations, error } = await supabase
-      .from('conversations')
-      .select(
-        `
-        id,
-        user1_id,
-        user2_id,
-        last_message_at,
-        last_message_preview,
-        created_at
-      `
-      )
-      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
-      .order('last_message_at', { ascending: false })
-      .limit(50)
-
-    if (error) {
-      return NextResponse.json({ error: 'Failed to fetch conversations' }, { status: 500 })
-    }
-
-    if (!conversations || conversations.length === 0) {
-      return NextResponse.json({ conversations: [] })
-    }
-
-    // 批量获取对方用户信息（避免 N+1 查询）
-    const otherUserIds = conversations.map((conv) =>
-      conv.user1_id === userId ? conv.user2_id : conv.user1_id
-    )
-    const uniqueOtherUserIds = [...new Set(otherUserIds)]
-    const conversationIds = conversations.map((c) => c.id)
-
-    const [profilesResult, unreadResult, memberSettingsResult] = await Promise.all([
-      // 一次性获取所有对方用户资料
-      supabase
-        .from('user_profiles')
-        .select('id, handle, avatar_url, bio')
-        .in('id', uniqueOtherUserIds),
-      // 一次性获取所有会话的未读计数（排除已删除消息）
-      // Removed `count: 'exact'` — the count value is never read; we
-      // iterate data[] to build an unreadMap below, so the extra
-      // COUNT(*) round-trip was pure waste.
-      supabase
-        .from('direct_messages')
-        .select('conversation_id')
-        .eq('receiver_id', userId)
-        .eq('read', false)
-        .is('deleted_at', null)
-        .in('conversation_id', conversationIds),
-      // 一次性获取所有会话的成员设置（备注、置顶、静音等）
-      supabase
-        .from('conversation_members')
-        .select('conversation_id, remark, is_muted, is_pinned, is_blocked')
-        .eq('user_id', userId)
-        .in('conversation_id', conversationIds),
-    ])
-
-    if (profilesResult.error || unreadResult.error || memberSettingsResult.error) {
-      return NextResponse.json({ error: 'Failed to fetch conversations' }, { status: 500 })
-    }
-
-    // 构建用户资料映射
-    const profileMap = new Map<
-      string,
-      { id: string; handle: string | null; avatar_url: string | null; bio: string | null }
-    >()
-    profilesResult.data?.forEach((p) => {
-      profileMap.set(p.id, {
-        id: p.id,
-        handle: p.handle || null,
-        avatar_url: p.avatar_url || null,
-        bio: p.bio || null,
-      })
+    const actorId = actor.data.toLowerCase()
+    const { data, error } = await supabase.rpc('get_direct_message_conversation_list_atomic', {
+      p_actor_id: actorId,
+      p_limit: LIST_LIMIT,
     })
 
-    // 构建未读计数映射（按 conversation_id 分组）
-    const unreadMap = new Map<string, number>()
-    if (unreadResult.data) {
-      for (const msg of unreadResult.data) {
-        const convId = msg.conversation_id
-        unreadMap.set(convId, (unreadMap.get(convId) || 0) + 1)
+    if (error) return json({ error: 'Failed to fetch conversations' }, 500)
+
+    const acknowledgement = readAcknowledgement(data)
+    if (!acknowledgement) return json({ error: 'Failed to fetch conversations' }, 500)
+
+    if (!acknowledgement.success) {
+      if (acknowledgement.reason === 'ACTOR_UNAVAILABLE') {
+        return json({ error: 'No permission to access conversations' }, 403)
       }
+      return json({ error: 'Failed to fetch conversations' }, 500)
     }
 
-    // 构建成员设置映射
-    const memberSettingsMap = new Map<
-      string,
-      { remark: string | null; is_muted: boolean; is_pinned: boolean; is_blocked: boolean }
-    >()
-    if (memberSettingsResult.data) {
-      for (const setting of memberSettingsResult.data) {
-        memberSettingsMap.set(setting.conversation_id, {
-          remark: setting.remark || null,
-          is_muted: setting.is_muted || false,
-          is_pinned: setting.is_pinned || false,
-          is_blocked: setting.is_blocked || false,
-        })
-      }
+    if (!acknowledgementMatchesActor(acknowledgement, actorId)) {
+      return json({ error: 'Failed to fetch conversations' }, 500)
     }
 
-    // 组装结果
-    const enhancedConversations = conversations.map((conv) => {
-      const otherUserId = conv.user1_id === userId ? conv.user2_id : conv.user1_id
-      const otherUser = profileMap.get(otherUserId)
-
-      return {
-        id: conv.id,
-        other_user: otherUser || {
-          id: otherUserId,
-          handle: null,
-          avatar_url: null,
-          bio: null,
-        },
-        last_message_at: conv.last_message_at,
-        last_message_preview: conv.last_message_preview,
-        unread_count: unreadMap.get(conv.id) || 0,
-        created_at: conv.created_at,
-        member_settings: memberSettingsMap.get(conv.id) || null,
-      }
-    })
-
-    // Sort: pinned conversations first, then by last_message_at
-    enhancedConversations.sort((a, b) => {
-      const aPinned = a.member_settings?.is_pinned || false
-      const bPinned = b.member_settings?.is_pinned || false
-      if (aPinned && !bPinned) return -1
-      if (!aPinned && bPinned) return 1
-      return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
-    })
-
-    return NextResponse.json({ conversations: enhancedConversations })
+    return json({ conversations: acknowledgement.conversations })
   },
   { rateLimit: 'authenticated', name: 'conversations' }
 )
