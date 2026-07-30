@@ -77,10 +77,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const releaseLock = await acquireCronLock('batch-5min', { ttlSeconds: 300 })
-  if (!releaseLock) {
-    return NextResponse.json({ status: 'skipped', reason: 'already running' })
+  const lock = await acquireCronLock('batch-5min', { ttlSeconds: 300 })
+  if (lock.status !== 'acquired') {
+    return NextResponse.json(
+      lock.status === 'contended'
+        ? { ok: true, status: 'skipped', reason: 'already running' }
+        : { ok: false, status: 'error', reason: 'lock_unavailable' },
+      { status: lock.status === 'contended' ? 200 : 503 }
+    )
   }
+  const releaseLock = lock.release
 
   const startTime = Date.now()
   const plog = await PipelineLogger.start('batch-5min')

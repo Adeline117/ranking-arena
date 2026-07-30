@@ -87,7 +87,7 @@ describe('GET /api/cron/sync-meilisearch', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockVerifyCronSecret.mockReturnValue(true)
-    mockAcquireCronLock.mockResolvedValue(mockReleaseCronLock)
+    mockAcquireCronLock.mockResolvedValue({ status: 'acquired', release: mockReleaseCronLock })
     mockReleaseCronLock.mockResolvedValue(undefined)
     mockPipelineStateSet.mockResolvedValue(undefined)
     mockPlogSuccess.mockResolvedValue(undefined)
@@ -173,17 +173,32 @@ describe('GET /api/cron/sync-meilisearch', () => {
   })
 
   it('skips an overlapping run without creating a pipeline record', async () => {
-    mockAcquireCronLock.mockResolvedValue(null)
+    mockAcquireCronLock.mockResolvedValue({ status: 'contended' })
 
     const response = await GET(request())
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
+      ok: true,
       status: 'skipped',
       reason: 'already running',
     })
     expect(mockRebuild).not.toHaveBeenCalled()
     expect(mockPipelineStateSet).not.toHaveBeenCalled()
+  })
+
+  it('returns 503 when the distributed lock authority is unavailable', async () => {
+    mockAcquireCronLock.mockResolvedValue({ status: 'unavailable' })
+
+    const response = await GET(request())
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      status: 'error',
+      reason: 'lock_unavailable',
+    })
+    expect(mockRebuild).not.toHaveBeenCalled()
   })
 
   it('contains no incremental or unsealed leaderboard fallback in the route', () => {

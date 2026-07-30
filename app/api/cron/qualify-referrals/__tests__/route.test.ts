@@ -98,7 +98,7 @@ describe('GET /api/cron/qualify-referrals retryable authority', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockVerifyCronSecret.mockReturnValue(true)
-    mockAcquireCronLock.mockResolvedValue(mockReleaseLock)
+    mockAcquireCronLock.mockResolvedValue({ status: 'acquired', release: mockReleaseLock })
     mockPipelineStart.mockResolvedValue({
       success: mockPipelineSuccess,
       error: mockPipelineError,
@@ -125,14 +125,29 @@ describe('GET /api/cron/qualify-referrals retryable authority', () => {
   })
 
   it('skips an overlapping run before creating a pipeline attempt', async () => {
-    mockAcquireCronLock.mockResolvedValue(null)
+    mockAcquireCronLock.mockResolvedValue({ status: 'contended' })
 
     const response = await GET({} as never)
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
+      ok: true,
       status: 'skipped',
       reason: 'already running',
+    })
+    expect(mockPipelineStart).not.toHaveBeenCalled()
+  })
+
+  it('fails closed before creating a pipeline attempt when lock authority is unavailable', async () => {
+    mockAcquireCronLock.mockResolvedValue({ status: 'unavailable' })
+
+    const response = await GET({} as never)
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      status: 'error',
+      reason: 'lock_unavailable',
     })
     expect(mockPipelineStart).not.toHaveBeenCalled()
   })

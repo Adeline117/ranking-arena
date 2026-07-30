@@ -100,7 +100,7 @@ jest.mock('@/lib/auth/verify-service-auth', () => ({
 }))
 
 jest.mock('@/lib/cron/with-cron-lock', () => ({
-  acquireCronLock: jest.fn(async () => mockReleaseLock),
+  acquireCronLock: jest.fn(async () => ({ status: 'acquired', release: mockReleaseLock })),
 }))
 
 jest.mock('@/lib/services/pipeline-logger', () => ({

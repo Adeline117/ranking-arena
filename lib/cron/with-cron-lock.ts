@@ -17,17 +17,23 @@ interface CronLockOptions {
   ttlSeconds?: number
 }
 
+export type CronLockAcquisition =
+  | { status: 'acquired'; release: () => Promise<void> }
+  | { status: 'contended' }
+  | { status: 'unavailable' }
+
 /**
  * Acquire a Redis lock for a cron job.
- * Returns a release function if acquired, `null` if already locked.
+ * Distinguishes a real competing owner from coordination failure so callers
+ * cannot report HTTP 200 `skipped` while Redis is unavailable.
  *
- * Fail closed: if Redis is unavailable or errors, return `null`. Mutating
- * jobs must retry later instead of running concurrently without fencing.
+ * Fail closed: Redis outages return `unavailable`; mutating jobs must expose
+ * a retryable failure instead of running concurrently without fencing.
  */
 export async function acquireCronLock(
   jobName: string,
   options: CronLockOptions = {}
-): Promise<(() => Promise<void>) | null> {
+): Promise<CronLockAcquisition> {
   const { ttlSeconds = 300 } = options
   const lockKey = `cron:lock:${jobName}`
   const leaseTtlSeconds = ttlSeconds + 30
@@ -38,30 +44,33 @@ export async function acquireCronLock(
 
     if (!redis) {
       logger.error(`[${jobName}] Redis unavailable; cron blocked`)
-      return null
+      return { status: 'unavailable' }
     }
 
     const lease = await tryAcquireRedisLease(redis, lockKey, leaseTtlSeconds)
     if (!lease) {
       logger.info(`[${jobName}] Skipped — already running (lock exists)`)
-      return null
+      return { status: 'contended' }
     }
 
-    return async () => {
-      try {
-        await lease.release()
-      } catch (err) {
-        logger.warn(
-          `[${jobName}] Failed to release lock:`,
-          err instanceof Error ? err.message : String(err)
-        )
-      }
+    return {
+      status: 'acquired',
+      release: async () => {
+        try {
+          await lease.release()
+        } catch (err) {
+          logger.warn(
+            `[${jobName}] Failed to release lock:`,
+            err instanceof Error ? err.message : String(err)
+          )
+        }
+      },
     }
   } catch (err) {
     logger.error(
       `[${jobName}] Lock check failed; cron blocked:`,
       err instanceof Error ? err.message : String(err)
     )
-    return null
+    return { status: 'unavailable' }
   }
 }

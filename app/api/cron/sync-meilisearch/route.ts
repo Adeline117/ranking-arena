@@ -34,10 +34,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Meilisearch not configured' }, { status: 503 })
   }
 
-  const releaseLock = await acquireCronLock('sync-meilisearch', { ttlSeconds: 120 })
-  if (!releaseLock) {
-    return NextResponse.json({ status: 'skipped', reason: 'already running' })
+  const lock = await acquireCronLock('sync-meilisearch', { ttlSeconds: 120 })
+  if (lock.status !== 'acquired') {
+    return NextResponse.json(
+      lock.status === 'contended'
+        ? { ok: true, status: 'skipped', reason: 'already running' }
+        : { ok: false, status: 'error', reason: 'lock_unavailable' },
+      { status: lock.status === 'contended' ? 200 : 503 }
+    )
   }
+  const releaseLock = lock.release
 
   const startedAt = Date.now()
   let plog: Awaited<ReturnType<typeof PipelineLogger.start>> | undefined

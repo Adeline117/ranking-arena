@@ -150,10 +150,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const releaseLock = await acquireCronLock('qualify-referrals', { ttlSeconds: 300 })
-  if (!releaseLock) {
-    return NextResponse.json({ status: 'skipped', reason: 'already running' })
+  const lock = await acquireCronLock('qualify-referrals', { ttlSeconds: 300 })
+  if (lock.status !== 'acquired') {
+    return NextResponse.json(
+      lock.status === 'contended'
+        ? { ok: true, status: 'skipped', reason: 'already running' }
+        : { ok: false, status: 'error', reason: 'lock_unavailable' },
+      { status: lock.status === 'contended' ? 200 : 503 }
+    )
   }
+  const releaseLock = lock.release
 
   const plog = await PipelineLogger.start('qualify-referrals')
   try {
@@ -328,6 +334,6 @@ export async function GET(request: NextRequest) {
     await plog.error(err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   } finally {
-    releaseLock()
+    await releaseLock()
   }
 }

@@ -90,18 +90,20 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const releaseLock = await acquireCronLock('check-data-freshness', {
+  const lock = await acquireCronLock('check-data-freshness', {
     // Keep the lease past Vercel's hard timeout so a duplicate delivery cannot
     // start while the first invocation is still being terminated.
     ttlSeconds: maxDuration + 30,
   })
-  if (!releaseLock) {
-    return NextResponse.json({
-      ok: true,
-      skipped: true,
-      reason: 'concurrent_execution',
-    })
+  if (lock.status !== 'acquired') {
+    return NextResponse.json(
+      lock.status === 'contended'
+        ? { ok: true, skipped: true, reason: 'concurrent_execution' }
+        : { ok: false, skipped: true, reason: 'lock_unavailable' },
+      { status: lock.status === 'contended' ? 200 : 503 }
+    )
   }
+  const releaseLock = lock.release
 
   try {
     return await runFreshnessCheck()
