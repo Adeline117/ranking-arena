@@ -362,6 +362,13 @@ export default async function sitemap({
     return [...staticPages, ...exchangePages]
   }
 
+  // Metadata sitemap shards are prerendered during `next build`. Runtime
+  // credentials and the database must not become deployment dependencies:
+  // robots.txt points crawlers at /api/sitemap-xml, which fills these dynamic
+  // URLs at request time. Returning no dynamic URLs is truthful and keeps the
+  // static sitemap available; inventing trader/profile URLs would not be.
+  if (process.env.NEXT_PHASE === 'phase-production-build') return []
+
   // ── Sitemap EXTRA_SITEMAP_ID: posts, groups, user profiles ─────────────────
   if (id === EXTRA_SITEMAP_ID) {
     const [posts, groups, userProfiles] = await Promise.all([
@@ -399,7 +406,16 @@ export default async function sitemap({
   const shardIndex = id - 1 // 0-based
   if (shardIndex < 0) return []
 
-  const traders = await getTraderShard(shardIndex)
+  let traders: SitemapTrader[]
+  try {
+    traders = await getTraderShard(shardIndex)
+  } catch (error) {
+    console.error(
+      `[sitemap] trader shard ${shardIndex} unavailable:`,
+      error instanceof Error ? error.message : error
+    )
+    return []
+  }
 
   return traders.map((trader) => ({
     url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.source)}`,
