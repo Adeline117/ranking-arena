@@ -271,25 +271,30 @@ export function ApiKeysSection({
       return
     setRevokingId(id)
     try {
-      const res = await authedFetch(
-        '/api/user/api-keys',
-        'PATCH',
-        scope.accessToken,
-        { id },
-        15_000,
-        {
-          expectedUserId: scope.userId,
-          expectedSessionGeneration: scope.sessionGeneration,
-        }
-      )
+      const res = await authedFetch<{
+        success?: unknown
+        data?: { id?: unknown; active?: unknown; revoked_at?: unknown }
+      }>('/api/user/api-keys', 'PATCH', scope.accessToken, { id }, 15_000, {
+        expectedUserId: scope.userId,
+        expectedSessionGeneration: scope.sessionGeneration,
+      })
       if (!stateBelongsToViewer(scope) || res.stale) return
-      if (!res.ok) {
+      const acknowledgement = res.data?.data
+      const acknowledgedRevokedAt = acknowledgement?.revoked_at
+      if (
+        !res.ok ||
+        res.data?.success !== true ||
+        acknowledgement?.id !== id ||
+        acknowledgement.active !== false ||
+        typeof acknowledgedRevokedAt !== 'string' ||
+        !Number.isFinite(Date.parse(acknowledgedRevokedAt))
+      ) {
         showToast(t('apiKeyRevokeFailed'), 'error')
         return
       }
       setKeys((prev) =>
         prev.map((k) =>
-          k.id === id ? { ...k, active: false, revoked_at: new Date().toISOString() } : k
+          k.id === id ? { ...k, active: false, revoked_at: acknowledgedRevokedAt } : k
         )
       )
       showToast(t('apiKeyRevokedToast'), 'success')

@@ -419,6 +419,59 @@ describe('ApiKeysSection viewer ownership', () => {
     expect(screen.queryByText('apiKeyRevokedSection')).not.toBeInTheDocument()
   })
 
+  it('keeps a key active until revocation is acknowledged for that exact key', async () => {
+    let revokeResponse: FetchResult = {
+      ok: true,
+      status: 200,
+      data: { success: true },
+    }
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url.includes('/usage')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { keys: [], daily: [], totals: {} } },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'GET') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: [apiKey('user-a')] },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'PATCH') {
+        return Promise.resolve(revokeResponse)
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<ApiKeysSection />)
+    await screen.findByText('user-a private key')
+    fireEvent.click(screen.getByRole('button', { name: 'revoke' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('apiKeyRevokeFailed', 'error'))
+    expect(screen.getByRole('button', { name: 'revoke' })).toBeEnabled()
+    expect(screen.queryByText('apiKeyRevokedSection')).not.toBeInTheDocument()
+
+    revokeResponse = {
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        data: {
+          id: apiKey('user-a').id,
+          active: false,
+          revoked_at: '2026-07-29T12:00:00.000Z',
+        },
+      },
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'revoke' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('apiKeyRevokedToast', 'success'))
+    expect(screen.getByText('apiKeyRevokedSection')).toBeInTheDocument()
+  })
+
   it('uses explicit API portal scopes and never offers paid plan changes through Portal', async () => {
     mockAuthedFetch.mockImplementation((url: string, method: string) => {
       if (url.includes('/usage')) {

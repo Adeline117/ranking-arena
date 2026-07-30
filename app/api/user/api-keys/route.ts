@@ -117,19 +117,39 @@ export const PATCH = withAuth(
       return NextResponse.json({ error: 'Missing key id' }, { status: 400 })
     }
 
+    const revokedAt = new Date().toISOString()
     const { data, error } = await supabase
       .from('api_keys')
-      .update({ active: false, revoked_at: new Date().toISOString() })
+      .update({ active: false, revoked_at: revokedAt })
       .eq('id', id)
       .eq('user_id', user!.id)
-      .select('id')
+      .select('id, active, revoked_at')
       .single()
 
     if (error || !data) {
       return NextResponse.json({ error: 'Key not found' }, { status: 404 })
     }
+    if (
+      data.id !== id ||
+      data.active !== false ||
+      typeof data.revoked_at !== 'string' ||
+      !Number.isFinite(Date.parse(data.revoked_at)) ||
+      Date.parse(data.revoked_at) !== Date.parse(revokedAt)
+    ) {
+      return NextResponse.json(
+        { error: 'Failed to acknowledge API key revocation' },
+        { status: 500 }
+      )
+    }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: data.id,
+        active: data.active,
+        revoked_at: data.revoked_at,
+      },
+    })
   },
   { name: 'api-keys-revoke', rateLimit: 'authenticated' }
 )
