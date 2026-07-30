@@ -6,6 +6,63 @@ const MAX_KEYS_PER_USER = 5
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const API_KEY_PATTERN = /^arena_sk_[0-9a-f]{32}$/
 const CREATE_ACK_KEYS = ['created_at', 'daily_limit', 'id', 'key', 'name', 'tier'].sort()
+const API_KEY_DAILY_LIMITS = {
+  free: 100,
+  starter: 10_000,
+  pro: 0,
+} as const
+
+type ApiKeyTier = keyof typeof API_KEY_DAILY_LIMITS
+
+type StoredApiKey = {
+  id: string
+  user_id: string
+  name: string
+  key: string
+  tier: ApiKeyTier
+  daily_limit: number
+  request_count_today: number
+  active: boolean
+  last_used_at: string | null
+  created_at: string
+  revoked_at: string | null
+}
+
+function isTimestampOrNull(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && Number.isFinite(Date.parse(value)))
+}
+
+function parseStoredApiKey(value: unknown, expectedUserId: string): StoredApiKey | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const row = value as Record<string, unknown>
+  const tier = row.tier
+  if (tier !== 'free' && tier !== 'starter' && tier !== 'pro') return null
+
+  if (
+    typeof row.id !== 'string' ||
+    !UUID_PATTERN.test(row.id) ||
+    row.user_id !== expectedUserId ||
+    typeof row.name !== 'string' ||
+    row.name !== row.name.trim() ||
+    row.name.length < 1 ||
+    row.name.length > 50 ||
+    typeof row.key !== 'string' ||
+    !API_KEY_PATTERN.test(row.key) ||
+    row.daily_limit !== API_KEY_DAILY_LIMITS[tier] ||
+    typeof row.request_count_today !== 'number' ||
+    !Number.isSafeInteger(row.request_count_today) ||
+    row.request_count_today < 0 ||
+    typeof row.active !== 'boolean' ||
+    !isTimestampOrNull(row.last_used_at) ||
+    typeof row.created_at !== 'string' ||
+    !Number.isFinite(Date.parse(row.created_at)) ||
+    !isTimestampOrNull(row.revoked_at)
+  ) {
+    return null
+  }
+
+  return row as StoredApiKey
+}
 
 function isExactCreateAcknowledgement(
   value: unknown,
@@ -59,7 +116,7 @@ export const GET = withAuth(
       supabase
         .from('api_keys')
         .select(
-          'id, name, key, tier, daily_limit, request_count_today, active, last_used_at, created_at, revoked_at'
+          'id, user_id, name, key, tier, daily_limit, request_count_today, active, last_used_at, created_at, revoked_at'
         )
         .eq('user_id', user!.id)
         .order('created_at', { ascending: false }),
@@ -70,20 +127,32 @@ export const GET = withAuth(
         .maybeSingle(),
     ])
 
-    if (keysResult.error || profileResult.error || !profileResult.data) {
+    if (
+      keysResult.error ||
+      profileResult.error ||
+      !Array.isArray(keysResult.data) ||
+      !profileResult.data ||
+      (profileResult.data.api_tier !== 'free' &&
+        profileResult.data.api_tier !== 'starter' &&
+        profileResult.data.api_tier !== 'pro') ||
+      (profileResult.data.api_stripe_subscription_id !== null &&
+        typeof profileResult.data.api_stripe_subscription_id !== 'string')
+    ) {
+      return NextResponse.json({ error: 'Failed to fetch API keys' }, { status: 500 })
+    }
+
+    const storedKeys = keysResult.data.map((row) => parseStoredApiKey(row, user!.id))
+    if (storedKeys.some((row) => row === null)) {
       return NextResponse.json({ error: 'Failed to fetch API keys' }, { status: 500 })
     }
 
     // Mask keys in list view — only show prefix + last 4
-    const masked = (keysResult.data ?? []).map((k) => ({
-      ...k,
-      key: k.key.slice(0, 7) + '...' + k.key.slice(-4),
+    const masked = (storedKeys as StoredApiKey[]).map(({ user_id: _userId, ...key }) => ({
+      ...key,
+      key: key.key.slice(0, 7) + '...' + key.key.slice(-4),
     }))
 
-    const apiTier =
-      profileResult.data.api_tier === 'starter' || profileResult.data.api_tier === 'pro'
-        ? profileResult.data.api_tier
-        : 'free'
+    const apiTier = profileResult.data.api_tier
     const hasStripeSubscription =
       apiTier !== 'free' &&
       typeof profileResult.data.api_stripe_subscription_id === 'string' &&
