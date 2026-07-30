@@ -195,6 +195,7 @@ describe('OKX product-specific record contracts', () => {
     }
 
     expect(captured).toHaveLength(2)
+    expect(captured[0].payload).toMatchObject({ historyTraderIdentity: UNIQUE_CODE })
     expect(urls).toHaveLength(2)
     expect(urls[1]).toContain('after=newer-close')
   })

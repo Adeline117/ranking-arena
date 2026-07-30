@@ -309,7 +309,12 @@ const okxAdapter: SourceAdapter = {
       const data = await fetchData(session, url)
       if (data.length === 0) break
 
-      yield { pageIndex: page, payload: { data }, url, fetchedAt: new Date().toISOString() }
+      yield {
+        pageIndex: page,
+        payload: { data, historyTraderIdentity: exchangeTraderId },
+        url,
+        fetchedAt: new Date().toISOString(),
+      }
 
       const last = data[data.length - 1]
       const lastId = String(last.subPosId ?? '')

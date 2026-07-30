@@ -28,6 +28,15 @@ const ctx: ParseCtx = {
   meta: {},
 }
 
+const HISTORY_TRADER_IDENTITY = 'F503A5D5F1F6989F'
+
+function historyFixture(): Record<string, unknown> {
+  return {
+    ...fixture('history-page.json'),
+    historyTraderIdentity: HISTORY_TRADER_IDENTITY,
+  }
+}
+
 describe('parseOkxLeaderboardPage', () => {
   const payload = fixture('board-page.json')
 
@@ -122,7 +131,7 @@ describe('parseOkxPositions', () => {
 
 describe('parseOkxHistory', () => {
   it('position_history: subPosId natural key; empty closeTime → null, never 0', () => {
-    const rows = parseOkxHistory(fixture('history-page.json'), 'position_history', ctx)
+    const rows = parseOkxHistory(historyFixture(), 'position_history', ctx)
     expect(rows).toHaveLength(3)
     expect(rows[0]).toMatchObject({
       kind: 'position_history',
@@ -137,8 +146,18 @@ describe('parseOkxHistory', () => {
       expect(rows[0].realizedPnl).toBeCloseTo(5140.49648, 4)
     }
     expect(rows[0].dedupeHash).toBe(
-      parseOkxHistory(fixture('history-page.json'), 'position_history', ctx)[0].dedupeHash
+      parseOkxHistory(historyFixture(), 'position_history', ctx)[0].dedupeHash
     ) // deterministic
+  })
+
+  it('binds subPosId dedupe to the trader identity', () => {
+    const first = parseOkxHistory(historyFixture(), 'position_history', ctx)[0]
+    const second = parseOkxHistory(
+      { ...historyFixture(), historyTraderIdentity: '0000000000000002' },
+      'position_history',
+      ctx
+    )[0]
+    expect(first.dedupeHash).not.toBe(second.dedupeHash)
   })
 
   it('copiers: top-10 list with derived copy duration; aggregate rides in raw', () => {

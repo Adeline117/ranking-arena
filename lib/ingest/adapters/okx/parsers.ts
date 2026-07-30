@@ -240,8 +240,13 @@ export function parseOkxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[
 
 /** Closed lead positions; subPosId is the stable natural key. */
 export function parseOkxPositionHistory(raw: unknown, _ctx: ParseCtx): ParsedHistoryRow[] {
+  const rows = dataRows(raw)
+  const traderIdentity = str((raw as Dict | null)?.historyTraderIdentity)
+  if (rows.length > 0 && traderIdentity === null) {
+    throw new Error('[okx] position history is missing trader identity')
+  }
   const out: ParsedHistoryRow[] = []
-  for (const item of dataRows(raw)) {
+  for (const item of rows) {
     const symbol = str(item.instId)
     if (!symbol) continue
     out.push({
@@ -256,8 +261,8 @@ export function parseOkxPositionHistory(raw: unknown, _ctx: ParseCtx): ParsedHis
       exitPrice: num(item.closeAvgPx),
       realizedPnl: num(item.pnl),
       dedupeHash: item.subPosId
-        ? dedupeHash('okx_ph', item.subPosId)
-        : dedupeHash('okx_ph', symbol, item.openTime, item.closeTime, item.subPos),
+        ? dedupeHash('okx_ph', traderIdentity, item.subPosId)
+        : dedupeHash('okx_ph', traderIdentity, symbol, item.openTime, item.closeTime, item.subPos),
       raw: item,
     })
   }
