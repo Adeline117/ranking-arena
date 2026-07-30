@@ -294,17 +294,18 @@ const bitgetAdapter: SourceAdapter = {
       })
       const data = ((payload as Record<string, unknown>)?.data ?? {}) as Record<string, unknown>
       const rows = Array.isArray(data.rows) ? (data.rows as Array<Record<string, unknown>>) : []
-      if (rows.length === 0) break
+      if (rows.length === 0) return
 
       yield { pageIndex: pageNo, payload, url, fetchedAt: new Date().toISOString() }
 
-      if (data.nextFlag === false || rows.length < pageSize) break
+      if (data.nextFlag === false || rows.length < pageSize) return
       if (kind === 'position_history' && Number.isFinite(cursorMs)) {
         const closeTimes = rows.map((r) => Number(r.closeTime)).filter((t) => Number.isFinite(t))
         // Overlap reached: this page already dips into stored history.
-        if (closeTimes.length > 0 && Math.min(...closeTimes) <= cursorMs) break
+        if (closeTimes.length > 0 && Math.min(...closeTimes) <= cursorMs) return
       }
     }
+    throw new Error(`[bitget] ${kind} reached page cap ${maxPages} without terminal proof`)
   },
 
   parseLeaderboard: parseBitgetLeaderboardPage,
