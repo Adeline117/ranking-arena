@@ -289,6 +289,49 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.initialValuesRef.current?.handle).toBe('alpha')
   })
 
+  it('does not present a failed passkey read as an empty credential list', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockAuthedFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      data: { error: 'unavailable' },
+    })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    await act(async () => {
+      await hook.result.current.loadPasskeys()
+    })
+
+    expect(hook.result.current.passkeys).toEqual([])
+    expect(hook.result.current.passkeysLoadFailed).toBe(true)
+
+    mockAuthedFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        passkeys: [
+          {
+            id: 'credential-1',
+            deviceName: 'Laptop',
+            createdAt: '2026-07-29T00:00:00.000Z',
+            lastUsedAt: null,
+            transports: ['internal'],
+          },
+        ],
+      },
+    })
+    await act(async () => {
+      await hook.result.current.loadPasskeys()
+    })
+
+    expect(hook.result.current.passkeysLoadFailed).toBe(false)
+    expect(hook.result.current.passkeys).toHaveLength(1)
+  })
+
   it('blocks A form actions while B ownership is still unresolved', async () => {
     const publicB = deferred<ReturnType<typeof publicProfile>>()
     const sensitiveB = deferred<ReturnType<typeof sensitiveProfile>>()

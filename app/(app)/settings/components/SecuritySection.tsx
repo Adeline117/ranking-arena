@@ -62,11 +62,13 @@ interface SecuritySectionProps {
   // Passkeys
   passkeys: PasskeyInfo[]
   loadingPasskeys: boolean
+  passkeysLoadFailed: boolean
   passkeyBusy: boolean
   newPasskeyName: string
   setNewPasskeyName: (v: string) => void
   onAddPasskey: () => void
   onRemovePasskey: (id: string) => void
+  onRetryPasskeys: () => void
   // Other sessions
   revokingOtherSessions: boolean
   onRevokeOtherSessions: () => void
@@ -653,6 +655,27 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
           <Text size="sm" color="tertiary">
             {t('loading')}
           </Text>
+        ) : props.passkeysLoadFailed ? (
+          <Box
+            role="alert"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: tokens.spacing[3],
+              padding: tokens.spacing[3],
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${alpha(tokens.colors.accent.error, 25)}`,
+              background: alpha(tokens.colors.accent.error, 6),
+            }}
+          >
+            <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+              {t('loadFailedRetryShort')}
+            </Text>
+            <Button variant="secondary" size="sm" onClick={props.onRetryPasskeys}>
+              {t('retry')}
+            </Button>
+          </Box>
         ) : props.passkeys.length === 0 ? (
           <Text size="sm" color="tertiary">
             {t('passkeyNone')}

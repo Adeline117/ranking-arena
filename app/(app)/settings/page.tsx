@@ -445,11 +445,13 @@ export function SettingsContent() {
             onDisable2FA={h.handleDisable2FA}
             passkeys={h.passkeys}
             loadingPasskeys={h.loadingPasskeys}
+            passkeysLoadFailed={h.passkeysLoadFailed}
             passkeyBusy={h.passkeyBusy}
             newPasskeyName={h.newPasskeyName}
             setNewPasskeyName={h.setNewPasskeyName}
             onAddPasskey={h.handleAddPasskey}
             onRemovePasskey={h.handleRemovePasskey}
+            onRetryPasskeys={h.loadPasskeys}
             revokingOtherSessions={h.revokingOtherSessions}
             onRevokeOtherSessions={h.handleRevokeOtherSessions}
             touchedFields={{

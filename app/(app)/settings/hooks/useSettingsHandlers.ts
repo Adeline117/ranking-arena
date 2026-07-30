@@ -255,6 +255,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   }
   const [passkeys, setPasskeys] = useState<PasskeyInfo[]>([])
   const [loadingPasskeys, setLoadingPasskeys] = useState(false)
+  const [passkeysLoadFailed, setPasskeysLoadFailed] = useState(false)
   const [passkeyBusy, setPasskeyBusy] = useState(false)
   const [newPasskeyName, setNewPasskeyName] = useState('')
 
@@ -502,6 +503,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
 
     setPasskeys([])
     setLoadingPasskeys(false)
+    setPasskeysLoadFailed(false)
     setPasskeyBusy(false)
     setNewPasskeyName('')
     setRevokingOtherSessions(false)
@@ -1336,6 +1338,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       const loadIsCurrent = () =>
         passkeyLoadGenerationRef.current === loadGeneration && viewerIsCurrent(scope)
       setLoadingPasskeys(true)
+      setPasskeysLoadFailed(false)
       try {
         const result = await authedFetch<{ passkeys?: PasskeyInfo[] }>(
           '/api/auth/webauthn/credentials',
@@ -1349,12 +1352,14 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
           }
         )
         if (!loadIsCurrent() || result.stale) return
-        if (result.ok) {
-          setPasskeys(result.data?.passkeys || [])
+        if (!result.ok || !Array.isArray(result.data?.passkeys)) {
+          throw new Error('Passkey list was not acknowledged')
         }
+        setPasskeys(result.data.passkeys)
       } catch (error) {
         if (!loadIsCurrent()) return
         uiLogger.error('[Passkeys] Load error:', error)
+        setPasskeysLoadFailed(true)
       } finally {
         if (loadIsCurrent()) setLoadingPasskeys(false)
       }
@@ -1872,6 +1877,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     // Passkeys
     passkeys,
     loadingPasskeys,
+    passkeysLoadFailed,
     passkeyBusy,
     newPasskeyName,
     setNewPasskeyName,
