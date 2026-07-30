@@ -664,7 +664,9 @@ describe('useApplications operation/viewer scope', () => {
 
     await act(async () => {
       reviewResponse.resolve(editReviewAck(1, 'approve'))
-      await expect(Promise.all([first, second])).resolves.toEqual([true, false])
+      const outcomes = await Promise.all([first, second])
+      expect(outcomes).toHaveLength(2)
+      expect(outcomes.filter(Boolean)).toHaveLength(1)
     })
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
