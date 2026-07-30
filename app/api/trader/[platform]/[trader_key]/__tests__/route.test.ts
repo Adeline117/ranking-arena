@@ -93,7 +93,6 @@ function installSuccessfulQueries() {
   mockFrom.mockImplementation((table: string) => {
     if (table === 'trader_profiles_v2') return queryResult(null).proxy
     if (table === 'trader_timeseries') return queryResult([]).proxy
-    if (table === 'refresh_jobs') return queryResult(null).proxy
     if (table === 'trader_equity_curve') return queryResult([]).proxy
     if (table === 'trader_asset_breakdown') return queryResult([]).proxy
     if (table === 'leaderboard_ranks') {
@@ -274,6 +273,8 @@ describe('GET /api/trader/:platform/:trader_key publication boundary', () => {
     expect(body.snapshots['30D'].rank).toBe(2)
     expect(body.snapshots['90D'].rank).toBe(2)
     expect(body.updated_at).toBe('2026-07-29T09:00:00.000Z')
+    expect(body.refresh_job).toBeNull()
+    expect(mockFrom).not.toHaveBeenCalledWith('refresh_jobs')
     expect(response.headers.get('X-Cache')).toBe('MISS')
     expect(mockTieredSet).toHaveBeenCalledWith(
       expect.stringContaining('trader:sealed-v1:binance_futures:trader-1'),
@@ -379,7 +380,6 @@ describe('GET /api/trader/:platform/:trader_key publication boundary', () => {
       if (table === 'trader_timeseries') {
         return queryResult(null, { message: 'timeseries unavailable' }).proxy
       }
-      if (table === 'refresh_jobs') return queryResult(null).proxy
       if (table === 'trader_equity_curve') return queryResult([]).proxy
       if (table === 'trader_asset_breakdown') return queryResult([]).proxy
       throw new Error(`unexpected table: ${table}`)

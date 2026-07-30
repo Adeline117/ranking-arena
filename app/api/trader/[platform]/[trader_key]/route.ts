@@ -21,7 +21,6 @@ import type {
   EquityCurvePoint,
   DailyPnlPoint,
   AssetBreakdownPoint,
-  RefreshJobSummary,
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
@@ -129,7 +128,7 @@ export async function GET(
 
       // Phase 1: fetch the non-ranking profile and chart enrichments in
       // parallel. Ranking snapshots are authorized separately below.
-      const [profileResult, timeseriesResult, jobResult, ecResult, abResult] = await Promise.all([
+      const [profileResult, timeseriesResult, ecResult, abResult] = await Promise.all([
         // V2 primary queries
         supabase
           .from('trader_profiles_v2')
@@ -146,16 +145,6 @@ export async function GET(
           .eq('trader_key', trader_key)
           .order('as_of_ts', { ascending: false })
           .limit(5),
-        supabase
-          .from('refresh_jobs')
-          .select('id, status, attempts, last_error, created_at, updated_at')
-          .eq('platform', platform)
-          .eq('trader_key', trader_key)
-          .in('status', ['pending', 'running'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-
         // Legacy timeseries (trader_timeseries is empty, always needed).
         // Use .eq('source', ...) when only 1 alias — .in() adds BitmapOr plan overhead.
         sourceAliases.length === 1
@@ -194,7 +183,6 @@ export async function GET(
 
       assertQuerySucceeded('trader profile', profileResult, true)
       assertQuerySucceeded('trader timeseries', timeseriesResult)
-      assertQuerySucceeded('refresh job', jobResult, true)
       assertQuerySucceeded('trader equity curve', ecResult)
       assertQuerySucceeded('trader asset breakdown', abResult)
 
@@ -392,18 +380,6 @@ export async function GET(
       const stalenessSeconds = getStalenessSeconds(latestUpdate)
       const isStale = stalenessSeconds > STALENESS_THRESHOLDS.STALE
 
-      // Build refresh job summary
-      const refreshJob: RefreshJobSummary | null = jobResult.data
-        ? {
-            id: jobResult.data.id,
-            status: jobResult.data.status,
-            attempts: jobResult.data.attempts,
-            last_error: jobResult.data.last_error,
-            created_at: jobResult.data.created_at,
-            updated_at: jobResult.data.updated_at,
-          }
-        : null
-
       const response: TraderDetailResponse = {
         profile,
         snapshots,
@@ -411,7 +387,10 @@ export async function GET(
         updated_at: latestUpdate,
         is_stale: isStale,
         staleness_seconds: stalenessSeconds,
-        refresh_job: refreshJob,
+        // Kept as an explicit null for legacy response compatibility. Refresh
+        // jobs have no executor and this read-only endpoint must not depend on
+        // the retired queue table.
+        refresh_job: null,
       }
 
       const cacheBinding: SealedTraderDetailBinding = {
