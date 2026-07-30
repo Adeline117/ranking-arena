@@ -2,7 +2,7 @@
  * Expire Mutes & Temp Bans Cron
  * GET /api/cron/expire-mutes
  *
- * Runs hourly. Clears expired group mutes and temporary account bans through
+ * Runs every six hours. Clears expired group mutes and temporary account bans through
  * one database transaction. Active/permanent sanctions always fail closed.
  */
 
@@ -20,6 +20,9 @@ interface ExpiredSanctionCleanupResult {
   temp_bans_preserved: number
 }
 
+const CLEANUP_LIMIT = 500
+const CLEANUP_WORK_BUDGET_MS = 20_000
+
 function parseCleanupResult(value: unknown): ExpiredSanctionCleanupResult {
   if (!value || typeof value !== 'object') {
     throw new Error('Expired-sanction cleanup returned an invalid acknowledgement')
@@ -30,7 +33,11 @@ function parseCleanupResult(value: unknown): ExpiredSanctionCleanupResult {
     candidate.temp_bans_cleared,
     candidate.temp_bans_preserved,
   ]
-  if (fields.some((field) => !Number.isSafeInteger(field) || Number(field) < 0)) {
+  if (
+    fields.some(
+      (field) => !Number.isSafeInteger(field) || Number(field) < 0 || Number(field) > CLEANUP_LIMIT
+    )
+  ) {
     throw new Error('Expired-sanction cleanup returned invalid counters')
   }
   return candidate as unknown as ExpiredSanctionCleanupResult
@@ -40,16 +47,24 @@ export const GET = withCron(
   'expire-mutes',
   async (_request: NextRequest) => {
     const supabase = getSupabaseAdmin()
-    const { data, error } = (await Reflect.apply(supabase.rpc, supabase, [
+    const workSignal = AbortSignal.timeout(CLEANUP_WORK_BUDGET_MS)
+    const query = Reflect.apply(supabase.rpc, supabase, [
       'expire_mutes_and_temporary_bans_atomic',
-      { p_limit: 500 },
-    ])) as { data: unknown; error: { message?: string } | null }
+      { p_limit: CLEANUP_LIMIT },
+    ]) as {
+      abortSignal(signal: AbortSignal): PromiseLike<{
+        data: unknown
+        error: { message?: string } | null
+      }>
+    }
+    const { data, error } = await query.abortSignal(workSignal)
 
     if (error) {
       throw new Error(
         `Expired-sanction cleanup failed: ${error.message ?? 'unknown database error'}`
       )
     }
+    workSignal.throwIfAborted()
     const result = parseCleanupResult(data)
     return {
       count: result.group_mutes_cleared + result.temp_bans_cleared,
