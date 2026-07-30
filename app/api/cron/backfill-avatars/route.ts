@@ -3,7 +3,7 @@
  *
  * GET /api/cron/backfill-avatars?platform=binance_futures&limit=100
  *
- * Runs on Vercel (Japan region) to bypass geo-blocks
+ * Runs on Vercel in sfo1, close to the Supabase primary region.
  */
 
 import { NextResponse } from 'next/server'
@@ -13,6 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { parseLimit } from '@/lib/utils/safe-parse'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { AVATAR_BACKFILL_SCHEDULE_PLATFORMS } from './platforms'
 
 const log = createLogger('cron:backfill-avatars')
 
@@ -424,6 +425,15 @@ const BULK_FETCHERS: Record<string, (signal?: AbortSignal) => Promise<Map<string
   bitget_futures: fetchBitgetBulk,
 }
 
+const missingScheduledFetchers = AVATAR_BACKFILL_SCHEDULE_PLATFORMS.filter(
+  (platform) => !INDIVIDUAL_FETCHERS[platform] && !BULK_FETCHERS[platform]
+)
+if (missingScheduledFetchers.length > 0) {
+  throw new Error(
+    `Avatar backfill schedule has no fetcher for: ${missingScheduledFetchers.join(', ')}`
+  )
+}
+
 const SINGLE_WORK_BUDGET_MS = 250_000
 const DATABASE_TIMEOUT_MS = 15_000
 
@@ -588,7 +598,7 @@ export async function GET(request: Request) {
         message: 'Platform skipped (dead/blocked)',
       }))
     const perPlatformLimit = Math.floor(limit / Math.max(activePlatforms.length, 1)) || 50
-    const PER_PLATFORM_TIMEOUT = 18_000 // 18s per platform (14 platforms × 18s = 252s < 300s limit)
+    const PER_PLATFORM_TIMEOUT = 18_000 // 12 scheduled platforms × 18s = 216s < 300s limit
     const PER_PLATFORM_WORK_BUDGET_MS = 15_000
 
     for (const p of activePlatforms) {

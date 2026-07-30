@@ -140,7 +140,7 @@
       "schedule": "0 9 * * 1"
     },
     {
-      "path": "/api/cron/backfill-avatars?platform=drift,toobit,bitfinex,etoro,gains&limit=400",
+      "path": "/api/cron/backfill-avatars?platform=binance_futures,bybit,bitget_futures,okx_futures,mexc,htx_futures,coinex,bingx,xt,blofin,kucoin,phemex&limit=400",
       "schedule": "35 2 * * *"
     },
     {

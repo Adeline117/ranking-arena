@@ -54,6 +54,7 @@ global.fetch = mockFetch
 
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { GET } from '../route'
+import { AVATAR_BACKFILL_SCHEDULE_PLATFORMS } from '../platforms'
 
 const CRON_SECRET = 'test-secret'
 const mockPipelineStart = PipelineLogger.start as jest.Mock
@@ -151,6 +152,20 @@ describe('GET /api/cron/backfill-avatars', () => {
     expect(mockReadAbort).not.toHaveBeenCalled()
     expect(mockPipelineSuccess).not.toHaveBeenCalled()
     expect(mockPipelineError).toHaveBeenCalledTimes(1)
+  })
+
+  it('has an implemented route for every platform in the canonical schedule', async () => {
+    mockReadAbort.mockResolvedValue({ data: [], error: null })
+
+    for (const platform of AVATAR_BACKFILL_SCHEDULE_PLATFORMS) {
+      const response = await GET(request(platform, { secret: CRON_SECRET }))
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body).toMatchObject({ success: true, status: 'success', platform })
+    }
+
+    expect(mockReadAbort).toHaveBeenCalledTimes(AVATAR_BACKFILL_SCHEDULE_PLATFORMS.length)
   })
 
   it('fails closed when the missing-avatar query returns an error', async () => {
