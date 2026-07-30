@@ -61,17 +61,16 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  SELECT profile.*
-  INTO v_profile
-  FROM public.user_profiles AS profile
-  WHERE profile.id = p_user_id
-  FOR UPDATE;
-  IF NOT FOUND
-    OR v_profile.deleted_at IS NULL
-    OR v_profile.deletion_scheduled_at IS NULL
-  THEN
-    RETURN NULL;
-  END IF;
+  -- Match claim/finish/abort/hard-delete lock order even when this helper is
+  -- called directly by a future service path. Reacquiring the transaction
+  -- advisory lock from finish is harmless and closes a profile/admission
+  -- deadlock edge.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'account-recovery-admission:' || p_user_id::text,
+      0
+    )
+  );
 
   -- finish_account_recovery_admission_atomic already holds this row, but the
   -- explicit lock makes the helper safe and exact if another service path is
@@ -86,10 +85,24 @@ BEGIN
   ORDER BY admission.claimed_at, admission.operation_id
   LIMIT 1
   FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT profile.*
+  INTO v_profile
+  FROM public.user_profiles AS profile
+  WHERE profile.id = p_user_id
+  FOR UPDATE;
+  IF NOT FOUND
+    OR v_profile.deleted_at IS NULL
+    OR v_profile.deletion_scheduled_at IS NULL
+  THEN
+    RETURN NULL;
+  END IF;
 
   v_now := pg_catalog.clock_timestamp();
-  IF NOT FOUND
-    OR v_admission.claimed_at >= v_profile.deletion_scheduled_at
+  IF v_admission.claimed_at >= v_profile.deletion_scheduled_at
     OR v_admission.lease_expires_at <= v_now
   THEN
     RETURN NULL;

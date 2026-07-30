@@ -20,6 +20,15 @@ describe('admitted account recovery deadline', () => {
     expect(migration).toContain('v_admission.claimed_at >= v_profile.deletion_scheduled_at')
     expect(migration).toContain('v_admission.lease_expires_at <= v_now')
     expect(migration).toContain('token.expires_at > v_admission.claimed_at')
+    const helper = migration.slice(
+      migration.indexOf('CREATE OR REPLACE FUNCTION public.restore_pending_account')
+    )
+    expect(helper.indexOf('pg_advisory_xact_lock')).toBeLessThan(
+      helper.indexOf('FROM public.account_recovery_admissions AS admission')
+    )
+    expect(helper.indexOf('FROM public.account_recovery_admissions AS admission')).toBeLessThan(
+      helper.indexOf('FROM public.user_profiles AS profile')
+    )
   })
 
   it('keeps the helper service-only and hardens its execution context', () => {
