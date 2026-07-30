@@ -247,6 +247,23 @@ describe('parseBitgetHistory (live-captured fixtures, 2026-06-11)', () => {
     expect(again[0].dedupeHash).toBe(first.dedupeHash)
   })
 
+  it('keeps realized PnL unknown when the reviewed netProfit field is absent', () => {
+    const raw = fixture('position-history-p1.json') as {
+      data: { rows: Array<Record<string, unknown>> }
+    }
+    raw.data.rows[0] = {
+      ...raw.data.rows[0],
+      netProfit: null,
+      achievedProfits: '999.99',
+    }
+
+    const rows = parseBitgetHistory(raw, 'position_history', ctx)
+    const first = rows[0]
+    if (first.kind !== 'position_history') throw new Error('wrong kind')
+    expect(first.realizedPnl).toBeNull()
+    expect(first.raw.achievedProfits).toBe('999.99')
+  })
+
   it('parses copiers rows from trader/followerList with scrape-time ts', () => {
     const rows = parseBitgetHistory(fixture('copiers-p1.json'), 'copiers', ctx)
     expect(rows.length).toBeGreaterThan(0)
