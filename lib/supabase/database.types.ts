@@ -11675,6 +11675,16 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_direct_message_conversation_page_atomic: {
+        Args: {
+          p_actor_id: string
+          p_before_created_at: string | null
+          p_before_id: string | null
+          p_conversation_id: string
+          p_limit: number
+        }
+        Returns: Json
+      }
       get_following_posts_page: {
         Args: {
           p_author_handle?: string
