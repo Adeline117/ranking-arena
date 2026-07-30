@@ -11498,6 +11498,20 @@ export type Database = {
         Returns: string
       }
       create_next_tph_partition: { Args: never; Returns: undefined }
+      create_notification_atomic: {
+        Args: {
+          p_actor_id: string | null
+          p_dedup_window_seconds: number
+          p_deduplicate: boolean
+          p_link: string | null
+          p_message: string
+          p_recipient_id: string
+          p_reference_id: string | null
+          p_title: string
+          p_type: string
+        }
+        Returns: Json
+      }
       current_user_can_read_post_with_current_entitlement: {
         Args: { p_post_id: string }
         Returns: boolean
