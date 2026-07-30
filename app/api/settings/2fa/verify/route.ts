@@ -12,6 +12,7 @@ import {
   twoFactorEnableResultSchema,
   twoFactorEnrollmentReadResultSchema,
 } from '@/lib/security/two-factor-credentials'
+import { hasActiveTwoFactorProfile } from '@/lib/security/two-factor-active-profile'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('2fa-verify')
@@ -60,6 +61,9 @@ export const POST = withAuth(
       logger.error('[2FA Verify] Enrollment read RPC returned an invalid response')
       return NextResponse.json({ error: 'Failed to verify 2FA setup' }, { status: 500 })
     }
+    if (enrollment.data.status === 'suspended') {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
+    }
     if (enrollment.data.status === 'already_enabled') {
       return badRequest('2FA is already enabled')
     }
@@ -102,6 +106,9 @@ export const POST = withAuth(
       logger.error('[2FA Verify] Enablement RPC returned an invalid response')
       return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
     }
+    if (enablement.data.status === 'suspended') {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
+    }
     if (enablement.data.status === 'already_enabled') {
       return badRequest('2FA is already enabled')
     }
@@ -122,6 +129,12 @@ export const POST = withAuth(
         status: enablement.data.status,
       })
       return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
+    }
+
+    // Do not disclose freshly generated recovery credentials after a
+    // suspension/deletion that commits just after database enablement.
+    if (!(await hasActiveTwoFactorProfile(user))) {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
     }
 
     return NextResponse.json({

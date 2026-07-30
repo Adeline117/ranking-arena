@@ -59,6 +59,11 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 }))
 
 const mockGetAuthUser = jest.fn()
+const mockHasActiveTwoFactorProfile = jest.fn()
+
+jest.mock('@/lib/security/two-factor-active-profile', () => ({
+  hasActiveTwoFactorProfile: (...args: unknown[]) => mockHasActiveTwoFactorProfile(...args),
+}))
 
 const mockRpcResult: {
   data: Record<string, unknown> | null
@@ -135,6 +140,7 @@ describe('POST /api/settings/2fa/setup', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockGetAuthUser.mockResolvedValue(mockUser)
+    mockHasActiveTwoFactorProfile.mockResolvedValue(true)
     mockGenerateTotpSecret.mockReturnValue({
       secret: 'JBSWY3DPEHPK3PXP',
       uri: 'otpauth://totp/RankingArena:test@test.com?secret=JBSWY3DPEHPK3PXP&issuer=RankingArena',
@@ -213,6 +219,37 @@ describe('POST /api/settings/2fa/setup', () => {
       p_user_id: 'user-123',
       p_totp_secret: 'JBSWY3DPEHPK3PXP',
     })
+    expect(mockHasActiveTwoFactorProfile).toHaveBeenCalledWith(mockUser)
+  })
+
+  it('rejects a suspension that wins after bearer admission without releasing a secret', async () => {
+    mockRpcResult.data = { status: 'suspended' }
+
+    const req = new NextRequest('http://localhost/api/settings/2fa/setup', {
+      method: 'POST',
+    })
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(403)
+    expect(body.secret).toBeUndefined()
+    expect(body.qrCode).toBeUndefined()
+    expect(mockHasActiveTwoFactorProfile).not.toHaveBeenCalled()
+  })
+
+  it('withholds a staged secret when pre-release admission loses', async () => {
+    mockHasActiveTwoFactorProfile.mockResolvedValue(false)
+
+    const req = new NextRequest('http://localhost/api/settings/2fa/setup', {
+      method: 'POST',
+    })
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(403)
+    expect(body.secret).toBeUndefined()
+    expect(body.uri).toBeUndefined()
+    expect(body.qrCode).toBeUndefined()
   })
 
   it('fails without staging when no profile row exists', async () => {

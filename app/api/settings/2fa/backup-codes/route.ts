@@ -9,6 +9,7 @@ import { generateBackupCodes, hashBackupCode } from '@/lib/services/totp'
 import { withAuth } from '@/lib/api/middleware'
 import { serverError } from '@/lib/api/response'
 import { twoFactorBackupCodeRotationResultSchema } from '@/lib/security/two-factor-credentials'
+import { hasActiveTwoFactorProfile } from '@/lib/security/two-factor-active-profile'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('2fa-backup-codes')
@@ -36,6 +37,9 @@ export const POST = withAuth(
       return serverError('Failed to regenerate backup codes')
     }
 
+    if (parsed.data.status === 'suspended') {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
+    }
     if (parsed.data.status === 'not_enabled') {
       return NextResponse.json({ error: '2FA is not enabled. Enable 2FA first.' }, { status: 400 })
     }
@@ -44,6 +48,12 @@ export const POST = withAuth(
         status: parsed.data.status,
       })
       return serverError('Failed to regenerate backup codes')
+    }
+
+    // A backup-code set is a bearer credential. Recheck immediately before
+    // returning any plaintext code to the browser.
+    if (!(await hasActiveTwoFactorProfile(user))) {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
     }
 
     return NextResponse.json({

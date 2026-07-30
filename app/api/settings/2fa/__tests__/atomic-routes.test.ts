@@ -54,6 +54,11 @@ const mockUser = {
 }
 const mockRpc = jest.fn()
 const mockSupabase = { rpc: mockRpc }
+const mockHasActiveTwoFactorProfile = jest.fn()
+
+jest.mock('@/lib/security/two-factor-active-profile', () => ({
+  hasActiveTwoFactorProfile: (...args: unknown[]) => mockHasActiveTwoFactorProfile(...args),
+}))
 
 jest.mock('@/lib/api/middleware', () => ({
   withAuth:
@@ -117,6 +122,7 @@ function request(body?: unknown) {
 describe('atomic 2FA runtime routes', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockHasActiveTwoFactorProfile.mockResolvedValue(true)
     mockVerifyTotpCode.mockReturnValue(true)
     mockSignInWithPassword.mockResolvedValue({
       data: { user: mockUser, session: { user: mockUser } },
@@ -137,6 +143,7 @@ describe('atomic 2FA runtime routes', () => {
       p_user_id: mockUser.id,
       p_code_hashes: codeHashes,
     })
+    expect(mockHasActiveTwoFactorProfile).toHaveBeenCalledWith(mockUser)
   })
 
   it.each([
@@ -161,6 +168,28 @@ describe('atomic 2FA runtime routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(400)
+    expect(body.backupCodes).toBeUndefined()
+  })
+
+  it('never releases rotated backup codes after a lifecycle suspension', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'suspended' }, error: null })
+
+    const response = await rotateBackupCodes(request())
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.backupCodes).toBeUndefined()
+    expect(mockHasActiveTwoFactorProfile).not.toHaveBeenCalled()
+  })
+
+  it('withholds rotated backup codes when pre-release admission loses', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'rotated', code_count: 8 }, error: null })
+    mockHasActiveTwoFactorProfile.mockResolvedValue(false)
+
+    const response = await rotateBackupCodes(request())
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
     expect(body.backupCodes).toBeUndefined()
   })
 
@@ -229,6 +258,52 @@ describe('atomic 2FA runtime routes', () => {
     expect(body.backupCodes).toBeUndefined()
   })
 
+  it('rejects suspension during enrollment read before TOTP verification', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'suspended' }, error: null })
+
+    const response = await verifyTwoFactor(request({ code: '123456' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.backupCodes).toBeUndefined()
+    expect(mockVerifyTotpCode).not.toHaveBeenCalled()
+  })
+
+  it('rejects suspension during enablement without releasing generated codes', async () => {
+    mockRpc
+      .mockResolvedValueOnce({
+        data: { status: 'ready', totp_secret: 'JBSWY3DPEHPK3PXP' },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: { status: 'suspended' }, error: null })
+
+    const response = await verifyTwoFactor(request({ code: '123456' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.backupCodes).toBeUndefined()
+    expect(mockHasActiveTwoFactorProfile).not.toHaveBeenCalled()
+  })
+
+  it('withholds enabled backup codes when pre-release admission loses', async () => {
+    mockRpc
+      .mockResolvedValueOnce({
+        data: { status: 'ready', totp_secret: 'JBSWY3DPEHPK3PXP' },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { status: 'enabled', code_count: 8 },
+        error: null,
+      })
+    mockHasActiveTwoFactorProfile.mockResolvedValue(false)
+
+    const response = await verifyTwoFactor(request({ code: '123456' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.backupCodes).toBeUndefined()
+  })
+
   it.each([
     ['zero rows', { data: null, error: null }],
     [
@@ -279,6 +354,27 @@ describe('atomic 2FA runtime routes', () => {
 
     expect(response.status).toBe(403)
     expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('rejects suspended disablement and preserves the failure boundary', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'suspended' }, error: null })
+
+    const response = await disableTwoFactor(request({ password: 'correct horse' }))
+
+    expect(response.status).toBe(403)
+    expect(mockHasActiveTwoFactorProfile).not.toHaveBeenCalled()
+  })
+
+  it('does not report disablement success when pre-release admission loses', async () => {
+    mockRpc.mockResolvedValue({
+      data: { status: 'disabled', code_count: 8, secret_count: 1 },
+      error: null,
+    })
+    mockHasActiveTwoFactorProfile.mockResolvedValue(false)
+
+    const response = await disableTwoFactor(request({ password: 'correct horse' }))
+
+    expect(response.status).toBe(403)
   })
 
   it.each([

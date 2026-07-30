@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, serverError } from '@/lib/api/response'
 import { twoFactorDisableResultSchema } from '@/lib/security/two-factor-credentials'
+import { hasActiveTwoFactorProfile } from '@/lib/security/two-factor-active-profile'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('2fa-disable')
@@ -64,6 +65,9 @@ export const POST = withAuth(
       logger.error('[2FA Disable] Disablement RPC returned an invalid response')
       return serverError('Failed to disable 2FA')
     }
+    if (parsed.data.status === 'suspended') {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
+    }
     if (parsed.data.status === 'not_enabled') {
       return badRequest('2FA is not enabled')
     }
@@ -72,6 +76,10 @@ export const POST = withAuth(
         status: parsed.data.status,
       })
       return serverError('Failed to disable 2FA')
+    }
+
+    if (!(await hasActiveTwoFactorProfile(user))) {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
     }
 
     return NextResponse.json({ success: true })

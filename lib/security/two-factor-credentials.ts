@@ -12,6 +12,7 @@ export const twoFactorEnrollmentReadResultSchema = z.discriminatedUnion('status'
   statusOnly('invalid_user'),
   statusOnly('user_not_found'),
   statusOnly('profile_not_found'),
+  statusOnly('suspended'),
   statusOnly('already_enabled'),
   statusOnly('secret_not_found'),
 ])
@@ -21,6 +22,7 @@ export const twoFactorEnrollmentStageResultSchema = z.discriminatedUnion('status
   statusOnly('invalid'),
   statusOnly('user_not_found'),
   statusOnly('profile_not_found'),
+  statusOnly('suspended'),
   statusOnly('already_enabled'),
 ])
 
@@ -30,6 +32,7 @@ export const twoFactorEnableResultSchema = z.discriminatedUnion('status', [
   statusOnly('invalid_codes'),
   statusOnly('user_not_found'),
   statusOnly('profile_not_found'),
+  statusOnly('suspended'),
   statusOnly('already_enabled'),
   statusOnly('secret_not_found'),
   statusOnly('secret_changed'),
@@ -41,6 +44,7 @@ export const twoFactorBackupCodeRotationResultSchema = z.discriminatedUnion('sta
   statusOnly('invalid_codes'),
   statusOnly('user_not_found'),
   statusOnly('profile_not_found'),
+  statusOnly('suspended'),
   statusOnly('not_enabled'),
   statusOnly('credential_inconsistent'),
 ])
@@ -56,5 +60,6 @@ export const twoFactorDisableResultSchema = z.discriminatedUnion('status', [
   statusOnly('invalid_user'),
   statusOnly('user_not_found'),
   statusOnly('profile_not_found'),
+  statusOnly('suspended'),
   statusOnly('not_enabled'),
 ])

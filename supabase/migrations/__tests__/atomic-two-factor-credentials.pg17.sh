@@ -7,6 +7,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260729056000_atomic_two_factor_credentials.sql"
+ACTIVE_PROFILE_MIGRATION="$ROOT_DIR/supabase/migrations/20260729163500_active_profile_two_factor_credentials.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -84,6 +85,27 @@ expect_failure() {
   fi
 }
 
+wait_for_subject_lock() {
+  local user_id="$1"
+  local acquired
+  for _attempt in $(seq 1 150); do
+    acquired="$(psql_cmd -qAtc "
+      SELECT pg_catalog.pg_try_advisory_lock(
+        pg_catalog.hashtextextended(
+          'account-recovery-admission:' || '$user_id'::uuid::text,
+          0
+        )
+      );
+    ")"
+    if [[ "$acquired" == 'f' ]]; then
+      return 0
+    fi
+    sleep 0.02
+  done
+  echo "Timed out waiting for lifecycle lock: $user_id" >&2
+  return 1
+}
+
 "$PG_BIN/initdb" \
   -D "$DATA_DIR" \
   --auth-local=trust \
@@ -127,9 +149,48 @@ ALTER TABLE auth.users OWNER TO postgres;
 
 CREATE TABLE public.user_profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  totp_enabled boolean DEFAULT false
+  totp_enabled boolean DEFAULT false,
+  banned_at timestamptz,
+  ban_expires_at timestamptz,
+  deleted_at timestamptz,
+  is_banned boolean NOT NULL DEFAULT false
 );
 ALTER TABLE public.user_profiles OWNER TO postgres;
+
+CREATE FUNCTION public.lock_account_lifecycle_subject_transition()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_subject_id uuid;
+BEGIN
+  v_subject_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.id ELSE NEW.id END;
+  IF NOT pg_catalog.pg_try_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'account-recovery-admission:' || v_subject_id::text,
+      0
+    )
+  ) THEN
+    RAISE EXCEPTION 'account lifecycle transition conflicts with a canonical writer'
+      USING ERRCODE = '40001';
+  END IF;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END
+$function$;
+ALTER FUNCTION public.lock_account_lifecycle_subject_transition()
+  OWNER TO postgres;
+
+CREATE TRIGGER "000_account_lifecycle_subject_insert_delete_lock"
+  BEFORE INSERT OR DELETE ON public.user_profiles
+  FOR EACH ROW EXECUTE FUNCTION
+    public.lock_account_lifecycle_subject_transition();
+CREATE TRIGGER "000_account_lifecycle_subject_status_lock"
+  BEFORE UPDATE OF deleted_at, banned_at, is_banned, ban_expires_at
+  ON public.user_profiles
+  FOR EACH ROW EXECUTE FUNCTION
+    public.lock_account_lifecycle_subject_transition();
 
 CREATE TABLE public.backup_codes (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
@@ -162,6 +223,8 @@ INSERT INTO public.backup_codes (user_id, code_hash, used) VALUES
 SQL
 
 psql_cmd -f "$MIGRATION" >/dev/null
+psql_cmd -f "$ACTIVE_PROFILE_MIGRATION" >/dev/null
+psql_cmd -f "$ACTIVE_PROFILE_MIGRATION" >/dev/null
 
 HASHES_ONE="ARRAY[
   repeat('1', 64), repeat('2', 64), repeat('3', 64), repeat('4', 64),
@@ -375,4 +438,295 @@ expect_value \
     $HASHES_ONE
   );"
 
-echo "Atomic 2FA credential PostgreSQL 17 proof passed."
+# Active-profile race fixtures cover each security mutation and both durable
+# lifecycle outcomes without sharing subjects across independent proofs.
+STAGE_RACE='20000000-0000-4000-8000-000000000001'
+ENABLE_RACE='20000000-0000-4000-8000-000000000002'
+ROTATE_RACE='20000000-0000-4000-8000-000000000003'
+DISABLE_RACE='20000000-0000-4000-8000-000000000004'
+MUTATION_FIRST='20000000-0000-4000-8000-000000000005'
+STAGE_FAILURE='20000000-0000-4000-8000-000000000006'
+ENABLE_FAILURE='20000000-0000-4000-8000-000000000007'
+
+psql_cmd -q <<SQL
+INSERT INTO auth.users (id) VALUES
+  ('$STAGE_RACE'),
+  ('$ENABLE_RACE'),
+  ('$ROTATE_RACE'),
+  ('$DISABLE_RACE'),
+  ('$MUTATION_FIRST'),
+  ('$STAGE_FAILURE'),
+  ('$ENABLE_FAILURE');
+INSERT INTO public.user_profiles (id, totp_enabled) VALUES
+  ('$STAGE_RACE', false),
+  ('$ENABLE_RACE', false),
+  ('$ROTATE_RACE', true),
+  ('$DISABLE_RACE', true),
+  ('$MUTATION_FIRST', true),
+  ('$STAGE_FAILURE', false),
+  ('$ENABLE_FAILURE', false);
+INSERT INTO public.user_2fa_secrets (user_id, totp_secret) VALUES
+  ('$ENABLE_RACE', 'JBSWY3DPEHPK3PXP'),
+  ('$ROTATE_RACE', 'JBSWY3DPEHPK3PXP'),
+  ('$DISABLE_RACE', 'JBSWY3DPEHPK3PXP'),
+  ('$MUTATION_FIRST', 'JBSWY3DPEHPK3PXP'),
+  ('$ENABLE_FAILURE', 'JBSWY3DPEHPK3PXP');
+INSERT INTO public.backup_codes (user_id, code_hash, used)
+SELECT fixture.user_id, pg_catalog.lpad(series.value::text, 64, fixture.prefix), false
+FROM (
+  VALUES
+    ('$ROTATE_RACE'::uuid, 'a'),
+    ('$DISABLE_RACE'::uuid, 'b'),
+    ('$MUTATION_FIRST'::uuid, 'c')
+) AS fixture(user_id, prefix)
+CROSS JOIN pg_catalog.generate_series(1, 8) AS series(value);
+SQL
+
+# A ban that owns the lifecycle order rejects queued enrollment staging.
+psql_cmd -qAt <<SQL >"$TMP_ROOT/stage-ban.out" 2>"$TMP_ROOT/stage-ban.err" &
+BEGIN;
+SELECT pg_catalog.pg_advisory_xact_lock(
+  pg_catalog.hashtextextended(
+    'account-recovery-admission:' || '$STAGE_RACE'::uuid::text,
+    0
+  )
+);
+UPDATE public.user_profiles
+SET banned_at = pg_catalog.clock_timestamp(), is_banned = true
+WHERE id = '$STAGE_RACE';
+SELECT pg_catalog.pg_sleep(0.75);
+COMMIT;
+SQL
+stage_ban_pid=$!
+wait_for_subject_lock "$STAGE_RACE"
+expect_value \
+  "ban wins enrollment staging race" \
+  '{"status": "suspended"}' \
+  "SELECT public.stage_two_factor_enrollment_secret_atomic(
+    '$STAGE_RACE', 'JBSWY3DPEHPK3PXP'
+  );"
+wait "$stage_ban_pid"
+if [[ "$(psql_cmd -qAtc "SELECT count(*) FROM public.user_2fa_secrets WHERE user_id = '$STAGE_RACE';")" != '0' ]]; then
+  echo 'ban-first staging race persisted a secret' >&2
+  exit 1
+fi
+
+# A soft deletion that owns the lifecycle order rejects queued enablement and
+# preserves the staged, disabled generation exactly.
+psql_cmd -qAt <<SQL >"$TMP_ROOT/enable-delete.out" 2>"$TMP_ROOT/enable-delete.err" &
+BEGIN;
+SELECT pg_catalog.pg_advisory_xact_lock(
+  pg_catalog.hashtextextended(
+    'account-recovery-admission:' || '$ENABLE_RACE'::uuid::text,
+    0
+  )
+);
+UPDATE public.user_profiles
+SET deleted_at = pg_catalog.clock_timestamp()
+WHERE id = '$ENABLE_RACE';
+SELECT pg_catalog.pg_sleep(0.75);
+COMMIT;
+SQL
+enable_delete_pid=$!
+wait_for_subject_lock "$ENABLE_RACE"
+expect_value \
+  "deletion wins 2FA enablement race" \
+  '{"status": "suspended"}' \
+  "SELECT public.enable_two_factor_credentials_atomic(
+    '$ENABLE_RACE', 'JBSWY3DPEHPK3PXP', $HASHES_ONE
+  );"
+wait "$enable_delete_pid"
+if [[ "$(psql_cmd -qAtc "
+  SELECT profile.totp_enabled::text || '|' ||
+    count(DISTINCT secret_row.user_id) || '|' ||
+    count(DISTINCT backup_code.id)
+  FROM public.user_profiles AS profile
+  LEFT JOIN public.user_2fa_secrets AS secret_row
+    ON secret_row.user_id = profile.id
+  LEFT JOIN public.backup_codes AS backup_code
+    ON backup_code.user_id = profile.id
+  WHERE profile.id = '$ENABLE_RACE'
+  GROUP BY profile.totp_enabled;
+")" != 'false|1|0' ]]; then
+  echo 'deletion-first enablement race changed credentials' >&2
+  exit 1
+fi
+
+# A ban rejects queued backup-code rotation without replacing any hash and the
+# enrollment-secret read never discloses a suspended subject's secret.
+rotate_hash_before="$(psql_cmd -qAtc "SELECT string_agg(code_hash, ',' ORDER BY code_hash) FROM public.backup_codes WHERE user_id = '$ROTATE_RACE';")"
+psql_cmd -qAt <<SQL >"$TMP_ROOT/rotate-ban.out" 2>"$TMP_ROOT/rotate-ban.err" &
+BEGIN;
+SELECT pg_catalog.pg_advisory_xact_lock(
+  pg_catalog.hashtextextended(
+    'account-recovery-admission:' || '$ROTATE_RACE'::uuid::text,
+    0
+  )
+);
+UPDATE public.user_profiles
+SET banned_at = pg_catalog.clock_timestamp(), is_banned = true
+WHERE id = '$ROTATE_RACE';
+SELECT pg_catalog.pg_sleep(0.75);
+COMMIT;
+SQL
+rotate_ban_pid=$!
+wait_for_subject_lock "$ROTATE_RACE"
+expect_value \
+  "ban wins backup-code rotation race" \
+  '{"status": "suspended"}' \
+  "SELECT public.rotate_two_factor_backup_codes_atomic(
+    '$ROTATE_RACE', $HASHES_TWO
+  );"
+wait "$rotate_ban_pid"
+if [[ "$(psql_cmd -qAtc "SELECT string_agg(code_hash, ',' ORDER BY code_hash) FROM public.backup_codes WHERE user_id = '$ROTATE_RACE';")" != "$rotate_hash_before" ]]; then
+  echo 'ban-first rotation race replaced backup hashes' >&2
+  exit 1
+fi
+expect_value \
+  "suspended enrollment secret is not disclosed" \
+  '{"status": "suspended"}' \
+  "SELECT public.read_two_factor_enrollment_secret('$ROTATE_RACE');"
+
+# Deletion also blocks the credential-downgrade path: a stale authenticated
+# password proof cannot disable credentials that will be needed on recovery.
+psql_cmd -qAt <<SQL >"$TMP_ROOT/disable-delete.out" 2>"$TMP_ROOT/disable-delete.err" &
+BEGIN;
+SELECT pg_catalog.pg_advisory_xact_lock(
+  pg_catalog.hashtextextended(
+    'account-recovery-admission:' || '$DISABLE_RACE'::uuid::text,
+    0
+  )
+);
+UPDATE public.user_profiles
+SET deleted_at = pg_catalog.clock_timestamp()
+WHERE id = '$DISABLE_RACE';
+SELECT pg_catalog.pg_sleep(0.75);
+COMMIT;
+SQL
+disable_delete_pid=$!
+wait_for_subject_lock "$DISABLE_RACE"
+expect_value \
+  "deletion wins 2FA disablement race" \
+  '{"status": "suspended"}' \
+  "SELECT public.disable_two_factor_credentials_atomic('$DISABLE_RACE');"
+wait "$disable_delete_pid"
+if [[ "$(psql_cmd -qAtc "
+  SELECT profile.totp_enabled::text || '|' ||
+    count(DISTINCT secret_row.user_id) || '|' ||
+    count(DISTINCT backup_code.id)
+  FROM public.user_profiles AS profile
+  LEFT JOIN public.user_2fa_secrets AS secret_row
+    ON secret_row.user_id = profile.id
+  LEFT JOIN public.backup_codes AS backup_code
+    ON backup_code.user_id = profile.id
+  WHERE profile.id = '$DISABLE_RACE'
+  GROUP BY profile.totp_enabled;
+")" != 'true|1|8' ]]; then
+  echo 'deletion-first disablement race weakened credentials' >&2
+  exit 1
+fi
+
+# The inverse durable order is valid too: rotation commits, then the canonical
+# deletion transition acquires the same lifecycle key. Runtime pre-release
+# admission is responsible for withholding the now-invalid plaintext codes.
+psql_cmd -qAt <<SQL >"$TMP_ROOT/mutation-first.out" 2>"$TMP_ROOT/mutation-first.err" &
+BEGIN;
+SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
+SELECT public.rotate_two_factor_backup_codes_atomic(
+  '$MUTATION_FIRST', $HASHES_TWO
+);
+SELECT pg_catalog.pg_sleep(0.75);
+COMMIT;
+SQL
+mutation_first_pid=$!
+wait_for_subject_lock "$MUTATION_FIRST"
+psql_cmd -qAt <<SQL >/dev/null
+BEGIN;
+SELECT pg_catalog.pg_advisory_xact_lock(
+  pg_catalog.hashtextextended(
+    'account-recovery-admission:' || '$MUTATION_FIRST'::uuid::text,
+    0
+  )
+);
+UPDATE public.user_profiles
+SET deleted_at = pg_catalog.clock_timestamp()
+WHERE id = '$MUTATION_FIRST';
+COMMIT;
+SQL
+wait "$mutation_first_pid"
+if [[ "$(awk '/"status": "rotated"/ { print $0 }' "$TMP_ROOT/mutation-first.out")" != '{"status": "rotated", "code_count": 8}' ]]; then
+  echo 'mutation-first rotation did not commit exactly once' >&2
+  exit 1
+fi
+if [[ "$(psql_cmd -qAtc "
+  SELECT (deleted_at IS NOT NULL)::text || '|' || count(backup_code.id)
+  FROM public.user_profiles AS profile
+  LEFT JOIN public.backup_codes AS backup_code
+    ON backup_code.user_id = profile.id
+  WHERE profile.id = '$MUTATION_FIRST'
+  GROUP BY profile.deleted_at;
+")" != 'true|8' ]]; then
+  echo 'mutation-first lifecycle ordering drifted' >&2
+  exit 1
+fi
+
+# Stage and enable failures roll back their entire credential generation;
+# rotation and disable rollback are proven above by the original suite.
+psql_cmd <<SQL
+CREATE FUNCTION public.reject_selected_two_factor_writes()
+RETURNS trigger
+LANGUAGE plpgsql
+AS \$function\$
+BEGIN
+  IF TG_TABLE_NAME = 'user_2fa_secrets'
+    AND NEW.user_id = '$STAGE_FAILURE'::uuid
+  THEN
+    RAISE EXCEPTION 'injected staging failure';
+  END IF;
+  IF TG_TABLE_NAME = 'backup_codes'
+    AND NEW.user_id = '$ENABLE_FAILURE'::uuid
+  THEN
+    RAISE EXCEPTION 'injected enablement failure';
+  END IF;
+  RETURN NEW;
+END
+\$function\$;
+CREATE TRIGGER reject_selected_secret_write
+  BEFORE INSERT OR UPDATE ON public.user_2fa_secrets
+  FOR EACH ROW EXECUTE FUNCTION public.reject_selected_two_factor_writes();
+CREATE TRIGGER reject_selected_backup_write
+  BEFORE INSERT ON public.backup_codes
+  FOR EACH ROW EXECUTE FUNCTION public.reject_selected_two_factor_writes();
+SQL
+expect_failure \
+  "failed staging leaves no secret" \
+  "SELECT public.stage_two_factor_enrollment_secret_atomic(
+    '$STAGE_FAILURE', 'JBSWY3DPEHPK3PXP'
+  );"
+if [[ "$(psql_cmd -qAtc "SELECT count(*) FROM public.user_2fa_secrets WHERE user_id = '$STAGE_FAILURE';")" != '0' ]]; then
+  echo 'failed staging left a partial secret' >&2
+  exit 1
+fi
+expect_failure \
+  "failed enablement restores staged disabled state" \
+  "SELECT public.enable_two_factor_credentials_atomic(
+    '$ENABLE_FAILURE', 'JBSWY3DPEHPK3PXP', $HASHES_ONE
+  );"
+if [[ "$(psql_cmd -qAtc "
+  SELECT profile.totp_enabled::text || '|' ||
+    count(DISTINCT secret_row.user_id) || '|' ||
+    count(DISTINCT backup_code.id)
+  FROM public.user_profiles AS profile
+  LEFT JOIN public.user_2fa_secrets AS secret_row
+    ON secret_row.user_id = profile.id
+  LEFT JOIN public.backup_codes AS backup_code
+    ON backup_code.user_id = profile.id
+  WHERE profile.id = '$ENABLE_FAILURE'
+  GROUP BY profile.totp_enabled;
+")" != 'false|1|0' ]]; then
+  echo 'failed enablement did not restore staged disabled state' >&2
+  exit 1
+fi
+
+echo "Atomic active-profile 2FA credential PostgreSQL 17 proof passed."

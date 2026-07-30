@@ -9,6 +9,7 @@ import { generateTotpSecret } from '@/lib/services/totp'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, serverError } from '@/lib/api/response'
 import { twoFactorEnrollmentStageResultSchema } from '@/lib/security/two-factor-credentials'
+import { hasActiveTwoFactorProfile } from '@/lib/security/two-factor-active-profile'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('2fa-setup')
@@ -38,6 +39,9 @@ export const POST = withAuth(
       return serverError('Failed to store TOTP secret')
     }
 
+    if (parsed.data.status === 'suspended') {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
+    }
     if (parsed.data.status === 'already_enabled') {
       return badRequest('2FA is already enabled. Disable it first to reconfigure.')
     }
@@ -49,6 +53,12 @@ export const POST = withAuth(
         status: parsed.data.status,
       })
       return serverError('Failed to store TOTP secret')
+    }
+
+    // The lifecycle can change after the staging transaction commits. Check
+    // again immediately before releasing the enrollment secret and QR code.
+    if (!(await hasActiveTwoFactorProfile(user))) {
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
     }
 
     return NextResponse.json({ qrCode, secret, uri })
