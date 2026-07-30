@@ -159,6 +159,46 @@ describe('OKX product-specific record contracts', () => {
     ])
   })
 
+  it('compares a stored close cursor with closeTime, not openTime', async () => {
+    const urls: string[] = []
+    const cursor = Date.parse('2026-07-01T00:00:00.000Z')
+    const pages = [
+      [
+        {
+          subPosId: 'newer-close',
+          openTime: String(Date.parse('2026-06-01T00:00:00.000Z')),
+          closeTime: String(Date.parse('2026-07-10T00:00:00.000Z')),
+        },
+      ],
+      [
+        {
+          subPosId: 'cursor-overlap',
+          openTime: String(Date.parse('2026-05-01T00:00:00.000Z')),
+          closeTime: String(Date.parse('2026-06-30T00:00:00.000Z')),
+        },
+      ],
+    ]
+    global.fetch = jest.fn(async (input: string | URL | Request) => {
+      urls.push(String(input))
+      return ok(pages[urls.length - 1] ?? [])
+    }) as unknown as typeof fetch
+
+    const captured = []
+    for await (const page of okxAdapter.getHistory(
+      session(),
+      source('futures', 'SWAP'),
+      UNIQUE_CODE,
+      'position_history',
+      new Date(cursor).toISOString()
+    )) {
+      captured.push(page)
+    }
+
+    expect(captured).toHaveLength(2)
+    expect(urls).toHaveLength(2)
+    expect(urls[1]).toContain('after=newer-close')
+  })
+
   it('treats an invalid instType as configuration failure, not unsupported data', () => {
     expect(() =>
       supportsSourceSurface(okxAdapter, source('futures', 'MARGIN'), 'positions')
