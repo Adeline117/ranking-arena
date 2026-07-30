@@ -221,11 +221,13 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729173500_atomic_notification_mutations.sql',
     '20260729174000_atomic_bookmark_folder_lifecycle.sql',
     '20260729174500_atomic_notification_create.sql',
+    '20260729175000_atomic_bookmark_folder_reads.sql',
+    '20260729175500_atomic_ranking_notification_batch.sql',
   ]
   const inactiveAuthSubjectMutationBarrierMigration =
     '20260729154500_inactive_auth_subject_mutation_barrier.sql'
 
-  assert.equal(predeploy.length, 174)
+  assert.equal(predeploy.length, 176)
   assert.ok(predeploy.includes(accountHardDeleteRecoveryBarrierMigration))
   assert.ok(predeploy.includes(verifiedAuthProfileEmailMigration))
   assert.ok(predeploy.includes(accountRecoveryAuthEmailMigration))
@@ -367,7 +369,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 196)
+  assert.equal(new Set(all).size, 198)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -509,7 +511,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-133), [
+  assert.deepEqual(predeploy.slice(-135), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -701,7 +703,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     predeploy.indexOf(exchangeOAuthStateClaimMigration) >
       predeploy.indexOf(stripeWebhookLeaseMigration)
   )
-  assert.deepEqual(predeploy.slice(-62), [
+  assert.deepEqual(predeploy.slice(-64), [
     '20260729059000_atomic_referral_attribution.sql',
     '20260729060000_retryable_referral_qualification.sql',
     '20260729061000_source_legacy_platform_alias_contract.sql',
