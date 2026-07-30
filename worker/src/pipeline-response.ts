@@ -11,6 +11,13 @@ function containsErrors(value: unknown): boolean {
   return true
 }
 
+export function requireWorkerCronSecret(value: unknown): string {
+  if (typeof value !== 'string' || value.trim().length < 32) {
+    throw new Error('pipeline worker CRON_SECRET is missing or invalid')
+  }
+  return value
+}
+
 /**
  * BullMQ must retry logical API failures even when the endpoint returned HTTP 200.
  * A successful sync contract is deliberately narrow: JSON `ok` is exactly true

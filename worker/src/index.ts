@@ -12,6 +12,7 @@
  *   INGEST_DATABASE_URL           — Supabase session-pooler URI (port 5432)
  *   NEXT_PUBLIC_SUPABASE_URL      — Supabase project URL
  *   SUPABASE_SERVICE_ROLE_KEY     — Supabase service role key
+ *   CRON_SECRET                   — service authentication for downstream jobs
  *
  * Architecture:
  *   Scheduler → Queue (BullMQ) → Workers (per job type)
@@ -34,6 +35,7 @@ import { PIPELINE_WORKER_CONCURRENCY } from './pipeline-runtime'
 import {
   assertSuccessfulLeaderboardComputeResponse,
   assertSuccessfulMeilisearchSyncResponse,
+  requireWorkerCronSecret,
 } from './pipeline-response'
 import { registerSchedules } from './scheduler'
 import { startDashboard } from './dashboard'
@@ -63,11 +65,7 @@ async function main() {
         case JOB.COMPUTE_LEADERBOARD: {
           // Trigger Vercel's compute-leaderboard endpoint (still runs there)
           const { season } = job.data as { season: string }
-          const cronSecret = process.env.CRON_SECRET
-          if (!cronSecret) {
-            job.log('[skip] CRON_SECRET not set, cannot trigger compute-leaderboard')
-            return { skipped: true }
-          }
+          const cronSecret = requireWorkerCronSecret(process.env.CRON_SECRET)
           const siteUrl = process.env.SITE_URL || 'https://www.arenafi.org'
           job.log(`Triggering compute-leaderboard for ${season}`)
           const resp = await fetch(`${siteUrl}/api/cron/compute-leaderboard?season=${season}`, {
@@ -84,8 +82,7 @@ async function main() {
 
         case JOB.SYNC_MEILISEARCH: {
           // Trigger Vercel's sync-meilisearch endpoint
-          const msSecret = process.env.CRON_SECRET
-          if (!msSecret) return { skipped: true, reason: 'no CRON_SECRET' }
+          const msSecret = requireWorkerCronSecret(process.env.CRON_SECRET)
           const msUrl = process.env.SITE_URL || 'https://www.arenafi.org'
           job.log('Triggering sync-meilisearch')
           const msResp = await fetch(`${msUrl}/api/cron/sync-meilisearch`, {
@@ -99,8 +96,7 @@ async function main() {
         }
 
         default:
-          job.log(`[skip] Unknown job: ${job.name}`)
-          return { skipped: true }
+          throw new Error(`[worker] Unknown pipeline job: ${job.name}`)
       }
     },
     {

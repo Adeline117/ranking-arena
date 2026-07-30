@@ -1,6 +1,7 @@
 import {
   assertSuccessfulLeaderboardComputeResponse,
   assertSuccessfulMeilisearchSyncResponse,
+  requireWorkerCronSecret,
 } from '../pipeline-response'
 
 describe('pipeline Meilisearch response contract', () => {
@@ -68,5 +69,16 @@ describe('pipeline leaderboard compute response contract', () => {
     expect(() =>
       assertSuccessfulLeaderboardComputeResponse(false, 503, { ok: true }, '90D')
     ).toThrow('returned 503')
+  })
+})
+
+describe('pipeline worker service credential', () => {
+  it.each([undefined, null, '', 'short', '   '])('rejects an unusable CRON_SECRET: %s', (value) => {
+    expect(() => requireWorkerCronSecret(value)).toThrow('missing or invalid')
+  })
+
+  it('returns the exact configured secret without logging or rewriting it', () => {
+    const secret = '0123456789abcdef0123456789abcdef'
+    expect(requireWorkerCronSecret(secret)).toBe(secret)
   })
 })
