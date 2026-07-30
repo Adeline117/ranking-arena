@@ -443,7 +443,10 @@ export const POST = withAuth(
               message: content.slice(0, 100),
               actor_id: user.id,
               link: `/post/${id}`,
-              reference_id: id,
+              // Each committed comment is a distinct business event. Using
+              // the post ID here caused later comments by the same actor in
+              // the one-hour dedup window to disappear from the author's inbox.
+              reference_id: comment.id,
               read: false,
             },
             'Comment notification'
@@ -466,7 +469,7 @@ export const POST = withAuth(
                 message: content.slice(0, 100),
                 actor_id: user.id,
                 link: `/post/${id}`,
-                reference_id: id,
+                reference_id: comment.id,
                 read: false,
               },
               'Reply notification'
