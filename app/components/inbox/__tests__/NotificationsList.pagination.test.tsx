@@ -45,6 +45,7 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
           loading: 'Loading',
           noNotifications: 'No notifications',
           noNotificationsForFilter: 'No notifications in this category',
+          notifications: 'Notifications',
           notifText_new_follower_msg: '{handle} followed you',
           notifText_new_follower_msg_generic: 'Someone followed you',
           notifText_new_follower_title: 'New follower',
@@ -95,13 +96,13 @@ function response(
   } as Response
 }
 
-function renderList() {
+function renderList(variant: 'page' | 'panel' = 'page') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <NotificationsList variant="page" />
+      <NotificationsList variant={variant} />
     </QueryClientProvider>
   )
 }
@@ -210,5 +211,21 @@ describe('NotificationsList server-filtered keyset pages', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load, please retry')
     expect(screen.queryByText('No notifications')).not.toBeInTheDocument()
+  })
+
+  it('exposes the compact panel disclosure as a real accessible button', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(response([notification()])) as unknown as typeof fetch
+    renderList('panel')
+
+    expect(await screen.findByText('Recent system notice')).toBeInTheDocument()
+    const disclosure = screen.getByRole('button', { name: /Notifications/ })
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(disclosure)
+
+    expect(disclosure).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Recent system notice')).not.toBeInTheDocument()
   })
 })

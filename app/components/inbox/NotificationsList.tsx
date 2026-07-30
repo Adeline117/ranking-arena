@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo, useId } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
@@ -252,6 +252,7 @@ export default function NotificationsList({
   variant = 'panel',
 }: { variant?: 'panel' | 'page' } = {}) {
   const isPanel = variant !== 'page'
+  const listId = useId()
   const [typeFilter, setTypeFilter] = useState<NotificationFilter>('all')
   const [collapsed, setCollapsed] = useState(false)
   const effectiveCollapsed = isPanel ? collapsed : false
@@ -505,14 +506,16 @@ export default function NotificationsList({
           }}
         >
           <button
+            type="button"
             onClick={markAllAsRead}
             style={{
-              padding: '4px 8px',
+              minHeight: 40,
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               border: 'none',
               background: 'transparent',
               color: tokens.colors.accent.primary,
-              fontSize: 12,
-              fontWeight: 600,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.semibold,
               cursor: 'pointer',
             }}
           >
@@ -523,17 +526,35 @@ export default function NotificationsList({
       {/* Section header (panel variant only) */}
       {isPanel && (
         <div
-          onClick={() => setCollapsed(!collapsed)}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            cursor: 'pointer',
-            userSelect: 'none',
+            gap: tokens.spacing[2],
+            padding: `0 ${tokens.spacing[4]}`,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          <button
+            type="button"
+            aria-controls={listId}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((previous) => !previous)}
+            style={{
+              minWidth: 0,
+              minHeight: 48,
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+              gap: tokens.spacing[2],
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: 'inherit',
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+          >
             <svg
               width="12"
               height="12"
@@ -541,6 +562,8 @@ export default function NotificationsList({
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
+              aria-hidden="true"
+              focusable="false"
               style={{
                 transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
                 transition: 'transform 0.2s',
@@ -551,7 +574,7 @@ export default function NotificationsList({
             </svg>
             <span
               style={{
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
                 fontSize: tokens.typography.fontSize.sm,
                 color: tokens.colors.text.primary,
               }}
@@ -565,27 +588,26 @@ export default function NotificationsList({
                   borderRadius: tokens.radius.md,
                   background: tokens.colors.accent.primary,
                   color: tokens.colors.white,
-                  fontSize: 11,
-                  fontWeight: 700,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.bold,
                 }}
               >
                 {unreadNotifications}
               </span>
             )}
-          </div>
+          </button>
           {unreadNotifications > 0 && (
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                markAllAsRead()
-              }}
+              type="button"
+              onClick={markAllAsRead}
               style={{
-                padding: '4px 8px',
+                minHeight: 40,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 border: 'none',
                 background: 'transparent',
                 color: tokens.colors.accent.primary,
-                fontSize: 12,
-                fontWeight: 600,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 cursor: 'pointer',
               }}
             >
@@ -600,26 +622,28 @@ export default function NotificationsList({
         <div
           style={{
             display: 'flex',
-            gap: 4,
+            gap: tokens.spacing[1],
             padding: `0 ${tokens.spacing[4]} ${tokens.spacing[2]}`,
             overflowX: 'auto',
           }}
         >
           {(['all', 'follow', 'like', 'comment', 'mention'] as const).map((f) => (
             <button
+              type="button"
               key={f}
+              aria-pressed={typeFilter === f}
               onClick={() => setTypeFilter(f)}
               style={{
-                padding: '3px 10px',
+                minHeight: 40,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.lg,
                 border: 'none',
                 background: typeFilter === f ? tokens.colors.accent.brand : 'transparent',
                 color: typeFilter === f ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
-                fontSize: 11,
-                fontWeight: 600,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                minHeight: 24,
               }}
             >
               {f === 'all' ? t('all') : t(`notifType_${f}`) || f}
@@ -630,7 +654,10 @@ export default function NotificationsList({
 
       {/* Notifications list */}
       {!effectiveCollapsed && (
-        <div style={isPanel ? { maxHeight: 'min(400px, 60vh)', overflowY: 'auto' } : undefined}>
+        <div
+          id={listId}
+          style={isPanel ? { maxHeight: 'min(400px, 60vh)', overflowY: 'auto' } : undefined}
+        >
           {!loading && loadFailed && (
             <div style={{ padding: tokens.spacing[4] }}>
               <ErrorMessage
@@ -641,6 +668,8 @@ export default function NotificationsList({
           )}
           {loading ? (
             <div
+              role="status"
+              aria-label={t('loading')}
               style={{
                 padding: tokens.spacing[3],
                 display: 'flex',
@@ -675,7 +704,7 @@ export default function NotificationsList({
                       style={{
                         width: '70%',
                         height: 14,
-                        borderRadius: 4,
+                        borderRadius: tokens.radius.sm,
                         background: tokens.colors.bg.tertiary,
                         animation: 'shimmer 1.5s ease-in-out infinite',
                         backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
@@ -686,7 +715,7 @@ export default function NotificationsList({
                       style={{
                         width: '50%',
                         height: 12,
-                        borderRadius: 4,
+                        borderRadius: tokens.radius.sm,
                         background: tokens.colors.bg.tertiary,
                         animation: 'shimmer 1.5s ease-in-out infinite',
                         backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
@@ -701,13 +730,18 @@ export default function NotificationsList({
             <div style={{ padding: '24px 12px', textAlign: 'center' }}>
               <Image
                 src="/stickers/gn.webp"
-                alt="No notifications"
+                alt=""
                 width={48}
                 height={48}
                 unoptimized
                 style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }}
               />
-              <p style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
+              <p
+                style={{
+                  fontSize: tokens.typography.fontSize.sm,
+                  color: tokens.colors.text.tertiary,
+                }}
+              >
                 {typeFilter === 'all' ? t('noNotifications') : t('noNotificationsForFilter')}
               </p>
             </div>
@@ -738,7 +772,7 @@ export default function NotificationsList({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 14,
+                      fontSize: tokens.typography.fontSize.base,
                       flexShrink: 0,
                       overflow: 'hidden',
                     }}
@@ -746,7 +780,7 @@ export default function NotificationsList({
                     {notif.actor_avatar_url ? (
                       <Image
                         src={avatarSrc(notif.actor_avatar_url)}
-                        alt={`${notif.actor_handle || 'User'} avatar`}
+                        alt=""
                         width={32}
                         height={32}
                         sizes="32px"
@@ -764,8 +798,8 @@ export default function NotificationsList({
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: 13,
-                        fontWeight: 700,
+                        fontSize: tokens.typography.fontSize.sm,
+                        fontWeight: tokens.typography.fontWeight.bold,
                         color: tokens.colors.text.primary,
                         marginBottom: 2,
                       }}
@@ -774,7 +808,7 @@ export default function NotificationsList({
                     </div>
                     <div
                       style={{
-                        fontSize: 12,
+                        fontSize: tokens.typography.fontSize.xs,
                         color: tokens.colors.text.secondary,
                         marginBottom: 2,
                         overflow: 'hidden',
@@ -784,7 +818,12 @@ export default function NotificationsList({
                     >
                       {localizeNotifMessage(notif, t)}
                     </div>
-                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                    <div
+                      style={{
+                        fontSize: tokens.typography.fontSize.xs,
+                        color: tokens.colors.text.tertiary,
+                      }}
+                    >
                       {formatTimeAgo(notif.created_at, language)}
                     </div>
                   </div>
@@ -798,6 +837,7 @@ export default function NotificationsList({
                         flexShrink: 0,
                         marginTop: 6,
                       }}
+                      aria-hidden="true"
                     />
                   )}
                 </div>
@@ -821,16 +861,18 @@ export default function NotificationsList({
               style={{ textAlign: 'center', padding: `${tokens.spacing[3]} ${tokens.spacing[4]}` }}
             >
               <button
+                type="button"
                 onClick={loadMoreNotifications}
                 disabled={loadingMore}
                 style={{
+                  minHeight: 40,
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                   border: `1px solid ${tokens.colors.border.primary}`,
                   borderRadius: tokens.radius.md,
                   background: 'transparent',
                   color: tokens.colors.text.secondary,
-                  fontSize: 12,
-                  fontWeight: 600,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.semibold,
                   cursor: loadingMore ? 'not-allowed' : 'pointer',
                   opacity: loadingMore ? 0.6 : 1,
                 }}
