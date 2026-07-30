@@ -144,7 +144,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 113)
+  assert.equal(predeploy.length, 114)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -228,6 +228,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260729223000_rerank_public_eligible_rows_only.sql',
           '20260729224000_rank_eligible_leaderboard_count_cache.sql',
           '20260729225000_token_trader_rank_authority.sql',
+          '20260729230000_token_ranking_generation_barrier.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -246,9 +247,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 126)
+  assert.equal(new Set(all).size, 127)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-72), [
+  assert.deepEqual(predeploy.slice(-73), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -321,6 +322,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
+    '20260729230000_token_ranking_generation_barrier.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -397,16 +399,18 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729070500_leaderboard_score_input_manifest_v2.sql'))
   assert.ok(predeploy.includes('20260729071000_leaderboard_metric_trust_projection_v2.sql'))
   assert.ok(predeploy.includes('20260729071500_tier_a_one_phase_commit_guard.sql'))
-  assert.deepEqual(predeploy.slice(-3), [
+  assert.deepEqual(predeploy.slice(-4), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
+    '20260729230000_token_ranking_generation_barrier.sql',
   ])
   assert.ok(!recoveryPrerequisites.includes('20260729223000_rerank_public_eligible_rows_only.sql'))
   assert.ok(
     !recoveryPrerequisites.includes('20260729224000_rank_eligible_leaderboard_count_cache.sql')
   )
   assert.ok(!recoveryPrerequisites.includes('20260729225000_token_trader_rank_authority.sql'))
+  assert.ok(!recoveryPrerequisites.includes('20260729230000_token_ranking_generation_barrier.sql'))
   assert.ok(
     predeploy.includes('20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql')
   )

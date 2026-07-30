@@ -27,7 +27,7 @@ describe('get_token_trader_rankings SQL authority', () => {
   it('returns a deterministic token_rank before limit/offset pagination', () => {
     expect(normalized).toContain('token_rank bigint')
     expect(normalized).toMatch(
-      /row_number\(\) over \(order by totals\.token_pnl desc, totals\.source asc, totals\.source_trader_id asc\)[^,]* as token_rank/
+      /(?:pg_catalog\.)?row_number\(\) over \(\s*order by totals\.token_pnl desc, totals\.source asc, totals\.source_trader_id asc\s*\) as token_rank/
     )
 
     const rankIndex = normalized.indexOf('row_number() over')
@@ -48,7 +48,7 @@ describe('get_token_trader_rankings SQL authority', () => {
     expect(tokenMigrationIndex).toBeGreaterThan(predeployStart)
     expect(tokenMigrationIndex).toBeLessThan(quarantineStart)
     expect(normalized).toContain("notify pgrst, 'reload schema'")
-    expect(normalized).toContain('token trader ranking return contract postflight failed')
+    expect(normalized).toContain('token ranking function authority postflight failed')
     expect(runbook).toContain('/rest/v1/rpc/get_token_trader_rankings')
     expect(runbook).toContain('.[0].token_rank')
   })
