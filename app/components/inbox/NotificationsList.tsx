@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -15,6 +15,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import ErrorMessage from '@/app/components/ui/ErrorMessage'
+import { PERSISTED_NOTIFICATION_TYPES } from '@/lib/types/notification'
 import {
   captureInboxViewer,
   inboxViewerScopeKey,
@@ -23,15 +24,190 @@ import {
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 type Notification = NotificationWithActor
+type NotificationFilter = 'all' | 'follow' | 'like' | 'comment' | 'mention'
+type NotificationCursor = { before: string; beforeId: string }
+type NotificationPage = {
+  notifications: Notification[]
+  nextCursor: NotificationCursor | null
+  unreadCount: number
+}
 
-// U10-2: chip filter → actual stored notification type(s). Producers emit
-// `new_follower` (not `follow`) and `post_reply` (not `comment`), so the naive
-// `n.type === chip` match left the Follows/Comments chips permanently empty.
-const FILTER_TYPE_MAP: Record<string, string[]> = {
-  follow: ['follow', 'new_follower'],
-  like: ['like'],
-  comment: ['comment', 'post_reply'],
-  mention: ['mention'],
+const PAGE_SIZE = 20
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const NOTIFICATION_TYPE_SET = new Set<string>(PERSISTED_NOTIFICATION_TYPES)
+const NOTIFICATION_KEYS = [
+  'actor_avatar_url',
+  'actor_handle',
+  'actor_id',
+  'created_at',
+  'id',
+  'link',
+  'message',
+  'read',
+  'reference_id',
+  'title',
+  'type',
+  'user_id',
+] as const
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const sortedExpected = [...expected].sort()
+  return (
+    actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index])
+  )
+}
+
+function timestampMicros(value: string): number | null {
+  const milliseconds = Date.parse(value)
+  if (!Number.isFinite(milliseconds)) return null
+  const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? ''
+  if (fraction.length > 6) return null
+  return milliseconds * 1000 + Number(fraction.padEnd(6, '0').slice(3, 6))
+}
+
+function comparePosition(
+  left: { created_at: string; id: string },
+  right: { created_at: string; id: string }
+): number | null {
+  const leftTime = timestampMicros(left.created_at)
+  const rightTime = timestampMicros(right.created_at)
+  if (leftTime === null || rightTime === null) return null
+  if (leftTime !== rightTime) return leftTime - rightTime
+  if (left.id === right.id) return 0
+  return left.id < right.id ? -1 : 1
+}
+
+function isSafeNotificationLink(value: string): boolean {
+  return (
+    value.startsWith('/') &&
+    !value.startsWith('//') &&
+    !value.includes('\\') &&
+    !/[\u0000-\u001f\u007f]/.test(value)
+  )
+}
+
+function readNotification(value: unknown, viewerId: string): Notification | null {
+  if (!isRecord(value) || !hasExactKeys(value, NOTIFICATION_KEYS)) return null
+  if (
+    typeof value.id !== 'string' ||
+    !UUID_PATTERN.test(value.id) ||
+    value.user_id !== viewerId ||
+    typeof value.type !== 'string' ||
+    !NOTIFICATION_TYPE_SET.has(value.type) ||
+    typeof value.title !== 'string' ||
+    typeof value.message !== 'string' ||
+    !(
+      value.link === null ||
+      (typeof value.link === 'string' && isSafeNotificationLink(value.link))
+    ) ||
+    typeof value.read !== 'boolean' ||
+    !(
+      value.actor_id === null ||
+      (typeof value.actor_id === 'string' && UUID_PATTERN.test(value.actor_id))
+    ) ||
+    !(value.reference_id === null || typeof value.reference_id === 'string') ||
+    typeof value.created_at !== 'string' ||
+    timestampMicros(value.created_at) === null ||
+    !(value.actor_handle === null || typeof value.actor_handle === 'string') ||
+    !(value.actor_avatar_url === null || typeof value.actor_avatar_url === 'string') ||
+    (value.actor_id === null && (value.actor_handle !== null || value.actor_avatar_url !== null))
+  ) {
+    return null
+  }
+
+  return {
+    id: value.id,
+    user_id: viewerId,
+    type: value.type as Notification['type'],
+    title: value.title,
+    message: value.message,
+    link: value.link,
+    read: value.read,
+    actor_id: value.actor_id,
+    reference_id: value.reference_id,
+    created_at: value.created_at,
+    actor_handle: value.actor_handle ?? undefined,
+    actor_avatar_url: value.actor_avatar_url,
+  }
+}
+
+function readNotificationPage(
+  value: unknown,
+  viewerId: string,
+  requestCursor: NotificationCursor | null
+): NotificationPage | null {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['notifications', 'next_cursor', 'unread_count']) ||
+    !Array.isArray(value.notifications) ||
+    value.notifications.length > PAGE_SIZE ||
+    typeof value.unread_count !== 'number' ||
+    !Number.isSafeInteger(value.unread_count) ||
+    value.unread_count < 0
+  ) {
+    return null
+  }
+
+  let nextCursor: NotificationCursor | null = null
+  if (value.next_cursor !== null) {
+    if (
+      !isRecord(value.next_cursor) ||
+      !hasExactKeys(value.next_cursor, ['before', 'before_id']) ||
+      typeof value.next_cursor.before !== 'string' ||
+      timestampMicros(value.next_cursor.before) === null ||
+      typeof value.next_cursor.before_id !== 'string' ||
+      !UUID_PATTERN.test(value.next_cursor.before_id)
+    ) {
+      return null
+    }
+    nextCursor = {
+      before: value.next_cursor.before,
+      beforeId: value.next_cursor.before_id,
+    }
+  }
+
+  if (nextCursor !== null && value.notifications.length !== PAGE_SIZE) return null
+
+  const notifications: Notification[] = []
+  const notificationIds = new Set<string>()
+  for (const candidate of value.notifications) {
+    const notification = readNotification(candidate, viewerId)
+    if (!notification || notificationIds.has(notification.id)) return null
+    notificationIds.add(notification.id)
+
+    const previous = notifications.at(-1)
+    if (previous) {
+      const order = comparePosition(previous, notification)
+      if (order === null || order <= 0) return null
+    }
+    if (requestCursor) {
+      const cursorOrder = comparePosition(notification, {
+        id: requestCursor.beforeId,
+        created_at: requestCursor.before,
+      })
+      if (cursorOrder === null || cursorOrder >= 0) return null
+    }
+    notifications.push(notification)
+  }
+
+  if (nextCursor !== null) {
+    const last = notifications.at(-1)
+    if (!last || nextCursor.before !== last.created_at || nextCursor.beforeId !== last.id) {
+      return null
+    }
+  }
+
+  return {
+    notifications,
+    nextCursor,
+    unreadCount: value.unread_count,
+  }
 }
 
 // U10-4: notification title/message are stored as English in the DB. Localize at
@@ -76,12 +252,9 @@ export default function NotificationsList({
   variant = 'panel',
 }: { variant?: 'panel' | 'page' } = {}) {
   const isPanel = variant !== 'page'
-  const [typeFilter, setTypeFilter] = useState<'all' | 'follow' | 'like' | 'comment' | 'mention'>(
-    'all'
-  )
+  const [typeFilter, setTypeFilter] = useState<NotificationFilter>('all')
   const [collapsed, setCollapsed] = useState(false)
   const effectiveCollapsed = isPanel ? collapsed : false
-  const PAGE_SIZE = 20
   const auth = useAuthSession()
   const authRef = useRef(auth)
   authRef.current = auth
@@ -96,6 +269,7 @@ export default function NotificationsList({
   )
   const { showToast } = useToast()
   const { t, language } = useLanguage()
+  const queryClient = useQueryClient()
   // 用于防止重复请求和回滚
   const pendingMarkAllRef = useRef<string | null>(null)
   const pendingMarkRef = useRef<Set<string>>(new Set())
@@ -114,13 +288,27 @@ export default function NotificationsList({
     isError: loadFailed,
     refetch: refetchNotifications,
   } = useInfiniteQuery({
-    queryKey: ['notifications', viewer?.viewerKey ?? 'inactive', viewer?.sessionGeneration ?? -1],
-    queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
+    queryKey: [
+      'notifications',
+      viewer?.viewerKey ?? 'inactive',
+      viewer?.sessionGeneration ?? -1,
+      typeFilter,
+    ],
+    queryFn: async ({ pageParam }) => {
       if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) {
         throw new Error('stale inbox viewer')
       }
+      const cursor = pageParam as NotificationCursor | null
+      const parameters = new URLSearchParams({
+        filter: typeFilter,
+        limit: String(PAGE_SIZE),
+      })
+      if (cursor) {
+        parameters.set('cursor', cursor.before)
+        parameters.set('cursorId', cursor.beforeId)
+      }
       const result = await authedFetch<unknown>(
-        `/api/notifications?offset=${pageParam}&limit=${PAGE_SIZE}`,
+        `/api/notifications?${parameters.toString()}`,
         'GET',
         viewer.accessToken,
         undefined,
@@ -133,28 +321,12 @@ export default function NotificationsList({
       if (!result.ok || result.stale || !isInboxViewerCurrent(viewer, authRef.current)) {
         throw new Error(`HTTP ${result.status}`)
       }
-      const envelope = result.data
-      const data =
-        envelope && typeof envelope === 'object' && 'data' in envelope
-          ? (envelope as { data?: unknown }).data
-          : envelope
-      if (!data || typeof data !== 'object') throw new Error('Invalid notifications response')
-      const record = data as Record<string, unknown>
-      if (!Array.isArray(record.notifications)) throw new Error('Invalid notifications response')
-      return {
-        notifications: record.notifications as Notification[],
-        unread_count:
-          typeof record.unread_count === 'number' && Number.isFinite(record.unread_count)
-            ? Math.max(0, Math.floor(record.unread_count))
-            : 0,
-        hasMore: record.notifications.length >= PAGE_SIZE,
-      }
+      const page = readNotificationPage(result.data, viewer.userId, cursor)
+      if (!page) throw new Error('Invalid notifications response')
+      return page
     },
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) => {
-      if (!lastPage.hasMore) return undefined
-      return allPages.reduce((sum, p) => sum + p.notifications.length, 0)
-    },
+    initialPageParam: null as NotificationCursor | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: Boolean(viewer),
     staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
@@ -168,28 +340,17 @@ export default function NotificationsList({
   const [notifications, setNotifications] = useViewerOwnedState<Notification[]>(
     [],
     () => [],
-    scopeKey
+    `${scopeKey}\u0000${typeFilter}`
   )
   useEffect(() => {
     setNotifications(fetchedNotifications)
-  }, [fetchedNotifications, scopeKey, setNotifications])
+  }, [fetchedNotifications, scopeKey, setNotifications, typeFilter])
   const hasMore = hasNextPage ?? false
-
-  // U10-2/U10-3: filter by the chip using the type map, and drive the empty
-  // state off the *filtered* result so an empty category shows a message
-  // instead of a blank pane.
-  const filtered = useMemo(
-    () =>
-      notifications.filter(
-        (n) => typeFilter === 'all' || (FILTER_TYPE_MAP[typeFilter]?.includes(n.type) ?? false)
-      ),
-    [notifications, typeFilter]
-  )
 
   // Sync unread count from first page
   useEffect(() => {
     if (viewer && notifData?.pages[0] && isInboxViewerCurrent(viewer, authRef.current)) {
-      setUnreadNotifications(viewer, notifData.pages[0].unread_count)
+      setUnreadNotifications(viewer, notifData.pages[0].unreadCount)
     }
   }, [notifData, scopeKey, setUnreadNotifications, viewer])
 
@@ -233,6 +394,10 @@ export default function NotificationsList({
       if (!result.ok) {
         throw new Error(`Failed to mark all as read: ${result.status}`)
       }
+      await queryClient.invalidateQueries({
+        queryKey: ['notifications', operation.viewerKey, operation.sessionGeneration],
+        refetchType: 'none',
+      })
     } catch {
       if (!isInboxViewerCurrent(operation, authRef.current)) return
       // Delta rollback: only restore read=false for IDs that were unread before
@@ -244,6 +409,7 @@ export default function NotificationsList({
     }
   }, [
     notifications,
+    queryClient,
     setNotifications,
     setUnreadNotifications,
     showToast,
@@ -269,7 +435,11 @@ export default function NotificationsList({
 
       // Optimistic update (delta-based)
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
-      setUnreadNotifications(operation, Math.max(0, unreadNotifications - 1))
+      const currentUnreadCount = selectScopedUnreadNotifications(
+        useInboxStore.getState(),
+        operation
+      )
+      setUnreadNotifications(operation, Math.max(0, currentUnreadCount - 1))
 
       try {
         const result = await authedFetch(
@@ -287,6 +457,10 @@ export default function NotificationsList({
         if (!result.ok) {
           throw new Error(`Failed to mark as read: ${result.status}`)
         }
+        await queryClient.invalidateQueries({
+          queryKey: ['notifications', operation.viewerKey, operation.sessionGeneration],
+          refetchType: 'none',
+        })
       } catch {
         if (!isInboxViewerCurrent(operation, authRef.current)) return
         // Delta rollback: reverse the -1 from current state
@@ -298,15 +472,7 @@ export default function NotificationsList({
         pendingMarkRef.current.delete(pendingKey)
       }
     },
-    [
-      notifications,
-      setNotifications,
-      setUnreadNotifications,
-      showToast,
-      t,
-      unreadNotifications,
-      viewer,
-    ]
+    [notifications, queryClient, setNotifications, setUnreadNotifications, showToast, t, viewer]
   )
 
   function getIcon(type: string): string {
@@ -531,7 +697,7 @@ export default function NotificationsList({
                 </div>
               ))}
             </div>
-          ) : loadFailed && notifications.length === 0 ? null : filtered.length === 0 ? (
+          ) : loadFailed && notifications.length === 0 ? null : notifications.length === 0 ? (
             <div style={{ padding: '24px 12px', textAlign: 'center' }}>
               <Image
                 src="/stickers/gn.webp"
@@ -546,7 +712,7 @@ export default function NotificationsList({
               </p>
             </div>
           ) : (
-            filtered.map((notif) => {
+            notifications.map((notif) => {
               const content = (
                 <div
                   key={notif.id}

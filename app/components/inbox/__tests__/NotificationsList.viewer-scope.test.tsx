@@ -10,6 +10,10 @@ import {
 import { selectScopedUnreadNotifications, useInboxStore } from '@/lib/stores/inboxStore'
 import type { AuthSessionReturn } from '@/lib/hooks/useAuthSession'
 
+const VIEWER_A = '11111111-1111-4111-8111-111111111111'
+const VIEWER_B = '22222222-2222-4222-8222-222222222222'
+const NOTICE_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => {
@@ -88,8 +92,8 @@ describe('NotificationsList viewer ownership', () => {
   })
 
   it('hides A immediately and rejects A mark-read completion after B takes over', async () => {
-    const scopeA = synchronizeViewerScope(true, 'user-a')
-    currentAuth = authFor('user-a', scopeA.sessionGeneration)
+    const scopeA = synchronizeViewerScope(true, VIEWER_A)
+    currentAuth = authFor(VIEWER_A, scopeA.sessionGeneration)
     const putA = deferred<{
       ok: boolean
       status: number
@@ -110,18 +114,22 @@ describe('NotificationsList viewer ownership', () => {
                     {
                       actor_avatar_url: null,
                       actor_handle: null,
+                      actor_id: null,
                       created_at: '2026-07-28T12:00:00.000Z',
-                      id: 'notice-a',
+                      id: NOTICE_A,
                       link: null,
                       message: 'Private A content',
                       read: false,
+                      reference_id: null,
                       title: 'A notice',
                       type: 'system',
+                      user_id: VIEWER_A,
                     },
                   ],
+                  next_cursor: null,
                   unread_count: 1,
                 }
-              : { notifications: [], unread_count: 5 },
+              : { notifications: [], next_cursor: null, unread_count: 5 },
         } as Response
       }
       return putA.promise as Promise<Response>
@@ -139,9 +147,9 @@ describe('NotificationsList viewer ownership', () => {
     expect(await screen.findByText('A notice')).toBeInTheDocument()
     fireEvent.click(screen.getByText('A notice'))
 
-    const transition = beginViewerTransition('user-b')
-    const scopeB = commitViewerTransition(transition, 'user-b')!
-    currentAuth = authFor('user-b', scopeB.sessionGeneration)
+    const transition = beginViewerTransition(VIEWER_B)
+    const scopeB = commitViewerTransition(transition, VIEWER_B)!
+    currentAuth = authFor(VIEWER_B, scopeB.sessionGeneration)
     view.rerender(
       <QueryClientProvider client={queryClient}>
         <NotificationsList variant="page" />
@@ -153,7 +161,7 @@ describe('NotificationsList viewer ownership', () => {
       expect(selectScopedUnreadNotifications(useInboxStore.getState(), scopeB)).toBe(5)
     )
     expect(
-      queryClient.getQueryData(['notifications', scopeB.viewerKey, scopeB.sessionGeneration])
+      queryClient.getQueryData(['notifications', scopeB.viewerKey, scopeB.sessionGeneration, 'all'])
     ).toBeDefined()
 
     putA.resolve({

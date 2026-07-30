@@ -75,7 +75,7 @@ describe('NotificationsList load failure', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ notifications: [], unread_count: 0 }),
+        json: async () => ({ notifications: [], next_cursor: null, unread_count: 0 }),
       })
     global.fetch = fetchMock as unknown as typeof fetch
 
