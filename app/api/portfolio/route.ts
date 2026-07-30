@@ -79,7 +79,9 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('user_portfolios')
-      .select('id, exchange, label, created_at, is_active')
+      .select(
+        'id, exchange, label, created_at, is_active, current_equity, current_pnl, current_equity_generation'
+      )
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 

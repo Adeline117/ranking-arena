@@ -197,6 +197,10 @@ const connectedPortfolio = {
   exchange: 'binance',
   label: 'Main account',
   created_at: '2026-07-17T00:00:00.000Z',
+  is_active: true,
+  current_equity: 200,
+  current_pnl: 20,
+  current_equity_generation: 1,
 }
 
 function position(markPrice: number) {
@@ -332,7 +336,16 @@ describe('PortfolioPage load state', () => {
         return Promise.resolve(response({ error: 'Service unavailable' }, 503))
       }
       if (url === '/api/portfolio') {
-        return Promise.resolve(response({ data: [connectedPortfolio] }))
+        return Promise.resolve(
+          response({
+            data: [
+              {
+                ...connectedPortfolio,
+                current_equity: mode === 'recovered' ? 300 : 200,
+              },
+            ],
+          })
+        )
       }
       if (url === '/api/portfolio/positions') {
         return Promise.resolve(response({ data: [position(mode === 'recovered' ? 150 : 100)] }))

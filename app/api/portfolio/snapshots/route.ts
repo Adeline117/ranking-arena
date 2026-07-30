@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
       .from('user_portfolio_snapshots')
       .select('portfolio_id, total_equity, total_pnl, snapshot_at')
       .in('portfolio_id', portfolioIds)
+      .eq('snapshot_source', 'exchange_sync')
       .order('snapshot_at', { ascending: true })
 
     if (error) throw error

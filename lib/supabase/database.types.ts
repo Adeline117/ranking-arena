@@ -9513,6 +9513,7 @@ export type Database = {
         Row: {
           id: string
           portfolio_id: string
+          snapshot_source: string
           snapshot_at: string
           total_equity: number
           total_pnl: number
@@ -9521,6 +9522,7 @@ export type Database = {
         Insert: {
           id?: string
           portfolio_id: string
+          snapshot_source?: string
           snapshot_at?: string
           total_equity?: number
           total_pnl?: number
@@ -9529,6 +9531,7 @@ export type Database = {
         Update: {
           id?: string
           portfolio_id?: string
+          snapshot_source?: string
           snapshot_at?: string
           total_equity?: number
           total_pnl?: number
@@ -9551,6 +9554,11 @@ export type Database = {
           api_secret_encrypted: string
           credential_generation: number
           created_at: string
+          current_equity: number | null
+          current_equity_at: string | null
+          current_equity_generation: number
+          current_pnl: number | null
+          current_pnl_pct: number | null
           exchange: string
           id: string
           is_active: boolean
@@ -9568,6 +9576,11 @@ export type Database = {
           api_secret_encrypted: string
           credential_generation?: number
           created_at?: string
+          current_equity?: number | null
+          current_equity_at?: string | null
+          current_equity_generation?: number
+          current_pnl?: number | null
+          current_pnl_pct?: number | null
           exchange: string
           id?: string
           is_active?: boolean
@@ -9585,6 +9598,11 @@ export type Database = {
           api_secret_encrypted?: string
           credential_generation?: number
           created_at?: string
+          current_equity?: number | null
+          current_equity_at?: string | null
+          current_equity_generation?: number
+          current_pnl?: number | null
+          current_pnl_pct?: number | null
           exchange?: string
           id?: string
           is_active?: boolean

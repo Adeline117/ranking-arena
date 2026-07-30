@@ -7,6 +7,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 PUBLICATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260729057000_atomic_portfolio_sync_publication.sql"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260729170500_portfolio_account_lifecycle.sql"
+EQUITY_MIGRATION="$ROOT_DIR/supabase/migrations/20260729172500_portfolio_exchange_equity_projection.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -504,6 +505,19 @@ expect_value \
   "SELECT is_active::text || '|' || credential_generation::text
    FROM public.user_portfolios WHERE id = '$PORTFOLIO_ID';"
 
+psql_cmd -f "$EQUITY_MIGRATION" >/dev/null
+psql_cmd -f "$EQUITY_MIGRATION" >/dev/null
+expect_value \
+  "equity migration replay preserves legacy provenance without backfill" \
+  "0|legacy_unverified" \
+  "SELECT portfolio.current_equity_generation::text || '|' ||
+          (SELECT snapshot_source
+           FROM public.user_portfolio_snapshots
+           WHERE portfolio_id = '$LEGACY_PORTFOLIO_ID'
+           LIMIT 1)
+   FROM public.user_portfolios AS portfolio
+   WHERE portfolio.id = '$PORTFOLIO_ID';"
+
 expect_value \
   "claim returns the exact active credential generation" \
   "claimed|1|1|bybit|true" \
@@ -652,6 +666,59 @@ expect_value \
        '$POSITIONS'::jsonb, 500, 2, 0.4
      ) AS result
    ) AS published;"
+expect_value \
+  "published exchange balance owns the current equity projection" \
+  "500|2|0.4|1|true|exchange_sync" \
+  "SELECT portfolio.current_equity::text || '|' ||
+          portfolio.current_pnl::text || '|' ||
+          portfolio.current_pnl_pct::text || '|' ||
+          portfolio.current_equity_generation::text || '|' ||
+          (portfolio.current_equity_at = portfolio.last_synced_at)::text || '|' ||
+          (SELECT snapshot.snapshot_source
+           FROM public.user_portfolio_snapshots AS snapshot
+           WHERE snapshot.portfolio_id = portfolio.id
+             AND snapshot.snapshot_at = portfolio.current_equity_at)
+   FROM public.user_portfolios AS portfolio
+   WHERE portfolio.id = '$PORTFOLIO_ID';"
+
+expect_value \
+  "newer sync claims without discarding last-good equity" \
+  "2|1|500" \
+  "SELECT (result ->> 'generation') || '|' ||
+          (result ->> 'credential_generation') || '|' ||
+          portfolio.current_equity::text
+   FROM (
+     SELECT public.claim_portfolio_sync_generation_atomic(
+       '$USER_ID', '$PORTFOLIO_ID'
+     ) AS result
+   ) AS claimed
+   CROSS JOIN public.user_portfolios AS portfolio
+   WHERE portfolio.id = '$PORTFOLIO_ID';"
+expect_value \
+  "consecutive publication advances the exact equity generation atomically" \
+  "published" \
+  "SELECT public.publish_active_portfolio_sync_atomic(
+    '$USER_ID', '$PORTFOLIO_ID', 2, 1,
+    pg_catalog.date_trunc('milliseconds', pg_catalog.clock_timestamp()),
+    '$POSITIONS'::jsonb, 550, 3, 0.5454545454545455
+  ) ->> 'status';"
+expect_value \
+  "consecutive publication committed the new projection" \
+  "550|2|2" \
+  "SELECT current_equity::text || '|' ||
+          current_equity_generation::text || '|' ||
+          published_sync_generation::text
+   FROM public.user_portfolios
+   WHERE id = '$PORTFOLIO_ID';"
+expect_failure \
+  "deferred equity constraint rejects a committed generation lag" \
+  "UPDATE public.user_portfolios
+   SET sync_generation = 3,
+       published_sync_generation = 3,
+       last_synced_at = last_synced_at + pg_catalog.make_interval(secs => 1)
+   WHERE id = '$PORTFOLIO_ID';" \
+  postgres \
+  service_role
 
 # Save-first race: the save holds the profile lock through commit. The ban then
 # wins in serialized order and the quiescence trigger invalidates the new fence.
@@ -680,10 +747,16 @@ psql_cmd -qc "
 wait "$SAVE_FIRST_PID"
 expect_value \
   "save-first concurrent ban converges inactive" \
-  "false|2" \
-  "SELECT is_active::text || '|' || credential_generation::text
-   FROM public.user_portfolios
-   WHERE user_id = '$USER_ID' AND label = 'Concurrent';"
+  "false|2|0|true" \
+  "SELECT concurrent.is_active::text || '|' ||
+          concurrent.credential_generation::text || '|' ||
+          current_portfolio.current_equity_generation::text || '|' ||
+          (current_portfolio.current_equity IS NULL)::text
+   FROM public.user_portfolios AS concurrent
+   CROSS JOIN public.user_portfolios AS current_portfolio
+   WHERE concurrent.user_id = '$USER_ID'
+     AND concurrent.label = 'Concurrent'
+     AND current_portfolio.id = '$PORTFOLIO_ID';"
 
 # Ban-first race: the save waits for the profile writer, then observes the
 # committed inactive state and cannot reactivate or replace the credential.

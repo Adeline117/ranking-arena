@@ -27,6 +27,7 @@ import {
   type ExchangeViewerSnapshot,
 } from '@/lib/exchange/viewer-scope'
 import { logger } from '@/lib/logger'
+import { summarizePortfolioCurrentEquity } from '@/lib/portfolio/current-equity'
 
 interface Portfolio {
   id: string
@@ -34,6 +35,9 @@ interface Portfolio {
   label: string
   created_at: string
   is_active: boolean
+  current_equity: number | string | null
+  current_pnl: number | string | null
+  current_equity_generation: number | string
 }
 
 interface Position {
@@ -388,10 +392,10 @@ function PortfolioPageContent({
     }
   }
 
-  // Totals from positions
-  const totalPnl = positions.reduce((sum, p) => sum + Number(p.pnl), 0)
-  const totalEquity = positions.reduce((sum, p) => sum + Number(p.size) * Number(p.mark_price), 0)
-  const totalPnlPct = totalEquity > 0 ? (totalPnl / totalEquity) * 100 : 0
+  // Account equity comes only from the exchange balance committed by the same
+  // lifecycle-fenced transaction as the visible position generation. Position
+  // size × mark price is leveraged exposure, not the user's account balance.
+  const { totalEquity, totalPnl, totalPnlPct } = summarizePortfolioCurrentEquity(portfolios)
   const isInitialLoad = loading && !hasSuccessfulLoad
 
   return (
