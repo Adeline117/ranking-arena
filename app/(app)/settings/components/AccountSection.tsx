@@ -27,6 +27,39 @@ type ExportOperation = {
   controller: AbortController
 }
 
+type ExportResponseMetadata = {
+  byteLength: number
+  fileName: string
+}
+
+const EXPORT_FILE_NAME_PATTERN = /^ranking-arena-export-\d{4}-\d{2}-\d{2}\.json$/
+
+function readExportResponseMetadata(
+  response: Response,
+  expectedUserId: string
+): ExportResponseMetadata | null {
+  const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  const subject = response.headers.get('x-arena-export-subject')
+  const schema = response.headers.get('x-arena-export-schema')
+  const rawByteLength = response.headers.get('x-arena-export-bytes')
+  const disposition = response.headers.get('content-disposition')
+  const fileNameMatch = disposition?.match(/^attachment;\s*filename="([^"]+)"$/i)
+  if (
+    contentType !== 'application/json' ||
+    subject !== expectedUserId ||
+    schema !== '1' ||
+    !rawByteLength ||
+    !/^[1-9]\d*$/.test(rawByteLength) ||
+    !fileNameMatch ||
+    !EXPORT_FILE_NAME_PATTERN.test(fileNameMatch[1])
+  ) {
+    return null
+  }
+
+  const byteLength = Number(rawByteLength)
+  return Number.isSafeInteger(byteLength) ? { byteLength, fileName: fileNameMatch[1] } : null
+}
+
 function exportScopeKey(
   viewer: SettingsViewerSnapshot | null,
   fallback: { viewerKey: string; sessionGeneration: number }
@@ -141,14 +174,26 @@ export const AccountSection = React.memo(function AccountSection({
         toastRef.current(error, 'error')
         return
       }
+      const metadata = readExportResponseMetadata(res, operation.viewer.userId)
+      if (!metadata) {
+        toastRef.current(tRef.current('operationFailed'), 'error')
+        return
+      }
       const blob = await res.blob()
       if (!operationIsCurrent(operation)) return
+      if (
+        blob.size !== metadata.byteLength ||
+        blob.type.split(';', 1)[0]?.trim().toLowerCase() !== 'application/json'
+      ) {
+        toastRef.current(tRef.current('operationFailed'), 'error')
+        return
+      }
       const url = URL.createObjectURL(blob)
       try {
         if (!operationIsCurrent(operation)) return
         const a = document.createElement('a')
         a.href = url
-        a.download = `arena-data-export-${new Date().toISOString().slice(0, 10)}.json`
+        a.download = metadata.fileName
         document.body.appendChild(a)
         try {
           if (!operationIsCurrent(operation)) return

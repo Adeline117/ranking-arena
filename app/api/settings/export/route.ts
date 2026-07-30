@@ -1271,11 +1271,15 @@ export async function POST(request: NextRequest) {
     // Serialize and construct the response before consuming the durable
     // cooldown. Then atomically claim it; concurrent requests may both read,
     // but only one can return a download.
-    const response = new NextResponse(JSON.stringify(exportData, null, 2), {
+    const serializedExport = JSON.stringify(exportData, null, 2)
+    const response = new NextResponse(serializedExport, {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
         'Content-Disposition': `attachment; filename="ranking-arena-export-${exportData.exportedAt.slice(0, 10)}.json"`,
+        'X-Arena-Export-Subject': user.id,
+        'X-Arena-Export-Schema': exportData.manifest.schema_version,
+        'X-Arena-Export-Bytes': String(new TextEncoder().encode(serializedExport).byteLength),
         'Cache-Control': 'private, no-store, max-age=0',
         Pragma: 'no-cache',
         'X-Content-Type-Options': 'nosniff',

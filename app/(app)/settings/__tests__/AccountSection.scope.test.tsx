@@ -105,6 +105,20 @@ function renderSection() {
   return render(<AccountSection onLogout={jest.fn()} onDeleteAccount={jest.fn()} />)
 }
 
+function jsonBlob(contents: string): Blob {
+  return new Blob([contents], { type: 'application/json' })
+}
+
+function exportHeaders(userId: string, blob: Blob): Headers {
+  return new Headers({
+    'Content-Type': 'application/json',
+    'Content-Disposition': 'attachment; filename="ranking-arena-export-2026-07-29.json"',
+    'X-Arena-Export-Subject': userId,
+    'X-Arena-Export-Schema': '1',
+    'X-Arena-Export-Bytes': String(blob.size),
+  })
+}
+
 function switchToUserB(rerender: () => void) {
   const transition = beginViewerTransition('user-b')
   const scopeB = commitViewerTransition(transition, 'user-b')!
@@ -137,10 +151,12 @@ describe('AccountSection export viewer ownership', () => {
   })
 
   it('drops a late A export and fails empty immediately after switching to B', async () => {
+    const exportA = jsonBlob('{"profile":{"id":"user-a"}}')
     const blobA = deferred<Blob>()
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
+      headers: exportHeaders('user-a', exportA),
       blob: () => blobA.promise,
       json: () => Promise.resolve({}),
     })
@@ -172,7 +188,7 @@ describe('AccountSection export viewer ownership', () => {
     expect((request[1] as RequestInit).signal?.aborted).toBe(true)
 
     await act(async () => {
-      blobA.resolve(new Blob(['private user A export']))
+      blobA.resolve(exportA)
     })
 
     expect(mockCreateObjectURL).not.toHaveBeenCalled()
@@ -211,12 +227,14 @@ describe('AccountSection export viewer ownership', () => {
     expect(signal?.aborted).toBe(true)
 
     await act(async () => {
+      const exportA = jsonBlob('{"profile":{"id":"user-a"}}')
       response.resolve({
         ok: true,
         status: 200,
-        blob: () => Promise.resolve(new Blob(['private export'])),
+        headers: exportHeaders('user-a', exportA),
+        blob: () => Promise.resolve(exportA),
         json: () => Promise.resolve({}),
-      })
+      } as never)
     })
 
     expect(anchorClickSpy).not.toHaveBeenCalled()
@@ -235,10 +253,12 @@ describe('AccountSection export viewer ownership', () => {
   })
 
   it('aborts an in-flight export on invalid auth and does not restore stale busy state', async () => {
+    const exportA = jsonBlob('{"profile":{"id":"user-a"}}')
     const blobA = deferred<Blob>()
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
+      headers: exportHeaders('user-a', exportA),
       blob: () => blobA.promise,
       json: () => Promise.resolve({}),
     })
@@ -265,7 +285,7 @@ describe('AccountSection export viewer ownership', () => {
     expect(screen.getByRole('button', { name: 'exportData' })).not.toBeDisabled()
 
     await act(async () => {
-      blobA.resolve(new Blob(['private user A export']))
+      blobA.resolve(exportA)
     })
 
     expect(mockCreateObjectURL).not.toHaveBeenCalled()
@@ -273,11 +293,50 @@ describe('AccountSection export viewer ownership', () => {
     expect(mockShowToast).not.toHaveBeenCalled()
   })
 
-  it('downloads and reports success only for the still-current viewer', async () => {
-    const blob = new Blob(['current viewer export'])
+  it('rejects a 200 export response attested for another account', async () => {
+    const blob = jsonBlob('{"profile":{"id":"user-b"}}')
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
+      headers: exportHeaders('user-b', blob),
+      blob: () => Promise.resolve(blob),
+      json: () => Promise.resolve({}),
+    })
+    renderSection()
+
+    fireEvent.click(screen.getByRole('button', { name: 'exportData' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error'))
+    expect(mockCreateObjectURL).not.toHaveBeenCalled()
+    expect(anchorClickSpy).not.toHaveBeenCalled()
+  })
+
+  it('rejects a truncated export whose blob size differs from the server manifest', async () => {
+    const blob = jsonBlob('{"profile":{"id":"user-a"}}')
+    const headers = exportHeaders('user-a', blob)
+    headers.set('X-Arena-Export-Bytes', String(blob.size + 10))
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers,
+      blob: () => Promise.resolve(blob),
+      json: () => Promise.resolve({}),
+    })
+    renderSection()
+
+    fireEvent.click(screen.getByRole('button', { name: 'exportData' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error'))
+    expect(mockCreateObjectURL).not.toHaveBeenCalled()
+    expect(anchorClickSpy).not.toHaveBeenCalled()
+  })
+
+  it('downloads and reports success only for the still-current viewer', async () => {
+    const blob = jsonBlob('{"profile":{"id":"user-a"}}')
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: exportHeaders('user-a', blob),
       blob: () => Promise.resolve(blob),
       json: () => Promise.resolve({}),
     })

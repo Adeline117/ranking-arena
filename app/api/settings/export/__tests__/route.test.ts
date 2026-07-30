@@ -898,6 +898,15 @@ describe('POST /api/settings/export', () => {
     expect(mockFetchAllExportRowsForUuidParents).toHaveBeenCalledTimes(1)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
+    expect(response.headers.get('Content-Disposition')).toMatch(
+      /^attachment; filename="ranking-arena-export-\d{4}-\d{2}-\d{2}\.json"$/
+    )
+    expect(response.headers.get('Content-Type')).toBe('application/json')
+    expect(response.headers.get('X-Arena-Export-Subject')).toBe(USER_ID)
+    expect(response.headers.get('X-Arena-Export-Schema')).toBe('1')
+    expect(response.headers.get('X-Arena-Export-Bytes')).toBe(
+      String(new TextEncoder().encode(JSON.stringify(body, null, 2)).byteLength)
+    )
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
     expect(response.headers.get('Pragma')).toBe('no-cache')
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
