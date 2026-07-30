@@ -74,6 +74,14 @@ describe('checkContract', () => {
     mockGetBytecode.mockRejectedValue(new Error('rpc down'))
     expect(await checkContract('0xabc', 42161)).toBeNull()
   })
+
+  it('调用方取消时立即返回 null,不启动 RPC', async () => {
+    const controller = new AbortController()
+    controller.abort(new Error('job deadline'))
+
+    expect(await checkContract('0xabc', 42161, controller.signal)).toBeNull()
+    expect(mockGetBytecode).not.toHaveBeenCalled()
+  })
 })
 
 describe('isBotContract — 100 字节阈值', () => {
@@ -108,5 +116,15 @@ describe('batchCheckContracts', () => {
     expect(r.get('0x1')).toEqual({ isContract: true, bytecodeSize: 200 })
     expect(r.get('0x2')).toBeNull()
     expect(r.get('0x3')).toEqual({ isContract: false, bytecodeSize: 0 })
+  })
+
+  it('批处理在截止信号已取消时不启动或伪造剩余 RPC 结果', async () => {
+    const controller = new AbortController()
+    controller.abort(new Error('job deadline'))
+
+    const r = await batchCheckContracts(['0x1', '0x2'], 42161, 20, controller.signal)
+
+    expect(r.size).toBe(0)
+    expect(mockGetBytecode).not.toHaveBeenCalled()
   })
 })

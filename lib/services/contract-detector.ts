@@ -77,6 +77,34 @@ export interface ContractCheckResult {
   bytecodeSize: number // 0 for EOA
 }
 
+function abortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error('Contract check aborted')
+}
+
+async function withAbortSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) throw abortError(signal)
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup()
+      reject(abortError(signal))
+    }
+    const cleanup = () => signal.removeEventListener('abort', onAbort)
+
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(
+      (value) => {
+        cleanup()
+        resolve(value)
+      },
+      (error) => {
+        cleanup()
+        reject(error)
+      }
+    )
+  })
+}
+
 // ── Public API ──
 
 /**
@@ -92,17 +120,18 @@ export function getChainForPlatform(platform: string): number | null {
  */
 export async function checkContract(
   address: string,
-  chainId: number
+  chainId: number,
+  signal?: AbortSignal
 ): Promise<ContractCheckResult | null> {
   try {
+    if (signal?.aborted) throw abortError(signal)
     const client = getClient(chainId)
-    // 5s timeout to prevent slow public RPCs from blocking the batch
-    const bytecode = await Promise.race([
+    const timeoutSignal = AbortSignal.timeout(5_000)
+    const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+    const bytecode = await withAbortSignal(
       client.getBytecode({ address: address as Address }),
-      new Promise<undefined>((_, reject) =>
-        setTimeout(() => reject(new Error('RPC timeout (5s)')), 5000)
-      ),
-    ])
+      requestSignal
+    )
     if (bytecode == null || bytecode === '0x' || bytecode.length <= 2) {
       return { isContract: false, bytecodeSize: 0 }
     }
@@ -128,17 +157,22 @@ export function isBotContract(result: ContractCheckResult): boolean {
 export async function batchCheckContracts(
   addresses: string[],
   chainId: number,
-  concurrency = 20
+  concurrency = 20,
+  signal?: AbortSignal
 ): Promise<Map<string, ContractCheckResult | null>> {
   const results = new Map<string, ContractCheckResult | null>()
   if (addresses.length === 0) return results
 
   for (let i = 0; i < addresses.length; i += concurrency) {
+    if (signal?.aborted) {
+      break
+    }
+
     const batch = addresses.slice(i, i + concurrency)
     const settled = await Promise.allSettled(
       batch.map(async (addr) => ({
         addr,
-        result: await checkContract(addr, chainId),
+        result: await checkContract(addr, chainId, signal),
       }))
     )
 
@@ -148,7 +182,7 @@ export async function batchCheckContracts(
       }
     }
 
-    if (i + concurrency < addresses.length) {
+    if (i + concurrency < addresses.length && !signal?.aborted) {
       await new Promise((r) => setTimeout(r, 200))
     }
   }
