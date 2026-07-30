@@ -272,6 +272,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   const [loadingBlockedUsers, setLoadingBlockedUsers] = useState(false)
   const [blockedUsersLoadFailed, setBlockedUsersLoadFailed] = useState(false)
   const [unblockingId, setUnblockingId] = useState<string | null>(null)
+  const unblockingIdRef = useRef<string | null>(null)
 
   // Email digest state
   const [emailDigest, setEmailDigest] = useState<EmailDigestValue>('none')
@@ -512,6 +513,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     setLoadingBlockedUsers(false)
     setBlockedUsersLoadFailed(false)
     setUnblockingId(null)
+    unblockingIdRef.current = null
 
     setEmailDigest('none')
     emailDigestPersistedRef.current = 'none'
@@ -1593,10 +1595,11 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
 
   const handleUnblock = async (blockedId: string) => {
     const scope = captureViewer()
-    if (!scope || !stateBelongsToViewer(scope)) return
+    if (!scope || !stateBelongsToViewer(scope) || unblockingIdRef.current !== null) return
+    unblockingIdRef.current = blockedId
     setUnblockingId(blockedId)
     try {
-      const result = await authedFetch(
+      const result = await authedFetch<{ success?: unknown }>(
         `/api/users/${blockedId}/block`,
         'DELETE',
         scope.accessToken,
@@ -1608,7 +1611,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         }
       )
       if (!viewerIsCurrent(scope) || result.stale) return
-      if (result.ok) {
+      if (result.ok && result.data?.success === true) {
         setBlockedUsers((prev) => prev.filter((u) => u.blockedId !== blockedId))
         showToast(t('unblocked'), 'success')
       } else showToast(t('operationFailed'), 'error')
@@ -1616,7 +1619,10 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
     } finally {
-      if (viewerIsCurrent(scope)) setUnblockingId(null)
+      if (viewerIsCurrent(scope) && unblockingIdRef.current === blockedId) {
+        unblockingIdRef.current = null
+        setUnblockingId(null)
+      }
     }
   }
 

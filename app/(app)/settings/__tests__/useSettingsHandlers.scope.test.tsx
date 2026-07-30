@@ -416,6 +416,40 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.blockedUsers).toEqual([])
   })
 
+  it('requires an exact unblock acknowledgement and single-flights rapid clicks', async () => {
+    const blockedId = '00000000-0000-4000-8000-000000000002'
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockAuthedFetch.mockResolvedValueOnce({ ok: true, status: 200, data: {} })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    await act(async () => {
+      await Promise.all([
+        hook.result.current.handleUnblock(blockedId),
+        hook.result.current.handleUnblock(blockedId),
+      ])
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('operationFailed', 'error')
+    expect(hook.result.current.unblockingId).toBeNull()
+
+    mockAuthedFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { success: true },
+    })
+    await act(async () => {
+      await hook.result.current.handleUnblock(blockedId)
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+    expect(showToast).toHaveBeenCalledWith('unblocked', 'success')
+  })
+
   it('blocks A form actions while B ownership is still unresolved', async () => {
     const publicB = deferred<ReturnType<typeof publicProfile>>()
     const sensitiveB = deferred<ReturnType<typeof sensitiveProfile>>()

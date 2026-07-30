@@ -239,7 +239,7 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
                   variant="ghost"
                   size="sm"
                   onClick={() => props.onUnblock(blockedUser.blockedId)}
-                  disabled={props.unblockingId === blockedUser.blockedId}
+                  disabled={props.unblockingId !== null}
                   style={{
                     fontSize: tokens.typography.fontSize.xs,
                     color: tokens.colors.accent.primary,
