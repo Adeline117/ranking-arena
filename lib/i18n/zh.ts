@@ -1026,7 +1026,7 @@ const zh = {
   passwordPlaceholder: '请输入密码',
   confirmDisable: '确认关闭',
   activeSessions: '活跃会话',
-  activeSessionsDesc: '查看和管理你的登录设备',
+  activeSessionsDesc: '登出其他所有设备，同时保留当前设备的登录状态。',
   currentSession: '当前',
   revoke: '撤销',
   logoutOtherDevices: '登出其他设备',

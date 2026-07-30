@@ -940,7 +940,8 @@ const ja = {
   passwordPlaceholder: 'パスワードを入力',
   confirmDisable: '無効化を確認',
   activeSessions: 'アクティブなセッション',
-  activeSessionsDesc: 'ログインデバイスの表示と管理',
+  activeSessionsDesc:
+    'このデバイスのログインを維持したまま、他のすべてのデバイスからログアウトします。',
   currentSession: '現在',
   revoke: '取り消し',
   logoutOtherDevices: '他のデバイスからログアウト',

@@ -979,7 +979,7 @@ const ko = {
   passwordPlaceholder: '비밀번호 입력',
   confirmDisable: '비활성화 확인',
   activeSessions: '활성 세션',
-  activeSessionsDesc: '로그인 기기를 보고 관리하세요',
+  activeSessionsDesc: '이 기기의 로그인은 유지하고 다른 모든 기기에서 로그아웃합니다.',
   currentSession: '현재',
   revoke: '해지',
   logoutOtherDevices: '다른 기기 로그아웃',

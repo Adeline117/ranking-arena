@@ -1043,7 +1043,7 @@ const en = {
   passwordPlaceholder: 'Enter password',
   confirmDisable: 'Confirm Disable',
   activeSessions: 'Active Sessions',
-  activeSessionsDesc: 'View and manage your login devices',
+  activeSessionsDesc: 'Log out every other device while keeping this device signed in.',
   currentSession: 'Current',
   revoke: 'Revoke',
   logoutOtherDevices: 'Logout Other Devices',

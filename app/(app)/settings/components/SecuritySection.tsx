@@ -11,22 +11,9 @@ import { SectionCard, getInputStyle } from './shared'
 import PasswordInput from '@/app/components/ui/PasswordInput'
 import { validateEmail, validatePassword, validatePasswordMatch } from '../validation'
 
-// 假安全隐藏门 —— 这两个界面存在但后端不生效，暴露给用户 = 信任风险：
-//  • 2FA：`verifyTotpCode` 仅注册流(api/settings/2fa/verify)调用，任何登录路径都不校验
-//    TOTP → 启用 2FA 对登录安全零作用。接线到 auth 流之前隐藏，不展示假安全感。
-//  • Sessions：app 代码从不 INSERT `login_sessions`（仅读/删）→ 列表永远空、
-//    "撤销会话"作用于永不存在的行。改为真接线(登录时写 session 行)之前隐藏。
-// 后端代码/路由全部保留，仅隐藏 UI 入口。真接线后把对应开关翻 true 即可。
+// `verifyTotpCode` is currently used only during enrollment; no login path
+// requires TOTP yet. Keep the setup UI hidden until it protects authentication.
 const SECURITY_2FA_ENABLED = false
-const SESSION_MANAGEMENT_ENABLED = false
-
-interface SessionInfo {
-  id: string
-  deviceInfo: { browser?: string; os?: string } | null
-  ipAddress: string | null
-  lastActiveAt: string | null
-  isCurrent: boolean
-}
 
 interface PasskeyInfo {
   id: string
@@ -80,11 +67,9 @@ interface SecuritySectionProps {
   setNewPasskeyName: (v: string) => void
   onAddPasskey: () => void
   onRemovePasskey: (id: string) => void
-  // Sessions
-  sessions: SessionInfo[]
-  loadingSessions: boolean
-  onRevokeSession: (id: string) => void
-  onRevokeAllSessions: () => void
+  // Other sessions
+  revokingOtherSessions: boolean
+  onRevokeOtherSessions: () => void
   // Validation touched state
   touchedFields: { newPassword: boolean; confirmPassword: boolean; newEmail: boolean }
   markTouched: (field: 'newPassword' | 'confirmPassword' | 'newEmail') => void
@@ -719,120 +704,34 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
         )}
       </Box>
 
-      {/* Active Sessions — gated behind SESSION_MANAGEMENT_ENABLED (login_sessions 从不写入，列表永远空) */}
-      {SESSION_MANAGEMENT_ENABLED && (
-        <Box
-          style={{
-            marginTop: tokens.spacing[6],
-            paddingTop: tokens.spacing[6],
-            borderTop: `1px solid ${tokens.colors.border.primary}`,
-          }}
-        >
-          <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-            {t('activeSessionsTitle')}
-          </Text>
-          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-            {t('activeSessionsDesc')}
-          </Text>
-
-          {props.loadingSessions ? (
-            <Text size="sm" color="tertiary">
-              {t('loading')}
-            </Text>
-          ) : props.sessions.length === 0 ? (
-            <Text size="sm" color="tertiary">
-              {t('noSessionInfo')}
-            </Text>
-          ) : (
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-              {props.sessions.map((session) => (
-                <Box
-                  key={session.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: tokens.spacing[3],
-                    borderRadius: tokens.radius.md,
-                    background: tokens.colors.bg.primary,
-                    border: `1px solid ${session.isCurrent ? colorAlpha(tokens.colors.accent.success, 25) : tokens.colors.border.primary}`,
-                  }}
-                >
-                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
-                    <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                      <Text size="sm" weight="medium">
-                        {session.deviceInfo?.browser || t('unknownBrowser')}
-                        {session.deviceInfo?.os ? ` - ${session.deviceInfo.os}` : ''}
-                      </Text>
-                      {session.isCurrent && (
-                        <span
-                          style={{
-                            padding: `1px ${tokens.spacing[2]}`,
-                            borderRadius: tokens.radius.sm,
-                            background: `${alpha(tokens.colors.accent.success, 8)}`,
-                            color: tokens.colors.accent.success,
-                            fontSize: tokens.typography.fontSize.xs,
-                            fontWeight: Number(tokens.typography.fontWeight.bold),
-                          }}
-                        >
-                          {t('currentSessionLabel')}
-                        </span>
-                      )}
-                    </Box>
-                    <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
-                      {session.ipAddress && (
-                        <Text size="xs" color="tertiary">
-                          IP: {session.ipAddress}
-                        </Text>
-                      )}
-                      {session.lastActiveAt && (
-                        <Text size="xs" color="tertiary">
-                          {formatTimeAgo(session.lastActiveAt, language)}
-                        </Text>
-                      )}
-                    </Box>
-                  </Box>
-                  {!session.isCurrent && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => props.onRevokeSession(session.id)}
-                      style={{
-                        color: tokens.colors.accent.error,
-                        fontSize: tokens.typography.fontSize.xs,
-                      }}
-                    >
-                      {t('revokeSession')}
-                    </Button>
-                  )}
-                </Box>
-              ))}
-
-              {props.sessions.filter((s) => !s.isCurrent).length > 0 && (
-                <Box
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    marginTop: tokens.spacing[2],
-                  }}
-                >
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={props.onRevokeAllSessions}
-                    style={{
-                      color: tokens.colors.accent.error,
-                      borderColor: colorAlpha(tokens.colors.accent.error, 25),
-                    }}
-                  >
-                    {t('logoutOtherDevicesButton')}
-                  </Button>
-                </Box>
-              )}
-            </Box>
-          )}
+      <Box
+        style={{
+          marginTop: tokens.spacing[6],
+          paddingTop: tokens.spacing[6],
+          borderTop: `1px solid ${tokens.colors.border.primary}`,
+        }}
+      >
+        <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+          {t('activeSessionsTitle')}
+        </Text>
+        <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+          {t('activeSessionsDesc')}
+        </Text>
+        <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={props.onRevokeOtherSessions}
+            disabled={props.revokingOtherSessions}
+            style={{
+              color: tokens.colors.accent.error,
+              borderColor: colorAlpha(tokens.colors.accent.error, 25),
+            }}
+          >
+            {props.revokingOtherSessions ? t('loading') : t('logoutOtherDevicesButton')}
+          </Button>
         </Box>
-      )}
+      </Box>
     </SectionCard>
   )
 })

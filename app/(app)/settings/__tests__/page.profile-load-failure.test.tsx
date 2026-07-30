@@ -49,10 +49,8 @@ jest.mock('../hooks/useSettingsHandlers', () => ({
     hasUnsavedChanges: () => false,
     loadBlockedUsers: jest.fn(),
     loadPasskeys: jest.fn(),
-    loadSessions: jest.fn(),
     loadingBlockedUsers: false,
     loadingPasskeys: false,
-    loadingSessions: false,
   }),
 }))
 

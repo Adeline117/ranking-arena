@@ -257,16 +257,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   const [passkeyBusy, setPasskeyBusy] = useState(false)
   const [newPasskeyName, setNewPasskeyName] = useState('')
 
-  // Sessions state
-  interface SessionInfo {
-    id: string
-    deviceInfo: { browser?: string; os?: string } | null
-    ipAddress: string | null
-    lastActiveAt: string | null
-    isCurrent: boolean
-  }
-  const [sessions, setSessions] = useState<SessionInfo[]>([])
-  const [loadingSessions, setLoadingSessions] = useState(false)
+  const [revokingOtherSessions, setRevokingOtherSessions] = useState(false)
 
   // Blocked users state
   interface BlockedUserInfo {
@@ -298,7 +289,6 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   const handleCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const handleCheckGenerationRef = useRef(0)
   const passkeyLoadGenerationRef = useRef(0)
-  const sessionLoadGenerationRef = useRef(0)
   const blockedUsersLoadGenerationRef = useRef(0)
 
   // Profile readiness is separate from canonical authentication. A failed
@@ -459,7 +449,6 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     handleCheckGenerationRef.current += 1
     profileLoadGenerationRef.current += 1
     passkeyLoadGenerationRef.current += 1
-    sessionLoadGenerationRef.current += 1
     blockedUsersLoadGenerationRef.current += 1
     notificationQueueRef.current?.invalidate()
     emailDigestQueueRef.current?.invalidate()
@@ -514,8 +503,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     setLoadingPasskeys(false)
     setPasskeyBusy(false)
     setNewPasskeyName('')
-    setSessions([])
-    setLoadingSessions(false)
+    setRevokingOtherSessions(false)
     setBlockedUsers([])
     setLoadingBlockedUsers(false)
     setUnblockingId(null)
@@ -1480,63 +1468,33 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     }
   }
 
-  // ===== Sessions handlers =====
-  const loadSessions = useCallback(async () => {
+  // Supabase does not expose a user-facing session inventory through this
+  // client. Offer only the operation GoTrue can authoritatively perform:
+  // revoke every refresh session except the exact current bearer session.
+  const handleRevokeOtherSessions = async () => {
     const scope = captureViewer()
-    if (!scope) return
-    const loadGeneration = ++sessionLoadGenerationRef.current
-    const loadIsCurrent = () =>
-      sessionLoadGenerationRef.current === loadGeneration && viewerIsCurrent(scope)
-    setLoadingSessions(true)
+    if (submittingRef.current || revokingOtherSessions || !scope || !stateBelongsToViewer(scope)) {
+      return
+    }
+
+    submittingRef.current = true
+    setRevokingOtherSessions(true)
     try {
-      const result = await authedFetch<{
-        sessions?: Array<{
-          id: string
-          deviceInfo: string | null
-          ipAddress: string | null
-          lastActiveAt: string | null
-        }>
-      }>('/api/settings/sessions', 'GET', scope.accessToken, undefined, 15_000, {
-        expectedUserId: scope.userId,
-        expectedSessionGeneration: scope.sessionGeneration,
-      })
-      if (!loadIsCurrent() || result.stale) return
-      if (result.ok) {
-        const sessionList = result.data?.sessions || []
-        setSessions(
-          sessionList.map((s, index) => ({
-            id: s.id,
-            deviceInfo: s.deviceInfo
-              ? ((typeof s.deviceInfo === 'string' ? JSON.parse(s.deviceInfo) : s.deviceInfo) as {
-                  browser?: string
-                  os?: string
-                })
-              : null,
-            ipAddress: s.ipAddress,
-            lastActiveAt: s.lastActiveAt,
-            isCurrent: index === 0,
-          }))
-        )
+      const confirmed = await showConfirm(t('logoutAllDevices'), t('logoutAllDevicesConfirm'))
+      if (!confirmed || !viewerIsCurrent(scope)) return
+
+      const token = await getFreshToken(scope)
+      if (!viewerIsCurrent(scope)) return
+      if (!token) {
+        showToast(t('pleaseLoginAgain'), 'error')
+        return
       }
-    } catch (error) {
-      if (!loadIsCurrent()) return
-      uiLogger.error('[Sessions] Load error:', error)
-    } finally {
-      if (loadIsCurrent()) setLoadingSessions(false)
-    }
-  }, [captureViewer, viewerIsCurrent])
 
-  const handleRevokeSession = async (sessionId: string) => {
-    const scope = captureViewer()
-    if (!scope || !stateBelongsToViewer(scope)) return
-    try {
-      const result = await authedFetch(
+      const result = await authedFetch<{ success?: unknown; revokedOthers?: unknown }>(
         '/api/settings/sessions',
         'DELETE',
-        scope.accessToken,
-        {
-          sessionId,
-        },
+        token,
+        { all: true },
         15_000,
         {
           expectedUserId: scope.userId,
@@ -1544,43 +1502,19 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         }
       )
       if (!viewerIsCurrent(scope) || result.stale) return
-      if (result.ok) {
-        setSessions((prev) => prev.filter((s) => s.id !== sessionId))
-        showToast(t('sessionRevoked'), 'success')
-      } else showToast(t('operationFailed'), 'error')
-    } catch {
-      if (!viewerIsCurrent(scope)) return
-      showToast(t('networkError'), 'error')
-    }
-  }
-
-  const handleRevokeAllSessions = async () => {
-    const scope = captureViewer()
-    if (!scope || !stateBelongsToViewer(scope)) return
-    const confirmed = await showConfirm(t('logoutAllDevices'), t('logoutAllDevicesConfirm'))
-    if (!confirmed || !viewerIsCurrent(scope)) return
-    try {
-      const result = await authedFetch(
-        '/api/settings/sessions',
-        'DELETE',
-        scope.accessToken,
-        {
-          all: true,
-        },
-        15_000,
-        {
-          expectedUserId: scope.userId,
-          expectedSessionGeneration: scope.sessionGeneration,
-        }
-      )
-      if (!viewerIsCurrent(scope) || result.stale) return
-      if (result.ok) {
-        setSessions((prev) => prev.filter((s) => s.isCurrent))
+      if (result.ok && result.data?.success === true && result.data.revokedOthers === true) {
         showToast(t('logoutAllSuccess'), 'success')
-      } else showToast(t('operationFailed'), 'error')
+      } else {
+        showToast(t('operationFailed'), 'error')
+      }
     } catch {
       if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
+    } finally {
+      if (viewerIsCurrent(scope)) {
+        setRevokingOtherSessions(false)
+        submittingRef.current = false
+      }
     }
   }
 
@@ -1948,9 +1882,8 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     handleAddPasskey,
     handleRemovePasskey,
 
-    // Sessions
-    sessions,
-    loadingSessions,
+    // Other sessions
+    revokingOtherSessions,
 
     // Notifications
     notifyFollow,
@@ -2012,9 +1945,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     handleSetup2FA,
     handleVerify2FA,
     handleDisable2FA,
-    loadSessions,
-    handleRevokeSession,
-    handleRevokeAllSessions,
+    handleRevokeOtherSessions,
     loadBlockedUsers,
     handleUnblock,
     handleEmailDigestChange,

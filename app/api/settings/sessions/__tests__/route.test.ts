@@ -23,7 +23,6 @@ jest.mock('next/server', () => {
 })
 
 const mockGetAuthUser = jest.fn()
-const mockGetProvisioningAuthUser = jest.fn()
 const mockGetSupabaseAdmin = jest.fn()
 const mockValidateCsrfToken = jest.fn()
 const mockCheckRateLimit = jest.fn()
@@ -32,7 +31,6 @@ const mockFrom = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
-  getProvisioningAuthUser: (...args: unknown[]) => mockGetProvisioningAuthUser(...args),
   getSupabaseAdmin: (...args: unknown[]) => mockGetSupabaseAdmin(...args),
 }))
 

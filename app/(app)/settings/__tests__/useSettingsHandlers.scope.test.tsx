@@ -631,6 +631,37 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(showToast).toHaveBeenCalledWith('passwordChanged', 'success')
   })
 
+  it('offers one truthful user-triggered operation for revoking every other session', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { success: true, revokedOthers: true },
+    })
+    showConfirm.mockResolvedValue(true)
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+
+    await act(async () => {
+      await hook.result.current.handleRevokeOtherSessions()
+    })
+
+    expect(showConfirm).toHaveBeenCalledWith('logoutAllDevices', 'logoutAllDevicesConfirm')
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      '/api/settings/sessions',
+      'DELETE',
+      jwt('user-a'),
+      { all: true },
+      15_000,
+      { expectedUserId: 'user-a', expectedSessionGeneration: scope.sessionGeneration }
+    )
+    expect(showToast).toHaveBeenCalledWith('logoutAllSuccess', 'success')
+    expect(hook.result.current.revokingOtherSessions).toBe(false)
+  })
+
   it('keeps an already-running Replay clean when localStorage and local sign-out fail', async () => {
     const recoveryToken = 'A'.repeat(43)
     const replayContext = { urls: [] as string[] }

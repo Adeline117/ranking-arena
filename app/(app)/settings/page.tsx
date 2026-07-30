@@ -70,22 +70,13 @@ export function SettingsContent() {
   authRef.current = auth
 
   // Lazy-load flags
-  const [sessionsLoaded, setSessionsLoaded] = useState(false)
   const [passkeysLoaded, setPasskeysLoaded] = useState(false)
   const [blockedUsersLoaded, setBlockedUsersLoaded] = useState(false)
 
   const h = useSettingsHandlers({ auth, showToast, showConfirm, t })
   const hasUnsavedChanges = h.hasUnsavedChanges()
   useBottomOverlayReservation(saveBarRef, hasUnsavedChanges)
-  const {
-    loadBlockedUsers,
-    loadPasskeys,
-    loadSessions,
-    loadingBlockedUsers,
-    loadingPasskeys,
-    loadingSessions,
-    userId,
-  } = h
+  const { loadBlockedUsers, loadPasskeys, loadingBlockedUsers, loadingPasskeys, userId } = h
 
   // ===== Init auth =====
   useEffect(() => {
@@ -96,17 +87,12 @@ export function SettingsContent() {
 
   // Viewer-owned lazy flags must never survive an account switch.
   useEffect(() => {
-    setSessionsLoaded(false)
     setPasskeysLoaded(false)
     setBlockedUsersLoaded(false)
   }, [auth.sessionGeneration])
 
-  // ===== Lazy-load sessions and blocked users =====
+  // ===== Lazy-load passkeys and blocked users =====
   useEffect(() => {
-    if (activeSection === 'security' && !sessionsLoaded && !loadingSessions) {
-      setSessionsLoaded(true)
-      loadSessions()
-    }
     if (activeSection === 'security' && !passkeysLoaded && !loadingPasskeys) {
       setPasskeysLoaded(true)
       loadPasskeys()
@@ -117,14 +103,11 @@ export function SettingsContent() {
     }
   }, [
     activeSection,
-    sessionsLoaded,
     passkeysLoaded,
     blockedUsersLoaded,
     userId,
-    loadingSessions,
     loadingPasskeys,
     loadingBlockedUsers,
-    loadSessions,
     loadPasskeys,
     loadBlockedUsers,
   ])
@@ -467,10 +450,8 @@ export function SettingsContent() {
             setNewPasskeyName={h.setNewPasskeyName}
             onAddPasskey={h.handleAddPasskey}
             onRemovePasskey={h.handleRemovePasskey}
-            sessions={h.sessions}
-            loadingSessions={h.loadingSessions}
-            onRevokeSession={h.handleRevokeSession}
-            onRevokeAllSessions={h.handleRevokeAllSessions}
+            revokingOtherSessions={h.revokingOtherSessions}
+            onRevokeOtherSessions={h.handleRevokeOtherSessions}
             touchedFields={{
               newPassword: h.touchedFields.newPassword,
               confirmPassword: h.touchedFields.confirmPassword,
