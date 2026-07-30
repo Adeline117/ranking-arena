@@ -137,7 +137,7 @@ type ChatSearchOverlayProps = {
   onClose: () => void
   conversationId: string
   accessToken: string
-  onNavigateToMessage: (messageId: string) => void
+  onNavigateToMessage: (messageId: string, createdAt: string) => void
 }
 
 export default function ChatSearchOverlay({
@@ -291,7 +291,7 @@ export default function ChatSearchOverlay({
     if (matches.length === 0) return
     const newIndex = Math.min(currentIndex + 1, matches.length - 1)
     setCurrentIndex(newIndex)
-    onNavigateToMessage(matches[newIndex].message_id)
+    onNavigateToMessage(matches[newIndex].message_id, matches[newIndex].created_at)
 
     // Load more if approaching end
     if (newIndex >= matches.length - 3 && nextCursor) {
@@ -303,12 +303,12 @@ export default function ChatSearchOverlay({
     if (matches.length === 0) return
     const newIndex = Math.max(currentIndex - 1, 0)
     setCurrentIndex(newIndex)
-    onNavigateToMessage(matches[newIndex].message_id)
+    onNavigateToMessage(matches[newIndex].message_id, matches[newIndex].created_at)
   }
 
   const handleMatchClick = (index: number) => {
     setCurrentIndex(index)
-    onNavigateToMessage(matches[index].message_id)
+    onNavigateToMessage(matches[index].message_id, matches[index].created_at)
   }
 
   const formatDate = (dateString: string) => {

@@ -351,6 +351,65 @@ describe('useConversationMessages viewer scope', () => {
     expect(result.current.hasMore).toBe(false)
   })
 
+  it('fetches and scrolls directly to a search result outside the loaded page', async () => {
+    const { result } = renderConversation()
+    await loadConversation(result)
+    mockAuthedFetch.mockClear()
+
+    const targetId = '77777777-7777-4777-8777-777777777777'
+    const targetCreatedAt = '2026-07-29T10:00:00.123456Z'
+    const target = {
+      ...message(targetId, OTHER_USER, VIEWER_A, 'search target'),
+      created_at: targetCreatedAt,
+    }
+    const scrollIntoView = jest.fn()
+    result.current.messageRefs.current[targetId] = { scrollIntoView } as unknown as HTMLDivElement
+    mockAuthedFetch.mockResolvedValueOnce({
+      data: messagesAcknowledgement(VIEWER_A, { messages: [target] }),
+      ok: true,
+      status: 200,
+    })
+
+    let navigated = false
+    await act(async () => {
+      navigated = await result.current.navigateToMessage(targetId, targetCreatedAt)
+    })
+
+    expect(navigated).toBe(true)
+    expect(mockAuthedFetch.mock.calls[0]?.[0]).toBe(
+      `/api/messages?conversationId=${CONVERSATION_ID}&before=${encodeURIComponent(targetCreatedAt)}&beforeId=77777777-7777-4777-8777-777777777778&limit=1`
+    )
+    expect(result.current.messages.map((item) => item.id)).toEqual([
+      targetId,
+      MESSAGE_FROM_OTHER,
+      MESSAGE_FROM_VIEWER,
+    ])
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+    expect(result.current.highlightedMessageId).toBe(targetId)
+  })
+
+  it('scrolls to an already loaded search result without another request', async () => {
+    const { result } = renderConversation()
+    await loadConversation(result)
+    mockAuthedFetch.mockClear()
+    const scrollIntoView = jest.fn()
+    result.current.messageRefs.current[MESSAGE_FROM_OTHER] = {
+      scrollIntoView,
+    } as unknown as HTMLDivElement
+
+    let navigated = false
+    await act(async () => {
+      navigated = await result.current.navigateToMessage(
+        MESSAGE_FROM_OTHER,
+        '2026-07-29T12:00:00.000Z'
+      )
+    })
+
+    expect(navigated).toBe(true)
+    expect(mockAuthedFetch).not.toHaveBeenCalled()
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+  })
+
   it('does not let an old account handler send after the viewer changes', async () => {
     const { result, rerender } = renderConversation()
     await loadConversation(result)

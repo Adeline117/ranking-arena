@@ -62,6 +62,7 @@ type SendAcknowledgement = {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const MIN_VALID_UUID = '00000000-0000-1000-8000-000000000000'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -94,6 +95,54 @@ function compareMessagePosition(
   if (leftTime !== rightTime) return leftTime - rightTime
   if (left.id === right.id) return 0
   return left.id < right.id ? -1 : 1
+}
+
+/**
+ * Return the next RFC-compatible UUID in PostgreSQL's bytewise UUID order.
+ * A cursor at this value includes `value` in an exclusive `(created_at, id)`
+ * page without also including messages with larger IDs at the same timestamp.
+ */
+function nextValidUuid(value: string): string | null {
+  const compact = value.replaceAll('-', '').toLowerCase()
+  if (compact.length !== 32 || !UUID_PATTERN.test(value)) return null
+
+  const digits = [...compact].map((character) => Number.parseInt(character, 16))
+  for (let index = digits.length - 1; index >= 0; index -= 1) {
+    const allowed = index === 12 ? [1, 2, 3, 4, 5, 6, 7, 8] : index === 16 ? [8, 9, 10, 11] : null
+    const next =
+      allowed?.find((digit) => digit > digits[index]) ??
+      (allowed === null && digits[index] < 15 ? digits[index] + 1 : undefined)
+    if (next === undefined) continue
+
+    digits[index] = next
+    for (let resetIndex = index + 1; resetIndex < digits.length; resetIndex += 1) {
+      digits[resetIndex] = resetIndex === 12 ? 1 : resetIndex === 16 ? 8 : 0
+    }
+    const successor = digits.map((digit) => digit.toString(16)).join('')
+    return `${successor.slice(0, 8)}-${successor.slice(8, 12)}-${successor.slice(12, 16)}-${successor.slice(16, 20)}-${successor.slice(20)}`
+  }
+  return null
+}
+
+function messageCursorImmediatelyAfter(
+  messageId: string,
+  createdAt: string
+): MessagePageCursor | null {
+  const micros = timestampMicros(createdAt)
+  if (micros === null || micros >= Number.MAX_SAFE_INTEGER) return null
+
+  const successor = nextValidUuid(messageId)
+  if (successor) return { before: createdAt, beforeId: successor }
+
+  const nextMicros = micros + 1
+  const milliseconds = Math.floor(nextMicros / 1000)
+  const microsWithinMillisecond = nextMicros % 1000
+  const before = new Date(milliseconds)
+    .toISOString()
+    .replace(/\.(\d{3})Z$/, (_match, millis: string) => {
+      return `.${millis}${microsWithinMillisecond.toString().padStart(3, '0')}Z`
+    })
+  return { before, beforeId: MIN_VALID_UUID }
 }
 
 function readServerError(value: unknown): { error?: string; error_code?: string } {
@@ -464,6 +513,8 @@ export function useConversationMessages({
   const isLoadingOlderRef = useRef(false)
   const prevMessageCountRef = useRef(0)
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const pendingNavigationMessageIdRef = useRef<string | null>(null)
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   // Reply / quote: the message currently being replied to (null = not replying)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
@@ -487,6 +538,7 @@ export function useConversationMessages({
       for (const operation of operations) operation.controller.abort()
       operations.clear()
       latestOperations.clear()
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current)
     }
   }, [])
 
@@ -561,6 +613,12 @@ export function useConversationMessages({
     setNextCursor(null)
     setClearedBefore(null)
     setReplyingTo(null)
+    setHighlightedMessageId(null)
+    pendingNavigationMessageIdRef.current = null
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current)
+      highlightTimeoutRef.current = null
+    }
     reactionRowMapRef.current.clear()
     isLoadingOlderRef.current = false
     prevMessageCountRef.current = 0
@@ -1164,14 +1222,122 @@ export function useConversationMessages({
     ]
   )
 
-  const navigateToMessage = useCallback((messageId: string) => {
+  const scrollToMessage = useCallback((messageId: string): boolean => {
+    const element = messageRefs.current[messageId]
+    if (!element) return false
+
+    pendingNavigationMessageIdRef.current = null
+    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current)
     setHighlightedMessageId(messageId)
-    const el = messageRefs.current[messageId]
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      setTimeout(() => setHighlightedMessageId(null), 2000)
-    }
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    highlightTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current) setHighlightedMessageId(null)
+      highlightTimeoutRef.current = null
+    }, 2000)
+    return true
   }, [])
+
+  useEffect(() => {
+    const pendingMessageId = pendingNavigationMessageIdRef.current
+    if (pendingMessageId && messages.some((message) => message.id === pendingMessageId)) {
+      scrollToMessage(pendingMessageId)
+    }
+  }, [messages, scrollToMessage])
+
+  const navigateToMessage = useCallback(
+    async (messageId: string, createdAt?: string): Promise<boolean> => {
+      if (!UUID_PATTERN.test(messageId)) return false
+      if (messagesRef.current.some((message) => message.id === messageId)) {
+        pendingNavigationMessageIdRef.current = messageId
+        return scrollToMessage(messageId)
+      }
+
+      const counterpart = otherUser
+      const cursor = createdAt ? messageCursorImmediatelyAfter(messageId, createdAt) : null
+      if (!counterpart || !cursor || !userId) {
+        showToast(t('loadOlderMessagesFailed'), 'error')
+        return false
+      }
+
+      const operation = beginOperation('messages', { conversationId, userId })
+      if (!operation) return false
+      setLoadingMore(true)
+      try {
+        const result = await authedFetch<unknown>(
+          `/api/messages?conversationId=${encodeURIComponent(operation.conversationId)}&before=${encodeURIComponent(cursor.before)}&beforeId=${encodeURIComponent(cursor.beforeId)}&limit=1`,
+          'GET',
+          operation.viewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: operation.controller.signal,
+          }
+        )
+        if (result.stale || !operationIsCurrent(operation)) return false
+
+        const acknowledgement = result.ok
+          ? readMessagesAcknowledgement(result.data, operation.viewer.userId, counterpart.id)
+          : null
+        const target = acknowledgement?.messages[0]
+        if (
+          !acknowledgement ||
+          acknowledgement.messages.length !== 1 ||
+          !target ||
+          target.id !== messageId ||
+          !createdAt ||
+          compareMessagePosition(target, { id: messageId, created_at: createdAt }) !== 0
+        ) {
+          showToast(t('loadOlderMessagesFailed'), 'error')
+          return false
+        }
+
+        pendingNavigationMessageIdRef.current = messageId
+        isLoadingOlderRef.current = true
+        setClearedBefore(acknowledgement.clearedBefore)
+        setMessages((previous) => {
+          const merged = previous.some((message) => message.id === target.id)
+            ? [...previous]
+            : [...previous, target]
+          const boundary =
+            acknowledgement.clearedBefore === null
+              ? null
+              : timestampMicros(acknowledgement.clearedBefore)
+          const visible =
+            boundary === null
+              ? merged
+              : merged.filter((message) => {
+                  const messageTime = timestampMicros(message.created_at)
+                  return messageTime !== null && messageTime > boundary
+                })
+          visible.sort((left, right) => compareMessagePosition(left, right) ?? 0)
+          messagesRef.current = visible
+          return visible
+        })
+        return true
+      } catch {
+        if (!operationIsCurrent(operation)) return false
+        showToast(t('loadOlderMessagesFailed'), 'error')
+        return false
+      } finally {
+        const isCurrent = operationIsCurrent(operation)
+        if (isCurrent) setLoadingMore(false)
+        finishOperation(operation)
+      }
+    },
+    [
+      beginOperation,
+      conversationId,
+      finishOperation,
+      operationIsCurrent,
+      otherUser,
+      scrollToMessage,
+      showToast,
+      t,
+      userId,
+    ]
+  )
 
   const formatTime = useCallback(
     (dateString: string) => {

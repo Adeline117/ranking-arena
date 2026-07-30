@@ -620,9 +620,9 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
           onClose={() => setSearchOpen(false)}
           conversationId={conversationId}
           accessToken={accessToken}
-          onNavigateToMessage={(messageId) => {
+          onNavigateToMessage={(messageId, createdAt) => {
             setSearchOpen(false)
-            setTimeout(() => msgHook.navigateToMessage(messageId), 100)
+            void msgHook.navigateToMessage(messageId, createdAt)
           }}
         />
       )}

@@ -113,7 +113,7 @@ describe('ChatSearchOverlay atomic pagination', () => {
     expect(fetchMock.mock.calls[1]?.[0]).toContain(
       `cursor=${encodeURIComponent(firstCreatedAt)}&cursorId=${FIRST_MESSAGE_ID}`
     )
-    expect(onNavigate).toHaveBeenCalledWith(FIRST_MESSAGE_ID)
+    expect(onNavigate).toHaveBeenCalledWith(FIRST_MESSAGE_ID, firstCreatedAt)
   })
 
   it('surfaces malformed success data as a failure instead of a genuine empty result', async () => {
