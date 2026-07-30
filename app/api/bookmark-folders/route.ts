@@ -23,14 +23,18 @@ import {
 } from '@/lib/bookmarks/folder-mutation'
 
 export const GET = withAuth(
-  async ({ user, supabase }) => {
+  async ({ user, supabase, request }) => {
     try {
       // A missing default-folder authority is not an authoritative empty
       // collection. Supabase reports RPC failures in the result rather than
       // throwing, so inspect the error explicitly before reading the list.
-      const { error: ensureDefaultError } = await supabase.rpc('ensure_default_bookmark_folder', {
-        p_user_id: user.id,
-      })
+      const userSupabase = createUserScopedServerClient(request)
+      const { error: ensureDefaultError } = await userSupabase.rpc(
+        'ensure_default_bookmark_folder',
+        {
+          p_user_id: user.id,
+        }
+      )
       if (ensureDefaultError) {
         throw ensureDefaultError
       }

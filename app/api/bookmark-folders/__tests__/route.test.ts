@@ -204,6 +204,11 @@ describe('/api/bookmark-folders', () => {
       expect(res.status).toBe(200)
       expect(body.success).toBe(true)
       expect(body.data.folders).toEqual([])
+      expect(mockCreateUserScopedServerClient).toHaveBeenCalledWith(req)
+      expect(mockUserScopedRpc).toHaveBeenCalledWith('ensure_default_bookmark_folder', {
+        p_user_id: USER_ID,
+      })
+      expect(mockSupabaseRpc).not.toHaveBeenCalled()
     })
 
     it('returns user bookmark folders', async () => {
@@ -249,6 +254,20 @@ describe('/api/bookmark-folders', () => {
 
       expect(res.status).toBeGreaterThanOrEqual(500)
       expect(body.success).toBe(false)
+    })
+
+    it('fails closed if the default-folder authority has no verified bearer to forward', async () => {
+      mockCreateUserScopedServerClient.mockImplementationOnce(() => {
+        throw new Error('A verified bearer token is required for an RLS-scoped query')
+      })
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders')
+      const res = await GET(req)
+
+      expect(res.status).toBe(500)
+      expect(mockUserScopedRpc).not.toHaveBeenCalled()
+      expect(mockSupabaseRpc).not.toHaveBeenCalled()
+      expect(mockSupabaseFrom).not.toHaveBeenCalled()
     })
 
     it('does not turn a bookmark count failure into zero items in every folder', async () => {
