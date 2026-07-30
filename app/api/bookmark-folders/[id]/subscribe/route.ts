@@ -7,7 +7,8 @@
 
 import { NextRequest } from 'next/server'
 import { withAuth, withPublic } from '@/lib/api/middleware'
-import { success, handleError } from '@/lib/api/response'
+import { success, badRequest, error as errorResponse, handleError } from '@/lib/api/response'
+import { ErrorCode } from '@/lib/api/errors'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -15,17 +16,151 @@ function isNoRows(error: { code?: string } | null): boolean {
   return error?.code === 'PGRST116'
 }
 
-function validSubscriberCount(count: number | null): count is number {
-  return Number.isSafeInteger(count) && Number(count) >= 0
+type SubscriptionMutationStatus =
+  | 'invalid'
+  | 'account_inactive'
+  | 'folder_not_found'
+  | 'owner_forbidden'
+  | 'folder_private'
+  | 'added'
+  | 'already_subscribed'
+  | 'removed'
+  | 'not_subscribed'
+
+type SubscriptionMutationAck =
+  | {
+      status:
+        | 'invalid'
+        | 'account_inactive'
+        | 'folder_not_found'
+        | 'owner_forbidden'
+        | 'folder_private'
+    }
+  | {
+      status: 'added' | 'already_subscribed' | 'removed' | 'not_subscribed'
+      userId: string
+      folderId: string
+      isSubscribed: boolean
+      subscriberCount: number
+    }
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function normalizeFolderId(value: string): string | null {
+  const normalized = value.toLowerCase()
+  return uuidPattern.test(normalized) ? normalized : null
+}
+
+function exactKeys(record: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(record)
+  return actual.length === expected.length && expected.every((key) => actual.includes(key))
+}
+
+function parseMutationAck(value: unknown): SubscriptionMutationAck | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const result = value as Record<string, unknown>
+  const status = result.status as SubscriptionMutationStatus | undefined
+
+  if (
+    exactKeys(result, ['status']) &&
+    (status === 'invalid' ||
+      status === 'account_inactive' ||
+      status === 'folder_not_found' ||
+      status === 'owner_forbidden' ||
+      status === 'folder_private')
+  ) {
+    return { status }
+  }
+
+  if (
+    !exactKeys(result, ['status', 'user_id', 'folder_id', 'is_subscribed', 'subscriber_count']) ||
+    (status !== 'added' &&
+      status !== 'already_subscribed' &&
+      status !== 'removed' &&
+      status !== 'not_subscribed') ||
+    typeof result.user_id !== 'string' ||
+    !uuidPattern.test(result.user_id) ||
+    typeof result.folder_id !== 'string' ||
+    !uuidPattern.test(result.folder_id) ||
+    typeof result.is_subscribed !== 'boolean' ||
+    !Number.isSafeInteger(result.subscriber_count) ||
+    Number(result.subscriber_count) < 0
+  ) {
+    return null
+  }
+
+  const shouldBeSubscribed = status === 'added' || status === 'already_subscribed'
+  if (
+    result.is_subscribed !== shouldBeSubscribed ||
+    (shouldBeSubscribed && Number(result.subscriber_count) < 1)
+  ) {
+    return null
+  }
+
+  return {
+    status,
+    userId: result.user_id.toLowerCase(),
+    folderId: result.folder_id.toLowerCase(),
+    isSubscribed: result.is_subscribed,
+    subscriberCount: Number(result.subscriber_count),
+  }
+}
+
+function isSubscriptionAuthorityUnavailable(
+  error: { code?: string; message?: string } | null
+): boolean {
+  if (!error) return false
+  return (
+    error.code === 'PGRST202' ||
+    error.code === 'PGRST205' ||
+    error.code === '42883' ||
+    error.code === '42P01' ||
+    !!error.message?.includes('Could not find the table') ||
+    !!error.message?.includes('Could not find the function')
+  )
+}
+
+function subscriptionUnavailable() {
+  return errorResponse(
+    'Folder subscriptions are temporarily unavailable',
+    503,
+    ErrorCode.SERVICE_UNAVAILABLE
+  )
+}
+
+function validateMutationAck(
+  value: unknown,
+  expected: { action: 'add' | 'remove'; userId: string; folderId: string }
+): SubscriptionMutationAck {
+  const ack = parseMutationAck(value)
+  if (!ack) {
+    throw new Error('Invalid atomic folder subscription acknowledgement')
+  }
+
+  if ('userId' in ack) {
+    const validStatus =
+      expected.action === 'add'
+        ? ack.status === 'added' || ack.status === 'already_subscribed'
+        : ack.status === 'removed' || ack.status === 'not_subscribed'
+    if (!validStatus || ack.userId !== expected.userId || ack.folderId !== expected.folderId) {
+      throw new Error('Atomic folder subscription acknowledgement mismatch')
+    }
+  }
+
+  return ack
 }
 
 // 检查订阅状态（支持已登录和未登录用户）
 export async function GET(request: NextRequest, context: RouteContext) {
-  const { id: folderId } = await context.params
+  const { id } = await context.params
+  const folderId = normalizeFolderId(id)
 
   const handler = withPublic(
     async ({ user, supabase }) => {
       try {
+        if (!folderId) {
+          return badRequest('Invalid folder id')
+        }
         if (!user) {
           return success({ is_subscribed: false })
         }
@@ -55,79 +190,54 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // 订阅收藏夹
 export async function POST(request: NextRequest, context: RouteContext) {
-  const { id: folderId } = await context.params
+  const { id } = await context.params
+  const folderId = normalizeFolderId(id)
 
   const handler = withAuth(
     async ({ user, supabase }) => {
       try {
-        // 获取收藏夹信息，检查是否存在、是否公开、是否是自己的
-        const { data: folder, error: folderError } = await supabase
-          .from('bookmark_folders')
-          .select('id, user_id, is_public, name')
-          .eq('id', folderId)
-          .single()
-
-        if (folderError && !isNoRows(folderError)) {
-          throw folderError
+        if (!folderId) {
+          return badRequest('Invalid folder id')
         }
-        if (!folder) {
+
+        const { data, error } = await supabase.rpc('mutate_bookmark_folder_subscription_atomic', {
+          p_folder_id: folderId,
+          p_action: 'add',
+        })
+        if (error) {
+          if (isSubscriptionAuthorityUnavailable(error)) return subscriptionUnavailable()
+          throw error
+        }
+
+        const ack = validateMutationAck(data, {
+          action: 'add',
+          userId: user.id.toLowerCase(),
+          folderId,
+        })
+        if (ack.status === 'account_inactive') {
+          return success({ error: 'Account is inactive' }, 403)
+        }
+        if (ack.status === 'folder_not_found') {
           return success({ error: 'Folder not found' }, 404)
         }
-
-        // 不能订阅自己的收藏夹
-        if (folder.user_id === user.id) {
+        if (ack.status === 'owner_forbidden') {
           return success({ error: 'Cannot subscribe to your own folder' }, 400)
         }
-
-        // 只能订阅公开的收藏夹
-        if (!folder.is_public) {
+        if (ack.status === 'folder_private') {
           return success({ error: 'This folder is not public' }, 403)
         }
-
-        // 检查是否已订阅
-        const { data: existing, error: existingError } = await supabase
-          .from('folder_subscriptions')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('folder_id', folderId)
-          .single()
-        if (existingError && !isNoRows(existingError)) {
-          throw existingError
-        }
-
-        if (existing) {
+        if (ack.status === 'already_subscribed') {
           return success({ error: 'Already subscribed to this folder' }, 409)
         }
-
-        // 创建订阅
-        const { error: insertError } = await supabase.from('folder_subscriptions').insert({
-          user_id: user.id,
-          folder_id: folderId,
-        })
-
-        if (insertError) {
-          if (insertError.code === '23505') {
-            return success({ error: 'Already subscribed to this folder' }, 409)
-          }
-          throw insertError
-        }
-
-        // 获取更新后的订阅者数量（如果列存在）
-        // KEEP 'exact' — returned to the client as the updated subscriber
-        // count right after subscribe; must reflect the new row.
-        const { count: subscriberCount, error: countError } = await supabase
-          .from('folder_subscriptions')
-          .select('id', { count: 'exact', head: true })
-          .eq('folder_id', folderId)
-        if (countError || !validSubscriberCount(subscriberCount)) {
-          throw countError ?? new Error('Invalid folder subscriber count')
+        if (ack.status !== 'added' || !('subscriberCount' in ack)) {
+          throw new Error('Atomic folder subscription add returned an impossible status')
         }
 
         return success(
           {
             message: 'Subscribed successfully',
             is_subscribed: true,
-            subscriber_count: Number(subscriberCount),
+            subscriber_count: ack.subscriberCount,
           },
           201
         )
@@ -143,51 +253,47 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
 // 取消订阅
 export async function DELETE(request: NextRequest, context: RouteContext) {
-  const { id: folderId } = await context.params
+  const { id } = await context.params
+  const folderId = normalizeFolderId(id)
 
   const handler = withAuth(
     async ({ user, supabase }) => {
       try {
-        // 检查是否已订阅
-        const { data: subscription, error: findError } = await supabase
-          .from('folder_subscriptions')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('folder_id', folderId)
-          .single()
-
-        if (findError && !isNoRows(findError)) {
-          throw findError
+        if (!folderId) {
+          return badRequest('Invalid folder id')
         }
-        if (!subscription) {
+
+        const { data, error } = await supabase.rpc('mutate_bookmark_folder_subscription_atomic', {
+          p_folder_id: folderId,
+          p_action: 'remove',
+        })
+        if (error) {
+          if (isSubscriptionAuthorityUnavailable(error)) return subscriptionUnavailable()
+          throw error
+        }
+
+        const ack = validateMutationAck(data, {
+          action: 'remove',
+          userId: user.id.toLowerCase(),
+          folderId,
+        })
+        if (ack.status === 'account_inactive') {
+          return success({ error: 'Account is inactive' }, 403)
+        }
+        if (ack.status === 'folder_not_found') {
+          return success({ error: 'Folder not found' }, 404)
+        }
+        if (ack.status === 'not_subscribed') {
           return success({ error: 'Not subscribed to this folder' }, 404)
         }
-
-        // 删除订阅
-        const { error: deleteError } = await supabase
-          .from('folder_subscriptions')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('folder_id', folderId)
-
-        if (deleteError) {
-          throw deleteError
-        }
-
-        // 获取更新后的订阅者数量
-        // KEEP 'exact' — same rationale as the POST handler above.
-        const { count: subscriberCount, error: countError } = await supabase
-          .from('folder_subscriptions')
-          .select('id', { count: 'exact', head: true })
-          .eq('folder_id', folderId)
-        if (countError || !validSubscriberCount(subscriberCount)) {
-          throw countError ?? new Error('Invalid folder subscriber count')
+        if (ack.status !== 'removed' || !('subscriberCount' in ack)) {
+          throw new Error('Atomic folder subscription remove returned an impossible status')
         }
 
         return success({
           message: 'Unsubscribed successfully',
           is_subscribed: false,
-          subscriber_count: Number(subscriberCount),
+          subscriber_count: ack.subscriberCount,
         })
       } catch (error: unknown) {
         return handleError(error, 'bookmark-folders/[id]/subscribe DELETE')
