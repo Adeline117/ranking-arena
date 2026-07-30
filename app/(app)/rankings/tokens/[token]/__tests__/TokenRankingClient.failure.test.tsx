@@ -31,6 +31,7 @@ const initialTrader: TokenTrader = {
   arena_score: 81,
   roi: 12,
   total_pnl: 500,
+  token_rank: 1,
   token_pnl: 200,
   token_trade_count: 8,
   token_win_rate: 62,
@@ -136,6 +137,7 @@ describe('TokenRankingClient failure state', () => {
               ...initialTrader,
               source_trader_id: 'trader-page-1',
               handle: 'Bob',
+              token_rank: 51,
             },
           ],
           total: 51,
@@ -168,5 +170,42 @@ describe('TokenRankingClient failure state', () => {
 
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
     expect(global.fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects a server rank that falls outside the requested page window', async () => {
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        token: 'BTC',
+        period: '90D',
+        traders: [
+          {
+            ...initialTrader,
+            source_trader_id: 'wrong-page-rank',
+            handle: 'Wrong page',
+            token_rank: 1,
+          },
+        ],
+        total: 51,
+      }),
+    })
+
+    render(
+      <TokenRankingClient
+        token="BTC"
+        initialPeriod="90D"
+        initialTraders={[initialTrader]}
+        initialTotal={51}
+        initialStatus="success"
+        asOf="2026-07-18T00:00:00.000Z"
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'tokenRankingNext' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('failedToLoadRankings')
+    expect(screen.queryByText('Wrong page')).not.toBeInTheDocument()
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
   })
 })

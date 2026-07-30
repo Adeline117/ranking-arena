@@ -33,7 +33,7 @@ export async function loadTokenTradersSSR(
  * de-duped with the API's own Redis layer by the shared 1h ISR window.
  */
 // Do not inherit empty entries cached by the former catch-and-return loader.
-const getTokenTradersSSR = unstable_cache(loadTokenTradersSSR, ['token-traders-ssr-v2'], {
+const getTokenTradersSSR = unstable_cache(loadTokenTradersSSR, ['token-traders-ssr-v3'], {
   revalidate: 3600,
   tags: ['rankings', 'by-token'],
 })
@@ -69,7 +69,7 @@ export async function generateMetadata({
   // here to avoid a doubled '… | Arena | Arena'. OG/Twitter bypass the template.
   const title = `Best ${token} Traders ${CURRENT_YEAR} — Who Trades ${token} Best?`
   const ogTitle = `${title} | Arena`
-  const description = `Top traders for ${token} ranked by PnL across current public source boards. Rankings use the latest published data and recompute every two hours.`
+  const description = `Top traders for ${token} ranked by PnL across current public source boards. Rankings use the latest available published position-history aggregates.`
 
   return {
     title,
@@ -143,7 +143,9 @@ export default async function TokenDetailPage({
       initialTraders={initial.traders}
       initialTotal={initial.total}
       initialStatus={initialStatus}
-      asOf={new Date().toISOString()}
+      // The aggregate currently exposes no trustworthy publication timestamp.
+      // Keep provenance unknown instead of presenting the render time as data freshness.
+      asOf={null}
     />
   )
 }
