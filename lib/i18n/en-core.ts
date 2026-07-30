@@ -403,8 +403,7 @@ const enCore = {
   rankingsSubNavTraders: 'Traders',
   rankingsSubNavTokens: 'Tokens',
   youAreOffline: 'You Are Offline',
-  checkNetworkAndRetryOffline:
-    'Check your network connection and try again. Some cached content may still be available.',
+  checkNetworkAndRetryOffline: 'Check your network connection, then try again.',
   retryConnection: 'Retry Connection',
   arenaTagline: 'Arena - Crypto Trader Leaderboard',
   // /saved hub + watchlist/favorites titles — first-paint-visible headings, so

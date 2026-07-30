@@ -2351,10 +2351,8 @@ const ko = {
 
   // Offline page
   youAreOffline: '오프라인 상태입니다',
-  checkNetworkAndRetryOffline:
-    '네트워크 연결을 확인하고 다시 시도해 주세요. 일부 캐시된 콘텐츠는 여전히 접근 가능할 수 있습니다.',
+  checkNetworkAndRetryOffline: '네트워크 연결을 확인한 후 다시 시도해 주세요.',
   retryConnection: '다시 연결',
-  cachedLeaderboard: '마지막으로 캐시된 리더보드',
   arenaTagline: 'Arena - 암호화폐 트레이더 리더보드',
 
   // Onboarding page
