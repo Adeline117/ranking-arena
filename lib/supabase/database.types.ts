@@ -10511,6 +10511,31 @@ export type Database = {
         }
         Returns: Json
       }
+      read_bookmark_folder_detail_snapshot: {
+        Args: {
+          p_actor_id: string | null
+          p_folder_id: string
+          p_limit: number
+          p_offset: number
+        }
+        Returns: Json
+      }
+      read_owned_bookmark_folders_snapshot: {
+        Args: { p_actor_id: string }
+        Returns: Json
+      }
+      read_profile_bookmark_folders_snapshot: {
+        Args: {
+          p_actor_id: string | null
+          p_include_private: boolean
+          p_profile_id: string
+        }
+        Returns: Json
+      }
+      read_subscribed_bookmark_folders_snapshot: {
+        Args: { p_actor_id: string; p_limit: number; p_offset: number }
+        Returns: Json
+      }
       mutate_trader_watchlist_atomic: {
         Args: {
           p_action: string

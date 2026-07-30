@@ -57,21 +57,6 @@ jest.mock('@/lib/api/response', () => ({
 
 import { DELETE, GET, PATCH } from '../route'
 
-type QueryResult = { data?: unknown; error: unknown; count?: number | null }
-
-function query(result: QueryResult): Record<string, jest.Mock> {
-  const builder: Record<string, jest.Mock> = {}
-  for (const method of ['select', 'eq', 'order', 'update', 'delete', 'in']) {
-    builder[method] = jest.fn(() => builder)
-  }
-  builder.single = jest.fn().mockResolvedValue(result)
-  builder.range = jest.fn().mockResolvedValue(result)
-  builder.then = jest.fn((resolveResult: (value: QueryResult) => unknown) =>
-    Promise.resolve(result).then(resolveResult)
-  )
-  return builder
-}
-
 function request(
   method: 'GET' | 'PATCH' | 'DELETE' = 'GET',
   body: unknown = { name: 'Renamed' }
@@ -103,11 +88,52 @@ function folder(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function detailFolder(overrides: Record<string, unknown> = {}) {
+  return {
+    ...folder(),
+    owner_handle: 'owner',
+    owner_avatar_url: null,
+    ...overrides,
+  }
+}
+
+function detailPost(overrides: Record<string, unknown> = {}) {
+  return {
+    bookmark_id: '44444444-4444-4444-8444-444444444444',
+    bookmarked_at: '2026-07-29T03:00:00Z',
+    id: '55555555-5555-4555-8555-555555555555',
+    title: 'Visible post',
+    content: 'Content',
+    author_id: OWNER_ID,
+    author_handle: 'owner',
+    group_id: null,
+    like_count: 1,
+    comment_count: 2,
+    bookmark_count: 3,
+    created_at: '2026-07-29T02:00:00Z',
+    ...overrides,
+  }
+}
+
+function detailAck(overrides: Record<string, unknown> = {}) {
+  return {
+    status: 'ok',
+    actor_id: USER_ID,
+    folder: detailFolder(),
+    posts: [],
+    is_owner: false,
+    is_subscribed: false,
+    pagination: { limit: 20, offset: 0, has_more: false },
+    ...overrides,
+  }
+}
+
 describe('/api/bookmark-folders/[id] consistency', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCreateUserScopedServerClient.mockReturnValue({ rpc: mockRpc })
     mockRpc.mockResolvedValue({ data: null, error: null })
+    mockAdminRpc.mockResolvedValue({ data: null, error: null })
   })
 
   it.each([
@@ -123,9 +149,10 @@ describe('/api/bookmark-folders/[id] consistency', () => {
   })
 
   it('distinguishes a database failure from a missing folder', async () => {
-    mockFrom.mockReturnValueOnce(
-      query({ data: null, error: { code: 'XX000', message: 'database unavailable' } })
-    )
+    mockAdminRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'XX000', message: 'database unavailable' },
+    })
 
     const response = await GET(request(), context)
 
@@ -133,9 +160,7 @@ describe('/api/bookmark-folders/[id] consistency', () => {
   })
 
   it('keeps a genuine no-row result as not found', async () => {
-    mockFrom.mockReturnValueOnce(
-      query({ data: null, error: { code: 'PGRST116', message: 'no rows' } })
-    )
+    mockAdminRpc.mockResolvedValueOnce({ data: { status: 'folder_not_found' }, error: null })
 
     const response = await GET(request(), context)
 
@@ -143,11 +168,10 @@ describe('/api/bookmark-folders/[id] consistency', () => {
   })
 
   it('does not turn an unavailable subscriber count into zero', async () => {
-    mockFrom
-      .mockReturnValueOnce(query({ data: folder(), error: null }))
-      .mockReturnValueOnce(
-        query({ count: null, error: { code: 'XX000', message: 'count failed' } })
-      )
+    mockAdminRpc.mockResolvedValueOnce({
+      data: detailAck({ folder: detailFolder({ subscriber_count: null }) }),
+      error: null,
+    })
 
     const response = await GET(request(), context)
 
@@ -155,12 +179,13 @@ describe('/api/bookmark-folders/[id] consistency', () => {
   })
 
   it('does not turn a subscription lookup failure into not subscribed', async () => {
-    mockFrom
-      .mockReturnValueOnce(query({ data: folder(), error: null }))
-      .mockReturnValueOnce(query({ count: 3, error: null }))
-      .mockReturnValueOnce(
-        query({ data: null, error: { code: 'XX000', message: 'subscription failed' } })
-      )
+    mockAdminRpc.mockResolvedValueOnce({
+      data: detailAck({
+        folder: detailFolder({ subscriber_count: 0 }),
+        is_subscribed: true,
+      }),
+      error: null,
+    })
 
     const response = await GET(request(), context)
 
@@ -168,43 +193,39 @@ describe('/api/bookmark-folders/[id] consistency', () => {
   })
 
   it('does not turn a bookmark page failure into an empty folder', async () => {
-    mockFrom
-      .mockReturnValueOnce(query({ data: folder({ user_id: USER_ID }), error: null }))
-      .mockReturnValueOnce(query({ count: 0, error: null }))
-      .mockReturnValueOnce(
-        query({ data: null, error: { code: 'XX000', message: 'bookmarks failed' } })
-      )
+    mockAdminRpc.mockResolvedValueOnce({
+      data: detailAck({ posts: null }),
+      error: null,
+    })
 
     const response = await GET(request(), context)
 
     expect(response.status).toBe(500)
   })
 
-  it('keeps GET read-only when an embedded post is absent', async () => {
-    const bookmarkPage = query({
-      data: [
-        {
-          id: '44444444-4444-4444-8444-444444444444',
-          post_id: '55555555-5555-4555-8555-555555555555',
-          created_at: '2026-07-29T00:00:00Z',
-          posts: null,
-        },
-      ],
+  it('reads one audience-filtered snapshot without touching raw service-role tables', async () => {
+    mockAdminRpc.mockResolvedValueOnce({
+      data: detailAck({
+        folder: detailFolder({ post_count: 1 }),
+        posts: [detailPost()],
+      }),
       error: null,
     })
-    mockFrom
-      .mockReturnValueOnce(query({ data: folder({ user_id: USER_ID }), error: null }))
-      .mockReturnValueOnce(query({ count: 0, error: null }))
-      .mockReturnValueOnce(bookmarkPage)
-      .mockReturnValueOnce(query({ data: { handle: 'owner', avatar_url: null }, error: null }))
 
     const response = await GET(request(), context)
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body.data.posts).toEqual([])
-    expect(bookmarkPage.delete).not.toHaveBeenCalled()
-    expect(bookmarkPage.update).not.toHaveBeenCalled()
+    expect(body.data.posts).toEqual([detailPost()])
+    expect(body.data.pagination).toEqual({ limit: 20, offset: 0, has_more: false })
+    expect(mockAdminRpc).toHaveBeenCalledWith('read_bookmark_folder_detail_snapshot', {
+      p_actor_id: USER_ID,
+      p_folder_id: FOLDER_ID,
+      p_limit: 20,
+      p_offset: 0,
+    })
+    expect(mockAdminRpc).toHaveBeenCalledTimes(1)
+    expect(mockFrom).not.toHaveBeenCalled()
 
     const source = readFileSync(
       resolve(process.cwd(), 'app/api/bookmark-folders/[id]/route.ts'),
@@ -214,8 +235,21 @@ describe('/api/bookmark-folders/[id] consistency', () => {
       source.indexOf('export async function GET'),
       source.indexOf('// 更新收藏夹信息')
     )
-    expect(getHandler).not.toContain(".from('post_bookmarks')\n                .delete()")
-    expect(getHandler).not.toContain('update({ post_count:')
+    expect(getHandler).not.toContain('.from(')
+    expect(getHandler).toContain(".rpc('read_bookmark_folder_detail_snapshot'")
+  })
+
+  it('returns 503 when the detail snapshot authority is not deployed', async () => {
+    mockAdminRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'PGRST202', message: 'Could not find the function' },
+    })
+
+    const response = await GET(request(), context)
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.error.code).toBe('SERVICE_UNAVAILABLE')
   })
 
   it.each([

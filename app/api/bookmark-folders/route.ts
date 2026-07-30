@@ -21,6 +21,15 @@ import {
   isBookmarkFolderAuthorityUnavailable,
   validateBookmarkFolderMutationAck,
 } from '@/lib/bookmarks/folder-mutation'
+import { parseOwnedBookmarkFoldersRead } from '@/lib/bookmarks/folder-read'
+
+function bookmarkFoldersUnavailable() {
+  return errorResponse(
+    'Bookmark folders are temporarily unavailable',
+    503,
+    ErrorCode.SERVICE_UNAVAILABLE
+  )
+}
 
 export const GET = withAuth(
   async ({ user, supabase, request }) => {
@@ -36,44 +45,26 @@ export const GET = withAuth(
         }
       )
       if (ensureDefaultError) {
+        if (isBookmarkFolderAuthorityUnavailable(ensureDefaultError)) {
+          return bookmarkFoldersUnavailable()
+        }
         throw ensureDefaultError
       }
 
-      // 获取用户的所有收藏夹
-      const { data: folders, error } = await supabase
-        .from('bookmark_folders')
-        .select('id, name, description, avatar_url, is_public, is_default, created_at')
-        .eq('user_id', user.id)
-        .order('is_default', { ascending: false })
-        .order('created_at', { ascending: true })
-
+      const { data, error } = await supabase.rpc('read_owned_bookmark_folders_snapshot', {
+        p_actor_id: user.id,
+      })
       if (error) {
+        if (isBookmarkFolderAuthorityUnavailable(error)) return bookmarkFoldersUnavailable()
         throw error
       }
 
-      // Attach per-folder item counts. The folder row has no count column, so the
-      // client previously rendered "undefined items". Tally the user's bookmarks by
-      // folder_id in one lightweight query (folder_id only); null-folder bookmarks
-      // belong to the default folder.
-      const list = (folders || []) as Array<{ id: string; is_default?: boolean }>
-      const countByFolder: Record<string, number> = {}
-      if (list.length > 0) {
-        const { data: marks, error: marksError } = await supabase
-          .from('post_bookmarks')
-          .select('folder_id')
-          .eq('user_id', user.id)
-        if (marksError) {
-          throw marksError
-        }
-        const defaultId = list.find((f) => f.is_default)?.id
-        for (const m of (marks || []) as Array<{ folder_id: string | null }>) {
-          const fid = m.folder_id || defaultId
-          if (fid) countByFolder[fid] = (countByFolder[fid] || 0) + 1
-        }
+      const snapshot = parseOwnedBookmarkFoldersRead(data, user.id)
+      if (snapshot.status === 'actor_inactive') return forbidden('Account is inactive')
+      if (snapshot.status !== 'ok') {
+        throw new Error('Owned bookmark folders snapshot returned an impossible status')
       }
-      return success({
-        folders: list.map((f) => ({ ...f, post_count: countByFolder[f.id] ?? 0 })),
-      })
+      return success({ folders: snapshot.folders })
     } catch (error: unknown) {
       return handleError(error, 'bookmark-folders GET')
     }
@@ -127,11 +118,7 @@ export const POST = withAuth(
       })
       if (error) {
         if (isBookmarkFolderAuthorityUnavailable(error)) {
-          return errorResponse(
-            'Bookmark folders are temporarily unavailable',
-            503,
-            ErrorCode.SERVICE_UNAVAILABLE
-          )
+          return bookmarkFoldersUnavailable()
         }
         throw error
       }

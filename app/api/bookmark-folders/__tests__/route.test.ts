@@ -66,7 +66,8 @@ const mockSupabaseRpc = jest.fn()
 const mockUserScopedRpc = jest.fn()
 const mockCreateUserScopedServerClient = jest.fn()
 const mockSupabaseFrom = jest.fn()
-let mockSupabaseRpcResult: { data: unknown; error: unknown } = { data: null, error: null }
+let mockAdminRpcResult: { data: unknown; error: unknown } = { data: null, error: null }
+let mockUserRpcResult: { data: unknown; error: unknown } = { data: null, error: null }
 let mockSupabaseSelectResult: { data: unknown; error: unknown } = { data: [], error: null }
 let mockSupabaseTableResults: Record<string, { data: unknown; error: unknown }> = {}
 
@@ -85,7 +86,7 @@ jest.mock('@/lib/supabase/user-scoped-server', () => ({
   createUserScopedServerClient: (...args: unknown[]) => mockCreateUserScopedServerClient(...args),
 }))
 
-mockSupabaseRpc.mockImplementation(() => Promise.resolve(mockSupabaseRpcResult))
+mockSupabaseRpc.mockImplementation(() => Promise.resolve(mockAdminRpcResult))
 mockSupabaseFrom.mockImplementation((table: string) => {
   const chain: Record<string, jest.Mock> = {}
   chain.select = jest.fn(() => chain)
@@ -156,8 +157,8 @@ describe('/api/bookmark-folders', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    mockSupabaseRpc.mockImplementation(() => Promise.resolve(mockSupabaseRpcResult))
-    mockUserScopedRpc.mockImplementation(() => Promise.resolve(mockSupabaseRpcResult))
+    mockSupabaseRpc.mockImplementation(() => Promise.resolve(mockAdminRpcResult))
+    mockUserScopedRpc.mockImplementation(() => Promise.resolve(mockUserRpcResult))
     mockCreateUserScopedServerClient.mockReturnValue({ rpc: mockUserScopedRpc })
     mockSupabaseFrom.mockImplementation((table: string) => {
       const chain: Record<string, jest.Mock> = {}
@@ -175,7 +176,8 @@ describe('/api/bookmark-folders', () => {
     })
     mockRequireAuth.mockResolvedValue(mockUser)
     mockGetAuthUser.mockResolvedValue(mockUser)
-    mockSupabaseRpcResult = { data: null, error: null }
+    mockAdminRpcResult = { data: null, error: null }
+    mockUserRpcResult = { data: null, error: null }
     mockSupabaseSelectResult = { data: [], error: null }
     mockSupabaseTableResults = {}
   })
@@ -195,7 +197,10 @@ describe('/api/bookmark-folders', () => {
     })
 
     it('returns empty folders list for new user', async () => {
-      mockSupabaseSelectResult = { data: [], error: null }
+      mockAdminRpcResult = {
+        data: { status: 'ok', actor_id: USER_ID, folders: [] },
+        error: null,
+      }
 
       const req = new NextRequest('http://localhost/api/bookmark-folders')
       const res = await GET(req)
@@ -208,15 +213,26 @@ describe('/api/bookmark-folders', () => {
       expect(mockUserScopedRpc).toHaveBeenCalledWith('ensure_default_bookmark_folder', {
         p_user_id: USER_ID,
       })
-      expect(mockSupabaseRpc).not.toHaveBeenCalled()
+      expect(mockSupabaseRpc).toHaveBeenCalledWith('read_owned_bookmark_folders_snapshot', {
+        p_actor_id: USER_ID,
+      })
+      expect(mockSupabaseFrom).not.toHaveBeenCalled()
     })
 
     it('returns user bookmark folders', async () => {
-      mockSupabaseSelectResult = {
-        data: [
-          { id: 'f1', name: 'Default', is_default: true, is_public: false },
-          { id: 'f2', name: 'Favorites', is_default: false, is_public: true },
-        ],
+      mockAdminRpcResult = {
+        data: {
+          status: 'ok',
+          actor_id: USER_ID,
+          folders: [
+            mutationFolder({ is_default: true, name: 'Default' }),
+            mutationFolder({
+              id: '33333333-3333-4333-8333-333333333333',
+              is_public: true,
+              name: 'Favorites',
+            }),
+          ],
+        },
         error: null,
       }
 
@@ -229,7 +245,7 @@ describe('/api/bookmark-folders', () => {
     })
 
     it('fails closed when the folder table is unavailable', async () => {
-      mockSupabaseSelectResult = {
+      mockAdminRpcResult = {
         data: null,
         error: { code: '42P01', message: 'relation does not exist' },
       }
@@ -238,12 +254,12 @@ describe('/api/bookmark-folders', () => {
       const res = await GET(req)
       const body = await res.json()
 
-      expect(res.status).toBeGreaterThanOrEqual(500)
+      expect(res.status).toBe(503)
       expect(body.success).toBe(false)
     })
 
     it('fails closed when the default-folder authority is unavailable', async () => {
-      mockSupabaseRpcResult = {
+      mockUserRpcResult = {
         data: null,
         error: { code: 'PGRST202', message: 'function is not in the schema cache' },
       }
@@ -270,24 +286,23 @@ describe('/api/bookmark-folders', () => {
       expect(mockSupabaseFrom).not.toHaveBeenCalled()
     })
 
-    it('does not turn a bookmark count failure into zero items in every folder', async () => {
-      mockSupabaseTableResults = {
-        bookmark_folders: {
-          data: [{ id: 'f1', name: 'Default', is_default: true, is_public: false }],
-          error: null,
+    it('does not turn an invalid count snapshot into zero items in every folder', async () => {
+      mockAdminRpcResult = {
+        data: {
+          status: 'ok',
+          actor_id: USER_ID,
+          folders: [mutationFolder({ post_count: null })],
         },
-        post_bookmarks: {
-          data: null,
-          error: { code: 'XX000', message: 'count read failed' },
-        },
+        error: null,
       }
 
       const req = new NextRequest('http://localhost/api/bookmark-folders')
       const res = await GET(req)
       const body = await res.json()
 
-      expect(res.status).toBeGreaterThanOrEqual(500)
+      expect(res.status).toBe(500)
       expect(body.success).toBe(false)
+      expect(mockSupabaseFrom).not.toHaveBeenCalled()
     })
   })
 
@@ -322,7 +337,7 @@ describe('/api/bookmark-folders', () => {
 
     it('creates folder successfully with valid name', async () => {
       const mockFolder = mutationFolder()
-      mockSupabaseRpcResult = {
+      mockUserRpcResult = {
         data: { status: 'created', user_id: USER_ID, folder: mockFolder },
         error: null,
       }
@@ -355,7 +370,7 @@ describe('/api/bookmark-folders', () => {
     })
 
     it('handles duplicate folder name error', async () => {
-      mockSupabaseRpcResult = { data: { status: 'name_conflict' }, error: null }
+      mockUserRpcResult = { data: { status: 'name_conflict' }, error: null }
 
       const req = new NextRequest('http://localhost/api/bookmark-folders', {
         method: 'POST',
@@ -369,7 +384,7 @@ describe('/api/bookmark-folders', () => {
     })
 
     it('returns 503 when the lifecycle authority is not deployed', async () => {
-      mockSupabaseRpcResult = {
+      mockUserRpcResult = {
         data: null,
         error: { code: 'PGRST202', message: 'Could not find the function' },
       }
@@ -387,7 +402,7 @@ describe('/api/bookmark-folders', () => {
     })
 
     it('fails closed on a forged or malformed create acknowledgement', async () => {
-      mockSupabaseRpcResult = {
+      mockUserRpcResult = {
         data: {
           status: 'created',
           user_id: USER_ID,

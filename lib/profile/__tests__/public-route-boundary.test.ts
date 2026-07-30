@@ -16,7 +16,7 @@ describe('public profile service-route audience boundary', () => {
     },
     {
       path: 'app/api/users/[handle]/bookmark-folders/route.ts',
-      childRead: ".from('bookmark_folders')",
+      childRead: "rpc('read_profile_bookmark_folders_snapshot'",
     },
   ]
 

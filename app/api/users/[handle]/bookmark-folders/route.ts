@@ -7,12 +7,17 @@ import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
   getAuthUser,
+  error as errorResponse,
+  ErrorCode,
+  forbidden,
   success,
   handleError,
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
 import { readPublicProfileAudienceByHandle } from '@/lib/profile/public-audience'
+import { isBookmarkFolderAuthorityUnavailable } from '@/lib/bookmarks/folder-mutation'
+import { parseProfileBookmarkFoldersRead } from '@/lib/bookmarks/folder-read'
 
 type RouteContext = { params: Promise<{ handle: string }> }
 
@@ -46,31 +51,37 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const isOwnProfile = currentUser?.id === audience.profile.id
 
-    // 获取用户的收藏夹
-    let query = supabase
-      .from('bookmark_folders')
-      .select('id, name, description, avatar_url, is_public, is_default, post_count, created_at')
-      .eq('user_id', audience.profile.id)
-      .order('is_default', { ascending: false })
-      .order('created_at', { ascending: false })
-
-    // 如果不是自己的主页，只显示公开的收藏夹
-    if (!isOwnProfile) {
-      query = query.eq('is_public', true)
+    const { data, error } = await supabase.rpc('read_profile_bookmark_folders_snapshot', {
+      p_actor_id: currentUser?.id ?? null,
+      p_profile_id: audience.profile.id,
+      p_include_private: isOwnProfile,
+    })
+    if (error) {
+      if (isBookmarkFolderAuthorityUnavailable(error)) {
+        return errorResponse(
+          'Bookmark folders are temporarily unavailable',
+          503,
+          ErrorCode.SERVICE_UNAVAILABLE
+        )
+      }
+      throw error
     }
-
-    const { data: folders, error: foldersError } = await query
-
-    if (foldersError) {
-      throw foldersError
+    const snapshot = parseProfileBookmarkFoldersRead(data, {
+      actorId: currentUser?.id ?? null,
+      profileId: audience.profile.id,
+      includePrivate: isOwnProfile,
+    })
+    if (snapshot.status === 'actor_inactive') return forbidden('Account is inactive')
+    if (snapshot.status === 'profile_not_found') {
+      return success({ error: 'User not found', folders: [] }, 404, noStore)
     }
-    if (!Array.isArray(folders)) {
-      throw new Error('Invalid public bookmark folder result')
+    if (snapshot.status !== 'ok') {
+      throw new Error('Profile bookmark folders snapshot returned an impossible status')
     }
 
     return success(
       {
-        folders,
+        folders: snapshot.folders,
         is_own_profile: isOwnProfile,
       },
       200,
