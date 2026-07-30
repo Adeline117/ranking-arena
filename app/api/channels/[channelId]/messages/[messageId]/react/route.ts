@@ -254,7 +254,10 @@ export async function POST(
               message: acknowledgement.messagePreview || 'your message',
               actor_id: actorId,
               link: `/channels/${channelId}`,
-              reference_id: messageId,
+              // One actor may add several allowed emoji to the same message.
+              // Keep retries of one emoji idempotent without swallowing the
+              // other distinct reactions.
+              reference_id: `channel-reaction:${messageId}:${encodeURIComponent(emoji)}`,
               read: false,
             },
             'Channel reaction notification'

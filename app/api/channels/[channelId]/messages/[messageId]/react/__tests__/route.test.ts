@@ -153,7 +153,7 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
         message: 'message preview',
         actor_id: actorId,
         link: `/channels/${channelId}`,
-        reference_id: messageId,
+        reference_id: `channel-reaction:${messageId}:%F0%9F%94%A5`,
         read: false,
       },
       'Channel reaction notification'
@@ -181,6 +181,29 @@ describe('POST /api/channels/[channelId]/messages/[messageId]/react', () => {
     })
     expect(mockGetUserHandle).not.toHaveBeenCalled()
     expect(mockFireAndForget).not.toHaveBeenCalled()
+  })
+
+  it('gives a second emoji on the same message a distinct notification identity', async () => {
+    rpcResult(
+      acknowledgement({
+        emoji: '👍',
+        counts: { '👍': 1 },
+        user_emojis: ['👍'],
+      })
+    )
+
+    const response = await POST(request({ emoji: '👍' }), context())
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(response.status).toBe(200)
+    expect(mockSendNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reference_id: `channel-reaction:${messageId}:%F0%9F%91%8D`,
+      }),
+      'Channel reaction notification'
+    )
   })
 
   it('requires authentication before parsing input or calling the RPC', async () => {
