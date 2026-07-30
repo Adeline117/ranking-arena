@@ -74,6 +74,58 @@ type LoginProfile = {
   avatar_url: string | null
 }
 
+type AccountRecoveryAcknowledgement = {
+  userId: string
+  subscriptionResumed: boolean
+  billingReactivationRequired: boolean
+}
+
+const ACCOUNT_RECOVERY_ACK_FIELDS = [
+  'billing_reactivation_required',
+  'message',
+  'subscription_resumed',
+  'success',
+  'user_id',
+]
+const AUTH_USER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function parseAccountRecoveryAcknowledgement(
+  value: unknown,
+  status: number
+): AccountRecoveryAcknowledgement | null {
+  if (status !== 200 || !value || typeof value !== 'object' || Array.isArray(value)) return null
+  const acknowledgement = value as Record<string, unknown>
+  const fields = Object.keys(acknowledgement).sort()
+  if (
+    fields.length !== ACCOUNT_RECOVERY_ACK_FIELDS.length ||
+    !fields.every((field, index) => field === ACCOUNT_RECOVERY_ACK_FIELDS[index]) ||
+    acknowledgement.success !== true ||
+    typeof acknowledgement.user_id !== 'string' ||
+    !AUTH_USER_ID_PATTERN.test(acknowledgement.user_id) ||
+    typeof acknowledgement.subscription_resumed !== 'boolean' ||
+    typeof acknowledgement.billing_reactivation_required !== 'boolean' ||
+    acknowledgement.billing_reactivation_required === acknowledgement.subscription_resumed
+  ) {
+    return null
+  }
+
+  const validMessage = acknowledgement.subscription_resumed
+    ? acknowledgement.message ===
+      'Account and retained data recovered successfully. You can now log in.'
+    : acknowledgement.message ===
+        'Account and retained data recovered, but billing must be reactivated from account settings.' ||
+      acknowledgement.message ===
+        'Account recovered, but one or more subscriptions ended during deletion and must be reactivated.'
+  if (!validMessage) return null
+
+  return {
+    userId: acknowledgement.user_id,
+    subscriptionResumed: acknowledgement.subscription_resumed,
+    billingReactivationRequired: acknowledgement.billing_reactivation_required,
+  }
+}
+
 class StaleLoginAttemptError extends Error {
   constructor() {
     super('Login operation was superseded')
@@ -1152,9 +1204,12 @@ export default function LoginPageClient() {
         signal: attempt.controller.signal,
       })
       assertAttemptAuthBoundaryCurrent(attempt)
-      const data = await res.json()
+      const data: unknown = await res.json()
       assertAttemptAuthBoundaryCurrent(attempt)
-      if (res.ok && data.success) {
+      const recoveryAcknowledgement = res.ok
+        ? parseAccountRecoveryAcknowledgement(data, res.status)
+        : null
+      if (recoveryAcknowledgement) {
         preserveRecoveryToken = false
         setShowRecoveryPrompt(false)
         showToast(t('loginAccountRecovered'), 'success')
@@ -1190,7 +1245,11 @@ export default function LoginPageClient() {
           preserveRecoveryToken = false
           setAccountRecoveryToken(null)
         }
-        setError(data.error || t('loginRecoveryFailed'))
+        const responseError =
+          data && typeof data === 'object' && !Array.isArray(data)
+            ? (data as Record<string, unknown>).error
+            : null
+        setError(typeof responseError === 'string' ? responseError : t('loginRecoveryFailed'))
       }
     } catch (err) {
       const cancelled = isCancellation(err)

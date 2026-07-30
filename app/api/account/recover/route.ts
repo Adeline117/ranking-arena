@@ -41,6 +41,18 @@ function isIsoTimestamp(value: unknown): value is string {
   )
 }
 
+function recoveredResponse(body: {
+  success: true
+  user_id: string
+  subscription_resumed: boolean
+  billing_reactivation_required: boolean
+  message: string
+}) {
+  const response = NextResponse.json(body)
+  response.headers.set('Cache-Control', 'private, no-store')
+  return response
+}
+
 async function reban(userId: string): Promise<boolean> {
   try {
     await enforceAccountDeletionAuthBan(getSupabaseAdmin().auth.admin, userId)
@@ -609,7 +621,7 @@ export const POST = withPublic(
         operationId,
         error: error instanceof Error ? error.message : String(error),
       })
-      return NextResponse.json({
+      return recoveredResponse({
         success: true,
         user_id: userId,
         subscription_resumed: false,
@@ -622,7 +634,7 @@ export const POST = withPublic(
     logger.info('Account recovered successfully', { userId })
     const subscriptionResumed = billingRecovery.terminalSubscriptionIds.length === 0
 
-    return NextResponse.json({
+    return recoveredResponse({
       success: true,
       user_id: userId,
       subscription_resumed: subscriptionResumed,

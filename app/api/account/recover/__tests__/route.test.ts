@@ -207,6 +207,7 @@ describe('account recovery', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
     expect(body).toMatchObject({
       success: true,
       user_id: 'user-1',

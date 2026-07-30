@@ -288,7 +288,7 @@ describe('LoginPageClient exact identity boundary', () => {
 
     expect(window.location.href).not.toContain(recoveryToken)
     expect(window.location.hash).toBe('')
-    expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull()
+    await waitFor(() => expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull())
     expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBeNull()
     fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
 
@@ -384,6 +384,63 @@ describe('LoginPageClient exact identity boundary', () => {
     await screen.findByText('temporarily unavailable')
 
     expect(window.location.hash).toBe('')
+    await waitFor(() =>
+      expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBe(recoveryToken)
+    )
+    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBe(recoveryToken)
+  })
+
+  it('accepts only an exact successful recovery acknowledgement', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    const recoveredUserId = '11111111-1111-4111-8111-111111111111'
+    mockSearchParams = new URLSearchParams('recover=1')
+    window.localStorage.setItem(ACCOUNT_RECOVERY_TOKEN_KEY, recoveryToken)
+    global.fetch = jest.fn().mockResolvedValue(
+      Object.assign(
+        new Response(
+          JSON.stringify({
+            success: true,
+            user_id: recoveredUserId,
+            subscription_resumed: true,
+            billing_reactivation_required: false,
+            message: 'Account and retained data recovered successfully. You can now log in.',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        ),
+        { ok: true }
+      )
+    )
+
+    await renderLogin()
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'loginRecoverMyAccount' })
+      ).not.toBeInTheDocument()
+    )
+    await waitFor(() => expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull())
+    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBeNull()
+  })
+
+  it('preserves the credential for a malformed HTTP 200 recovery response', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    mockSearchParams = new URLSearchParams('recover=1')
+    window.localStorage.setItem(ACCOUNT_RECOVERY_TOKEN_KEY, recoveryToken)
+    global.fetch = jest.fn().mockResolvedValue(
+      Object.assign(
+        new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+        { ok: true }
+      )
+    )
+
+    await renderLogin()
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+
+    await screen.findByText('loginRecoveryFailed')
     await waitFor(() =>
       expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBe(recoveryToken)
     )
