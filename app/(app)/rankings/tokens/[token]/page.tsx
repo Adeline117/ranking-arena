@@ -1,60 +1,127 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
-import { unstable_cache } from 'next/cache'
+import { notFound, redirect } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import TokenRankingClient, { type Period, type TokenTrader } from './TokenRankingClient'
+import {
+  getTokenTraderRankingSnapshot,
+  TOKEN_RANKING_MAX_GENERATION,
+  type TokenRankingPeriod,
+  type TokenTraderRankingSnapshot,
+} from '@/lib/rankings/token-ranking-snapshot'
+import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
+import TokenRankingClient from './TokenRankingClient'
 import { BASE_URL } from '@/lib/constants/urls'
-import { getTokenTraderRankings } from '@/lib/rankings/token-traders'
+
 const CURRENT_YEAR = new Date().getFullYear()
-
-// ISR: 1 hour (matches the by-token API cold-cache TTL).
-export const revalidate = 3600
-
-// Only allow 1-20 uppercase alphanumeric characters (valid crypto token symbols)
-const VALID_TOKEN_RE = /^[A-Z0-9]{1,20}$/
-
 const PAGE_SIZE = 50
-// SSR fetch budget: the position-history aggregation can be slow on a cold
-// cache during cron contention; past it we mark the seed failed so the client
-// can retry without presenting a fabricated empty ranking.
-const SSR_TIMEOUT_MS = 4000
+const MAX_PAGE_INDEX = 40_000
+const SSR_TIMEOUT_MS = 4_000
+
+// The current DB head must be read for every request. A one-hour Full Route
+// Cache could otherwise pin HTML to a retired generation after the API moved.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+type RawSearchParams = Record<string, string | string[] | undefined>
+
+export interface TokenPageQuery {
+  period: TokenRankingPeriod
+  page: number
+  generation?: string
+  canonical: boolean
+}
+
+function oneValue(value: string | string[] | undefined): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
+export function parseTokenPageQuery(searchParams: RawSearchParams): TokenPageQuery {
+  const allowedKeys = new Set(['generation', 'page', 'period'])
+  const exactKeys = Object.keys(searchParams).every(
+    (key) => allowedKeys.has(key) && !Array.isArray(searchParams[key])
+  )
+  const rawPeriod = oneValue(searchParams.period)
+  const normalizedPeriod = rawPeriod?.toUpperCase()
+  const period: TokenRankingPeriod =
+    normalizedPeriod === '7D' || normalizedPeriod === '30D' || normalizedPeriod === '90D'
+      ? normalizedPeriod
+      : '90D'
+
+  const rawPage = oneValue(searchParams.page)
+  const page =
+    rawPage && /^[1-9]\d{0,4}$/.test(rawPage) ? Math.min(Number(rawPage), MAX_PAGE_INDEX) : 0
+  const rawGeneration = oneValue(searchParams.generation)
+  let generation: string | undefined
+  if (rawGeneration && /^[1-9]\d{0,15}$/.test(rawGeneration)) {
+    const parsed = BigInt(rawGeneration)
+    if (parsed <= BigInt(TOKEN_RANKING_MAX_GENERATION) && String(parsed) === rawGeneration) {
+      generation = rawGeneration
+    }
+  }
+
+  const canonicalPeriod =
+    (rawPeriod === undefined && period === '90D') || (rawPeriod === period && period !== '90D')
+  const canonicalPage =
+    (rawPage === undefined && page === 0) || (page > 0 && rawPage === String(page))
+  const canonicalGeneration = rawGeneration === undefined || rawGeneration === generation
+
+  return {
+    period,
+    page,
+    generation,
+    canonical: exactKeys && canonicalPeriod && canonicalPage && canonicalGeneration,
+  }
+}
+
+function tokenPagePath(
+  token: string,
+  period: TokenRankingPeriod,
+  page: number,
+  generation?: string
+): string {
+  const params = new URLSearchParams()
+  if (period !== '90D') params.set('period', period)
+  if (page > 0) params.set('page', String(page))
+  if (generation) params.set('generation', generation)
+  const query = params.toString()
+  return `/rankings/tokens/${encodeURIComponent(token)}${query ? `?${query}` : ''}`
+}
 
 export async function loadTokenTradersSSR(
   token: string,
-  period: Period
-): Promise<{ traders: TokenTrader[]; total: number }> {
-  return getTokenTraderRankings(getSupabaseAdmin(), token, period, PAGE_SIZE, 0)
+  period: TokenRankingPeriod,
+  page: number,
+  generation?: string,
+  signal?: AbortSignal
+): Promise<TokenTraderRankingSnapshot> {
+  return getTokenTraderRankingSnapshot(
+    getSupabaseAdmin(),
+    {
+      token,
+      period,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+      generation,
+    },
+    { signal }
+  )
 }
 
-/**
- * Server-side first-page prefetch — replicates the GET /api/rankings/by-token
- * aggregation for offset 0 so the board paints rows on first byte instead of a
- * client-only spinner. Wrapped in unstable_cache (keyed on token+period) and
- * de-duped with the API's own Redis layer by the shared 1h ISR window.
- */
-// Do not inherit empty entries cached by the former catch-and-return loader.
-const getTokenTradersSSR = unstable_cache(loadTokenTradersSSR, ['token-traders-ssr-v3'], {
-  revalidate: 3600,
-  tags: ['rankings', 'by-token'],
-})
-
-async function withSsrTimeout<T>(promise: Promise<T>): Promise<T> {
+async function withSsrTimeout<T>(load: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController()
   let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
-      promise,
+      load(controller.signal),
       new Promise<T>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error('Token ranking SSR timed out')), SSR_TIMEOUT_MS)
+        timeout = setTimeout(() => {
+          controller.abort()
+          reject(new Error('Token ranking SSR timed out'))
+        }, SSR_TIMEOUT_MS)
       }),
     ])
   } finally {
     if (timeout) clearTimeout(timeout)
   }
-}
-
-function normalizePeriod(raw: string | undefined): Period {
-  const up = (raw || '').toUpperCase()
-  return (['7D', '30D', '90D'] as const).includes(up as Period) ? (up as Period) : '90D'
 }
 
 export async function generateMetadata({
@@ -64,9 +131,6 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { token: rawToken } = await params
   const token = rawToken.toUpperCase()
-
-  // Root layout template appends ' | Arena' to the metadata title; keep it out
-  // here to avoid a doubled '… | Arena | Arena'. OG/Twitter bypass the template.
   const title = `Best ${token} Traders ${CURRENT_YEAR} — Who Trades ${token} Best?`
   const ogTitle = `${title} | Arena`
   const description = `Top traders for ${token} ranked by PnL across current public source boards. Rankings use the latest available published position-history aggregates.`
@@ -74,9 +138,7 @@ export async function generateMetadata({
   return {
     title,
     description,
-    alternates: {
-      canonical: `${BASE_URL}/rankings/tokens/${token}`,
-    },
+    alternates: { canonical: `${BASE_URL}/rankings/tokens/${token}` },
     keywords: [
       `best ${token} traders`,
       `top ${token} traders ${CURRENT_YEAR}`,
@@ -116,36 +178,41 @@ export default async function TokenDetailPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>
-  searchParams: Promise<{ period?: string }>
+  searchParams: Promise<RawSearchParams>
 }) {
   const { token: rawToken } = await params
   const token = rawToken.toUpperCase()
+  if (!isValidTokenSymbol(token)) notFound()
 
-  // Reject malformed token symbols (SQL injection, XSS, garbage URLs)
-  if (!VALID_TOKEN_RE.test(token)) {
-    notFound()
+  const query = parseTokenPageQuery(await searchParams)
+  const canonicalPath = tokenPagePath(token, query.period, query.page, query.generation)
+  if (rawToken !== token || !query.canonical) redirect(canonicalPath)
+
+  let initial: TokenTraderRankingSnapshot | null = null
+  try {
+    initial = await withSsrTimeout((signal) =>
+      loadTokenTradersSSR(token, query.period, query.page, query.generation, signal)
+    )
+  } catch {
+    // The client receives an explicit failed seed and performs one fresh,
+    // generation-aware request. Never convert an outage into a valid empty page.
   }
 
-  const period = normalizePeriod((await searchParams).period)
-
-  let initial: { traders: TokenTrader[]; total: number } = { traders: [], total: 0 }
-  let initialStatus: 'success' | 'error' = 'success'
-  try {
-    initial = await withSsrTimeout(getTokenTradersSSR(token, period))
-  } catch {
-    initialStatus = 'error'
+  if (initial) {
+    const totalPages = Math.ceil(initial.total / PAGE_SIZE)
+    const lastPage = Math.max(totalPages - 1, 0)
+    if (query.page > lastPage) {
+      redirect(tokenPagePath(token, query.period, lastPage, initial.generation))
+    }
   }
 
   return (
     <TokenRankingClient
       token={token}
-      initialPeriod={period}
-      initialTraders={initial.traders}
-      initialTotal={initial.total}
-      initialStatus={initialStatus}
-      // The aggregate currently exposes no trustworthy publication timestamp.
-      // Keep provenance unknown instead of presenting the render time as data freshness.
-      asOf={null}
+      initialPeriod={query.period}
+      initialPage={query.page}
+      requestedGeneration={query.generation ?? null}
+      initialSnapshot={initial}
     />
   )
 }
