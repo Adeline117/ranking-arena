@@ -206,6 +206,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729175000_atomic_bookmark_folder_reads.sql
   20260729175500_atomic_ranking_notification_batch.sql
   20260729180000_atomic_bookmark_post_removal.sql
+  20260729181500_admitted_account_recovery_deadline.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055

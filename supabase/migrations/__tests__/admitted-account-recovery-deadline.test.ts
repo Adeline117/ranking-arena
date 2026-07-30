@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const migrationName = '20260729173500_admitted_account_recovery_deadline.sql'
+const migrationName = '20260729181500_admitted_account_recovery_deadline.sql'
 const migration = readFileSync(resolve(process.cwd(), 'supabase/migrations', migrationName), 'utf8')
 const pg17Proof = readFileSync(
   resolve(

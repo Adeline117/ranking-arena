@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 ADMISSION_MIGRATION="$ROOT_DIR/supabase/migrations/20260729022500_account_recovery_admission_state_machine.sql"
-DEADLINE_MIGRATION="$ROOT_DIR/supabase/migrations/20260729173500_admitted_account_recovery_deadline.sql"
+DEADLINE_MIGRATION="$ROOT_DIR/supabase/migrations/20260729181500_admitted_account_recovery_deadline.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
