@@ -7,6 +7,7 @@ import PageHeader from '@/app/components/ui/PageHeader'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import Metric from '@/app/components/ui/Metric'
 import ErrorState from '@/app/components/ui/ErrorState'
+import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
 import { tokens } from '@/lib/design-tokens'
 import { formatPnL } from '@/lib/utils/format'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -16,6 +17,32 @@ export interface PopularToken {
   trade_count: number
   trader_count: number
   total_pnl: number
+}
+
+export interface TokenRankingPublicationMetadata {
+  publishedAt: string
+  publishedAtEpochMs: number
+  windowThroughDate: string
+  sourceAsOf: string | null
+  sourceThroughDate: string | null
+  dailyRowCount: number
+  popularRowCount: number
+}
+
+export interface PopularTokenIndexSnapshot extends TokenRankingPublicationMetadata {
+  contract: 'popular-token-page@1'
+  generation: string
+  lookbackDays: 90
+  limit: number
+  total: number
+  tokens: PopularToken[]
+}
+
+interface TokenCard {
+  token: string
+  trade_count: number | null
+  trader_count: number | null
+  total_pnl: number | null
 }
 
 // Featured tokens always displayed (even with no activity yet) so the index is
@@ -37,8 +64,206 @@ const FEATURED_TOKENS = [
 
 type SortKey = 'traders' | 'trades' | 'pnl'
 const CLIENT_REQUEST_TIMEOUT_MS = 15_000
+const POPULAR_TOKEN_CONTRACT = 'popular-token-page@1'
+const POPULAR_TOKEN_LIMIT = 50
+const MAX_GENERATION = 9_007_199_254_740_000
+const SNAPSHOT_KEYS = [
+  'contract',
+  'dailyRowCount',
+  'generation',
+  'limit',
+  'lookbackDays',
+  'popularRowCount',
+  'publishedAt',
+  'publishedAtEpochMs',
+  'sourceAsOf',
+  'sourceThroughDate',
+  'tokens',
+  'total',
+  'windowThroughDate',
+] as const
+const TOKEN_KEYS = ['token', 'total_pnl', 'trade_count', 'trader_count'] as const
+const RFC3339_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
-function sortValue(tk: PopularToken, key: SortKey): number {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value)
+  return actual.length === expected.length && expected.every((key) => Object.hasOwn(value, key))
+}
+
+function isSafeInteger(value: unknown, minimum = 0): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= minimum
+}
+
+function isCanonicalDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return (
+    Number(value.slice(0, 4)) >= 1000 &&
+    !Number.isNaN(parsed.valueOf()) &&
+    parsed.toISOString().slice(0, 10) === value
+  )
+}
+
+function parseRfc3339EpochMs(value: unknown): number | null {
+  if (typeof value !== 'string') return null
+  const match = RFC3339_PATTERN.exec(value)
+  if (!match) return null
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, fraction, zone] = match
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  const hour = Number(hourText)
+  const minute = Number(minuteText)
+  const second = Number(secondText)
+  const baseMs = Date.UTC(year, month - 1, day, hour, minute, second)
+  const probe = new Date(baseMs)
+  if (
+    year < 1000 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59 ||
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() !== month - 1 ||
+    probe.getUTCDate() !== day ||
+    probe.getUTCHours() !== hour ||
+    probe.getUTCMinutes() !== minute ||
+    probe.getUTCSeconds() !== second
+  ) {
+    return null
+  }
+
+  let offsetMinutes = 0
+  if (zone !== 'Z') {
+    const offsetHours = Number(zone.slice(1, 3))
+    const offsetMinutePart = Number(zone.slice(4, 6))
+    if (offsetHours > 23 || offsetMinutePart > 59) return null
+    offsetMinutes = (zone[0] === '+' ? 1 : -1) * (offsetHours * 60 + offsetMinutePart)
+  }
+  const fractionMicros = Number((fraction ?? '').padEnd(6, '0') || '0')
+  const epochMs = baseMs - offsetMinutes * 60_000 + Math.floor(fractionMicros / 1000)
+  return Number.isSafeInteger(epochMs) ? epochMs : null
+}
+
+function isRfc3339(value: unknown): value is string {
+  return parseRfc3339EpochMs(value) !== null
+}
+
+function isGeneration(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return false
+  try {
+    const generation = BigInt(value)
+    return generation <= BigInt(MAX_GENERATION) && String(generation) === value
+  } catch {
+    return false
+  }
+}
+
+function parsePopularToken(
+  value: unknown,
+  index: number,
+  previous: PopularToken | null
+): PopularToken {
+  if (!isRecord(value) || !hasExactKeys(value, TOKEN_KEYS)) {
+    throw new Error(`popular-tokens: token row ${index} shape changed`)
+  }
+  const token = value.token
+  const tradeCount = value.trade_count
+  const traderCount = value.trader_count
+  const totalPnl = value.total_pnl
+  if (
+    typeof token !== 'string' ||
+    !/^[A-Z0-9]{1,10}$/.test(token) ||
+    !/[A-Z]/.test(token) ||
+    !isSafeInteger(tradeCount) ||
+    !isSafeInteger(traderCount) ||
+    typeof totalPnl !== 'number' ||
+    !Number.isFinite(totalPnl)
+  ) {
+    throw new Error(`popular-tokens: token row ${index} is invalid`)
+  }
+  const parsed = {
+    token,
+    trade_count: tradeCount,
+    trader_count: traderCount,
+    total_pnl: totalPnl,
+  }
+  if (
+    previous &&
+    (parsed.trade_count > previous.trade_count ||
+      (parsed.trade_count === previous.trade_count && parsed.token <= previous.token))
+  ) {
+    throw new Error(`popular-tokens: token row ${index} is out of order`)
+  }
+  return parsed
+}
+
+export function parsePopularTokenIndexSnapshot(value: unknown): PopularTokenIndexSnapshot {
+  if (!isRecord(value) || !hasExactKeys(value, SNAPSHOT_KEYS)) {
+    throw new Error('popular-tokens: snapshot shape changed')
+  }
+  const publishedAtEpochMs = parseRfc3339EpochMs(value.publishedAt)
+  const sourceAsOfEpochMs = value.sourceAsOf === null ? null : parseRfc3339EpochMs(value.sourceAsOf)
+  if (
+    value.contract !== POPULAR_TOKEN_CONTRACT ||
+    value.lookbackDays !== 90 ||
+    value.limit !== POPULAR_TOKEN_LIMIT ||
+    !isGeneration(value.generation) ||
+    typeof value.publishedAt !== 'string' ||
+    publishedAtEpochMs === null ||
+    !isSafeInteger(value.publishedAtEpochMs) ||
+    publishedAtEpochMs !== value.publishedAtEpochMs ||
+    !isCanonicalDate(value.windowThroughDate) ||
+    !(value.sourceAsOf === null || isRfc3339(value.sourceAsOf)) ||
+    (sourceAsOfEpochMs !== null &&
+      publishedAtEpochMs !== null &&
+      sourceAsOfEpochMs > publishedAtEpochMs + 5 * 60_000) ||
+    !(value.sourceThroughDate === null || isCanonicalDate(value.sourceThroughDate)) ||
+    !isSafeInteger(value.dailyRowCount) ||
+    !isSafeInteger(value.popularRowCount) ||
+    !isSafeInteger(value.total) ||
+    !Array.isArray(value.tokens) ||
+    value.tokens.length !== Math.min(value.total, POPULAR_TOKEN_LIMIT)
+  ) {
+    throw new Error('popular-tokens: snapshot contract is invalid')
+  }
+
+  const seen = new Set<string>()
+  let previous: PopularToken | null = null
+  const parsedTokens = value.tokens.map((candidate, index) => {
+    const parsed = parsePopularToken(candidate, index, previous)
+    if (seen.has(parsed.token)) throw new Error('popular-tokens: duplicate token')
+    seen.add(parsed.token)
+    previous = parsed
+    return parsed
+  })
+
+  return {
+    contract: POPULAR_TOKEN_CONTRACT,
+    generation: value.generation,
+    publishedAt: value.publishedAt,
+    publishedAtEpochMs: value.publishedAtEpochMs,
+    windowThroughDate: value.windowThroughDate,
+    sourceAsOf: value.sourceAsOf,
+    sourceThroughDate: value.sourceThroughDate,
+    dailyRowCount: value.dailyRowCount,
+    popularRowCount: value.popularRowCount,
+    lookbackDays: 90,
+    limit: POPULAR_TOKEN_LIMIT,
+    total: value.total,
+    tokens: parsedTokens,
+  }
+}
+
+function sortValue(tk: TokenCard, key: SortKey): number | null {
   switch (key) {
     case 'trades':
       return tk.trade_count
@@ -93,20 +318,21 @@ const TOKENS_INDEX_CSS = `
 `
 
 interface TokensIndexClientProps {
-  initialTokens?: PopularToken[]
+  initialSnapshot?: PopularTokenIndexSnapshot | null
   initialStatus?: 'success' | 'error'
 }
 
 export default function TokensIndexClient({
-  initialTokens,
-  initialStatus = initialTokens === undefined ? 'error' : 'success',
+  initialSnapshot = null,
+  initialStatus = initialSnapshot === null ? 'error' : 'success',
 }: TokensIndexClientProps = {}) {
   const { t } = useLanguage()
-  const [popularTokens, setPopularTokens] = useState<PopularToken[]>(initialTokens || [])
-  const [loadState, setLoadState] = useState<'loading' | 'success' | 'error'>(
-    initialStatus === 'success' ? 'success' : 'loading'
+  const [snapshot, setSnapshot] = useState<PopularTokenIndexSnapshot | null>(
+    initialStatus === 'success' ? initialSnapshot : null
   )
-  const [hasSuccessfulData, setHasSuccessfulData] = useState(initialStatus === 'success')
+  const [loadState, setLoadState] = useState<'loading' | 'success' | 'error'>(
+    initialStatus === 'success' && initialSnapshot !== null ? 'success' : 'loading'
+  )
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('traders')
   const requestRef = useRef<AbortController | null>(null)
@@ -133,20 +359,15 @@ export default function TokensIndexClient({
     try {
       const response = await fetch('/api/rankings/by-token?action=popular-tokens', {
         signal: controller.signal,
+        cache: 'no-store',
       })
       if (!response.ok) throw new Error(`popular-tokens: ${response.status}`)
-      const data: unknown = await response.json()
-      if (
-        typeof data !== 'object' ||
-        data === null ||
-        !Array.isArray((data as { tokens?: unknown }).tokens)
-      ) {
-        throw new Error('popular-tokens: invalid response')
-      }
+      const nextSnapshot = parsePopularTokenIndexSnapshot(await response.json())
       if (requestRef.current !== controller || controller.signal.aborted) return
 
-      setPopularTokens((data as { tokens: PopularToken[] }).tokens)
-      setHasSuccessfulData(true)
+      // One state update replaces generation, publication metadata, total, and
+      // rows together. No field from the previous generation can survive.
+      setSnapshot(nextSnapshot)
       setLoadState('success')
     } catch (error) {
       if (requestRef.current !== controller) return
@@ -155,6 +376,7 @@ export default function TokensIndexClient({
       setLoadState('error')
     } finally {
       clearTimeout(timeout)
+      if (requestRef.current === controller) requestRef.current = null
     }
   }, [])
 
@@ -167,27 +389,35 @@ export default function TokensIndexClient({
     return () => requestRef.current?.abort()
   }, [initialStatus, loadPopularTokens])
 
-  // Merge featured tokens with popular tokens (dedup by symbol).
+  // Merge featured tokens with published tokens (dedup by symbol). Missing
+  // featured tokens are discovery links, not measured zero-activity rows.
   const allTokens = useMemo(() => {
-    const tokenMap = new Map(popularTokens.map((tk) => [tk.token, tk]))
-    const result: PopularToken[] = []
+    const tokenMap = new Map((snapshot?.tokens ?? []).map((tk) => [tk.token, tk]))
+    const result: TokenCard[] = []
 
     for (const ft of FEATURED_TOKENS) {
       if (tokenMap.has(ft)) {
         result.push(tokenMap.get(ft)!)
         tokenMap.delete(ft)
       } else {
-        result.push({ token: ft, trade_count: 0, trader_count: 0, total_pnl: 0 })
+        result.push({ token: ft, trade_count: null, trader_count: null, total_pnl: null })
       }
     }
     for (const [, v] of tokenMap) result.push(v)
     return result
-  }, [popularTokens])
+  }, [snapshot])
 
-  // Sort by the chosen metric (desc). Zero-activity tokens naturally fall to the
-  // bottom for traders/trades, so they're never pinned above real data.
+  // Known values sort first. Unknown featured-token metrics remain at the end
+  // even when every published PnL is negative.
   const sorted = useMemo(() => {
-    return [...allTokens].sort((a, b) => sortValue(b, sortKey) - sortValue(a, sortKey))
+    return [...allTokens].sort((a, b) => {
+      const aValue = sortValue(a, sortKey)
+      const bValue = sortValue(b, sortKey)
+      if (aValue === null && bValue === null) return a.token.localeCompare(b.token)
+      if (aValue === null) return 1
+      if (bValue === null) return -1
+      return bValue - aValue || a.token.localeCompare(b.token)
+    })
   }, [allTokens, sortKey])
 
   const filtered = useMemo(() => {
@@ -236,7 +466,7 @@ export default function TokensIndexClient({
             border: `1px solid ${tokens.colors.border.primary}`,
             background: tokens.colors.bg.secondary,
             color: tokens.colors.text.primary,
-            fontSize: 14,
+            fontSize: tokens.typography.fontSize.base,
             transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
           }}
         />
@@ -265,12 +495,12 @@ export default function TokensIndexClient({
           title={t('failedToLoadRankings')}
           description={t('tryAgain')}
           retry={() => void loadPopularTokens()}
-          variant={hasSuccessfulData ? 'compact' : 'default'}
+          variant={snapshot ? 'compact' : 'default'}
         />
       )}
 
       {/* Token Grid */}
-      {loadState === 'loading' && !hasSuccessfulData ? (
+      {loadState === 'loading' && snapshot === null ? (
         <Box
           style={{
             display: 'grid',
@@ -291,8 +521,11 @@ export default function TokensIndexClient({
             />
           ))}
         </Box>
-      ) : loadState !== 'error' || hasSuccessfulData ? (
+      ) : loadState !== 'error' || snapshot !== null ? (
         <Box
+          data-generation={snapshot?.generation}
+          data-published-at={snapshot?.publishedAt}
+          data-total={snapshot?.total}
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
@@ -300,10 +533,17 @@ export default function TokensIndexClient({
           }}
         >
           {filtered.map((tk) => {
-            const hasActivity = tk.trade_count > 0 || tk.trader_count > 0
-            const ariaLabel = hasActivity
-              ? `${tk.token} — ${tk.trader_count} ${tk.trader_count === 1 ? t('tokenRankingsTradersSingular') : t('tokenRankingsTraders')}, ${tk.trade_count} ${t('tokenRankingsTrades')}, ${t('tokenRankingsTotalPnl')} ${formatPnL(tk.total_pnl)}`
-              : `${tk.token} — ${t('tokenRankingsNoActivity')}`
+            const metrics =
+              tk.trade_count === null || tk.trader_count === null || tk.total_pnl === null
+                ? null
+                : {
+                    tradeCount: tk.trade_count,
+                    traderCount: tk.trader_count,
+                    totalPnl: tk.total_pnl,
+                  }
+            const ariaLabel = metrics
+              ? `${tk.token} — ${metrics.traderCount} ${metrics.traderCount === 1 ? t('tokenRankingsTradersSingular') : t('tokenRankingsTraders')}, ${metrics.tradeCount} ${t('tokenRankingsTrades')}, ${t('tokenRankingsTotalPnl')} ${formatPnL(metrics.totalPnl)}`
+              : `${tk.token} — ${t('unknown')}`
             return (
               <Link
                 key={tk.token}
@@ -311,9 +551,10 @@ export default function TokensIndexClient({
                 className="tk-card-link"
                 aria-label={ariaLabel}
                 data-token={tk.token}
-                data-trader-count={tk.trader_count}
-                data-trade-count={tk.trade_count}
-                data-total-pnl={tk.total_pnl}
+                data-metrics-known={metrics ? 'true' : 'false'}
+                data-trader-count={metrics?.traderCount}
+                data-trade-count={metrics?.tradeCount}
+                data-total-pnl={metrics?.totalPnl}
               >
                 <Box
                   className="tk-card"
@@ -338,15 +579,15 @@ export default function TokensIndexClient({
                         {tk.token}
                       </Text>
                       <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
-                        {tk.trader_count > 0
-                          ? `${tk.trader_count} ${tk.trader_count === 1 ? t('tokenRankingsTradersSingular') : t('tokenRankingsTraders')}`
+                        {metrics
+                          ? `${metrics.traderCount} ${metrics.traderCount === 1 ? t('tokenRankingsTradersSingular') : t('tokenRankingsTraders')}`
                           : t('tokenRankingsViewRankings')}
                       </Text>
                     </Box>
                   </Box>
 
-                  {/* Stats — real activity, or a clean "no activity yet" note */}
-                  {hasActivity ? (
+                  {/* Stats — published measurements or an explicit unknown. */}
+                  {metrics ? (
                     <Box
                       style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}
                     >
@@ -362,11 +603,11 @@ export default function TokensIndexClient({
                           weight="bold"
                           style={{ color: tokens.colors.text.primary }}
                         >
-                          {tk.trade_count.toLocaleString('en-US')}
+                          {metrics.tradeCount.toLocaleString('en-US')}
                         </Text>
                       </Box>
                       <Metric
-                        value={tk.total_pnl}
+                        value={metrics.totalPnl}
                         format="pnl"
                         size="md"
                         showArrow
@@ -375,7 +616,7 @@ export default function TokensIndexClient({
                     </Box>
                   ) : (
                     <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
-                      {t('tokenRankingsNoActivity')}
+                      {t('unknown')}
                     </Text>
                   )}
                 </Box>
@@ -384,6 +625,22 @@ export default function TokensIndexClient({
           })}
         </Box>
       ) : null}
+
+      {snapshot &&
+        (snapshot.sourceAsOf ? (
+          <ProvenanceFooter
+            provenance={{ source: 'arena', asOf: snapshot.sourceAsOf }}
+            exchangeName="Arena"
+          />
+        ) : (
+          <Text
+            size="xs"
+            color="tertiary"
+            style={{ display: 'block', marginTop: tokens.spacing[2] }}
+          >
+            {t('provenanceSource')}: Arena · {t('provenanceAsOf')} {t('unknown')}
+          </Text>
+        ))}
     </Box>
   )
 }
