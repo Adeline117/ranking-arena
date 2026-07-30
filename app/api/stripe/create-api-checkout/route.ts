@@ -13,6 +13,7 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { env } from '@/lib/env'
 import { extractUserFromRequest } from '@/lib/auth/extract-user'
 import { API_PRICING } from '@/app/(app)/user-center/membership-config'
+import { isTrustedStripeCheckoutUrl } from '@/lib/stripe/hosted-url'
 
 const logger = createLogger('stripe-create-api-checkout')
 
@@ -227,16 +228,6 @@ function stripeObjectId(value: unknown): string | null {
   return typeof record?.id === 'string' ? record.id : null
 }
 
-function isHostedCheckoutUrl(value: unknown): value is string {
-  if (typeof value !== 'string') return false
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' && url.hostname === 'checkout.stripe.com'
-  } catch {
-    return false
-  }
-}
-
 function parseExactCheckoutSession(params: {
   value: unknown
   customerId: string
@@ -262,7 +253,7 @@ function parseExactCheckoutSession(params: {
     STRIPE_SESSION_ID_PATTERN.test(id) &&
     id.length <= 255 &&
     persistedSessionMatches &&
-    isHostedCheckoutUrl(url) &&
+    isTrustedStripeCheckoutUrl(url) &&
     session.object === 'checkout.session' &&
     session.mode === 'subscription' &&
     session.status === 'open' &&

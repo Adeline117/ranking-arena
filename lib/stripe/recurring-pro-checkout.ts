@@ -1,5 +1,6 @@
 import type Stripe from 'stripe'
 import { PRICING } from '@/app/(app)/user-center/membership-config'
+import { isTrustedStripeCheckoutUrl } from '@/lib/stripe/hosted-url'
 
 export type RecurringProPlan = 'monthly' | 'yearly'
 
@@ -135,16 +136,6 @@ function stripeObjectId(value: unknown): string | null {
   if (typeof value === 'string') return value
   const valueRecord = record(value)
   return typeof valueRecord?.id === 'string' ? valueRecord.id : null
-}
-
-function isHostedCheckoutUrl(value: unknown): value is string {
-  if (typeof value !== 'string') return false
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' && url.hostname === 'checkout.stripe.com'
-  } catch {
-    return false
-  }
 }
 
 function isEmptyStripeCollection(value: unknown): boolean {
@@ -418,7 +409,7 @@ export async function verifyRecurringProCheckoutSession(params: {
       ? session.status === 'open' &&
         session.payment_status === 'unpaid' &&
         session.subscription === null &&
-        isHostedCheckoutUrl(session.url)
+        isTrustedStripeCheckoutUrl(session.url)
       : session.status === 'complete' &&
         session.payment_status === expectedPaymentStatus &&
         stripeObjectId(session.subscription) === params.subscriptionId

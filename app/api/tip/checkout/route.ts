@@ -12,6 +12,7 @@ import { env } from '@/lib/env'
 import { createOneTimePaymentSession, getOrCreateStripeCustomer, getStripe } from '@/lib/stripe'
 import { sanitizeInput } from '@/lib/utils/sanitize'
 import { isTipCheckoutRuntimeEnabled } from '@/lib/security/tip-checkout-cutover'
+import { isTrustedStripeCheckoutUrl } from '@/lib/stripe/hosted-url'
 
 const logger = createLogger('tip-checkout')
 
@@ -68,16 +69,6 @@ function serviceUnavailable(message = 'Unable to prepare tip checkout. Please re
       },
     }
   )
-}
-
-function isHostedCheckoutUrl(value: string | null): value is string {
-  if (!value) return false
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' && url.hostname === 'checkout.stripe.com'
-  } catch {
-    return false
-  }
 }
 
 function isEmptyStripeCollection(value: unknown): boolean {
@@ -233,7 +224,7 @@ async function verifyFreshTipSession(params: {
     session.subscription === null &&
     session.invoice === null &&
     session.after_expiration === null &&
-    isHostedCheckoutUrl(session.url) &&
+    isTrustedStripeCheckoutUrl(session.url) &&
     session.currency === 'usd' &&
     session.amount_subtotal === params.amountCents &&
     session.amount_total === params.amountCents &&

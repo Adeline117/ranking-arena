@@ -30,6 +30,7 @@ import {
   verifyRecurringProCheckoutSession,
   type RecurringProPlan,
 } from '@/lib/stripe/recurring-pro-checkout'
+import { isTrustedStripeCheckoutUrl } from '@/lib/stripe/hosted-url'
 
 const LIFETIME_RESERVATION_TTL_SECONDS = 60 * 60
 const LIFETIME_PRICE_CENTS = Math.round(PRICING.lifetime.price * 100)
@@ -125,16 +126,6 @@ function stripeId(value: string | { id: string } | null): string | null {
   return typeof value === 'string' ? value : value?.id || null
 }
 
-function isHostedCheckoutUrl(value: string | null): value is string {
-  if (!value) return false
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' && url.hostname === 'checkout.stripe.com'
-  } catch {
-    return false
-  }
-}
-
 function checkoutLinePriceId(line: Stripe.LineItem): string | null {
   return line.price?.id || null
 }
@@ -224,7 +215,7 @@ async function verifyFreshLifetimeSession(params: {
     session.payment_status === 'unpaid' &&
     session.subscription === null &&
     session.after_expiration === null &&
-    isHostedCheckoutUrl(session.url) &&
+    isTrustedStripeCheckoutUrl(session.url) &&
     session.currency === 'usd' &&
     session.amount_subtotal === LIFETIME_PRICE_CENTS &&
     session.amount_total === LIFETIME_PRICE_CENTS &&
