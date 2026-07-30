@@ -307,7 +307,7 @@ const okxAdapter: SourceAdapter = {
         `&uniqueCode=${exchangeTraderId}&limit=100` +
         (after ? `&after=${after}` : '')
       const data = await fetchData(session, url)
-      if (data.length === 0) break
+      if (data.length === 0) return
 
       yield {
         pageIndex: page,
@@ -318,7 +318,9 @@ const okxAdapter: SourceAdapter = {
 
       const last = data[data.length - 1]
       const lastId = String(last.subPosId ?? '')
-      if (!lastId) break
+      if (!lastId) {
+        throw new Error('[okx] position history page is missing the pagination subPosId')
+      }
       if (Number.isFinite(cursorMs)) {
         // The persisted position-history cursor is a close timestamp. Compare
         // it with the same source field; using openTime can stop early for a
@@ -326,10 +328,13 @@ const okxAdapter: SourceAdapter = {
         // checkpoint.
         const oldest = Number(last.closeTime)
         // Overlap reached: this page already dips into stored close history.
-        if (Number.isFinite(oldest) && oldest <= cursorMs) break
+        if (Number.isFinite(oldest) && oldest <= cursorMs) return
       }
       after = lastId
     }
+    throw new Error(
+      `[okx] position history reached page cap ${maxPages} without exhaustion or cursor overlap`
+    )
   },
 
   parseLeaderboard: parseOkxLeaderboardPage,
