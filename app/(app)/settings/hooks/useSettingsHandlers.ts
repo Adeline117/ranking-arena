@@ -924,8 +924,10 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
           return
         }
         // Revert avatar/cover preview on DB save failure
+        setAvatarUrl(previousAvatarUrl)
         setPreviewUrl(previousAvatarUrl)
         setAvatarFile(null)
+        setCoverUrl(previousCoverUrl)
         setCoverPreviewUrl(previousCoverUrl)
         setCoverFile(null)
         if (
@@ -989,9 +991,13 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     } catch (error) {
       if (!stateBelongsToViewer(scope, profileGeneration)) return
       uiLogger.error('Error saving:', error)
-      // Revert avatar/cover preview on unexpected failure
+      // Keep canonical URL state and its preview in lockstep after an
+      // ambiguous/failed write. Otherwise a later save can silently persist a
+      // newly-uploaded URL that the UI already appeared to roll back.
+      setAvatarUrl(previousAvatarUrl)
       setPreviewUrl(previousAvatarUrl)
       setAvatarFile(null)
+      setCoverUrl(previousCoverUrl)
       setCoverPreviewUrl(previousCoverUrl)
       setCoverFile(null)
       showToast(t('saveFailedRetry'), 'error')

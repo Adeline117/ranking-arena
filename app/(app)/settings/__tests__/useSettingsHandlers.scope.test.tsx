@@ -459,6 +459,66 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.hasUnsavedChanges()).toBe(false)
   })
 
+  it('rolls back canonical image URLs when uploads succeed but the profile write fails', async () => {
+    const oldAvatar = 'https://cdn.example.com/old-avatar.jpg'
+    const oldCover = 'https://cdn.example.com/old-cover.jpg'
+    const newAvatar = 'https://cdn.example.com/new-avatar.jpg'
+    const newCover = 'https://cdn.example.com/new-cover.png'
+    mockPublicMaybeSingle
+      .mockResolvedValueOnce({
+        ...publicProfile('alpha'),
+        data: { ...publicProfile('alpha').data, avatar_url: oldAvatar, cover_url: oldCover },
+      })
+      .mockResolvedValueOnce({
+        data: { avatar_url: oldAvatar, cover_url: oldCover },
+        error: null,
+      })
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockProfileSaveMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'XX001', message: 'profile write failed' },
+    })
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ url: newAvatar }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ url: newCover }),
+      }) as unknown as typeof fetch
+
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.previewUrl).toBe(oldAvatar))
+
+    act(() => {
+      hook.result.current.setAvatarFile(new File(['avatar'], 'avatar.jpg', { type: 'image/jpeg' }))
+      hook.result.current.setCoverFile(new File(['cover'], 'cover.png', { type: 'image/png' }))
+    })
+    await act(async () => {
+      await hook.result.current.handleSaveProfile()
+    })
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'update_own_profile_settings',
+      expect.objectContaining({ p_avatar_url: newAvatar, p_cover_url: newCover })
+    )
+    expect(hook.result.current.previewUrl).toBe(oldAvatar)
+    expect(hook.result.current.coverPreviewUrl).toBe(oldCover)
+    expect(hook.result.current.coverUrl).toBe(oldCover)
+    expect(hook.result.current.hasUnsavedChanges()).toBe(false)
+    expect(showToast).toHaveBeenCalledWith(
+      'saveFailedWithMsg'.replace('{msg}', 'profile write failed'),
+      'error'
+    )
+  })
+
   it('writes a changed canonical CJK handle as a non-null string', async () => {
     mockPublicMaybeSingle
       .mockResolvedValueOnce(publicProfile('alpha'))
