@@ -125,37 +125,51 @@ async function main() {
 
   // ---------- Step 2: 关注/取关（用排行榜第一名的活 trader）----------
   newBucket('2-follow-unfollow')
-  let traderPath = '/trader/soul'
+  let traderPath = null
   try {
     // 页面内 fetch（Node UA 会被 WAF 拦 Forbidden）
     const rk = await apiCall('/api/rankings?window=30d&limit=1', { method: 'GET' })
     const t0r = rk?.body?.data?.traders?.[0]
-    if (t0r?.trader_key)
-      traderPath = `/trader/${encodeURIComponent(t0r.trader_key)}?platform=${t0r.platform}`
-  } catch {}
-  note(`目标 trader: ${traderPath}`)
-  await goto(traderPath)
-  const followBtn = page
-    .locator('button:has-text("Follow"), button:has-text("关注"), button:has-text("+ Follow")')
-    .first()
-  if (await followBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await followBtn.click()
-    await page.waitForTimeout(2500)
-    const unfollowBtn = page
-      .locator(
-        'button:has-text("Following"), button:has-text("已关注"), button:has-text("Unfollow"), button:has-text("取消关注")'
-      )
-      .first()
-    const followed = await unfollowBtn.isVisible({ timeout: 3000 }).catch(() => false)
-    note(followed ? 'OK 关注成功（按钮状态翻转）' : 'FAIL 点击关注后按钮未翻转')
-    if (followed) {
-      await unfollowBtn.click()
-      await page.waitForTimeout(2500)
-      const restored = await followBtn.isVisible({ timeout: 3000 }).catch(() => false)
-      note(restored ? 'OK 取关成功（已清理）' : 'WARN 取关后按钮未还原 — 需人工确认清理')
+    if (
+      rk?.status >= 200 &&
+      rk.status < 300 &&
+      typeof t0r?.trader_key === 'string' &&
+      t0r.trader_key &&
+      typeof t0r?.platform === 'string' &&
+      t0r.platform
+    ) {
+      traderPath = `/trader/${encodeURIComponent(t0r.trader_key)}?source=${encodeURIComponent(t0r.platform)}`
     }
+  } catch (error) {
+    note(`SKIP 当前 trader 样本请求失败: ${String(error?.message || error).slice(0, 120)}`)
+  }
+  if (!traderPath) {
+    note('SKIP 当前公开排行榜没有可验证的 trader 样本（不回退历史 fixture）')
   } else {
-    note('SKIP 未找到关注按钮')
+    note(`目标 trader: ${traderPath}`)
+    await goto(traderPath)
+    const followBtn = page
+      .locator('button:has-text("Follow"), button:has-text("关注"), button:has-text("+ Follow")')
+      .first()
+    if (await followBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await followBtn.click()
+      await page.waitForTimeout(2500)
+      const unfollowBtn = page
+        .locator(
+          'button:has-text("Following"), button:has-text("已关注"), button:has-text("Unfollow"), button:has-text("取消关注")'
+        )
+        .first()
+      const followed = await unfollowBtn.isVisible({ timeout: 3000 }).catch(() => false)
+      note(followed ? 'OK 关注成功（按钮状态翻转）' : 'FAIL 点击关注后按钮未翻转')
+      if (followed) {
+        await unfollowBtn.click()
+        await page.waitForTimeout(2500)
+        const restored = await followBtn.isVisible({ timeout: 3000 }).catch(() => false)
+        note(restored ? 'OK 取关成功（已清理）' : 'WARN 取关后按钮未还原 — 需人工确认清理')
+      }
+    } else {
+      note('SKIP 未找到关注按钮')
+    }
   }
 
   // ---------- Step 3: 发帖 → 点赞 → 评论 → 删评论 → 删帖（自包含闭环）----------
