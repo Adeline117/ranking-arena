@@ -56,17 +56,6 @@ export type Platform = (typeof SUPPORTED_PLATFORMS)[number]
 export const SNAPSHOT_WINDOWS = ['7D', '30D', '90D'] as const
 export type SnapshotWindow = (typeof SNAPSHOT_WINDOWS)[number]
 
-export const JOB_TYPES = [
-  'full_refresh',
-  'profile_only',
-  'snapshot_only',
-  'timeseries_only',
-] as const
-export type JobType = (typeof JOB_TYPES)[number]
-
-export const JOB_STATUSES = ['pending', 'running', 'success', 'failed', 'cancelled'] as const
-export type JobStatus = (typeof JOB_STATUSES)[number]
-
 export const SERIES_TYPES = ['equity_curve', 'daily_pnl', 'asset_breakdown'] as const
 export type SeriesType = (typeof SERIES_TYPES)[number]
 
@@ -174,26 +163,6 @@ export interface TraderTimeseriesRow {
   created_at: string
 }
 
-export interface RefreshJobRow {
-  id: string
-  job_type: JobType
-  platform: Platform
-  trader_key: string
-  priority: number
-  status: JobStatus
-  attempts: number
-  max_attempts: number
-  next_run_at: string
-  locked_at: string | null
-  locked_by: string | null
-  started_at: string | null
-  completed_at: string | null
-  last_error: string | null
-  result: Record<string, unknown> | null
-  created_at: string
-  updated_at: string
-}
-
 // ============================================
 // Timeseries Data Point Types
 // ============================================
@@ -229,11 +198,6 @@ export interface RankingsQueryParams {
   sort_dir?: 'asc' | 'desc'
   limit?: number
   offset?: number
-}
-
-export interface RefreshRequest {
-  job_type?: JobType
-  priority?: number
 }
 
 // ============================================
@@ -273,21 +237,8 @@ export interface TraderDetailResponse {
   updated_at: string
   is_stale: boolean
   staleness_seconds: number
-  refresh_job: RefreshJobSummary | null
-}
-
-export interface RefreshJobSummary {
-  id: string
-  status: JobStatus
-  attempts: number
-  last_error: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface RefreshResponse {
-  job: RefreshJobSummary
-  created: boolean // true if new job was created, false if existing job returned
+  /** Legacy wire field; the retired refresh queue is never read or exposed. */
+  refresh_job: null
 }
 
 // ============================================
