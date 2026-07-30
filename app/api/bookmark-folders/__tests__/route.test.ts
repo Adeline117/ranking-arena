@@ -17,7 +17,9 @@ jest.mock('next/server', () => {
       this.status = init.status || 200
       this.headers = new Map()
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -30,15 +32,22 @@ jest.mock('next/server', () => {
     method: string
     _body: unknown
     cookies: { get: () => undefined }
-    constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
+    constructor(
+      url: string,
+      opts?: { headers?: Record<string, string>; method?: string; body?: unknown }
+    ) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Jest Test Runner)', ...(opts?.headers || {}) }))
+      this.headers = new Map(
+        Object.entries({ 'user-agent': 'Mozilla/5.0 (Jest Test Runner)', ...(opts?.headers || {}) })
+      )
       this.method = opts?.method || 'GET'
       this._body = opts?.body
       this.cookies = { get: () => undefined }
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
@@ -56,11 +65,12 @@ const mockGetAuthUser = jest.fn()
 let mockSupabaseRpcResult: { data: unknown; error: unknown } = { data: null, error: null }
 let mockSupabaseSelectResult: { data: unknown; error: unknown } = { data: [], error: null }
 let mockSupabaseInsertResult: { data: unknown; error: unknown } = { data: null, error: null }
+let mockSupabaseTableResults: Record<string, { data: unknown; error: unknown }> = {}
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
     rpc: jest.fn().mockImplementation(() => Promise.resolve(mockSupabaseRpcResult)),
-    from: jest.fn(() => {
+    from: jest.fn((table: string) => {
       const chain: Record<string, jest.Mock> = {}
       chain.select = jest.fn(() => chain)
       chain.eq = jest.fn(() => chain)
@@ -68,7 +78,9 @@ jest.mock('@/lib/supabase/server', () => ({
       chain.insert = jest.fn(() => chain)
       chain.single = jest.fn(() => Promise.resolve(mockSupabaseInsertResult))
       // Make the chain thenable so `await` resolves to the select result
-      chain.then = jest.fn((resolve: (v: unknown) => void) => resolve(mockSupabaseSelectResult)) as jest.Mock
+      chain.then = jest.fn((resolve: (v: unknown) => void) =>
+        resolve(mockSupabaseTableResults[table] ?? mockSupabaseSelectResult)
+      ) as jest.Mock
       return chain
     }),
   })),
@@ -118,6 +130,7 @@ describe('/api/bookmark-folders', () => {
     mockSupabaseRpcResult = { data: null, error: null }
     mockSupabaseSelectResult = { data: [], error: null }
     mockSupabaseInsertResult = { data: null, error: null }
+    mockSupabaseTableResults = {}
   })
 
   // --- GET: List Bookmark Folders ---
@@ -163,7 +176,7 @@ describe('/api/bookmark-folders', () => {
       expect(body.data.folders).toHaveLength(2)
     })
 
-    it('handles table not found gracefully', async () => {
+    it('fails closed when the folder table is unavailable', async () => {
       mockSupabaseSelectResult = {
         data: null,
         error: { code: '42P01', message: 'relation does not exist' },
@@ -173,8 +186,42 @@ describe('/api/bookmark-folders', () => {
       const res = await GET(req)
       const body = await res.json()
 
-      expect(res.status).toBe(200)
-      expect(body.data.folders).toEqual([])
+      expect(res.status).toBeGreaterThanOrEqual(500)
+      expect(body.success).toBe(false)
+    })
+
+    it('fails closed when the default-folder authority is unavailable', async () => {
+      mockSupabaseRpcResult = {
+        data: null,
+        error: { code: 'PGRST202', message: 'function is not in the schema cache' },
+      }
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders')
+      const res = await GET(req)
+      const body = await res.json()
+
+      expect(res.status).toBeGreaterThanOrEqual(500)
+      expect(body.success).toBe(false)
+    })
+
+    it('does not turn a bookmark count failure into zero items in every folder', async () => {
+      mockSupabaseTableResults = {
+        bookmark_folders: {
+          data: [{ id: 'f1', name: 'Default', is_default: true, is_public: false }],
+          error: null,
+        },
+        post_bookmarks: {
+          data: null,
+          error: { code: 'XX000', message: 'count read failed' },
+        },
+      }
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders')
+      const res = await GET(req)
+      const body = await res.json()
+
+      expect(res.status).toBeGreaterThanOrEqual(500)
+      expect(body.success).toBe(false)
     })
   })
 

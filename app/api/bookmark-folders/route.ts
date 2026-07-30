@@ -11,11 +11,14 @@ import { validateString, validateBoolean } from '@/lib/api/validation'
 export const GET = withAuth(
   async ({ user, supabase }) => {
     try {
-      // 尝试确保用户有默认收藏夹（如果表存在）
-      try {
-        await supabase.rpc('ensure_default_bookmark_folder', { p_user_id: user.id })
-      } catch {
-        // Intentionally swallowed: RPC function may not be deployed yet, folder creation continues without it
+      // A missing default-folder authority is not an authoritative empty
+      // collection. Supabase reports RPC failures in the result rather than
+      // throwing, so inspect the error explicitly before reading the list.
+      const { error: ensureDefaultError } = await supabase.rpc('ensure_default_bookmark_folder', {
+        p_user_id: user.id,
+      })
+      if (ensureDefaultError) {
+        throw ensureDefaultError
       }
 
       // 获取用户的所有收藏夹
@@ -27,11 +30,6 @@ export const GET = withAuth(
         .order('created_at', { ascending: true })
 
       if (error) {
-        // 如果表不存在，返回空列表
-        const ignoredCodes = ['42P01', 'PGRST116', 'PGRST204']
-        if (ignoredCodes.includes(error.code || '')) {
-          return success({ folders: [] })
-        }
         throw error
       }
 
@@ -42,10 +40,13 @@ export const GET = withAuth(
       const list = (folders || []) as Array<{ id: string; is_default?: boolean }>
       const countByFolder: Record<string, number> = {}
       if (list.length > 0) {
-        const { data: marks } = await supabase
+        const { data: marks, error: marksError } = await supabase
           .from('post_bookmarks')
           .select('folder_id')
           .eq('user_id', user.id)
+        if (marksError) {
+          throw marksError
+        }
         const defaultId = list.find((f) => f.is_default)?.id
         for (const m of (marks || []) as Array<{ folder_id: string | null }>) {
           const fid = m.folder_id || defaultId

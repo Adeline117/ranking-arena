@@ -36,7 +36,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    const body: unknown = await request.json()
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
     const postIds =
       body && typeof body === 'object' && !Array.isArray(body) && 'postIds' in body
         ? (body as { postIds?: unknown }).postIds
@@ -76,16 +81,20 @@ export async function POST(request: NextRequest) {
 
     if (queryError) {
       apiLogger.error('Error querying bookmarks:', queryError)
-      return NextResponse.json({ bookmarks: {} })
+      return NextResponse.json({ error: 'Failed to load bookmark status' }, { status: 500 })
+    }
+    if (!Array.isArray(bookmarks)) {
+      apiLogger.error('Bookmark status query returned an invalid result')
+      return NextResponse.json({ error: 'Failed to load bookmark status' }, { status: 500 })
     }
 
-    bookmarks?.forEach((b) => {
+    bookmarks.forEach((b) => {
       bookmarkMap[b.post_id] = true
     })
 
     return NextResponse.json({ bookmarks: bookmarkMap })
   } catch (error: unknown) {
     apiLogger.error('Error checking batch bookmarks:', error)
-    return NextResponse.json({ bookmarks: {} })
+    return NextResponse.json({ error: 'Failed to load bookmark status' }, { status: 500 })
   }
 }

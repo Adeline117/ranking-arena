@@ -44,6 +44,16 @@ function request(postIds: unknown): Parameters<typeof POST>[0] {
   } as unknown as Parameters<typeof POST>[0]
 }
 
+function invalidJsonRequest(): Parameters<typeof POST>[0] {
+  return {
+    headers: { get: () => 'csrf' },
+    cookies: { get: () => ({ value: 'csrf' }) },
+    json: async () => {
+      throw new SyntaxError('invalid json')
+    },
+  } as unknown as Parameters<typeof POST>[0]
+}
+
 describe('POST /api/posts/bookmarks/status service audience boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -84,5 +94,45 @@ describe('POST /api/posts/bookmarks/status service audience boundary', () => {
       [READABLE_ID]: false,
       [UNREADABLE_ID]: false,
     })
+  })
+
+  it('returns an error instead of clearing every bookmark on a database failure', async () => {
+    mockIn.mockResolvedValue({ data: null, error: { code: 'XX000', message: 'failed' } })
+
+    const response = await POST(request([READABLE_ID]))
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body).toEqual({ error: 'Failed to load bookmark status' })
+    expect(body).not.toHaveProperty('bookmarks')
+  })
+
+  it('rejects a null database result without publishing false states', async () => {
+    mockIn.mockResolvedValue({ data: null, error: null })
+
+    const response = await POST(request([READABLE_ID]))
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body).not.toHaveProperty('bookmarks')
+  })
+
+  it('returns an error when post audience filtering cannot complete', async () => {
+    mockFilterServiceReadablePostRows.mockRejectedValue(new Error('authority failed'))
+
+    const response = await POST(request([READABLE_ID]))
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body).not.toHaveProperty('bookmarks')
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid JSON as a client error', async () => {
+    const response = await POST(invalidJsonRequest())
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid JSON body' })
+    expect(mockFilterServiceReadablePostRows).not.toHaveBeenCalled()
   })
 })
