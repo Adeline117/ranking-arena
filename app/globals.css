@@ -5,19 +5,16 @@
    This eliminates CLS because the swap happens at the same DOM position. */
 
 /* Two-phase rendering:
-   - SSR hero + ranking table rendered as static HTML for instant LCP.
-   - Phase 2 rendering is DEFERRED until user interaction (scroll/click/keypress).
-     This locks LCP at the SSR paint time (~1.2s) because LCP finalizes on first input.
-   - Once Phase 2 (#homepage-interactive) mounts, CSS hides both SSR shells.
-   - JS idle callback removes the SSR DOM nodes for cleanup.
-   - Phase 2 has min-height matching SSR content (~1650px) to prevent CLS
-     when SSR shells collapse to 0. */
+   - SSR hero + ranking table render as static HTML for instant LCP.
+   - Phase 2 starts after hydration but stays out of layout until its ranking
+     state has resolved, so mounting a cold client bundle cannot blank the SSR UI.
+   - Phase 2 has geometry matching the SSR content to prevent CLS at handoff. */
 /* Phase 2 transition:
    - The server shell now contains the final source strip + three-column
-     geometry and stays visible while the deferred bundle downloads.
-   - Once #homepage-interactive is committed, critical CSS hides the complete
-     server shell in that same style calculation. HomePageClient is statically
-     imported with the server data, so there is no empty center-column gap.
+     geometry and stays visible while the client bundle/data load.
+   - HomePageClient sets data-home-ready only after loading resolves; critical
+     CSS then reveals the interactive root and hides the complete server shell
+     in the same style calculation.
    - HomePageClient's layout effect remains a fallback for browsers without
      :has() support.
    #ssr-topnav stays visible permanently. */

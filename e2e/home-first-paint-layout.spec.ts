@@ -482,6 +482,11 @@ test.describe('homepage first-paint layout handoff', () => {
             await expect(
               page.locator('#homepage-interactive .three-col-layout').first()
             ).toBeVisible({ timeout: 30_000 })
+            await expect(page.locator('#homepage-interactive')).toHaveAttribute(
+              'data-home-ready',
+              'true'
+            )
+            await expect(page.locator('#ssr-home-content-shell')).toBeHidden()
             await page.waitForTimeout(750)
 
             const afterLayout = await readLayout(page, '#homepage-interactive .three-col-layout')

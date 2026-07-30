@@ -47,8 +47,9 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
   }, [])
 
   // SSR topnav removal is handled by HomePage.useLayoutEffect.
-  // SSR ranking table is hidden by HomePageClient's useLayoutEffect
-  // AFTER Phase 2 content has rendered (prevents CLS).
+  // HomePageClient publishes an explicit readiness attribute after its initial
+  // ranking state resolves; only then does critical CSS swap the SSR shell for
+  // this interactive tree.
 
   if (!activated) {
     // Subtle top-of-viewport progress bar while Phase 2 loads.

@@ -51,6 +51,12 @@ describe('HomeFirstPaintShell', () => {
       '@media(min-width:1441px){.three-col-layout{max-width:1600px;grid-template-columns:260px 1fr 280px}}'
     )
     expect(criticalCss).toContain(
+      '#homepage-interactive:not([data-home-ready="true"]){display:none}'
+    )
+    expect(criticalCss).toContain(
+      'html:has(#homepage-interactive[data-home-ready="true"]) #ssr-home-content-shell{display:none}'
+    )
+    expect(criticalCss).not.toContain(
       'html:has(#homepage-interactive) #ssr-home-content-shell{display:none}'
     )
   })

@@ -105,34 +105,19 @@ export default function HomePageClient({
     })
   }, [activeTimeRange, loading, totalCount, traders.length])
 
-  // Hide SSR ranking table only AFTER we have real data to show.
-  // Previously this ran on mount (useLayoutEffect + []), which hid the SSR
-  // table immediately — before React had data to replace it with. On slow
-  // mobile connections (4MB JS), this created a "spinner of death" where the
-  // SSR content vanished and the loading skeleton appeared for seconds or forever.
-  //
-  // Root fix: wait until `loading` is false (data ready) before hiding SSR.
-  // Hide SSR shells when React has data to show.
-  // useLayoutEffect runs BEFORE paint — on fast connections, the browser
-  // never shows the SSR table (it's hidden before first paint).
-  // On slow connections (SSR already painted), we collapse it instantly
-  // since any transition would show "double content" (SSR + React stacked).
-  // Hide SSR period controls immediately on mount to prevent double-selector flash.
-  // React always renders its own TimeRangeSelector, so SSR controls are redundant.
-  useLayoutEffect(() => {
-    const ssrControls = document.querySelector(
-      '#ssr-ranking-table .ssr-controls'
-    ) as HTMLElement | null
-    if (ssrControls) ssrControls.style.display = 'none'
-  }, [])
-
-  // Hide the complete first-paint shell once React data is ready. Keeping the
-  // source strip and both sidebar placeholders in the same shell prevents a
-  // one-column → three-column jump while the deferred client bundle downloads.
+  // Mounting Phase 2 is not enough to replace the server shell: on a cold or
+  // failed fetch the interactive tree can remain in loading state for seconds.
+  // Commit one explicit readiness signal only after that state resolves. The
+  // critical CSS keeps Phase 2 out of layout until this signal, and hides the
+  // geometry-matched server shell in the same style calculation. The inline
+  // hide is the fallback for browsers without :has(). Once ready, never switch
+  // back to the server shell during later background refreshes.
   useLayoutEffect(() => {
     if (loading) return
-    const el = document.getElementById('ssr-home-content-shell')
-    if (el) el.style.display = 'none'
+    const interactiveRoot = document.getElementById('homepage-interactive')
+    if (interactiveRoot) interactiveRoot.setAttribute('data-home-ready', 'true')
+    const serverShell = document.getElementById('ssr-home-content-shell')
+    if (serverShell) serverShell.style.display = 'none'
   }, [loading])
 
   // Sync time range with URL on initial load

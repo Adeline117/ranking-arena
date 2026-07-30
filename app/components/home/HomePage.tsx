@@ -66,7 +66,9 @@ export default function HomePage({
   // SSR TopNav stays visible permanently (no portal, no removal).
   // globals.css no longer hides #ssr-topnav when Phase 2 loads.
 
-  // SSR shell hiding moved to HomePageClient.tsx — only hides when data is ready.
+  // HomePageClient marks this root ready and hides the SSR shell only after its
+  // initial ranking state resolves. Critical CSS keeps this tree out of layout
+  // before that atomic handoff.
 
   return (
     <>
@@ -216,7 +218,7 @@ export default function HomePage({
                   so its code is already in the main bundle. Wrapping in Suspense caused
                   the "spinner of death" on mobile: during hydration, Suspense showed
                   <RankingSkeleton> which replaced the visible SSR content with a skeleton,
-                  then CSS :has() hid #ssr-ranking-table, leaving users staring at a
+                  then an eager CSS handoff hid #ssr-ranking-table, leaving users staring at a
                   spinner while 4.2MB JS loaded. Without Suspense, React hydrates
                   HomePageClient in-place and SSR content stays visible throughout. */}
               <HomePageClient
