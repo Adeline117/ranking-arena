@@ -345,4 +345,67 @@ describe('gtrade profile transport', () => {
       expect.objectContaining({ message: expect.stringContaining('missing 1 opening events') })
     )
   })
+
+  it('yields RAW evidence but rejects a page-capped prefix even when its positions pair', async () => {
+    const fetchMock = jest.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      const endDate = new URL(url).searchParams.get('endDate')
+      if (!endDate) throw new Error('missing endDate')
+      const end = Date.parse(endDate)
+      return response({
+        data: [
+          {
+            id: 10,
+            date: new Date(end - DAY_MS).toISOString(),
+            action: 'TradeClosedMarket',
+            pair: 'ETH/USD',
+            tradeIndex: 7,
+            pnl_net: 5,
+            collateralPriceUsd: 1,
+            price: 2_100,
+          },
+          {
+            id: 9,
+            date: new Date(end - 2 * DAY_MS).toISOString(),
+            action: 'TradeOpenedMarket',
+            pair: 'ETH/USD',
+            tradeIndex: 7,
+            pnl_net: 0,
+            price: 2_000,
+            long: true,
+          },
+        ],
+        pagination: { hasMore: true, nextCursor: 9, limit: 1_000 },
+      })
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    const pages = []
+    let failure: unknown = null
+    try {
+      for await (const page of gtradeAdapter.getHistory(
+        session(),
+        { ...src, meta: { ...src.meta, history_max_pages: 1 } },
+        ADDRESS,
+        'position_history',
+        null
+      )) {
+        pages.push(page)
+      }
+    } catch (error) {
+      failure = error
+    }
+
+    expect(pages).toHaveLength(1)
+    expect(pages[0].payload).toMatchObject({
+      historyFetchReason: 'page_cap',
+      tradesSnapshot: { meta: { complete: false, capHit: true } },
+    })
+    expect(gtradeAdapter.parseHistory(pages[0].payload, 'position_history', parseCtx)).toHaveLength(
+      1
+    )
+    expect(failure).toEqual(
+      expect.objectContaining({ message: '[gtrade] position history incomplete: page_cap' })
+    )
+  })
 })
