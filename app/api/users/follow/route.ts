@@ -225,12 +225,22 @@ export async function POST(request: NextRequest) {
       if (result.status === 'followed') {
         fireAndForget(
           (async () => {
-            const { data: followerProfile } = await supabase
+            const { data: followerProfile, error: followerProfileError } = await supabase
               .from('user_profiles')
               .select('handle')
               .eq('id', followerId)
               .maybeSingle()
-            const followerHandle = followerProfile?.handle || 'Someone'
+
+            const followerHandle = followerProfile?.handle
+            if (followerProfileError || !followerHandle) {
+              logger.error('[User Follow API] notification actor lookup failed', {
+                actorId: followerId,
+                targetId: followingId,
+                error: followerProfileError?.message ?? 'profile unavailable',
+              })
+              return
+            }
+
             sendNotification(
               supabase,
               {
@@ -239,7 +249,7 @@ export async function POST(request: NextRequest) {
                 title: 'New Follower',
                 message: `${followerHandle} started following you`,
                 actor_id: followerId,
-                link: `/u/${followerHandle}`,
+                link: `/u/${encodeURIComponent(followerHandle)}`,
                 reference_id: followerId,
               },
               'User follow notification'

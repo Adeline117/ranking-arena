@@ -79,6 +79,8 @@ const mockRateLimit = jest.fn()
 const mockFeatureGuard = jest.fn()
 const mockValidateCsrf = jest.fn()
 const mockFireAndForget = jest.fn()
+const mockSendNotification = jest.fn()
+const mockLoggerError = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: () => ({ rpc: mockRpc, from: mockFrom }),
@@ -99,13 +101,19 @@ jest.mock('@/lib/utils/csrf', () => ({
 jest.mock('@/lib/utils/logger', () => ({
   fireAndForget: (...args: unknown[]) => mockFireAndForget(...args),
 }))
-jest.mock('@/lib/data/notifications', () => ({ sendNotification: jest.fn() }))
+jest.mock('@/lib/data/notifications', () => ({
+  sendNotification: (...args: unknown[]) => mockSendNotification(...args),
+}))
 jest.mock('@/app/api/following/route', () => ({
   invalidateFollowingCache: jest.fn().mockResolvedValue(undefined),
 }))
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
-  default: { error: jest.fn(), warn: jest.fn(), info: jest.fn() },
+  default: {
+    error: (...args: unknown[]) => mockLoggerError(...args),
+    warn: jest.fn(),
+    info: jest.fn(),
+  },
 }))
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -175,6 +183,7 @@ describe('/api/users/follow atomic boundary', () => {
     mockFeatureGuard.mockReturnValue(null)
     mockValidateCsrf.mockReturnValue(true)
     mockRpc.mockResolvedValue({ data: successResult(), error: null })
+    mockFrom.mockReturnValue(query({ data: { handle: 'actor' }, error: null }))
   })
 
   it('binds the verified actor to one strict follow RPC and returns absolute counts', async () => {
@@ -252,6 +261,41 @@ describe('/api/users/follow atomic boundary', () => {
     })
     await POST(postRequest())
     expect(mockFireAndForget).not.toHaveBeenCalled()
+  })
+
+  it('builds the follower notification from the canonical profile and encodes its link', async () => {
+    mockFrom.mockReturnValue(query({ data: { handle: 'actor/name' }, error: null }))
+
+    await POST(postRequest())
+    await mockFireAndForget.mock.calls[0][0]
+
+    expect(mockSendNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        user_id: TARGET_ID,
+        actor_id: ACTOR_ID,
+        message: 'actor/name started following you',
+        link: '/u/actor%2Fname',
+        reference_id: ACTOR_ID,
+      }),
+      'User follow notification'
+    )
+  })
+
+  it('does not emit a broken follower notification when its actor profile cannot be read', async () => {
+    mockFrom.mockReturnValue(
+      query({ data: null, error: { message: 'profile lookup unavailable' } })
+    )
+
+    const response = await POST(postRequest())
+    await mockFireAndForget.mock.calls[0][0]
+
+    expect(response.status).toBe(200)
+    expect(mockSendNotification).not.toHaveBeenCalled()
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      '[User Follow API] notification actor lookup failed',
+      expect.objectContaining({ actorId: ACTOR_ID, targetId: TARGET_ID })
+    )
   })
 
   it.each([
