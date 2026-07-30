@@ -59,6 +59,8 @@ const FINISH_DELETION_ACK_KEYS = [
   'stripe_customer_id',
   'stripe_subscription_ids',
 ].sort()
+const MAX_DELETION_REASON_CHARACTERS = 500
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/
 
 function isIsoTimestamp(value: unknown): value is string {
   return (
@@ -83,6 +85,23 @@ function isExactStringSet(value: unknown, expected: string[]): boolean {
 function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
   const keys = Object.keys(value).sort()
   return keys.length === expected.length && keys.every((key, index) => key === expected[index])
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key))
+}
+
+function normalizeDeletionReason(value: unknown): string | null {
+  if (value === undefined) return ''
+  if (typeof value !== 'string' || value.length > MAX_DELETION_REASON_CHARACTERS * 2) return null
+  const normalized = value.trim()
+  if (
+    Array.from(normalized).length > MAX_DELETION_REASON_CHARACTERS ||
+    CONTROL_CHARACTER_PATTERN.test(normalized)
+  ) {
+    return null
+  }
+  return normalized
 }
 
 function isExactPrepareDeletionAck(
@@ -147,26 +166,29 @@ function isExactCustomerBindingAck(value: unknown): boolean {
 
 export const POST = withAuth(
   async ({ user, request }) => {
-    let body: {
-      password?: string
-      reason?: string
-      confirm?: string
-      recovery_token?: string
-    }
+    let parsedBody: unknown
     try {
-      body = await request.json()
+      parsedBody = await request.json()
     } catch {
       return badRequest('Invalid JSON body')
     }
 
-    const { password, reason, confirm } = body
+    if (!parsedBody || typeof parsedBody !== 'object' || Array.isArray(parsedBody)) {
+      return badRequest('Request body must be an object')
+    }
+    const body = parsedBody as Record<string, unknown>
+    const reason = normalizeDeletionReason(body.reason)
+    if (reason === null) {
+      return badRequest('Deletion reason must be at most 500 characters without control characters')
+    }
+
     const bearerMatch = request.headers.get('authorization')?.match(/^Bearer\s+(\S+)$/i)
     if (!bearerMatch) {
       return forbidden('Unable to verify account session')
     }
     const currentAccessToken = bearerMatch[1]
     const recoveryToken = body.recovery_token
-    if (!isAccountRecoveryToken(recoveryToken)) {
+    if (typeof recoveryToken !== 'string' || !isAccountRecoveryToken(recoveryToken)) {
       return badRequest('Invalid recovery credential')
     }
     // The exact bearer was already validated by withAuth. Its AMR claim tells
@@ -183,6 +205,10 @@ export const POST = withAuth(
     }
 
     if (deletionProof === 'password') {
+      if (!hasOnlyKeys(body, ['password', 'reason', 'recovery_token'])) {
+        return badRequest('Unsupported account deletion field')
+      }
+      const password = body.password
       if (typeof password !== 'string' || password.length === 0 || password.length > 4096) {
         return badRequest('Password required')
       }
@@ -201,8 +227,18 @@ export const POST = withAuth(
       if (error || signInData.user?.id !== user.id || signInData.session?.user.id !== user.id) {
         return forbidden('Invalid password')
       }
-    } else if ((confirm ?? '').trim().toUpperCase() !== 'DELETE') {
-      return badRequest('Type DELETE to confirm account deletion')
+    } else {
+      if (!hasOnlyKeys(body, ['confirm', 'reason', 'recovery_token'])) {
+        return badRequest('Unsupported account deletion field')
+      }
+      const confirm = body.confirm
+      if (
+        typeof confirm !== 'string' ||
+        confirm.length > 64 ||
+        confirm.trim().toUpperCase() !== 'DELETE'
+      ) {
+        return badRequest('Type DELETE to confirm account deletion')
+      }
     }
 
     const adminSupabase = getSupabaseAdmin()
@@ -310,7 +346,7 @@ export const POST = withAuth(
     const prepareArgs: PrepareDeletionBillingArgs = {
       p_user_id: user.id,
       p_operation_id: operationId,
-      p_reason: reason ?? '',
+      p_reason: reason,
       p_scheduled_at: scheduledDeletion.toISOString(),
       p_recovery_token_hash: recoveryTokenHash,
       p_stripe_customer_id: stripeCustomerId,
@@ -383,8 +419,8 @@ export const POST = withAuth(
     const scheduledResponse = (
       billingSettlementPending: boolean,
       authInvalidationPending: boolean
-    ) =>
-      NextResponse.json(
+    ) => {
+      const response = NextResponse.json(
         {
           success: true,
           user_id: user.id,
@@ -399,6 +435,9 @@ export const POST = withAuth(
         },
         { status: billingSettlementPending || authInvalidationPending ? 202 : 200 }
       )
+      response.headers.set('Cache-Control', 'private, no-store')
+      return response
+    }
 
     try {
       if (stripeCustomerId && stripeClient) {

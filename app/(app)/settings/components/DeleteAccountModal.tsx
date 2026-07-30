@@ -107,6 +107,7 @@ export function DeleteAccountModal({
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t('enterCurrentPassword')}
               autoComplete="current-password"
+              maxLength={4096}
               style={{
                 width: '100%',
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -125,6 +126,7 @@ export function DeleteAccountModal({
               onChange={(e) => setConfirmText?.(e.target.value)}
               placeholder="DELETE"
               autoComplete="off"
+              maxLength={64}
               style={{
                 width: '100%',
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -149,6 +151,7 @@ export function DeleteAccountModal({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={t('tellUsWhy')}
+            maxLength={500}
             style={{
               width: '100%',
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,

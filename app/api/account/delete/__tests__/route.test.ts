@@ -217,6 +217,7 @@ describe('account deletion scheduling', () => {
     expect(body.recovery_token).toMatch(/^[A-Za-z0-9_-]{40,}$/)
     expect(body.billing_settlement_pending).toBe(false)
     expect(body.auth_invalidation_pending).toBe(false)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
     expect(mockRpc).toHaveBeenCalledWith(
       'prepare_account_deletion_billing_atomic',
       expect.objectContaining({
@@ -319,6 +320,51 @@ describe('account deletion scheduling', () => {
     expect(mockExpireOpenSubscriptionCheckouts).not.toHaveBeenCalled()
     expect(mockStopStripeSubscriptionRenewals).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a non-object body', null],
+    ['an array body', []],
+  ])('rejects %s before authentication or billing', async (_label, body) => {
+    const response = await POST(
+      new Request('https://www.arenafi.org/api/account/delete', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${currentAccessToken}`,
+        },
+        body: JSON.stringify(body),
+      })
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a non-string reason', { reason: 42 }],
+    ['an oversized reason', { reason: 'x'.repeat(501) }],
+    ['a control character', { reason: 'privacy\u0000request' }],
+    ['an unknown field', { reason: 'privacy', unexpected: true }],
+  ])('rejects %s before password or billing work', async (_label, drift) => {
+    const response = await POST(request({ password: 'correct', ...drift }))
+
+    expect(response.status).toBe(400)
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('trims a bounded deletion reason before the durable operation', async () => {
+    const response = await POST(request({ password: 'correct', reason: '  privacy  ' }))
+
+    expect(response.status).toBe(200)
+    expect(mockRpc).toHaveBeenCalledWith(
+      'prepare_account_deletion_billing_atomic',
+      expect.objectContaining({ p_reason: 'privacy' })
+    )
   })
 
   it('rejects credentials that authenticate a different Auth subject before every mutation', async () => {
