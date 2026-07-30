@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import NotificationsList from '../NotificationsList'
 import { __resetViewerScopeForTests, synchronizeViewerScope } from '@/lib/auth/viewer-scope'
@@ -43,6 +43,7 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
           failedToLoadRetryShort: 'Failed to load, please retry',
           loadMore: 'Load more',
           loading: 'Loading',
+          markAllAsRead: 'Mark all as read',
           noNotifications: 'No notifications',
           noNotificationsForFilter: 'No notifications in this category',
           notifications: 'Notifications',
@@ -105,6 +106,14 @@ function renderList(variant: 'page' | 'panel' = 'page') {
       <NotificationsList variant={variant} />
     </QueryClientProvider>
   )
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
 }
 
 describe('NotificationsList server-filtered keyset pages', () => {
@@ -227,5 +236,64 @@ describe('NotificationsList server-filtered keyset pages', () => {
 
     expect(disclosure).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('Recent system notice')).not.toBeInTheDocument()
+  })
+
+  it('does not overlap one-item and mark-all mutations for the same viewer', async () => {
+    const firstMutation = deferred<Response>()
+    const fetchMock = jest.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'GET') {
+        return response(
+          [
+            notification({ title: 'First unread notice' }),
+            notification({
+              created_at: '2026-07-29T11:59:00Z',
+              id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              title: 'Second unread notice',
+            }),
+          ],
+          null,
+          2
+        )
+      }
+
+      if (fetchMock.mock.calls.filter(([, request]) => request?.method === 'PUT').length === 1) {
+        return firstMutation.promise
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      } as Response
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+    renderList()
+
+    fireEvent.click(await screen.findByText('First unread notice'))
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.filter(([, request]) => request?.method === 'PUT')).toHaveLength(
+        1
+      )
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }))
+    expect(fetchMock.mock.calls.filter(([, request]) => request?.method === 'PUT')).toHaveLength(1)
+
+    await act(async () => {
+      firstMutation.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      } as Response)
+      await firstMutation.promise
+      await Promise.resolve()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }))
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.filter(([, request]) => request?.method === 'PUT')).toHaveLength(
+        2
+      )
+    )
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({ mark_all: true })
   })
 })

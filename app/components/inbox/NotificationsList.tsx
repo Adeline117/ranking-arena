@@ -50,6 +50,14 @@ const NOTIFICATION_KEYS = [
   'user_id',
 ] as const
 
+function hasPendingNotificationMark(scopeKey: string, pending: Set<string>): boolean {
+  const prefix = `${scopeKey}\u0000`
+  for (const key of pending) {
+    if (key.startsWith(prefix)) return true
+  }
+  return false
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -368,7 +376,12 @@ export default function NotificationsList({
     if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) return
     const operation = viewer
     const operationScopeKey = inboxViewerScopeKey(operation)
-    if (pendingMarkAllRef.current === operationScopeKey) return
+    if (
+      pendingMarkAllRef.current === operationScopeKey ||
+      hasPendingNotificationMark(operationScopeKey, pendingMarkRef.current)
+    ) {
+      return
+    }
     pendingMarkAllRef.current = operationScopeKey
 
     // Delta: capture IDs that were unread (not a full snapshot — just the delta set)
@@ -423,7 +436,9 @@ export default function NotificationsList({
     async (id: string) => {
       if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) return
       const operation = viewer
-      const pendingKey = `${inboxViewerScopeKey(operation)}\u0000${id}`
+      const operationScopeKey = inboxViewerScopeKey(operation)
+      if (pendingMarkAllRef.current === operationScopeKey) return
+      const pendingKey = `${operationScopeKey}\u0000${id}`
       if (pendingMarkRef.current.has(pendingKey)) return
       pendingMarkRef.current.add(pendingKey)
 
