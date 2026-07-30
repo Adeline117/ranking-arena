@@ -14,6 +14,124 @@ type SearchMatch = {
   sender_id: string
 }
 
+type SearchCursor = {
+  before: string
+  before_id: string
+}
+
+type SearchResponse = {
+  matches: SearchMatch[]
+  next_cursor: SearchCursor | null
+  total_in_page: number
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const expected = [...keys].sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function isTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    Number.isFinite(Date.parse(value))
+  )
+}
+
+function timestampMicros(value: string): number {
+  const milliseconds = Date.parse(value)
+  const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? ''
+  return milliseconds * 1000 + Number(fraction.padEnd(6, '0').slice(3, 6))
+}
+
+function readSearchResponse(value: unknown): SearchResponse | null {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['matches', 'next_cursor', 'total_in_page']) ||
+    !Array.isArray(value.matches) ||
+    value.matches.length > 20 ||
+    !Number.isSafeInteger(value.total_in_page) ||
+    value.total_in_page !== value.matches.length
+  ) {
+    return null
+  }
+
+  const matches: SearchMatch[] = []
+  const ids = new Set<string>()
+  for (const rawMatch of value.matches) {
+    if (
+      !isRecord(rawMatch) ||
+      !hasExactKeys(rawMatch, ['message_id', 'snippet', 'created_at', 'sender_id']) ||
+      typeof rawMatch.message_id !== 'string' ||
+      !UUID_PATTERN.test(rawMatch.message_id) ||
+      ids.has(rawMatch.message_id) ||
+      typeof rawMatch.sender_id !== 'string' ||
+      !UUID_PATTERN.test(rawMatch.sender_id) ||
+      typeof rawMatch.snippet !== 'string' ||
+      rawMatch.snippet.length > 206 ||
+      !isTimestamp(rawMatch.created_at)
+    ) {
+      return null
+    }
+
+    const match: SearchMatch = {
+      message_id: rawMatch.message_id,
+      sender_id: rawMatch.sender_id,
+      snippet: rawMatch.snippet,
+      created_at: rawMatch.created_at,
+    }
+    const previous = matches[matches.length - 1]
+    if (
+      previous &&
+      (timestampMicros(previous.created_at) < timestampMicros(match.created_at) ||
+        (timestampMicros(previous.created_at) === timestampMicros(match.created_at) &&
+          previous.message_id <= match.message_id))
+    ) {
+      return null
+    }
+    ids.add(match.message_id)
+    matches.push(match)
+  }
+
+  let nextCursor: SearchCursor | null = null
+  if (value.next_cursor !== null) {
+    if (
+      !isRecord(value.next_cursor) ||
+      !hasExactKeys(value.next_cursor, ['before', 'before_id']) ||
+      !isTimestamp(value.next_cursor.before) ||
+      typeof value.next_cursor.before_id !== 'string' ||
+      !UUID_PATTERN.test(value.next_cursor.before_id)
+    ) {
+      return null
+    }
+    const last = matches[matches.length - 1]
+    if (
+      !last ||
+      value.next_cursor.before !== last.created_at ||
+      value.next_cursor.before_id !== last.message_id
+    ) {
+      return null
+    }
+    nextCursor = {
+      before: value.next_cursor.before,
+      before_id: value.next_cursor.before_id,
+    }
+  }
+
+  return {
+    matches,
+    next_cursor: nextCursor,
+    total_in_page: value.total_in_page as number,
+  }
+}
+
 type ChatSearchOverlayProps = {
   isOpen: boolean
   onClose: () => void
@@ -34,10 +152,13 @@ export default function ChatSearchOverlay({
   const [matches, setMatches] = useState<SearchMatch[]>([])
   const [loading, setLoading] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [nextCursor, setNextCursor] = useState<SearchCursor | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
+  const [searchFailed, setSearchFailed] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
+  const requestGenerationRef = useRef(0)
+  const requestControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -58,11 +179,15 @@ export default function ChatSearchOverlay({
   // Reset state when closed
   useEffect(() => {
     if (!isOpen) {
+      requestGenerationRef.current += 1
+      requestControllerRef.current?.abort()
+      requestControllerRef.current = null
       setQuery('')
       setMatches([])
       setCurrentIndex(0)
       setNextCursor(null)
       setHasSearched(false)
+      setSearchFailed(false)
     }
   }, [isOpen])
 
@@ -70,48 +195,83 @@ export default function ChatSearchOverlay({
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
+      requestGenerationRef.current += 1
+      requestControllerRef.current?.abort()
     }
   }, [])
 
   const doSearch = useCallback(
-    async (searchQuery: string, cursor?: string) => {
-      if (!searchQuery.trim()) {
+    async (searchQuery: string, cursor?: SearchCursor) => {
+      const normalizedQuery = searchQuery.trim()
+      if (!normalizedQuery) {
         setMatches([])
         setHasSearched(false)
         return
       }
+      if (cursor && loading) return
 
+      const generation = ++requestGenerationRef.current
+      requestControllerRef.current?.abort()
+      const controller = new AbortController()
+      requestControllerRef.current = controller
       setLoading(true)
+      setSearchFailed(false)
       try {
-        let url = `/api/chat/${conversationId}/search?q=${encodeURIComponent(searchQuery.trim())}&limit=20`
-        if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`
+        let url = `/api/chat/${conversationId}/search?q=${encodeURIComponent(normalizedQuery)}&limit=20`
+        if (cursor) {
+          url += `&cursor=${encodeURIComponent(cursor.before)}&cursorId=${encodeURIComponent(cursor.before_id)}`
+        }
 
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${accessToken}` },
+          signal: controller.signal,
         })
 
-        if (res.ok) {
-          const data = await res.json()
-          if (cursor) {
-            setMatches((prev) => [...prev, ...data.matches])
-          } else {
-            setMatches(data.matches)
-            setCurrentIndex(0)
-          }
-          setNextCursor(data.next_cursor)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = readSearchResponse(await res.json())
+        if (!data) throw new Error('Invalid search response')
+        if (generation !== requestGenerationRef.current || controller.signal.aborted) return
+
+        if (cursor) {
+          setMatches((previous) => {
+            const existingIds = new Set(previous.map((match) => match.message_id))
+            return [
+              ...previous,
+              ...data.matches.filter((match) => !existingIds.has(match.message_id)),
+            ]
+          })
+        } else {
+          setMatches(data.matches)
+          setCurrentIndex(0)
         }
+        setNextCursor(data.next_cursor)
       } catch (error) {
-        logger.error('Search failed:', error)
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+          logger.error('Search failed:', error)
+          if (generation === requestGenerationRef.current) setSearchFailed(true)
+        }
       } finally {
-        setLoading(false)
-        setHasSearched(true)
+        if (generation === requestGenerationRef.current) {
+          requestControllerRef.current = null
+          setLoading(false)
+          setHasSearched(true)
+        }
       }
     },
-    [conversationId, accessToken]
+    [accessToken, conversationId, loading]
   )
 
   const handleInputChange = (value: string) => {
+    requestGenerationRef.current += 1
+    requestControllerRef.current?.abort()
+    requestControllerRef.current = null
     setQuery(value)
+    setLoading(false)
+    setMatches([])
+    setCurrentIndex(0)
+    setNextCursor(null)
+    setHasSearched(false)
+    setSearchFailed(false)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       doSearch(value)
@@ -171,13 +331,19 @@ export default function ChatSearchOverlay({
   // Highlight matched text in snippet
   const highlightSnippet = (snippet: string) => {
     if (!query.trim()) return snippet
-    const regex = new RegExp(`(${query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
-    const parts = snippet.split(regex)
+    const escapedQuery = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const splitPattern = new RegExp(`(${escapedQuery})`, 'gi')
+    const exactPattern = new RegExp(`^${escapedQuery}$`, 'i')
+    const parts = snippet.split(splitPattern)
     return parts.map((part, i) =>
-      regex.test(part) ? (
+      exactPattern.test(part) ? (
         <span
           key={i}
-          style={{ background: 'var(--color-highlight-bg)', borderRadius: 2, padding: '0 1px' }}
+          style={{
+            background: 'var(--color-highlight-bg)',
+            borderRadius: tokens.radius.sm,
+            padding: '0 1px',
+          }}
         >
           {part}
         </span>
@@ -282,7 +448,7 @@ export default function ChatSearchOverlay({
               border: 'none',
               background: 'transparent',
               color: tokens.colors.text.primary,
-              fontSize: 14,
+              fontSize: tokens.typography.fontSize.base,
               outline: 'none',
               padding: '4px 0',
             }}
@@ -290,9 +456,17 @@ export default function ChatSearchOverlay({
           {query && (
             <button
               onClick={() => {
+                requestGenerationRef.current += 1
+                requestControllerRef.current?.abort()
+                requestControllerRef.current = null
+                if (debounceRef.current) clearTimeout(debounceRef.current)
                 setQuery('')
                 setMatches([])
+                setCurrentIndex(0)
+                setNextCursor(null)
+                setLoading(false)
                 setHasSearched(false)
+                setSearchFailed(false)
               }}
               style={{
                 border: 'none',
@@ -399,7 +573,15 @@ export default function ChatSearchOverlay({
           </Box>
         )}
 
-        {!loading && hasSearched && matches.length === 0 && (
+        {!loading && searchFailed && (
+          <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }} role="alert">
+            <Text size="sm" color="tertiary">
+              {t('searchFailed')}
+            </Text>
+          </Box>
+        )}
+
+        {!loading && !searchFailed && hasSearched && matches.length === 0 && (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
             <Text size="sm" color="tertiary">
               {t('noMessagesFound')}
@@ -407,7 +589,7 @@ export default function ChatSearchOverlay({
           </Box>
         )}
 
-        {!hasSearched && !loading && (
+        {!hasSearched && !loading && !searchFailed && (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
             <Text size="sm" color="tertiary">
               {t('enterKeywordToSearch')}

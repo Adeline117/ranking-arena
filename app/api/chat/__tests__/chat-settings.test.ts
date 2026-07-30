@@ -434,11 +434,42 @@ describe('Chat Settings API', () => {
 })
 
 describe('Chat Search API', () => {
+  const MESSAGE_ID = 'b0000000-0000-4000-8000-000000000001'
+
+  function searchMessage(overrides: Record<string, unknown> = {}) {
+    return {
+      id: MESSAGE_ID,
+      sender_id: TARGET_ID,
+      content: 'Hello world',
+      created_at: '2026-07-29T11:00:00.123456+00:00',
+      ...overrides,
+    }
+  }
+
+  function searchAcknowledgement(overrides: Record<string, unknown> = {}) {
+    return {
+      success: true,
+      actor_id: ACTOR_ID,
+      conversation_id: CONVERSATION_ID,
+      query: 'hello',
+      from_created_at: null,
+      to_created_at: null,
+      messages: [searchMessage()],
+      has_more: false,
+      next_cursor: null,
+      ...overrides,
+    }
+  }
+
   beforeEach(() => {
     jest.clearAllMocks()
     Object.values(mockFromChain).forEach((mock) => {
       mock.mockReturnValue(mockFromChain)
     })
+    mockGetAuthUser.mockResolvedValue({
+      id: ACTOR_ID,
+    } as unknown as import('@supabase/supabase-js').User)
+    mockRpc.mockResolvedValue({ data: searchAcknowledgement(), error: null })
   })
 
   describe('GET /api/chat/[conversationId]/search', () => {
@@ -446,118 +477,189 @@ describe('Chat Search API', () => {
       mockGetAuthUser.mockResolvedValue(null)
 
       const { GET } = await import('../[conversationId]/search/route')
-      const request = createRequest('/api/chat/conv-123/search?q=hello')
-      const response = await GET(request, { params: { conversationId: 'conv-123' } })
+      const request = createRequest(`/api/chat/${CONVERSATION_ID}/search?q=hello`)
+      const response = await GET(request, { params: { conversationId: CONVERSATION_ID } })
 
       expect(response.status).toBe(401)
     })
 
-    it('returns 400 for empty query', async () => {
-      mockGetAuthUser.mockResolvedValue({
-        id: 'user-1',
-      } as unknown as import('@supabase/supabase-js').User)
-
+    it('returns one exact request-bound page from one RPC', async () => {
       const { GET } = await import('../[conversationId]/search/route')
-      const request = createRequest('/api/chat/conv-123/search?q=')
-      const response = await GET(request, { params: { conversationId: 'conv-123' } })
+      const request = createRequest(`/api/chat/${CONVERSATION_ID}/search?q=%20hello%20`, {
+        headers: { Authorization: 'Bearer valid-token' },
+      })
+      const response = await GET(request, { params: { conversationId: CONVERSATION_ID } })
 
-      expect(response.status).toBe(400)
+      expect(response.status).toBe(200)
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+      const data = await response.json()
+      expect(data).toEqual({
+        matches: [
+          {
+            message_id: MESSAGE_ID,
+            sender_id: TARGET_ID,
+            snippet: 'Hello world',
+            created_at: '2026-07-29T11:00:00.123456+00:00',
+          },
+        ],
+        next_cursor: null,
+        total_in_page: 1,
+      })
+      expect(mockRpc).toHaveBeenCalledTimes(1)
+      expect(mockRpc).toHaveBeenCalledWith('search_direct_message_conversation_atomic', {
+        p_actor_id: ACTOR_ID,
+        p_before_created_at: null,
+        p_before_id: null,
+        p_conversation_id: CONVERSATION_ID,
+        p_from_created_at: null,
+        p_limit: 20,
+        p_query: 'hello',
+        p_to_created_at: null,
+      })
+      expect(mockFrom).not.toHaveBeenCalled()
     })
 
-    it('returns 403 for non-member search', async () => {
-      mockGetAuthUser.mockResolvedValue({
-        id: 'user-999',
-      } as unknown as import('@supabase/supabase-js').User)
-
-      mockMaybeSingle.mockResolvedValueOnce({
-        data: { id: 'conv-123', user1_id: 'user-1', user2_id: 'user-2' },
+    it('binds the total cursor, inclusive date range, and limit into the RPC', async () => {
+      const cursor = '2026-07-29T12:00:00.123456+00:00'
+      const from = '2026-07-29T10:00:00+00:00'
+      const to = '2026-07-29T11:00:00.123456+00:00'
+      mockRpc.mockResolvedValue({
+        data: searchAcknowledgement({
+          from_created_at: from,
+          to_created_at: to,
+          has_more: true,
+          next_cursor: {
+            before: '2026-07-29T11:00:00.123456+00:00',
+            before_id: MESSAGE_ID,
+          },
+        }),
         error: null,
       })
 
       const { GET } = await import('../[conversationId]/search/route')
-      const request = createRequest('/api/chat/conv-123/search?q=hello')
-      const response = await GET(request, { params: { conversationId: 'conv-123' } })
-
-      expect(response.status).toBe(403)
-    })
-
-    it('returns search results with snippets for members', async () => {
-      mockGetAuthUser.mockResolvedValue({
-        id: 'user-1',
-      } as unknown as import('@supabase/supabase-js').User)
-
-      // conversation check
-      mockMaybeSingle
-        .mockResolvedValueOnce({
-          data: { id: 'conv-123', user1_id: 'user-1', user2_id: 'user-2' },
-          error: null,
-        })
-        // member settings (no cleared_before)
-        .mockResolvedValueOnce({ data: null, error: null })
-
-      // Search results - returned from the chained query
-      // The final call in the chain resolves with the data
-      const searchResults = [
-        {
-          id: 'msg-1',
-          content: 'Hello world',
-          created_at: '2024-01-01T10:00:00Z',
-          sender_id: 'user-1',
-        },
-        {
-          id: 'msg-2',
-          content: 'Hello there',
-          created_at: '2024-01-01T09:00:00Z',
-          sender_id: 'user-2',
-        },
-      ]
-
-      // Override the final resolution of the chain (after all filters applied)
-      // The search query chain ends without maybeSingle/single - it resolves directly
-      mockLimit.mockResolvedValueOnce({ data: searchResults, error: null })
-
-      const { GET } = await import('../[conversationId]/search/route')
-      const request = createRequest('/api/chat/conv-123/search?q=hello', {
-        headers: { Authorization: 'Bearer valid-token' },
-      })
-      const response = await GET(request, { params: { conversationId: 'conv-123' } })
+      const request = createRequest(
+        `/api/chat/${CONVERSATION_ID}/search?q=hello&limit=1&cursor=${encodeURIComponent(cursor)}&cursorId=${MESSAGE_ID}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+      )
+      const response = await GET(request, { params: { conversationId: CONVERSATION_ID } })
 
       expect(response.status).toBe(200)
-      const data = await response.json()
-      expect(data.matches).toHaveLength(2)
-      expect(data.matches[0].message_id).toBe('msg-1')
-      expect(data.matches[0].snippet).toContain('Hello')
-      expect(data.next_cursor).toBeNull()
-      expect(mockIs).toHaveBeenCalledWith('deleted_at', null)
+      expect(mockRpc).toHaveBeenCalledWith(
+        'search_direct_message_conversation_atomic',
+        expect.objectContaining({
+          p_before_created_at: cursor,
+          p_before_id: MESSAGE_ID,
+          p_from_created_at: from,
+          p_to_created_at: to,
+          p_limit: 1,
+        })
+      )
     })
 
-    it('respects cleared_before filter', async () => {
-      mockGetAuthUser.mockResolvedValue({
-        id: 'user-1',
-      } as unknown as import('@supabase/supabase-js').User)
+    it.each([
+      [`/api/chat/${CONVERSATION_ID}/search?q=`, CONVERSATION_ID, 'empty query'],
+      [
+        `/api/chat/${CONVERSATION_ID}/search?q=hello&cursor=2026-07-29T12%3A00%3A00Z`,
+        CONVERSATION_ID,
+        'half cursor',
+      ],
+      [`/api/chat/${CONVERSATION_ID}/search?q=hello&limit=51`, CONVERSATION_ID, 'oversized limit'],
+      [
+        `/api/chat/${CONVERSATION_ID}/search?q=hello&unknown=1`,
+        CONVERSATION_ID,
+        'unknown parameter',
+      ],
+      [
+        `/api/chat/${CONVERSATION_ID}/search?q=hello&q=again`,
+        CONVERSATION_ID,
+        'duplicate parameter',
+      ],
+      [
+        `/api/chat/${CONVERSATION_ID}/search?q=hello&from=2026-07-30T00%3A00%3A00Z&to=2026-07-29T00%3A00%3A00Z`,
+        CONVERSATION_ID,
+        'inverted dates',
+      ],
+      [`/api/chat/not-a-uuid/search?q=hello`, 'not-a-uuid', 'invalid conversation'],
+    ])('rejects %s (%s)', async (url, conversationId, _label) => {
+      const { GET } = await import('../[conversationId]/search/route')
+      const response = await GET(createRequest(url), { params: { conversationId } })
 
-      mockMaybeSingle
-        .mockResolvedValueOnce({
-          data: { id: 'conv-123', user1_id: 'user-1', user2_id: 'user-2' },
-          error: null,
-        })
-        .mockResolvedValueOnce({
-          data: { cleared_before: '2024-01-01T08:00:00Z' },
-          error: null,
-        })
+      expect(response.status).toBe(400)
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+      expect(mockRpc).not.toHaveBeenCalled()
+    })
 
-      // limit() is the final call and returns the awaited result
-      mockLimit.mockResolvedValueOnce({ data: [], error: null })
+    it.each([
+      ['database failure', { data: null, error: { message: 'unavailable' } }, 500],
+      ['missing acknowledgement', { data: null, error: null }, 500],
+      ['not found', { data: { success: false, reason: 'NOT_FOUND' }, error: null }, 404],
+      [
+        'actor unavailable',
+        { data: { success: false, reason: 'ACTOR_UNAVAILABLE' }, error: null },
+        403,
+      ],
+      [
+        'extra acknowledgement field',
+        { data: { ...searchAcknowledgement(), stale: true }, error: null },
+        500,
+      ],
+      [
+        'wrong actor binding',
+        { data: searchAcknowledgement({ actor_id: TARGET_ID }), error: null },
+        500,
+      ],
+      [
+        'wrong query binding',
+        { data: searchAcknowledgement({ query: 'other' }), error: null },
+        500,
+      ],
+      [
+        'duplicate message',
+        {
+          data: searchAcknowledgement({ messages: [searchMessage(), searchMessage()] }),
+          error: null,
+        },
+        500,
+      ],
+      [
+        'unsorted page',
+        {
+          data: searchAcknowledgement({
+            messages: [
+              searchMessage({ created_at: '2026-07-29T10:00:00Z' }),
+              searchMessage({
+                id: 'b0000000-0000-4000-8000-000000000002',
+                created_at: '2026-07-29T12:00:00Z',
+              }),
+            ],
+          }),
+          error: null,
+        },
+        500,
+      ],
+      [
+        'cursor mismatch',
+        {
+          data: searchAcknowledgement({
+            has_more: true,
+            next_cursor: {
+              before: '2026-07-29T11:00:00.123456+00:00',
+              before_id: 'b0000000-0000-4000-8000-000000000099',
+            },
+          }),
+          error: null,
+        },
+        500,
+      ],
+    ])('fails closed on %s without direct-table fallback', async (_label, result, status) => {
+      mockRpc.mockResolvedValue(result)
 
       const { GET } = await import('../[conversationId]/search/route')
-      const request = createRequest('/api/chat/conv-123/search?q=hello', {
-        headers: { Authorization: 'Bearer valid-token' },
-      })
-      const response = await GET(request, { params: { conversationId: 'conv-123' } })
+      const request = createRequest(`/api/chat/${CONVERSATION_ID}/search?q=hello`)
+      const response = await GET(request, { params: { conversationId: CONVERSATION_ID } })
 
-      expect(response.status).toBe(200)
-      // gt was called with cleared_before timestamp
-      expect(mockGt).toHaveBeenCalled()
+      expect(response.status).toBe(status)
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+      expect(mockFrom).not.toHaveBeenCalled()
     })
   })
 })
