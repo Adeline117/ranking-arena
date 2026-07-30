@@ -773,17 +773,131 @@ type UsageData = {
   totals: Record<string, number>
 }
 
+type UsageLoadOutcome = 'loading' | 'ready' | 'failed'
+const USAGE_KEY_FIELDS = ['id', 'name']
+const USAGE_DAILY_FIELDS = ['api_key_id', 'date', 'request_count']
+const USAGE_DATA_FIELDS = ['daily', 'keys', 'totals']
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function isExactDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+function exactFields(value: Record<string, unknown>, expected: string[]): boolean {
+  const fields = Object.keys(value).sort()
+  return (
+    fields.length === expected.length && fields.every((field, index) => field === expected[index])
+  )
+}
+
+function parseUsagePayload(value: unknown): UsageData | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const payload = value as Record<string, unknown>
+  if (!exactFields(payload, ['data'])) return null
+  if (!payload.data || typeof payload.data !== 'object' || Array.isArray(payload.data)) return null
+  const data = payload.data as Record<string, unknown>
+  if (
+    !exactFields(data, USAGE_DATA_FIELDS) ||
+    !Array.isArray(data.keys) ||
+    !Array.isArray(data.daily) ||
+    !data.totals ||
+    typeof data.totals !== 'object' ||
+    Array.isArray(data.totals)
+  ) {
+    return null
+  }
+
+  const keys: UsageData['keys'] = []
+  const keyIds = new Set<string>()
+  for (const value of data.keys) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const key = value as Record<string, unknown>
+    if (
+      !exactFields(key, USAGE_KEY_FIELDS) ||
+      typeof key.id !== 'string' ||
+      !UUID_PATTERN.test(key.id) ||
+      keyIds.has(key.id) ||
+      typeof key.name !== 'string' ||
+      key.name !== key.name.trim() ||
+      key.name.length < 1 ||
+      key.name.length > 50
+    ) {
+      return null
+    }
+    keyIds.add(key.id)
+    keys.push({ id: key.id, name: key.name })
+  }
+
+  const today = new Date().toISOString().slice(0, 10)
+  const since = new Date(new Date(`${today}T00:00:00.000Z`).getTime() - 29 * DAY_MS)
+    .toISOString()
+    .slice(0, 10)
+  const daily: UsageData['daily'] = []
+  const dailyIdentities = new Set<string>()
+  const expectedTotals: Record<string, number> = {}
+  for (const value of data.daily) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const row = value as Record<string, unknown>
+    const identity = `${String(row.api_key_id)}\u0000${String(row.date)}`
+    if (
+      !exactFields(row, USAGE_DAILY_FIELDS) ||
+      typeof row.api_key_id !== 'string' ||
+      !keyIds.has(row.api_key_id) ||
+      !isExactDate(row.date) ||
+      row.date < since ||
+      row.date > today ||
+      typeof row.request_count !== 'number' ||
+      !Number.isSafeInteger(row.request_count) ||
+      row.request_count < 0 ||
+      dailyIdentities.has(identity)
+    ) {
+      return null
+    }
+    const total = (expectedTotals[row.api_key_id] || 0) + row.request_count
+    if (!Number.isSafeInteger(total)) return null
+    expectedTotals[row.api_key_id] = total
+    dailyIdentities.add(identity)
+    daily.push({
+      api_key_id: row.api_key_id,
+      date: row.date,
+      request_count: row.request_count,
+    })
+  }
+
+  const rawTotals = data.totals as Record<string, unknown>
+  const totalIds = Object.keys(rawTotals).sort()
+  const expectedTotalIds = Object.keys(expectedTotals).sort()
+  if (
+    totalIds.length !== expectedTotalIds.length ||
+    !totalIds.every((id, index) => id === expectedTotalIds[index]) ||
+    totalIds.some((id) => rawTotals[id] !== expectedTotals[id])
+  ) {
+    return null
+  }
+
+  return { keys, daily, totals: expectedTotals }
+}
+
 function UsageChart() {
   const { t } = useLanguage()
   const auth = useAuthSession()
   const authRef = useRef(auth)
   authRef.current = auth
   const [usage, setUsage] = useState<UsageData | null>(null)
+  const [loadOutcome, setLoadOutcome] = useState<UsageLoadOutcome>('loading')
+  const [retryGeneration, setRetryGeneration] = useState(0)
 
   useEffect(() => {
     setUsage(null)
+    setLoadOutcome('loading')
     const scope = captureSettingsViewer(authRef.current)
-    if (!scope) return
+    if (!scope) {
+      setLoadOutcome('failed')
+      return
+    }
     let cancelled = false
 
     void (async () => {
@@ -799,18 +913,56 @@ function UsageChart() {
             expectedSessionGeneration: scope.sessionGeneration,
           }
         )
-        if (cancelled || res.stale || !isSettingsViewerCurrent(scope, authRef.current) || !res.ok)
+        if (cancelled || res.stale || !isSettingsViewerCurrent(scope, authRef.current)) return
+        const parsed = res.ok ? parseUsagePayload(res.data) : null
+        if (!parsed) {
+          setLoadOutcome('failed')
           return
-        setUsage(res.data?.data ?? null)
+        }
+        setUsage(parsed)
+        setLoadOutcome('ready')
       } catch {
-        // Usage history is supplementary; identity-bound failure stays empty.
+        if (!cancelled && isSettingsViewerCurrent(scope, authRef.current)) {
+          setLoadOutcome('failed')
+        }
       }
     })()
 
     return () => {
       cancelled = true
     }
-  }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId])
+  }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId, retryGeneration])
+
+  if (loadOutcome !== 'ready') {
+    return (
+      <div
+        role={loadOutcome === 'failed' ? 'alert' : undefined}
+        style={{
+          marginTop: tokens.spacing[4],
+          paddingTop: tokens.spacing[3],
+          borderTop: '1px solid var(--color-border-primary)',
+        }}
+      >
+        <Text
+          size="xs"
+          weight="bold"
+          style={{ color: 'var(--color-text-tertiary)', marginBottom: tokens.spacing[2] }}
+        >
+          {t('apiKeyUsage30d')}
+        </Text>
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
+            {loadOutcome === 'loading' ? t('loading') : t('loadFailedRetryShort')}
+          </Text>
+          {loadOutcome === 'failed' && (
+            <Button size="sm" variant="secondary" onClick={() => setRetryGeneration((v) => v + 1)}>
+              {t('retry')}
+            </Button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   if (!usage || usage.daily.length === 0) {
     return (

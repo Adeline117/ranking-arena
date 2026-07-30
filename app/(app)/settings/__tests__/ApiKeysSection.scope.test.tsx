@@ -417,6 +417,67 @@ describe('ApiKeysSection viewer ownership', () => {
     expect(screen.queryByPlaceholderText('apiKeyNamePlaceholder')).not.toBeInTheDocument()
   })
 
+  it.each([
+    ['failed usage read', { ok: false, status: 503, data: { error: 'unavailable' } }],
+    [
+      'malformed usage payload',
+      {
+        ok: true,
+        status: 200,
+        data: {
+          data: {
+            keys: [],
+            daily: [
+              {
+                api_key_id: '22222222-2222-4222-8222-222222222222',
+                date: '2026-07-29',
+                request_count: 1,
+              },
+            ],
+            totals: {},
+          },
+        },
+      },
+    ],
+  ])('distinguishes a %s from zero usage and retries', async (_label, firstUsageResponse) => {
+    let usageReads = 0
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url.includes('/usage')) {
+        usageReads += 1
+        return Promise.resolve(
+          usageReads === 1
+            ? firstUsageResponse
+            : {
+                ok: true,
+                status: 200,
+                data: { data: { keys: [], daily: [], totals: {} } },
+              }
+        )
+      }
+      if (url === '/api/user/api-keys' && method === 'GET') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: apiKeyList(apiKey('user-a')),
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<ApiKeysSection />)
+    await screen.findByText('user-a private key')
+
+    const usageAlert = await screen.findByRole('alert')
+    expect(usageAlert).toHaveTextContent('loadFailedRetryShort')
+    expect(screen.queryByText('apiKeyNoUsage')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'retry' }))
+
+    expect(await screen.findByText('apiKeyNoUsage')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(usageReads).toBe(2)
+  })
+
   it('catches create network failures, preserves the draft, and releases the busy state', async () => {
     mockAuthedFetch.mockImplementation((url: string, method: string) => {
       if (url.includes('/usage')) {
