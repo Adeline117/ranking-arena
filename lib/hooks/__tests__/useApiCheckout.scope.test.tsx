@@ -69,7 +69,7 @@ describe('useApiCheckout viewer ownership', () => {
     mockAuthedFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      data: { url: 'https://checkout.stripe.test/session-a', sessionId: 'cs_a' },
+      data: { url: 'https://checkout.stripe.com/session-a', sessionId: 'cs_a' },
     })
     const redirect = jest.fn()
     const hook = renderHook(() => useApiCheckout({ redirectToCheckout: redirect }))
@@ -89,7 +89,7 @@ describe('useApiCheckout viewer ownership', () => {
         expectedSessionGeneration: scope.sessionGeneration,
       }
     )
-    expect(redirect).toHaveBeenCalledWith('https://checkout.stripe.test/session-a')
+    expect(redirect).toHaveBeenCalledWith('https://checkout.stripe.com/session-a')
     expect(hook.result.current.isLoading).toBe(false)
   })
 
@@ -135,18 +135,18 @@ describe('useApiCheckout viewer ownership', () => {
       responseB.resolve({
         ok: true,
         status: 200,
-        data: { url: 'https://checkout.stripe.test/session-b' },
+        data: { url: 'https://checkout.stripe.com/session-b' },
       })
       await checkoutB
     })
     expect(redirect).toHaveBeenCalledTimes(1)
-    expect(redirect).toHaveBeenCalledWith('https://checkout.stripe.test/session-b')
+    expect(redirect).toHaveBeenCalledWith('https://checkout.stripe.com/session-b')
 
     await act(async () => {
       responseA.resolve({
         ok: true,
         status: 200,
-        data: { url: 'https://checkout.stripe.test/session-a' },
+        data: { url: 'https://checkout.stripe.com/session-a' },
       })
       await checkoutA
     })
@@ -170,6 +170,25 @@ describe('useApiCheckout viewer ownership', () => {
     expect(mockAuthedFetch).not.toHaveBeenCalled()
     expect(redirect).not.toHaveBeenCalled()
     expect(mockPush).not.toHaveBeenCalled()
+  })
+
+  it('does not navigate to a non-Stripe URL in a successful response', async () => {
+    const scope = synchronizeViewerScope(true, 'user-a')
+    mockAuth = authFor('user-a', scope.sessionGeneration)
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { url: 'https://attacker.example/fake-checkout', sessionId: 'cs_a' },
+    })
+    const redirect = jest.fn()
+    const hook = renderHook(() => useApiCheckout({ redirectToCheckout: redirect }))
+
+    await act(async () => {
+      await hook.result.current.checkout('starter')
+    })
+
+    expect(redirect).not.toHaveBeenCalled()
+    expect(hook.result.current.error).toBe('Checkout failed')
   })
 
   it('routes a resolved anonymous viewer to login without creating checkout', async () => {

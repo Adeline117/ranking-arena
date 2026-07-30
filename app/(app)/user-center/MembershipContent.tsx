@@ -12,6 +12,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
 import { trackEvent } from '@/lib/analytics/track'
 import { authedFetch } from '@/lib/api/client'
+import { isTrustedStripeCheckoutUrl } from '@/lib/stripe/hosted-url'
 import {
   captureSettingsViewer,
   isSettingsViewerCurrent,
@@ -312,7 +313,7 @@ export default function MembershipContent({
         return
       }
 
-      if (typeof result.data?.url === 'string' && result.data.url.startsWith('https://')) {
+      if (isTrustedStripeCheckoutUrl(result.data?.url)) {
         // Last CAS immediately before the irreversible browser navigation.
         if (!operationIsCurrent()) return
         navigating = true

@@ -6,6 +6,7 @@ import { authedFetch } from '@/lib/api/client'
 import { jwtSubject } from '@/lib/auth/token-subject'
 import { getViewerScope, isViewerScopeCurrent, type ViewerScope } from '@/lib/auth/viewer-scope'
 import { useAuthSession, type AuthSessionReturn } from '@/lib/hooks/useAuthSession'
+import { isTrustedStripeCheckoutUrl } from '@/lib/stripe/hosted-url'
 
 type ApiPlan = 'starter' | 'pro'
 
@@ -161,10 +162,12 @@ export function useApiCheckout(options: UseApiCheckoutOptions = {}) {
           return
         }
 
-        if (typeof data?.url === 'string' && data.url) {
+        if (isTrustedStripeCheckoutUrl(data?.url)) {
           // Last CAS immediately before the irreversible browser navigation.
           if (!operationIsCurrent()) return
           redirectToCheckout(data.url)
+        } else {
+          setRawError('Checkout failed')
         }
       } catch {
         if (operationIsCurrent()) setRawError('Network error. Please try again.')

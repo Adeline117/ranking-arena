@@ -191,7 +191,7 @@ describe('useDirectCheckout viewer-owned intent', () => {
       response.resolve({
         ok: true,
         status: 200,
-        data: { url: 'https://checkout.stripe.test/session-a' },
+        data: { url: 'https://checkout.stripe.com/session-a' },
       })
       await first
     })
@@ -241,18 +241,18 @@ describe('useDirectCheckout viewer-owned intent', () => {
       responseB.resolve({
         ok: true,
         status: 200,
-        data: { url: 'https://checkout.stripe.test/session-b' },
+        data: { url: 'https://checkout.stripe.com/session-b' },
       })
       await checkoutB
     })
     expect(redirect).toHaveBeenCalledTimes(1)
-    expect(redirect).toHaveBeenCalledWith('https://checkout.stripe.test/session-b')
+    expect(redirect).toHaveBeenCalledWith('https://checkout.stripe.com/session-b')
 
     await act(async () => {
       responseA.resolve({
         ok: true,
         status: 200,
-        data: { url: 'https://checkout.stripe.test/session-a' },
+        data: { url: 'https://checkout.stripe.com/session-a' },
       })
       await checkoutA
     })
@@ -279,5 +279,24 @@ describe('useDirectCheckout viewer-owned intent', () => {
     expect(mockAuthedFetch).not.toHaveBeenCalled()
     expect(redirect).not.toHaveBeenCalled()
     expect(mockPush).not.toHaveBeenCalled()
+  })
+
+  it('does not navigate to a non-Stripe URL in a successful response', async () => {
+    const scope = synchronizeViewerScope(true, 'user-a')
+    mockAuth = authFor('user-a', scope.sessionGeneration)
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { url: 'https://attacker.example/fake-checkout' },
+    })
+    const redirect = jest.fn()
+    const hook = renderHook(() => useDirectCheckout({ redirectToCheckout: redirect }))
+
+    await act(async () => {
+      await hook.result.current.checkout({ plan: 'monthly' })
+    })
+
+    expect(redirect).not.toHaveBeenCalled()
+    expect(hook.result.current.error).toBe('Checkout failed')
   })
 })

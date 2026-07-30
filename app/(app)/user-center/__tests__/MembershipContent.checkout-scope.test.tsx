@@ -199,6 +199,24 @@ describe('MembershipContent checkout viewer ownership', () => {
     expect(redirect).not.toHaveBeenCalled()
   })
 
+  it('rejects a non-Stripe checkout URL and releases the subscribe button', async () => {
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { url: 'https://attacker.example/fake-checkout' },
+    })
+    const redirect = jest.fn()
+    render(<MembershipContent redirectToCheckout={redirect} />)
+
+    const subscribe = await screen.findByRole('button', { name: 'subscribe' })
+    fireEvent.click(subscribe)
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('getPaymentLinkFailed', 'error'))
+    expect(redirect).not.toHaveBeenCalled()
+    expect(subscribe).toBeEnabled()
+    expect(screen.getByTestId('checkout-state')).toHaveTextContent('idle')
+  })
+
   it('hides A state immediately and drops A checkout URL after switching to B', async () => {
     const checkoutA = deferred<CheckoutResult>()
     mockAuthedFetch.mockReturnValue(checkoutA.promise)
