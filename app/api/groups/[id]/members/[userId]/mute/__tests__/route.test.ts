@@ -138,7 +138,7 @@ describe('atomic group mute route', () => {
         title: 'Group mute notification',
         message: 'You have been muted in "Safety group" for 3 hours. \nReason: spam',
         actor_id: ACTOR_ID,
-        reference_id: GROUP_ID,
+        reference_id: OPERATION_ID,
         link: `/groups/${GROUP_ID}`,
       }),
       'group-mute'

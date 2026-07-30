@@ -101,7 +101,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
           actor_id: user.id,
           reference_id: groupId,
         },
-        'Kick notification'
+        'Kick notification',
+        // The atomic RPC reports `kicked` only for the transaction that
+        // actually removed the membership. A later rejoin-and-kick is a new
+        // moderation event and must not be suppressed by the group ID.
+        { deduplicate: false }
       )
 
       return NextResponse.json({ success: true })

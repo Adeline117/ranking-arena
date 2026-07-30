@@ -86,7 +86,8 @@ describe('POST group member kick atomic route', () => {
         actor_id: 'group-admin',
         reference_id: GROUP_ID,
       }),
-      'Kick notification'
+      'Kick notification',
+      { deduplicate: false }
     )
     expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(
       mockSendNotification.mock.invocationCallOrder[0]

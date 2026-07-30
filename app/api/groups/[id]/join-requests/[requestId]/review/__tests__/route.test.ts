@@ -111,7 +111,7 @@ describe('atomic join-request review route', () => {
       expect.objectContaining({
         user_id: APPLICANT_ID,
         actor_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        reference_id: GROUP_ID,
+        reference_id: REQUEST_ID,
       }),
       expect.any(String)
     )

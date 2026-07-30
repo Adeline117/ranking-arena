@@ -110,7 +110,7 @@ export const POST = withAuth(
             message: 'Your request to join the group was approved',
             link: `/groups/${routeIds.groupId}`,
             actor_id: user.id,
-            reference_id: routeIds.groupId,
+            reference_id: routeIds.requestId,
           },
           'Join request approval notification'
         )
@@ -125,7 +125,7 @@ export const POST = withAuth(
             message: 'Your request to join the group was not approved',
             link: `/groups/${routeIds.groupId}`,
             actor_id: user.id,
-            reference_id: routeIds.groupId,
+            reference_id: routeIds.requestId,
           },
           'Join request rejection notification'
         )

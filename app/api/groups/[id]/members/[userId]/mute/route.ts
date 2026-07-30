@@ -312,7 +312,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
             message,
             link: `/groups/${result.groupId}`,
             actor_id: actorId,
-            reference_id: result.groupId,
+            // The RPC operation ID is stable across a retry and unique across
+            // two real mute decisions in the same group.
+            reference_id: result.operationId,
           },
           'group-mute'
         )
