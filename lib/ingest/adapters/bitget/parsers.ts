@@ -314,7 +314,10 @@ export function parseBitgetPositionHistory(raw: unknown, _ctx: ParseCtx): Parsed
       size: num(item.closeDealCount ?? item.openDealCount), // base-asset quantity
       entryPrice: num(item.openAvgPrice),
       exitPrice: num(item.closeAvgPrice),
-      realizedPnl: num(item.netProfit ?? item.achievedProfits),
+      // netProfit is the reviewed after-fee field. achievedProfits has a
+      // different (pre-fee) methodology and must not silently impersonate it
+      // when the net value is absent.
+      realizedPnl: num(item.netProfit),
       dedupeHash: item.orderNo
         ? dedupeHash('bitget_ph', item.orderNo)
         : dedupeHash('bitget_ph', symbol, item.openTime, item.closeTime, item.closeDealCount),
