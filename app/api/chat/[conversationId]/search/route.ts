@@ -70,6 +70,7 @@ export async function GET(
         .from('direct_messages')
         .select('id, content, created_at, sender_id')
         .eq('conversation_id', conversationId)
+        .is('deleted_at', null)
         .ilike('content', `%${escapeLikePattern(query.trim())}%`)
 
       // Apply cleared_before filter

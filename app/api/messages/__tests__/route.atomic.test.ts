@@ -228,3 +228,22 @@ describe('POST /api/messages atomic authority', () => {
     expect(post).not.toContain('.insert(')
   })
 })
+
+describe('GET /api/messages soft-delete privacy', () => {
+  it('never resolves reply previews from deleted or cross-conversation parents', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/api/messages/route.ts'), 'utf8')
+    const get = source.slice(
+      source.indexOf('export const GET'),
+      source.indexOf('export const POST')
+    )
+    const previewQuery = get.slice(
+      get.indexOf(".from('direct_messages')", get.indexOf('replyPreviewMap')),
+      get.indexOf('const messageIds')
+    )
+
+    expect(previewQuery).toContain(".eq('conversation_id', conversationId)")
+    expect(previewQuery).toContain(".is('deleted_at', null)")
+    expect(previewQuery).toContain('if (parentError)')
+    expect(previewQuery).toContain("{ error: 'Failed to fetch messages' }")
+  })
+})

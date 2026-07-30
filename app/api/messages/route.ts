@@ -232,10 +232,16 @@ export const GET = withAuth(
     ) as string[]
     const replyPreviewMap = new Map<string, { sender_id: string; content: string }>()
     if (replyIds.length > 0) {
-      const { data: parents } = await sb
+      const { data: parents, error: parentError } = await sb
         .from('direct_messages')
         .select('id, sender_id, content')
         .in('id', replyIds)
+        .eq('conversation_id', conversationId)
+        .is('deleted_at', null)
+      if (parentError) {
+        logger.error('Reply preview query error', { error: parentError.message })
+        return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
+      }
       for (const p of parents || []) {
         replyPreviewMap.set(p.id, {
           sender_id: p.sender_id,
