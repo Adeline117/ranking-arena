@@ -315,8 +315,12 @@ const okxAdapter: SourceAdapter = {
       const lastId = String(last.subPosId ?? '')
       if (!lastId) break
       if (Number.isFinite(cursorMs)) {
-        const oldest = Number(last.openTime)
-        // Overlap reached: this page already dips into stored history.
+        // The persisted position-history cursor is a close timestamp. Compare
+        // it with the same source field; using openTime can stop early for a
+        // long-lived position that opened before, but closed after, the
+        // checkpoint.
+        const oldest = Number(last.closeTime)
+        // Overlap reached: this page already dips into stored close history.
         if (Number.isFinite(oldest) && oldest <= cursorMs) break
       }
       after = lastId
