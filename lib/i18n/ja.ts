@@ -2251,10 +2251,8 @@ const ja = {
   imageLoadFailed: '画像の読み込みに失敗しました',
 
   youAreOffline: 'オフラインです',
-  checkNetworkAndRetryOffline:
-    'ネットワーク接続を確認してもう一度お試しください。キャッシュされた一部のコンテンツは引き続きアクセスできる場合があります。',
+  checkNetworkAndRetryOffline: 'ネットワーク接続を確認してから、もう一度お試しください。',
   retryConnection: '接続を再試行',
-  cachedLeaderboard: '最終キャッシュランキング',
   arenaTagline: 'Arena - 暗号資産トレーダーランキング',
 
   onboardingTitle: 'Arenaへようこそ',

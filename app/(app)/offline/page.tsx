@@ -1,53 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
-
-interface CachedTrader {
-  nickname?: string
-  exchange?: string
-  pnl_7d?: number
-}
 
 /**
  * Offline page
  * Shown when user is offline and no cached page is available
+ *
+ * Service worker v5 intentionally caches only this fallback document. Do not
+ * read legacy ranking caches here: they have no current freshness, units, or
+ * published-rank contract and are deleted during service-worker activation.
  */
 export default function OfflinePage() {
   const { t } = useLanguage()
-  const [cachedTraders, setCachedTraders] = useState<CachedTrader[]>([])
-
-  useEffect(() => {
-    // Try to load cached leaderboard data from Cache API
-    async function loadCachedData() {
-      try {
-        const cache = await caches.open('ranking-arena-v3')
-        const keys = await cache.keys()
-        const tradersReq = keys.find((r) => r.url.includes('/api/traders'))
-        if (tradersReq) {
-          const resp = await cache.match(tradersReq)
-          if (resp) {
-            const data = await resp.json()
-            const list = Array.isArray(data) ? data : data?.data
-            if (Array.isArray(list)) {
-              setCachedTraders(list.slice(0, 5))
-            }
-          }
-        }
-      } catch {
-        // Intentionally swallowed: offline page cached data is best-effort, empty state is acceptable
-      }
-    }
-    loadCachedData()
-  }, [])
-
-  const handleRetry = () => {
-    window.location.reload()
-  }
 
   return (
-    <div
+    <main
       style={{
         minHeight: '100vh',
         display: 'flex',
@@ -69,6 +37,7 @@ export default function OfflinePage() {
       >
         {/* Offline icon */}
         <div
+          aria-hidden="true"
           style={{
             width: '64px',
             height: '64px',
@@ -122,92 +91,27 @@ export default function OfflinePage() {
           {t('checkNetworkAndRetryOffline')}
         </p>
 
-        <button
-          onClick={handleRetry}
-          style={{
-            padding: '0.75rem 2rem',
-            fontSize: '0.875rem',
-            fontWeight: '500',
-            color: 'var(--color-on-accent)',
-            backgroundColor: 'var(--color-brand, #8b6fa8)',
-            border: 'none',
-            borderRadius: tokens.radius.md,
-            cursor: 'pointer',
-            transition: 'opacity 0.2s',
-            width: '100%',
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.opacity = '0.85'
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.opacity = '1'
-          }}
-        >
-          {t('retryConnection')}
-        </button>
-
-        {/* Cached leaderboard data */}
-        {cachedTraders.length > 0 && (
-          <div
+        {/* Native form submission still works when offline JS cannot hydrate. */}
+        <form action="" method="get">
+          <button
+            type="submit"
             style={{
-              marginTop: '2rem',
-              padding: '1rem',
-              backgroundColor: 'var(--color-bg-secondary, #14121C)',
-              borderRadius: tokens.radius.lg,
-              border: '1px solid var(--color-border-primary, #2A2836)',
-              textAlign: 'left',
+              display: 'block',
+              padding: '0.75rem 2rem',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              color: 'var(--color-on-accent)',
+              backgroundColor: 'var(--color-brand, #8b6fa8)',
+              border: 'none',
+              borderRadius: tokens.radius.md,
+              cursor: 'pointer',
+              width: '100%',
+              boxSizing: 'border-box',
             }}
           >
-            <p
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: '600',
-                color: 'var(--color-text-tertiary, #8E8E9E)',
-                marginBottom: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >
-              {t('cachedLeaderboard')}
-            </p>
-            {cachedTraders.map((trader, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '0.5rem 0',
-                  borderTop: i > 0 ? '1px solid var(--color-border-primary, #2A2836)' : 'none',
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: '0.8125rem',
-                    color: 'var(--color-text-primary, #EDEDED)',
-                  }}
-                >
-                  {i + 1}. {trader.nickname || 'Trader'}
-                </span>
-                {trader.pnl_7d != null && (
-                  <span
-                    style={{
-                      fontSize: '0.75rem',
-                      fontWeight: '500',
-                      color:
-                        trader.pnl_7d >= 0
-                          ? 'var(--color-success, #2fe57d)'
-                          : 'var(--color-error, #ff7c7c)',
-                    }}
-                  >
-                    {trader.pnl_7d >= 0 ? '+' : ''}
-                    {trader.pnl_7d.toFixed(1)}%
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+            {t('retryConnection')}
+          </button>
+        </form>
 
         <p
           style={{
@@ -219,6 +123,6 @@ export default function OfflinePage() {
           {t('arenaTagline')}
         </p>
       </div>
-    </div>
+    </main>
   )
 }

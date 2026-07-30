@@ -2441,10 +2441,8 @@ const en = {
 
   // Offline page
   youAreOffline: 'You Are Offline',
-  checkNetworkAndRetryOffline:
-    'Please check your network connection and try again. Some cached content may still be accessible.',
+  checkNetworkAndRetryOffline: 'Check your network connection, then try again.',
   retryConnection: 'Retry Connection',
-  cachedLeaderboard: 'Last Cached Leaderboard',
   arenaTagline: 'Arena - Crypto Trader Leaderboard',
 
   // Onboarding page

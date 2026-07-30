@@ -2385,9 +2385,8 @@ const zh = {
 
   // Offline page
   youAreOffline: '您已离线',
-  checkNetworkAndRetryOffline: '请检查您的网络连接后重试。部分已缓存的内容可能仍可访问。',
+  checkNetworkAndRetryOffline: '请检查网络连接，恢复联网后重试。',
   retryConnection: '重试连接',
-  cachedLeaderboard: '上次缓存的排行榜',
   arenaTagline: 'Arena — 加密万物排行榜',
 
   // Onboarding page
