@@ -5,7 +5,10 @@ jest.mock('@/lib/api/with-cron', () => ({
   ),
 }))
 
-const mockRpc = jest.fn()
+const mockRpcResult = jest.fn()
+const mockRpc = jest.fn((name: string, args: unknown) => ({
+  abortSignal: (signal: AbortSignal) => mockRpcResult(name, args, signal),
+}))
 const mockRemove = jest.fn()
 const mockSupabase = {
   rpc: mockRpc,
@@ -27,11 +30,12 @@ const ITEM = {
 
 describe('cleanup report evidence cron worker', () => {
   beforeEach(() => {
-    mockRpc.mockReset()
+    mockRpc.mockClear()
+    mockRpcResult.mockReset()
     mockRemove.mockReset()
     mockSupabase.storage.from.mockClear()
     mockRemove.mockResolvedValue({ error: null })
-    mockRpc.mockImplementation(async (name: string) => {
+    mockRpcResult.mockImplementation(async (name: string) => {
       if (name === 'lease_stale_report_evidence_cleanup') {
         return { data: [ITEM], error: null }
       }
@@ -68,6 +72,12 @@ describe('cleanup report evidence cron worker', () => {
   it('removes through Storage API and acknowledges the exact lease', async () => {
     const result = await GET({} as never)
     expect(result).toEqual({ count: 1, leased: 1, failed: 0 })
+    expect(mockRpc).toHaveBeenCalledWith('lease_stale_report_evidence_cleanup', { p_limit: 10 })
+    expect(mockRpcResult).toHaveBeenCalledWith(
+      'lease_stale_report_evidence_cleanup',
+      { p_limit: 10 },
+      expect.any(AbortSignal)
+    )
     expect(mockRemove).toHaveBeenCalledWith([ITEM.object_name])
     expect(mockRpc).toHaveBeenCalledWith('ack_report_evidence_cleanup', {
       p_reporter_id: ITEM.reporter_id,
@@ -78,8 +88,7 @@ describe('cleanup report evidence cron worker', () => {
 
   it('releases a lease after transient Storage failure for retry', async () => {
     mockRemove.mockResolvedValue({ error: { message: 'temporary outage' } })
-    const result = await GET({} as never)
-    expect(result).toEqual({ count: 0, leased: 1, failed: 1 })
+    await expect(GET({} as never)).rejects.toThrow('Report evidence cleanup incomplete')
     expect(mockRpc).toHaveBeenCalledWith('release_report_evidence_cleanup', {
       p_reporter_id: ITEM.reporter_id,
       p_evidence_ref: ITEM.evidence_ref,
@@ -89,7 +98,7 @@ describe('cleanup report evidence cron worker', () => {
   })
 
   it('leaves a failed acknowledgement leased for bounded retry', async () => {
-    mockRpc.mockImplementation(async (name: string) => {
+    mockRpcResult.mockImplementation(async (name: string) => {
       if (name === 'lease_stale_report_evidence_cleanup') {
         return { data: [ITEM], error: null }
       }
@@ -98,18 +107,52 @@ describe('cleanup report evidence cron worker', () => {
       }
       return { data: true, error: null }
     })
-    const result = await GET({} as never)
-    expect(result).toEqual({ count: 0, leased: 1, failed: 1 })
+    await expect(GET({} as never)).rejects.toThrow('Report evidence cleanup incomplete')
     expect(mockRpc).not.toHaveBeenCalledWith('release_report_evidence_cleanup', expect.anything())
   })
 
+  it('fails closed when a failed removal lease is not explicitly released', async () => {
+    mockRemove.mockResolvedValue({ error: { message: 'temporary outage' } })
+    mockRpcResult.mockImplementation(async (name: string) => {
+      if (name === 'lease_stale_report_evidence_cleanup') {
+        return { data: [ITEM], error: null }
+      }
+      if (name === 'release_report_evidence_cleanup') {
+        return { data: false, error: null }
+      }
+      return { data: true, error: null }
+    })
+
+    await expect(GET({} as never)).rejects.toThrow(
+      'Failed to release report evidence cleanup lease'
+    )
+  })
+
+  it('rejects a lease response larger than the requested batch', async () => {
+    mockRpcResult.mockResolvedValueOnce({
+      data: Array.from({ length: 11 }, (_, index) => ({
+        ...ITEM,
+        evidence_ref: ITEM.evidence_ref.replace(
+          '0123456789abcdef',
+          String(index).padStart(16, '0')
+        ),
+        object_name: ITEM.object_name.replace('0123456789abcdef', String(index).padStart(16, '0')),
+      })),
+      error: null,
+    })
+
+    await expect(GET({} as never)).rejects.toThrow('Invalid report evidence cleanup lease batch')
+    expect(mockRemove).not.toHaveBeenCalled()
+  })
+
   it('fails closed on malformed leased identities before Storage access', async () => {
-    mockRpc.mockResolvedValueOnce({
+    mockRpcResult.mockResolvedValueOnce({
       data: [{ ...ITEM, object_name: '../foreign.png' }],
       error: null,
     })
-    const result = await GET({} as never)
-    expect(result).toEqual({ count: 0, leased: 1, failed: 1 })
+    await expect(GET({} as never)).rejects.toThrow(
+      'Report evidence cleanup lease identity is invalid'
+    )
     expect(mockRemove).not.toHaveBeenCalled()
   })
 })

@@ -17,6 +17,8 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
+const CLEANUP_LIMIT = 10
+const WORK_BUDGET_MS = 40_000
 const CleanupItemSchema = z
   .object({
     evidence_ref: z.string(),
@@ -26,17 +28,21 @@ const CleanupItemSchema = z
     lease_expires_at: z.string().datetime({ offset: true }),
   })
   .strict()
-const CleanupBatchSchema = z.array(CleanupItemSchema).max(50)
+const CleanupBatchSchema = z.array(CleanupItemSchema).max(CLEANUP_LIMIT)
 
 export const GET = withCron(
   'cleanup-report-evidence',
   async (_request: NextRequest, { supabase }) => {
+    const workSignal = AbortSignal.timeout(WORK_BUDGET_MS)
     // Generated database types intentionally lag this deploy-ordered migration.
     const serviceClient: SupabaseClient = supabase
-    const leased = await serviceClient.rpc('lease_stale_report_evidence_cleanup', {
-      p_limit: 50,
-    })
+    const leased = await serviceClient
+      .rpc('lease_stale_report_evidence_cleanup', {
+        p_limit: CLEANUP_LIMIT,
+      })
+      .abortSignal(workSignal)
     if (leased.error) throw leased.error
+    workSignal.throwIfAborted()
 
     const batch = CleanupBatchSchema.safeParse(leased.data)
     if (!batch.success) throw new Error('Invalid report evidence cleanup lease batch')
@@ -44,10 +50,10 @@ export const GET = withCron(
     let deleted = 0
     let failed = 0
     for (const item of batch.data) {
+      workSignal.throwIfAborted()
       const parsed = parseReportEvidenceRef(item.evidence_ref, item.reporter_id)
       if (!parsed || parsed.objectName !== item.object_name) {
-        failed++
-        continue
+        throw new Error('Report evidence cleanup lease identity is invalid')
       }
 
       let removeError: unknown = null
@@ -62,19 +68,26 @@ export const GET = withCron(
 
       if (removeError) {
         failed++
-        await serviceClient.rpc('release_report_evidence_cleanup', {
+        const release = await serviceClient
+          .rpc('release_report_evidence_cleanup', {
+            p_reporter_id: item.reporter_id,
+            p_evidence_ref: item.evidence_ref,
+            p_lease_token: item.lease_token,
+          })
+          .abortSignal(workSignal)
+        if (release.error || release.data !== true) {
+          throw new Error('Failed to release report evidence cleanup lease')
+        }
+        continue
+      }
+
+      const ack = await serviceClient
+        .rpc('ack_report_evidence_cleanup', {
           p_reporter_id: item.reporter_id,
           p_evidence_ref: item.evidence_ref,
           p_lease_token: item.lease_token,
         })
-        continue
-      }
-
-      const ack = await serviceClient.rpc('ack_report_evidence_cleanup', {
-        p_reporter_id: item.reporter_id,
-        p_evidence_ref: item.evidence_ref,
-        p_lease_token: item.lease_token,
-      })
+        .abortSignal(workSignal)
       if (ack.error || ack.data !== true) {
         // Leave the bounded lease in place. The stale-leasing RPC will pick it
         // up again after lease_expires_at and Storage removal is idempotent.
@@ -82,6 +95,10 @@ export const GET = withCron(
         continue
       }
       deleted++
+    }
+    workSignal.throwIfAborted()
+    if (failed > 0) {
+      throw new Error(`Report evidence cleanup incomplete: ${failed} item(s) failed`)
     }
 
     return { count: deleted, leased: batch.data.length, failed }
