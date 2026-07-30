@@ -53,7 +53,7 @@ function roiColor(v: number): string {
 const TH_STYLE: React.CSSProperties = {
   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
   fontSize: tokens.typography.fontSize.xs,
-  fontWeight: 600,
+  fontWeight: tokens.typography.fontWeight.semibold,
   color: 'var(--color-text-tertiary)',
   textAlign: 'right',
   whiteSpace: 'nowrap',
@@ -85,6 +85,31 @@ const SORT_BTN_STYLE: React.CSSProperties = {
 type SortKey = 'trader' | 'exchange' | 'roi' | 'pnl' | 'winRate' | 'asOf'
 type SortDir = 'asc' | 'desc'
 
+type RankedWeeklyLeaderRow = WeeklyLeaderRow & { pooledRank: number }
+
+function finiteNumberOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function compareIdentity(a: WeeklyLeaderRow, b: WeeklyLeaderRow): number {
+  if (a.source !== b.source) return a.source < b.source ? -1 : 1
+  if (a.exchangeTraderId !== b.exchangeTraderId) {
+    return a.exchangeTraderId < b.exchangeTraderId ? -1 : 1
+  }
+  return 0
+}
+
+/**
+ * Assign the official pooled rank before any user-selected table ordering.
+ * The identity tie-break keeps equal-ROI rows deterministic across renders.
+ */
+export function rankWeeklyRows(rows: readonly WeeklyLeaderRow[]): RankedWeeklyLeaderRow[] {
+  return [...rows]
+    .filter((row) => Number.isFinite(row.roi))
+    .sort((a, b) => b.roi - a.roi || compareIdentity(a, b))
+    .map((row, index) => ({ ...row, pooledRank: index + 1 }))
+}
+
 function defaultDir(key: SortKey): SortDir {
   return key === 'trader' || key === 'exchange' ? 'asc' : 'desc'
 }
@@ -98,9 +123,9 @@ function sortValue(row: WeeklyLeaderRow, key: SortKey): number | string | null {
     case 'roi':
       return row.roi
     case 'pnl':
-      return row.pnl?.value ?? null
+      return finiteNumberOrNull(row.pnl?.value)
     case 'winRate':
-      return row.winRate
+      return finiteNumberOrNull(row.winRate)
     case 'asOf':
       return row.provenance.asOf
   }
@@ -197,7 +222,7 @@ function TraderAvatar({ row, size }: { row: WeeklyLeaderRow; size: number }) {
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: tokens.typography.fontSize.xs,
-        fontWeight: 700,
+        fontWeight: tokens.typography.fontWeight.bold,
         color: 'var(--color-text-tertiary)',
       }}
     >
@@ -223,7 +248,7 @@ function ExchangeLogo({ source, name, size }: { source: string; name: string; si
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: tokens.typography.fontSize.xs,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
         }}
       >
         {name.slice(0, 1).toUpperCase()}
@@ -315,29 +340,31 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
   const [copied, setCopied] = useState(false)
   const [copyFailed, setCopyFailed] = useState(false)
 
-  // Canonical pooled ranking is by ROI — podium always reflects that, regardless
-  // of how the user re-sorts the explorable table below.
-  const podium = useMemo(() => [...rows].sort((a, b) => b.roi - a.roi).slice(0, 3), [rows])
+  // Assign canonical ranks once. Browsing by another column may move a row, but
+  // must never relabel that row as a different official weekly rank.
+  const rankedRows = useMemo(() => rankWeeklyRows(rows), [rows])
+  const podium = useMemo(() => rankedRows.slice(0, 3), [rankedRows])
 
   const sortedRows = useMemo(() => {
-    const arr = [...rows]
+    const arr = [...rankedRows]
     arr.sort((a, b) => {
       const av = sortValue(a, sortKey)
       const bv = sortValue(b, sortKey)
       const aNull = av === null || av === undefined
       const bNull = bv === null || bv === undefined
-      if (aNull && bNull) return 0
+      if (aNull && bNull) return a.pooledRank - b.pooledRank
       if (aNull) return 1 // nulls always last
       if (bNull) return -1
       let cmp: number
       if (typeof av === 'string') cmp = av.localeCompare(bv as string)
       else cmp = (av as number) - (bv as number)
-      return sortDir === 'asc' ? cmp : -cmp
+      if (cmp !== 0) return sortDir === 'asc' ? cmp : -cmp
+      return a.pooledRank - b.pooledRank
     })
     return arr
-  }, [rows, sortKey, sortDir])
+  }, [rankedRows, sortKey, sortDir])
 
-  const newestAsOf = rows.reduce<string | null>(
+  const newestAsOf = rankedRows.reduce<string | null>(
     (acc, r) => (acc === null || r.provenance.asOf > acc ? r.provenance.asOf : acc),
     null
   )
@@ -436,7 +463,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
           )}
         </Box>
 
-        {rows.length > 0 && (
+        {rankedRows.length > 0 && (
           <button
             type="button"
             onClick={onShare}
@@ -446,7 +473,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
               gap: tokens.spacing[1],
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               fontSize: tokens.typography.fontSize.sm,
-              fontWeight: 600,
+              fontWeight: tokens.typography.fontWeight.semibold,
               color: copyFailed ? 'var(--color-error)' : 'var(--color-text-secondary)',
               background: 'transparent',
               border: '1px solid var(--color-border-primary)',
@@ -459,7 +486,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
         )}
       </Box>
 
-      {rows.length === 0 ? (
+      {rankedRows.length === 0 ? (
         <Box
           style={{
             marginTop: tokens.spacing[4],
@@ -504,7 +531,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {/* Rank — positional, not sortable, but frozen */}
+                  {/* Official pooled ROI rank — not affected by browse sorting. */}
                   <th
                     style={{
                       ...TH_STYLE,
@@ -531,21 +558,28 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                 </tr>
               </thead>
               <tbody>
-                {sortedRows.map((row, i) => (
+                {sortedRows.map((row) => (
                   <tr key={`${row.source}:${row.exchangeTraderId}`} className="wka-row">
                     <td
                       className="wka-frozen"
                       style={{
                         ...TD_STYLE,
                         textAlign: 'left',
-                        fontWeight: 700,
+                        fontWeight: tokens.typography.fontWeight.bold,
                         width: RANK_COL_WIDTH,
                         position: 'sticky',
                         left: 0,
                         zIndex: 2,
                       }}
                     >
-                      {i < 3 ? MEDALS[i] : `#${i + 1}`}
+                      {row.pooledRank <= 3 ? (
+                        <>
+                          <span aria-hidden="true">{MEDALS[row.pooledRank - 1]}</span>
+                          <span className="sr-only">#{row.pooledRank}</span>
+                        </>
+                      ) : (
+                        `#${row.pooledRank}`
+                      )}
                     </td>
                     <td
                       className="wka-frozen"
@@ -617,7 +651,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                       />
                     </td>
                     <td style={TD_STYLE}>
-                      {row.pnl ? (
+                      {row.pnl && Number.isFinite(row.pnl.value) ? (
                         <Metric
                           value={row.pnl.value}
                           format="pnl"
@@ -630,7 +664,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                         '—'
                       )}
                     </td>
-                    <td style={TD_STYLE}>{formatWeeklyWinRate(row.winRate)}</td>
+                    <td style={TD_STYLE}>{formatWeeklyWinRate(finiteNumberOrNull(row.winRate))}</td>
                     <td style={{ ...TD_STYLE, color: 'var(--color-text-tertiary)' }}>
                       <time
                         dateTime={row.provenance.asOf}
