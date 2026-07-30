@@ -23,7 +23,8 @@ describe('retired position-notional portfolio snapshot writer', () => {
   })
 
   it('keeps atomic exchange equity as the documented snapshot authority', () => {
-    expect(syncRoute).toContain("'publish_portfolio_sync_atomic'")
+    expect(syncRoute).toContain("'publish_active_portfolio_sync_atomic'")
+    expect(syncRoute).not.toContain("'publish_portfolio_sync_atomic'")
     expect(syncRoute).toContain('p_total_equity: result.equity')
     expect(snapshotsRoute).toContain('exchange-reported account equity')
     expect(snapshotsRoute).not.toContain('from `user_positions`')

@@ -39,7 +39,6 @@ jest.mock('next/server', () => {
 const mockRequireAuth = jest.fn()
 const mockCheckRateLimit = jest.fn()
 const mockGetSupabaseAdmin = jest.fn()
-const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 const mockSyncExchangePortfolio = jest.fn()
 
@@ -111,20 +110,18 @@ function request() {
   })
 }
 
-function portfolioQuery() {
-  const query: Record<string, jest.Mock> = {}
-  query.select = jest.fn(() => query)
-  query.eq = jest.fn(() => query)
-  query.single = jest.fn().mockResolvedValue({ data: portfolio, error: null })
-  return query
-}
-
-function claimed(generation = 1) {
+function claimed(generation = 1, credentialGeneration = 1) {
   return {
     data: {
       status: 'claimed',
+      user_id: USER_ID,
       portfolio_id: PORTFOLIO_ID,
+      exchange: portfolio.exchange,
       generation,
+      credential_generation: credentialGeneration,
+      api_key_encrypted: portfolio.api_key_encrypted,
+      api_secret_encrypted: portfolio.api_secret_encrypted,
+      api_passphrase_encrypted: portfolio.api_passphrase_encrypted,
     },
     error: null,
   }
@@ -150,12 +147,11 @@ describe('POST /api/portfolio/sync atomic publication boundary', () => {
     jest.clearAllMocks()
     mockCheckRateLimit.mockResolvedValue(null)
     mockRequireAuth.mockResolvedValue({ id: USER_ID })
-    mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom, rpc: mockRpc })
-    mockFrom.mockReturnValue(portfolioQuery())
+    mockGetSupabaseAdmin.mockReturnValue({ rpc: mockRpc })
     mockSyncExchangePortfolio.mockResolvedValue(completeSnapshot)
     mockRpc.mockImplementation((name: string) => {
       if (name === 'claim_portfolio_sync_generation_atomic') return Promise.resolve(claimed())
-      if (name === 'publish_portfolio_sync_atomic') return Promise.resolve(published())
+      if (name === 'publish_active_portfolio_sync_atomic') return Promise.resolve(published())
       throw new Error(`unexpected RPC ${name}`)
     })
   })
@@ -171,8 +167,9 @@ describe('POST /api/portfolio/sync atomic publication boundary', () => {
     expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(
       mockSyncExchangePortfolio.mock.invocationCallOrder[0]
     )
-    expect(mockRpc).toHaveBeenNthCalledWith(2, 'publish_portfolio_sync_atomic', {
+    expect(mockRpc).toHaveBeenNthCalledWith(2, 'publish_active_portfolio_sync_atomic', {
       p_actor_id: USER_ID,
+      p_credential_generation: 1,
       p_portfolio_id: PORTFOLIO_ID,
       p_generation: 1,
       p_synced_at: SYNCED_AT,
@@ -192,7 +189,14 @@ describe('POST /api/portfolio/sync atomic publication boundary', () => {
       p_total_pnl: 2,
       p_total_pnl_pct: 0.4,
     })
-    expect(mockFrom).toHaveBeenCalledTimes(1)
+    expect(mockSyncExchangePortfolio).toHaveBeenCalledWith({
+      apiKeyEncrypted: portfolio.api_key_encrypted,
+      apiPassphraseEncrypted: portfolio.api_passphrase_encrypted,
+      apiSecretEncrypted: portfolio.api_secret_encrypted,
+      exchange: portfolio.exchange,
+      portfolioId: PORTFOLIO_ID,
+      userId: USER_ID,
+    })
   })
 
   it('publishes an authoritative zero-position, zero-equity snapshot', async () => {
@@ -205,7 +209,7 @@ describe('POST /api/portfolio/sync atomic publication boundary', () => {
     })
     mockRpc.mockImplementation((name: string) => {
       if (name === 'claim_portfolio_sync_generation_atomic') return Promise.resolve(claimed())
-      if (name === 'publish_portfolio_sync_atomic') {
+      if (name === 'publish_active_portfolio_sync_atomic') {
         return Promise.resolve(published({ position_count: 0 }))
       }
       throw new Error(`unexpected RPC ${name}`)
@@ -215,7 +219,7 @@ describe('POST /api/portfolio/sync atomic publication boundary', () => {
 
     expect(response.status).toBe(200)
     expect(mockRpc).toHaveBeenLastCalledWith(
-      'publish_portfolio_sync_atomic',
+      'publish_active_portfolio_sync_atomic',
       expect.objectContaining({
         p_positions: [],
         p_total_equity: 0,
@@ -253,6 +257,28 @@ describe('POST /api/portfolio/sync atomic publication boundary', () => {
     expect(response.status).toBe(404)
     expect(mockSyncExchangePortfolio).not.toHaveBeenCalled()
   })
+
+  it('does not read or fetch credentials after the portfolio was quiesced', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { status: 'inactive' }, error: null })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(409)
+    expect(mockSyncExchangePortfolio).not.toHaveBeenCalled()
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['missing_account', 'suspended'])(
+    'does not fetch after account lifecycle status %s',
+    async (status) => {
+      mockRpc.mockResolvedValueOnce({ data: { status }, error: null })
+
+      const response = await POST(request())
+
+      expect(response.status).toBe(403)
+      expect(mockSyncExchangePortfolio).not.toHaveBeenCalled()
+    }
+  )
 
   it('never invokes publication after an incomplete exchange fetch', async () => {
     mockSyncExchangePortfolio.mockResolvedValue({ ok: false, reason: 'exchange_error' })
@@ -311,5 +337,32 @@ describe('POST /api/portfolio/sync atomic publication boundary', () => {
         viewer_id: USER_ID,
       },
     })
+  })
+
+  it('rejects a publication whose credential was replaced during the exchange fetch', async () => {
+    mockRpc.mockResolvedValueOnce(claimed()).mockResolvedValueOnce({
+      data: {
+        status: 'superseded',
+        generation: 1,
+        current_generation: 1,
+        credential_generation: 1,
+        current_credential_generation: 2,
+      },
+      error: null,
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(409)
+  })
+
+  it('does not acknowledge a publication after the account is suspended', async () => {
+    mockRpc
+      .mockResolvedValueOnce(claimed())
+      .mockResolvedValueOnce({ data: { status: 'suspended' }, error: null })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(403)
   })
 })

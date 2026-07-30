@@ -19,12 +19,55 @@ import {
   READ_ONLY_ACCESS_PLATFORMS,
   validateExchangeReadOnlyAccess,
 } from '@/lib/validators/api-key-validator'
+import type { Json } from '@/lib/supabase/database.types'
 
 export const dynamic = 'force-dynamic'
 
 // Never persist a credential based on format or exchange name alone. Each
 // platform here has an exchange-owned permission endpoint used below.
 const ALLOWED_EXCHANGES = new Set<string>(READ_ONLY_ACCESS_PLATFORMS)
+
+type PortfolioSaveAck = {
+  status: 'saved'
+  userId: string
+  portfolioId: string
+  exchange: string
+  label: string
+  credentialGeneration: number
+  createdAt: string
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && !Array.isArray(value) && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function parsePortfolioSaveAck(value: unknown): PortfolioSaveAck | string | null {
+  const result = record(value)
+  if (!result || typeof result.status !== 'string') return null
+  if (result.status !== 'saved') return result.status
+  if (
+    typeof result.user_id !== 'string' ||
+    typeof result.portfolio_id !== 'string' ||
+    typeof result.exchange !== 'string' ||
+    typeof result.label !== 'string' ||
+    !Number.isSafeInteger(result.credential_generation) ||
+    Number(result.credential_generation) <= 0 ||
+    typeof result.created_at !== 'string'
+  ) {
+    return null
+  }
+  return {
+    status: 'saved',
+    userId: result.user_id,
+    portfolioId: result.portfolio_id,
+    exchange: result.exchange,
+    label: result.label,
+    credentialGeneration: Number(result.credential_generation),
+    createdAt: result.created_at,
+  }
+}
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
@@ -36,7 +79,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('user_portfolios')
-      .select('id, exchange, label, created_at')
+      .select('id, exchange, label, created_at, is_active')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -79,6 +122,11 @@ export async function POST(request: NextRequest) {
       typeof api_passphrase === 'string' && api_passphrase.trim()
         ? api_passphrase.trim()
         : undefined
+    const normalizedLabel =
+      typeof label === 'string' && label.trim() ? label.trim() : normalizedExchange
+    if (normalizedLabel.length > 255) {
+      return NextResponse.json({ error: 'Label is too long' }, { status: 400 })
+    }
     const validation = await validateExchangeReadOnlyAccess(normalizedExchange, {
       apiKey: api_key,
       apiSecret: api_secret,
@@ -94,25 +142,53 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin()
-
-    const { data, error } = await supabase
-      .from('user_portfolios')
-      .insert({
-        user_id: user.id,
-        exchange: normalizedExchange,
-        api_key_encrypted: encryptApiKey(api_key, user.id),
-        api_secret_encrypted: encryptApiKey(api_secret, user.id),
-        api_passphrase_encrypted: normalizedPassphrase
+    const permissions = validation.permissions?.length ? validation.permissions : ['read']
+    const { data: rawSaved, error } = await supabase.rpc(
+      'save_user_portfolio_for_active_profile_atomic',
+      {
+        p_user_id: user.id,
+        p_exchange: normalizedExchange,
+        p_api_key_encrypted: encryptApiKey(api_key, user.id),
+        p_api_secret_encrypted: encryptApiKey(api_secret, user.id),
+        p_api_passphrase_encrypted: normalizedPassphrase
           ? encryptApiKey(normalizedPassphrase, user.id)
           : null,
-        label: typeof label === 'string' && label.trim() ? label.trim() : normalizedExchange,
-      })
-      .select('id, exchange, label, created_at')
-      .single()
-
+        p_label: normalizedLabel,
+        p_read_only_permissions: permissions as Json,
+      }
+    )
     if (error) throw error
 
-    return success({ ...data, viewer_id: user.id }, 201)
+    const saved = parsePortfolioSaveAck(rawSaved)
+    if (saved === 'missing_account' || saved === 'suspended') {
+      return NextResponse.json({ error: 'Account is inactive' }, { status: 403 })
+    }
+    if (saved === 'already_exists') {
+      return NextResponse.json(
+        { error: 'A portfolio with this exchange and label already exists' },
+        { status: 409 }
+      )
+    }
+    if (
+      !saved ||
+      typeof saved === 'string' ||
+      saved.userId !== user.id ||
+      saved.exchange !== normalizedExchange ||
+      saved.label !== normalizedLabel
+    ) {
+      throw new Error('Portfolio save authority returned an invalid acknowledgement')
+    }
+
+    return success(
+      {
+        id: saved.portfolioId,
+        exchange: saved.exchange,
+        label: saved.label,
+        created_at: saved.createdAt,
+        viewer_id: user.id,
+      },
+      201
+    )
   } catch (err) {
     return handleError(err)
   }

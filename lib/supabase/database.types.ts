@@ -9549,12 +9549,16 @@ export type Database = {
           api_key_encrypted: string
           api_passphrase_encrypted: string | null
           api_secret_encrypted: string
+          credential_generation: number
           created_at: string
           exchange: string
           id: string
+          is_active: boolean
           label: string | null
           last_synced_at: string | null
           published_sync_generation: number
+          read_only_permissions: Json | null
+          read_only_verified_at: string | null
           sync_generation: number
           user_id: string
         }
@@ -9562,12 +9566,16 @@ export type Database = {
           api_key_encrypted: string
           api_passphrase_encrypted?: string | null
           api_secret_encrypted: string
+          credential_generation?: number
           created_at?: string
           exchange: string
           id?: string
+          is_active?: boolean
           label?: string | null
           last_synced_at?: string | null
           published_sync_generation?: number
+          read_only_permissions?: Json | null
+          read_only_verified_at?: string | null
           sync_generation?: number
           user_id: string
         }
@@ -9575,12 +9583,16 @@ export type Database = {
           api_key_encrypted?: string
           api_passphrase_encrypted?: string | null
           api_secret_encrypted?: string
+          credential_generation?: number
           created_at?: string
           exchange?: string
           id?: string
+          is_active?: boolean
           label?: string | null
           last_synced_at?: string | null
           published_sync_generation?: number
+          read_only_permissions?: Json | null
+          read_only_verified_at?: string | null
           sync_generation?: number
           user_id?: string
         }
@@ -10547,6 +10559,32 @@ export type Database = {
           p_total_equity: number
           p_total_pnl: number
           p_total_pnl_pct: number
+        }
+        Returns: Json
+      }
+      publish_active_portfolio_sync_atomic: {
+        Args: {
+          p_actor_id: string
+          p_credential_generation: number
+          p_generation: number
+          p_portfolio_id: string
+          p_positions: Json
+          p_synced_at: string
+          p_total_equity: number
+          p_total_pnl: number
+          p_total_pnl_pct: number
+        }
+        Returns: Json
+      }
+      save_user_portfolio_for_active_profile_atomic: {
+        Args: {
+          p_api_key_encrypted: string
+          p_api_passphrase_encrypted: string | null
+          p_api_secret_encrypted: string
+          p_exchange: string
+          p_label: string
+          p_read_only_permissions: Json
+          p_user_id: string
         }
         Returns: Json
       }

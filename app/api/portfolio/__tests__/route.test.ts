@@ -40,6 +40,7 @@ const mockRequireAuth = jest.fn()
 const mockCheckRateLimit = jest.fn()
 const mockGetSupabaseAdmin = jest.fn()
 const mockFrom = jest.fn()
+const mockRpc = jest.fn()
 const mockEncryptApiKey = jest.fn((value: string, userId: string) => `${userId}:${value}`)
 const mockValidateReadOnlyAccess = jest.fn()
 
@@ -83,18 +84,27 @@ function deleteQuery(result: { data: unknown; error: unknown }) {
   return query
 }
 
-function insertQuery() {
-  const stored = {
-    id: PORTFOLIO_ID,
-    exchange: 'binance',
-    label: 'Main',
-    created_at: '2026-07-29T00:00:00.000Z',
+const stored = {
+  id: PORTFOLIO_ID,
+  exchange: 'binance',
+  label: 'Main',
+  created_at: '2026-07-29T00:00:00.000Z',
+}
+
+function saved(overrides: Record<string, unknown> = {}) {
+  return {
+    data: {
+      status: 'saved',
+      user_id: USER_ID,
+      portfolio_id: PORTFOLIO_ID,
+      exchange: 'binance',
+      label: 'Main',
+      credential_generation: 1,
+      created_at: stored.created_at,
+      ...overrides,
+    },
+    error: null,
   }
-  const query: Record<string, jest.Mock> = {}
-  query.insert = jest.fn(() => query)
-  query.select = jest.fn(() => query)
-  query.single = jest.fn().mockResolvedValue({ data: stored, error: null })
-  return { query, stored }
 }
 
 describe('portfolio destructive ownership and identity ACKs', () => {
@@ -102,8 +112,9 @@ describe('portfolio destructive ownership and identity ACKs', () => {
     jest.clearAllMocks()
     mockCheckRateLimit.mockResolvedValue(null)
     mockRequireAuth.mockResolvedValue({ id: USER_ID })
-    mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom })
+    mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom, rpc: mockRpc })
     mockValidateReadOnlyAccess.mockResolvedValue({ isValid: true, permissions: ['read'] })
+    mockRpc.mockResolvedValue(saved())
   })
 
   it('deletes through one statement constrained by both id and authenticated owner', async () => {
@@ -131,9 +142,7 @@ describe('portfolio destructive ownership and identity ACKs', () => {
     expect(await response.json()).toEqual({ error: 'Portfolio not found' })
   })
 
-  it('returns the authenticated viewer in the add ACK', async () => {
-    const { query, stored } = insertQuery()
-    mockFrom.mockReturnValue(query)
+  it('stores the proof and ciphertext through the active-account authority', async () => {
     const request = new NextRequest('http://localhost/api/portfolio', {
       body: {
         exchange: 'BINANCE',
@@ -151,15 +160,54 @@ describe('portfolio destructive ownership and identity ACKs', () => {
       apiSecret: 'secret',
       passphrase: undefined,
     })
-    expect(query.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        api_key_encrypted: `${USER_ID}:key`,
-        api_secret_encrypted: `${USER_ID}:secret`,
-        exchange: 'binance',
-        user_id: USER_ID,
-      })
-    )
+    expect(mockRpc).toHaveBeenCalledWith('save_user_portfolio_for_active_profile_atomic', {
+      p_api_key_encrypted: `${USER_ID}:key`,
+      p_api_passphrase_encrypted: null,
+      p_api_secret_encrypted: `${USER_ID}:secret`,
+      p_exchange: 'binance',
+      p_label: 'Main',
+      p_read_only_permissions: ['read'],
+      p_user_id: USER_ID,
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
     expect(await response.json()).toEqual({ data: { ...stored, viewer_id: USER_ID } })
+  })
+
+  it('fails closed when the account becomes suspended during remote validation', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'suspended' }, error: null })
+    const request = new NextRequest('http://localhost/api/portfolio', {
+      body: { exchange: 'binance', api_key: 'key', api_secret: 'secret' },
+    })
+
+    const response = await POST(request)
+
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({ error: 'Account is inactive' })
+  })
+
+  it('never silently replaces an existing portfolio or its financial history', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'already_exists' }, error: null })
+    const request = new NextRequest('http://localhost/api/portfolio', {
+      body: { exchange: 'binance', api_key: 'key', api_secret: 'secret', label: 'Main' },
+    })
+
+    const response = await POST(request)
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      error: 'A portfolio with this exchange and label already exists',
+    })
+  })
+
+  it('does not acknowledge a contradictory portfolio identity', async () => {
+    mockRpc.mockResolvedValue(saved({ user_id: '33333333-3333-4333-8333-333333333333' }))
+    const request = new NextRequest('http://localhost/api/portfolio', {
+      body: { exchange: 'binance', api_key: 'key', api_secret: 'secret', label: 'Main' },
+    })
+
+    const response = await POST(request)
+
+    expect(response.status).toBe(500)
   })
 
   it('does not encrypt or persist a credential without an exchange read-only proof', async () => {

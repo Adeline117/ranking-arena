@@ -71,7 +71,7 @@ describe('atomic portfolio sync publication migration', () => {
 
   it('routes every financial projection through the atomic RPC and validates its ACK', () => {
     expect(route).toContain("'claim_portfolio_sync_generation_atomic'")
-    expect(route).toContain("'publish_portfolio_sync_atomic'")
+    expect(route).toContain("'publish_active_portfolio_sync_atomic'")
     expect(route).not.toContain(".from('user_positions')")
     expect(route).not.toContain(".from('user_portfolio_snapshots')")
     expect(route).toContain('if (claimError || !claim)')

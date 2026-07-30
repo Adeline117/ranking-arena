@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       // Verify ownership
       const { data: portfolio } = await supabase
         .from('user_portfolios')
-        .select('id')
+        .select('id, is_active')
         .eq('id', portfolioId)
         .eq('user_id', user.id)
         .single()
@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
       if (!portfolio) {
         return NextResponse.json({ error: 'Portfolio not found' }, { status: 404 })
       }
+      if (!portfolio.is_active) return success([])
 
       const { data, error } = await supabase
         .from('user_positions')
@@ -56,6 +57,7 @@ export async function GET(request: NextRequest) {
       .from('user_portfolios')
       .select('id')
       .eq('user_id', user.id)
+      .eq('is_active', true)
 
     if (!portfolios?.length) return success([])
 

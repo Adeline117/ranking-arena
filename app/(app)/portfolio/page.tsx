@@ -33,6 +33,7 @@ interface Portfolio {
   exchange: string
   label: string
   created_at: string
+  is_active: boolean
 }
 
 interface Position {
@@ -321,12 +322,14 @@ function PortfolioPageContent({
         exchange_error: 'portfolioSyncExchangeError',
       }
       if (!result.ok || !exactAck) {
-        showToast(reason ? t(reasonKey[reason]) : t('portfolioSyncFailed'), 'error')
+        const key = reason ? reasonKey[reason] : undefined
+        showToast(key ? t(key) : t('portfolioSyncFailed'), 'error')
         return
       }
       if (payload?.synced === false) {
         // Soft outcome (geo/passphrase/unsupported) — inform, don't error.
-        showToast(reason ? t(reasonKey[reason]) : t('portfolioSyncFailed'), 'info')
+        const key = reason ? reasonKey[reason] : undefined
+        showToast(key ? t(key) : t('portfolioSyncFailed'), 'info')
         return
       }
       await loadAll(true)
@@ -456,7 +459,8 @@ function PortfolioPageContent({
                       <button
                         style={{ ...styles.syncBtn, opacity: syncingId === p.id ? 0.6 : 1 }}
                         onClick={() => handleSync(p.id)}
-                        disabled={!!syncingId}
+                        disabled={!!syncingId || p.is_active === false}
+                        title={p.is_active === false ? t('portfolioSyncKeysUnreadable') : undefined}
                       >
                         {syncingId === p.id ? t('portfolioSyncing') : t('portfolioSync')}
                       </button>
