@@ -102,6 +102,9 @@ const PLATFORM_NAMES: Record<string, string> = {
   kwenta: 'Kwenta',
 }
 
+const OG_TRADER_CARD_LIMIT = 3
+const OG_TRADER_CANDIDATE_LIMIT = 12
+
 function formatRoi(roi: number): string {
   const abs = Math.abs(roi)
   const sign = roi >= 0 ? '+' : '-'
@@ -111,6 +114,7 @@ function formatRoi(roi: number): string {
 }
 
 interface TopTrader {
+  source_trader_id: string
   handle: string | null
   avatar_url: string | null
   roi: number | null
@@ -125,16 +129,18 @@ async function fetchExchangeData(
 
   const { data: top3, error: topErr } = await supabase
     .from('leaderboard_ranks')
-    .select('handle, avatar_url, roi, arena_score, rank')
+    .select('source_trader_id, handle, avatar_url, roi, arena_score, rank')
     .eq('source', exchange)
     .eq('season_id', '90D')
     .not('rank', 'is', null)
     .not('arena_score', 'is', null)
     .gt('arena_score', 0)
     .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('arena_score', { ascending: false, nullsFirst: false })
     .order('rank', { ascending: true, nullsFirst: false })
-    .limit(3)
+    .order('arena_score', { ascending: false, nullsFirst: false })
+    // Read a few extra candidates so a malformed row can be rejected without
+    // turning a healthy three-card preview into a shorter one.
+    .limit(OG_TRADER_CANDIDATE_LIMIT)
 
   if (topErr) {
     logger.error('[OG Exchange] Error fetching top traders:', topErr)
@@ -157,8 +163,22 @@ async function fetchExchangeData(
   }
 
   const traders: TopTrader[] = (top3 || [])
-    .filter((t) => t.rank != null)
+    .filter(
+      (t) =>
+        typeof t.source_trader_id === 'string' &&
+        t.source_trader_id.trim().length > 0 &&
+        Number.isSafeInteger(t.rank) &&
+        Number(t.rank) > 0 &&
+        typeof t.roi === 'number' &&
+        Number.isFinite(t.roi) &&
+        typeof t.arena_score === 'number' &&
+        Number.isFinite(t.arena_score) &&
+        t.arena_score > 0 &&
+        t.arena_score <= 100
+    )
+    .slice(0, OG_TRADER_CARD_LIMIT)
     .map((t) => ({
+      source_trader_id: t.source_trader_id,
       handle: t.handle as string | null,
       avatar_url: t.avatar_url as string | null,
       roi: t.roi as number | null,
@@ -374,16 +394,17 @@ export async function GET(request: NextRequest) {
           {traders.length > 0 ? (
             <div style={{ display: 'flex', gap: 16, flex: 1, alignItems: 'stretch' }}>
               {traders.map((trader, i) => {
-                const medalColor = MEDAL_COLORS[i]
+                const isMedalRank = trader.rank <= MEDAL_COLORS.length
+                const rankColor = isMedalRank ? (MEDAL_COLORS[trader.rank - 1] ?? C.dim) : C.dim
                 const roiColor = trader.roi != null && trader.roi >= 0 ? C.success : C.error
                 const roiStr = trader.roi != null ? formatRoi(trader.roi) : '--'
-                const traderName = trader.handle || `Trader ${i + 1}`
+                const traderName = trader.handle?.trim() || trader.source_trader_id
                 // avatarSrc is pre-fetched below into base64 — index i
                 const avatarSrc = avatarDataUrls[i] ?? null
 
                 return (
                   <div
-                    key={i}
+                    key={trader.source_trader_id}
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
@@ -391,9 +412,10 @@ export async function GET(request: NextRequest) {
                       padding: '24px 24px',
                       borderRadius: 16,
                       gap: 16,
-                      background: i === 0 ? 'rgba(212,175,55,0.08)' : 'rgba(255,255,255,0.03)',
+                      background:
+                        trader.rank === 1 ? 'rgba(212,175,55,0.08)' : 'rgba(255,255,255,0.03)',
                       border:
-                        i === 0
+                        trader.rank === 1
                           ? '1px solid rgba(212,175,55,0.25)'
                           : '1px solid rgba(255,255,255,0.08)',
                     }}
@@ -404,15 +426,15 @@ export async function GET(request: NextRequest) {
                           width: 32,
                           height: 32,
                           borderRadius: 999,
-                          background: medalColor + '25',
-                          border: `2px solid ${medalColor}`,
+                          background: isMedalRank ? `${rankColor}25` : 'rgba(255,255,255,0.06)',
+                          border: `2px solid ${rankColor}`,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
                       >
-                        <span style={{ fontSize: 14, fontWeight: 900, color: medalColor }}>
-                          {i + 1}
+                        <span style={{ fontSize: 14, fontWeight: 900, color: rankColor }}>
+                          {trader.rank}
                         </span>
                       </div>
                       {avatarSrc ? (
