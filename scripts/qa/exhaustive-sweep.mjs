@@ -161,7 +161,6 @@ const ANON_ROUTES = [
   '/rankings/tokens',
   '/rankings/exchanges',
   '/rankings/weekly',
-  '/trader/soul',
   '/hot',
   '/feed',
   '/search?q=btc',
@@ -192,8 +191,6 @@ const ANON_ROUTES = [
   '/s/BTC',
   '/hashtag/btc',
   '/exchange/binance',
-  '/wrapped/soul',
-  '/u/arena_bot',
 ]
 
 // Redirect-only routes: the page component renders null and client-redirects
@@ -889,7 +886,79 @@ async function main() {
     ? ROUTES_ARG.split(',')
     : AUTH
       ? [...ANON_ROUTES, ...AUTH_EXTRA_ROUTES]
-      : ANON_ROUTES
+      : [...ANON_ROUTES]
+  const routeSampleSkips = []
+
+  if (!ROUTES_ARG) {
+    const jget = async (path) => {
+      const response = await fetch(`${BASE}${path}`, {
+        headers: { 'user-agent': 'ArenaQA exhaustive-sweep' },
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`)
+      return response.json()
+    }
+    const addDynamic = async (label, loader) => {
+      try {
+        const route = await loader()
+        if (route) {
+          if (!routes.includes(route)) routes.push(route)
+        } else {
+          routeSampleSkips.push(`${label}（API 返回空样本）`)
+        }
+      } catch (error) {
+        routeSampleSkips.push(
+          `${label}（取样失败: ${String(error?.message || error).slice(0, 100)}）`
+        )
+      }
+    }
+    let rankingSamplePromise
+    const rankingSample = () => {
+      rankingSamplePromise ??= jget('/api/rankings?window=30d&limit=1').then(
+        (body) => body?.data?.traders?.[0]
+      )
+      return rankingSamplePromise
+    }
+    let postSamplePromise
+    const postSample = () => {
+      postSamplePromise ??= jget('/api/posts?limit=1').then((body) => body?.data?.posts?.[0])
+      return postSamplePromise
+    }
+    await addDynamic('/trader/[handle]', async () => {
+      const sample = await rankingSample()
+      const key = sample?.trader_key
+      const source = sample?.platform
+      if (!key || !source) return null
+      return `/trader/${encodeURIComponent(key)}?source=${encodeURIComponent(source)}`
+    })
+    await addDynamic('/wrapped/[handle]', async () => {
+      const sample = await rankingSample()
+      const key = sample?.trader_key
+      const source = sample?.platform
+      if (!key || !source) return null
+      return `/wrapped/${encodeURIComponent(key)}?platform=${encodeURIComponent(source)}`
+    })
+    await addDynamic('/share/rank/[trader_key]', async () => {
+      const key = (await rankingSample())?.trader_key
+      return key && `/share/rank/${encodeURIComponent(key)}`
+    })
+    await addDynamic('/post/[id]', async () => {
+      const id = (await postSample())?.id
+      return id && `/post/${encodeURIComponent(id)}`
+    })
+    await addDynamic('/u/[handle]', async () => {
+      const handle = (await postSample())?.author_handle
+      return handle && `/u/${encodeURIComponent(handle)}`
+    })
+    await addDynamic('/groups/[id]', async () => {
+      const id = (await jget('/api/groups?limit=1'))?.data?.groups?.[0]?.id
+      return id && `/groups/${encodeURIComponent(id)}`
+    })
+    await addDynamic('/feed/[id]', async () => {
+      const id = (await jget('/api/feed?limit=1'))?.data?.activities?.[0]?.id
+      return id && `/feed/${encodeURIComponent(id)}`
+    })
+  }
 
   console.log(`Exhaustive sweep — ${AUTH ? 'AUTH' : 'anon'} — ${BASE} — ${routes.length} routes`)
   const browser = await chromium.launch({ headless: true })
@@ -1123,6 +1192,10 @@ async function main() {
   fs.writeFileSync(LEDGER_PATH, ledger.map((r) => JSON.stringify(r)).join('\n') + '\n')
   const errored = ledger.filter((r) => r.errors && r.errors.length)
   console.log('\n=== Ledger summary ===')
+  if (routeSampleSkips.length) {
+    console.log(`  dynamic skips     : ${routeSampleSkips.length}`)
+    for (const skip of routeSampleSkips) console.log(`    SKIP ${skip}`)
+  }
   console.log(`  elements recorded : ${ledger.length}`)
   console.log(`  clicked           : ${counters.clicked}`)
   console.log(`  filled            : ${counters.filled}`)

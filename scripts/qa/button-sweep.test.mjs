@@ -6,6 +6,10 @@ import test from 'node:test'
 const source = readFileSync(join(process.cwd(), 'scripts/qa/button-sweep.mjs'), 'utf8')
 const authSource = readFileSync(join(process.cwd(), 'scripts/qa/auth-button-sweep.mjs'), 'utf8')
 const visualSource = readFileSync(join(process.cwd(), 'scripts/qa/visual-audit.mjs'), 'utf8')
+const exhaustiveSource = readFileSync(
+  join(process.cwd(), 'scripts/qa/exhaustive-sweep.mjs'),
+  'utf8'
+)
 
 test('public entity routes use live API samples instead of retired fixtures', () => {
   assert.doesNotMatch(source, /\/trader\/soul|\/wrapped\/soul|\/u\/arena_bot/)
@@ -31,4 +35,20 @@ test('the visual audit resolves public entities and reports missing samples', ()
   assert.match(visualSource, /addDynamic\('\/trader\/\[handle\]'/)
   assert.match(visualSource, /addDynamic\('\/u\/\[handle\]'/)
   assert.match(visualSource, /显式跳过/)
+})
+
+test('the exhaustive audit resolves every public dynamic entity without dead fixtures', () => {
+  assert.doesNotMatch(exhaustiveSource, /\/trader\/soul|\/wrapped\/soul|\/u\/arena_bot/)
+  for (const route of [
+    '/trader/\\[handle\\]',
+    '/wrapped/\\[handle\\]',
+    '/share/rank/\\[trader_key\\]',
+    '/post/\\[id\\]',
+    '/u/\\[handle\\]',
+    '/groups/\\[id\\]',
+    '/feed/\\[id\\]',
+  ]) {
+    assert.match(exhaustiveSource, new RegExp(`addDynamic\\('${route}'`))
+  }
+  assert.match(exhaustiveSource, /dynamic skips/)
 })
