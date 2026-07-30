@@ -9,9 +9,12 @@ import { NextRequest } from 'next/server'
 import { withAuth, withPublic } from '@/lib/api/middleware'
 import { success, badRequest, handleError } from '@/lib/api/response'
 import { validateString, validateBoolean, validateNumber } from '@/lib/api/validation'
-import logger from '@/lib/logger'
 
 type RouteContext = { params: Promise<{ id: string }> }
+
+function isNoRows(error: { code?: string } | null): boolean {
+  return error?.code === 'PGRST116'
+}
 
 // 获取收藏夹详情和帖子列表
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -28,54 +31,60 @@ export async function GET(request: NextRequest, context: RouteContext) {
         // 获取收藏夹信息
         const { data: folder, error: folderError } = await supabase
           .from('bookmark_folders')
-          .select('id, user_id, name, description, avatar_url, is_public, is_default, post_count, created_at')
+          .select(
+            'id, user_id, name, description, avatar_url, is_public, is_default, post_count, created_at'
+          )
           .eq('id', id)
           .single()
 
-        if (folderError || !folder) {
-          // 如果列不存在错误，忽略
-          if (folderError?.code === '42703') {
-            return success({ error: 'Folder not found' }, 404)
-          }
+        if (folderError && !isNoRows(folderError)) {
+          throw folderError
+        }
+        if (!folder) {
           return success({ error: 'Folder not found' }, 404)
         }
 
-        // 获取订阅者数量（通过计数订阅表）
-        // KEEP 'exact' — displayed as the exact subscriber count on the
-        // folder page. Scoped via (folder_id) index → cheap.
-        let subscriberCount = 0
-        try {
-          const { count } = await supabase
-            .from('folder_subscriptions')
-            .select('id', { count: 'exact', head: true })
-            .eq('folder_id', id)
-          subscriberCount = count || 0
-        } catch {
-          // Intentionally swallowed: folder_subscriptions table may not exist yet, subscriber count defaults to 0
-        }
-
-        // 检查访问权限
+        // 检查访问权限 before touching child rows.
         const isOwner = user?.id === folder.user_id
         if (!folder.is_public && !isOwner) {
           return success({ error: 'No permission to access this folder' }, 403)
         }
 
+        // 获取订阅者数量（通过计数订阅表）
+        // KEEP 'exact' — displayed as the exact subscriber count on the
+        // folder page. Scoped via (folder_id) index → cheap.
+        const { count: subscriberCount, error: subscriberCountError } = await supabase
+          .from('folder_subscriptions')
+          .select('id', { count: 'exact', head: true })
+          .eq('folder_id', id)
+        if (
+          subscriberCountError ||
+          !Number.isSafeInteger(subscriberCount) ||
+          Number(subscriberCount) < 0
+        ) {
+          throw subscriberCountError ?? new Error('Invalid folder subscriber count')
+        }
+
         // 检查当前用户是否已订阅此收藏夹
         let isSubscribed = false
         if (user && !isOwner && folder.is_public) {
-          const { data: subscription } = await supabase
+          const { data: subscription, error: subscriptionError } = await supabase
             .from('folder_subscriptions')
             .select('id')
             .eq('user_id', user.id)
             .eq('folder_id', id)
             .single()
+          if (subscriptionError && !isNoRows(subscriptionError)) {
+            throw subscriptionError
+          }
           isSubscribed = !!subscription
         }
 
         // 获取收藏夹中的帖子
         const { data: bookmarks, error: bookmarksError } = await supabase
           .from('post_bookmarks')
-          .select(`
+          .select(
+            `
             id,
             post_id,
             created_at,
@@ -91,25 +100,31 @@ export async function GET(request: NextRequest, context: RouteContext) {
               bookmark_count,
               created_at
             )
-          `)
+          `
+          )
           .eq('folder_id', id)
           .order('created_at', { ascending: false })
           .range(offset, offset + limit - 1)
 
         if (bookmarksError) {
-          logger.error('Error fetching bookmarks:', bookmarksError)
+          throw bookmarksError
+        }
+        if (!Array.isArray(bookmarks)) {
+          throw new Error('Invalid bookmark folder post result')
         }
 
-        // 格式化帖子列表，并收集需要清理的孤立书签
-        const orphanedBookmarkIds: string[] = []
-        const posts = (bookmarks || [])
-          .map(b => {
-            // 如果帖子不存在（已删除），记录下来
-            const post = b.posts as unknown as Record<string, unknown> | null
-            if (!post || !post.id) {
-              orphanedBookmarkIds.push(b.id)
+        // GET is read-only. Physical post deletion is already protected by the
+        // post_bookmarks FK cascade; treating a null embedded post as an
+        // orphan here could delete data merely hidden by post audience RLS and
+        // race the canonical bookmark counter trigger.
+        const posts = bookmarks
+          .map((b) => {
+            const rawPost: unknown = b.posts
+            if (!rawPost || typeof rawPost !== 'object' || Array.isArray(rawPost)) {
               return null
             }
+            const post = rawPost as Record<string, unknown>
+            if (!post.id) return null
             return {
               bookmark_id: b.id,
               bookmarked_at: b.created_at,
@@ -118,36 +133,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
           })
           .filter((p): p is NonNullable<typeof p> => p !== null)
 
-        // 异步清理孤立的书签记录（不阻塞响应）
-        if (orphanedBookmarkIds.length > 0) {
-          ;(async () => {
-            try {
-              await supabase
-                .from('post_bookmarks')
-                .delete()
-                .in('id', orphanedBookmarkIds)
-              // 更新收藏夹的 post_count
-              await supabase
-                .from('bookmark_folders')
-                .update({ post_count: Math.max(0, folder.post_count - orphanedBookmarkIds.length) })
-                .eq('id', id)
-            } catch (err: unknown) {
-              logger.error('Error cleaning orphaned bookmarks:', err)
-            }
-          })()
-        }
-
         // 获取收藏夹所有者的信息
-        const { data: owner } = await supabase
+        const { data: owner, error: ownerError } = await supabase
           .from('user_profiles')
           .select('handle, avatar_url')
           .eq('id', folder.user_id)
           .single()
+        if (ownerError && !isNoRows(ownerError)) {
+          throw ownerError
+        }
 
         return success({
           folder: {
             ...folder,
-            subscriber_count: subscriberCount,
+            subscriber_count: Number(subscriberCount),
             owner_handle: owner?.handle,
             owner_avatar_url: owner?.avatar_url,
           },
@@ -184,7 +183,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           .eq('id', id)
           .single()
 
-        if (folderError || !folder) {
+        if (folderError && !isNoRows(folderError)) {
+          throw folderError
+        }
+        if (!folder) {
           return success({ error: 'Folder not found' }, 404)
         }
 
@@ -272,7 +274,10 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
           .eq('id', id)
           .single()
 
-        if (folderError || !folder) {
+        if (folderError && !isNoRows(folderError)) {
+          throw folderError
+        }
+        if (!folder) {
           return success({ error: 'Folder not found' }, 404)
         }
 
@@ -286,10 +291,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         }
 
         // 删除收藏夹（收藏记录会通过 CASCADE 自动删除）
-        const { error: deleteError } = await supabase
-          .from('bookmark_folders')
-          .delete()
-          .eq('id', id)
+        const { error: deleteError } = await supabase.from('bookmark_folders').delete().eq('id', id)
 
         if (deleteError) {
           throw deleteError
