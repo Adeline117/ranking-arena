@@ -178,6 +178,31 @@ PREDEPLOY_MIGRATIONS=(
   20260729157500_atomic_admin_user_sanctions.sql
   20260729158000_atomic_direct_message_reaction_toggle.sql
   20260729158500_siwe_active_profile_wallet_admission.sql
+  20260729159000_atomic_direct_message_conversation_start.sql
+  20260729159500_siwe_active_profile_wallet_unlink.sql
+  20260729160000_trader_claim_account_lifecycle.sql
+  20260729160500_webauthn_active_profile_assertion.sql
+  20260729161000_webauthn_active_profile_credential_mutations.sql
+  20260729161500_atomic_direct_message_conversation_read.sql
+  20260729162000_private_chat_media_storage.sql
+  20260729162500_primary_trader_account_lifecycle.sql
+  20260729163000_atomic_direct_message_conversation_settings.sql
+  20260729163500_active_profile_two_factor_credentials.sql
+  20260729164000_exchange_oauth_account_lifecycle.sql
+  20260729164500_trader_authorization_account_lifecycle.sql
+  20260729165000_atomic_direct_message_conversation_page.sql
+  20260729165500_exchange_api_key_account_lifecycle.sql
+  20260729170000_atomic_direct_message_conversation_list.sql
+  20260729170500_portfolio_account_lifecycle.sql
+  20260729171000_atomic_direct_message_search.sql
+  20260729171500_atomic_trader_watchlist_mutation.sql
+  20260729172000_atomic_notification_page.sql
+  20260729172500_portfolio_exchange_equity_projection.sql
+  20260729172750_bookmark_folders_foundation.sql
+  20260729173000_atomic_bookmark_folder_subscription.sql
+  20260729173500_atomic_notification_mutations.sql
+  20260729174000_atomic_bookmark_folder_lifecycle.sql
+  20260729174500_atomic_notification_create.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
