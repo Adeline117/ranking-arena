@@ -27,7 +27,6 @@ const STATIC_ROUTES = [
   '/rankings/tokens',
   '/rankings/exchanges',
   '/rankings/weekly',
-  '/trader/soul', // 已知公开交易员（/trader/[handle]）
   '/hot',
   '/feed',
   '/search?q=btc',
@@ -97,8 +96,6 @@ const STATIC_ROUTES = [
   '/s/BTC', // /s/[token]
   '/hashtag/btc', // /hashtag/[tag]
   '/exchange/binance', // /exchange/[slug]
-  '/wrapped/soul', // /wrapped/[handle]
-  '/u/arena_bot', // /u/[handle]
 ]
 
 // 需登录态、无公开样本 ID 的动态路由 —— 由 auth-button-sweep 覆盖，此处显式记录
@@ -112,7 +109,7 @@ const SKIPPED_AUTH_ROUTES = [
   '/u/[handle]/new',
 ]
 
-const CORE_LANG_ROUTES = ['/', '/rankings', '/trader/soul', '/hot', '/pricing', '/search?q=btc']
+const STATIC_CORE_LANG_ROUTES = ['/', '/rankings', '/hot', '/pricing', '/search?q=btc']
 const LANGS = ['en', 'zh', 'ja', 'ko']
 
 // 已知可忽略的网络错误（第三方/预期 4xx）
@@ -273,21 +270,43 @@ function summarize(results) {
 async function main() {
   // 取动态 ID（每个独立 try，单点失败不影响其余；取不到即显式 skip 记录）
   const routes = [...STATIC_ROUTES]
+  const coreLangRoutes = [...STATIC_CORE_LANG_ROUTES]
   const skips = [...SKIPPED_AUTH_ROUTES.map((r) => `${r} (需登录态 → auth-sweep)`)]
-  const jget = (p) =>
-    fetch(`${BASE}${p}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json())
-  const addDynamic = async (label, fn) => {
+  const jget = async (path) => {
+    const response = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(15000) })
+    if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`)
+    return response.json()
+  }
+  let rankingSamplePromise
+  const loadRankingSample = () => {
+    rankingSamplePromise ??= jget('/api/rankings?window=30d&limit=1').then(
+      (body) => body?.data?.traders?.[0]
+    )
+    return rankingSamplePromise
+  }
+  let postSamplePromise
+  const loadPostSample = () => {
+    postSamplePromise ??= jget('/api/posts?limit=1').then((body) => body?.data?.posts?.[0])
+    return postSamplePromise
+  }
+  const addDynamic = async (label, fn, { coreLang = false } = {}) => {
     try {
       const route = await fn()
-      if (route) routes.push(route)
-      else skips.push(`${label}（API 返回空样本）`)
+      if (route) {
+        routes.push(route)
+        if (coreLang) coreLangRoutes.push(route)
+      } else skips.push(`${label}（API 返回空样本）`)
     } catch (e) {
       skips.push(`${label}（取 ID 失败: ${String(e.message).slice(0, 80)}）`)
     }
   }
   await addDynamic('/post/[id]', async () => {
-    const id = (await jget('/api/posts?limit=1'))?.data?.posts?.[0]?.id
+    const id = (await loadPostSample())?.id
     return id && `/post/${id}`
+  })
+  await addDynamic('/u/[handle]', async () => {
+    const handle = (await loadPostSample())?.author_handle
+    return handle && `/u/${encodeURIComponent(handle)}`
   })
   await addDynamic('/groups/[id]', async () => {
     const id = (await jget('/api/groups?limit=1'))?.data?.groups?.[0]?.id
@@ -298,8 +317,26 @@ async function main() {
     return id && `/feed/${id}`
   })
   await addDynamic('/share/rank/[trader_key]', async () => {
-    const key = (await jget('/api/rankings?window=30d&limit=1'))?.data?.traders?.[0]?.trader_key
-    return key && `/share/rank/${key}`
+    const key = (await loadRankingSample())?.trader_key
+    return key && `/share/rank/${encodeURIComponent(key)}`
+  })
+  await addDynamic(
+    '/trader/[handle]',
+    async () => {
+      const sample = await loadRankingSample()
+      const key = sample?.trader_key
+      const source = sample?.platform
+      if (!key || !source) return null
+      return `/trader/${encodeURIComponent(key)}?source=${encodeURIComponent(source)}`
+    },
+    { coreLang: true }
+  )
+  await addDynamic('/wrapped/[handle]', async () => {
+    const sample = await loadRankingSample()
+    const key = sample?.trader_key
+    const source = sample?.platform
+    if (!key || !source) return null
+    return `/wrapped/${encodeURIComponent(key)}?platform=${encodeURIComponent(source)}`
   })
 
   const browser = await chromium.launch({ headless: true })
@@ -323,8 +360,8 @@ async function main() {
   }
 
   if (LANG_SWEEP) {
-    console.log(`== 4 语言 × ${CORE_LANG_ROUTES.length} 核心路径 ==`)
-    for (const route of CORE_LANG_ROUTES) {
+    console.log(`== 4 语言 × ${coreLangRoutes.length} 核心路径 ==`)
+    for (const route of coreLangRoutes) {
       for (const lang of LANGS) {
         const r = await sweepRoute(browser, route, {
           viewport: { width: 1280, height: 800 },
