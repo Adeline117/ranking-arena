@@ -3,6 +3,7 @@ import { handleInvoiceFinalizationFailed, handlePaymentActionRequired } from '..
 
 const mockSingle = jest.fn()
 const mockSendNotification = jest.fn()
+const mockDeliverNotification = jest.fn()
 const mockSendRateLimitedAlert = jest.fn()
 const mockLoggerInfo = jest.fn()
 const mockLoggerWarn = jest.fn()
@@ -29,6 +30,7 @@ jest.mock('@/lib/stripe', () => ({
 
 jest.mock('@/lib/data/notifications', () => ({
   sendNotification: (...args: unknown[]) => mockSendNotification(...args),
+  deliverNotification: (...args: unknown[]) => mockDeliverNotification(...args),
 }))
 
 jest.mock('@/lib/alerts/send-alert', () => ({
@@ -48,6 +50,11 @@ describe('invoice webhook recovery events', () => {
     jest.clearAllMocks()
     mockSingle.mockResolvedValue({ data: { id: 'user-1' }, error: null })
     mockSendNotification.mockResolvedValue(undefined)
+    mockDeliverNotification.mockResolvedValue({
+      outcome: 'CREATED',
+      notificationId: 'notification-1',
+      created: true,
+    })
     mockSendRateLimitedAlert.mockResolvedValue({
       sent: true,
       rateLimited: false,
@@ -58,21 +65,33 @@ describe('invoice webhook recovery events', () => {
   it('notifies the owning user when bank verification is required', async () => {
     await handlePaymentActionRequired(invoice())
 
-    expect(mockSendNotification).toHaveBeenCalledWith(
+    expect(mockDeliverNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         user_id: 'user-1',
         reference_id: 'payment_action_required_in_test',
       }),
-      'stripe-payment-action-required'
+      { deduplicate: true, dedupWindowSeconds: 604800 }
     )
   })
 
   it('does not invent an owner when the invoice has no customer', async () => {
     await handlePaymentActionRequired(invoice({ customer: null }))
 
-    expect(mockSendNotification).not.toHaveBeenCalled()
+    expect(mockDeliverNotification).not.toHaveBeenCalled()
     expect(mockLoggerWarn).toHaveBeenCalled()
+  })
+
+  it('does not log a payment-action reminder as sent before durable delivery', async () => {
+    mockDeliverNotification.mockRejectedValue(new Error('notification authority unavailable'))
+
+    await expect(handlePaymentActionRequired(invoice())).rejects.toThrow(
+      'notification authority unavailable'
+    )
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
+      'Payment action required notification sent',
+      expect.anything()
+    )
   })
 
   it('pages operators when Stripe cannot finalize an invoice', async () => {

@@ -1,168 +1,156 @@
 /**
  * 通知数据层
  *
- * 所有 API route 发送通知必须使用 sendNotification()。
- * 它强制 fire-and-forget + dedup，防止：
+ * API route 必须通过 sendNotification()（非阻塞）或
+ * deliverNotification()（等待精确确认）发送通知。
+ * 两者共享同一原子创建/去重 authority，防止：
  * 1. 通知阻塞 API 响应
  * 2. 重复通知轰炸用户
  * 3. 通知失败影响主流程
  *
- * 仅 cron 批量通知可直接 insert（已有自己的 dedup 逻辑）。
+ * 仅经审计的 cron 批量广播可直接 insert（有独立批次 authority）。
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
-import { logger } from '@/lib/logger'
+import { z } from 'zod'
 import { fireAndForget } from '@/lib/utils/logger'
-import type { NotificationType as PersistedNotificationType } from '@/lib/types/notification'
-
-export interface Notification {
-  id: string
-  user_id: string
-  type: NotificationType
-  title: string
-  message: string
-  link?: string
-  read: boolean
-  actor_id?: string
-  reference_id?: string
-  created_at: string
-  // 关联信息
-  actor_handle?: string
-  actor_avatar_url?: string
-}
+import {
+  PERSISTED_NOTIFICATION_TYPES,
+  type NotificationType as PersistedNotificationType,
+} from '@/lib/types/notification'
 
 export type NotificationType = PersistedNotificationType
 
-export interface NotificationListOptions {
-  limit?: number
-  offset?: number
-  unread_only?: boolean
-}
-
-// 数据库返回的通知行类型
-interface _NotificationRow {
-  id: string
+export type NotificationCreateInput = {
   user_id: string
   type: NotificationType
   title: string
   message: string
   link?: string
-  read: boolean
   actor_id?: string
   reference_id?: string
-  created_at: string
+  read?: boolean
 }
 
-/**
- * 获取用户通知列表 + 未读数（单次 RPC 调用，含 actor JOIN）
- */
-export async function getUserNotificationsWithCount(
-  supabase: SupabaseClient,
-  userId: string,
-  options: NotificationListOptions = {}
-): Promise<{ notifications: Notification[]; unreadCount: number }> {
-  const { limit = 50, offset = 0, unread_only = false } = options
+export type NotificationDeliveryOptions = {
+  deduplicate?: boolean
+  dedupWindowSeconds?: number
+}
 
-  const { data, error } = await supabase.rpc('get_user_notifications', {
-    p_user_id: userId,
-    p_limit: limit,
-    p_offset: offset,
-    p_unread_only: unread_only,
-  })
+export type NotificationDeliveryResult = {
+  outcome: 'CREATED' | 'DEDUPLICATED' | 'SKIPPED_SELF'
+  notificationId: string | null
+  createdAt: string | null
+  created: boolean
+  deduplicated: boolean
+  skippedSelf: boolean
+}
 
-  if (error) {
-    throw error
+export type NotificationDeliveryErrorCode =
+  | 'INVALID_REQUEST'
+  | 'RECIPIENT_UNAVAILABLE'
+  | 'ACTOR_UNAVAILABLE'
+  | 'RPC_ERROR'
+  | 'INVALID_ACKNOWLEDGEMENT'
+
+export class NotificationDeliveryError extends Error {
+  constructor(
+    readonly code: NotificationDeliveryErrorCode,
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options)
+    this.name = 'NotificationDeliveryError'
   }
+}
 
-  if (!data || data.length === 0) {
-    // Still need unread count even when no notifications on this page
-    const { count } = await supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('read', false)
-    return { notifications: [], unreadCount: count || 0 }
-  }
-
-  // unread_count is the same on every row (CROSS JOIN)
-  const unreadCount = Number(data[0].unread_count) || 0
-
-  const notifications: Notification[] = data.map(
-    (n: {
-      id: string
-      user_id: string
-      type: NotificationType
-      title: string
-      message: string
-      link?: string
-      read: boolean
-      actor_id?: string
-      reference_id?: string
-      created_at: string
-      actor_handle?: string
-      actor_avatar_url?: string
-    }) => ({
-      id: n.id,
-      user_id: n.user_id,
-      type: n.type,
-      title: n.title,
-      message: n.message,
-      link: n.link,
-      read: n.read,
-      actor_id: n.actor_id,
-      reference_id: n.reference_id,
-      created_at: n.created_at,
-      actor_handle: n.actor_handle || undefined,
-      actor_avatar_url: n.actor_avatar_url || undefined,
-    })
+const NormalizedUuidSchema = z
+  .string()
+  .uuid()
+  .transform((value) => value.toLowerCase())
+const TimestampSchema = z
+  .string()
+  .datetime({ offset: true })
+  .refine((value) => (value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1]?.length ?? 0) <= 6)
+const SafeLinkSchema = z
+  .string()
+  .max(500)
+  .refine(
+    (value) =>
+      value.startsWith('/') &&
+      !value.startsWith('//') &&
+      !value.includes('\\') &&
+      !/[\u0000-\u001f\u007f]/.test(value)
   )
-
-  return { notifications, unreadCount }
-}
-
-/**
- * 获取用户通知列表（兼容旧调用方，内部使用 RPC）
- */
-export async function getUserNotifications(
-  supabase: SupabaseClient,
-  userId: string,
-  options: NotificationListOptions = {}
-): Promise<Notification[]> {
-  const { notifications } = await getUserNotificationsWithCount(supabase, userId, options)
-  return notifications
-}
-
-/**
- * 获取未读通知数量
- */
-export async function getUnreadNotificationCount(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<number> {
-  // KEEP 'exact' — scoped to a single user via (user_id, read) index,
-  // tiny row set per user, and the exact number is shown as the
-  // notification badge (e.g. "3 unread").
-  const { count, error } = await supabase
-    .from('notifications')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('read', false)
-
-  if (error) {
-    // A failed count must not read as a confident "0 unread" — the badge would
-    // hide real notifications with no signal. Log so the failure is observable.
-    logger.error('[notifications] getUnreadNotificationCount failed', {
-      userId,
-      error: error.message,
-    })
-    return 0
-  }
-  return count || 0
-}
+const NotificationCreateInputSchema = z
+  .object({
+    user_id: NormalizedUuidSchema,
+    type: z.enum(PERSISTED_NOTIFICATION_TYPES).refine((value) => value !== 'tip_received'),
+    title: z
+      .string()
+      .min(1)
+      .max(200)
+      .refine((value) => value.trim().length > 0),
+    message: z
+      .string()
+      .min(1)
+      .max(1000)
+      .refine((value) => value.trim().length > 0),
+    link: SafeLinkSchema.optional().transform((value) => value ?? null),
+    actor_id: NormalizedUuidSchema.optional().transform((value) => value ?? null),
+    reference_id: z
+      .string()
+      .min(1)
+      .max(500)
+      .refine((value) => value.trim().length > 0)
+      .optional()
+      .transform((value) => value ?? null),
+    read: z.literal(false).optional(),
+  })
+  .strict()
+const NotificationDeliveryOptionsSchema = z
+  .object({
+    deduplicate: z.boolean().optional(),
+    dedupWindowSeconds: z.number().int().min(0).max(604800).optional(),
+  })
+  .strict()
+const NotificationCreateFailureSchema = z
+  .object({
+    success: z.literal(false),
+    reason: z.enum(['INVALID', 'RECIPIENT_UNAVAILABLE', 'ACTOR_UNAVAILABLE']),
+  })
+  .strict()
+const NotificationCreateSuccessSchema = z
+  .object({
+    success: z.literal(true),
+    outcome: z.enum(['CREATED', 'DEDUPLICATED', 'SKIPPED_SELF']),
+    recipient_id: NormalizedUuidSchema,
+    type: z.enum(PERSISTED_NOTIFICATION_TYPES),
+    title: z.string(),
+    message: z.string(),
+    link: z.string().nullable(),
+    actor_id: NormalizedUuidSchema.nullable(),
+    reference_id: z.string().nullable(),
+    deduplicate: z.boolean(),
+    dedup_window_seconds: z.number().int().nonnegative().refine(Number.isSafeInteger),
+    notification_id: NormalizedUuidSchema.nullable(),
+    created_at: TimestampSchema.nullable(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const skipped = value.outcome === 'SKIPPED_SELF'
+    if (skipped !== (value.notification_id === null) || skipped !== (value.created_at === null)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Notification outcome does not match its persisted identity',
+      })
+    }
+  })
 
 /**
  * 统一通知入口 — 所有 API route 必须使用这个函数发送通知。
- * 强制 fire-and-forget + dedup，不阻塞响应，不影响主流程。
+ * Fire-and-forget wrapper. Actor + reference events default to a one-hour
+ * dedup window; system events opt in explicitly when their identity is stable.
  *
  * @example
  * sendNotification(supabase, {
@@ -177,19 +165,11 @@ export async function getUnreadNotificationCount(
  */
 export function sendNotification(
   supabase: SupabaseClient,
-  notification: {
-    user_id: string
-    type: NotificationType
-    title: string
-    message: string
-    link?: string
-    actor_id?: string
-    reference_id?: string
-    read?: boolean
-  },
-  context: string
+  notification: NotificationCreateInput,
+  context: string,
+  options?: NotificationDeliveryOptions
 ): void {
-  fireAndForget(createNotificationDeduped(supabase, notification), context)
+  fireAndForget(deliverNotification(supabase, notification, options), context)
 }
 
 /**
@@ -198,92 +178,112 @@ export function sendNotification(
  */
 export function sendNotifications(
   supabase: SupabaseClient,
-  notifications: Array<{
-    user_id: string
-    type: NotificationType
-    title: string
-    message: string
-    link?: string
-    actor_id?: string
-    reference_id?: string
-    read?: boolean
-  }>,
-  context: string
+  notifications: NotificationCreateInput[],
+  context: string,
+  options?: NotificationDeliveryOptions
 ): void {
   if (notifications.length === 0) return
   fireAndForget(
-    Promise.all(notifications.map((n) => createNotificationDeduped(supabase, n))),
+    Promise.all(
+      notifications.map((notification) => deliverNotification(supabase, notification, options))
+    ),
     context
   )
 }
 
 /**
- * 创建通知（用于系统通知等）
+ * Create or atomically deduplicate one notification and wait for the exact
+ * database acknowledgement. Callers whose primary write must stay fast should
+ * use sendNotification(), which observes this promise through fireAndForget().
  */
-export async function createNotification(
+export async function deliverNotification(
   supabase: SupabaseClient,
-  notification: {
-    user_id: string
-    type: NotificationType
-    title: string
-    message: string
-    link?: string
-    actor_id?: string
-    reference_id?: string
+  notification: NotificationCreateInput,
+  options: NotificationDeliveryOptions = {}
+): Promise<NotificationDeliveryResult> {
+  const parsedNotification = NotificationCreateInputSchema.safeParse(notification)
+  const parsedOptions = NotificationDeliveryOptionsSchema.safeParse(options)
+  if (!parsedNotification.success || !parsedOptions.success) {
+    throw new NotificationDeliveryError('INVALID_REQUEST', 'Invalid notification request')
   }
-): Promise<Notification> {
-  const { data, error } = await supabase
-    .from('notifications')
-    .insert(notification)
-    .select()
-    .single()
+
+  const input = parsedNotification.data
+  const deduplicate =
+    parsedOptions.data.deduplicate ?? Boolean(input.actor_id && input.reference_id)
+  const dedupWindowSeconds = deduplicate ? (parsedOptions.data.dedupWindowSeconds ?? 3600) : 0
+  if (
+    (deduplicate && (!input.reference_id || dedupWindowSeconds < 1)) ||
+    (!deduplicate &&
+      parsedOptions.data.dedupWindowSeconds !== undefined &&
+      parsedOptions.data.dedupWindowSeconds !== 0)
+  ) {
+    throw new NotificationDeliveryError('INVALID_REQUEST', 'Invalid notification deduplication')
+  }
+
+  const { data, error } = await supabase.rpc('create_notification_atomic', {
+    p_recipient_id: input.user_id,
+    p_type: input.type,
+    p_title: input.title,
+    p_message: input.message,
+    p_link: input.link,
+    p_actor_id: input.actor_id,
+    p_reference_id: input.reference_id,
+    p_deduplicate: deduplicate,
+    p_dedup_window_seconds: dedupWindowSeconds,
+  })
 
   if (error) {
-    throw error
+    throw new NotificationDeliveryError('RPC_ERROR', 'Notification authority unavailable', {
+      cause: error,
+    })
   }
 
-  return data
+  const failure = NotificationCreateFailureSchema.safeParse(data)
+  if (failure.success) {
+    const code = failure.data.reason
+    if (code === 'RECIPIENT_UNAVAILABLE' || code === 'ACTOR_UNAVAILABLE') {
+      throw new NotificationDeliveryError(code, `Notification ${code.toLowerCase()}`)
+    }
+    throw new NotificationDeliveryError(
+      'INVALID_ACKNOWLEDGEMENT',
+      'Notification authority rejected validated input'
+    )
+  }
+
+  const acknowledgement = NotificationCreateSuccessSchema.safeParse(data)
+  if (
+    !acknowledgement.success ||
+    acknowledgement.data.recipient_id !== input.user_id ||
+    acknowledgement.data.type !== input.type ||
+    acknowledgement.data.title !== input.title ||
+    acknowledgement.data.message !== input.message ||
+    acknowledgement.data.link !== input.link ||
+    acknowledgement.data.actor_id !== input.actor_id ||
+    acknowledgement.data.reference_id !== input.reference_id ||
+    acknowledgement.data.deduplicate !== deduplicate ||
+    acknowledgement.data.dedup_window_seconds !== dedupWindowSeconds
+  ) {
+    throw new NotificationDeliveryError(
+      'INVALID_ACKNOWLEDGEMENT',
+      'Notification authority returned an invalid acknowledgement'
+    )
+  }
+
+  return {
+    outcome: acknowledgement.data.outcome,
+    notificationId: acknowledgement.data.notification_id,
+    createdAt: acknowledgement.data.created_at,
+    created: acknowledgement.data.outcome === 'CREATED',
+    deduplicated: acknowledgement.data.outcome === 'DEDUPLICATED',
+    skippedSelf: acknowledgement.data.outcome === 'SKIPPED_SELF',
+  }
 }
 
-/**
- * 去重通知：同一 actor + type + reference 在 1 小时内不重复发送
- * 用于 like/comment/follow 等高频操作，防止通知轰炸
- */
+/** Backward-compatible awaited dedup helper. */
 export async function createNotificationDeduped(
   supabase: SupabaseClient,
-  notification: {
-    user_id: string
-    type: NotificationType
-    title: string
-    message: string
-    link?: string
-    actor_id?: string
-    reference_id?: string
-    read?: boolean
-  }
-): Promise<void> {
-  // Check for recent duplicate (same actor + type + reference within 1 hour)
-  if (notification.actor_id && notification.reference_id) {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-    const { data: existing } = await supabase
-      .from('notifications')
-      .select('id')
-      .eq('user_id', notification.user_id)
-      .eq('type', notification.type)
-      .eq('actor_id', notification.actor_id)
-      .eq('reference_id', notification.reference_id)
-      .gte('created_at', oneHourAgo)
-      .limit(1)
-      .maybeSingle()
-
-    if (existing) {
-      return // Duplicate within window — skip
-    }
-  }
-
-  const { error } = await supabase.from('notifications').insert(notification)
-
-  if (error) {
-    logger.warn('[notifications] Deduped insert failed:', error.message)
-  }
+  notification: NotificationCreateInput,
+  options?: NotificationDeliveryOptions
+): Promise<NotificationDeliveryResult> {
+  return deliverNotification(supabase, notification, options)
 }

@@ -18,21 +18,94 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getSupabaseAdmin,
-  handleError,
-} from '@/lib/api'
+import { z } from 'zod'
+import { getSupabaseAdmin, handleError } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { verifyServiceAuth as verifyServiceAuthShared } from '@/lib/auth/verify-service-auth'
+import { deliverNotification, NotificationDeliveryError } from '@/lib/data/notifications'
+import type { NotificationType } from '@/lib/types/notification'
 
 export const dynamic = 'force-dynamic'
 
 const VALID_TYPES = [
-  'follow', 'like', 'comment', 'mention', 'system',
-  'copy_trade', 'trader_alert', 'message', 'post_reply',
-  'new_follower', 'group_update', 'ranking_change', 'referral_reward',
-]
+  'follow',
+  'like',
+  'comment',
+  'mention',
+  'system',
+  'copy_trade',
+  'trader_alert',
+  'message',
+  'post_reply',
+  'new_follower',
+  'group_update',
+  'ranking_change',
+  'referral_reward',
+] as const satisfies readonly NotificationType[]
+
+const NormalizedUuidSchema = z
+  .string()
+  .uuid()
+  .transform((value) => value.toLowerCase())
+const SafeLinkSchema = z
+  .string()
+  .max(500)
+  .refine(
+    (value) =>
+      value.startsWith('/') &&
+      !value.startsWith('//') &&
+      !value.includes('\\') &&
+      !/[\u0000-\u001f\u007f]/.test(value)
+  )
+const NotificationSendBodySchema = z
+  .object({
+    user_id: NormalizedUuidSchema,
+    type: z.enum(VALID_TYPES),
+    title: z
+      .string()
+      .min(1)
+      .max(200)
+      .refine((value) => value.trim().length > 0),
+    message: z
+      .string()
+      .min(1)
+      .max(1000)
+      .refine((value) => value.trim().length > 0),
+    link: SafeLinkSchema.optional(),
+    actor_id: NormalizedUuidSchema.optional(),
+    reference_id: z
+      .string()
+      .min(1)
+      .max(500)
+      .refine((value) => value.trim().length > 0)
+      .optional(),
+    deduplicate: z.boolean().optional(),
+    dedup_window_seconds: z.number().int().min(1).max(604800).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.deduplicate === true && value.reference_id === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reference_id'],
+        message: 'Deduplication requires a reference ID',
+      })
+    }
+    if (value.deduplicate !== true && value.dedup_window_seconds !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dedup_window_seconds'],
+        message: 'Deduplication window requires deduplicate=true',
+      })
+    }
+  })
+
+const PRIVATE_NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' }
+
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: PRIVATE_NO_STORE_HEADERS })
+}
 
 /**
  * Verify caller is an internal/service caller (timing-safe).
@@ -50,64 +123,61 @@ export async function POST(request: NextRequest) {
   try {
     // Service-role only: reject any regular user JWT calls
     if (!verifyServiceAuth(request)) {
-      return NextResponse.json(
-        { error: 'Forbidden: notifications must be sent by internal services only' },
-        { status: 403 }
-      )
+      return json({ error: 'Forbidden: notifications must be sent by internal services only' }, 403)
     }
 
-    const body = await request.json()
-    const { user_id, type, title, message, link, actor_id, reference_id } = body
-
-    // 验证必填字段
-    if (!user_id || typeof user_id !== 'string') {
-      return NextResponse.json({ error: 'Missing user_id' }, { status: 400 })
-    }
-    if (!type || !VALID_TYPES.includes(type)) {
-      return NextResponse.json(
-        { error: `Invalid notification type, supported: ${VALID_TYPES.join(', ')}` },
-        { status: 400 }
-      )
-    }
-    if (!title || typeof title !== 'string') {
-      return NextResponse.json({ error: 'Missing title' }, { status: 400 })
-    }
-    if (!message || typeof message !== 'string') {
-      return NextResponse.json({ error: 'Missing message' }, { status: 400 })
+    let rawBody: unknown
+    try {
+      rawBody = await request.json()
+    } catch {
+      return json({ error: 'Invalid notification request' }, 400)
     }
 
-    // 防止给自己发通知
-    if (actor_id && actor_id === user_id) {
-      return NextResponse.json({ success: true, message: 'Skipped self-notification', skipped: true })
+    const body = NotificationSendBodySchema.safeParse(rawBody)
+    if (!body.success) {
+      return json({ error: 'Invalid notification request' }, 400)
     }
 
-    const supabase = getSupabaseAdmin()
+    const result = await deliverNotification(
+      getSupabaseAdmin(),
+      {
+        user_id: body.data.user_id,
+        type: body.data.type,
+        title: body.data.title,
+        message: body.data.message,
+        ...(body.data.link === undefined ? {} : { link: body.data.link }),
+        ...(body.data.actor_id === undefined ? {} : { actor_id: body.data.actor_id }),
+        ...(body.data.reference_id === undefined ? {} : { reference_id: body.data.reference_id }),
+      },
+      {
+        deduplicate: body.data.deduplicate ?? false,
+        ...(body.data.dedup_window_seconds === undefined
+          ? {}
+          : { dedupWindowSeconds: body.data.dedup_window_seconds }),
+      }
+    )
 
-    const { data, error } = await supabase
-      .from('notifications')
-      .insert({
-        user_id,
-        type,
-        title: title.slice(0, 200),
-        message: message.slice(0, 1000),
-        link: link?.slice(0, 500) || null,
-        actor_id: actor_id || null,
-        reference_id: reference_id || null,
-        read: false,
-      })
-      .select('id')
-      .single()
-
-    if (error) {
-      logger.error('[notifications/send] 创建通知Failed:', error)
-      return NextResponse.json({ error: 'Failed to create notification' }, { status: 500 })
-    }
-
-    return NextResponse.json({
+    return json({
       success: true,
-      notification_id: data.id,
+      notification_id: result.notificationId,
+      outcome: result.outcome,
+      created: result.created,
+      deduplicated: result.deduplicated,
+      skipped: result.skippedSelf,
     })
   } catch (error: unknown) {
+    if (error instanceof NotificationDeliveryError) {
+      logger.error('[notifications/send] atomic delivery failed', {
+        code: error.code,
+      })
+      if (error.code === 'RECIPIENT_UNAVAILABLE') {
+        return json({ error: 'Notification recipient is unavailable' }, 404)
+      }
+      if (error.code === 'ACTOR_UNAVAILABLE') {
+        return json({ error: 'Notification actor is unavailable' }, 400)
+      }
+      return json({ error: 'Failed to create notification' }, 500)
+    }
     return handleError(error, 'notifications/send POST')
   }
 }

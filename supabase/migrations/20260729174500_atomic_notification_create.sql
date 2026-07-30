@@ -247,7 +247,7 @@ DECLARE
     'group_update',
     'ranking_change',
     'referral_reward',
-    'tip_received',
+    -- tip_received is emitted only by the durable tip-completion authority.
     'subscription_expiring',
     'subscription_expired',
     'nft_expired',

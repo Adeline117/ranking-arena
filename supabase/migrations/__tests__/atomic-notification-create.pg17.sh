@@ -204,6 +204,7 @@ WHERE id='33333333-3333-4333-8333-333333333333';
 SQL
 
 assert_service_scalar 'INVALID' "SELECT public.create_notification_atomic('11111111-1111-4111-8111-111111111111','unknown','title','message',NULL,NULL,NULL,false,0)->>'reason'"
+assert_service_scalar 'INVALID' "SELECT public.create_notification_atomic('11111111-1111-4111-8111-111111111111','tip_received','title','message',NULL,NULL,'tip-1',true,3600)->>'reason'"
 assert_service_scalar 'INVALID' "SELECT public.create_notification_atomic('11111111-1111-4111-8111-111111111111','system',' ','message',NULL,NULL,NULL,false,0)->>'reason'"
 assert_service_scalar 'INVALID' "SELECT public.create_notification_atomic('11111111-1111-4111-8111-111111111111','system','title','message','https://evil.example',NULL,NULL,false,0)->>'reason'"
 assert_service_scalar 'INVALID' "SELECT public.create_notification_atomic('11111111-1111-4111-8111-111111111111','system','title','message',NULL,NULL,NULL,true,3600)->>'reason'"

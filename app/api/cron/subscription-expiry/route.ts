@@ -18,6 +18,7 @@ import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { getStripe, STRIPE_API_PRICE_IDS, STRIPE_PRICE_IDS } from '@/lib/stripe'
 import { classifyActiveProSubscription } from '@/lib/stripe/reconciliation'
 import { reconcileAllDueProEntitlementProjections } from '@/lib/stripe/projection-reconciliation'
+import { deliverNotification } from '@/lib/data/notifications'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -95,51 +96,37 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
       }
     }
 
-    const expiringUserIds = verifiedExpiring.map((s) => s.user_id)
-    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: existingNotifs } = await supabase
-      .from('notifications')
-      .select('user_id')
-      .in('user_id', expiringUserIds)
-      .eq('type', 'subscription_expiring')
-      .gte('created_at', threeDaysAgo)
-    const alreadyNotified = new Set(existingNotifs?.map((n) => n.user_id) || [])
+    const reminders = verifiedExpiring.map((sub) => {
+      const expiryDate = new Date(sub.current_period_end!).toLocaleDateString('zh-CN')
+      return {
+        user_id: sub.user_id,
+        type: 'subscription_expiring' as const,
+        title: 'Pro 会员即将到期',
+        message: `您的 Pro 会员将于 ${expiryDate} 到期。如需继续使用 Pro 功能，请前往会员中心续费。`,
+        reference_id: `sub_expiring_${sub.user_id}`,
+      }
+    })
 
-    const toInsert = verifiedExpiring
-      .filter((sub) => !alreadyNotified.has(sub.user_id))
-      .map((sub) => {
-        const expiryDate = new Date(sub.current_period_end!).toLocaleDateString('zh-CN')
-        return {
-          user_id: sub.user_id,
-          type: 'subscription_expiring',
-          title: 'Pro 会员即将到期',
-          body: `您的 Pro 会员将于 ${expiryDate} 到期。如需继续使用 Pro 功能，请前往会员中心续费。`,
-          data: {
-            expiryDate: sub.current_period_end,
-            plan: sub.plan,
-          },
-        }
-      })
-
-    if (toInsert.length > 0) {
-      // Use sendNotification for built-in dedup (prevents duplicates on cron double-fire)
-      const { sendNotification } = await import('@/lib/data/notifications')
-      await Promise.allSettled(
-        toInsert.map((n) =>
-          sendNotification(
-            supabase,
-            {
-              user_id: n.user_id,
-              type: n.type as import('@/lib/data/notifications').NotificationType,
-              title: n.title,
-              message: n.body,
-              reference_id: `sub_expiring_${n.user_id}`,
-            },
-            'subscription-expiry'
-          )
+    if (reminders.length > 0) {
+      const deliveries = await Promise.allSettled(
+        reminders.map((notification) =>
+          deliverNotification(supabase, notification, {
+            deduplicate: true,
+            dedupWindowSeconds: 3 * 24 * 60 * 60,
+          })
         )
       )
-      results.expiringReminders = toInsert.length
+      deliveries.forEach((delivery, index) => {
+        if (delivery.status === 'fulfilled') {
+          if (delivery.value.created) results.expiringReminders += 1
+          return
+        }
+        results.errors.push(
+          `Expiry reminder delivery failed for ${reminders[index]?.user_id ?? 'unknown user'}: ${
+            delivery.reason instanceof Error ? delivery.reason.message : String(delivery.reason)
+          }`
+        )
+      })
     }
   }
 

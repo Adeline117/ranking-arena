@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
 import { getStripe } from '@/lib/stripe'
 import { getSupabase, logger, type StripeWebhookEventContext } from './shared'
-import { sendNotification } from '@/lib/data/notifications'
+import { deliverNotification, sendNotification } from '@/lib/data/notifications'
 import { carriesApiTierSubscriptionIdentity } from './api-tier-identity'
 import {
   resolveSubscriptionEventStateAuthority,
@@ -549,7 +549,8 @@ export async function handlePaymentFailed(
           : 'Your Pro payment failed and retries are exhausted. Update your payment method in Settings to restore Pro.',
         reference_id: `payment_failed_${invoice.id}`,
       },
-      'stripe-payment-failed'
+      'stripe-payment-failed',
+      { deduplicate: true, dedupWindowSeconds: 604800 }
     )
 
     logger.info(`Exact payment failure recorded for user ${profile.id}`, {
@@ -594,7 +595,7 @@ export async function handlePaymentActionRequired(invoice: Stripe.Invoice) {
     return
   }
 
-  await sendNotification(
+  await deliverNotification(
     getSupabase(),
     {
       user_id: profile.id,
@@ -604,7 +605,7 @@ export async function handlePaymentActionRequired(invoice: Stripe.Invoice) {
         'Your bank requires an extra verification step. Open Settings and complete payment verification to keep your Pro access.',
       reference_id: `payment_action_required_${invoice.id}`,
     },
-    'stripe-payment-action-required'
+    { deduplicate: true, dedupWindowSeconds: 604800 }
   )
   logger.info('Payment action required notification sent', {
     userId: profile.id,
