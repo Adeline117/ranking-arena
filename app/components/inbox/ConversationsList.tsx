@@ -419,7 +419,7 @@ export default function ConversationsList({
           `/api/chat/${conversationId}/settings`,
           'PATCH',
           operation.accessToken,
-          { cleared_before: new Date().toISOString() },
+          { clear_history: true },
           15_000,
           {
             expectedUserId: operation.userId,

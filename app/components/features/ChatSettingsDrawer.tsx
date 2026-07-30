@@ -21,6 +21,14 @@ type ChatSettings = {
   cleared_before: string | null
 }
 
+type ChatSettingsPatch = {
+  remark?: string | null
+  is_muted?: boolean
+  is_pinned?: boolean
+  is_blocked?: boolean
+  clear_history?: true
+}
+
 type OtherUser = {
   id: string
   handle: string | null
@@ -88,7 +96,7 @@ export default function ChatSettingsDrawer({
     }
   }, [isOpen, loadSettings])
 
-  const updateSetting = async (updates: Partial<ChatSettings>) => {
+  const updateSetting = async (updates: ChatSettingsPatch): Promise<boolean> => {
     setSaving(true)
     try {
       const res = await fetch(`/api/chat/${conversationId}/settings`, {
@@ -104,7 +112,7 @@ export default function ChatSettingsDrawer({
       if (!res.ok) {
         const data = await res.json()
         showToast(data.error || t('updateFailed'), 'error')
-        return
+        return false
       }
 
       const data = await res.json()
@@ -120,9 +128,11 @@ export default function ChatSettingsDrawer({
       } else if ('remark' in updates) {
         showToast(t('remarkUpdated'), 'success')
       }
+      return true
     } catch (error) {
       logger.error('Failed to update setting:', error)
       showToast(t('updateFailed'), 'error')
+      return false
     } finally {
       setSaving(false)
     }
@@ -134,7 +144,7 @@ export default function ChatSettingsDrawer({
       showToast(t('remarkMaxLength'), 'warning')
       return
     }
-    updateSetting({ remark: trimmed || null })
+    void updateSetting({ remark: trimmed || null })
     setEditingRemark(false)
   }
 
@@ -143,9 +153,10 @@ export default function ChatSettingsDrawer({
       return
     }
 
-    await updateSetting({ cleared_before: new Date().toISOString() })
-    onClearHistory()
-    showToast(t('chatHistoryCleared'), 'success')
+    if (await updateSetting({ clear_history: true })) {
+      onClearHistory()
+      showToast(t('chatHistoryCleared'), 'success')
+    }
   }
 
   const handleBlock = async () => {
