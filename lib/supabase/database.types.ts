@@ -11806,6 +11806,16 @@ export type Database = {
         Args: { p_actor_id: string; p_limit: number }
         Returns: Json
       }
+      get_notification_page_atomic: {
+        Args: {
+          p_actor_id: string
+          p_before_created_at: string | null
+          p_before_id: string | null
+          p_limit: number
+          p_types: string[] | null
+        }
+        Returns: Json
+      }
       get_following_posts_page: {
         Args: {
           p_author_handle?: string
