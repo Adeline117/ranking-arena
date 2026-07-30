@@ -19,26 +19,51 @@ import { logger } from '@/lib/logger'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export const GET = withCron('score-backtest', async (_request: NextRequest, { supabase }) => {
-  const { data: snapshotted, error: snapErr } = await supabase.rpc('snapshot_score_backtest')
-  if (snapErr) logger.error('[score-backtest] snapshot failed:', snapErr.message)
+export const GET = withCron(
+  'score-backtest',
+  async (_request: NextRequest, { supabase }) => {
+    const workSignal = AbortSignal.timeout(45_000)
+    const { data: snapshotted, error: snapErr } = await supabase
+      .rpc('snapshot_score_backtest')
+      .abortSignal(workSignal)
 
-  const { data: evaluation, error: evalErr } = await supabase.rpc('evaluate_score_backtest', {
-    p_horizon_days: 30,
-  })
-  if (evalErr) logger.error('[score-backtest] evaluate failed:', evalErr.message)
+    const { data: evaluation, error: evalErr } = await supabase
+      .rpc('evaluate_score_backtest', {
+        p_horizon_days: 30,
+      })
+      .abortSignal(workSignal)
 
-  const ev = (evaluation ?? {}) as Record<string, unknown>
-  if (ev.status === 'evaluated') {
-    logger.info(
-      `[score-backtest] ${String(ev.snapshot_date)} n=${String(ev.n)} rank_corr=${String(ev.rank_corr)} Q5-Q1=${String(ev.top_minus_bottom)}`
-    )
-  }
+    const rpcErrors = [
+      snapErr ? `snapshot_score_backtest: ${snapErr.message}` : null,
+      evalErr ? `evaluate_score_backtest: ${evalErr.message}` : null,
+    ].filter((message): message is string => message !== null)
+    if (rpcErrors.length > 0) {
+      throw new Error(`Score backtest RPC failure(s): ${rpcErrors.join('; ')}`)
+    }
 
-  return {
-    count: (snapshotted as number | null) ?? 0,
-    snapshotted: snapshotted ?? 0,
-    evaluation: ev,
-    errors: [snapErr?.message, evalErr?.message].filter(Boolean),
-  }
-}, { safetyTimeoutMs: 55_000 })
+    if (typeof snapshotted !== 'number' || !Number.isInteger(snapshotted) || snapshotted < 0) {
+      throw new Error('snapshot_score_backtest returned an invalid acknowledgement')
+    }
+
+    if (!evaluation || typeof evaluation !== 'object' || Array.isArray(evaluation)) {
+      throw new Error('evaluate_score_backtest returned an invalid acknowledgement')
+    }
+
+    const ev = evaluation as Record<string, unknown>
+    if (!['evaluated', 'no_pending_snapshot', 'empty_join'].includes(String(ev.status))) {
+      throw new Error('evaluate_score_backtest returned an unknown status')
+    }
+    if (ev.status === 'evaluated') {
+      logger.info(
+        `[score-backtest] ${String(ev.snapshot_date)} n=${String(ev.n)} rank_corr=${String(ev.rank_corr)} Q5-Q1=${String(ev.top_minus_bottom)}`
+      )
+    }
+
+    return {
+      count: snapshotted,
+      snapshotted,
+      evaluation: ev,
+    }
+  },
+  { safetyTimeoutMs: 55_000 }
+)
