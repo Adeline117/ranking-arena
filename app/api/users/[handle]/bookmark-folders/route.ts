@@ -12,7 +12,6 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
-import logger from '@/lib/logger'
 import { readPublicProfileAudienceByHandle } from '@/lib/profile/public-audience'
 
 type RouteContext = { params: Promise<{ handle: string }> }
@@ -63,13 +62,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const { data: folders, error: foldersError } = await query
 
     if (foldersError) {
-      logger.error('Error fetching bookmark folders:', foldersError)
-      return success({ folders: [] }, 200, noStore)
+      throw foldersError
+    }
+    if (!Array.isArray(folders)) {
+      throw new Error('Invalid public bookmark folder result')
     }
 
     return success(
       {
-        folders: folders || [],
+        folders,
         is_own_profile: isOwnProfile,
       },
       200,
