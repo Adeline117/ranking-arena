@@ -12413,6 +12413,22 @@ export type Database = {
         }
         Returns: Json
       }
+      mutate_direct_message_conversation_settings_atomic: {
+        Args: {
+          p_actor_id: string
+          p_clear_history: boolean
+          p_conversation_id: string
+          p_is_blocked: boolean | null
+          p_is_blocked_present: boolean
+          p_is_muted: boolean | null
+          p_is_muted_present: boolean
+          p_is_pinned: boolean | null
+          p_is_pinned_present: boolean
+          p_remark: string | null
+          p_remark_present: boolean
+        }
+        Returns: Json
+      }
       mutate_group_join_request_atomic: {
         Args: {
           p_action: string
