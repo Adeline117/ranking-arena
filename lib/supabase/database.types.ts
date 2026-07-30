@@ -10462,6 +10462,15 @@ export type Database = {
         }
         Returns: Json
       }
+      mutate_trader_watchlist_atomic: {
+        Args: {
+          p_action: string
+          p_handle: string | null
+          p_source: string
+          p_source_trader_id: string
+        }
+        Returns: Json
+      }
       finish_api_tier_payment_backfill_target_atomic: {
         Args: {
           p_error: string | null
