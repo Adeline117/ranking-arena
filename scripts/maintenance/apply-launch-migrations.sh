@@ -207,6 +207,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729175500_atomic_ranking_notification_batch.sql
   20260729180000_atomic_bookmark_post_removal.sql
   20260729180500_idempotent_channel_message_reactions.sql
+  20260729181000_atomic_bookmark_folder_save.sql
   20260729181500_admitted_account_recovery_deadline.sql
 )
 
