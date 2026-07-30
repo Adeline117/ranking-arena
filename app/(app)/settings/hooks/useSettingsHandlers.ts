@@ -16,6 +16,7 @@ import {
   persistAccountRecoveryToken,
   replaceDocumentForAccountRecovery,
 } from '@/lib/auth/account-recovery-token'
+import { getAccountDeletionProof } from '@/lib/auth/account-deletion-proof'
 import type { AuthSessionReturn } from '@/lib/hooks/useAuthSession'
 import {
   EMAIL_DIGEST_VALUES,
@@ -1652,32 +1653,22 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     }
   }
 
-  // 打开删号弹窗时探测账号是否有密码凭据(OAuth/钱包用户无 → 走 DELETE 确认)。
+  // Choose the proof from the current session's real AMR method. An `email`
+  // identity can represent either password or OTP, so provider metadata alone
+  // would strand passwordless users behind a password they never created.
   useEffect(() => {
     if (!showDeleteAccountModal) return
     const scope = captureViewer()
     if (!scope || auth.user?.id !== scope.userId) return
-    const providers = new Set(
-      (auth.user.identities ?? [])
-        .map((identity) => identity.provider)
-        .filter(
-          (provider): provider is string => typeof provider === 'string' && provider.length > 0
-        )
-    )
-    const metadataProvider = auth.user.app_metadata?.provider
-    if (typeof metadataProvider === 'string' && metadataProvider.length > 0) {
-      providers.add(metadataProvider)
-    }
-    const metadataProviders = auth.user.app_metadata?.providers
-    if (Array.isArray(metadataProviders)) {
-      for (const provider of metadataProviders) {
-        if (typeof provider === 'string' && provider.length > 0) providers.add(provider)
-      }
-    }
-    const isWalletEmail = (auth.user.email ?? '').endsWith('@wallet.arena')
-    // Unknown provider state stays on the stronger password UI. The server
-    // independently fails that state closed instead of accepting typed DELETE.
-    setDeleteHasPassword(!isWalletEmail && (providers.has('email') || providers.size === 0))
+    const deletionProof = getAccountDeletionProof({
+      accessToken: scope.accessToken,
+      email: auth.user.email ?? null,
+      identities: auth.user.identities,
+      appMetadata: auth.user.app_metadata,
+    })
+    // Unknown provider/session state stays on the stronger UI. The server
+    // independently rejects it instead of accepting typed DELETE.
+    setDeleteHasPassword(deletionProof !== 'typed')
   }, [auth.sessionGeneration, auth.user, captureViewer, showDeleteAccountModal])
 
   const handleDeleteAccount = async () => {

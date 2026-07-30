@@ -18,7 +18,7 @@ const mockDiscoverStripeSubscriptionBilling = jest.fn()
 const mockPersistOneTimeSettlementScan = jest.fn()
 const mockStripeClient = { marker: 'stripe-client' }
 const DEFAULT_RECOVERY_TOKEN = 'Q'.repeat(43)
-const CURRENT_ACCESS_TOKEN = 'header.payload.signature'
+let currentAccessToken = 'header.payload.signature'
 let subscriptionResult: { data: Record<string, unknown> | null; error: unknown }
 let billingProfileResult: { data: Record<string, unknown> | null; error: unknown }
 
@@ -114,7 +114,7 @@ function request(body: Record<string, unknown>, includeRecoveryToken = true): Re
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${CURRENT_ACCESS_TOKEN}`,
+      authorization: `Bearer ${currentAccessToken}`,
     },
     body: JSON.stringify(
       includeRecoveryToken ? { recovery_token: DEFAULT_RECOVERY_TOKEN, ...body } : body
@@ -128,6 +128,7 @@ describe('account deletion scheduling', () => {
     mockUser.email = 'user@example.com'
     mockUser.app_metadata = { provider: 'email', providers: ['email'] }
     mockUser.identities = [{ provider: 'email' }]
+    currentAccessToken = 'header.payload.signature'
     subscriptionResult = {
       data: {
         stripe_subscription_id: 'sub_123',
@@ -279,7 +280,7 @@ describe('account deletion scheduling', () => {
     )
     expect(mockLocalSubscriptionUpdate).not.toHaveBeenCalled()
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '876000h' })
-    expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
+    expect(mockAdminSignOut).toHaveBeenCalledWith(currentAccessToken, 'global')
     expect(mockFrom).toHaveBeenCalledTimes(2)
   })
 
@@ -473,7 +474,7 @@ describe('account deletion scheduling', () => {
       expect.any(Object)
     )
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '876000h' })
-    expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
+    expect(mockAdminSignOut).toHaveBeenCalledWith(currentAccessToken, 'global')
   })
 
   it('keeps the operation prepared until a failed Auth ban can be retried', async () => {
@@ -496,7 +497,7 @@ describe('account deletion scheduling', () => {
       'finish_account_deletion_billing_atomic',
       expect.any(Object)
     )
-    expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
+    expect(mockAdminSignOut).toHaveBeenCalledWith(currentAccessToken, 'global')
   })
 
   it('does not crash after preparation when Auth APIs throw', async () => {
@@ -528,7 +529,7 @@ describe('account deletion scheduling', () => {
         auth_invalidation_pending: true,
       })
     )
-    expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
+    expect(mockAdminSignOut).toHaveBeenCalledWith(currentAccessToken, 'global')
     expect(mockAdminSignOut).not.toHaveBeenCalledWith('user-1', 'global')
     expect(mockRpc).toHaveBeenCalledWith(
       'finish_account_deletion_billing_atomic',
@@ -645,7 +646,7 @@ describe('account deletion scheduling', () => {
       )
     ).toBe(false)
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '876000h' })
-    expect(mockAdminSignOut).toHaveBeenCalledWith(CURRENT_ACCESS_TOKEN, 'global')
+    expect(mockAdminSignOut).toHaveBeenCalledWith(currentAccessToken, 'global')
   })
 
   it('performs zero Stripe mutations when another profile owns a derived customer', async () => {
@@ -746,6 +747,26 @@ describe('account deletion scheduling', () => {
         p_stripe_customer_id: null,
         p_stripe_subscription_ids: [],
       })
+    )
+  })
+
+  it('supports an email-OTP account that never created a password', async () => {
+    currentAccessToken = `header.${Buffer.from(
+      JSON.stringify({ sub: 'user-1', amr: [{ method: 'otp', timestamp: 123 }] })
+    ).toString('base64url')}.signature`
+    subscriptionResult.data = null
+    billingProfileResult.data = {
+      stripe_customer_id: null,
+      api_stripe_subscription_id: null,
+    }
+
+    const response = await POST(request({ confirm: 'DELETE' }))
+
+    expect(response.status).toBe(200)
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockRpc).toHaveBeenCalledWith(
+      'prepare_account_deletion_billing_atomic',
+      expect.objectContaining({ p_user_id: 'user-1' })
     )
   })
 

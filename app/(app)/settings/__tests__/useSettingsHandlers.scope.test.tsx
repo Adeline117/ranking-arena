@@ -122,10 +122,10 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function jwt(userId: string): string {
+function jwt(userId: string, amr?: unknown): string {
   const encode = (value: unknown) =>
     btoa(JSON.stringify(value)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
-  return `${encode({ alg: 'none' })}.${encode({ sub: userId })}.signature`
+  return `${encode({ alg: 'none' })}.${encode({ sub: userId, ...(amr === undefined ? {} : { amr }) })}.signature`
 }
 
 function authFor(userId: string, sessionGeneration: number): AuthSessionReturn {
@@ -779,6 +779,39 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.deleteError).toBeNull()
     expect(showToast).toHaveBeenCalledWith('accountMarkedDeleted', 'success')
     storageSet.mockRestore()
+  })
+
+  it('offers typed deletion to an email-OTP account that has no password', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, user_id: 'user-a', recovery_token: recoveryToken }),
+    }) as unknown as typeof fetch
+
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    auth.accessToken = jwt('user-a', [{ method: 'otp', timestamp: 123 }])
+    auth.user!.app_metadata = { provider: 'email', providers: ['email'] }
+    auth.user!.identities = [{ provider: 'email' }] as typeof auth.user.identities
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    act(() => {
+      hook.result.current.setShowDeleteAccountModal(true)
+      hook.result.current.setDeleteConfirm('DELETE')
+    })
+    await waitFor(() => expect(hook.result.current.deleteHasPassword).toBe(false))
+
+    await act(async () => {
+      await hook.result.current.handleDeleteAccount()
+    })
+
+    const request = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
+    const body = JSON.parse(String(request.body)) as Record<string, unknown>
+    expect(body.confirm).toBe('DELETE')
+    expect(body).not.toHaveProperty('password')
   })
 
   it('uses full-document replacement, never client history, when all storage is blocked', async () => {
