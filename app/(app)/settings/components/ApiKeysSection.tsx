@@ -86,6 +86,8 @@ const TIER_LABELS: Record<string, { labelKey: string; color: string; limitKey: s
   pro: { labelKey: 'pro', color: 'var(--color-accent-success)', limitKey: 'unlimitedLabel' },
 }
 
+const FULL_API_KEY_PATTERN = /^arena_sk_[0-9a-f]{32}$/
+
 export function ApiKeysSection({
   redirectToPortal = defaultPortalRedirect,
 }: ApiKeysSectionProps = {}) {
@@ -114,6 +116,7 @@ export function ApiKeysSection({
   const stateOwnerRef = useRef<ApiKeyStateOwner | null>(null)
   const loadOutcomeRef = useRef<ApiKeyLoadOutcome>('idle')
   const keysLoadGenerationRef = useRef(0)
+  const keyMutationRef = useRef<'create' | string | null>(null)
   const mountedRef = useRef(false)
   const portalOperationRef = useRef<ApiPortalOperation | null>(null)
   const nextPortalOperationIdRef = useRef(0)
@@ -122,80 +125,100 @@ export function ApiKeysSection({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      keyMutationRef.current = null
       portalOperationRef.current?.controller.abort()
       portalOperationRef.current = null
     }
   }, [])
 
-  const fetchKeys = useCallback(async (expectedScope?: SettingsViewerSnapshot) => {
-    const scope = expectedScope ?? captureSettingsViewer(authRef.current)
-    if (!scope) {
-      if (authRef.current.authChecked && !authRef.current.loading) setLoading(false)
-      return
-    }
-    if (!isSettingsViewerCurrent(scope, authRef.current)) return
-    const loadGeneration = ++keysLoadGenerationRef.current
-    const loadIsCurrent = () =>
-      keysLoadGenerationRef.current === loadGeneration &&
-      isSettingsViewerCurrent(scope, authRef.current)
-
-    const owner = apiKeyStateOwnerFor(scope)
-    stateOwnerRef.current = owner
-    loadOutcomeRef.current = 'loading'
-    setStateOwner(owner)
-    setLoadOutcome('loading')
-    setKeys([])
-    setLoading(true)
-
-    try {
-      const res = await authedFetch<{
-        data?: ApiKey[]
-        entitlement?: {
-          tier?: unknown
-          hasStripeSubscription?: unknown
-        }
-      }>('/api/user/api-keys', 'GET', scope.accessToken, undefined, 15_000, {
-        expectedUserId: scope.userId,
-        expectedSessionGeneration: scope.sessionGeneration,
-      })
-      if (!loadIsCurrent() || res.stale) return
-      if (!res.ok) {
-        setKeys([])
-        setEntitlement(null)
-        loadOutcomeRef.current = 'failed'
-        setLoadOutcome('failed')
-        return
+  const fetchKeys = useCallback(
+    async (
+      expectedScope?: SettingsViewerSnapshot,
+      options?: { preserveReadyState?: boolean }
+    ): Promise<boolean> => {
+      const scope = expectedScope ?? captureSettingsViewer(authRef.current)
+      if (!scope) {
+        if (authRef.current.authChecked && !authRef.current.loading) setLoading(false)
+        return false
       }
-      const loadedKeys = res.data?.data ?? []
-      const rawTier = res.data?.entitlement?.tier
-      const tier: ApiTier =
-        rawTier === 'starter' || rawTier === 'pro'
-          ? rawTier
-          : rawTier === 'free'
-            ? 'free'
-            : loadedKeys.find((key) => key.active)?.tier === 'starter'
-              ? 'starter'
-              : loadedKeys.find((key) => key.active)?.tier === 'pro'
-                ? 'pro'
-                : 'free'
-      setKeys(loadedKeys)
-      setEntitlement({
-        tier,
-        hasStripeSubscription:
-          tier !== 'free' && res.data?.entitlement?.hasStripeSubscription === true,
-      })
-      loadOutcomeRef.current = 'ready'
-      setLoadOutcome('ready')
-    } catch {
-      if (!loadIsCurrent()) return
-      setKeys([])
-      setEntitlement(null)
-      loadOutcomeRef.current = 'failed'
-      setLoadOutcome('failed')
-    } finally {
-      if (loadIsCurrent()) setLoading(false)
-    }
-  }, [])
+      if (!isSettingsViewerCurrent(scope, authRef.current)) return false
+      const preserveReadyState =
+        options?.preserveReadyState === true &&
+        mountedRef.current &&
+        loadOutcomeRef.current === 'ready' &&
+        apiKeyStateOwnerMatches(stateOwnerRef.current, scope)
+      const loadGeneration = ++keysLoadGenerationRef.current
+      const loadIsCurrent = () =>
+        keysLoadGenerationRef.current === loadGeneration &&
+        isSettingsViewerCurrent(scope, authRef.current)
+
+      if (!preserveReadyState) {
+        const owner = apiKeyStateOwnerFor(scope)
+        stateOwnerRef.current = owner
+        loadOutcomeRef.current = 'loading'
+        setStateOwner(owner)
+        setLoadOutcome('loading')
+        setKeys([])
+        setLoading(true)
+      }
+
+      try {
+        const res = await authedFetch<{
+          data?: ApiKey[]
+          entitlement?: {
+            tier?: unknown
+            hasStripeSubscription?: unknown
+          }
+        }>('/api/user/api-keys', 'GET', scope.accessToken, undefined, 15_000, {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        })
+        if (!loadIsCurrent() || res.stale) return false
+        if (!res.ok || !Array.isArray(res.data?.data)) {
+          if (!preserveReadyState) {
+            setKeys([])
+            setEntitlement(null)
+            loadOutcomeRef.current = 'failed'
+            setLoadOutcome('failed')
+          }
+          return false
+        }
+        const loadedKeys = res.data.data
+        const rawTier = res.data?.entitlement?.tier
+        const tier: ApiTier =
+          rawTier === 'starter' || rawTier === 'pro'
+            ? rawTier
+            : rawTier === 'free'
+              ? 'free'
+              : loadedKeys.find((key) => key.active)?.tier === 'starter'
+                ? 'starter'
+                : loadedKeys.find((key) => key.active)?.tier === 'pro'
+                  ? 'pro'
+                  : 'free'
+        setKeys(loadedKeys)
+        setEntitlement({
+          tier,
+          hasStripeSubscription:
+            tier !== 'free' && res.data?.entitlement?.hasStripeSubscription === true,
+        })
+        loadOutcomeRef.current = 'ready'
+        setLoadOutcome('ready')
+        return true
+      } catch {
+        if (!loadIsCurrent()) return false
+        if (!preserveReadyState) {
+          setKeys([])
+          setEntitlement(null)
+          loadOutcomeRef.current = 'failed'
+          setLoadOutcome('failed')
+        }
+        return false
+      } finally {
+        if (loadIsCurrent() && !preserveReadyState) setLoading(false)
+      }
+    },
+    []
+  )
 
   useEffect(() => {
     const portalOperation = portalOperationRef.current
@@ -213,6 +236,7 @@ export function ApiKeysSection({
     setLoading(auth.loading || !auth.authChecked || Boolean(auth.userId))
     setCreating(false)
     setRevokingId(null)
+    keyMutationRef.current = null
     setNewKeyName('')
     setJustCreatedKey(null)
     setPortalFlow(null)
@@ -227,7 +251,9 @@ export function ApiKeysSection({
 
   const createKey = async () => {
     const scope = captureSettingsViewer(authRef.current)
-    if (!scope || !stateBelongsToViewer(scope) || creating) return
+    if (!scope || !stateBelongsToViewer(scope) || creating || keyMutationRef.current !== null)
+      return
+    keyMutationRef.current = 'create'
     setCreating(true)
     try {
       const res = await authedFetch<{ data?: { key: string }; error?: string }>(
@@ -242,21 +268,31 @@ export function ApiKeysSection({
         }
       )
       if (!stateBelongsToViewer(scope) || res.stale) return
-      if (!res.ok || !res.data?.data) {
+      const createdKey = res.data?.data?.key
+      if (
+        !res.ok ||
+        res.status !== 201 ||
+        typeof createdKey !== 'string' ||
+        !FULL_API_KEY_PATTERN.test(createdKey)
+      ) {
         showToast(res.data?.error || t('apiKeyCreateFailed'), 'error')
         return
       }
-      setJustCreatedKey(res.data.data.key)
+      setJustCreatedKey(createdKey)
       setNewKeyName('')
-      await fetchKeys(scope)
+      const refreshed = await fetchKeys(scope, { preserveReadyState: true })
       if (!isSettingsViewerCurrent(scope, authRef.current)) return
       showToast(t('apiKeyCreatedToast'), 'success')
+      if (!refreshed) showToast(t('loadFailedRetryShort'), 'warning')
     } catch {
       if (stateBelongsToViewer(scope)) {
         showToast(t('networkError'), 'error')
       }
     } finally {
-      if (isSettingsViewerCurrent(scope, authRef.current)) setCreating(false)
+      if (isSettingsViewerCurrent(scope, authRef.current) && keyMutationRef.current === 'create') {
+        keyMutationRef.current = null
+        setCreating(false)
+      }
     }
   }
 
@@ -266,9 +302,11 @@ export function ApiKeysSection({
       !scope ||
       !stateBelongsToViewer(scope) ||
       revokingId !== null ||
+      keyMutationRef.current !== null ||
       !keys.some((key) => key.id === id && key.active)
     )
       return
+    keyMutationRef.current = id
     setRevokingId(id)
     try {
       const res = await authedFetch<{
@@ -303,7 +341,10 @@ export function ApiKeysSection({
         showToast(t('networkError'), 'error')
       }
     } finally {
-      if (isSettingsViewerCurrent(scope, authRef.current)) setRevokingId(null)
+      if (isSettingsViewerCurrent(scope, authRef.current) && keyMutationRef.current === id) {
+        keyMutationRef.current = null
+        setRevokingId(null)
+      }
     }
   }
 

@@ -77,6 +77,8 @@ type FetchResult = {
   stale?: boolean
 }
 
+const FULL_SECRET_A = 'arena_sk_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((resolvePromise) => {
@@ -244,11 +246,11 @@ describe('ApiKeysSection viewer ownership', () => {
       createA.resolve({
         ok: true,
         status: 201,
-        data: { data: { key: 'arena_sk_full_secret_for_a' } },
+        data: { data: { key: FULL_SECRET_A } },
       })
     })
 
-    expect(screen.queryByText('arena_sk_full_secret_for_a')).not.toBeInTheDocument()
+    expect(screen.queryByText(FULL_SECRET_A)).not.toBeInTheDocument()
     expect(mockShowToast).not.toHaveBeenCalledWith('apiKeyCreatedToast', 'success')
     const postCall = mockAuthedFetch.mock.calls.find((call) => call[1] === 'POST')
     expect(postCall?.[2]).toBe(jwt('user-a'))
@@ -272,7 +274,7 @@ describe('ApiKeysSection viewer ownership', () => {
           return Promise.resolve({
             ok: true,
             status: 201,
-            data: { data: { key: 'arena_sk_full_secret_for_a' } },
+            data: { data: { key: FULL_SECRET_A } },
           })
         }
         if (url === '/api/user/api-keys' && method === 'PATCH') return revokeA.promise
@@ -299,12 +301,10 @@ describe('ApiKeysSection viewer ownership', () => {
       target: { value: 'Alpha secret' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'apiKeyCreate' }))
-    await screen.findByText('arena_sk_full_secret_for_a')
+    await screen.findByText(FULL_SECRET_A)
     fireEvent.click(screen.getByRole('button', { name: 'copy' }))
     fireEvent.click(screen.getByRole('button', { name: 'revoke' }))
-    await waitFor(() =>
-      expect(mockClipboardWrite).toHaveBeenCalledWith('arena_sk_full_secret_for_a')
-    )
+    await waitFor(() => expect(mockClipboardWrite).toHaveBeenCalledWith(FULL_SECRET_A))
     await waitFor(() =>
       expect(mockAuthedFetch.mock.calls.some((call) => call[1] === 'PATCH')).toBe(true)
     )
@@ -385,6 +385,81 @@ describe('ApiKeysSection viewer ownership', () => {
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('networkError', 'error'))
     expect(input).toHaveValue('Keep this draft')
     expect(screen.getByRole('button', { name: 'apiKeyCreate' })).toBeEnabled()
+  })
+
+  it('rejects a malformed one-time key response without clearing the draft', async () => {
+    let listReads = 0
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url.includes('/usage')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { keys: [], daily: [], totals: {} } },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'GET') {
+        listReads += 1
+        return Promise.resolve({ ok: true, status: 200, data: { data: [] } })
+      }
+      if (url === '/api/user/api-keys' && method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          status: 201,
+          data: { data: { key: 'not-an-api-key' } },
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<ApiKeysSection />)
+    const input = await screen.findByPlaceholderText('apiKeyNamePlaceholder')
+    fireEvent.change(input, { target: { value: 'Keep this draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'apiKeyCreate' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('apiKeyCreateFailed', 'error'))
+    expect(input).toHaveValue('Keep this draft')
+    expect(screen.queryByText('not-an-api-key')).not.toBeInTheDocument()
+    expect(listReads).toBe(1)
+  })
+
+  it('keeps the one-time secret visible when the post-create list refresh fails', async () => {
+    let listReads = 0
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url.includes('/usage')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { keys: [], daily: [], totals: {} } },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'GET') {
+        listReads += 1
+        return Promise.resolve(
+          listReads === 1
+            ? { ok: true, status: 200, data: { data: [] } }
+            : { ok: false, status: 503, data: { error: 'unavailable' } }
+        )
+      }
+      if (url === '/api/user/api-keys' && method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          status: 201,
+          data: { data: { key: FULL_SECRET_A } },
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<ApiKeysSection />)
+    fireEvent.change(await screen.findByPlaceholderText('apiKeyNamePlaceholder'), {
+      target: { value: 'Production' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'apiKeyCreate' }))
+
+    expect(await screen.findByText(FULL_SECRET_A)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockShowToast).toHaveBeenCalledWith('apiKeyCreatedToast', 'success')
+    expect(mockShowToast).toHaveBeenCalledWith('loadFailedRetryShort', 'warning')
   })
 
   it('catches revoke network failures and restores the active key action', async () => {
