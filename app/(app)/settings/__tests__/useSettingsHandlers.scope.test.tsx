@@ -69,6 +69,7 @@ jest.mock('@/lib/auth/account-recovery-token', () => {
   const replaceDocument = jest.fn(() => true)
   return {
     ...actual,
+    generateAccountRecoveryToken: jest.fn(() => 'A'.repeat(43)),
     replaceDocumentForAccountRecovery: replaceDocument,
     __settingsMocks: { replaceDocument },
   }
@@ -184,6 +185,19 @@ function sensitiveProfile(settingsVersion = 0) {
       settings_version: settingsVersion,
     },
     error: null,
+  }
+}
+
+function deletionAcknowledgement(recoveryToken: string, overrides: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    user_id: 'user-a',
+    deletion_scheduled_at: '2026-08-28T12:00:00.000Z',
+    recovery_token: recoveryToken,
+    billing_settlement_pending: false,
+    auth_invalidation_pending: false,
+    message: 'Account marked for deletion, recoverable within 30 days',
+    ...overrides,
   }
 }
 
@@ -898,7 +912,8 @@ describe('useSettingsHandlers viewer ownership', () => {
     mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ success: true, user_id: 'user-a', recovery_token: recoveryToken }),
+      status: 200,
+      json: async () => deletionAcknowledgement(recoveryToken),
     }) as unknown as typeof fetch
 
     const originalSetItem = Storage.prototype.setItem
@@ -948,7 +963,8 @@ describe('useSettingsHandlers viewer ownership', () => {
     mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ success: true, user_id: 'user-a', recovery_token: recoveryToken }),
+      status: 200,
+      json: async () => deletionAcknowledgement(recoveryToken),
     }) as unknown as typeof fetch
 
     const scope = synchronizeViewerScope(true, 'user-a')
@@ -981,7 +997,8 @@ describe('useSettingsHandlers viewer ownership', () => {
     mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ success: true, user_id: 'user-a', recovery_token: recoveryToken }),
+      status: 200,
+      json: async () => deletionAcknowledgement(recoveryToken),
     }) as unknown as typeof fetch
 
     const storageSet = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
@@ -1008,6 +1025,79 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.deleteError).toBeNull()
     expect(showToast).toHaveBeenCalledWith('accountMarkedDeleted', 'success')
     storageSet.mockRestore()
+  })
+
+  it('never replaces the staged recovery authority with a different valid response token', async () => {
+    const stagedRecoveryToken = 'A'.repeat(43)
+    const wrongRecoveryToken = 'B'.repeat(43)
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => deletionAcknowledgement(wrongRecoveryToken),
+    }) as unknown as typeof fetch
+
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const signOut = auth.signOut as jest.Mock
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    act(() => {
+      hook.result.current.setShowDeleteAccountModal(true)
+      hook.result.current.setDeleteConfirm('DELETE')
+    })
+    await waitFor(() => expect(hook.result.current.deleteHasPassword).toBe(false))
+
+    await act(async () => {
+      await hook.result.current.handleDeleteAccount()
+    })
+
+    expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBe(stagedRecoveryToken)
+    expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBe(
+      stagedRecoveryToken
+    )
+    expect(JSON.stringify(window.localStorage)).not.toContain(wrongRecoveryToken)
+    expect(hook.result.current.deleteError).toBe('operationFailed')
+    expect(signOut).not.toHaveBeenCalled()
+    expect(mockRouterPush).not.toHaveBeenCalled()
+    expect(mockReplaceDocument).not.toHaveBeenCalled()
+    expect(showToast).not.toHaveBeenCalledWith('accountMarkedDeleted', 'success')
+  })
+
+  it('accepts an exact pending acknowledgement only with HTTP 202', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () =>
+        deletionAcknowledgement(recoveryToken, {
+          billing_settlement_pending: true,
+          message: 'Account marked for deletion. Secure shutdown is still being retried.',
+        }),
+    }) as unknown as typeof fetch
+
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    act(() => {
+      hook.result.current.setShowDeleteAccountModal(true)
+      hook.result.current.setDeleteConfirm('DELETE')
+    })
+    await waitFor(() => expect(hook.result.current.deleteHasPassword).toBe(false))
+
+    await act(async () => {
+      await hook.result.current.handleDeleteAccount()
+    })
+
+    expect(hook.result.current.deleteError).toBeNull()
+    expect(mockRouterPush).toHaveBeenCalledWith('/login?account_deleted=1')
+    expect(showToast).toHaveBeenCalledWith('accountMarkedDeleted', 'success')
   })
 
   it('stages the exact credential before dispatch and single-flights rapid deletion clicks', async () => {

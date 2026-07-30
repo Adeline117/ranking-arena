@@ -49,6 +49,59 @@ type SettingsStateOwner = SettingsViewerSnapshot & {
   profileGeneration: number
 }
 
+const ACCOUNT_DELETION_ACK_FIELDS = [
+  'auth_invalidation_pending',
+  'billing_settlement_pending',
+  'deletion_scheduled_at',
+  'message',
+  'recovery_token',
+  'success',
+  'user_id',
+]
+
+function isExactAccountDeletionAcknowledgement(
+  value: unknown,
+  status: number,
+  expected: { userId: string; recoveryToken: string }
+): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const acknowledgement = value as Record<string, unknown>
+  const fields = Object.keys(acknowledgement).sort()
+  if (
+    fields.length !== ACCOUNT_DELETION_ACK_FIELDS.length ||
+    !fields.every((field, index) => field === ACCOUNT_DELETION_ACK_FIELDS[index])
+  ) {
+    return false
+  }
+
+  const scheduledAt = acknowledgement.deletion_scheduled_at
+  const billingPending = acknowledgement.billing_settlement_pending
+  const authPending = acknowledgement.auth_invalidation_pending
+  if (
+    acknowledgement.success !== true ||
+    acknowledgement.user_id !== expected.userId ||
+    typeof acknowledgement.recovery_token !== 'string' ||
+    acknowledgement.recovery_token !== expected.recoveryToken ||
+    !isAccountRecoveryToken(acknowledgement.recovery_token) ||
+    typeof scheduledAt !== 'string' ||
+    !Number.isFinite(Date.parse(scheduledAt)) ||
+    new Date(scheduledAt).toISOString() !== scheduledAt ||
+    typeof billingPending !== 'boolean' ||
+    typeof authPending !== 'boolean'
+  ) {
+    return false
+  }
+
+  const pending = billingPending || authPending
+  return (
+    status === (pending ? 202 : 200) &&
+    acknowledgement.message ===
+      (pending
+        ? 'Account marked for deletion. Secure shutdown is still being retried.'
+        : 'Account marked for deletion, recoverable within 30 days')
+  )
+}
+
 function settingsScopeMatches(
   left: Pick<SettingsViewerSnapshot, 'sessionGeneration' | 'userId' | 'viewerKey'>,
   right: Pick<SettingsViewerSnapshot, 'sessionGeneration' | 'userId' | 'viewerKey'>
@@ -1740,34 +1793,33 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         ),
       })
       if (!viewerIsCurrent(scope)) return
-      const data = await res.json()
+      const data: unknown = await res.json()
       if (!viewerIsCurrent(scope)) return
       if (!res.ok) {
-        setDeleteError(data.error || t('operationFailed'))
+        const responseError =
+          data && typeof data === 'object' && !Array.isArray(data)
+            ? (data as Record<string, unknown>).error
+            : null
+        setDeleteError(typeof responseError === 'string' ? responseError : t('operationFailed'))
+        return
+      }
+      if (
+        !stagedRecoveryToken ||
+        !isExactAccountDeletionAcknowledgement(data, res.status, {
+          userId: scope.userId,
+          recoveryToken: stagedRecoveryToken,
+        })
+      ) {
+        setDeleteError(t('operationFailed'))
         return
       }
       const recoveryLoginPath = buildAccountRecoveryLoginPath()
       let fullDocumentRecoveryToken: string | null = null
-      const responseRecoveryToken = isAccountRecoveryToken(data.recovery_token)
-        ? data.recovery_token
-        : stagedRecoveryToken
-      if (responseRecoveryToken) {
-        // One-time credential for OAuth/wallet recovery. The server stores only
-        // its SHA-256 hash. Normal SPA navigation is always credential-free.
-        // When neither storage lane is durable, use only the parser-first
-        // full-document fallback; never expose the credential to client history.
-        const persistence = persistAccountRecoveryToken(responseRecoveryToken)
-        if (persistence.status === 'memory' || persistence.status === 'unavailable') {
-          fullDocumentRecoveryToken = responseRecoveryToken
-        }
-      }
-      if (
-        data?.success !== true ||
-        data?.user_id !== scope.userId ||
-        !isAccountRecoveryToken(data?.recovery_token)
-      ) {
-        setDeleteError(t('operationFailed'))
-        return
+      // Persist only the credential generated and staged before dispatch. A
+      // response value is never allowed to replace the recovery authority.
+      const persistence = persistAccountRecoveryToken(stagedRecoveryToken)
+      if (persistence.status === 'memory' || persistence.status === 'unavailable') {
+        fullDocumentRecoveryToken = stagedRecoveryToken
       }
       showToast(t('accountMarkedDeleted'), 'success')
       setShowDeleteAccountModal(false)
