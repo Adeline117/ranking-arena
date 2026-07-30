@@ -5,7 +5,7 @@
  * Open interest indicates total outstanding positions and market activity.
  *
  * Data sources: Binance, Bybit, OKX, Bitget public APIs
- * Schedule: Every hour
+ * Schedule: Every 6 hours (vercel.json)
  * Priority: Medium
  */
 
@@ -19,6 +19,13 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
 
 const RATE_LIMIT_DELAY = 200 // 200ms between requests
+const UPSTREAM_TIMEOUT_MS = 12_000
+const DATABASE_TIMEOUT_MS = 12_000
+const JOB_BUDGET_MS = 240_000
+const MAX_DATA_AGE_MS = 3 * 24 * 60 * 60 * 1000
+const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000
+const MAX_PRICE_USD = 1_000_000_000
+const MAX_OPEN_INTEREST = 1_000_000_000_000_000
 
 interface ExchangeConfig {
   name: string
@@ -40,14 +47,21 @@ interface OpenInterestData {
   timestamp: string
 }
 
+interface OpenInterestFailure {
+  stage: 'upstream' | 'price' | 'validation' | 'database' | 'budget'
+  exchange: string
+  symbol: string
+  error: string
+}
+
 // ============================================
 // Symbol universe
 // ============================================
 
 // Mainstream coin universe (restored from the pre-2026-02-14 24-symbol set, which
 // was silently narrowed to 3-5 symbols). Kept to ~20 majors so that symbols×exchanges
-// (≈80 fetches, ~2 requests each for base-coin venues) stays well within maxDuration=300.
-// A symbol absent on a given venue just yields an HTTP 400 → logged warn → null (no crash).
+// remains bounded; per-request deadlines and the job budget protect maxDuration=300.
+// A symbol absent on a venue is acknowledged as a failed item while other symbols continue.
 const MAINSTREAM_COINS = [
   'BTC',
   'ETH',
@@ -180,75 +194,137 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function remainingTimeout(deadlineMs: number, maximumMs: number): number {
+  return Math.max(1, Math.min(maximumMs, deadlineMs - Date.now()))
+}
+
+function validationError(message: string): Error {
+  return Object.assign(new Error(message), { stage: 'validation' as const })
+}
+
+function priceError(message: string): Error {
+  return Object.assign(new Error(message), { stage: 'price' as const })
+}
+
+function validateOpenInterest(
+  oi: OpenInterestData | null,
+  exchange: ExchangeConfig,
+  symbol: string,
+  nowMs = Date.now()
+): OpenInterestData {
+  if (!oi) {
+    throw validationError('upstream payload contained no open interest')
+  }
+
+  const timestampMs = Date.parse(oi.timestamp)
+  const quantityValid =
+    oi.open_interest_qty === undefined ||
+    (Number.isFinite(oi.open_interest_qty) &&
+      oi.open_interest_qty >= 0 &&
+      oi.open_interest_qty <= MAX_OPEN_INTEREST)
+
+  if (
+    oi.platform !== exchange.name ||
+    typeof oi.symbol !== 'string' ||
+    oi.symbol.length === 0 ||
+    !Number.isFinite(oi.open_interest_usd) ||
+    oi.open_interest_usd < 0 ||
+    oi.open_interest_usd > MAX_OPEN_INTEREST ||
+    !quantityValid ||
+    !Number.isFinite(timestampMs) ||
+    timestampMs < nowMs - MAX_DATA_AGE_MS ||
+    timestampMs > nowMs + MAX_FUTURE_SKEW_MS
+  ) {
+    throw validationError(`invalid open interest payload for ${exchange.name}/${symbol}`)
+  }
+
+  if (exchange.priceUrl && oi.open_interest_qty === undefined) {
+    throw validationError(`missing open interest quantity for ${exchange.name}/${symbol}`)
+  }
+
+  return oi
+}
+
 async function fetchOpenInterest(
   exchange: ExchangeConfig,
-  symbol: string
-): Promise<OpenInterestData | null> {
-  try {
-    let url = exchange.url
+  symbol: string,
+  deadlineMs: number
+): Promise<OpenInterestData> {
+  let url = exchange.url
 
-    // Build query string based on exchange
-    switch (exchange.name) {
-      case 'binance':
-        url += `?symbol=${symbol}`
-        break
-      case 'bybit':
-        url += `?category=linear&symbol=${symbol}&intervalTime=1h`
-        break
-      case 'okx':
-        url += `?instId=${symbol}`
-        break
-      case 'bitget':
-        url += `?symbol=${symbol}&productType=usdt-futures`
-        break
-    }
-
-    const response = await fetch(url, {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'RankingArena/1.0',
-      },
-    })
-
-    if (!response.ok) {
-      // 403/451 are expected (WAF/geo-block) — don't send to Sentry
-      logger.warn(`[oi] ${exchange.name} ${symbol}: HTTP ${response.status}`)
-      return null
-    }
-
-    const data = await response.json()
-    const oi = exchange.responseMapper(data, symbol)
-
-    // Base-coin exchanges (binance/bybit/bitget) report OI as a quantity, not USD.
-    // Fetch the exchange's price and compute open_interest_usd = qty * price. If the
-    // price fetch fails we keep usd=0 but still record the qty (no row is lost).
-    if (
-      oi &&
-      exchange.priceUrl &&
-      exchange.priceParse &&
-      (!oi.open_interest_usd || oi.open_interest_usd === 0) &&
-      oi.open_interest_qty
-    ) {
-      try {
-        const pxRes = await fetch(exchange.priceUrl(symbol), {
-          headers: { Accept: 'application/json', 'User-Agent': 'RankingArena/1.0' },
-        })
-        if (pxRes.ok) {
-          const price = exchange.priceParse(await pxRes.json())
-          if (price && price > 0) oi.open_interest_usd = oi.open_interest_qty * price
-        }
-      } catch {
-        // price fetch failed — leave usd at 0; qty is still recorded
-      }
-    }
-
-    return oi
-  } catch (error) {
-    logger.warn(
-      `[oi] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`
-    )
-    return null
+  // Build query string based on exchange
+  switch (exchange.name) {
+    case 'binance':
+      url += `?symbol=${symbol}`
+      break
+    case 'bybit':
+      url += `?category=linear&symbol=${symbol}&intervalTime=1h`
+      break
+    case 'okx':
+      url += `?instId=${symbol}`
+      break
+    case 'bitget':
+      url += `?symbol=${symbol}&productType=usdt-futures`
+      break
   }
+
+  const response = await fetch(url, {
+    cache: 'no-store',
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'RankingArena/1.0',
+    },
+    signal: AbortSignal.timeout(remainingTimeout(deadlineMs, UPSTREAM_TIMEOUT_MS)),
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  let mapped: OpenInterestData | null
+  try {
+    mapped = exchange.responseMapper(await response.json(), symbol)
+  } catch (error) {
+    throw validationError(`malformed open interest payload: ${errorMessage(error)}`)
+  }
+  const oi = validateOpenInterest(mapped, exchange, symbol)
+
+  // Base-coin venues report quantity rather than USD. A missing/invalid price must
+  // not be persisted as a real $0 observation because that corrupts downstream data.
+  if (exchange.priceUrl && exchange.priceParse) {
+    try {
+      const priceResponse = await fetch(exchange.priceUrl(symbol), {
+        cache: 'no-store',
+        headers: { Accept: 'application/json', 'User-Agent': 'RankingArena/1.0' },
+        signal: AbortSignal.timeout(remainingTimeout(deadlineMs, UPSTREAM_TIMEOUT_MS)),
+      })
+      if (!priceResponse.ok) {
+        throw priceError(`price HTTP ${priceResponse.status}`)
+      }
+
+      const price = exchange.priceParse(await priceResponse.json())
+      if (price === null || !Number.isFinite(price) || price <= 0 || price > MAX_PRICE_USD) {
+        throw priceError(`invalid conversion price for ${exchange.name}/${symbol}`)
+      }
+
+      const usd = (oi.open_interest_qty as number) * price
+      if (!Number.isFinite(usd) || usd < 0 || usd > MAX_OPEN_INTEREST) {
+        throw priceError(`invalid converted open interest for ${exchange.name}/${symbol}`)
+      }
+      oi.open_interest_usd = usd
+    } catch (error) {
+      if (error && typeof error === 'object' && 'stage' in error && error.stage === 'price') {
+        throw error
+      }
+      throw priceError(errorMessage(error))
+    }
+  }
+
+  return oi
 }
 
 // ============================================
@@ -264,70 +340,137 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseAdmin()
 
   const startTime = Date.now()
+  const deadlineMs = startTime + JOB_BUDGET_MS
   let fetched = 0
   let inserted = 0
-  let errors = 0
+  let attempted = 0
+  let upstreamSucceeded = 0
+  const failures: OpenInterestFailure[] = []
 
   const plog = await PipelineLogger.start('fetch-open-interest')
 
   try {
-    for (const exchange of EXCHANGES) {
+    exchangeLoop: for (const exchange of EXCHANGES) {
       for (const symbol of exchange.symbols) {
-        try {
-          // Fetch open interest
-          const oi = await fetchOpenInterest(exchange, symbol)
+        if (Date.now() >= deadlineMs) {
+          failures.push({
+            stage: 'budget',
+            exchange: exchange.name,
+            symbol,
+            error: `job budget exhausted after ${JOB_BUDGET_MS}ms`,
+          })
+          break exchangeLoop
+        }
 
-          if (oi) {
-            // Insert into database
-            const { error } = await supabase.from('open_interest').upsert(
-              {
-                platform: oi.platform,
-                symbol: oi.symbol,
-                open_interest_usd: oi.open_interest_usd,
-                open_interest_contracts: oi.open_interest_qty ?? null,
-                timestamp: oi.timestamp,
-              },
-              { onConflict: 'platform,symbol,timestamp' }
-            )
+        attempted++
+        try {
+          const oi = await fetchOpenInterest(exchange, symbol, deadlineMs)
+          upstreamSucceeded++
+          fetched++
+
+          try {
+            const { error } = await supabase
+              .from('open_interest')
+              .upsert(
+                {
+                  platform: oi.platform,
+                  symbol: oi.symbol,
+                  open_interest_usd: oi.open_interest_usd,
+                  open_interest_contracts: oi.open_interest_qty ?? null,
+                  timestamp: oi.timestamp,
+                },
+                { onConflict: 'platform,symbol,timestamp' }
+              )
+              .abortSignal(AbortSignal.timeout(remainingTimeout(deadlineMs, DATABASE_TIMEOUT_MS)))
 
             if (error) {
-              // Log locally but don't send to Sentry — these are expected DB conflicts
+              failures.push({
+                stage: 'database',
+                exchange: exchange.name,
+                symbol,
+                error: error.message || String(error),
+              })
               logger.warn(
                 `[OI] DB error for ${oi.platform}/${oi.symbol}: ${error.message || JSON.stringify(error)}`
               )
-              errors++
             } else {
               inserted++
             }
-
-            fetched++
+          } catch (error) {
+            const message = errorMessage(error)
+            failures.push({
+              stage: 'database',
+              exchange: exchange.name,
+              symbol,
+              error: message,
+            })
+            logger.warn(`[OI] DB error for ${oi.platform}/${oi.symbol}: ${message}`)
           }
-
-          // Rate limiting
-          await sleep(RATE_LIMIT_DELAY)
         } catch (error) {
-          logger.error(
-            'Error processing open interest',
-            { exchange: exchange.name, symbol },
-            error instanceof Error ? error : new Error(String(error))
-          )
-          errors++
+          const stage =
+            error && typeof error === 'object' && 'stage' in error
+              ? (error.stage as OpenInterestFailure['stage'])
+              : 'upstream'
+          const message = errorMessage(error)
+          failures.push({ stage, exchange: exchange.name, symbol, error: message })
+          logger.warn(`[oi] ${exchange.name} ${symbol}: ${message}`)
+        } finally {
+          await sleep(RATE_LIMIT_DELAY)
         }
       }
     }
 
     const duration = Date.now() - startTime
-
-    await plog.success(inserted, { fetched, errors })
-
-    return NextResponse.json({
-      success: true,
+    const expected = EXCHANGES.reduce((total, exchange) => total + exchange.symbols.length, 0)
+    const acknowledgement = {
+      expected,
+      attempted,
+      upstream_succeeded: upstreamSucceeded,
       fetched,
       inserted,
-      errors,
-      exchanges: EXCHANGES.length,
-      duration: `${duration}ms`,
-    })
+      durable_writes: inserted,
+      unattempted: expected - attempted,
+      failures,
+    }
+    const noDurableWrites = inserted === 0
+    const partial =
+      !noDurableWrites &&
+      (attempted < expected ||
+        upstreamSucceeded < expected ||
+        inserted < fetched ||
+        failures.length > 0)
+    const status = noDurableWrites ? 'failed' : partial ? 'partial' : 'success'
+    const success = status === 'success'
+
+    if (success) {
+      await plog.success(inserted, { status, acknowledgement, duration })
+    } else if (partial) {
+      await plog.partialSuccess(
+        inserted,
+        failures.map((failure) => `${failure.exchange}/${failure.symbol}:${failure.stage}`),
+        { status, acknowledgement, duration }
+      )
+    } else {
+      await plog.error(new Error('open interest job produced no durable writes'), {
+        status,
+        acknowledgement,
+        duration,
+      })
+    }
+
+    return NextResponse.json(
+      {
+        success,
+        status,
+        fetched,
+        inserted,
+        errors: failures.length,
+        acknowledgement,
+        exchanges: EXCHANGES.length,
+        duration: `${duration}ms`,
+      },
+      { status: noDurableWrites ? 503 : partial ? 207 : 200 }
+    )
   } catch (error) {
     logger.apiError('/api/cron/fetch-open-interest', error, {})
     await plog.error(error)
@@ -337,7 +480,8 @@ export async function POST(request: NextRequest) {
         details: error instanceof Error ? error.message : 'Unknown error',
         fetched,
         inserted,
-        errors,
+        errors: failures.length,
+        failures,
       },
       { status: 500 }
     )
