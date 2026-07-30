@@ -12838,6 +12838,10 @@ export type Database = {
         }
         Returns: Json
       }
+      start_direct_message_conversation_atomic: {
+        Args: { p_receiver_id: string; p_sender_id: string }
+        Returns: Json
+      }
       service_actor_has_current_global_pro_entitlement: {
         Args: { p_actor_id: string }
         Returns: boolean
