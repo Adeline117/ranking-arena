@@ -39,6 +39,14 @@ const initialTrader: TokenTrader = {
 
 const originalFetch = global.fetch
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
 describe('TokenRankingClient failure state', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -168,5 +176,60 @@ describe('TokenRankingClient failure state', () => {
 
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
     expect(global.fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('lets a newer period abort and replace an in-flight period request', async () => {
+    const sevenDay = deferred<{
+      ok: boolean
+      status: number
+      json: () => Promise<unknown>
+    }>()
+    const thirtyDay = deferred<{
+      ok: boolean
+      status: number
+      json: () => Promise<unknown>
+    }>()
+    const requestSignals: AbortSignal[] = []
+    global.fetch = jest.fn((_input, init) => {
+      if (init?.signal) requestSignals.push(init.signal)
+      return requestSignals.length === 1 ? sevenDay.promise : thirtyDay.promise
+    }) as typeof fetch
+
+    render(
+      <TokenRankingClient
+        token="BTC"
+        initialPeriod="90D"
+        initialTraders={[initialTrader]}
+        initialTotal={1}
+        initialStatus="success"
+        asOf="2026-07-18T00:00:00.000Z"
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'days7' }))
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+
+    const thirtyDayButton = screen.getByRole('button', { name: 'days30' })
+    expect(thirtyDayButton).toBeEnabled()
+    fireEvent.click(thirtyDayButton)
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2))
+    expect(requestSignals[0]?.aborted).toBe(true)
+    expect(requestSignals[1]?.aborted).toBe(false)
+
+    thirtyDay.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ token: 'BTC', period: '30D', traders: [], total: 0 }),
+    })
+    await waitFor(() => expect(thirtyDayButton).toHaveAttribute('aria-pressed', 'true'))
+    await waitFor(() => expect(screen.getAllByText('tokenRankingNoData').length).toBeGreaterThan(0))
+
+    sevenDay.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ token: 'BTC', period: '7D', traders: [initialTrader], total: 1 }),
+    })
+    await waitFor(() => expect(screen.queryByText('Alice')).not.toBeInTheDocument())
   })
 })

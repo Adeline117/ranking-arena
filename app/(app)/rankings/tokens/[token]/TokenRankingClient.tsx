@@ -161,6 +161,7 @@ function PeriodSelector({
   }
   return (
     <div
+      aria-busy={loading}
       style={{
         display: 'inline-flex',
         gap: 0,
@@ -173,19 +174,20 @@ function PeriodSelector({
       {periods.map((p) => (
         <button
           key={p}
+          type="button"
+          aria-pressed={period === p}
           onClick={() => onChange(p)}
-          disabled={loading}
           style={{
-            padding: '6px 14px',
-            minHeight: 36,
+            padding: '8px 14px',
+            minWidth: 56,
+            minHeight: 40,
             borderRadius: tokens.radius.md,
             border: 'none',
             fontSize: 13,
             fontWeight: period === p ? 700 : 500,
             background: period === p ? alpha(tokens.colors.accent.brand, 13) : 'transparent',
             color: period === p ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
-            cursor: loading ? 'wait' : 'pointer',
-            opacity: loading ? 0.6 : 1,
+            cursor: 'pointer',
             transition: 'all 0.15s',
           }}
         >
