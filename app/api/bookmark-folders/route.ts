@@ -15,6 +15,7 @@ import {
 } from '@/lib/api/response'
 import { ErrorCode } from '@/lib/api/errors'
 import { validateString, validateBoolean } from '@/lib/api/validation'
+import { createUserScopedServerClient } from '@/lib/supabase/user-scoped-server'
 import {
   hasControlCharacters,
   isBookmarkFolderAuthorityUnavailable,
@@ -77,7 +78,7 @@ export const GET = withAuth(
 )
 
 export const POST = withAuth(
-  async ({ user, supabase, request }) => {
+  async ({ user, request }) => {
     try {
       let body: Record<string, unknown>
       try {
@@ -107,7 +108,8 @@ export const POST = withAuth(
         return badRequest('Folder fields cannot contain control characters')
       }
 
-      const { data, error } = await supabase.rpc('mutate_bookmark_folder_atomic', {
+      const userSupabase = createUserScopedServerClient(request)
+      const { data, error } = await userSupabase.rpc('mutate_bookmark_folder_atomic', {
         p_action: 'create',
         p_folder_id: null,
         p_name: name,

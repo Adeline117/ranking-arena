@@ -63,6 +63,8 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 const mockRequireAuth = jest.fn()
 const mockGetAuthUser = jest.fn()
 const mockSupabaseRpc = jest.fn()
+const mockUserScopedRpc = jest.fn()
+const mockCreateUserScopedServerClient = jest.fn()
 const mockSupabaseFrom = jest.fn()
 let mockSupabaseRpcResult: { data: unknown; error: unknown } = { data: null, error: null }
 let mockSupabaseSelectResult: { data: unknown; error: unknown } = { data: [], error: null }
@@ -77,6 +79,10 @@ jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   getUserHandle: jest.fn(),
   getUserProfile: jest.fn(),
+}))
+
+jest.mock('@/lib/supabase/user-scoped-server', () => ({
+  createUserScopedServerClient: (...args: unknown[]) => mockCreateUserScopedServerClient(...args),
 }))
 
 mockSupabaseRpc.mockImplementation(() => Promise.resolve(mockSupabaseRpcResult))
@@ -151,6 +157,8 @@ describe('/api/bookmark-folders', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockSupabaseRpc.mockImplementation(() => Promise.resolve(mockSupabaseRpcResult))
+    mockUserScopedRpc.mockImplementation(() => Promise.resolve(mockSupabaseRpcResult))
+    mockCreateUserScopedServerClient.mockReturnValue({ rpc: mockUserScopedRpc })
     mockSupabaseFrom.mockImplementation((table: string) => {
       const chain: Record<string, jest.Mock> = {}
       chain.select = jest.fn(() => chain)
@@ -310,7 +318,8 @@ describe('/api/bookmark-folders', () => {
       expect(res.status).toBe(201)
       expect(body.success).toBe(true)
       expect(body.data.folder.name).toBe('My Folder')
-      expect(mockSupabaseRpc).toHaveBeenCalledWith('mutate_bookmark_folder_atomic', {
+      expect(mockCreateUserScopedServerClient).toHaveBeenCalledWith(req)
+      expect(mockUserScopedRpc).toHaveBeenCalledWith('mutate_bookmark_folder_atomic', {
         p_action: 'create',
         p_folder_id: null,
         p_name: 'My Folder',
@@ -322,6 +331,7 @@ describe('/api/bookmark-folders', () => {
         p_set_avatar_url: true,
         p_set_is_public: true,
       })
+      expect(mockSupabaseRpc).not.toHaveBeenCalled()
       expect(mockSupabaseFrom).not.toHaveBeenCalled()
     })
 
@@ -386,7 +396,7 @@ describe('/api/bookmark-folders', () => {
       const res = await POST(req)
 
       expect(res.status).toBe(400)
-      expect(mockSupabaseRpc).not.toHaveBeenCalled()
+      expect(mockUserScopedRpc).not.toHaveBeenCalled()
     })
 
     it('rejects control characters before invoking the authority', async () => {
@@ -397,6 +407,22 @@ describe('/api/bookmark-folders', () => {
       const res = await POST(req)
 
       expect(res.status).toBe(400)
+      expect(mockUserScopedRpc).not.toHaveBeenCalled()
+    })
+
+    it('fails closed if a post-auth handler has no verified bearer to forward', async () => {
+      mockCreateUserScopedServerClient.mockImplementationOnce(() => {
+        throw new Error('A verified bearer token is required for an RLS-scoped query')
+      })
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders', {
+        method: 'POST',
+        body: { name: 'My Folder' },
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(500)
+      expect(mockUserScopedRpc).not.toHaveBeenCalled()
       expect(mockSupabaseRpc).not.toHaveBeenCalled()
     })
   })

@@ -12,6 +12,7 @@ import { badRequest, forbidden, serverError, error as errorResponse } from '@/li
 import { ErrorCode } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { createUserScopedServerClient } from '@/lib/supabase/user-scoped-server'
 import { readSealedRankIdentities } from '@/lib/rankings/read-sealed-rank-identities'
 
 const log = createLogger('api:watchlist')
@@ -363,7 +364,7 @@ export const GET = withAuth(
 )
 
 export const POST = withAuth(
-  async ({ user, supabase, request }) => {
+  async ({ user, request }) => {
     let body: unknown
     try {
       body = await request.json()
@@ -373,7 +374,8 @@ export const POST = withAuth(
     const input = parseMutationInput(body, 'add')
     if (!input) return badRequest('Invalid watchlist identity')
 
-    const { data, error } = await supabase.rpc('mutate_trader_watchlist_atomic', {
+    const userSupabase = createUserScopedServerClient(request)
+    const { data, error } = await userSupabase.rpc('mutate_trader_watchlist_atomic', {
       p_source: input.source,
       p_source_trader_id: input.sourceTraderId,
       p_handle: input.handle,
@@ -390,7 +392,7 @@ export const POST = withAuth(
 )
 
 export const DELETE = withAuth(
-  async ({ user, supabase, request }) => {
+  async ({ user, request }) => {
     let body: unknown
     try {
       body = await request.json()
@@ -400,7 +402,8 @@ export const DELETE = withAuth(
     const input = parseMutationInput(body, 'remove')
     if (!input) return badRequest('Invalid watchlist identity')
 
-    const { data, error } = await supabase.rpc('mutate_trader_watchlist_atomic', {
+    const userSupabase = createUserScopedServerClient(request)
+    const { data, error } = await userSupabase.rpc('mutate_trader_watchlist_atomic', {
       p_source: input.source,
       p_source_trader_id: input.sourceTraderId,
       p_handle: null,

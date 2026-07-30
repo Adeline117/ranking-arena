@@ -9,9 +9,11 @@ const FOLDER_ID = '33333333-3333-4333-8333-333333333333'
 
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
+const mockAdminRpc = jest.fn()
+const mockCreateUserScopedServerClient = jest.fn()
 const mockSupabase = {
   from: (...args: unknown[]) => mockFrom(...args),
-  rpc: (...args: unknown[]) => mockRpc(...args),
+  rpc: (...args: unknown[]) => mockAdminRpc(...args),
 }
 
 jest.mock('@/lib/api/middleware', () => ({
@@ -23,6 +25,10 @@ jest.mock('@/lib/api/middleware', () => ({
     (handler: Function) =>
     (request: Request): Promise<Response> =>
       handler({ user: { id: USER_ID }, supabase: mockSupabase, request }),
+}))
+
+jest.mock('@/lib/supabase/user-scoped-server', () => ({
+  createUserScopedServerClient: (...args: unknown[]) => mockCreateUserScopedServerClient(...args),
 }))
 
 class MockTestResponse {
@@ -100,6 +106,7 @@ function folder(overrides: Record<string, unknown> = {}) {
 describe('/api/bookmark-folders/[id] consistency', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockCreateUserScopedServerClient.mockReturnValue({ rpc: mockRpc })
     mockRpc.mockResolvedValue({ data: null, error: null })
   })
 
@@ -238,11 +245,13 @@ describe('/api/bookmark-folders/[id] consistency', () => {
       error: null,
     })
 
-    const response = await PATCH(request('PATCH', { description: 'Updated description' }), context)
+    const mutationRequest = request('PATCH', { description: 'Updated description' })
+    const response = await PATCH(mutationRequest, context)
     const body = await response.json()
 
     expect(response.status).toBe(200)
     expect(body.data.folder.description).toBe('Updated description')
+    expect(mockCreateUserScopedServerClient).toHaveBeenCalledWith(mutationRequest)
     expect(mockRpc).toHaveBeenCalledWith('mutate_bookmark_folder_atomic', {
       p_action: 'update',
       p_folder_id: FOLDER_ID,
@@ -255,6 +264,7 @@ describe('/api/bookmark-folders/[id] consistency', () => {
       p_set_avatar_url: false,
       p_set_is_public: false,
     })
+    expect(mockAdminRpc).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
@@ -357,6 +367,24 @@ describe('/api/bookmark-folders/[id] consistency', () => {
     expect(body.error.code).toBe('SERVICE_UNAVAILABLE')
   })
 
+  it.each([
+    ['PATCH', PATCH],
+    ['DELETE', DELETE],
+  ] as const)(
+    'fails closed if %s reaches the post-auth handler without a verified bearer',
+    async (method, handler) => {
+      mockCreateUserScopedServerClient.mockImplementationOnce(() => {
+        throw new Error('A verified bearer token is required for an RLS-scoped query')
+      })
+
+      const response = await handler(request(method), context)
+
+      expect(response.status).toBe(500)
+      expect(mockRpc).not.toHaveBeenCalled()
+      expect(mockAdminRpc).not.toHaveBeenCalled()
+    }
+  )
+
   it('fails closed when an update acknowledgement names another actor or folder', async () => {
     mockRpc.mockResolvedValueOnce({
       data: {
@@ -411,6 +439,7 @@ describe('/api/bookmark-folders/[id] consistency', () => {
       p_set_avatar_url: false,
       p_set_is_public: false,
     })
+    expect(mockAdminRpc).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
   })
 

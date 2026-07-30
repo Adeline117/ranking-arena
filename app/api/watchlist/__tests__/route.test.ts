@@ -3,6 +3,8 @@ import { resolve } from 'node:path'
 
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
+const mockAdminRpc = jest.fn()
+const mockCreateUserScopedServerClient = jest.fn()
 const mockGetSupabaseAdmin = jest.fn()
 const mockReadSealedRankIdentities = jest.fn()
 
@@ -35,9 +37,13 @@ jest.mock('@/lib/api/middleware', () => ({
     (handler: (context: Record<string, unknown>) => Promise<unknown>) => (request: unknown) =>
       handler({
         user: { id: 'user-1' },
-        supabase: { from: mockFrom, rpc: mockRpc },
+        supabase: { from: mockFrom, rpc: mockAdminRpc },
         request,
       }),
+}))
+
+jest.mock('@/lib/supabase/user-scoped-server', () => ({
+  createUserScopedServerClient: (...args: unknown[]) => mockCreateUserScopedServerClient(...args),
 }))
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -68,6 +74,7 @@ describe('GET /api/watchlist availability', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockRpc.mockReset()
+    mockCreateUserScopedServerClient.mockReturnValue({ rpc: mockRpc })
     mockGetSupabaseAdmin.mockReturnValue({ from: jest.fn(), rpc: jest.fn() })
     mockReadSealedRankIdentities.mockResolvedValue(null)
   })
@@ -238,6 +245,7 @@ function mutationAck(
 describe('watchlist atomic mutations', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockCreateUserScopedServerClient.mockReturnValue({ rpc: mockRpc })
     mockFrom.mockImplementation((table: string) => {
       throw new Error(`Unexpected direct table access: ${table}`)
     })
@@ -245,17 +253,22 @@ describe('watchlist atomic mutations', () => {
   })
 
   it('adds through the atomic authority and consumes its same-transaction list', async () => {
-    const response = await POST(
-      request({ source: SOURCE, source_trader_id: TRADER_ID, handle: 'Leader' })
-    )
+    const mutationRequest = request({
+      source: SOURCE,
+      source_trader_id: TRADER_ID,
+      handle: 'Leader',
+    })
+    const response = await POST(mutationRequest)
 
     expect(response.status).toBe(200)
+    expect(mockCreateUserScopedServerClient).toHaveBeenCalledWith(mutationRequest)
     expect(mockRpc).toHaveBeenCalledWith('mutate_trader_watchlist_atomic', {
       p_source: SOURCE,
       p_source_trader_id: TRADER_ID,
       p_handle: 'Leader',
       p_action: 'add',
     })
+    expect(mockAdminRpc).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toEqual({ watchlist: [item(TRADER_ID)] })
   })

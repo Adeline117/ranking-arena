@@ -18,6 +18,7 @@ import {
 } from '@/lib/api/response'
 import { ErrorCode } from '@/lib/api/errors'
 import { validateString, validateBoolean, validateNumber } from '@/lib/api/validation'
+import { createUserScopedServerClient } from '@/lib/supabase/user-scoped-server'
 import {
   hasControlCharacters,
   isBookmarkFolderAuthorityUnavailable,
@@ -193,7 +194,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const folderId = normalizeBookmarkFolderId(id)
 
   const handler = withAuth(
-    async ({ user, supabase, request: req }) => {
+    async ({ user, request: req }) => {
       try {
         if (!folderId) return badRequest('Invalid folder id')
 
@@ -242,7 +243,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           return badRequest('Folder fields cannot contain control characters')
         }
 
-        const { data, error } = await supabase.rpc('mutate_bookmark_folder_atomic', {
+        const userSupabase = createUserScopedServerClient(req)
+        const { data, error } = await userSupabase.rpc('mutate_bookmark_folder_atomic', {
           p_action: 'update',
           p_folder_id: folderId,
           p_name: name,
@@ -302,11 +304,12 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   const folderId = normalizeBookmarkFolderId(id)
 
   const handler = withAuth(
-    async ({ user, supabase }) => {
+    async ({ user, request: req }) => {
       try {
         if (!folderId) return badRequest('Invalid folder id')
 
-        const { data, error } = await supabase.rpc('mutate_bookmark_folder_atomic', {
+        const userSupabase = createUserScopedServerClient(req)
+        const { data, error } = await userSupabase.rpc('mutate_bookmark_folder_atomic', {
           p_action: 'delete',
           p_folder_id: folderId,
           p_name: null,

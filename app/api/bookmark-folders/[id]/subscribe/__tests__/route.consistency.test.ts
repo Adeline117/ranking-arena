@@ -5,9 +5,11 @@ const FOLDER_ID = '33333333-3333-4333-8333-333333333333'
 
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
+const mockAdminRpc = jest.fn()
+const mockCreateUserScopedServerClient = jest.fn()
 const mockSupabase = {
   from: (...args: unknown[]) => mockFrom(...args),
-  rpc: (...args: unknown[]) => mockRpc(...args),
+  rpc: (...args: unknown[]) => mockAdminRpc(...args),
 }
 
 jest.mock('@/lib/api/middleware', () => ({
@@ -19,6 +21,10 @@ jest.mock('@/lib/api/middleware', () => ({
     (handler: Function) =>
     (request: Request): Promise<Response> =>
       handler({ user: { id: USER_ID }, supabase: mockSupabase, request }),
+}))
+
+jest.mock('@/lib/supabase/user-scoped-server', () => ({
+  createUserScopedServerClient: (...args: unknown[]) => mockCreateUserScopedServerClient(...args),
 }))
 
 class MockTestResponse {
@@ -84,6 +90,7 @@ function ack(
 describe('/api/bookmark-folders/[id]/subscribe consistency', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockCreateUserScopedServerClient.mockReturnValue({ rpc: mockRpc })
   })
 
   it('does not report a failed subscription read as false', async () => {
@@ -190,7 +197,8 @@ describe('/api/bookmark-folders/[id]/subscribe consistency', () => {
   it('returns the exact atomic add count', async () => {
     mockRpc.mockResolvedValueOnce({ data: ack('added', 7), error: null })
 
-    const response = await POST(request('POST'), context())
+    const mutationRequest = request('POST')
+    const response = await POST(mutationRequest, context())
     const body = await response.json()
 
     expect(response.status).toBe(201)
@@ -199,9 +207,27 @@ describe('/api/bookmark-folders/[id]/subscribe consistency', () => {
       is_subscribed: true,
       subscriber_count: 7,
     })
+    expect(mockCreateUserScopedServerClient).toHaveBeenCalledWith(mutationRequest)
     expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockAdminRpc).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
   })
+
+  it.each(['POST', 'DELETE'] as const)(
+    'fails closed if %s reaches the handler without a verified bearer',
+    async (method) => {
+      mockCreateUserScopedServerClient.mockImplementationOnce(() => {
+        throw new Error('A verified bearer token is required for an RLS-scoped query')
+      })
+      const handler = method === 'POST' ? POST : DELETE
+
+      const response = await handler(request(method), context())
+
+      expect(response.status).toBe(500)
+      expect(mockRpc).not.toHaveBeenCalled()
+      expect(mockAdminRpc).not.toHaveBeenCalled()
+    }
+  )
 
   it.each([
     ['account_inactive', 403],

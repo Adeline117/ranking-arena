@@ -9,6 +9,7 @@ import { NextRequest } from 'next/server'
 import { withAuth, withPublic } from '@/lib/api/middleware'
 import { success, badRequest, error as errorResponse, handleError } from '@/lib/api/response'
 import { ErrorCode } from '@/lib/api/errors'
+import { createUserScopedServerClient } from '@/lib/supabase/user-scoped-server'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -194,16 +195,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const folderId = normalizeFolderId(id)
 
   const handler = withAuth(
-    async ({ user, supabase }) => {
+    async ({ user, request: req }) => {
       try {
         if (!folderId) {
           return badRequest('Invalid folder id')
         }
 
-        const { data, error } = await supabase.rpc('mutate_bookmark_folder_subscription_atomic', {
-          p_folder_id: folderId,
-          p_action: 'add',
-        })
+        const userSupabase = createUserScopedServerClient(req)
+        const { data, error } = await userSupabase.rpc(
+          'mutate_bookmark_folder_subscription_atomic',
+          {
+            p_folder_id: folderId,
+            p_action: 'add',
+          }
+        )
         if (error) {
           if (isSubscriptionAuthorityUnavailable(error)) return subscriptionUnavailable()
           throw error
@@ -257,16 +262,20 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   const folderId = normalizeFolderId(id)
 
   const handler = withAuth(
-    async ({ user, supabase }) => {
+    async ({ user, request: req }) => {
       try {
         if (!folderId) {
           return badRequest('Invalid folder id')
         }
 
-        const { data, error } = await supabase.rpc('mutate_bookmark_folder_subscription_atomic', {
-          p_folder_id: folderId,
-          p_action: 'remove',
-        })
+        const userSupabase = createUserScopedServerClient(req)
+        const { data, error } = await userSupabase.rpc(
+          'mutate_bookmark_folder_subscription_atomic',
+          {
+            p_folder_id: folderId,
+            p_action: 'remove',
+          }
+        )
         if (error) {
           if (isSubscriptionAuthorityUnavailable(error)) return subscriptionUnavailable()
           throw error
