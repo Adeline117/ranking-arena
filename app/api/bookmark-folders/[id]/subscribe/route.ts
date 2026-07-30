@@ -11,6 +11,14 @@ import { success, handleError } from '@/lib/api/response'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
+function isNoRows(error: { code?: string } | null): boolean {
+  return error?.code === 'PGRST116'
+}
+
+function validSubscriberCount(count: number | null): count is number {
+  return Number.isSafeInteger(count) && Number(count) >= 0
+}
+
 // 检查订阅状态（支持已登录和未登录用户）
 export async function GET(request: NextRequest, context: RouteContext) {
   const { id: folderId } = await context.params
@@ -30,13 +38,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           .eq('folder_id', folderId)
           .single()
 
-        if (error && error.code !== 'PGRST116') {
-          // PGRST116 = 没有找到记录，这是正常的
-          // 如果表不存在，返回未订阅
-          const ignoredCodes = ['42P01', 'PGRST204']
-          if (ignoredCodes.includes(error.code || '')) {
-            return success({ is_subscribed: false })
-          }
+        if (error && !isNoRows(error)) {
           throw error
         }
 
@@ -65,7 +67,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
           .eq('id', folderId)
           .single()
 
-        if (folderError || !folder) {
+        if (folderError && !isNoRows(folderError)) {
+          throw folderError
+        }
+        if (!folder) {
           return success({ error: 'Folder not found' }, 404)
         }
 
@@ -80,48 +85,52 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
 
         // 检查是否已订阅
-        const { data: existing } = await supabase
+        const { data: existing, error: existingError } = await supabase
           .from('folder_subscriptions')
           .select('id')
           .eq('user_id', user.id)
           .eq('folder_id', folderId)
           .single()
+        if (existingError && !isNoRows(existingError)) {
+          throw existingError
+        }
 
         if (existing) {
           return success({ error: 'Already subscribed to this folder' }, 409)
         }
 
         // 创建订阅
-        const { error: insertError } = await supabase
-          .from('folder_subscriptions')
-          .insert({
-            user_id: user.id,
-            folder_id: folderId,
-          })
+        const { error: insertError } = await supabase.from('folder_subscriptions').insert({
+          user_id: user.id,
+          folder_id: folderId,
+        })
 
         if (insertError) {
+          if (insertError.code === '23505') {
+            return success({ error: 'Already subscribed to this folder' }, 409)
+          }
           throw insertError
         }
 
         // 获取更新后的订阅者数量（如果列存在）
         // KEEP 'exact' — returned to the client as the updated subscriber
         // count right after subscribe; must reflect the new row.
-        let subscriberCount = 0
-        try {
-          const { count } = await supabase
-            .from('folder_subscriptions')
-            .select('id', { count: 'exact', head: true })
-            .eq('folder_id', folderId)
-          subscriberCount = count || 0
-        } catch {
-          // subscriber_count 列可能不存在，忽略错误
+        const { count: subscriberCount, error: countError } = await supabase
+          .from('folder_subscriptions')
+          .select('id', { count: 'exact', head: true })
+          .eq('folder_id', folderId)
+        if (countError || !validSubscriberCount(subscriberCount)) {
+          throw countError ?? new Error('Invalid folder subscriber count')
         }
 
-        return success({
-          message: 'Subscribed successfully',
-          is_subscribed: true,
-          subscriber_count: subscriberCount,
-        }, 201)
+        return success(
+          {
+            message: 'Subscribed successfully',
+            is_subscribed: true,
+            subscriber_count: Number(subscriberCount),
+          },
+          201
+        )
       } catch (error: unknown) {
         return handleError(error, 'bookmark-folders/[id]/subscribe POST')
       }
@@ -147,7 +156,10 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
           .eq('folder_id', folderId)
           .single()
 
-        if (findError || !subscription) {
+        if (findError && !isNoRows(findError)) {
+          throw findError
+        }
+        if (!subscription) {
           return success({ error: 'Not subscribed to this folder' }, 404)
         }
 
@@ -164,21 +176,18 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
         // 获取更新后的订阅者数量
         // KEEP 'exact' — same rationale as the POST handler above.
-        let subscriberCount = 0
-        try {
-          const { count } = await supabase
-            .from('folder_subscriptions')
-            .select('id', { count: 'exact', head: true })
-            .eq('folder_id', folderId)
-          subscriberCount = count || 0
-        } catch {
-          // Intentionally swallowed: subscriber count query failed, return 0 as default
+        const { count: subscriberCount, error: countError } = await supabase
+          .from('folder_subscriptions')
+          .select('id', { count: 'exact', head: true })
+          .eq('folder_id', folderId)
+        if (countError || !validSubscriberCount(subscriberCount)) {
+          throw countError ?? new Error('Invalid folder subscriber count')
         }
 
         return success({
           message: 'Unsubscribed successfully',
           is_subscribed: false,
-          subscriber_count: subscriberCount,
+          subscriber_count: Number(subscriberCount),
         })
       } catch (error: unknown) {
         return handleError(error, 'bookmark-folders/[id]/subscribe DELETE')
