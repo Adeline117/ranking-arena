@@ -12965,6 +12965,19 @@ export type Database = {
           weighted_score: number
         }[]
       }
+      search_direct_message_conversation_atomic: {
+        Args: {
+          p_actor_id: string
+          p_before_created_at: string | null
+          p_before_id: string | null
+          p_conversation_id: string
+          p_from_created_at: string | null
+          p_limit: number
+          p_query: string
+          p_to_created_at: string | null
+        }
+        Returns: Json
+      }
       search_traders_fuzzy: {
         Args: {
           platform_filter?: string
