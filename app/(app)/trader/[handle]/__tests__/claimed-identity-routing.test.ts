@@ -34,7 +34,8 @@ describe('claimed trader routing contract', () => {
     expect(client).toContain('retry: false')
     expect(client).toContain('exactClaim: freshExactClaim')
     expect(overview).toContain('verifiedTraderProfile: VerifiedTraderProfileData | null')
-    expect(overview).toContain('currentData={verifiedTraderProfile ?? {}}')
+    expect(overview).toContain('isVerifiedClaimOwner && verifiedTraderProfile')
+    expect(overview).toContain('currentData={verifiedTraderProfile}')
     expect(overview).not.toContain('currentData={{}}')
 
     for (const exactProfileRead of [claimStatusRoute, traderDetailRoute]) {
@@ -44,6 +45,7 @@ describe('claimed trader routing contract', () => {
       expect(exactProfileRead).toContain('source,')
       expect(exactProfileRead).toContain('display_name: verified.display_name')
       expect(exactProfileRead).toContain('bio: verified.bio')
+      expect(exactProfileRead).toContain('profile_version: verified.profile_version')
     }
     expect(claimStatusRoute).toContain("response.headers.set('Cache-Control', 'private, no-store")
   })
@@ -82,7 +84,7 @@ describe('claimed trader routing contract', () => {
     expect(client).toContain('isOwnProfile={isProfilePageOwner}')
     expect(client).toContain('isVerifiedClaimOwner={isVerifiedClaimOwner}')
     expect(overview).toContain('isVerifiedClaimOwner: boolean')
-    expect(overview).toContain('{isVerifiedClaimOwner ? (')
+    expect(overview).toContain('{isVerifiedClaimOwner && verifiedTraderProfile ? (')
     expect(overview).not.toContain('{isOwner ? (')
     for (const profileWriteRoute of [claimProfileRoute, verifiedProfileRoute]) {
       expect(profileWriteRoute).not.toContain('getUserVerifiedTrader(supabase, user.id)')

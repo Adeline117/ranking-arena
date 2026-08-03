@@ -4753,6 +4753,9 @@ const ja = {
   verifiedTraderSaving: '保存中...',
   verifiedTraderSaved: 'プロフィールが更新されました！',
   verifiedTraderSaveFailed: 'プロフィールの保存に失敗しました。',
+  verifiedTraderSaveConflict:
+    'このプロフィールは別の場所で更新されました。下書きは保持されています。再読み込みして確認してから保存してください。',
+  verifiedTraderReloadRequired: '変更を保存する前にプロフィールを再読み込みしてください。',
   verifiedTraderDisplayName: '表示名',
   verifiedTraderBio: '自己紹介',
   verifiedTraderTwitter: 'Twitter/X',

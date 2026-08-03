@@ -35,7 +35,7 @@ jest.mock('@/app/components/base', () => {
   }
 })
 
-import VerifiedTraderEditor from '../VerifiedTraderEditor'
+import VerifiedTraderEditor, { type VerifiedTraderProfileData } from '../VerifiedTraderEditor'
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -47,7 +47,47 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-const successfulResponse = { ok: true, json: async () => ({ success: true }) } as Response
+function profile(
+  values: Omit<VerifiedTraderProfileData, 'profile_version'>,
+  profileVersion = 0
+): VerifiedTraderProfileData {
+  return { profile_version: profileVersion, ...values }
+}
+
+function successfulResponse(
+  verifiedTrader: VerifiedTraderProfileData & { trader_id: string; source: string }
+): Response {
+  const completeProfile = {
+    display_name: null,
+    bio: null,
+    twitter_url: null,
+    telegram_url: null,
+    discord_url: null,
+    website_url: null,
+    ...verifiedTrader,
+  }
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ success: true, data: { verified_trader: completeProfile } }),
+  } as Response
+}
+
+function responseForRequest(_input: unknown, init?: RequestInit): Response {
+  const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+  const profileVersion = body.profile_version as number
+  return successfulResponse({
+    profile_version: profileVersion + 1,
+    trader_id: body.trader_id as string,
+    source: body.source as string,
+    display_name: (body.display_name as string | null | undefined) ?? null,
+    bio: (body.bio as string | null | undefined) ?? null,
+    twitter_url: (body.twitter_url as string | null | undefined) ?? null,
+    telegram_url: (body.telegram_url as string | null | undefined) ?? null,
+    discord_url: (body.discord_url as string | null | undefined) ?? null,
+    website_url: (body.website_url as string | null | undefined) ?? null,
+  })
+}
 
 describe('VerifiedTraderEditor identity contract', () => {
   beforeEach(() => {
@@ -55,7 +95,7 @@ describe('VerifiedTraderEditor identity contract', () => {
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'access-token' } },
     })
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
+    global.fetch = jest.fn().mockImplementation(responseForRequest)
   })
 
   it('sends only the changed field with the exact trader identity', async () => {
@@ -63,14 +103,14 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{
+        currentData={profile({
           display_name: 'Before',
           bio: 'Existing bio',
           twitter_url: 'https://x.com/existing',
           telegram_url: 'https://t.me/existing',
           discord_url: 'existing-user',
           website_url: 'https://example.com',
-        }}
+        })}
         onSaved={mockOnSaved}
       />
     )
@@ -86,6 +126,7 @@ describe('VerifiedTraderEditor identity contract', () => {
     expect(JSON.parse(String(init.body))).toEqual({
       trader_id: 'account-42',
       source: 'binance_futures',
+      profile_version: 0,
       display_name: 'After',
     })
     expect(mockOnSaved).toHaveBeenCalledTimes(1)
@@ -96,7 +137,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Existing name', bio: 'Existing bio' }}
+        currentData={profile({ display_name: 'Existing name', bio: 'Existing bio' })}
       />
     )
 
@@ -109,6 +150,7 @@ describe('VerifiedTraderEditor identity contract', () => {
     expect(JSON.parse(String(init.body))).toEqual({
       trader_id: 'account-42',
       source: 'binance_futures',
+      profile_version: 0,
       bio: null,
     })
   })
@@ -118,7 +160,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Existing name', bio: 'Existing bio' }}
+        currentData={profile({ display_name: 'Existing name', bio: 'Existing bio' })}
       />
     )
 
@@ -135,7 +177,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Before', bio: 'Before bio' }}
+        currentData={profile({ display_name: 'Before', bio: 'Before bio' })}
       />
     )
 
@@ -148,7 +190,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Fresh server value', bio: 'Fresh server bio' }}
+        currentData={profile({ display_name: 'Fresh server value', bio: 'Fresh server bio' }, 1)}
       />
     )
     expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('Unsaved draft')
@@ -163,14 +205,18 @@ describe('VerifiedTraderEditor identity contract', () => {
 
   it('adopts exact profile data that arrives before editing starts', () => {
     const view = render(
-      <VerifiedTraderEditor traderId="account-42" source="binance_futures" currentData={{}} />
+      <VerifiedTraderEditor
+        traderId="account-42"
+        source="binance_futures"
+        currentData={profile({})}
+      />
     )
 
     view.rerender(
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Loaded name', bio: 'Loaded bio' }}
+        currentData={profile({ display_name: 'Loaded name', bio: 'Loaded bio' }, 2)}
       />
     )
     fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
@@ -184,7 +230,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Account 42', bio: 'First account' }}
+        currentData={profile({ display_name: 'Account 42', bio: 'First account' })}
       />
     )
 
@@ -197,7 +243,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-99"
         source="bybit"
-        currentData={{ display_name: 'Account 99', bio: 'Second account' }}
+        currentData={profile({ display_name: 'Account 99', bio: 'Second account' }, 4)}
       />
     )
 
@@ -215,7 +261,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Before', bio: 'Old server bio' }}
+        currentData={profile({ display_name: 'Before', bio: 'Old server bio' })}
       />
     )
 
@@ -230,12 +276,22 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Before', bio: 'Fresh server bio' }}
+        currentData={profile({ display_name: 'Before', bio: 'Fresh server bio' })}
       />
     )
     expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('Saved name')
 
-    await act(async () => pendingSave.resolve(successfulResponse))
+    await act(async () =>
+      pendingSave.resolve(
+        successfulResponse({
+          trader_id: 'account-42',
+          source: 'binance_futures',
+          profile_version: 1,
+          display_name: 'Saved name',
+          bio: 'Fresh server bio',
+        })
+      )
+    )
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'verifiedTraderEditProfile' })).toBeInTheDocument()
     )
@@ -257,7 +313,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Account 42' }}
+        currentData={profile({ display_name: 'Account 42' })}
         onSaved={mockOnSaved}
       />
     )
@@ -273,7 +329,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-99"
         source="bybit"
-        currentData={{ display_name: 'Account 99' }}
+        currentData={profile({ display_name: 'Account 99' })}
         onSaved={mockOnSaved}
       />
     )
@@ -284,14 +340,32 @@ describe('VerifiedTraderEditor identity contract', () => {
     fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2))
 
-    await act(async () => oldSave.resolve(successfulResponse))
+    await act(async () =>
+      oldSave.resolve(
+        successfulResponse({
+          trader_id: 'account-42',
+          source: 'binance_futures',
+          profile_version: 1,
+          display_name: 'Old save',
+        })
+      )
+    )
 
     expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('New save')
     expect(screen.getByRole('button', { name: /verifiedTraderSaving/ })).toBeDisabled()
     expect(mockOnSaved).not.toHaveBeenCalled()
     expect(mockShowToast).not.toHaveBeenCalled()
 
-    await act(async () => newSave.resolve(successfulResponse))
+    await act(async () =>
+      newSave.resolve(
+        successfulResponse({
+          trader_id: 'account-99',
+          source: 'bybit',
+          profile_version: 1,
+          display_name: 'New save',
+        })
+      )
+    )
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'verifiedTraderEditProfile' })).toBeInTheDocument()
@@ -301,8 +375,16 @@ describe('VerifiedTraderEditor identity contract', () => {
 
     const oldRequest = JSON.parse(String((global.fetch as jest.Mock).mock.calls[0][1].body))
     const newRequest = JSON.parse(String((global.fetch as jest.Mock).mock.calls[1][1].body))
-    expect(oldRequest).toMatchObject({ trader_id: 'account-42', source: 'binance_futures' })
-    expect(newRequest).toMatchObject({ trader_id: 'account-99', source: 'bybit' })
+    expect(oldRequest).toMatchObject({
+      trader_id: 'account-42',
+      source: 'binance_futures',
+      profile_version: 0,
+    })
+    expect(newRequest).toMatchObject({
+      trader_id: 'account-99',
+      source: 'bybit',
+      profile_version: 0,
+    })
   })
 
   it('does not start an old identity write when its deferred session arrives late', async () => {
@@ -315,7 +397,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Account 42' }}
+        currentData={profile({ display_name: 'Account 42' })}
         onSaved={mockOnSaved}
       />
     )
@@ -331,7 +413,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-99"
         source="bybit"
-        currentData={{ display_name: 'Account 99' }}
+        currentData={profile({ display_name: 'Account 99' })}
         onSaved={mockOnSaved}
       />
     )
@@ -345,6 +427,107 @@ describe('VerifiedTraderEditor identity contract', () => {
     expect(screen.getByRole('button', { name: 'verifiedTraderEditProfile' })).toBeInTheDocument()
   })
 
+  it('keeps the stale draft open when the database rejects its revision', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        success: false,
+        error: { code: 'DUPLICATE_ACTION', message: 'Profile changed' },
+      }),
+    })
+    render(
+      <VerifiedTraderEditor
+        traderId="account-42"
+        source="binance_futures"
+        currentData={profile({ display_name: 'Before' }, 5)}
+        onSaved={mockOnSaved}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
+    fireEvent.change(screen.getByLabelText('verifiedTraderDisplayName'), {
+      target: { value: 'Preserved stale draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith('verifiedTraderSaveConflict', 'error')
+    )
+    expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('Preserved stale draft')
+    expect(mockOnSaved).not.toHaveBeenCalled()
+    const [, init] = (global.fetch as jest.Mock).mock.calls[0]
+    expect(JSON.parse(String(init.body))).toMatchObject({ profile_version: 5 })
+  })
+
+  it('does not report success for a mismatched database acknowledgement', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      successfulResponse({
+        trader_id: 'account-42',
+        source: 'bybit',
+        profile_version: 1,
+        display_name: 'Draft',
+      })
+    )
+    render(
+      <VerifiedTraderEditor
+        traderId="account-42"
+        source="binance_futures"
+        currentData={profile({ display_name: 'Before' })}
+        onSaved={mockOnSaved}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
+    fireEvent.change(screen.getByLabelText('verifiedTraderDisplayName'), {
+      target: { value: 'Draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.stringContaining('verifiedTraderSaveFailed'),
+        'error'
+      )
+    )
+    expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('Draft')
+    expect(mockOnSaved).not.toHaveBeenCalled()
+  })
+
+  it('uses the acknowledged revision for a later save without a page reload', async () => {
+    render(
+      <VerifiedTraderEditor
+        traderId="account-42"
+        source="binance_futures"
+        currentData={profile({ display_name: 'Before' })}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
+    fireEvent.change(screen.getByLabelText('verifiedTraderDisplayName'), {
+      target: { value: 'First save' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'verifiedTraderEditProfile' })).toBeInTheDocument()
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
+    fireEvent.change(screen.getByLabelText('verifiedTraderBio'), {
+      target: { value: 'Second save' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2))
+
+    const secondRequest = JSON.parse(String((global.fetch as jest.Mock).mock.calls[1][1].body))
+    expect(secondRequest).toMatchObject({
+      trader_id: 'account-42',
+      source: 'binance_futures',
+      profile_version: 1,
+      bio: 'Second save',
+    })
+  })
+
   it('ignores a deferred response after the editor unmounts', async () => {
     const pendingSave = deferred<Response>()
     global.fetch = jest.fn().mockReturnValueOnce(pendingSave.promise)
@@ -352,7 +535,7 @@ describe('VerifiedTraderEditor identity contract', () => {
       <VerifiedTraderEditor
         traderId="account-42"
         source="binance_futures"
-        currentData={{ display_name: 'Account 42' }}
+        currentData={profile({ display_name: 'Account 42' })}
         onSaved={mockOnSaved}
       />
     )
@@ -365,7 +548,16 @@ describe('VerifiedTraderEditor identity contract', () => {
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
 
     view.unmount()
-    await act(async () => pendingSave.resolve(successfulResponse))
+    await act(async () =>
+      pendingSave.resolve(
+        successfulResponse({
+          trader_id: 'account-42',
+          source: 'binance_futures',
+          profile_version: 1,
+          display_name: 'Pending save',
+        })
+      )
+    )
 
     expect(mockOnSaved).not.toHaveBeenCalled()
     expect(mockShowToast).not.toHaveBeenCalled()

@@ -16,7 +16,7 @@ function verifiedClaim(
     source,
     is_verified: true,
     owner_id: ownerId,
-    profile: { display_name: displayName, bio: `${displayName} bio` },
+    profile: { display_name: displayName, bio: `${displayName} bio`, profile_version: 4 },
   }
 }
 

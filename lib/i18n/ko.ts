@@ -5002,6 +5002,9 @@ const ko = {
   verifiedTraderSaving: '저장 중...',
   verifiedTraderSaved: '프로필이 업데이트되었습니다!',
   verifiedTraderSaveFailed: '프로필 저장에 실패했습니다.',
+  verifiedTraderSaveConflict:
+    '이 프로필이 다른 곳에서 변경되었습니다. 초안은 유지되었으니 새로고침 후 비교한 뒤 다시 저장하세요.',
+  verifiedTraderReloadRequired: '변경사항을 저장하기 전에 프로필을 새로고침하세요.',
   verifiedTraderDisplayName: '표시 이름',
   verifiedTraderBio: '소개',
   verifiedTraderTwitter: 'Twitter/X',

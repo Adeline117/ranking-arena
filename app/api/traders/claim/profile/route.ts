@@ -16,8 +16,8 @@ import {
   RateLimitPresets,
   validateString,
 } from '@/lib/api'
-import { ApiError } from '@/lib/api/errors'
-import { updateVerifiedTrader } from '@/lib/data/trader-claims'
+import { ApiError, ErrorCode } from '@/lib/api/errors'
+import { isVerifiedTraderProfileConflict, updateVerifiedTrader } from '@/lib/data/trader-claims'
 import { createLogger } from '@/lib/utils/logger'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
@@ -45,6 +45,14 @@ export async function PUT(request: NextRequest) {
     if (!rawTraderId || !rawSource) {
       throw ApiError.validation('trader_id and source are required')
     }
+    if (
+      typeof body.profile_version !== 'number' ||
+      !Number.isSafeInteger(body.profile_version) ||
+      body.profile_version < 0
+    ) {
+      throw ApiError.validation('A valid profile_version is required')
+    }
+    const profileVersion = body.profile_version
 
     const source = rawSource.toLowerCase()
     let traderId = rawTraderId
@@ -131,6 +139,7 @@ export async function PUT(request: NextRequest) {
       supabase,
       user.id,
       { trader_id: traderId, source },
+      profileVersion,
       updates
     )
     if (
@@ -155,6 +164,14 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Claim profile update failed', { error })
+    if (isVerifiedTraderProfileConflict(error)) {
+      return handleError(
+        new ApiError('Profile changed since it was loaded; your draft was not saved', {
+          code: ErrorCode.DUPLICATE_ACTION,
+        }),
+        'claim profile PUT'
+      )
+    }
     return handleError(error, 'claim profile PUT')
   }
 }

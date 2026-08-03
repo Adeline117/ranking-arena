@@ -5139,6 +5139,9 @@ const en = {
   verifiedTraderSaving: 'Saving...',
   verifiedTraderSaved: 'Profile updated successfully!',
   verifiedTraderSaveFailed: 'Failed to save profile changes.',
+  verifiedTraderSaveConflict:
+    'This profile changed elsewhere. Your draft was kept; reload and compare before saving again.',
+  verifiedTraderReloadRequired: 'Reload this profile before saving changes.',
   verifiedTraderDisplayName: 'Display Name',
   verifiedTraderBio: 'Bio',
   verifiedTraderTwitter: 'Twitter/X',

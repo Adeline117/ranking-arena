@@ -76,6 +76,7 @@ function verifiedTrader(overrides: Partial<VerifiedTrader> = {}): VerifiedTrader
     can_pin_posts: false,
     can_reply_reviews: true,
     can_receive_messages: true,
+    profile_version: 0,
     created_at: '2026-07-15T10:00:00.000Z',
     updated_at: '2026-07-16T10:00:00.000Z',
     ...overrides,
@@ -137,66 +138,66 @@ describe('trader claim identity scope', () => {
 })
 
 describe('verified trader profile identity scope', () => {
-  it('updates the requested identity without touching a sibling account', async () => {
-    const rows = [
-      verifiedTrader({ id: 'verified-a', trader_id: 'trader-a', display_name: 'Alpha' }),
-      verifiedTrader({ id: 'verified-b', trader_id: 'trader-b', display_name: 'Beta' }),
-    ]
-    const filters: Array<[keyof VerifiedTrader, unknown]> = []
-    let updateData: Partial<VerifiedTrader> = {}
-    const builder: Record<string, jest.Mock> = {}
-    builder.update = jest.fn((value: Partial<VerifiedTrader>) => {
-      updateData = value
-      return builder
-    })
-    builder.eq = jest.fn((field: keyof VerifiedTrader, value: unknown) => {
-      filters.push([field, value])
-      return builder
-    })
-    builder.select = jest.fn(() => builder)
-    builder.maybeSingle = jest.fn(async () => {
-      const matched = rows.filter((row) => filters.every(([field, value]) => row[field] === value))
-      for (const row of matched) Object.assign(row, updateData)
-      return { data: matched[0] ?? null, error: null }
-    })
-    const from = jest.fn(() => builder)
-    const client = { from } as unknown as SupabaseClient<Database>
+  function rpcClient(data: unknown, error: unknown = null) {
+    const rpc = jest.fn().mockResolvedValue({ data, error })
+    return {
+      client: { rpc } as unknown as SupabaseClient<Database>,
+      rpc,
+    }
+  }
 
+  it('compares the revision inside the exact composite-identity RPC', async () => {
+    const acknowledgement = verifiedTrader({
+      id: 'verified-b',
+      trader_id: 'trader-b',
+      display_name: 'Beta Updated',
+      profile_version: 8,
+    })
+    const { client, rpc } = rpcClient(acknowledgement)
     await expect(
       updateVerifiedTrader(
         client,
         USER_ID,
         { trader_id: 'trader-b', source: 'binance_futures' },
+        7,
         { display_name: 'Beta Updated' }
       )
-    ).resolves.toMatchObject({ id: 'verified-b', display_name: 'Beta Updated' })
+    ).resolves.toEqual(acknowledgement)
 
-    expect(from).toHaveBeenCalledWith('verified_traders')
-    expect(builder.eq.mock.calls).toEqual([
-      ['user_id', USER_ID],
-      ['trader_id', 'trader-b'],
-      ['source', 'binance_futures'],
-    ])
-    expect(builder.maybeSingle).toHaveBeenCalledTimes(1)
-    expect(rows[0]).toMatchObject({ id: 'verified-a', display_name: 'Alpha' })
-    expect(rows[1]).toMatchObject({ id: 'verified-b', display_name: 'Beta Updated' })
+    expect(rpc).toHaveBeenCalledWith('update_verified_trader_profile_cas', {
+      p_user_id: USER_ID,
+      p_trader_id: 'trader-b',
+      p_source: 'binance_futures',
+      p_expected_version: 7,
+      p_updates: { display_name: 'Beta Updated' },
+    })
   })
 
-  it('returns null instead of falling back to another account owned by the user', async () => {
-    const builder: Record<string, jest.Mock> = {}
-    builder.update = jest.fn(() => builder)
-    builder.eq = jest.fn(() => builder)
-    builder.select = jest.fn(() => builder)
-    builder.maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null })
-    const client = { from: jest.fn(() => builder) } as unknown as SupabaseClient<Database>
+  it('accepts a no-op acknowledgement without inventing a revision bump', async () => {
+    const acknowledgement = verifiedTrader({ bio: 'Original bio', profile_version: 4 })
+    const { client } = rpcClient([acknowledgement])
 
     await expect(
       updateVerifiedTrader(
         client,
         USER_ID,
-        { trader_id: 'not-owned', source: 'bybit' },
-        { bio: 'Must not land elsewhere' }
+        { trader_id: 'trader-1', source: 'binance_futures' },
+        4,
+        { bio: 'Original bio' }
       )
+    ).resolves.toEqual(acknowledgement)
+  })
+
+  it('returns null for the service-only not-owned result', async () => {
+    const { client } = rpcClient(null, {
+      code: 'P0002',
+      message: 'owned verified-trader profile not found',
+    })
+
+    await expect(
+      updateVerifiedTrader(client, USER_ID, { trader_id: 'not-owned', source: 'bybit' }, 0, {
+        bio: 'Must not land elsewhere',
+      })
     ).resolves.toBeNull()
   })
 
@@ -205,81 +206,63 @@ describe('verified trader profile identity scope', () => {
     ['trader', { trader_id: 'sibling-trader' }],
     ['source', { source: 'bybit' }],
   ])('rejects a mismatched %s update acknowledgement', async (_field, mismatch) => {
-    const builder: Record<string, jest.Mock> = {}
-    builder.update = jest.fn(() => builder)
-    builder.eq = jest.fn(() => builder)
-    builder.select = jest.fn(() => builder)
-    builder.maybeSingle = jest.fn().mockResolvedValue({
-      data: verifiedTrader({ trader_id: 'requested-trader', ...mismatch }),
-      error: null,
-    })
-    const client = { from: jest.fn(() => builder) } as unknown as SupabaseClient<Database>
+    const { client } = rpcClient(
+      verifiedTrader({
+        trader_id: 'requested-trader',
+        bio: 'Scoped update',
+        profile_version: 1,
+        ...mismatch,
+      })
+    )
 
     await expect(
       updateVerifiedTrader(
         client,
         USER_ID,
         { trader_id: 'requested-trader', source: 'binance_futures' },
+        0,
         { bio: 'Scoped update' }
       )
     ).rejects.toThrow('Verified trader update returned a mismatched identity')
   })
 
-  it('does not fall across sources when the same trader id exists elsewhere', async () => {
-    const sibling = verifiedTrader({
-      id: 'verified-spot',
-      trader_id: 'shared-trader-id',
-      source: 'binance_spot',
-      bio: 'Spot bio',
-    })
-    const filters: Array<[keyof VerifiedTrader, unknown]> = []
-    let updateData: Partial<VerifiedTrader> = {}
-    const builder: Record<string, jest.Mock> = {}
-    builder.update = jest.fn((value: Partial<VerifiedTrader>) => {
-      updateData = value
-      return builder
-    })
-    builder.eq = jest.fn((field: keyof VerifiedTrader, value: unknown) => {
-      filters.push([field, value])
-      return builder
-    })
-    builder.select = jest.fn(() => builder)
-    builder.maybeSingle = jest.fn(async () => {
-      const matches = [sibling].filter((row) =>
-        filters.every(([field, value]) => row[field] === value)
-      )
-      for (const row of matches) Object.assign(row, updateData)
-      return { data: matches[0] ?? null, error: null }
-    })
-    const client = {
-      from: jest.fn(() => builder),
-    } as unknown as SupabaseClient<Database>
-
+  it.each([
+    ['an older revision', { profile_version: 6 }],
+    ['a skipped revision', { profile_version: 9 }],
+    ['a value that was not persisted', { bio: 'Different value', profile_version: 8 }],
+  ])('rejects %s in the database acknowledgement', async (_label, mismatch) => {
+    const { client } = rpcClient(
+      verifiedTrader({
+        trader_id: 'requested-trader',
+        bio: 'Scoped update',
+        profile_version: 8,
+        ...mismatch,
+      })
+    )
     await expect(
       updateVerifiedTrader(
         client,
         USER_ID,
-        { trader_id: 'shared-trader-id', source: 'binance_futures' },
-        { bio: 'Futures bio' }
+        { trader_id: 'requested-trader', source: 'binance_futures' },
+        7,
+        { bio: 'Scoped update' }
       )
-    ).resolves.toBeNull()
-    expect(sibling.bio).toBe('Spot bio')
+    ).rejects.toThrow('Verified trader update returned a mismatched identity')
   })
 
-  it('propagates the exact database error without accepting a row', async () => {
-    const databaseError = { code: 'PGRST116', message: 'Unexpected update cardinality' }
-    const builder: Record<string, jest.Mock> = {}
-    builder.update = jest.fn(() => builder)
-    builder.eq = jest.fn(() => builder)
-    builder.select = jest.fn(() => builder)
-    builder.maybeSingle = jest.fn().mockResolvedValue({ data: null, error: databaseError })
-    const client = { from: jest.fn(() => builder) } as unknown as SupabaseClient<Database>
+  it('propagates the exact stale-revision database error', async () => {
+    const databaseError = {
+      code: '40001',
+      message: 'verified-trader profile changed since it was loaded',
+    }
+    const { client } = rpcClient(null, databaseError)
 
     await expect(
       updateVerifiedTrader(
         client,
         USER_ID,
         { trader_id: 'requested-trader', source: 'binance_futures' },
+        7,
         { bio: 'Scoped update' }
       )
     ).rejects.toBe(databaseError)
@@ -536,6 +519,7 @@ describe('trader-claims types', () => {
       can_pin_posts: false,
       can_reply_reviews: true,
       can_receive_messages: true,
+      profile_version: 0,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     }

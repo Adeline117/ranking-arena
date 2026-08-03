@@ -447,11 +447,11 @@ export const OverviewTab = React.memo(function OverviewTab({
             )}
 
             {/* Verified trader edit OR Claim CTA */}
-            {isVerifiedClaimOwner ? (
+            {isVerifiedClaimOwner && verifiedTraderProfile ? (
               <VerifiedTraderEditor
                 traderId={data.source_trader_id}
                 source={data.source}
-                currentData={verifiedTraderProfile ?? {}}
+                currentData={verifiedTraderProfile}
                 onSaved={() => window.location.reload()}
               />
             ) : (
