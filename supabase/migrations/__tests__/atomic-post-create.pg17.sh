@@ -184,6 +184,7 @@ OPERATION="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 RACE_OPERATION="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 FAIL_OPERATION="cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 PLAIN_OPERATION="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+INVALID_OPERATION="ffffffff-ffff-4fff-8fff-ffffffffffff"
 
 psql_cmd -v actor="$ACTOR" -v mentioned="$MENTIONED" <<'SQL'
 INSERT INTO auth.users (id) VALUES (:'actor'), (:'mentioned');
@@ -258,6 +259,11 @@ grep -q '"status": "created"' <<<"$plain"
 grep -q '"poll": null' <<<"$plain"
 grep -q '"poll_enabled": false' <<<"$plain"
 echo 'plain post nullable poll contract'
+
+invalid_option="$(call_create "$INVALID_OPERATION" 'Invalid options' "ARRAY[pg_catalog.repeat('x', 101),'No']::text[]" "ARRAY[]::text[]")"
+[[ "$invalid_option" == *'"status": "invalid"'* ]]
+[[ "$(psql_cmd -At -c "SELECT count(*) FROM public.posts WHERE title = 'Invalid options'")" == '0' ]]
+echo 'poll option length boundary'
 
 links="$(psql_cmd -At -c "SELECT count(*) FROM public.posts AS p JOIN public.polls AS q ON q.id = p.poll_id AND q.post_id = p.id WHERE p.title = 'Atomic post' AND p.content_version = 0")"
 [[ "$links" == '1' ]]

@@ -51,6 +51,7 @@ describe('atomic post create migration', () => {
     expect(functionBody).toContain('v_poll.post_id IS DISTINCT FROM v_post.id')
     expect(functionBody).toContain('v_post.content_version <> 0')
     expect(functionBody).toContain('p_poll_duration_hours NOT BETWEEN 0 AND 168')
+    expect(functionBody).toContain('pg_catalog.char_length(option_text) NOT BETWEEN 1 AND 100')
   })
 
   it('synchronizes mentions and hashtags before recording the success', () => {
@@ -69,6 +70,9 @@ describe('atomic post create migration', () => {
     expect(migration).toContain("constraint_row.conrelid = 'public.polls'::regclass")
     expect(migration).toContain("constraint_row.confrelid = 'public.posts'::regclass")
     expect(migration).toContain("constraint_row.conrelid = 'public.post_hashtags'::regclass")
+    expect(migration).toContain("'post_create_operation_fingerprint_check'")
+    expect(migration).toContain("'post_create_operation_result_check'")
+    expect(migration).toContain('constraint_row.convalidated')
   })
 
   it('returns exact failure statuses and nested success acknowledgements', () => {

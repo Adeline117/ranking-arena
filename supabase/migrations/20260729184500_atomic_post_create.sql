@@ -524,8 +524,25 @@ BEGIN
     WHERE constraint_row.conrelid =
         'public.post_create_operation_results'::regclass
       AND constraint_row.contype = 'f'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_row
+    WHERE constraint_row.conrelid =
+        'public.post_create_operation_results'::regclass
+      AND constraint_row.conname =
+        'post_create_operation_fingerprint_check'
+      AND constraint_row.contype = 'c'
+      AND constraint_row.convalidated
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_row
+    WHERE constraint_row.conrelid =
+        'public.post_create_operation_results'::regclass
+      AND constraint_row.conname = 'post_create_operation_result_check'
+      AND constraint_row.contype = 'c'
+      AND constraint_row.convalidated
   ) THEN
-    RAISE EXCEPTION 'post create replay ledger key authority is incompatible';
+    RAISE EXCEPTION 'post create replay ledger constraints are incompatible';
   END IF;
 END
 $ledger_preflight$;
@@ -717,7 +734,7 @@ BEGIN
          OR EXISTS (
            SELECT 1 FROM pg_catalog.unnest(v_options) AS option_text
            WHERE option_text IS NULL
-              OR pg_catalog.char_length(option_text) NOT BETWEEN 1 AND 200
+              OR pg_catalog.char_length(option_text) NOT BETWEEN 1 AND 100
               OR option_text ~ '[[:cntrl:]]'
          )
          OR (
