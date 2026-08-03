@@ -5,9 +5,7 @@ import { redirect } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { supabase as _supabase } from '@/lib/supabase/client'
-import type { SupabaseClient } from '@supabase/supabase-js'
-const supabase = _supabase as SupabaseClient
+import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
@@ -292,7 +290,6 @@ export default function EditPostPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -324,15 +321,21 @@ export default function EditPostPage() {
   useEffect(() => {
     supabase.auth
       .getUser()
-      .then(({ data }) => {
-        setEmail(data.user?.email ?? null)
-        setUserId(data.user?.id ?? null)
+      .then(({ data, error }) => {
+        if (error) throw error
+        if (!data.user) {
+          router.replace(`/login?redirect=${encodeURIComponent(`/post/${postId}/edit`)}`)
+          return
+        }
+        setUserId(data.user.id)
       })
-      // eslint-disable-next-line no-restricted-syntax
-      .catch(() => {
-        /* Intentionally swallowed: auth check non-critical for edit page init */
+      .catch((error) => {
+        logger.error('Error resolving editor identity:', error)
+        showToast(t('loadPostFailed'), 'error')
+        setLoading(false)
       })
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable translation ref
+  }, [postId, router, showToast])
 
   // 加载帖子数据
   useEffect(() => {

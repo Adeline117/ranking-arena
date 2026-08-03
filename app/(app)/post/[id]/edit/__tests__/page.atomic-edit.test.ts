@@ -18,6 +18,14 @@ describe('full post editor atomic write path', () => {
     expect(page).toContain('sameStringList(acknowledgement.images ?? [], submittedImages)')
   })
 
+  it('does not leave unauthenticated or failed identity resolution on an infinite skeleton', () => {
+    expect(page).toContain('router.replace(`/login?redirect=${encodeURIComponent(')
+    expect(page).toContain("logger.error('Error resolving editor identity:'")
+    expect(page).toContain('setLoading(false)')
+    expect(page).not.toContain('setEmail(')
+    expect(page).not.toContain('as SupabaseClient')
+  })
+
   it('protects image-only edits with the unsaved-change guard', () => {
     expect(page).toContain('images.map((image) => image.url)')
     expect(page).toContain('Array.isArray(originalPost.images)')
