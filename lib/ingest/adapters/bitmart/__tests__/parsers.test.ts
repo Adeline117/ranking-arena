@@ -125,6 +125,20 @@ describe('parseBitmartPositions', () => {
       unrealizedPnl: 12.53,
     })
   })
+
+  it('accepts an explicitly successful empty position list', () => {
+    expect(parseBitmartPositions({ errno: 'OK', success: true, data: { list: [] } }, ctx)).toEqual(
+      []
+    )
+  })
+
+  it.each([
+    [{ errno: 'FAIL', success: false, data: { list: [] } }, /response failed/],
+    [{ errno: 'OK', success: true, data: {} }, /malformed position response list/],
+    [null, /malformed position response envelope/],
+  ])('rejects failed or malformed position payloads', (payload, expected) => {
+    expect(() => parseBitmartPositions(payload, ctx)).toThrow(expected as RegExp)
+  })
 })
 
 describe('parseBitmartHistory', () => {

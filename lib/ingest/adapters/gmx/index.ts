@@ -158,9 +158,18 @@ function getSymbolMaps(session: FetchSession, src: SourceRow): Promise<SymbolMap
         'query { markets(limit: 1000) { id indexToken } }'
       )
       const tokensPayload = (await fetchJson(session, endpoint(src, 'tokens', TOKENS_URL))) as {
-        tokens?: SymbolMaps['tokens']
+        tokens?: unknown
       }
-      return { markets: markets.markets ?? [], tokens: tokensPayload.tokens ?? [] }
+      if (!Array.isArray(markets.markets)) {
+        throw new TypeError('[gmx] subgraph returned malformed markets')
+      }
+      if (!Array.isArray(tokensPayload.tokens)) {
+        throw new TypeError('[gmx] token service returned malformed tokens')
+      }
+      return {
+        markets: markets.markets,
+        tokens: tokensPayload.tokens as SymbolMaps['tokens'],
+      }
     })()
     symbolMapCache.set(session, cached)
     cached.catch(() => symbolMapCache.delete(session)) // never memoize a failure
@@ -286,7 +295,7 @@ const gmxAdapter: SourceAdapter = {
     exchangeTraderId: string
   ): Promise<RawBundle> {
     const account = checksum(exchangeTraderId)
-    const data = await gql<{ positions: Dict[] }>(
+    const data = await gql<{ positions?: unknown }>(
       session,
       src,
       `query { positions(limit: 200, where: { account_eq: "${account}", isSnapshot_eq: false }) ` +
@@ -294,6 +303,9 @@ const gmxAdapter: SourceAdapter = {
         'sizeInTokens sizeInUsd realizedPnl maxSize entryPrice leverage ' +
         'unrealizedPnl unrealizedFees openedAt isSnapshot } }'
     )
+    if (!Array.isArray(data.positions)) {
+      throw new TypeError('[gmx] subgraph returned malformed positions')
+    }
     const maps = await getSymbolMaps(session, src)
     const fetchedAt = new Date().toISOString()
     return {
@@ -301,7 +313,7 @@ const gmxAdapter: SourceAdapter = {
         {
           pageIndex: 1,
           payload: {
-            positions: data.positions ?? [],
+            positions: data.positions,
             markets: maps.markets,
             tokens: maps.tokens,
           },

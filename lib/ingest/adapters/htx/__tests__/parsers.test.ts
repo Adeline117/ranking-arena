@@ -143,6 +143,15 @@ describe('parseHtxPositions', () => {
   it('returns empty for a trader with no open positions', () => {
     expect(parseHtxPositions(fixture('current-positions.json'), ctx)).toEqual([])
   })
+
+  it('rejects error and malformed envelopes instead of clearing last-good positions', () => {
+    expect(() => parseHtxPositions({ code: 500, success: false, data: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseHtxPositions({ code: 200, success: true, data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
 })
 
 describe('parseHtxHistory', () => {

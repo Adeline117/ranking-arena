@@ -452,6 +452,24 @@ describe('parseHyperliquidPositions', () => {
     expect(btc?.markPrice).toBeCloseTo(63520.0, 1)
     expect(btc?.unrealizedPnl).toBeCloseTo(-51385.715677, 4)
   })
+
+  it('accepts an explicitly complete empty clearinghouse state', () => {
+    expect(
+      parseHyperliquidPositions(
+        { assetPositions: [], marginSummary: {}, crossMarginSummary: {} },
+        ctx
+      )
+    ).toEqual([])
+  })
+
+  it.each([
+    [{ marginSummary: {}, crossMarginSummary: {} }, /malformed clearinghouse asset positions/],
+    [{ assetPositions: [], crossMarginSummary: {} }, /malformed clearinghouse marginSummary/],
+    [{ assetPositions: [], marginSummary: {} }, /malformed clearinghouse crossMarginSummary/],
+    [null, /malformed clearinghouse state/],
+  ])('rejects incomplete clearinghouse states', (payload, expected) => {
+    expect(() => parseHyperliquidPositions(payload, ctx)).toThrow(expected as RegExp)
+  })
 })
 
 describe('lerpAt', () => {

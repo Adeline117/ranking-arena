@@ -369,10 +369,22 @@ interface TokenInfo {
  * Unmappable markets fall back to the market address as symbol.
  */
 export function parseGmxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const payload = (raw ?? {}) as { positions?: unknown; markets?: unknown; tokens?: unknown }
-  const positions = Array.isArray(payload.positions) ? (payload.positions as Dict[]) : []
-  const markets = Array.isArray(payload.markets) ? (payload.markets as Dict[]) : []
-  const tokens = Array.isArray(payload.tokens) ? (payload.tokens as TokenInfo[]) : []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[gmx] malformed position response bundle')
+  }
+  const payload = raw as { positions?: unknown; markets?: unknown; tokens?: unknown }
+  if (!Array.isArray(payload.positions)) {
+    throw new TypeError('[gmx] malformed positions result')
+  }
+  if (!Array.isArray(payload.markets)) {
+    throw new TypeError('[gmx] malformed position markets result')
+  }
+  if (!Array.isArray(payload.tokens)) {
+    throw new TypeError('[gmx] malformed position tokens result')
+  }
+  const positions = payload.positions as Dict[]
+  const markets = payload.markets as Dict[]
+  const tokens = payload.tokens as TokenInfo[]
 
   const indexTokenByMarket = new Map<string, string>()
   for (const m of markets) {

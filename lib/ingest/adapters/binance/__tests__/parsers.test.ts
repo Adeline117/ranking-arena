@@ -165,6 +165,19 @@ describe('parseBinancePositions', () => {
     expect(eth.entryPrice).toBeCloseTo(1622.61261261)
     expect(eth.leverage).toBeNull()
   })
+
+  it('allows only explicit successful empty futures or spot snapshots', () => {
+    expect(parseBinancePositions({ code: '000000', success: true, data: [] }, ctx)).toEqual([])
+    expect(
+      parseBinancePositions({ code: '000000', success: true, data: { list: [] } }, ctx)
+    ).toEqual([])
+    expect(() =>
+      parseBinancePositions({ code: '100001', success: false, data: null }, ctx)
+    ).toThrow('position response failed')
+    expect(() => parseBinancePositions({ code: '000000', success: true, data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
 })
 
 describe('parseBinanceHistory', () => {

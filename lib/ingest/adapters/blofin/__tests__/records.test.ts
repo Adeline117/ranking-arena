@@ -65,6 +65,16 @@ describe('parseBlofinPositions', () => {
     expect(out.length).toBe(2) // Y-USDT BUY + Y-USDT SELL; X dropped (closed)
     expect(out.map((p) => `${p.symbol}/${p.side}`).sort()).toEqual(['Y-USDT/BUY', 'Y-USDT/SELL'])
   })
+
+  it('allows only an explicit successful empty snapshot', () => {
+    expect(parseBlofinPositions({ code: 200, data: [] }, ctx)).toEqual([])
+    expect(() => parseBlofinPositions({ code: 500, data: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseBlofinPositions({ code: 200, data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
 })
 
 describe('parseBlofinHistory position_history', () => {

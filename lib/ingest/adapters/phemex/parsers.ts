@@ -300,8 +300,22 @@ export function parsePhemexProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 
 /** Current positions (GET position/current/v2, { total, rows }). */
 export function parsePhemexPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const d = data(raw) as Dict | null
-  const rows = Array.isArray(d?.rows) ? (d.rows as Dict[]) : []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[phemex] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== 0) {
+    throw new TypeError(`[phemex] position response failed with code ${String(envelope.code)}`)
+  }
+  const response = envelope.data
+  if (typeof response !== 'object' || response === null || Array.isArray(response)) {
+    throw new TypeError('[phemex] malformed position response data')
+  }
+  const positionRows = (response as Dict).rows
+  if (!Array.isArray(positionRows)) {
+    throw new TypeError('[phemex] malformed position response rows')
+  }
+  const rows = positionRows as Dict[]
   const out: ParsedPosition[] = []
   for (const item of rows) {
     if (!item.symbol) continue

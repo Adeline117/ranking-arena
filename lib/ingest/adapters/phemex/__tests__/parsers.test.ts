@@ -162,6 +162,16 @@ describe('parsePhemexPositions', () => {
       markPrice: null,
     })
   })
+
+  it('allows only an explicit successful empty snapshot', () => {
+    expect(parsePhemexPositions({ code: 0, data: { rows: [] } }, ctx)).toEqual([])
+    expect(() => parsePhemexPositions({ code: 401, data: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parsePhemexPositions({ code: 0, data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
 })
 
 describe('parsePhemexHistory', () => {

@@ -305,8 +305,22 @@ export function parseMexcProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
  * unrealized PnL is NOT public here → NULL (NULL-collapse, spec §6).
  */
 export function parseMexcPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const d = data(raw)
-  const list = Array.isArray(d?.content) ? (d.content as Dict[]) : []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[mexc] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== 0 || envelope.success !== true) {
+    throw new TypeError(`[mexc] position response failed with code ${String(envelope.code)}`)
+  }
+  const response = envelope.data
+  if (typeof response !== 'object' || response === null || Array.isArray(response)) {
+    throw new TypeError('[mexc] malformed position response data')
+  }
+  const content = (response as Dict).content
+  if (!Array.isArray(content)) {
+    throw new TypeError('[mexc] malformed position response content')
+  }
+  const list = content as Dict[]
   const out: ParsedPosition[] = []
   for (const item of list) {
     if (!item.symbol) continue

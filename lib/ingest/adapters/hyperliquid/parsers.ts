@@ -508,8 +508,19 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
 
 /** clearinghouseState.assetPositions → current open positions (Tier D). */
 export function parseHyperliquidPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const ch = (raw ?? {}) as Dict
-  const assetPositions = Array.isArray(ch.assetPositions) ? (ch.assetPositions as Dict[]) : []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[hyperliquid] malformed clearinghouse state')
+  }
+  const ch = raw as Dict
+  if (!Array.isArray(ch.assetPositions)) {
+    throw new TypeError('[hyperliquid] malformed clearinghouse asset positions')
+  }
+  for (const summary of ['marginSummary', 'crossMarginSummary'] as const) {
+    if (typeof ch[summary] !== 'object' || ch[summary] === null || Array.isArray(ch[summary])) {
+      throw new TypeError(`[hyperliquid] malformed clearinghouse ${summary}`)
+    }
+  }
+  const assetPositions = ch.assetPositions as Dict[]
 
   const out: ParsedPosition[] = []
   for (const ap of assetPositions) {

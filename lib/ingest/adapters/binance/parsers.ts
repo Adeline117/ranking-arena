@@ -277,7 +277,14 @@ function side(v: unknown): string | null {
  *     remainAmount, avgBuyPrice, lastPrice, unrealizedPnl } → long-only.
  */
 export function parseBinancePositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const data = (raw as Dict)?.data
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[binance] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== '000000' || envelope.success !== true) {
+    throw new TypeError(`[binance] position response failed with code ${String(envelope.code)}`)
+  }
+  const data = envelope.data
   const out: ParsedPosition[] = []
 
   if (Array.isArray(data)) {
@@ -300,8 +307,16 @@ export function parseBinancePositions(raw: unknown, _ctx: ParseCtx): ParsedPosit
     return out
   }
 
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    throw new TypeError('[binance] malformed position response data')
+  }
+  const spotList = (data as Dict).list
+  if (!Array.isArray(spotList)) {
+    throw new TypeError('[binance] malformed spot position response list')
+  }
+
   // spot holdings
-  for (const item of listOf(raw)) {
+  for (const item of spotList as Dict[]) {
     if (!item.symbol && !item.asset) continue
     out.push({
       symbol: String(item.symbol ?? item.asset),

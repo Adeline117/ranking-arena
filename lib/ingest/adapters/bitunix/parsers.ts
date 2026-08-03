@@ -248,7 +248,17 @@ export function parseBitunixProfile(raw: unknown, ctx: ParseCtx): ParsedProfile 
  * mark price, unrealized PnL and ROE are all public here.
  */
 export function parseBitunixPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const list = Array.isArray((raw as Dict)?.data) ? ((raw as Dict).data as Dict[]) : []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[bitunix] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== 0 || envelope.success !== true) {
+    throw new TypeError(`[bitunix] position response failed with code ${String(envelope.code)}`)
+  }
+  if (!Array.isArray(envelope.data)) {
+    throw new TypeError('[bitunix] malformed position response data')
+  }
+  const list = envelope.data as Dict[]
   const out: ParsedPosition[] = []
   for (const item of list) {
     if (!item.symbol) continue

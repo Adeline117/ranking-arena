@@ -235,8 +235,22 @@ export function parseHtxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 
 /** Current positions (GET trader-info/current-positions, { isHide, positions }). */
 export function parseHtxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const d = data(raw)
-  const list = Array.isArray(d?.positions) ? (d.positions as Dict[]) : []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[htx] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== 200 || envelope.success !== true) {
+    throw new TypeError(`[htx] position response failed with code ${String(envelope.code)}`)
+  }
+  const response = envelope.data
+  if (typeof response !== 'object' || response === null || Array.isArray(response)) {
+    throw new TypeError('[htx] malformed position response data')
+  }
+  const positions = (response as Dict).positions
+  if (!Array.isArray(positions)) {
+    throw new TypeError('[htx] malformed position response list')
+  }
+  const list = positions as Dict[]
   const out: ParsedPosition[] = []
   for (const item of list) {
     const symbol = item.contractCode ?? item.symbol

@@ -89,4 +89,24 @@ describe('gmx exact-window transport', () => {
     expect(historyQuery).toContain(`from: ${bounds.from}`)
     expect(historyQuery).not.toContain(`to: ${bounds.to}`)
   })
+
+  it('rejects a successful GraphQL envelope without a positions array', async () => {
+    global.fetch = jest.fn(async () => response({ data: {} })) as unknown as typeof fetch
+
+    await expect(gmxAdapter.getPositions(session(), src, ADDRESS)).rejects.toThrow(
+      'subgraph returned malformed positions'
+    )
+  })
+
+  it('rejects missing market symbol-map evidence', async () => {
+    global.fetch = jest.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { query?: string }
+      if (body.query?.includes('positions(')) return response({ data: { positions: [] } })
+      return response({ data: {} })
+    }) as unknown as typeof fetch
+
+    await expect(gmxAdapter.getPositions(session(), src, ADDRESS)).rejects.toThrow(
+      'subgraph returned malformed markets'
+    )
+  })
 })
