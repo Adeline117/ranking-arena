@@ -1,5 +1,5 @@
-import type { PoolClient } from 'pg'
 import type { HistoryKind, ParsedHistoryRow } from '../core/types'
+import type { IngestQueryExecutor } from '../db'
 
 const PARTITION_PARENT_BY_KIND = {
   orders: 'order_records',
@@ -44,7 +44,7 @@ export function historyPartitionRequest(
 }
 
 export async function ensureHistoryPartitions(
-  client: Pick<PoolClient, 'query'>,
+  client: IngestQueryExecutor,
   kind: HistoryKind,
   rows: ParsedHistoryRow[]
 ): Promise<number> {

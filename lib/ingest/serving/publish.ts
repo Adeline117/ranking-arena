@@ -1586,6 +1586,188 @@ export async function publishPositions(
   }
 }
 
+async function publishHistoryRowsTransactionInternal(
+  client: IngestQueryExecutor,
+  src: SourceRow,
+  traderId: number,
+  kind: HistoryKind,
+  rows: ParsedHistoryRow[],
+  newCursor: string | null
+): Promise<number> {
+  if (rows.length === 0) return 0
+  if (rows.some((row) => row.kind !== kind)) {
+    throw new Error(`[history] row kind does not match ${kind}`)
+  }
+  await ensureHistoryPartitions(client, kind, rows)
+  let written = 0
+
+  if (kind === 'position_history') {
+    const result = await client.query(
+      `INSERT INTO arena.position_history
+           (trader_id, opened_at, closed_at, symbol, side, leverage, size,
+            entry_price, exit_price, realized_pnl, currency, dedupe_hash, raw)
+         SELECT $1, r.opened_at::timestamptz, r.closed_at::timestamptz, r.symbol,
+                r.side, r.leverage, r.size, r.entry_price, r.exit_price,
+                r.realized_pnl, $2, r.dedupe_hash, r.raw
+           FROM jsonb_to_recordset($3::jsonb) AS r(
+             opened_at text, closed_at text, symbol text, side text,
+             leverage numeric, size numeric, entry_price numeric,
+             exit_price numeric, realized_pnl numeric, dedupe_hash text, raw jsonb)
+         ON CONFLICT (closed_at, dedupe_hash) DO NOTHING`,
+      [
+        traderId,
+        src.currency,
+        JSON.stringify(
+          rows
+            .filter(
+              (r): r is Extract<ParsedHistoryRow, { kind: 'position_history' }> =>
+                r.kind === 'position_history'
+            )
+            .map((r) => ({
+              opened_at: r.openedAt,
+              closed_at: r.closedAt,
+              symbol: r.symbol,
+              side: r.side,
+              leverage: r.leverage,
+              size: r.size,
+              entry_price: r.entryPrice,
+              exit_price: r.exitPrice,
+              realized_pnl: r.realizedPnl,
+              dedupe_hash: r.dedupeHash,
+              raw: r.raw,
+            }))
+        ),
+      ]
+    )
+    written = result.rowCount ?? 0
+  } else if (kind === 'orders') {
+    const result = await client.query(
+      `INSERT INTO arena.order_records
+           (trader_id, ts, kind, symbol, side, price, qty, currency, dedupe_hash, raw)
+         SELECT $1, r.ts::timestamptz, r.order_kind, r.symbol, r.side, r.price,
+                r.qty, $2, r.dedupe_hash, r.raw
+           FROM jsonb_to_recordset($3::jsonb) AS r(
+             ts text, order_kind text, symbol text, side text, price numeric,
+             qty numeric, dedupe_hash text, raw jsonb)
+         ON CONFLICT (ts, dedupe_hash) DO NOTHING`,
+      [
+        traderId,
+        src.currency,
+        JSON.stringify(
+          rows
+            .filter((r): r is Extract<ParsedHistoryRow, { kind: 'orders' }> => r.kind === 'orders')
+            .map((r) => ({
+              ts: r.ts,
+              order_kind: r.orderKind,
+              symbol: r.symbol,
+              side: r.side,
+              price: r.price,
+              qty: r.qty,
+              dedupe_hash: r.dedupeHash,
+              raw: r.raw,
+            }))
+        ),
+      ]
+    )
+    written = result.rowCount ?? 0
+  } else if (kind === 'transfers') {
+    const result = await client.query(
+      `INSERT INTO arena.transfer_history
+           (trader_id, ts, direction, asset, amount, currency, dedupe_hash, raw)
+         SELECT $1, r.ts::timestamptz, r.direction, r.asset, r.amount, $2,
+                r.dedupe_hash, r.raw
+           FROM jsonb_to_recordset($3::jsonb) AS r(
+             ts text, direction text, asset text, amount numeric,
+             dedupe_hash text, raw jsonb)
+         ON CONFLICT (ts, dedupe_hash) DO NOTHING`,
+      [
+        traderId,
+        src.currency,
+        JSON.stringify(
+          rows
+            .filter(
+              (r): r is Extract<ParsedHistoryRow, { kind: 'transfers' }> => r.kind === 'transfers'
+            )
+            .map((r) => ({
+              ts: r.ts,
+              direction: r.direction,
+              asset: r.asset,
+              amount: r.amount,
+              dedupe_hash: r.dedupeHash,
+              raw: r.raw,
+            }))
+        ),
+      ]
+    )
+    written = result.rowCount ?? 0
+  } else {
+    const result = await client.query(
+      `INSERT INTO arena.copier_records
+           (trader_id, ts, copier_label, copier_pnl, copier_invested,
+            copy_duration_days, currency, dedupe_hash, raw)
+         SELECT $1, r.ts::timestamptz, r.copier_label, r.copier_pnl,
+                r.copier_invested, r.copy_duration_days, $2, r.dedupe_hash, r.raw
+           FROM jsonb_to_recordset($3::jsonb) AS r(
+             ts text, copier_label text, copier_pnl numeric,
+             copier_invested numeric, copy_duration_days int,
+             dedupe_hash text, raw jsonb)
+         ON CONFLICT (ts, dedupe_hash) DO NOTHING`,
+      [
+        traderId,
+        src.currency,
+        JSON.stringify(
+          rows
+            .filter(
+              (r): r is Extract<ParsedHistoryRow, { kind: 'copiers' }> => r.kind === 'copiers'
+            )
+            .map((r) => ({
+              ts: r.ts,
+              copier_label: r.copierLabel,
+              copier_pnl: r.copierPnl,
+              copier_invested: r.copierInvested,
+              copy_duration_days: r.copyDurationDays,
+              dedupe_hash: r.dedupeHash,
+              raw: r.raw,
+            }))
+        ),
+      ]
+    )
+    written = result.rowCount ?? 0
+  }
+
+  if (newCursor !== null) {
+    await client.query(
+      `INSERT INTO arena.ingest_cursors (trader_id, kind, cursor_value, updated_at)
+         VALUES ($1, $2, $3, now())
+         ON CONFLICT (trader_id, kind)
+         DO UPDATE SET cursor_value = EXCLUDED.cursor_value, updated_at = now()
+         -- Caller checks are not enough: Tier-B and Tier-C can commit out of
+         -- order. The database is the final monotonic checkpoint authority.
+         WHERE EXCLUDED.cursor_value::timestamptz
+               > arena.ingest_cursors.cursor_value::timestamptz`,
+      [traderId, kind, newCursor]
+    )
+  }
+
+  return written
+}
+
+/**
+ * Query-only incremental history publication. The caller owns the transaction
+ * so an immutable RAW pointer, typed history rows, and the monotonic cursor may
+ * commit or roll back as one unit.
+ */
+export async function publishHistoryRowsInTransaction(
+  transaction: IngestQueryExecutor,
+  src: SourceRow,
+  traderId: number,
+  kind: HistoryKind,
+  rows: ParsedHistoryRow[],
+  newCursor: string | null
+): Promise<number> {
+  return publishHistoryRowsTransactionInternal(transaction, src, traderId, kind, rows, newCursor)
+}
+
 /**
  * Incremental history publish: idempotent upsert by dedupe_hash + cursor
  * update (spec §2.3 Histories). Returns rows actually written.
@@ -1601,159 +1783,14 @@ export async function publishHistoryRows(
   const client = await ingestClientConnect()
   try {
     await client.query('BEGIN')
-    await ensureHistoryPartitions(client, kind, rows)
-    let written = 0
-
-    if (kind === 'position_history') {
-      const result = await client.query(
-        `INSERT INTO arena.position_history
-           (trader_id, opened_at, closed_at, symbol, side, leverage, size,
-            entry_price, exit_price, realized_pnl, currency, dedupe_hash, raw)
-         SELECT $1, r.opened_at::timestamptz, r.closed_at::timestamptz, r.symbol,
-                r.side, r.leverage, r.size, r.entry_price, r.exit_price,
-                r.realized_pnl, $2, r.dedupe_hash, r.raw
-           FROM jsonb_to_recordset($3::jsonb) AS r(
-             opened_at text, closed_at text, symbol text, side text,
-             leverage numeric, size numeric, entry_price numeric,
-             exit_price numeric, realized_pnl numeric, dedupe_hash text, raw jsonb)
-         ON CONFLICT (closed_at, dedupe_hash) DO NOTHING`,
-        [
-          traderId,
-          src.currency,
-          JSON.stringify(
-            rows
-              .filter(
-                (r): r is Extract<ParsedHistoryRow, { kind: 'position_history' }> =>
-                  r.kind === 'position_history'
-              )
-              .map((r) => ({
-                opened_at: r.openedAt,
-                closed_at: r.closedAt,
-                symbol: r.symbol,
-                side: r.side,
-                leverage: r.leverage,
-                size: r.size,
-                entry_price: r.entryPrice,
-                exit_price: r.exitPrice,
-                realized_pnl: r.realizedPnl,
-                dedupe_hash: r.dedupeHash,
-                raw: r.raw,
-              }))
-          ),
-        ]
-      )
-      written = result.rowCount ?? 0
-    } else if (kind === 'orders') {
-      const result = await client.query(
-        `INSERT INTO arena.order_records
-           (trader_id, ts, kind, symbol, side, price, qty, currency, dedupe_hash, raw)
-         SELECT $1, r.ts::timestamptz, r.order_kind, r.symbol, r.side, r.price,
-                r.qty, $2, r.dedupe_hash, r.raw
-           FROM jsonb_to_recordset($3::jsonb) AS r(
-             ts text, order_kind text, symbol text, side text, price numeric,
-             qty numeric, dedupe_hash text, raw jsonb)
-         ON CONFLICT (ts, dedupe_hash) DO NOTHING`,
-        [
-          traderId,
-          src.currency,
-          JSON.stringify(
-            rows
-              .filter(
-                (r): r is Extract<ParsedHistoryRow, { kind: 'orders' }> => r.kind === 'orders'
-              )
-              .map((r) => ({
-                ts: r.ts,
-                order_kind: r.orderKind,
-                symbol: r.symbol,
-                side: r.side,
-                price: r.price,
-                qty: r.qty,
-                dedupe_hash: r.dedupeHash,
-                raw: r.raw,
-              }))
-          ),
-        ]
-      )
-      written = result.rowCount ?? 0
-    } else if (kind === 'transfers') {
-      const result = await client.query(
-        `INSERT INTO arena.transfer_history
-           (trader_id, ts, direction, asset, amount, currency, dedupe_hash, raw)
-         SELECT $1, r.ts::timestamptz, r.direction, r.asset, r.amount, $2,
-                r.dedupe_hash, r.raw
-           FROM jsonb_to_recordset($3::jsonb) AS r(
-             ts text, direction text, asset text, amount numeric,
-             dedupe_hash text, raw jsonb)
-         ON CONFLICT (ts, dedupe_hash) DO NOTHING`,
-        [
-          traderId,
-          src.currency,
-          JSON.stringify(
-            rows
-              .filter(
-                (r): r is Extract<ParsedHistoryRow, { kind: 'transfers' }> => r.kind === 'transfers'
-              )
-              .map((r) => ({
-                ts: r.ts,
-                direction: r.direction,
-                asset: r.asset,
-                amount: r.amount,
-                dedupe_hash: r.dedupeHash,
-                raw: r.raw,
-              }))
-          ),
-        ]
-      )
-      written = result.rowCount ?? 0
-    } else {
-      const result = await client.query(
-        `INSERT INTO arena.copier_records
-           (trader_id, ts, copier_label, copier_pnl, copier_invested,
-            copy_duration_days, currency, dedupe_hash, raw)
-         SELECT $1, r.ts::timestamptz, r.copier_label, r.copier_pnl,
-                r.copier_invested, r.copy_duration_days, $2, r.dedupe_hash, r.raw
-           FROM jsonb_to_recordset($3::jsonb) AS r(
-             ts text, copier_label text, copier_pnl numeric,
-             copier_invested numeric, copy_duration_days int,
-             dedupe_hash text, raw jsonb)
-         ON CONFLICT (ts, dedupe_hash) DO NOTHING`,
-        [
-          traderId,
-          src.currency,
-          JSON.stringify(
-            rows
-              .filter(
-                (r): r is Extract<ParsedHistoryRow, { kind: 'copiers' }> => r.kind === 'copiers'
-              )
-              .map((r) => ({
-                ts: r.ts,
-                copier_label: r.copierLabel,
-                copier_pnl: r.copierPnl,
-                copier_invested: r.copierInvested,
-                copy_duration_days: r.copyDurationDays,
-                dedupe_hash: r.dedupeHash,
-                raw: r.raw,
-              }))
-          ),
-        ]
-      )
-      written = result.rowCount ?? 0
-    }
-
-    if (newCursor !== null) {
-      await client.query(
-        `INSERT INTO arena.ingest_cursors (trader_id, kind, cursor_value, updated_at)
-         VALUES ($1, $2, $3, now())
-         ON CONFLICT (trader_id, kind)
-         DO UPDATE SET cursor_value = EXCLUDED.cursor_value, updated_at = now()
-         -- Caller checks are not enough: Tier-B and Tier-C can commit out of
-         -- order. The database is the final monotonic checkpoint authority.
-         WHERE EXCLUDED.cursor_value::timestamptz
-               > arena.ingest_cursors.cursor_value::timestamptz`,
-        [traderId, kind, newCursor]
-      )
-    }
-
+    const written = await publishHistoryRowsTransactionInternal(
+      client,
+      src,
+      traderId,
+      kind,
+      rows,
+      newCursor
+    )
     await client.query('COMMIT')
     return written
   } catch (err) {
