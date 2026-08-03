@@ -1,0 +1,33 @@
+-- Preserve the exact audited Tip lifecycle body in the migration ledger so
+-- the selective 21211000 completion-identity migration can prove its required
+-- predecessor in this focused PostgreSQL chain.
+
+CREATE SCHEMA IF NOT EXISTS supabase_migrations AUTHORIZATION postgres;
+CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
+  version text PRIMARY KEY,
+  statements text[] NOT NULL,
+  name text NOT NULL,
+  created_by text NOT NULL,
+  idempotency_key text NOT NULL
+);
+
+\set tip_lifecycle_body_b64 `base64 < supabase/migrations/20260721210000_tip_checkout_lifecycle_atomic.sql | tr -d '\n'`
+
+INSERT INTO supabase_migrations.schema_migrations (
+  version, statements, name, created_by, idempotency_key
+) VALUES (
+  '20260721210000',
+  ARRAY[
+    pg_catalog.convert_from(
+      pg_catalog.decode(:'tip_lifecycle_body_b64', 'base64'),
+      'UTF8'
+    )
+  ],
+  'tip_checkout_lifecycle_atomic',
+  'codex',
+  'codex:20260721210000:d10a9959b52e20d127553c1683b154a62c97d85c455ff12e831c3a1d5c7ef1ab'
+) ON CONFLICT (version) DO UPDATE SET
+  statements = EXCLUDED.statements,
+  name = EXCLUDED.name,
+  created_by = EXCLUDED.created_by,
+  idempotency_key = EXCLUDED.idempotency_key;

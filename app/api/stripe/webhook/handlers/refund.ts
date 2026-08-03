@@ -150,6 +150,12 @@ const NON_ENTITLEMENT_PROJECTION_STATUSES = new Set([
   'revocation_acknowledged',
 ])
 
+const API_TIER_PROJECTION_STATUSES = new Set([
+  'api_tier_refund_recorded',
+  'api_tier_full_refund_revoked',
+  'api_tier_full_refund_already_revoked',
+])
+
 const PRO_TOMBSTONE_PROJECTION_STATUSES = new Set([
   'no_tombstone',
   'already_merged',
@@ -195,7 +201,7 @@ type TombstoneAcknowledgement =
       route: 'non_entitlement'
       entitlementPaymentId: null
       ownershipId: string
-      productKind: 'group_pass' | 'tip'
+      productKind: 'api_tier' | 'group_pass' | 'tip'
       projectionStatus: string
     }
   | {
@@ -203,7 +209,7 @@ type TombstoneAcknowledgement =
       route: 'durable_attention'
       entitlementPaymentId: null
       ownershipId: string | null
-      productKind: 'group_pass' | 'pro_entitlement' | 'tip' | null
+      productKind: 'api_tier' | 'group_pass' | 'pro_entitlement' | 'tip' | null
       projectionStatus: null
     }
   | {
@@ -945,9 +951,14 @@ function readTombstoneAcknowledgement(value: unknown): TombstoneAcknowledgement 
     OWNERSHIP_CLAIM_STATUSES.has(result.ownership_status) &&
     typeof result.ownership_id === 'string' &&
     UUID_PATTERN.test(result.ownership_id) &&
-    (result.product_kind === 'tip' || result.product_kind === 'group_pass') &&
+    (result.product_kind === 'tip' ||
+      result.product_kind === 'group_pass' ||
+      result.product_kind === 'api_tier') &&
     typeof result.projection_status === 'string' &&
-    NON_ENTITLEMENT_PROJECTION_STATUSES.has(result.projection_status) &&
+    ((result.product_kind === 'api_tier' &&
+      API_TIER_PROJECTION_STATUSES.has(result.projection_status)) ||
+      ((result.product_kind === 'tip' || result.product_kind === 'group_pass') &&
+        NON_ENTITLEMENT_PROJECTION_STATUSES.has(result.projection_status))) &&
     hasExactKeys(result, [
       'status',
       'ownership_status',

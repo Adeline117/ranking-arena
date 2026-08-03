@@ -29,6 +29,7 @@ import {
 
 const session = {
   id: 'cs_lifetime_123',
+  livemode: false,
   metadata: {
     userId: 'user-123',
     plan: 'lifetime',
@@ -56,6 +57,7 @@ const authority = {
     originalAmount: 4_999,
   },
 }
+const PAYMENT_LEDGER_ID = 'a4e09b6f-b13f-4c2f-90d5-c57f62295f5f'
 
 describe('activateLifetimeCheckoutEntitlement', () => {
   const rpc = jest.fn()
@@ -68,7 +70,7 @@ describe('activateLifetimeCheckoutEntitlement', () => {
     rpc.mockResolvedValue({ data: { status: 'activated' }, error: null })
   })
 
-  it('maps exact resolved Stripe identity into the ten-argument atomic activation', async () => {
+  it('maps exact resolved Stripe identity and mode into the atomic activation', async () => {
     const outcome = await activateLifetimeCheckoutEntitlement({
       stripe,
       supabase,
@@ -78,6 +80,7 @@ describe('activateLifetimeCheckoutEntitlement', () => {
 
     expect(mockResolveCheckoutSessionAuthority).toHaveBeenCalledWith(stripe, session, {
       expectedUserId: 'user-123',
+      expectedLivemode: false,
       products: {
         prices: {
           monthly: ['price_monthly'],
@@ -85,6 +88,10 @@ describe('activateLifetimeCheckoutEntitlement', () => {
           lifetime: ['price_lifetime'],
         },
         expectedCurrency: 'usd',
+        expectedRecurringAmountsByPrice: {
+          price_monthly: 499,
+          price_yearly: 2_999,
+        },
       },
     })
     expect(rpc).toHaveBeenCalledWith('activate_lifetime_membership_with_identity_atomic', {
@@ -98,6 +105,7 @@ describe('activateLifetimeCheckoutEntitlement', () => {
       p_currency: 'usd',
       p_paid_at: '2027-01-15T08:00:00.000Z',
       p_payment_status: 'succeeded',
+      p_livemode: false,
     })
     expect(outcome).toEqual({ status: 'activated', authority })
     expect(lifetimeActivationGranted(outcome.status)).toBe(true)
@@ -122,6 +130,47 @@ describe('activateLifetimeCheckoutEntitlement', () => {
     )
     expect(outcome.status).toBe('reservation_refund_queued')
     expect(lifetimeActivationGranted(outcome.status)).toBe(false)
+  })
+
+  it('accepts an exact account-recovery refund acknowledgement without granting lifetime', async () => {
+    rpc.mockResolvedValue({
+      data: {
+        status: 'account_recovery_billing_blocked',
+        refund_status: 'refund_pending',
+        payment_id: PAYMENT_LEDGER_ID,
+      },
+      error: null,
+    })
+
+    const outcome = await activateLifetimeCheckoutEntitlement({
+      stripe,
+      supabase,
+      session,
+      expectedUserId: 'user-123',
+    })
+
+    expect(outcome.status).toBe('account_recovery_billing_blocked')
+    expect(lifetimeActivationGranted(outcome.status)).toBe(false)
+  })
+
+  it.each([
+    { refund_status: 'completed', payment_id: PAYMENT_LEDGER_ID },
+    { refund_status: 'refund_pending', payment_id: 'not-a-uuid' },
+    { refund_status: 'refund_pending', payment_id: PAYMENT_LEDGER_ID.toUpperCase() },
+  ])('rejects malformed account-recovery refund authority %#', async (blockedFields) => {
+    rpc.mockResolvedValue({
+      data: { status: 'account_recovery_billing_blocked', ...blockedFields },
+      error: null,
+    })
+
+    await expect(
+      activateLifetimeCheckoutEntitlement({
+        stripe,
+        supabase,
+        session,
+        expectedUserId: 'user-123',
+      })
+    ).rejects.toThrow('invalid recovery refund result')
   })
 
   it('durably records deterministic authority failures without calling activation', async () => {

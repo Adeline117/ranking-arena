@@ -143,6 +143,12 @@ const UPSTASH_REDIS_REST_TOKEN = isServer ? getEnv('UPSTASH_REDIS_REST_TOKEN', f
 // Auth
 const ADMIN_SECRET = isServer ? getEnv('ADMIN_SECRET', false) : undefined
 const INVITE_SECRET = isServer ? getEnv('INVITE_SECRET', false) : undefined
+const ACCOUNT_RECOVERY_FINALIZATION_SECRET = isServer
+  ? getEnv('ACCOUNT_RECOVERY_FINALIZATION_SECRET', false)
+  : undefined
+const ACCOUNT_RECOVERY_FINALIZATION_SECRET_PREVIOUS = isServer
+  ? getEnv('ACCOUNT_RECOVERY_FINALIZATION_SECRET_PREVIOUS', false)
+  : undefined
 
 // Stripe
 const STRIPE_SECRET_KEY = isServer ? getEnv('STRIPE_SECRET_KEY', false) : undefined
@@ -200,6 +206,8 @@ export const env = {
   // NEXT_PUBLIC_ADMIN_EMAILS is deprecated - use database role check instead
   ADMIN_SECRET,
   INVITE_SECRET,
+  ACCOUNT_RECOVERY_FINALIZATION_SECRET,
+  ACCOUNT_RECOVERY_FINALIZATION_SECRET_PREVIOUS,
 
   // ── Encryption ──
   ENCRYPTION_KEY: isServer ? getEnv('ENCRYPTION_KEY', false) : undefined,
@@ -210,6 +218,12 @@ export const env = {
   STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET,
   STRIPE_WEBHOOK_SECRET_PREVIOUS,
+  API_TIER_CHECKOUT_WRITER_MODE: getEnv(
+    'API_TIER_CHECKOUT_WRITER_MODE',
+    false,
+    process.env.NODE_ENV === 'production' ? 'closed' : 'sealed'
+  ),
+  API_TIER_CHECKOUT_WRITER_SHA: getEnv('API_TIER_CHECKOUT_WRITER_SHA', false),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: getEnv('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', false),
   STRIPE_PRO_MONTHLY_PRICE_ID: getEnv('STRIPE_PRO_MONTHLY_PRICE_ID', false),
   STRIPE_PRO_YEARLY_PRICE_ID: getEnv('STRIPE_PRO_YEARLY_PRICE_ID', false),

@@ -37,6 +37,7 @@ import { safeInternalReturnPath } from '@/lib/auth/safe-return-path'
 import {
   clearAccountRecoveryToken,
   consumeAccountRecoveryToken,
+  persistAccountRecoveryToken,
   retainAccountRecoveryTokenLease,
 } from '@/lib/auth/account-recovery-token'
 import { StaleVerifiedSessionError } from '@/lib/auth/verified-session'
@@ -117,6 +118,14 @@ function safeLocalStorageRemove(key: string): void {
     localStorage.removeItem(key)
   } catch {
     // Storage cleanup is best-effort; identity CAS remains authoritative.
+  }
+}
+
+function safeLocalStorageSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // A session marker remains available when durable storage is blocked.
   }
 }
 
@@ -210,6 +219,10 @@ export default function LoginPageClient() {
   const [showRecoveryPrompt, setShowRecoveryPrompt] = useState(false)
   const [recovering, setRecovering] = useState(false)
   const [accountRecoveryToken, setAccountRecoveryToken] = useState<string | null>(null)
+  const [hasRecoveryFallbackCookie, setHasRecoveryFallbackCookie] = useState(false)
+  const [recoveryFallbackOperationId, setRecoveryFallbackOperationId] = useState<string | null>(
+    null
+  )
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0)
 
   const [touchedFields, setTouchedFields] = useState<{
@@ -233,10 +246,14 @@ export default function LoginPageClient() {
   const searchParams = useSearchParams()
   const { showToast } = useToast()
   const productFacts = useProductFacts()
+  const recoveryDiscoveryToastRef = useRef(showToast)
+  const recoveryDiscoveryTranslateRef = useRef(t)
 
   const isAddAccount = searchParams.get('addAccount') === 'true'
   isRegisterRef.current = isRegister
   codeVerifiedRef.current = codeVerified
+  recoveryDiscoveryToastRef.current = showToast
+  recoveryDiscoveryTranslateRef.current = t
 
   const beginAttempt = useCallback((externalSession?: Session): LoginAttempt => {
     activeAttemptRef.current?.controller.abort()
@@ -514,6 +531,169 @@ export default function LoginPageClient() {
       }
     }
   }, [searchParams, t])
+
+  useEffect(() => {
+    if (!mounted) return
+    let cancelled = false
+    const resumeDeletionHandoff = async () => {
+      const acceptDeletionCommit = (data: Record<string, unknown>) => {
+        if (typeof data.recovery_token !== 'string') return false
+        persistAccountRecoveryToken(data.recovery_token)
+        setAccountRecoveryToken(data.recovery_token)
+        setError(recoveryDiscoveryTranslateRef.current('loginAccountPendingDeletion'))
+        setShowRecoveryPrompt(true)
+        return true
+      }
+      try {
+        const deletionStatusResponse = await fetch('/api/account/delete?phase=status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: '{}',
+        })
+        const deletionStatusData = await deletionStatusResponse.json()
+        const deletionOperations = Array.isArray(deletionStatusData.operations)
+          ? deletionStatusData.operations
+              .filter(
+                (operation: { operation_id?: unknown }) =>
+                  typeof operation?.operation_id === 'string'
+              )
+              .sort((left: { operation_id: string }, right: { operation_id: string }) =>
+                left.operation_id.localeCompare(right.operation_id)
+              )
+          : []
+        if (!cancelled && deletionStatusResponse.ok && deletionOperations.length > 0) {
+          const commitResponse = await fetch('/api/account/delete?phase=commit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ operation_id: deletionOperations[0].operation_id }),
+          })
+          const commitData = await commitResponse.json()
+          if (!cancelled && commitResponse.ok && acceptDeletionCommit(commitData)) return
+        }
+      } catch {
+        // Deletion capability discovery is a retry aid; the cookies stay durable.
+      }
+      let marker: { operation_id?: unknown; user_id?: unknown } | null = null
+      try {
+        marker = JSON.parse(
+          localStorage.getItem('account_deletion_pending_operation') ?? 'null'
+        ) as {
+          operation_id?: unknown
+          user_id?: unknown
+        } | null
+      } catch {
+        marker = null
+      }
+      if (
+        marker &&
+        typeof marker.operation_id === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          marker.operation_id
+        )
+      ) {
+        try {
+          const response = await fetch('/api/account/delete?phase=commit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ operation_id: marker.operation_id }),
+          })
+          const data = await response.json()
+          if (cancelled) return
+          if (response.ok && acceptDeletionCommit(data)) {
+            localStorage.removeItem('account_deletion_pending_operation')
+            if (typeof marker.user_id === 'string') {
+              localStorage.removeItem(`account_deletion_operation_id:${marker.user_id}`)
+            }
+            return
+          }
+          if (
+            response.status === 409 ||
+            (response.status === 410 && data?.code === 'capability_invalid')
+          ) {
+            localStorage.removeItem('account_deletion_pending_operation')
+            if (typeof marker.user_id === 'string') {
+              localStorage.removeItem(`account_deletion_operation_id:${marker.user_id}`)
+            }
+          }
+        } catch {
+          // A retryable marker remains durable for the next mount.
+        }
+      }
+      try {
+        const statusResponse = await fetch('/api/account/recover?phase=status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: '{}',
+        })
+        const statusData = await statusResponse.json()
+        const operations = Array.isArray(statusData.operations)
+          ? statusData.operations
+              .filter(
+                (operation: { operation_id?: unknown }) =>
+                  typeof operation?.operation_id === 'string'
+              )
+              .sort((left: { operation_id: string }, right: { operation_id: string }) =>
+                left.operation_id.localeCompare(right.operation_id)
+              )
+          : []
+        if (!cancelled && statusResponse.ok) {
+          for (const operation of operations) {
+            const commitResponse = await fetch('/api/account/recover?phase=commit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ operation_id: operation.operation_id }),
+            })
+            const commitData = await commitResponse.json()
+            if (cancelled) return
+            if (commitResponse.ok && commitData.success) {
+              setShowRecoveryPrompt(false)
+              setHasRecoveryFallbackCookie(false)
+              setRecoveryFallbackOperationId(null)
+              recoveryDiscoveryToastRef.current(
+                recoveryDiscoveryTranslateRef.current('loginAccountRecovered'),
+                'success'
+              )
+              return
+            }
+            if (commitResponse.status !== 410) break
+          }
+        }
+      } catch {
+        // Recovery finalization remains discoverable from its HttpOnly cookie.
+      }
+      try {
+        const response = await fetch('/api/account/recover?phase=fallback-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: '{}',
+        })
+        const data = await response.json()
+        const fallbackOperations = Array.isArray(data.operations) ? data.operations : []
+        const fallbackOperationId = fallbackOperations
+          .map((operation: { operation_id?: unknown }) => operation?.operation_id)
+          .filter((operationId: unknown): operationId is string => typeof operationId === 'string')
+          .sort()[0]
+        if (!cancelled && response.ok && data.available === true && fallbackOperationId) {
+          setHasRecoveryFallbackCookie(true)
+          setRecoveryFallbackOperationId(fallbackOperationId)
+          setError(recoveryDiscoveryTranslateRef.current('loginAccountPendingDeletion'))
+          setShowRecoveryPrompt(true)
+        }
+      } catch {
+        // Fallback discovery is best-effort; explicit credentials still work.
+      }
+    }
+    void resumeDeletionHandoff()
+    return () => {
+      cancelled = true
+    }
+  }, [mounted])
 
   useEffect(() => {
     if (error && errorRef.current) {
@@ -1108,6 +1288,7 @@ export default function LoginPageClient() {
     setHandle('')
     setCountdown(0)
     safeSessionStorageRemove('otp_countdown_end')
+    safeSessionStorageRemove('account_recovery_operation_id')
     setError(null)
     setLoading(false)
     setSendingCode(false)
@@ -1118,11 +1299,17 @@ export default function LoginPageClient() {
     setShowRecoveryPrompt(false)
     clearAccountRecoveryToken()
     setAccountRecoveryToken(null)
+    setHasRecoveryFallbackCookie(false)
+    setRecoveryFallbackOperationId(null)
     setTouchedFields({ email: false, password: false, handle: false })
   }
 
   const handleRecoverAccount = async () => {
-    if (recovering || (!accountRecoveryToken && (!email || !password))) return
+    if (
+      recovering ||
+      (!accountRecoveryToken && !hasRecoveryFallbackCookie && (!email || !password))
+    )
+      return
     const recoveryToken = accountRecoveryToken
     const attempt = beginAttempt()
     let establishedSession: Session | null = null
@@ -1132,21 +1319,108 @@ export default function LoginPageClient() {
     setRecovering(true)
     setError(null)
     try {
-      const res = await fetch('/api/account/recover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          recoveryToken ? { recovery_token: recoveryToken } : { email, password }
-        ),
-        signal: attempt.controller.signal,
-      })
+      const recoveryIdentity = accountRecoveryToken
+        ? `token:${accountRecoveryToken}`
+        : hasRecoveryFallbackCookie
+          ? `fallback-cookie:${recoveryFallbackOperationId ?? 'missing'}`
+          : `email:${email.trim().toLowerCase()}`
+      const recoveryIdentityDigest = Array.from(
+        new Uint8Array(
+          await crypto.subtle.digest('SHA-256', new TextEncoder().encode(recoveryIdentity))
+        )
+      )
+        .slice(0, 16)
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('')
+      const durableOperationStorageKey = `account_recovery_operation_id:${recoveryIdentityDigest}`
+      const storedOperationId = safeLocalStorageGet(durableOperationStorageKey)
+      let recoveryOperationId =
+        storedOperationId &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          storedOperationId
+        )
+          ? storedOperationId
+          : crypto.randomUUID()
+      safeLocalStorageSet(durableOperationStorageKey, recoveryOperationId)
+      const commitRecovery = () =>
+        fetch('/api/account/recover?phase=commit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ operation_id: recoveryOperationId }),
+          signal: attempt.controller.signal,
+        })
+      let res = storedOperationId
+        ? await commitRecovery()
+        : await fetch('/api/account/recover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(
+              recoveryToken
+                ? { recovery_token: recoveryToken, operation_id: recoveryOperationId }
+                : hasRecoveryFallbackCookie
+                  ? {
+                      recovery_cookie: true,
+                      recovery_cookie_operation_id: recoveryFallbackOperationId,
+                      operation_id: recoveryOperationId,
+                    }
+                  : { email, password, operation_id: recoveryOperationId }
+            ),
+            signal: attempt.controller.signal,
+          })
       assertAttemptAuthBoundaryCurrent(attempt)
-      const data = await res.json()
+      let data = await res.json()
+      if (storedOperationId && res.status === 409) {
+        res = await fetch('/api/account/recover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(
+            recoveryToken
+              ? { recovery_token: recoveryToken, operation_id: recoveryOperationId }
+              : hasRecoveryFallbackCookie
+                ? {
+                    recovery_cookie: true,
+                    recovery_cookie_operation_id: recoveryFallbackOperationId,
+                    operation_id: recoveryOperationId,
+                  }
+                : { email, password, operation_id: recoveryOperationId }
+          ),
+          signal: attempt.controller.signal,
+        })
+        assertAttemptAuthBoundaryCurrent(attempt)
+        data = await res.json()
+      }
+      if (res.status === 202) {
+        if (
+          !data ||
+          typeof data !== 'object' ||
+          Array.isArray(data) ||
+          Object.keys(data).length !== 2 ||
+          data.status !== 'prepared' ||
+          typeof data.operation_id !== 'string' ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            data.operation_id
+          )
+        ) {
+          throw new Error('Invalid account recovery preparation acknowledgement')
+        }
+        recoveryOperationId = data.operation_id.toLowerCase()
+        safeLocalStorageSet(durableOperationStorageKey, recoveryOperationId)
+        res = await commitRecovery()
+        assertAttemptAuthBoundaryCurrent(attempt)
+        data = await res.json()
+      }
       assertAttemptAuthBoundaryCurrent(attempt)
       if (res.ok && data.success) {
+        safeLocalStorageRemove(durableOperationStorageKey)
+        clearAccountRecoveryToken()
+        setHasRecoveryFallbackCookie(false)
+        setRecoveryFallbackOperationId(null)
         setShowRecoveryPrompt(false)
         showToast(t('loginAccountRecovered'), 'success')
-        if (recoveryToken) {
+        if (recoveryToken || hasRecoveryFallbackCookie) {
           setAccountRecoveryToken(null)
           setError(null)
           return
@@ -1170,6 +1444,9 @@ export default function LoginPageClient() {
           completionCommitted = true
         }
       } else {
+        if (res.status === 410 && data?.code === 'capability_invalid') {
+          safeLocalStorageRemove(durableOperationStorageKey)
+        }
         setError(data.error || t('loginRecoveryFailed'))
       }
     } catch (err) {
@@ -1181,7 +1458,6 @@ export default function LoginPageClient() {
         setError(t('networkErrorRetry'))
       }
     } finally {
-      clearAccountRecoveryToken()
       if (isAttemptCurrent(attempt)) {
         setRecovering(false)
         submittingRef.current = false

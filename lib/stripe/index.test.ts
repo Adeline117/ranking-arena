@@ -13,7 +13,6 @@ import {
   getOrCreateStripeCustomer,
   createCheckoutSession,
   createOneTimePaymentSession,
-  createPortalSession,
   cancelSubscription,
   resumeSubscription,
   getSubscription,
@@ -303,10 +302,23 @@ describe('Stripe payment runtime readiness', () => {
 })
 
 describe('getOrCreateStripeCustomer', () => {
+  const listedCustomer = (
+    id: string,
+    metadata: Record<string, string>,
+    overrides: Record<string, unknown> = {}
+  ) => ({
+    id,
+    object: 'customer',
+    livemode: false,
+    metadata,
+    ...overrides,
+  })
+
   test('reuses an email-matched customer only when Stripe metadata names the same user', async () => {
     const mockCustomerId = 'cus_existing123'
     stripe.customers.list = jest.fn().mockResolvedValue({
-      data: [{ id: mockCustomerId, metadata: { userId: 'user123' } }],
+      data: [listedCustomer(mockCustomerId, { userId: 'user123' })],
+      has_more: false,
     })
 
     const result = await getOrCreateStripeCustomer('user123', 'test@example.com')
@@ -318,15 +330,14 @@ describe('getOrCreateStripeCustomer', () => {
   })
 
   test('continues email pagination until an owned customer after the first ten results is found', async () => {
-    const firstTen = Array.from({ length: 10 }, (_, index) => ({
-      id: `cus_other_${index + 1}`,
-      metadata: { userId: `other-user-${index + 1}` },
-    }))
+    const firstTen = Array.from({ length: 10 }, (_, index) =>
+      listedCustomer(`cus_other_${index + 1}`, { userId: `other-user-${index + 1}` })
+    )
     stripe.customers.list = jest
       .fn()
       .mockResolvedValueOnce({ data: firstTen, has_more: true })
       .mockResolvedValueOnce({
-        data: [{ id: 'cus_owned_11', metadata: { userId: 'user123' } }],
+        data: [listedCustomer('cus_owned_11', { userId: 'user123' })],
         has_more: false,
       })
 
@@ -354,9 +365,131 @@ describe('getOrCreateStripeCustomer', () => {
     expect(stripe.customers.create).not.toHaveBeenCalled()
   })
 
+  test('fails closed when Stripe customer email pagination returns an empty continuation page', async () => {
+    stripe.customers.list = jest
+      .fn()
+      .mockResolvedValueOnce({
+        data: [listedCustomer('cus_other_1', { userId: 'other-user' })],
+        has_more: true,
+      })
+      .mockResolvedValueOnce({ data: [], has_more: false })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).rejects.toThrow(
+      'Stripe customer email lookup pagination returned an empty continuation page'
+    )
+    expect(stripe.customers.create).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    ['missing has_more', undefined],
+    ['string has_more', 'false'],
+    ['numeric has_more', 0],
+  ])('fails closed on a customer page with %s', async (_label, hasMore) => {
+    stripe.customers.list = jest.fn().mockResolvedValue({
+      data: [],
+      ...(hasMore === undefined ? {} : { has_more: hasMore }),
+    })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).rejects.toThrow(
+      'Stripe customer email lookup pagination returned an invalid page'
+    )
+    expect(stripe.customers.create).not.toHaveBeenCalled()
+  })
+
+  test('fails closed when Stripe returns more Customers than the requested page limit', async () => {
+    stripe.customers.list = jest.fn().mockResolvedValue({
+      data: Array.from({ length: 101 }, (_, index) =>
+        listedCustomer(`cus_oversized_${index + 1}`, { userId: `other-user-${index + 1}` })
+      ),
+      has_more: false,
+    })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).rejects.toThrow(
+      'Stripe customer email lookup pagination returned an invalid page'
+    )
+    expect(stripe.customers.create).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    ['wrong object', listedCustomer('cus_wrong_object', {}, { object: 'price' })],
+    ['wrong livemode', listedCustomer('cus_wrong_mode', {}, { livemode: true })],
+    ['missing metadata', listedCustomer('cus_no_metadata', {}, { metadata: null })],
+    ['malformed metadata', listedCustomer('cus_bad_metadata', {}, { metadata: { userId: 42 } })],
+  ])('fails closed on customer identity with %s', async (_label, customer) => {
+    stripe.customers.list = jest.fn().mockResolvedValue({ data: [customer], has_more: false })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).rejects.toThrow(
+      'Stripe customer email lookup pagination returned uncertain identity'
+    )
+    expect(stripe.customers.create).not.toHaveBeenCalled()
+  })
+
+  test('fails closed when customer pagination repeats an object identity', async () => {
+    const repeated = listedCustomer('cus_repeated', { userId: 'other-user' })
+    stripe.customers.list = jest
+      .fn()
+      .mockResolvedValueOnce({ data: [repeated], has_more: true })
+      .mockResolvedValueOnce({ data: [repeated], has_more: true })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).rejects.toThrow(
+      'Stripe customer email lookup pagination returned uncertain identity'
+    )
+    expect(stripe.customers.create).not.toHaveBeenCalled()
+  })
+
+  test('fails closed after the customer email pagination safety limit', async () => {
+    let page = 0
+    stripe.customers.list = jest.fn().mockImplementation(async () => {
+      page += 1
+      return {
+        data: [listedCustomer(`cus_page_${page}`, { userId: `other-user-${page}` })],
+        has_more: true,
+      }
+    })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).rejects.toThrow(
+      'Stripe customer email lookup pagination exceeded its safety limit'
+    )
+    expect(stripe.customers.list).toHaveBeenCalledTimes(100)
+    expect(stripe.customers.create).not.toHaveBeenCalled()
+  })
+
+  test('fails closed when multiple email matches claim the same application user', async () => {
+    stripe.customers.list = jest.fn().mockResolvedValue({
+      data: [
+        listedCustomer('cus_owned_one', { userId: 'user123' }),
+        listedCustomer('cus_owned_two', { supabase_user_id: 'user123' }),
+      ],
+      has_more: false,
+    })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).rejects.toThrow(
+      'Stripe customer email lookup returned multiple customers for this user'
+    )
+    expect(stripe.customers.create).not.toHaveBeenCalled()
+  })
+
+  test('fails closed on conflicting owner aliases in an email-matched customer', async () => {
+    stripe.customers.list = jest.fn().mockResolvedValue({
+      data: [
+        listedCustomer('cus_conflicting', {
+          userId: 'user123',
+          supabase_user_id: 'other-user',
+        }),
+      ],
+      has_more: false,
+    })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).rejects.toThrow(
+      'Stripe customer cus_conflicting has conflicting user identities'
+    )
+    expect(stripe.customers.create).not.toHaveBeenCalled()
+  })
+
   test('does not claim an ownerless email-matched customer', async () => {
     stripe.customers.list = jest.fn().mockResolvedValue({
-      data: [{ id: 'cus_ownerless', metadata: {} }],
+      data: [listedCustomer('cus_ownerless', {})],
+      has_more: false,
     })
     stripe.customers.create = jest.fn().mockResolvedValue({ id: 'cus_new123' })
 
@@ -368,7 +501,8 @@ describe('getOrCreateStripeCustomer', () => {
 
   test('does not reuse an email-matched customer owned by another user', async () => {
     stripe.customers.list = jest.fn().mockResolvedValue({
-      data: [{ id: 'cus_other', metadata: { userId: 'other-user' } }],
+      data: [listedCustomer('cus_other', { userId: 'other-user' })],
+      has_more: false,
     })
     stripe.customers.create = jest.fn().mockResolvedValue({ id: 'cus_new123' })
 
@@ -380,7 +514,7 @@ describe('getOrCreateStripeCustomer', () => {
 
   test('should create new customer when not found', async () => {
     const mockNewCustomerId = 'cus_new123'
-    stripe.customers.list = jest.fn().mockResolvedValue({ data: [] })
+    stripe.customers.list = jest.fn().mockResolvedValue({ data: [], has_more: false })
     stripe.customers.create = jest.fn().mockResolvedValue({ id: mockNewCustomerId })
 
     const result = await getOrCreateStripeCustomer('user123', 'test@example.com')
@@ -395,7 +529,7 @@ describe('getOrCreateStripeCustomer', () => {
   })
 
   test('should include metadata when creating customer', async () => {
-    stripe.customers.list = jest.fn().mockResolvedValue({ data: [] })
+    stripe.customers.list = jest.fn().mockResolvedValue({ data: [], has_more: false })
     stripe.customers.create = jest.fn().mockResolvedValue({ id: 'cus_new123' })
 
     await getOrCreateStripeCustomer('user123', 'test@example.com', { plan: 'pro' })
@@ -553,6 +687,42 @@ describe('createCheckoutSession', () => {
         },
       }),
       expect.objectContaining({ idempotencyKey: expect.any(String) })
+    )
+  })
+
+  test('accepts an exact durable identity for an API-tier subscription Checkout', async () => {
+    stripe.checkout.sessions.create = jest.fn().mockResolvedValue({ id: 'cs_api_atomic' })
+    const metadata = {
+      userId: '11111111-1111-4111-8111-111111111111',
+      supabase_user_id: '11111111-1111-4111-8111-111111111111',
+      type: 'api_tier',
+      api_plan: 'starter',
+      api_tier_reservation_id: '22222222-2222-4222-8222-222222222222',
+    }
+
+    await createCheckoutSession({
+      customerId: 'cus_api_atomic',
+      priceId: 'price_api_starter',
+      successUrl: 'https://example.com/settings?api_upgraded=starter',
+      cancelUrl: 'https://example.com/api-docs',
+      metadata,
+      idempotencyKey: 'api_tier_checkout_test_22222222-2222-4222-8222-222222222222',
+      expiresAt: 1_900_000_000,
+      clientReferenceId: '22222222-2222-4222-8222-222222222222',
+    })
+
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: 'cus_api_atomic',
+        mode: 'subscription',
+        expires_at: 1_900_000_000,
+        client_reference_id: '22222222-2222-4222-8222-222222222222',
+        metadata,
+        subscription_data: { metadata },
+      }),
+      {
+        idempotencyKey: 'api_tier_checkout_test_22222222-2222-4222-8222-222222222222',
+      }
     )
   })
 })
@@ -766,24 +936,6 @@ describe('createOneTimePaymentSession', () => {
     ).rejects.toThrow('STRIPE_WEBHOOK_SECRET is not configured')
 
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
-  })
-})
-
-describe('createPortalSession', () => {
-  test('should create portal session', async () => {
-    const mockSession = {
-      id: 'bps_test123',
-      url: 'https://billing.stripe.com/...',
-    }
-    stripe.billingPortal.sessions.create = jest.fn().mockResolvedValue(mockSession)
-
-    const result = await createPortalSession('cus_123', 'https://example.com/account')
-
-    expect(result).toBe(mockSession)
-    expect(stripe.billingPortal.sessions.create).toHaveBeenCalledWith({
-      customer: 'cus_123',
-      return_url: 'https://example.com/account',
-    })
   })
 })
 

@@ -1,0 +1,201 @@
+\set ON_ERROR_STOP on
+
+DO $immutable_recovery_payment_lifecycle_proof$
+DECLARE
+  v_user_id uuid := '00000000-0000-0000-0000-000000000900';
+  v_recovery_operation_id uuid :=
+    '74000000-0000-0000-0000-000000000001';
+  v_deletion_operation_id uuid :=
+    '74000000-0000-0000-0000-000000000002';
+  v_release_attempt_id uuid :=
+    '74000000-0000-0000-0000-000000000003';
+  v_claimed_at timestamptz := pg_catalog.statement_timestamp() - interval '3 hours';
+  v_completed_at timestamptz := pg_catalog.statement_timestamp() - interval '2 hours';
+  v_old_checkout_at timestamptz := pg_catalog.statement_timestamp() - interval '150 minutes';
+  v_old_paid_at timestamptz := pg_catalog.statement_timestamp() - interval '1 hour';
+  v_new_checkout_at timestamptz := pg_catalog.statement_timestamp() - interval '1 hour';
+  v_new_paid_at timestamptz := pg_catalog.statement_timestamp() - interval '30 minutes';
+  v_identity jsonb;
+  v_snapshot jsonb;
+  v_result jsonb;
+  v_digest text;
+  v_locator record;
+  v_ack text;
+BEGIN
+  v_identity := pg_catalog.jsonb_build_object(
+    'version', 2,
+    'livemode', false,
+    'stripe_customer_id', NULL,
+    'schedule_subscription_ids', pg_catalog.jsonb_build_array(),
+    'b2c_target', NULL,
+    'api_subscription_ids', pg_catalog.jsonb_build_array(),
+    'retired_b2c_subscription_ids', pg_catalog.jsonb_build_array(),
+    'unclassified_subscription_ids', pg_catalog.jsonb_build_array(),
+    'conflicting_subscription_ids', pg_catalog.jsonb_build_array(),
+    'decision_status', 'resolved',
+    'current_target_count', 0
+  );
+  v_digest := pg_catalog.encode(
+    pg_catalog.sha256(pg_catalog.convert_to(v_identity::text, 'UTF8')),
+    'hex'
+  );
+  v_snapshot := pg_catalog.jsonb_build_object(
+    'status', 'resolved',
+    'stripe_customer_id', NULL,
+    'target_digest', v_digest,
+    'b2c_target', NULL,
+    'api_target_count', 0,
+    'retired_b2c_count', 0,
+    'unclassified_target_count', 0,
+    'livemode', false,
+    'target_identity', v_identity
+  );
+  v_result := pg_catalog.jsonb_build_object(
+    'status', 'completed_resumed',
+    'b2c_state', 'no_b2c_target',
+    'lifetime_state', 'not_present',
+    'subscription_resumed', true,
+    'billing_reactivation_required', false,
+    'target_digest', v_digest
+  );
+  IF NOT public.account_recovery_billing_target_snapshot_is_exact_v2(
+      v_snapshot, v_digest
+    )
+    OR NOT public.account_recovery_billing_result_is_exact_v2(
+      v_result, v_digest, true
+    )
+  THEN
+    RAISE EXCEPTION 'fixture V2 snapshot/result construction is invalid: target=%, result=%, snapshot_keys=%, identity_keys=%, result_keys=%, digest_equal=%, snapshot=%, result_json=%',
+      public.account_recovery_billing_target_snapshot_is_exact_v2(
+        v_snapshot, v_digest
+      ),
+      public.account_recovery_billing_result_is_exact_v2(
+        v_result, v_digest, true
+      ),
+      public.jsonb_object_key_count_v2(v_snapshot),
+      public.jsonb_object_key_count_v2(v_identity),
+      public.jsonb_object_key_count_v2(v_result),
+      pg_catalog.encode(
+        pg_catalog.sha256(pg_catalog.convert_to(v_identity::text, 'UTF8')),
+        'hex'
+      ) = v_digest,
+      v_snapshot,
+      v_result;
+  END IF;
+
+  INSERT INTO public.account_recovery_admissions (
+    operation_id,
+    user_id,
+    recovery_token_hash,
+    state,
+    claimed_at,
+    lease_expires_at,
+    finished_at,
+    updated_at,
+    auth_finalization_capability_hash,
+    auth_finalization_state,
+    auth_finalization_prepared_at,
+    auth_finalized_at,
+    recovery_billing_resumed,
+    recovery_billing_target_snapshot,
+    recovery_billing_target_digest,
+    recovery_billing_v2_result,
+    recovery_billing_completed_at
+  ) VALUES (
+    v_recovery_operation_id,
+    v_user_id,
+    pg_catalog.repeat('1', 64),
+    'finished',
+    v_claimed_at,
+    v_claimed_at + interval '15 minutes',
+    v_claimed_at + interval '5 minutes',
+    v_completed_at,
+    pg_catalog.repeat('2', 64),
+    'completed',
+    v_claimed_at + interval '6 minutes',
+    v_completed_at - interval '1 minute',
+    true,
+    v_snapshot,
+    v_digest,
+    v_result,
+    v_completed_at
+  );
+
+  BEGIN
+    UPDATE public.account_recovery_admissions
+    SET recovery_billing_completed_at = v_completed_at + interval '1 second'
+    WHERE operation_id = v_recovery_operation_id;
+    RAISE EXCEPTION 'immutable recovery completion boundary accepted mutation';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+
+  SELECT located.* INTO STRICT v_locator
+  FROM public.locate_account_recovery_payment_lifecycle_v2(
+    v_user_id, v_old_checkout_at, v_old_paid_at
+  ) AS located;
+  IF v_locator.operation_id IS DISTINCT FROM v_recovery_operation_id
+    OR v_locator.lifecycle_kind IS DISTINCT FROM 'completed_window'
+    OR v_locator.recovery_billing_completed_at IS DISTINCT FROM v_completed_at
+  THEN
+    RAISE EXCEPTION 'completed recovery window locator is not exact';
+  END IF;
+
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role', 'service_role', true
+  );
+  v_ack := public.prepare_account_deletion_auth_fence_atomic(
+    v_user_id,
+    v_deletion_operation_id,
+    pg_catalog.repeat('3', 64),
+    'immutable lifecycle proof'
+  );
+  IF v_ack IS DISTINCT FROM 'prepared' THEN
+    RAISE EXCEPTION 'deletion preparation did not supersede recovery: %', v_ack;
+  END IF;
+  v_ack := public.release_account_deletion_auth_fence_atomic(
+    v_user_id,
+    v_deletion_operation_id,
+    v_release_attempt_id,
+    pg_catalog.repeat('3', 64)
+  );
+  IF v_ack IS DISTINCT FROM 'released' THEN
+    RAISE EXCEPTION 'deletion release failed: %', v_ack;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.locate_account_recovery_payment_lifecycle_v2(
+      v_user_id, v_old_checkout_at, v_old_paid_at
+    ) AS located
+    WHERE located.operation_id = v_recovery_operation_id
+      AND located.lifecycle_kind = 'completed_window'
+      AND located.recovery_billing_completed_at = v_completed_at
+  ) OR NOT public.account_recovery_payment_lifecycle_is_blocked_v2(
+    v_user_id, v_old_checkout_at, v_old_paid_at
+  ) THEN
+    RAISE EXCEPTION 'superseded/released admission lost its old payment window';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.locate_account_recovery_payment_lifecycle_v2(
+      v_user_id, v_new_checkout_at, v_new_paid_at
+    )
+  ) OR public.account_recovery_payment_lifecycle_is_blocked_v2(
+    v_user_id, v_new_checkout_at, v_new_paid_at
+  ) THEN
+    RAISE EXCEPTION 'post-completion checkout was incorrectly blocked';
+  END IF;
+
+  IF pg_catalog.has_function_privilege(
+    'service_role',
+    'public.locate_account_recovery_payment_lifecycle_v2(uuid,timestamptz,timestamptz)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'owner-only recovery lifecycle locator leaked to service role';
+  END IF;
+END
+$immutable_recovery_payment_lifecycle_proof$;
+
+SELECT 'b2c subscription webhook authority PG17 proof passed' AS result;

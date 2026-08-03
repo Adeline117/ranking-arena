@@ -12,6 +12,7 @@ EXTRA_SETUP_SQLS="${STRIPE_ENTITLEMENT_EXTRA_SETUP_SQLS:-${STRIPE_ENTITLEMENT_EX
 EXTRA_MIGRATIONS="${STRIPE_ENTITLEMENT_EXTRA_MIGRATIONS:-${STRIPE_ENTITLEMENT_EXTRA_MIGRATION:-}}"
 EXTRA_PROOF_SQLS="${STRIPE_ENTITLEMENT_EXTRA_PROOF_SQLS:-${STRIPE_ENTITLEMENT_EXTRA_PROOF_SQL:-}}"
 EXTRA_PROOF_SHELLS="${STRIPE_ENTITLEMENT_EXTRA_PROOF_SHELLS:-}"
+SKIP_BASE_PROOF="${STRIPE_ENTITLEMENT_SKIP_BASE_PROOF:-0}"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -541,6 +542,7 @@ if [[ -n "$EXTRA_MIGRATIONS" ]]; then
   done
 fi
 
+if [[ "$SKIP_BASE_PROOF" != "1" ]]; then
 psql_cmd <<'SQL'
 DO $additive_deploy_window$
 BEGIN
@@ -2521,6 +2523,7 @@ BEGIN
 END
 $predeploy_concurrency_and_acl_proof$;
 SQL
+fi
 
 if [[ -n "$EXTRA_PROOF_SQLS" ]]; then
   IFS=':' read -r -a extra_proof_paths <<< "$EXTRA_PROOF_SQLS"

@@ -10,6 +10,10 @@ import { badRequest, notFound } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 import { env } from '@/lib/env'
 import { createOneTimePaymentSession, getOrCreateStripeCustomer, getStripe } from '@/lib/stripe'
+import {
+  BILLING_SURFACE_UNAVAILABLE_MESSAGE,
+  assertUserStripeBillingSurfaceAccess,
+} from '@/lib/stripe/billing-surface-access'
 import { sanitizeInput } from '@/lib/utils/sanitize'
 import { isTipCheckoutRuntimeEnabled } from '@/lib/security/tip-checkout-cutover'
 
@@ -305,6 +309,16 @@ const authenticatedPost = withAuth(
       typeof message === 'string' && message.trim()
         ? sanitizeInput(message.trim(), { maxLength: 200 })
         : null
+
+    try {
+      await assertUserStripeBillingSurfaceAccess(user.id)
+    } catch (error) {
+      logger.error('[Tip Checkout] Billing surface access was unavailable', {
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return serviceUnavailable(BILLING_SURFACE_UNAVAILABLE_MESSAGE)
+    }
 
     // Customer identity is established before reserving a payable Tip tuple.
     // Both the Stripe create key and the DB compare-and-set are stable by user.

@@ -30,12 +30,23 @@ import { env } from '@/lib/env'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+function secretKeyLivemode(secretKey: string): boolean | null {
+  if (/^sk_live_[A-Za-z0-9_]+$/.test(secretKey)) return true
+  if (/^sk_test_[A-Za-z0-9_]+$/.test(secretKey)) return false
+  return null
+}
+
 export async function POST(request: NextRequest) {
   const correlationId = getOrCreateCorrelationId(request)
   return runWithCorrelationId(correlationId, async () => {
     const startTime = Date.now()
     if (!env.STRIPE_SECRET_KEY) {
       logger.error('STRIPE_SECRET_KEY is not configured')
+      return NextResponse.json({ error: 'Payment system not configured' }, { status: 503 })
+    }
+    const configuredLivemode = secretKeyLivemode(env.STRIPE_SECRET_KEY)
+    if (configuredLivemode === null) {
+      logger.error('STRIPE_SECRET_KEY has no valid Stripe secret-key mode')
       return NextResponse.json({ error: 'Payment system not configured' }, { status: 503 })
     }
     if (!env.STRIPE_WEBHOOK_SECRET) {
@@ -57,6 +68,15 @@ export async function POST(request: NextRequest) {
       } catch (err: unknown) {
         logger.error('Webhook signature verification failed', { error: err })
         return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+      }
+
+      if (event.livemode !== configuredLivemode) {
+        logger.error('Signed Stripe event mode does not match the configured secret key', {
+          eventId: event.id,
+          eventLivemode: event.livemode,
+          configuredLivemode,
+        })
+        return NextResponse.json({ error: 'Stripe event mode mismatch' }, { status: 400 })
       }
 
       const supabase = getSupabase()
@@ -110,7 +130,11 @@ export async function POST(request: NextRequest) {
                 livemode: event.livemode,
               })
             } else {
-              await handleCheckoutComplete(session)
+              await handleCheckoutComplete(session, {
+                id: event.id,
+                created: event.created,
+                livemode: event.livemode,
+              })
             }
             break
           }
@@ -125,20 +149,37 @@ export async function POST(request: NextRequest) {
 
           case 'customer.subscription.created':
           case 'customer.subscription.updated':
-            await handleSubscriptionUpdate(event.data.object as Stripe.Subscription)
+            await handleSubscriptionUpdate(event.data.object as Stripe.Subscription, {
+              id: event.id,
+              created: event.created,
+              livemode: event.livemode,
+            })
             break
 
           case 'customer.subscription.deleted':
-            await handleSubscriptionCanceled(event.data.object as Stripe.Subscription)
+            await handleSubscriptionCanceled(event.data.object as Stripe.Subscription, {
+              id: event.id,
+              created: event.created,
+              livemode: event.livemode,
+            })
             break
 
           case 'invoice.paid':
           case 'invoice.payment_succeeded':
-            await handlePaymentSucceeded(event.data.object as Stripe.Invoice)
+            await handlePaymentSucceeded(event.data.object as Stripe.Invoice, {
+              id: event.id,
+              created: event.created,
+              livemode: event.livemode,
+              type: event.type,
+            })
             break
 
           case 'invoice.payment_failed':
-            await handlePaymentFailed(event.data.object as Stripe.Invoice)
+            await handlePaymentFailed(event.data.object as Stripe.Invoice, {
+              id: event.id,
+              created: event.created,
+              livemode: event.livemode,
+            })
             break
 
           case 'invoice.payment_action_required':

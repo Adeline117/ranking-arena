@@ -28,7 +28,9 @@ jest.mock('@/lib/cache/redis-client', () => ({
 }))
 
 jest.mock('@/lib/cron/with-cron-lock', () => ({
-  acquireCronLock: jest.fn().mockImplementation(async () => mockReleaseCronLock),
+  acquireCronLock: jest
+    .fn()
+    .mockImplementation(async () => ({ status: 'acquired', release: mockReleaseCronLock })),
 }))
 
 jest.mock('@/lib/services/pipeline-logger', () => ({

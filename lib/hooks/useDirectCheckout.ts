@@ -64,7 +64,9 @@ export function useDirectCheckout() {
           body: JSON.stringify({
             plan: intent.plan,
             promotionCode: intent.promotionCode,
-            trial: intent.plan === 'lifetime' ? undefined : intent.trial,
+            // Recurring checkout requires an explicit paid/trial choice. Never
+            // let an omitted or malformed UI intent silently become paid.
+            trial: intent.plan === 'lifetime' ? undefined : intent.trial === true,
           }),
         })
 

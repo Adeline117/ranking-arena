@@ -171,7 +171,7 @@ function proAcknowledgement(overrides: Record<string, unknown> = {}) {
 }
 
 function nonEntitlementAcknowledgement(
-  kind: 'group_pass' | 'tip',
+  kind: 'api_tier' | 'group_pass' | 'tip',
   overrides: Record<string, unknown> = {}
 ) {
   return {
@@ -344,10 +344,16 @@ describe('refund webhook product ownership routing', () => {
     )
   })
 
-  it.each(['tip', 'group_pass'] as const)(
+  it.each(['tip', 'group_pass', 'api_tier'] as const)(
     'projects an exact %s acknowledgement without touching Pro',
     async (productKind) => {
-      configureRpc({ tombstoneData: nonEntitlementAcknowledgement(productKind) })
+      const projectionStatus =
+        productKind === 'api_tier' ? 'api_tier_full_refund_revoked' : 'resolved'
+      configureRpc({
+        tombstoneData: nonEntitlementAcknowledgement(productKind, {
+          projection_status: projectionStatus,
+        }),
+      })
 
       await handleChargeRefunded(refundedCharge(), refundEvent)
 
@@ -356,10 +362,39 @@ describe('refund webhook product ownership routing', () => {
       expect(mockRpc).toHaveBeenCalledTimes(1)
       expect(mockLoggerInfo).toHaveBeenCalledWith(
         'Charge refund projected through exact non-entitlement ownership',
-        expect.objectContaining({ productKind, projectionStatus: 'resolved' })
+        expect.objectContaining({ productKind, projectionStatus })
       )
     }
   )
+
+  it.each([
+    'api_tier_refund_recorded',
+    'api_tier_full_refund_revoked',
+    'api_tier_full_refund_already_revoked',
+  ])('accepts the exact API tier refund projection status %s', async (projectionStatus) => {
+    configureRpc({
+      tombstoneData: nonEntitlementAcknowledgement('api_tier', {
+        projection_status: projectionStatus,
+      }),
+    })
+
+    await expect(handleChargeRefunded(refundedCharge(), refundEvent)).resolves.toBeUndefined()
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    nonEntitlementAcknowledgement('api_tier', { projection_status: 'resolved' }),
+    nonEntitlementAcknowledgement('tip', {
+      projection_status: 'api_tier_full_refund_revoked',
+    }),
+  ])('rejects a product/projection mismatch %#', async (tombstoneData) => {
+    configureRpc({ tombstoneData })
+
+    await expect(handleChargeRefunded(refundedCharge(), refundEvent)).rejects.toThrow(
+      'contradictory product ownership'
+    )
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
 
   it('ACKs an exact durable group-pass revocation review', async () => {
     configureRpc({
@@ -653,7 +688,7 @@ describe('refund webhook product ownership routing', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it.each(['tip', 'group_pass'] as const)(
+  it.each(['tip', 'group_pass', 'api_tier'] as const)(
     'rejects no_tombstone as a %s projection acknowledgement',
     async (productKind) => {
       configureRpc({

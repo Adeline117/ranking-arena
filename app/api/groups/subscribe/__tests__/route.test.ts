@@ -42,6 +42,7 @@ const mockRpc = jest.fn()
 const mockFrom = jest.fn()
 const mockCheckoutRetrieve = jest.fn()
 const mockPaymentIntentRetrieve = jest.fn()
+const mockChargeRetrieve = jest.fn()
 const mockAssertStripePaymentRuntimeReady = jest.fn()
 
 jest.mock('@/lib/api/middleware', () => ({
@@ -69,11 +70,18 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('@/lib/stripe', () => ({
   assertStripePaymentRuntimeReady: () => mockAssertStripePaymentRuntimeReady(),
 }))
+const mockAssertUserStripeBillingSurfaceAccess = jest.fn()
+jest.mock('@/lib/stripe/billing-surface-access', () => ({
+  BILLING_SURFACE_UNAVAILABLE_MESSAGE: 'Billing is temporarily unavailable. Please retry.',
+  assertUserStripeBillingSurfaceAccess: (...args: unknown[]) =>
+    mockAssertUserStripeBillingSurfaceAccess(...args),
+}))
 jest.mock('stripe', () => ({
   __esModule: true,
   default: jest.fn().mockImplementation(() => ({
     checkout: { sessions: { retrieve: mockCheckoutRetrieve } },
     paymentIntents: { retrieve: mockPaymentIntentRetrieve },
+    charges: { retrieve: mockChargeRetrieve },
   })),
 }))
 
@@ -88,7 +96,14 @@ const OTHER_GROUP_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const SUBSCRIPTION_ID = '33333333-3333-4333-8333-333333333333'
 const PAYMENT_INTENT_ID = 'pi_paid_123'
 const CHECKOUT_SESSION_ID = 'cs_paid_123'
+const CHARGE_ID = 'ch_paid_123'
+const CUSTOMER_ID = 'cus_paid_123'
+const OWNERSHIP_ID = '44444444-4444-4444-8444-444444444444'
 const PERIOD_END = '2026-08-15T00:00:00.000Z'
+const CHECKOUT_CREATED = 1_785_542_400
+const CHECKOUT_CREATED_AT = '2026-08-01T00:00:00.000Z'
+const PAID = 1_785_542_460
+const PAID_AT = '2026-08-01T00:01:00.000Z'
 
 function postRequest(body: unknown): NextRequest {
   return new NextRequest('http://localhost/api/groups/subscribe', {
@@ -136,9 +151,12 @@ function paymentIntent(overrides: Record<string, unknown> = {}) {
     id: PAYMENT_INTENT_ID,
     status: 'succeeded',
     metadata: { user_id: ACTOR_ID, group_id: GROUP_ID, tier: 'monthly' },
+    customer: CUSTOMER_ID,
+    latest_charge: CHARGE_ID,
     amount: 990,
     amount_received: 990,
     currency: 'usd',
+    livemode: false,
     ...overrides,
   }
 }
@@ -154,6 +172,49 @@ function checkoutSession(overrides: Record<string, unknown> = {}) {
     amount_total: 990,
     currency: 'usd',
     payment_intent: PAYMENT_INTENT_ID,
+    customer: CUSTOMER_ID,
+    livemode: false,
+    created: CHECKOUT_CREATED,
+    ...overrides,
+  }
+}
+
+function charge(overrides: Record<string, unknown> = {}) {
+  return {
+    id: CHARGE_ID,
+    payment_intent: PAYMENT_INTENT_ID,
+    customer: CUSTOMER_ID,
+    status: 'succeeded',
+    paid: true,
+    captured: true,
+    refunded: false,
+    amount: 990,
+    amount_captured: 990,
+    amount_refunded: 0,
+    created: PAID,
+    currency: 'usd',
+    livemode: false,
+    ...overrides,
+  }
+}
+
+function paidActivationResult(overrides: Record<string, unknown> = {}) {
+  return activationResult({
+    tier: 'monthly',
+    subscription_status: 'active',
+    price_paid: 9.9,
+    stripe_ownership_id: OWNERSHIP_ID,
+    tombstone_status: 'no_tombstone',
+    ...overrides,
+  })
+}
+
+function paidActivationRequest(overrides: Record<string, unknown> = {}) {
+  return {
+    group_id: GROUP_ID,
+    tier: 'monthly',
+    payment_intent_id: PAYMENT_INTENT_ID,
+    checkout_session_id: CHECKOUT_SESSION_ID,
     ...overrides,
   }
 }
@@ -192,6 +253,10 @@ describe('/api/groups/subscribe atomic boundary', () => {
     jest.clearAllMocks()
     process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
     mockAssertStripePaymentRuntimeReady.mockReturnValue(undefined)
+    mockAssertUserStripeBillingSurfaceAccess.mockResolvedValue(undefined)
+    mockCheckoutRetrieve.mockResolvedValue(checkoutSession())
+    mockPaymentIntentRetrieve.mockResolvedValue(paymentIntent())
+    mockChargeRetrieve.mockResolvedValue(charge())
     mockRpc.mockResolvedValue({ data: activationResult(), error: null })
   })
 
@@ -216,6 +281,10 @@ describe('/api/groups/subscribe atomic boundary', () => {
     const response = await POST(postRequest(requestBody))
 
     expect(response.status).toBe(201)
+    expect(mockAssertUserStripeBillingSurfaceAccess).toHaveBeenCalledWith(ACTOR_ID)
+    expect(mockAssertUserStripeBillingSurfaceAccess.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRpc.mock.invocationCallOrder[0]
+    )
     expect(mockRpc).toHaveBeenCalledWith('activate_group_subscription_atomic', {
       p_actor_id: ACTOR_ID,
       p_group_id: GROUP_ID,
@@ -229,6 +298,30 @@ describe('/api/groups/subscribe atomic boundary', () => {
     expect(mockCheckoutRetrieve).not.toHaveBeenCalled()
     expect(mockPaymentIntentRetrieve).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['blocked trial', { group_id: GROUP_ID, tier: 'trial' }, 'blocked'],
+    ['database-failed trial', { group_id: GROUP_ID, tier: 'trial' }, 'database error'],
+    ['blocked paid', paidActivationRequest(), 'blocked'],
+    ['database-failed paid', paidActivationRequest(), 'database error'],
+  ])('fails %s closed before Stripe reads or activation RPC', async (_label, body, reason) => {
+    mockAssertUserStripeBillingSurfaceAccess.mockRejectedValueOnce(new Error(reason))
+
+    const response = await POST(postRequest(body))
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({
+      success: false,
+      error: { message: 'Billing is temporarily unavailable. Please retry.' },
+    })
+    expect(mockAssertUserStripeBillingSurfaceAccess).toHaveBeenCalledWith(ACTOR_ID)
+    expect(Stripe).not.toHaveBeenCalled()
+    expect(mockAssertStripePaymentRuntimeReady).not.toHaveBeenCalled()
+    expect(mockCheckoutRetrieve).not.toHaveBeenCalled()
+    expect(mockPaymentIntentRetrieve).not.toHaveBeenCalled()
+    expect(mockChargeRetrieve).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 
   it('rejects invalid JSON before payment verification or RPC execution', async () => {
@@ -289,13 +382,7 @@ describe('/api/groups/subscribe atomic boundary', () => {
   it('refuses paid activation when Stripe is not configured', async () => {
     delete process.env.STRIPE_SECRET_KEY
 
-    const response = await POST(
-      postRequest({
-        group_id: GROUP_ID,
-        tier: 'monthly',
-        payment_intent_id: PAYMENT_INTENT_ID,
-      })
-    )
+    const response = await POST(postRequest(paidActivationRequest()))
 
     expect(response.status).toBe(503)
     expect(mockRpc).not.toHaveBeenCalled()
@@ -307,13 +394,7 @@ describe('/api/groups/subscribe atomic boundary', () => {
       throw new Error('Stripe live mode is required for Production payment actions')
     })
 
-    const response = await POST(
-      postRequest({
-        group_id: GROUP_ID,
-        tier: 'monthly',
-        payment_intent_id: PAYMENT_INTENT_ID,
-      })
-    )
+    const response = await POST(postRequest(paidActivationRequest()))
 
     expect(response.status).toBe(503)
     expect(mockRpc).not.toHaveBeenCalled()
@@ -321,29 +402,40 @@ describe('/api/groups/subscribe atomic boundary', () => {
     expect(mockPaymentIntentRetrieve).not.toHaveBeenCalled()
   })
 
-  it('binds a succeeded PaymentIntent to exact metadata, USD and fully received amount', async () => {
-    mockPaymentIntentRetrieve.mockResolvedValue(paymentIntent())
+  it('binds one exact Checkout, PaymentIntent, Charge and customer graph', async () => {
     mockRpc.mockResolvedValue({
-      data: activationResult({
-        tier: 'monthly',
-        subscription_status: 'active',
-        price_paid: 9.9,
-      }),
+      data: paidActivationResult(),
       error: null,
     })
 
-    const response = await POST(
-      postRequest({
-        group_id: GROUP_ID,
-        tier: 'monthly',
-        payment_intent_id: PAYMENT_INTENT_ID,
-        checkout_session_id: null,
-      })
-    )
+    const response = await POST(postRequest(paidActivationRequest()))
 
     expect(response.status).toBe(201)
-    expect(mockPaymentIntentRetrieve).toHaveBeenCalledWith(PAYMENT_INTENT_ID)
-    expect(mockRpc).toHaveBeenCalledWith('activate_group_subscription_atomic', {
+    expect(mockAssertUserStripeBillingSurfaceAccess.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCheckoutRetrieve.mock.invocationCallOrder[0]
+    )
+    expect(mockPaymentIntentRetrieve).toHaveBeenCalledWith(PAYMENT_INTENT_ID, {
+      expand: ['latest_charge'],
+    })
+    expect(mockChargeRetrieve).toHaveBeenCalledWith(CHARGE_ID)
+    expect(mockRpc).toHaveBeenCalledWith(
+      'activate_group_subscription_with_stripe_ownership_atomic',
+      {
+        p_actor_id: ACTOR_ID,
+        p_group_id: GROUP_ID,
+        p_tier: 'monthly',
+        p_payment_intent_id: PAYMENT_INTENT_ID,
+        p_checkout_session_id: CHECKOUT_SESSION_ID,
+        p_amount_cents: 990,
+        p_currency: 'usd',
+        p_stripe_charge_id: CHARGE_ID,
+        p_stripe_customer_id: CUSTOMER_ID,
+        p_livemode: false,
+        p_checkout_created_at: CHECKOUT_CREATED_AT,
+        p_paid_at: PAID_AT,
+      }
+    )
+    expect(mockRpc).not.toHaveBeenCalledWith('activate_group_subscription_atomic', {
       p_actor_id: ACTOR_ID,
       p_group_id: GROUP_ID,
       p_tier: 'monthly',
@@ -357,23 +449,12 @@ describe('/api/groups/subscribe atomic boundary', () => {
   })
 
   it('constructs paid verification with the shared pinned Stripe API version', async () => {
-    mockPaymentIntentRetrieve.mockResolvedValue(paymentIntent())
     mockRpc.mockResolvedValue({
-      data: activationResult({
-        tier: 'monthly',
-        subscription_status: 'active',
-        price_paid: 9.9,
-      }),
+      data: paidActivationResult(),
       error: null,
     })
 
-    const response = await POST(
-      postRequest({
-        group_id: GROUP_ID,
-        tier: 'monthly',
-        payment_intent_id: PAYMENT_INTENT_ID,
-      })
-    )
+    const response = await POST(postRequest(paidActivationRequest()))
 
     expect(response.status).toBe(201)
     expect(STRIPE_API_VERSION).toBe('2026-04-22.dahlia')
@@ -407,16 +488,15 @@ describe('/api/groups/subscribe atomic boundary', () => {
     ['zero amount', { amount: 0, amount_received: 0 }],
     ['partially received amount', { amount: 990, amount_received: 989 }],
     ['unsafe amount', { amount: Number.MAX_SAFE_INTEGER + 1, amount_received: 990 }],
+    ['customer', { customer: 'cus_other' }],
+    ['missing customer', { customer: null }],
+    ['latest Charge', { latest_charge: 'ch_other' }],
+    ['missing latest Charge', { latest_charge: null }],
+    ['mode', { livemode: true }],
   ])('rejects PaymentIntent proof with invalid %s', async (_label, overrides) => {
     mockPaymentIntentRetrieve.mockResolvedValue(paymentIntent(overrides))
 
-    const response = await POST(
-      postRequest({
-        group_id: GROUP_ID,
-        tier: 'monthly',
-        payment_intent_id: PAYMENT_INTENT_ID,
-      })
-    )
+    const response = await POST(postRequest(paidActivationRequest()))
 
     expect(response.status).toBe(402)
     expect(mockRpc).not.toHaveBeenCalled()
@@ -427,37 +507,33 @@ describe('/api/groups/subscribe atomic boundary', () => {
     mockCheckoutRetrieve.mockResolvedValue(
       checkoutSession({ payment_intent: { id: PAYMENT_INTENT_ID } })
     )
-    mockPaymentIntentRetrieve.mockResolvedValue(paymentIntent())
     mockRpc.mockResolvedValue({
-      data: activationResult({
-        tier: 'monthly',
-        subscription_status: 'active',
-        price_paid: 9.9,
-      }),
+      data: paidActivationResult(),
       error: null,
     })
 
-    const response = await POST(
-      postRequest({
-        group_id: GROUP_ID,
-        tier: 'monthly',
-        payment_intent_id: PAYMENT_INTENT_ID,
-        checkout_session_id: CHECKOUT_SESSION_ID,
-      })
-    )
+    const response = await POST(postRequest(paidActivationRequest()))
 
     expect(response.status).toBe(201)
     expect(mockCheckoutRetrieve).toHaveBeenCalledWith(CHECKOUT_SESSION_ID, {
       expand: ['payment_intent'],
     })
-    expect(mockPaymentIntentRetrieve).toHaveBeenCalledWith(PAYMENT_INTENT_ID)
+    expect(mockPaymentIntentRetrieve).toHaveBeenCalledWith(PAYMENT_INTENT_ID, {
+      expand: ['latest_charge'],
+    })
+    expect(mockChargeRetrieve).toHaveBeenCalledWith(CHARGE_ID)
     expect(mockRpc).toHaveBeenCalledWith(
-      'activate_group_subscription_atomic',
+      'activate_group_subscription_with_stripe_ownership_atomic',
       expect.objectContaining({
         p_payment_intent_id: PAYMENT_INTENT_ID,
         p_checkout_session_id: CHECKOUT_SESSION_ID,
+        p_stripe_charge_id: CHARGE_ID,
+        p_stripe_customer_id: CUSTOMER_ID,
         p_amount_cents: 990,
         p_currency: 'usd',
+        p_livemode: false,
+        p_checkout_created_at: CHECKOUT_CREATED_AT,
+        p_paid_at: PAID_AT,
       })
     )
   })
@@ -479,18 +555,15 @@ describe('/api/groups/subscribe atomic boundary', () => {
     ['amount', { amount_total: 0 }],
     ['missing payment intent', { payment_intent: null }],
     ['different payment intent', { payment_intent: 'pi_different' }],
+    ['customer', { customer: 'cus_other' }],
+    ['missing customer', { customer: null }],
+    ['mode', { livemode: true }],
+    ['missing created timestamp', { created: null }],
+    ['fractional created timestamp', { created: CHECKOUT_CREATED + 0.5 }],
+    ['out-of-range created timestamp', { created: 253_402_300_800 }],
   ])('rejects Checkout proof with invalid %s', async (_label, overrides) => {
     mockCheckoutRetrieve.mockResolvedValue(checkoutSession(overrides))
-    mockPaymentIntentRetrieve.mockResolvedValue(paymentIntent())
-
-    const response = await POST(
-      postRequest({
-        group_id: GROUP_ID,
-        tier: 'monthly',
-        payment_intent_id: PAYMENT_INTENT_ID,
-        checkout_session_id: CHECKOUT_SESSION_ID,
-      })
-    )
+    const response = await POST(postRequest(paidActivationRequest()))
 
     expect(response.status).toBe(402)
     expect(mockRpc).not.toHaveBeenCalled()
@@ -502,33 +575,91 @@ describe('/api/groups/subscribe atomic boundary', () => {
       paymentIntent({ amount: 991, amount_received: 991 })
     )
 
-    const response = await POST(
-      postRequest({
-        group_id: GROUP_ID,
-        tier: 'monthly',
-        payment_intent_id: PAYMENT_INTENT_ID,
-        checkout_session_id: CHECKOUT_SESSION_ID,
-      })
-    )
+    const response = await POST(postRequest(paidActivationRequest()))
 
     expect(response.status).toBe(402)
-    expect(mockPaymentIntentRetrieve).toHaveBeenCalledWith(PAYMENT_INTENT_ID)
+    expect(mockPaymentIntentRetrieve).toHaveBeenCalledWith(PAYMENT_INTENT_ID, {
+      expand: ['latest_charge'],
+    })
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['returned id', { id: 'ch_other' }],
+    ['PaymentIntent', { payment_intent: 'pi_other' }],
+    ['customer', { customer: 'cus_other' }],
+    ['status', { status: 'failed' }],
+    ['paid state', { paid: false }],
+    ['capture state', { captured: false }],
+    ['refunded state', { refunded: true, amount_refunded: 990 }],
+    ['partial refund', { amount_refunded: 1 }],
+    ['amount', { amount: 991 }],
+    ['captured amount', { amount_captured: 989 }],
+    ['missing paid timestamp', { created: null }],
+    ['fractional paid timestamp', { created: PAID + 0.5 }],
+    ['out-of-range paid timestamp', { created: 253_402_300_800 }],
+    ['paid before Checkout', { created: CHECKOUT_CREATED - 1 }],
+    ['currency', { currency: 'eur' }],
+    ['mode', { livemode: true }],
+  ])('rejects fresh Charge proof with invalid %s', async (_label, overrides) => {
+    mockChargeRetrieve.mockResolvedValue(charge(overrides))
+
+    const response = await POST(postRequest(paidActivationRequest()))
+
+    expect(response.status).toBe(402)
+    expect(mockChargeRetrieve).toHaveBeenCalledWith(CHARGE_ID)
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
   it('fails closed when Stripe retrieval throws', async () => {
     mockPaymentIntentRetrieve.mockRejectedValue(new Error('provider unavailable'))
 
-    const response = await POST(
-      postRequest({
-        group_id: GROUP_ID,
-        tier: 'yearly',
-        payment_intent_id: PAYMENT_INTENT_ID,
-      })
-    )
+    const response = await POST(postRequest(paidActivationRequest({ tier: 'yearly' })))
 
     expect(response.status).toBe(402)
     expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      {
+        status: 'refund_observed',
+        subscription_id: SUBSCRIPTION_ID,
+        idempotent_replay: false,
+        stripe_ownership_id: OWNERSHIP_ID,
+        tombstone_status: 'resolved',
+      },
+      409,
+    ],
+    [
+      {
+        status: 'refund_pending',
+        subscription_id: SUBSCRIPTION_ID,
+        idempotent_replay: false,
+      },
+      409,
+    ],
+    [{ status: 'identity_conflict' }, 409],
+    [{ status: 'manual_review' }, 409],
+    [{ status: 'manual_review', reason_key: 'group_pass_membership_provenance_required' }, 409],
+  ])('fails closed for paid ownership authority result %#', async (data, expectedStatus) => {
+    mockRpc.mockResolvedValue({ data, error: null })
+
+    const response = await POST(postRequest(paidActivationRequest()))
+
+    expect(response.status).toBe(expectedStatus)
+  })
+
+  it.each([
+    paidActivationResult({ stripe_ownership_id: undefined }),
+    paidActivationResult({ tombstone_status: undefined }),
+    paidActivationResult({ tombstone_status: 'resolved' }),
+  ])('rejects a paid success ACK without current exact ownership %#', async (data) => {
+    mockRpc.mockResolvedValue({ data, error: null })
+
+    const response = await POST(postRequest(paidActivationRequest()))
+
+    expect(response.status).toBe(500)
   })
 
   it.each([
@@ -592,35 +723,25 @@ describe('/api/groups/subscribe atomic boundary', () => {
   })
 
   it('returns 200 for an exact paid-payment ledger replay', async () => {
-    mockPaymentIntentRetrieve.mockResolvedValue(paymentIntent())
     mockRpc.mockResolvedValue({
-      data: activationResult({
-        tier: 'monthly',
-        subscription_status: 'active',
-        price_paid: 9.9,
-        idempotent_replay: true,
-      }),
+      data: paidActivationResult({ idempotent_replay: true }),
       error: null,
     })
 
-    const response = await POST(
-      postRequest({
-        group_id: GROUP_ID,
-        tier: 'monthly',
-        payment_intent_id: PAYMENT_INTENT_ID,
-      })
-    )
+    const response = await POST(postRequest(paidActivationRequest()))
 
     expect(response.status).toBe(200)
   })
 
   it('reads group-pass state through one strict actor-bound RPC', async () => {
+    mockAssertUserStripeBillingSurfaceAccess.mockRejectedValue(new Error('blocked'))
     mockRpc.mockResolvedValue({ data: readResult(), error: null })
 
     const response = await GET(getRequest())
     const responseBody = await response.json()
 
     expect(response.status).toBe(200)
+    expect(mockAssertUserStripeBillingSurfaceAccess).not.toHaveBeenCalled()
     expect(responseBody.data.group.id).toBe(GROUP_ID)
     expect(responseBody.data.subscription.id).toBe(SUBSCRIPTION_ID)
     expect(responseBody.data.is_subscribed).toBe(true)
@@ -669,6 +790,7 @@ describe('/api/groups/subscribe atomic boundary', () => {
   })
 
   it('schedules cancellation through one strict actor-bound RPC', async () => {
+    mockAssertUserStripeBillingSurfaceAccess.mockRejectedValue(new Error('blocked'))
     mockRpc.mockResolvedValue({
       data: { status: 'cancellation_scheduled', expires_at: PERIOD_END },
       error: null,
@@ -678,6 +800,7 @@ describe('/api/groups/subscribe atomic boundary', () => {
     const responseBody = await response.json()
 
     expect(response.status).toBe(200)
+    expect(mockAssertUserStripeBillingSurfaceAccess).not.toHaveBeenCalled()
     expect(responseBody.data.status).toBe('cancellation_scheduled')
     expect(responseBody.data.expires_at).toBe(PERIOD_END)
     expect(mockRpc).toHaveBeenCalledWith('cancel_group_subscription_atomic', {

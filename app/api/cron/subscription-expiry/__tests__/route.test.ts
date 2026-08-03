@@ -1,21 +1,12 @@
 /**
- * Cron: subscription-expiry route tests
- * Tests auth, expiry checks, downgrade logic, and error handling.
- *
  * @jest-environment node
  */
 
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
-
-// Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
 jest.mock('@/lib/env', () => ({
   env: new Proxy(
     {},
     {
-      get(_t, key) {
-        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+      get(_target, key) {
         return process.env[String(key)]
       },
     }
@@ -23,11 +14,11 @@ jest.mock('@/lib/env', () => ({
 }))
 
 const mockFrom = jest.fn()
-const mockSupabaseClient = { from: mockFrom }
+const mockRpc = jest.fn()
 const mockStripeRetrieve = jest.fn()
-const mockStripeList = jest.fn()
-const mockUpdateUserSubscription = jest.fn()
-const mockCheckNFTMembership = jest.fn()
+const mockSendRateLimitedAlert = jest.fn()
+const mockSendNotification = jest.fn()
+const mockSupabaseClient = { from: mockFrom, rpc: mockRpc }
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => mockSupabaseClient),
@@ -38,9 +29,7 @@ jest.mock('@/lib/supabase/server', () => ({
 }))
 
 jest.mock('@/lib/stripe', () => ({
-  getStripe: () => ({
-    subscriptions: { retrieve: mockStripeRetrieve, list: mockStripeList },
-  }),
+  getStripe: () => ({ subscriptions: { retrieve: mockStripeRetrieve } }),
   STRIPE_PRICE_IDS: {
     monthly: 'price_monthly',
     yearly: 'price_yearly',
@@ -49,71 +38,20 @@ jest.mock('@/lib/stripe', () => ({
   STRIPE_API_PRICE_IDS: { starter: 'price_api_starter', pro: 'price_api_pro' },
 }))
 
-jest.mock('@/app/api/stripe/webhook/handlers/subscription', () => ({
-  updateUserSubscription: (...args: unknown[]) => mockUpdateUserSubscription(...args),
-}))
-
 jest.mock('@/lib/utils/logger', () => ({
-  createLogger: () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-  }),
-  logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    apiError: jest.fn(),
-    dbError: jest.fn(),
-  },
-  apiLogger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    apiError: jest.fn(),
-    dbError: jest.fn(),
-  },
-  dataLogger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    apiError: jest.fn(),
-    dbError: jest.fn(),
-  },
-  captureError: jest.fn(),
-  captureMessage: jest.fn(),
+  createLogger: () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }),
 }))
 
-jest.mock('@/lib/web3/nft', () => ({
-  checkNFTMembership: (...args: unknown[]) => mockCheckNFTMembership(...args),
-}))
-
-jest.mock('@/lib/logger', () => ({
-  logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    dbError: jest.fn(),
-    apiError: jest.fn(),
-  },
-}))
-
-// Mock withCron to pass through (auth handled by test's CRON_SECRET setup)
 jest.mock('@/lib/api/with-cron', () => ({
-  withCron: (jobName: string, handler: Function) => async (request: unknown) => {
+  withCron: (_jobName: string, handler: Function) => async (request: unknown) => {
     const secret = process.env.CRON_SECRET
-    const authHeader = (request as { headers: { get: (k: string) => string | null } }).headers.get(
-      'authorization'
-    )
+    const authHeader = (
+      request as { headers: { get: (key: string) => string | null } }
+    ).headers.get('authorization')
+    const { NextResponse } = require('next/server')
     if (!secret || authHeader !== `Bearer ${secret}`) {
-      const { NextResponse } = require('next/server')
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
-    const { getSupabaseAdmin } = require('@/lib/supabase/server')
     try {
       const result = await handler(request, {
         plog: {
@@ -123,14 +61,12 @@ jest.mock('@/lib/api/with-cron', () => ({
           partialSuccess: jest.fn(),
           id: 1,
         },
-        supabase: getSupabaseAdmin(),
+        supabase: mockSupabaseClient,
       })
-      const { NextResponse } = require('next/server')
       return NextResponse.json({ ok: true, ...result })
-    } catch (err: unknown) {
-      const { NextResponse } = require('next/server')
+    } catch (error) {
       return NextResponse.json(
-        { ok: false, error: err instanceof Error ? err.message : String(err) },
+        { ok: false, error: error instanceof Error ? error.message : String(error) },
         { status: 500 }
       )
     }
@@ -138,33 +74,16 @@ jest.mock('@/lib/api/with-cron', () => ({
 }))
 
 jest.mock('@/lib/alerts/send-alert', () => ({
-  sendRateLimitedAlert: jest
-    .fn()
-    .mockResolvedValue({ sent: false, rateLimited: false, channels: [] }),
+  sendRateLimitedAlert: (...args: unknown[]) => mockSendRateLimitedAlert(...args),
   sendAlert: jest.fn().mockResolvedValue({ sent: false, channels: [] }),
 }))
 
 jest.mock('@/lib/data/notifications', () => ({
-  sendNotification: jest.fn().mockResolvedValue(undefined),
-}))
-
-jest.mock('@/lib/services/pipeline-logger', () => ({
-  PipelineLogger: {
-    start: jest.fn().mockResolvedValue({
-      id: 1,
-      success: jest.fn().mockResolvedValue(undefined),
-      error: jest.fn().mockResolvedValue(undefined),
-      timeout: jest.fn().mockResolvedValue(undefined),
-    }),
-  },
+  sendNotification: (...args: unknown[]) => mockSendNotification(...args),
 }))
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function createCronRequest(secret?: string): NextRequest {
   const headers = new Headers()
@@ -172,14 +91,13 @@ function createCronRequest(secret?: string): NextRequest {
   return new NextRequest('http://localhost:3000/api/cron/subscription-expiry', { headers })
 }
 
-/** Build chainable mock */
 function chainable(result: { data?: unknown; error?: unknown; count?: number | null }) {
   const handler = (): unknown =>
     new Proxy(
       {},
       {
         get(_target, prop) {
-          if (prop === 'then') return (resolve: (v: unknown) => void) => resolve(result)
+          if (prop === 'then') return (resolve: (value: unknown) => void) => resolve(result)
           return jest.fn().mockImplementation(handler)
         },
       }
@@ -198,192 +116,167 @@ function queueDatabaseResults(
   })
 }
 
-function stripeSubscription(status: 'active' | 'canceled') {
+function projectionPage(processedCount = 0, authorityCount = 0) {
   return {
-    id: 'sub_1',
-    status,
-    customer: 'cus_1',
-    start_date: 1_700_000_000,
-    cancel_at_period_end: false,
-    items: { data: [{ price: { id: 'price_monthly' } }] },
+    status: 'reconciled',
+    processed_count: processedCount,
+    authority_count: authorityCount,
+    next_cursor: null,
+    has_more: false,
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe('GET /api/cron/subscription-expiry', () => {
-  const CRON_SECRET = 'test-secret'
+  const cronSecret = 'test-secret'
 
   beforeAll(() => {
-    process.env.CRON_SECRET = CRON_SECRET
+    process.env.CRON_SECRET = cronSecret
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.test'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key'
   })
 
   beforeEach(() => {
     jest.clearAllMocks()
-    mockUpdateUserSubscription.mockResolvedValue(undefined)
-    mockCheckNFTMembership.mockResolvedValue(false)
+    mockFrom.mockImplementation(() => chainable({ data: [], error: null, count: 0 }))
+    mockRpc.mockResolvedValue({ data: projectionPage(), error: null })
+    mockSendRateLimitedAlert.mockResolvedValue({ sent: false, rateLimited: false, channels: [] })
+    mockSendNotification.mockResolvedValue(undefined)
   })
-
-  // ---- Auth ----------------------------------------------------------------
 
   it('returns 401 when CRON_SECRET is missing', async () => {
-    const res = await GET(createCronRequest())
-    expect(res.status).toBe(401)
+    const response = await GET(createCronRequest())
+    expect(response.status).toBe(401)
   })
 
-  it('returns 401 when secret does not match', async () => {
-    const res = await GET(createCronRequest('wrong'))
-    expect(res.status).toBe(401)
+  it('returns 401 when the secret does not match', async () => {
+    const response = await GET(createCronRequest('wrong'))
+    expect(response.status).toBe(401)
   })
 
-  // ---- Successful execution with no expiring subscriptions -----------------
+  it('reconciles zero due projections without touching Stripe', async () => {
+    const response = await GET(createCronRequest(cronSecret))
+    const body = await response.json()
 
-  it('runs successfully with no expiring subscriptions', async () => {
-    mockFrom.mockImplementation(() => chainable({ data: [], error: null, count: 0 }))
-
-    const res = await GET(createCronRequest(CRON_SECRET))
-    const body = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(body.ok).toBe(true)
-    expect(body.expiringReminders).toBe(0)
-    expect(body.downgraded).toBe(0)
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      ok: true,
+      count: 0,
+      expiringReminders: 0,
+      downgraded: 0,
+      repaired: 0,
+      projectionReconciled: 0,
+      errors: [],
+    })
+    expect(mockStripeRetrieve).not.toHaveBeenCalled()
+    expect(mockRpc).toHaveBeenCalledWith('reconcile_due_pro_entitlement_projections_atomic', {
+      p_limit: 500,
+      p_after_user_id: null,
+    })
   })
 
-  // ---- Downgrade expired subscriptions -------------------------------------
+  it('reports the number of projections repaired by the atomic ledger writer', async () => {
+    mockRpc.mockResolvedValueOnce({ data: projectionPage(4, 3), error: null })
 
-  it('downgrades expired subscriptions', async () => {
-    const expiredSubs = [
-      {
-        user_id: 'user1',
-        stripe_subscription_id: 'sub_1',
-        stripe_customer_id: 'cus_1',
-        plan: 'monthly',
-      },
-    ]
-    const ended = stripeSubscription('canceled')
+    const response = await GET(createCronRequest(cronSecret))
+    const body = await response.json()
+
+    expect(body).toMatchObject({ count: 4, projectionReconciled: 4 })
+  })
+
+  it('sends a reminder only after Stripe confirms the exact active expiring product', async () => {
+    const periodEnd = Math.floor(Date.now() / 1000) + 3 * 24 * 60 * 60
     queueDatabaseResults(
-      { data: [], error: null },
-      { data: expiredSubs, error: null },
       {
-        data: [{ id: 'user1', pro_plan: 'monthly', wallet_address: null }],
+        data: [
+          {
+            user_id: 'user1',
+            stripe_subscription_id: 'sub_1',
+            stripe_customer_id: 'cus_1',
+            current_period_end: new Date(periodEnd * 1000).toISOString(),
+            plan: 'monthly',
+            cancel_at_period_end: true,
+          },
+        ],
         error: null,
       },
       { data: [], error: null }
     )
-    mockStripeList.mockResolvedValue({ data: [ended] })
+    mockStripeRetrieve.mockResolvedValue({
+      id: 'sub_1',
+      status: 'active',
+      customer: 'cus_1',
+      cancel_at_period_end: true,
+      items: {
+        data: [{ current_period_end: periodEnd, price: { id: 'price_monthly' } }],
+      },
+    })
 
-    const res = await GET(createCronRequest(CRON_SECRET))
-    const body = await res.json()
+    const response = await GET(createCronRequest(cronSecret))
+    const body = await response.json()
 
-    expect(res.status).toBe(200)
-    expect(body.ok).toBe(true)
-    expect(body.downgraded).toBe(1)
-    expect(mockUpdateUserSubscription).toHaveBeenCalledWith('user1', ended, 'monthly')
+    expect(body.expiringReminders).toBe(1)
+    expect(mockSendNotification).toHaveBeenCalledWith(
+      mockSupabaseClient,
+      expect.objectContaining({
+        user_id: 'user1',
+        type: 'subscription_expiring',
+        reference_id: 'sub_expiring_user1',
+      }),
+      'subscription-expiry'
+    )
   })
 
-  it('repairs a stale local expiry when Stripe still says active', async () => {
-    const expiredSubs = [
-      {
-        user_id: 'user1',
-        stripe_subscription_id: 'sub_1',
-        stripe_customer_id: 'cus_1',
-        plan: 'monthly',
-      },
-    ]
-    const active = stripeSubscription('active')
+  it('preserves access and records an error when Stripe reminder verification fails', async () => {
     queueDatabaseResults(
-      { data: [], error: null },
-      { data: expiredSubs, error: null },
       {
-        data: [{ id: 'user1', pro_plan: 'monthly', wallet_address: null }],
+        data: [
+          {
+            user_id: 'user1',
+            stripe_subscription_id: 'sub_1',
+            stripe_customer_id: 'cus_1',
+            current_period_end: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+            plan: 'monthly',
+            cancel_at_period_end: true,
+          },
+        ],
         error: null,
       },
       { data: [], error: null }
     )
-    mockStripeList.mockResolvedValue({ data: [active] })
+    mockStripeRetrieve.mockRejectedValue(new Error('Stripe unavailable'))
 
-    const res = await GET(createCronRequest(CRON_SECRET))
-    const body = await res.json()
+    const response = await GET(createCronRequest(cronSecret))
+    const body = await response.json()
 
-    expect(body).toMatchObject({ downgraded: 0, repaired: 1 })
-    expect(mockUpdateUserSubscription).toHaveBeenCalledWith('user1', active, 'monthly')
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({ downgraded: 0, projectionReconciled: 0 })
+    expect(body.errors).toEqual(['Stripe expiry-reminder verification failed for user1'])
+    expect(mockSendRateLimitedAlert).toHaveBeenCalled()
   })
 
-  // ---- Error handling ------------------------------------------------------
-
-  it('returns 500 when database throws', async () => {
+  it('returns 500 when the database query throws', async () => {
     mockFrom.mockImplementation(() => {
       throw new Error('Connection lost')
     })
 
-    const res = await GET(createCronRequest(CRON_SECRET))
-    expect(res.status).toBe(500)
+    const response = await GET(createCronRequest(cronSecret))
+    expect(response.status).toBe(500)
   })
 
-  it('preserves access when Stripe expiration verification fails', async () => {
-    queueDatabaseResults(
-      { data: [], error: null },
-      {
-        data: [
-          {
-            user_id: 'user1',
-            stripe_subscription_id: 'sub_1',
-            stripe_customer_id: 'cus_1',
-            plan: 'monthly',
-          },
-        ],
-        error: null,
-      },
-      {
-        data: [{ id: 'user1', pro_plan: 'monthly', wallet_address: null }],
-        error: null,
-      },
-      { data: [], error: null }
+  it('returns 500 and alerts when atomic projection reconciliation fails', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'projection ledger unavailable' },
+    })
+
+    const response = await GET(createCronRequest(cronSecret))
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body.error).toContain('projection ledger unavailable')
+    expect(mockSendRateLimitedAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '订阅过期投影修复失败' }),
+      'subscription-expiry:projection-authority'
     )
-    mockStripeList.mockRejectedValue(new Error('Stripe unavailable'))
-
-    const res = await GET(createCronRequest(CRON_SECRET))
-    const body = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(body.downgraded).toBe(0)
-    expect(body.errors).toHaveLength(1)
-    expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
-  })
-
-  it('does not treat an NFT badge as fallback authority for an ended Stripe subscription', async () => {
-    const ended = stripeSubscription('canceled')
-    queueDatabaseResults(
-      { data: [], error: null },
-      {
-        data: [
-          {
-            user_id: 'user1',
-            stripe_subscription_id: 'sub_1',
-            stripe_customer_id: 'cus_1',
-            plan: 'monthly',
-          },
-        ],
-        error: null,
-      },
-      {
-        data: [{ id: 'user1', pro_plan: 'monthly', wallet_address: '0x123' }],
-        error: null,
-      }
-    )
-    mockStripeList.mockResolvedValue({ data: [ended] })
-    mockCheckNFTMembership.mockResolvedValue(true)
-
-    const res = await GET(createCronRequest(CRON_SECRET))
-    const body = await res.json()
-
-    expect(body.downgraded).toBe(1)
-    expect(mockUpdateUserSubscription).toHaveBeenCalledWith('user1', ended, 'monthly')
-    expect(mockCheckNFTMembership).not.toHaveBeenCalled()
   })
 })

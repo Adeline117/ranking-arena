@@ -1,9 +1,11 @@
 import Stripe from 'stripe'
 import { stripe, API_TIER_LIMITS, getStripe } from '@/lib/stripe'
-import { joinProOfficialGroup } from '@/app/api/pro-official-group/route'
-import { getSupabase, withRetry, logger, type StripeWebhookEventContext } from './shared'
-import { getProPlanFromPriceId, updateUserSubscription } from './subscription'
-import { mintNFTForUser } from './nft'
+import { getSupabase, logger, type StripeWebhookEventContext } from './shared'
+import {
+  applyApiTierStripeEvent,
+  resolveApiTierSubscriptionOwner,
+  type ApiTierStripeAuthority,
+} from './subscription'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { fireAndForget } from '@/lib/utils/logger'
 import {
@@ -16,11 +18,49 @@ import {
 import { completeTipCheckout } from '@/lib/stripe/tip-completion'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { Json } from '@/lib/supabase/database.types'
+import { activateExactRecurringCheckout } from '@/lib/stripe/recurring-entitlement'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const reservationNoncePattern = /^[A-Za-z0-9_.:-]{8,128}$/
 const stripeCheckoutIdPattern = /^cs_[A-Za-z0-9_]+$/
 const stripeEventIdPattern = /^evt_[A-Za-z0-9_]+$/
+const stripeCustomerIdPattern = /^cus_[A-Za-z0-9_]+$/
+const stripeSubscriptionIdPattern = /^sub_[A-Za-z0-9_]+$/
+const stripePriceIdPattern = /^price_[A-Za-z0-9_]+$/
+const maxStripeUnixSeconds = 253_402_300_799
+const delayedPaidProStatuses = new Set<Stripe.Subscription.Status>([
+  'active',
+  'past_due',
+  'unpaid',
+  'paused',
+  'canceled',
+  'incomplete_expired',
+])
+const delayedTrialProStatuses = new Set<Stripe.Subscription.Status>([
+  'trialing',
+  ...delayedPaidProStatuses,
+])
+const apiTierReservationMetadataKey = 'api_tier_reservation_id'
+const proMembershipReservationMetadataKey = 'pro_membership_reservation_id'
+const proMembershipPriceMetadataKey = 'pro_price_id'
+const apiCheckoutMetadataKeys = [
+  'api_plan',
+  apiTierReservationMetadataKey,
+  'supabase_user_id',
+  'type',
+  'userId',
+] as const
+const proCheckoutMetadataKeys = [
+  'currency',
+  'plan',
+  proMembershipReservationMetadataKey,
+  proMembershipPriceMetadataKey,
+  'supabase_user_id',
+  'trial_days',
+  'type',
+  'unit_amount',
+  'userId',
+] as const
 const tipExpiryMetadataKeys = [
   'amount_cents',
   'from_user_id',
@@ -31,10 +71,32 @@ const tipExpiryMetadataKeys = [
   'user_id',
 ] as const
 
+class DeterministicProCheckoutError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'DeterministicProCheckoutError'
+  }
+}
+
 function rpcStatus(value: unknown): string | null {
   return value && !Array.isArray(value) && typeof value === 'object'
     ? String((value as Record<string, unknown>).status || '')
     : null
+}
+
+function exactRpcString(value: unknown, key: string): string | null {
+  if (!value || Array.isArray(value) || typeof value !== 'object') return null
+  const candidate = (value as Record<string, unknown>)[key]
+  return typeof candidate === 'string' ? candidate : null
+}
+
+function exactStripeIdentifier(value: unknown, pattern: RegExp): value is string {
+  return (
+    typeof value === 'string' &&
+    value === value.trim() &&
+    value.length <= 255 &&
+    pattern.test(value)
+  )
 }
 
 function canonicalUuid(value: string | null | undefined): string | null {
@@ -48,6 +110,286 @@ function exactCanonicalLowerUuid(value: string | null | undefined): string | nul
     : null
 }
 
+function isEmptyStripeCollection(value: unknown): boolean {
+  return value == null || (Array.isArray(value) && value.length === 0)
+}
+
+function exactStripeUnixSeconds(value: unknown): number | null {
+  return typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value > 0 &&
+    value <= maxStripeUnixSeconds
+    ? value
+    : null
+}
+
+type ProCheckoutIdentity = {
+  userId: string
+  reservationId: string
+  customerId: string
+  subscriptionId: string
+  plan: 'monthly' | 'yearly'
+  priceId: string
+  unitAmount: number
+  currency: 'usd'
+  trialDays: 0 | 7
+}
+
+function carriesProCheckoutIdentity(metadata: Stripe.Metadata | null | undefined): boolean {
+  const candidate = metadata || {}
+  return (
+    Object.prototype.hasOwnProperty.call(candidate, proMembershipReservationMetadataKey) ||
+    Object.prototype.hasOwnProperty.call(candidate, proMembershipPriceMetadataKey)
+  )
+}
+
+function parseProCheckoutCompletionIdentity(
+  session: Stripe.Checkout.Session,
+  event: StripeWebhookEventContext
+): ProCheckoutIdentity {
+  const metadata = session.metadata || {}
+  const metadataKeys = Object.keys(metadata).sort()
+  const metadataUserId = exactCanonicalLowerUuid(metadata.userId)
+  const metadataSupabaseUserId = exactCanonicalLowerUuid(metadata.supabase_user_id)
+  const reservationId = exactCanonicalLowerUuid(metadata[proMembershipReservationMetadataKey])
+  const customerId = typeof session.customer === 'string' ? session.customer : null
+  const subscriptionId = typeof session.subscription === 'string' ? session.subscription : null
+  const trialDays = metadata.trial_days === '7' ? 7 : metadata.trial_days === '0' ? 0 : null
+  const unitAmount = Number(metadata.unit_amount)
+  const eventCreatedIsValid =
+    Number.isSafeInteger(event.created) &&
+    event.created > 0 &&
+    event.created <= maxStripeUnixSeconds
+
+  if (
+    session.object !== 'checkout.session' ||
+    session.mode !== 'subscription' ||
+    session.status !== 'complete' ||
+    (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') ||
+    typeof session.livemode !== 'boolean' ||
+    session.livemode !== event.livemode ||
+    !exactStripeIdentifier(session.id, stripeCheckoutIdPattern) ||
+    !exactStripeIdentifier(event.id, stripeEventIdPattern) ||
+    !eventCreatedIsValid ||
+    metadataKeys.length !== proCheckoutMetadataKeys.length ||
+    !proCheckoutMetadataKeys.every((key, index) => metadataKeys[index] === key) ||
+    metadata.type !== 'pro_membership' ||
+    (metadata.plan !== 'monthly' && metadata.plan !== 'yearly') ||
+    !metadataUserId ||
+    !metadataSupabaseUserId ||
+    metadataUserId !== metadataSupabaseUserId ||
+    Object.prototype.hasOwnProperty.call(metadata, 'user_id') ||
+    !reservationId ||
+    session.client_reference_id !== reservationId ||
+    !customerId ||
+    !exactStripeIdentifier(customerId, stripeCustomerIdPattern) ||
+    !subscriptionId ||
+    !exactStripeIdentifier(subscriptionId, stripeSubscriptionIdPattern) ||
+    !exactStripeIdentifier(metadata[proMembershipPriceMetadataKey], stripePriceIdPattern) ||
+    metadata.currency !== 'usd' ||
+    !/^[1-9][0-9]{0,11}$/.test(metadata.unit_amount || '') ||
+    !Number.isSafeInteger(unitAmount) ||
+    trialDays === null
+  ) {
+    throw new DeterministicProCheckoutError(
+      `Pro checkout ${session.id} has invalid exact reservation identity`
+    )
+  }
+
+  return {
+    userId: metadataUserId,
+    reservationId,
+    customerId,
+    subscriptionId,
+    plan: metadata.plan,
+    priceId: metadata[proMembershipPriceMetadataKey],
+    unitAmount,
+    currency: 'usd',
+    trialDays,
+  }
+}
+
+async function convertExactProCheckout(
+  session: Stripe.Checkout.Session,
+  event: StripeWebhookEventContext
+) {
+  const identity = parseProCheckoutCompletionIdentity(session, event)
+  const stripeClient = getStripe()
+  const subscription = await stripeClient.subscriptions.retrieve(identity.subscriptionId)
+  const subscriptionCustomerId =
+    typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id
+  const sessionCreated = exactStripeUnixSeconds(session.created)
+  const subscriptionCreatedIsValid =
+    Number.isSafeInteger(subscription.created) &&
+    subscription.created > 0 &&
+    sessionCreated !== null &&
+    subscription.created >= sessionCreated &&
+    subscription.created <= event.created
+  const expectedAmount = identity.unitAmount
+  const dueNow = identity.trialDays === 7 ? 0 : expectedAmount
+  const trialStart = exactStripeUnixSeconds(subscription.trial_start)
+  const trialEnd = exactStripeUnixSeconds(subscription.trial_end)
+  const completionTermsMatch =
+    identity.trialDays === 7
+      ? session.payment_status === 'no_payment_required' &&
+        delayedTrialProStatuses.has(subscription.status) &&
+        trialStart !== null &&
+        trialEnd !== null &&
+        trialEnd - trialStart === 7 * 24 * 60 * 60
+      : session.payment_status === 'paid' && delayedPaidProStatuses.has(subscription.status)
+  // Current Subscription product/metadata/cancellation fields are mutable.
+  // The signed Session plus its exact durable reservation are the immutable
+  // purchase identity; downstream authority re-fetches that Session, its line
+  // item, and the initial paid Invoice before granting anything.
+  const exact =
+    subscription.id === identity.subscriptionId &&
+    subscription.object === 'subscription' &&
+    exactStripeIdentifier(subscription.id, stripeSubscriptionIdPattern) &&
+    subscription.livemode === event.livemode &&
+    subscriptionCustomerId === identity.customerId &&
+    subscriptionCreatedIsValid &&
+    completionTermsMatch &&
+    session.currency === identity.currency &&
+    session.amount_subtotal === dueNow &&
+    session.amount_total === dueNow &&
+    session.total_details?.amount_discount === 0 &&
+    session.total_details.amount_shipping === 0 &&
+    session.total_details.amount_tax === 0 &&
+    session.allow_promotion_codes === false &&
+    session.automatic_tax?.enabled === false &&
+    session.adaptive_pricing?.enabled !== true &&
+    session.after_expiration === null &&
+    session.recovered_from === null &&
+    isEmptyStripeCollection(session.discounts) &&
+    isEmptyStripeCollection(session.optional_items) &&
+    Array.isArray(session.custom_fields) &&
+    session.custom_fields.length === 0
+
+  if (!exact) {
+    throw new DeterministicProCheckoutError(
+      `Pro subscription ${subscription.id} does not match its exact checkout`
+    )
+  }
+
+  const { data, error } = await getSupabaseAdmin().rpc(
+    'convert_pro_membership_checkout_reservation_atomic',
+    {
+      p_reservation_id: identity.reservationId,
+      p_user_id: identity.userId,
+      p_livemode: event.livemode,
+      p_stripe_customer_id: identity.customerId,
+      p_pro_plan: identity.plan,
+      p_stripe_price_id: identity.priceId,
+      p_unit_amount: identity.unitAmount,
+      p_currency: identity.currency,
+      p_trial_days: identity.trialDays,
+      p_checkout_session_id: session.id,
+      p_stripe_subscription_id: identity.subscriptionId,
+      p_payment_status: session.payment_status,
+      p_subscription_status: subscription.status,
+      p_trial_start: identity.trialDays === 7 ? trialStart : null,
+      p_trial_end: identity.trialDays === 7 ? trialEnd : null,
+      p_stripe_event_id: event.id,
+      p_stripe_event_created: event.created,
+    }
+  )
+  if (error) {
+    if (
+      error.code === '40001' ||
+      error.code === '22023' ||
+      error.code === '23505' ||
+      error.code === '23514'
+    ) {
+      throw new DeterministicProCheckoutError(
+        `Pro Checkout reservation identity conflicted: ${error.message}`
+      )
+    }
+    throw new Error(`Failed to convert Pro Checkout reservation: ${error.message}`)
+  }
+  const status = rpcStatus(data)
+  const effectiveSubscriptionStatus = exactRpcString(data, 'effective_subscription_status')
+  const observation = exactRpcString(data, 'observation')
+  const exactResult =
+    (status === 'converted' && observation === 'recorded') ||
+    (status === 'already_converted' &&
+      (observation === 'replayed' || observation === 'observed' || observation === 'tightened'))
+  if (!exactResult || effectiveSubscriptionStatus !== subscription.status) {
+    throw new DeterministicProCheckoutError(
+      `Pro Checkout reservation conversion returned an uncertain effective state (${status || 'missing'}, ${effectiveSubscriptionStatus || 'missing'})`
+    )
+  }
+  return identity
+}
+
+type ApiCheckoutIdentity = {
+  userId: string
+  reservationId: string
+  customerId: string
+  subscriptionId: string
+  metadataPlan: 'starter' | 'pro'
+}
+
+function carriesApiCheckoutIdentity(metadata: Stripe.Metadata | null | undefined): boolean {
+  const candidate = metadata || {}
+  return (
+    candidate.type === 'api_tier' ||
+    Object.prototype.hasOwnProperty.call(candidate, 'api_plan') ||
+    Object.prototype.hasOwnProperty.call(candidate, apiTierReservationMetadataKey)
+  )
+}
+
+function parseApiCheckoutCompletionIdentity(
+  session: Stripe.Checkout.Session,
+  event: StripeWebhookEventContext
+): ApiCheckoutIdentity {
+  const metadata = session.metadata || {}
+  const metadataKeys = Object.keys(metadata).sort()
+  const metadataUserId = exactCanonicalLowerUuid(metadata.userId)
+  const metadataSupabaseUserId = exactCanonicalLowerUuid(metadata.supabase_user_id)
+  const reservationId = exactCanonicalLowerUuid(metadata[apiTierReservationMetadataKey])
+  const customerId = typeof session.customer === 'string' ? session.customer : null
+  const subscriptionId = typeof session.subscription === 'string' ? session.subscription : null
+  const eventCreatedIsValid =
+    Number.isSafeInteger(event.created) &&
+    event.created > 0 &&
+    event.created <= maxStripeUnixSeconds
+
+  if (
+    session.object !== 'checkout.session' ||
+    session.mode !== 'subscription' ||
+    session.status !== 'complete' ||
+    session.payment_status !== 'paid' ||
+    session.livemode !== event.livemode ||
+    !exactStripeIdentifier(session.id, stripeCheckoutIdPattern) ||
+    !exactStripeIdentifier(event.id, stripeEventIdPattern) ||
+    !eventCreatedIsValid ||
+    metadataKeys.length !== apiCheckoutMetadataKeys.length ||
+    !apiCheckoutMetadataKeys.every((key, index) => metadataKeys[index] === key) ||
+    metadata.type !== 'api_tier' ||
+    (metadata.api_plan !== 'starter' && metadata.api_plan !== 'pro') ||
+    !metadataUserId ||
+    !metadataSupabaseUserId ||
+    metadataUserId !== metadataSupabaseUserId ||
+    Object.prototype.hasOwnProperty.call(metadata, 'user_id') ||
+    !reservationId ||
+    session.client_reference_id !== reservationId ||
+    !customerId ||
+    !exactStripeIdentifier(customerId, stripeCustomerIdPattern) ||
+    !subscriptionId ||
+    !exactStripeIdentifier(subscriptionId, stripeSubscriptionIdPattern)
+  ) {
+    throw new Error(`API checkout ${session.id} has invalid exact entitlement identity`)
+  }
+
+  return {
+    userId: metadataUserId,
+    reservationId,
+    customerId,
+    subscriptionId,
+    metadataPlan: metadata.api_plan,
+  }
+}
+
 export function carriesTipCheckoutIdentity(metadata: Stripe.Metadata | null | undefined): boolean {
   const candidate = metadata || {}
   return (
@@ -59,7 +401,11 @@ export function carriesTipCheckoutIdentity(metadata: Stripe.Metadata | null | un
   )
 }
 
-export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
+export async function handleCheckoutComplete(
+  session: Stripe.Checkout.Session,
+  event?: StripeWebhookEventContext,
+  options?: { reportProReservationConversion?: boolean }
+) {
   const rawUserId = session.metadata?.userId
   const rawSupabaseUserId = session.metadata?.supabase_user_id
   const metadataUserId = canonicalUuid(rawUserId)
@@ -174,37 +520,97 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     return
   }
 
-  if (!userId) {
-    logger.error('No userId in session metadata', { metadata: session.metadata })
-    throw new Error(`Checkout ${session.id} cannot be mapped to a user`)
-  }
-
   // API tier subscription checkout
-  if (session.metadata?.type === 'api_tier') {
-    const apiPlan = session.metadata.api_plan
-    if (!apiPlan || !['starter', 'pro'].includes(apiPlan)) {
-      logger.error('Invalid api_plan in metadata', { metadata: session.metadata })
-      throw new Error(`Checkout ${session.id} has invalid API plan metadata`)
-    }
-    const subscriptionId = session.subscription as string
-    if (!subscriptionId || session.payment_status !== 'paid') {
+  if (carriesApiCheckoutIdentity(session.metadata)) {
+    if (session.payment_status !== 'paid') {
       logger.warn('API checkout completed without a paid subscription', {
         sessionId: session.id,
-        subscriptionId,
+        subscriptionId: session.subscription,
         paymentStatus: session.payment_status,
       })
       return
     }
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+    if (!event) {
+      throw new Error(`API checkout ${session.id} is missing its signed event identity`)
+    }
+    const checkoutIdentity = parseApiCheckoutCompletionIdentity(session, event)
+    const subscription = await stripe.subscriptions.retrieve(checkoutIdentity.subscriptionId)
     if (subscription.status !== 'active') {
       logger.warn('API checkout subscription is not active', {
-        subscriptionId,
+        subscriptionId: checkoutIdentity.subscriptionId,
         status: subscription.status,
       })
       return
     }
-    await handleApiTierActivation(userId, apiPlan, subscriptionId)
+    const { authority } = await resolveApiTierSubscriptionOwner(subscription)
+    if (
+      subscription.id !== checkoutIdentity.subscriptionId ||
+      subscription.livemode !== session.livemode ||
+      authority.userId !== checkoutIdentity.userId ||
+      authority.stripeCustomerId !== checkoutIdentity.customerId ||
+      authority.checkoutReservationId !== checkoutIdentity.reservationId ||
+      subscription.metadata.api_plan !== checkoutIdentity.metadataPlan
+    ) {
+      throw new Error(`API subscription ${subscription.id} identity does not match its checkout`)
+    }
+    await handleApiTierActivation(authority, subscription, event)
     return
+  }
+
+  // Ordinary B2C Pro Checkout first consumes the durable reservation that
+  // admitted the Session. It then enters the one atomic recurring authority;
+  // no direct projection write, cancellation, group mutation, or NFT side
+  // effect is allowed on this webhook path.
+  let exactRecurringUserId = canonicalPaymentUserId
+  let proReservationConverted = false
+  if (carriesProCheckoutIdentity(session.metadata)) {
+    if (!event) {
+      throw new Error(`Pro checkout ${session.id} is missing its signed event identity`)
+    }
+    let identity: ProCheckoutIdentity
+    try {
+      identity = await convertExactProCheckout(session, event)
+    } catch (error) {
+      if (!(error instanceof DeterministicProCheckoutError)) throw error
+      await recordStripeCheckoutManualReview({
+        supabase: getSupabaseAdmin(),
+        sessionId: session.id || event.id,
+        userId: canonicalPaymentUserId,
+        reasonKey: 'pro_checkout_completion_identity_invalid',
+        reason: error.message,
+        context: {
+          event_id: event.id,
+          event_created: event.created,
+          event_livemode: event.livemode,
+          session_id: session.id,
+          session_mode: session.mode,
+          session_status: session.status,
+          session_payment_status: session.payment_status,
+          session_livemode: session.livemode,
+          session_amount_subtotal: session.amount_subtotal ?? null,
+          session_amount_total: session.amount_total ?? null,
+          session_customer_id:
+            typeof session.customer === 'string' ? session.customer : session.customer?.id || null,
+          session_subscription_id:
+            typeof session.subscription === 'string'
+              ? session.subscription
+              : session.subscription?.id || null,
+          metadata: (session.metadata || {}) as Json,
+        },
+      })
+      logger.warn('Pro checkout deterministic identity conflict was durably reviewed', {
+        sessionId: session.id,
+        eventId: event.id,
+      })
+      return
+    }
+    exactRecurringUserId = identity.userId
+    proReservationConverted = true
+  }
+
+  if (!userId || !exactRecurringUserId) {
+    logger.error('No userId in session metadata', { metadata: session.metadata })
+    throw new Error(`Checkout ${session.id} cannot be mapped to a user`)
   }
 
   if (session.mode !== 'subscription') {
@@ -217,94 +623,30 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     logger.error('No subscription ID in checkout session')
     throw new Error(`Checkout ${session.id} is missing its subscription ID`)
   }
-
-  // If user already has an active subscription with a DIFFERENT stripe_subscription_id,
-  // cancel the new one automatically to prevent double billing
-  const { data: existingSub, error: existingSubError } = await getSupabase()
-    .from('subscriptions')
-    .select('stripe_subscription_id, status')
-    .eq('user_id', userId)
-    .in('status', ['active', 'trialing'])
-    .maybeSingle()
-
-  if (existingSubError) {
-    throw new Error(`Failed to check existing subscription: ${existingSubError.message}`)
+  if (!event) {
+    throw new Error(`Recurring checkout ${session.id} is missing its signed event identity`)
   }
 
-  if (
-    existingSub?.stripe_subscription_id &&
-    existingSub.stripe_subscription_id !== subscriptionId
-  ) {
-    // Cancel the NEW subscription to keep the existing one
-    await stripe.subscriptions.cancel(subscriptionId)
-    logger.warn('Duplicate subscription detected and cancelled', {
-      userId,
-      existing: existingSub.stripe_subscription_id,
-      cancelled: subscriptionId,
-    })
-    return // Don't update DB with the cancelled subscription
-  }
-
-  try {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-
-    if (subscription.status !== 'active' && subscription.status !== 'trialing') {
-      logger.warn(`Subscription ${subscriptionId} is not active`, { status: subscription.status })
-      return
+  const outcome = await activateExactRecurringCheckout({
+    stripe: getStripe(),
+    supabase: getSupabaseAdmin(),
+    session,
+    event,
+    expectedUserId: exactRecurringUserId,
+  })
+  logger.info('Recurring checkout reached durable atomic authority', {
+    userId: exactRecurringUserId,
+    sessionId: session.id,
+    subscriptionId,
+    status: outcome.status,
+    reviewCode: outcome.reviewCode,
+  })
+  if (options?.reportProReservationConversion) {
+    return {
+      status: proReservationConverted
+        ? ('pro_reservation_converted' as const)
+        : ('not_pro' as const),
     }
-
-    const priceId = subscription.items.data[0]?.price.id
-    const authoritativePlan = getProPlanFromPriceId(priceId)
-    if (!authoritativePlan || authoritativePlan === 'lifetime') {
-      throw new Error(`Cannot map Stripe price ${priceId || 'missing'} to a subscription plan`)
-    }
-    if (plan && plan !== authoritativePlan) {
-      throw new Error(
-        `Checkout plan metadata ${plan} does not match Stripe price plan ${authoritativePlan}`
-      )
-    }
-
-    await updateUserSubscription(userId, subscription, authoritativePlan)
-
-    try {
-      const joinResult = await joinProOfficialGroup(userId)
-      if (joinResult.success) {
-        logger.info(`User ${userId} joined Pro official group`, { groupId: joinResult.groupId })
-      } else {
-        throw new Error(`Failed to join Pro official group: ${joinResult.message}`)
-      }
-    } catch (joinError) {
-      logger.error('Error joining Pro official group', { error: joinError })
-      throw joinError
-    }
-
-    await mintNFTForUser(userId, plan || 'monthly')
-
-    logger.info(`Checkout completed for user ${userId}`, { plan, subscriptionId })
-
-    // Celebrate every new paying subscriber on Telegram. Fire-and-forget so
-    // this can never break the checkout flow. Retro 2026-04-09: CEO review
-    // flagged that the first paying signal was invisible — this is the fix.
-    fireAndForget(
-      sendAlert({
-        title: '🎉 New paying subscriber',
-        message: `Plan: ${plan || 'monthly'} · Subscription: ${subscriptionId}`,
-        level: 'info',
-        details: {
-          userId,
-          plan: plan || 'monthly',
-          subscriptionId,
-          status: subscription.status,
-        },
-      }),
-      'stripe-new-subscriber-alert'
-    )
-  } catch (err: unknown) {
-    logger.error('Failed to process checkout completion', { error: err })
-    // Never convert a technical failure into Pro access. Re-throw so the
-    // route marks this event failed and Stripe can retry the authoritative
-    // subscription lookup and atomic DB update.
-    throw err
   }
 }
 
@@ -373,8 +715,8 @@ export async function handleCheckoutExpired(
       session.livemode === true &&
       event.livemode === true &&
       session.livemode === event.livemode &&
-      stripeCheckoutIdPattern.test(session.id) &&
-      stripeEventIdPattern.test(event.id) &&
+      exactStripeIdentifier(session.id, stripeCheckoutIdPattern) &&
+      exactStripeIdentifier(event.id, stripeEventIdPattern) &&
       eventCreatedIsValid &&
       sessionExpiresAtIsValid &&
       session.client_reference_id === tipId
@@ -439,6 +781,271 @@ export async function handleCheckoutExpired(
       sessionId: session.id,
       eventId: event.id,
       tipId,
+      status,
+    })
+    return
+  }
+
+  // API Checkout reservation expiration is also a signed entitlement
+  // lifecycle transition. It must release the exact reservation instead of
+  // falling through to generic abandonment analytics.
+  if (carriesApiCheckoutIdentity(sessionMetadata)) {
+    const metadataKeys = Object.keys(sessionMetadata).sort()
+    const metadataUserId = exactCanonicalLowerUuid(sessionMetadata.userId)
+    const metadataSupabaseUserId = exactCanonicalLowerUuid(sessionMetadata.supabase_user_id)
+    const reservationId = exactCanonicalLowerUuid(sessionMetadata[apiTierReservationMetadataKey])
+    const customerId = typeof session.customer === 'string' ? session.customer : null
+    const eventCreatedIsValid =
+      Number.isSafeInteger(event.created) &&
+      event.created > 0 &&
+      event.created <= maxStripeUnixSeconds
+    const checkoutExpiresAtIsValid =
+      Number.isSafeInteger(session.expires_at) &&
+      Number(session.expires_at) > 0 &&
+      Number(session.expires_at) <= maxStripeUnixSeconds
+    const identityIsExact =
+      metadataKeys.length === apiCheckoutMetadataKeys.length &&
+      apiCheckoutMetadataKeys.every((key, index) => metadataKeys[index] === key) &&
+      sessionMetadata.type === 'api_tier' &&
+      (sessionMetadata.api_plan === 'starter' || sessionMetadata.api_plan === 'pro') &&
+      !!metadataUserId &&
+      metadataUserId === metadataSupabaseUserId &&
+      !Object.prototype.hasOwnProperty.call(sessionMetadata, 'user_id') &&
+      !!reservationId &&
+      session.object === 'checkout.session' &&
+      session.mode === 'subscription' &&
+      session.status === 'expired' &&
+      session.payment_status === 'unpaid' &&
+      session.subscription === null &&
+      typeof session.livemode === 'boolean' &&
+      session.livemode === event.livemode &&
+      exactStripeIdentifier(session.id, stripeCheckoutIdPattern) &&
+      exactStripeIdentifier(event.id, stripeEventIdPattern) &&
+      eventCreatedIsValid &&
+      checkoutExpiresAtIsValid &&
+      session.client_reference_id === reservationId &&
+      !!customerId &&
+      exactStripeIdentifier(customerId, stripeCustomerIdPattern)
+    const reviewUserId =
+      metadataUserId && metadataUserId === metadataSupabaseUserId ? metadataUserId : null
+
+    const recordApiExpiryReview = async (reasonKey: string, reason: string) => {
+      await recordStripeCheckoutManualReview({
+        supabase: getSupabaseAdmin(),
+        sessionId: session.id || 'unknown_checkout_session',
+        userId: reviewUserId,
+        reasonKey,
+        reason,
+        context: {
+          event_id: event.id,
+          event_created: event.created,
+          event_livemode: event.livemode,
+          session_id: session.id,
+          session_livemode: session.livemode ?? null,
+          session_mode: session.mode ?? null,
+          session_status: session.status ?? null,
+          session_payment_status: session.payment_status ?? null,
+          session_subscription_present: session.subscription !== null,
+          checkout_expires_at: session.expires_at || null,
+          client_reference_id: session.client_reference_id || null,
+          stripe_customer_id: customerId,
+          metadata_type: sessionMetadata.type || null,
+          metadata_api_plan: sessionMetadata.api_plan || null,
+          metadata_user_id: sessionMetadata.userId || null,
+          metadata_supabase_user_id: sessionMetadata.supabase_user_id || null,
+          reservation_id: sessionMetadata[apiTierReservationMetadataKey] || null,
+        },
+      })
+    }
+
+    if (!identityIsExact || !metadataUserId || !reservationId || !customerId) {
+      await recordApiExpiryReview(
+        'api_tier_expiry_identity_invalid',
+        'An expired API tier Checkout Session had incomplete or malformed exact identity.'
+      )
+      return
+    }
+
+    const { data: profile, error: profileError } = await getSupabase()
+      .from('user_profiles')
+      .select('id, stripe_customer_id')
+      .eq('id', metadataUserId)
+      .maybeSingle()
+    if (profileError) {
+      throw new Error(`Failed to verify expired API checkout owner: ${profileError.message}`)
+    }
+    if (!profile || profile.id !== metadataUserId || profile.stripe_customer_id !== customerId) {
+      await recordApiExpiryReview(
+        'api_tier_expiry_customer_mismatch',
+        'An expired API tier Checkout Session did not match its persisted Stripe customer owner.'
+      )
+      return
+    }
+
+    const { data, error } = await getSupabaseAdmin().rpc(
+      'release_api_tier_checkout_reservation_atomic',
+      {
+        p_reservation_id: reservationId,
+        p_user_id: metadataUserId,
+        p_livemode: event.livemode,
+        p_stripe_customer_id: customerId,
+        p_checkout_session_id: session.id,
+        p_stripe_event_id: event.id,
+        p_stripe_event_created: event.created,
+      }
+    )
+    if (error) {
+      throw new Error(`Failed to release expired API tier reservation: ${error.message}`)
+    }
+    const status = rpcStatus(data)
+    if (status !== 'released' && status !== 'already_released') {
+      throw new Error(
+        `API tier checkout reservation release returned unexpected status ${status || 'missing'}`
+      )
+    }
+    logger.info('API tier Checkout reservation reached a released state', {
+      userId: metadataUserId,
+      reservationId,
+      sessionId: session.id,
+      eventId: event.id,
+      status,
+    })
+    return
+  }
+
+  // Ordinary Pro reservation expiration is accepted only from the exact
+  // signed Stripe snapshot. This also handles the safe case where Stripe
+  // created/expired a Session but the database bind response was lost.
+  if (carriesProCheckoutIdentity(sessionMetadata)) {
+    const metadataKeys = Object.keys(sessionMetadata).sort()
+    const metadataUserId = exactCanonicalLowerUuid(sessionMetadata.userId)
+    const metadataSupabaseUserId = exactCanonicalLowerUuid(sessionMetadata.supabase_user_id)
+    const reservationId = exactCanonicalLowerUuid(
+      sessionMetadata[proMembershipReservationMetadataKey]
+    )
+    const customerId = typeof session.customer === 'string' ? session.customer : null
+    const plan = sessionMetadata.plan
+    const priceId = sessionMetadata[proMembershipPriceMetadataKey]
+    const unitAmount = Number(sessionMetadata.unit_amount)
+    const currency = sessionMetadata.currency
+    const trialDays =
+      sessionMetadata.trial_days === '7' ? 7 : sessionMetadata.trial_days === '0' ? 0 : null
+    const eventCreatedIsValid =
+      Number.isSafeInteger(event.created) &&
+      event.created > 0 &&
+      event.created <= maxStripeUnixSeconds
+    const checkoutExpiresAtIsValid =
+      Number.isSafeInteger(session.expires_at) &&
+      Number(session.expires_at) > 0 &&
+      Number(session.expires_at) <= maxStripeUnixSeconds
+    const identityIsExact =
+      metadataKeys.length === proCheckoutMetadataKeys.length &&
+      proCheckoutMetadataKeys.every((key, index) => metadataKeys[index] === key) &&
+      sessionMetadata.type === 'pro_membership' &&
+      (plan === 'monthly' || plan === 'yearly') &&
+      !!metadataUserId &&
+      metadataUserId === metadataSupabaseUserId &&
+      !Object.prototype.hasOwnProperty.call(sessionMetadata, 'user_id') &&
+      !!reservationId &&
+      !!priceId &&
+      exactStripeIdentifier(priceId, stripePriceIdPattern) &&
+      currency === 'usd' &&
+      /^[1-9][0-9]{0,11}$/.test(sessionMetadata.unit_amount || '') &&
+      Number.isSafeInteger(unitAmount) &&
+      trialDays !== null &&
+      session.object === 'checkout.session' &&
+      session.mode === 'subscription' &&
+      session.status === 'expired' &&
+      session.payment_status === 'unpaid' &&
+      session.subscription === null &&
+      typeof session.livemode === 'boolean' &&
+      session.livemode === event.livemode &&
+      exactStripeIdentifier(session.id, stripeCheckoutIdPattern) &&
+      exactStripeIdentifier(event.id, stripeEventIdPattern) &&
+      eventCreatedIsValid &&
+      checkoutExpiresAtIsValid &&
+      session.client_reference_id === reservationId &&
+      !!customerId &&
+      exactStripeIdentifier(customerId, stripeCustomerIdPattern)
+
+    if (
+      !identityIsExact ||
+      !metadataUserId ||
+      !reservationId ||
+      !customerId ||
+      (plan !== 'monthly' && plan !== 'yearly') ||
+      !priceId ||
+      currency !== 'usd' ||
+      !Number.isSafeInteger(unitAmount) ||
+      trialDays === null ||
+      !session.expires_at
+    ) {
+      await recordStripeCheckoutManualReview({
+        supabase: getSupabaseAdmin(),
+        sessionId: session.id || 'unknown_checkout_session',
+        userId: metadataUserId && metadataUserId === metadataSupabaseUserId ? metadataUserId : null,
+        reasonKey: 'pro_checkout_expiry_identity_invalid',
+        reason:
+          'An expired ordinary Pro Checkout Session had incomplete or malformed exact identity.',
+        context: {
+          event_id: event.id,
+          event_created: event.created,
+          event_livemode: event.livemode,
+          session_id: session.id,
+          session_livemode: session.livemode ?? null,
+          session_mode: session.mode ?? null,
+          session_status: session.status ?? null,
+          session_payment_status: session.payment_status ?? null,
+          session_subscription_present: session.subscription !== null,
+          checkout_expires_at: session.expires_at || null,
+          client_reference_id: session.client_reference_id || null,
+          stripe_customer_id: customerId,
+          metadata_type: sessionMetadata.type || null,
+          metadata_plan: plan || null,
+          metadata_price_id: priceId || null,
+          metadata_unit_amount: sessionMetadata.unit_amount || null,
+          metadata_currency: currency || null,
+          metadata_trial_days: sessionMetadata.trial_days || null,
+          metadata_user_id: sessionMetadata.userId || null,
+          metadata_supabase_user_id: sessionMetadata.supabase_user_id || null,
+          reservation_id: sessionMetadata[proMembershipReservationMetadataKey] || null,
+        },
+      })
+      return
+    }
+
+    const { data, error } = await getSupabaseAdmin().rpc(
+      'release_pro_membership_checkout_reservation_atomic',
+      {
+        p_reservation_id: reservationId,
+        p_user_id: metadataUserId,
+        p_livemode: event.livemode,
+        p_stripe_customer_id: customerId,
+        p_pro_plan: plan,
+        p_stripe_price_id: priceId,
+        p_unit_amount: unitAmount,
+        p_currency: currency,
+        p_trial_days: trialDays,
+        p_checkout_session_id: session.id,
+        p_checkout_expires_at: session.expires_at,
+        p_stripe_event_id: event.id,
+        p_stripe_event_created: event.created,
+      }
+    )
+    if (error) {
+      throw new Error(`Failed to release expired Pro Checkout reservation: ${error.message}`)
+    }
+    const status = rpcStatus(data)
+    if (status !== 'released' && status !== 'already_released') {
+      throw new Error(
+        `Pro Checkout reservation release returned unexpected status ${status || 'missing'}`
+      )
+    }
+    logger.info('Pro Checkout reservation reached a signed released state', {
+      userId: metadataUserId,
+      reservationId,
+      sessionId: session.id,
+      eventId: event.id,
       status,
     })
     return
@@ -645,35 +1252,38 @@ async function handleLifetimePayment(session: Stripe.Checkout.Session, userId: s
 }
 
 export async function handleApiTierActivation(
-  userId: string,
-  apiPlan: string,
-  stripeSubscriptionId: string
+  authority: ApiTierStripeAuthority,
+  subscription: Stripe.Subscription,
+  event: StripeWebhookEventContext
 ) {
-  const dailyLimit = API_TIER_LIMITS[apiPlan] ?? 100
-
-  logger.info('Activating API tier', { userId, apiPlan, dailyLimit, stripeSubscriptionId })
-
-  await withRetry(async () => {
-    const { error } = await getSupabase().rpc('update_user_api_tier', {
-      p_user_id: userId,
-      p_api_tier: apiPlan,
-      p_stripe_subscription_id: stripeSubscriptionId,
-      p_daily_limit: dailyLimit,
-    })
-
-    if (error) {
-      throw new Error(`Failed to update API tier: ${error.message}`)
-    }
+  logger.info('Activating API tier from Checkout', {
+    userId: authority.userId,
+    apiPlan: authority.plan,
+    stripeSubscriptionId: subscription.id,
   })
 
-  logger.info(`API tier activated for user ${userId}`, { apiPlan })
+  await applyApiTierStripeEvent({
+    authority,
+    plan: authority.plan,
+    dailyLimit: API_TIER_LIMITS[authority.plan] ?? API_TIER_LIMITS.free,
+    subscription,
+    event,
+    isActive: true,
+    isTerminal: false,
+  })
+
+  logger.info(`API tier activated for user ${authority.userId}`, { apiPlan: authority.plan })
 
   fireAndForget(
     sendAlert({
       title: '🎉 New API subscriber',
-      message: `Plan: ${apiPlan} · User: ${userId}`,
+      message: `Plan: ${authority.plan} · User: ${authority.userId}`,
       level: 'info',
-      details: { userId, apiPlan, stripeSubscriptionId },
+      details: {
+        userId: authority.userId,
+        apiPlan: authority.plan,
+        stripeSubscriptionId: subscription.id,
+      },
     }),
     'stripe-new-api-subscriber-alert'
   )

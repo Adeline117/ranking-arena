@@ -188,6 +188,53 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+  const response = new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+  if (typeof response.ok !== 'boolean') {
+    Object.defineProperty(response, 'ok', {
+      configurable: true,
+      value: status >= 200 && status < 300,
+    })
+  }
+  return response
+}
+
+function recoveryPrepareBodies(): Array<Record<string, unknown>> {
+  return (global.fetch as jest.Mock).mock.calls
+    .filter(([url]) => url === '/api/account/recover')
+    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>)
+}
+
+function installProtocolFetch(
+  recoverPrepare?: (body: Record<string, unknown>) => Response | Promise<Response>,
+  fallbackStatus: Record<string, unknown> = { available: false, operations: [] }
+): void {
+  global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url === '/api/account/delete?phase=status') {
+      return jsonResponse({ operations: [] })
+    }
+    if (url === '/api/account/recover?phase=status') {
+      return jsonResponse({ operations: [] })
+    }
+    if (url === '/api/account/recover?phase=fallback-status') {
+      return jsonResponse(fallbackStatus)
+    }
+    if (url === '/api/account/recover') {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      if (recoverPrepare) return recoverPrepare(body)
+      return jsonResponse({ status: 'prepared', operation_id: body.operation_id }, 202)
+    }
+    if (url === '/api/account/recover?phase=commit') {
+      return jsonResponse({ success: true })
+    }
+    return jsonResponse({ success: true })
+  })
+}
+
 function installProfileBuilder(): void {
   const builder = {
     select: (...args: unknown[]) => {
@@ -239,6 +286,15 @@ describe('LoginPageClient exact identity boundary', () => {
     window.sessionStorage.clear()
     window.history.replaceState(null, '', '/login')
     document.cookie = 'csrf-token=csrf-login; path=/'
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: {
+        randomUUID: jest.fn(() => '00000000-0000-4000-8000-000000000001'),
+        subtle: {
+          digest: jest.fn(async () => new Uint8Array(32).buffer),
+        },
+      } as unknown as Crypto,
+    })
     __resetAuthOperationsForTests()
     __resetViewerScopeForTests()
     synchronizeViewerScope(true, null)
@@ -255,12 +311,7 @@ describe('LoginPageClient exact identity boundary', () => {
     mockSignInWithOtp.mockResolvedValue({ data: {}, error: null })
     mockSignOutIfCurrent.mockResolvedValue(false)
     mockSignOut.mockImplementation(async () => makeAnonymous())
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      })
-    )
+    installProtocolFetch()
   })
 
   it('distinguishes Terms and Privacy links without relying on brand color', async () => {
@@ -293,16 +344,115 @@ describe('LoginPageClient exact identity boundary', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
 
     await waitFor(() =>
+      expect(recoveryPrepareBodies()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            recovery_token: recoveryToken,
+            operation_id: expect.any(String),
+          }),
+        ])
+      )
+    )
+    await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith(
-        '/api/account/recover',
-        expect.objectContaining({
-          body: JSON.stringify({ recovery_token: recoveryToken }),
-        })
+        '/api/account/recover?phase=commit',
+        expect.objectContaining({ body: expect.stringContaining('operation_id') })
       )
     )
     expect(window.location.hash).toBe('')
     expect(window.localStorage.getItem(ACCOUNT_RECOVERY_TOKEN_KEY)).toBeNull()
     expect(window.sessionStorage.getItem(ACCOUNT_RECOVERY_SESSION_TOKEN_KEY)).toBeNull()
+  })
+
+  it('commits the exact existing operation returned by capability reacquisition', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    const reacquiredOperationId = '22222222-2222-4222-8222-222222222222'
+    mockSearchParams = new URLSearchParams('account_deleted=1')
+    persistAccountRecoveryToken(recoveryToken)
+    window.history.replaceState(null, '', '/login?account_deleted=1')
+    installProtocolFetch(() =>
+      jsonResponse({ status: 'prepared', operation_id: reacquiredOperationId }, 202)
+    )
+
+    await renderLogin()
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+
+    await waitFor(() => {
+      const commitCall = (global.fetch as jest.Mock).mock.calls.find(
+        ([url]) => url === '/api/account/recover?phase=commit'
+      )
+      expect(commitCall).toBeDefined()
+      expect(JSON.parse(String(commitCall?.[1]?.body))).toEqual({
+        operation_id: reacquiredOperationId,
+      })
+    })
+    expect(recoveryPrepareBodies()).toEqual([
+      expect.objectContaining({
+        recovery_token: recoveryToken,
+        operation_id: '00000000-0000-4000-8000-000000000001',
+      }),
+    ])
+  })
+
+  it('keeps the deletion-cookie locator separate and switches to the returned recovery operation', async () => {
+    const deletionOperationId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+    const reacquiredOperationId = '22222222-2222-4222-8222-222222222222'
+    mockSearchParams = new URLSearchParams('account_deleted=1')
+    window.history.replaceState(null, '', '/login?account_deleted=1')
+    installProtocolFetch(
+      () => jsonResponse({ status: 'prepared', operation_id: reacquiredOperationId }, 202),
+      {
+        available: true,
+        operations: [{ operation_id: deletionOperationId }],
+      }
+    )
+
+    await renderLogin()
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/account/recover?phase=fallback-status',
+        expect.objectContaining({ body: '{}' })
+      )
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+
+    await waitFor(() =>
+      expect(recoveryPrepareBodies()).toEqual([
+        expect.objectContaining({
+          recovery_cookie: true,
+          recovery_cookie_operation_id: deletionOperationId,
+          operation_id: '00000000-0000-4000-8000-000000000001',
+        }),
+      ])
+    )
+    await waitFor(() => {
+      const commitCall = (global.fetch as jest.Mock).mock.calls.find(
+        ([url]) => url === '/api/account/recover?phase=commit'
+      )
+      expect(JSON.parse(String(commitCall?.[1]?.body))).toEqual({
+        operation_id: reacquiredOperationId,
+      })
+    })
+  })
+
+  it('rejects a malformed prepared operation acknowledgement without committing', async () => {
+    const recoveryToken = 'A'.repeat(43)
+    mockSearchParams = new URLSearchParams('account_deleted=1')
+    persistAccountRecoveryToken(recoveryToken)
+    window.history.replaceState(null, '', '/login?account_deleted=1')
+    installProtocolFetch(() =>
+      jsonResponse({ status: 'prepared', operation_id: 'not-an-operation' }, 202)
+    )
+
+    await renderLogin()
+    fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
+
+    await screen.findByText('networkErrorRetry')
+    expect(
+      (global.fetch as jest.Mock).mock.calls.some(
+        ([url]) => url === '/api/account/recover?phase=commit'
+      )
+    ).toBe(false)
   })
 
   it('reclaims the in-memory handoff after a real same-URL subtree remount', async () => {
@@ -323,11 +473,19 @@ describe('LoginPageClient exact identity boundary', () => {
     const replacementMount = await renderLogin()
     fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
     await waitFor(() =>
+      expect(recoveryPrepareBodies()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            recovery_token: recoveryToken,
+            operation_id: expect.any(String),
+          }),
+        ])
+      )
+    )
+    await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith(
-        '/api/account/recover',
-        expect.objectContaining({
-          body: JSON.stringify({ recovery_token: recoveryToken }),
-        })
+        '/api/account/recover?phase=commit',
+        expect.objectContaining({ body: expect.stringContaining('operation_id') })
       )
     )
 
@@ -351,12 +509,7 @@ describe('LoginPageClient exact identity boundary', () => {
     const recoveryToken = 'A'.repeat(43)
     mockSearchParams = new URLSearchParams('recover=1')
     window.localStorage.setItem(ACCOUNT_RECOVERY_TOKEN_KEY, recoveryToken)
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: false, error: 'recovery failed' }), {
-        status: 401,
-        headers: { 'content-type': 'application/json' },
-      })
-    )
+    installProtocolFetch(() => jsonResponse({ success: false, error: 'recovery failed' }, 401))
 
     await renderLogin()
     fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))
@@ -371,7 +524,7 @@ describe('LoginPageClient exact identity boundary', () => {
     const recovery = deferred<Response>()
     mockSearchParams = new URLSearchParams('recover=1')
     window.history.replaceState(null, '', `/login?recover=1#recovery_token=${recoveryToken}`)
-    global.fetch = jest.fn().mockReturnValue(recovery.promise)
+    installProtocolFetch(() => recovery.promise)
 
     const view = await renderLogin()
     fireEvent.click(await screen.findByRole('button', { name: 'loginRecoverMyAccount' }))

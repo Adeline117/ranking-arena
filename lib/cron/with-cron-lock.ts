@@ -8,6 +8,7 @@
  */
 
 import { createLogger } from '@/lib/utils/logger'
+import { tryAcquireRedisLease } from '@/lib/cache/redis-lease'
 
 const logger = createLogger('cron-lock')
 
@@ -16,53 +17,62 @@ interface CronLockOptions {
   ttlSeconds?: number
 }
 
+export type CronLockAcquisition =
+  | { status: 'acquired'; release: () => Promise<void> }
+  | { status: 'held' }
+  | { status: 'unavailable' }
+
 /**
  * Acquire a Redis lock for a cron job.
- * Returns a release function if acquired, `null` if already locked.
+ * Distinguishes a held lease from an unavailable lock backend so callers can
+ * acknowledge real overlap while returning a retryable 503 for infrastructure
+ * failures.
  *
- * Fail-open: if Redis is unavailable or errors, the job runs anyway
- * (availability > dedup correctness).
+ * Fail closed: if Redis is unavailable or errors, return `unavailable`.
+ * Mutating jobs must retry later instead of running concurrently without
+ * fencing.
  */
 export async function acquireCronLock(
   jobName: string,
   options: CronLockOptions = {}
-): Promise<(() => Promise<void>) | null> {
+): Promise<CronLockAcquisition> {
   const { ttlSeconds = 300 } = options
   const lockKey = `cron:lock:${jobName}`
+  const leaseTtlSeconds = ttlSeconds + 30
 
   try {
     const { getSharedRedis } = await import('@/lib/cache/redis-client')
     const redis = await getSharedRedis()
 
     if (!redis) {
-      // Redis unavailable — allow execution (fail open for availability)
-      logger.warn(`[${jobName}] Redis unavailable, running without lock`)
-      return async () => {}
+      logger.error(`[${jobName}] Redis unavailable; cron blocked`)
+      return { status: 'unavailable' }
     }
 
-    const result = await redis.set(lockKey, Date.now().toString(), { nx: true, ex: ttlSeconds })
-    if (result !== 'OK') {
+    const lease = await tryAcquireRedisLease(redis, lockKey, leaseTtlSeconds)
+    if (!lease) {
       logger.info(`[${jobName}] Skipped — already running (lock exists)`)
-      return null
+      return { status: 'held' }
     }
 
-    // Return release function
-    return async () => {
-      try {
-        await redis.del(lockKey)
-      } catch (err) {
-        logger.warn(
-          `[${jobName}] Failed to release lock:`,
-          err instanceof Error ? err.message : String(err)
-        )
-      }
+    return {
+      status: 'acquired',
+      release: async () => {
+        try {
+          await lease.release()
+        } catch (err) {
+          logger.warn(
+            `[${jobName}] Failed to release lock:`,
+            err instanceof Error ? err.message : String(err)
+          )
+        }
+      },
     }
   } catch (err) {
-    // Redis error — allow execution (fail open)
-    logger.warn(
-      `[${jobName}] Lock check failed, running without lock:`,
+    logger.error(
+      `[${jobName}] Lock check failed; cron blocked:`,
       err instanceof Error ? err.message : String(err)
     )
-    return async () => {}
+    return { status: 'unavailable' }
   }
 }

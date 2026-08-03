@@ -43,6 +43,9 @@ const ENTITLEMENT_READINESS_METRIC_KEYS = [
   'projection_drift',
   'notification_delivery_anomalies',
   'authority_drift',
+  'api_tier_payment_ownership_anomalies',
+  'api_tier_payment_backfill_incomplete',
+  'api_tier_reversal_actions_incomplete',
 ] as const
 
 export const STRIPE_PAID_READINESS_KEYS = ['status', ...ENTITLEMENT_READINESS_METRIC_KEYS] as const
@@ -119,6 +122,9 @@ function parseStripePaidReadiness(value: unknown): StripePaidReadiness | null {
     projection_drift: record.projection_drift as number,
     notification_delivery_anomalies: record.notification_delivery_anomalies as number,
     authority_drift: record.authority_drift as number,
+    api_tier_payment_ownership_anomalies: record.api_tier_payment_ownership_anomalies as number,
+    api_tier_payment_backfill_incomplete: record.api_tier_payment_backfill_incomplete as number,
+    api_tier_reversal_actions_incomplete: record.api_tier_reversal_actions_incomplete as number,
   }
 }
 
@@ -207,18 +213,26 @@ export const GET = withCron(
     }
 
     const staleCutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-    const [failedEvents, staleEvents, paidReadinessResult] = await Promise.all([
-      supabase
-        .from('stripe_events')
-        .select('event_id', { count: 'exact', head: true })
-        .eq('status', 'failed'),
-      supabase
-        .from('stripe_events')
-        .select('event_id', { count: 'exact', head: true })
-        .eq('status', 'processing')
-        .lt('started_at', staleCutoff),
-      supabase.rpc('stripe_paid_launch_readiness_v2'),
-    ])
+    const effectWorkerCutoff = new Date(Date.now() - 20 * 60 * 1000).toISOString()
+    const [failedEvents, staleEvents, paidReadinessResult, effectWorkerHeartbeat] =
+      await Promise.all([
+        supabase
+          .from('stripe_events')
+          .select('event_id', { count: 'exact', head: true })
+          .eq('status', 'failed'),
+        supabase
+          .from('stripe_events')
+          .select('event_id', { count: 'exact', head: true })
+          .eq('status', 'processing')
+          .lt('started_at', staleCutoff),
+        supabase.rpc('stripe_paid_launch_readiness_v2'),
+        supabase
+          .from('pipeline_logs')
+          .select('id', { count: 'exact', head: true })
+          .eq('job_name', 'stripe-entitlement-effects')
+          .eq('status', 'success')
+          .gte('started_at', effectWorkerCutoff),
+      ])
     if (failedEvents.error || staleEvents.error) {
       failures.push('Stripe webhook event health query failed')
     } else {
@@ -228,6 +242,14 @@ export const GET = withCron(
       if ((staleEvents.count || 0) > 0) {
         failures.push(`${staleEvents.count} Stripe webhook event(s) are stuck processing`)
       }
+    }
+
+    const entitlementEffectWorkerRecent =
+      !effectWorkerHeartbeat.error && (effectWorkerHeartbeat.count || 0) > 0
+    if (effectWorkerHeartbeat.error) {
+      failures.push('Stripe entitlement effect worker heartbeat query failed')
+    } else if (!entitlementEffectWorkerRecent) {
+      failures.push('Stripe entitlement effect worker has no recent successful run')
     }
 
     let entitlementReadiness: StripePaidReadiness | null = null
@@ -277,6 +299,7 @@ export const GET = withCron(
       mode: secretMode,
       promoEnabled,
       entitlementReadiness,
+      entitlementEffectWorkerRecent,
       failures,
       warnings,
     }

@@ -90,23 +90,31 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const releaseLock = await acquireCronLock('check-data-freshness', {
+  const lock = await acquireCronLock('check-data-freshness', {
     // Keep the lease past Vercel's hard timeout so a duplicate delivery cannot
     // start while the first invocation is still being terminated.
     ttlSeconds: maxDuration + 30,
   })
-  if (!releaseLock) {
+  if (lock.status === 'unavailable') {
+    return NextResponse.json({ error: 'Cron lock unavailable' }, { status: 503 })
+  }
+  if (lock.status === 'held') {
     return NextResponse.json({
       ok: true,
       skipped: true,
       reason: 'concurrent_execution',
     })
   }
+  const releaseLock = lock.release
 
   try {
     return await runFreshnessCheck()
   } finally {
-    await bestEffort('Failed to release freshness cron lock', releaseLock)
+    try {
+      await releaseLock()
+    } catch {
+      logger.error('Failed to release freshness cron lock', {}, new Error('lock release failed'))
+    }
   }
 }
 

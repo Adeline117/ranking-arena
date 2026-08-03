@@ -48,6 +48,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/reconcile-account-auth",
+      "schedule": "7,22,37,52 * * * *"
+    },
+    {
       "path": "/api/cron/cleanup-report-evidence",
       "schedule": "*/15 * * * *"
     },
@@ -74,6 +78,10 @@
     {
       "path": "/api/cron/stripe-readiness",
       "schedule": "45 7 * * *"
+    },
+    {
+      "path": "/api/cron/stripe-entitlement-effects",
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/fetch-market-data?type=prices",

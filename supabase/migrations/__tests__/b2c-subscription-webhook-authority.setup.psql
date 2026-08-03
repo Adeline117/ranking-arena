@@ -1,0 +1,165 @@
+-- Additional production-shaped account-recovery prerequisites for running the
+-- B2C authority migration on the shared Stripe entitlement PG17 fixture.
+
+CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION postgres;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
+ALTER TABLE auth.users
+  ADD COLUMN email text,
+  ADD COLUMN encrypted_password text;
+ALTER TABLE auth.users OWNER TO postgres;
+
+ALTER TABLE public.user_profiles
+  ADD COLUMN email text,
+  ADD COLUMN deletion_scheduled_at timestamptz,
+  ADD COLUMN original_handle text,
+  ADD COLUMN original_email text;
+
+CREATE TABLE public.account_recovery_tokens (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  user_id uuid NOT NULL,
+  token_hash text NOT NULL UNIQUE,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz
+);
+ALTER TABLE public.account_recovery_tokens OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.restore_pending_account(
+  p_user_id uuid,
+  p_recovery_token_hash text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  PERFORM 1
+  FROM public.user_profiles AS profile
+  WHERE profile.id = p_user_id
+    AND profile.deleted_at IS NOT NULL
+    AND profile.deletion_scheduled_at > pg_catalog.clock_timestamp()
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+  IF p_recovery_token_hash IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.account_recovery_tokens AS token
+      WHERE token.user_id = p_user_id
+        AND token.token_hash = p_recovery_token_hash
+        AND token.used_at IS NULL
+        AND token.expires_at > pg_catalog.clock_timestamp()
+    )
+  THEN
+    RETURN NULL;
+  END IF;
+  UPDATE public.user_profiles
+  SET deleted_at = NULL,
+      deletion_scheduled_at = NULL
+  WHERE id = p_user_id;
+  UPDATE public.account_recovery_tokens
+  SET used_at = pg_catalog.clock_timestamp()
+  WHERE user_id = p_user_id
+    AND used_at IS NULL;
+  RETURN p_user_id;
+END
+$function$;
+ALTER FUNCTION public.restore_pending_account(uuid, text) OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.schedule_account_deletion_with_billing_blocks(
+  p_user_id uuid,
+  p_reason text,
+  p_scheduled_at timestamptz,
+  p_recovery_token_hash text,
+  p_stripe_customer_id text,
+  p_stripe_subscription_ids text[]
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_deleted_at timestamptz := pg_catalog.clock_timestamp();
+BEGIN
+  UPDATE public.user_profiles
+  SET deleted_at = v_deleted_at,
+      deletion_scheduled_at = p_scheduled_at
+  WHERE id = p_user_id
+    AND deleted_at IS NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not schedulable';
+  END IF;
+  INSERT INTO public.account_recovery_tokens (
+    user_id, token_hash, expires_at
+  ) VALUES (
+    p_user_id, p_recovery_token_hash, p_scheduled_at
+  );
+  RETURN pg_catalog.jsonb_build_object(
+    'status', 'scheduled',
+    'user_id', p_user_id,
+    'deleted_at', v_deleted_at,
+    'deletion_scheduled_at', p_scheduled_at,
+    'stripe_customer_id', p_stripe_customer_id,
+    'stripe_subscription_ids', p_stripe_subscription_ids
+  );
+END
+$function$;
+ALTER FUNCTION public.schedule_account_deletion_with_billing_blocks(
+  uuid, text, timestamptz, text, text, text[]
+) OWNER TO postgres;
+GRANT EXECUTE ON FUNCTION public.schedule_account_deletion_with_billing_blocks(
+  uuid, text, timestamptz, text, text, text[]
+) TO service_role;
+
+-- The shared entitlement fixture predates the API-tier and tip Checkout
+-- migrations.  Production has these RPCs already; minimal service-only
+-- stand-ins let this focused migration test exercise the recovery wrappers.
+CREATE OR REPLACE FUNCTION public.reserve_api_tier_checkout_atomic(
+  p_user_id uuid,
+  p_livemode boolean,
+  p_stripe_customer_id text,
+  p_api_plan text,
+  p_stripe_price_id text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  RETURN pg_catalog.jsonb_build_object('status', 'reserved');
+END
+$function$;
+ALTER FUNCTION public.reserve_api_tier_checkout_atomic(
+  uuid, boolean, text, text, text
+) OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.bind_api_tier_checkout_session_atomic(
+  p_reservation_id uuid,
+  p_user_id uuid,
+  p_livemode boolean,
+  p_stripe_customer_id text,
+  p_api_plan text,
+  p_stripe_price_id text,
+  p_checkout_session_id text,
+  p_checkout_expires_at bigint
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  RETURN pg_catalog.jsonb_build_object('status', 'bound');
+END
+$function$;
+ALTER FUNCTION public.bind_api_tier_checkout_session_atomic(
+  uuid, uuid, boolean, text, text, text, text, bigint
+) OWNER TO postgres;
+
+-- Tip reservation/session RPCs are supplied by the real 21210000 lifecycle
+-- migration in this chain.  Do not shadow-create them here: doing so would
+-- correctly trip that migration's partial-application preflight.

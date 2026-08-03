@@ -144,11 +144,15 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 110)
+  const additiveApiTierMigration = '20260729020000_api_tier_cancellation_identity.sql'
+  const legacyApiTierCleanupMigration = '20260729021000_disable_legacy_api_tier_writer.sql'
+
+  assert.equal(predeploy.length, 119)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
     '20260729061000_tier_a_execution_claim_enforcement.sql',
+    legacyApiTierCleanupMigration,
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   assert.deepEqual(recoveryPrerequisites, [
@@ -215,6 +219,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260729014500_leaderboard_rank_generation_canonical_batches.sql',
           '20260729015000_leaderboard_rank_generation_attested_batch_writer.sql',
           '20260729015500_tier_a_execution_claim_fence.sql',
+          '20260729020000_api_tier_cancellation_identity.sql',
+          '20260729022000_account_deletion_one_time_settlement_barrier.sql',
+          '20260729022500_account_recovery_admission_state_machine.sql',
+          '20260729023000_preserve_financial_owner_after_account_deletion.sql',
           '20260729054400_leaderboard_rank_generation_private_staging.sql',
           '20260729060000_stale_leaderboard_attempt_report.sql',
           '20260729061533_leaderboard_rank_generation_staging_only_writer.sql',
@@ -225,6 +233,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260729070500_leaderboard_score_input_manifest_v2.sql',
           '20260729071000_leaderboard_metric_trust_projection_v2.sql',
           '20260729071500_tier_a_one_phase_commit_guard.sql',
+          '20260729072000_account_recovery_auth_finalization.sql',
+          '20260729073000_pro_membership_checkout_reservation.sql',
+          '20260729074000_b2c_subscription_webhook_authority.sql',
+          '20260729075000_account_recovery_capability_reacquisition.sql',
+          '20260729080000_api_tier_recovery_payment_authority.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -243,9 +256,21 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 123)
+  assert.equal(new Set(all).size, 133)
+  assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
+  assert.equal(
+    postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
+    1
+  )
+  assert.ok(!predeploy.includes(legacyApiTierCleanupMigration))
+  assert.ok(!postdeploy.includes(additiveApiTierMigration))
+  assert.ok(!recoveryPrerequisites.includes(legacyApiTierCleanupMigration))
+  assert.ok(!concurrentRecovery.includes(legacyApiTierCleanupMigration))
+  assert.ok(!recovery.includes(legacyApiTierCleanupMigration))
+  assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
+  assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-69), [
+  assert.deepEqual(predeploy.slice(-78), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -305,6 +330,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729014500_leaderboard_rank_generation_canonical_batches.sql',
     '20260729015000_leaderboard_rank_generation_attested_batch_writer.sql',
     '20260729015500_tier_a_execution_claim_fence.sql',
+    '20260729020000_api_tier_cancellation_identity.sql',
+    '20260729022000_account_deletion_one_time_settlement_barrier.sql',
+    '20260729022500_account_recovery_admission_state_machine.sql',
+    '20260729023000_preserve_financial_owner_after_account_deletion.sql',
     '20260729054400_leaderboard_rank_generation_private_staging.sql',
     '20260729060000_stale_leaderboard_attempt_report.sql',
     '20260729061533_leaderboard_rank_generation_staging_only_writer.sql',
@@ -315,6 +344,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729070500_leaderboard_score_input_manifest_v2.sql',
     '20260729071000_leaderboard_metric_trust_projection_v2.sql',
     '20260729071500_tier_a_one_phase_commit_guard.sql',
+    '20260729072000_account_recovery_auth_finalization.sql',
+    '20260729073000_pro_membership_checkout_reservation.sql',
+    '20260729074000_b2c_subscription_webhook_authority.sql',
+    '20260729075000_account_recovery_capability_reacquisition.sql',
+    '20260729080000_api_tier_recovery_payment_authority.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -366,6 +400,12 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     predeploy.includes('20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql')
   )
   assert.ok(predeploy.includes('20260729010000_api_keys_server_authority.sql'))
+  assert.ok(predeploy.includes('20260729020000_api_tier_cancellation_identity.sql'))
+  assert.ok(predeploy.includes('20260729022000_account_deletion_one_time_settlement_barrier.sql'))
+  assert.ok(predeploy.includes('20260729022500_account_recovery_admission_state_machine.sql'))
+  assert.ok(
+    predeploy.includes('20260729023000_preserve_financial_owner_after_account_deletion.sql')
+  )
   assert.ok(
     predeploy.includes('20260729011000_leaderboard_rank_manifest_attestation_substrate.sql')
   )
@@ -391,6 +431,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729070500_leaderboard_score_input_manifest_v2.sql'))
   assert.ok(predeploy.includes('20260729071000_leaderboard_metric_trust_projection_v2.sql'))
   assert.ok(predeploy.includes('20260729071500_tier_a_one_phase_commit_guard.sql'))
+  assert.ok(predeploy.includes('20260729072000_account_recovery_auth_finalization.sql'))
+  assert.ok(predeploy.includes('20260729073000_pro_membership_checkout_reservation.sql'))
+  assert.ok(predeploy.includes('20260729074000_b2c_subscription_webhook_authority.sql'))
+  assert.ok(predeploy.includes('20260729075000_account_recovery_capability_reacquisition.sql'))
+  assert.ok(predeploy.includes('20260729080000_api_tier_recovery_payment_authority.sql'))
   assert.ok(
     predeploy.includes('20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql')
   )
@@ -449,6 +494,20 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     )
   )
   assert.ok(!recoveryPrerequisites.includes('20260729010000_api_keys_server_authority.sql'))
+  assert.ok(!recoveryPrerequisites.includes('20260729020000_api_tier_cancellation_identity.sql'))
+  assert.ok(
+    !recoveryPrerequisites.includes(
+      '20260729022000_account_deletion_one_time_settlement_barrier.sql'
+    )
+  )
+  assert.ok(
+    !recoveryPrerequisites.includes('20260729022500_account_recovery_admission_state_machine.sql')
+  )
+  assert.ok(
+    !recoveryPrerequisites.includes(
+      '20260729023000_preserve_financial_owner_after_account_deletion.sql'
+    )
+  )
   assert.ok(
     !recoveryPrerequisites.includes(
       '20260729011000_leaderboard_rank_manifest_attestation_substrate.sql'

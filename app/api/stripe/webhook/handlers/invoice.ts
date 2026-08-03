@@ -1,167 +1,206 @@
 import Stripe from 'stripe'
 import { stripe } from '@/lib/stripe'
-import { getSupabase, logger } from './shared'
+import { getSupabase, logger, type StripeWebhookEventContext } from './shared'
 import { sendNotification } from '@/lib/data/notifications'
+import { getApiPlanFromPriceId, getProPlanFromPriceId } from './stripe-price-identity'
+import {
+  applyExactRecurringInvoiceFailure,
+  applyExactRecurringInvoicePayment,
+  recordRecurringAuthorityReview,
+} from '@/lib/stripe/recurring-entitlement'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import {
+  resolveExactRecurringInvoicePriceId,
+  StripeAuthorityError,
+} from '@/lib/stripe/entitlement-authority'
+import { applyExactApiTierInvoicePayment } from './api-tier-payment'
 
-export async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
+export type StripePaidInvoiceEventContext = StripeWebhookEventContext & {
+  type: 'invoice.paid' | 'invoice.payment_succeeded'
+}
+
+function subscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
   const subscriptionData = invoice.parent?.subscription_details?.subscription
-  const subscriptionId =
-    typeof subscriptionData === 'string' ? subscriptionData : subscriptionData?.id || null
+  return typeof subscriptionData === 'string' ? subscriptionData : subscriptionData?.id || null
+}
 
-  if (!subscriptionId) return
+type RecurringInvoiceProductClassification = 'api_tier' | 'b2c_pro' | 'manual_review'
 
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+async function classifyRecurringInvoiceProduct(
+  invoice: Stripe.Invoice,
+  event: StripeWebhookEventContext
+): Promise<RecurringInvoiceProductClassification> {
+  const subscriptionId = subscriptionIdFromInvoice(invoice)
+  if (!subscriptionId) return 'b2c_pro'
   const customerId =
-    typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id || ''
-
-  const { data: profile, error: profileError } = await getSupabase()
-    .from('user_profiles')
-    .select('id, subscription_tier')
-    .eq('stripe_customer_id', customerId)
-    .maybeSingle()
-
-  if (profileError) {
-    throw new Error(`Failed to find successful payment owner: ${profileError.message}`)
+    typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id || null
+  if (
+    !customerId ||
+    invoice.livemode !== event.livemode ||
+    !Number.isSafeInteger(invoice.created) ||
+    invoice.created <= 0 ||
+    invoice.created > event.created
+  ) {
+    return 'b2c_pro'
   }
-  if (!profile) return
-
-  // Upsert payment record (handles webhook retries)
-  const { error: historyErr } = await getSupabase().from('payment_history').upsert(
-    {
-      user_id: profile.id,
-      stripe_invoice_id: invoice.id,
-      stripe_payment_intent_id: null,
-      amount: invoice.amount_paid,
-      currency: invoice.currency,
-      status: 'succeeded',
-      created_at: new Date().toISOString(),
-    },
-    { onConflict: 'stripe_invoice_id' }
-  )
-  if (historyErr) {
-    logger.error('Failed to record payment', { error: historyErr, invoiceId: invoice.id })
-    throw new Error(`Failed to record successful payment: ${historyErr.message}`)
-  }
-  logger.info(`Payment succeeded for user ${profile.id}`, { amount: invoice.amount_paid })
-
-  // S-1 FIX: Restore Pro tier if the subscription is now active.
-  // After a past_due → active recovery, customer.subscription.updated may be
-  // delayed or lost. This ensures the user gets Pro access back immediately
-  // on successful payment, without relying solely on that event.
-  if (subscription.status === 'active') {
-    if (profile.subscription_tier !== 'pro') {
-      const { error: restoreErr } = await getSupabase()
-        .from('user_profiles')
-        .update({ subscription_tier: 'pro', updated_at: new Date().toISOString() })
-        .eq('id', profile.id)
-      if (restoreErr) {
-        logger.error('Failed to restore Pro tier after payment', {
-          error: restoreErr.message,
-          userId: profile.id,
-        })
-        throw new Error(`Failed to restore Pro tier after payment: ${restoreErr.message}`)
+  try {
+    // Classify the immutable historical Invoice, not the Subscription's
+    // mutable current metadata/item. The helper walks every line page and
+    // rejects hidden/proration/extra lines before an API Price can win.
+    const priceId = await resolveExactRecurringInvoicePriceId(stripe, invoice, event.livemode)
+    const { data, error } = await getSupabaseAdmin().rpc(
+      'classify_recurring_invoice_product_authority_atomic',
+      {
+        p_livemode: event.livemode,
+        p_event_id: event.id,
+        p_invoice_id: invoice.id,
+        p_stripe_customer_id: customerId,
+        p_stripe_subscription_id: subscriptionId,
+        p_stripe_price_id: priceId,
       }
-      logger.info(`Restored Pro tier for user ${profile.id} after successful payment`)
+    )
+    if (error) {
+      throw new Error(`Recurring Invoice product classification failed: ${error.message}`)
     }
+    if (
+      !data ||
+      Array.isArray(data) ||
+      typeof data !== 'object' ||
+      typeof data.status !== 'string' ||
+      Object.keys(data).length !== 1
+    ) {
+      throw new Error('Recurring Invoice product classification returned an invalid result')
+    }
+    if (data.status === 'api_tier' || data.status === 'b2c_pro') return data.status
+    if (data.status === 'manual_review') return 'manual_review'
+    if (data.status !== 'not_found') {
+      throw new Error(`Recurring Invoice product classification returned ${data.status}`)
+    }
+    const apiMatch = getApiPlanFromPriceId(priceId) !== null
+    const proPlan = getProPlanFromPriceId(priceId)
+    const b2cMatch = proPlan === 'monthly' || proPlan === 'yearly'
+    if (apiMatch !== b2cMatch) return apiMatch ? 'api_tier' : 'b2c_pro'
 
-    // Always reconcile the subscription row, even when the profile is already
-    // Pro. Otherwise a retry after "profile restored, subscription write
-    // failed" would skip this write and incorrectly ACK the event.
-    const { error: subscriptionError } = await getSupabase()
-      .from('subscriptions')
-      .update({ status: 'active', updated_at: new Date().toISOString() })
-      .eq('user_id', profile.id)
-      .eq('stripe_subscription_id', subscriptionId)
-    if (subscriptionError) {
-      throw new Error(`Failed to restore active subscription status: ${subscriptionError.message}`)
-    }
+    await recordRecurringAuthorityReview({
+      supabase: getSupabaseAdmin(),
+      objectType: 'invoice',
+      objectId: invoice.id,
+      event,
+      error: new StripeAuthorityError({
+        code: apiMatch ? 'ambiguous_product' : 'unsupported_product',
+        stage: 'product',
+        message: apiMatch
+          ? 'Current API and B2C configuration both claim one recurring Price.'
+          : 'No durable or current product authority claims this recurring Price.',
+        objectIds: { invoiceId: invoice.id, subscriptionId },
+        details: { priceId, apiMatch, b2cMatch },
+      }),
+    })
+    return 'manual_review'
+  } catch (error) {
+    // Ordinary B2C authority persists the exact failure as a durable review.
+    // Returning false here avoids a classifier-only retry loop and never
+    // silently delegates an ambiguous Invoice to the API writer.
+    if (error instanceof StripeAuthorityError) return 'b2c_pro'
+    throw error
   }
 }
 
-export async function handlePaymentFailed(invoice: Stripe.Invoice) {
-  const customerId = invoice.customer as string
-
-  const { data: profile, error: profileError } = await getSupabase()
-    .from('user_profiles')
-    .select('id, subscription_tier')
-    .eq('stripe_customer_id', customerId)
-    .maybeSingle()
-
-  if (profileError) {
-    throw new Error(`Failed to find failed payment owner: ${profileError.message}`)
+export async function handlePaymentSucceeded(
+  invoice: Stripe.Invoice,
+  event: StripePaidInvoiceEventContext
+) {
+  const product = await classifyRecurringInvoiceProduct(invoice, event)
+  if (product === 'manual_review') {
+    logger.warn('Recurring Invoice product authority conflict was durably queued for review', {
+      invoiceId: invoice.id,
+      subscriptionId: subscriptionIdFromInvoice(invoice),
+      eventId: event.id,
+    })
+    return
   }
-  if (!profile) {
-    logger.warn(`Payment failed but no user found for customer`, { customerId })
+  if (product === 'api_tier') {
+    const outcome = await applyExactApiTierInvoicePayment({
+      stripe,
+      supabase: getSupabaseAdmin(),
+      invoice,
+      event,
+    })
+    logger.info('API tier paid invoice reached durable payment authority', {
+      invoiceId: invoice.id,
+      subscriptionId: subscriptionIdFromInvoice(invoice),
+      eventId: event.id,
+      status: outcome.status,
+      reviewCode: outcome.reviewCode,
+    })
     return
   }
 
-  const { error: historyErr } = await getSupabase().from('payment_history').upsert(
-    {
-      user_id: profile.id,
-      stripe_invoice_id: invoice.id,
-      amount: invoice.amount_due,
-      currency: invoice.currency,
-      status: 'failed',
-      created_at: new Date().toISOString(),
-    },
-    { onConflict: 'stripe_invoice_id' }
-  )
-  if (historyErr) {
-    logger.error('Failed to record payment failure', { error: historyErr })
-    throw new Error(`Failed to record payment failure: ${historyErr.message}`)
+  const outcome = await applyExactRecurringInvoicePayment({
+    stripe,
+    supabase: getSupabaseAdmin(),
+    invoice,
+    event,
+    eventType: event.type,
+  })
+  logger.info('Ordinary B2C Pro paid invoice reached durable authority', {
+    invoiceId: invoice.id,
+    eventId: event.id,
+    status: outcome.status,
+    reviewCode: outcome.reviewCode,
+  })
+}
+
+export async function handlePaymentFailed(
+  invoice: Stripe.Invoice,
+  event: StripeWebhookEventContext
+) {
+  const product = await classifyRecurringInvoiceProduct(invoice, event)
+  if (product === 'manual_review') {
+    logger.warn('Recurring Invoice product authority conflict was durably queued for review', {
+      invoiceId: invoice.id,
+      subscriptionId: subscriptionIdFromInvoice(invoice),
+      eventId: event.id,
+    })
+    return
+  }
+  if (product === 'api_tier') {
+    logger.info('API tier payment failure left to API subscription authority', {
+      invoiceId: invoice.id,
+      subscriptionId: subscriptionIdFromInvoice(invoice),
+    })
+    return
   }
 
-  const subscriptionData = invoice.parent?.subscription_details?.subscription
-  const subscriptionId =
-    typeof subscriptionData === 'string' ? subscriptionData : subscriptionData?.id || null
-  if (subscriptionId) {
-    try {
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-      if (subscription.status === 'past_due') {
-        // 2026-07-11:只标 past_due,不再立即降级。此前首次扣款失败即
-        // profile→free,而 Stripe smart-retries 常在几天内恢复(handlePaymentSucceeded
-        // 会复权),期间用户无解释失去 Pro、也不知该换卡。真正的降级由
-        // handleSubscriptionCanceled 在 Stripe 耗尽重试真取消时执行。这里给宽限期 +
-        // 通知用户更新支付方式。
-        const { error: statusError } = await getSupabase()
-          .from('subscriptions')
-          .update({
-            status: 'past_due',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('stripe_subscription_id', subscriptionId)
-        if (statusError) {
-          throw new Error(`Failed to mark subscription past due: ${statusError.message}`)
-        }
-
-        const willRetry = !!invoice.next_payment_attempt
-        sendNotification(
-          getSupabase(),
-          {
-            user_id: profile.id,
-            type: 'subscription_expiring',
-            title: willRetry ? 'Payment failed — please update your card' : 'Pro payment failed',
-            message: willRetry
-              ? 'We could not charge your card. We will retry automatically over the next few days — update your payment method in Settings to keep your Pro access.'
-              : 'Your Pro payment failed and retries are exhausted. Update your payment method in Settings to restore Pro.',
-            reference_id: `payment_failed_${invoice.id}`,
-          },
-          'stripe-payment-failed'
-        )
-
-        logger.info(`Marked past_due (grace, no downgrade) + notified user`, {
-          customerId,
-          subscriptionId,
-          willRetry,
-        })
-      }
-    } catch (err: unknown) {
-      logger.error('Failed to update subscription status on payment failure', { error: err })
-      throw err
-    }
+  const outcome = await applyExactRecurringInvoiceFailure({
+    stripe,
+    supabase: getSupabaseAdmin(),
+    invoice,
+    event,
+  })
+  const authority = outcome.authority
+  if (authority?.kind === 'recurring_invoice_failure') {
+    const willRetry = authority.nextPaymentAttempt !== null
+    sendNotification(
+      getSupabase(),
+      {
+        user_id: authority.userId,
+        type: 'subscription_expiring',
+        title: willRetry ? 'Payment failed — please update your card' : 'Pro payment failed',
+        message: willRetry
+          ? 'We could not charge your card. We will retry automatically — update your payment method in Settings to keep your Pro access.'
+          : 'Your Pro payment failed. Update your payment method in Settings to restore Pro.',
+        reference_id: `payment_failed_${invoice.id}`,
+      },
+      'stripe-payment-failed'
+    )
   }
-
-  logger.info(`Payment failed for user ${profile.id}`, { invoiceId: invoice.id })
+  logger.info('Ordinary B2C Pro failed invoice recorded without entitlement mutation', {
+    invoiceId: invoice.id,
+    eventId: event.id,
+    status: outcome.status,
+    reviewCode: outcome.reviewCode,
+  })
 }
 
 export async function handlePaymentActionRequired(invoice: Stripe.Invoice) {

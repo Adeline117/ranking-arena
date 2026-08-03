@@ -16,9 +16,28 @@ ArenaFi 的 B2C Pro **尚未开始真实收费，当前支付入口必须保持�
 - 测试价格已与产品唯一口径一致：月付 `$4.99`、年付 `$29.99`、终身 `$49.99`。
 - Checkout 会在创建 Customer/Session 前验证 Price、Product、币种、金额、周期和 test/live mode；未知 Price 不授予 Pro。
 - webhook 使用可重试状态机；业务处理失败不会再被误记为“已处理”。`20260718183000` entitlement authority 与 `20260718183500` NULL fail-closed 加固已经作为 PREDEPLOY 落库，但最终撤销旧 RPC、封禁 direct DML 的 Stripe POSTDEPLOY 尚未在仓库中实现或分配迁移版本，仍是付费上线硬阻断。当前 `20260718184000` 是榜单 `board_as_of` 水位迁移，与 Stripe 切换无关。
-- 每日 `stripe-readiness` 金丝雀检查三档 B2C 价格、密钥模式、webhook 事件契约、失败或卡住的 webhook 事件，以及数据库权威函数 `stripe_paid_launch_readiness_v2()` 的精确九键契约。九键必须包含 `unresolved_refund_tombstones`，任何未合并的 Charge 退款墓碑都必须阻断付费开放。
+- 每日 `stripe-readiness` 金丝雀检查三档 B2C 价格、密钥模式、webhook 事件契约、失败或卡住的 webhook 事件，以及数据库权威函数 `stripe_paid_launch_readiness_v2()` 的精确十三键契约。十三键必须同时包含 `unresolved_refund_tombstones`、API 套餐付款 ownership、backfill 和 reversal 阻断项；任何未合并的 Charge 退款墓碑、付款归属异常或未完成逆向动作都必须阻断付费开放。
 
 因此当前状态是 **paid launch blocked by design**。不能把 test Price、test Customer 或其他 Stripe account/mode 的对象直接搬到 live mode，也不能仅补一个环境变量就开始收费。
+
+## 账户恢复 finalization 密钥
+
+允许账户恢复 prepare 的每个运行环境都必须配置独立的 server-only
+`ACCOUNT_RECOVERY_FINALIZATION_SECRET`。推荐使用 `openssl rand -hex 32` 生成随机值；current 和
+previous（如配置）都必须是 32–4096 个可打印、非空白 ASCII 字符，并至少包含 8 种不同字符。
+两者都不得与非空的 `SUPABASE_SERVICE_ROLE_KEY` 完全相同，previous 还必须与 current 不同。
+禁止把任何密钥值写入日志、客户端变量或文档。
+
+- 新 prepare 只用 current 密钥和 `account-recovery-finalization:v2` 域签发 capability。密钥缺失，
+  长度、字符集、字符多样性或独立性不合规时，会在 token/profile 查询、claim、Auth 解封和 Stripe
+  调用前 fail closed 为 HTTP 503；不得回退生成 service-role/v1 capability。该检查是 prepare
+  的运行时门禁，不把密钥变成 production build/import 阶段的硬依赖。
+- 轮换时可暂时设置 `ACCOUNT_RECOVERY_FINALIZATION_SECRET_PREVIOUS`。新 capability 始终由
+  current 签发；current/previous 候选仅为未来受认证的 reacquire 流程预留，当前没有对外
+  reacquire endpoint。
+- commit 直接消费已写入 HttpOnly cookie 并核对数据库中的 capability hash，不重新派生。因此密钥
+  轮换不会使已签发 cookie（包括尚未提交的旧 v1 cookie）失效。确认新部署稳定且没有需要兼容的
+  后续 reacquire 版本后，应删除 `ACCOUNT_RECOVERY_FINALIZATION_SECRET_PREVIOUS`。
 
 ## 当前 sandbox webhook 合约修复
 
@@ -135,15 +154,17 @@ SELECT s.id, s.user_id, s.stripe_subscription_id, s.stripe_customer_id,
 9. 新建 live webhook endpoint，不要更新旧 endpoint：canonical URL、`api_version=2026-04-22.dahlia`、精确 `15` 个事件必须一次配置正确；安全保存新 signing secret 后立即把新 endpoint 暂时设为 disabled，此时不要停用旧 endpoint。这样密钥部署完成前不会让新 endpoint 向只认识旧密钥的生产实例投递。
 10. 在 Vercel Production 更新：
 
-| 变量                                 | Live 值                                         |
-| ------------------------------------ | ----------------------------------------------- |
-| `STRIPE_SECRET_KEY`                  | `sk_live_...`                                   |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_live_...`                                   |
-| `STRIPE_WEBHOOK_SECRET`              | 新 Dahlia live endpoint 的 signing secret       |
-| `STRIPE_WEBHOOK_SECRET_PREVIOUS`     | 仅切换窗口使用的旧 live endpoint signing secret |
-| `STRIPE_PRO_MONTHLY_PRICE_ID`        | 月付 live Price                                 |
-| `STRIPE_PRO_YEARLY_PRICE_ID`         | 年付 live Price                                 |
-| `STRIPE_PRO_LIFETIME_PRICE_ID`       | 终身 live Price                                 |
+| 变量                                            | Live 值                                                                                                 |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `ACCOUNT_RECOVERY_FINALIZATION_SECRET`          | 独立的 current HMAC 密钥；32–4096 个可打印非空白 ASCII 字符、至少 8 种字符，且不得等于 service-role key |
+| `ACCOUNT_RECOVERY_FINALIZATION_SECRET_PREVIOUS` | 仅轮换窗口可选；同一格式，并须同时区别于 current 和 service-role key                                    |
+| `STRIPE_SECRET_KEY`                             | `sk_live_...`                                                                                           |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`            | `pk_live_...`                                                                                           |
+| `STRIPE_WEBHOOK_SECRET`                         | 新 Dahlia live endpoint 的 signing secret                                                               |
+| `STRIPE_WEBHOOK_SECRET_PREVIOUS`                | 仅切换窗口使用的旧 live endpoint signing secret                                                         |
+| `STRIPE_PRO_MONTHLY_PRICE_ID`                   | 月付 live Price                                                                                         |
+| `STRIPE_PRO_YEARLY_PRICE_ID`                    | 年付 live Price                                                                                         |
+| `STRIPE_PRO_LIFETIME_PRICE_ID`                  | 终身 live Price                                                                                         |
 
 11. 保持 `NEXT_PUBLIC_PRO_FREE_PROMO` 开启并部署 primary=new、previous=old 的双签名配置；用两个密钥分别完成不制造新业务事件的签名 canary 后，启用新 endpoint，再停用旧 endpoint。确认旧 endpoint 的在途/重试事件均被处理、新 endpoint 持续健康、最终只有一个 enabled canonical endpoint 后，在独立里程碑删除 `STRIPE_WEBHOOK_SECRET_PREVIOUS` 并再次部署；不要在该密钥切换中开始收费，终身 flag 仍保持关闭。
 12. 用 Cron secret 调用 `/api/cron/stripe-readiness`，确认除 promo owner gate 外无失败，并确认 `STRIPE_WEBHOOK_SECRET_PREVIOUS` 已移除。

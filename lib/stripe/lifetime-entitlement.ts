@@ -29,6 +29,7 @@ const activationStatuses = new Set([
   'reservation_review',
   'subject_deleted',
   'duplicate_refund_queued',
+  'account_recovery_billing_blocked',
 ] as const)
 
 export type LifetimeActivationStatus =
@@ -41,6 +42,7 @@ export type LifetimeActivationStatus =
   | 'reservation_review'
   | 'subject_deleted'
   | 'duplicate_refund_queued'
+  | 'account_recovery_billing_blocked'
   | 'authority_review_recorded'
 
 export type LifetimeActivationOutcome = {
@@ -57,6 +59,15 @@ function rpcStatus(value: Json, operation: string): string {
     typeof value.status !== 'string'
   ) {
     throw new Error(`${operation} returned an invalid result`)
+  }
+  if (
+    value.status === 'account_recovery_billing_blocked' &&
+    (value.refund_status !== 'refund_pending' ||
+      typeof value.payment_id !== 'string' ||
+      !uuidPattern.test(value.payment_id) ||
+      value.payment_id !== value.payment_id.toLowerCase())
+  ) {
+    throw new Error(`${operation} returned an invalid recovery refund result`)
   }
   return value.status
 }
@@ -133,7 +144,7 @@ export async function activateLifetimeCheckoutEntitlement(params: {
     const resolved = await resolveCheckoutSessionAuthority(
       params.stripe,
       params.session,
-      stripeEntitlementAuthorityOptions(params.expectedUserId)
+      stripeEntitlementAuthorityOptions(params.expectedUserId, params.session.livemode)
     )
     if (resolved.kind !== 'lifetime_payment') {
       throw new Error(`Checkout ${params.session.id} is not a lifetime payment`)
@@ -197,6 +208,7 @@ export async function activateLifetimeCheckoutEntitlement(params: {
       p_currency: authority.currency,
       p_paid_at: new Date(authority.paidAt * 1000).toISOString(),
       p_payment_status: 'succeeded',
+      p_livemode: params.session.livemode,
     }
   )
   if (error) {

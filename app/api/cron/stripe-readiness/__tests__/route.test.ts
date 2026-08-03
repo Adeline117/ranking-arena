@@ -62,6 +62,9 @@ const readyEntitlementAuthority = {
   projection_drift: 0,
   notification_delivery_anomalies: 0,
   authority_drift: 0,
+  api_tier_payment_ownership_anomalies: 0,
+  api_tier_payment_backfill_incomplete: 0,
+  api_tier_reversal_actions_incomplete: 0,
 }
 
 function chainable(result: { count: number | null; error: null | { message: string } }) {
@@ -78,10 +81,11 @@ function chainable(result: { count: number | null; error: null | { message: stri
   return handler()
 }
 
-function queueEventHealth(failed = 0, stale = 0) {
+function queueEventHealth(failed = 0, stale = 0, workerHeartbeats = 1) {
   const results = [
     { count: failed, error: null },
     { count: stale, error: null },
+    { count: workerHeartbeats, error: null },
   ]
   mockFrom.mockImplementation(() => chainable(results.shift()!))
 }
@@ -133,6 +137,7 @@ describe('GET /api/cron/stripe-readiness', () => {
       mode: 'test',
       promoEnabled: true,
       entitlementReadiness: readyEntitlementAuthority,
+      entitlementEffectWorkerRecent: true,
     })
     expect(Object.keys(body.entitlementReadiness).sort()).toEqual(
       [...STRIPE_PAID_READINESS_KEYS].sort()
@@ -277,6 +282,40 @@ describe('GET /api/cron/stripe-readiness', () => {
     expect(body.failures).toContain('Stripe entitlement authority readiness contract is invalid')
   })
 
+  it('fails closed while API tier ownership backfill or reversals are incomplete', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        ...readyEntitlementAuthority,
+        status: 'blocked',
+        api_tier_payment_ownership_anomalies: 1,
+        api_tier_payment_backfill_incomplete: 2,
+        api_tier_reversal_actions_incomplete: 3,
+      },
+      error: null,
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.paidLaunchReady).toBe(false)
+    expect(body.failures).toContain(
+      'Stripe entitlement authority is blocked: api_tier_payment_ownership_anomalies=1, api_tier_payment_backfill_incomplete=2, api_tier_reversal_actions_incomplete=3'
+    )
+  })
+
+  it('rejects a readiness payload that omits an API tier reversal gate', async () => {
+    const { api_tier_reversal_actions_incomplete: _omitted, ...incompleteReadiness } =
+      readyEntitlementAuthority
+    mockRpc.mockResolvedValue({ data: incompleteReadiness, error: null })
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.healthy).toBe(false)
+    expect(body.failures).toContain('Stripe entitlement authority readiness contract is invalid')
+  })
+
   it('fails closed when the database authority readiness query fails', async () => {
     mockRpc.mockResolvedValue({
       data: null,
@@ -413,6 +452,19 @@ describe('GET /api/cron/stripe-readiness', () => {
 
     expect(body.failures).toContain('2 Stripe webhook event(s) are failed')
     expect(mockSendAlert).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed when the entitlement effect worker has no recent success', async () => {
+    queueEventHealth(0, 0, 0)
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/stripe-readiness'))
+    const body = await response.json()
+
+    expect(body.entitlementEffectWorkerRecent).toBe(false)
+    expect(body.healthy).toBe(false)
+    expect(body.paidLaunchReady).toBe(false)
+    expect(body.failures).toContain('Stripe entitlement effect worker has no recent successful run')
+    expect(mockFrom).toHaveBeenCalledWith('pipeline_logs')
   })
 
   it('requires live keys before the production paywall can be enabled', async () => {

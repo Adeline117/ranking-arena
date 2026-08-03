@@ -74,6 +74,13 @@ jest.mock('@/lib/stripe', () => ({
   }),
 }))
 
+const mockAssertUserStripeBillingSurfaceAccess = jest.fn()
+jest.mock('@/lib/stripe/billing-surface-access', () => ({
+  BILLING_SURFACE_UNAVAILABLE_MESSAGE: 'Billing is temporarily unavailable. Please retry.',
+  assertUserStripeBillingSurfaceAccess: (...args: unknown[]) =>
+    mockAssertUserStripeBillingSurfaceAccess(...args),
+}))
+
 jest.mock('@/lib/env', () => ({
   env: { NEXT_PUBLIC_APP_URL: 'https://arena.example' },
 }))
@@ -228,6 +235,7 @@ describe('POST /api/tip/checkout', () => {
     mockFrom.mockReturnValue(
       makeQuery({ data: { stripe_customer_id: 'cus_tip_atomic' }, error: null })
     )
+    mockAssertUserStripeBillingSurfaceAccess.mockResolvedValue(undefined)
     mockGetOrCreateStripeCustomer.mockResolvedValue('cus_tip_atomic')
     mockCreateOneTimePaymentSession.mockResolvedValue({ id: 'cs_tip_atomic' })
     mockRetrieveSession.mockResolvedValue(freshSession())
@@ -300,6 +308,28 @@ describe('POST /api/tip/checkout', () => {
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
+  it.each(['blocked', 'database error'])(
+    'fails closed before profile, reservation, or Stripe work when billing access is %s',
+    async (reason) => {
+      mockAssertUserStripeBillingSurfaceAccess.mockRejectedValueOnce(new Error(reason))
+
+      const response = await POST(requestWith({ post_id: POST_ID, amount_cents: 500 }) as never)
+
+      expect(response.status).toBe(503)
+      expect(await response.json()).toEqual({
+        error: 'Billing is temporarily unavailable. Please retry.',
+      })
+      expect(mockAssertUserStripeBillingSurfaceAccess).toHaveBeenCalledWith(USER_ID)
+      expect(mockFrom).not.toHaveBeenCalled()
+      expect(mockRpc).not.toHaveBeenCalled()
+      expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+      expect(mockCreateOneTimePaymentSession).not.toHaveBeenCalled()
+      expect(mockRetrieveSession).not.toHaveBeenCalled()
+      expect(mockListLineItems).not.toHaveBeenCalled()
+      expect(mockExpireSession).not.toHaveBeenCalled()
+    }
+  )
+
   it('establishes Customer ownership, reserves, verifies, binds, then returns the exact URL', async () => {
     const response = await POST(
       requestWith({
@@ -315,6 +345,10 @@ describe('POST /api/tip/checkout', () => {
       sessionId: 'cs_tip_atomic',
       url: 'https://checkout.stripe.com/c/pay/cs_tip_atomic',
     })
+    expect(mockAssertUserStripeBillingSurfaceAccess).toHaveBeenCalledWith(USER_ID)
+    expect(mockAssertUserStripeBillingSurfaceAccess.mock.invocationCallOrder[0]).toBeLessThan(
+      mockFrom.mock.invocationCallOrder[0]
+    )
     expect(mockGetOrCreateStripeCustomer).toHaveBeenCalledWith(
       USER_ID,
       'tipper@example.com',

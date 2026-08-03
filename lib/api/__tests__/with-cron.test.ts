@@ -117,11 +117,11 @@ jest.mock('@/lib/services/pipeline-logger', () => {
 // -------- Redis client mock (overrides jest.setup.js global mock) ----------
 jest.mock('@/lib/cache/redis-client', () => {
   const set = jest.fn(async () => 'OK')
-  const del = jest.fn(async () => 1)
-  const getSharedRedis = jest.fn(async () => ({ set, del }))
+  const evalScript = jest.fn(async () => 1)
+  const getSharedRedis = jest.fn(async () => ({ set, eval: evalScript }))
   return {
     getSharedRedis,
-    __mocks: { set, del, getSharedRedis },
+    __mocks: { set, evalScript, getSharedRedis },
   }
 })
 
@@ -142,7 +142,7 @@ const plogMocks = (
 ).__mocks
 const redisMocks = (
   jest.requireMock('@/lib/cache/redis-client') as {
-    __mocks: { set: jest.Mock; del: jest.Mock; getSharedRedis: jest.Mock }
+    __mocks: { set: jest.Mock; evalScript: jest.Mock; getSharedRedis: jest.Mock }
   }
 ).__mocks
 
@@ -151,7 +151,7 @@ const mockPlogSuccess = plogMocks.success
 const mockPlogError = plogMocks.error
 const mockPlogTimeout = plogMocks.timeout
 const mockRedisSet = redisMocks.set
-const mockRedisDel = redisMocks.del
+const mockRedisEval = redisMocks.evalScript
 const mockedGetSharedRedis = redisMocks.getSharedRedis
 
 function makeAuthedRequest(
@@ -166,10 +166,10 @@ function makeAuthedRequest(
 beforeEach(() => {
   jest.clearAllMocks()
   mockRedisSet.mockResolvedValue('OK')
-  mockRedisDel.mockResolvedValue(1)
+  mockRedisEval.mockResolvedValue(1)
   mockedGetSharedRedis.mockResolvedValue({
     set: mockRedisSet,
-    del: mockRedisDel,
+    eval: mockRedisEval,
   })
 })
 
@@ -341,10 +341,12 @@ describe('withCron safety timeout', () => {
 
     const pendingInvocation = wrapped(makeAuthedRequest())
 
-    // Let the auth/lock/plog.start async chain flush, then advance past the timer
-    await Promise.resolve()
-    await Promise.resolve()
-    await Promise.resolve()
+    // Let the auth/owned-lock/plog.start async chain flush, then advance past
+    // the timer. The owner-token lease adds an extra awaited Redis boundary.
+    for (let attempt = 0; attempt < 10 && !handlerResolve; attempt += 1) {
+      await Promise.resolve()
+    }
+    expect(handlerResolve).toBeDefined()
 
     jest.advanceTimersByTime(1500)
 
@@ -405,8 +407,12 @@ describe('withCron distributed lock (Redis NX)', () => {
     expect(opts).toMatchObject({ nx: true })
     expect(opts.ex).toBeGreaterThan(0)
 
-    // Lock released in finally block
-    expect(mockRedisDel).toHaveBeenCalledWith('cron:lock:lock-job')
+    // Lock released in finally through owner-token compare-and-delete.
+    expect(mockRedisEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('GET', KEYS[1])"),
+      ['cron:lock:lock-job'],
+      [expect.any(String)]
+    )
   })
 
   it('releases lock on handler error', async () => {
@@ -416,7 +422,11 @@ describe('withCron distributed lock (Redis NX)', () => {
     await wrapped(makeAuthedRequest())
 
     expect(mockRedisSet).toHaveBeenCalledTimes(1)
-    expect(mockRedisDel).toHaveBeenCalledWith('cron:lock:lock-err-job')
+    expect(mockRedisEval).toHaveBeenCalledWith(
+      expect.any(String),
+      ['cron:lock:lock-err-job'],
+      [expect.any(String)]
+    )
   })
 
   it('skips execution when lock is already held (concurrent run)', async () => {
@@ -434,10 +444,10 @@ describe('withCron distributed lock (Redis NX)', () => {
     expect(handler).not.toHaveBeenCalled()
     expect(mockedPipelineStart).not.toHaveBeenCalled()
     // Must NOT delete a lock we never acquired
-    expect(mockRedisDel).not.toHaveBeenCalled()
+    expect(mockRedisEval).not.toHaveBeenCalled()
   })
 
-  it('proceeds without lock when Redis is unavailable (fail-open)', async () => {
+  it('blocks execution when Redis is unavailable', async () => {
     mockedGetSharedRedis.mockResolvedValueOnce(null)
 
     const handler = jest.fn().mockResolvedValue({ count: 1 })
@@ -445,13 +455,14 @@ describe('withCron distributed lock (Redis NX)', () => {
 
     const res = await wrapped(makeAuthedRequest())
 
-    expect(res.status).toBe(200)
-    expect(handler).toHaveBeenCalledTimes(1)
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ ok: false, reason: 'lock_unavailable' })
+    expect(handler).not.toHaveBeenCalled()
     expect(mockRedisSet).not.toHaveBeenCalled()
-    expect(mockRedisDel).not.toHaveBeenCalled()
+    expect(mockRedisEval).not.toHaveBeenCalled()
   })
 
-  it('proceeds without lock when Redis SET throws (fail-open)', async () => {
+  it('blocks execution when Redis SET throws', async () => {
     mockRedisSet.mockRejectedValueOnce(new Error('redis timeout'))
 
     const handler = jest.fn().mockResolvedValue({ count: 2 })
@@ -459,7 +470,8 @@ describe('withCron distributed lock (Redis NX)', () => {
 
     const res = await wrapped(makeAuthedRequest())
 
-    expect(res.status).toBe(200)
-    expect(handler).toHaveBeenCalledTimes(1)
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ ok: false, reason: 'lock_unavailable' })
+    expect(handler).not.toHaveBeenCalled()
   })
 })

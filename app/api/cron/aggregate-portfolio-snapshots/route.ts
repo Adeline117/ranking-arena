@@ -36,62 +36,68 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const releaseLock = await acquireCronLock('aggregate-portfolio-snapshots', { ttlSeconds: 300 })
-  if (!releaseLock) {
+  const lock = await acquireCronLock('aggregate-portfolio-snapshots', { ttlSeconds: 300 })
+  if (lock.status === 'unavailable') {
+    return NextResponse.json({ error: 'Cron lock unavailable' }, { status: 503 })
+  }
+  if (lock.status === 'held') {
     return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
+  const releaseLock = lock.release
 
-  const plog = await PipelineLogger.start('aggregate-portfolio-snapshots')
   try {
-    const supabase = getSupabaseAdmin()
-    const snapshotAt = new Date().toISOString()
+    const plog = await PipelineLogger.start('aggregate-portfolio-snapshots')
+    try {
+      const supabase = getSupabaseAdmin()
+      const snapshotAt = new Date().toISOString()
 
-    // Pull every position; aggregate per portfolio. Volume is small (positions are
-    // per connected exchange, not market-wide), so a single scan is fine.
-    const { data: positions, error } = await supabase
-      .from('user_positions')
-      .select('portfolio_id, size, mark_price, pnl')
+      // Pull every position; aggregate per portfolio. Volume is small (positions are
+      // per connected exchange, not market-wide), so a single scan is fine.
+      const { data: positions, error } = await supabase
+        .from('user_positions')
+        .select('portfolio_id, size, mark_price, pnl')
 
-    if (error) throw error
+      if (error) throw error
 
-    if (!positions?.length) {
-      await plog.success(0)
-      return NextResponse.json({ status: 'ok', snapshots: 0, reason: 'no positions' })
-    }
-
-    const totals = new Map<string, { equity: number; pnl: number }>()
-    for (const p of positions as PositionRow[]) {
-      if (!p.portfolio_id) continue
-      const equity = (Number(p.size) || 0) * (Number(p.mark_price) || 0)
-      const pnl = Number(p.pnl) || 0
-      const t = totals.get(p.portfolio_id)
-      if (t) {
-        t.equity += equity
-        t.pnl += pnl
-      } else {
-        totals.set(p.portfolio_id, { equity, pnl })
+      if (!positions?.length) {
+        await plog.success(0)
+        return NextResponse.json({ status: 'ok', snapshots: 0, reason: 'no positions' })
       }
+
+      const totals = new Map<string, { equity: number; pnl: number }>()
+      for (const p of positions as PositionRow[]) {
+        if (!p.portfolio_id) continue
+        const equity = (Number(p.size) || 0) * (Number(p.mark_price) || 0)
+        const pnl = Number(p.pnl) || 0
+        const t = totals.get(p.portfolio_id)
+        if (t) {
+          t.equity += equity
+          t.pnl += pnl
+        } else {
+          totals.set(p.portfolio_id, { equity, pnl })
+        }
+      }
+
+      const rows = Array.from(totals.entries()).map(([portfolio_id, t]) => ({
+        portfolio_id,
+        total_equity: t.equity,
+        total_pnl: t.pnl,
+        total_pnl_pct: t.equity > 0 ? (t.pnl / t.equity) * 100 : 0,
+        snapshot_at: snapshotAt,
+      }))
+
+      const { error: insertError } = await supabase.from('user_portfolio_snapshots').insert(rows)
+      if (insertError) throw insertError
+
+      logger.info(`[aggregate-portfolio-snapshots] wrote ${rows.length} snapshots`)
+      await plog.success(rows.length)
+      return NextResponse.json({ status: 'ok', snapshots: rows.length })
+    } catch (err) {
+      logger.error('[aggregate-portfolio-snapshots] failed', err)
+      await plog.error(err)
+      return NextResponse.json({ error: 'Internal error' }, { status: 500 })
     }
-
-    const rows = Array.from(totals.entries()).map(([portfolio_id, t]) => ({
-      portfolio_id,
-      total_equity: t.equity,
-      total_pnl: t.pnl,
-      total_pnl_pct: t.equity > 0 ? (t.pnl / t.equity) * 100 : 0,
-      snapshot_at: snapshotAt,
-    }))
-
-    const { error: insertError } = await supabase.from('user_portfolio_snapshots').insert(rows)
-    if (insertError) throw insertError
-
-    logger.info(`[aggregate-portfolio-snapshots] wrote ${rows.length} snapshots`)
-    await plog.success(rows.length)
-    return NextResponse.json({ status: 'ok', snapshots: rows.length })
-  } catch (err) {
-    logger.error('[aggregate-portfolio-snapshots] failed', err)
-    await plog.error(err)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   } finally {
-    releaseLock()
+    await releaseLock()
   }
 }

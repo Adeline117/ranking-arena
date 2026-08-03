@@ -4,6 +4,7 @@ import {
   resolveRecurringInvoiceAuthority,
   resolveSubscriptionAuthority,
   resolveSubscriptionEventStateAuthority,
+  resolveTrialZeroInvoiceAuthority,
   StripeAuthorityError,
   type StripeAuthorityClient,
   type StripeAuthorityOptions,
@@ -22,8 +23,13 @@ const options: StripeAuthorityOptions = {
       lifetime: ['price_lifetime'],
     },
     expectedCurrency: 'usd',
+    expectedRecurringAmountsByPrice: {
+      price_monthly: 1_000,
+      price_yearly: 2_000,
+    },
   },
   expectedUserId: USER_ID,
+  expectedLivemode: true,
 }
 
 type Scenario = {
@@ -36,12 +42,14 @@ type Scenario = {
   charges: Record<string, Stripe.Charge>
   sessions: Record<string, Stripe.Checkout.Session>
   sessionLines: Record<string, Stripe.LineItem[]>
+  prices: Record<string, Stripe.Price>
 }
 
 function customer(userId = USER_ID): Stripe.Customer {
   return {
     id: CUSTOMER_ID,
     object: 'customer',
+    livemode: true,
     metadata: { userId, supabase_user_id: userId },
   } as unknown as Stripe.Customer
 }
@@ -53,6 +61,7 @@ function subscription(
   return {
     id: SUBSCRIPTION_ID,
     object: 'subscription',
+    livemode: true,
     customer: CUSTOMER_ID,
     currency: 'usd',
     latest_invoice: latestInvoice,
@@ -61,13 +70,17 @@ function subscription(
     cancel_at_period_end: false,
     canceled_at: null,
     items: {
+      object: 'list',
+      has_more: false,
+      url: `/v1/subscription_items?subscription=${SUBSCRIPTION_ID}`,
       data: [
         {
           id: 'si_pro',
           object: 'subscription_item',
+          subscription: SUBSCRIPTION_ID,
           current_period_start: 2_000,
           current_period_end: 3_000,
-          price: { id: 'price_monthly', currency: 'usd' },
+          price: recurringPrice(),
           quantity: 1,
         },
       ],
@@ -87,6 +100,7 @@ function invoice(
   return {
     id,
     object: 'invoice',
+    livemode: true,
     amount_paid: 1_000,
     amount_remaining: 0,
     created: periodStart - 10,
@@ -118,6 +132,7 @@ function invoiceLine(
   return {
     id,
     object: 'line_item',
+    amount: 1_000,
     currency: 'usd',
     invoice: id.replace('il_', 'in_'),
     parent: {
@@ -173,6 +188,7 @@ function paymentIntent(
   return {
     id,
     object: 'payment_intent',
+    livemode: true,
     amount: 1_000,
     amount_received: 1_000,
     currency: 'usd',
@@ -192,6 +208,7 @@ function charge(
   return {
     id,
     object: 'charge',
+    livemode: true,
     amount: 1_000,
     amount_captured: 1_000,
     amount_refunded: 0,
@@ -215,6 +232,8 @@ function checkoutSession(
   return {
     id,
     object: 'checkout.session',
+    livemode: true,
+    amount_subtotal: 1_000,
     amount_total: 1_000,
     created: 1_990,
     currency: 'usd',
@@ -237,12 +256,36 @@ function checkoutLine(
   return {
     id: `li_${priceId}`,
     object: 'item',
+    amount_subtotal: 1_000,
     amount_total: 1_000,
     currency: 'usd',
-    price: { id: priceId },
+    price:
+      priceId === 'price_monthly'
+        ? recurringPrice()
+        : ({ id: priceId, object: 'price', livemode: true } as Stripe.Price),
     quantity: 1,
     ...overrides,
   } as unknown as Stripe.LineItem
+}
+
+function recurringPrice(id = 'price_monthly', overrides: Partial<Stripe.Price> = {}): Stripe.Price {
+  const yearly = id === 'price_yearly'
+  return {
+    id,
+    object: 'price',
+    active: true,
+    billing_scheme: 'per_unit',
+    currency: 'usd',
+    livemode: true,
+    type: 'recurring',
+    unit_amount: yearly ? 2_000 : 1_000,
+    recurring: {
+      interval: yearly ? 'year' : 'month',
+      interval_count: 1,
+      usage_type: 'licensed',
+    },
+    ...overrides,
+  } as Stripe.Price
 }
 
 function baseScenario(): Scenario {
@@ -256,7 +299,59 @@ function baseScenario(): Scenario {
     charges: { ch_paid: charge() },
     sessions: { cs_paid: checkoutSession() },
     sessionLines: { cs_paid: [checkoutLine()] },
+    prices: {
+      price_monthly: recurringPrice(),
+      price_yearly: recurringPrice('price_yearly'),
+    },
   }
+}
+
+function trialZeroScenario(payments: Stripe.InvoicePayment[] = []): Scenario {
+  const scenario = baseScenario()
+  const periodStart = 2_000
+  const periodEnd = periodStart + 7 * 24 * 60 * 60
+  scenario.invoices.in_trial = invoice('in_trial', periodStart, periodEnd, {
+    amount_due: 0,
+    amount_paid: 0,
+    amount_remaining: 0,
+    amount_shipping: 0,
+    billing_reason: 'subscription_create',
+    subtotal: 0,
+    tax: 0,
+    total: 0,
+    total_tax_amounts: [],
+  })
+  scenario.invoiceLines.in_trial = [
+    invoiceLine('il_trial', periodStart, periodEnd, 'price_monthly', {
+      object: 'line_item',
+      livemode: true,
+      amount: 0,
+      discount_amounts: [],
+      tax_amounts: [],
+    }),
+  ]
+  scenario.invoicePayments.in_trial = payments
+  scenario.subscriptions[SUBSCRIPTION_ID] = subscription('in_trial', {
+    status: 'trialing',
+    trial_start: periodStart,
+    trial_end: periodEnd,
+  })
+  return scenario
+}
+
+function zeroInvoicePayment(
+  id = 'inpay_trial_zero',
+  type: 'charge' | 'payment_intent' | 'payment_record' = 'payment_intent',
+  overrides: Partial<Stripe.InvoicePayment> = {}
+): Stripe.InvoicePayment {
+  return invoicePayment(id, 'pi_unused', {
+    amount_paid: 0,
+    amount_requested: 0,
+    created: 2_001,
+    invoice: 'in_trial',
+    payment: { type } as unknown as Stripe.InvoicePayment['payment'],
+    ...overrides,
+  })
 }
 
 function clientFor(scenario: Scenario): StripeAuthorityClient {
@@ -295,6 +390,9 @@ function clientFor(scenario: Scenario): StripeAuthorityClient {
     charges: {
       retrieve: jest.fn(async (id: string) => scenario.charges[id]),
     },
+    prices: {
+      retrieve: jest.fn(async (id: string) => scenario.prices[id]),
+    },
   }
 }
 
@@ -320,6 +418,119 @@ async function expectAuthorityError(
 }
 
 describe('Stripe entitlement authority', () => {
+  it('accepts an exact zero-dollar trial Invoice with no InvoicePayment object', async () => {
+    const authority = await resolveTrialZeroInvoiceAuthority(
+      clientFor(trialZeroScenario()),
+      'in_trial',
+      options
+    )
+
+    expect(authority).toMatchObject({
+      kind: 'trial_zero_invoice',
+      invoiceId: 'in_trial',
+      subscriptionId: SUBSCRIPTION_ID,
+      priceId: 'price_monthly',
+      expectedAmount: 1_000,
+      periodStart: 2_000,
+      periodEnd: 606_800,
+    })
+  })
+
+  it.each(['charge', 'payment_intent', 'payment_record'] as const)(
+    'accepts one reference-free default zero InvoicePayment with type %s',
+    async (type) => {
+      const authority = await resolveTrialZeroInvoiceAuthority(
+        clientFor(trialZeroScenario([zeroInvoicePayment('inpay_trial_zero', type)])),
+        'in_trial',
+        options
+      )
+
+      expect(authority.kind).toBe('trial_zero_invoice')
+    }
+  )
+
+  it.each([
+    {
+      name: 'a PaymentIntent reference',
+      mutate: (payment: Stripe.InvoicePayment) => {
+        payment.payment = {
+          type: 'payment_intent',
+          payment_intent: 'pi_forbidden',
+        } as Stripe.InvoicePayment['payment']
+      },
+    },
+    {
+      name: 'a non-default mapping',
+      mutate: (payment: Stripe.InvoicePayment) => {
+        payment.is_default = false
+      },
+    },
+    {
+      name: 'a nonzero requested amount',
+      mutate: (payment: Stripe.InvoicePayment) => {
+        payment.amount_requested = 1
+      },
+    },
+    {
+      name: 'an unknown payment type',
+      mutate: (payment: Stripe.InvoicePayment) => {
+        payment.payment = {
+          type: 'future_payment_type',
+        } as unknown as Stripe.InvoicePayment['payment']
+      },
+    },
+  ])('rejects a zero InvoicePayment carrying $name', async ({ mutate }) => {
+    const payment = zeroInvoicePayment()
+    mutate(payment)
+    await expectAuthorityError(
+      resolveTrialZeroInvoiceAuthority(
+        clientFor(trialZeroScenario([payment])),
+        'in_trial',
+        options
+      ),
+      'unsupported_invoice_payment'
+    )
+  })
+
+  it('rejects multiple zero InvoicePayments on one page', async () => {
+    await expectAuthorityError(
+      resolveTrialZeroInvoiceAuthority(
+        clientFor(
+          trialZeroScenario([
+            zeroInvoicePayment('inpay_trial_zero_a'),
+            zeroInvoicePayment('inpay_trial_zero_b'),
+          ])
+        ),
+        'in_trial',
+        options
+      ),
+      'ambiguous_invoice_payment'
+    )
+  })
+
+  it('walks every InvoicePayment page before rejecting a hidden second zero mapping', async () => {
+    const scenario = trialZeroScenario()
+    const client = clientFor(scenario)
+    const list = client.invoicePayments.list as jest.Mock
+    list.mockImplementation(async (params: Stripe.InvoicePaymentListParams) =>
+      params.starting_after
+        ? { data: [zeroInvoicePayment('inpay_trial_zero_b')], has_more: false }
+        : { data: [zeroInvoicePayment('inpay_trial_zero_a')], has_more: true }
+    )
+
+    await expectAuthorityError(
+      resolveTrialZeroInvoiceAuthority(client, 'in_trial', options),
+      'ambiguous_invoice_payment'
+    )
+    expect(list).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        invoice: 'in_trial',
+        starting_after: 'inpay_trial_zero_a',
+      })
+    )
+  })
+
   it('walks every InvoicePayments page and accepts only the paid payment', async () => {
     const scenario = baseScenario()
     const client = clientFor(scenario)
@@ -380,6 +591,36 @@ describe('Stripe entitlement authority', () => {
       kind: 'recurring_payment',
       invoiceId: 'in_new',
       invoicePaymentId: 'inpay_new',
+      periodStart: 2_000,
+      periodEnd: 3_000,
+    })
+  })
+
+  it('accepts a delayed historical Invoice after the current Subscription changed plan and Price', async () => {
+    const scenario = baseScenario()
+    scenario.subscriptions[SUBSCRIPTION_ID] = subscription('in_new', {
+      items: {
+        object: 'list',
+        has_more: false,
+        url: `/v1/subscription_items?subscription=${SUBSCRIPTION_ID}`,
+        data: [
+          {
+            ...subscription().items.data[0],
+            current_period_start: 3_000,
+            current_period_end: 4_000,
+            price: recurringPrice('price_yearly'),
+          },
+        ],
+      } as Stripe.ApiList<Stripe.SubscriptionItem>,
+    })
+
+    await expect(
+      resolveRecurringInvoiceAuthority(clientFor(scenario), 'in_paid', options)
+    ).resolves.toMatchObject({
+      invoiceId: 'in_paid',
+      priceId: 'price_monthly',
+      plan: 'monthly',
+      amount: 1_000,
       periodStart: 2_000,
       periodEnd: 3_000,
     })
@@ -645,14 +886,19 @@ describe('Stripe entitlement authority', () => {
     scenario.subscriptions[SUBSCRIPTION_ID] = subscription(null, {
       status: 'trialing',
       trial_start: 2_000,
-      trial_end: 3_000,
+      trial_end: 606_800,
       items: {
+        object: 'list',
+        has_more: false,
+        url: `/v1/subscription_items?subscription=${SUBSCRIPTION_ID}`,
         data: [
           {
             id: 'si_trial',
+            object: 'subscription_item',
+            subscription: SUBSCRIPTION_ID,
             current_period_start: 2_000,
-            current_period_end: 3_000,
-            price: { id: 'price_monthly', currency: 'usd' },
+            current_period_end: 606_800,
+            price: recurringPrice(),
             quantity: 1,
           },
         ],
@@ -669,11 +915,12 @@ describe('Stripe entitlement authority', () => {
       subscriptionId: SUBSCRIPTION_ID,
       priceId: 'price_monthly',
       plan: 'monthly',
+      expectedAmount: 1_000,
       currency: 'usd',
       periodStart: 2_000,
-      periodEnd: 3_000,
+      periodEnd: 606_800,
       trialStart: 2_000,
-      trialEnd: 3_000,
+      trialEnd: 606_800,
       subscriptionStatus: 'trialing',
     })
     expect(client.invoices.retrieve).not.toHaveBeenCalled()
@@ -699,6 +946,7 @@ describe('Stripe entitlement authority', () => {
       currentInvoiceId: 'in_failed',
       priceId: 'price_monthly',
       plan: 'monthly',
+      expectedAmount: 1_000,
       currency: 'usd',
       periodStart: 2_000,
       periodEnd: 3_000,
@@ -743,12 +991,17 @@ describe('Stripe entitlement authority', () => {
     malformedPeriod.subscriptions[SUBSCRIPTION_ID] = subscription('in_failed', {
       status: 'past_due',
       items: {
+        object: 'list',
+        has_more: false,
+        url: `/v1/subscription_items?subscription=${SUBSCRIPTION_ID}`,
         data: [
           {
             id: 'si_pro',
+            object: 'subscription_item',
+            subscription: SUBSCRIPTION_ID,
             current_period_start: 3_000,
             current_period_end: 2_000,
-            price: { id: 'price_monthly', currency: 'usd' },
+            price: recurringPrice(),
             quantity: 1,
           },
         ],
@@ -767,6 +1020,9 @@ describe('Stripe entitlement authority', () => {
     ambiguous.subscriptions[SUBSCRIPTION_ID] = subscription('in_failed', {
       status: 'past_due',
       items: {
+        object: 'list',
+        has_more: false,
+        url: `/v1/subscription_items?subscription=${SUBSCRIPTION_ID}`,
         data: [
           subscription().items.data[0],
           {
@@ -801,5 +1057,283 @@ describe('Stripe entitlement authority', () => {
       'invalid_trial'
     )
     expect(client.invoices.retrieve).not.toHaveBeenCalled()
+  })
+
+  it('rejects a complete low-value payment chain that does not match the durable Price amount', async () => {
+    const scenario = baseScenario()
+    scenario.invoices.in_paid = invoice('in_paid', 2_000, 3_000, { amount_paid: 999 })
+    scenario.invoiceLines.in_paid = [
+      invoiceLine('il_paid', 2_000, 3_000, 'price_monthly', { amount: 999 }),
+    ]
+    scenario.invoicePayments.in_paid = [
+      invoicePayment('inpay_paid', 'pi_paid', { amount_paid: 999, amount_requested: 999 }),
+    ]
+    scenario.paymentIntents.pi_paid = paymentIntent('pi_paid', 'ch_paid', {
+      amount: 999,
+      amount_received: 999,
+    })
+    scenario.charges.ch_paid = charge('ch_paid', 'pi_paid', {
+      amount: 999,
+      amount_captured: 999,
+    })
+
+    await expectAuthorityError(
+      resolveRecurringInvoiceAuthority(clientFor(scenario), 'in_paid', options),
+      'amount_mismatch'
+    )
+  })
+
+  it('rejects recurring Invoice credits even when the remaining payment fields look valid', async () => {
+    const scenario = baseScenario()
+    scenario.invoices.in_paid = invoice('in_paid', 2_000, 3_000, {
+      total_discount_amounts: [{ amount: 1, discount: 'di_unauthorized' }],
+    } as Partial<Stripe.Invoice>)
+
+    await expectAuthorityError(
+      resolveRecurringInvoiceAuthority(clientFor(scenario), 'in_paid', options),
+      'amount_mismatch'
+    )
+  })
+
+  it('does not replace a historical Invoice product with the mutable current item page', async () => {
+    const scenario = baseScenario()
+    scenario.subscriptions[SUBSCRIPTION_ID] = subscription('in_paid', {
+      items: {
+        ...subscription().items,
+        has_more: true,
+      } as Stripe.ApiList<Stripe.SubscriptionItem>,
+    })
+
+    await expect(
+      resolveRecurringInvoiceAuthority(clientFor(scenario), 'in_paid', options)
+    ).resolves.toMatchObject({ invoiceId: 'in_paid', priceId: 'price_monthly', plan: 'monthly' })
+  })
+
+  it.each([
+    ['Customer', (scenario: Scenario) => (scenario.customers[CUSTOMER_ID] = customer(USER_ID))],
+    [
+      'Subscription',
+      (scenario: Scenario) =>
+        (scenario.subscriptions[SUBSCRIPTION_ID] = subscription('in_paid', { livemode: false })),
+    ],
+    [
+      'Invoice',
+      (scenario: Scenario) =>
+        (scenario.invoices.in_paid = invoice('in_paid', 2_000, 3_000, { livemode: false })),
+    ],
+    [
+      'InvoicePayment',
+      (scenario: Scenario) =>
+        (scenario.invoicePayments.in_paid = [
+          invoicePayment('inpay_paid', 'pi_paid', { livemode: false }),
+        ]),
+    ],
+    [
+      'PaymentIntent',
+      (scenario: Scenario) =>
+        (scenario.paymentIntents.pi_paid = paymentIntent('pi_paid', 'ch_paid', {
+          livemode: false,
+        })),
+    ],
+    [
+      'Charge',
+      (scenario: Scenario) =>
+        (scenario.charges.ch_paid = charge('ch_paid', 'pi_paid', { livemode: false })),
+    ],
+    [
+      'Price',
+      (scenario: Scenario) =>
+        (scenario.prices.price_monthly = recurringPrice('price_monthly', { livemode: false })),
+    ],
+  ])('rejects a cross-mode %s in the recurring remote chain', async (_name, mutate) => {
+    const scenario = baseScenario()
+    if (_name === 'Customer') {
+      scenario.customers[CUSTOMER_ID] = {
+        ...customer(USER_ID),
+        livemode: false,
+      } as Stripe.Customer
+    } else {
+      mutate(scenario)
+    }
+    await expectAuthorityError(
+      resolveRecurringInvoiceAuthority(clientFor(scenario), 'in_paid', options),
+      _name === 'Price' ? 'amount_mismatch' : 'invalid_object'
+    )
+  })
+
+  it('rejects duplicate ids across Stripe pagination pages', async () => {
+    const scenario = baseScenario()
+    const client = clientFor(scenario)
+    const list = client.invoicePayments.list as jest.Mock
+    list.mockImplementation(async (params: Stripe.InvoicePaymentListParams) => ({
+      data: [invoicePayment()],
+      has_more: !params.starting_after,
+    }))
+
+    await expectAuthorityError(
+      resolveRecurringInvoiceAuthority(client, 'in_paid', options),
+      'pagination_invariant'
+    )
+  })
+
+  it('caps Stripe pagination instead of following an unbounded continuation', async () => {
+    const scenario = baseScenario()
+    const client = clientFor(scenario)
+    let page = 0
+    ;(client.invoicePayments.list as jest.Mock).mockImplementation(async () => {
+      page += 1
+      return {
+        data: [
+          invoicePayment(`inpay_open_${page}`, `pi_unused_${page}`, {
+            status: 'open',
+            amount_paid: null,
+          }),
+        ],
+        has_more: true,
+      }
+    })
+
+    await expectAuthorityError(
+      resolveRecurringInvoiceAuthority(client, 'in_paid', options),
+      'pagination_invariant'
+    )
+    expect(page).toBe(100)
+  })
+
+  it('consumes the exact seven-day trial authority from a fresh terminal Subscription', async () => {
+    const scenario = baseScenario()
+    scenario.sessions.cs_terminal_trial = checkoutSession('cs_terminal_trial', {
+      amount_subtotal: 0,
+      amount_total: 0,
+      invoice: null,
+      payment_status: 'no_payment_required',
+    })
+    scenario.sessionLines.cs_terminal_trial = [
+      checkoutLine('price_monthly', { amount_subtotal: 0, amount_total: 0 }),
+    ]
+    scenario.subscriptions[SUBSCRIPTION_ID] = subscription(null, {
+      status: 'canceled',
+      trial_start: 2_000,
+      trial_end: 606_800,
+      canceled_at: 606_800,
+      items: {
+        object: 'list',
+        has_more: false,
+        url: `/v1/subscription_items?subscription=${SUBSCRIPTION_ID}`,
+        data: [
+          {
+            ...subscription().items.data[0],
+            current_period_start: 2_000,
+            current_period_end: 606_800,
+          },
+        ],
+      } as Stripe.ApiList<Stripe.SubscriptionItem>,
+    })
+
+    await expect(
+      resolveCheckoutSessionAuthority(clientFor(scenario), 'cs_terminal_trial', options)
+    ).resolves.toMatchObject({
+      kind: 'trial',
+      subscriptionStatus: 'canceled',
+      expectedAmount: 1_000,
+      trialStart: 2_000,
+      trialEnd: 606_800,
+    })
+  })
+
+  it('fails closed when a trial Subscription item page hides another item', async () => {
+    const scenario = baseScenario()
+    scenario.sessions.cs_hidden_trial_item = checkoutSession('cs_hidden_trial_item', {
+      amount_subtotal: 0,
+      amount_total: 0,
+      invoice: null,
+      payment_status: 'no_payment_required',
+    })
+    scenario.sessionLines.cs_hidden_trial_item = [
+      checkoutLine('price_monthly', { amount_subtotal: 0, amount_total: 0 }),
+    ]
+    scenario.subscriptions[SUBSCRIPTION_ID] = subscription(null, {
+      status: 'trialing',
+      trial_start: 2_000,
+      trial_end: 606_800,
+      items: {
+        object: 'list',
+        has_more: true,
+        url: `/v1/subscription_items?subscription=${SUBSCRIPTION_ID}`,
+        data: [
+          {
+            ...subscription().items.data[0],
+            current_period_start: 2_000,
+            current_period_end: 606_800,
+          },
+        ],
+      } as Stripe.ApiList<Stripe.SubscriptionItem>,
+    })
+
+    await expectAuthorityError(
+      resolveCheckoutSessionAuthority(clientFor(scenario), 'cs_hidden_trial_item', options),
+      'ambiguous_product'
+    )
+    await expectAuthorityError(
+      resolveSubscriptionEventStateAuthority(
+        clientFor(scenario),
+        scenario.subscriptions[SUBSCRIPTION_ID],
+        options
+      ),
+      'ambiguous_product'
+    )
+  })
+
+  it('records a delayed consumed trial from its immutable trial window, not the mutable current period', async () => {
+    const scenario = baseScenario()
+    scenario.sessions.cs_delayed_trial = checkoutSession('cs_delayed_trial', {
+      amount_subtotal: 0,
+      amount_total: 0,
+      invoice: null,
+      payment_status: 'no_payment_required',
+    })
+    scenario.sessionLines.cs_delayed_trial = [
+      checkoutLine('price_monthly', { amount_subtotal: 0, amount_total: 0 }),
+    ]
+    scenario.subscriptions[SUBSCRIPTION_ID] = subscription('in_paid', {
+      status: 'active',
+      trial_start: 2_000,
+      trial_end: 606_800,
+      items: {
+        object: 'list',
+        has_more: false,
+        url: `/v1/subscription_items?subscription=${SUBSCRIPTION_ID}`,
+        data: [
+          {
+            ...subscription().items.data[0],
+            current_period_start: 606_800,
+            current_period_end: 3_198_800,
+          },
+        ],
+      } as Stripe.ApiList<Stripe.SubscriptionItem>,
+    })
+
+    await expect(
+      resolveCheckoutSessionAuthority(clientFor(scenario), 'cs_delayed_trial', options)
+    ).resolves.toMatchObject({
+      kind: 'trial',
+      subscriptionStatus: 'active',
+      periodStart: 2_000,
+      periodEnd: 606_800,
+      expectedAmount: 1_000,
+    })
+  })
+
+  it.each([
+    ['surrounding whitespace', ' cs_paid'],
+    ['illegal punctuation', 'cs_bad-value'],
+    ['more than 255 bytes', `cs_${'a'.repeat(253)}`],
+  ])('rejects a Checkout id with %s', async (_label, id) => {
+    const scenario = baseScenario()
+    const malformed = checkoutSession(id)
+    await expectAuthorityError(
+      resolveCheckoutSessionAuthority(clientFor(scenario), malformed, options),
+      'invalid_object'
+    )
   })
 })

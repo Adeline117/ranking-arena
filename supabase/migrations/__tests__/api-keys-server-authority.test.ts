@@ -4,6 +4,10 @@ import { join, relative } from 'node:path'
 const root = process.cwd()
 const migrationName = '20260729010000_api_keys_server_authority.sql'
 const migration = readFileSync(join(root, 'supabase/migrations', migrationName), 'utf8')
+const apiTierEventMigration = readFileSync(
+  join(root, 'supabase/migrations/20260729020000_api_tier_cancellation_identity.sql'),
+  'utf8'
+)
 const pg17Proof = readFileSync(
   join(root, 'supabase/migrations/__tests__/api-keys-server-authority.pg17.sh'),
   'utf8'
@@ -100,7 +104,7 @@ describe('API keys server authority migration', () => {
     )
   })
 
-  it('keeps every direct application caller behind an admin-backed API route', () => {
+  it('keeps legacy direct callers behind admin routes and moves Stripe to event authority', () => {
     const directTablePattern = /\.from\(\s*['"](?:api_keys|api_key_usage_daily)['"]\s*\)/
     const directRpcPattern =
       /\.rpc\(\s*['"](?:increment_api_key_usage|reset_api_key_daily_counts|rollup_api_key_usage|update_user_api_tier)['"]/
@@ -113,8 +117,6 @@ describe('API keys server authority migration', () => {
       .sort()
 
     expect(callers).toEqual([
-      'app/api/stripe/webhook/handlers/checkout.ts',
-      'app/api/stripe/webhook/handlers/subscription.ts',
       'app/api/user/api-keys/route.ts',
       'app/api/user/api-keys/usage/route.ts',
       'app/api/v3/route.ts',
@@ -123,6 +125,14 @@ describe('API keys server authority migration', () => {
     const keyRoute = readFileSync(join(root, 'app/api/user/api-keys/route.ts'), 'utf8')
     const usageRoute = readFileSync(join(root, 'app/api/user/api-keys/usage/route.ts'), 'utf8')
     const v3Route = readFileSync(join(root, 'app/api/v3/route.ts'), 'utf8')
+    const stripeCheckout = readFileSync(
+      join(root, 'app/api/stripe/webhook/handlers/checkout.ts'),
+      'utf8'
+    )
+    const stripeSubscription = readFileSync(
+      join(root, 'app/api/stripe/webhook/handlers/subscription.ts'),
+      'utf8'
+    )
     const stripeShared = readFileSync(
       join(root, 'app/api/stripe/webhook/handlers/shared.ts'),
       'utf8'
@@ -132,6 +142,19 @@ describe('API keys server authority migration', () => {
     expect(keyRoute).toContain("import { withAuth } from '@/lib/api/middleware'")
     expect(usageRoute).toContain("import { withAuth } from '@/lib/api/middleware'")
     expect(v3Route).toContain("import { getSupabaseAdmin } from '@/lib/supabase/server'")
+    expect(stripeCheckout).not.toMatch(directTablePattern)
+    expect(stripeCheckout).not.toMatch(directRpcPattern)
+    expect(stripeSubscription).not.toMatch(directTablePattern)
+    expect(stripeSubscription).not.toMatch(directRpcPattern)
+    expect(stripeCheckout).toContain('applyApiTierStripeEvent')
+    expect(stripeSubscription).toContain(".rpc('apply_user_api_tier_stripe_event'")
+    expect(stripeSubscription).toContain("'apply_user_api_tier_persisted_non_grant_event'")
+    expect(apiTierEventMigration).toContain(
+      'CREATE OR REPLACE FUNCTION public.apply_user_api_tier_stripe_event('
+    )
+    expect(apiTierEventMigration).toContain(
+      'CREATE OR REPLACE FUNCTION public.apply_user_api_tier_persisted_non_grant_event('
+    )
     expect(stripeShared).toContain('export const getSupabase = () => getSupabaseAdmin()')
     expect(middleware).toMatch(
       /const supabase = getSupabaseAdmin\(\)[\s\S]*handler\(\{ user, supabase, request, version: versionContext \}\)/

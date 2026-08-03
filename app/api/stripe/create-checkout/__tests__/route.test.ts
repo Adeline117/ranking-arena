@@ -11,14 +11,27 @@ jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
-    constructor(body?: unknown, init: { status?: number } = {}) {
+    headers: {
+      get: (key: string) => string | null
+      set: (key: string, value: string) => void
+    }
+    constructor(body?: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this._body = body
       this.status = init.status || 200
+      const values = new Map(
+        Object.entries(init.headers || {}).map(([key, value]) => [key.toLowerCase(), value])
+      )
+      this.headers = {
+        get: (key: string) => values.get(key.toLowerCase()) || null,
+        set: (key: string, value: string) => {
+          values.set(key.toLowerCase(), value)
+        },
+      }
     }
     async json() {
       return this._body
     }
-    static json(data: unknown, init?: { status?: number }) {
+    static json(data: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(data, init)
     }
   }
@@ -36,14 +49,19 @@ jest.mock('next/server', () => {
       this.url = url
       this.nextUrl = new URL(url)
       this._headers = new Map(
-        Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) })
+        Object.entries({
+          'user-agent': 'Mozilla/5.0 (Test)',
+          origin: 'https://app.test.com',
+          'sec-fetch-site': 'same-origin',
+          ...(opts?.headers || {}),
+        }).map(([key, value]) => [key.toLowerCase(), value])
       )
       this._body = opts?.body
     }
 
     get headers() {
       const headers = this._headers
-      return { get: (key: string) => headers.get(key) || null }
+      return { get: (key: string) => headers.get(key.toLowerCase()) || null }
     }
 
     async json() {
@@ -106,9 +124,20 @@ const mockCreateCheckoutSession = jest
 const mockListSubscriptions = jest.fn()
 const mockListSubscriptionItems = jest.fn()
 const mockListCheckoutLineItems = jest.fn()
+const mockListCheckoutSessions = jest.fn()
+const mockListStripeEvents = jest.fn()
+const mockRetrieveStripeEvent = jest.fn()
 const mockExpireOneTimeCheckoutSession = jest.fn()
 const mockRetrieveOneTimeCheckoutSession = jest.fn()
+const mockRetrieveCustomer = jest.fn()
+const mockHandleCheckoutComplete = jest.fn()
 const lifetimeCheckoutExpiresAt = Math.floor(Date.parse('2099-01-01T00:00:00.000Z') / 1000)
+const proCheckoutExpiresAt = lifetimeCheckoutExpiresAt - 3600
+const proReservationId = '71e34ce2-43c1-4bcc-8f19-79b36d56605c'
+
+jest.mock('@/app/api/stripe/webhook/handlers/checkout', () => ({
+  handleCheckoutComplete: (...args: unknown[]) => mockHandleCheckoutComplete(...args),
+}))
 const lifetimeCheckoutLine = {
   id: 'li_lifetime123',
   object: 'item',
@@ -176,6 +205,96 @@ function createdLifetimeCheckoutSession(
   }
 }
 
+function createdProCheckoutSession(
+  params: Record<string, unknown>,
+  overrides: Record<string, unknown> = {}
+) {
+  const priceId = String(params.priceId)
+  const yearly = priceId === 'price_yearly123'
+  const priceAmount = yearly ? 2999 : 499
+  const amount = params.trialDays === 7 ? 0 : priceAmount
+  return {
+    id: 'cs_test123',
+    object: 'checkout.session',
+    customer: params.customerId,
+    metadata: params.metadata,
+    created: Number(params.expiresAt) - 2700,
+    expires_at: params.expiresAt,
+    client_reference_id: params.clientReferenceId,
+    mode: 'subscription',
+    status: 'open',
+    payment_status: 'unpaid',
+    subscription: null,
+    after_expiration: null,
+    url: 'https://checkout.stripe.com/session',
+    livemode: false,
+    currency: 'usd',
+    amount_subtotal: amount,
+    amount_total: amount,
+    total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 0 },
+    discounts: [],
+    optional_items: [],
+    custom_fields: [],
+    allow_promotion_codes: false,
+    automatic_tax: { enabled: false },
+    adaptive_pricing: { enabled: false },
+    ...overrides,
+  }
+}
+
+function proCheckoutMetadata(plan: 'monthly' | 'yearly' = 'monthly', trialDays: 0 | 7 = 0) {
+  const yearly = plan === 'yearly'
+  return {
+    currency: 'usd',
+    userId: 'user-123',
+    supabase_user_id: 'user-123',
+    type: 'pro_membership',
+    plan,
+    pro_membership_reservation_id: proReservationId,
+    pro_price_id: yearly ? 'price_yearly123' : 'price_monthly123',
+    trial_days: String(trialDays),
+    unit_amount: String(yearly ? 2999 : 499),
+  }
+}
+
+function proCheckoutLine(priceId: string, trialDays: 0 | 7 = 0) {
+  const yearly = priceId === 'price_yearly123'
+  const priceAmount = yearly ? 2999 : 499
+  const amount = trialDays === 7 ? 0 : priceAmount
+  return {
+    id: 'li_pro123',
+    object: 'item',
+    price: {
+      id: priceId,
+      object: 'price',
+      active: true,
+      billing_scheme: 'per_unit',
+      currency: 'usd',
+      currency_options: undefined,
+      custom_unit_amount: null,
+      livemode: false,
+      recurring: {
+        interval: yearly ? 'year' : 'month',
+        interval_count: 1,
+        usage_type: 'licensed',
+      },
+      tiers_mode: null,
+      transform_quantity: null,
+      type: 'recurring',
+      unit_amount: priceAmount,
+      unit_amount_decimal: String(priceAmount),
+    },
+    quantity: 1,
+    currency: 'usd',
+    amount_subtotal: amount,
+    amount_total: amount,
+    amount_discount: 0,
+    amount_tax: 0,
+    discounts: [],
+    taxes: [],
+  }
+}
+
 function customerSubscription(params: {
   id: string
   status?: string
@@ -184,8 +303,13 @@ function customerSubscription(params: {
   trialEnd?: number | null
   customerId?: string
 }) {
+  const priceId = params.priceId || 'price_monthly123'
+  const yearly = priceId === 'price_yearly123'
+  const amount = yearly ? 2999 : priceId.startsWith('price_api_') ? 1000 : 499
   return {
     id: params.id,
+    object: 'subscription',
+    livemode: false,
     customer: params.customerId || 'cus_test123',
     status: params.status || 'canceled',
     trial_start: params.trialStart ?? null,
@@ -194,8 +318,28 @@ function customerSubscription(params: {
       data: [
         {
           id: `si_${params.id.slice(4)}`,
+          object: 'subscription_item',
           subscription: params.id,
-          price: { id: params.priceId || 'price_monthly123' },
+          quantity: 1,
+          discounts: [],
+          tax_rates: [],
+          price: {
+            id: priceId,
+            object: 'price',
+            livemode: false,
+            type: 'recurring',
+            billing_scheme: 'per_unit',
+            currency: 'usd',
+            unit_amount: amount,
+            custom_unit_amount: null,
+            transform_quantity: null,
+            tiers_mode: null,
+            recurring: {
+              interval: yearly ? 'year' : 'month',
+              interval_count: 1,
+              usage_type: 'licensed',
+            },
+          },
         },
       ],
       has_more: false,
@@ -205,14 +349,77 @@ function customerSubscription(params: {
 
 const mockCreateOneTimeCheckoutSession = jest.fn()
 let lastCreatedLifetimeCheckoutSession: Record<string, unknown> | null = null
+let lastCreatedProCheckoutSession: Record<string, unknown> | null = null
+let lastCreatedProCheckoutPriceId = 'price_monthly123'
+let lastCreatedProCheckoutTrialDays: 0 | 7 = 0
+
+function installProReservationRpc(
+  params: {
+    reservation?: Record<string, unknown>
+    bind?:
+      | { data: unknown; error: { code?: string; message?: string } | null; status?: number }
+      | Error
+    observation?:
+      | { data: unknown; error: { code?: string; message?: string } | null; status?: number }
+      | Error
+  } = {}
+) {
+  mockRpc.mockImplementation((name: string, args?: Record<string, unknown>) => {
+    if (name === 'bind_stripe_customer_owner_atomic') {
+      return Promise.resolve({ data: { status: 'bound' }, error: null, status: 200 })
+    }
+    if (name === 'reserve_pro_membership_checkout_atomic') {
+      return Promise.resolve({
+        data: {
+          status: 'reserved',
+          reservation_id: proReservationId,
+          pro_plan: args?.p_pro_plan,
+          stripe_price_id: args?.p_stripe_price_id,
+          unit_amount: args?.p_unit_amount,
+          currency: args?.p_currency,
+          trial_days: args?.p_trial_days,
+          success_url: args?.p_success_url,
+          cancel_url: args?.p_cancel_url,
+          checkout_expires_at: proCheckoutExpiresAt,
+          checkout_session_id: null,
+          ...params.reservation,
+        },
+        error: null,
+        status: 200,
+      })
+    }
+    if (name === 'resolve_b2c_recurring_price_authority') {
+      return Promise.resolve({ data: { status: 'not_found' }, error: null, status: 200 })
+    }
+    if (name === 'bind_pro_membership_checkout_session_atomic') {
+      if (params.bind instanceof Error) return Promise.reject(params.bind)
+      return Promise.resolve(params.bind || { data: { status: 'bound' }, error: null, status: 200 })
+    }
+    if (name === 'release_pro_membership_checkout_observation_atomic') {
+      if (params.observation instanceof Error) return Promise.reject(params.observation)
+      return Promise.resolve(
+        params.observation || { data: { status: 'released' }, error: null, status: 200 }
+      )
+    }
+    throw new Error(`Unexpected RPC ${name}`)
+  })
+}
 const mockGetStripe = jest.fn(() => ({
+  customers: {
+    retrieve: (...args: unknown[]) => mockRetrieveCustomer(...args),
+  },
   checkout: {
     sessions: {
       create: (...args: unknown[]) => mockCreateOneTimeCheckoutSession(...args),
       expire: (...args: unknown[]) => mockExpireOneTimeCheckoutSession(...args),
       retrieve: (...args: unknown[]) => mockRetrieveOneTimeCheckoutSession(...args),
       listLineItems: (...args: unknown[]) => mockListCheckoutLineItems(...args),
+      list: (...args: unknown[]) => mockListCheckoutSessions(...args),
     },
+  },
+  events: {
+    list: (...args: unknown[]) => mockListStripeEvents(...args),
+    retrieve: (...args: unknown[]) => mockRetrieveStripeEvent(...args),
   },
   subscriptions: {
     list: (...args: unknown[]) => mockListSubscriptions(...args),
@@ -228,11 +435,21 @@ jest.mock('@/lib/stripe', () => ({
     yearly: 'price_yearly123',
     lifetime: 'price_lifetime123',
   },
+  STRIPE_API_PRICE_IDS: {
+    starter: 'price_api_starter',
+    pro: 'price_api_pro',
+  },
   getOrCreateStripeCustomer: (...args: unknown[]) => mockGetOrCreateStripeCustomer(...args),
   assertProPriceReady: (...args: unknown[]) => mockAssertProPriceReady(...args),
   assertStripePaymentRuntimeReady: () => mockAssertStripePaymentRuntimeReady(),
   createCheckoutSession: (...args: unknown[]) => mockCreateCheckoutSession(...args),
   getStripe: () => mockGetStripe(),
+}))
+const mockAssertUserStripeBillingSurfaceAccess = jest.fn()
+jest.mock('@/lib/stripe/billing-surface-access', () => ({
+  BILLING_SURFACE_UNAVAILABLE_MESSAGE: 'Billing is temporarily unavailable. Please retry.',
+  assertUserStripeBillingSurfaceAccess: (...args: unknown[]) =>
+    mockAssertUserStripeBillingSurfaceAccess(...args),
 }))
 const mockRecordStripeCheckoutManualReview = jest.fn()
 jest.mock('@/lib/stripe/lifetime-entitlement', () => ({
@@ -293,6 +510,7 @@ jest.mock('@supabase/supabase-js', () => ({
 }))
 
 import { NextRequest } from 'next/server'
+import { recoverExpiredProCheckoutReservation } from '@/lib/stripe/pro-checkout-recovery'
 import { POST } from '../route'
 
 const originalVercelEnv = process.env.VERCEL_ENV
@@ -306,12 +524,19 @@ describe('POST /api/stripe/create-checkout', () => {
     mockCheckRateLimit.mockResolvedValue(null)
     mockGetUser.mockResolvedValue({ data: { user: validUser }, error: null })
     mockExtractUser.mockResolvedValue({ user: validUser, error: null })
+    mockAssertUserStripeBillingSurfaceAccess.mockResolvedValue(undefined)
     mockGetOrCreateStripeCustomer.mockResolvedValue('cus_test123')
+    mockRetrieveCustomer.mockResolvedValue({
+      id: 'cus_test123',
+      object: 'customer',
+      livemode: false,
+      metadata: { userId: 'user-123' },
+    })
     mockBillingProfileSingle.mockResolvedValue({
       data: { stripe_customer_id: null },
       error: null,
     })
-    mockRpc.mockImplementation((name: string) => {
+    mockRpc.mockImplementation((name: string, args?: Record<string, unknown>) => {
       if (name === 'bind_stripe_customer_owner_atomic') {
         return Promise.resolve({ data: { status: 'bound' }, error: null })
       }
@@ -331,27 +556,71 @@ describe('POST /api/stripe/create-checkout', () => {
       if (name === 'release_lifetime_membership_reservation_atomic') {
         return Promise.resolve({ data: { status: 'released' }, error: null })
       }
+      if (name === 'reserve_pro_membership_checkout_atomic') {
+        return Promise.resolve({
+          data: {
+            status: 'reserved',
+            reservation_id: proReservationId,
+            pro_plan: args?.p_pro_plan,
+            stripe_price_id: args?.p_stripe_price_id,
+            unit_amount: args?.p_unit_amount,
+            currency: args?.p_currency,
+            trial_days: args?.p_trial_days,
+            success_url: args?.p_success_url,
+            cancel_url: args?.p_cancel_url,
+            checkout_expires_at: proCheckoutExpiresAt,
+            checkout_session_id: null,
+          },
+          error: null,
+          status: 200,
+        })
+      }
+      if (name === 'resolve_b2c_recurring_price_authority') {
+        return Promise.resolve({ data: { status: 'not_found' }, error: null, status: 200 })
+      }
+      if (name === 'bind_pro_membership_checkout_session_atomic') {
+        return Promise.resolve({ data: { status: 'bound' }, error: null, status: 200 })
+      }
       throw new Error(`Unexpected RPC ${name}`)
     })
     mockAssertProPriceReady.mockResolvedValue(undefined)
     mockAssertStripePaymentRuntimeReady.mockReturnValue(undefined)
-    mockCreateCheckoutSession.mockResolvedValue({
-      url: 'https://checkout.stripe.com/session',
-      id: 'cs_test123',
+    lastCreatedProCheckoutSession = null
+    lastCreatedProCheckoutPriceId = 'price_monthly123'
+    lastCreatedProCheckoutTrialDays = 0
+    mockCreateCheckoutSession.mockImplementation((params: Record<string, unknown>) => {
+      lastCreatedProCheckoutPriceId = String(params.priceId)
+      lastCreatedProCheckoutTrialDays = params.trialDays === 7 ? 7 : 0
+      lastCreatedProCheckoutSession = createdProCheckoutSession(params)
+      return Promise.resolve({ id: 'cs_test123' })
     })
     lastCreatedLifetimeCheckoutSession = null
     mockCreateOneTimeCheckoutSession.mockImplementation((params: Record<string, unknown>) => {
       lastCreatedLifetimeCheckoutSession = createdLifetimeCheckoutSession(params)
       return Promise.resolve(lastCreatedLifetimeCheckoutSession)
     })
-    mockRetrieveOneTimeCheckoutSession.mockImplementation(() =>
-      Promise.resolve(lastCreatedLifetimeCheckoutSession || recoveredLifetimeCheckoutSession)
-    )
-    mockListCheckoutLineItems.mockResolvedValue({
-      data: [lifetimeCheckoutLine],
-      has_more: false,
+    mockRetrieveOneTimeCheckoutSession.mockImplementation((sessionId: string) => {
+      if (sessionId === 'cs_test123') {
+        return Promise.resolve(lastCreatedProCheckoutSession)
+      }
+      return Promise.resolve(lastCreatedLifetimeCheckoutSession || recoveredLifetimeCheckoutSession)
+    })
+    mockListCheckoutLineItems.mockImplementation((sessionId: string) => {
+      if (sessionId === 'cs_test123') {
+        return Promise.resolve({
+          data: [proCheckoutLine(lastCreatedProCheckoutPriceId, lastCreatedProCheckoutTrialDays)],
+          has_more: false,
+        })
+      }
+      return Promise.resolve({
+        data: [lifetimeCheckoutLine],
+        has_more: false,
+      })
     })
     mockListSubscriptionItems.mockResolvedValue({ data: [], has_more: false })
+    mockListCheckoutSessions.mockResolvedValue({ data: [], has_more: false })
+    mockListStripeEvents.mockResolvedValue({ data: [], has_more: false })
+    mockHandleCheckoutComplete.mockResolvedValue(undefined)
     mockRecordStripeCheckoutManualReview.mockResolvedValue(undefined)
     mockExpireOneTimeCheckoutSession.mockResolvedValue({ id: 'cs_lifetime123', status: 'expired' })
     mockListSubscriptions.mockResolvedValue({ data: [], has_more: false })
@@ -384,6 +653,57 @@ describe('POST /api/stripe/create-checkout', () => {
 
   // --- Rate Limiting ---
 
+  it.each([
+    ['a missing Origin', null, 'same-origin'],
+    ['a foreign Origin', 'https://attacker.example', 'same-origin'],
+    ['a missing Sec-Fetch-Site', 'https://app.test.com', null],
+    ['a cross-site fetch context', 'https://app.test.com', 'cross-site'],
+  ])(
+    'rejects %s before rate limiting, authentication, database, or Stripe work',
+    async (_label, origin, fetchSite) => {
+      const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+      const requestHeaders = (req as unknown as { _headers: Map<string, string> })._headers
+      if (origin === null) requestHeaders.delete('origin')
+      else requestHeaders.set('origin', origin)
+      if (fetchSite === null) requestHeaders.delete('sec-fetch-site')
+      else requestHeaders.set('sec-fetch-site', fetchSite)
+
+      const res = await POST(req)
+
+      expect(res.status).toBe(403)
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+      expect(mockCheckRateLimit).not.toHaveBeenCalled()
+      expect(mockExtractUser).not.toHaveBeenCalled()
+      expect(mockRpc).not.toHaveBeenCalled()
+      expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+      expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    }
+  )
+
+  it('does not let a poisoned request Host redefine the trusted application Origin', async () => {
+    const req = new NextRequest('https://poisoned.example/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer valid-token',
+        origin: 'https://poisoned.example',
+        'sec-fetch-site': 'same-origin',
+      },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(403)
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockExtractUser).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
   it('returns rate limit response when rate limited', async () => {
     const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
     mockCheckRateLimit.mockResolvedValue(
@@ -393,11 +713,12 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
     const res = await POST(req)
 
     expect(res.status).toBe(429)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
   })
 
   // --- Stripe Not Configured ---
@@ -408,13 +729,14 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
     const res = await POST(req)
     const body = await res.json()
 
     expect(res.status).toBe(503)
     expect(body.error).toMatch(/not configured/)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
   })
 
   // --- Authentication ---
@@ -426,7 +748,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer invalid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
     const res = await POST(req)
     const body = await res.json()
@@ -441,7 +763,7 @@ describe('POST /api/stripe/create-checkout', () => {
 
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
     const res = await POST(req)
     await res.json()
@@ -450,6 +772,51 @@ describe('POST /api/stripe/create-checkout', () => {
   })
 
   // --- Input Validation ---
+
+  it.each([
+    ['an omitted recurring choice', { plan: 'monthly' }, 'TRIAL_CHOICE_REQUIRED'],
+    ['a string trial choice', { plan: 'monthly', trial: 'true' }, 'INVALID_TRIAL_CHOICE'],
+    ['a numeric trial choice', { plan: 'yearly', trial: 1 }, 'INVALID_TRIAL_CHOICE'],
+    ['a null trial choice', { plan: 'monthly', trial: null }, 'INVALID_TRIAL_CHOICE'],
+    ['a trial on lifetime', { plan: 'lifetime', trial: true }, 'INVALID_TRIAL_CHOICE'],
+  ])(
+    'rejects %s before rate, auth, database, or Stripe side effects',
+    async (_label, input, code) => {
+      const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify(input),
+      })
+
+      const res = await POST(req)
+
+      expect(res.status).toBe(400)
+      await expect(res.json()).resolves.toEqual(expect.objectContaining({ code }))
+      expect(mockCheckRateLimit).not.toHaveBeenCalled()
+      expect(mockExtractUser).not.toHaveBeenCalled()
+      expect(mockRpc).not.toHaveBeenCalled()
+      expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+      expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    }
+  )
+
+  it('rejects malformed JSON before rate, auth, database, or Stripe side effects', async () => {
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: '{',
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toEqual(expect.objectContaining({ code: 'INVALID_JSON' }))
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockExtractUser).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
 
   it('returns 400 for invalid plan type', async () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
@@ -469,7 +836,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -486,7 +853,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -505,7 +872,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -514,12 +881,71 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
 
+  it('fails closed when a fresh Stripe Customer retrieve is unavailable', async () => {
+    mockRetrieveCustomer.mockRejectedValue(new Error('temporary Stripe read outage'))
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['deleted Customer', { id: 'cus_test123', object: 'customer', deleted: true }],
+    [
+      'wrong Stripe mode',
+      {
+        id: 'cus_test123',
+        object: 'customer',
+        livemode: true,
+        metadata: { userId: 'user-123' },
+      },
+    ],
+    [
+      'conflicting user alias',
+      {
+        id: 'cus_test123',
+        object: 'customer',
+        livemode: false,
+        metadata: { userId: 'user-123', supabase_user_id: 'attacker' },
+      },
+    ],
+    [
+      'ownerless Customer',
+      {
+        id: 'cus_test123',
+        object: 'customer',
+        livemode: false,
+        metadata: {},
+      },
+    ],
+  ])('fails closed on a freshly attested %s', async (_label, customer) => {
+    mockRetrieveCustomer.mockResolvedValue(customer)
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
   it('blocks checkout when exact Stripe customer ownership conflicts', async () => {
     mockRpc.mockResolvedValue({ data: { status: 'identity_conflict' }, error: null })
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -533,7 +959,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -552,7 +978,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -571,7 +997,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -584,11 +1010,37 @@ describe('POST /api/stripe/create-checkout', () => {
 
   // --- Success Cases ---
 
+  it.each(['blocked', 'database error', 'malformed acknowledgement'])(
+    'fails closed before every Stripe side effect when billing access is %s',
+    async (reason) => {
+      mockAssertUserStripeBillingSurfaceAccess.mockRejectedValueOnce(new Error(reason))
+      const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+
+      const res = await POST(req)
+
+      expect(res.status).toBe(503)
+      await expect(res.json()).resolves.toEqual({
+        error: 'Billing is temporarily unavailable. Please retry.',
+      })
+      expect(mockAssertUserStripeBillingSurfaceAccess).toHaveBeenCalledWith('user-123')
+      expect(mockBillingProfileSingle).not.toHaveBeenCalled()
+      expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+      expect(mockGetStripe).not.toHaveBeenCalled()
+      expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+      expect(mockCreateOneTimeCheckoutSession).not.toHaveBeenCalled()
+      expect(mockRpc).not.toHaveBeenCalled()
+    }
+  )
+
   it('creates monthly subscription checkout session', async () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
     const res = await POST(req)
     const body = await res.json()
@@ -596,6 +1048,11 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(res.status).toBe(200)
     expect(body.url).toBeDefined()
     expect(body.sessionId).toBeDefined()
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(mockAssertUserStripeBillingSurfaceAccess).toHaveBeenCalledWith('user-123')
+    expect(mockAssertUserStripeBillingSurfaceAccess.mock.invocationCallOrder[0]).toBeLessThan(
+      mockGetOrCreateStripeCustomer.mock.invocationCallOrder[0]
+    )
     expect(mockGetOrCreateStripeCustomer).toHaveBeenCalledWith(
       'user-123',
       'user@test.com',
@@ -622,7 +1079,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'yearly' }),
+      body: JSON.stringify({ plan: 'yearly', trial: false }),
     })
     const res = await POST(req)
     const body = await res.json()
@@ -632,6 +1089,845 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(body.sessionId).toBeDefined()
     expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
       expect.objectContaining({ allowPromotionCodes: false })
+    )
+  })
+
+  it('uses one durable reservation UUID for Stripe idempotency, metadata, expiry, and client identity', async () => {
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    expect(mockRpc).toHaveBeenCalledWith('reserve_pro_membership_checkout_atomic', {
+      p_user_id: 'user-123',
+      p_livemode: false,
+      p_stripe_customer_id: 'cus_test123',
+      p_pro_plan: 'monthly',
+      p_stripe_price_id: 'price_monthly123',
+      p_unit_amount: 499,
+      p_currency: 'usd',
+      p_trial_days: 0,
+      p_success_url: 'https://app.test.com/pricing/success?session_id={CHECKOUT_SESSION_ID}',
+      p_cancel_url: 'https://app.test.com/pricing',
+    })
+    expect(mockCreateCheckoutSession).toHaveBeenCalledWith({
+      customerId: 'cus_test123',
+      priceId: 'price_monthly123',
+      successUrl: 'https://app.test.com/pricing/success?session_id={CHECKOUT_SESSION_ID}',
+      cancelUrl: 'https://app.test.com/pricing',
+      metadata: {
+        currency: 'usd',
+        userId: 'user-123',
+        supabase_user_id: 'user-123',
+        type: 'pro_membership',
+        plan: 'monthly',
+        pro_membership_reservation_id: proReservationId,
+        pro_price_id: 'price_monthly123',
+        trial_days: '0',
+        unit_amount: '499',
+      },
+      allowPromotionCodes: false,
+      idempotencyKey: `pro_membership_checkout_test_${proReservationId}`,
+      expiresAt: proCheckoutExpiresAt,
+      clientReferenceId: proReservationId,
+    })
+    expect(mockRetrieveOneTimeCheckoutSession).toHaveBeenCalledWith('cs_test123', {
+      expand: ['line_items.data.price'],
+    })
+    expect(mockListCheckoutLineItems).toHaveBeenCalledWith('cs_test123', {
+      limit: 100,
+      expand: ['data.price'],
+    })
+    expect(mockRpc).toHaveBeenCalledWith('bind_pro_membership_checkout_session_atomic', {
+      p_reservation_id: proReservationId,
+      p_user_id: 'user-123',
+      p_livemode: false,
+      p_stripe_customer_id: 'cus_test123',
+      p_pro_plan: 'monthly',
+      p_stripe_price_id: 'price_monthly123',
+      p_unit_amount: 499,
+      p_currency: 'usd',
+      p_trial_days: 0,
+      p_checkout_session_id: 'cs_test123',
+      p_checkout_expires_at: proCheckoutExpiresAt,
+    })
+  })
+
+  it('returns 409 when another plan already owns the active durable reservation', async () => {
+    installProReservationRpc({
+      reservation: {
+        status: 'existing',
+        pro_plan: 'yearly',
+        stripe_price_id: 'price_yearly123',
+      },
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(body.code).toBe('PRO_CHECKOUT_CONFLICT')
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('never reuses an existing trial reservation for an explicit paid request', async () => {
+    installProReservationRpc({
+      reservation: {
+        status: 'existing',
+        trial_days: 7,
+      },
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(body.code).toBe('PRO_CHECKOUT_CONFLICT')
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    expect(mockRetrieveOneTimeCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('never reuses an existing reservation with different exact redirect URLs', async () => {
+    installProReservationRpc({
+      reservation: {
+        status: 'existing',
+        success_url: 'https://app.test.com/pricing/success?flow=older',
+      },
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(body.code).toBe('PRO_CHECKOUT_CONFLICT')
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    expect(mockRetrieveOneTimeCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('withholds an existing reservation whose persisted redirect leaves the canonical app origin', async () => {
+    installProReservationRpc({
+      reservation: {
+        status: 'existing',
+        success_url: 'https://attacker.example/paid',
+      },
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    expect(mockRetrieveOneTimeCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('recovers and verifies the exact bound Session without creating another one', async () => {
+    const metadata = {
+      currency: 'usd',
+      userId: 'user-123',
+      supabase_user_id: 'user-123',
+      type: 'pro_membership',
+      plan: 'monthly',
+      pro_membership_reservation_id: proReservationId,
+      pro_price_id: 'price_monthly123',
+      trial_days: '0',
+      unit_amount: '499',
+    }
+    lastCreatedProCheckoutSession = createdProCheckoutSession({
+      customerId: 'cus_test123',
+      priceId: 'price_monthly123',
+      metadata,
+      expiresAt: proCheckoutExpiresAt,
+      clientReferenceId: proReservationId,
+    })
+    installProReservationRpc({
+      reservation: {
+        status: 'existing',
+        checkout_session_id: 'cs_test123',
+      },
+      bind: { data: { status: 'already_bound' }, error: null, status: 200 },
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    expect(mockRetrieveOneTimeCheckoutSession).toHaveBeenCalledWith('cs_test123', {
+      expand: ['line_items.data.price'],
+    })
+  })
+
+  it('releases an expired bound reservation from a fresh exact expired Session even after its Price is deactivated', async () => {
+    const checkoutExpiresAt = Math.floor(Date.now() / 1000) - 3600
+    const metadata = proCheckoutMetadata()
+    lastCreatedProCheckoutSession = createdProCheckoutSession(
+      {
+        customerId: 'cus_test123',
+        priceId: 'price_monthly123',
+        metadata,
+        expiresAt: checkoutExpiresAt,
+        clientReferenceId: proReservationId,
+      },
+      { status: 'expired', url: null }
+    )
+    const inactiveLine = proCheckoutLine('price_monthly123')
+    inactiveLine.price.active = false
+    mockListCheckoutLineItems.mockResolvedValue({ data: [inactiveLine], has_more: false })
+    installProReservationRpc({
+      reservation: {
+        status: 'existing',
+        checkout_expires_at: checkoutExpiresAt,
+        checkout_session_id: 'cs_test123',
+      },
+    })
+
+    const res = await POST(
+      new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+    )
+
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ code: 'PRO_CHECKOUT_RECOVERED' })
+    expect(mockRpc).toHaveBeenCalledWith(
+      'release_pro_membership_checkout_observation_atomic',
+      expect.objectContaining({
+        p_reservation_id: proReservationId,
+        p_checkout_session_id: 'cs_test123',
+        p_observation_kind: 'expired_session',
+      })
+    )
+  })
+
+  it('expires and re-reads an exact cached open Session before releasing an expired reservation', async () => {
+    const checkoutExpiresAt = Math.floor(Date.now() / 1000) - 3600
+    const metadata = proCheckoutMetadata()
+    const open = createdProCheckoutSession({
+      customerId: 'cus_test123',
+      priceId: 'price_monthly123',
+      metadata,
+      expiresAt: checkoutExpiresAt,
+      clientReferenceId: proReservationId,
+    })
+    const expired = { ...open, status: 'expired', url: null }
+    mockCreateCheckoutSession.mockResolvedValue({ id: 'cs_test123' })
+    mockRetrieveOneTimeCheckoutSession.mockResolvedValueOnce(open).mockResolvedValueOnce(expired)
+    installProReservationRpc({
+      reservation: { status: 'existing', checkout_expires_at: checkoutExpiresAt },
+    })
+
+    const res = await POST(
+      new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+    )
+
+    expect(res.status).toBe(409)
+    expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: `pro_membership_checkout_test_${proReservationId}`,
+        expiresAt: checkoutExpiresAt,
+      })
+    )
+    expect(mockExpireOneTimeCheckoutSession).toHaveBeenCalledWith('cs_test123')
+    expect(mockRetrieveOneTimeCheckoutSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('releases an old unbound orphan only after exact expired-parameter rejection and a complete empty Session scan', async () => {
+    const checkoutExpiresAt = Math.floor(Date.now() / 1000) - 25 * 60 * 60
+    installProReservationRpc({
+      reservation: { status: 'existing', checkout_expires_at: checkoutExpiresAt },
+    })
+    mockCreateCheckoutSession.mockRejectedValue(
+      Object.assign(new Error('expires_at must be in the future'), {
+        type: 'StripeInvalidRequestError',
+        param: 'expires_at',
+      })
+    )
+    mockListCheckoutSessions
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 'cs_irrelevant',
+            object: 'checkout.session',
+            livemode: false,
+            customer: 'cus_test123',
+            client_reference_id: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+            metadata: {},
+          },
+        ],
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 'cs_irrelevant_second',
+            object: 'checkout.session',
+            livemode: false,
+            customer: 'cus_test123',
+            client_reference_id: 'bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb',
+            metadata: {},
+          },
+        ],
+        has_more: false,
+      })
+
+    const res = await POST(
+      new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+    )
+
+    expect(res.status).toBe(409)
+    expect(mockListCheckoutSessions).toHaveBeenNthCalledWith(1, {
+      customer: 'cus_test123',
+      limit: 100,
+    })
+    expect(mockListCheckoutSessions).toHaveBeenNthCalledWith(2, {
+      customer: 'cus_test123',
+      limit: 100,
+      starting_after: 'cs_irrelevant',
+    })
+    expect(mockRpc).toHaveBeenCalledWith(
+      'release_pro_membership_checkout_observation_atomic',
+      expect.objectContaining({
+        p_checkout_session_id: null,
+        p_observation_kind: 'absent_session',
+      })
+    )
+  })
+
+  it.each([
+    ['a network error', new Error('connection reset after write')],
+    [
+      'an idempotency-key-in-use response',
+      Object.assign(new Error('another request is still executing'), {
+        type: 'StripeIdempotencyError',
+        code: 'idempotency_key_in_use',
+      }),
+    ],
+  ])(
+    'preserves an expired unbound reservation after %s even when a complete scan is empty',
+    async (_label, createError) => {
+      const checkoutExpiresAt = Math.floor(Date.now() / 1000) - 3600
+      installProReservationRpc({
+        reservation: { status: 'existing', checkout_expires_at: checkoutExpiresAt },
+      })
+      mockCreateCheckoutSession.mockRejectedValue(createError)
+
+      const res = await POST(
+        new NextRequest('http://localhost/api/stripe/create-checkout', {
+          method: 'POST',
+          headers: { authorization: 'Bearer valid-token' },
+          body: JSON.stringify({ plan: 'monthly', trial: false }),
+        })
+      )
+
+      expect(res.status).toBe(503)
+      expect(mockListCheckoutSessions).toHaveBeenCalledTimes(1)
+      expect(mockRpc).not.toHaveBeenCalledWith(
+        'release_pro_membership_checkout_observation_atomic',
+        expect.anything()
+      )
+    }
+  )
+
+  it('preserves an expired unbound reservation when the full Session scan is malformed', async () => {
+    const checkoutExpiresAt = Math.floor(Date.now() / 1000) - 3600
+    installProReservationRpc({
+      reservation: { status: 'existing', checkout_expires_at: checkoutExpiresAt },
+    })
+    mockCreateCheckoutSession.mockRejectedValue(
+      Object.assign(new Error('expired'), {
+        type: 'StripeInvalidRequestError',
+        param: 'expires_at',
+      })
+    )
+    mockListCheckoutSessions.mockResolvedValue({ data: [], has_more: true })
+
+    const res = await POST(
+      new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+    )
+
+    expect(res.status).toBe(503)
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'release_pro_membership_checkout_observation_atomic',
+      expect.anything()
+    )
+  })
+
+  it('preserves an expired unbound reservation when two Stripe Sessions claim its marker', async () => {
+    const checkoutExpiresAt = Math.floor(Date.now() / 1000) - 3600
+    installProReservationRpc({
+      reservation: { status: 'existing', checkout_expires_at: checkoutExpiresAt },
+    })
+    mockCreateCheckoutSession.mockRejectedValue(
+      Object.assign(new Error('expired'), {
+        type: 'StripeInvalidRequestError',
+        param: 'expires_at',
+      })
+    )
+    mockListCheckoutSessions.mockResolvedValue({
+      data: ['cs_duplicate_one', 'cs_duplicate_two'].map((id) => ({
+        id,
+        object: 'checkout.session',
+        livemode: false,
+        customer: 'cus_test123',
+        client_reference_id: proReservationId,
+        metadata: proCheckoutMetadata(),
+      })),
+      has_more: false,
+    })
+
+    const res = await POST(
+      new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+    )
+
+    expect(res.status).toBe(503)
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'release_pro_membership_checkout_observation_atomic',
+      expect.anything()
+    )
+  })
+
+  it('preserves an expired orphan when the observation release is rejected by the database', async () => {
+    const checkoutExpiresAt = Math.floor(Date.now() / 1000) - 3600
+    installProReservationRpc({
+      reservation: { status: 'existing', checkout_expires_at: checkoutExpiresAt },
+      observation: {
+        data: null,
+        error: { code: '40001', message: 'reservation changed' },
+        status: 409,
+      },
+    })
+    mockCreateCheckoutSession.mockRejectedValue(
+      Object.assign(new Error('expired'), {
+        type: 'StripeInvalidRequestError',
+        param: 'expires_at',
+      })
+    )
+
+    const res = await POST(
+      new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+    )
+
+    expect(res.status).toBe(503)
+  })
+
+  it('recovers a completed reservation from a created-time-bounded real Event snapshot even with old account history', async () => {
+    const now = Math.floor(Date.now() / 1000)
+    const checkoutExpiresAt = now - 3600
+    const metadata = proCheckoutMetadata()
+    const completed = createdProCheckoutSession(
+      {
+        customerId: 'cus_test123',
+        priceId: 'price_monthly123',
+        metadata,
+        expiresAt: checkoutExpiresAt,
+        clientReferenceId: proReservationId,
+      },
+      {
+        created: checkoutExpiresAt - 1200,
+        recovered_from: null,
+        status: 'complete',
+        payment_status: 'paid',
+        subscription: 'sub_recovered123',
+        url: null,
+      }
+    )
+    lastCreatedProCheckoutSession = completed
+    const inactiveLine = proCheckoutLine('price_monthly123')
+    inactiveLine.price.active = false
+    mockListCheckoutLineItems.mockResolvedValue({ data: [inactiveLine], has_more: false })
+    mockListStripeEvents.mockResolvedValue({
+      data: [
+        {
+          id: 'evt_recovered123',
+          object: 'event',
+          type: 'checkout.session.completed',
+          livemode: false,
+          created: checkoutExpiresAt - 600,
+          data: { object: completed },
+        },
+      ],
+      has_more: false,
+    })
+    mockHandleCheckoutComplete.mockResolvedValue({ status: 'pro_reservation_converted' })
+    installProReservationRpc({
+      reservation: {
+        status: 'existing',
+        checkout_expires_at: checkoutExpiresAt,
+        checkout_session_id: 'cs_test123',
+      },
+    })
+
+    const res = await POST(
+      new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+    )
+
+    expect(res.status).toBe(409)
+    expect(mockListStripeEvents).toHaveBeenCalledWith({
+      type: 'checkout.session.completed',
+      created: {
+        gte: checkoutExpiresAt - 1200,
+        lte: expect.any(Number),
+      },
+      limit: 100,
+    })
+    expect(mockHandleCheckoutComplete).toHaveBeenCalledWith(
+      completed,
+      { id: 'evt_recovered123', created: checkoutExpiresAt - 600, livemode: false },
+      { reportProReservationConversion: true }
+    )
+  })
+
+  it('replays an unexpired converted reservation from its exact durable Event identity', async () => {
+    const now = Math.floor(Date.now() / 1000)
+    const checkoutExpiresAt = now + 30 * 60
+    const eventCreated = now - 5 * 60
+    const metadata = proCheckoutMetadata()
+    const completed = createdProCheckoutSession(
+      {
+        customerId: 'cus_test123',
+        priceId: 'price_monthly123',
+        metadata,
+        expiresAt: checkoutExpiresAt,
+        clientReferenceId: proReservationId,
+      },
+      {
+        recovered_from: null,
+        status: 'complete',
+        payment_status: 'paid',
+        subscription: 'sub_recovered123',
+        url: null,
+      }
+    )
+    lastCreatedProCheckoutSession = completed
+    mockRetrieveStripeEvent.mockResolvedValue({
+      id: 'evt_recovered123',
+      object: 'event',
+      type: 'checkout.session.completed',
+      livemode: false,
+      created: eventCreated,
+      data: { object: completed },
+    })
+    mockHandleCheckoutComplete.mockResolvedValue({ status: 'pro_reservation_converted' })
+
+    const result = await recoverExpiredProCheckoutReservation({
+      stripeClient: mockGetStripe() as never,
+      supabaseAdmin: { rpc: (...args: unknown[]) => mockRpc(...args) } as never,
+      reservation: {
+        status: 'converted',
+        reservationId: proReservationId,
+        plan: 'monthly',
+        priceId: 'price_monthly123',
+        unitAmount: 499,
+        currency: 'usd',
+        trialDays: 0,
+        successUrl: 'https://app.test.com/pricing/success',
+        cancelUrl: 'https://app.test.com/pricing',
+        checkoutExpiresAtSeconds: checkoutExpiresAt,
+        checkoutSessionId: 'cs_test123',
+      },
+      userId: 'user-123',
+      customerId: 'cus_test123',
+      livemode: false,
+      metadata,
+      expectedCompletion: {
+        eventId: 'evt_recovered123',
+        eventCreated,
+        subscriptionId: 'sub_recovered123',
+      },
+    })
+
+    expect(result).toBe('converted')
+    expect(mockRetrieveStripeEvent).toHaveBeenCalledWith('evt_recovered123')
+    expect(mockListStripeEvents).not.toHaveBeenCalled()
+    expect(mockHandleCheckoutComplete).toHaveBeenCalledWith(
+      completed,
+      { id: 'evt_recovered123', created: eventCreated, livemode: false },
+      { reportProReservationConversion: true }
+    )
+  })
+
+  it.each([
+    ['the handler durably reviews instead of converting', 'review'],
+    ['activation crashes after conversion', 'crash'],
+    ['the signed Event snapshot drifts from the reservation', 'snapshot_drift'],
+  ])('preserves a completed reservation when %s', async (_label, failure) => {
+    const now = Math.floor(Date.now() / 1000)
+    const checkoutExpiresAt = now - 3600
+    const metadata = proCheckoutMetadata()
+    const current = createdProCheckoutSession(
+      {
+        customerId: 'cus_test123',
+        priceId: 'price_monthly123',
+        metadata,
+        expiresAt: checkoutExpiresAt,
+        clientReferenceId: proReservationId,
+      },
+      {
+        created: checkoutExpiresAt - 1200,
+        recovered_from: null,
+        status: 'complete',
+        payment_status: 'paid',
+        subscription: 'sub_recovered123',
+        url: null,
+      }
+    )
+    const snapshot =
+      failure === 'snapshot_drift'
+        ? { ...current, metadata: { ...metadata, unit_amount: '599' } }
+        : current
+    lastCreatedProCheckoutSession = current
+    mockListStripeEvents.mockResolvedValue({
+      data: [
+        {
+          id: 'evt_recovered123',
+          object: 'event',
+          type: 'checkout.session.completed',
+          livemode: false,
+          created: checkoutExpiresAt - 600,
+          data: { object: snapshot },
+        },
+      ],
+      has_more: false,
+    })
+    if (failure === 'crash') {
+      mockHandleCheckoutComplete.mockRejectedValue(
+        new Error('simulated activation crash after conversion')
+      )
+    } else {
+      mockHandleCheckoutComplete.mockResolvedValue(undefined)
+    }
+    installProReservationRpc({
+      reservation: {
+        status: 'existing',
+        checkout_expires_at: checkoutExpiresAt,
+        checkout_session_id: 'cs_test123',
+      },
+    })
+
+    const res = await POST(
+      new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+    )
+
+    expect(res.status).toBe(503)
+    if (failure === 'snapshot_drift') {
+      expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
+    }
+  })
+
+  it('preserves the reservation when Stripe create has an ambiguous outcome', async () => {
+    mockCreateCheckoutSession.mockRejectedValue(new Error('connection reset after write'))
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockExpireOneTimeCheckoutSession).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'bind_pro_membership_checkout_session_atomic',
+      expect.anything()
+    )
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'release_pro_membership_checkout_reservation_atomic',
+      expect.anything()
+    )
+  })
+
+  it('preserves an exact Session when the bind outcome is ambiguous', async () => {
+    installProReservationRpc({ bind: new Error('response lost after commit') })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockExpireOneTimeCheckoutSession).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'release_pro_membership_checkout_reservation_atomic',
+      expect.anything()
+    )
+  })
+
+  it('expires an exact-owned Session only after an explicit database bind rejection', async () => {
+    installProReservationRpc({
+      bind: {
+        data: null,
+        error: { code: '40001', message: 'identity conflict' },
+        status: 409,
+      },
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockExpireOneTimeCheckoutSession).toHaveBeenCalledWith('cs_test123')
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'release_pro_membership_checkout_reservation_atomic',
+      expect.anything()
+    )
+  })
+
+  it('withholds but never expires a Session whose exact owner cannot be established', async () => {
+    mockRetrieveOneTimeCheckoutSession.mockImplementation(async (sessionId: string) => {
+      if (sessionId !== 'cs_test123') return recoveredLifetimeCheckoutSession
+      return { ...lastCreatedProCheckoutSession, customer: 'cus_attacker' }
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockExpireOneTimeCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('expires an exact-owned Session whose Price becomes variable or mismatched', async () => {
+    mockListCheckoutLineItems.mockImplementation(async (sessionId: string) => {
+      if (sessionId !== 'cs_test123') {
+        return { data: [lifetimeCheckoutLine], has_more: false }
+      }
+      const line = proCheckoutLine('price_monthly123')
+      return {
+        data: [{ ...line, price: { ...line.price, custom_unit_amount: { enabled: true } } }],
+        has_more: false,
+      }
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockExpireOneTimeCheckoutSession).toHaveBeenCalledWith('cs_test123')
+  })
+
+  it('accepts the exact zero-due-today trial shape while preserving the future unit Price', async () => {
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: true }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    expect(lastCreatedProCheckoutSession).toEqual(
+      expect.objectContaining({ amount_subtotal: 0, amount_total: 0 })
+    )
+    expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ trialDays: 7 })
+    )
+  })
+
+  it('rejects a database trial downgrade instead of creating an immediate paid Session', async () => {
+    installProReservationRpc({ reservation: { trial_days: 0 } })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'yearly', trial: true }),
+    })
+
+    const res = await POST(req)
+
+    const body = await res.json()
+    expect(res.status).toBe(409)
+    expect(body.code).toBe('TRIAL_ALREADY_USED')
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('rejects the atomic trial-history winner without reserving or creating a paid Session', async () => {
+    installProReservationRpc({ reservation: { status: 'trial_already_used' } })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: true }),
+    })
+
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(body.code).toBe('TRIAL_ALREADY_USED')
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'bind_pro_membership_checkout_session_atomic',
+      expect.anything()
     )
   })
 
@@ -645,7 +1941,7 @@ describe('POST /api/stripe/create-checkout', () => {
       const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
         method: 'POST',
         headers: { authorization: 'Bearer valid-token' },
-        body: JSON.stringify({ plan: 'monthly' }),
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
       })
 
       const res = await POST(req)
@@ -667,7 +1963,7 @@ describe('POST /api/stripe/create-checkout', () => {
       const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
         method: 'POST',
         headers: { authorization: 'Bearer valid-token' },
-        body: JSON.stringify({ plan: 'yearly' }),
+        body: JSON.stringify({ plan: 'yearly', trial: false }),
       })
 
       const res = await POST(req)
@@ -698,7 +1994,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -720,7 +2016,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -743,13 +2039,257 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
 
     expect(res.status).toBe(200)
     expect(mockCreateCheckoutSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks an active historical Pro Price even without a local row or 073 reservation', async () => {
+    mockListSubscriptions.mockResolvedValue({
+      data: [
+        customerSubscription({
+          id: 'sub_legacy_pro_active',
+          status: 'active',
+          priceId: 'price_retired_pro_monthly',
+        }),
+      ],
+      has_more: false,
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(body.code).toBe('ALREADY_SUBSCRIBED')
+    expect(mockRpc).toHaveBeenCalledWith('resolve_b2c_recurring_price_authority', {
+      p_stripe_subscription_id: 'sub_legacy_pro_active',
+      p_livemode: false,
+      p_stripe_price_id: 'price_retired_pro_monthly',
+    })
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('accepts exact durable amount and currency authority for a terminal historical Pro Price', async () => {
+    const defaultRpc = mockRpc.getMockImplementation()
+    mockRpc.mockImplementation((name: string, args?: Record<string, unknown>) => {
+      if (name === 'resolve_b2c_recurring_price_authority') {
+        return Promise.resolve({
+          data: {
+            status: 'resolved',
+            user_id: 'user-123',
+            stripe_customer_id: 'cus_test123',
+            stripe_price_id: 'price_retired_pro_monthly',
+            expected_amount: 499,
+            currency: 'usd',
+            plan: 'monthly',
+            pro_plan: 'monthly',
+            source_kind: 'converted_checkout_reservation',
+          },
+          error: null,
+          status: 200,
+        })
+      }
+      return defaultRpc?.(name, args)
+    })
+    mockListSubscriptions.mockResolvedValue({
+      data: [
+        customerSubscription({
+          id: 'sub_legacy_pro_terminal',
+          status: 'canceled',
+          priceId: 'price_retired_pro_monthly',
+        }),
+      ],
+      has_more: false,
+    })
+
+    const res = await POST(
+      new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+    )
+
+    expect(res.status).toBe(200)
+    expect(mockCreateCheckoutSession).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['amount', { expected_amount: 599, currency: 'usd' }],
+    ['currency', { expected_amount: 499, currency: 'eur' }],
+    ['missing amount', { currency: 'usd' }],
+  ])(
+    'fails closed when historical Pro %s authority disagrees with the fresh Stripe Price',
+    async (_label, authorityFields) => {
+      const defaultRpc = mockRpc.getMockImplementation()
+      mockRpc.mockImplementation((name: string, args?: Record<string, unknown>) => {
+        if (name === 'resolve_b2c_recurring_price_authority') {
+          return Promise.resolve({
+            data: {
+              status: 'resolved',
+              user_id: 'user-123',
+              stripe_customer_id: 'cus_test123',
+              stripe_price_id: 'price_retired_pro_monthly',
+              plan: 'monthly',
+              pro_plan: 'monthly',
+              source_kind: 'converted_checkout_reservation',
+              ...authorityFields,
+            },
+            error: null,
+            status: 200,
+          })
+        }
+        return defaultRpc?.(name, args)
+      })
+      mockListSubscriptions.mockResolvedValue({
+        data: [
+          customerSubscription({
+            id: 'sub_legacy_pro_terminal',
+            status: 'canceled',
+            priceId: 'price_retired_pro_monthly',
+          }),
+        ],
+        has_more: false,
+      })
+
+      const res = await POST(
+        new NextRequest('http://localhost/api/stripe/create-checkout', {
+          method: 'POST',
+          headers: { authorization: 'Bearer valid-token' },
+          body: JSON.stringify({ plan: 'monthly', trial: false }),
+        })
+      )
+
+      expect(res.status).toBe(503)
+      expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    }
+  )
+
+  it('expires the exact new Session when a remote Pro authority appears before bind', async () => {
+    mockListSubscriptions
+      .mockResolvedValue({
+        data: [customerSubscription({ id: 'sub_manual_race', status: 'active' })],
+        has_more: false,
+      })
+      .mockResolvedValueOnce({ data: [], has_more: false })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(409)
+    expect(mockCreateCheckoutSession).toHaveBeenCalledTimes(1)
+    expect(mockExpireOneTimeCheckoutSession).toHaveBeenCalledWith('cs_test123')
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'bind_pro_membership_checkout_session_atomic',
+      expect.anything()
+    )
+  })
+
+  it('returns only TRIAL_ALREADY_USED when trial history appears in the second pre-bind scan', async () => {
+    mockListSubscriptions
+      .mockResolvedValue({
+        data: [
+          customerSubscription({
+            id: 'sub_trial_history_race',
+            status: 'canceled',
+            trialStart: 1_700_000_000,
+            trialEnd: 1_700_604_800,
+          }),
+        ],
+        has_more: false,
+      })
+      .mockResolvedValueOnce({ data: [], has_more: false })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: true }),
+    })
+
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(body.code).toBe('TRIAL_ALREADY_USED')
+    expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ trialDays: 7 })
+    )
+    expect(mockExpireOneTimeCheckoutSession).toHaveBeenCalledWith('cs_test123')
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'bind_pro_membership_checkout_session_atomic',
+      expect.anything()
+    )
+  })
+
+  it('re-attests the fresh Customer before bind and expires the Session on ownership drift', async () => {
+    mockRetrieveCustomer
+      .mockResolvedValueOnce({
+        id: 'cus_test123',
+        object: 'customer',
+        livemode: false,
+        metadata: { userId: 'user-123' },
+      })
+      .mockResolvedValueOnce({
+        id: 'cus_test123',
+        object: 'customer',
+        livemode: false,
+        metadata: { userId: 'other-user' },
+      })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockRetrieveCustomer).toHaveBeenCalledTimes(2)
+    expect(mockCreateCheckoutSession).toHaveBeenCalledTimes(1)
+    expect(mockExpireOneTimeCheckoutSession).toHaveBeenCalledWith('cs_test123')
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'bind_pro_membership_checkout_session_atomic',
+      expect.anything()
+    )
+  })
+
+  it('preserves the exact Session when the second fresh Customer read is unavailable', async () => {
+    mockRetrieveCustomer
+      .mockResolvedValueOnce({
+        id: 'cus_test123',
+        object: 'customer',
+        livemode: false,
+        metadata: { userId: 'user-123' },
+      })
+      .mockRejectedValueOnce(new Error('temporary second Customer read outage'))
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockRetrieveCustomer).toHaveBeenCalledTimes(2)
+    expect(mockCreateCheckoutSession).toHaveBeenCalledTimes(1)
+    expect(mockExpireOneTimeCheckoutSession).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'bind_pro_membership_checkout_session_atomic',
+      expect.anything()
+    )
   })
 
   it('finds a non-terminal Pro subscription on the fully paginated second page', async () => {
@@ -769,7 +2309,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -784,7 +2324,7 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
 
-  it('paginates subscription items before classifying an exact Pro price', async () => {
+  it('paginates subscription items and fails closed on ambiguous multi-item semantics', async () => {
     const subscription = customerSubscription({
       id: 'sub_mixed_items',
       status: 'past_due',
@@ -792,12 +2332,16 @@ describe('POST /api/stripe/create-checkout', () => {
     })
     subscription.items.has_more = true
     mockListSubscriptions.mockResolvedValue({ data: [subscription], has_more: false })
+    const secondItem = customerSubscription({
+      id: 'sub_second_item',
+      priceId: 'price_yearly123',
+    }).items.data[0]
     mockListSubscriptionItems.mockResolvedValue({
       data: [
         {
+          ...secondItem,
           id: 'si_pro_second',
           subscription: 'sub_mixed_items',
-          price: { id: 'price_yearly123' },
         },
       ],
       has_more: false,
@@ -805,18 +2349,89 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
 
-    expect(res.status).toBe(409)
+    expect(res.status).toBe(503)
     expect(mockListSubscriptionItems).toHaveBeenCalledWith({
       subscription: 'sub_mixed_items',
       limit: 100,
       starting_after: 'si_mixed_items',
     })
     expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('rejects an oversized Stripe customer Subscription page', async () => {
+    mockListSubscriptions.mockResolvedValue({
+      data: Array.from({ length: 101 }, (_, index) =>
+        customerSubscription({ id: `sub_oversized_${index + 1}` })
+      ),
+      has_more: false,
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it.each(['initial', 'continuation'])(
+    'rejects an oversized Stripe Subscription Item %s page',
+    async (pageKind) => {
+      const subscription = customerSubscription({ id: `sub_oversized_items_${pageKind}` })
+      const makeItem = (index: number) => ({
+        ...subscription.items.data[0],
+        id: `si_oversized_${pageKind}_${index + 1}`,
+        subscription: subscription.id,
+      })
+      if (pageKind === 'initial') {
+        subscription.items.data = Array.from({ length: 101 }, (_, index) => makeItem(index))
+      } else {
+        subscription.items.has_more = true
+        mockListSubscriptionItems.mockResolvedValue({
+          data: Array.from({ length: 101 }, (_, index) => makeItem(index)),
+          has_more: false,
+        })
+      }
+      mockListSubscriptions.mockResolvedValue({ data: [subscription], has_more: false })
+      const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'monthly', trial: false }),
+      })
+
+      const res = await POST(req)
+
+      expect(res.status).toBe(503)
+      expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    }
+  )
+
+  it('rejects an oversized Stripe Checkout line-item page before exposing its URL', async () => {
+    mockListCheckoutLineItems.mockResolvedValue({
+      data: Array.from({ length: 101 }, () => proCheckoutLine('price_monthly123')),
+      has_more: false,
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'bind_pro_membership_checkout_session_atomic',
+      expect.anything()
+    )
   })
 
   it.each([
@@ -838,12 +2453,76 @@ describe('POST /api/stripe/create-checkout', () => {
         },
       },
     ],
+    [
+      'wrong mode',
+      {
+        ...customerSubscription({ id: 'sub_wrong_mode', status: 'active' }),
+        livemode: true,
+      },
+    ],
+    [
+      'wrong object type',
+      {
+        ...customerSubscription({ id: 'sub_wrong_object', status: 'active' }),
+        object: 'customer',
+      },
+    ],
+    [
+      'Price mode mismatch',
+      {
+        ...customerSubscription({ id: 'sub_wrong_price_mode', status: 'active' }),
+        items: {
+          data: [
+            {
+              ...customerSubscription({ id: 'sub_wrong_price_mode' }).items.data[0],
+              price: {
+                ...customerSubscription({ id: 'sub_wrong_price_mode' }).items.data[0].price,
+                livemode: true,
+              },
+            },
+          ],
+          has_more: false,
+        },
+      },
+    ],
+    ...[
+      ['leading whitespace', ' sub_whitespace'],
+      ['empty suffix', 'sub_'],
+      ['punctuation', 'sub_bad-id'],
+      ['oversize identity', `sub_${'a'.repeat(252)}`],
+    ].map(([label, id]) => [
+      `invalid Subscription ${label}`,
+      customerSubscription({ id, status: 'active' }),
+    ]),
+    ...[
+      ['leading whitespace', ' si_whitespace'],
+      ['empty suffix', 'si_'],
+      ['punctuation', 'si_bad-id'],
+      ['oversize identity', `si_${'a'.repeat(253)}`],
+    ].map(([label, id]) => {
+      const subscription = customerSubscription({ id: `sub_item_${label.replaceAll(' ', '_')}` })
+      subscription.items.data[0].id = id
+      return [`invalid Subscription Item ${label}`, subscription]
+    }),
+    ...[
+      ['leading whitespace', ' price_whitespace'],
+      ['empty suffix', 'price_'],
+      ['punctuation', 'price_bad-id'],
+      ['oversize identity', `price_${'a'.repeat(250)}`],
+    ].map(([label, priceId]) => [
+      `invalid Price ${label}`,
+      customerSubscription({
+        id: `sub_price_${label.replaceAll(' ', '_')}`,
+        status: 'active',
+        priceId,
+      }),
+    ]),
   ])('fails closed on Stripe subscription %s', async (_label, subscription) => {
     mockListSubscriptions.mockResolvedValue({ data: [subscription], has_more: false })
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -857,7 +2536,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
 
     const res = await POST(req)
@@ -913,7 +2592,7 @@ describe('POST /api/stripe/create-checkout', () => {
     )
   })
 
-  it('finds a prior trial on the 101st Stripe subscription and denies another trial', async () => {
+  it('finds a prior trial on the 101st Stripe subscription and refuses paid fallback', async () => {
     const firstHundred = Array.from({ length: 100 }, (_, index) =>
       customerSubscription({ id: `sub_history_${index + 1}` })
     )
@@ -937,16 +2616,16 @@ describe('POST /api/stripe/create-checkout', () => {
 
     const res = await POST(req)
 
-    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(res.status).toBe(409)
+    expect(body.code).toBe('TRIAL_ALREADY_USED')
     expect(mockListSubscriptions).toHaveBeenNthCalledWith(2, {
       customer: 'cus_test123',
       status: 'all',
       limit: 100,
       starting_after: 'sub_history_100',
     })
-    expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
-      expect.not.objectContaining({ trialDays: 7 })
-    )
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
 
   it('fails closed on a non-advancing Stripe customer-subscription page', async () => {
@@ -963,6 +2642,34 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
 
+  it('fails closed when Stripe customer-subscription pagination exceeds the explicit cap', async () => {
+    mockListSubscriptions.mockImplementation((args: { starting_after?: string }) => {
+      const previous = args.starting_after ? Number(args.starting_after.replace('sub_cap_', '')) : 0
+      const next = previous + 1
+      return Promise.resolve({
+        data: [
+          customerSubscription({
+            id: `sub_cap_${next}`,
+            status: 'canceled',
+            priceId: 'price_api_pro',
+          }),
+        ],
+        has_more: true,
+      })
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockListSubscriptions).toHaveBeenCalledTimes(100)
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
   it('creates lifetime one-time payment checkout session', async () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
@@ -975,6 +2682,13 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(res.status).toBe(200)
     expect(body.url).toBeDefined()
     expect(body.sessionId).toBeDefined()
+    expect(mockRpc).toHaveBeenCalledWith(
+      'reserve_lifetime_membership_spot_atomic',
+      expect.objectContaining({
+        p_user_id: 'user-123',
+        p_livemode: false,
+      })
+    )
     expect(mockCreateOneTimeCheckoutSession).toHaveBeenCalledWith(
       expect.objectContaining({
         allow_promotion_codes: false,
@@ -1002,6 +2716,7 @@ describe('POST /api/stripe/create-checkout', () => {
         p_reservation_id: '9a8df3e8-e908-4f27-9cb4-8b892d748cc7',
         p_checkout_session_id: 'cs_lifetime123',
         p_session_expires_at: '2099-01-01T00:00:00.000Z',
+        p_livemode: false,
       })
     )
   })
@@ -1775,7 +3490,7 @@ describe('POST /api/stripe/create-checkout', () => {
       const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
         method: 'POST',
         headers: { authorization: 'Bearer valid-token' },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, trial: false }),
       })
       const res = await POST(req)
 
@@ -1814,7 +3529,11 @@ describe('POST /api/stripe/create-checkout', () => {
       const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
         method: 'POST',
         headers: { authorization: 'Bearer valid-token' },
-        body: JSON.stringify({ plan, promotionCode: 'promo_free_100_percent' }),
+        body: JSON.stringify({
+          plan,
+          ...(plan === 'lifetime' ? {} : { trial: false }),
+          promotionCode: 'promo_free_100_percent',
+        }),
       })
       const res = await POST(req)
       const body = await res.json()
@@ -1835,7 +3554,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
     const res = await POST(req)
     const body = await res.json()
@@ -1851,7 +3570,7 @@ describe('POST /api/stripe/create-checkout', () => {
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
       headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly' }),
+      body: JSON.stringify({ plan: 'monthly', trial: false }),
     })
     const res = await POST(req)
     const body = await res.json()

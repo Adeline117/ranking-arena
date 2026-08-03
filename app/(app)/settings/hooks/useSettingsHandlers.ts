@@ -1686,31 +1686,134 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     setDeletingAccount(true)
     setDeleteError(null)
     try {
-      const token = await getFreshToken(scope)
-      if (!viewerIsCurrent(scope)) return
-      if (!token) {
-        setDeleteError(t('pleaseLoginAgain'))
-        return
+      const operationStorageKey = `account_deletion_operation_id:${scope.userId}`
+      const globalOperationStorageKey = 'account_deletion_pending_operation'
+      let storedOperationId: string | null = null
+      try {
+        storedOperationId = localStorage.getItem(operationStorageKey)
+      } catch {
+        // The in-memory operation below still makes the current attempt safe.
       }
-      const res = await fetch('/api/account/delete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify(
-          deleteHasPassword
-            ? { password: deletePassword, reason: deleteReason }
-            : { confirm: deleteConfirm, reason: deleteReason }
-        ),
-      })
+      const deletionOperationId =
+        storedOperationId &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          storedOperationId
+        )
+          ? storedOperationId
+          : crypto.randomUUID()
+      try {
+        localStorage.setItem(operationStorageKey, deletionOperationId)
+        localStorage.setItem(
+          globalOperationStorageKey,
+          JSON.stringify({ operation_id: deletionOperationId, user_id: scope.userId })
+        )
+      } catch {
+        // Best-effort public marker; the secret remains HttpOnly.
+      }
+      const commitDeletion = () =>
+        fetch('/api/account/delete?phase=commit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ operation_id: deletionOperationId }),
+        })
+      let token: string | null = null
+      let res: Response
+      if (storedOperationId) {
+        res = await commitDeletion()
+      } else {
+        token = await getFreshToken(scope)
+        if (!viewerIsCurrent(scope)) return
+        if (!token) {
+          setDeleteError(t('pleaseLoginAgain'))
+          return
+        }
+        res = await fetch('/api/account/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            ...getCsrfHeaders(),
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify(
+            deleteHasPassword
+              ? {
+                  password: deletePassword,
+                  reason: deleteReason,
+                  operation_id: deletionOperationId,
+                }
+              : {
+                  confirm: deleteConfirm,
+                  reason: deleteReason,
+                  operation_id: deletionOperationId,
+                }
+          ),
+        })
+      }
       if (!viewerIsCurrent(scope)) return
-      const data = await res.json()
+      let data = await res.json()
+      if (storedOperationId && res.status === 409) {
+        token = await getFreshToken(scope)
+        if (!viewerIsCurrent(scope)) return
+        if (!token) {
+          setDeleteError(t('pleaseLoginAgain'))
+          return
+        }
+        res = await fetch('/api/account/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            ...getCsrfHeaders(),
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify(
+            deleteHasPassword
+              ? {
+                  password: deletePassword,
+                  reason: deleteReason,
+                  operation_id: deletionOperationId,
+                }
+              : {
+                  confirm: deleteConfirm,
+                  reason: deleteReason,
+                  operation_id: deletionOperationId,
+                }
+          ),
+        })
+        if (!viewerIsCurrent(scope)) return
+        data = await res.json()
+      }
+      if (
+        res.status === 202 &&
+        data?.status === 'prepared' &&
+        data.operation_id === deletionOperationId &&
+        typeof data.recovery_token === 'string'
+      ) {
+        persistAccountRecoveryToken(data.recovery_token)
+        res = await commitDeletion()
+        if (!viewerIsCurrent(scope)) return
+        data = await res.json()
+      }
       if (!viewerIsCurrent(scope)) return
       if (!res.ok) {
+        if (res.status === 410 && data?.code === 'capability_invalid') {
+          try {
+            localStorage.removeItem(operationStorageKey)
+            localStorage.removeItem(globalOperationStorageKey)
+          } catch {
+            // Terminal cleanup is best-effort.
+          }
+        }
         setDeleteError(data.error || t('operationFailed'))
         return
+      }
+      try {
+        localStorage.removeItem(operationStorageKey)
+        localStorage.removeItem(globalOperationStorageKey)
+      } catch {
+        // Terminal cleanup is best-effort.
       }
       const recoveryLoginPath = buildAccountRecoveryLoginPath()
       let fullDocumentRecoveryToken: string | null = null

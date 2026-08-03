@@ -37,10 +37,14 @@ export async function GET(request: NextRequest) {
   )
   const lockName =
     daysBack > 1 ? `aggregate-daily-snapshots:days_back=${daysBack}` : 'aggregate-daily-snapshots'
-  const releaseLock = await acquireCronLock(lockName, { ttlSeconds: 300 })
-  if (!releaseLock) {
+  const lock = await acquireCronLock(lockName, { ttlSeconds: 300 })
+  if (lock.status === 'unavailable') {
+    return NextResponse.json({ error: 'Cron lock unavailable' }, { status: 503 })
+  }
+  if (lock.status === 'held') {
     return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
+  const releaseLock = lock.release
 
   try {
     const supabase = getSupabaseAdmin()

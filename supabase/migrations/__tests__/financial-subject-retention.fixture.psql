@@ -1,0 +1,303 @@
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+
+DO $prove_preexisting_owner_repair$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM auth.users
+    WHERE id = 'f2300000-0000-4000-8000-000000000001'
+  )
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_profiles
+      WHERE id = 'f2300000-0000-4000-8000-000000000001'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments AS payment
+      JOIN public.stripe_payment_ownerships AS ownership
+        ON ownership.product_kind = 'pro_entitlement'
+        AND ownership.ledger_id = payment.id
+      WHERE payment.stripe_charge_id = 'ch_financial_repair'
+        AND payment.user_id =
+          'f2300000-0000-4000-8000-000000000001'
+        AND ownership.owner_user_id = payment.user_id
+        AND public.stripe_payment_ownership_is_exact_v2(ownership.id)
+    )
+  THEN
+    RAISE EXCEPTION
+      'known historical entitlement owner was not repaired exactly';
+  END IF;
+END
+$prove_preexisting_owner_repair$;
+
+INSERT INTO auth.users (id) VALUES
+  ('f2300000-0000-4000-8000-000000000010'),
+  ('f2300000-0000-4000-8000-000000000020');
+
+INSERT INTO public.user_profiles (id, stripe_customer_id) VALUES
+  (
+    'f2300000-0000-4000-8000-000000000010',
+    'cus_financial_tip'
+  ),
+  (
+    'f2300000-0000-4000-8000-000000000020',
+    'cus_financial_pro'
+  );
+
+DO $create_exact_financial_ledgers$
+DECLARE
+  v_tip_result jsonb;
+  v_pro_result jsonb;
+BEGIN
+  INSERT INTO public.tips (
+    id,
+    from_user_id,
+    amount_cents,
+    status,
+    stripe_checkout_session_id
+  ) VALUES (
+    'f2300000-0000-4000-8000-000000000011',
+    'f2300000-0000-4000-8000-000000000010',
+    1200,
+    'pending',
+    'cs_financial_tip'
+  );
+
+  v_tip_result := public.complete_tip_with_stripe_ownership_atomic(
+    'f2300000-0000-4000-8000-000000000011',
+    'cus_financial_tip',
+    'pi_financial_tip',
+    'ch_financial_tip',
+    'cs_financial_tip',
+    1200,
+    'usd',
+    '2036-03-01 00:00:00+00'
+  );
+
+  v_pro_result := public.activate_recurring_entitlement_payment_atomic(
+    'f2300000-0000-4000-8000-000000000020',
+    'cus_financial_pro',
+    'sub_financial_pro',
+    'in_financial_pro',
+    'pi_financial_pro',
+    'ch_financial_pro',
+    'monthly',
+    2400,
+    'usd',
+    '2036-03-01 00:00:00+00',
+    '2036-04-01 00:00:00+00',
+    'paid',
+    'active'
+  );
+
+  IF v_tip_result ->> 'status' <> 'completed'
+    OR v_pro_result ->> 'status' <> 'activated'
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_payment_ownerships AS ownership
+      WHERE ownership.stripe_charge_id IN (
+          'ch_financial_tip',
+          'ch_financial_pro'
+        )
+        AND public.stripe_payment_ownership_is_exact_v2(ownership.id)
+    ) <> 2
+  THEN
+    RAISE EXCEPTION
+      'exact financial ledger setup failed: tip %, pro %',
+      v_tip_result,
+      v_pro_result;
+  END IF;
+END
+$create_exact_financial_ledgers$;
+
+DELETE FROM auth.users
+WHERE id IN (
+  'f2300000-0000-4000-8000-000000000010',
+  'f2300000-0000-4000-8000-000000000020'
+);
+
+DO $hard_delete_retains_exact_financial_identity$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM auth.users
+    WHERE id IN (
+      'f2300000-0000-4000-8000-000000000010',
+      'f2300000-0000-4000-8000-000000000020'
+    )
+  )
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_profiles
+      WHERE id IN (
+        'f2300000-0000-4000-8000-000000000010',
+        'f2300000-0000-4000-8000-000000000020'
+      )
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips
+      WHERE id = 'f2300000-0000-4000-8000-000000000011'
+        AND from_user_id =
+          'f2300000-0000-4000-8000-000000000010'
+        AND status = 'completed'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments
+      WHERE stripe_charge_id = 'ch_financial_pro'
+        AND user_id = 'f2300000-0000-4000-8000-000000000020'
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_payment_ownerships AS ownership
+      WHERE ownership.stripe_charge_id IN (
+          'ch_financial_tip',
+          'ch_financial_pro'
+        )
+        AND public.stripe_payment_ownership_is_exact_v2(ownership.id)
+    ) <> 2
+  THEN
+    RAISE EXCEPTION
+      'account hard delete erased or detached exact financial identity';
+  END IF;
+END
+$hard_delete_retains_exact_financial_identity$;
+
+DO $financial_owner_is_immutable$
+BEGIN
+  BEGIN
+    UPDATE public.tips
+    SET from_user_id = 'f2300000-0000-4000-8000-000000000020'
+    WHERE id = 'f2300000-0000-4000-8000-000000000011';
+    RAISE EXCEPTION 'Tip financial owner mutation was accepted';
+  EXCEPTION
+    WHEN check_violation THEN
+      NULL;
+  END;
+
+  BEGIN
+    UPDATE public.stripe_entitlement_payments
+    SET user_id = NULL
+    WHERE stripe_charge_id = 'ch_financial_pro';
+    RAISE EXCEPTION 'entitlement financial owner mutation was accepted';
+  EXCEPTION
+    WHEN check_violation THEN
+      NULL;
+  END;
+END
+$financial_owner_is_immutable$;
+
+DO $refund_routing_survives_hard_delete$
+DECLARE
+  v_tip_refund jsonb;
+  v_pro_route jsonb;
+  v_pro_refund jsonb;
+BEGIN
+  v_tip_refund := public.record_charge_refund_tombstone_atomic(
+    'f2300000-0000-4000-8000-000000000010',
+    'cus_financial_tip',
+    'pi_financial_tip',
+    'ch_financial_tip',
+    true,
+    1200,
+    'usd',
+    1200,
+    'succeeded',
+    'evt_financial_tip_refund',
+    '2036-03-02 00:00:00+00'
+  );
+
+  v_pro_route := public.record_charge_refund_tombstone_atomic(
+    'f2300000-0000-4000-8000-000000000020',
+    'cus_financial_pro',
+    'pi_financial_pro',
+    'ch_financial_pro',
+    true,
+    2400,
+    'usd',
+    300,
+    'pending',
+    'evt_financial_pro_refund',
+    '2036-03-02 00:01:00+00'
+  );
+
+  v_pro_refund := public.reconcile_stripe_entitlement_refund_atomic(
+    'f2300000-0000-4000-8000-000000000020',
+    'cus_financial_pro',
+    'recurring',
+    'monthly',
+    'sub_financial_pro',
+    'in_financial_pro',
+    'pi_financial_pro',
+    'ch_financial_pro',
+    NULL,
+    2400,
+    'usd',
+    '2036-03-01 00:00:00+00',
+    '2036-04-01 00:00:00+00',
+    'paid',
+    300,
+    'pending',
+    'canceled',
+    'evt_financial_pro_refund',
+    '2036-03-02 00:01:00+00'
+  );
+
+  IF v_tip_refund ->> 'status' <> 'recorded'
+    OR v_tip_refund ->> 'product_kind' <> 'tip'
+    OR v_pro_route ->> 'status' <>
+      'payment_reconciliation_required'
+    OR v_pro_route ->> 'product_kind' <> 'pro_entitlement'
+    OR v_pro_refund ->> 'status' <> 'refund_recorded'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.tips
+      WHERE id = 'f2300000-0000-4000-8000-000000000011'
+        AND status = 'refunded'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_payments
+      WHERE stripe_charge_id = 'ch_financial_pro'
+        AND user_id = 'f2300000-0000-4000-8000-000000000020'
+        AND refund_succeeded_amount = 300
+        AND refund_state = 'pending'
+    )
+    OR NOT public.stripe_refund_tombstone_is_resolved_v2(
+      'ch_financial_tip'
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_refund_events AS refund_event
+      JOIN public.stripe_entitlement_payments AS payment
+        ON payment.id = refund_event.entitlement_payment_id
+      WHERE refund_event.event_id = 'evt_financial_pro_refund'
+        AND payment.stripe_charge_id = 'ch_financial_pro'
+        AND refund_event.user_id IS NULL
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_payment_ownerships AS ownership
+      WHERE ownership.stripe_charge_id IN (
+          'ch_financial_tip',
+          'ch_financial_pro'
+        )
+        AND public.stripe_payment_ownership_is_exact_v2(ownership.id)
+    ) <> 2
+  THEN
+    RAISE EXCEPTION
+      'refund ownership was not deterministic after hard delete: tip %, route %, pro %',
+      v_tip_refund,
+      v_pro_route,
+      v_pro_refund;
+  END IF;
+END
+$refund_routing_survives_hard_delete$;
+
+SELECT 'Financial-subject retention fixture passed';

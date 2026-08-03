@@ -3,6 +3,7 @@ import type Stripe from 'stripe'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   STRIPE_PRICE_IDS,
+  STRIPE_API_PRICE_IDS,
   getOrCreateStripeCustomer,
   createCheckoutSession,
   getStripe,
@@ -19,11 +20,36 @@ import {
   LIFETIME_RESERVATION_NONCE_METADATA_KEY,
   recordStripeCheckoutManualReview,
 } from '@/lib/stripe/lifetime-entitlement'
+import {
+  BILLING_SURFACE_UNAVAILABLE_MESSAGE,
+  assertUserStripeBillingSurfaceAccess,
+} from '@/lib/stripe/billing-surface-access'
 import type { Json } from '@/lib/supabase/database.types'
+import {
+  PRO_CHECKOUT_METADATA_KEYS,
+  PRO_MEMBERSHIP_PRICE_METADATA_KEY,
+  PRO_MEMBERSHIP_RESERVATION_METADATA_KEY,
+  listCompleteCustomerProSubscriptions,
+  recoverExpiredProCheckoutReservation,
+  stripeCustomerIsExactlyOwned,
+  verifyFreshProCheckoutSession,
+  type ExactRecurringPriceSnapshot,
+  type ProCheckoutReservation,
+  type ProSessionVerification,
+  type ProSubscriptionSnapshot,
+} from '@/lib/stripe/pro-checkout-recovery'
 
 const LIFETIME_RESERVATION_TTL_SECONDS = 60 * 60
 const LIFETIME_PRICE_CENTS = Math.round(PRICING.lifetime.price * 100)
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const canonicalUuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const stripeCustomerIdPattern = /^cus_[A-Za-z0-9_]+$/
+const stripeSessionIdPattern = /^cs_[A-Za-z0-9_]+$/
+const stripePriceIdPattern = /^price_[A-Za-z0-9_]+$/
+const stripeLineItemIdPattern = /^li_[A-Za-z0-9_]+$/
+const maxStripeUnixSeconds = 253_402_300_799
+const maxStripePaginationPages = 100
 const reservationNoncePattern = /^[A-Za-z0-9_.:-]{8,128}$/
 const blockingProSubscriptionStatuses = new Set<Stripe.Subscription.Status>([
   'active',
@@ -37,11 +63,21 @@ const terminalProSubscriptionStatuses = new Set<Stripe.Subscription.Status>([
   'canceled',
   'incomplete_expired',
 ])
+const PRIVATE_NO_STORE = 'private, no-store'
 
 function rpcRecord(value: unknown): Record<string, unknown> | null {
   return value && !Array.isArray(value) && typeof value === 'object'
     ? (value as Record<string, unknown>)
     : null
+}
+
+function exactStripeIdentifier(value: unknown, pattern: RegExp): value is string {
+  return (
+    typeof value === 'string' &&
+    value === value.trim() &&
+    value.length <= 255 &&
+    pattern.test(value)
+  )
 }
 
 function stripeId(value: string | { id: string } | null): string | null {
@@ -58,6 +94,25 @@ function isHostedCheckoutUrl(value: string | null): value is string {
   }
 }
 
+function configuredApplicationOrigin(): string | null {
+  try {
+    const configured = env.NEXT_PUBLIC_APP_URL
+    if (!configured) return null
+    const url = new URL(configured)
+    return url.protocol === 'https:' ? url.origin : null
+  } catch {
+    return null
+  }
+}
+
+function hasExactOrigin(value: string, expectedOrigin: string): boolean {
+  try {
+    return new URL(value).origin === expectedOrigin
+  } catch {
+    return false
+  }
+}
+
 function checkoutLinePriceId(line: Stripe.LineItem): string | null {
   return line.price?.id || null
 }
@@ -66,27 +121,135 @@ function isEmptyOptionalStripeCollection(value: unknown): boolean {
   return value == null || (Array.isArray(value) && value.length === 0)
 }
 
+type RecurringProPlan = 'monthly' | 'yearly'
+
+function stripeSecretLivemode(secret: string): boolean | null {
+  const value = secret.trim()
+  if (value.startsWith('sk_live_')) return true
+  if (value.startsWith('sk_test_')) return false
+  return null
+}
+
+function recurringCheckoutUnavailable() {
+  return NextResponse.json(
+    { error: 'Unable to prepare Pro checkout. Please retry.' },
+    {
+      status: 503,
+      headers: { 'Cache-Control': 'no-store', 'Retry-After': '30' },
+    }
+  )
+}
+
+function recurringCheckoutConflict() {
+  return NextResponse.json(
+    {
+      error:
+        'A checkout for a different Pro plan is already in progress. Finish it or retry after it expires.',
+      code: 'PRO_CHECKOUT_CONFLICT',
+    },
+    { status: 409, headers: { 'Cache-Control': 'no-store' } }
+  )
+}
+
+function recurringTrialAlreadyUsed() {
+  return NextResponse.json(
+    {
+      error:
+        'This account has already used its Pro free trial. Choose the paid upgrade explicitly to continue.',
+      code: 'TRIAL_ALREADY_USED',
+    },
+    { status: 409, headers: { 'Cache-Control': PRIVATE_NO_STORE } }
+  )
+}
+
+function parseProCheckoutReservation(value: unknown): ProCheckoutReservation | null {
+  const record = rpcRecord(value)
+  if (!record) return null
+  const status = record.status
+  const reservationId = record.reservation_id
+  const plan = record.pro_plan
+  const priceId = record.stripe_price_id
+  const unitAmount = record.unit_amount
+  const currency = record.currency
+  const trialDays = record.trial_days
+  const successUrl = record.success_url
+  const cancelUrl = record.cancel_url
+  const checkoutExpiresAt = record.checkout_expires_at
+  const checkoutSessionId = record.checkout_session_id
+
+  if (
+    (status !== 'reserved' && status !== 'existing') ||
+    typeof reservationId !== 'string' ||
+    !canonicalUuidPattern.test(reservationId) ||
+    (plan !== 'monthly' && plan !== 'yearly') ||
+    !exactStripeIdentifier(priceId, stripePriceIdPattern) ||
+    typeof unitAmount !== 'number' ||
+    !Number.isSafeInteger(unitAmount) ||
+    unitAmount <= 0 ||
+    currency !== 'usd' ||
+    (trialDays !== 0 && trialDays !== 7) ||
+    typeof successUrl !== 'string' ||
+    !successUrl.startsWith('https://') ||
+    typeof cancelUrl !== 'string' ||
+    !cancelUrl.startsWith('https://') ||
+    typeof checkoutExpiresAt !== 'number' ||
+    !Number.isSafeInteger(checkoutExpiresAt) ||
+    checkoutExpiresAt <= 2700 ||
+    checkoutExpiresAt > maxStripeUnixSeconds ||
+    (checkoutSessionId !== null &&
+      !exactStripeIdentifier(checkoutSessionId, stripeSessionIdPattern)) ||
+    (status === 'reserved' && checkoutSessionId !== null)
+  ) {
+    return null
+  }
+
+  return {
+    status,
+    reservationId,
+    plan,
+    priceId,
+    unitAmount,
+    currency,
+    trialDays,
+    successUrl,
+    cancelUrl,
+    checkoutExpiresAtSeconds: checkoutExpiresAt,
+    checkoutSessionId,
+  }
+}
+
 async function listCompleteCheckoutLineItems(
   stripeClient: Stripe,
-  sessionId: string
+  sessionId: string,
+  expandPrice = false
 ): Promise<Stripe.LineItem[]> {
   const lines: Stripe.LineItem[] = []
   const seenLineIds = new Set<string>()
   let startingAfter: string | undefined
+  let pageCount = 0
 
   while (true) {
+    pageCount += 1
+    if (pageCount > maxStripePaginationPages) {
+      throw new Error('Stripe Checkout line-item pagination exceeded its safety limit')
+    }
     const page = await stripeClient.checkout.sessions.listLineItems(sessionId, {
       limit: 100,
+      ...(expandPrice ? { expand: ['data.price'] } : {}),
       ...(startingAfter ? { starting_after: startingAfter } : {}),
     })
-    if (!Array.isArray(page.data) || typeof page.has_more !== 'boolean') {
+    if (!Array.isArray(page.data) || page.data.length > 100 || typeof page.has_more !== 'boolean') {
       throw new Error('Stripe Checkout line-item pagination returned an invalid page')
     }
     if (startingAfter && page.data.length === 0) {
       throw new Error('Stripe Checkout line-item pagination returned an empty continuation page')
     }
     for (const line of page.data) {
-      if (!line.id?.startsWith('li_') || line.object !== 'item' || seenLineIds.has(line.id)) {
+      if (
+        !exactStripeIdentifier(line.id, stripeLineItemIdPattern) ||
+        line.object !== 'item' ||
+        seenLineIds.has(line.id)
+      ) {
         throw new Error('Stripe Checkout line-item pagination returned uncertain identity')
       }
       seenLineIds.add(line.id)
@@ -99,6 +262,22 @@ async function listCompleteCheckoutLineItems(
       throw new Error('Stripe Checkout line-item pagination did not advance')
     }
     startingAfter = lastLine.id
+  }
+}
+
+async function expireProCheckoutSessionBestEffort(
+  sessionId: string,
+  logger: ReturnType<typeof createLogger>,
+  context: string
+) {
+  try {
+    await getStripe().checkout.sessions.expire(sessionId)
+  } catch (error) {
+    logger.error('Failed to expire an exact-owned unsafe Pro Checkout Session', {
+      sessionId,
+      context,
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 }
 
@@ -116,7 +295,7 @@ async function verifyFreshLifetimeSession(params: {
   checkoutExpiresAtSeconds: number
   priceId: string
 }): Promise<LifetimeSessionVerification> {
-  if (!params.sessionId.startsWith('cs_')) {
+  if (!exactStripeIdentifier(params.sessionId, stripeSessionIdPattern)) {
     return {
       ok: false,
       reason: 'Stripe returned an invalid lifetime Checkout Session identity.',
@@ -134,7 +313,7 @@ async function verifyFreshLifetimeSession(params: {
   const lineTaxes = line?.taxes
   const matches =
     session.id === params.sessionId &&
-    session.id.startsWith('cs_') &&
+    exactStripeIdentifier(session.id, stripeSessionIdPattern) &&
     stripeId(session.customer) === params.customerId &&
     session.metadata?.supabase_user_id === params.userId &&
     session.metadata?.userId === params.userId &&
@@ -210,141 +389,57 @@ async function verifyFreshLifetimeSession(params: {
   }
 }
 
-function subscriptionItemPriceId(item: Stripe.SubscriptionItem): string | null {
-  return item.price?.id || null
-}
-
-async function completeSubscriptionPriceIds(
-  stripeClient: Stripe,
-  subscription: Stripe.Subscription
-): Promise<string[]> {
-  if (!subscription.items || !Array.isArray(subscription.items.data)) {
-    throw new Error(`Stripe subscription ${subscription.id} omitted its item list`)
+async function handlePost(request: NextRequest, appOrigin: string) {
+  let parsedBody: unknown
+  try {
+    parsedBody = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid JSON in request body', code: 'INVALID_JSON' },
+      { status: 400 }
+    )
   }
-  if (typeof subscription.items.has_more !== 'boolean') {
-    throw new Error(`Stripe subscription ${subscription.id} returned an invalid item page`)
-  }
-
-  const priceIds: string[] = []
-  const seenItemIds = new Set<string>()
-  const appendItems = (items: Stripe.SubscriptionItem[]) => {
-    for (const item of items) {
-      if (
-        !item.id?.startsWith('si_') ||
-        seenItemIds.has(item.id) ||
-        stripeId(item.subscription) !== subscription.id
-      ) {
-        throw new Error(`Stripe subscription ${subscription.id} returned uncertain item identity`)
-      }
-      const priceId = subscriptionItemPriceId(item)
-      if (!priceId?.startsWith('price_')) {
-        throw new Error(`Stripe subscription ${subscription.id} returned an invalid price identity`)
-      }
-      seenItemIds.add(item.id)
-      priceIds.push(priceId)
-    }
+  if (!parsedBody || Array.isArray(parsedBody) || typeof parsedBody !== 'object') {
+    return NextResponse.json(
+      { error: 'Invalid request body', code: 'INVALID_REQUEST_BODY' },
+      { status: 400 }
+    )
   }
 
-  appendItems(subscription.items.data)
-  let hasMore = subscription.items.has_more
-  let startingAfter = subscription.items.data.at(-1)?.id
-  const seenCursors = new Set<string>()
-  if (hasMore && !startingAfter) {
-    throw new Error(`Stripe subscription ${subscription.id} item pagination did not advance`)
+  const body = parsedBody as Record<string, unknown>
+  const hasTrialChoice = Object.prototype.hasOwnProperty.call(body, 'trial')
+  if (hasTrialChoice && typeof body.trial !== 'boolean') {
+    return NextResponse.json(
+      { error: 'Trial choice must be a boolean.', code: 'INVALID_TRIAL_CHOICE' },
+      { status: 400 }
+    )
   }
 
-  while (hasMore) {
-    if (!startingAfter || seenCursors.has(startingAfter)) {
-      throw new Error(`Stripe subscription ${subscription.id} item pagination did not advance`)
-    }
-    seenCursors.add(startingAfter)
-    const page = await stripeClient.subscriptionItems.list({
-      subscription: subscription.id,
-      limit: 100,
-      ...(startingAfter ? { starting_after: startingAfter } : {}),
-    })
-    if (!Array.isArray(page.data) || typeof page.has_more !== 'boolean') {
-      throw new Error(`Stripe subscription ${subscription.id} returned an invalid item page`)
-    }
-    if (page.data.length === 0) {
-      throw new Error(`Stripe subscription ${subscription.id} returned an empty item continuation`)
-    }
-    appendItems(page.data)
-    if (!page.has_more) break
-
-    const lastItem = page.data.at(-1)
-    if (!lastItem?.id || lastItem.id === startingAfter) {
-      throw new Error(`Stripe subscription ${subscription.id} item pagination did not advance`)
-    }
-    startingAfter = lastItem.id
-    hasMore = page.has_more
+  const plan = body.plan
+  if (plan !== 'monthly' && plan !== 'yearly' && plan !== 'lifetime') {
+    return NextResponse.json({ error: 'Invalid plan type' }, { status: 400 })
+  }
+  if ((plan === 'monthly' || plan === 'yearly') && !hasTrialChoice) {
+    return NextResponse.json(
+      {
+        error: 'Choose paid checkout or the free trial explicitly.',
+        code: 'TRIAL_CHOICE_REQUIRED',
+      },
+      { status: 400 }
+    )
+  }
+  if (plan === 'lifetime' && body.trial === true) {
+    return NextResponse.json(
+      { error: 'Lifetime checkout cannot include a trial.', code: 'INVALID_TRIAL_CHOICE' },
+      { status: 400 }
+    )
   }
 
-  if (priceIds.length === 0) {
-    throw new Error(`Stripe subscription ${subscription.id} has no classifiable price`)
-  }
-  return priceIds
-}
+  const successUrl = body.successUrl
+  const cancelUrl = body.cancelUrl
+  const promotionCode = body.promotionCode
+  const trial = body.trial === true
 
-type ProSubscriptionSnapshot = {
-  subscription: Stripe.Subscription
-  priceIds: string[]
-}
-
-async function listCompleteCustomerProSubscriptions(params: {
-  stripeClient: Stripe
-  customerId: string
-  proPriceIds: ReadonlySet<string>
-}): Promise<ProSubscriptionSnapshot[]> {
-  const snapshots: ProSubscriptionSnapshot[] = []
-  const seenSubscriptionIds = new Set<string>()
-  let startingAfter: string | undefined
-
-  while (true) {
-    const page = await params.stripeClient.subscriptions.list({
-      customer: params.customerId,
-      status: 'all',
-      limit: 100,
-      ...(startingAfter ? { starting_after: startingAfter } : {}),
-    })
-    if (!Array.isArray(page.data) || typeof page.has_more !== 'boolean') {
-      throw new Error('Stripe customer subscription pagination returned an invalid page')
-    }
-    if (startingAfter && page.data.length === 0) {
-      throw new Error('Stripe customer subscription pagination returned an empty continuation page')
-    }
-
-    for (const subscription of page.data) {
-      if (
-        !subscription.id?.startsWith('sub_') ||
-        seenSubscriptionIds.has(subscription.id) ||
-        stripeId(subscription.customer) !== params.customerId
-      ) {
-        throw new Error('Stripe customer subscription pagination returned uncertain identity')
-      }
-      seenSubscriptionIds.add(subscription.id)
-      if (
-        !blockingProSubscriptionStatuses.has(subscription.status) &&
-        !terminalProSubscriptionStatuses.has(subscription.status)
-      ) {
-        throw new Error(`Stripe subscription ${subscription.id} returned an unknown status`)
-      }
-      const priceIds = await completeSubscriptionPriceIds(params.stripeClient, subscription)
-      if (priceIds.some((priceId) => params.proPriceIds.has(priceId))) {
-        snapshots.push({ subscription, priceIds })
-      }
-    }
-
-    if (!page.has_more) return snapshots
-    const lastSubscription = page.data.at(-1)
-    if (!lastSubscription?.id || lastSubscription.id === startingAfter) {
-      throw new Error('Stripe customer subscription pagination did not advance')
-    }
-    startingAfter = lastSubscription.id
-  }
-}
-
-export async function POST(request: NextRequest) {
   // 敏感操作限流
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
   if (rateLimitResponse) {
@@ -357,25 +452,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Payment system not configured. Please contact support.' },
         { status: 503 }
-      )
-    }
-
-    let plan: string,
-      successUrl: string | undefined,
-      cancelUrl: string | undefined,
-      promotionCode: string | undefined,
-      trial: boolean | undefined
-    try {
-      const body = await request.json()
-      plan = body.plan
-      successUrl = body.successUrl
-      cancelUrl = body.cancelUrl
-      promotionCode = body.promotionCode
-      trial = body.trial === true
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid JSON in request body', code: 'INVALID_JSON' },
-        { status: 400 }
       )
     }
 
@@ -402,9 +478,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized - Please login first' }, { status: 401 })
     }
 
-    if (!['monthly', 'yearly', 'lifetime'].includes(plan)) {
-      return NextResponse.json({ error: 'Invalid plan type' }, { status: 400 })
-    }
     if (promotionCode !== undefined) {
       return NextResponse.json(
         {
@@ -415,7 +488,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const typedPlan = plan as 'monthly' | 'yearly' | 'lifetime'
+    try {
+      await assertUserStripeBillingSurfaceAccess(user.id)
+    } catch (error) {
+      logger.error('Pro Checkout billing surface access was unavailable', {
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return NextResponse.json(
+        { error: BILLING_SURFACE_UNAVAILABLE_MESSAGE },
+        { status: 503, headers: { 'Cache-Control': PRIVATE_NO_STORE } }
+      )
+    }
+
+    const typedPlan = plan
     const recurringCheckout = typedPlan === 'monthly' || typedPlan === 'yearly'
 
     // Keep the local projection as an early safety signal for recurring Pro
@@ -492,6 +578,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const stripeLivemode = stripeSecretLivemode(env.STRIPE_SECRET_KEY)
+    if (stripeLivemode === null) {
+      logger.error('Stripe secret has no exact live/test identity')
+      return NextResponse.json(
+        { error: 'Payment system not configured. Please contact support.' },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      )
+    }
+
     // 获取或创建 Stripe 客户
     const userEmail = user.email || `${user.id}@user.ranking-arena.com`
     const customerId = await getOrCreateStripeCustomer(
@@ -503,6 +598,42 @@ export async function POST(request: NextRequest) {
       },
       billingProfile.stripe_customer_id
     )
+
+    // get/create/update responses are not fresh ownership attestations: a
+    // stale helper response or a conflicting metadata write must not reach a
+    // financial reservation. Retrieve the final object and bind its exact
+    // mode plus all known user aliases before any Checkout admission RPC.
+    let freshCustomer: Stripe.Customer | Stripe.DeletedCustomer
+    try {
+      freshCustomer = await getStripe().customers.retrieve(customerId)
+    } catch (customerError) {
+      logger.error('Fresh Stripe Customer ownership attestation was unavailable', {
+        userId: user.id,
+        customerId,
+        error: customerError instanceof Error ? customerError.message : String(customerError),
+      })
+      return NextResponse.json(
+        { error: 'Unable to prepare payment account. Please retry.' },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      )
+    }
+    if (
+      !stripeCustomerIsExactlyOwned({
+        value: freshCustomer,
+        expectedCustomerId: customerId,
+        expectedUserId: user.id,
+        expectedLivemode: stripeLivemode,
+      })
+    ) {
+      logger.error('Fresh Stripe Customer ownership attestation conflicted', {
+        userId: user.id,
+        customerId,
+      })
+      return NextResponse.json(
+        { error: 'Unable to prepare payment account. Please retry.' },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      )
+    }
 
     // Customer ownership is a financial identity, not a last-write-wins profile
     // field. The RPC serializes the user and Customer identities and performs a
@@ -532,11 +663,22 @@ export async function POST(request: NextRequest) {
     }
 
     let stripeProSubscriptions: ProSubscriptionSnapshot[] = []
+    let recurringTrialDays: 0 | 7 = 0
+    let scanStripeProSubscriptions: (() => Promise<ProSubscriptionSnapshot[]>) | null = null
     if (recurringCheckout) {
       const proPriceIds = new Set([STRIPE_PRICE_IDS.monthly, STRIPE_PRICE_IDS.yearly])
+      const apiPriceIds = new Set(
+        Object.values(STRIPE_API_PRICE_IDS).filter(
+          (configuredPriceId): configuredPriceId is string =>
+            exactStripeIdentifier(configuredPriceId, stripePriceIdPattern)
+        )
+      )
       if (
         proPriceIds.size !== 2 ||
-        [...proPriceIds].some((configuredPriceId) => !configuredPriceId?.startsWith('price_'))
+        [...proPriceIds].some(
+          (configuredPriceId) => !exactStripeIdentifier(configuredPriceId, stripePriceIdPattern)
+        ) ||
+        [...apiPriceIds].some((configuredPriceId) => proPriceIds.has(configuredPriceId))
       ) {
         logger.error('Exact Pro subscription classification is not configured', {
           userId: user.id,
@@ -547,12 +689,53 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      try {
-        stripeProSubscriptions = await listCompleteCustomerProSubscriptions({
+      const resolveHistoricalAuthority = async (
+        subscription: Stripe.Subscription,
+        historicalPrice: ExactRecurringPriceSnapshot
+      ) => {
+        const { data, error } = await supabaseAdmin.rpc('resolve_b2c_recurring_price_authority', {
+          p_stripe_subscription_id: subscription.id,
+          p_livemode: stripeLivemode,
+          p_stripe_price_id: historicalPrice.priceId,
+        })
+        if (error) {
+          throw new Error(`Historical Pro price authority failed: ${error.message}`)
+        }
+        const authority = rpcRecord(data)
+        if (authority?.status === 'not_found') return
+        const plan = authority?.plan ?? authority?.pro_plan
+        if (
+          authority?.status !== 'resolved' ||
+          authority.user_id !== user.id ||
+          authority.stripe_customer_id !== customerId ||
+          authority.stripe_price_id !== historicalPrice.priceId ||
+          !Number.isSafeInteger(authority.expected_amount) ||
+          Number(authority.expected_amount) <= 0 ||
+          authority.expected_amount !== historicalPrice.unitAmount ||
+          typeof authority.currency !== 'string' ||
+          !/^[a-z]{3}$/.test(authority.currency) ||
+          authority.currency !== historicalPrice.currency ||
+          (plan !== 'monthly' && plan !== 'yearly') ||
+          (authority.plan !== undefined && authority.plan !== plan) ||
+          (authority.pro_plan !== undefined && authority.pro_plan !== plan) ||
+          (authority.source_kind !== 'converted_checkout_reservation' &&
+            authority.source_kind !== 'verified_invoice_event')
+        ) {
+          throw new Error(`Historical Pro price authority for ${subscription.id} was uncertain`)
+        }
+      }
+      scanStripeProSubscriptions = () =>
+        listCompleteCustomerProSubscriptions({
           stripeClient: getStripe(),
           customerId,
+          livemode: stripeLivemode,
           proPriceIds,
+          apiPriceIds,
+          resolveHistoricalAuthority,
         })
+
+      try {
+        stripeProSubscriptions = await scanStripeProSubscriptions()
       } catch (subscriptionError) {
         logger.error('Exact Stripe Pro subscription lookup failed; checkout blocked', {
           userId: user.id,
@@ -611,6 +794,16 @@ export async function POST(request: NextRequest) {
           { status: 503 }
         )
       }
+
+      if (trial) {
+        // Only exact monthly/yearly Stripe history consumes this B2C trial.
+        // API-tier and unrelated subscriptions were filtered out above.
+        const alreadyTrialed = stripeProSubscriptions.some(
+          ({ subscription }) => subscription.trial_start != null || subscription.trial_end != null
+        )
+        if (alreadyTrialed) return recurringTrialAlreadyUsed()
+        recurringTrialDays = 7
+      }
     }
 
     const meta = {
@@ -620,9 +813,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate redirect URLs to prevent open redirect attacks
-    const appOrigin = new URL(env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org').origin
-    const defaultSuccessUrl = `${env.NEXT_PUBLIC_APP_URL}/pricing/success?session_id={CHECKOUT_SESSION_ID}`
-    const defaultCancelUrl = `${env.NEXT_PUBLIC_APP_URL}/pricing`
+    const defaultSuccessUrl = `${appOrigin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`
+    const defaultCancelUrl = `${appOrigin}/pricing`
 
     let sUrl = defaultSuccessUrl
     let cUrl = defaultCancelUrl
@@ -647,7 +839,7 @@ export async function POST(request: NextRequest) {
 
     if (plan === 'lifetime') {
       // 终身会员 — 一次性付款 (mode: 'payment')
-      if (!priceId || !priceId.startsWith('price_')) {
+      if (!exactStripeIdentifier(priceId, stripePriceIdPattern)) {
         throw new Error(
           `Invalid Stripe price ID for lifetime: "${priceId}". Please configure STRIPE_PRO_LIFETIME_PRICE_ID.`
         )
@@ -663,6 +855,7 @@ export async function POST(request: NextRequest) {
           p_user_id: user.id,
           p_request_nonce: requestNonce,
           p_ttl_seconds: LIFETIME_RESERVATION_TTL_SECONDS,
+          p_livemode: stripeLivemode,
         }
       )
       const reservation = rpcRecord(reservationData)
@@ -787,7 +980,7 @@ export async function POST(request: NextRequest) {
           typeof reservation?.checkout_session_id === 'string'
             ? reservation.checkout_session_id
             : null
-        if (!existingSessionId?.startsWith('cs_')) {
+        if (!exactStripeIdentifier(existingSessionId, stripeSessionIdPattern)) {
           await recordRecoveryReview({
             sessionId: existingSessionId,
             reason: 'A bound lifetime reservation omitted its Checkout Session identity.',
@@ -946,7 +1139,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!createdVerification.ok) {
-        if (checkoutSession.id.startsWith('cs_')) {
+        if (exactStripeIdentifier(checkoutSession.id, stripeSessionIdPattern)) {
           try {
             await getStripe().checkout.sessions.expire(checkoutSession.id)
           } catch (expireError) {
@@ -986,6 +1179,7 @@ export async function POST(request: NextRequest) {
           p_request_nonce: effectiveRequestNonce,
           p_checkout_session_id: checkoutSession.id,
           p_session_expires_at: new Date(sessionExpiresAt * 1000).toISOString(),
+          p_livemode: stripeLivemode,
         }
       )
       const bindingStatus = rpcRecord(bindingData)?.status
@@ -1017,41 +1211,375 @@ export async function POST(request: NextRequest) {
         )
       }
     } else {
-      // 月付 / 年付订阅
-      const checkoutOptions: Parameters<typeof createCheckoutSession>[0] = {
-        customerId,
-        priceId,
-        successUrl: sUrl,
-        cancelUrl: cUrl,
-        metadata: meta,
-        allowPromotionCodes: false,
+      // 月付 / 年付订阅。The database reservation is the admission
+      // authority across processes; Stripe scans above remain a second,
+      // external duplicate check but no longer carry the concurrency burden.
+      const recurringPlan = typedPlan as RecurringProPlan
+      const recurringUnitAmount = Math.round(PRICING[recurringPlan].price * 100)
+      const recurringCurrency = 'usd' as const
+      const livemode = stripeLivemode
+      if (!exactStripeIdentifier(customerId, stripeCustomerIdPattern)) {
+        logger.error('Recurring Pro checkout runtime identity is not exact', {
+          userId: user.id,
+          customerId,
+        })
+        return recurringCheckoutUnavailable()
       }
 
-      // Add 7-day free trial if requested (only for new subscribers, not lifetime).
-      // 2026-07-11:trial 由客户端 body 传,此前无"已试用过"校验 → 取消后重订可
-      // 无限薅 7 天。这里只用完整 Stripe 历史中的精确 Pro price 判断既往 trial。
-      if (trial) {
-        // The exact, fully-paginated Stripe snapshot above contains only Pro
-        // monthly/yearly prices. API-tier and unrelated subscriptions cannot
-        // consume the B2C Pro trial.
-        const alreadyTrialed = stripeProSubscriptions.some(
-          ({ subscription }) => subscription.trial_start != null || subscription.trial_end != null
+      let reservationData: unknown
+      let reservationError: { message?: string } | null
+      try {
+        const result = await supabaseAdmin.rpc('reserve_pro_membership_checkout_atomic', {
+          p_user_id: user.id,
+          p_livemode: livemode,
+          p_stripe_customer_id: customerId,
+          p_pro_plan: recurringPlan,
+          p_stripe_price_id: priceId,
+          p_unit_amount: recurringUnitAmount,
+          p_currency: recurringCurrency,
+          p_trial_days: recurringTrialDays,
+          p_success_url: sUrl,
+          p_cancel_url: cUrl,
+        })
+        reservationData = result.data
+        reservationError = result.error
+      } catch (error) {
+        logger.error('Atomic Pro Checkout reservation was unavailable', {
+          userId: user.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        return recurringCheckoutUnavailable()
+      }
+      if (reservationError) {
+        logger.error('Atomic Pro Checkout reservation failed', {
+          userId: user.id,
+          error: reservationError.message,
+        })
+        return recurringCheckoutUnavailable()
+      }
+      if (rpcRecord(reservationData)?.status === 'already_subscribed') {
+        return NextResponse.json(
+          {
+            error:
+              'You already have a non-terminal subscription. Manage it from your account settings.',
+            code: 'ALREADY_SUBSCRIBED',
+          },
+          { status: 409, headers: { 'Cache-Control': 'no-store' } }
         )
-        if (!alreadyTrialed) {
-          checkoutOptions.trialDays = 7
+      }
+      if (rpcRecord(reservationData)?.status === 'trial_already_used') {
+        return recurringTrialAlreadyUsed()
+      }
+
+      const reservation = parseProCheckoutReservation(reservationData)
+      if (!reservation) {
+        logger.error('Atomic Pro Checkout reservation returned uncertain identity', {
+          userId: user.id,
+        })
+        return recurringCheckoutUnavailable()
+      }
+      if (
+        reservation.unitAmount !== recurringUnitAmount ||
+        reservation.currency !== recurringCurrency ||
+        !hasExactOrigin(reservation.successUrl, appOrigin) ||
+        !hasExactOrigin(reservation.cancelUrl, appOrigin)
+      ) {
+        logger.error('Pro Checkout reservation returned unsafe durable product identity', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+        })
+        return recurringCheckoutUnavailable()
+      }
+
+      const proMetadata: Record<(typeof PRO_CHECKOUT_METADATA_KEYS)[number], string> = {
+        supabase_user_id: user.id,
+        userId: user.id,
+        currency: reservation.currency,
+        type: 'pro_membership',
+        plan: reservation.plan,
+        [PRO_MEMBERSHIP_RESERVATION_METADATA_KEY]: reservation.reservationId,
+        [PRO_MEMBERSHIP_PRICE_METADATA_KEY]: reservation.priceId,
+        trial_days: String(reservation.trialDays),
+        unit_amount: String(reservation.unitAmount),
+      }
+
+      if (reservation.checkoutExpiresAtSeconds <= Math.floor(Date.now() / 1000)) {
+        try {
+          const recovery = await recoverExpiredProCheckoutReservation({
+            stripeClient: getStripe(),
+            supabaseAdmin,
+            reservation,
+            userId: user.id,
+            customerId,
+            livemode,
+            metadata: proMetadata,
+          })
+          if (recovery === 'released' || recovery === 'converted') {
+            return NextResponse.json(
+              {
+                error: 'A previous checkout was safely reconciled. Please retry your selection.',
+                code: 'PRO_CHECKOUT_RECOVERED',
+              },
+              { status: 409, headers: { 'Cache-Control': PRIVATE_NO_STORE } }
+            )
+          }
+        } catch (error) {
+          logger.error('Expired Pro Checkout recovery remained uncertain', {
+            userId: user.id,
+            reservationId: reservation.reservationId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+        return recurringCheckoutUnavailable()
+      }
+      if (
+        reservation.status === 'existing' &&
+        (reservation.plan !== recurringPlan ||
+          reservation.priceId !== priceId ||
+          reservation.trialDays !== recurringTrialDays ||
+          reservation.successUrl !== sUrl ||
+          reservation.cancelUrl !== cUrl)
+      ) {
+        if (trial && reservation.trialDays !== 7) return recurringTrialAlreadyUsed()
+        return recurringCheckoutConflict()
+      }
+      if (trial && reservation.trialDays !== 7) {
+        return recurringTrialAlreadyUsed()
+      }
+      if (
+        reservation.plan !== recurringPlan ||
+        reservation.priceId !== priceId ||
+        reservation.trialDays !== recurringTrialDays ||
+        reservation.successUrl !== sUrl ||
+        reservation.cancelUrl !== cUrl
+      ) {
+        logger.error('New Pro Checkout reservation did not match the requested product', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+        })
+        return recurringCheckoutUnavailable()
+      }
+
+      let sessionId = reservation.checkoutSessionId
+      if (!sessionId) {
+        try {
+          const created = await createCheckoutSession({
+            customerId,
+            priceId: reservation.priceId,
+            successUrl: reservation.successUrl,
+            cancelUrl: reservation.cancelUrl,
+            metadata: proMetadata,
+            allowPromotionCodes: false,
+            ...(reservation.trialDays === 7 ? { trialDays: 7 } : {}),
+            idempotencyKey: `pro_membership_checkout_${livemode ? 'live' : 'test'}_${reservation.reservationId}`,
+            expiresAt: reservation.checkoutExpiresAtSeconds,
+            clientReferenceId: reservation.reservationId,
+          })
+          sessionId = created.id
+        } catch (error) {
+          // No Stripe transport/error class proves the Session was not
+          // committed. Preserve the reservation and retry this stable UUID.
+          logger.warn('Stripe Pro Checkout create was ambiguous; reservation preserved', {
+            userId: user.id,
+            reservationId: reservation.reservationId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+          return recurringCheckoutUnavailable()
         }
       }
 
-      // A Customer subscription scan cannot serialize concurrent open Checkout
-      // Sessions. The durable recurring-checkout admission RPC remains required
-      // before this path can be treated as launch-safe against TOCTOU.
-      checkoutSession = await createCheckoutSession(checkoutOptions)
+      let verification: ProSessionVerification
+      try {
+        verification = await verifyFreshProCheckoutSession({
+          stripeClient: getStripe(),
+          sessionId,
+          userId: user.id,
+          customerId,
+          livemode,
+          reservation,
+          metadata: proMetadata,
+        })
+      } catch (error) {
+        // Retrieval/pagination failure cannot distinguish an unsafe Session
+        // from a temporary Stripe read failure. Keep both durable identities.
+        logger.error('Fresh Pro Checkout verification was unavailable', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        return recurringCheckoutUnavailable()
+      }
+      if (!verification.ok) {
+        if (verification.safeToExpire) {
+          await expireProCheckoutSessionBestEffort(
+            sessionId,
+            logger,
+            'pro_checkout_exact_verification_failed'
+          )
+        }
+        logger.error('Stripe returned an unsafe Pro Checkout Session; URL withheld', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+          sessionId,
+          safeToExpire: verification.safeToExpire,
+          reason: verification.reason,
+        })
+        return recurringCheckoutUnavailable()
+      }
+
+      // Close the long Stripe-create/verification window with a second fresh
+      // Customer attestation and full Subscription scan. The bind RPC
+      // separately repeats local authority checks under its transaction
+      // locks; none of these snapshots is sufficient on its own.
+      let preBindCustomer: Stripe.Customer | Stripe.DeletedCustomer
+      try {
+        preBindCustomer = await getStripe().customers.retrieve(customerId)
+      } catch (error) {
+        logger.error('Pre-bind Stripe Customer attestation was unavailable', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+          sessionId: verification.session.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        return recurringCheckoutUnavailable()
+      }
+      if (
+        !stripeCustomerIsExactlyOwned({
+          value: preBindCustomer,
+          expectedCustomerId: customerId,
+          expectedUserId: user.id,
+          expectedLivemode: livemode,
+        })
+      ) {
+        await expireProCheckoutSessionBestEffort(
+          verification.session.id,
+          logger,
+          'pro_checkout_customer_authority_changed_before_bind'
+        )
+        logger.error('Pre-bind Stripe Customer ownership attestation conflicted', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+          sessionId: verification.session.id,
+        })
+        return recurringCheckoutUnavailable()
+      }
+
+      let preBindSubscriptions: ProSubscriptionSnapshot[]
+      try {
+        if (!scanStripeProSubscriptions) {
+          throw new Error('Recurring Pro subscription scanner was not initialized')
+        }
+        preBindSubscriptions = await scanStripeProSubscriptions()
+      } catch (error) {
+        logger.error('Pre-bind Stripe Pro subscription verification was unavailable', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+          sessionId: verification.session.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        return recurringCheckoutUnavailable()
+      }
+      const preBindBlocking = preBindSubscriptions.some(({ subscription }) =>
+        blockingProSubscriptionStatuses.has(subscription.status)
+      )
+      const preBindTrialConflict =
+        reservation.trialDays === 7 &&
+        preBindSubscriptions.some(
+          ({ subscription }) => subscription.trial_start !== null || subscription.trial_end !== null
+        )
+      if (preBindBlocking || preBindTrialConflict) {
+        await expireProCheckoutSessionBestEffort(
+          verification.session.id,
+          logger,
+          preBindBlocking
+            ? 'pro_checkout_remote_authority_appeared_before_bind'
+            : 'pro_checkout_trial_history_appeared_before_bind'
+        )
+        if (preBindTrialConflict && !preBindBlocking) {
+          return recurringTrialAlreadyUsed()
+        }
+        return NextResponse.json(
+          {
+            error:
+              'You already have a non-terminal subscription. Manage it from your account settings.',
+            code: 'ALREADY_SUBSCRIBED',
+          },
+          { status: 409 }
+        )
+      }
+
+      let bindResult:
+        | {
+            data: unknown
+            error: { code?: string; message?: string } | null
+            status?: number
+          }
+        | undefined
+      try {
+        bindResult = await supabaseAdmin.rpc('bind_pro_membership_checkout_session_atomic', {
+          p_reservation_id: reservation.reservationId,
+          p_user_id: user.id,
+          p_livemode: livemode,
+          p_stripe_customer_id: customerId,
+          p_pro_plan: reservation.plan,
+          p_stripe_price_id: reservation.priceId,
+          p_unit_amount: reservation.unitAmount,
+          p_currency: reservation.currency,
+          p_trial_days: reservation.trialDays,
+          p_checkout_session_id: verification.session.id,
+          p_checkout_expires_at: reservation.checkoutExpiresAtSeconds,
+        })
+      } catch (error) {
+        logger.error('Pro Checkout bind outcome was uncertain; Session preserved', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+          sessionId: verification.session.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        return recurringCheckoutUnavailable()
+      }
+
+      const bindStatus = rpcRecord(bindResult.data)?.status
+      const explicitRejection =
+        bindResult.error !== null &&
+        typeof bindResult.error.code === 'string' &&
+        bindResult.error.code.length > 0 &&
+        typeof bindResult.status === 'number' &&
+        bindResult.status >= 400 &&
+        bindResult.status < 600
+      if (explicitRejection) {
+        await expireProCheckoutSessionBestEffort(
+          verification.session.id,
+          logger,
+          'pro_checkout_bind_explicitly_rejected'
+        )
+      }
+      if (
+        bindResult.error ||
+        (bindStatus !== 'bound' && bindStatus !== 'already_bound' && bindStatus !== 'converted')
+      ) {
+        logger.error('Pro Checkout bind was not durably acknowledged; URL withheld', {
+          userId: user.id,
+          reservationId: reservation.reservationId,
+          sessionId: verification.session.id,
+          status: bindStatus,
+          explicitRejection,
+          error: bindResult.error?.message,
+        })
+        return recurringCheckoutUnavailable()
+      }
+
+      checkoutSession = verification.session
     }
 
-    return NextResponse.json({
-      url: checkoutSession.url,
-      sessionId: checkoutSession.id,
-    })
+    return NextResponse.json(
+      {
+        url: checkoutSession.url,
+        sessionId: checkoutSession.id,
+      },
+      { headers: { 'Cache-Control': 'no-store' } }
+    )
   } catch (error: unknown) {
     const logger = createLogger('stripe-create-checkout')
     const errorMessage = error instanceof Error ? error.message : String(error)
@@ -1086,4 +1614,33 @@ export async function POST(request: NextRequest) {
       { status: statusCode }
     )
   }
+}
+
+export async function POST(request: NextRequest) {
+  // This endpoint uses browser cookies and creates a durable financial
+  // reservation. Reject ambient cross-site POSTs before rate limiting, auth,
+  // database reads, or Stripe calls; an unreadable response would still let a
+  // CSRF request occupy the reservation for 45 minutes.
+  const appOrigin = configuredApplicationOrigin()
+  if (!appOrigin) {
+    return NextResponse.json(
+      { error: 'Payment system not configured. Please contact support.' },
+      { status: 503, headers: { 'Cache-Control': PRIVATE_NO_STORE } }
+    )
+  }
+  if (
+    request.headers.get('origin') !== appOrigin ||
+    request.headers.get('sec-fetch-site') !== 'same-origin'
+  ) {
+    return NextResponse.json(
+      { error: 'Invalid request origin', code: 'INVALID_REQUEST_ORIGIN' },
+      { status: 403, headers: { 'Cache-Control': PRIVATE_NO_STORE } }
+    )
+  }
+
+  const response = await handlePost(request, appOrigin)
+  // POST is usually not cached, but Checkout URLs and subscription state are
+  // too sensitive to leave to proxy/browser heuristics.
+  response.headers.set('Cache-Control', PRIVATE_NO_STORE)
+  return response
 }

@@ -37,6 +37,7 @@ export type Database = {
           created_at: string
           expires_at: string
           id: string
+          livemode: boolean | null
           token_hash: string
           used_at: string | null
           user_id: string
@@ -45,6 +46,7 @@ export type Database = {
           created_at?: string
           expires_at: string
           id?: string
+          livemode?: boolean | null
           token_hash: string
           used_at?: string | null
           user_id: string
@@ -53,8 +55,84 @@ export type Database = {
           created_at?: string
           expires_at?: string
           id?: string
+          livemode?: boolean | null
           token_hash?: string
           used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      account_recovery_admissions: {
+        Row: {
+          abort_reason: string | null
+          aborted_at: string | null
+          auth_finalization_attempt_expires_at: string | null
+          auth_finalization_attempt_id: string | null
+          auth_finalization_capability_hash: string | null
+          auth_finalization_prepared_at: string | null
+          auth_finalization_state: string | null
+          auth_finalized_at: string | null
+          claimed_at: string
+          finished_at: string | null
+          lease_expires_at: string
+          operation_id: string
+          recovery_billing_completed_at: string | null
+          recovery_billing_may_have_changed: boolean | null
+          recovery_billing_resumed: boolean | null
+          recovery_billing_target_digest: string | null
+          recovery_billing_target_snapshot: Json | null
+          recovery_billing_v2_result: Json | null
+          recovery_token_hash: string | null
+          state: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          abort_reason?: string | null
+          aborted_at?: string | null
+          auth_finalization_attempt_expires_at?: string | null
+          auth_finalization_attempt_id?: string | null
+          auth_finalization_capability_hash?: string | null
+          auth_finalization_prepared_at?: string | null
+          auth_finalization_state?: string | null
+          auth_finalized_at?: string | null
+          claimed_at: string
+          finished_at?: string | null
+          lease_expires_at: string
+          operation_id: string
+          recovery_billing_completed_at?: string | null
+          recovery_billing_may_have_changed?: boolean | null
+          recovery_billing_resumed?: boolean | null
+          recovery_billing_target_digest?: string | null
+          recovery_billing_target_snapshot?: Json | null
+          recovery_billing_v2_result?: Json | null
+          recovery_token_hash?: string | null
+          state: string
+          updated_at: string
+          user_id: string
+        }
+        Update: {
+          abort_reason?: string | null
+          aborted_at?: string | null
+          auth_finalization_attempt_expires_at?: string | null
+          auth_finalization_attempt_id?: string | null
+          auth_finalization_capability_hash?: string | null
+          auth_finalization_prepared_at?: string | null
+          auth_finalization_state?: string | null
+          auth_finalized_at?: string | null
+          claimed_at?: string
+          finished_at?: string | null
+          lease_expires_at?: string
+          operation_id?: string
+          recovery_billing_completed_at?: string | null
+          recovery_billing_may_have_changed?: boolean | null
+          recovery_billing_resumed?: boolean | null
+          recovery_billing_target_digest?: string | null
+          recovery_billing_target_snapshot?: Json | null
+          recovery_billing_v2_result?: Json | null
+          recovery_token_hash?: string | null
+          state?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -395,6 +473,164 @@ export type Database = {
           request_count_today?: number
           revoked_at?: string | null
           tier?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      api_tier_checkout_reservations: {
+        Row: {
+          api_plan: string
+          bound_at: string | null
+          checkout_expires_at: number
+          checkout_session_id: string | null
+          created_at: string
+          id: string
+          lease_expires_at: string
+          livemode: boolean
+          release_event_created: number | null
+          release_event_id: string | null
+          release_reason: string | null
+          released_at: string | null
+          status: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_plan: string
+          bound_at?: string | null
+          checkout_expires_at: number
+          checkout_session_id?: string | null
+          created_at?: string
+          id?: string
+          lease_expires_at: string
+          livemode: boolean
+          release_event_created?: number | null
+          release_event_id?: string | null
+          release_reason?: string | null
+          released_at?: string | null
+          status: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_plan?: string
+          bound_at?: string | null
+          checkout_expires_at?: number
+          checkout_session_id?: string | null
+          created_at?: string
+          id?: string
+          lease_expires_at?: string
+          livemode?: boolean
+          release_event_created?: number | null
+          release_event_id?: string | null
+          release_reason?: string | null
+          released_at?: string | null
+          status?: string
+          stripe_customer_id?: string
+          stripe_price_id?: string
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      api_tier_stripe_event_ledger: {
+        Row: {
+          api_tier: string
+          checkout_reservation_id: string | null
+          daily_limit: number
+          identity_source: string
+          is_active: boolean
+          is_terminal: boolean
+          livemode: boolean
+          metadata_supabase_user_id: string
+          metadata_user_id: string
+          recorded_at: string
+          stripe_customer_id: string
+          stripe_event_created: number
+          stripe_event_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string
+          subscription_created: number
+          user_id: string
+        }
+        Insert: {
+          api_tier: string
+          checkout_reservation_id?: string | null
+          daily_limit: number
+          identity_source: string
+          is_active: boolean
+          is_terminal: boolean
+          livemode: boolean
+          metadata_supabase_user_id: string
+          metadata_user_id: string
+          recorded_at?: string
+          stripe_customer_id: string
+          stripe_event_created: number
+          stripe_event_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string
+          subscription_created: number
+          user_id: string
+        }
+        Update: {
+          api_tier?: string
+          checkout_reservation_id?: string | null
+          daily_limit?: number
+          identity_source?: string
+          is_active?: boolean
+          is_terminal?: boolean
+          livemode?: boolean
+          metadata_supabase_user_id?: string
+          metadata_user_id?: string
+          recorded_at?: string
+          stripe_customer_id?: string
+          stripe_event_created?: number
+          stripe_event_id?: string
+          stripe_price_id?: string
+          stripe_subscription_id?: string
+          subscription_created?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'api_tier_stripe_event_ledger_reservation_fkey'
+            columns: ['checkout_reservation_id']
+            isOneToOne: false
+            referencedRelation: 'api_tier_checkout_reservations'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      api_tier_subscription_blocks: {
+        Row: {
+          block_kind: string
+          blocked_at: string
+          livemode: boolean
+          stripe_customer_id: string | null
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Insert: {
+          block_kind: string
+          blocked_at?: string
+          livemode: boolean
+          stripe_customer_id?: string | null
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Update: {
+          block_kind?: string
+          blocked_at?: string
+          livemode?: boolean
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string
           user_id?: string
         }
         Relationships: []
@@ -2151,6 +2387,7 @@ export type Database = {
           currency: string
           group_id: string
           id: string
+          livemode: boolean | null
           outcome: string
           payment_intent_id: string
           payment_member_joined_at: string | null
@@ -2169,6 +2406,7 @@ export type Database = {
           currency: string
           group_id: string
           id?: string
+          livemode?: boolean | null
           outcome: string
           payment_intent_id: string
           payment_member_joined_at?: string | null
@@ -2187,6 +2425,7 @@ export type Database = {
           currency?: string
           group_id?: string
           id?: string
+          livemode?: boolean | null
           outcome?: string
           payment_intent_id?: string
           payment_member_joined_at?: string | null
@@ -3829,9 +4068,17 @@ export type Database = {
           created_at: string
           currency: string | null
           id: number
+          livemode: boolean | null
           status: string
+          stripe_charge_id: string | null
+          stripe_customer_id: string | null
+          stripe_event_created_at: string | null
+          stripe_event_id: string | null
           stripe_invoice_id: string | null
+          stripe_invoice_payment_id: string | null
           stripe_payment_intent_id: string | null
+          stripe_price_id: string | null
+          stripe_subscription_id: string | null
           user_id: string | null
         }
         Insert: {
@@ -3839,9 +4086,17 @@ export type Database = {
           created_at?: string
           currency?: string | null
           id?: never
+          livemode?: boolean | null
           status: string
+          stripe_charge_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_event_created_at?: string | null
+          stripe_event_id?: string | null
           stripe_invoice_id?: string | null
+          stripe_invoice_payment_id?: string | null
           stripe_payment_intent_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
           user_id?: string | null
         }
         Update: {
@@ -3849,9 +4104,17 @@ export type Database = {
           created_at?: string
           currency?: string | null
           id?: never
+          livemode?: boolean | null
           status?: string
+          stripe_charge_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_event_created_at?: string | null
+          stripe_event_id?: string | null
           stripe_invoice_id?: string | null
+          stripe_invoice_payment_id?: string | null
           stripe_payment_intent_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
           user_id?: string | null
         }
         Relationships: []
@@ -4595,6 +4858,90 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      pro_membership_checkout_reservations: {
+        Row: {
+          cancel_url: string
+          checkout_expires_at: number
+          checkout_session_id: string | null
+          completion_payment_status: string | null
+          converted_at: string | null
+          created_at: string
+          currency: string
+          id: string
+          livemode: boolean
+          pro_plan: string
+          released_at: string | null
+          status: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string | null
+          subscription_status: string | null
+          success_url: string
+          terminal_event_created: number | null
+          terminal_event_id: string | null
+          trial_days: number
+          trial_end: number | null
+          trial_start: number | null
+          unit_amount: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancel_url: string
+          checkout_expires_at: number
+          checkout_session_id?: string | null
+          completion_payment_status?: string | null
+          converted_at?: string | null
+          created_at: string
+          currency: string
+          id?: string
+          livemode: boolean
+          pro_plan: string
+          released_at?: string | null
+          status: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
+          success_url: string
+          terminal_event_created?: number | null
+          terminal_event_id?: string | null
+          trial_days: number
+          trial_end?: number | null
+          trial_start?: number | null
+          unit_amount: number
+          updated_at: string
+          user_id: string
+        }
+        Update: {
+          cancel_url?: string
+          checkout_expires_at?: number
+          checkout_session_id?: string | null
+          completion_payment_status?: string | null
+          converted_at?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          livemode?: boolean
+          pro_plan?: string
+          released_at?: string | null
+          status?: string
+          stripe_customer_id?: string
+          stripe_price_id?: string
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
+          success_url?: string
+          terminal_event_created?: number | null
+          terminal_event_id?: string | null
+          trial_days?: number
+          trial_end?: number | null
+          trial_start?: number | null
+          unit_amount?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       pro_official_group_members: {
         Row: {
@@ -5687,6 +6034,498 @@ export type Database = {
           },
         ]
       }
+      stripe_api_tier_invoice_locators: {
+        Row: {
+          api_plan: string
+          checkout_reservation_id: string
+          checkout_session_id: string
+          first_event_id: string
+          first_invoice_id: string
+          id: string
+          livemode: boolean
+          located_at: string
+          metadata_supabase_user_id: string
+          metadata_user_id: string
+          session_created_at: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Insert: {
+          api_plan: string
+          checkout_reservation_id: string
+          checkout_session_id: string
+          first_event_id: string
+          first_invoice_id: string
+          id?: string
+          livemode: boolean
+          located_at?: string
+          metadata_supabase_user_id: string
+          metadata_user_id: string
+          session_created_at: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Update: {
+          api_plan?: string
+          checkout_reservation_id?: string
+          checkout_session_id?: string
+          first_event_id?: string
+          first_invoice_id?: string
+          id?: string
+          livemode?: boolean
+          located_at?: string
+          metadata_supabase_user_id?: string
+          metadata_user_id?: string
+          session_created_at?: string
+          stripe_customer_id?: string
+          stripe_price_id?: string
+          stripe_subscription_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      stripe_api_tier_invoice_payments: {
+        Row: {
+          amount_paid: number
+          api_plan: string
+          authority_outcome: string
+          checkout_reservation_id: string
+          checkout_session_id: string
+          currency: string
+          id: string
+          invoice_created_at: string
+          livemode: boolean
+          metadata_supabase_user_id: string
+          metadata_user_id: string
+          observed_at: string
+          paid_at: string
+          payment_status: string
+          period_end: string
+          period_start: string
+          session_created_at: string
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_invoice_id: string
+          stripe_invoice_payment_id: string
+          stripe_payment_intent_id: string | null
+          stripe_price_id: string
+          stripe_subscription_id: string
+          subscription_created: number
+          subscription_status: string
+          user_id: string
+        }
+        Insert: {
+          amount_paid: number
+          api_plan: string
+          authority_outcome: string
+          checkout_reservation_id: string
+          checkout_session_id: string
+          currency: string
+          id?: string
+          invoice_created_at: string
+          livemode: boolean
+          metadata_supabase_user_id: string
+          metadata_user_id: string
+          observed_at?: string
+          paid_at: string
+          payment_status: string
+          period_end: string
+          period_start: string
+          session_created_at: string
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_invoice_id: string
+          stripe_invoice_payment_id: string
+          stripe_payment_intent_id?: string | null
+          stripe_price_id: string
+          stripe_subscription_id: string
+          subscription_created: number
+          subscription_status: string
+          user_id: string
+        }
+        Update: {
+          amount_paid?: number
+          api_plan?: string
+          authority_outcome?: string
+          checkout_reservation_id?: string
+          checkout_session_id?: string
+          currency?: string
+          id?: string
+          invoice_created_at?: string
+          livemode?: boolean
+          metadata_supabase_user_id?: string
+          metadata_user_id?: string
+          observed_at?: string
+          paid_at?: string
+          payment_status?: string
+          period_end?: string
+          period_start?: string
+          session_created_at?: string
+          stripe_charge_id?: string
+          stripe_customer_id?: string
+          stripe_invoice_id?: string
+          stripe_invoice_payment_id?: string
+          stripe_payment_intent_id?: string | null
+          stripe_price_id?: string
+          stripe_subscription_id?: string
+          subscription_created?: number
+          subscription_status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      stripe_api_tier_invoice_events: {
+        Row: {
+          event_created_at: string
+          event_id: string
+          event_type: string
+          livemode: boolean
+          payment_id: string
+          recorded_at: string
+        }
+        Insert: {
+          event_created_at: string
+          event_id: string
+          event_type: string
+          livemode: boolean
+          payment_id: string
+          recorded_at?: string
+        }
+        Update: {
+          event_created_at?: string
+          event_id?: string
+          event_type?: string
+          livemode?: boolean
+          payment_id?: string
+          recorded_at?: string
+        }
+        Relationships: []
+      }
+      stripe_api_tier_pending_subscription_events: {
+        Row: {
+          api_tier: string
+          checkout_reservation_id: string
+          daily_limit: number
+          livemode: boolean
+          metadata_supabase_user_id: string
+          metadata_user_id: string
+          outcome: string
+          recorded_at: string
+          recovery_operation_id: string | null
+          stripe_customer_id: string
+          stripe_event_created: number
+          stripe_event_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string
+          subscription_created: number
+          user_id: string
+        }
+        Insert: {
+          api_tier: string
+          checkout_reservation_id: string
+          daily_limit: number
+          livemode: boolean
+          metadata_supabase_user_id: string
+          metadata_user_id: string
+          outcome: string
+          recorded_at?: string
+          recovery_operation_id?: string | null
+          stripe_customer_id: string
+          stripe_event_created: number
+          stripe_event_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string
+          subscription_created: number
+          user_id: string
+        }
+        Update: {
+          api_tier?: string
+          checkout_reservation_id?: string
+          daily_limit?: number
+          livemode?: boolean
+          metadata_supabase_user_id?: string
+          metadata_user_id?: string
+          outcome?: string
+          recorded_at?: string
+          recovery_operation_id?: string | null
+          stripe_customer_id?: string
+          stripe_event_created?: number
+          stripe_event_id?: string
+          stripe_price_id?: string
+          stripe_subscription_id?: string
+          subscription_created?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      stripe_api_tier_recovery_subscription_blocks: {
+        Row: {
+          blocked_at: string
+          livemode: boolean
+          recovery_claimed_at: string
+          recovery_operation_id: string
+          source_event_id: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Insert: {
+          blocked_at?: string
+          livemode: boolean
+          recovery_claimed_at: string
+          recovery_operation_id: string
+          source_event_id: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Update: {
+          blocked_at?: string
+          livemode?: boolean
+          recovery_claimed_at?: string
+          recovery_operation_id?: string
+          source_event_id?: string
+          stripe_customer_id?: string
+          stripe_subscription_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      stripe_api_tier_recovery_payment_blocks: {
+        Row: {
+          blocked_at: string
+          payment_id: string
+          recovery_claimed_at: string
+          recovery_operation_id: string
+          source_event_id: string
+          source_kind: string
+        }
+        Insert: {
+          blocked_at?: string
+          payment_id: string
+          recovery_claimed_at: string
+          recovery_operation_id: string
+          source_event_id: string
+          source_kind: string
+        }
+        Update: {
+          blocked_at?: string
+          payment_id?: string
+          recovery_claimed_at?: string
+          recovery_operation_id?: string
+          source_event_id?: string
+          source_kind?: string
+        }
+        Relationships: []
+      }
+      stripe_api_tier_recovery_cancellations: {
+        Row: {
+          authority_payment_id: string
+          created_at: string
+          id: string
+          livemode: boolean
+          recovery_claimed_at: string
+          recovery_operation_id: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Insert: {
+          authority_payment_id: string
+          created_at?: string
+          id?: string
+          livemode: boolean
+          recovery_claimed_at: string
+          recovery_operation_id: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Update: {
+          authority_payment_id?: string
+          created_at?: string
+          id?: string
+          livemode?: boolean
+          recovery_claimed_at?: string
+          recovery_operation_id?: string
+          stripe_customer_id?: string
+          stripe_subscription_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      stripe_api_tier_refund_revocations: {
+        Row: {
+          amount_paid: number
+          ownership_id: string
+          payment_id: string
+          projection_event_id: string
+          refund_event_created_at: string
+          refund_event_id: string
+          refund_succeeded_amount: number
+          revoked_at: string
+        }
+        Insert: {
+          amount_paid: number
+          ownership_id: string
+          payment_id: string
+          projection_event_id: string
+          refund_event_created_at: string
+          refund_event_id: string
+          refund_succeeded_amount: number
+          revoked_at?: string
+        }
+        Update: {
+          amount_paid?: number
+          ownership_id?: string
+          payment_id?: string
+          projection_event_id?: string
+          refund_event_created_at?: string
+          refund_event_id?: string
+          refund_succeeded_amount?: number
+          revoked_at?: string
+        }
+        Relationships: []
+      }
+      stripe_b2c_invoice_events: {
+        Row: {
+          amount: number
+          currency: string
+          event_created_at: string
+          event_id: string
+          event_type: string
+          livemode: boolean
+          next_payment_attempt: string | null
+          observed_at: string
+          outcome: string
+          payment_status: string
+          period_end: string
+          period_start: string
+          plan: string
+          stripe_charge_id: string | null
+          stripe_customer_id: string
+          stripe_invoice_id: string
+          stripe_invoice_payment_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_price_id: string
+          stripe_subscription_id: string
+          stripe_subscription_status: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          currency: string
+          event_created_at: string
+          event_id: string
+          event_type: string
+          livemode: boolean
+          next_payment_attempt?: string | null
+          observed_at?: string
+          outcome?: string
+          payment_status: string
+          period_end: string
+          period_start: string
+          plan: string
+          stripe_charge_id?: string | null
+          stripe_customer_id: string
+          stripe_invoice_id: string
+          stripe_invoice_payment_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_price_id: string
+          stripe_subscription_id: string
+          stripe_subscription_status: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          currency?: string
+          event_created_at?: string
+          event_id?: string
+          event_type?: string
+          livemode?: boolean
+          next_payment_attempt?: string | null
+          observed_at?: string
+          outcome?: string
+          payment_status?: string
+          period_end?: string
+          period_start?: string
+          plan?: string
+          stripe_charge_id?: string | null
+          stripe_customer_id?: string
+          stripe_invoice_id?: string
+          stripe_invoice_payment_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_price_id?: string
+          stripe_subscription_id?: string
+          stripe_subscription_status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      stripe_b2c_recurring_activations: {
+        Row: {
+          activation_committed_at: string | null
+          authority_kind: string
+          currency: string
+          expected_amount: number
+          livemode: boolean
+          observed_at: string
+          observed_subscription_status: string
+          outcome: string
+          period_end: string
+          period_start: string
+          plan: string
+          source_event_created_at: string
+          source_event_id: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Insert: {
+          activation_committed_at?: string | null
+          authority_kind: string
+          currency: string
+          expected_amount: number
+          livemode: boolean
+          observed_at?: string
+          observed_subscription_status: string
+          outcome?: string
+          period_end: string
+          period_start: string
+          plan: string
+          source_event_created_at: string
+          source_event_id: string
+          stripe_customer_id: string
+          stripe_price_id: string
+          stripe_subscription_id: string
+          user_id: string
+        }
+        Update: {
+          activation_committed_at?: string | null
+          authority_kind?: string
+          currency?: string
+          expected_amount?: number
+          livemode?: boolean
+          observed_at?: string
+          observed_subscription_status?: string
+          outcome?: string
+          period_end?: string
+          period_start?: string
+          plan?: string
+          source_event_created_at?: string
+          source_event_id?: string
+          stripe_customer_id?: string
+          stripe_price_id?: string
+          stripe_subscription_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       stripe_charge_refund_tombstone_events: {
         Row: {
           event_created_at: string
@@ -5809,6 +6648,7 @@ export type Database = {
           available_at: string
           completed_at: string | null
           created_at: string
+          dispatch_committed_at: string | null
           effect_type: string
           entitlement_payment_id: string | null
           external_ref: string | null
@@ -5829,6 +6669,7 @@ export type Database = {
           available_at?: string
           completed_at?: string | null
           created_at?: string
+          dispatch_committed_at?: string | null
           effect_type: string
           entitlement_payment_id?: string | null
           external_ref?: string | null
@@ -5849,6 +6690,7 @@ export type Database = {
           available_at?: string
           completed_at?: string | null
           created_at?: string
+          dispatch_committed_at?: string | null
           effect_type?: string
           entitlement_payment_id?: string | null
           external_ref?: string | null
@@ -5971,29 +6813,7 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: 'stripe_entitlement_payments_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: false
-            referencedRelation: 'public_user_profiles'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'stripe_entitlement_payments_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: false
-            referencedRelation: 'user_follow_counts'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'stripe_entitlement_payments_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: false
-            referencedRelation: 'user_profiles'
-            referencedColumns: ['id']
-          },
-        ]
+        Relationships: []
       }
       stripe_entitlement_refund_events: {
         Row: {
@@ -6138,6 +6958,117 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_lifetime_superseded_authorities: {
+        Row: {
+          activation_committed_at: string | null
+          activation_event_created_at: string | null
+          activation_event_id: string | null
+          authority_kind: string
+          cancel_at_period_end: boolean
+          cancel_dispatch_committed_at: string | null
+          cancellation_effect_id: string
+          created_at: string
+          currency: string | null
+          expected_amount: number | null
+          legacy_grant_id: string | null
+          lifetime_livemode: boolean
+          lifetime_payment_id: string
+          livemode: boolean | null
+          owner_user_id: string
+          period_end: string
+          period_start: string
+          plan: string
+          recurring_payment_id: string | null
+          refund_event_id: string | null
+          restore_effect_id: string | null
+          restored_at: string | null
+          retry_grace_grant_ids: string[]
+          snapshot_digest: string
+          state: string
+          stripe_customer_id: string
+          stripe_price_id: string | null
+          stripe_subscription_id: string
+          subscription_row_id: string
+          subscription_snapshot: Json
+          subscription_status: string
+          trial_id: string | null
+          trial_verified_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          activation_committed_at?: string | null
+          activation_event_created_at?: string | null
+          activation_event_id?: string | null
+          authority_kind: string
+          cancel_at_period_end: boolean
+          cancel_dispatch_committed_at?: string | null
+          cancellation_effect_id: string
+          created_at?: string
+          currency?: string | null
+          expected_amount?: number | null
+          legacy_grant_id?: string | null
+          lifetime_livemode: boolean
+          lifetime_payment_id: string
+          livemode?: boolean | null
+          owner_user_id: string
+          period_end: string
+          period_start: string
+          plan: string
+          recurring_payment_id?: string | null
+          refund_event_id?: string | null
+          restore_effect_id?: string | null
+          restored_at?: string | null
+          retry_grace_grant_ids?: string[]
+          snapshot_digest: string
+          state?: string
+          stripe_customer_id: string
+          stripe_price_id?: string | null
+          stripe_subscription_id: string
+          subscription_row_id: string
+          subscription_snapshot: Json
+          subscription_status: string
+          trial_id?: string | null
+          trial_verified_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activation_committed_at?: string | null
+          activation_event_created_at?: string | null
+          activation_event_id?: string | null
+          authority_kind?: string
+          cancel_at_period_end?: boolean
+          cancel_dispatch_committed_at?: string | null
+          cancellation_effect_id?: string
+          created_at?: string
+          currency?: string | null
+          expected_amount?: number | null
+          legacy_grant_id?: string | null
+          lifetime_livemode?: boolean
+          lifetime_payment_id?: string
+          livemode?: boolean | null
+          owner_user_id?: string
+          period_end?: string
+          period_start?: string
+          plan?: string
+          recurring_payment_id?: string | null
+          refund_event_id?: string | null
+          restore_effect_id?: string | null
+          restored_at?: string | null
+          retry_grace_grant_ids?: string[]
+          snapshot_digest?: string
+          state?: string
+          stripe_customer_id?: string
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string
+          subscription_row_id?: string
+          subscription_snapshot?: Json
+          subscription_status?: string
+          trial_id?: string | null
+          trial_verified_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       stripe_lifetime_seat_reservations: {
         Row: {
           checkout_expires_at: string
@@ -6146,6 +7077,7 @@ export type Database = {
           created_at: string
           expires_at: string
           id: string
+          livemode: boolean | null
           release_event_created_at: string | null
           release_event_id: string | null
           release_reason: string | null
@@ -6162,6 +7094,7 @@ export type Database = {
           created_at?: string
           expires_at: string
           id?: string
+          livemode?: boolean | null
           release_event_created_at?: string | null
           release_event_id?: string | null
           release_reason?: string | null
@@ -6178,6 +7111,7 @@ export type Database = {
           created_at?: string
           expires_at?: string
           id?: string
+          livemode?: boolean | null
           release_event_created_at?: string | null
           release_event_id?: string | null
           release_reason?: string | null
@@ -6311,8 +7245,11 @@ export type Database = {
           cancel_at_period_end: boolean
           canceled_at: string | null
           current_invoice_id: string | null
+          currency: string | null
           event_created_at: string
           event_id: string
+          expected_amount: number | null
+          livemode: boolean | null
           observed_at: string
           outcome: string
           period_end: string
@@ -6320,6 +7257,8 @@ export type Database = {
           plan: string
           requested_grace_expires_at: string | null
           stripe_customer_id: string
+          stripe_event_id: string | null
+          stripe_price_id: string | null
           stripe_status: string
           stripe_subscription_id: string
           user_id: string | null
@@ -6328,8 +7267,11 @@ export type Database = {
           cancel_at_period_end: boolean
           canceled_at?: string | null
           current_invoice_id?: string | null
+          currency?: string | null
           event_created_at: string
           event_id: string
+          expected_amount?: number | null
+          livemode?: boolean | null
           observed_at?: string
           outcome?: string
           period_end: string
@@ -6337,6 +7279,8 @@ export type Database = {
           plan: string
           requested_grace_expires_at?: string | null
           stripe_customer_id: string
+          stripe_event_id?: string | null
+          stripe_price_id?: string | null
           stripe_status: string
           stripe_subscription_id: string
           user_id?: string | null
@@ -6345,8 +7289,11 @@ export type Database = {
           cancel_at_period_end?: boolean
           canceled_at?: string | null
           current_invoice_id?: string | null
+          currency?: string | null
           event_created_at?: string
           event_id?: string
+          expected_amount?: number | null
+          livemode?: boolean | null
           observed_at?: string
           outcome?: string
           period_end?: string
@@ -6354,6 +7301,8 @@ export type Database = {
           plan?: string
           requested_grace_expires_at?: string | null
           stripe_customer_id?: string
+          stripe_event_id?: string | null
+          stripe_price_id?: string | null
           stripe_status?: string
           stripe_subscription_id?: string
           user_id?: string | null
@@ -6668,6 +7617,7 @@ export type Database = {
           currency: string | null
           from_user_id: string
           id: string
+          livemode: boolean | null
           message: string | null
           post_id: string | null
           status: string
@@ -6692,6 +7642,7 @@ export type Database = {
           currency?: string | null
           from_user_id: string
           id?: string
+          livemode?: boolean | null
           message?: string | null
           post_id?: string | null
           status?: string
@@ -6716,6 +7667,7 @@ export type Database = {
           currency?: string | null
           from_user_id?: string
           id?: string
+          livemode?: boolean | null
           message?: string | null
           post_id?: string | null
           status?: string
@@ -9460,6 +10412,69 @@ export type Database = {
         Args: { p_actor_id: string; p_author_ids: string[] }
         Returns: undefined
       }
+      activate_and_reconcile_b2c_recurring_trial_event_atomic: {
+        Args: {
+          p_cancel_at_period_end: boolean
+          p_canceled_at: string | null
+          p_currency: string
+          p_current_invoice_id: string | null
+          p_event_created_at: string
+          p_event_id: string
+          p_expected_amount: number
+          p_grace_expires_at: string | null
+          p_livemode: boolean
+          p_period_end: string
+          p_period_start: string
+          p_plan: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_stripe_status: string
+          p_stripe_subscription_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      activate_b2c_recurring_payment_atomic: {
+        Args: {
+          p_amount_paid: number
+          p_currency: string
+          p_financial_only: boolean
+          p_livemode: boolean
+          p_payment_status: string
+          p_period_end: string
+          p_period_start: string
+          p_plan: string
+          p_source_event_created_at: string
+          p_source_event_id: string
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_invoice_id: string
+          p_stripe_payment_intent_id: string | null
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_stripe_subscription_status: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      activate_b2c_recurring_trial_atomic: {
+        Args: {
+          p_currency: string
+          p_expected_amount: number
+          p_livemode: boolean
+          p_period_end: string
+          p_period_start: string
+          p_plan: string
+          p_source_event_created_at: string
+          p_source_event_id: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_stripe_subscription_status: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       activate_group_subscription_atomic: {
         Args: {
           p_actor_id: string
@@ -9473,13 +10488,421 @@ export type Database = {
         }
         Returns: Json
       }
+      apply_b2c_recurring_invoice_event_atomic: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_event_created_at: string
+          p_event_id: string
+          p_event_type: string
+          p_financial_only: boolean
+          p_livemode: boolean
+          p_next_payment_attempt: string | null
+          p_payment_status: string
+          p_period_end: string
+          p_period_start: string
+          p_plan: string
+          p_stripe_charge_id: string | null
+          p_stripe_customer_id: string
+          p_stripe_invoice_id: string
+          p_stripe_invoice_payment_id: string | null
+          p_stripe_payment_intent_id: string | null
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_stripe_subscription_status: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      apply_api_tier_paid_invoice_event_atomic: {
+        Args: {
+          p_amount_paid: number
+          p_api_plan: string
+          p_checkout_reservation_id: string
+          p_checkout_session_id: string
+          p_currency: string
+          p_event_created_at: string
+          p_event_id: string
+          p_event_type: string
+          p_invoice_created_at: string
+          p_livemode: boolean
+          p_metadata_supabase_user_id: string
+          p_metadata_user_id: string
+          p_paid_at: string
+          p_period_end: string
+          p_period_start: string
+          p_session_created_at: string
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_invoice_id: string
+          p_stripe_invoice_payment_id: string
+          p_stripe_payment_intent_id: string | null
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_subscription_created: number
+          p_subscription_status: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      apply_user_api_tier_stripe_event: {
+        Args: {
+          p_api_tier: string
+          p_checkout_api_plan: string | null
+          p_checkout_price_id: string | null
+          p_checkout_reservation_id: string | null
+          p_checkout_session_id: string | null
+          p_daily_limit: number
+          p_event_created: number
+          p_identity_source: string
+          p_is_active: boolean
+          p_is_terminal: boolean
+          p_livemode: boolean
+          p_metadata_supabase_user_id: string
+          p_metadata_user_id: string
+          p_stripe_customer_id: string
+          p_stripe_event_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_subscription_created: number
+          p_user_id: string
+        }
+        Returns: string
+      }
+      apply_user_api_tier_persisted_non_grant_event: {
+        Args: {
+          p_event_created: number
+          p_is_terminal: boolean
+          p_livemode: boolean
+          p_stripe_customer_id: string
+          p_stripe_event_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_subscription_created: number
+        }
+        Returns: string
+      }
+      bind_api_tier_checkout_session_atomic: {
+        Args: {
+          p_api_plan: string
+          p_checkout_expires_at: number
+          p_checkout_session_id: string
+          p_livemode: boolean
+          p_reservation_id: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      bind_pro_membership_checkout_session_atomic: {
+        Args: {
+          p_checkout_expires_at: number
+          p_checkout_session_id: string
+          p_livemode: boolean
+          p_currency: string
+          p_pro_plan: string
+          p_reservation_id: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_trial_days: number
+          p_unit_amount: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      check_b2c_activation_reservation_atomic: {
+        Args: {
+          p_currency: string
+          p_expected_amount: number
+          p_livemode: boolean
+          p_plan: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      classify_recurring_invoice_product_authority_atomic: {
+        Args: {
+          p_event_id: string
+          p_invoice_id: string
+          p_livemode: boolean
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+        }
+        Returns: Json
+      }
+      classify_recurring_subscription_product_authority_atomic: {
+        Args: {
+          p_event_id: string
+          p_livemode: boolean
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+        }
+        Returns: Json
+      }
+      convert_pro_membership_checkout_reservation_atomic: {
+        Args: {
+          p_checkout_session_id: string
+          p_currency: string
+          p_livemode: boolean
+          p_payment_status: string
+          p_pro_plan: string
+          p_reservation_id: string
+          p_stripe_customer_id: string
+          p_stripe_event_created: number
+          p_stripe_event_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_subscription_status: string
+          p_trial_days: number
+          p_trial_end: number | null
+          p_trial_start: number | null
+          p_unit_amount: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      claim_pro_membership_checkout_recovery_candidates: {
+        Args: { p_limit?: number; p_livemode: boolean }
+        Returns: Json
+      }
+      claim_lifetime_recovery_refund_dispatch_atomic: {
+        Args: {
+          p_effect_id: string
+          p_lease_token: string
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
+      claim_api_tier_recovery_payment_refund_dispatch_atomic: {
+        Args: {
+          p_effect_id: string
+          p_lease_token: string
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
+      claim_api_tier_subscription_cancel_dispatch_atomic: {
+        Args: {
+          p_effect_id: string
+          p_lease_token: string
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
+      claim_recovery_payment_refund_dispatch_atomic: {
+        Args: {
+          p_effect_id: string
+          p_lease_token: string
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
+      claim_stripe_subscription_cancel_dispatch_atomic: {
+        Args: {
+          p_effect_id: string
+          p_lease_token: string
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
+      read_lifetime_restore_authority_atomic: {
+        Args: {
+          p_effect_id: string
+          p_lease_token: string
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
+      restore_lifetime_superseded_authority_atomic: {
+        Args: {
+          p_cancel_at_period_end: boolean
+          p_effect_id: string
+          p_lease_token: string
+          p_livemode: boolean
+          p_period_end: string
+          p_period_start: string
+          p_stripe_customer_id: string
+          p_stripe_subscription_id: string
+          p_subscription_status: string
+        }
+        Returns: Json
+      }
+      create_user_api_key_with_current_entitlement: {
+        Args: {
+          p_key: string
+          p_name: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      drain_pending_b2c_subscription_events_atomic: {
+        Args: {
+          p_currency: string
+          p_expected_amount: number
+          p_livemode: boolean
+          p_plan: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      locate_account_recovery_payment_lifecycle_v2: {
+        Args: {
+          p_checkout_created_at: string
+          p_paid_at: string
+          p_user_id: string
+        }
+        Returns: {
+          lifecycle_kind: string
+          operation_id: string
+          recovery_billing_completed_at: string | null
+          recovery_claimed_at: string
+        }[]
+      }
+      locate_api_tier_invoice_authority_atomic: {
+        Args: {
+          p_api_plan: string
+          p_checkout_reservation_id: string
+          p_checkout_session_id: string
+          p_event_created_at: string
+          p_event_id: string
+          p_invoice_created_at: string
+          p_invoice_id: string
+          p_livemode: boolean
+          p_metadata_supabase_user_id: string
+          p_metadata_user_id: string
+          p_paid_at: string
+          p_session_created_at: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_subscription_created: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      observe_b2c_recurring_activation_atomic: {
+        Args: {
+          p_authority_kind: string
+          p_currency: string
+          p_expected_amount: number
+          p_livemode: boolean
+          p_period_end: string
+          p_period_start: string
+          p_plan: string
+          p_source_event_created_at: string
+          p_source_event_id: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+          p_stripe_subscription_status: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      release_api_tier_checkout_reservation_atomic: {
+        Args: {
+          p_checkout_session_id: string
+          p_livemode: boolean
+          p_reservation_id: string
+          p_stripe_customer_id: string
+          p_stripe_event_created: number
+          p_stripe_event_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      resolve_b2c_recurring_price_authority: {
+        Args: {
+          p_livemode: boolean
+          p_stripe_price_id: string
+          p_stripe_subscription_id: string
+        }
+        Returns: Json
+      }
+      resolve_api_tier_refund_tombstone_atomic: {
+        Args: { p_ownership_id: string }
+        Returns: Json
+      }
+      release_pro_membership_checkout_reservation_atomic: {
+        Args: {
+          p_checkout_expires_at: number
+          p_checkout_session_id: string
+          p_currency: string
+          p_livemode: boolean
+          p_pro_plan: string
+          p_reservation_id: string
+          p_stripe_customer_id: string
+          p_stripe_event_created: number
+          p_stripe_event_id: string
+          p_stripe_price_id: string
+          p_trial_days: number
+          p_unit_amount: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      release_pro_membership_checkout_observation_atomic: {
+        Args: {
+          p_checkout_expires_at: number
+          p_checkout_session_id: string | null
+          p_currency: string
+          p_livemode: boolean
+          p_observation_kind: string
+          p_observed_at: number
+          p_pro_plan: string
+          p_reservation_id: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_trial_days: number
+          p_unit_amount: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      reserve_api_tier_checkout_atomic: {
+        Args: {
+          p_api_plan: string
+          p_livemode: boolean
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      reserve_pro_membership_checkout_atomic: {
+        Args: {
+          p_cancel_url: string
+          p_currency: string
+          p_livemode: boolean
+          p_pro_plan: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_success_url: string
+          p_trial_days: number
+          p_unit_amount: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
       activate_group_subscription_with_stripe_ownership_atomic: {
         Args: {
           p_actor_id: string
           p_amount_cents: number
+          p_checkout_created_at: string
           p_checkout_session_id: string
           p_currency: string
           p_group_id: string
+          p_livemode: boolean
+          p_paid_at: string
           p_payment_intent_id: string
           p_stripe_charge_id: string
           p_stripe_customer_id: string
@@ -9496,6 +10919,7 @@ export type Database = {
           p_amount_paid: number
           p_checkout_session_id: string
           p_currency: string
+          p_livemode: boolean
           p_paid_at: string
           p_payment_status: string
           p_reservation_id: string | null
@@ -9728,6 +11152,7 @@ export type Database = {
       bind_lifetime_membership_reservation_session_atomic: {
         Args: {
           p_checkout_session_id: string
+          p_livemode: boolean
           p_request_nonce: string
           p_reservation_id: string
           p_session_expires_at: string
@@ -9992,6 +11417,7 @@ export type Database = {
               p_completed_at: string
               p_currency: string
               p_event_id: string
+              p_livemode: boolean
               p_metadata_amount_cents: number
               p_metadata_from_user_id: string
               p_metadata_post_id: string
@@ -10166,6 +11592,14 @@ export type Database = {
         Returns: Json
       }
       fill_null_pnl_from_siblings: { Args: never; Returns: number }
+      finalize_account_hard_deletion_takeover_atomic: {
+        Args: { p_user_id: string }
+        Returns: string
+      }
+      finalize_account_hard_deletion_worker_atomic: {
+        Args: { p_user_id: string; p_worker_attempt_id: string }
+        Returns: string
+      }
       finalize_report_evidence_upload: {
         Args: { p_evidence_ref: string; p_reporter_id: string }
         Returns: Json
@@ -10897,6 +12331,7 @@ export type Database = {
           available_at: string
           completed_at: string | null
           created_at: string
+          dispatch_committed_at: string | null
           effect_type: string
           entitlement_payment_id: string | null
           external_ref: string | null
@@ -11119,6 +12554,47 @@ export type Database = {
           score: number
         }[]
       }
+      reconcile_b2c_subscription_event_atomic: {
+        Args: {
+          p_cancel_at_period_end: boolean
+          p_canceled_at: string | null
+          p_currency: string
+          p_current_invoice_id: string | null
+          p_event_created_at: string
+          p_event_id: string
+          p_expected_amount: number
+          p_grace_expires_at: string | null
+          p_livemode: boolean
+          p_period_end: string
+          p_period_start: string
+          p_plan: string
+          p_stripe_customer_id: string
+          p_stripe_price_id: string
+          p_stripe_status: string
+          p_stripe_subscription_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      reconcile_b2c_subscription_state_core_atomic: {
+        Args: {
+          p_cancel_at_period_end: boolean
+          p_canceled_at: string | null
+          p_current_invoice_id: string | null
+          p_event_created_at: string
+          p_event_id: string
+          p_grace_expires_at: string | null
+          p_livemode: boolean
+          p_period_end: string
+          p_period_start: string
+          p_plan: string
+          p_stripe_customer_id: string
+          p_stripe_status: string
+          p_stripe_subscription_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       reconcile_due_pro_entitlement_projections_atomic: {
         Args: { p_after_user_id: string | null; p_limit: number }
         Returns: Json
@@ -11202,6 +12678,17 @@ export type Database = {
         Returns: boolean
       }
       record_rejected_writes: { Args: { p_rows: Json }; Returns: undefined }
+      record_b2c_recurring_manual_review_atomic: {
+        Args: {
+          p_context: Json
+          p_object_id: string
+          p_object_type: string
+          p_reason: string
+          p_reason_key: string
+          p_user_id: string | null
+        }
+        Returns: Json
+      }
       record_stripe_manual_review_atomic: {
         Args: {
           p_context: Json
@@ -11267,6 +12754,7 @@ export type Database = {
       rerank_leaderboard: { Args: { p_season_id: string }; Returns: number }
       reserve_lifetime_membership_spot_atomic: {
         Args: {
+          p_livemode: boolean
           p_request_nonce: string
           p_ttl_seconds: number
           p_user_id: string
@@ -11378,6 +12866,17 @@ export type Database = {
         }
         Returns: string
       }
+      schedule_account_deletion_with_billing_blocks: {
+        Args: {
+          p_reason: string
+          p_recovery_token_hash: string
+          p_scheduled_at: string
+          p_stripe_customer_id: string | null
+          p_stripe_subscription_ids: string[]
+          p_user_id: string
+        }
+        Returns: Json
+      }
       search_did_you_mean: {
         Args: { search_query: string; suggestion_limit?: number }
         Returns: {
@@ -11485,6 +12984,10 @@ export type Database = {
         }
       }
       snapshot_score_backtest: { Args: never; Returns: number }
+      api_tier_recovery_effect_is_current_v2: {
+        Args: { p_effect_id: string }
+        Returns: boolean
+      }
       stripe_entitlement_effect_is_current_v2: {
         Args: { p_effect_id: string }
         Returns: boolean

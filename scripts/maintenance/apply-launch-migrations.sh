@@ -129,6 +129,10 @@ PREDEPLOY_MIGRATIONS=(
   20260729014500_leaderboard_rank_generation_canonical_batches.sql
   20260729015000_leaderboard_rank_generation_attested_batch_writer.sql
   20260729015500_tier_a_execution_claim_fence.sql
+  20260729020000_api_tier_cancellation_identity.sql
+  20260729022000_account_deletion_one_time_settlement_barrier.sql
+  20260729022500_account_recovery_admission_state_machine.sql
+  20260729023000_preserve_financial_owner_after_account_deletion.sql
   20260729054400_leaderboard_rank_generation_private_staging.sql
   20260729060000_stale_leaderboard_attempt_report.sql
   20260729061533_leaderboard_rank_generation_staging_only_writer.sql
@@ -139,6 +143,11 @@ PREDEPLOY_MIGRATIONS=(
   20260729070500_leaderboard_score_input_manifest_v2.sql
   20260729071000_leaderboard_metric_trust_projection_v2.sql
   20260729071500_tier_a_one_phase_commit_guard.sql
+  20260729072000_account_recovery_auth_finalization.sql
+  20260729073000_pro_membership_checkout_reservation.sql
+  20260729074000_b2c_subscription_webhook_authority.sql
+  20260729075000_account_recovery_capability_reacquisition.sql
+  20260729080000_api_tier_recovery_payment_authority.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
@@ -161,6 +170,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
   20260729061000_tier_a_execution_claim_enforcement.sql
+  20260729021000_disable_legacy_api_tier_writer.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover

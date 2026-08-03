@@ -258,6 +258,7 @@ describe('completeTipCheckout', () => {
       p_metadata_amount_cents: AMOUNT,
       p_checkout_expires_at: new Date(CHECKOUT_EXPIRES_AT * 1000).toISOString(),
       p_event_id: EVENT_ID,
+      p_livemode: true,
     })
     expect(outcome).toEqual({
       status: 'completed',
@@ -276,6 +277,7 @@ describe('completeTipCheckout', () => {
         chargeId: CHARGE_ID,
         amount: AMOUNT,
         currency: 'usd',
+        livemode: true,
         completedAt: '2027-01-15T08:00:00.000Z',
         refundSucceededAmount: 0,
         fullyRefunded: false,
@@ -290,6 +292,7 @@ describe('completeTipCheckout', () => {
     'completed',
     'already_completed',
     'refunded',
+    'refund_pending',
     'identity_conflict',
     'manual_review',
     'notification_suppressed',
@@ -300,15 +303,22 @@ describe('completeTipCheckout', () => {
         ? { status, tip_id: TIP_ID }
         : status === 'refunded'
           ? { status, tip_id: TIP_ID }
-          : status === 'notification_suppressed'
+          : status === 'refund_pending'
             ? {
                 status,
-                completion_status: 'completed',
-                tip_status: 'completed',
-                notification_status: 'suppressed',
-                reason_key: 'tip_notification_recipient_deleted',
+                completion_status: 'notification_suppressed',
+                tip_id: TIP_ID,
+                idempotent_replay: false,
               }
-            : { status }
+            : status === 'notification_suppressed'
+              ? {
+                  status,
+                  completion_status: 'completed',
+                  tip_status: 'completed',
+                  notification_status: 'suppressed',
+                  reason_key: 'tip_notification_recipient_deleted',
+                }
+              : { status }
     if (status === 'refunded') {
       scenario.charge = charge({ amount_refunded: AMOUNT, refunded: true })
       maybeSingleTombstone.mockResolvedValue({
@@ -901,7 +911,7 @@ describe('completeTipCheckout', () => {
     )
   })
 
-  it.each(['completed', 'already_completed', 'refunded'])(
+  it.each(['completed', 'already_completed', 'refunded', 'refund_pending'])(
     'rejects %s without the exact canonical tip identity',
     async (status) => {
       const scenario = baseScenario()
@@ -922,6 +932,25 @@ describe('completeTipCheckout', () => {
       )
     }
   )
+
+  it('rejects a recovery refund acknowledgement without notification suppression proof', async () => {
+    rpc.mockResolvedValue({
+      data: {
+        status: 'refund_pending',
+        completion_status: 'completed',
+        tip_id: TIP_ID,
+        idempotent_replay: false,
+      },
+      error: null,
+    })
+    const { stripe } = stripeFor(baseScenario())
+
+    await expect(
+      completeTipCheckout({ stripe, supabase, sessionId: SESSION_ID, eventId: EVENT_ID })
+    ).rejects.toThrow(
+      'complete_tip_with_stripe_ownership_atomic returned an invalid recovery refund result'
+    )
+  })
 
   it('rejects a malformed deleted-authority notification suppression result', async () => {
     rpc.mockResolvedValue({

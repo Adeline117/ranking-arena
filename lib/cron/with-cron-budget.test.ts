@@ -30,8 +30,8 @@ jest.mock('@/lib/utils/logger', () => ({
 
 // Mock Redis client — lock acquisition controlled per test
 const mockRedisSet = jest.fn()
-const mockRedisDel = jest.fn()
-let mockRedisInstance: { set: jest.Mock; del: jest.Mock } | null = null
+const mockRedisEval = jest.fn()
+let mockRedisInstance: { set: jest.Mock; eval: jest.Mock } | null = null
 
 jest.mock('@/lib/cache/redis-client', () => ({
   getSharedRedis: jest.fn(async () => mockRedisInstance),
@@ -74,15 +74,16 @@ beforeEach(() => {
   mockPartial.mockClear()
   mockTimeout.mockClear()
   mockRedisSet.mockReset()
-  mockRedisDel.mockReset()
-  mockRedisInstance = { set: mockRedisSet, del: mockRedisDel }
+  mockRedisEval.mockReset()
+  mockRedisEval.mockResolvedValue(1)
+  mockRedisInstance = { set: mockRedisSet, eval: mockRedisEval }
 })
 
 describe('withCronBudget', () => {
   it('rejects requests without a matching CRON_SECRET', async () => {
     const res = await withCronBudget(
       { jobName: 'test', maxDurationSec: 60, request: makeRequest('Bearer wrong') },
-      async () => ({ recordsProcessed: 0 }),
+      async () => ({ recordsProcessed: 0 })
     )
     expect(res.status).toBe(401)
     expect(mockSuccess).not.toHaveBeenCalled()
@@ -93,7 +94,7 @@ describe('withCronBudget', () => {
     mockRedisSet.mockResolvedValue('OK')
     const res = await withCronBudget(
       { jobName: 'test', maxDurationSec: 60, skipAuth: true },
-      async () => ({ recordsProcessed: 5 }),
+      async () => ({ recordsProcessed: 5 })
     )
     expect(res.status).toBe(200)
     expect(mockSuccess).toHaveBeenCalledTimes(1)
@@ -110,7 +111,7 @@ describe('withCronBudget', () => {
         maxDurationSec: 60,
         skipAuth: true,
       },
-      fn,
+      fn
     )
     expect(res.status).toBe(200)
     // Callback never ran, plog lifecycle never started, lock never released
@@ -118,19 +119,23 @@ describe('withCronBudget', () => {
     expect(fn).not.toHaveBeenCalled()
     expect(mockSuccess).not.toHaveBeenCalled()
     expect(mockError).not.toHaveBeenCalled()
-    expect(mockRedisDel).not.toHaveBeenCalled()
+    expect(mockRedisEval).not.toHaveBeenCalled()
   })
 
   it('finalizes plog.success exactly once on happy path', async () => {
     mockRedisSet.mockResolvedValue('OK')
     await withCronBudget(
       { jobName: 'test', maxDurationSec: 60, skipAuth: true, lockKey: 'k' },
-      async () => ({ recordsProcessed: 42 }),
+      async () => ({ recordsProcessed: 42 })
     )
     expect(mockSuccess).toHaveBeenCalledTimes(1)
     expect(mockSuccess).toHaveBeenCalledWith(42, undefined)
     expect(mockError).not.toHaveBeenCalled()
-    expect(mockRedisDel).toHaveBeenCalledWith('k')
+    expect(mockRedisEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('GET', KEYS[1])"),
+      ['k'],
+      [expect.any(String)]
+    )
   })
 
   it('finalizes plog.error exactly once when callback throws', async () => {
@@ -140,29 +145,44 @@ describe('withCronBudget', () => {
       { jobName: 'test', maxDurationSec: 60, skipAuth: true, lockKey: 'k' },
       async () => {
         throw boom
-      },
+      }
     )
     expect(res.status).toBe(500)
     expect(mockError).toHaveBeenCalledTimes(1)
     expect(mockError).toHaveBeenCalledWith(boom)
     expect(mockSuccess).not.toHaveBeenCalled()
     // Lock released even on error
-    expect(mockRedisDel).toHaveBeenCalledWith('k')
+    expect(mockRedisEval).toHaveBeenCalledWith(expect.any(String), ['k'], [expect.any(String)])
   })
 
   it('routes partial_success status to plog.partialSuccess', async () => {
     mockRedisSet.mockResolvedValue('OK')
-    await withCronBudget(
-      { jobName: 'test', maxDurationSec: 60, skipAuth: true },
-      async () => ({
-        status: 'partial_success',
-        recordsProcessed: 10,
-        failedItems: ['a', 'b'],
-      }),
-    )
+    await withCronBudget({ jobName: 'test', maxDurationSec: 60, skipAuth: true }, async () => ({
+      status: 'partial_success',
+      recordsProcessed: 10,
+      failedItems: ['a', 'b'],
+    }))
     expect(mockPartial).toHaveBeenCalledTimes(1)
     expect(mockPartial).toHaveBeenCalledWith(10, ['a', 'b'], undefined)
     expect(mockSuccess).not.toHaveBeenCalled()
+  })
+
+  it('blocks execution when Redis is unavailable', async () => {
+    mockRedisInstance = null
+    const fn = jest.fn(async () => ({ recordsProcessed: 1 }))
+
+    const res = await withCronBudget(
+      {
+        jobName: 'test',
+        lockKey: 'cron:test:running',
+        maxDurationSec: 60,
+        skipAuth: true,
+      },
+      fn
+    )
+
+    expect(res.status).toBe(503)
+    expect(fn).not.toHaveBeenCalled()
   })
 
   it('exposes a coherent remainingMs / deadline to the callback', async () => {
@@ -176,7 +196,7 @@ describe('withCronBudget', () => {
         capturedRemaining = remainingMs()
         capturedDeadline = deadline
         return { recordsProcessed: 0 }
-      },
+      }
     )
     // Effective budget = (100 - 20) * 1000 = 80000ms
     // Captured remaining should be close to 80000 (minus tiny execution time)
@@ -192,10 +212,9 @@ describe('withCronBudget', () => {
     // detect finalized=false and still call success. In other words: withCronBudget
     // owns the finalization lifecycle — callers should NOT call plog.success/error
     // directly. We assert the wrapper calls exactly once.
-    await withCronBudget(
-      { jobName: 'test', maxDurationSec: 60, skipAuth: true },
-      async () => ({ recordsProcessed: 1 }),
-    )
+    await withCronBudget({ jobName: 'test', maxDurationSec: 60, skipAuth: true }, async () => ({
+      recordsProcessed: 1,
+    }))
     expect(mockSuccess).toHaveBeenCalledTimes(1)
   })
 })

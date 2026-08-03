@@ -91,7 +91,7 @@ jest.mock('../FaqSection', () => ({
 
 jest.mock('../SubscriptionManagement', () => ({
   __esModule: true,
-  default: () => null,
+  default: () => <div>Stripe subscription management</div>,
 }))
 
 import MembershipContent from '../MembershipContent'
@@ -170,5 +170,27 @@ describe('MembershipContent failure state', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load, please retry')
     expect(screen.queryByText('Current plan loaded')).not.toBeInTheDocument()
+  })
+
+  it('does not expose Stripe controls for the synthesized free subscription object', async () => {
+    mockFetch.mockImplementation((input: RequestInfo | URL) => {
+      if (String(input) === '/api/subscription') {
+        return Promise.resolve(
+          response({
+            subscription: {
+              tier: 'free',
+              status: 'active',
+              autoRenew: false,
+            },
+          })
+        )
+      }
+      return successfulResponse(input)
+    })
+
+    render(<MembershipContent />)
+
+    await screen.findByText('Current plan loaded')
+    expect(screen.queryByText('Stripe subscription management')).not.toBeInTheDocument()
   })
 })

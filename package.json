@@ -96,6 +96,8 @@
     "qa:score-v5-pg17": "bash supabase/migrations/__tests__/pure-arena-score-v5-zero-metrics.pg17.sh",
     "qa:score-manifest-v2-pg17": "bash supabase/migrations/__tests__/leaderboard-score-input-manifest.pg17.sh",
     "qa:score-projection-v2-pg17": "bash supabase/migrations/__tests__/leaderboard-metric-trust-projection-v2.pg17.sh",
+    "qa:api-tier-cutover": "node --test scripts/maintenance/api-tier-cutover.test.mjs",
+    "qa:api-tier-cutover-report": "node --test scripts/maintenance/validate-api-tier-cutover-report.test.mjs",
     "qa:buttons": "node scripts/qa/button-sweep.mjs",
     "qa:auth-e2e": "playwright test --config=playwright.authenticated.config.ts",
     "qa:controlled-write": "node scripts/qa/controlled-write-sweep.mjs",

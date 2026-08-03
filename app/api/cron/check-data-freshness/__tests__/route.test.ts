@@ -259,7 +259,10 @@ describe('GET /api/cron/check-data-freshness', () => {
     mockPlogSuccess.mockResolvedValue(undefined)
     mockPlogError.mockResolvedValue(undefined)
     mockReleaseCronLock.mockResolvedValue(undefined)
-    mockAcquireCronLock.mockResolvedValue(mockReleaseCronLock)
+    mockAcquireCronLock.mockResolvedValue({
+      status: 'acquired',
+      release: mockReleaseCronLock,
+    })
     mockPipelineStart.mockResolvedValue({
       id: 1,
       success: mockPlogSuccess,
@@ -287,7 +290,7 @@ describe('GET /api/cron/check-data-freshness', () => {
   )
 
   it('skips a duplicate delivery while the distributed lock is held', async () => {
-    mockAcquireCronLock.mockResolvedValueOnce(null)
+    mockAcquireCronLock.mockResolvedValueOnce({ status: 'held' })
 
     const response = await GET(createRequest('test-secret'))
 
@@ -297,6 +300,18 @@ describe('GET /api/cron/check-data-freshness', () => {
       skipped: true,
       reason: 'concurrent_execution',
     })
+    expect(mockPipelineStart).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockReleaseCronLock).not.toHaveBeenCalled()
+  })
+
+  it('returns retryable 503 when the distributed lock backend is unavailable', async () => {
+    mockAcquireCronLock.mockResolvedValueOnce({ status: 'unavailable' })
+
+    const response = await GET(createRequest('test-secret'))
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ error: 'Cron lock unavailable' })
     expect(mockPipelineStart).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
     expect(mockReleaseCronLock).not.toHaveBeenCalled()

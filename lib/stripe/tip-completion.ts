@@ -27,6 +27,7 @@ const terminalStatuses = new Set([
   'completed',
   'already_completed',
   'refunded',
+  'refund_pending',
   'identity_conflict',
   'manual_review',
   'notification_suppressed',
@@ -36,6 +37,7 @@ export type TipCompletionStatus =
   | 'completed'
   | 'already_completed'
   | 'refunded'
+  | 'refund_pending'
   | 'identity_conflict'
   | 'manual_review'
   | 'notification_suppressed'
@@ -55,6 +57,7 @@ export type TipPaymentAuthority = {
   chargeId: string
   amount: number
   currency: string
+  livemode: true
   completedAt: string
   refundSucceededAmount: number
   fullyRefunded: boolean
@@ -733,6 +736,7 @@ async function resolveTipPaymentAuthority(
     chargeId,
     amount,
     currency,
+    livemode: true,
     completedAt: authoritativeCompletedAt(charge.created, objectIds),
     refundSucceededAmount,
     fullyRefunded: charge.refunded,
@@ -781,7 +785,10 @@ function readCompletionStatus(data: Json, authority: TipPaymentAuthority): TipCo
 
   const status = data.status as TipCompletionStatus
   if (
-    (status === 'completed' || status === 'already_completed' || status === 'refunded') &&
+    (status === 'completed' ||
+      status === 'already_completed' ||
+      status === 'refunded' ||
+      status === 'refund_pending') &&
     data.tip_id !== authority.tipId
   ) {
     throw new Error(
@@ -790,6 +797,15 @@ function readCompletionStatus(data: Json, authority: TipPaymentAuthority): TipCo
   }
 
   let financialStatus: string = status
+  if (
+    status === 'refund_pending' &&
+    (data.completion_status !== 'notification_suppressed' ||
+      typeof data.idempotent_replay !== 'boolean')
+  ) {
+    throw new Error(
+      'complete_tip_with_stripe_ownership_atomic returned an invalid recovery refund result'
+    )
+  }
   if (status === 'notification_suppressed') {
     const allowedCompletionStatuses = new Set([
       'completed',
@@ -900,6 +916,7 @@ export async function completeTipCheckout(params: {
     p_metadata_amount_cents: authority.metadataAmountCents,
     p_checkout_expires_at: authority.checkoutExpiresAt,
     p_event_id: params.eventId,
+    p_livemode: authority.livemode,
   })
   if (error) {
     throw new Error(`Failed to complete tip atomically: ${error.message}`)

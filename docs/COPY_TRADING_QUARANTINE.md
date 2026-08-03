@@ -35,6 +35,18 @@ Read-only audit point: Base block `48,796,256`
 - `maxFollowersPerTrader()` was still `100`; the on-chain block below was not
   yet complete at the audit point.
 
+### Latest read-only recheck
+
+At Base block `49,260,392` (`2026-07-29T07:28:51Z`), the owner remained
+`0x8c3d9Bb2e1EB8B7af8D59a2e6F8E27B4ECA2aa1b` and
+`maxFollowersPerTrader()` still returned `100`, so the required owner block is
+still open. The runtime hash remained
+`0x084a90115b11af8ec07aa9164784b5d04bd1e99478bc223bf4892d480b7d3a14`;
+USDC and native balances were both `0`. Complete Blockscout pagination still
+returned only the creation transaction and constructor `OwnershipTransferred`
+log. These read-only facts prove that no funds have entered v1; they do not
+make a non-zero follower cap safe.
+
 ## Confirmed v1 defects
 
 These findings apply to the deployed runtime, not merely an unshipped source

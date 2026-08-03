@@ -24,6 +24,8 @@ function optionalEnv(name: string): string {
   return process.env[name]?.trim() || ''
 }
 
+const MAX_STRIPE_CUSTOMER_LOOKUP_PAGES = 100
+
 // Stripe 服务端实例 - 懒加载以避免构建时环境变量未定义的问题
 let _stripe: Stripe | null = null
 
@@ -75,6 +77,18 @@ export const stripe = {
   },
   get prices() {
     return getStripe().prices
+  },
+  get invoices() {
+    return getStripe().invoices
+  },
+  get invoicePayments() {
+    return getStripe().invoicePayments
+  },
+  get paymentIntents() {
+    return getStripe().paymentIntents
+  },
+  get charges() {
+    return getStripe().charges
   },
   get checkout() {
     return getStripe().checkout
@@ -268,23 +282,75 @@ export async function getOrCreateStripeCustomer(
     }
   }
 
+  const secretKey = requireEnv('STRIPE_SECRET_KEY')
+  const expectedLivemode = secretKey.startsWith('sk_live_')
+    ? true
+    : secretKey.startsWith('sk_test_')
+      ? false
+      : null
+  if (expectedLivemode === null) {
+    throw new Error('STRIPE_SECRET_KEY has an invalid mode prefix')
+  }
+
   let startingAfter: string | undefined
+  let pageCount = 0
+  let ownedCustomerId: string | null = null
+  const seenCustomerIds = new Set<string>()
+  const seenCursors = new Set<string>()
   while (true) {
+    pageCount += 1
+    if (pageCount > MAX_STRIPE_CUSTOMER_LOOKUP_PAGES) {
+      throw new Error('Stripe customer email lookup pagination exceeded its safety limit')
+    }
+    if (startingAfter) {
+      if (seenCursors.has(startingAfter)) {
+        throw new Error('Stripe customer email lookup pagination repeated a cursor')
+      }
+      seenCursors.add(startingAfter)
+    }
+
     const existingCustomers = await stripe.customers.list({
       email,
       limit: 100,
       ...(startingAfter ? { starting_after: startingAfter } : {}),
     })
 
-    const ownedCustomer = existingCustomers.data.find((customer) => {
-      try {
-        return stripeMetadataUserId(customer.metadata, `Stripe customer ${customer.id}`) === userId
-      } catch {
-        return false
+    if (
+      !existingCustomers ||
+      typeof existingCustomers !== 'object' ||
+      !Array.isArray(existingCustomers.data) ||
+      existingCustomers.data.length > 100 ||
+      typeof existingCustomers.has_more !== 'boolean'
+    ) {
+      throw new Error('Stripe customer email lookup pagination returned an invalid page')
+    }
+    if (startingAfter && existingCustomers.data.length === 0) {
+      throw new Error('Stripe customer email lookup pagination returned an empty continuation page')
+    }
+
+    for (const customer of existingCustomers.data) {
+      if (
+        !customer ||
+        customer.object !== 'customer' ||
+        !/^cus_[A-Za-z0-9_]+$/.test(customer.id) ||
+        customer.livemode !== expectedLivemode ||
+        !customer.metadata ||
+        typeof customer.metadata !== 'object' ||
+        Array.isArray(customer.metadata) ||
+        Object.values(customer.metadata).some((value) => typeof value !== 'string') ||
+        seenCustomerIds.has(customer.id)
+      ) {
+        throw new Error('Stripe customer email lookup pagination returned uncertain identity')
       }
-    })
-    if (ownedCustomer) {
-      return ownedCustomer.id
+      seenCustomerIds.add(customer.id)
+
+      const owner = stripeMetadataUserId(customer.metadata, `Stripe customer ${customer.id}`)
+      if (owner === userId) {
+        if (ownedCustomerId && ownedCustomerId !== customer.id) {
+          throw new Error('Stripe customer email lookup returned multiple customers for this user')
+        }
+        ownedCustomerId = customer.id
+      }
     }
 
     if (!existingCustomers.has_more) break
@@ -295,7 +361,9 @@ export async function getOrCreateStripeCustomer(
     startingAfter = lastCustomer.id
   }
 
-  const mode = requireEnv('STRIPE_SECRET_KEY').startsWith('sk_live_') ? 'live' : 'test'
+  if (ownedCustomerId) return ownedCustomerId
+
+  const mode = expectedLivemode ? 'live' : 'test'
   const customer = await stripe.customers.create(
     {
       email,
@@ -320,6 +388,12 @@ export async function createCheckoutSession(params: {
   promotionCode?: string
   allowPromotionCodes?: boolean
   trialDays?: number
+  /** Stable caller-owned identity for durable Checkout workflows. */
+  idempotencyKey?: string
+  /** Stripe Checkout expiration as an exact Unix timestamp in seconds. */
+  expiresAt?: number
+  /** Durable application identity copied to Checkout's client_reference_id. */
+  clientReferenceId?: string
 }): Promise<Stripe.Checkout.Session> {
   // Validate priceId before making Stripe API call
   if (!params.priceId || !params.priceId.startsWith('price_')) {
@@ -343,6 +417,8 @@ export async function createCheckoutSession(params: {
     mode: 'subscription',
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
+    expires_at: params.expiresAt,
+    client_reference_id: params.clientReferenceId,
     metadata: params.metadata,
     subscription_data: {
       metadata: params.metadata,
@@ -365,7 +441,9 @@ export async function createCheckoutSession(params: {
   // Idempotency key prevents duplicate checkout sessions if the client retries
   // (double-click, network retry, browser prefetch). Stripe deduplicates within 24h.
   // Key is scoped to customer + price so switching plans creates a new session.
-  const idempotencyKey = `checkout_${params.customerId}_${params.priceId}_${Math.floor(Date.now() / 60_000)}`
+  const idempotencyKey =
+    params.idempotencyKey ??
+    `checkout_${params.customerId}_${params.priceId}_${Math.floor(Date.now() / 60_000)}`
   const session = await stripe.checkout.sessions.create(sessionParams, {
     idempotencyKey,
   })
@@ -430,19 +508,6 @@ export async function createOneTimePaymentSession(params: {
   }
 
   return stripe.checkout.sessions.create(sessionParams, { idempotencyKey })
-}
-
-// 创建客户门户会话 (用于管理订阅)
-export async function createPortalSession(
-  customerId: string,
-  returnUrl: string
-): Promise<Stripe.BillingPortal.Session> {
-  const session = await stripe.billingPortal.sessions.create({
-    customer: customerId,
-    return_url: returnUrl,
-  })
-
-  return session
 }
 
 // 取消订阅

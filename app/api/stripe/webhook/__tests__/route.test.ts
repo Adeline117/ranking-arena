@@ -95,6 +95,9 @@ function event(type = 'checkout.session.completed') {
     data: {
       object: {
         id: 'obj_123',
+        object: 'checkout.session',
+        created: 1_700_000_000,
+        livemode: true,
         customer: 'cus_123',
         metadata: {},
       },
@@ -109,7 +112,7 @@ describe('POST /api/stripe/webhook', () => {
     jest.clearAllMocks()
     process.env = {
       ...originalEnv,
-      STRIPE_SECRET_KEY: 'sk_test_xxx',
+      STRIPE_SECRET_KEY: 'sk_live_xxx',
       STRIPE_WEBHOOK_SECRET: 'whsec_test_xxx',
     }
     constructEventMock.mockReturnValue(event())
@@ -147,6 +150,11 @@ describe('POST /api/stripe/webhook', () => {
 
     expect(response.status).toBe(200)
     expect(mockHandleCheckoutComplete).toHaveBeenCalledTimes(1)
+    expect(mockHandleCheckoutComplete).toHaveBeenCalledWith(expect.anything(), {
+      id: 'evt_test_retryable',
+      created: 1_800_000_000,
+      livemode: true,
+    })
     expect(mockRpc.mock.calls).toEqual([
       [
         'claim_stripe_event',
@@ -214,6 +222,9 @@ describe('POST /api/stripe/webhook', () => {
       data: {
         object: {
           id: 'cs_tip',
+          object: 'checkout.session',
+          created: 1_700_000_000,
+          livemode: true,
           customer: 'cus_123',
           metadata: { type: 'tip', tip_id: 'tip-123' },
         },
@@ -256,6 +267,9 @@ describe('POST /api/stripe/webhook', () => {
         data: {
           object: {
             id: 'cs_tip_drift',
+            object: 'checkout.session',
+            created: 1_700_000_000,
+            livemode: true,
             customer: 'cus_123',
             metadata,
           },
@@ -275,6 +289,7 @@ describe('POST /api/stripe/webhook', () => {
   )
 
   it.each([
+    ['customer.subscription.created', mockHandleSubscriptionUpdate],
     ['customer.subscription.updated', mockHandleSubscriptionUpdate],
     ['customer.subscription.deleted', mockHandleSubscriptionCanceled],
     ['invoice.payment_succeeded', mockHandlePaymentSucceeded],
@@ -292,7 +307,25 @@ describe('POST /api/stripe/webhook', () => {
 
     expect(response.status).toBe(200)
     expect(handler).toHaveBeenCalledTimes(1)
-    if (type === 'checkout.session.expired') {
+    if (
+      type === 'checkout.session.expired' ||
+      type === 'customer.subscription.created' ||
+      type === 'customer.subscription.updated' ||
+      type === 'customer.subscription.deleted'
+    ) {
+      expect(handler).toHaveBeenCalledWith(expect.anything(), {
+        id: 'evt_test_retryable',
+        created: 1_800_000_000,
+        livemode: true,
+      })
+    } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
+      expect(handler).toHaveBeenCalledWith(expect.anything(), {
+        id: 'evt_test_retryable',
+        created: 1_800_000_000,
+        livemode: true,
+        type,
+      })
+    } else if (type === 'invoice.payment_failed') {
       expect(handler).toHaveBeenCalledWith(expect.anything(), {
         id: 'evt_test_retryable',
         created: 1_800_000_000,
