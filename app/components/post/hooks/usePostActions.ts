@@ -21,6 +21,10 @@ import {
   readPostPinAcknowledgement,
 } from '@/lib/posts/post-pin-client'
 import { readPostEditApiAcknowledgement } from '@/lib/posts/post-edit-contract'
+import {
+  readPostDeleteAcknowledgement,
+  readPostDeleteError,
+} from '@/lib/posts/post-delete-contract'
 
 type Post = PostWithUserState
 
@@ -1145,14 +1149,14 @@ export function usePostActions({
           method: 'DELETE',
           headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
         })
-        const data = await response.json()
+        const data: unknown = await response.json()
         if (!scopeIsCurrent(capturedScope)) return
-        if (response.ok) {
+        if (response.ok && readPostDeleteAcknowledgement(data)) {
           setPosts((prev) => prev.filter((p) => p.id !== post.id))
           if (openPost?.id === post.id) setOpenPost(null)
           showToast(t('deleted'), 'success')
         } else {
-          showToast(data.error || t('deleteFailed'), 'error')
+          showToast(readPostDeleteError(data) ?? t('deleteFailed'), 'error')
         }
       } catch {
         if (!scopeIsCurrent(capturedScope)) return

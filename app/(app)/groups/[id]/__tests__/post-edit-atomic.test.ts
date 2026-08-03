@@ -24,4 +24,9 @@ describe('group inline post editor atomic contract', () => {
     expect(hook).toContain('hashtags: acknowledgement.hashtags')
     expect(hook).not.toMatch(/result\.ok\)[\s\S]{0,400}title: submittedTitle/)
   })
+
+  it('does not remove a post from the group UI on a malformed 2xx delete response', () => {
+    expect(hook).toContain('result.ok && readPostDeleteAcknowledgement(result.data)')
+    expect(hook).toContain('readPostDeleteError(result.data)')
+  })
 })

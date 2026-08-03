@@ -183,6 +183,37 @@ describe('usePostActions aliased detail state', () => {
     expect(mockShowToast).toHaveBeenCalledWith('Pinned', 'success')
   })
 
+  it.each([{}, { success: true, extra: 'invented' }, { success: false }])(
+    'keeps a post visible after a malformed 2xx delete acknowledgement %#',
+    async (body) => {
+      ;(global.fetch as jest.Mock).mockResolvedValue(jsonResponse(body))
+      const { result } = renderHook(() => useAliasedPostActions())
+
+      await act(async () => {
+        await result.current.actions.handleDeletePost(result.current.post, {
+          stopPropagation: jest.fn(),
+        } as unknown as React.MouseEvent)
+      })
+
+      expect(mockSetOpenPost).not.toHaveBeenCalledWith(null)
+      expect(mockShowToast).toHaveBeenCalledWith('deleteFailed', 'error')
+    }
+  )
+
+  it('removes a post only after the exact delete acknowledgement', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ success: true }))
+    const { result } = renderHook(() => useAliasedPostActions())
+
+    await act(async () => {
+      await result.current.actions.handleDeletePost(result.current.post, {
+        stopPropagation: jest.fn(),
+      } as unknown as React.MouseEvent)
+    })
+
+    expect(mockSetOpenPost).toHaveBeenCalledWith(null)
+    expect(mockShowToast).toHaveBeenCalledWith('deleted', 'success')
+  })
+
   it('updates the detail post once and preserves optimistic counts when ACK counts are null', async () => {
     ;(global.fetch as jest.Mock).mockResolvedValue(
       jsonResponse({

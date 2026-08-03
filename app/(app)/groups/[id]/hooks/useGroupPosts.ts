@@ -23,6 +23,10 @@ import {
   readPostPinAcknowledgement,
 } from '@/lib/posts/post-pin-client'
 import { readPostEditApiAcknowledgement } from '@/lib/posts/post-edit-contract'
+import {
+  readPostDeleteAcknowledgement,
+  readPostDeleteError,
+} from '@/lib/posts/post-delete-contract'
 
 export interface Post {
   id: string
@@ -978,11 +982,11 @@ export function useGroupPosts({
         context.scope
       )
       if (!mutationContextIsCurrent(context)) return
-      if (result.ok) {
+      if (result.ok && readPostDeleteAcknowledgement(result.data)) {
         setPosts((prev) => prev.filter((p) => p.id !== postId))
         showToast(t('postDeleted'), 'success')
       } else {
-        showToast(result.error || t('deleteFailed'), 'error')
+        showToast(readPostDeleteError(result.data) ?? result.error ?? t('deleteFailed'), 'error')
       }
       setDeletingPost(null)
     },

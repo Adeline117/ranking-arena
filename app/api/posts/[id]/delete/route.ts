@@ -35,11 +35,19 @@ export async function DELETE(
       // Delete the post — comments, likes, bookmarks, reactions cascade via FK constraints.
       // Previous code manually deleted children before the post, which was both
       // redundant (CASCADE handles it) and non-transactional (partial failure left orphans).
-      const { error: deleteError } = await supabase.from('posts').delete().eq('id', postId)
+      const { data: deletedRows, error: deleteError } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', postId)
+        .eq('author_id', user.id)
+        .select('id')
 
       if (deleteError) {
         logger.error('Delete error', { error: deleteError, postId, userId: user.id })
         return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
+      }
+      if (!Array.isArray(deletedRows) || deletedRows.length !== 1) {
+        return NextResponse.json({ error: 'Post not found' }, { status: 404 })
       }
 
       // 清除帖子列表缓存
