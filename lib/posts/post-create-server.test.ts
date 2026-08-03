@@ -27,10 +27,14 @@ jest.mock('@/lib/utils/server-cache', () => ({
   deleteServerCacheByPrefix: jest.fn(),
 }))
 jest.mock('@/lib/cache', () => ({ del: jest.fn().mockResolvedValue(undefined) }))
-jest.mock('@/lib/data/notifications', () => ({ sendNotifications: jest.fn() }))
+const mockDeliverNotification = jest.fn().mockResolvedValue({ outcome: 'CREATED' })
+jest.mock('@/lib/data/notifications', () => ({
+  deliverNotification: (...args: unknown[]) => mockDeliverNotification(...args),
+}))
+const mockFireAndForget = jest.fn()
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: jest.fn(() => ({ error: jest.fn(), warn: jest.fn(), info: jest.fn() })),
-  fireAndForget: jest.fn(),
+  fireAndForget: (...args: unknown[]) => mockFireAndForget(...args),
 }))
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -115,6 +119,11 @@ const prepared: PreparedPostCreate = {
 }
 
 describe('post creation server authority', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockDeliverNotification.mockResolvedValue({ outcome: 'CREATED' })
+  })
+
   it('extracts NFC Unicode handles without treating an email suffix as a mention', () => {
     expect(extractMentionHandles('你好 @测试用户 and @Alice_1, not mail@example.com')).toEqual([
       'Alice_1',
@@ -289,6 +298,59 @@ describe('post creation server authority', () => {
       },
     })
   })
+
+  it.each(['created', 'replayed'] as const)(
+    'durably awaits deduplicated mention delivery after %s acknowledgement',
+    async (status) => {
+      const mentionedContent = `${post.content} @bob`
+      const mentionedPost = { ...post, content: mentionedContent, mentions: ['bob'] }
+      const mentionedAcknowledgement = {
+        ...acknowledgement(status),
+        post: mentionedPost,
+      }
+      const client = clientWith({ data: mentionedAcknowledgement, error: null })
+      ;(client.from as jest.Mock).mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          in: jest.fn().mockResolvedValue({
+            data: [{ id: OTHER, handle: 'bob' }],
+            error: null,
+          }),
+        }),
+      })
+
+      const response = await handleAtomicPostCreateHttp({
+        request: request({
+          operation_id: OPERATION,
+          title: post.title,
+          content: mentionedContent,
+          images: post.images,
+        }),
+        supabase: client,
+        actorId: ACTOR,
+      })
+
+      expect(response.status).toBe(status === 'created' ? 201 : 200)
+      const deliveryCall = mockFireAndForget.mock.calls.find(
+        ([, context]) => context === 'Resolve and deliver mention notifications after post create'
+      )
+      expect(deliveryCall).toBeDefined()
+      await deliveryCall?.[0]
+      expect(mockDeliverNotification).toHaveBeenCalledWith(
+        client,
+        {
+          user_id: OTHER,
+          type: 'mention',
+          title: '测试_user mentioned you in a post',
+          message: post.title,
+          actor_id: ACTOR,
+          link: `/post/${POST}`,
+          reference_id: POST,
+          read: false,
+        },
+        { deduplicate: true, dedupWindowSeconds: 604800 }
+      )
+    }
+  )
 
   it('fails closed with 503 when the RPC schema is unavailable', async () => {
     const response = await handleAtomicPostCreateHttp({

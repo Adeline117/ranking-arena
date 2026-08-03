@@ -12,7 +12,7 @@ import { detectPostLanguage } from '@/lib/data/posts'
 import { extractHashtags } from '@/lib/data/hashtags'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { del as cacheDel } from '@/lib/cache'
-import { sendNotifications } from '@/lib/data/notifications'
+import { deliverNotification } from '@/lib/data/notifications'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { extractMentionHandles } from '@/lib/posts/mentions'
 
@@ -268,7 +268,7 @@ function sendMentionNotificationsAfterCreate(
   supabase: PostCreateRpcClient,
   acknowledgement: AtomicCreatePostAck
 ): void {
-  if (!acknowledgement.applied || acknowledgement.post.mentions.length === 0) return
+  if (acknowledgement.post.mentions.length === 0) return
 
   fireAndForget(
     (async () => {
@@ -290,9 +290,16 @@ function sendMentionNotificationsAfterCreate(
           reference_id: acknowledgement.post.id,
           read: false,
         }))
-      sendNotifications(supabase, rows, 'Mention notifications after post create')
+      await Promise.all(
+        rows.map((notification) =>
+          deliverNotification(supabase, notification, {
+            deduplicate: true,
+            dedupWindowSeconds: 604800,
+          })
+        )
+      )
     })(),
-    'Resolve mention recipients after post create'
+    'Resolve and deliver mention notifications after post create'
   )
 }
 
