@@ -29,6 +29,16 @@ import {
   parseBitgetPositions,
   parseBitgetProfile,
 } from './parsers'
+import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+  type HistoryTerminalClaimReason,
+} from '../../history-acquisition'
+import {
+  BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT,
+  BITGET_POSITION_HISTORY_URL,
+  bitgetPositionHistoryTerminalVerifier,
+} from './history-terminal'
 
 const BASE = 'https://www.bitget.com/v1/trigger/trace/public'
 const TRACE_BASE = 'https://www.bitget.com/v1/trigger/trace'
@@ -57,6 +67,20 @@ function endpoint(src: SourceRow, key: string, fallback: string): string {
   return endpoints[key] ?? fallback
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function historyTerminalClaim(
+  reason: HistoryTerminalClaimReason,
+  pageOrdinal: number
+): HistoryTerminalClaim {
+  return {
+    contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+    observations: [{ segment_id: 'default', reason, page_ordinal: pageOrdinal }],
+  }
+}
+
 /**
  * Bitget's WAF 403s cold API hits; one page load establishes the session
  * cookies and the rest is pure JSON replay (spec §2.2). Warm once per
@@ -70,9 +94,11 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   const page = await session.page()
   const url = src.leaderboard_url ?? 'https://www.bitget.com/zh-CN/copy-trading/futures'
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {
+  try {
+    await page.waitForLoadState('networkidle', { timeout: 20_000 })
+  } catch {
     // networkidle is best-effort — a busy page still yields valid cookies
-  })
+  }
   warmedSessions.add(session)
 }
 
@@ -109,6 +135,15 @@ const bitgetAdapter: SourceAdapter = {
     // balance/transfer endpoint candidates demand an auth token (00005).
     transfers: false,
     copiers: true, // POST trace/trader/followerList (top-50 only, PII rules apply)
+  },
+
+  historyTerminalVerifier(src, kind) {
+    return src.slug === 'bitget_futures' &&
+      src.product_type === 'futures' &&
+      kind === 'position_history' &&
+      endpoint(src, 'positionHistory', BITGET_POSITION_HISTORY_URL) === BITGET_POSITION_HISTORY_URL
+      ? bitgetPositionHistoryTerminalVerifier
+      : null
   },
 
   async *listLeaderboard(
@@ -269,7 +304,7 @@ const bitgetAdapter: SourceAdapter = {
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null
-  ): AsyncIterable<RawPage> {
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim, void> {
     if (kind !== 'position_history' && kind !== 'copiers') {
       throw new Error(`[bitget] history surface ${kind} not supported`)
     }
@@ -277,7 +312,7 @@ const bitgetAdapter: SourceAdapter = {
     const fetcher = pageFetcher(session)
     const url =
       kind === 'position_history'
-        ? endpoint(src, 'positionHistory', `${TRACE_BASE}/order/historyList`)
+        ? endpoint(src, 'positionHistory', BITGET_POSITION_HISTORY_URL)
         : endpoint(src, 'copiers', `${TRACE_BASE}/trader/followerList`)
     const pageSize = kind === 'copiers' ? 10 : 20
     // First-sight backfill depth cap (configurable per source); incremental
@@ -286,23 +321,61 @@ const bitgetAdapter: SourceAdapter = {
     const cursorMs = cursor ? Date.parse(cursor) : NaN
 
     for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+      const request = { pageNo, pageSize, traderUid: exchangeTraderId }
       const payload = await replayJson(session, fetcher, {
         url,
         method: 'POST',
         headers: UTA_HEADERS,
-        body: { pageNo, pageSize, traderUid: exchangeTraderId },
+        body: request,
       })
-      const data = ((payload as Record<string, unknown>)?.data ?? {}) as Record<string, unknown>
-      const rows = Array.isArray(data.rows) ? (data.rows as Array<Record<string, unknown>>) : []
-      if (rows.length === 0) return
+      yield {
+        pageIndex: pageNo,
+        payload: {
+          contract: BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT,
+          historyTraderIdentity: exchangeTraderId,
+          request,
+          response: payload,
+        },
+        url,
+        fetchedAt: new Date().toISOString(),
+      }
 
-      yield { pageIndex: pageNo, payload, url, fetchedAt: new Date().toISOString() }
-
-      if (data.nextFlag === false || rows.length < pageSize) return
+      if (!isRecord(payload) || payload.code !== '00000') {
+        throw new Error(`[bitget] ${kind} returned a non-success API envelope`)
+      }
+      if (!isRecord(payload.data)) {
+        throw new Error(`[bitget] ${kind} returned a malformed rows envelope`)
+      }
+      const data = payload.data
+      const rawRows = data.rows
+      if (!Array.isArray(rawRows)) {
+        throw new Error(`[bitget] ${kind} returned a malformed rows envelope`)
+      }
+      if (!rawRows.every(isRecord) || rawRows.length > pageSize) {
+        throw new Error(`[bitget] ${kind} returned an invalid history page`)
+      }
+      const rows = rawRows.filter(isRecord)
+      if (
+        data.nextFlag !== undefined &&
+        data.nextFlag !== null &&
+        typeof data.nextFlag !== 'boolean'
+      ) {
+        throw new Error(`[bitget] ${kind} returned an invalid nextFlag`)
+      }
+      if (data.nextFlag === false) return historyTerminalClaim('reported_end', pageNo)
+      if (rows.length < pageSize && data.nextFlag === true) {
+        throw new Error(`[bitget] ${kind} short page still claims continuation`)
+      }
+      if (rows.length === 0) return historyTerminalClaim('empty_page', pageNo)
+      if (rows.length < pageSize) return historyTerminalClaim('short_page', pageNo)
       if (kind === 'position_history' && Number.isFinite(cursorMs)) {
-        const closeTimes = rows.map((r) => Number(r.closeTime)).filter((t) => Number.isFinite(t))
+        const closeTimes = rows
+          .map((row) => Number(row.closeTime))
+          .filter((closeTime) => Number.isFinite(closeTime) && closeTime > 0)
         // Overlap reached: this page already dips into stored history.
-        if (closeTimes.length > 0 && Math.min(...closeTimes) <= cursorMs) return
+        if (closeTimes.length > 0 && Math.min(...closeTimes) <= cursorMs) {
+          return historyTerminalClaim('cursor_overlap', pageNo)
+        }
       }
     }
     throw new Error(`[bitget] ${kind} reached page cap ${maxPages} without terminal proof`)
