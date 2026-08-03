@@ -142,14 +142,19 @@ async function persistPositionHistory(
   let written = 0
   const publishWithRaw: IngestTransactionRunner = async (persistRawPointer) => {
     // writePositionHistoryRawArtifact invokes this only after the immutable
-    // Storage object is durable. Parser failures therefore remain replayable.
+    // Storage object is durable. An unverified capture is audit evidence, not
+    // serving data: keep it out of the typed table so a later complete receipt
+    // can never make partial rows appear authoritative.
     storageDurable = true
+    const termination = acquisition.artifact.termination
+    if (termination.evidence_state !== 'verified') {
+      return runHistoryTransaction(persistRawPointer)
+    }
+
     const rows: ParsedHistoryRow[] = acquisition.pages.flatMap((page) =>
       adapter.parseHistory(page.payload, 'position_history', ctx)
     )
-    const termination = acquisition.artifact.termination
-    const nextCursor =
-      termination.evidence_state === 'verified' ? nextHistoryCursor(rows, cursor) : null
+    const nextCursor = nextHistoryCursor(rows, cursor)
 
     return runHistoryTransaction(async (transaction) => {
       const receipt = await persistRawPointer(transaction)

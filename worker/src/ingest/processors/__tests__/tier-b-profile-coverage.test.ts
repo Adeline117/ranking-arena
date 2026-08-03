@@ -382,7 +382,7 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockIngestClientRelease).toHaveBeenCalledWith(false)
   })
 
-  it('publishes unverified history rows without advancing the cursor', async () => {
+  it('keeps unverified history as RAW-only audit evidence', async () => {
     mockProfileTimeframes.mockReturnValue([30])
     mockParseProfile.mockReturnValue(profile(30, true))
     mockGetHistory.mockImplementation(() => positionHistoryStream())
@@ -404,7 +404,7 @@ describe('Tier-B profile coverage accounting', () => {
 
     await expect(processTierB(job)).resolves.toMatchObject({
       tradersCrawled: 1,
-      historyRowsWritten: 1,
+      historyRowsWritten: 0,
       errors: 0,
     })
 
@@ -418,14 +418,9 @@ describe('Tier-B profile coverage accounting', () => {
       },
     })
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRowsInTransaction).toHaveBeenCalledWith(
-      expect.anything(),
-      src,
-      42,
-      'position_history',
-      [positionRow],
-      null
-    )
+    expect(mockParseHistory).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
   })
 
   it('persists upstream-error position-history RAW without parsing or cursor progress', async () => {
@@ -490,6 +485,10 @@ describe('Tier-B profile coverage accounting', () => {
       parseProfile: mockParseProfile,
       parseHistory: mockParseHistory,
       validateProfile: mockValidateProfile,
+      historyTerminalVerifier: () => ({
+        contract: 'arena.ingest.history-terminal-verifier.test.position_history@1',
+        verify: () => ({ verified: true, scanTerminalState: 'exhausted' }),
+      }),
     })
 
     await expect(processTierB(job)).resolves.toMatchObject({
@@ -527,6 +526,10 @@ describe('Tier-B profile coverage accounting', () => {
       parseProfile: mockParseProfile,
       parseHistory: mockParseHistory,
       validateProfile: mockValidateProfile,
+      historyTerminalVerifier: () => ({
+        contract: 'arena.ingest.history-terminal-verifier.test.position_history@1',
+        verify: () => ({ verified: true, scanTerminalState: 'exhausted' }),
+      }),
     })
 
     await expect(processTierB(job)).resolves.toMatchObject({

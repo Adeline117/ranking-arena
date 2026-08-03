@@ -508,14 +508,7 @@ describe('Tier-C incomplete profile window gate', () => {
       },
     })
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRowsInTransaction).toHaveBeenCalledWith(
-      expect.anything(),
-      src,
-      42,
-      'position_history',
-      [positionRow(1), positionRow(2)],
-      null
-    )
+    expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
     const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
     expect(renderPayload.rows).toEqual([
       expect.not.objectContaining({ raw: expect.anything() }),
@@ -564,14 +557,7 @@ describe('Tier-C incomplete profile window gate', () => {
       },
     })
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRowsInTransaction).toHaveBeenCalledWith(
-      expect.anything(),
-      src,
-      42,
-      'position_history',
-      [positionRow(1)],
-      null
-    )
+    expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
     const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
     expect(renderPayload).toMatchObject({
       sourceAsOf: null,

@@ -42,7 +42,6 @@ import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import {
   getHistoryCursor,
   publishHistoryRows,
-  publishHistoryRowsInTransaction,
   publishPositions,
   publishProfile,
   resolveTraderId,
@@ -365,24 +364,22 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         }
 
         let storageDurable = false
-        const renderAndPublish: IngestTransactionRunner = async (persistRawPointer) => {
+        const renderPreviewWithRaw: IngestTransactionRunner = async (persistRawPointer) => {
           // The writer calls this only after the immutable artifact is in
-          // Storage. Tier-C remains preview-only and never advances a cursor.
+          // Storage. Tier-C remains preview-only: publish its RAW audit pointer
+          // before rendering, but never write typed rows or advance a cursor.
           storageDurable = true
           const parsed = acquisition.pages.flatMap((page) =>
             adapter.parseHistory(page.payload, kind, ctx)
           )
           rows = historyRowsForRender(parsed, kind)
+          const receipt = await runHistoryTransaction(persistRawPointer)
           await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
-          return runHistoryTransaction(async (transaction) => {
-            const receipt = await persistRawPointer(transaction)
-            await publishHistoryRowsInTransaction(transaction, src, traderId, kind, parsed, null)
-            return receipt
-          })
+          return receipt
         }
 
         try {
-          await writePositionHistoryRawArtifact(rawInput, renderAndPublish)
+          await writePositionHistoryRawArtifact(rawInput, renderPreviewWithRaw)
         } catch (cause) {
           if (storageDurable) {
             try {
