@@ -31,7 +31,10 @@ import { Worker } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
 import { QUEUE_NAME, JOB, getQueue } from './queues'
 import { PIPELINE_WORKER_CONCURRENCY } from './pipeline-runtime'
-import { assertSuccessfulMeilisearchSyncResponse } from './pipeline-response'
+import {
+  assertSuccessfulLeaderboardComputeResponse,
+  assertSuccessfulMeilisearchSyncResponse,
+} from './pipeline-response'
 import { registerSchedules } from './scheduler'
 import { startDashboard } from './dashboard'
 import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readiness'
@@ -62,8 +65,7 @@ async function main() {
           const { season } = job.data as { season: string }
           const cronSecret = process.env.CRON_SECRET
           if (!cronSecret) {
-            job.log('[skip] CRON_SECRET not set, cannot trigger compute-leaderboard')
-            return { skipped: true }
+            throw new Error('CRON_SECRET not set, cannot trigger compute-leaderboard')
           }
           const siteUrl = process.env.SITE_URL || 'https://www.arenafi.org'
           job.log(`Triggering compute-leaderboard for ${season}`)
@@ -75,14 +77,14 @@ async function main() {
           job.log(
             `compute-leaderboard ${season}: ${resp.status} — ${JSON.stringify(body).slice(0, 200)}`
           )
-          if (!resp.ok) throw new Error(`compute-leaderboard ${season} returned ${resp.status}`)
+          assertSuccessfulLeaderboardComputeResponse(resp.ok, resp.status, body, season)
           return { season, status: resp.status, ...body }
         }
 
         case JOB.SYNC_MEILISEARCH: {
           // Trigger Vercel's sync-meilisearch endpoint
           const msSecret = process.env.CRON_SECRET
-          if (!msSecret) return { skipped: true, reason: 'no CRON_SECRET' }
+          if (!msSecret) throw new Error('CRON_SECRET not set, cannot trigger sync-meilisearch')
           const msUrl = process.env.SITE_URL || 'https://www.arenafi.org'
           job.log('Triggering sync-meilisearch')
           const msResp = await fetch(`${msUrl}/api/cron/sync-meilisearch`, {

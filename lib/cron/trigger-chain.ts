@@ -17,9 +17,89 @@ const logger = createLogger('trigger-chain')
 
 const DEDUP_KEY = 'trigger-chain:last-run'
 const DEDUP_WINDOW_MS = 5 * 60 * 1000 // 5 minutes — skip if last trigger was <5min ago
+const FULL_LEADERBOARD_SEASONS = ['7D', '30D', '90D'] as const
+const SUCCESSFUL_PUBLICATION_STATUSES = ['published', 'checkpoint_skip'] as const
 
 // In-memory fallback dedup when Redis is unavailable
 let memoryLastRun = 0
+
+type JsonObject = Record<string, unknown>
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasExactKeys(value: JsonObject, expectedKeys: readonly string[]): boolean {
+  const actualKeys = Object.keys(value).sort()
+  const sortedExpectedKeys = [...expectedKeys].sort()
+  return (
+    actualKeys.length === sortedExpectedKeys.length &&
+    actualKeys.every((key, index) => key === sortedExpectedKeys[index])
+  )
+}
+
+function containsErrors(value: unknown): boolean {
+  if (value == null) return false
+  if (Array.isArray(value)) return value.length > 0
+  if (isJsonObject(value)) return Object.keys(value).length > 0
+  return true
+}
+
+function isSuccessfulPublicationStatus(value: unknown): boolean {
+  return SUCCESSFUL_PUBLICATION_STATUSES.includes(
+    value as (typeof SUCCESSFUL_PUBLICATION_STATUSES)[number]
+  )
+}
+
+function describePayload(value: unknown): string {
+  try {
+    return String(JSON.stringify(value)).slice(0, 500)
+  } catch {
+    return String(value).slice(0, 500)
+  }
+}
+
+/**
+ * The full refresh endpoint acknowledges success only when all three target
+ * seasons point at a positive, sealed publication (or an exact same-hour
+ * checkpoint). Any partial target would make evaluation and cache warming
+ * describe different generations.
+ */
+export function assertSuccessfulFullLeaderboardComputeResponse(
+  body: unknown
+): asserts body is JsonObject & { ok: true } {
+  if (!isJsonObject(body) || body.ok !== true) {
+    throw new Error(
+      `compute-leaderboard returned an unsuccessful payload: ${describePayload(body)}`
+    )
+  }
+
+  const stats = isJsonObject(body.stats) ? body.stats : null
+  const seasons = stats && isJsonObject(stats.seasons) ? stats.seasons : null
+  const publicationStatus = isJsonObject(body.publication_status) ? body.publication_status : null
+  const targetStatuses = publicationStatus
+    ? FULL_LEADERBOARD_SEASONS.map((season) => publicationStatus[season])
+    : []
+  const uniformSuccessfulStatus =
+    targetStatuses.length === FULL_LEADERBOARD_SEASONS.length &&
+    isSuccessfulPublicationStatus(targetStatuses[0]) &&
+    targetStatuses.every((status) => status === targetStatuses[0])
+  const complete =
+    seasons !== null &&
+    publicationStatus !== null &&
+    hasExactKeys(seasons, FULL_LEADERBOARD_SEASONS) &&
+    hasExactKeys(publicationStatus, FULL_LEADERBOARD_SEASONS) &&
+    uniformSuccessfulStatus &&
+    FULL_LEADERBOARD_SEASONS.every(
+      (season) => Number.isSafeInteger(seasons[season]) && (seasons[season] as number) > 0
+    )
+
+  if (!complete || containsErrors(body.warnings) || containsErrors(body.publication_unsealed)) {
+    throw new Error(
+      `compute-leaderboard returned an incomplete publication acknowledgement: ${describePayload(body)}`
+    )
+  }
+}
 
 /**
  * Fetch with retry + exponential backoff for downstream job triggers.
@@ -134,17 +214,10 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
         2,
         source
       )
-      const unsealedSeasons = computeBody?.publication_unsealed as string[] | undefined
+      assertSuccessfulFullLeaderboardComputeResponse(computeBody)
       logger.info(
-        `[${source}] compute-leaderboard: ok (${Date.now() - computeStart}ms, trace=${traceId})${unsealedSeasons?.length ? ` publication_unsealed=[${unsealedSeasons.join(',')}]` : ''}`
+        `[${source}] compute-leaderboard: published all seasons (${Date.now() - computeStart}ms, trace=${traceId})`
       )
-
-      // If all seasons withheld a publication seal, downstream evaluation and
-      // warming cannot claim a coherent new generation.
-      if (unsealedSeasons && unsealedSeasons.length >= 3) {
-        logger.warn(`[${source}] All seasons are unsealed — skipping downstream generation work`)
-        return
-      }
 
       // ── 2. Trigger pipeline-evaluate (Anthropic harness: independent Evaluator) ──
       logger.info(`[${source}] Triggering pipeline-evaluate (trace=${traceId})...`)
