@@ -88,6 +88,89 @@ expect_failure_contains() {
   fi
 }
 
+function_metadata_fingerprint() {
+  local function_signature="$1"
+  psql_cmd -Atq -v function_signature="$function_signature" <<'SQL'
+SELECT pg_catalog.encode(
+  pg_catalog.sha256(
+    pg_catalog.convert_to(
+      pg_catalog.jsonb_build_object(
+        'oid', function_row.oid::text,
+        'owner', function_row.proowner::text,
+        'acl', COALESCE(function_row.proacl::text, ''),
+        'language', function_row.prolang::text,
+        'kind', function_row.prokind::text,
+        'securityDefiner', function_row.prosecdef,
+        'volatility', function_row.provolatile::text,
+        'parallel', function_row.proparallel::text,
+        'strict', function_row.proisstrict,
+        'leakproof', function_row.proleakproof,
+        'returnsSet', function_row.proretset,
+        'argumentDefaults', function_row.pronargdefaults,
+        'config', function_row.proconfig,
+        'definition', pg_catalog.pg_get_functiondef(function_row.oid)
+      )::text,
+      'UTF8'
+    )
+  ),
+  'hex'
+)
+FROM pg_catalog.pg_proc AS function_row
+WHERE function_row.oid = :'function_signature'::pg_catalog.regprocedure;
+SQL
+}
+
+rpc_output_fingerprint() {
+  psql_cmd -Atq <<'SQL'
+SELECT pg_catalog.encode(
+  pg_catalog.sha256(
+    pg_catalog.convert_to(
+      pg_catalog.jsonb_build_object(
+        'delayedPositions', public.arena_records_page(
+          'delayed_positions', 'delayed-trader', 'positions', NULL, NULL, 50
+        ),
+        'missingDelayPositions', public.arena_records_page(
+          'missing_delay', 'missing-trader', 'positions', NULL, NULL, 50
+        ),
+        'invalidDelayPositions', public.arena_records_page(
+          'invalid_delay', 'invalid-trader', 'positions', NULL, NULL, 50
+        ),
+        'negativeDelayPositions', public.arena_records_page(
+          'negative_delay', 'negative-trader', 'positions', NULL, NULL, 50
+        ),
+        'emptyPositions', public.arena_records_page(
+          'empty_positions', 'empty-trader', 'positions', NULL, NULL, 50
+        ),
+        'positionHistory', public.arena_records_page(
+          'event_records', 'events-trader', 'position_history', NULL, NULL, 50
+        ),
+        'orders', public.arena_records_page(
+          'event_records', 'events-trader', 'orders', NULL, NULL, 50
+        ),
+        'transfers', public.arena_records_page(
+          'event_records', 'events-trader', 'transfers', NULL, NULL, 50
+        ),
+        'trustedBot', public.arena_copier_aggregate(
+          'bitget_bots_futures', 'bot-trusted'
+        ),
+        'top10Bot', public.arena_copier_aggregate(
+          'bitget_bots_spot', 'bot-top10'
+        ),
+        'humanCopier', public.arena_copier_aggregate(
+          'bitget_futures', 'human-copier'
+        ),
+        'noEvidenceBot', public.arena_copier_aggregate(
+          'bitget_bots_futures', 'bot-no-evidence'
+        )
+      )::text,
+      'UTF8'
+    )
+  ),
+  'hex'
+);
+SQL
+}
+
 echo "[record-provenance] boot isolated PostgreSQL 17 cluster"
 "$PG_BIN/initdb" \
   -D "$DATA_DIR" \
@@ -417,12 +500,12 @@ BEGIN
     'event_records', 'events-trader', 'position_history', NULL, NULL, 50
   );
 
-  IF pg_catalog.jsonb_array_length(v_payload->'rows') <> 1
+  IF pg_catalog.jsonb_array_length(v_payload->'rows') IS DISTINCT FROM 1
      OR NOT v_payload ? 'asOf'
      OR v_payload ? 'sourceAsOf'
      OR v_payload ? 'observedAt'
      OR v_payload ? 'publishedAt'
-     OR (v_payload->>'asOf')::timestamptz <>
+     OR (v_payload->>'asOf')::timestamptz IS DISTINCT FROM
           pg_catalog.transaction_timestamp() THEN
     RAISE EXCEPTION 'legacy history did not reproduce read-time asOf: %', v_payload;
   END IF;
@@ -430,9 +513,9 @@ BEGIN
   v_payload := public.arena_records_page(
     'empty_positions', 'empty-trader', 'positions', NULL, NULL, 50
   );
-  IF pg_catalog.jsonb_array_length(v_payload->'rows') <> 0
+  IF pg_catalog.jsonb_array_length(v_payload->'rows') IS DISTINCT FROM 0
      OR NOT v_payload ? 'asOf'
-     OR (v_payload->>'asOf')::timestamptz <>
+     OR (v_payload->>'asOf')::timestamptz IS DISTINCT FROM
           pg_catalog.transaction_timestamp() THEN
     RAISE EXCEPTION 'legacy empty positions did not synthesize now(): %', v_payload;
   END IF;
@@ -461,13 +544,13 @@ BEGIN
     'delayed_positions', 'delayed-trader', 'positions', NULL, NULL, 50
   );
   RESET ROLE;
-  IF pg_catalog.jsonb_array_length(v_payload->'rows') <> 2
-     OR (v_payload->>'sourceAsOf')::timestamptz <>
+  IF pg_catalog.jsonb_array_length(v_payload->'rows') IS DISTINCT FROM 2
+     OR (v_payload->>'sourceAsOf')::timestamptz IS DISTINCT FROM
           '2026-08-03 12:00:00+00'::timestamptz
-     OR v_payload->'observedAt' <> 'null'::jsonb
-     OR (v_payload->>'publishedAt')::timestamptz <>
+     OR v_payload->'observedAt' IS DISTINCT FROM 'null'::jsonb
+     OR (v_payload->>'publishedAt')::timestamptz IS DISTINCT FROM
           '2026-08-03 12:20:00+00'::timestamptz
-     OR (v_payload->>'asOf')::timestamptz <>
+     OR (v_payload->>'asOf')::timestamptz IS DISTINCT FROM
           '2026-08-03 12:00:00+00'::timestamptz THEN
     RAISE EXCEPTION 'explicit-delay position clocks drifted: %', v_payload;
   END IF;
@@ -484,11 +567,16 @@ BEGIN
       END,
       'positions', NULL, NULL, 50
     );
-    IF pg_catalog.jsonb_array_length(v_payload->'rows') <> 1
-       OR v_payload->'sourceAsOf' <> 'null'::jsonb
-       OR v_payload->'observedAt' <> 'null'::jsonb
-       OR v_payload->'publishedAt' = 'null'::jsonb
-       OR v_payload->'asOf' <> 'null'::jsonb THEN
+    IF pg_catalog.jsonb_array_length(v_payload->'rows') IS DISTINCT FROM 1
+       OR v_payload->'sourceAsOf' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'observedAt' IS DISTINCT FROM 'null'::jsonb
+       OR (v_payload->>'publishedAt')::timestamptz IS DISTINCT FROM
+            (CASE v_kind
+              WHEN 'missing_delay' THEN '2026-08-03 12:21:00+00'::timestamptz
+              WHEN 'invalid_delay' THEN '2026-08-03 12:22:00+00'::timestamptz
+              ELSE '2026-08-03 12:23:00+00'::timestamptz
+            END)
+       OR v_payload->'asOf' IS DISTINCT FROM 'null'::jsonb THEN
       RAISE EXCEPTION 'untrusted delay exposed source freshness for %: %', v_kind, v_payload;
     END IF;
   END LOOP;
@@ -496,11 +584,11 @@ BEGIN
   v_payload := public.arena_records_page(
     'empty_positions', 'empty-trader', 'positions', NULL, NULL, 50
   );
-  IF pg_catalog.jsonb_array_length(v_payload->'rows') <> 0
-     OR v_payload->'sourceAsOf' <> 'null'::jsonb
-     OR v_payload->'observedAt' <> 'null'::jsonb
-     OR v_payload->'publishedAt' <> 'null'::jsonb
-     OR v_payload->'asOf' <> 'null'::jsonb THEN
+  IF pg_catalog.jsonb_array_length(v_payload->'rows') IS DISTINCT FROM 0
+     OR v_payload->'sourceAsOf' IS DISTINCT FROM 'null'::jsonb
+     OR v_payload->'observedAt' IS DISTINCT FROM 'null'::jsonb
+     OR v_payload->'publishedAt' IS DISTINCT FROM 'null'::jsonb
+     OR v_payload->'asOf' IS DISTINCT FROM 'null'::jsonb THEN
     RAISE EXCEPTION 'empty positions synthesized provenance: %', v_payload;
   END IF;
 
@@ -510,11 +598,11 @@ BEGIN
     v_payload := public.arena_records_page(
       'event_records', 'events-trader', v_kind, NULL, NULL, 50
     );
-    IF pg_catalog.jsonb_array_length(v_payload->'rows') <> 1
-       OR v_payload->'sourceAsOf' <> 'null'::jsonb
-       OR v_payload->'observedAt' <> 'null'::jsonb
-       OR v_payload->'publishedAt' <> 'null'::jsonb
-       OR v_payload->'asOf' <> 'null'::jsonb THEN
+    IF pg_catalog.jsonb_array_length(v_payload->'rows') IS DISTINCT FROM 1
+       OR v_payload->'sourceAsOf' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'observedAt' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'publishedAt' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'asOf' IS DISTINCT FROM 'null'::jsonb THEN
       RAISE EXCEPTION 'event surface fabricated provenance for %: %', v_kind, v_payload;
     END IF;
   END LOOP;
@@ -547,10 +635,10 @@ BEGIN
       pg_catalog.split_part(v_subject, '|', 1),
       pg_catalog.split_part(v_subject, '|', 2)
     );
-    IF v_payload->'sourceAsOf' <> 'null'::jsonb
-       OR v_payload->'observedAt' <> 'null'::jsonb
-       OR v_payload->'publishedAt' <> 'null'::jsonb
-       OR v_payload->'asOf' <> 'null'::jsonb THEN
+    IF v_payload->'sourceAsOf' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'observedAt' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'publishedAt' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'asOf' IS DISTINCT FROM 'null'::jsonb THEN
       RAISE EXCEPTION 'copier aggregate fabricated clocks for %: %', v_subject, v_payload;
     END IF;
   END LOOP;
@@ -558,20 +646,20 @@ BEGIN
   v_payload := public.arena_copier_aggregate(
     'bitget_bots_futures', 'bot-trusted'
   );
-  IF (v_payload->>'copierCount')::integer <> 123
-     OR (v_payload->>'totalCopierPnl')::numeric <> 456
-     OR v_payload->>'depth' <> 'top10'
-     OR pg_catalog.jsonb_array_length(v_payload->'pnlDistribution') <> 5 THEN
+  IF (v_payload->>'copierCount')::integer IS DISTINCT FROM 123
+     OR (v_payload->>'totalCopierPnl')::numeric IS DISTINCT FROM 456
+     OR v_payload->>'depth' IS DISTINCT FROM 'top10'
+     OR pg_catalog.jsonb_array_length(v_payload->'pnlDistribution') IS DISTINCT FROM 5 THEN
     RAISE EXCEPTION 'trusted Bitget bot totals regressed: %', v_payload;
   END IF;
 
   v_payload := public.arena_copier_aggregate(
     'bitget_bots_spot', 'bot-top10'
   );
-  IF v_payload->'copierCount' <> 'null'::jsonb
-     OR v_payload->'totalCopierPnl' <> 'null'::jsonb
-     OR v_payload->>'depth' <> 'top10'
-     OR pg_catalog.jsonb_array_length(v_payload->'pnlDistribution') <> 1 THEN
+  IF v_payload->'copierCount' IS DISTINCT FROM 'null'::jsonb
+     OR v_payload->'totalCopierPnl' IS DISTINCT FROM 'null'::jsonb
+     OR v_payload->>'depth' IS DISTINCT FROM 'top10'
+     OR pg_catalog.jsonb_array_length(v_payload->'pnlDistribution') IS DISTINCT FROM 1 THEN
     RAISE EXCEPTION 'Top-10-only Bitget bot semantics regressed: %', v_payload;
   END IF;
 END
@@ -621,31 +709,51 @@ BEGIN
        OR NOT pg_catalog.has_function_privilege('service_role', v_function, 'EXECUTE')
        OR pg_catalog.has_function_privilege('hostile_role', v_function, 'EXECUTE')
        OR EXISTS (
-         SELECT 1
+         SELECT
+           actual.grantor,
+           actual.grantee,
+           actual.privilege_type,
+           actual.is_grantable
          FROM pg_catalog.aclexplode(
            COALESCE(v_row.proacl, pg_catalog.acldefault('f', v_row.proowner))
-         ) AS privilege
-         WHERE privilege.privilege_type = 'EXECUTE'
-           AND (
-             privilege.is_grantable
-             OR privilege.grantee = 0::oid
-             OR privilege.grantee <> ALL (
-               ARRAY[
-                 v_row.proowner,
-                 'anon'::regrole::oid,
-                 'authenticated'::regrole::oid,
-                 'service_role'::regrole::oid
-               ]::oid[]
-             )
-           )
+         ) AS actual
+         EXCEPT
+         SELECT
+           expected.grantor,
+           expected.grantee,
+           expected.privilege_type,
+           expected.is_grantable
+         FROM (
+           VALUES
+             (v_row.proowner, v_row.proowner, 'EXECUTE'::text, false),
+             (v_row.proowner, 'anon'::regrole::oid, 'EXECUTE'::text, false),
+             (v_row.proowner, 'authenticated'::regrole::oid, 'EXECUTE'::text, false),
+             (v_row.proowner, 'service_role'::regrole::oid, 'EXECUTE'::text, false)
+         ) AS expected(grantor, grantee, privilege_type, is_grantable)
        )
-       OR (
-         SELECT pg_catalog.count(*)
+       OR EXISTS (
+         SELECT
+           expected.grantor,
+           expected.grantee,
+           expected.privilege_type,
+           expected.is_grantable
+         FROM (
+           VALUES
+             (v_row.proowner, v_row.proowner, 'EXECUTE'::text, false),
+             (v_row.proowner, 'anon'::regrole::oid, 'EXECUTE'::text, false),
+             (v_row.proowner, 'authenticated'::regrole::oid, 'EXECUTE'::text, false),
+             (v_row.proowner, 'service_role'::regrole::oid, 'EXECUTE'::text, false)
+         ) AS expected(grantor, grantee, privilege_type, is_grantable)
+         EXCEPT
+         SELECT
+           actual.grantor,
+           actual.grantee,
+           actual.privilege_type,
+           actual.is_grantable
          FROM pg_catalog.aclexplode(
            COALESCE(v_row.proacl, pg_catalog.acldefault('f', v_row.proowner))
-         ) AS privilege
-         WHERE privilege.privilege_type = 'EXECUTE'
-       ) <> 4 THEN
+         ) AS actual
+       ) THEN
       RAISE EXCEPTION 'callable ACL/metadata drifted for %', v_signature;
     END IF;
   END LOOP;
@@ -653,16 +761,16 @@ END
 $callable_acl_contract$;
 SQL
 
-RECORDS_METADATA_BEFORE_REPLAY="$(psql_cmd -Atqc "SELECT oid::text || '|' || proowner::text || '|' || prosecdef::text || '|' || provolatile::text || '|' || COALESCE(array_to_string(proconfig, ','), '') || '|' || COALESCE(proacl::text, '') || '|' || encode(sha256(convert_to(prosrc, 'UTF8')), 'hex') FROM pg_proc WHERE oid = 'public.arena_records_page(text,text,text,integer,text,integer)'::regprocedure")"
-COPIER_METADATA_BEFORE_REPLAY="$(psql_cmd -Atqc "SELECT oid::text || '|' || proowner::text || '|' || prosecdef::text || '|' || provolatile::text || '|' || COALESCE(array_to_string(proconfig, ','), '') || '|' || COALESCE(proacl::text, '') || '|' || encode(sha256(convert_to(prosrc, 'UTF8')), 'hex') FROM pg_proc WHERE oid = 'public.arena_copier_aggregate(text,text)'::regprocedure")"
-OUTPUT_FINGERPRINT_BEFORE_REPLAY="$(psql_cmd -Atqc "SELECT encode(sha256(convert_to(jsonb_build_object('positions', public.arena_records_page('delayed_positions','delayed-trader','positions',NULL,NULL,50), 'history', public.arena_records_page('event_records','events-trader','position_history',NULL,NULL,50), 'trustedBot', public.arena_copier_aggregate('bitget_bots_futures','bot-trusted'), 'top10Bot', public.arena_copier_aggregate('bitget_bots_spot','bot-top10'))::text, 'UTF8')), 'hex')")"
+RECORDS_METADATA_BEFORE_REPLAY="$(function_metadata_fingerprint 'public.arena_records_page(text,text,text,integer,text,integer)')"
+COPIER_METADATA_BEFORE_REPLAY="$(function_metadata_fingerprint 'public.arena_copier_aggregate(text,text)')"
+OUTPUT_FINGERPRINT_BEFORE_REPLAY="$(rpc_output_fingerprint)"
 
 echo "[record-provenance] replay migration and prove stable identity/output"
 psql_cmd -q -f "$MIGRATION"
 
-RECORDS_METADATA_AFTER_REPLAY="$(psql_cmd -Atqc "SELECT oid::text || '|' || proowner::text || '|' || prosecdef::text || '|' || provolatile::text || '|' || COALESCE(array_to_string(proconfig, ','), '') || '|' || COALESCE(proacl::text, '') || '|' || encode(sha256(convert_to(prosrc, 'UTF8')), 'hex') FROM pg_proc WHERE oid = 'public.arena_records_page(text,text,text,integer,text,integer)'::regprocedure")"
-COPIER_METADATA_AFTER_REPLAY="$(psql_cmd -Atqc "SELECT oid::text || '|' || proowner::text || '|' || prosecdef::text || '|' || provolatile::text || '|' || COALESCE(array_to_string(proconfig, ','), '') || '|' || COALESCE(proacl::text, '') || '|' || encode(sha256(convert_to(prosrc, 'UTF8')), 'hex') FROM pg_proc WHERE oid = 'public.arena_copier_aggregate(text,text)'::regprocedure")"
-OUTPUT_FINGERPRINT_AFTER_REPLAY="$(psql_cmd -Atqc "SELECT encode(sha256(convert_to(jsonb_build_object('positions', public.arena_records_page('delayed_positions','delayed-trader','positions',NULL,NULL,50), 'history', public.arena_records_page('event_records','events-trader','position_history',NULL,NULL,50), 'trustedBot', public.arena_copier_aggregate('bitget_bots_futures','bot-trusted'), 'top10Bot', public.arena_copier_aggregate('bitget_bots_spot','bot-top10'))::text, 'UTF8')), 'hex')")"
+RECORDS_METADATA_AFTER_REPLAY="$(function_metadata_fingerprint 'public.arena_records_page(text,text,text,integer,text,integer)')"
+COPIER_METADATA_AFTER_REPLAY="$(function_metadata_fingerprint 'public.arena_copier_aggregate(text,text)')"
+OUTPUT_FINGERPRINT_AFTER_REPLAY="$(rpc_output_fingerprint)"
 
 assert_equal "records callable replay metadata" "$RECORDS_METADATA_BEFORE_REPLAY" "$RECORDS_METADATA_AFTER_REPLAY"
 assert_equal "copier callable replay metadata" "$COPIER_METADATA_BEFORE_REPLAY" "$COPIER_METADATA_AFTER_REPLAY"
