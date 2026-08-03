@@ -1,4 +1,4 @@
-# ArenaFi 路由与交互清单 — 2026-07-29
+# ArenaFi 路由与交互清单 — 2026-07-29，滚动更新至 2026-08-03
 
 > 范围：仓库中 79 个 `page.tsx` 页面、主要重定向入口、全局导航和用户可见
 > 按钮。本文说明“点击后去哪、谁能点、成功/失败应看到什么”，不把 API 存在
@@ -22,6 +22,8 @@
 7. Cookie banner、移动底栏、FAB、toast 与输入法共享 safe-area，不能互相覆盖。
 8. `source + exchange_trader_id` 是交易账户身份；handle 只用于展示/路由。任何 Follow、
    Watch、Compare、Share、Alert、Claim 都必须保留 source。
+9. 帖子媒体成功回执必须精确绑定当前 viewer、`posts/<owner>/...` 对象路径、配置的
+   Supabase origin 和服务器验证的 MIME/size；URL-only、跨 owner、外域或扩展字段均失败。
 
 ## 2. 排名数据到用户动作的核心链路
 
@@ -161,13 +163,13 @@ Settings 左侧/顶部 section 导航更新 `?section=` 并支持浏览器前进
 | `/feed/[id]`          | Back、目标 activity/post、完整互动条、Comments                                                     | SSR 目标实体；不存在或不可见明确 404/permission；不以全局 feed 模态冒充详情。                                                     |
 | `/hot`                | 时间/类别 tabs、帖子卡、互动、Load more、Refresh                                                   | hot score authority 漂移时 fail-closed/last-good；tab 用标准键盘语义。                                                            |
 | `/post/[id]`          | Back、Like/Downvote、Bookmark、Repost、Share、Report、Comment/Reply/Reaction；owner Edit/Delete    | 只渲染该帖和 thread；canonical audience；删除等确认；失败恢复互动计数。                                                           |
-| `/post/[id]/edit`     | Edit/Preview、正文/媒体/投票、Cancel、Save                                                         | owner-only；unsaved guard；保存 revision/ACK；失败保留草稿，不覆盖新版本。                                                        |
+| `/post/[id]/edit`     | Edit/Preview、正文/媒体、@mention picker、图片移动/删除、Cancel、Save                              | owner-only；鉴权失败跳回带 redirect 的登录或明确错误；unsaved guard；正文/facet/join/count 原子 CAS；严格媒体/ACK；失败保留草稿。 |
 | `/my-posts`           | Draft/Published 等分类、Open、Edit/Delete、Retry                                                   | 当前 viewer scope；解析 profile 期间有稳定占位；删除确认后才移除。                                                                |
 | `/hashtag/[tag]`      | 标签 header、排序、帖子互动、Load more                                                             | tag 贯穿所有分页；不能首屏按 tag、后续混入全局帖子。                                                                              |
 | `/groups`             | 推荐/已加入/我管理、Search、group 卡、Follow/Join/Apply、Create/Apply                              | 未登录保留 intent；每类独立状态；权限/会员级别在服务端决定。                                                                      |
-| `/groups/apply`       | 小组资料、规则、媒体、Edit/Preview、Cancel、Submit                                                 | 必填/长度内联校验；unsaved guard；重复提交 single-flight；失败保留表单。                                                          |
+| `/groups/apply`       | 小组资料、规则、头像、Edit/Preview、Cancel、Submit                                                 | 必填/长度内联校验；头像回执绑定当前 owner/path/origin；账户切换丢弃旧完成；unsaved guard；重复提交 single-flight；失败保留表单。  |
 | `/groups/[id]`        | Follow、Join/Apply/Leave、频道/帖子/成员 tabs、创建帖子、成员卡、Share/Report                      | private/premium/member/admin audience 在同一 authority；Leave/Follow exact ACK；tab 深链可恢复。                                  |
-| `/groups/[id]/new`    | Edit/Preview、正文/媒体/投票、Cancel、Publish                                                      | member permission 每次提交复核；unsaved guard；失败保留内容。                                                                     |
+| `/groups/[id]/new`    | Edit/Preview、正文/图片/视频/投票、@mention、Cancel、Publish                                       | member permission 每次提交复核；媒体回执绑定 owner/path/origin/MIME/size；原子发布与严格 ACK；unsaved guard；失败保留内容。       |
 | `/groups/[id]/manage` | Applications、Members、Roles、Mute/Remove/Ban、Channels、Broadcast、Settings、Dissolve             | owner/admin fail-closed；review/role/moderation/channel/broadcast/dissolve 使用原子 authority；所有破坏性动作确认并写 audit log。 |
 
 ### 6.1 帖子与评论按钮真值
@@ -244,5 +246,5 @@ usage → revoke → Pricing 只在 readiness 通过后进入官方 Stripe Check
 - 需登录的 channel、conversation、favorite detail、post edit、group manage/new、profile composer
   必须由双账号 auth sweep 覆盖；admin 使用独立最小权限 fixture。
 - 最终截图矩阵至少包含 375×812、768×1024、1280×800、1440×900，明/暗主题和中/英；
-  first-paint 另外启用慢 hydration 与 backend unavailable。
+  first-paint 另外启用慢 hydration 与 backend unavailable；长文案控件补日文 320/375px。
 - 当前 NO-GO 原因和 P0/P1/P2 总表见 `docs/FULL_LAUNCH_AUDIT_2026-07-18.md`。

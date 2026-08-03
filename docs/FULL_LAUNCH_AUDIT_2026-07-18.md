@@ -1,10 +1,10 @@
-# ArenaFi 全量上线审计与用户路径 — 2026-07-18，滚动更新至 2026-07-29
+# ArenaFi 全量上线审计与用户路径 — 2026-07-18，滚动更新至 2026-08-03
 
 > 范围：B2C 交易员发现、排行榜、关注/收藏/对比、认领、个人主页、社交、
 > Onboarding、Pro 转化与核心市场页。本文区分“代码已修”“数据库已迁移”
 > “生产已部署”“需要 owner”的状态，任何一层没完成都不写成已上线。
 
-## 2026-07-29 当前结论（覆盖下文历史状态与数字）
+## 2026-08-03 当前结论（覆盖下文历史状态与数字）
 
 本节是当前 release candidate 的唯一状态入口。下文保留 2026-07-18 的详细流程、
 历史问题和设计证据，但凡状态、数量或生产健康结论与本节冲突，以本节为准。
@@ -12,9 +12,10 @@
 ### 当前上线判定
 
 - **代码侧已知 P0 正在逐域清零**：账户、认证、资金权益、排行榜发布、私聊、
-  收藏夹和通知已完成新一轮原子性/完整性审计；每个小修复独立测试、提交并推送。
+  收藏夹、通知和帖子写入已完成新一轮原子性/完整性审计；每个小修复独立测试、提交，
+  分支只在工作树清洁且定向测试通过后走安全推送门禁。
 - **整体 P0 尚未清零，禁止宣布正式上线**：生产数据库本轮出现 Cloudflare 522，
-  当前 176 条 predeploy 迁移尚未在健康生产库做 exact-ledger 证明；CopyTrading v1
+  当前 187 条 predeploy 迁移尚未在健康生产库做 exact-ledger 证明；CopyTrading v1
   cap、凭据轮换和 Stripe live readiness 仍需要 owner 操作。
 - 免费、只读页面即使能降级渲染，也不能用来证明写入、收费或数据 freshness 健康。
 - 当前候选分支为 `codex/api-tier-cancel-identity-20260729`；只有部署平台返回的精确
@@ -22,39 +23,41 @@
 
 ### P0 — 致命：当前完整清单
 
-| ID    | 问题/风险                                                                                              | 已完成的代码处置                                                                                                                                            | 上线状态                                                                         |
-| ----- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| P0-01 | CopyTrading v1 可绕过网页直调，旧合约缺少足够资金安全边界。                                            | 网页、地址与产品入口永久 fail-closed；保留隔离 runbook。                                                                                                    | 👤 owner 仍须把 `maxFollowersPerTrader` 从实时 getter 的 `100` 改为 `0`。        |
-| P0-02 | 生产数据库不可达时，榜单水位、写入和迁移状态都无法证明；本轮 build/页面请求观察到 Cloudflare 522。     | sitemap/build 和只读页面在 authority 故障时诚实降级，不伪造数据。                                                                                           | 👤 恢复数据库后重跑 exact ledger、schema/type、health 和同 SHA 浏览器验收。      |
-| P0-03 | 数据库密码以及 Alchemy/Brave 凭据曾进入受控诊断输出。                                                  | 代码和文档不复述值，后续诊断不打印继承环境。                                                                                                                | 👤 轮换、更新所有运行环境并撤销旧值。                                            |
-| P0-04 | Stripe live 可能存在订阅投影漂移、旧 writer、重复购买或错误撤权。                                      | checkout、webhook、退款、争议、entitlement、账户删除结算均 fail-closed；真实收费继续关闭。                                                                  | 👤 readiness 清零、旧 writer 撤权、test/live canary 全过后才能开收费。           |
-| P0-05 | Stripe Portal/Checkout 成功响应若携带恶意 URL，浏览器可能被导向第三方。                                | Portal 只信任规范 `https://billing.stripe.com`；Checkout 只信任规范 `https://checkout.stripe.com`，拒绝凭据、自定义端口、伪子域、空白和 HTTP。              | ✅ 代码、前后端双层校验与回归测试已推送；⏳待部署。                              |
-| P0-06 | 账户删除可能先删 auth、后结算失败，或在重试/恢复时产生重复资金动作、复活已删除主体。                   | 删除 intent、一次性 settlement barrier、billing recovery、auth invalidation、hard-delete recovery 全部持久化并串行化；OTP-only 用户不再被不存在的密码卡死。 | ✅ 代码/PG17；⏳迁移与生产恢复演练。                                             |
-| P0-07 | 旧 JWT、封禁/删除用户、SIWE/WebAuthn/2FA 并发可能继续写库或重放凭据。                                  | 请求 admission、数据库 mutation barrier、SIWE nonce/wallet、WebAuthn assertion/counter/credential、2FA 都绑定 active profile 与原子 authority。             | ✅ 代码/PG17；⏳迁移与生产认证 E2E。                                             |
-| P0-08 | 交易所 OAuth/API key、portfolio、trader claim/primary link 与账户删除并发时可能残留凭据或错误 owner。  | OAuth state 原子 claim；refresh 串行；credential、portfolio、claim、primary trader 全部绑定账户生命周期；只读 credential 证明被保留。                       | ✅ 代码/PG17；⏳迁移与真实只读连接 canary。                                      |
-| P0-09 | 私聊列表、搜索、会话创建/读取/设置、reaction 和附件若分步查询，可能越权、泄露私有媒体或返回撕裂快照。  | service-only 原子 RPC；附件 bucket 私有化并在每次读取重签名；删除内容不再读出；actor/recipient 生命周期同快照复核。                                         | ✅ 代码/PG17；⏳迁移与双账号 E2E。                                               |
-| P0-10 | Watchlist/Favorites 分步 mutation/read 会出现 UI 假成功、订阅漂移、私密 folder/post 泄露或跨用户误写。 | mutation、subscription、folder lifecycle、四类 read snapshot 均原子化；API 使用 verified bearer user client 调 authenticated RPC；完整性不足 fail-closed。  | ✅ 代码/PG17；⏳迁移与双账号 E2E。                                               |
-| P0-11 | 通知过滤后分页、mark-read/delete/create 和排名批量通知分步执行，会漏项、重复、串用户或误发 push。      | 原子 filtered page/mutation/create/batch authority；稳定 event identity 去重；500 分片、逐条 ACK 绑定，只对 `CREATED` 发 push。                             | ✅ 代码/PG17；⏳迁移与通知/推送 E2E。                                            |
-| P0-12 | leaderboard 直接 writer、零行成功、过期 edge cache 或不完整来源可把错误排名发布给所有用户。            | publication fence、typed batch receipt、sealed rankings/source freshness、零行/部分写 fail-closed、旧 writer 关闭、last-good 保留。                         | ✅ 代码/PG17；⏳生产数据链和 release SHA 实证。                                  |
-| P0-13 | API key 创建/列出/撤销若相信残缺响应，会泄露完整 secret、展示错套餐额度或把失败当成功。                | 创建、列表、撤销均验证 exact ACK；列表验证 owner/tier/limit/usage/time 并脱敏；一次性 secret 在后续刷新失败时仍保留给用户。                                 | ✅ 代码与前端回归；⏳部署后真实 key canary。                                     |
-| P0-14 | 新应用依赖的数据库 authority 未进入 launch runner，会在部署后让核心功能整体不可用。                    | 所有截至 `20260729175500` 的当前迁移加入精确、有序、唯一的 runner；body/hash/ledger 与外层事务门禁保留。                                                    | ✅ 176 predeploy、12 postdeploy、5 concurrent recovery、3 recovery；⏳生产执行。 |
+| ID    | 问题/风险                                                                                              | 已完成的代码处置                                                                                                                                            | 上线状态                                                                                                                         |
+| ----- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| P0-01 | CopyTrading v1 可绕过网页直调，旧合约缺少足够资金安全边界。                                            | 网页、地址与产品入口永久 fail-closed；保留隔离 runbook。                                                                                                    | 👤 owner 仍须把 `maxFollowersPerTrader` 从实时 getter 的 `100` 改为 `0`。                                                        |
+| P0-02 | 生产数据库不可达时，榜单水位、写入和迁移状态都无法证明；本轮 build/页面请求观察到 Cloudflare 522。     | sitemap/build 和只读页面在 authority 故障时诚实降级，不伪造数据。                                                                                           | 👤 恢复数据库后重跑 exact ledger、schema/type、health 和同 SHA 浏览器验收。                                                      |
+| P0-03 | 数据库密码以及 Alchemy/Brave 凭据曾进入受控诊断输出。                                                  | 代码和文档不复述值，后续诊断不打印继承环境。                                                                                                                | 👤 轮换、更新所有运行环境并撤销旧值。                                                                                            |
+| P0-04 | Stripe live 可能存在订阅投影漂移、旧 writer、重复购买或错误撤权。                                      | checkout、webhook、退款、争议、entitlement、账户删除结算均 fail-closed；真实收费继续关闭。                                                                  | 👤 readiness 清零、旧 writer 撤权、test/live canary 全过后才能开收费。                                                           |
+| P0-05 | Stripe Portal/Checkout 成功响应若携带恶意 URL，浏览器可能被导向第三方。                                | Portal 只信任规范 `https://billing.stripe.com`；Checkout 只信任规范 `https://checkout.stripe.com`，拒绝凭据、自定义端口、伪子域、空白和 HTTP。              | ✅ 代码、前后端双层校验与回归测试已推送；⏳待部署。                                                                              |
+| P0-06 | 账户删除可能先删 auth、后结算失败，或在重试/恢复时产生重复资金动作、复活已删除主体。                   | 删除 intent、一次性 settlement barrier、billing recovery、auth invalidation、hard-delete recovery 全部持久化并串行化；OTP-only 用户不再被不存在的密码卡死。 | ✅ 代码/PG17；⏳迁移与生产恢复演练。                                                                                             |
+| P0-07 | 旧 JWT、封禁/删除用户、SIWE/WebAuthn/2FA 并发可能继续写库或重放凭据。                                  | 请求 admission、数据库 mutation barrier、SIWE nonce/wallet、WebAuthn assertion/counter/credential、2FA 都绑定 active profile 与原子 authority。             | ✅ 代码/PG17；⏳迁移与生产认证 E2E。                                                                                             |
+| P0-08 | 交易所 OAuth/API key、portfolio、trader claim/primary link 与账户删除并发时可能残留凭据或错误 owner。  | OAuth state 原子 claim；refresh 串行；credential、portfolio、claim、primary trader 全部绑定账户生命周期；只读 credential 证明被保留。                       | ✅ 代码/PG17；⏳迁移与真实只读连接 canary。                                                                                      |
+| P0-09 | 私聊列表、搜索、会话创建/读取/设置、reaction 和附件若分步查询，可能越权、泄露私有媒体或返回撕裂快照。  | service-only 原子 RPC；附件 bucket 私有化并在每次读取重签名；删除内容不再读出；actor/recipient 生命周期同快照复核。                                         | ✅ 代码/PG17；⏳迁移与双账号 E2E。                                                                                               |
+| P0-10 | Watchlist/Favorites 分步 mutation/read 会出现 UI 假成功、订阅漂移、私密 folder/post 泄露或跨用户误写。 | mutation、subscription、folder lifecycle、四类 read snapshot 均原子化；API 使用 verified bearer user client 调 authenticated RPC；完整性不足 fail-closed。  | ✅ 代码/PG17；⏳迁移与双账号 E2E。                                                                                               |
+| P0-11 | 通知过滤后分页、mark-read/delete/create 和排名批量通知分步执行，会漏项、重复、串用户或误发 push。      | 原子 filtered page/mutation/create/batch authority；稳定 event identity 去重；500 分片、逐条 ACK 绑定，只对 `CREATED` 发 push。                             | ✅ 代码/PG17；⏳迁移与通知/推送 E2E。                                                                                            |
+| P0-12 | leaderboard 直接 writer、零行成功、过期 edge cache 或不完整来源可把错误排名发布给所有用户。            | publication fence、typed batch receipt、sealed rankings/source freshness、零行/部分写 fail-closed、旧 writer 关闭、last-good 保留。                         | ✅ 代码/PG17；⏳生产数据链和 release SHA 实证。                                                                                  |
+| P0-13 | API key 创建/列出/撤销若相信残缺响应，会泄露完整 secret、展示错套餐额度或把失败当成功。                | 创建、列表、撤销均验证 exact ACK；列表验证 owner/tier/limit/usage/time 并脱敏；一次性 secret 在后续刷新失败时仍保留给用户。                                 | ✅ 代码与前端回归；⏳部署后真实 key canary。                                                                                     |
+| P0-14 | 新应用依赖的数据库 authority 未进入 launch runner，会在部署后让核心功能整体不可用。                    | 所有截至 `20260729187000` 的当前迁移加入精确、有序、唯一的 runner；body/hash/ledger 与外层事务门禁保留。                                                    | ✅ 187 predeploy、16 postdeploy、5 concurrent recovery、3 recovery、1 quarantined、1 superseded，共 213 项唯一迁移；⏳生产执行。 |
 
 P0 的“代码已修”不等于“生产已清零”。P0-01 至 P0-04 的 owner/基础设施动作、
 P0-02/P0-06 至 P0-14 的生产迁移与同 SHA 验收全部完成前，发布结论保持 **NO-GO**。
 
 ### P1 — 重要：当前清单
 
-| ID    | 问题                                                                                | 当前处置                                                                                                     |
-| ----- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| P1-01 | 首页慢加载时先单列、后变标准 UI，造成明显 CLS。                                     | SSR 直接输出最终三栏壳；慢 hydration 的 4 视口 × 2 auth/locale 矩阵已通过。✅                                |
-| P1-02 | Token rankings 在后端不可用时把 popular tokens 整页打成 500。                       | last-good/degraded/503 truth；不再让附属模块拖垮主页面。✅                                                   |
-| P1-03 | 90D/30D/7D 在请求进行中被禁用，旧请求阻塞下一次点击。                               | 周期按钮始终可操作，切换会 abort 旧请求；补 `aria-pressed`、`aria-busy` 与 40px 触控高度。✅                 |
-| P1-04 | Inbox/filter 先分页后过滤会出现空洞；通知 panel loading/empty/error 混淆。          | 服务端过滤后原子分页；panel 状态和交互对齐。✅                                                               |
-| P1-05 | Favorites/Following/Portfolio/Compare/Claim 请求失败时伪装为空或清掉 last-good。    | 各域保留 last-good，显式 error/retry；服务端确认前不做不可逆 UI 删除。✅                                     |
-| P1-06 | Settings 的 passkey、block、session、profile image 操作可能静默失败或乐观显示成功。 | list/mutation exact ACK；删除 passkey/unblock/session revoke/profile image 保存均有真错误与回滚。✅          |
-| P1-07 | build 依赖生产数据库生成动态 sitemap，数据库故障可阻塞整个 release。                | build phase 只保留静态 sitemap；运行时动态 shard 故障返回空 shard。✅ production build 已在 522 条件下成功。 |
-| P1-08 | 其余页面仍需逐页截图复核重叠、safe-area、触控目标、焦点、对比度和错误态。           | 🔄 按公开主流程优先继续；每一组有截图证据后才标完成。                                                        |
-| P1-09 | 认证写流程缺少完整生产双账号/OTP/passkey/Stripe test fixture E2E。                  | 🧪 单元、合同、PG17 已覆盖；⏳健康 staging/production fixture 后补浏览器闭环。                               |
+| ID    | 问题                                                                                          | 当前处置                                                                                                                                  |
+| ----- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-01 | 首页慢加载时先单列、后变标准 UI，造成明显 CLS。                                               | 根因是 `responsive.css` 被 `media=print` 延迟；现改为首屏阻塞加载并锁定唯一 stylesheet，hydration 前 1440px 已是三栏。✅                  |
+| P1-02 | Token rankings 在后端不可用时把 popular tokens 整页打成 500。                                 | last-good/degraded/503 truth；不再让附属模块拖垮主页面。✅                                                                                |
+| P1-03 | 90D/30D/7D 在请求进行中被禁用，旧请求阻塞下一次点击。                                         | 周期按钮始终可操作，切换会 abort 旧请求；补 `aria-pressed`、`aria-busy` 与 40px 触控高度。✅                                              |
+| P1-04 | Inbox/filter 先分页后过滤会出现空洞；通知 panel loading/empty/error 混淆。                    | 服务端过滤后原子分页；panel 状态和交互对齐。✅                                                                                            |
+| P1-05 | Favorites/Following/Portfolio/Compare/Claim 请求失败时伪装为空或清掉 last-good。              | 各域保留 last-good，显式 error/retry；服务端确认前不做不可逆 UI 删除。✅                                                                  |
+| P1-06 | Settings 的 passkey、block、session、profile image 操作可能静默失败或乐观显示成功。           | list/mutation exact ACK；删除 passkey/unblock/session revoke/profile image 保存均有真错误与回滚。✅                                       |
+| P1-07 | build 依赖生产数据库生成动态 sitemap，数据库故障可阻塞整个 release。                          | build phase 只保留静态 sitemap；运行时动态 shard 故障返回空 shard。✅ production build 已在 522 条件下成功。                              |
+| P1-08 | 其余页面仍需逐页截图复核重叠、safe-area、触控目标、焦点、对比度和错误态。                     | 🔄 按公开主流程优先继续；排行榜日文 320/375px 工具栏裁切已修并留几何/截图证据，其余页面继续。                                             |
+| P1-09 | 认证写流程缺少完整生产双账号/OTP/passkey/Stripe test fixture E2E。                            | 🧪 单元、合同、PG17 已覆盖；⏳健康 staging/production fixture 后补浏览器闭环。                                                            |
+| P1-10 | 帖子编辑分步更新正文、语言、提及、标签和计数，可能部分成功或覆盖并发版本。                    | 10 参数原子 CAS RPC 同步全部 facet/join/count；保留旧签名滚动兼容，应用全量后再按 `186000 → 187000` 关闭旧签名。✅代码/PG17；⏳生产迁移。 |
+| P1-11 | 媒体上传客户端信任 URL-only/跨 owner 回执，编辑鉴权失败会无限骨架，预览控制与正式渲染不一致。 | 图片/视频回执绑定 owner/path/origin/MIME/size；编辑页失败退出 loading、补 mention picker，预览拒绝危险图片并精确移动/删除。✅             |
 
 ### P2 — 边缘：明确上线后
 
@@ -86,14 +89,14 @@ checked-in serving 证据是 2026-07-16 的 34 个 source boards，不能冒充 
 
 ### 当前验证证据
 
-- `npm run qa:launch-migration-runner`：19/19 通过；当前 migration 集合 198 个
+- `npm run qa:launch-migration-runner`：19/19 通过；当前 migration 集合 213 个
   唯一成员（含 pre/post/recovery/quarantine/superseded）。
-- PostgreSQL 17 runner harness：事务回滚、同 target 并发、全局串行、锁超时、
-  连接中断和 mid-body error 不变量全部通过。
+- PostgreSQL 17：帖子媒体 bucket、标签计数完整性、facet-aware 编辑及旧签名关闭的
+  回滚、重放、权限、并发与零停机顺序全部通过；runner 的事务/锁不变量继续通过。
 - production build：在生产数据库 Cloudflare 522 时仍成功，静态页面和 sitemap
   不再被动态数据库 shard 阻塞。
-- 首页 first-paint：desktop 项目的 4 个 viewport × 2 个 auth/locale 场景通过，
-  后端故障与慢 hydration 条件下不先渲染单列。
+- 首页 first-paint：响应式几何在绘制前阻塞加载；Playwright 慢 chunk 证明确认
+  hydration 前 1440px 已是三栏，既有多视口矩阵继续保留。
 - production read-only button sweep：69 routes × 2 viewports 共 138 次均 HTTP 200，
   无 blank/crash/error boundary；发现的 token 500 与 period click timeout 已代码修复，
   WalletConnect explorer 噪声归 P2。修复后仍须在最终 SHA 重跑生产 sweep。
@@ -148,7 +151,7 @@ fail closed，直到 P0-06 的 readiness、writer 撤权和 live canary 全部�
 
 | 领域              | 已确认问题                                                                                                                                                              | 修复/处置                                                                                                                                                 |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 首页首屏          | 慢网先显示单列，数秒后才变标准三栏，产生巨大布局位移。                                                                                                                  | 服务端直接输出最终三栏壳；客户端只接管交互，不重新发明布局；保留固定高度与列宽。✅                                                                        |
+| 首页首屏          | `responsive.css` 用 `media=print` + `onload` 延迟，慢网先绘制单列，数秒后才变标准三栏。                                                                                 | 根布局只输出一个首屏阻塞 stylesheet；禁止 print/onload trick；Playwright 确认 hydration 前桌面已为三栏。✅                                                |
 | 首页 freshness    | footer 用本地 2 小时推断，但数据来源契约是逐源 48 小时；指标不变时 fingerprint 会吞掉 freshness 更新。                                                                  | 从 SSR 到 footer 贯通 `isStale`；fingerprint 和跨标签广播包含来源水位；删除本地推断。✅                                                                   |
 | 数据水位          | 旧 API 用全局 score compute time 冒充来源更新时间，无法指出 Binance/Bybit 等单源陈旧。                                                                                  | 新增逐 source/window 水位表；仅在无错误发布后前移；缺失、未来时间、失败批次均 fail-closed。✅代码；✅生产 migration；✅生产应用                           |
 | 重新打分          | 陈旧来源可能被重新打分、清零或参与清理，破坏 last-good 数据。                                                                                                           | stale source 不重新打分、不归零；清理只针对本轮 fresh source。✅                                                                                          |
@@ -156,6 +159,7 @@ fail closed，直到 P0-06 的 readiness、writer 撤权和 live canary 全部�
 | Hero 事实         | “44 exchanges”及旧 exchange count 文案不真实；代码把 source board 当公司数。                                                                                            | 改为 live ranking source boards；API 保留 deprecated `exchangeCount` 但注释真实语义；RPC 用活跃榜源计数。✅代码；✅生产 migration；✅生产应用             |
 | 首页数据时间      | footer 显示计算时间而非真实采集时间。                                                                                                                                   | API、SSR、composite 全部使用来源 watermark，并显示 stale 状态。✅                                                                                         |
 | 手机榜单卡        | 卡片内容横向溢出、按钮藏在卡外、嵌套交互区域误触。                                                                                                                      | 约束最小宽度/换行，动作按钮显式可见，移除嵌套 interactive。✅                                                                                             |
+| 排行手机工具栏    | 日文 320/375px 下交易员类型长标签把 Filter/Compare 推出容器，Compare 最多被裁 77px。                                                                                    | 类型按钮进入可横滑且可访问的独立 lane；Filter/Compare 固定留在行内；320/375/768 几何与截图验证。✅                                                        |
 | Compare 缺失项    | API 静默丢弃不存在账户，用户以为全部已对比。                                                                                                                            | 返回 `missingAccounts`，UI 告知并规范化 URL，仅保存实际加载身份。✅                                                                                       |
 | Claim 身份        | 认领跳转只带 handle，可能落到同名的其他交易所账户。                                                                                                                     | 全链路传递 source + exchange trader id。✅                                                                                                                |
 | Claim 错误        | 搜索失败被渲染为空结果，用户无法区分“没有”与“请求失败”。                                                                                                                | 显式错误态和 retry；不清空已有结果。✅                                                                                                                    |
@@ -169,7 +173,7 @@ fail closed，直到 P0-06 的 readiness、writer 撤权和 live canary 全部�
 | Follow 登录恢复   | pending follow 在伪未登录瞬间被消费/丢失。                                                                                                                              | 只在确认 auth restore 后执行。✅                                                                                                                          |
 | Follow 聚合       | 粉丝数、相似交易员、排行榜评分按 raw id 统计，会把不同交易所同 id 合并；fallback 还可能被 1,000 行上限截断。                                                            | 新 source/account RPC；reader 全部用 JSON tuple key；fallback 显式分页且部分页失败整批丢弃。✅代码/类型/生产 RPC                                          |
 | Digest/Activity   | weekly digest、follow activity 和 trader event reference 按 raw id 关联，可能把另一个交易所账户的活动发给用户。                                                         | digest/follow/activity/alert 全部 source-scope；legacy null 只在唯一候选时兼容，否则跳过；同 raw id 双 source 回归已覆盖。✅                              |
-| 迁移 runner       | 只看 version 数量、host 先查再执行，账本可在事务开始前漂移；重跑也可能把同名错误结构当成功。                                                                            | exact name/hash/body/idempotency；事务内重验并 `FOR SHARE` 锁行；missing 才执行；schema 提前存在时 fail closed。✅Node 10/10 + PG17                       |
+| 迁移 runner       | 只看 version 数量、host 先查再执行，账本可在事务开始前漂移；重跑也可能把同名错误结构当成功。                                                                            | exact name/hash/body/idempotency；事务内重验并 `FOR SHARE` 锁行；missing 才执行；当前 187 predeploy + 16 postdeploy，213 项唯一分类。✅Node + PG17        |
 | Onboarding        | 完成页跳转早于 follow intents 写完，选择的关注可能丢失。                                                                                                                | 跳转前 drain 全部 intent。✅                                                                                                                              |
 | Search People     | API 有 public people，前端模型丢弃，People tab 假空。                                                                                                                   | 统一结果模型并展示公开用户。✅                                                                                                                            |
 | Search retry      | 搜索失败只能改关键词，没有明确重试。                                                                                                                                    | 增加 retry，保留查询和结果。✅                                                                                                                            |
@@ -199,6 +203,9 @@ fail closed，直到 P0-06 的 readiness、writer 撤权和 live canary 全部�
 | Serving QA        | 首页等待全局 `networkidle`，被持续请求拖成假超时。                                                                                                                      | 等可见榜单行并观察固定窗口，同时记录所有 `>=400` 响应。✅                                                                                                 |
 | OKX Solana 增强   | 代表页 5/5 `POST /api/trader/onchain-enrich` 500；Helius `max usage reached`，Alchemy 月容量耗尽。核心 profile 约 765ms 可见，但可选链上 insight 不可用并制造重复 500。 | 容量错误现为可识别的 503 + `Retry-After`，有 5 分钟 circuit breaker 和显式非致命 UI；永久代码/DB 错误仍保持 500。✅代码；👤恢复增强功能仍需补供应商容量。 |
 | Hot last-good     | SSR 帖子已显示后，hydration/定时刷新遇 500 会把 `{error}` 当空数组，清空整页并显示 noData。                                                                             | 非 2xx/畸形 2xx 进入显式错误，保留当前帖子并显示 Retry；只有成功合法空数组进入 noData；pull-to-refresh 改成原地请求。✅                                   |
+| 帖子编辑一致性    | 正文保存成功后 language/mentions/hashtags/join/count 仍可能失败；旧回执不能证明最终 facet，编辑鉴权异常还会永久 skeleton。                                              | 服务端从清洗后正文派生 facet，数据库事务内 CAS + 同步 join/count 并返回严格 ACK；鉴权失败明确跳登录/错误；原签名待 postdeploy 关闭。✅代码/PG17           |
+| 帖子媒体与预览    | 上传成功响应可伪造 URL/owner；自定义 alt 图片控制失效；占位符文本会被移动算法误替换；危险 Markdown 图片可进入预览。                                                     | 回执精确验证 storage origin/owner/path/类型/大小；共享纯函数按 URL 精确移动删除且无占位符；预览只渲染 http(s) 图片并切断新窗口 opener。✅                 |
+| 群组申请头像      | 可达申请页只读取 `data.url`，跨 owner、外域或扩展成功回执会被当成头像。                                                                                                 | 复用帖子媒体严格回执；账户切换时旧上传不能覆盖新 viewer；删除两个零引用的宽松旧 hooks。✅                                                                 |
 | Tip 成功页        | `tips.post_id` 被误当成 group id；“Back to post”和分享都跳 `/groups/{postId}`。                                                                                         | 统一生成 `/post/{encodedPostId}`；没有 post id 时才返回 Groups。✅                                                                                        |
 | Sentry sourcemap  | Production 虽已有 `SENTRY_AUTH_TOKEN`，但 `withSentryConfig` 已移除、browser sourcemap 关闭，仓库也没有 exact-SHA 上传调用。                                            | 补回受控上传机制并在 Sentry 侧保存同一 release SHA 的可读栈留证；仅存在 token 不算完成。👤                                                                |
 | Auth 品牌         | Supabase 默认邮件模板/发件域会破坏首次注册体验。                                                                                                                        | Dashboard 配置和真实收件箱 canary。👤                                                                                                                     |
