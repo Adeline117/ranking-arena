@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const page = readFileSync(resolve(process.cwd(), 'app/(app)/post/[id]/edit/page.tsx'), 'utf8')
@@ -22,5 +22,16 @@ describe('full post editor atomic write path', () => {
     expect(page).toContain('images.map((image) => image.url)')
     expect(page).toContain('Array.isArray(originalPost.images)')
     expect(page).toContain('!sameStringList(')
+  })
+
+  it('has no dormant duplicate editor that can restore direct database writes', () => {
+    for (const relativePath of [
+      'app/(app)/post/[id]/edit/_hooks/useEditPost.ts',
+      'app/(app)/post/[id]/edit/_components/ContentPreview.tsx',
+      'app/(app)/post/[id]/edit/_components/EditorForm.tsx',
+      'app/(app)/post/[id]/edit/_components/ImageUploadSection.tsx',
+    ]) {
+      expect(existsSync(resolve(process.cwd(), relativePath))).toBe(false)
+    }
   })
 })
