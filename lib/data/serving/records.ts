@@ -76,6 +76,12 @@ function recordProvenance(source: string, payload: Record<string, unknown>): Rec
   }
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
 /** Copier-PII guard (spec §6): these keys never leave the API layer. */
 const BANNED_ROW_KEYS: ReadonlySet<string> = new Set([
   'copier_label',
@@ -85,6 +91,13 @@ const BANNED_ROW_KEYS: ReadonlySet<string> = new Set([
   'email',
   'user_id',
   'userId',
+  // RAW is an internal evidence substrate, not a serving field. Keeping it
+  // out also prevents nested upstream identifiers from bypassing this guard.
+  'raw',
+  // Never assign these untrusted keys onto a normal object.
+  '__proto__',
+  'prototype',
+  'constructor',
 ])
 
 export function sanitizeRecordRow(row: Record<string, unknown>): Record<string, unknown> {
@@ -93,6 +106,23 @@ export function sanitizeRecordRow(row: Record<string, unknown>): Record<string, 
     if (!BANNED_ROW_KEYS.has(key)) out[key] = value
   }
   return out
+}
+
+function sanitizeRecordRows(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return []
+  const rows: Record<string, unknown>[] = []
+  for (const candidate of value) {
+    if (isPlainRecord(candidate)) rows.push(sanitizeRecordRow(candidate))
+  }
+  return rows
+}
+
+function finiteNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function nonNegativeSafeIntegerOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 
 function unknownHistoryCompleteness(): HistoryCompleteness {
@@ -182,11 +212,10 @@ export async function getRecordsPage(
     p_limit: limit,
   })
   logRpcError('arena_records_page', error)
-  if (error || !data) return null
-  const d = data as Record<string, unknown>
-  const rows = Array.isArray(d.rows) ? (d.rows as Record<string, unknown>[]) : []
+  if (error || !isPlainRecord(data)) return null
+  const d = data
   return {
-    rows: rows.map(sanitizeRecordRow),
+    rows: sanitizeRecordRows(d.rows),
     nextCursor: typeof d.nextCursor === 'string' ? d.nextCursor : null,
     provenance: recordProvenance(source, d),
     cacheState: 'warm',
@@ -204,25 +233,27 @@ export async function getCopierAggregate(
     p_trader: exchangeTraderId,
   })
   logRpcError('arena_copier_aggregate', error)
-  if (error || !data) return null
-  const d = data as Record<string, unknown>
+  if (error || !isPlainRecord(data)) return null
+  const d = data
 
   const distribution: CopierAggregate['pnlDistribution'] = []
   if (Array.isArray(d.pnlDistribution)) {
-    for (const b of d.pnlDistribution as Array<Record<string, unknown>>) {
-      if (typeof b.bucket === 'string' && typeof b.count === 'number') {
-        distribution.push({ bucket: b.bucket, count: b.count })
+    for (const candidate of d.pnlDistribution) {
+      if (!isPlainRecord(candidate)) continue
+      const count = nonNegativeSafeIntegerOrNull(candidate.count)
+      if (typeof candidate.bucket === 'string' && count !== null) {
+        distribution.push({ bucket: candidate.bucket, count })
       }
     }
   }
 
-  const totalPnl = typeof d.totalCopierPnl === 'number' ? d.totalCopierPnl : null
+  const totalPnl = finiteNumberOrNull(d.totalCopierPnl)
   const depth =
     d.depth === 'full' || d.depth === 'top10' || d.depth === 'top3_preview' ? d.depth : 'none'
 
   return {
-    copierCount: typeof d.copierCount === 'number' ? d.copierCount : null,
-    copierCountMax: typeof d.copierCountMax === 'number' ? d.copierCountMax : null,
+    copierCount: nonNegativeSafeIntegerOrNull(d.copierCount),
+    copierCountMax: nonNegativeSafeIntegerOrNull(d.copierCountMax),
     totalCopierPnl: totalPnl === null ? null : money(totalPnl, asCurrency(d.currency)),
     pnlDistribution: distribution,
     depth,
@@ -234,10 +265,10 @@ export async function getCopierAggregate(
 export function recordsPageFromTierC(
   source: string,
   kind: Exclude<RecordKind, 'copiers'>,
-  payload: Record<string, unknown>
+  payload: unknown
 ): RecordsPage | null {
-  const rows = Array.isArray(payload.rows) ? (payload.rows as Record<string, unknown>[]) : null
-  if (!rows) return null
+  if (!isPlainRecord(payload) || !Array.isArray(payload.rows)) return null
+  const rows = sanitizeRecordRows(payload.rows)
   const parsedCompleteness = parseHistoryCompleteness(payload.completeness)
   const previewCompleteness: HistoryCompleteness | undefined =
     kind === 'position_history'
@@ -256,7 +287,7 @@ export function recordsPageFromTierC(
         }
       : undefined
   return {
-    rows: rows.map(sanitizeRecordRow),
+    rows,
     // Tier-C history is a bounded preview and may never advertise pagination,
     // even if an old or malformed worker payload supplies a cursor.
     nextCursor:
