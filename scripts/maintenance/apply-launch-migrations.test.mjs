@@ -169,6 +169,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729153500_close_legacy_leaderboard_rank_writer_rpcs.sql'
   const leaderboardPublicationAuthorityClosureMigration =
     '20260729154000_close_leaderboard_publication_authority.sql'
+  const postDirectWriteClosureMigration = '20260729184000_close_post_direct_writes.sql'
+  const postCreateDirectWriteClosureMigration = '20260729185000_close_post_create_direct_writes.sql'
   const accountHardDeleteRecoveryBarrierMigration =
     '20260729075300_account_hard_delete_recovery_barrier.sql'
   const verifiedAuthProfileEmailMigration = '20260729075400_verified_auth_profile_email.sql'
@@ -248,6 +250,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     latestMutationAuthorityMigrations
   )
   assert.ok(predeploy.includes(inactiveAuthSubjectMutationBarrierMigration))
+  assert.equal(postdeploy.length, 14)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -261,7 +264,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     leaderboardRankDirectWriteClosureMigration,
     legacyLeaderboardRankWriterClosureMigration,
     leaderboardPublicationAuthorityClosureMigration,
-    '20260729184000_close_post_direct_writes.sql',
+    postDirectWriteClosureMigration,
+    postCreateDirectWriteClosureMigration,
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   assert.deepEqual(recoveryPrerequisites, [
@@ -379,7 +383,21 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 208)
+  assert.equal(new Set(all).size, 209)
+  assert.equal(
+    postdeploy.filter((migration) => migration === postCreateDirectWriteClosureMigration).length,
+    1
+  )
+  assert.equal(
+    postdeploy.indexOf(postCreateDirectWriteClosureMigration),
+    postdeploy.indexOf(postDirectWriteClosureMigration) + 1
+  )
+  assert.ok(!predeploy.includes(postCreateDirectWriteClosureMigration))
+  assert.ok(!recoveryPrerequisites.includes(postCreateDirectWriteClosureMigration))
+  assert.ok(!concurrentRecovery.includes(postCreateDirectWriteClosureMigration))
+  assert.ok(!recovery.includes(postCreateDirectWriteClosureMigration))
+  assert.ok(!quarantined.includes(postCreateDirectWriteClosureMigration))
+  assert.ok(!superseded.includes(postCreateDirectWriteClosureMigration))
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,

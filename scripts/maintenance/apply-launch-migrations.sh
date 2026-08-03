@@ -246,6 +246,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260729153500_close_legacy_leaderboard_rank_writer_rpcs.sql
   20260729154000_close_leaderboard_publication_authority.sql
   20260729184000_close_post_direct_writes.sql
+  20260729185000_close_post_create_direct_writes.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover
