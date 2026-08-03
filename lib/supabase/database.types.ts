@@ -13280,6 +13280,14 @@ export type Database = {
         }
         Returns: Json
       }
+      set_post_pin_state_atomic: {
+        Args: {
+          p_actor_id: string
+          p_is_pinned: boolean
+          p_post_id: string
+        }
+        Returns: Json
+      }
       set_primary_linked_trader: {
         Args: { p_link_id: string; p_user_id: string }
         Returns: {
