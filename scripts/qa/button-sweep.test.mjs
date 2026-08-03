@@ -10,6 +10,10 @@ const exhaustiveSource = readFileSync(
   join(process.cwd(), 'scripts/qa/exhaustive-sweep.mjs'),
   'utf8'
 )
+const traderRegressionSource = readFileSync(
+  join(process.cwd(), 'e2e/trader-detail-500-regression.spec.ts'),
+  'utf8'
+)
 
 test('public entity routes use live API samples instead of retired fixtures', () => {
   assert.doesNotMatch(source, /\/trader\/soul|\/wrapped\/soul|\/u\/arena_bot/)
@@ -51,4 +55,11 @@ test('the exhaustive audit resolves every public dynamic entity without dead fix
     assert.match(exhaustiveSource, new RegExp(`addDynamic\\('${route}'`))
   }
   assert.match(exhaustiveSource, /dynamic skips/)
+})
+
+test('the trader 500 regression samples live futures and on-chain identities', () => {
+  assert.doesNotMatch(traderRegressionSource, /\/trader\/soul|Anointed-Connect|\?platform=/)
+  assert.match(traderRegressionSource, /loadRankingSample\(request, 'futures'\)/)
+  assert.match(traderRegressionSource, /loadRankingSample\(request, 'onchain'\)/)
+  assert.match(traderRegressionSource, /\?source=\$\{encodeURIComponent\(trader\.source\)\}/)
 })

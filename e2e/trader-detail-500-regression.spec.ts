@@ -1,4 +1,31 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type APIRequestContext } from '@playwright/test'
+
+type RankingCategory = 'futures' | 'onchain'
+
+interface RankingSample {
+  key: string
+  source: string
+}
+
+async function loadRankingSample(
+  request: APIRequestContext,
+  category: RankingCategory
+): Promise<RankingSample> {
+  const response = await request.get(
+    `/api/rankings?window=30d&category=${category}&limit=1&_e2e=${Date.now()}`,
+    { timeout: 20_000 }
+  )
+  expect(response.status(), `${category} ranking sample must be available`).toBe(200)
+
+  const body = await response.json()
+  const trader = body?.data?.traders?.[0]
+  const key = trader?.trader_key
+  const source = trader?.platform
+  expect(typeof key === 'string' && key.trim().length > 0).toBeTruthy()
+  expect(typeof source === 'string' && source.trim().length > 0).toBeTruthy()
+
+  return { key: key.trim(), source: source.trim() }
+}
 
 /**
  * Regression test: /trader/* must never return 500
@@ -14,8 +41,9 @@ import { test, expect } from '@playwright/test'
  */
 
 test.describe('Trader Detail 500 Regression', () => {
-  test('direct URL — futures trader loads (not 500)', async ({ page }) => {
-    const response = await page.goto('/trader/soul', {
+  test('direct URL — futures trader loads (not 500)', async ({ page, request }) => {
+    const trader = await loadRankingSample(request, 'futures')
+    const response = await page.goto(`/trader/${encodeURIComponent(trader.key)}`, {
       timeout: 30_000,
       waitUntil: 'domcontentloaded',
     })
@@ -29,11 +57,15 @@ test.describe('Trader Detail 500 Regression', () => {
     expect(title).not.toContain('500')
   })
 
-  test('direct URL — on-chain trader loads (not 500)', async ({ page }) => {
-    const response = await page.goto('/trader/Anointed-Connect', {
-      timeout: 30_000,
-      waitUntil: 'domcontentloaded',
-    })
+  test('direct URL — on-chain trader loads (not 500)', async ({ page, request }) => {
+    const trader = await loadRankingSample(request, 'onchain')
+    const response = await page.goto(
+      `/trader/${encodeURIComponent(trader.key)}?source=${encodeURIComponent(trader.source)}`,
+      {
+        timeout: 30_000,
+        waitUntil: 'domcontentloaded',
+      }
+    )
 
     expect(response?.status()).not.toBe(500)
 
@@ -41,11 +73,15 @@ test.describe('Trader Detail 500 Regression', () => {
     expect(title).not.toContain("couldn't load")
   })
 
-  test('direct URL with ?platform= param loads (not 500)', async ({ page }) => {
-    const response = await page.goto('/trader/soul?platform=binance_futures', {
-      timeout: 30_000,
-      waitUntil: 'domcontentloaded',
-    })
+  test('direct URL with ?source= param loads (not 500)', async ({ page, request }) => {
+    const trader = await loadRankingSample(request, 'futures')
+    const response = await page.goto(
+      `/trader/${encodeURIComponent(trader.key)}?source=${encodeURIComponent(trader.source)}`,
+      {
+        timeout: 30_000,
+        waitUntil: 'domcontentloaded',
+      }
+    )
 
     expect(response?.status()).not.toBe(500)
 
