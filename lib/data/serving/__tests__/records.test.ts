@@ -32,16 +32,46 @@ describe('copier PII rule (spec §6)', () => {
   })
 
   it('sanitizeRecordRow strips identifier-ish keys (defense in depth)', () => {
-    expect(
-      sanitizeRecordRow({
-        symbol: 'BTCUSDT',
-        realized_pnl: 12,
-        copier_label: 'ku****j@***.com',
-        copierLabel: 'x',
-        email: 'a@b.c',
-        user_id: '123',
-      })
-    ).toEqual({ symbol: 'BTCUSDT', realized_pnl: 12 })
+    const row = JSON.parse(
+      '{"symbol":"BTCUSDT","realized_pnl":12,"copier_label":"ku****j@***.com",' +
+        '"copierLabel":"x","email":"a@b.c","user_id":"123",' +
+        '"raw":{"email":"nested@secret.invalid"},"__proto__":{"polluted":true},' +
+        '"prototype":{"polluted":true},"constructor":{"polluted":true}}'
+    ) as Record<string, unknown>
+    const sanitized = sanitizeRecordRow(row)
+
+    expect(sanitized).toEqual({ symbol: 'BTCUSDT', realized_pnl: 12 })
+    expect(Object.getPrototypeOf(sanitized)).toBe(Object.prototype)
+    expect(({} as { polluted?: boolean }).polluted).toBeUndefined()
+  })
+
+  it('filters malformed copier distribution entries and non-finite aggregate values', async () => {
+    const aggregate = await getCopierAggregate(
+      rpcClient({
+        copierCount: Number.NaN,
+        copierCountMax: -1,
+        totalCopierPnl: Number.POSITIVE_INFINITY,
+        currency: 'USDT',
+        depth: 'full',
+        pnlDistribution: [
+          null,
+          [],
+          'bad',
+          { bucket: 'negative', count: -1 },
+          { bucket: 'fractional', count: 1.5 },
+          { bucket: 'valid', count: 2 },
+        ],
+      }),
+      'bitget_futures',
+      'abc'
+    )
+
+    expect(aggregate).toMatchObject({
+      copierCount: null,
+      copierCountMax: null,
+      totalCopierPnl: null,
+      pnlDistribution: [{ bucket: 'valid', count: 2 }],
+    })
   })
 
   it('getCopierAggregate returns aggregate-only fields', async () => {
@@ -188,6 +218,32 @@ describe('getRecordsPage', () => {
     expect(
       await getRecordsPage(rpcClient(null, { message: 'x' }), 's', 't', 'orders', null)
     ).toBeNull()
+    expect(await getRecordsPage(rpcClient([]), 's', 't', 'orders', null)).toBeNull()
+  })
+
+  it('drops malformed and internal RAW rows without crashing the warm mapper', async () => {
+    const nullPrototype = Object.assign(Object.create(null) as Record<string, unknown>, {
+      symbol: 'ETHUSDT',
+    })
+    const page = await getRecordsPage(
+      rpcClient({
+        rows: [
+          null,
+          [],
+          'not-a-row',
+          42,
+          new Date('2026-06-10T12:00:00Z'),
+          { symbol: 'BTCUSDT', raw: { email: 'secret@example.com' } },
+          nullPrototype,
+        ],
+      }),
+      'bitget_futures',
+      'abc',
+      'orders',
+      null
+    )
+
+    expect(page?.rows).toEqual([{ symbol: 'BTCUSDT' }, { symbol: 'ETHUSDT' }])
   })
 })
 
@@ -263,5 +319,19 @@ describe('recordsPageFromTierC', () => {
 
   it('returns null when the payload has no rows array', () => {
     expect(recordsPageFromTierC('s', 'position_history', { stats: [] })).toBeNull()
+    expect(recordsPageFromTierC('s', 'position_history', [])).toBeNull()
+  })
+
+  it('drops malformed and internal RAW rows without crashing the Tier-C mapper', () => {
+    const page = recordsPageFromTierC('bitget_futures', 'orders', {
+      rows: [
+        null,
+        ['not', 'a', 'row'],
+        true,
+        { symbol: 'BTCUSDT', raw: { user_id: 'private' }, constructor: 'blocked' },
+      ],
+    })
+
+    expect(page?.rows).toEqual([{ symbol: 'BTCUSDT' }])
   })
 })
