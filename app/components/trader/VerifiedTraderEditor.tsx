@@ -11,8 +11,13 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import { supabase } from '@/lib/supabase/client'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
 
 export interface VerifiedTraderProfileData {
   profile_version: number
@@ -68,13 +73,14 @@ function isValidProfileVersion(value: unknown): value is number {
 
 function isProfileAcknowledgement(
   value: unknown,
-  identity: { traderId: string; source: string },
+  identity: { traderId: string; source: string; userId: string },
   expectedVersion: number,
   updates: ProfileUpdates
-): value is VerifiedTraderProfileData & { trader_id: string; source: string } {
+): value is VerifiedTraderProfileData & { trader_id: string; source: string; user_id: string } {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const acknowledgement = value as Record<string, unknown>
   return (
+    acknowledgement.user_id === identity.userId &&
     acknowledgement.trader_id === identity.traderId &&
     acknowledgement.source === identity.source &&
     isValidProfileVersion(acknowledgement.profile_version) &&
@@ -85,6 +91,13 @@ function isProfileAcknowledgement(
     ) &&
     Object.entries(updates).every(([field, update]) => acknowledgement[field] === update)
   )
+}
+
+type ProfileSaveOperation = {
+  controller: AbortController
+  id: number
+  identityKey: string
+  viewer: SettingsViewerSnapshot
 }
 
 function responseErrorMessage(value: unknown): string {
@@ -119,8 +132,36 @@ export default function VerifiedTraderEditor({
   currentData,
   onSaved,
 }: VerifiedTraderEditorProps) {
+  const auth = useAuthSession()
+  const viewer = captureSettingsViewer(auth)
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${source}\u0000${traderId}`
+
+  return (
+    <ViewerScopedVerifiedTraderEditor
+      key={scopeKey}
+      traderId={traderId}
+      source={source}
+      currentData={currentData}
+      onSaved={onSaved}
+      viewer={viewer}
+    />
+  )
+}
+
+function ViewerScopedVerifiedTraderEditor({
+  traderId,
+  source,
+  currentData,
+  onSaved,
+  viewer,
+}: VerifiedTraderEditorProps & { viewer: SettingsViewerSnapshot | null }) {
   const { t } = useLanguage()
   const { showToast } = useToast()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const viewerRef = useRef(viewer)
+  viewerRef.current = viewer
 
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -137,6 +178,9 @@ export default function VerifiedTraderEditor({
   const identityKeyRef = useRef(identityKey)
   const renderedIdentityKeyRef = useRef(identityKey)
   const saveGenerationRef = useRef(0)
+  const mountedRef = useRef(false)
+  const nextOperationIdRef = useRef(0)
+  const saveOperationRef = useRef<ProfileSaveOperation | null>(null)
 
   // These refs intentionally track the newest render synchronously. A pending
   // request may settle before effects for a new identity or refreshed profile
@@ -145,13 +189,22 @@ export default function VerifiedTraderEditor({
   latestExternalVersionRef.current = externalVersion
   renderedIdentityKeyRef.current = identityKey
 
-  useEffect(
-    () => () => {
-      // A completed request must not fire a toast/onSaved after navigation.
+  const operationIsCurrent = (operation: ProfileSaveOperation): boolean =>
+    mountedRef.current &&
+    saveOperationRef.current === operation &&
+    renderedIdentityKeyRef.current === operation.identityKey &&
+    identityKeyRef.current === operation.identityKey &&
+    isSettingsViewerCurrent(operation.viewer, authRef.current)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
       saveGenerationRef.current += 1
-    },
-    []
-  )
+      saveOperationRef.current?.controller.abort()
+      saveOperationRef.current = null
+    }
+  }, [])
 
   // Profile data commonly arrives after the editor first renders. Adopt it only
   // while closed; a background revalidation must not overwrite an active draft.
@@ -163,6 +216,8 @@ export default function VerifiedTraderEditor({
       // Invalidate every await still in flight for the previous identity.
       // The old request may still finish, but it must become a complete no-op.
       saveGenerationRef.current += 1
+      saveOperationRef.current?.controller.abort()
+      saveOperationRef.current = null
       lastExternalValuesRef.current = externalValues
       lastExternalVersionRef.current = externalVersion
       initialValuesRef.current = externalValues
@@ -220,6 +275,9 @@ export default function VerifiedTraderEditor({
   }
 
   const handleSave = async () => {
+    // React state is not synchronous. The operation ref closes the same-tick
+    // double-click window before the disabled button can render.
+    if (saveOperationRef.current) return
     const updates = changedProfileFields(initialValuesRef.current, formValues)
     if (Object.keys(updates).length === 0) {
       resetToLatestProfile()
@@ -231,49 +289,53 @@ export default function VerifiedTraderEditor({
       return
     }
 
+    const operationViewer = viewerRef.current
+    if (!operationViewer || !isSettingsViewerCurrent(operationViewer, authRef.current)) {
+      showToast(t('pleaseLoginFirst'), 'warning')
+      return
+    }
+
     const saveIdentityKey = identityKey
     const saveGeneration = ++saveGenerationRef.current
+    const operation: ProfileSaveOperation = {
+      controller: new AbortController(),
+      id: ++nextOperationIdRef.current,
+      identityKey: saveIdentityKey,
+      viewer: operationViewer,
+    }
+    saveOperationRef.current = operation
     const isCurrentSave = () =>
-      renderedIdentityKeyRef.current === saveIdentityKey &&
-      identityKeyRef.current === saveIdentityKey &&
-      saveGenerationRef.current === saveGeneration
+      operationIsCurrent(operation) && saveGenerationRef.current === saveGeneration
 
     setSaving(true)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!isCurrentSave()) return
-      if (!session) {
-        showToast(t('pleaseLoginFirst'), 'warning')
-        return
-      }
-
-      const res = await fetch('/api/traders/claim/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({
+      const result = await authedFetch<unknown>(
+        '/api/traders/claim/profile',
+        'PUT',
+        operation.viewer.accessToken,
+        {
           trader_id: traderId,
           source,
           profile_version: expectedVersion,
           ...updates,
-        }),
-      })
-
-      const responseData = await res.json().catch(() => null)
-      if (!res.ok) {
+        },
+        20_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+          signal: operation.controller.signal,
+        }
+      )
+      if (result.stale || !isCurrentSave()) return
+      if (!result.ok) {
         if (!isCurrentSave()) return
-        if (res.status === 409) throw new VerifiedTraderProfileConflictError()
-        throw new Error(responseErrorMessage(responseData) || 'Failed to save')
+        if (result.status === 409) throw new VerifiedTraderProfileConflictError()
+        throw new Error(responseErrorMessage(result.data) || 'Failed to save')
       }
       if (!isCurrentSave()) return
       const acknowledgement =
-        typeof responseData === 'object' && responseData !== null && !Array.isArray(responseData)
-          ? (responseData as Record<string, unknown>).data
+        typeof result.data === 'object' && result.data !== null && !Array.isArray(result.data)
+          ? (result.data as Record<string, unknown>).data
           : null
       const verifiedTrader =
         typeof acknowledgement === 'object' &&
@@ -282,7 +344,12 @@ export default function VerifiedTraderEditor({
           ? (acknowledgement as Record<string, unknown>).verified_trader
           : null
       if (
-        !isProfileAcknowledgement(verifiedTrader, { traderId, source }, expectedVersion, updates)
+        !isProfileAcknowledgement(
+          verifiedTrader,
+          { traderId, source, userId: operation.viewer.userId },
+          expectedVersion,
+          updates
+        )
       ) {
         throw new Error('Invalid profile save acknowledgement')
       }
@@ -306,9 +373,16 @@ export default function VerifiedTraderEditor({
       showToast(`${t('verifiedTraderSaveFailed')} ${msg}`, 'error')
     } finally {
       // An older response must not clear the spinner for a newer save.
-      if (isCurrentSave()) setSaving(false)
+      const shouldSettleCurrentSave = isCurrentSave()
+      if (saveOperationRef.current === operation) saveOperationRef.current = null
+      if (shouldSettleCurrentSave) setSaving(false)
     }
   }
+
+  // During auth restoration or an account transition, fail closed. Because
+  // the outer key includes the viewer generation, the prior viewer's draft is
+  // unmounted before this frame can expose it to the next viewer.
+  if (!viewer) return null
 
   if (!isEditing) {
     return (
@@ -353,7 +427,7 @@ export default function VerifiedTraderEditor({
   const labelStyle: React.CSSProperties = {
     display: 'block',
     marginBottom: tokens.spacing[1],
-    fontWeight: 500,
+    fontWeight: tokens.typography.fontWeight.medium,
     fontSize: tokens.typography.fontSize.xs,
     color: tokens.colors.text.secondary,
   }
@@ -371,7 +445,7 @@ export default function VerifiedTraderEditor({
       <Text
         style={{
           fontSize: tokens.typography.fontSize.md,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
           marginBottom: tokens.spacing[3],
         }}
       >
@@ -387,6 +461,7 @@ export default function VerifiedTraderEditor({
             id="vt-display-name"
             type="text"
             value={formValues.display_name}
+            disabled={saving}
             onChange={(e) => setProfileField('display_name', e.target.value)}
             maxLength={50}
             style={inputStyle}
@@ -400,6 +475,7 @@ export default function VerifiedTraderEditor({
           <textarea
             id="vt-bio"
             value={formValues.bio}
+            disabled={saving}
             onChange={(e) => setProfileField('bio', e.target.value)}
             maxLength={280}
             rows={3}
@@ -415,6 +491,7 @@ export default function VerifiedTraderEditor({
             id="vt-twitter"
             type="url"
             value={formValues.twitter_url}
+            disabled={saving}
             onChange={(e) => setProfileField('twitter_url', e.target.value)}
             placeholder="https://x.com/username"
             style={inputStyle}
@@ -429,6 +506,7 @@ export default function VerifiedTraderEditor({
             id="vt-telegram"
             type="url"
             value={formValues.telegram_url}
+            disabled={saving}
             onChange={(e) => setProfileField('telegram_url', e.target.value)}
             placeholder="https://t.me/username"
             style={inputStyle}
@@ -443,6 +521,7 @@ export default function VerifiedTraderEditor({
             id="vt-discord"
             type="text"
             value={formValues.discord_url}
+            disabled={saving}
             onChange={(e) => setProfileField('discord_url', e.target.value)}
             placeholder="username#1234"
             style={inputStyle}
@@ -457,6 +536,7 @@ export default function VerifiedTraderEditor({
             id="vt-website"
             type="url"
             value={formValues.website_url}
+            disabled={saving}
             onChange={(e) => setProfileField('website_url', e.target.value)}
             placeholder="https://example.com"
             style={inputStyle}

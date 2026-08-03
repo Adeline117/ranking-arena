@@ -1,11 +1,67 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-const mockGetSession = jest.fn()
 const mockShowToast = jest.fn()
 const mockOnSaved = jest.fn()
+const mockAuthedFetch = jest.fn()
+const VIEWER_A = '11111111-1111-4111-8111-111111111111'
+const VIEWER_B = '22222222-2222-4222-8222-222222222222'
 
-jest.mock('@/lib/supabase/client', () => ({
-  supabase: { auth: { getSession: (...args: unknown[]) => mockGetSession(...args) } },
+type MockAuth = {
+  accessToken: string | null
+  authChecked: boolean
+  email: string | null
+  loading: boolean
+  sessionGeneration: number
+  userId: string | null
+  viewerKey: 'anon' | 'pending' | `user:${string}`
+}
+
+function signedIn(userId: string, token: string, generation: number): MockAuth {
+  return {
+    accessToken: token,
+    authChecked: true,
+    email: null,
+    loading: false,
+    sessionGeneration: generation,
+    userId,
+    viewerKey: `user:${userId}`,
+  }
+}
+
+let mockAuth: MockAuth = signedIn(VIEWER_A, 'token-a', 1)
+
+jest.mock('@/lib/hooks/useAuthSession', () => ({
+  useAuthSession: () => mockAuth,
+}))
+
+jest.mock('@/app/(app)/settings/hooks/settings-viewer-scope', () => ({
+  captureSettingsViewer: (auth: MockAuth) => {
+    if (
+      auth.loading ||
+      !auth.authChecked ||
+      !auth.userId ||
+      !auth.accessToken ||
+      auth.viewerKey !== `user:${auth.userId}`
+    ) {
+      return null
+    }
+    return {
+      accessToken: auth.accessToken,
+      email: auth.email,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+      viewerKey: auth.viewerKey,
+    }
+  },
+  isSettingsViewerCurrent: (
+    viewer: { sessionGeneration: number; userId: string; viewerKey: string },
+    auth: MockAuth
+  ) =>
+    auth.authChecked &&
+    !auth.loading &&
+    auth.userId === viewer.userId &&
+    auth.viewerKey === viewer.viewerKey &&
+    auth.sessionGeneration === viewer.sessionGeneration,
 }))
 
 jest.mock('@/app/components/ui/Toast', () => ({
@@ -16,7 +72,9 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ t: (key: string) => key }),
 }))
 
-jest.mock('@/lib/api/client', () => ({ getCsrfHeaders: () => ({ 'x-csrf-token': 'csrf' }) }))
+jest.mock('@/lib/api/client', () => ({
+  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
+}))
 
 jest.mock('@/app/components/base', () => {
   const React = jest.requireActual<typeof import('react')>('react')
@@ -55,9 +113,14 @@ function profile(
 }
 
 function successfulResponse(
-  verifiedTrader: VerifiedTraderProfileData & { trader_id: string; source: string }
+  verifiedTrader: VerifiedTraderProfileData & {
+    trader_id: string
+    source: string
+    user_id?: string
+  }
 ): Response {
   const completeProfile = {
+    user_id: VIEWER_A,
     display_name: null,
     bio: null,
     twitter_url: null,
@@ -89,12 +152,32 @@ function responseForRequest(_input: unknown, init?: RequestInit): Response {
   })
 }
 
+async function authedFetchThroughBrowserFetch(
+  url: string,
+  method: string,
+  accessToken: string,
+  body: Record<string, unknown> | undefined,
+  _timeoutMs: number,
+  scope: { signal?: AbortSignal }
+) {
+  const response = await fetch(url, {
+    method,
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: scope.signal,
+  })
+  return {
+    ok: response.ok,
+    status: response.status,
+    data: await response.json().catch(() => null),
+  }
+}
+
 describe('VerifiedTraderEditor identity contract', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockGetSession.mockResolvedValue({
-      data: { session: { access_token: 'access-token' } },
-    })
+    mockAuth = signedIn(VIEWER_A, 'token-a', 1)
+    mockAuthedFetch.mockImplementation(authedFetchThroughBrowserFetch)
     global.fetch = jest.fn().mockImplementation(responseForRequest)
   })
 
@@ -129,6 +212,23 @@ describe('VerifiedTraderEditor identity contract', () => {
       profile_version: 0,
       display_name: 'After',
     })
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      '/api/traders/claim/profile',
+      'PUT',
+      'token-a',
+      {
+        trader_id: 'account-42',
+        source: 'binance_futures',
+        profile_version: 0,
+        display_name: 'After',
+      },
+      20_000,
+      expect.objectContaining({
+        expectedUserId: VIEWER_A,
+        expectedSessionGeneration: 1,
+        signal: expect.any(AbortSignal),
+      })
+    )
     expect(mockOnSaved).toHaveBeenCalledTimes(1)
   })
 
@@ -155,7 +255,7 @@ describe('VerifiedTraderEditor identity contract', () => {
     })
   })
 
-  it('does not request a session or write when nothing changed', () => {
+  it('does not write when nothing changed', () => {
     render(
       <VerifiedTraderEditor
         traderId="account-42"
@@ -167,7 +267,7 @@ describe('VerifiedTraderEditor identity contract', () => {
     fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
     fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
 
-    expect(mockGetSession).not.toHaveBeenCalled()
+    expect(mockAuthedFetch).not.toHaveBeenCalled()
     expect(global.fetch).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'verifiedTraderEditProfile' })).toBeInTheDocument()
   })
@@ -387,12 +487,9 @@ describe('VerifiedTraderEditor identity contract', () => {
     })
   })
 
-  it('does not start an old identity write when its deferred session arrives late', async () => {
-    const oldSession = deferred<{
-      data: { session: { access_token: string } }
-    }>()
-    mockGetSession.mockReturnValueOnce(oldSession.promise)
-
+  it('clears A draft, aborts A write, and ignores its response after A to B switch', async () => {
+    const oldSave = deferred<Response>()
+    global.fetch = jest.fn().mockReturnValueOnce(oldSave.promise)
     const view = render(
       <VerifiedTraderEditor
         traderId="account-42"
@@ -404,27 +501,68 @@ describe('VerifiedTraderEditor identity contract', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
     fireEvent.change(screen.getByLabelText('verifiedTraderDisplayName'), {
-      target: { value: 'Old save' },
+      target: { value: 'A private draft' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
-    await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+    const oldSignal = (global.fetch as jest.Mock).mock.calls[0][1].signal as AbortSignal
+    expect(oldSignal.aborted).toBe(false)
 
+    mockAuth = signedIn(VIEWER_B, 'token-b', 2)
     view.rerender(
       <VerifiedTraderEditor
-        traderId="account-99"
-        source="bybit"
-        currentData={profile({ display_name: 'Account 99' })}
+        traderId="account-42"
+        source="binance_futures"
+        currentData={profile({ display_name: 'Account 42' })}
         onSaved={mockOnSaved}
       />
     )
+    expect(oldSignal.aborted).toBe(true)
+    expect(screen.queryByDisplayValue('A private draft')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
+    expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('Account 42')
+
     await act(async () =>
-      oldSession.resolve({ data: { session: { access_token: 'old-access-token' } } })
+      oldSave.resolve(
+        successfulResponse({
+          user_id: VIEWER_A,
+          trader_id: 'account-42',
+          source: 'binance_futures',
+          profile_version: 1,
+          display_name: 'A private draft',
+        })
+      )
     )
 
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(mockOnSaved).not.toHaveBeenCalled()
     expect(mockShowToast).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'verifiedTraderEditProfile' })).toBeInTheDocument()
+    expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('Account 42')
+  })
+
+  it('closes the same-tick double-click window before saving state renders', async () => {
+    const pendingSave = deferred<Response>()
+    global.fetch = jest.fn().mockReturnValue(pendingSave.promise)
+    render(
+      <VerifiedTraderEditor
+        traderId="account-42"
+        source="binance_futures"
+        currentData={profile({ display_name: 'Before' })}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
+    fireEvent.change(screen.getByLabelText('verifiedTraderDisplayName'), {
+      target: { value: 'One save only' },
+    })
+    const saveButton = screen.getByRole('button', { name: 'verifiedTraderSaveChanges' })
+    act(() => {
+      saveButton.click()
+      saveButton.click()
+    })
+
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+    expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the stale draft open when the database rejects its revision', async () => {
@@ -465,6 +603,41 @@ describe('VerifiedTraderEditor identity contract', () => {
       successfulResponse({
         trader_id: 'account-42',
         source: 'bybit',
+        profile_version: 1,
+        display_name: 'Draft',
+      })
+    )
+    render(
+      <VerifiedTraderEditor
+        traderId="account-42"
+        source="binance_futures"
+        currentData={profile({ display_name: 'Before' })}
+        onSaved={mockOnSaved}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
+    fireEvent.change(screen.getByLabelText('verifiedTraderDisplayName'), {
+      target: { value: 'Draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.stringContaining('verifiedTraderSaveFailed'),
+        'error'
+      )
+    )
+    expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('Draft')
+    expect(mockOnSaved).not.toHaveBeenCalled()
+  })
+
+  it('does not report success when the acknowledgement belongs to another viewer', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      successfulResponse({
+        user_id: VIEWER_B,
+        trader_id: 'account-42',
+        source: 'binance_futures',
         profile_version: 1,
         display_name: 'Draft',
       })
