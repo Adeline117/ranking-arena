@@ -664,7 +664,16 @@ export async function deletePost(
     .select('id')
 
   if (error) throw error
-  if (!data || data.length === 0) return false
+  if (
+    !Array.isArray(data) ||
+    data.length !== 1 ||
+    typeof data[0] !== 'object' ||
+    data[0] === null ||
+    !('id' in data[0]) ||
+    data[0].id !== postId
+  ) {
+    return false
+  }
 
   // M-6: Invalidate post list caches after deletion
   await invalidatePostListCache()

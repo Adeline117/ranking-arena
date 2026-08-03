@@ -274,6 +274,19 @@ describe('deletePost', () => {
     ).resolves.toBe(false)
   })
 
+  test.each([
+    ['null', null],
+    ['object', { id: 'post1' }],
+    ['wrong id', [{ id: 'post2' }]],
+    ['multiple rows', [{ id: 'post1' }, { id: 'post2' }]],
+  ])('should fail closed on a %s delete acknowledgement', async (_label, data) => {
+    const mockSupabase = mockDeleteChain({ data, error: null })
+
+    await expect(
+      deletePost(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    ).resolves.toBe(false)
+  })
+
   test('should throw error on deletion failure', async () => {
     const mockSupabase = mockDeleteChain({ data: null, error: new Error('Delete failed') })
 
