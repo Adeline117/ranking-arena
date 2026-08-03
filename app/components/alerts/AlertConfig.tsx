@@ -65,6 +65,7 @@ interface AlertMutationPayload {
   data?: {
     alert?: AlertMutationResult
     deleted?: unknown
+    id?: unknown
   }
 }
 
@@ -147,8 +148,11 @@ function isSuccessfulMutationPayload(payload: AlertMutationPayload | null): bool
   return payload?.success === true && payload.error === undefined
 }
 
-function isDeleteAcknowledged(payload: AlertMutationPayload | null): boolean {
-  return payload?.data?.deleted === true
+function isDeleteAcknowledged(
+  payload: AlertMutationPayload | null,
+  expectedAlertId: string
+): boolean {
+  return payload?.data?.deleted === true && payload.data.id === expectedAlertId
 }
 
 /**
@@ -472,7 +476,7 @@ function ViewerScopedAlertConfig({
       if (!isSuccessfulMutationPayload(result.data)) {
         throw new Error(responseError(result.data, tRef.current('saveFailed2')))
       }
-      if (!isDeleteAcknowledged(result.data)) throw new Error(tRef.current('saveFailed2'))
+      if (!isDeleteAcknowledged(result.data, alertId)) throw new Error(tRef.current('saveFailed2'))
       setAlert(defaultAlert())
       setHistory([])
       showToastRef.current(tRef.current('alertDisabled'), 'success')
@@ -637,7 +641,12 @@ function ViewerScopedAlertConfig({
           marginBottom: 16,
         }}
       >
-        <Text style={{ fontWeight: 600, fontSize: 16 }}>
+        <Text
+          style={{
+            fontWeight: tokens.typography.fontWeight.semibold,
+            fontSize: tokens.typography.fontSize.md,
+          }}
+        >
           {t('alertSettings')} - {traderHandle}
         </Text>
         <Box style={{ display: 'flex', gap: 8 }}>
@@ -648,7 +657,7 @@ function ViewerScopedAlertConfig({
               aria-busy={toggling}
               style={{
                 padding: '4px 12px',
-                fontSize: 13,
+                fontSize: tokens.typography.fontSize.sm,
                 borderRadius: tokens.radius.sm,
                 background: alert.enabled
                   ? tokens.colors.accent.success
@@ -667,7 +676,7 @@ function ViewerScopedAlertConfig({
               onClick={onClose}
               style={{
                 padding: '4px 8px',
-                fontSize: 13,
+                fontSize: tokens.typography.fontSize.sm,
                 borderRadius: tokens.radius.sm,
                 background: 'transparent',
                 border: `1px solid ${tokens.colors.border.primary}`,
@@ -742,7 +751,12 @@ function ViewerScopedAlertConfig({
             checked={alert.one_time}
             onChange={() => setAlert((prev) => ({ ...prev, one_time: !prev.one_time }))}
           />
-          <Text style={{ fontSize: 13, color: tokens.colors.text.secondary }}>
+          <Text
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.secondary,
+            }}
+          >
             {t('alertOneTime')}
           </Text>
         </label>
@@ -762,7 +776,7 @@ function ViewerScopedAlertConfig({
             border: 'none',
             cursor: mutationBusy ? 'not-allowed' : 'pointer',
             opacity: mutationBusy ? 0.6 : 1,
-            fontWeight: 600,
+            fontWeight: tokens.typography.fontWeight.semibold,
           }}
         >
           {saving ? `\u23F3 ${t('saving')}` : t('save')}

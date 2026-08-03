@@ -138,6 +138,35 @@ describe('TraderAlertsManager viewer ownership', () => {
     expect(mockShowToast).not.toHaveBeenCalled()
   })
 
+  it('removes the rendered alert only after an exact wrapped acknowledgement', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce(alertsFor('user-a'))
+      .mockResolvedValueOnce(ok({ success: true, data: { deleted: true, id: 'alert-user-a' } }))
+
+    render(<TraderAlertsManager />)
+    await screen.findByText('trader-user-a')
+    fireEvent.click(screen.getByRole('button', { name: 'traderAlertsRemove' }))
+
+    await waitFor(() => expect(screen.queryByText('trader-user-a')).not.toBeInTheDocument())
+    expect(mockShowToast).toHaveBeenCalledWith('alertDisabled', 'success')
+  })
+
+  it('keeps the alert when a 2xx delete acknowledgement names another row', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce(alertsFor('user-a'))
+      .mockResolvedValueOnce(ok({ success: true, data: { deleted: true, id: 'alert-other-user' } }))
+
+    render(<TraderAlertsManager />)
+    await screen.findByText('trader-user-a')
+    fireEvent.click(screen.getByRole('button', { name: 'traderAlertsRemove' }))
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith('traderAlertsRemoveFailed', 'error')
+    )
+    expect(screen.getByText('trader-user-a')).toBeInTheDocument()
+    expect(mockShowToast).not.toHaveBeenCalledWith('alertDisabled', 'success')
+  })
+
   it('does not remove or toast in B when A deletion resolves late', async () => {
     const deleteA = deferred<ReturnType<typeof ok>>()
     mockAuthedFetch.mockImplementation(
@@ -173,7 +202,9 @@ describe('TraderAlertsManager viewer ownership', () => {
     view.rerender(<TraderAlertsManager />)
     await screen.findByText('trader-user-b')
 
-    await act(async () => deleteA.resolve(ok({ deleted: true })))
+    await act(async () =>
+      deleteA.resolve(ok({ success: true, data: { deleted: true, id: 'alert-user-a' } }))
+    )
     expect(screen.getByText('trader-user-b')).toBeInTheDocument()
     expect(mockShowToast).not.toHaveBeenCalled()
   })

@@ -42,6 +42,12 @@ type TraderAlertsPayload = {
   alerts?: unknown
 }
 
+type TraderAlertDeletePayload = {
+  success?: unknown
+  error?: unknown
+  data?: { deleted?: unknown; id?: unknown }
+}
+
 type TraderAlertsUiState = {
   alerts: TraderAlert[]
   loading: boolean
@@ -94,6 +100,18 @@ function isTraderAlert(value: unknown): value is TraderAlert {
     typeof alert.alert_score_change === 'boolean' &&
     typeof alert.alert_rank_change === 'boolean' &&
     typeof alert.enabled === 'boolean'
+  )
+}
+
+function isDeleteAcknowledged(
+  payload: TraderAlertDeletePayload | null,
+  expectedAlertId: string
+): boolean {
+  return (
+    payload?.success === true &&
+    payload.error === undefined &&
+    payload.data?.deleted === true &&
+    payload.data.id === expectedAlertId
   )
 }
 
@@ -225,7 +243,7 @@ export default function TraderAlertsManager() {
     removeOperationRef.current = operation
     setUi((current) => ({ ...current, removing: alert.id }))
     try {
-      const result = await authedFetch<{ deleted?: boolean }>(
+      const result = await authedFetch<TraderAlertDeletePayload>(
         `/api/trader-alerts?id=${encodeURIComponent(alert.id)}`,
         'DELETE',
         operation.viewer.accessToken,
@@ -238,6 +256,9 @@ export default function TraderAlertsManager() {
       )
       if (!operationIsCurrent(operation, removeOperationRef) || result.stale) return
       if (!result.ok) throw new Error('Failed to delete trader alert')
+      if (!isDeleteAcknowledged(result.data, alert.id)) {
+        throw new Error('Trader alert deletion was not acknowledged')
+      }
       setUi((current) => ({
         ...current,
         alerts: current.alerts.filter((item) => item.id !== alert.id),

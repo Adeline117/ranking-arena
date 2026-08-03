@@ -402,7 +402,7 @@ describe('AlertConfig enable toggle', () => {
 
   it('deletes only after the wrapped acknowledgement confirms deletion', async () => {
     loadResponses()
-    mockAuthedFetch.mockResolvedValueOnce(mutationResult({ deleted: true }))
+    mockAuthedFetch.mockResolvedValueOnce(mutationResult({ deleted: true, id: 'alert-1' }))
     await renderLoadedConfig()
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
@@ -411,6 +411,18 @@ describe('AlertConfig enable toggle', () => {
       expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     )
     expect(mockShowToast).toHaveBeenCalledWith('Alerts disabled', 'success')
+  })
+
+  it('keeps the alert when a wrapped delete acknowledgement names another row', async () => {
+    loadResponses()
+    mockAuthedFetch.mockResolvedValueOnce(mutationResult({ deleted: true, id: 'another-alert' }))
+    await renderLoadedConfig()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Save failed', 'error'))
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(mockShowToast).not.toHaveBeenCalledWith('Alerts disabled', 'success')
   })
 
   it('discards A load data when it resolves after B is rendered', async () => {
@@ -550,7 +562,7 @@ describe('AlertConfig enable toggle', () => {
     {
       action: 'delete',
       click: () => screen.getByRole('button', { name: 'Delete' }),
-      response: () => mutationResult({ deleted: true }),
+      response: () => mutationResult({ deleted: true, id: 'alert-a' }),
     },
     {
       action: 'toggle',
@@ -617,7 +629,7 @@ describe('AlertConfig enable toggle', () => {
     {
       action: 'delete',
       click: () => screen.getByRole('button', { name: 'Delete' }),
-      response: () => mutationResult({ deleted: true }),
+      response: () => mutationResult({ deleted: true, id: 'alert-a' }),
       successToast: 'Alerts disabled',
     },
     {
@@ -647,7 +659,7 @@ describe('AlertConfig enable toggle', () => {
             return Promise.resolve(result({ data: { alerts: [existingAlert(true, 'alert-a')] } }))
           }
           if (method === 'DELETE') {
-            return Promise.resolve(mutationResult({ deleted: true }))
+            return Promise.resolve(mutationResult({ deleted: true, id: 'alert-b' }))
           }
           if (url.startsWith('/api/alerts?')) {
             return Promise.resolve(result({ data: { history: [] } }))
