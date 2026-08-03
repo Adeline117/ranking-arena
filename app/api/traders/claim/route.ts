@@ -88,6 +88,7 @@ export async function GET(request: NextRequest) {
         .order('display_order', { ascending: true }),
     ])
 
+    if (linkedResult.error) throw linkedResult.error
     const linkedTraders = linkedResult.data || []
 
     return success({

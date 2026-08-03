@@ -157,6 +157,23 @@ describe('GET /api/traders/claim identity scope', () => {
     expect(mockGetUserClaimForTrader).not.toHaveBeenCalled()
     expect(mockSupabase.from).not.toHaveBeenCalled()
   })
+
+  it('fails closed instead of presenting an empty linked list after a database error', async () => {
+    mockLinkedOrder.mockResolvedValue({
+      data: null,
+      error: { code: 'XX000', message: 'linked account lookup failed' },
+    })
+
+    const response = await GET(
+      getRequest('http://localhost/api/traders/claim?trader_id=account-42&source=binance_futures')
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'linked account lookup failed',
+    })
+  })
 })
 
 describe('POST /api/traders/claim wallet identity boundary', () => {
