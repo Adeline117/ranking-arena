@@ -106,6 +106,21 @@ const mockUseToast = useToast as jest.Mock
 const mockAuthedFetch = authedFetch as jest.Mock
 const mockGetValidToken = tokenRefreshCoordinator.getValidToken as jest.Mock
 const showToast = jest.fn()
+const USER_A = '11111111-1111-4111-8111-111111111111'
+const USER_B = '22222222-2222-4222-8222-222222222222'
+const OBJECT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const OBJECT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const STORAGE_BASE_URL = 'https://project.supabase.co'
+const originalStorageBaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+
+function imageAcknowledgement(ownerId: string, objectId: string) {
+  const fileName = `${ownerId}/${objectId}.png`
+  return {
+    url: `${STORAGE_BASE_URL}/storage/v1/object/public/posts/${fileName}`,
+    fileName,
+    verified: true,
+  }
+}
 
 function jwt(userId: string, nonce = 'initial'): string {
   const encode = (value: unknown) =>
@@ -141,21 +156,27 @@ describe('group application viewer ownership', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    process.env.NEXT_PUBLIC_SUPABASE_URL = STORAGE_BASE_URL
     __resetViewerScopeForTests()
-    const scope = synchronizeViewerScope(true, 'user-a')
-    currentAuth = authFor('user-a', scope.sessionGeneration)
+    const scope = synchronizeViewerScope(true, USER_A)
+    currentAuth = authFor(USER_A, scope.sessionGeneration)
     mockUseAuthSession.mockImplementation(() => currentAuth)
     mockUseToast.mockReturnValue({ showToast })
     mockAuthedFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      data: { applications: [] },
+      data: {},
     })
     originalFetch = global.fetch
   })
 
   afterEach(() => {
     global.fetch = originalFetch
+  })
+
+  afterAll(() => {
+    if (originalStorageBaseUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = originalStorageBaseUrl
   })
 
   it('fails empty for every user-owned draft slot on an account switch', async () => {
@@ -201,8 +222,8 @@ describe('group application viewer ownership', () => {
     expect(screen.getByTestId('admin-role-zh')).toHaveValue('A owner')
     expect(screen.getByTestId('premium-choice')).toHaveTextContent('premium')
 
-    const scopeB = synchronizeViewerScope(true, 'user-b')
-    currentAuth = authFor('user-b', scopeB.sessionGeneration)
+    const scopeB = synchronizeViewerScope(true, USER_B)
+    currentAuth = authFor(USER_B, scopeB.sessionGeneration)
     view.rerender(<ApplyGroupPage />)
 
     expect(screen.getByPlaceholderText('groupNameZhPlaceholder')).toHaveValue('')
@@ -222,15 +243,15 @@ describe('group application viewer ownership', () => {
     fireEvent.blur(screen.getByPlaceholderText('groupNameZhPlaceholder'))
     expect(screen.getByText('nameRequiredError')).toBeInTheDocument()
 
-    const scopeB = synchronizeViewerScope(true, 'user-b')
-    currentAuth = authFor('user-b', scopeB.sessionGeneration)
+    const scopeB = synchronizeViewerScope(true, USER_B)
+    currentAuth = authFor(USER_B, scopeB.sessionGeneration)
     view.rerender(<ApplyGroupPage />)
 
     expect(screen.queryByText('nameRequiredError')).not.toBeInTheDocument()
   })
 
   it('rejects a mismatched JWT before refreshing a token or sending the file', () => {
-    currentAuth = { ...currentAuth, accessToken: jwt('user-b') }
+    currentAuth = { ...currentAuth, accessToken: jwt(USER_B) }
     global.fetch = jest.fn()
     render(<ApplyGroupPage />)
 
@@ -255,18 +276,18 @@ describe('group application viewer ownership', () => {
 
     await waitFor(() =>
       expect(mockGetValidToken).toHaveBeenCalledWith({
-        expectedUserId: 'user-a',
+        expectedUserId: USER_A,
         sessionGeneration: currentAuth.sessionGeneration,
       })
     )
     expect(screen.getByTestId('avatar-uploading')).toHaveTextContent('uploading')
 
-    const scopeB = synchronizeViewerScope(true, 'user-b')
-    currentAuth = authFor('user-b', scopeB.sessionGeneration)
+    const scopeB = synchronizeViewerScope(true, USER_B)
+    currentAuth = authFor(USER_B, scopeB.sessionGeneration)
     view.rerender(<ApplyGroupPage />)
     expect(screen.getByTestId('avatar-uploading')).toHaveTextContent('idle')
 
-    await act(async () => token.resolve(jwt('user-b', 'fresh')))
+    await act(async () => token.resolve(jwt(USER_B, 'fresh')))
 
     expect(global.fetch).not.toHaveBeenCalled()
     expect(showToast).not.toHaveBeenCalled()
@@ -282,7 +303,7 @@ describe('group application viewer ownership', () => {
     )
     const fetchMock = jest.fn((_url: string, init?: RequestInit) => {
       const authorization = new Headers(init?.headers).get('authorization')
-      return authorization === `Bearer ${jwt('user-a', 'fresh')}`
+      return authorization === `Bearer ${jwt(USER_A, 'fresh')}`
         ? responseA.promise
         : responseB.promise
     })
@@ -295,27 +316,27 @@ describe('group application viewer ownership', () => {
 
     const firstRequest = fetchMock.mock.calls[0]?.[1] as RequestInit
     expect(new Headers(firstRequest.headers).get('authorization')).toBe(
-      `Bearer ${jwt('user-a', 'fresh')}`
+      `Bearer ${jwt(USER_A, 'fresh')}`
     )
-    expect((firstRequest.body as FormData).get('userId')).toBe('user-a')
+    expect((firstRequest.body as FormData).get('userId')).toBe(USER_A)
 
-    const scopeB = synchronizeViewerScope(true, 'user-b')
-    currentAuth = authFor('user-b', scopeB.sessionGeneration)
+    const scopeB = synchronizeViewerScope(true, USER_B)
+    currentAuth = authFor(USER_B, scopeB.sessionGeneration)
     view.rerender(<ApplyGroupPage />)
 
     fireEvent.change(fileInput, { target: { files: [imageFile('b.png')] } })
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     const secondRequest = fetchMock.mock.calls[1]?.[1] as RequestInit
     expect(new Headers(secondRequest.headers).get('authorization')).toBe(
-      `Bearer ${jwt('user-b', 'fresh')}`
+      `Bearer ${jwt(USER_B, 'fresh')}`
     )
-    expect((secondRequest.body as FormData).get('userId')).toBe('user-b')
+    expect((secondRequest.body as FormData).get('userId')).toBe(USER_B)
 
     await act(async () =>
       responseA.resolve({
         ok: true,
         status: 200,
-        json: async () => ({ url: 'https://a/avatar' }),
+        json: async () => imageAcknowledgement(USER_A, OBJECT_A),
       } as Response)
     )
 
@@ -328,13 +349,47 @@ describe('group application viewer ownership', () => {
       responseB.resolve({
         ok: true,
         status: 200,
-        json: async () => ({ url: 'https://b/avatar' }),
+        json: async () => imageAcknowledgement(USER_B, OBJECT_B),
       } as Response)
     )
 
-    await waitFor(() => expect(screen.getByTestId('avatar-url')).toHaveValue('https://b/avatar'))
+    await waitFor(() =>
+      expect(screen.getByTestId('avatar-url')).toHaveValue(
+        imageAcknowledgement(USER_B, OBJECT_B).url
+      )
+    )
     expect(screen.getByTestId('avatar-uploading')).toHaveTextContent('idle')
     expect(showToast).toHaveBeenCalledTimes(1)
     expect(showToast).toHaveBeenCalledWith('imageUploadSuccess', 'success')
+  })
+
+  it.each([
+    ['legacy URL-only response', { url: imageAcknowledgement(USER_A, OBJECT_A).url }],
+    ['foreign owner', imageAcknowledgement(USER_B, OBJECT_B)],
+    [
+      'foreign origin',
+      {
+        ...imageAcknowledgement(USER_A, OBJECT_A),
+        url: `https://evil.example/storage/v1/object/public/posts/${USER_A}/${OBJECT_A}.png`,
+      },
+    ],
+    ['widened response', { ...imageAcknowledgement(USER_A, OBJECT_A), extra: true }],
+  ])('rejects a successful upload with %s evidence', async (_label, responseBody) => {
+    mockGetValidToken.mockResolvedValue(jwt(USER_A, 'fresh'))
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => responseBody,
+    } as Response)
+
+    render(<ApplyGroupPage />)
+    fireEvent.change(screen.getByTestId('avatar-file'), {
+      target: { files: [imageFile('a.png')] },
+    })
+
+    await waitFor(() => expect(screen.getByTestId('avatar-uploading')).toHaveTextContent('idle'))
+    expect(screen.getByTestId('avatar-url')).toHaveValue('')
+    expect(showToast).toHaveBeenCalledWith('uploadFailed', 'error')
+    expect(showToast).not.toHaveBeenCalledWith('imageUploadSuccess', 'success')
   })
 })

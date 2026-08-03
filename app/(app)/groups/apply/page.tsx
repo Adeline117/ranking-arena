@@ -2,7 +2,7 @@
 
 import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
@@ -31,6 +31,10 @@ import {
   runGroupApplicationSingleFlight,
 } from '@/lib/groups/application-operation'
 import { useViewerSlotState } from '@/lib/groups/use-viewer-slot-state'
+import {
+  readPostImageUploadAcknowledgement,
+  readPostMediaUploadError,
+} from '@/lib/posts/post-media-upload-contract'
 
 export default function ApplyGroupPage() {
   if (!features.social) redirect('/')
@@ -43,7 +47,7 @@ export default function ApplyGroupPage() {
   const submitOperationIdRef = useRef<Record<string, string>>({})
   const avatarUploadOperationIdRef = useRef<Record<string, number>>({})
   const nextAvatarUploadOperationIdRef = useRef(0)
-  const { accessToken, email, userId, viewerKey, sessionGeneration } = useAuthSession()
+  const { accessToken, userId, viewerKey, sessionGeneration } = useAuthSession()
   const stateOwnerKey = `${viewerKey}:${sessionGeneration}`
   const [loading, setLoading] = useViewerSlotState(stateOwnerKey, false)
   const [error, setError] = useViewerSlotState<string | null>(stateOwnerKey, null)
@@ -96,12 +100,6 @@ export default function ApplyGroupPage() {
     []
   )
 
-  useEffect(() => {
-    if (accessToken) {
-      fetchMyApplications(accessToken)
-    }
-  }, [accessToken, sessionGeneration, userId, viewerKey])
-
   // The DOM file input is shared across renders. Clear A's selected File as
   // soon as ownership changes, while stale A completions are forbidden from
   // clearing a later B selection.
@@ -124,41 +122,50 @@ export default function ApplyGroupPage() {
     setFieldErrors(newErrors)
   }
 
-  const fetchMyApplications = async (token: string, requestScope?: ViewerScope) => {
-    const scope = requestScope ?? { viewerKey, sessionGeneration, userId }
-    if (
-      !scope.userId ||
-      scope.viewerKey !== `user:${scope.userId}` ||
-      jwtSubject(token) !== scope.userId ||
-      !isViewerScopeCurrent(scope)
-    )
-      return
-    try {
-      const result = await authedFetch<{ applications?: unknown[] }>(
-        '/api/groups/apply',
-        'GET',
-        token,
-        undefined,
-        15_000,
-        {
-          expectedUserId: scope.userId,
-          expectedSessionGeneration: scope.sessionGeneration,
-        }
+  const fetchMyApplications = useCallback(
+    async (token: string, requestScope?: ViewerScope) => {
+      const scope = requestScope ?? { viewerKey, sessionGeneration, userId }
+      if (
+        !scope.userId ||
+        scope.viewerKey !== `user:${scope.userId}` ||
+        jwtSubject(token) !== scope.userId ||
+        !isViewerScopeCurrent(scope)
       )
-
-      if (result.stale || !isViewerScopeCurrent(scope)) return
-      if (!result.ok) {
-        logger.warn('Failed to fetch applications:', result.status)
         return
-      }
+      try {
+        const result = await authedFetch<{ applications?: unknown[] }>(
+          '/api/groups/apply',
+          'GET',
+          token,
+          undefined,
+          15_000,
+          {
+            expectedUserId: scope.userId,
+            expectedSessionGeneration: scope.sessionGeneration,
+          }
+        )
 
-      if (result.data?.applications) {
-        setExistingApplications(result.data.applications)
+        if (result.stale || !isViewerScopeCurrent(scope)) return
+        if (!result.ok) {
+          logger.warn('Failed to fetch applications:', result.status)
+          return
+        }
+
+        if (result.data?.applications) {
+          setExistingApplications(result.data.applications)
+        }
+      } catch (err) {
+        logger.error('Error fetching applications:', err)
       }
-    } catch (err) {
-      logger.error('Error fetching applications:', err)
+    },
+    [sessionGeneration, setExistingApplications, userId, viewerKey]
+  )
+
+  useEffect(() => {
+    if (accessToken) {
+      fetchMyApplications(accessToken)
     }
-  }
+  }, [accessToken, fetchMyApplications])
 
   const addRule = () => {
     const zhText = newRuleZh.trim()
@@ -243,23 +250,31 @@ export default function ApplyGroupPage() {
       })
       if (!operationIsCurrent()) return
 
+      let responseBody: unknown
+      try {
+        responseBody = await response.json()
+      } catch {
+        if (operationIsCurrent()) showToast(`${t('uploadFailed')} (${response.status})`, 'error')
+        return
+      }
+      if (!operationIsCurrent()) return
+
       if (!response.ok) {
-        let errorMsg = t('uploadFailed')
-        try {
-          const errorData = await response.json()
-          if (!operationIsCurrent()) return
-          errorMsg = errorData.error || errorMsg
-        } catch {
-          if (!operationIsCurrent()) return
-          errorMsg = `${errorMsg} (${response.status})`
-        }
-        if (operationIsCurrent()) showToast(errorMsg, 'error')
+        showToast(readPostMediaUploadError(responseBody) ?? t('uploadFailed'), 'error')
         return
       }
 
-      const data = await response.json()
-      if (!operationIsCurrent()) return
-      setAvatarUrl(data.url)
+      const acknowledgement = readPostImageUploadAcknowledgement(
+        responseBody,
+        requestUserId,
+        process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+      )
+      if (!acknowledgement) {
+        showToast(t('uploadFailed'), 'error')
+        return
+      }
+
+      setAvatarUrl(acknowledgement.url)
       showToast(t('imageUploadSuccess'), 'success')
     } catch (error: unknown) {
       if (!operationIsCurrent()) return
