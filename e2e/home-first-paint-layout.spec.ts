@@ -423,6 +423,9 @@ test.describe('homepage first-paint layout handoff', () => {
               ).toBe(true)
             }
             expectResponsiveNavBounds(beforeNav, viewport.width)
+            const firstPaintSourceStrip = page.getByTestId('first-paint-source-strip')
+            if (viewport.width < 768) await expect(firstPaintSourceStrip).toBeHidden()
+            else await expect(firstPaintSourceStrip).toBeVisible()
             await expect(
               page.getByTestId('top-nav-auth-slot').locator(':scope > .skeleton')
             ).toBeVisible()
@@ -497,6 +500,9 @@ test.describe('homepage first-paint layout handoff', () => {
               'true'
             )
             await expect(page.locator('#ssr-home-content-shell')).toBeHidden()
+            const interactiveSourceStrip = page.getByTestId('interactive-source-strip')
+            if (viewport.width < 768) await expect(interactiveSourceStrip).toBeHidden()
+            else await expect(interactiveSourceStrip).toBeVisible()
             await page.waitForTimeout(750)
 
             const afterLayout = await readLayout(page, '#homepage-interactive .three-col-layout')
