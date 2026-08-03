@@ -54,6 +54,8 @@ const RAW_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_object_gc_q
 export const RAW_JSON_STRINGIFY_CONTRACT = 'arena.raw-json-stringify@1' as const
 export const POSITION_HISTORY_RAW_JOB_TYPE = 'history:position_history' as const
 export const EVENT_HISTORY_RAW_ARTIFACT_ROLE = 'event_history' as const
+export const POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
+  'arena.position-history-publication-evidence@1' as const
 export type RawSerializationContract =
   | typeof RAW_JSON_STRINGIFY_CONTRACT
   | typeof STRICT_CANONICAL_JSON_CONTRACT
@@ -1103,14 +1105,20 @@ function preparePositionHistoryRawArtifact(
     metaBase: {
       surface: 'position_history',
       data_contract: input.artifact.contract,
+      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
       source_run_id: input.sourceRunId,
       source_slug: input.sourceSlug,
       exchange_trader_id: input.exchangeTraderId,
       history_kind: input.artifact.history_kind,
+      attempt_started_at: input.artifact.attempt_started_at,
+      starting_cursor: input.artifact.starting_cursor,
+      capture_config: input.artifact.capture_config,
+      observed_at: input.fetchedAt,
       page_count: input.artifact.pages.length,
       terminal_evidence_state: input.artifact.termination.evidence_state,
       scan_terminal_state: input.artifact.termination.scan_terminal_state,
       verifier_contract: input.artifact.termination.verifier_contract,
+      termination: input.artifact.termination,
     },
   }
 }
@@ -1120,6 +1128,35 @@ function positionHistoryArtifactMeta(
 ): Record<string, unknown> {
   return rawIntegrityMeta(
     artifact.metaBase,
+    STRICT_CANONICAL_JSON_CONTRACT,
+    artifact.durableCompressedBytes,
+    artifact.jsonBytes.byteLength
+  )
+}
+
+/**
+ * Exact pre-publication-evidence metadata accepted only so an immutable RAW
+ * pointer created by an older worker can still be replayed for audit. The
+ * publication RPC requires the versioned contract above and therefore cannot
+ * promote this compatibility shape into trusted serving data.
+ */
+function legacyPositionHistoryArtifactMeta(
+  input: NormalizedPositionHistoryRawArtifactInput,
+  artifact: PreparedPositionHistoryRawArtifact
+): Record<string, unknown> {
+  return rawIntegrityMeta(
+    {
+      surface: 'position_history',
+      data_contract: input.artifact.contract,
+      source_run_id: input.sourceRunId,
+      source_slug: input.sourceSlug,
+      exchange_trader_id: input.exchangeTraderId,
+      history_kind: input.artifact.history_kind,
+      page_count: input.artifact.pages.length,
+      terminal_evidence_state: input.artifact.termination.evidence_state,
+      scan_terminal_state: input.artifact.termination.scan_terminal_state,
+      verifier_contract: input.artifact.termination.verifier_contract,
+    },
     STRICT_CANONICAL_JSON_CONTRACT,
     artifact.durableCompressedBytes,
     artifact.jsonBytes.byteLength
@@ -1164,8 +1201,10 @@ function validatePositionHistoryTrustPointer(
 
   let metaMatches = false
   try {
+    const storedMeta = strictCanonicalJson(row.meta)
     metaMatches =
-      strictCanonicalJson(row.meta) === strictCanonicalJson(positionHistoryArtifactMeta(artifact))
+      storedMeta === strictCanonicalJson(positionHistoryArtifactMeta(artifact)) ||
+      storedMeta === strictCanonicalJson(legacyPositionHistoryArtifactMeta(input, artifact))
   } catch {
     metaMatches = false
   }
