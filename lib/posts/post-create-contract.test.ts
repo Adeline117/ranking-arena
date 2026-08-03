@@ -86,6 +86,16 @@ describe('PostCreateRequestSchema', () => {
     ).toBe(true)
   })
 
+  it('normalizes request UUIDs before comparing them with database evidence', () => {
+    expect(
+      PostCreateRequestSchema.parse({
+        operation_id: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA',
+        title: 'Title',
+        content: 'Body',
+      }).operation_id
+    ).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+  })
+
   it('is strict and rejects malformed identifiers and empty trimmed text', () => {
     expect(
       PostCreateRequestSchema.safeParse({ title: 'Title', content: 'Body', extra: true }).success
@@ -210,6 +220,7 @@ describe('AtomicCreatePostAckSchema', () => {
     const invalid = [
       { ...acknowledgement, extra: true },
       { ...acknowledgement, operation_id: 'not-an-id' },
+      { ...acknowledgement, operation_id: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA' },
       { ...acknowledgement, status: 'created', applied: false },
       { ...acknowledgement, actor_id: GROUP_ID },
       { ...acknowledgement, post: { ...post, images: ['data:image/png,x'] } },

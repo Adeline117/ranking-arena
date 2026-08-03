@@ -1,6 +1,14 @@
 import { z } from 'zod'
 
 const URL_CONTROL_OR_SPACE_PATTERN = /[\u0000-\u001f\u007f\s]/
+const NormalizedUuidSchema = z
+  .string()
+  .uuid()
+  .transform((value) => value.toLowerCase())
+const CanonicalUuidSchema = z
+  .string()
+  .uuid()
+  .refine((value) => value === value.toLowerCase())
 
 const trimmedString = (minimum: number, maximum: number) =>
   z
@@ -60,10 +68,10 @@ const ContentWarningRequestSchema = z.union([
 
 export const PostCreateRequestSchema = z
   .object({
-    operation_id: z.string().uuid().optional(),
+    operation_id: NormalizedUuidSchema.optional(),
     title: trimmedString(1, 200),
     content: trimmedString(1, 10_000),
-    group_id: z.string().uuid().nullable().optional(),
+    group_id: NormalizedUuidSchema.nullable().optional(),
     images: ImageListSchema.default([]),
     poll_enabled: z.boolean().default(false),
     poll_options: PollOptionsSchema.optional(),
@@ -140,15 +148,15 @@ export const PostCreateRequestSchema = z
 
 const AtomicCreatedPostSchema = z
   .object({
-    id: z.string().uuid(),
-    author_id: z.string().uuid(),
+    id: CanonicalUuidSchema,
+    author_id: CanonicalUuidSchema,
     author_handle: exactTrimmedString(1, 64),
-    group_id: z.string().uuid().nullable(),
+    group_id: CanonicalUuidSchema.nullable(),
     title: exactTrimmedString(1, 200),
     content: exactTrimmedString(1, 10_000),
     images: ImageListSchema,
     poll_enabled: z.boolean(),
-    poll_id: z.string().uuid().nullable(),
+    poll_id: CanonicalUuidSchema.nullable(),
     visibility: z.enum(['public', 'followers', 'group']),
     is_sensitive: z.boolean(),
     content_warning: exactTrimmedString(0, 200).nullable(),
@@ -166,8 +174,8 @@ const AtomicCreatedPostSchema = z
 
 const AtomicCreatedPollSchema = z
   .object({
-    id: z.string().uuid(),
-    post_id: z.string().uuid(),
+    id: CanonicalUuidSchema,
+    post_id: CanonicalUuidSchema,
     question: z.string(),
     options: z
       .array(
@@ -189,8 +197,8 @@ const AtomicCreatedPollSchema = z
 const AtomicCreatePostResultFields = {
   status: z.enum(['created', 'replayed']),
   applied: z.boolean(),
-  operation_id: z.string().uuid(),
-  actor_id: z.string().uuid(),
+  operation_id: CanonicalUuidSchema,
+  actor_id: CanonicalUuidSchema,
   post: AtomicCreatedPostSchema,
   poll: AtomicCreatedPollSchema.nullable(),
 } as const
@@ -259,7 +267,7 @@ export const PostCreateApiSuccessSchema = z
           .object({
             status: z.enum(['created', 'replayed']),
             applied: z.boolean(),
-            operation_id: z.string().uuid(),
+            operation_id: CanonicalUuidSchema,
           })
           .strict(),
       })
