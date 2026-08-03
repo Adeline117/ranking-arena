@@ -14,9 +14,8 @@ import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { del as cacheDel } from '@/lib/cache'
 import { sendNotifications } from '@/lib/data/notifications'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
+import { extractMentionHandles } from '@/lib/posts/mentions'
 
-const MENTION_PATTERN =
-  /(?:^|[^A-Za-z0-9_.\u4E00-\u9FAF\u3041-\u309F\u30A0-\u30FF\uAC00-\uD7A3])@([A-Za-z0-9_.\u4E00-\u9FAF\u3041-\u309F\u30A0-\u30FF\uAC00-\uD7A3]{1,30})/gu
 const MAX_DERIVED_TERMS = 50
 const AUTHORITY_UNAVAILABLE_CODES = new Set([
   'PGRST202',
@@ -101,16 +100,7 @@ function isAuthorityUnavailable(error: { code?: string; message?: string } | nul
   )
 }
 
-export function extractMentionHandles(text: string): string[] {
-  const handles = new Map<string, string>()
-  for (const match of text.normalize('NFC').matchAll(MENTION_PATTERN)) {
-    const handle = match[1].normalize('NFC')
-    const key = handle.toLocaleLowerCase('und')
-    if (!handles.has(key)) handles.set(key, handle)
-    if (handles.size === MAX_DERIVED_TERMS) break
-  }
-  return [...handles.values()].sort((left, right) => left.localeCompare(right, 'und'))
-}
+export { extractMentionHandles } from '@/lib/posts/mentions'
 
 export function preparePostCreate(value: unknown): PreparedPostCreate | null {
   const parsed = PostCreateRequestSchema.safeParse(value)

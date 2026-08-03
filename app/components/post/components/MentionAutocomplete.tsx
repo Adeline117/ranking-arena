@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { getMentionQuery } from '@/lib/posts/mentions'
 
 interface MentionUser {
   id: string
@@ -42,18 +43,7 @@ export function MentionAutocomplete({
   const [selectedIndex, setSelectedIndex] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
 
-  // Extract the @query from text at cursor position
-  const getMentionQuery = useCallback((): { query: string; start: number } | null => {
-    const before = text.slice(0, cursorPosition)
-    const match = before.match(/@(\w{1,30})$/)
-    if (!match) return null
-    return {
-      query: match[1],
-      start: before.length - match[0].length,
-    }
-  }, [text, cursorPosition])
-
-  const mentionInfo = getMentionQuery()
+  const mentionInfo = getMentionQuery(text, cursorPosition)
 
   useEffect(() => {
     if (!mentionInfo || mentionInfo.query.length < 1) {
@@ -76,15 +66,16 @@ export function MentionAutocomplete({
           supabase.auth.getSession().then(({ data }) => data.session?.access_token || null)
         )
 
-    tokenPromise.then(token => {
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      return fetch(`/api/users/search?q=${encodeURIComponent(query)}&limit=5`, {
-        headers,
-        signal: controller.signal,
+    tokenPromise
+      .then((token) => {
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        return fetch(`/api/users/search?q=${encodeURIComponent(query)}&limit=5`, {
+          headers,
+          signal: controller.signal,
+        })
       })
-    })
-      .then(res => res.json())
-      .then(data => {
+      .then((res) => res.json())
+      .then((data) => {
         if (!controller.signal.aborted) {
           setUsers(data.users || [])
           setSelectedIndex(0)
@@ -103,11 +94,7 @@ export function MentionAutocomplete({
   if (!mentionInfo || users.length === 0) return null
 
   const handleSelect = (user: MentionUser) => {
-    onSelect(
-      user.handle,
-      mentionInfo.start,
-      cursorPosition
-    )
+    onSelect(user.handle, mentionInfo.start, cursorPosition)
     onClose()
   }
 
@@ -163,18 +150,20 @@ export function MentionAutocomplete({
               style={{ borderRadius: '50%', objectFit: 'cover' }}
             />
           ) : (
-            <div style={{
-              width: 24,
-              height: 24,
-              borderRadius: '50%',
-              background: tokens.colors.accent.primary,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              fontSize: 11,
-              fontWeight: 700,
-            }}>
+            <div
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: '50%',
+                background: tokens.colors.accent.primary,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
               {user.handle?.[0]?.toUpperCase() || '?'}
             </div>
           )}
@@ -200,22 +189,24 @@ export function useMentionAutocomplete() {
 
     // Check if we're in a @mention context
     const before = text.slice(0, pos)
-    const hasMention = /@\w{0,30}$/.test(before)
-    setShowMention(hasMention)
+    setShowMention(getMentionQuery(before, before.length, true) !== null)
   }, [])
 
-  const handleSelect = useCallback((
-    handle: string,
-    startIndex: number,
-    endIndex: number,
-    text: string,
-    setText: (text: string) => void
-  ) => {
-    // Replace @query with @handle + space
-    const newText = text.slice(0, startIndex) + `@${handle} ` + text.slice(endIndex)
-    setText(newText)
-    setShowMention(false)
-  }, [])
+  const handleSelect = useCallback(
+    (
+      handle: string,
+      startIndex: number,
+      endIndex: number,
+      text: string,
+      setText: (text: string) => void
+    ) => {
+      // Replace @query with @handle + space
+      const newText = text.slice(0, startIndex) + `@${handle} ` + text.slice(endIndex)
+      setText(newText)
+      setShowMention(false)
+    },
+    []
+  )
 
   return {
     showMention,

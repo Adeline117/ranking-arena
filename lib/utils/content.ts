@@ -6,6 +6,7 @@
 import { ReactNode, createElement } from 'react'
 import { getStickerById, isPureSticker, extractStickerId, STICKER_PATTERN } from '@/lib/stickers'
 import { logger } from '@/lib/logger'
+import { findMentionTokens } from '@/lib/posts/mentions'
 
 // Arena 主题色
 export const ARENA_PURPLE = 'var(--color-brand)'
@@ -404,50 +405,67 @@ function renderTextWithHashtags(text: string, keyPrefix: string): ReactNode[] {
  * clickable — mirrors the routes used by the feed body renderer:
  *   #tag  -> /hashtag/<lowercased tag>
  *   @user -> /u/<handle>
- * Hashtag regex kept in sync with renderTextWithHashtags + lib/data/hashtags.ts
- * (Unicode \p{L}\p{N} so #比特币 linkifies; @mentions are ASCII handles).
+ * Hashtag regex is kept in sync with renderTextWithHashtags +
+ * lib/data/hashtags.ts; mention parsing mirrors the canonical profile handle
+ * contract and excludes email suffixes.
  */
 export function linkifyTagsAndMentions(text: string, keyPrefix = 'lm'): ReactNode[] {
   if (!text) return []
-  const combined = /#([\p{L}\p{N}_]{1,30})|@(\w+)/gu
+  const tokens: Array<
+    | { type: 'hashtag'; start: number; end: number; value: string }
+    | { type: 'mention'; start: number; end: number; value: string }
+  > = []
+  for (const match of text.matchAll(/#([\p{L}\p{N}_]{1,30})/gu)) {
+    tokens.push({
+      type: 'hashtag',
+      start: match.index,
+      end: match.index + match[0].length,
+      value: match[1],
+    })
+  }
+  for (const mention of findMentionTokens(text)) {
+    tokens.push({
+      type: 'mention',
+      start: mention.start,
+      end: mention.end,
+      value: mention.handle,
+    })
+  }
+  tokens.sort((left, right) => left.start - right.start || left.end - right.end)
+
   const nodes: ReactNode[] = []
   let lastIdx = 0
-  let match: RegExpExecArray | null
-  combined.lastIndex = 0
-  while ((match = combined.exec(text)) !== null) {
-    if (match.index > lastIdx) {
-      nodes.push(text.slice(lastIdx, match.index))
-    }
-    const tag = match[1]
-    const mention = match[2]
-    if (tag) {
+  for (const token of tokens) {
+    if (token.start < lastIdx) continue
+    if (token.start > lastIdx) nodes.push(text.slice(lastIdx, token.start))
+    if (token.type === 'hashtag') {
       nodes.push(
         createElement(
           'a',
           {
-            key: `${keyPrefix}-ht${match.index}`,
-            href: `/hashtag/${tag.toLowerCase()}`,
+            key: `${keyPrefix}-ht${token.start}`,
+            href: `/hashtag/${token.value.toLowerCase()}`,
             onClick: (e: React.MouseEvent) => e.stopPropagation(),
             style: { color: ARENA_PURPLE, textDecoration: 'none', fontWeight: 600 },
           },
-          `#${tag}`
+          `#${token.value}`
         )
       )
-    } else if (mention) {
+    } else {
       nodes.push(
         createElement(
           'a',
           {
-            key: `${keyPrefix}-mt${match.index}`,
-            href: `/u/${encodeURIComponent(mention)}`,
+            key: `${keyPrefix}-mt${token.start}`,
+            href: `/u/${encodeURIComponent(token.value)}`,
             onClick: (e: React.MouseEvent) => e.stopPropagation(),
             style: { color: 'var(--color-brand)', textDecoration: 'none', fontWeight: 600 },
           },
-          `@${mention}`
+          `@${token.value}`
         )
       )
     }
-    lastIdx = match.index + match[0].length
+    lastIdx = token.end
   }
   if (lastIdx < text.length) {
     nodes.push(text.slice(lastIdx))
@@ -530,33 +548,33 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
  * Render @mention tokens within a plain text string as clickable links.
  */
 function renderTextWithMentions(text: string, keyPrefix: string): ReactNode[] {
-  const mentionRegex = /@(\w+)/g
-  if (!mentionRegex.test(text)) {
+  const mentions = findMentionTokens(text)
+  if (mentions.length === 0) {
     // No mentions — apply inline markdown
     return renderInlineMarkdown(text, keyPrefix)
   }
 
   const nodes: ReactNode[] = []
   let lastIdx = 0
-  let m: RegExpExecArray | null
-  mentionRegex.lastIndex = 0
-  while ((m = mentionRegex.exec(text)) !== null) {
-    if (m.index > lastIdx) {
+  for (const mention of mentions) {
+    if (mention.start > lastIdx) {
       // Apply inline markdown to text between mentions
-      nodes.push(...renderInlineMarkdown(text.slice(lastIdx, m.index), `${keyPrefix}-mt${lastIdx}`))
+      nodes.push(
+        ...renderInlineMarkdown(text.slice(lastIdx, mention.start), `${keyPrefix}-mt${lastIdx}`)
+      )
     }
     nodes.push(
       createElement(
         'a',
         {
-          key: `${keyPrefix}-m${m.index}`,
-          href: `/u/${encodeURIComponent(m[1])}`,
+          key: `${keyPrefix}-m${mention.start}`,
+          href: `/u/${encodeURIComponent(mention.handle)}`,
           style: { color: 'var(--color-brand)', fontWeight: 600, textDecoration: 'none' },
         },
-        `@${m[1]}`
+        `@${mention.handle}`
       )
     )
-    lastIdx = m.index + m[0].length
+    lastIdx = mention.end
   }
   if (lastIdx < text.length) {
     nodes.push(...renderInlineMarkdown(text.slice(lastIdx), `${keyPrefix}-mt${lastIdx}`))

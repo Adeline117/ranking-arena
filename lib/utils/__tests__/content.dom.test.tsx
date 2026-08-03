@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { renderContentParts, renderContentWithLinks } from '../content'
+import { linkifyTagsAndMentions, renderContentParts, renderContentWithLinks } from '../content'
 
 describe('markdown image DOM safety', () => {
   afterEach(() => {
@@ -42,5 +42,30 @@ describe('markdown image DOM safety', () => {
 
     expect(openSpy).toHaveBeenCalledWith(url, '_blank', 'noopener,noreferrer')
     expect(popup.opener).toBeNull()
+  })
+})
+
+describe('mention rendering', () => {
+  it('links canonical Unicode and dotted legacy handles', () => {
+    render(<div>{linkifyTagsAndMentions('Hi @测试用户 and @legacy.name')}</div>)
+
+    expect(screen.getByRole('link', { name: '@测试用户' })).toHaveAttribute(
+      'href',
+      `/u/${encodeURIComponent('测试用户')}`
+    )
+    expect(screen.getByRole('link', { name: '@legacy.name' })).toHaveAttribute(
+      'href',
+      '/u/legacy.name'
+    )
+  })
+
+  it('does not link email suffixes or partial overlong handles', () => {
+    const overlong = `@${'a'.repeat(31)}`
+    const { container } = render(
+      <div>{linkifyTagsAndMentions(`mail@example.com ${overlong}`)}</div>
+    )
+
+    expect(container.querySelector('a')).toBeNull()
+    expect(container).toHaveTextContent(`mail@example.com ${overlong}`)
   })
 })

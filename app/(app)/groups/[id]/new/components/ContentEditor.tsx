@@ -11,6 +11,7 @@ import Image from 'next/image'
 import { CharCount, inputStyle } from './FormControls'
 import type { LinkPreview } from '../types'
 import { CONTENT_MAX_LENGTH } from '../types'
+import { getMentionQuery } from '@/lib/posts/mentions'
 
 interface ContentEditorProps {
   content: string
@@ -30,50 +31,76 @@ interface ContentEditorProps {
 }
 
 export function ContentEditor({
-  content, setContent,
-  showPreview, setShowPreview,
-  showStickerPicker, setShowStickerPicker,
+  content,
+  setContent,
+  showPreview,
+  setShowPreview,
+  showStickerPicker,
+  setShowStickerPicker,
   draftSaved,
-  linkPreview, setLinkPreview, linkPreviewLoading, linkPreviewUrlRef,
-  language: _language, t,
+  linkPreview,
+  setLinkPreview,
+  linkPreviewLoading,
+  linkPreviewUrlRef,
+  language: _language,
+  t,
   accessToken,
 }: ContentEditorProps): React.ReactElement {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [cursorPos, setCursorPos] = useState(0)
   const [showMention, setShowMention] = useState(false)
 
-  const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newContent = e.target.value.slice(0, CONTENT_MAX_LENGTH)
-    setContent(newContent)
-    const pos = e.target.selectionStart || 0
-    setCursorPos(pos)
-    // Check if in @mention context
-    const before = newContent.slice(0, pos)
-    setShowMention(/@\w{0,30}$/.test(before))
-  }, [setContent])
+  const handleContentChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const newContent = e.target.value.slice(0, CONTENT_MAX_LENGTH)
+      setContent(newContent)
+      const pos = e.target.selectionStart || 0
+      setCursorPos(pos)
+      // Check if in @mention context
+      setShowMention(getMentionQuery(newContent, pos, true) !== null)
+    },
+    [setContent]
+  )
 
-  const handleMentionSelect = useCallback((handle: string, start: number, end: number) => {
-    const newText = content.slice(0, start) + `@${handle} ` + content.slice(end)
-    setContent(newText)
-    setShowMention(false)
-    // Focus back and set cursor after the inserted mention
-    setTimeout(() => {
-      if (textareaRef.current) {
-        const newPos = start + handle.length + 2 // @handle + space
-        textareaRef.current.focus()
-        textareaRef.current.setSelectionRange(newPos, newPos)
-      }
-    }, 0)
-  }, [content, setContent])
+  const handleMentionSelect = useCallback(
+    (handle: string, start: number, end: number) => {
+      const newText = content.slice(0, start) + `@${handle} ` + content.slice(end)
+      setContent(newText)
+      setShowMention(false)
+      // Focus back and set cursor after the inserted mention
+      setTimeout(() => {
+        if (textareaRef.current) {
+          const newPos = start + handle.length + 2 // @handle + space
+          textareaRef.current.focus()
+          textareaRef.current.setSelectionRange(newPos, newPos)
+        }
+      }, 0)
+    },
+    [content, setContent]
+  )
 
   return (
     <Box>
-      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
+      <Box
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: tokens.spacing[2],
+        }}
+      >
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
           <Text size="sm" weight="bold">
             {t('contentLabel')}
           </Text>
-          <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: ('1px solid ' + tokens.colors.border.primary) }}>
+          <Box
+            style={{
+              display: 'flex',
+              borderRadius: tokens.radius.md,
+              overflow: 'hidden',
+              border: '1px solid ' + tokens.colors.border.primary,
+            }}
+          >
             <button
               type="button"
               onClick={() => setShowPreview(false)}
@@ -98,7 +125,7 @@ export function ContentEditor({
               style={{
                 padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                 border: 'none',
-                borderLeft: ('1px solid ' + tokens.colors.border.primary),
+                borderLeft: '1px solid ' + tokens.colors.border.primary,
                 background: showPreview ? tokens.colors.accent.brand : 'transparent',
                 color: showPreview ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                 fontSize: tokens.typography.fontSize.xs,
@@ -128,7 +155,7 @@ export function ContentEditor({
             minHeight: 288,
             padding: tokens.spacing[4],
             borderRadius: tokens.radius.md,
-            border: ('2px solid ' + tokens.colors.accent.brand),
+            border: '2px solid ' + tokens.colors.accent.brand,
             background: `linear-gradient(135deg, var(--color-accent-primary-08) 0%, var(--color-accent-primary-10) 100%)`,
             color: tokens.colors.text.primary,
             fontSize: tokens.typography.fontSize.base,
@@ -153,7 +180,11 @@ export function ContentEditor({
           >
             {t('previewMode')}
           </Box>
-          {content ? renderContentWithLinks(content) : <Text color="tertiary">{t('previewPlaceholder')}</Text>}
+          {content ? (
+            renderContentWithLinks(content)
+          ) : (
+            <Text color="tertiary">{t('previewPlaceholder')}</Text>
+          )}
         </Box>
       ) : (
         <div style={{ position: 'relative' }}>
@@ -167,7 +198,14 @@ export function ContentEditor({
             rows={12}
             aria-label={t('contentLabel')}
             className="post-editor-input"
-            style={{ ...inputStyle, padding: tokens.spacing[4], resize: 'vertical', lineHeight: 1.7, transition: 'border-color 0.2s, box-shadow 0.2s', minHeight: 240 }}
+            style={{
+              ...inputStyle,
+              padding: tokens.spacing[4],
+              resize: 'vertical',
+              lineHeight: 1.7,
+              transition: 'border-color 0.2s, box-shadow 0.2s',
+              minHeight: 240,
+            }}
           />
           {showMention && (
             <MentionAutocomplete
@@ -184,32 +222,93 @@ export function ContentEditor({
 
       {/* UF15: Link Preview Card */}
       {linkPreviewLoading && (
-        <Box style={{ marginTop: tokens.spacing[2], padding: tokens.spacing[3], borderRadius: tokens.radius.md, background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}` }}>
-          <Text size="xs" color="tertiary">{t('fetchingLinkPreview')}</Text>
+        <Box
+          style={{
+            marginTop: tokens.spacing[2],
+            padding: tokens.spacing[3],
+            borderRadius: tokens.radius.md,
+            background: tokens.colors.bg.secondary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
+          <Text size="xs" color="tertiary">
+            {t('fetchingLinkPreview')}
+          </Text>
         </Box>
       )}
       {linkPreview && !linkPreviewLoading && (
-        <Box style={{
-          marginTop: tokens.spacing[2], padding: tokens.spacing[3], borderRadius: tokens.radius.md,
-          background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
-          display: 'flex', gap: tokens.spacing[3], alignItems: 'flex-start',
-        }}>
+        <Box
+          style={{
+            marginTop: tokens.spacing[2],
+            padding: tokens.spacing[3],
+            borderRadius: tokens.radius.md,
+            background: tokens.colors.bg.secondary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            display: 'flex',
+            gap: tokens.spacing[3],
+            alignItems: 'flex-start',
+          }}
+        >
           {linkPreview.image && (
-            <Image src={linkPreview.image} alt={linkPreview.title || 'Link preview'} width={80} height={60} loading="lazy" unoptimized style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+            <Image
+              src={linkPreview.image}
+              alt={linkPreview.title || 'Link preview'}
+              width={80}
+              height={60}
+              loading="lazy"
+              unoptimized
+              style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}
+            />
           )}
           <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text size="sm" weight="bold" style={{ marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Text
+              size="sm"
+              weight="bold"
+              style={{
+                marginBottom: 2,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {linkPreview.title}
             </Text>
             {linkPreview.description && (
-              <Text size="xs" color="secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
+              <Text
+                size="xs"
+                color="secondary"
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical' as const,
+                }}
+              >
                 {linkPreview.description}
               </Text>
             )}
-            <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>{new URL(linkPreview.url).hostname}</Text>
+            <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
+              {new URL(linkPreview.url).hostname}
+            </Text>
           </Box>
-          <button aria-label="Close" onClick={() => { setLinkPreview(null); linkPreviewUrlRef.current = 'dismissed' }}
-            style={{ background: 'none', border: 'none', color: tokens.colors.text.tertiary, cursor: 'pointer', fontSize: 16, padding: 2 }}>x</button>
+          <button
+            aria-label="Close"
+            onClick={() => {
+              setLinkPreview(null)
+              linkPreviewUrlRef.current = 'dismissed'
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: tokens.colors.text.tertiary,
+              cursor: 'pointer',
+              fontSize: 16,
+              padding: 2,
+            }}
+          >
+            x
+          </button>
         </Box>
       )}
 
@@ -220,7 +319,7 @@ export function ContentEditor({
           onClick={() => setShowStickerPicker((prev: boolean) => !prev)}
           style={{
             background: 'transparent',
-            border: ('1px solid ' + tokens.colors.border.primary),
+            border: '1px solid ' + tokens.colors.border.primary,
             cursor: 'pointer',
             padding: '4px 10px',
             borderRadius: tokens.radius.md,
@@ -231,7 +330,16 @@ export function ContentEditor({
             gap: 4,
           }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
             <path d="M14 3v4a2 2 0 0 0 2 2h4" />
           </svg>
