@@ -10,6 +10,7 @@ import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
+import { assertPositionSnapshotEvidence } from '@/lib/ingest/core/position-snapshot'
 import { supportsSourceSurface } from '@/lib/ingest/core/surface-capabilities'
 import type { ParseCtx } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
@@ -115,6 +116,11 @@ export async function processTierD(
           payload: bundle.pages,
         })
 
+        const positionEvidence = assertPositionSnapshotEvidence(
+          bundle,
+          `${src.slug}/${trader.exchange_trader_id}`
+        )
+
         const ctx: ParseCtx = {
           sourceSlug: src.slug,
           currency: src.currency,
@@ -126,7 +132,7 @@ export async function processTierD(
 
         // Source-disclosed staleness (spec §5.7): Bitget −1h.
         const asOf = new Date(scrapedAt.getTime() - delayHours * 3_600_000).toISOString()
-        await publishPositions(src, trader.id, positions, asOf)
+        await publishPositions(src, trader.id, positions, asOf, positionEvidence)
 
         result.tradersCrawled += 1
         result.positionsWritten += positions.length

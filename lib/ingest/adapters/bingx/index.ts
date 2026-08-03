@@ -232,7 +232,9 @@ const bingxAdapter: SourceAdapter = {
       POSITION_RE,
       null
     )
-    if (payload === null) return { pages: [], fetchedAt }
+    if (payload === null) {
+      throw new Error(`[bingx] position snapshot capture unavailable for ${exchangeTraderId}`)
+    }
     return { pages: [{ pageIndex: 1, payload, url, fetchedAt }], fetchedAt }
   },
 

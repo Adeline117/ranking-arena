@@ -5,7 +5,9 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { parseBingxPositions, parseBingxHistory } from '../parsers'
-import type { ParseCtx } from '../../../core/types'
+import { bingxAdapter } from '../index'
+import type { ParseCtx, SourceRow } from '../../../core/types'
+import type { FetchSession } from '../../../fetch/types'
 
 function fx(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -34,7 +36,22 @@ describe('parseBingxPositions', () => {
   })
 
   it('returns [] for an empty positions payload', () => {
-    expect(parseBingxPositions({ data: { result: [], total: 0 } }, ctx)).toEqual([])
+    expect(parseBingxPositions({ code: 0, data: { result: [], total: 0 } }, ctx)).toEqual([])
+  })
+
+  it('rejects error and malformed envelopes instead of clearing last-good positions', () => {
+    expect(() => parseBingxPositions({ code: 100005, data: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseBingxPositions({ code: 0, data: null }, ctx)).toThrow(
+      'malformed position response data'
+    )
+  })
+
+  it('rejects a capture without the routing identity instead of returning an empty bundle', async () => {
+    await expect(
+      bingxAdapter.getPositions({} as FetchSession, {} as SourceRow, 'trader-1', null)
+    ).rejects.toThrow('position snapshot capture unavailable')
   })
 })
 

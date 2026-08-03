@@ -273,8 +273,24 @@ export function bingxPerTfExtras(rankStat: Dict, tf: RankingTimeframe): Record<s
 
 /** Current open positions → ParsedPosition[] (data.result[]). */
 export function parseBingxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[bingx] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== 0) {
+    throw new TypeError(`[bingx] position response failed with code ${String(envelope.code)}`)
+  }
+  const data = envelope.data
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    throw new TypeError('[bingx] malformed position response data')
+  }
+  const result = (data as Dict).result
+  if (!Array.isArray(result)) {
+    throw new TypeError('[bingx] malformed position response result')
+  }
+
   const out: ParsedPosition[] = []
-  for (const item of recordRows(raw)) {
+  for (const item of result as Dict[]) {
     const symbol = typeof item.symbol === 'string' ? item.symbol : null
     if (!symbol) continue
     out.push({
