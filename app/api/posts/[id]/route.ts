@@ -13,18 +13,12 @@ import {
   success,
   notFound,
   handleError,
-  validateString,
 } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import {
-  getPostById,
-  updatePost,
-  deletePost,
-  getUserPostReaction,
-  getUserPostVote,
-} from '@/lib/data/posts'
+import { getPostById, deletePost, getUserPostReaction, getUserPostVote } from '@/lib/data/posts'
 import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
+import { handleAtomicPostEditHttp } from '@/lib/posts/post-edit-server'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -88,19 +82,13 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const { id } = await context.params
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
-
-    const body = await request.json()
-    const title = validateString(body.title, { maxLength: 200, fieldName: 'title' })
-    const content = validateString(body.content, { maxLength: 10000, fieldName: 'content' })
-    const poll_enabled = typeof body.poll_enabled === 'boolean' ? body.poll_enabled : undefined
-
-    const post = await updatePost(supabase, id, user.id, {
-      ...(title ? { title } : {}),
-      ...(content ? { content } : {}),
-      ...(poll_enabled !== undefined ? { poll_enabled } : {}),
+    return handleAtomicPostEditHttp({
+      request,
+      supabase,
+      actorId: user.id,
+      postId: id,
+      envelope: 'standard',
     })
-
-    return success({ post })
   } catch (error: unknown) {
     return handleError(error, 'posts/[id] PUT')
   }
