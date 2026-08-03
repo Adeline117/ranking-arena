@@ -23,7 +23,6 @@ jest.mock('next/server', () => {
   return { NextResponse: MockNextResponse }
 })
 
-const mockListBuckets = jest.fn()
 const mockUpload = jest.fn()
 const mockList = jest.fn()
 const mockRemove = jest.fn()
@@ -36,7 +35,6 @@ const mockFrom = jest.fn(() => ({
 }))
 const mockSupabase = {
   storage: {
-    listBuckets: mockListBuckets,
     from: mockFrom,
   },
 }
@@ -82,7 +80,6 @@ describe('post image upload authority', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     uploadedPath = ''
-    mockListBuckets.mockResolvedValue({ data: [{ id: 'posts' }], error: null })
     mockSniffImageFile.mockResolvedValue({
       kind: 'jpeg',
       mime: 'image/jpeg',
@@ -111,7 +108,24 @@ describe('post image upload authority', () => {
 
     expect(response.status).toBe(400)
     expect(mockSniffImageFile).not.toHaveBeenCalled()
-    expect(mockListBuckets).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('reports the migrated bucket as unavailable without pointing to a dead setup script', async () => {
+    mockUpload.mockResolvedValue({
+      data: null,
+      error: { message: 'Bucket not found' },
+    })
+
+    const response = await POST(request(file()) as never)
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body).toEqual({
+      error: 'Post media storage is temporarily unavailable.',
+      code: 'BUCKET_NOT_FOUND',
+    })
+    expect(JSON.stringify(body)).not.toContain('setup_posts_storage.sql')
   })
 
   it('accepts only an exact upload and listing acknowledgement', async () => {

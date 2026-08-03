@@ -44,31 +44,6 @@ export const POST = withAuth(
       )
     }
 
-    // 检查 posts bucket 是否存在
-    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
-    if (bucketsError) {
-      logger.error('Error listing buckets:', bucketsError)
-      return NextResponse.json(
-        {
-          error: 'Storage service unavailable. Please contact administrator.',
-        },
-        { status: 503 }
-      )
-    }
-
-    const postsBucketExists = buckets?.some((b: { id: string }) => b.id === 'posts')
-    if (!postsBucketExists) {
-      logger.error('Posts bucket does not exist. Please run scripts/setup_posts_storage.sql')
-      return NextResponse.json(
-        {
-          error:
-            'Storage not configured. Please contact administrator to run setup_posts_storage.sql',
-          code: 'BUCKET_NOT_FOUND',
-        },
-        { status: 503 }
-      )
-    }
-
     // 生成唯一文件名 — use SERVER-derived extension from sniffed magic
     // bytes, NOT the client-supplied filename. Prevents .php / .html /
     // .svg uploads that pass the type check via spoofed file.type.
@@ -87,7 +62,7 @@ export const POST = withAuth(
       if (error.message?.includes('Bucket not found')) {
         return NextResponse.json(
           {
-            error: 'Storage bucket not configured. Please run setup_posts_storage.sql',
+            error: 'Post media storage is temporarily unavailable.',
             code: 'BUCKET_NOT_FOUND',
           },
           { status: 503 }
@@ -96,7 +71,7 @@ export const POST = withAuth(
       if (error.message?.includes('security') || error.message?.includes('policy')) {
         return NextResponse.json(
           {
-            error: 'Upload permission denied. Please check storage policies.',
+            error: 'Upload permission denied.',
             code: 'PERMISSION_DENIED',
           },
           { status: 403 }
