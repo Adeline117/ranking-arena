@@ -7,11 +7,15 @@ import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { createLogger } from '@/lib/utils/logger'
 import { success } from '@/lib/api/response'
 import { readPostEditRpcAcknowledgement, type PostEditPost } from '@/lib/posts/post-edit-contract'
+import { detectPostLanguage } from '@/lib/data/posts'
+import { extractHashtags } from '@/lib/data/hashtags'
+import { extractMentionHandles } from '@/lib/posts/mentions'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const TITLE_CONTROL_PATTERN = /[\u0000-\u001f\u007f]/
 const CONTENT_CONTROL_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/
 const URL_CONTROL_OR_SPACE_PATTERN = /[\u0000-\u001f\u007f\s]/
+const MAX_DERIVED_TERMS = 50
 const logger = createLogger('post-edit')
 
 const ImageUrlSchema = z
@@ -58,6 +62,9 @@ export type PreparedPostEdit = {
   content: string
   images?: string[]
   expectedVersion: number
+  language: 'zh' | 'en' | 'ja' | 'ko'
+  mentionHandles: string[]
+  hashtagTags: string[]
 }
 
 type PostEditRpcClient = Pick<SupabaseClient<Database>, 'rpc'>
@@ -75,13 +82,13 @@ export function preparePostEdit(value: unknown): PreparedPostEdit | null {
   const parsed = PostEditRequestSchema.safeParse(value)
   if (!parsed.success) return null
 
-  const title = sanitizeInput(parsed.data.title.trim(), { maxLength: 200 })
+  const title = sanitizeInput(parsed.data.title.trim(), { maxLength: 200 }).normalize('NFC')
   if (!title || title.length > 200) return null
 
   const content = sanitizeText(parsed.data.content, {
     preserveNewlines: true,
     maxLength: 50000,
-  })
+  }).normalize('NFC')
   const images = parsed.data.images?.map(sanitizeUrl)
   if (
     images?.some((url) => !url) ||
@@ -90,12 +97,23 @@ export function preparePostEdit(value: unknown): PreparedPostEdit | null {
     return null
   }
 
+  const derivedText = `${title} ${content}`
+  const detectedLanguage = detectPostLanguage(derivedText)
+  if (!['zh', 'en', 'ja', 'ko'].includes(detectedLanguage)) return null
+
   return {
     title,
     content,
     ...(images !== undefined ? { images } : {}),
     expectedVersion: parsed.data.expected_version,
+    language: detectedLanguage as PreparedPostEdit['language'],
+    mentionHandles: extractMentionHandles(derivedText),
+    hashtagTags: extractHashtags(derivedText).slice(0, MAX_DERIVED_TERMS).sort(),
   }
+}
+
+function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
 function isAuthorityUnavailable(error: { code?: string; message?: string } | null): boolean {
@@ -125,6 +143,9 @@ export async function executeAtomicPostEdit(
       p_content: input.content,
       p_update_images: input.images !== undefined,
       p_images: input.images ?? null,
+      p_language: input.language,
+      p_mention_handles: input.mentionHandles,
+      p_hashtag_tags: input.hashtagTags,
     })
   } catch (error) {
     return { status: 'authority_unavailable', error }
@@ -156,8 +177,22 @@ export async function executeAtomicPostEdit(
       acknowledgement.post.images.every((url, index) => url === input.images?.[index]))
   const expectedVersionMatches =
     acknowledgement.status === 'updated'
-      ? acknowledgement.post.content_version === input.expectedVersion + 1
-      : acknowledgement.post.content_version >= input.expectedVersion
+      ? acknowledgement.revisionAdvanced
+        ? acknowledgement.post.content_version === input.expectedVersion + 1
+        : acknowledgement.post.content_version === input.expectedVersion
+      : !acknowledgement.revisionAdvanced &&
+        acknowledgement.post.content_version >= input.expectedVersion
+
+  const mentionCandidates = new Set(
+    input.mentionHandles.map((handle) => handle.toLocaleLowerCase('und'))
+  )
+  const observedMentions = new Set<string>()
+  const expectedMentionsMatch = acknowledgement.post.mentions.every((handle) => {
+    const key = handle.toLocaleLowerCase('und')
+    if (!mentionCandidates.has(key) || observedMentions.has(key)) return false
+    observedMentions.add(key)
+    return true
+  })
 
   if (
     acknowledgement.actorId !== actorId ||
@@ -166,7 +201,10 @@ export async function executeAtomicPostEdit(
     acknowledgement.post.title !== input.title ||
     acknowledgement.post.content !== input.content ||
     !expectedImagesMatch ||
-    !expectedVersionMatches
+    !expectedVersionMatches ||
+    acknowledgement.post.language !== input.language ||
+    !expectedMentionsMatch ||
+    !arraysEqual(acknowledgement.post.hashtags, input.hashtagTags)
   ) {
     return { status: 'invalid_ack' }
   }

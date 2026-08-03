@@ -13,22 +13,31 @@ const post = {
   title: 'Edited title',
   content: 'First line\nSecond line',
   images: ['https://cdn.example/image.png'],
+  language: 'en',
+  mentions: ['Alice_1'],
+  hashtags: ['markets'],
   content_version: 8,
   updated_at: '2026-07-30T01:35:00.123456+00:00',
 }
 
 describe('post edit acknowledgement contract', () => {
   it('accepts exact updated and unchanged RPC acknowledgements', () => {
-    expect(readPostEditRpcAcknowledgement({ status: 'updated', actor_id: ACTOR, post })).toEqual({
-      status: 'updated',
-      actorId: ACTOR,
-      post,
-    })
-    expect(readPostEditRpcAcknowledgement({ status: 'unchanged', actor_id: ACTOR, post })).toEqual({
-      status: 'unchanged',
-      actorId: ACTOR,
-      post,
-    })
+    expect(
+      readPostEditRpcAcknowledgement({
+        status: 'updated',
+        actor_id: ACTOR,
+        revision_advanced: true,
+        post,
+      })
+    ).toEqual({ status: 'updated', actorId: ACTOR, revisionAdvanced: true, post })
+    expect(
+      readPostEditRpcAcknowledgement({
+        status: 'unchanged',
+        actor_id: ACTOR,
+        revision_advanced: false,
+        post,
+      })
+    ).toEqual({ status: 'unchanged', actorId: ACTOR, revisionAdvanced: false, post })
   })
 
   it.each(['invalid', 'account_inactive', 'not_found', 'forbidden', 'conflict'])(
@@ -41,12 +50,19 @@ describe('post edit acknowledgement contract', () => {
 
   it('rejects malformed, widened, or contradictory success evidence', () => {
     expect(
-      readPostEditRpcAcknowledgement({ status: 'updated', actor_id: ACTOR, post, extra: true })
+      readPostEditRpcAcknowledgement({
+        status: 'updated',
+        actor_id: ACTOR,
+        revision_advanced: true,
+        post,
+        extra: true,
+      })
     ).toBeNull()
     expect(
       readPostEditRpcAcknowledgement({
         status: 'updated',
         actor_id: ACTOR,
+        revision_advanced: true,
         post: { ...post, content_version: 1.5 },
       })
     ).toBeNull()
@@ -54,6 +70,7 @@ describe('post edit acknowledgement contract', () => {
       readPostEditRpcAcknowledgement({
         status: 'updated',
         actor_id: ACTOR,
+        revision_advanced: true,
         post: { ...post, images: ['javascript:alert(1)'] },
       })
     ).toBeNull()
@@ -61,7 +78,24 @@ describe('post edit acknowledgement contract', () => {
       readPostEditRpcAcknowledgement({
         status: 'updated',
         actor_id: ACTOR,
+        revision_advanced: true,
         post: { ...post, unexpected: true },
+      })
+    ).toBeNull()
+    expect(
+      readPostEditRpcAcknowledgement({
+        status: 'updated',
+        actor_id: ACTOR,
+        revision_advanced: true,
+        post: { ...post, mentions: ['Alice_1', 'alice_1'] },
+      })
+    ).toBeNull()
+    expect(
+      readPostEditRpcAcknowledgement({
+        status: 'updated',
+        actor_id: ACTOR,
+        revision_advanced: true,
+        post: { ...post, hashtags: ['Not-Lower'] },
       })
     ).toBeNull()
   })

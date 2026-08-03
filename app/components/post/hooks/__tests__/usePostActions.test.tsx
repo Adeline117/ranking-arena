@@ -643,6 +643,9 @@ describe('usePostActions aliased detail state', () => {
       title: 'Authoritative title',
       content: 'Authoritative body',
       images: null,
+      language: 'en',
+      mentions: [],
+      hashtags: [],
       content_version: 8,
       updated_at: '2026-07-30T01:35:00.000Z',
     }
@@ -657,6 +660,9 @@ describe('usePostActions aliased detail state', () => {
       title: acknowledgedPost.title,
       content: acknowledgedPost.content,
       images: acknowledgedPost.images,
+      language: acknowledgedPost.language,
+      mentions: acknowledgedPost.mentions,
+      hashtags: acknowledgedPost.hashtags,
       content_version: acknowledgedPost.content_version,
       updated_at: acknowledgedPost.updated_at,
     })

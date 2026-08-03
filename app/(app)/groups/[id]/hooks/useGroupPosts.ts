@@ -32,6 +32,9 @@ export interface Post {
   created_at: string
   updated_at: string
   content_version: number
+  language?: string | null
+  mentions?: string[] | null
+  hashtags?: string[] | null
   author_handle?: string | null
   author_id?: string | null
   author_avatar_url?: string | null
@@ -79,7 +82,7 @@ interface UseGroupPostsOptions {
 
 const POST_PAGE_SIZE = 20
 const POST_SELECT_FIELDS =
-  'id, group_id, title, content, created_at, updated_at, content_version, author_handle, author_id, like_count, dislike_count, comment_count, bookmark_count, repost_count, is_pinned'
+  'id, group_id, title, content, created_at, updated_at, content_version, language, mentions, hashtags, author_handle, author_id, like_count, dislike_count, comment_count, bookmark_count, repost_count, is_pinned'
 
 // Generic fetch for boolean user interactions such as bookmarks.
 async function fetchUserInteractions(
@@ -1049,6 +1052,9 @@ export function useGroupPosts({
                     ...post,
                     title: acknowledgement.title,
                     content: acknowledgement.content,
+                    language: acknowledgement.language,
+                    mentions: acknowledgement.mentions,
+                    hashtags: acknowledgement.hashtags,
                     updated_at: acknowledgement.updated_at,
                     content_version: acknowledgement.content_version,
                   }

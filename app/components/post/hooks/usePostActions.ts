@@ -1075,6 +1075,9 @@ export function usePostActions({
                   title: acknowledgement.title,
                   content: acknowledgement.content,
                   images: acknowledgement.images,
+                  language: acknowledgement.language,
+                  mentions: acknowledgement.mentions,
+                  hashtags: acknowledgement.hashtags,
                   updated_at: acknowledgement.updated_at,
                   content_version: acknowledgement.content_version,
                 }
@@ -1088,6 +1091,9 @@ export function usePostActions({
             title: acknowledgement.title,
             content: acknowledgement.content,
             images: acknowledgement.images,
+            language: acknowledgement.language,
+            mentions: acknowledgement.mentions,
+            hashtags: acknowledgement.hashtags,
             updated_at: acknowledgement.updated_at,
             content_version: acknowledgement.content_version,
           })

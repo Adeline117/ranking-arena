@@ -10484,7 +10484,10 @@ export type Database = {
           p_actor_id: string
           p_content: string
           p_expected_version: number
+          p_hashtag_tags: string[]
           p_images: string[] | null
+          p_language: string
+          p_mention_handles: string[]
           p_post_id: string
           p_title: string
           p_update_images: boolean

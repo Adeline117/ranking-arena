@@ -38,6 +38,8 @@ export interface Post {
   content_warning?: string | null
   // Language detection
   language?: string
+  mentions?: string[]
+  hashtags?: string[]
 }
 
 export interface PostWithAuthor extends Post {

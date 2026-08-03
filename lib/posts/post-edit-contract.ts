@@ -7,6 +7,9 @@ const POST_KEYS = [
   'title',
   'content',
   'images',
+  'language',
+  'mentions',
+  'hashtags',
   'content_version',
   'updated_at',
 ] as const
@@ -18,6 +21,9 @@ export type PostEditPost = {
   title: string
   content: string
   images: string[] | null
+  language: 'zh' | 'en' | 'ja' | 'ko'
+  mentions: string[]
+  hashtags: string[]
   content_version: number
   updated_at: string
 }
@@ -27,6 +33,7 @@ export type PostEditRpcAcknowledgement =
   | {
       status: 'updated' | 'unchanged'
       actorId: string
+      revisionAdvanced: boolean
       post: PostEditPost
     }
 
@@ -64,6 +71,23 @@ function isImageList(value: unknown): value is string[] | null {
   )
 }
 
+function isUniqueStringList(
+  value: unknown,
+  options: { maxItems: number; pattern: RegExp; lowercase?: boolean }
+): value is string[] {
+  if (!Array.isArray(value) || value.length > options.maxItems) return false
+
+  const observed = new Set<string>()
+  for (const item of value) {
+    if (typeof item !== 'string' || !options.pattern.test(item)) return false
+    if (options.lowercase && item !== item.toLowerCase()) return false
+    const key = item.toLocaleLowerCase('und')
+    if (observed.has(key)) return false
+    observed.add(key)
+  }
+  return true
+}
+
 function parsePost(value: unknown): PostEditPost | null {
   if (!isRecord(value) || !hasExactKeys(value, POST_KEYS)) return null
   if (
@@ -77,6 +101,17 @@ function parsePost(value: unknown): PostEditPost | null {
     typeof value.content !== 'string' ||
     value.content.length > 50000 ||
     !isImageList(value.images) ||
+    typeof value.language !== 'string' ||
+    !['zh', 'en', 'ja', 'ko'].includes(value.language) ||
+    !isUniqueStringList(value.mentions, {
+      maxItems: 50,
+      pattern: /^[A-Za-z0-9_.\u4E00-\u9FAF\u3041-\u309F\u30A0-\u30FF\uAC00-\uD7A3]{1,30}$/u,
+    }) ||
+    !isUniqueStringList(value.hashtags, {
+      maxItems: 50,
+      pattern: /^[\p{L}\p{N}_]{1,30}$/u,
+      lowercase: true,
+    }) ||
     !Number.isSafeInteger(value.content_version) ||
     Number(value.content_version) < 0 ||
     typeof value.updated_at !== 'string' ||
@@ -92,6 +127,9 @@ function parsePost(value: unknown): PostEditPost | null {
     title: value.title,
     content: value.content,
     images: value.images,
+    language: value.language as PostEditPost['language'],
+    mentions: value.mentions,
+    hashtags: value.hashtags,
     content_version: Number(value.content_version),
     updated_at: value.updated_at,
   }
@@ -116,15 +154,21 @@ export function readPostEditRpcAcknowledgement(value: unknown): PostEditRpcAckno
 
   if (
     (value.status !== 'updated' && value.status !== 'unchanged') ||
-    !hasExactKeys(value, ['status', 'actor_id', 'post']) ||
-    !isUuid(value.actor_id)
+    !hasExactKeys(value, ['status', 'actor_id', 'revision_advanced', 'post']) ||
+    !isUuid(value.actor_id) ||
+    typeof value.revision_advanced !== 'boolean'
   ) {
     return null
   }
 
   const post = parsePost(value.post)
   if (!post) return null
-  return { status: value.status, actorId: value.actor_id, post }
+  return {
+    status: value.status,
+    actorId: value.actor_id,
+    revisionAdvanced: value.revision_advanced,
+    post,
+  }
 }
 
 /** Parse the public `/api/posts/:id/edit` success envelope fail-closed. */
