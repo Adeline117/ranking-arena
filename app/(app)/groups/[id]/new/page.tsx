@@ -30,6 +30,12 @@ import { ImageUploader } from './components/ImageUploader'
 import { VideoUploader } from './components/VideoUploader'
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { getViewerScope } from '@/lib/auth/viewer-scope'
+import {
+  bindPostCreateOperation,
+  publishPostAtomic,
+  type BoundPostCreateOperation,
+} from '@/lib/posts/post-create-client'
 
 export default function NewGroupPostPage(): React.ReactElement {
   if (!features.social) redirect('/')
@@ -42,11 +48,10 @@ export default function NewGroupPostPage(): React.ReactElement {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const submitRef = useRef(false)
+  const publishOperationRef = useRef<BoundPostCreateOperation | null>(null)
 
   // User state
-  const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
-  const [userHandle, setUserHandle] = useState<string | null>(null)
 
   // Form state
   const [groupName, setGroupName] = useState<string>('')
@@ -91,7 +96,6 @@ export default function NewGroupPostPage(): React.ReactElement {
     if (!groupId) return
 
     supabase.auth.getUser().then(async ({ data }) => {
-      setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
 
       if (!data.user) {
@@ -99,8 +103,6 @@ export default function NewGroupPostPage(): React.ReactElement {
         router.push(`/login?returnUrl=${encodeURIComponent(currentPath)}`)
         return
       }
-
-      loadUserHandle(data.user.id)
 
       // Check membership and mute status
       const { data: membership, error: membershipError } = await supabase
@@ -128,7 +130,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         return
       }
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- supabase/t/loadUserHandle are stable; auth check runs on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- supabase/t are stable; auth check runs on mount
   }, [router, groupId, showToast, language])
 
   // Load group name
@@ -145,28 +147,6 @@ export default function NewGroupPostPage(): React.ReactElement {
 
     loadGroupName()
   }, [groupId])
-
-  const loadUserHandle = async (uid: string) => {
-    try {
-      const { data: userProfile } = await supabase
-        .from('user_profiles')
-        .select('handle')
-        .eq('id', uid)
-        .maybeSingle()
-
-      if (userProfile?.handle) {
-        setUserHandle(userProfile.handle)
-        return
-      }
-
-      const { data: user } = await supabase.auth.getUser()
-      if (user?.user?.email) {
-        setUserHandle(user.user.email.split('@')[0])
-      }
-    } catch (error) {
-      logger.error('Error loading user handle:', error)
-    }
-  }
 
   // Load draft from localStorage
   useEffect(() => {
@@ -511,10 +491,18 @@ export default function NewGroupPostPage(): React.ReactElement {
       return
     }
 
+    const capturedViewerScope = getViewerScope()
+    if (capturedViewerScope.userId !== userId) {
+      showToast(t('pleaseLogin'), 'warning')
+      return
+    }
+
     // Validate poll options BEFORE setting loading state
+    const validPollOptions = pollOptions
+      .map((option) => option.text.trim())
+      .filter((option) => option.length > 0)
     if (pollEnabled) {
-      const validOptions = pollOptions.filter((opt) => opt.text.trim())
-      if (validOptions.length < 2) {
+      if (validPollOptions.length < 2) {
         showToast(t('pollMinOptions'), 'warning')
         return
       }
@@ -531,65 +519,46 @@ export default function NewGroupPostPage(): React.ReactElement {
         }
       }
 
-      let pollId = null
-      if (pollEnabled) {
-        const validOptions = pollOptions.filter((opt) => opt.text.trim())
-        const endAt = new Date(Date.now() + pollDuration * 60 * 60 * 1000)
-
-        const { data: pollData, error: pollError } = await supabase
-          .from('polls')
-          .insert({
-            question: title,
-            options: validOptions.map((opt, index) => ({
-              text: opt.text.trim(),
-              votes: 0,
-              index,
-            })),
-            type: pollType,
-            end_at: endAt.toISOString(),
-          })
-          .select('id')
-          .single()
-
-        if (pollError) {
-          const errorMsg = pollError.message || t('createPollFailed')
-          showToast(errorMsg, 'error')
-          setLoading(false)
-          submitRef.current = false
-          return
-        }
-        pollId = pollData.id
-      }
-
-      const { data: postData, error } = await supabase
-        .from('posts')
-        .insert({
+      const operation = bindPostCreateOperation(
+        {
           title,
           content: finalContent,
-          author_handle: userHandle || email?.split('@')[0] || 'user',
           group_id: groupId,
-          author_id: userId,
-          images: images.map((img) => img.url),
+          images: images.map((image) => image.url),
           poll_enabled: pollEnabled,
-          poll_id: pollId,
+          ...(pollEnabled
+            ? {
+                poll_options: validPollOptions,
+                poll_type: pollType,
+                poll_duration_hours: pollDuration,
+              }
+            : {}),
           visibility: 'group',
           is_sensitive: isSensitive,
           content_warning: isSensitive && contentWarning ? contentWarning : null,
-        })
-        .select('id')
-        .single()
+        },
+        publishOperationRef.current
+      )
+      publishOperationRef.current = operation
 
-      if (error) {
-        logger.error('Post creation error:', error)
-        const errorMsg =
-          error.code === '42501' ? t('permissionDeniedJoinGroup') : t('createPostFailed')
-        showToast(errorMsg, 'error')
-        setLoading(false)
-        submitRef.current = false
+      const result = await publishPostAtomic(operation.request, capturedViewerScope)
+      if (result.status === 'superseded') return
+      if (result.status === 'failed') {
+        logger.error('Post creation error:', result.error)
+        showToast(
+          result.httpStatus === 403 ? t('permissionDeniedJoinGroup') : result.error,
+          'error'
+        )
+        return
+      }
+      if (result.status === 'invalid_ack') {
+        logger.error('Post creation acknowledgement rejected')
+        showToast(t('createPostFailed'), 'error')
         return
       }
 
-      logger.warn('Post created successfully:', postData?.id)
+      publishOperationRef.current = null
+      logger.warn('Post created successfully:', result.data.post.id)
 
       clearDraft()
       if (typeof window !== 'undefined') {
