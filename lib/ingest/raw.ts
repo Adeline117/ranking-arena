@@ -34,6 +34,10 @@ import {
   type LeaderboardManifestOutcomeProjection,
 } from './acquisition-attempts'
 import {
+  parseHistoryAcquisitionArtifact,
+  type HistoryAcquisitionArtifact,
+} from './history-acquisition'
+import {
   STRICT_CANONICAL_JSON_CONTRACT,
   strictCanonicalJson,
   strictCanonicalSha256,
@@ -48,6 +52,8 @@ const RAW_UPLOAD_RETRY_BASE_MS = 750
 const RAW_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_object_gc_queue', 0)"
 
 export const RAW_JSON_STRINGIFY_CONTRACT = 'arena.raw-json-stringify@1' as const
+export const POSITION_HISTORY_RAW_JOB_TYPE = 'history:position_history' as const
+export const EVENT_HISTORY_RAW_ARTIFACT_ROLE = 'event_history' as const
 export type RawSerializationContract =
   | typeof RAW_JSON_STRINGIFY_CONTRACT
   | typeof STRICT_CANONICAL_JSON_CONTRACT
@@ -230,15 +236,18 @@ interface RawObjectGcPointer {
 
 type LeaderboardTrustArtifactRole = 'source_payload' | 'population_manifest'
 
-interface PreparedLeaderboardTrustArtifact {
-  role: LeaderboardTrustArtifactRole
-  jobType: 'tier_a' | 'tier_a_manifest'
+interface PreparedDeterministicRawArtifact {
   storagePath: string
   jsonBytes: Buffer
   gzipBytes: Buffer
   contentHash: string
-  metaBase: Record<string, unknown>
   durableCompressedBytes: number
+}
+
+interface PreparedLeaderboardTrustArtifact extends PreparedDeterministicRawArtifact {
+  role: LeaderboardTrustArtifactRole
+  jobType: 'tier_a' | 'tier_a_manifest'
+  metaBase: Record<string, unknown>
 }
 
 interface LeaderboardTrustPointerRow {
@@ -362,9 +371,13 @@ function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value))
 }
 
-function assertSafePositiveInteger(value: number, label: string): void {
+function assertSafePositiveInteger(
+  value: number,
+  label: string,
+  createError: (detail: string) => Error = artifactSetError
+): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
-    throw artifactSetError(`${label} must be a positive safe integer`)
+    throw createError(`${label} must be a positive safe integer`)
   }
 }
 
@@ -494,13 +507,14 @@ function prepareLeaderboardTrustArtifact(
 }
 
 async function verifyExistingDeterministicRaw(
-  artifact: PreparedLeaderboardTrustArtifact
+  artifact: PreparedDeterministicRawArtifact,
+  createError: (detail: string) => Error = artifactSetError
 ): Promise<number> {
   const { data, error } = await getStorageClient()
     .storage.from(RAW_BUCKET)
     .download(artifact.storagePath)
   if (error || !data) {
-    throw artifactSetError(
+    throw createError(
       `cannot verify existing Storage object ${artifact.storagePath}: ${error?.message ?? 'empty body'}`
     )
   }
@@ -509,7 +523,7 @@ async function verifyExistingDeterministicRaw(
   try {
     gzipBytes = Buffer.from(await data.arrayBuffer())
   } catch (cause) {
-    throw artifactSetError(
+    throw createError(
       `cannot read existing Storage object ${artifact.storagePath}: ${asError(cause).message}`
     )
   }
@@ -519,36 +533,39 @@ async function verifyExistingDeterministicRaw(
     gzipBytes[1] !== 0x8b ||
     gzipBytes[2] !== 0x08
   ) {
-    throw artifactSetError(`existing Storage object ${artifact.storagePath} is not gzip`)
+    throw createError(`existing Storage object ${artifact.storagePath} is not gzip`)
   }
 
   let jsonBytes: Buffer
   try {
     jsonBytes = gunzipSync(gzipBytes)
   } catch {
-    throw artifactSetError(`existing Storage object ${artifact.storagePath} has invalid gzip data`)
+    throw createError(`existing Storage object ${artifact.storagePath} has invalid gzip data`)
   }
   if (!jsonBytes.equals(artifact.jsonBytes)) {
-    throw artifactSetError(`existing Storage object ${artifact.storagePath} has different content`)
+    throw createError(`existing Storage object ${artifact.storagePath} has different content`)
   }
   const contentHash = createHash('sha256').update(jsonBytes).digest('hex')
   if (contentHash !== artifact.contentHash) {
-    throw artifactSetError(`existing Storage object ${artifact.storagePath} has a digest mismatch`)
+    throw createError(`existing Storage object ${artifact.storagePath} has a digest mismatch`)
   }
   let parsed: unknown
   try {
     const json = new TextDecoder('utf-8', { fatal: true }).decode(jsonBytes)
     parsed = JSON.parse(json)
   } catch {
-    throw artifactSetError(`existing Storage object ${artifact.storagePath} is not canonical JSON`)
+    throw createError(`existing Storage object ${artifact.storagePath} is not canonical JSON`)
   }
   if (strictCanonicalJson(parsed) !== artifact.jsonBytes.toString('utf8')) {
-    throw artifactSetError(`existing Storage object ${artifact.storagePath} is not canonical JSON`)
+    throw createError(`existing Storage object ${artifact.storagePath} is not canonical JSON`)
   }
   return gzipBytes.byteLength
 }
 
-async function uploadDeterministicRaw(artifact: PreparedLeaderboardTrustArtifact): Promise<number> {
+async function uploadDeterministicRaw(
+  artifact: PreparedDeterministicRawArtifact,
+  createError: (detail: string) => Error = artifactSetError
+): Promise<number> {
   const bucket = getStorageClient().storage.from(RAW_BUCKET)
   for (let attempt = 1; attempt <= RAW_UPLOAD_ATTEMPTS; attempt += 1) {
     const { error } = await bucket.upload(artifact.storagePath, artifact.gzipBytes, {
@@ -556,14 +573,14 @@ async function uploadDeterministicRaw(artifact: PreparedLeaderboardTrustArtifact
       upsert: false,
     })
     if (!error) return artifact.gzipBytes.byteLength
-    if (isAlreadyUploaded(error)) return verifyExistingDeterministicRaw(artifact)
+    if (isAlreadyUploaded(error)) return verifyExistingDeterministicRaw(artifact, createError)
     if (attempt === RAW_UPLOAD_ATTEMPTS || !isTransientStorageError(error)) {
-      throw artifactSetError(`Storage upload failed (${artifact.storagePath}): ${error.message}`)
+      throw createError(`Storage upload failed (${artifact.storagePath}): ${error.message}`)
     }
     const delayMs = RAW_UPLOAD_RETRY_BASE_MS * 2 ** (attempt - 1)
     await new Promise((resolve) => setTimeout(resolve, delayMs))
   }
-  throw artifactSetError(`Storage upload attempts exhausted (${artifact.storagePath})`)
+  throw createError(`Storage upload attempts exhausted (${artifact.storagePath})`)
 }
 
 function artifactMeta(artifact: PreparedLeaderboardTrustArtifact): Record<string, unknown> {
@@ -993,6 +1010,254 @@ export async function writeAttemptBoundLeaderboardRawArtifactSet(
     persistLeaderboardTrustPointersInTransaction(transaction, normalizedInput, artifacts)
   )
   return { ...receipts, projection }
+}
+
+export interface WritePositionHistoryRawArtifactInput {
+  sourceRunId: string
+  artifact: HistoryAcquisitionArtifact
+}
+
+interface NormalizedPositionHistoryRawArtifactInput {
+  sourceId: number
+  sourceSlug: string
+  traderId: number
+  exchangeTraderId: string
+  sourceRunId: string
+  fetchedAt: string
+  artifact: HistoryAcquisitionArtifact
+}
+
+interface PreparedPositionHistoryRawArtifact extends PreparedDeterministicRawArtifact {
+  metaBase: Record<string, unknown>
+}
+
+interface PositionHistoryTrustPointerRow {
+  id: number
+  source_id: number
+  job_type: string
+  trader_id: number | null
+  timeframe: number | null
+  fetched_at: string
+  storage_path: string
+  bytes: number
+  content_hash: string
+  quarantined: boolean
+  meta: unknown
+  source_run_id: string | null
+  trust_artifact_role: string | null
+}
+
+function positionHistoryArtifactError(detail: string): Error {
+  return new Error(`[ingest] position-history RAW artifact failed: ${detail}`)
+}
+
+function normalizePositionHistoryRawArtifactInput(
+  input: WritePositionHistoryRawArtifactInput
+): NormalizedPositionHistoryRawArtifactInput {
+  if (!/^[0-9a-f]{64}$/.test(input.sourceRunId)) {
+    throw positionHistoryArtifactError('source run id must be a lowercase SHA-256 digest')
+  }
+
+  let artifact: HistoryAcquisitionArtifact
+  try {
+    artifact = parseHistoryAcquisitionArtifact(input.artifact)
+  } catch (cause) {
+    throw positionHistoryArtifactError(`history artifact is invalid: ${asError(cause).message}`)
+  }
+  if (artifact.history_kind !== 'position_history') {
+    throw positionHistoryArtifactError('only position_history may bind the event_history role')
+  }
+  if (strictCanonicalSha256(artifact) !== input.sourceRunId) {
+    throw positionHistoryArtifactError('canonical artifact hash does not match source run id')
+  }
+
+  return {
+    sourceId: artifact.source.id,
+    sourceSlug: artifact.source.slug,
+    traderId: artifact.trader.id,
+    exchangeTraderId: artifact.trader.exchange_trader_id,
+    sourceRunId: input.sourceRunId,
+    fetchedAt: artifact.pages.at(-1)?.fetched_at ?? artifact.attempt_started_at,
+    artifact,
+  }
+}
+
+function preparePositionHistoryRawArtifact(
+  input: NormalizedPositionHistoryRawArtifactInput
+): PreparedPositionHistoryRawArtifact {
+  const { json } = serializeRawPayload(input.artifact, STRICT_CANONICAL_JSON_CONTRACT)
+  const jsonBytes = Buffer.from(json, 'utf8')
+  const gzipBytes = gzipSync(jsonBytes)
+  const contentHash = createHash('sha256').update(jsonBytes).digest('hex')
+  if (contentHash !== input.sourceRunId) {
+    throw positionHistoryArtifactError('serialized artifact digest does not match source run id')
+  }
+  return {
+    storagePath:
+      `${input.sourceSlug}/history_trust/position_history/${input.sourceRunId}/` +
+      `${EVENT_HISTORY_RAW_ARTIFACT_ROLE}_${contentHash}.json.gz`,
+    jsonBytes,
+    gzipBytes,
+    contentHash,
+    durableCompressedBytes: gzipBytes.byteLength,
+    metaBase: {
+      surface: 'position_history',
+      data_contract: input.artifact.contract,
+      source_run_id: input.sourceRunId,
+      source_slug: input.sourceSlug,
+      exchange_trader_id: input.exchangeTraderId,
+      history_kind: input.artifact.history_kind,
+      page_count: input.artifact.pages.length,
+      terminal_evidence_state: input.artifact.termination.evidence_state,
+      scan_terminal_state: input.artifact.termination.scan_terminal_state,
+      verifier_contract: input.artifact.termination.verifier_contract,
+    },
+  }
+}
+
+function positionHistoryArtifactMeta(
+  artifact: PreparedPositionHistoryRawArtifact
+): Record<string, unknown> {
+  return rawIntegrityMeta(
+    artifact.metaBase,
+    STRICT_CANONICAL_JSON_CONTRACT,
+    artifact.durableCompressedBytes,
+    artifact.jsonBytes.byteLength
+  )
+}
+
+async function loadPositionHistoryTrustPointers(
+  transaction: IngestQueryExecutor,
+  artifact: PreparedPositionHistoryRawArtifact,
+  sourceRunId: string
+): Promise<PositionHistoryTrustPointerRow[]> {
+  const { rows } = await transaction.query<PositionHistoryTrustPointerRow>(
+    `SELECT id, source_id, job_type, trader_id, timeframe,
+            fetched_at::text AS fetched_at, storage_path,
+            bytes, content_hash, quarantined, meta,
+            source_run_id, trust_artifact_role
+       FROM arena.raw_objects
+      WHERE storage_path = $1
+         OR (
+           source_run_id = $2
+           AND trust_artifact_role = 'event_history'
+         )
+      ORDER BY id
+      FOR UPDATE`,
+    [artifact.storagePath, sourceRunId]
+  )
+  return rows
+}
+
+function validatePositionHistoryTrustPointer(
+  rows: readonly PositionHistoryTrustPointerRow[],
+  input: NormalizedPositionHistoryRawArtifactInput,
+  artifact: PreparedPositionHistoryRawArtifact
+): RawObjectReceipt {
+  if (rows.length !== 1) {
+    throw positionHistoryArtifactError(
+      `expected one database pointer for ${input.sourceRunId}, found ${rows.length}`
+    )
+  }
+  const row = rows[0]
+  assertSafePositiveInteger(row.id, 'RAW pointer id', positionHistoryArtifactError)
+
+  let metaMatches = false
+  try {
+    metaMatches =
+      strictCanonicalJson(row.meta) === strictCanonicalJson(positionHistoryArtifactMeta(artifact))
+  } catch {
+    metaMatches = false
+  }
+  if (
+    row.source_id !== input.sourceId ||
+    row.job_type !== POSITION_HISTORY_RAW_JOB_TYPE ||
+    row.trader_id !== input.traderId ||
+    row.timeframe !== null ||
+    Date.parse(row.fetched_at) !== Date.parse(input.fetchedAt) ||
+    row.storage_path !== artifact.storagePath ||
+    row.bytes !== artifact.durableCompressedBytes ||
+    row.content_hash !== input.sourceRunId ||
+    row.quarantined !== false ||
+    row.source_run_id !== input.sourceRunId ||
+    row.trust_artifact_role !== EVENT_HISTORY_RAW_ARTIFACT_ROLE ||
+    !metaMatches
+  ) {
+    throw positionHistoryArtifactError(`database pointer ${row.id} does not match the artifact`)
+  }
+  return {
+    id: row.id,
+    storagePath: row.storage_path,
+    contentHash: row.content_hash,
+  }
+}
+
+async function insertPositionHistoryTrustPointer(
+  transaction: IngestQueryExecutor,
+  input: NormalizedPositionHistoryRawArtifactInput,
+  artifact: PreparedPositionHistoryRawArtifact
+): Promise<void> {
+  await transaction.query(
+    `INSERT INTO arena.raw_objects
+       (source_id, job_type, trader_id, timeframe, fetched_at, storage_path,
+        bytes, content_hash, meta, source_run_id, trust_artifact_role)
+     VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT (storage_path) DO NOTHING`,
+    [
+      input.sourceId,
+      POSITION_HISTORY_RAW_JOB_TYPE,
+      input.traderId,
+      input.fetchedAt,
+      artifact.storagePath,
+      artifact.durableCompressedBytes,
+      artifact.contentHash,
+      JSON.stringify(positionHistoryArtifactMeta(artifact)),
+      input.sourceRunId,
+      EVENT_HISTORY_RAW_ARTIFACT_ROLE,
+    ]
+  )
+}
+
+async function persistPositionHistoryTrustPointer(
+  transaction: IngestQueryExecutor,
+  input: NormalizedPositionHistoryRawArtifactInput,
+  artifact: PreparedPositionHistoryRawArtifact
+): Promise<RawObjectReceipt> {
+  await transaction.query(
+    `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
+    [`arena.position-history-raw-artifact:${input.sourceRunId}`]
+  )
+
+  let rows = await loadPositionHistoryTrustPointers(transaction, artifact, input.sourceRunId)
+  if (rows.length === 0) {
+    await insertPositionHistoryTrustPointer(transaction, input, artifact)
+    rows = await loadPositionHistoryTrustPointers(transaction, artifact, input.sourceRunId)
+  }
+  return validatePositionHistoryTrustPointer(rows, input, artifact)
+}
+
+/**
+ * Persist one immutable position-history acquisition artifact. The artifact is
+ * the event_history payload: it contains every captured upstream page plus its
+ * terminal proof or explicit partial/unknown blocker. Storage is durable before
+ * the caller-owned transaction publishes the exact source/trader pointer.
+ */
+export async function writePositionHistoryRawArtifact(
+  input: WritePositionHistoryRawArtifactInput,
+  runTransaction: IngestTransactionRunner
+): Promise<RawObjectReceipt> {
+  if (typeof runTransaction !== 'function') {
+    throw positionHistoryArtifactError('a claimed transaction runner is required')
+  }
+  const normalizedInput = normalizePositionHistoryRawArtifactInput(input)
+  const artifact = preparePositionHistoryRawArtifact(normalizedInput)
+  artifact.durableCompressedBytes = await uploadDeterministicRaw(
+    artifact,
+    positionHistoryArtifactError
+  )
+  return runTransaction((transaction) =>
+    persistPositionHistoryTrustPointer(transaction, normalizedInput, artifact)
+  )
 }
 
 interface PreparedRawObjectPointer {
