@@ -26,6 +26,7 @@ import { logger } from '@/lib/logger'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getAuthSession } from '@/lib/auth'
+import { fetchVerifiedSubscription } from './subscription-client'
 
 // ============================================
 // Feature Limits Export (for UI display)
@@ -80,6 +81,8 @@ interface PremiumContextValue {
   subscription: UserSubscription | null
   /** 是否加载中 */
   isLoading: boolean
+  /** 权益真值暂时不可验证；调用 refresh 可重试 */
+  error: string | null
   /** 是否为付费用户（有实际订阅） */
   isPremium: boolean
   /**
@@ -145,10 +148,12 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     initialSubscription || null
   )
   const [isLoadingState, setIsLoading] = useState(!initialSubscription)
+  const [errorState, setError] = useState<string | null>(null)
   const [hasNFTState, setHasNFT] = useState(false)
   const stateScopeOwned = stateOwnerScopeKeyRef.current === scopeKey
   const subscription = stateScopeOwned ? subscriptionState : null
   const isLoading = stateScopeOwned ? isLoadingState : true
+  const error = stateScopeOwned ? errorState : null
   const hasNFT = stateScopeOwned ? hasNFTState : false
   const scopeIsCurrent = useCallback(
     (scope: { viewerKey: string; sessionGeneration: number; userId: string | null }) => {
@@ -169,6 +174,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
         stateOwnerScopeKeyRef.current = ownerScopeKey
         setSubscription(null)
         setIsLoading(true)
+        setError(null)
         setHasNFT(false)
       }
       return true
@@ -185,117 +191,34 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     if (!auth.authChecked || !claimScope(capturedScope)) return
     try {
       setIsLoading(true)
-
-      // 动态导入 supabase 避免服务端问题
-      const { supabase } = await import('@/lib/supabase/client')
       const session = await getAuthSession()
       if (!scopeIsCurrent(capturedScope)) return
 
       if (!session) {
-        // 未登录，使用默认免费订阅
-        const defaultSub = createFreeSubscription()
-        setSubscription(defaultSub)
+        if (capturedScope.userId) {
+          throw new Error('Subscription session is missing for the authenticated viewer')
+        }
+        setSubscription(createFreeSubscription())
+        setError(null)
         return
       }
-
-      // 尝试从 API 获取订阅状态（携带认证信息）
-      try {
-        const response = await fetch('/api/subscription', {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${session.accessToken}`,
-          },
-        })
-
-        if (!scopeIsCurrent(capturedScope)) return
-        if (response.ok) {
-          const data = await response.json()
-          if (data.subscription && scopeIsCurrent(capturedScope)) {
-            setSubscription(data.subscription)
-            return
-          }
-        } else {
-          logger.warn('[PremiumProvider] Subscription API returned error:', response.status)
-        }
-      } catch (fetchError) {
-        logger.error('[PremiumProvider] Failed to fetch subscription:', fetchError)
+      if (session.userId !== capturedScope.userId) {
+        throw new Error('Subscription session does not match the current viewer')
       }
 
-      // API 未实现或失败时，尝试直接从数据库查询（降级方案）
-      try {
-        if (!scopeIsCurrent(capturedScope)) return
-        const { data: subscription } = await supabase
-          .from('subscriptions')
-          .select('tier, status')
-          .eq('user_id', session.userId)
-          .in('status', ['active', 'trialing'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        if (subscription && subscription.tier === 'pro' && scopeIsCurrent(capturedScope)) {
-          const fallbackSub: UserSubscription = {
-            userId: session.userId,
-            tier: 'pro',
-            status: subscription.status as UserSubscription['status'],
-            startDate: new Date().toISOString(),
-            endDate: null,
-            trialEndDate: null,
-            autoRenew: subscription.status === 'active',
-            usage: {
-              apiCallsToday: 0,
-              comparisonReportsThisMonth: 0,
-              exportsThisMonth: 0,
-              currentFollows: 0,
-              currentCustomRankings: 0,
-            },
-          }
-          setSubscription(fallbackSub)
-          return
-        }
-
-        // 最后检查 user_profiles
-        if (!scopeIsCurrent(capturedScope)) return
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('subscription_tier')
-          .eq('id', session.userId)
-          .maybeSingle()
-
-        if (profile?.subscription_tier === 'pro' && scopeIsCurrent(capturedScope)) {
-          const fallbackSub: UserSubscription = {
-            userId: session.userId,
-            tier: 'pro',
-            status: 'active',
-            startDate: new Date().toISOString(),
-            endDate: null,
-            trialEndDate: null,
-            autoRenew: true,
-            usage: {
-              apiCallsToday: 0,
-              comparisonReportsThisMonth: 0,
-              exportsThisMonth: 0,
-              currentFollows: 0,
-              currentCustomRankings: 0,
-            },
-          }
-          setSubscription(fallbackSub)
-          return
-        }
-      } catch (dbError) {
-        logger.error('[PremiumProvider] Failed to query database:', dbError)
-      }
-
-      // 所有方法都失败时使用默认值
-      if (scopeIsCurrent(capturedScope)) {
-        setSubscription(createFreeSubscription(session.userId))
-      }
+      const verifiedSubscription = await fetchVerifiedSubscription(
+        session.accessToken,
+        session.userId
+      )
+      if (!scopeIsCurrent(capturedScope)) return
+      setSubscription(verifiedSubscription)
+      setError(null)
     } catch (err) {
-      // Log so silent downgrade-to-free is visible in DevTools / server logs
-      console.error('[premium] subscription load failed:', err)
+      logger.error('[PremiumProvider] Subscription authority is unavailable:', err)
       if (scopeIsCurrent(capturedScope)) {
-        setSubscription(createFreeSubscription(capturedScope.userId || ''))
+        // Preserve a same-viewer last-good value. With no last-good value,
+        // remain unknown instead of fabricating a Free entitlement.
+        setError('Unable to verify subscription. Retry to refresh your access.')
       }
     } finally {
       if (scopeIsCurrent(capturedScope)) setIsLoading(false)
@@ -379,6 +302,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     return {
       subscription,
       isLoading,
+      error,
       isPremium: effectiveIsPremium,
       isFeaturesUnlocked: effectiveIsPremium,
       tier: subscription?.tier || 'free',
@@ -387,7 +311,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       checkFeature,
       refresh,
     }
-  }, [subscription, isLoading, hasNFT, checkFeature, refresh, scopedService])
+  }, [subscription, isLoading, error, hasNFT, checkFeature, refresh, scopedService])
 
   return <PremiumContext.Provider value={value}>{children}</PremiumContext.Provider>
 }
@@ -404,6 +328,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
 const PREMIUM_DEFAULT: PremiumContextValue = {
   subscription: null,
   isLoading: true,
+  error: null,
   isPremium: false,
   isFeaturesUnlocked: false,
   tier: 'free' as SubscriptionTier,
@@ -555,9 +480,9 @@ interface PremiumGateProps {
  * 付费功能门控组件
  */
 export function PremiumGate({ feature, tier, children, fallback = null }: PremiumGateProps) {
-  const { tier: currentTier, checkFeature, isLoading } = usePremium()
+  const { tier: currentTier, checkFeature, isLoading, error } = usePremium()
 
-  if (isLoading) {
+  if (isLoading || error) {
     return null
   }
 
@@ -593,9 +518,9 @@ export function PremiumOnly({
   children: ReactNode
   fallback?: ReactNode
 }) {
-  const { isPremium, isLoading } = usePremium()
+  const { isPremium, isLoading, error } = usePremium()
 
-  if (isLoading) return null
+  if (isLoading || error) return null
   if (!isPremium) return <>{fallback}</>
 
   return <>{children}</>
@@ -605,9 +530,9 @@ export function PremiumOnly({
  * 仅免费用户可见
  */
 export function FreeOnly({ children }: { children: ReactNode }) {
-  const { isPremium, isLoading } = usePremium()
+  const { isPremium, isLoading, error } = usePremium()
 
-  if (isLoading) return null
+  if (isLoading || error) return null
   if (isPremium) return null
 
   return <>{children}</>

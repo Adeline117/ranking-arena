@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({ useAuthSession: jest.fn() }))
 jest.mock('@/lib/auth', () => ({ getAuthSession: jest.fn() }))
@@ -22,10 +22,15 @@ function deferred<T>() {
 function Probe() {
   const premium = usePremium()
   return (
-    <div data-testid="premium-state">
-      {premium.isLoading ? 'loading' : 'ready'}:{premium.tier}:
-      {premium.subscription?.userId || 'none'}
-    </div>
+    <>
+      <div data-testid="premium-state">
+        {premium.isLoading ? 'loading' : 'ready'}:{premium.tier}:
+        {premium.subscription?.userId || 'none'}:{premium.error ? 'error' : 'ok'}
+      </div>
+      <button type="button" onClick={() => void premium.refresh()}>
+        refresh
+      </button>
+    </>
   )
 }
 
@@ -188,6 +193,89 @@ describe('PremiumProvider viewer ownership', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('badge-state')).toHaveTextContent('ready:free:free:badge')
+    )
+  })
+
+  it('keeps same-viewer last-good Pro when a refresh cannot verify authority', async () => {
+    mockUseAuthSession.mockReturnValue({
+      authChecked: true,
+      viewerKey: 'user:last-good',
+      sessionGeneration: 1,
+      userId: 'last-good',
+    })
+    mockGetAuthSession.mockResolvedValue({ userId: 'last-good', accessToken: 'last-good-token' })
+    let unavailable = false
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/membership/nft') {
+        return { ok: true, json: async () => ({ hasNft: false }) } as Response
+      }
+      if (unavailable) {
+        return { ok: false, status: 503, json: async () => ({ error: 'offline' }) } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          subscription: {
+            userId: 'last-good',
+            tier: 'pro',
+            status: 'active',
+            startDate: '2026-07-15T00:00:00.000Z',
+            endDate: null,
+            trialEndDate: null,
+            autoRenew: false,
+            usage: {
+              apiCallsToday: 0,
+              comparisonReportsThisMonth: 0,
+              exportsThisMonth: 0,
+              currentFollows: 0,
+              currentCustomRankings: 0,
+            },
+          },
+        }),
+      } as Response
+    })
+
+    render(
+      <PremiumProvider>
+        <Probe />
+      </PremiumProvider>
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId('premium-state')).toHaveTextContent('ready:pro:last-good:ok')
+    )
+
+    unavailable = true
+    fireEvent.click(screen.getByRole('button', { name: 'refresh' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('premium-state')).toHaveTextContent('ready:pro:last-good:error')
+    )
+  })
+
+  it('reports unknown entitlement instead of fabricating Free on the first failed read', async () => {
+    mockUseAuthSession.mockReturnValue({
+      authChecked: true,
+      viewerKey: 'user:unknown',
+      sessionGeneration: 1,
+      userId: 'unknown',
+    })
+    mockGetAuthSession.mockResolvedValue({ userId: 'unknown', accessToken: 'unknown-token' })
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/membership/nft') {
+        return { ok: true, json: async () => ({ hasNft: false }) } as Response
+      }
+      return { ok: false, status: 503, json: async () => ({ error: 'offline' }) } as Response
+    })
+
+    render(
+      <PremiumProvider>
+        <Probe />
+      </PremiumProvider>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('premium-state')).toHaveTextContent('ready:free:none:error')
     )
   })
 })
