@@ -2,7 +2,7 @@
 
 import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/base'
@@ -17,7 +17,6 @@ import { ContentWarningToggle } from '@/app/components/post/components/ContentWa
 import type { UploadedImage, UploadedVideo, PollOption, LinkPreview } from './types'
 import {
   TITLE_MAX_LENGTH,
-  DRAFT_KEY_PREFIX,
   MAX_IMAGES,
   MAX_VIDEO_SIZE_MB,
   ALLOWED_IMAGE_TYPES,
@@ -36,6 +35,15 @@ import {
   publishPostAtomic,
   type BoundPostCreateOperation,
 } from '@/lib/posts/post-create-client'
+import {
+  isPostDraftMeaningful,
+  postDraftStorageKey,
+  readPostDraft,
+  removePostDraft,
+  savePostDraft,
+  type GroupPostDraftData,
+  type GroupPostDraftScope,
+} from '@/lib/posts/post-draft-storage'
 
 export default function NewGroupPostPage(): React.ReactElement {
   if (!features.social) redirect('/')
@@ -58,11 +66,10 @@ export default function NewGroupPostPage(): React.ReactElement {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
-  // Draft-loss guard (audit 实体/详情)
-  useUnsavedChangesGuard(Boolean(title.trim() || content.trim()) && !loading)
   const [showPreview, setShowPreview] = useState(false)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
+  const [hydratedDraftScopeKey, setHydratedDraftScopeKey] = useState<string | null>(null)
 
   // Media state
   const [images, setImages] = useState<UploadedImage[]>([])
@@ -90,7 +97,67 @@ export default function NewGroupPostPage(): React.ReactElement {
   const [pollDuration, setPollDuration] = useState(24)
   const [pollType, setPollType] = useState<'single' | 'multiple'>('single')
 
-  const draftKey = `${DRAFT_KEY_PREFIX}${groupId}`
+  const draftScope = useMemo<GroupPostDraftScope | null>(
+    () =>
+      userId
+        ? {
+            ownerId: userId,
+            destination: { type: 'group', groupId },
+          }
+        : null,
+    [groupId, userId]
+  )
+  const draftScopeKey = useMemo(
+    () => (draftScope ? postDraftStorageKey(draftScope) : null),
+    [draftScope]
+  )
+  const draftData = useMemo<GroupPostDraftData>(
+    () => ({
+      title,
+      content,
+      images,
+      videos,
+      pollEnabled,
+      pollOptions,
+      pollType,
+      pollDuration,
+      isSensitive,
+      contentWarning,
+    }),
+    [
+      title,
+      content,
+      images,
+      videos,
+      pollEnabled,
+      pollOptions,
+      pollType,
+      pollDuration,
+      isSensitive,
+      contentWarning,
+    ]
+  )
+  const hasUnsavedDraft = isPostDraftMeaningful({ type: 'group', groupId }, draftData)
+  // Guard text, media, poll, and content-warning changes.
+  useUnsavedChangesGuard(hasUnsavedDraft && !loading)
+
+  const resetDraftForm = useCallback(() => {
+    setTitle('')
+    setContent('')
+    setImages([])
+    setVideos([])
+    setPollEnabled(false)
+    setPollOptions([
+      { text: '', votes: 0 },
+      { text: '', votes: 0 },
+    ])
+    setPollType('single')
+    setPollDuration(24)
+    setIsSensitive(false)
+    setContentWarning('')
+    setDraftSaved(false)
+    publishOperationRef.current = null
+  }, [])
 
   useEffect(() => {
     if (!groupId) return
@@ -150,41 +217,55 @@ export default function NewGroupPostPage(): React.ReactElement {
 
   // Load draft from localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined' && groupId) {
-      const draft = localStorage.getItem(draftKey)
-      if (draft) {
-        try {
-          const {
-            title: draftTitle,
-            content: draftContent,
-            images: draftImages,
-            pollEnabled: draftPollEnabled,
-          } = JSON.parse(draft)
-          if (draftTitle || draftContent) {
-            setTitle(draftTitle || '')
-            setContent(draftContent || '')
-            setImages(draftImages || [])
-            setPollEnabled(draftPollEnabled || false)
-            showToast(t('draftRestored'), 'info')
-          }
-        } catch (e) {
-          logger.error('Failed to parse draft:', e)
-        }
+    if (typeof window === 'undefined') return
+    if (!draftScope || !draftScopeKey) {
+      if (hydratedDraftScopeKey !== null) {
+        resetDraftForm()
+        setHydratedDraftScopeKey(null)
       }
+      return
     }
-  }, [groupId, draftKey, showToast, t])
+    if (hydratedDraftScopeKey === draftScopeKey) return
+
+    if (hydratedDraftScopeKey !== null) resetDraftForm()
+    const draft = readPostDraft(localStorage, draftScope)
+    if (draft && isPostDraftMeaningful(draftScope.destination, draft)) {
+      setTitle(draft.title)
+      setContent(draft.content)
+      setImages(draft.images)
+      setVideos(draft.videos)
+      setPollEnabled(draft.pollEnabled)
+      setPollOptions(draft.pollOptions)
+      setPollType(draft.pollType)
+      setPollDuration(draft.pollDuration)
+      setIsSensitive(draft.isSensitive)
+      setContentWarning(draft.contentWarning)
+      showToast(t('draftRestored'), 'info')
+    }
+    setHydratedDraftScopeKey(draftScopeKey)
+  }, [draftScope, draftScopeKey, hydratedDraftScopeKey, resetDraftForm, showToast, t])
 
   // Auto-save draft to localStorage (debounced)
   useEffect(() => {
-    if (typeof window === 'undefined' || !groupId) return
+    if (
+      typeof window === 'undefined' ||
+      !draftScope ||
+      !draftScopeKey ||
+      hydratedDraftScopeKey !== draftScopeKey
+    ) {
+      return
+    }
 
     let draftResetTimer: ReturnType<typeof setTimeout> | null = null
 
     const saveTimer = setTimeout(() => {
-      if (title.trim() || content.trim()) {
-        localStorage.setItem(draftKey, JSON.stringify({ title, content, images, pollEnabled }))
+      if (isPostDraftMeaningful(draftScope.destination, draftData)) {
+        if (!savePostDraft(localStorage, draftScope, draftData)) return
         setDraftSaved(true)
         draftResetTimer = setTimeout(() => setDraftSaved(false), 2000)
+      } else {
+        removePostDraft(localStorage, draftScope)
+        setDraftSaved(false)
       }
     }, 1000)
 
@@ -192,7 +273,7 @@ export default function NewGroupPostPage(): React.ReactElement {
       clearTimeout(saveTimer)
       if (draftResetTimer !== null) clearTimeout(draftResetTimer)
     }
-  }, [title, content, images, pollEnabled, groupId, draftKey])
+  }, [draftData, draftScope, draftScopeKey, hydratedDraftScopeKey])
 
   // UF15: Detect URLs in content and fetch link preview
   useEffect(() => {
@@ -228,10 +309,10 @@ export default function NewGroupPostPage(): React.ReactElement {
 
   // Clear draft after successful publish
   const clearDraft = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(draftKey)
+    if (typeof window !== 'undefined' && draftScope) {
+      removePostDraft(localStorage, draftScope)
     }
-  }, [draftKey])
+  }, [draftScope])
 
   // Image upload handler
   const handleImageUpload = useCallback(

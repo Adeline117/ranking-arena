@@ -2,7 +2,7 @@
 
 import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '@/app/components/base'
@@ -29,11 +29,19 @@ import {
   publishPostAtomic,
   type BoundPostCreateOperation,
 } from '@/lib/posts/post-create-client'
+import {
+  isPostDraftMeaningful,
+  postDraftStorageKey,
+  readPostDraft,
+  removePostDraft,
+  savePostDraft,
+  type ProfilePostDraftData,
+  type ProfilePostDraftScope,
+} from '@/lib/posts/post-draft-storage'
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
 import {
   TITLE_MAX_LENGTH,
   CONTENT_MAX_LENGTH,
-  DRAFT_KEY_PREFIX,
   POLL_DURATION_OPTIONS_ZH,
   POLL_DURATION_OPTIONS_EN,
 } from './types'
@@ -58,13 +66,12 @@ export default function NewPostPage() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
-  // Draft-loss guard: prompt on tab close/refresh while composing (audit 实体/详情)
-  useUnsavedChangesGuard(Boolean(title.trim() || content.trim()) && !loading)
   const [images, setImages] = useState<UploadedImage[]>([])
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null)
+  const [hydratedDraftScopeKey, setHydratedDraftScopeKey] = useState<string | null>(null)
   const [pollEnabled, setPollEnabled] = useState(false)
   const [pollOptions, setPollOptions] = useState<PollOption[]>([
     { text: '', votes: 0 },
@@ -83,7 +90,72 @@ export default function NewPostPage() {
   const [videoUploading, setVideoUploading] = useState(false)
   const [videoUploadProgress, setVideoUploadProgress] = useState(0)
 
-  const draftKey = `${DRAFT_KEY_PREFIX}${handle}`
+  const draftScope = useMemo<ProfilePostDraftScope | null>(
+    () =>
+      userId
+        ? {
+            ownerId: userId,
+            destination: { type: 'profile', handle },
+          }
+        : null,
+    [handle, userId]
+  )
+  const draftScopeKey = useMemo(
+    () => (draftScope ? postDraftStorageKey(draftScope) : null),
+    [draftScope]
+  )
+  const draftData = useMemo<ProfilePostDraftData>(
+    () => ({
+      title,
+      content,
+      images,
+      videos,
+      pollEnabled,
+      pollOptions,
+      pollType,
+      pollDuration,
+      visibility: visibility === 'followers' ? 'followers' : 'public',
+      isSensitive,
+      contentWarning,
+    }),
+    [
+      title,
+      content,
+      images,
+      videos,
+      pollEnabled,
+      pollOptions,
+      pollType,
+      pollDuration,
+      visibility,
+      isSensitive,
+      contentWarning,
+    ]
+  )
+  const hasUnsavedDraft = isPostDraftMeaningful({ type: 'profile', handle }, draftData)
+  // Guard text, media, poll, visibility, and content-warning changes.
+  useUnsavedChangesGuard(hasUnsavedDraft && !loading)
+
+  const resetDraftForm = useCallback(() => {
+    setTitle('')
+    setContent('')
+    setImages([])
+    setVideos([])
+    setPollEnabled(false)
+    setPollOptions([
+      { text: '', votes: 0 },
+      { text: '', votes: 0 },
+    ])
+    setPollType('single')
+    setPollDuration(0)
+    setVisibility('public')
+    setIsSensitive(false)
+    setContentWarning('')
+    setDraftSavedAt(null)
+    setTitleTouched(false)
+    titleHadInputRef.current = false
+    publishOperationRef.current = null
+  }, [])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -93,52 +165,66 @@ export default function NewPostPage() {
 
   // Load draft from localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined' && handle) {
-      const draft = localStorage.getItem(draftKey)
-      if (draft) {
-        try {
-          const {
-            title: draftTitle,
-            content: draftContent,
-            images: draftImages,
-            pollEnabled: draftPollEnabled,
-          } = JSON.parse(draft)
-          if (draftTitle || draftContent) {
-            setTitle(draftTitle || '')
-            setContent(draftContent || '')
-            setImages(draftImages || [])
-            setPollEnabled(draftPollEnabled || false)
-            showToast(t('draftRestored'), 'info')
-          }
-        } catch (e) {
-          logger.error('Failed to parse draft:', e)
-        }
+    if (typeof window === 'undefined') return
+    if (!draftScope || !draftScopeKey) {
+      if (hydratedDraftScopeKey !== null) {
+        resetDraftForm()
+        setHydratedDraftScopeKey(null)
       }
+      return
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore draft once on mount; showToast/t are stable refs
-  }, [handle, draftKey])
+    if (hydratedDraftScopeKey === draftScopeKey) return
+
+    if (hydratedDraftScopeKey !== null) resetDraftForm()
+    const draft = readPostDraft(localStorage, draftScope)
+    if (draft && isPostDraftMeaningful(draftScope.destination, draft)) {
+      setTitle(draft.title)
+      setContent(draft.content)
+      setImages(draft.images)
+      setVideos(draft.videos)
+      setPollEnabled(draft.pollEnabled)
+      setPollOptions(draft.pollOptions)
+      setPollType(draft.pollType)
+      setPollDuration(draft.pollDuration)
+      setVisibility(draft.visibility)
+      setIsSensitive(draft.isSensitive)
+      setContentWarning(draft.contentWarning)
+      showToast(t('draftRestored'), 'info')
+    }
+    setHydratedDraftScopeKey(draftScopeKey)
+  }, [draftScope, draftScopeKey, hydratedDraftScopeKey, resetDraftForm, showToast, t])
 
   // Auto-save draft to localStorage (debounced)
   useEffect(() => {
-    if (typeof window === 'undefined' || !handle) return
+    if (
+      typeof window === 'undefined' ||
+      !draftScope ||
+      !draftScopeKey ||
+      hydratedDraftScopeKey !== draftScopeKey
+    ) {
+      return
+    }
 
     const saveTimer = setTimeout(() => {
-      if (title.trim() || content.trim()) {
-        localStorage.setItem(draftKey, JSON.stringify({ title, content, images, pollEnabled }))
+      if (isPostDraftMeaningful(draftScope.destination, draftData)) {
+        if (!savePostDraft(localStorage, draftScope, draftData)) return
         const now = new Date()
         setDraftSavedAt(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      } else {
+        removePostDraft(localStorage, draftScope)
+        setDraftSavedAt(null)
       }
     }, 1000)
 
     return () => clearTimeout(saveTimer)
-  }, [title, content, images, pollEnabled, handle, draftKey])
+  }, [draftData, draftScope, draftScopeKey, hydratedDraftScopeKey])
 
   // Clear draft after successful publish
   const clearDraft = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(draftKey)
+    if (typeof window !== 'undefined' && draftScope) {
+      removePostDraft(localStorage, draftScope)
     }
-  }, [draftKey])
+  }, [draftScope])
 
   // Image upload handler
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
