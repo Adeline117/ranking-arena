@@ -1,5 +1,5 @@
 /**
- * 订阅状态���询 API
+ * 订阅状态查询 API
  * 获取当前用户的订阅信息
  */
 
@@ -8,74 +8,142 @@ import { withAuth } from '@/lib/api/middleware'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { UserSubscription } from '@/lib/premium'
 import { createLogger } from '@/lib/utils/logger'
+import { getCanonicalSubscriptionTier } from '@/lib/premium/server-entitlement'
+import type { Database } from '@/lib/supabase/database.types'
 
 export const dynamic = 'force-dynamic'
 
 const logger = createLogger('subscription-api')
 
+const SUBSCRIPTION_KEYS = [
+  'user_id',
+  'tier',
+  'status',
+  'plan',
+  'created_at',
+  'current_period_start',
+  'current_period_end',
+  'cancel_at_period_end',
+  'stripe_subscription_id',
+  'api_calls_today',
+  'comparison_reports_this_month',
+  'exports_this_month',
+] as const
+
+type ActiveSubscriptionRow = Record<(typeof SUBSCRIPTION_KEYS)[number], unknown>
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const expected = [...keys].sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function isDateOrNull(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && Number.isFinite(Date.parse(value)))
+}
+
+function isUsageCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+function parseActiveSubscription(value: unknown, userId: string): ActiveSubscriptionRow | null {
+  if (value === null) return null
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Subscription lookup returned an invalid row')
+  }
+
+  const row = value as Record<string, unknown>
+  if (
+    !hasExactKeys(row, SUBSCRIPTION_KEYS) ||
+    row.user_id !== userId ||
+    !['free', 'pro', 'elite'].includes(String(row.tier)) ||
+    (row.status !== 'active' && row.status !== 'trialing') ||
+    typeof row.created_at !== 'string' ||
+    !Number.isFinite(Date.parse(row.created_at)) ||
+    !isDateOrNull(row.current_period_start) ||
+    !isDateOrNull(row.current_period_end) ||
+    typeof row.cancel_at_period_end !== 'boolean' ||
+    (row.plan !== null && (typeof row.plan !== 'string' || row.plan.trim().length === 0)) ||
+    (row.stripe_subscription_id !== null &&
+      (typeof row.stripe_subscription_id !== 'string' ||
+        !/^sub_[A-Za-z0-9]+$/.test(row.stripe_subscription_id))) ||
+    !isUsageCount(row.api_calls_today) ||
+    !isUsageCount(row.comparison_reports_this_month) ||
+    !isUsageCount(row.exports_this_month)
+  ) {
+    throw new Error('Subscription lookup returned an inconsistent row')
+  }
+
+  return row as ActiveSubscriptionRow
+}
+
+function unavailable(error: unknown, userId: string): NextResponse {
+  logger.error('Unable to verify subscription state', { error, userId })
+  return NextResponse.json(
+    { success: false, error: 'Unable to verify subscription status. Please retry.' },
+    { status: 503, headers: { 'Cache-Control': 'private, no-store' } }
+  )
+}
+
+function subscriptionResponse(subscription: UserSubscription, tier: 'free' | 'pro'): NextResponse {
+  const response = NextResponse.json({ subscription })
+  response.headers.set(
+    'Set-Cookie',
+    `arena_tier=${tier}; Path=/; SameSite=Lax; Max-Age=${30 * 86400}`
+  )
+  response.headers.set('Cache-Control', 'private, no-store')
+  return response
+}
+
 export const GET = withAuth(
   async ({ user, supabase: sb }) => {
-    const supabase = sb as SupabaseClient
+    const supabase: SupabaseClient<Database> = sb
 
-    // 查询订阅信息 + 关注数并行
-    const [subResult, followsResult] = await Promise.all([
-      supabase
-        .from('subscriptions')
-        .select(
-          'user_id, tier, status, plan, created_at, current_period_start, current_period_end, cancel_at_period_end, stripe_subscription_id, api_calls_today, comparison_reports_this_month, exports_this_month'
-        )
-        .eq('user_id', user.id)
-        .in('status', ['active', 'trialing'])
-        .maybeSingle(),
-      // KEEP 'exact' — this count is compared against the user's Pro
-      // tier follow limit (billing enforcement). Scoped to one user
-      // via (user_id) index -> cheap. Must be accurate to block the
-      // (limit+1)th follow attempt.
-      supabase
-        .from('trader_follows')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id),
-    ])
-
-    const subscription = subResult.data
-    if (subResult.error) {
-      logger.warn('Query error', { error: subResult.error, userId: user.id })
+    let subResult
+    let followsResult
+    let tier: 'free' | 'pro'
+    try {
+      ;[subResult, followsResult, tier] = await Promise.all([
+        supabase
+          .from('subscriptions')
+          .select(SUBSCRIPTION_KEYS.join(', '))
+          .eq('user_id', user.id)
+          .in('status', ['active', 'trialing'])
+          .order('created_at', { ascending: false })
+          .limit(2)
+          .maybeSingle(),
+        // KEEP 'exact' — this count participates in the user's follow limit.
+        supabase
+          .from('trader_follows')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+        getCanonicalSubscriptionTier(supabase, user.id),
+      ])
+    } catch (error) {
+      return unavailable(error, user.id)
     }
 
-    const currentFollows = followsResult.count || 0
+    if (subResult.error || followsResult.error) {
+      return unavailable(subResult.error ?? followsResult.error, user.id)
+    }
+    if (!isUsageCount(followsResult.count)) {
+      return unavailable(new Error('Follow count lookup returned an invalid count'), user.id)
+    }
+
+    let subscription: ActiveSubscriptionRow | null
+    try {
+      subscription = parseActiveSubscription(subResult.data, user.id)
+    } catch (error) {
+      return unavailable(error, user.id)
+    }
+
+    const currentFollows = followsResult.count
     const currentCustomRankings = 0
 
-    // 确定 tier
-    let tier: 'free' | 'pro' = 'free'
-    if (!subscription) {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('subscription_tier')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (profile?.subscription_tier === 'pro') {
-        tier = 'pro'
-        logger.warn('User has pro tier in profile but no active subscription record', {
-          userId: user.id,
-        })
-      }
-    } else {
-      tier = subscription.tier as 'free' | 'pro'
-    }
-
-    // Set tier hint cookie so PremiumProvider can skip the idle-callback delay.
-    // HttpOnly=false so client JS can read it. SameSite=Lax for CSRF safety.
-    // Max-Age=30 days. This is a HINT — the full subscription loads in background.
-    const tierCookie = `arena_tier=${tier}; Path=/; SameSite=Lax; Max-Age=${30 * 86400}`
-
-    // 免费用户默认值。2026-07-11:早退条件从 (!sub && tier==='free') 收紧为
-    // !sub —— profile 回退判出 pro 但无订阅行的用户(NFT/admin 授予/清理残留)
-    // 此前穿透到 `const sub = subscription!` null 解引用 500。
     if (!subscription) {
       const defaultSubscription: UserSubscription = {
         userId: user.id,
-        tier: 'free',
+        tier,
         status: 'active',
         startDate: new Date().toISOString(),
         endDate: null,
@@ -89,26 +157,29 @@ export const GET = withAuth(
           currentCustomRankings,
         },
       }
-      const res = NextResponse.json({ subscription: defaultSubscription })
-      res.headers.set('Set-Cookie', tierCookie)
-      res.headers.set('Cache-Control', 'private, no-store')
-      return res
+      return subscriptionResponse(defaultSubscription, tier)
     }
 
-    const sub = subscription!
+    const normalizedRowTier =
+      subscription.tier === 'pro' || subscription.tier === 'elite' ? 'pro' : 'free'
+    if (normalizedRowTier !== tier) {
+      return unavailable(new Error('Subscription projection disagrees with entitlement'), user.id)
+    }
+
+    const sub = subscription
     const userSubscription: UserSubscription = {
-      userId: sub.user_id,
-      tier: sub.tier || tier,
-      status: sub.status,
-      startDate: sub.created_at || sub.current_period_start || new Date().toISOString(),
-      endDate: sub.current_period_end,
+      userId: sub.user_id as string,
+      tier,
+      status: sub.status as 'active' | 'trialing',
+      startDate: sub.created_at as string,
+      endDate: sub.current_period_end as string | null,
       trialEndDate: null,
       autoRenew: sub.status === 'active' && !sub.cancel_at_period_end,
       paymentMethod: sub.stripe_subscription_id ? 'stripe' : undefined,
       usage: {
-        apiCallsToday: sub.api_calls_today || 0,
-        comparisonReportsThisMonth: sub.comparison_reports_this_month || 0,
-        exportsThisMonth: sub.exports_this_month || 0,
+        apiCallsToday: sub.api_calls_today as number,
+        comparisonReportsThisMonth: sub.comparison_reports_this_month as number,
+        exportsThisMonth: sub.exports_this_month as number,
         currentFollows,
         currentCustomRankings,
       },
@@ -118,12 +189,12 @@ export const GET = withAuth(
     const res = NextResponse.json({
       subscription: {
         ...userSubscription,
-        plan: sub.plan || undefined,
-        currentPeriodEnd: sub.current_period_end || undefined,
-        cancelAtPeriodEnd: sub.cancel_at_period_end || false,
+        plan: (sub.plan as string | null) || undefined,
+        currentPeriodEnd: (sub.current_period_end as string | null) || undefined,
+        cancelAtPeriodEnd: sub.cancel_at_period_end as boolean,
       },
     })
-    res.headers.set('Set-Cookie', tierCookie)
+    res.headers.set('Set-Cookie', `arena_tier=${tier}; Path=/; SameSite=Lax; Max-Age=${30 * 86400}`)
     res.headers.set('Cache-Control', 'private, no-store')
     return res
   },
