@@ -24,6 +24,12 @@ describe('full post editor atomic write path', () => {
     expect(page).toContain('!sameStringList(')
   })
 
+  it('accepts image uploads only through the owner-bound acknowledgement parser', () => {
+    expect(page).toContain('readPostImageUploadAcknowledgement(')
+    expect(page).toContain("process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''")
+    expect(page).toContain('readPostMediaUploadError(responseBody)')
+  })
+
   it('has no dormant duplicate editor that can restore direct database writes', () => {
     for (const relativePath of [
       'app/(app)/post/[id]/edit/_hooks/useEditPost.ts',

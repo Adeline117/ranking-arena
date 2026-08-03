@@ -20,6 +20,10 @@ import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
 import { jwtSubject } from '@/lib/auth/token-subject'
 import { getViewerScope, isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
 import { readPostEditApiAcknowledgement } from '@/lib/posts/post-edit-contract'
+import {
+  readPostImageUploadAcknowledgement,
+  readPostMediaUploadError,
+} from '@/lib/posts/post-media-upload-contract'
 
 interface UploadedImage {
   url: string
@@ -427,16 +431,26 @@ export default function EditPostPage() {
           body: formData,
         })
 
-        const data = await response.json()
+        const responseBody: unknown = await response.json()
 
         if (!response.ok) {
-          showToast(data.error || t('uploadFailed'), 'error')
+          showToast(readPostMediaUploadError(responseBody) ?? t('uploadFailed'), 'error')
+          continue
+        }
+
+        const acknowledgement = readPostImageUploadAcknowledgement(
+          responseBody,
+          userId,
+          process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+        )
+        if (!acknowledgement) {
+          showToast(t('uploadFailed'), 'error')
           continue
         }
 
         newImages.push({
-          url: data.url,
-          fileName: data.fileName,
+          url: acknowledgement.url,
+          fileName: acknowledgement.fileName,
         })
       } catch (error) {
         logger.error('Upload error:', error)
