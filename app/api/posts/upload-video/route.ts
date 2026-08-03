@@ -3,35 +3,7 @@ import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
-
-// 支持的视频格式 (kept for documentation; validation uses magic-byte sniffing below)
-const _ALLOWED_VIDEO_TYPES = [
-  'video/mp4',
-  'video/webm',
-  'video/quicktime', // .mov
-  'video/x-msvideo', // .avi
-  'video/x-matroska', // .mkv
-]
-
-// Magic byte signatures for video container formats
-const VIDEO_SIGNATURES: Array<{ offset: number; bytes: number[]; type: string; ext: string }> = [
-  // MP4 / MOV — ftyp box at offset 4
-  { offset: 4, bytes: [0x66, 0x74, 0x79, 0x70], type: 'video/mp4', ext: 'mp4' },
-  // WebM / MKV — EBML header
-  { offset: 0, bytes: [0x1a, 0x45, 0xdf, 0xa3], type: 'video/webm', ext: 'webm' },
-  // AVI — RIFF....AVI
-  { offset: 0, bytes: [0x52, 0x49, 0x46, 0x46], type: 'video/x-msvideo', ext: 'avi' },
-]
-
-function sniffVideoFormat(buffer: ArrayBuffer): { type: string; ext: string } | null {
-  const view = new Uint8Array(buffer)
-  for (const sig of VIDEO_SIGNATURES) {
-    if (view.length < sig.offset + sig.bytes.length) continue
-    const match = sig.bytes.every((b, i) => view[sig.offset + i] === b)
-    if (match) return { type: sig.type, ext: sig.ext }
-  }
-  return null
-}
+import { sniffVideoFile } from '@/lib/utils/video-magic-bytes'
 
 // 最大文件大小: 100MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024
@@ -52,13 +24,17 @@ export async function POST(request: NextRequest) {
     const userId = user.id
 
     const formData = await request.formData()
-    const file = formData.get('file') as File
+    const fileEntry = formData.get('file')
 
-    if (!file) {
+    if (!fileEntry || typeof fileEntry === 'string') {
       return NextResponse.json({ error: 'No video file provided' }, { status: 400 })
     }
+    const file = fileEntry
 
     // 验证文件大小 (check first, before reading bytes)
+    if (file.size <= 0) {
+      return NextResponse.json({ error: 'Video file is empty' }, { status: 400 })
+    }
     if (file.size > MAX_VIDEO_SIZE) {
       return NextResponse.json(
         {
@@ -70,9 +46,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Magic-byte sniffing: verify actual file content, not just client-supplied type
-    const headerBytes = await file.slice(0, 64).arrayBuffer()
-    const sniffed = sniffVideoFormat(headerBytes)
+    // Validate the bounded container header, including its subtype/DocType.
+    const sniffed = await sniffVideoFile(file)
 
     if (!sniffed) {
       // Reject the file — magic bytes don't match any known video format
@@ -87,8 +62,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Use sniffed content type and extension (no client-supplied fallback)
-    const contentType = sniffed.type
-    const fileExt = sniffed.ext
+    const contentType = sniffed.mime
+    const fileExt = sniffed.extension
 
     // 创建 Supabase 客户端（使用 service key 以绕过 RLS）
     const supabase = getSupabaseAdmin()
@@ -116,7 +91,7 @@ export async function POST(request: NextRequest) {
       url: urlData.publicUrl,
       fileName: data.path,
       fileSize: file.size,
-      fileType: file.type,
+      fileType: contentType,
     })
   } catch (error: unknown) {
     logger.error('Error uploading video:', error)
