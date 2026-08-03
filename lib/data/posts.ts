@@ -89,6 +89,7 @@ export interface Post {
   is_pinned: boolean
   created_at: string
   updated_at?: string
+  content_version?: number
   original_post_id?: string | null
   visibility?: PostVisibility
   is_sensitive?: boolean
@@ -166,6 +167,7 @@ interface PostRow {
   images?: string[]
   created_at: string
   updated_at?: string
+  content_version?: number
   original_post_id?: string | null
   groups?: { name: string; name_en?: string | null } | { name: string; name_en?: string | null }[]
   visibility?: PostVisibility
@@ -259,6 +261,7 @@ function toPostWithAuthor(
     images: row.images || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    content_version: row.content_version,
     original_post_id: row.original_post_id || null,
     original_post: originalPost ?? null,
     visibility: (row.visibility as PostVisibility) || 'public',
@@ -273,7 +276,7 @@ const POST_SELECT_FIELDS = `
   poll_enabled, poll_id, poll_bull, poll_bear, poll_wait,
   like_count, dislike_count, comment_count, bookmark_count,
   repost_count, view_count, hot_score, is_pinned, images,
-  created_at, updated_at, original_post_id,
+  created_at, updated_at, content_version, original_post_id,
   visibility, is_sensitive, content_warning, language,
   status, deleted_at,
   groups(name, name_en)

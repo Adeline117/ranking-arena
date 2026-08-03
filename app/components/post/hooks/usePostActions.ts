@@ -20,6 +20,7 @@ import {
   postPinScopeKey,
   readPostPinAcknowledgement,
 } from '@/lib/posts/post-pin-client'
+import { readPostEditApiAcknowledgement } from '@/lib/posts/post-edit-contract'
 
 type Post = PostWithUserState
 
@@ -142,6 +143,7 @@ export function usePostActions({
   const lockRef = useRef<Set<string>>(new Set())
   const bookmarkLockRef = useRef<Set<string>>(new Set())
   const pinRequestLockRef = useRef<Set<string>>(new Set())
+  const editRequestLockRef = useRef<Set<string>>(new Set())
   const postsRef = useRef(posts)
   postsRef.current = posts
   // Always read the FRESHEST openPost. The toggleReaction callback is memoized on
@@ -1022,12 +1024,22 @@ export function usePostActions({
   const handleSaveEdit = useCallback(async () => {
     const capturedScope = captureRenderedScope()
     if (!scopeIsCurrent(capturedScope)) return
-    if (!editingPost || !accessToken) return
+    if (!editingPost || !accessToken || !currentUserId) return
     if (!editTitle.trim()) {
       showToast(t('titleRequired'), 'warning')
       return
     }
     const capturedPost = editingPost
+    if (
+      !Number.isSafeInteger(capturedPost.content_version) ||
+      Number(capturedPost.content_version) < 0
+    ) {
+      showToast(t('editFailed'), 'error')
+      return
+    }
+    const requestLockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${capturedPost.id}`
+    if (editRequestLockRef.current.has(requestLockKey)) return
+    editRequestLockRef.current.add(requestLockKey)
     const capturedTitle = editTitle.trim()
     const capturedContent = editContent.trim()
     setSavingEdit(true)
@@ -1039,35 +1051,68 @@ export function usePostActions({
           Authorization: `Bearer ${accessToken}`,
           ...getCsrfHeaders(),
         },
-        body: JSON.stringify({ title: capturedTitle, content: capturedContent }),
+        body: JSON.stringify({
+          title: capturedTitle,
+          content: capturedContent,
+          expected_version: capturedPost.content_version,
+        }),
       })
-      const data = await response.json()
+      const data: unknown = await response.json()
       if (!scopeIsCurrent(capturedScope)) return
-      if (response.ok) {
+      const acknowledgement = response.ok
+        ? readPostEditApiAcknowledgement(data, capturedPost.id)
+        : null
+      if (
+        acknowledgement &&
+        acknowledgement.author_id === currentUserId &&
+        acknowledgement.content_version >= Number(capturedPost.content_version)
+      ) {
         setPosts((prev) =>
           prev.map((p) =>
-            p.id === capturedPost.id ? { ...p, title: capturedTitle, content: capturedContent } : p
+            p.id === capturedPost.id
+              ? {
+                  ...p,
+                  title: acknowledgement.title,
+                  content: acknowledgement.content,
+                  images: acknowledgement.images,
+                  updated_at: acknowledgement.updated_at,
+                  content_version: acknowledgement.content_version,
+                }
+              : p
           )
         )
         const op = openPostRef.current
         if (!openPostAliasesPosts && op?.id === capturedPost.id)
-          setOpenPost({ ...op, title: capturedTitle, content: capturedContent })
+          setOpenPost({
+            ...op,
+            title: acknowledgement.title,
+            content: acknowledgement.content,
+            images: acknowledgement.images,
+            updated_at: acknowledgement.updated_at,
+            content_version: acknowledgement.content_version,
+          })
         setEditingPost(null)
         showToast(t('editSaved'), 'success')
       } else {
-        showToast(data.error || t('editFailed'), 'error')
+        const message =
+          data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+            ? data.error
+            : t('editFailed')
+        showToast(message, 'error')
       }
     } catch (err) {
       if (!scopeIsCurrent(capturedScope)) return
       logger.error('[PostFeed] edit failed:', err)
       showToast(t('editFailed'), 'error')
     } finally {
+      editRequestLockRef.current.delete(requestLockKey)
       if (scopeIsCurrent(capturedScope)) setSavingEdit(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs t, setPosts, setOpenPost excluded to avoid re-creating callback
   }, [
     editingPost,
     accessToken,
+    currentUserId,
     captureRenderedScope,
     editTitle,
     editContent,

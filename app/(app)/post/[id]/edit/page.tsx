@@ -17,6 +17,9 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
+import { jwtSubject } from '@/lib/auth/token-subject'
+import { getViewerScope, isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
+import { readPostEditApiAcknowledgement } from '@/lib/posts/post-edit-contract'
 
 interface UploadedImage {
   url: string
@@ -25,6 +28,19 @@ interface UploadedImage {
 
 const TITLE_MAX_LENGTH = 100
 const CONTENT_MAX_LENGTH = 10000
+
+function sameStringList(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
+function normalizeHttpUrl(value: string): string | null {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null
+  } catch {
+    return null
+  }
+}
 
 // 带编辑控制的内容渲染（用于预览模式）
 function renderContentWithControls(
@@ -291,7 +307,13 @@ export default function EditPostPage() {
     originalPost != null &&
       !saving &&
       (title !== ((originalPost.title as string) ?? '') ||
-        content !== ((originalPost.content as string) ?? ''))
+        content !== ((originalPost.content as string) ?? '') ||
+        !sameStringList(
+          images.map((image) => image.url),
+          Array.isArray(originalPost.images)
+            ? originalPost.images.filter((value): value is string => typeof value === 'string')
+            : []
+        ))
   )
 
   // 获取用户信息
@@ -322,7 +344,7 @@ export default function EditPostPage() {
           // poll_votes/poll_end_at/tags)→ PGRST 42703 → 编辑页对所有人 100% 打不开。
           // 只 select 生产实存的列(REST 探针核实);poll 用真实的 poll_bull/bear/wait/enabled。
           .select(
-            'id, title, content, author_handle, author_id, images, poll_enabled, poll_id, poll_bull, poll_bear, poll_wait, group_id, visibility, created_at, updated_at'
+            'id, title, content, author_handle, author_id, images, poll_enabled, poll_id, poll_bull, poll_bear, poll_wait, group_id, visibility, created_at, updated_at, content_version'
           )
           .eq('id', postId)
           .single()
@@ -573,6 +595,21 @@ export default function EditPostPage() {
       return
     }
 
+    const expectedVersion = originalPost.content_version
+    if (!Number.isSafeInteger(expectedVersion) || Number(expectedVersion) < 0) {
+      showToast(t('cannotSave'), 'error')
+      submitRef.current = false
+      return
+    }
+
+    const capturedScope = getViewerScope()
+    if (capturedScope.userId !== userId) {
+      showToast(t('cannotSave'), 'error')
+      submitRef.current = false
+      return
+    }
+    const capturedUserId = userId
+
     setSaving(true)
     try {
       // 如果有图片但没有插入到内容中，自动附加到内容末尾
@@ -584,18 +621,69 @@ export default function EditPostPage() {
         }
       }
 
-      const { error } = await supabase
-        .from('posts')
-        .update({
+      const submittedImages: string[] = []
+      for (const image of images) {
+        const normalizedUrl = normalizeHttpUrl(image.url)
+        if (!normalizedUrl) {
+          showToast(t('updateFailed'), 'error')
+          return
+        }
+        submittedImages.push(normalizedUrl)
+      }
+      const saveToken = await tokenRefreshCoordinator.getValidToken({
+        expectedUserId: capturedUserId,
+        sessionGeneration: capturedScope.sessionGeneration,
+      })
+      if (
+        !saveToken ||
+        jwtSubject(saveToken) !== capturedUserId ||
+        !isViewerScopeCurrent(capturedScope)
+      ) {
+        showToast(t('cannotSave'), 'error')
+        return
+      }
+
+      const response = await fetch(`/api/posts/${postId}/edit`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${saveToken}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({
           title,
           content: finalContent,
-          images: images.map((img) => img.url),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', postId)
-        .eq('author_id', userId)
+          images: submittedImages,
+          expected_version: Number(expectedVersion),
+        }),
+      })
+      let responseBody: unknown = null
+      try {
+        responseBody = await response.json()
+      } catch {
+        // A non-JSON 2xx is not a mutation acknowledgement.
+      }
+      if (!isViewerScopeCurrent(capturedScope)) return
 
-      if (error) {
+      if (!response.ok) {
+        const message =
+          responseBody &&
+          typeof responseBody === 'object' &&
+          'error' in responseBody &&
+          typeof responseBody.error === 'string'
+            ? responseBody.error
+            : t('updateFailed')
+        showToast(message, 'error')
+        return
+      }
+
+      const acknowledgement = readPostEditApiAcknowledgement(responseBody, postId)
+      if (
+        !acknowledgement ||
+        acknowledgement.author_id !== capturedUserId ||
+        acknowledgement.content_version < Number(expectedVersion) ||
+        !sameStringList(acknowledgement.images ?? [], submittedImages)
+      ) {
         showToast(t('updateFailed'), 'error')
         return
       }
@@ -606,7 +694,7 @@ export default function EditPostPage() {
       const errorMessage = error instanceof Error ? error.message : t('updateFailed')
       showToast(errorMessage, 'error')
     } finally {
-      setSaving(false)
+      if (isViewerScopeCurrent(capturedScope)) setSaving(false)
       submitRef.current = false
     }
   }

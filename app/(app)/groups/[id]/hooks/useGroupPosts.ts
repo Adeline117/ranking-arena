@@ -22,6 +22,7 @@ import {
   postPinScopeKey,
   readPostPinAcknowledgement,
 } from '@/lib/posts/post-pin-client'
+import { readPostEditApiAcknowledgement } from '@/lib/posts/post-edit-contract'
 
 export interface Post {
   id: string
@@ -29,6 +30,8 @@ export interface Post {
   title: string
   content?: string | null
   created_at: string
+  updated_at: string
+  content_version: number
   author_handle?: string | null
   author_id?: string | null
   author_avatar_url?: string | null
@@ -76,7 +79,7 @@ interface UseGroupPostsOptions {
 
 const POST_PAGE_SIZE = 20
 const POST_SELECT_FIELDS =
-  'id, group_id, title, content, created_at, author_handle, author_id, like_count, dislike_count, comment_count, bookmark_count, repost_count, is_pinned'
+  'id, group_id, title, content, created_at, updated_at, content_version, author_handle, author_id, like_count, dislike_count, comment_count, bookmark_count, repost_count, is_pinned'
 
 // Generic fetch for boolean user interactions such as bookmarks.
 async function fetchUserInteractions(
@@ -288,6 +291,7 @@ export function useGroupPosts({
   const [repostComment, setRepostComment] = useViewerOwnedState('', () => '', scopeKey)
   const likeRequestLockRef = useRef<Set<string>>(new Set())
   const repostRequestLockRef = useRef<Set<string>>(new Set())
+  const editRequestLockRef = useRef<Set<string>>(new Set())
   const pinRequestLockRef = useRef<Set<string>>(new Set())
 
   // Comments state
@@ -495,6 +499,7 @@ export function useGroupPosts({
     replyMutationLocksRef.current.clear()
     likeRequestLockRef.current.clear()
     pinRequestLockRef.current.clear()
+    editRequestLockRef.current.clear()
     setPosts([])
     setHasMorePosts(true)
     setLoadingMore(false)
@@ -998,30 +1003,67 @@ export function useGroupPosts({
         return
       }
       const context = captureMutationContext()
+      const currentPost = postsRef.current.find((post) => post.id === postId)
+      if (
+        !currentPost ||
+        currentPost.group_id !== context.groupId ||
+        !Number.isSafeInteger(currentPost.content_version) ||
+        currentPost.content_version < 0
+      ) {
+        showToast(t('editFailed'), 'error')
+        return
+      }
+      const requestLockKey = `${context.scope.viewerKey}\u0000${context.scope.sessionGeneration}\u0000${context.groupId}\u0000${postId}`
+      if (editRequestLockRef.current.has(requestLockKey)) return
+      editRequestLockRef.current.add(requestLockKey)
       const submittedTitle = editTitle.trim()
       const submittedContent = editContent.trim()
       setSavingEdit(true)
-      const result = await apiCall(
-        `/api/posts/${postId}/edit`,
-        {
-          method: 'PUT',
-          body: { title: submittedTitle, content: submittedContent },
-        },
-        context.scope
-      )
-      if (!mutationContextIsCurrent(context)) return
-      if (result.ok) {
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId ? { ...p, title: submittedTitle, content: submittedContent } : p
-          )
+      try {
+        const result = await apiCall(
+          `/api/posts/${postId}/edit`,
+          {
+            method: 'PUT',
+            body: {
+              title: submittedTitle,
+              content: submittedContent,
+              expected_version: currentPost.content_version,
+            },
+          },
+          context.scope
         )
-        setEditingPost(null)
-        showToast(t('editSaved'), 'success')
-      } else {
-        showToast(result.error || t('editFailed'), 'error')
+        if (!mutationContextIsCurrent(context)) return
+        const acknowledgement = result.ok
+          ? readPostEditApiAcknowledgement(result.data, postId)
+          : null
+        if (
+          acknowledgement &&
+          acknowledgement.author_id === context.scope.userId &&
+          acknowledgement.group_id === context.groupId &&
+          acknowledgement.content_version >= currentPost.content_version
+        ) {
+          setPosts((prev) =>
+            prev.map((post) =>
+              post.id === postId
+                ? {
+                    ...post,
+                    title: acknowledgement.title,
+                    content: acknowledgement.content,
+                    updated_at: acknowledgement.updated_at,
+                    content_version: acknowledgement.content_version,
+                  }
+                : post
+            )
+          )
+          setEditingPost(null)
+          showToast(t('editSaved'), 'success')
+        } else {
+          showToast(result.error || t('editFailed'), 'error')
+        }
+      } finally {
+        editRequestLockRef.current.delete(requestLockKey)
+        if (mutationContextIsCurrent(context)) setSavingEdit(false)
       }
-      setSavingEdit(false)
     },
     [
       apiCall,

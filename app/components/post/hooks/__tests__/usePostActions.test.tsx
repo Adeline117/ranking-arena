@@ -588,6 +588,131 @@ describe('usePostActions aliased detail state', () => {
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
+  it('single-flights an edit and applies only the exact authoritative post', async () => {
+    const actorId = '11111111-1111-4111-8111-111111111111'
+    const postId = '22222222-2222-4222-8222-222222222222'
+    const viewer: ViewerProps = {
+      accessToken: 'token-a',
+      currentUserId: actorId,
+      viewerKey: `user:${actorId}`,
+      sessionGeneration: 1,
+    }
+    const response = deferred<Response>()
+    ;(global.fetch as jest.Mock).mockReturnValue(response.promise)
+    const { result } = renderHook(() => useAliasedPostActions(viewer))
+
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: postId,
+        author_id: actorId,
+        content_version: 7,
+        updated_at: '2026-07-30T01:00:00.000Z',
+      }))
+    })
+    act(() => {
+      result.current.actions.setEditingPost(result.current.post)
+      result.current.actions.setEditTitle('Submitted title')
+      result.current.actions.setEditContent('Submitted body')
+    })
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = result.current.actions.handleSaveEdit()
+      duplicate = result.current.actions.handleSaveEdit()
+    })
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledWith(
+      `/api/posts/${postId}/edit`,
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          title: 'Submitted title',
+          content: 'Submitted body',
+          expected_version: 7,
+        }),
+      })
+    )
+
+    const acknowledgedPost = {
+      id: postId,
+      author_id: actorId,
+      group_id: null,
+      title: 'Authoritative title',
+      content: 'Authoritative body',
+      images: null,
+      content_version: 8,
+      updated_at: '2026-07-30T01:35:00.000Z',
+    }
+    await act(async () => {
+      response.resolve(jsonResponse({ success: true, post: acknowledgedPost }))
+      await Promise.all([first, duplicate])
+    })
+
+    expect(result.current.post).toMatchObject({
+      id: acknowledgedPost.id,
+      author_id: acknowledgedPost.author_id,
+      title: acknowledgedPost.title,
+      content: acknowledgedPost.content,
+      images: acknowledgedPost.images,
+      content_version: acknowledgedPost.content_version,
+      updated_at: acknowledgedPost.updated_at,
+    })
+    expect(result.current.actions.editingPost).toBeNull()
+    expect(mockShowToast).toHaveBeenCalledWith('editSaved', 'success')
+  })
+
+  it('preserves the editor and post when a 200 edit acknowledgement is malformed', async () => {
+    const actorId = '11111111-1111-4111-8111-111111111111'
+    const postId = '22222222-2222-4222-8222-222222222222'
+    const viewer: ViewerProps = {
+      accessToken: 'token-a',
+      currentUserId: actorId,
+      viewerKey: `user:${actorId}`,
+      sessionGeneration: 1,
+    }
+    ;(global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        success: true,
+        post: {
+          id: postId,
+          author_id: actorId,
+          group_id: null,
+          title: 'Untrusted title',
+          content: 'Untrusted body',
+          images: null,
+          content_version: 8,
+          updated_at: '2026-07-30T01:35:00.000Z',
+          extra: true,
+        },
+      })
+    )
+    const { result } = renderHook(() => useAliasedPostActions(viewer))
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: postId,
+        author_id: actorId,
+        content_version: 7,
+      }))
+    })
+    act(() => {
+      result.current.actions.setEditingPost(result.current.post)
+      result.current.actions.setEditTitle('Submitted title')
+      result.current.actions.setEditContent('Submitted body')
+    })
+
+    await act(async () => {
+      await result.current.actions.handleSaveEdit()
+    })
+
+    expect(result.current.post.title).toBe('Post')
+    expect(result.current.actions.editingPost?.id).toBe(postId)
+    expect(mockShowToast).toHaveBeenCalledWith('editFailed', 'error')
+  })
+
   it('resumes one exact same-tab bookmark after login', async () => {
     const postId = '22222222-2222-4222-8222-222222222222'
     window.history.replaceState({}, '', `/post/${postId}?from=hot`)

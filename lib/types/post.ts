@@ -27,6 +27,8 @@ export interface Post {
   images?: string[] | null
   created_at: string
   updated_at?: string | null
+  /** Database-owned optimistic revision for author-editable content. */
+  content_version?: number
   // 转发相关
   original_post_id?: string | null
   // Visibility level
@@ -115,4 +117,3 @@ export function getPollWinner(poll: PollState): PollChoice | 'tie' {
   if (arr[0][1] === arr[1][1]) return 'tie'
   return arr[0][0]
 }
-
