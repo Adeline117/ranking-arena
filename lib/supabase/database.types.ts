@@ -10398,6 +10398,26 @@ export type Database = {
         }
         Returns: Json
       }
+      upsert_trader_alert_atomic: {
+        Args: {
+          p_alert_drawdown: boolean
+          p_alert_pnl_change: boolean
+          p_alert_rank_change: boolean
+          p_alert_roi_change: boolean
+          p_alert_score_change: boolean
+          p_drawdown_threshold: number
+          p_enabled: boolean
+          p_expected_alert_id: string | null
+          p_one_time: boolean
+          p_pnl_change_threshold: number
+          p_rank_change_threshold: number
+          p_roi_change_threshold: number
+          p_score_change_threshold: number
+          p_source: string | null
+          p_trader_id: string
+        }
+        Returns: Json
+      }
       consume_webauthn_authentication_atomic: {
         Args: {
           p_credential_id: string
@@ -10423,6 +10443,14 @@ export type Database = {
           result_user_id: string | null
           status: string
         }[]
+      }
+      delete_trader_alert_atomic: {
+        Args: {
+          p_alert_id: string | null
+          p_source: string | null
+          p_trader_id: string | null
+        }
+        Returns: Json
       }
       register_webauthn_credential_for_active_profile_atomic: {
         Args: {
