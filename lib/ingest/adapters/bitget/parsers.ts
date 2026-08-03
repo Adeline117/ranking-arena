@@ -17,6 +17,8 @@ import type {
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
   ParsedPosition,
+  ParsedPositionHistoryFieldSources,
+  ParsedPositionHistoryLimitation,
   ParsedProfile,
   ParsedStats,
   Timeframe,
@@ -25,7 +27,9 @@ import type {
 type Dict = Record<string, unknown>
 
 function num(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null
+  if (v === null || v === undefined) return null
+  if (typeof v !== 'number' && typeof v !== 'string') return null
+  if (typeof v === 'string' && v.trim().length === 0) return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
 }
@@ -33,6 +37,37 @@ function num(v: unknown): number | null {
 function int(v: unknown): number | null {
   const n = num(v)
   return n === null ? null : Math.round(n)
+}
+
+function iso(v: unknown): string | null {
+  const ms = num(v)
+  if (ms === null || ms <= 0) return null
+  const parsed = new Date(ms)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
+
+function sourceIdentity(v: unknown): string | null {
+  if (typeof v === 'string') {
+    return v.length > 0 && v === v.trim() ? v : null
+  }
+  return typeof v === 'number' && Number.isSafeInteger(v) ? String(v) : null
+}
+
+function sourceMarker(v: unknown): string | null {
+  if (typeof v === 'string') {
+    const normalized = v.trim()
+    return normalized.length > 0 ? normalized : null
+  }
+  return typeof v === 'number' && Number.isFinite(v) ? String(v) : null
+}
+
+function claimPositionField(
+  sources: ParsedPositionHistoryFieldSources,
+  field: keyof ParsedPositionHistoryFieldSources,
+  value: unknown,
+  ...fieldPaths: [string, ...string[]]
+): void {
+  if (value !== null && value !== undefined) sources[field] = { fieldPaths }
 }
 
 /** Percent-or-decimal disambiguation: decimal shape uses different keys. */
@@ -298,28 +333,85 @@ export function parseBitgetPositionHistory(raw: unknown, _ctx: ParseCtx): Parsed
   if (!Array.isArray(rows)) return []
   const out: ParsedHistoryRow[] = []
   for (const item of rows as Dict[]) {
+    const symbolField =
+      item.symbolDisplayName !== null && item.symbolDisplayName !== undefined
+        ? 'data.rows[].symbolDisplayName'
+        : item.productCode !== null && item.productCode !== undefined
+          ? 'data.rows[].productCode'
+          : 'data.rows[].symbolId'
     const symbol = (item.symbolDisplayName ?? item.productCode ?? item.symbolId) as
       | string
       | undefined
     if (!symbol) continue
-    const openedAt = num(item.openTime)
-    const closedAt = num(item.closeTime)
+    const parsedOpenedAt = iso(item.openTime)
+    // Bitget uses 0 as an open/unfinished sentinel. It is not the Unix epoch
+    // and must remain a partial row with no asserted lifecycle marker.
+    const parsedClosedAt = iso(item.closeTime)
+    const sourceFactId = sourceIdentity(item.orderNo)
+    const sourceLifecycleMarker = parsedClosedAt === null ? null : sourceMarker(item.closeTime)
+    const sourceReturn = num(item.returnRate)
+    const parsedSide = bitgetSide(item.position ?? item.holdSide)
+    const leverage = num(item.openLevel)
+    const size = num(item.closeDealCount ?? item.openDealCount)
+    const sizeField =
+      item.closeDealCount !== null && item.closeDealCount !== undefined
+        ? 'data.rows[].closeDealCount'
+        : 'data.rows[].openDealCount'
+    const entryPrice = num(item.openAvgPrice)
+    const exitPrice = num(item.closeAvgPrice)
+    const realizedPnl = num(item.netProfit)
+    const fieldSources: ParsedPositionHistoryFieldSources = {}
+    claimPositionField(fieldSources, 'sourceFactId', sourceFactId, 'data.rows[].orderNo')
+    claimPositionField(
+      fieldSources,
+      'sourceLifecycleMarker',
+      sourceLifecycleMarker,
+      'data.rows[].closeTime'
+    )
+    claimPositionField(fieldSources, 'sourceReturn', sourceReturn, 'data.rows[].returnRate')
+    claimPositionField(fieldSources, 'openedAt', parsedOpenedAt, 'data.rows[].openTime')
+    claimPositionField(fieldSources, 'closedAt', parsedClosedAt, 'data.rows[].closeTime')
+    claimPositionField(fieldSources, 'symbol', symbol, symbolField)
+    claimPositionField(
+      fieldSources,
+      'side',
+      parsedSide,
+      item.position !== null && item.position !== undefined
+        ? 'data.rows[].position'
+        : 'data.rows[].holdSide'
+    )
+    claimPositionField(fieldSources, 'leverage', leverage, 'data.rows[].openLevel')
+    claimPositionField(fieldSources, 'size', size, sizeField)
+    claimPositionField(fieldSources, 'entryPrice', entryPrice, 'data.rows[].openAvgPrice')
+    claimPositionField(fieldSources, 'exitPrice', exitPrice, 'data.rows[].closeAvgPrice')
+    claimPositionField(fieldSources, 'realizedPnl', realizedPnl, 'data.rows[].netProfit')
+    const limitations: ParsedPositionHistoryLimitation[] = []
+    if (sourceFactId === null) limitations.push('source_fact_id_missing')
+    if (sourceLifecycleMarker === null) limitations.push('source_lifecycle_marker_missing')
+    if (parsedClosedAt === null) limitations.push('source_lifecycle_marker_partial')
+    if (sourceReturn === null) limitations.push('source_return_missing')
+    if (realizedPnl === null) limitations.push('source_realized_pnl_missing')
     out.push({
       kind: 'position_history',
-      openedAt: openedAt === null ? null : new Date(openedAt).toISOString(),
-      closedAt: closedAt === null ? null : new Date(closedAt).toISOString(),
+      openedAt: parsedOpenedAt,
+      closedAt: parsedClosedAt,
       symbol: String(symbol),
-      side: bitgetSide(item.position ?? item.holdSide),
-      leverage: num(item.openLevel),
-      size: num(item.closeDealCount ?? item.openDealCount), // base-asset quantity
-      entryPrice: num(item.openAvgPrice),
-      exitPrice: num(item.closeAvgPrice),
+      side: parsedSide,
+      leverage,
+      size, // base-asset quantity
+      entryPrice,
+      exitPrice,
       // netProfit is the reviewed after-fee field. achievedProfits has a
       // different (pre-fee) methodology and must not silently impersonate it
       // when the net value is absent.
-      realizedPnl: num(item.netProfit),
-      dedupeHash: item.orderNo
-        ? dedupeHash('bitget_ph', item.orderNo)
+      realizedPnl,
+      sourceFactId,
+      sourceLifecycleMarker,
+      sourceReturn,
+      fieldSources,
+      limitations,
+      dedupeHash: sourceFactId
+        ? dedupeHash('bitget_ph', sourceFactId)
         : dedupeHash('bitget_ph', symbol, item.openTime, item.closeTime, item.closeDealCount),
       raw: item,
     })

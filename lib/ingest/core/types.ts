@@ -264,6 +264,49 @@ export interface ParsedPosition {
   raw: Record<string, unknown>
 }
 
+/**
+ * Parser-owned location claim for one position-history value. A value may be
+ * composite (for example Binance portfolio id + history row id), so even a
+ * direct scalar uses the same non-empty `fieldPaths` representation.
+ *
+ * Deliberately absent: provenance, trust/quality, currency, run/raw binding,
+ * source-page ordinals, and rank eligibility. Those belong to the reviewed
+ * source contract and acquisition/publication framework, never the adapter.
+ */
+export interface ParsedPositionHistoryFieldSource {
+  fieldPaths: [string, ...string[]]
+}
+
+export type ParsedPositionHistoryClaimField =
+  | 'sourceFactId'
+  | 'sourceLifecycleMarker'
+  | 'sourceReturn'
+  | 'openedAt'
+  | 'closedAt'
+  | 'symbol'
+  | 'side'
+  | 'leverage'
+  | 'size'
+  | 'entryPrice'
+  | 'exitPrice'
+  | 'realizedPnl'
+
+export type ParsedPositionHistoryFieldSources = Partial<
+  Record<ParsedPositionHistoryClaimField, ParsedPositionHistoryFieldSource>
+>
+
+/** Objective parser limitations only; these do not assign a trust state. */
+export const PARSED_POSITION_HISTORY_LIMITATIONS = [
+  'source_fact_id_missing',
+  'source_lifecycle_marker_missing',
+  'source_lifecycle_marker_partial',
+  'source_lifecycle_marker_unrecognized',
+  'source_return_missing',
+  'source_realized_pnl_missing',
+] as const
+
+export type ParsedPositionHistoryLimitation = (typeof PARSED_POSITION_HISTORY_LIMITATIONS)[number]
+
 export interface ParsedPositionHistoryRow {
   kind: 'position_history'
   openedAt: string | null
@@ -275,6 +318,16 @@ export interface ParsedPositionHistoryRow {
   entryPrice: number | null
   exitPrice: number | null
   realizedPnl: number | null
+  /** Canonical source-scoped natural identity before hashing. Optional while adapters migrate. */
+  sourceFactId?: string | null
+  /** Exact source marker (for example status or raw closeTime), not a lifecycle verdict. */
+  sourceLifecycleMarker?: string | null
+  /** Exact finite source return value; units/normalization come from the registry. */
+  sourceReturn?: number | null
+  /** Parser-only field locations. The framework later binds RAW/run/page lineage. */
+  fieldSources?: ParsedPositionHistoryFieldSources
+  /** Objective missing/partial observations; never an eligibility decision. */
+  limitations?: ParsedPositionHistoryLimitation[]
   /** Stable natural identity (source position id where available, else a
    *  deterministic field-tuple hash) — drives idempotent upserts. */
   dedupeHash: string

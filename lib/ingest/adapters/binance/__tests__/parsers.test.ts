@@ -15,6 +15,7 @@ import {
   parseBinanceProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { parsedPositionHistoryRowSchema } from '../../../core/schemas'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -194,11 +195,212 @@ describe('parseBinanceHistory', () => {
       expect(row.side).toBe('long')
       expect(row.leverage).toBe(50)
       expect(row.realizedPnl).toBeCloseTo(368.88331987)
+      expect(row.sourceFactId).toBe(
+        JSON.stringify([
+          '4988579992261068032',
+          String(row.raw.id),
+          String(row.raw.symbol),
+          String(row.raw.side),
+        ])
+      )
+      expect(row.sourceLifecycleMarker).toBe('All Closed')
+      expect(row.sourceReturn).toBe(Number(row.raw.roi))
+      expect(row.fieldSources).toEqual({
+        sourceFactId: {
+          fieldPaths: [
+            'portfolioId',
+            'response.data.list[].id',
+            'response.data.list[].symbol',
+            'response.data.list[].side',
+          ],
+        },
+        sourceLifecycleMarker: { fieldPaths: ['response.data.list[].status'] },
+        sourceReturn: { fieldPaths: ['response.data.list[].roi'] },
+        openedAt: { fieldPaths: ['response.data.list[].opened'] },
+        closedAt: { fieldPaths: ['response.data.list[].closed'] },
+        symbol: { fieldPaths: ['response.data.list[].symbol'] },
+        side: { fieldPaths: ['response.data.list[].side'] },
+        leverage: { fieldPaths: ['response.data.list[].leverage'] },
+        size: { fieldPaths: ['response.data.list[].closedVolume'] },
+        entryPrice: { fieldPaths: ['response.data.list[].avgCost'] },
+        exitPrice: { fieldPaths: ['response.data.list[].avgClosePrice'] },
+        realizedPnl: { fieldPaths: ['response.data.list[].closingPnl'] },
+      })
+      expect(row.limitations).toEqual([])
+      expect(row.fieldSources?.realizedPnl).not.toHaveProperty('sourcePageOrdinal')
+      expect(row).not.toHaveProperty('provenance')
+      expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
     }
     // Same rows fetched under both sorts collapse onto identical hashes.
     const openingHashes = new Set(opening.map((r) => r.dedupeHash))
     const overlap = closing.filter((r) => openingHashes.has(r.dedupeHash))
     expect(overlap.length).toBeGreaterThan(0)
+  })
+
+  it('preserves a source-marked partial close without claiming terminal trust', () => {
+    const response = fixture('position-history-closing-p1.json') as {
+      data: { list: Array<Record<string, unknown>> }
+    }
+    response.data.list = [{ ...response.data.list[0], status: 'Partially Closed' }]
+    const rows = parseBinanceHistory(wrap(response), 'position_history', ctx)
+    const row = rows[0]
+    if (row.kind !== 'position_history') throw new Error('wrong kind')
+
+    expect(row.sourceLifecycleMarker).toBe('Partially Closed')
+    expect(row.closedAt).not.toBeNull()
+    expect(row.limitations).toContain('source_lifecycle_marker_partial')
+    expect(row).not.toHaveProperty('rankEligible')
+    expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+  })
+
+  it('preserves rows with blank ids/status without inventing source evidence', () => {
+    const response = fixture('position-history-closing-p1.json') as {
+      data: { list: Array<Record<string, unknown>> }
+    }
+    response.data.list = [{ ...response.data.list[0], id: '   ', status: '   ' }]
+    const rows = parseBinanceHistory(wrap(response), 'position_history', ctx)
+    const row = rows[0]
+    if (row.kind !== 'position_history') throw new Error('wrong kind')
+
+    expect(row.sourceFactId).toBeNull()
+    expect(row.sourceLifecycleMarker).toBeNull()
+    expect(row.fieldSources).not.toHaveProperty('sourceFactId')
+    expect(row.fieldSources).not.toHaveProperty('sourceLifecycleMarker')
+    expect(row.limitations).toEqual(
+      expect.arrayContaining(['source_fact_id_missing', 'source_lifecycle_marker_missing'])
+    )
+    expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+  })
+
+  it('keeps whitespace numerics and non-positive timestamps unknown instead of inventing zero or epoch', () => {
+    const response = fixture('position-history-closing-p1.json') as {
+      data: { list: Array<Record<string, unknown>> }
+    }
+    response.data.list = [
+      {
+        ...response.data.list[0],
+        opened: '   ',
+        closed: 0,
+        roi: '   ',
+        closingPnl: '   ',
+      },
+    ]
+    const rows = parseBinanceHistory(wrap(response), 'position_history', ctx)
+    const row = rows[0]
+    if (row.kind !== 'position_history') throw new Error('wrong kind')
+
+    expect(row.openedAt).toBeNull()
+    expect(row.closedAt).toBeNull()
+    expect(row.sourceReturn).toBeNull()
+    expect(row.realizedPnl).toBeNull()
+    expect(row.fieldSources).not.toHaveProperty('openedAt')
+    expect(row.fieldSources).not.toHaveProperty('closedAt')
+    expect(row.fieldSources).not.toHaveProperty('sourceReturn')
+    expect(row.fieldSources).not.toHaveProperty('realizedPnl')
+    expect(row.limitations).toEqual(
+      expect.arrayContaining(['source_return_missing', 'source_realized_pnl_missing'])
+    )
+    expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+  })
+
+  it('preserves genuine numeric and numeric-string zero return/PnL evidence', () => {
+    const response = fixture('position-history-closing-p1.json') as {
+      data: { list: Array<Record<string, unknown>> }
+    }
+    response.data.list = [{ ...response.data.list[0], roi: 0, closingPnl: '0' }]
+    const rows = parseBinanceHistory(wrap(response), 'position_history', ctx)
+    const row = rows[0]
+    if (row.kind !== 'position_history') throw new Error('wrong kind')
+
+    expect(row.sourceReturn).toBe(0)
+    expect(row.realizedPnl).toBe(0)
+    expect(row.fieldSources?.sourceReturn).toEqual({
+      fieldPaths: ['response.data.list[].roi'],
+    })
+    expect(row.fieldSources?.realizedPnl).toEqual({
+      fieldPaths: ['response.data.list[].closingPnl'],
+    })
+    expect(row.limitations).not.toContain('source_return_missing')
+    expect(row.limitations).not.toContain('source_realized_pnl_missing')
+    expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+  })
+
+  it.each([
+    ['boolean', true],
+    ['array', []],
+    ['object', {}],
+  ])('rejects %s values as numeric source evidence', (_case, invalidValue) => {
+    const response = fixture('position-history-closing-p1.json') as {
+      data: { list: Array<Record<string, unknown>> }
+    }
+    response.data.list = [{ ...response.data.list[0], roi: invalidValue, closingPnl: invalidValue }]
+    const rows = parseBinanceHistory(wrap(response), 'position_history', ctx)
+    const row = rows[0]
+    if (row.kind !== 'position_history') throw new Error('wrong kind')
+
+    expect(row.sourceReturn).toBeNull()
+    expect(row.realizedPnl).toBeNull()
+    expect(row.limitations).toEqual(
+      expect.arrayContaining(['source_return_missing', 'source_realized_pnl_missing'])
+    )
+    expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+  })
+
+  it('uses the same four-part natural identity for source facts and dedupe', () => {
+    const response = fixture('position-history-closing-p1.json') as {
+      data: { list: Array<Record<string, unknown>> }
+    }
+    const base = response.data.list[0]
+    response.data.list = [base, { ...base, symbol: 'DIFFERENTUSDT' }]
+    const rows = parseBinanceHistory(wrap(response), 'position_history', ctx)
+    const positionRows = rows.filter((row) => row.kind === 'position_history')
+
+    expect(positionRows[0].sourceFactId).not.toBe(positionRows[1].sourceFactId)
+    expect(positionRows[0].dedupeHash).not.toBe(positionRows[1].dedupeHash)
+  })
+
+  it('rejects unsafe numeric ids and keeps blank-id fallback rows distinct', () => {
+    const response = fixture('position-history-closing-p1.json') as {
+      data: { list: Array<Record<string, unknown>> }
+    }
+    const base = response.data.list[0]
+    response.data.list = [
+      { ...base, id: Number.MAX_SAFE_INTEGER + 1 },
+      { ...base, id: '   ', opened: 1780000000000, closed: 1780000001000 },
+      { ...base, id: '   ', opened: 1780000002000, closed: 1780000003000 },
+    ]
+    const rows = parseBinanceHistory(wrap(response), 'position_history', ctx)
+    const positionRows = rows.filter((row) => row.kind === 'position_history')
+
+    expect(positionRows[0].sourceFactId).toBeNull()
+    expect(positionRows[0].fieldSources).not.toHaveProperty('sourceFactId')
+    expect(positionRows[0].limitations).toContain('source_fact_id_missing')
+    expect(positionRows[1].sourceFactId).toBeNull()
+    expect(positionRows[2].sourceFactId).toBeNull()
+    expect(positionRows[1].dedupeHash).not.toBe(positionRows[2].dedupeHash)
+    for (const row of positionRows) {
+      expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+    }
+  })
+
+  it('keeps valid row ids in fallback identity when another identity component is missing', () => {
+    const response = fixture('position-history-closing-p1.json') as {
+      data: { list: Array<Record<string, unknown>> }
+    }
+    const base = response.data.list[0]
+    response.data.list = [
+      { ...base, id: 1780000000001, side: '   ' },
+      { ...base, id: 1780000000002, side: '   ' },
+    ]
+    const rows = parseBinanceHistory(wrap(response), 'position_history', ctx)
+    const positionRows = rows.filter((row) => row.kind === 'position_history')
+
+    expect(positionRows[0].sourceFactId).toBeNull()
+    expect(positionRows[1].sourceFactId).toBeNull()
+    expect(positionRows[0].dedupeHash).not.toBe(positionRows[1].dedupeHash)
+    for (const row of positionRows) {
+      expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+    }
   })
 
   it('includes the portfolio id in dedupe hashes (ids are ms epochs, not unique)', () => {
