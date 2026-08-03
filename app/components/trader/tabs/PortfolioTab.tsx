@@ -14,6 +14,7 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader-types'
+import type { HistoryCompleteness } from '@/lib/data/serving/types'
 
 const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
   loading: () => <RankingSkeleton />,
@@ -23,6 +24,7 @@ export interface PortfolioTabProps {
   visited: boolean
   portfolio: PortfolioItem[]
   positionHistory: PositionHistoryItem[]
+  historyCompleteness: HistoryCompleteness | null
   source: string
   isPro: boolean
   onUnlock: () => void
@@ -32,6 +34,7 @@ const PortfolioTab = React.memo(function PortfolioTab({
   visited,
   portfolio,
   positionHistory,
+  historyCompleteness,
   source,
   isPro,
   onUnlock,
@@ -42,7 +45,10 @@ const PortfolioTab = React.memo(function PortfolioTab({
     return <RankingSkeleton />
   }
 
-  if (portfolio.length === 0 && positionHistory.length === 0) {
+  const hasHistoryLimitation =
+    historyCompleteness !== null && historyCompleteness.state !== 'complete'
+
+  if (portfolio.length === 0 && positionHistory.length === 0 && !hasHistoryLimitation) {
     return (
       <Box
         style={{
@@ -97,7 +103,13 @@ const PortfolioTab = React.memo(function PortfolioTab({
   }
 
   return (
-    <PortfolioTable items={portfolio} history={positionHistory} isPro={isPro} onUnlock={onUnlock} />
+    <PortfolioTable
+      items={portfolio}
+      history={positionHistory}
+      historyCompleteness={historyCompleteness}
+      isPro={isPro}
+      onUnlock={onUnlock}
+    />
   )
 })
 

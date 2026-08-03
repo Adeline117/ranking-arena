@@ -13,13 +13,21 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import type { TraderStats } from '@/lib/data/trader'
-import type { AssetBreakdownData, PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
+import type { HistoryCompleteness } from '@/lib/data/serving/types'
+import type {
+  AssetBreakdownData,
+  PositionHistoryEntry,
+} from '@/app/(app)/u/[handle]/components/types'
 
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
 })
 
-type EquityCurveData = { '90D': Array<{ date: string; roi: number; pnl: number }>; '30D': Array<{ date: string; roi: number; pnl: number }>; '7D': Array<{ date: string; roi: number; pnl: number }> }
+type EquityCurveData = {
+  '90D': Array<{ date: string; roi: number; pnl: number }>
+  '30D': Array<{ date: string; roi: number; pnl: number }>
+  '7D': Array<{ date: string; roi: number; pnl: number }>
+}
 
 export interface StatsTabProps {
   visited: boolean
@@ -28,6 +36,7 @@ export interface StatsTabProps {
   assetBreakdown: AssetBreakdownData | undefined
   equityCurve: EquityCurveData | undefined
   positionHistory: PositionHistoryEntry[]
+  historyCompleteness: HistoryCompleteness | null
   isPro: boolean
   onUnlock: () => void
 }
@@ -39,6 +48,7 @@ const StatsTab = React.memo(function StatsTab({
   assetBreakdown,
   equityCurve,
   positionHistory,
+  historyCompleteness,
   isPro,
   onUnlock,
 }: StatsTabProps) {
@@ -48,7 +58,13 @@ const StatsTab = React.memo(function StatsTab({
     return <RankingSkeleton />
   }
 
-  if (stats || equityCurve || assetBreakdown) {
+  if (
+    stats ||
+    equityCurve ||
+    assetBreakdown ||
+    positionHistory.length > 0 ||
+    (historyCompleteness && historyCompleteness.state !== 'complete')
+  ) {
     return (
       <StatsPage
         stats={stats}
@@ -56,6 +72,7 @@ const StatsTab = React.memo(function StatsTab({
         assetBreakdown={assetBreakdown}
         equityCurve={equityCurve}
         positionHistory={positionHistory}
+        historyCompleteness={historyCompleteness}
         isPro={isPro}
         onUnlock={onUnlock}
       />
@@ -63,13 +80,15 @@ const StatsTab = React.memo(function StatsTab({
   }
 
   return (
-    <Box style={{
-      padding: tokens.spacing[6],
-      background: tokens.colors.bg.secondary,
-      borderRadius: tokens.radius.xl,
-      border: `1px solid ${tokens.colors.border.primary}`,
-      textAlign: 'center',
-    }}>
+    <Box
+      style={{
+        padding: tokens.spacing[6],
+        background: tokens.colors.bg.secondary,
+        borderRadius: tokens.radius.xl,
+        border: `1px solid ${tokens.colors.border.primary}`,
+        textAlign: 'center',
+      }}
+    >
       <Text size="sm" color="tertiary">
         {t('noStatsData')}
       </Text>
