@@ -6,7 +6,7 @@
  */
 
 import type { Job } from 'bullmq'
-import { getIngestPool } from '@/lib/ingest/db'
+import { getIngestPool, ingestClientConnect, type IngestQueryExecutor } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
 import { getLatestPassedNativeCohort, type NativeCohortTrader } from '@/lib/ingest/native-cohort'
 import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
@@ -19,10 +19,20 @@ import {
 import type { HistoryKind, ParseCtx, ParsedHistoryRow, SourceRow } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
-import { writeRawObject } from '@/lib/ingest/raw'
+import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
+import {
+  writePositionHistoryRawArtifact,
+  writeRawObject,
+  type IngestTransactionRunner,
+} from '@/lib/ingest/raw'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
-import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
+import {
+  getHistoryCursor,
+  publishHistoryRows,
+  publishHistoryRowsInTransaction,
+  publishProfile,
+} from '@/lib/ingest/serving/publish'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { fireAndForget, logger } from '@/lib/utils/logger'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
@@ -95,6 +105,131 @@ function historyKinds(adapter: SourceAdapter, src: SourceRow): HistoryKind[] {
   return kinds
 }
 
+async function runHistoryTransaction<T>(
+  operation: (transaction: IngestQueryExecutor) => Promise<T>
+): Promise<T> {
+  const client = await ingestClientConnect()
+  let transactionOpen = false
+  let commitAttempted = false
+  let destroyClient = false
+  try {
+    await client.query('BEGIN')
+    transactionOpen = true
+    const result = await operation(client)
+    commitAttempted = true
+    await client.query('COMMIT')
+    transactionOpen = false
+    return result
+  } catch (cause) {
+    if (commitAttempted) {
+      destroyClient = true
+      throw cause
+    }
+    let failure: unknown = cause
+    if (transactionOpen) {
+      try {
+        await client.query('ROLLBACK')
+        transactionOpen = false
+      } catch (rollbackCause) {
+        destroyClient = true
+        failure = new AggregateError(
+          [
+            cause instanceof Error ? cause : new Error(String(cause)),
+            rollbackCause instanceof Error ? rollbackCause : new Error(String(rollbackCause)),
+          ],
+          '[tier-b] history transaction and rollback both failed'
+        )
+      }
+    }
+    throw failure
+  } finally {
+    client.release(destroyClient)
+  }
+}
+
+async function persistPositionHistory(
+  session: FetchSession,
+  adapter: SourceAdapter,
+  src: SourceRow,
+  trader: NativeCohortTrader,
+  ctx: ParseCtx,
+  cursor: string | null
+): Promise<number> {
+  const acquisition = await captureHistoryAcquisition({
+    source: src,
+    traderId: trader.id,
+    exchangeTraderId: trader.exchange_trader_id,
+    kind: 'position_history',
+    cursor,
+    attemptStartedAt: new Date().toISOString(),
+    stream: adapter.getHistory(
+      session,
+      src,
+      trader.exchange_trader_id,
+      'position_history',
+      cursor,
+      trader.meta
+    ),
+    terminalVerifier: adapter.historyTerminalVerifier?.(src, 'position_history') ?? undefined,
+  })
+  const rawInput = { artifact: acquisition.artifact, sourceRunId: acquisition.sourceRunId }
+
+  if (acquisition.error !== null) {
+    await writePositionHistoryRawArtifact(rawInput, runHistoryTransaction)
+    throw acquisition.error
+  }
+
+  let storageDurable = false
+  let written = 0
+  const publishWithRaw: IngestTransactionRunner = async (persistRawPointer) => {
+    // writePositionHistoryRawArtifact invokes this only after the immutable
+    // Storage object is durable. Parser failures therefore remain replayable.
+    storageDurable = true
+    const rows: ParsedHistoryRow[] = acquisition.pages.flatMap((page) =>
+      adapter.parseHistory(page.payload, 'position_history', ctx)
+    )
+    const termination = acquisition.artifact.termination
+    const nextCursor =
+      termination.evidence_state === 'verified' ? nextHistoryCursor(rows, cursor) : null
+
+    return runHistoryTransaction(async (transaction) => {
+      const receipt = await persistRawPointer(transaction)
+      written = await publishHistoryRowsInTransaction(
+        transaction,
+        src,
+        trader.id,
+        'position_history',
+        rows,
+        nextCursor
+      )
+      return receipt
+    })
+  }
+
+  try {
+    await writePositionHistoryRawArtifact(rawInput, publishWithRaw)
+  } catch (cause) {
+    if (storageDurable) {
+      // Parsing or the typed publication transaction failed after Storage
+      // became durable. Reconcile only the immutable audit pointer; history
+      // rows and the cursor remain rolled back and retryable.
+      try {
+        await writePositionHistoryRawArtifact(rawInput, runHistoryTransaction)
+      } catch (rawCause) {
+        throw new AggregateError(
+          [
+            cause instanceof Error ? cause : new Error(String(cause)),
+            rawCause instanceof Error ? rawCause : new Error(String(rawCause)),
+          ],
+          '[tier-b] history publication failure and RAW audit persistence both failed'
+        )
+      }
+    }
+    throw cause
+  }
+  return written
+}
+
 /**
  * Incremental history pass for ONE trader within the same session (spec
  * §2.3 Histories): newest pages until cursor overlap, idempotent upsert by
@@ -110,6 +245,10 @@ async function crawlTraderHistories(
   let written = 0
   for (const kind of historyKinds(adapter, src)) {
     const cursor = await getHistoryCursor(trader.id, kind)
+    if (kind === 'position_history') {
+      written += await persistPositionHistory(session, adapter, src, trader, ctx, cursor)
+      continue
+    }
     const rawPages: unknown[] = []
     let fetchError: unknown = null
 

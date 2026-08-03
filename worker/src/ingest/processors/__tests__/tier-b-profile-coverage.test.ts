@@ -1,5 +1,5 @@
 import type { Job } from 'bullmq'
-import type { ParsedProfile, SourceRow } from '@/lib/ingest/core/types'
+import type { ParsedHistoryRow, ParsedProfile, SourceRow } from '@/lib/ingest/core/types'
 import type { TierJobData } from '../../queues'
 
 const mockGetSourceBySlug = jest.fn()
@@ -13,16 +13,26 @@ const mockValidateProfile = jest.fn()
 const mockOpenSession = jest.fn()
 const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
+const mockWritePositionHistoryRawArtifact = jest.fn()
 const mockRecordStagingRejects = jest.fn()
 const mockValidateStats = jest.fn()
 const mockRoiCrossCheckOk = jest.fn()
+const mockNextHistoryCursor = jest.fn()
 const mockGetHistoryCursor = jest.fn()
+const mockParseHistory = jest.fn()
+const mockPublishHistoryRowsInTransaction = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockDbQuery = jest.fn()
+const mockIngestClientQuery = jest.fn()
+const mockIngestClientRelease = jest.fn()
 const mockQueueAdd = jest.fn()
 
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: (...args: unknown[]) => mockDbQuery(...args) })),
+  ingestClientConnect: jest.fn(async () => ({
+    query: (...args: unknown[]) => mockIngestClientQuery(...args),
+    release: (...args: unknown[]) => mockIngestClientRelease(...args),
+  })),
 }))
 jest.mock('@/lib/ingest/sources', () => ({
   getSourceBySlug: (...args: unknown[]) => mockGetSourceBySlug(...args),
@@ -34,12 +44,16 @@ jest.mock('@/lib/ingest/native-cohort', () => ({
 jest.mock('@/lib/ingest/core/adapter', () => ({
   getAdapter: (...args: unknown[]) => mockGetAdapter(...args),
 }))
-jest.mock('@/lib/ingest/core/history-cursor', () => ({ nextHistoryCursor: jest.fn() }))
+jest.mock('@/lib/ingest/core/history-cursor', () => ({
+  nextHistoryCursor: (...args: unknown[]) => mockNextHistoryCursor(...args),
+}))
 jest.mock('@/lib/ingest/fetch/fetcher', () => ({
   openSession: (...args: unknown[]) => mockOpenSession(...args),
 }))
 jest.mock('@/lib/ingest/raw', () => ({
   writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
+  writePositionHistoryRawArtifact: (...args: unknown[]) =>
+    mockWritePositionHistoryRawArtifact(...args),
 }))
 jest.mock('@/lib/ingest/staging/validate', () => ({
   roiCrossCheckOk: (...args: unknown[]) => mockRoiCrossCheckOk(...args),
@@ -51,6 +65,8 @@ jest.mock('@/lib/ingest/staging/rejects', () => ({
 jest.mock('@/lib/ingest/serving/publish', () => ({
   getHistoryCursor: (...args: unknown[]) => mockGetHistoryCursor(...args),
   publishHistoryRows: jest.fn(),
+  publishHistoryRowsInTransaction: (...args: unknown[]) =>
+    mockPublishHistoryRowsInTransaction(...args),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
 }))
 jest.mock('@/lib/ingest/field-inventory', () => ({
@@ -114,6 +130,35 @@ function profile(timeframe: 7 | 30, complete: boolean): ParsedProfile {
   }
 }
 
+const positionRow: ParsedHistoryRow = {
+  kind: 'position_history',
+  openedAt: '2026-07-15T10:00:00.000Z',
+  closedAt: '2026-07-15T11:00:00.000Z',
+  symbol: 'BTCUSDT',
+  side: 'long',
+  leverage: 2,
+  size: 1,
+  entryPrice: 100,
+  exitPrice: 110,
+  realizedPnl: 10,
+  dedupeHash: 'position-1',
+  raw: { id: 'position-1' },
+}
+
+async function* positionHistoryStream(options: { failAfterPage?: boolean } = {}) {
+  yield {
+    pageIndex: 1,
+    payload: { data: [{ id: 'position-1' }], total: 1 },
+    url: 'https://gtrade.test/history',
+    fetchedAt: new Date(Date.now() + 1_000).toISOString(),
+  }
+  if (options.failAfterPage) throw new Error('history upstream failed')
+  return {
+    contract: 'arena.ingest.history-terminal-claim@1' as const,
+    observations: [{ segment_id: 'default', reason: 'reported_end' as const, page_ordinal: 1 }],
+  }
+}
+
 const job = { data: { sourceSlug: 'gtrade' } } as Job<TierJobData>
 
 describe('Tier-B profile coverage accounting', () => {
@@ -152,12 +197,28 @@ describe('Tier-B profile coverage accounting', () => {
       storagePath: 'test/tier_b/raw.json.gz',
       contentHash: 'a'.repeat(64),
     })
+    mockWritePositionHistoryRawArtifact.mockImplementation(
+      async (
+        _input: unknown,
+        runTransaction: (operation: (transaction: unknown) => Promise<unknown>) => Promise<unknown>
+      ) =>
+        runTransaction(async () => ({
+          id: 2_081_897,
+          storagePath: 'test/history/event.json.gz',
+          contentHash: 'b'.repeat(64),
+        }))
+    )
     mockRecordStagingRejects.mockResolvedValue(undefined)
     mockValidateProfile.mockReturnValue([])
     mockValidateStats.mockImplementation((stats: unknown[]) => ({ valid: stats, rejects: [] }))
     mockRoiCrossCheckOk.mockReturnValue(null)
     mockPublishProfile.mockResolvedValue(undefined)
     mockQueueAdd.mockResolvedValue(undefined)
+    mockIngestClientQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+    mockIngestClientRelease.mockReturnValue(undefined)
+    mockGetHistoryCursor.mockResolvedValue(null)
+    mockNextHistoryCursor.mockReturnValue('2026-07-15T11:00:00.000Z')
+    mockPublishHistoryRowsInTransaction.mockResolvedValue(1)
     mockGetLatestPassedNativeCohort.mockResolvedValue({
       traders: [
         {
@@ -259,6 +320,231 @@ describe('Tier-B profile coverage accounting', () => {
       errors: 0,
     })
     expect(mockGetHistory).not.toHaveBeenCalled()
+  })
+
+  it('atomically binds verified position-history RAW, rows, and cursor', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistory.mockImplementation(() => positionHistoryStream())
+    mockParseHistory.mockReturnValue([positionRow])
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: true,
+        orders: false,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+      historyTerminalVerifier: () => ({
+        contract: 'arena.ingest.history-terminal-verifier.test.position_history@1',
+        verify: () => ({ verified: true, scanTerminalState: 'exhausted' }),
+      }),
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 1,
+      errors: 0,
+    })
+
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWritePositionHistoryRawArtifact.mock.calls[0][0]).toMatchObject({
+      sourceRunId: expect.stringMatching(/^[0-9a-f]{64}$/),
+      artifact: {
+        source: { id: 34, slug: 'gtrade' },
+        trader: {
+          id: 42,
+          exchange_trader_id: '0x0000000000000000000000000000000000000001',
+        },
+        history_kind: 'position_history',
+        termination: {
+          evidence_state: 'verified',
+          scan_terminal_state: 'exhausted',
+        },
+      },
+    })
+    expect(mockNextHistoryCursor).toHaveBeenCalledWith([positionRow], null)
+    expect(mockPublishHistoryRowsInTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.any(Function) }),
+      src,
+      42,
+      'position_history',
+      [positionRow],
+      '2026-07-15T11:00:00.000Z'
+    )
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+    expect(mockIngestClientRelease).toHaveBeenCalledWith(false)
+  })
+
+  it('publishes unverified history rows without advancing the cursor', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistory.mockImplementation(() => positionHistoryStream())
+    mockParseHistory.mockReturnValue([positionRow])
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: true,
+        orders: false,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 1,
+      errors: 0,
+    })
+
+    expect(mockWritePositionHistoryRawArtifact.mock.calls[0][0]).toMatchObject({
+      artifact: {
+        termination: {
+          evidence_state: 'verifier_missing',
+          scan_terminal_state: 'unknown',
+          blocker_reasons: ['terminal_verifier_missing'],
+        },
+      },
+    })
+    expect(mockNextHistoryCursor).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRowsInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      src,
+      42,
+      'position_history',
+      [positionRow],
+      null
+    )
+  })
+
+  it('persists upstream-error position-history RAW without parsing or cursor progress', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistory.mockImplementation(() => positionHistoryStream({ failAfterPage: true }))
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: true,
+        orders: false,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWritePositionHistoryRawArtifact.mock.calls[0][0]).toMatchObject({
+      artifact: {
+        pages: [expect.any(Object)],
+        termination: {
+          evidence_state: 'upstream_error',
+          scan_terminal_state: 'partial',
+          blocker_reasons: ['upstream_error'],
+        },
+      },
+    })
+    expect(mockParseHistory).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
+    expect(mockNextHistoryCursor).not.toHaveBeenCalled()
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+  })
+
+  it('falls back to an audit-only RAW pointer when parsing fails after Storage upload', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistory.mockImplementation(() => positionHistoryStream())
+    mockParseHistory.mockImplementation(() => {
+      throw new Error('position parser rejected the page')
+    })
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: true,
+        orders: false,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
+    expect(mockWritePositionHistoryRawArtifact.mock.calls[1][0]).toEqual(
+      mockWritePositionHistoryRawArtifact.mock.calls[0][0]
+    )
+    expect(mockParseHistory).toHaveBeenCalledTimes(1)
+    expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
+    expect(mockNextHistoryCursor).not.toHaveBeenCalled()
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+  })
+
+  it('rolls back typed publication but reconciles the RAW audit pointer on database failure', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistory.mockImplementation(() => positionHistoryStream())
+    mockParseHistory.mockReturnValue([positionRow])
+    mockPublishHistoryRowsInTransaction.mockRejectedValue(new Error('history insert failed'))
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: true,
+        orders: false,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
+    expect(mockPublishHistoryRowsInTransaction).toHaveBeenCalledTimes(1)
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual([
+      'BEGIN',
+      'ROLLBACK',
+      'BEGIN',
+      'COMMIT',
+    ])
+    expect(mockIngestClientRelease).toHaveBeenNthCalledWith(1, false)
+    expect(mockIngestClientRelease).toHaveBeenNthCalledWith(2, false)
   })
 
   it('audits a bundle-wide quality reject before any validation or publication', async () => {
