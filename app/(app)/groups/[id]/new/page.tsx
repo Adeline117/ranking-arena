@@ -36,6 +36,13 @@ import {
   type BoundPostCreateOperation,
 } from '@/lib/posts/post-create-client'
 import {
+  readPostImageUploadAcknowledgement,
+  readPostMediaUploadError,
+  readPostVideoUploadAcknowledgement,
+  type PostImageUploadAcknowledgement,
+  type PostVideoUploadAcknowledgement,
+} from '@/lib/posts/post-media-upload-contract'
+import {
   isPostDraftMeaningful,
   postDraftStorageKey,
   readPostDraft,
@@ -363,7 +370,7 @@ export default function NewGroupPostPage(): React.ReactElement {
           formData.append('userId', userId)
 
           // Use XHR for upload progress tracking
-          const data = await new Promise<{ url: string; fileName: string }>((resolve, reject) => {
+          const data = await new Promise<PostImageUploadAcknowledgement>((resolve, reject) => {
             const xhr = new XMLHttpRequest()
             xhr.open('POST', '/api/posts/upload-image')
             xhr.setRequestHeader('Authorization', `Bearer ${uploadToken}`)
@@ -387,9 +394,22 @@ export default function NewGroupPostPage(): React.ReactElement {
             const onLoad = () => {
               cleanup()
               try {
-                const result = JSON.parse(xhr.responseText)
-                if (xhr.status >= 200 && xhr.status < 300) resolve(result)
-                else reject(new Error(result.error || `Upload failed (${xhr.status})`))
+                const responseBody: unknown = JSON.parse(xhr.responseText)
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  const acknowledgement = readPostImageUploadAcknowledgement(
+                    responseBody,
+                    userId,
+                    process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+                  )
+                  if (!acknowledgement) throw new Error('Invalid response')
+                  resolve(acknowledgement)
+                } else {
+                  reject(
+                    new Error(
+                      readPostMediaUploadError(responseBody) ?? `Upload failed (${xhr.status})`
+                    )
+                  )
+                }
               } catch {
                 reject(new Error('Invalid response'))
               }
@@ -481,60 +501,72 @@ export default function NewGroupPostPage(): React.ReactElement {
         formData.append('file', file)
         formData.append('userId', userId)
 
-        const data = await new Promise<{ url: string; fileName: string; fileSize: number }>(
-          (resolve, reject) => {
-            const xhr = new XMLHttpRequest()
+        const data = await new Promise<PostVideoUploadAcknowledgement>((resolve, reject) => {
+          const xhr = new XMLHttpRequest()
 
-            const onProgress = (event: ProgressEvent) => {
-              if (event.lengthComputable) {
-                setVideoUploadProgress(Math.round((event.loaded / event.total) * 100))
-              }
+          const onProgress = (event: ProgressEvent) => {
+            if (event.lengthComputable) {
+              setVideoUploadProgress(Math.round((event.loaded / event.total) * 100))
             }
-
-            const cleanup = () => {
-              xhr.upload.removeEventListener('progress', onProgress)
-              xhr.removeEventListener('load', onLoad)
-              xhr.removeEventListener('error', onError)
-              xhr.removeEventListener('abort', onAbort)
-            }
-
-            const onLoad = () => {
-              cleanup()
-              if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                  resolve(JSON.parse(xhr.responseText))
-                } catch {
-                  reject(new Error(t('parseResponseFailed')))
-                }
-              } else {
-                const error =
-                  JSON.parse(xhr.responseText).error || `${t('uploadFailed')} (${xhr.status})`
-                reject(new Error(error))
-              }
-            }
-
-            const onError = () => {
-              cleanup()
-              reject(new Error(t('networkError')))
-            }
-            const onAbort = () => {
-              cleanup()
-              reject(new Error('Upload aborted'))
-            }
-
-            xhr.upload.addEventListener('progress', onProgress)
-            xhr.addEventListener('load', onLoad)
-            xhr.addEventListener('error', onError)
-            xhr.addEventListener('abort', onAbort)
-
-            xhr.open('POST', '/api/posts/upload-video')
-            xhr.setRequestHeader('Authorization', `Bearer ${uploadToken}`)
-            Object.entries(getCsrfHeaders()).forEach(([key, value]) => {
-              if (value) xhr.setRequestHeader(key, value)
-            })
-            xhr.send(formData)
           }
-        )
+
+          const cleanup = () => {
+            xhr.upload.removeEventListener('progress', onProgress)
+            xhr.removeEventListener('load', onLoad)
+            xhr.removeEventListener('error', onError)
+            xhr.removeEventListener('abort', onAbort)
+          }
+
+          const onLoad = () => {
+            cleanup()
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const responseBody: unknown = JSON.parse(xhr.responseText)
+                const acknowledgement = readPostVideoUploadAcknowledgement(
+                  responseBody,
+                  userId,
+                  process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+                )
+                if (!acknowledgement) throw new Error(t('parseResponseFailed'))
+                resolve(acknowledgement)
+              } catch {
+                reject(new Error(t('parseResponseFailed')))
+              }
+            } else {
+              try {
+                const responseBody: unknown = JSON.parse(xhr.responseText)
+                reject(
+                  new Error(
+                    readPostMediaUploadError(responseBody) ?? `${t('uploadFailed')} (${xhr.status})`
+                  )
+                )
+              } catch {
+                reject(new Error(`${t('uploadFailed')} (${xhr.status})`))
+              }
+            }
+          }
+
+          const onError = () => {
+            cleanup()
+            reject(new Error(t('networkError')))
+          }
+          const onAbort = () => {
+            cleanup()
+            reject(new Error('Upload aborted'))
+          }
+
+          xhr.upload.addEventListener('progress', onProgress)
+          xhr.addEventListener('load', onLoad)
+          xhr.addEventListener('error', onError)
+          xhr.addEventListener('abort', onAbort)
+
+          xhr.open('POST', '/api/posts/upload-video')
+          xhr.setRequestHeader('Authorization', `Bearer ${uploadToken}`)
+          Object.entries(getCsrfHeaders()).forEach(([key, value]) => {
+            if (value) xhr.setRequestHeader(key, value)
+          })
+          xhr.send(formData)
+        })
 
         setVideos([{ url: data.url, fileName: data.fileName, fileSize: data.fileSize }])
         setContent((prev) => prev + `\n[video](${data.url})\n`)

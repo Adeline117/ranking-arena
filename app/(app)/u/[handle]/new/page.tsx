@@ -34,6 +34,12 @@ import {
   type BoundPostCreateOperation,
 } from '@/lib/posts/post-create-client'
 import {
+  readPostImageUploadAcknowledgement,
+  readPostMediaUploadError,
+  readPostVideoUploadAcknowledgement,
+  type PostVideoUploadAcknowledgement,
+} from '@/lib/posts/post-media-upload-contract'
+import {
   isPostDraftMeaningful,
   postDraftStorageKey,
   readPostDraft,
@@ -279,16 +285,26 @@ export default function NewPostPage() {
           body: formData,
         })
 
-        const data = await response.json()
+        const responseBody: unknown = await response.json()
 
         if (!response.ok) {
-          showToast(data.error || t('uploadFailed'), 'error')
+          showToast(readPostMediaUploadError(responseBody) ?? t('uploadFailed'), 'error')
+          continue
+        }
+
+        const acknowledgement = readPostImageUploadAcknowledgement(
+          responseBody,
+          userId,
+          process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+        )
+        if (!acknowledgement) {
+          showToast(t('uploadFailed'), 'error')
           continue
         }
 
         newImages.push({
-          url: data.url,
-          fileName: data.fileName,
+          url: acknowledgement.url,
+          fileName: acknowledgement.fileName,
         })
       } catch (error) {
         logger.error('Upload error:', error)
@@ -355,67 +371,71 @@ export default function NewPostPage() {
 
       const xhr = new XMLHttpRequest()
 
-      const uploadPromise = new Promise<{ url: string; fileName: string; fileSize: number }>(
-        (resolve, reject) => {
-          const onProgress = (event: ProgressEvent) => {
-            if (event.lengthComputable) {
-              const progress = Math.round((event.loaded / event.total) * 100)
-              setVideoUploadProgress(progress)
-            }
+      const uploadPromise = new Promise<PostVideoUploadAcknowledgement>((resolve, reject) => {
+        const onProgress = (event: ProgressEvent) => {
+          if (event.lengthComputable) {
+            const progress = Math.round((event.loaded / event.total) * 100)
+            setVideoUploadProgress(progress)
           }
-
-          const cleanup = () => {
-            xhr.upload.removeEventListener('progress', onProgress)
-            xhr.removeEventListener('load', onLoad)
-            xhr.removeEventListener('error', onError)
-            xhr.removeEventListener('abort', onAbort)
-          }
-
-          const onLoad = () => {
-            cleanup()
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                const data = JSON.parse(xhr.responseText)
-                resolve(data)
-              } catch {
-                reject(new Error(t('parseResponseFailed')))
-              }
-            } else {
-              try {
-                const error = JSON.parse(xhr.responseText)
-                reject(new Error(error.error || t('uploadFailed')))
-              } catch {
-                reject(new Error(`${t('uploadFailed')} (${xhr.status})`))
-              }
-            }
-          }
-
-          const onError = () => {
-            cleanup()
-            reject(new Error(t('networkErrorRetry')))
-          }
-
-          const onAbort = () => {
-            cleanup()
-            reject(new Error('Upload aborted'))
-          }
-
-          xhr.upload.addEventListener('progress', onProgress)
-          xhr.addEventListener('load', onLoad)
-          xhr.addEventListener('error', onError)
-          xhr.addEventListener('abort', onAbort)
-
-          xhr.open('POST', '/api/posts/upload-video')
-          xhr.setRequestHeader('Authorization', `Bearer ${uploadToken}`)
-
-          const csrfHeaders = getCsrfHeaders()
-          Object.entries(csrfHeaders).forEach(([key, value]) => {
-            if (value) xhr.setRequestHeader(key, value)
-          })
-
-          xhr.send(formData)
         }
-      )
+
+        const cleanup = () => {
+          xhr.upload.removeEventListener('progress', onProgress)
+          xhr.removeEventListener('load', onLoad)
+          xhr.removeEventListener('error', onError)
+          xhr.removeEventListener('abort', onAbort)
+        }
+
+        const onLoad = () => {
+          cleanup()
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const responseBody: unknown = JSON.parse(xhr.responseText)
+              const acknowledgement = readPostVideoUploadAcknowledgement(
+                responseBody,
+                userId,
+                process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+              )
+              if (!acknowledgement) throw new Error(t('parseResponseFailed'))
+              resolve(acknowledgement)
+            } catch {
+              reject(new Error(t('parseResponseFailed')))
+            }
+          } else {
+            try {
+              const responseBody: unknown = JSON.parse(xhr.responseText)
+              reject(new Error(readPostMediaUploadError(responseBody) ?? t('uploadFailed')))
+            } catch {
+              reject(new Error(`${t('uploadFailed')} (${xhr.status})`))
+            }
+          }
+        }
+
+        const onError = () => {
+          cleanup()
+          reject(new Error(t('networkErrorRetry')))
+        }
+
+        const onAbort = () => {
+          cleanup()
+          reject(new Error('Upload aborted'))
+        }
+
+        xhr.upload.addEventListener('progress', onProgress)
+        xhr.addEventListener('load', onLoad)
+        xhr.addEventListener('error', onError)
+        xhr.addEventListener('abort', onAbort)
+
+        xhr.open('POST', '/api/posts/upload-video')
+        xhr.setRequestHeader('Authorization', `Bearer ${uploadToken}`)
+
+        const csrfHeaders = getCsrfHeaders()
+        Object.entries(csrfHeaders).forEach(([key, value]) => {
+          if (value) xhr.setRequestHeader(key, value)
+        })
+
+        xhr.send(formData)
+      })
 
       const data = await uploadPromise
 
