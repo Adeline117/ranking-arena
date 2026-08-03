@@ -903,13 +903,7 @@ export default function NewPostPage() {
                   {t('previewMode')}
                 </Box>
                 {content ? (
-                  renderContentWithControls(
-                    content,
-                    moveImageInContent,
-                    removeImageFromContent,
-                    (content.match(/!\[image\]\([^)]+\)/g) || []).length,
-                    t
-                  )
+                  renderContentWithControls(content, moveImageInContent, removeImageFromContent, t)
                 ) : (
                   <Text color="tertiary">{t('previewPlaceholder')}</Text>
                 )}

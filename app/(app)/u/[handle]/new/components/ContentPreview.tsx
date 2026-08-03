@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
-import { linkifyTagsAndMentions } from '@/lib/utils/content'
+import { isAllowedContentImageUrl, linkifyTagsAndMentions } from '@/lib/utils/content'
 import VideoPlayer, { parseVideoUrl } from './VideoPlayer'
 
 /**
@@ -13,7 +13,6 @@ export function renderContentWithControls(
   text: string,
   onMoveImage: (url: string, direction: 'up' | 'down') => void,
   onRemoveImage: (url: string) => void,
-  imageCount: number,
   t: (key: string) => string
 ) {
   if (!text) return null
@@ -32,6 +31,7 @@ export function renderContentWithControls(
   let match
   let imgIdx = 0
   while ((match = imageRegex.exec(text)) !== null) {
+    if (!isAllowedContentImageUrl(match[2])) continue
     imageMatches.push({
       start: match.index,
       end: match.index + match[0].length,
@@ -128,7 +128,7 @@ export function renderContentWithControls(
   return parts.map((part, index) => {
     if (part.type === 'image') {
       const isFirst = part.imageIndex === 0
-      const isLast = part.imageIndex === imageCount - 1
+      const isLast = part.imageIndex === imageMatches.length - 1
       return (
         <span
           key={index}
@@ -149,7 +149,8 @@ export function renderContentWithControls(
             }}
             onClick={(e) => {
               e.stopPropagation()
-              window.open(part.url, '_blank')
+              const openedWindow = window.open(part.url, '_blank', 'noopener,noreferrer')
+              if (openedWindow) openedWindow.opener = null
             }}
             unoptimized
           />
